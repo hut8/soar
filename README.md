@@ -9,6 +9,12 @@ Situational Overview and Aircraft Record
 * Sends a keep-alive consisting of an octothorpe followed by information about the receiver periodically.
 *
 
+## Development
+
+```bash
+cargo install sqlx-cli --no-default-features --features rustls,postgres
+```
+
 ## Device database
 
 [DDB on Glidernet.org](https://ddb.glidernet.org/download/?j=1)
