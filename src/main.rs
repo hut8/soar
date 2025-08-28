@@ -14,6 +14,8 @@ async fn main() {
     let database_url = env::var("DATABASE_URL")
         .expect("DATABASE_URL must be set in environment variables");
 
+    let mut device_db = ddb::DeviceDatabase::new();
+
     // Create a connection pool to the PostgreSQL database
     let pool = match PgPool::connect(&database_url).await {
         Ok(pool) => {

@@ -3,9 +3,6 @@ use serde_derive::Serialize;
 use std::collections::HashMap;
 use reqwest;
 
-#[cfg(test)]
-use serde_json;
-
 const DDB_URL: &str = "http://ddb.glidernet.org/download/?j=1";
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]

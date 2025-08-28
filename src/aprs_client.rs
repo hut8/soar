@@ -1,14 +1,24 @@
 use std::sync::Arc;
 use std::time::Duration;
+use ogn_parser::AprsPacket;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
 use tokio::time::sleep;
 use tracing::{debug, error, info, warn};
 
-/// Type alias for the message processor function
-/// Takes a parsed APRS message and processes it
-pub type MessageProcessor = Arc<dyn Fn(String) + Send + Sync>;
+/// Trait for processing APRS messages
+/// Implementors can define custom logic for handling received APRS messages
+pub trait MessageProcessor: Send + Sync {
+    /// Process a received APRS message
+    ///
+    /// # Arguments
+    /// * `message` - The raw APRS message string received from the server
+    fn process_message(&self, message: AprsPacket);
+}
+
+/// Type alias for boxed message processor trait objects
+pub type BoxedMessageProcessor = Box<dyn MessageProcessor>;
 
 /// Configuration for the APRS client
 #[derive(Debug, Clone)]
@@ -46,13 +56,13 @@ impl Default for AprsClientConfig {
 /// APRS client that connects to an APRS-IS server via TCP
 pub struct AprsClient {
     config: AprsClientConfig,
-    processor: MessageProcessor,
+    processor: Arc<dyn MessageProcessor>,
     shutdown_tx: Option<mpsc::Sender<()>>,
 }
 
 impl AprsClient {
     /// Create a new APRS client with the given configuration and message processor
-    pub fn new(config: AprsClientConfig, processor: MessageProcessor) -> Self {
+    pub fn new(config: AprsClientConfig, processor: Arc<dyn MessageProcessor>) -> Self {
         Self {
             config,
             processor,
@@ -119,7 +129,7 @@ impl AprsClient {
     /// Connect to the APRS server and run the message processing loop
     async fn connect_and_run(
         config: &AprsClientConfig,
-        processor: MessageProcessor,
+        processor: Arc<dyn MessageProcessor>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         info!("Connecting to APRS server {}:{}", config.server, config.port);
 
@@ -188,7 +198,7 @@ impl AprsClient {
     }
 
     /// Process a received APRS message
-    async fn process_message(message: &str, processor: MessageProcessor) {
+    async fn process_message(message: &str, processor: Arc<dyn MessageProcessor>) {
         // Try to parse the message using ogn-parser
         match ogn_parser::parse(message) {
             Ok(parsed) => {
@@ -196,13 +206,10 @@ impl AprsClient {
                 // Call the processor with the original message
                 // Note: ogn-parser returns different types, so we pass the raw message
                 // The processor can decide how to handle it
-                processor(message.to_string());
+                processor.process_message(parsed);
             }
             Err(e) => {
                 debug!("Failed to parse APRS message '{}': {}", message, e);
-                // Still call the processor with the raw message
-                // Some processors might want to handle unparseable messages
-                processor(message.to_string());
             }
         }
     }
@@ -327,13 +334,21 @@ mod tests {
         assert_eq!(login_cmd, "user TEST123 pass -1 vers soar-aprs-client 1.0\r\n");
     }
 
+    struct TestMessageProcessor {
+        counter: Arc<AtomicUsize>,
+    }
+
+    impl MessageProcessor for TestMessageProcessor {
+        fn process_message(&self, _message: AprsPacket) {
+            self.counter.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+
     #[tokio::test]
     async fn test_message_processor() {
         let counter = Arc::new(AtomicUsize::new(0));
-        let counter_clone = Arc::clone(&counter);
-
-        let processor: MessageProcessor = Arc::new(move |_message: String| {
-            counter_clone.fetch_add(1, Ordering::SeqCst);
+        let processor: Arc<dyn MessageProcessor> = Arc::new(TestMessageProcessor {
+            counter: Arc::clone(&counter),
         });
 
         // Simulate processing a message
