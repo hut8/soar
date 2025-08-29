@@ -1,6 +1,12 @@
-use std::sync::Arc;
-use std::time::Duration;
+use anyhow::Result;
+use chrono::Utc;
 use ogn_parser::AprsPacket;
+use std::fs::{OpenOptions, create_dir_all};
+use std::io::Write;
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
@@ -20,6 +26,80 @@ pub trait MessageProcessor: Send + Sync {
 /// Type alias for boxed message processor trait objects
 pub type BoxedMessageProcessor = Box<dyn MessageProcessor>;
 
+/// Message archive for logging APRS messages to daily files
+struct MessageArchive {
+    base_dir: String,
+    current_file: Mutex<Option<std::fs::File>>,
+    current_date: Mutex<String>,
+}
+
+impl MessageArchive {
+    fn new(base_dir: String) -> Self {
+        Self {
+            base_dir,
+            current_file: Mutex::new(None),
+            current_date: Mutex::new(String::new()),
+        }
+    }
+
+    fn log_message(&self, message: &str) {
+        let now = Utc::now();
+        let date_str = now.format("%Y-%m-%d").to_string();
+
+        let mut current_date = self.current_date.lock().unwrap();
+        let mut current_file = self.current_file.lock().unwrap();
+
+        // Check if we need to create a new file (new day or first time)
+        if *current_date != date_str {
+            // Close the current file if it exists
+            *current_file = None;
+
+            // Create the archive directory if it doesn't exist
+            let archive_path = PathBuf::from(&self.base_dir);
+            if let Err(e) = create_dir_all(&archive_path) {
+                error!(
+                    "Failed to create archive directory {}: {}",
+                    archive_path.display(),
+                    e
+                );
+                return;
+            }
+
+            // Create the new log file
+            let log_file_path = archive_path.join(format!("{}.log", date_str));
+            match OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&log_file_path)
+            {
+                Ok(file) => {
+                    info!("Opened new archive log file: {}", log_file_path.display());
+                    *current_file = Some(file);
+                    *current_date = date_str;
+                }
+                Err(e) => {
+                    error!(
+                        "Failed to open archive log file {}: {}",
+                        log_file_path.display(),
+                        e
+                    );
+                    return;
+                }
+            }
+        }
+
+        // Write the message to the current file
+        if let Some(ref mut file) = *current_file {
+            let timestamp = now.format("%H:%M:%S").to_string();
+            if let Err(e) = writeln!(file, "[{}] {}", timestamp, message) {
+                error!("Failed to write to archive log file: {}", e);
+            } else if let Err(e) = file.flush() {
+                error!("Failed to flush archive log file: {}", e);
+            }
+        }
+    }
+}
+
 /// Configuration for the APRS client
 #[derive(Debug, Clone)]
 pub struct AprsClientConfig {
@@ -37,6 +117,8 @@ pub struct AprsClientConfig {
     pub filter: Option<String>,
     /// Delay between reconnection attempts in seconds
     pub retry_delay_seconds: u64,
+    /// Base directory for message archive (optional)
+    pub archive_base_dir: Option<String>,
 }
 
 impl Default for AprsClientConfig {
@@ -49,6 +131,7 @@ impl Default for AprsClientConfig {
             password: None,
             filter: None,
             retry_delay_seconds: 5,
+            archive_base_dir: None,
         }
     }
 }
@@ -72,7 +155,7 @@ impl AprsClient {
 
     /// Start the APRS client
     /// This will connect to the server and begin processing messages
-    pub async fn start(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn start(&mut self) -> Result<()> {
         let (shutdown_tx, mut shutdown_rx) = mpsc::channel::<()>(1);
         self.shutdown_tx = Some(shutdown_tx);
 
@@ -130,8 +213,17 @@ impl AprsClient {
     async fn connect_and_run(
         config: &AprsClientConfig,
         processor: Arc<dyn MessageProcessor>,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        info!("Connecting to APRS server {}:{}", config.server, config.port);
+    ) -> Result<()> {
+        info!(
+            "Connecting to APRS server {}:{}",
+            config.server, config.port
+        );
+
+        // Create message archive if configured
+        let archive = config.archive_base_dir.as_ref().map(|base_dir| {
+            info!("Message archive enabled, base directory: {}", base_dir);
+            Arc::new(MessageArchive::new(base_dir.clone()))
+        });
 
         // Connect to the APRS server
         let stream = TcpStream::connect(format!("{}:{}", config.server, config.port)).await?;
@@ -159,7 +251,10 @@ impl AprsClient {
                     let trimmed_line = line.trim();
                     if !trimmed_line.is_empty() {
                         debug!("Received: {}", trimmed_line);
-
+                        // Log to archive before processing (if archive is enabled)
+                        if let Some(ref archive) = archive {
+                            archive.log_message(trimmed_line);
+                        }
                         // Skip server messages (lines starting with #)
                         if !trimmed_line.starts_with('#') {
                             Self::process_message(trimmed_line, Arc::clone(&processor)).await;
@@ -262,6 +357,11 @@ impl AprsClientConfigBuilder {
         self
     }
 
+    pub fn archive_base_dir<S: Into<String>>(mut self, archive_base_dir: Option<S>) -> Self {
+        self.config.archive_base_dir = archive_base_dir.map(|d| d.into());
+        self
+    }
+
     pub fn build(self) -> AprsClientConfig {
         self.config
     }
@@ -309,6 +409,7 @@ mod tests {
             filter: Some("r/47.0/-122.0/100".to_string()),
             max_retries: 3,
             retry_delay_seconds: 5,
+            archive_base_dir: None,
         };
 
         let login_cmd = AprsClient::build_login_command(&config);
@@ -328,10 +429,14 @@ mod tests {
             filter: None,
             max_retries: 3,
             retry_delay_seconds: 5,
+            archive_base_dir: None,
         };
 
         let login_cmd = AprsClient::build_login_command(&config);
-        assert_eq!(login_cmd, "user TEST123 pass -1 vers soar-aprs-client 1.0\r\n");
+        assert_eq!(
+            login_cmd,
+            "user TEST123 pass -1 vers soar-aprs-client 1.0\r\n"
+        );
     }
 
     struct TestMessageProcessor {
@@ -355,5 +460,50 @@ mod tests {
         AprsClient::process_message("TEST>APRS:>Test message", Arc::clone(&processor)).await;
 
         assert_eq!(counter.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn test_config_builder_with_archive() {
+        let config = AprsClientConfigBuilder::new()
+            .server("test.aprs.net")
+            .port(14580)
+            .callsign("TEST123")
+            .archive_base_dir(Some("/tmp/aprs_archive"))
+            .build();
+
+        assert_eq!(config.server, "test.aprs.net");
+        assert_eq!(config.port, 14580);
+        assert_eq!(config.callsign, "TEST123");
+        assert_eq!(
+            config.archive_base_dir,
+            Some("/tmp/aprs_archive".to_string())
+        );
+    }
+
+    #[test]
+    fn test_message_archive() {
+        use std::fs;
+        use std::path::Path;
+
+        let temp_dir = "/tmp/test_aprs_archive";
+        let archive = MessageArchive::new(temp_dir.to_string());
+
+        // Log a test message
+        archive.log_message("TEST>APRS:>Test archive message");
+
+        // Check that the directory was created
+        assert!(Path::new(temp_dir).exists());
+
+        // Check that a log file was created with today's date
+        let today = Utc::now().format("%Y-%m-%d").to_string();
+        let log_file_path = Path::new(temp_dir).join(format!("{}.log", today));
+        assert!(log_file_path.exists());
+
+        // Read the file content and verify the message was logged
+        let content = fs::read_to_string(&log_file_path).expect("Failed to read log file");
+        assert!(content.contains("TEST>APRS:>Test archive message"));
+
+        // Clean up
+        let _ = fs::remove_dir_all(temp_dir);
     }
 }

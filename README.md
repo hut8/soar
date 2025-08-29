@@ -1,25 +1,119 @@
-# SOAR
+# SOAR - APRS Client with Message Archiving
 
-Situational Overview and Aircraft Record
+SOAR is a Rust library that provides an APRS client with optional message archiving capabilities. It can connect to APRS-IS servers and archive all incoming APRS messages to daily log files.
 
-## Overview
+## Features
 
-* Connects to aprs.glidernet.org:14580 (for filter) or aprs.glidernet.org:10152 (full feed)
-* Performs handshake and filter configuration.
-* Sends a keep-alive consisting of an octothorpe followed by information about the receiver periodically.
-*
+- **APRS-IS Connection**: Connect to any APRS-IS server with authentication
+- **Message Processing**: Flexible message processing through trait implementation
+- **Message Archiving**: Optional archiving of all incoming APRS messages to daily log files
+- **UTC Date-based Logging**: Creates new log files daily based on UTC dates (YYYY-MM-DD.log)
+- **Automatic Directory Creation**: Creates archive directories automatically
+- **Midnight Rollover**: Automatically switches to new log files at UTC midnight
+- **Configurable Filters**: Support for APRS-IS filters to limit received messages
+- **Retry Logic**: Built-in connection retry with configurable parameters
 
-## Development
+## Usage
 
-```bash
-cargo install sqlx-cli --no-default-features --features rustls,postgres
+### Basic Configuration
+
+```rust
+use soar::{AprsClient, AprsClientConfigBuilder, MessageProcessor};
+use std::sync::Arc;
+use ogn_parser::AprsPacket;
+
+// Implement your message processor
+struct MyProcessor;
+
+impl MessageProcessor for MyProcessor {
+    fn process_message(&self, message: AprsPacket) {
+        println!("Received: {:?}", message);
+    }
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let config = AprsClientConfigBuilder::new()
+        .server("aprs.glidernet.org")
+        .port(14580)
+        .callsign("N0CALL")  // Use your actual callsign
+        .password(None)      // Use None for read-only access
+        .build();
+
+    let processor = Arc::new(MyProcessor);
+    let mut client = AprsClient::new(config, processor);
+
+    client.start().await?;
+
+    // Keep running...
+    tokio::signal::ctrl_c().await?;
+    client.stop().await;
+
+    Ok(())
+}
 ```
 
-## Device database
+### With Message Archiving
 
-[DDB on Glidernet.org](https://ddb.glidernet.org/download/?j=1)
+To enable message archiving, simply add the `archive_base_dir` configuration:
 
-## Questions
+```rust
+let config = AprsClientConfigBuilder::new()
+    .server("aprs.glidernet.org")
+    .port(14580)
+    .callsign("N0CALL")
+    .password(None)
+    .filter(Some("r/47.0/-122.0/100".to_string())) // Optional filter
+    .archive_base_dir(Some("./aprs_logs".to_string())) // Enable archiving
+    .build();
+```
 
-- https://github.com/glidernet/ogn-ddb/blob/master/ogn-ddb-schema-1.0.0.json - what are F, I, and O? - I think it's FLARM, OGN, and something else?
-- https://github.com/svoop/ogn_client-ruby/wiki/OGN-flavoured-APRS - Easiest way to tell these apart?
+This will:
+- Create the `./aprs_logs` directory if it doesn't exist
+- Create daily log files named `YYYY-MM-DD.log` (e.g., `2025-08-29.log`)
+- Log each incoming APRS message with a timestamp: `[HH:MM:SS] <APRS message>`
+- Automatically roll over to a new file at UTC midnight
+
+### Configuration Options
+
+- `server`: APRS-IS server hostname (default: "aprs.glidernet.org")
+- `port`: APRS-IS server port (default: 14580)
+- `callsign`: Your amateur radio callsign (required)
+- `password`: APRS-IS password (use `None` for read-only access)
+- `filter`: APRS-IS filter string (optional)
+- `max_retries`: Maximum connection retry attempts (default: 5)
+- `retry_delay_seconds`: Delay between retry attempts (default: 5)
+- `archive_base_dir`: Base directory for message archives (optional)
+
+### Log File Format
+
+When archiving is enabled, each message is logged with the following format:
+
+```
+[14:30:25] N0CALL>APRS,TCPIP*:>Hello World
+[14:30:26] W1ABC-9>APRS,TCPIP*,qAC,T2SYDNEY:=3745.00N/12200.00W-Test Position
+```
+
+- `[HH:MM:SS]`: UTC timestamp when the message was received
+- Followed by the raw APRS message as received from the server
+
+### Example
+
+See `examples/aprs_archive_example.rs` for a complete working example.
+
+To run the example:
+
+```bash
+cargo run --example aprs_archive_example
+```
+
+## Dependencies
+
+- `tokio`: Async runtime
+- `chrono`: Date/time handling for UTC-based logging
+- `ogn-parser`: APRS message parsing
+- `tracing`: Logging framework
+
+## License
+
+This project is licensed under the MIT License.

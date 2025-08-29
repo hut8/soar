@@ -1,6 +1,6 @@
-mod ddb;
-mod ogn_aprs_aircraft;
-mod aprs_client;
+pub mod ddb;
+pub mod ogn_aprs_aircraft;
+pub mod aprs_client;
 
 use sqlx::postgres::PgPool;
 use std::env;
