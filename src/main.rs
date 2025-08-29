@@ -1,9 +1,13 @@
 pub mod ddb;
 pub mod ogn_aprs_aircraft;
 pub mod aprs_client;
+pub mod faa_data;
 
 use sqlx::postgres::PgPool;
 use std::env;
+
+// Embed migrations into the binary
+static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!();
 
 #[tokio::main]
 async fn main() {
@@ -27,6 +31,18 @@ async fn main() {
             std::process::exit(1);
         }
     };
+
+    // Run pending migrations
+    println!("Running database migrations...");
+    match MIGRATOR.run(&pool).await {
+        Ok(_) => {
+            println!("Database migrations completed successfully");
+        }
+        Err(e) => {
+            eprintln!("Failed to run database migrations: {e}");
+            std::process::exit(1);
+        }
+    }
 
     // Your application logic goes here
     println!("Application started with database connection");
