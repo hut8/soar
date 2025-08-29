@@ -21,4 +21,5 @@ cargo install sqlx-cli --no-default-features --features rustls,postgres
 
 ## Questions
 
-- https://github.com/glidernet/ogn-ddb/blob/master/ogn-ddb-schema-1.0.0.json - what are F, I, and O?
+- https://github.com/glidernet/ogn-ddb/blob/master/ogn-ddb-schema-1.0.0.json - what are F, I, and O? - I think it's FLARM, OGN, and something else?
+- https://github.com/svoop/ogn_client-ruby/wiki/OGN-flavoured-APRS - Easiest way to tell these apart?

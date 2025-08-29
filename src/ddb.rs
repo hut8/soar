@@ -1,7 +1,6 @@
 use serde_derive::Deserialize;
 use serde_derive::Serialize;
 use std::collections::HashMap;
-use reqwest;
 
 const DDB_URL: &str = "http://ddb.glidernet.org/download/?j=1";
 
