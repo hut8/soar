@@ -66,7 +66,7 @@ impl MessageArchive {
             }
 
             // Create the new log file
-            let log_file_path = archive_path.join(format!("{}.log", date_str));
+            let log_file_path = archive_path.join(format!("{date_str}.log"));
             match OpenOptions::new()
                 .create(true)
                 .append(true)
@@ -91,7 +91,7 @@ impl MessageArchive {
         // Write the message to the current file
         if let Some(ref mut file) = *current_file {
             let timestamp = now.format("%H:%M:%S").to_string();
-            if let Err(e) = writeln!(file, "[{}] {}", timestamp, message) {
+            if let Err(e) = writeln!(file, "[{timestamp}] {message}") {
                 error!("Failed to write to archive log file: {}", e);
             } else if let Err(e) = file.flush() {
                 error!("Failed to flush archive log file: {}", e);
