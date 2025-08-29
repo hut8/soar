@@ -11,7 +11,8 @@ pub struct Device {
     pub device_id: String,
     pub aircraft_model: String,
     pub registration: String,
-    pub cn: String,
+    #[serde(rename = "cn")]
+    pub competition_number: String,
     pub tracked: String,
     pub identified: String,
 }
@@ -77,7 +78,7 @@ mod tests {
             device_id: "000000".to_string(),
             aircraft_model: "SZD-41 Jantar Std".to_string(),
             registration: "HA-4403".to_string(),
-            cn: "J".to_string(),
+            competition_number: "J".to_string(),
             tracked: "Y".to_string(),
             identified: "Y".to_string(),
         };
