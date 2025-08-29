@@ -64,7 +64,7 @@ fn parse_transponder_number(line: &str) -> Option<u32> {
         }
     }
     let oct_raw = fw(line, 257, 264).trim();
-    if !oct_raw.is_empty() && oct_raw.chars().all(|c| c >= '0' && c <= '7') {
+    if !oct_raw.is_empty() && oct_raw.chars().all(|c| ('0'..='7').contains(&c)) {
         // Convert octal to decimal
         if let Ok(v) = u32::from_str_radix(oct_raw, 8) {
             return Some(v);
@@ -267,10 +267,10 @@ impl Aircraft {
         let other3 = to_opt_string(fw(line, 379, 428));
         let other4 = to_opt_string(fw(line, 430, 479));
         let other5 = to_opt_string(fw(line, 481, 530));
-        let mut other_names = Vec::new();
-        for o in [other1, other2, other3, other4, other5] {
-            if let Some(v) = o { other_names.push(v); }
-        }
+        let other_names = [other1, other2, other3, other4, other5]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>();
 
         let expiration_date = to_opt_date(fw(line, 532, 539));
         let unique_id = to_opt_string(fw(line, 541, 548));

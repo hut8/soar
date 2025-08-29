@@ -496,7 +496,7 @@ mod tests {
 
         // Check that a log file was created with today's date
         let today = Utc::now().format("%Y-%m-%d").to_string();
-        let log_file_path = Path::new(temp_dir).join(format!("{}.log", today));
+        let log_file_path = Path::new(temp_dir).join(format!("{today}.log"));
         assert!(log_file_path.exists());
 
         // Read the file content and verify the message was logged
