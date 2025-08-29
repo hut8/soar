@@ -345,3 +345,294 @@ pub fn read_aircraft_file<P: AsRef<Path>>(path: P) -> Result<Vec<Aircraft>> {
 
     Ok(out)
 }
+
+/// Parse a CSV date in YYYYMMDD format
+fn parse_csv_date(date_str: &str) -> Option<NaiveDate> {
+    let trimmed = date_str.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    to_opt_date(trimmed)
+}
+
+/// Parse Mode S code from hex string (CSV format)
+fn parse_csv_mode_s(hex_str: &str) -> Option<u32> {
+    let trimmed = hex_str.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    u32::from_str_radix(trimmed, 16).ok()
+}
+
+impl Aircraft {
+    /// Parse an Aircraft from a CSV line with the FAA registration format
+    /// Expected CSV columns (0-based indices):
+    /// 0: N-NUMBER, 1: SERIAL NUMBER, 2: MFR MDL CODE, 3: ENG MFR MDL, 4: YEAR MFR,
+    /// 5: TYPE REGISTRANT, 6: NAME, 7: STREET, 8: STREET2, 9: CITY, 10: STATE, 11: ZIP CODE,
+    /// 12: REGION, 13: COUNTY, 14: COUNTRY, 15: LAST ACTION DATE, 16: CERT ISSUE DATE,
+    /// 17: CERTIFICATION, 18: TYPE AIRCRAFT, 19: TYPE ENGINE, 20: STATUS CODE,
+    /// 21: MODE S CODE, 22: FRACT OWNER, 23: AIR WORTH DATE, 24-28: OTHER NAMES(1-5),
+    /// 29: EXPIRATION DATE, 30: UNIQUE ID, 31: KIT MFR, 32: KIT MODEL, 33: MODE S CODE HEX
+    pub fn from_csv_line(line: &str) -> Result<Self> {
+        let fields: Vec<&str> = line.split(',').collect();
+
+        if fields.len() < 34 {
+            return Err(anyhow!("CSV line has insufficient fields: expected at least 34, got {}", fields.len()));
+        }
+
+        let n_number = to_string_trim(fields[0]);
+        if n_number.is_empty() {
+            return Err(anyhow!("Missing N-number in CSV"));
+        }
+
+        let serial_number = to_string_trim(fields[1]);
+        let mfr_mdl_code = to_opt_string(fields[2]);
+        let eng_mfr_mdl_code = to_opt_string(fields[3]);
+        let year_mfr = to_opt_u32(fields[4]).map(|v| v as u16);
+
+        let type_registration_code = to_opt_string(fields[5]);
+        let registrant_name = to_opt_string(fields[6]);
+        let street1 = to_opt_string(fields[7]);
+        let street2 = to_opt_string(fields[8]);
+        let city = to_opt_string(fields[9]);
+        let state = to_opt_string(fields[10]);
+        let zip_code = to_opt_string(fields[11]);
+        let region_code = to_opt_string(fields[12]);
+        let county_mail_code = to_opt_string(fields[13]);
+        let country_mail_code = to_opt_string(fields[14]);
+
+        let last_action_date = parse_csv_date(fields[15]);
+        let certificate_issue_date = parse_csv_date(fields[16]);
+
+        let airworthiness_class_code = to_opt_string(fields[17]);
+        let type_aircraft_code = to_opt_string(fields[18]);
+        let type_engine_code = to_opt_string(fields[19]);
+        let status_code = to_opt_string(fields[20]);
+
+        // Try MODE S CODE HEX first (field 33), then MODE S CODE (field 21)
+        let transponder_code = parse_csv_mode_s(fields[33])
+            .or_else(|| to_opt_u32(fields[21]));
+
+        let fractional_owner = yn_to_bool(fields[22]);
+        let airworthiness_date = parse_csv_date(fields[23]);
+
+        // Other names (fields 24-28)
+        let other_names = (24..=28)
+            .filter_map(|i| fields.get(i).and_then(|s| to_opt_string(s)))
+            .collect::<Vec<_>>();
+
+        let expiration_date = parse_csv_date(fields[29]);
+        let unique_id = to_opt_string(fields[30]);
+        let kit_mfr_name = to_opt_string(fields[31]);
+        let kit_model_name = to_opt_string(fields[32]);
+
+        // For CSV, we don't have the detailed approved operations parsing
+        let approved_operations_raw = None;
+        let approved_ops = ApprovedOps::default();
+
+        Ok(Aircraft {
+            n_number,
+            serial_number,
+            mfr_mdl_code,
+            eng_mfr_mdl_code,
+            year_mfr,
+
+            type_registration_code,
+            registrant_name,
+            street1,
+            street2,
+            city,
+            state,
+            zip_code,
+            region_code,
+            county_mail_code,
+            country_mail_code,
+
+            last_action_date,
+            certificate_issue_date,
+
+            airworthiness_class_code,
+            approved_operations_raw,
+            approved_ops,
+
+            type_aircraft_code,
+            type_engine_code,
+            status_code,
+
+            transponder_code,
+
+            fractional_owner,
+            airworthiness_date,
+
+            other_names,
+
+            expiration_date,
+
+            unique_id,
+
+            kit_mfr_name,
+            kit_model_name,
+        })
+    }
+}
+
+/// Read a CSV FAA Aircraft registration file and parse all rows.
+/// Automatically skips the first line (header) and any blank lines.
+/// Returns an error on the first malformed line.
+pub fn read_aircraft_csv_file<P: AsRef<Path>>(path: P) -> Result<Vec<Aircraft>> {
+    let f = File::open(path.as_ref())
+        .with_context(|| format!("Opening {:?}", path.as_ref()))?;
+    let reader = BufReader::new(f);
+    let mut out = Vec::new();
+    let mut is_first_line = true;
+
+    for (lineno, line) in reader.lines().enumerate() {
+        let line = line.with_context(|| format!("Reading line {}", lineno + 1))?;
+        let trimmed = line.trim_end_matches(&['\r', '\n'][..]);
+
+        // Skip header line (first line)
+        if is_first_line {
+            is_first_line = false;
+            continue;
+        }
+
+        // Skip blank lines
+        if trimmed.trim().is_empty() {
+            continue;
+        }
+
+        let rec = Aircraft::from_csv_line(trimmed)
+            .with_context(|| format!("Parsing CSV line {}", lineno + 1))?;
+        out.push(rec);
+    }
+
+    Ok(out)
+}
+
+/// Updated read_aircraft_file that also skips the first line for any CSV files
+/// Detects format based on file extension or content
+pub fn read_aircraft_file_with_header_skip<P: AsRef<Path>>(path: P) -> Result<Vec<Aircraft>> {
+    let path_ref = path.as_ref();
+    let extension = path_ref.extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or("");
+
+    if extension.eq_ignore_ascii_case("csv") {
+        return read_aircraft_csv_file(path);
+    }
+
+    // For fixed-width files, also skip first line if it looks like a header
+    let f = File::open(path_ref)
+        .with_context(|| format!("Opening {path_ref:?}"))?;
+    let reader = BufReader::new(f);
+    let mut out = Vec::new();
+    let mut is_first_line = true;
+
+    for (lineno, line) in reader.lines().enumerate() {
+        let line = line.with_context(|| format!("Reading line {}", lineno + 1))?;
+        let trimmed = line.trim_end_matches(&['\r', '\n'][..]);
+
+        if trimmed.trim().is_empty() {
+            continue;
+        }
+
+        // Skip first line if it looks like a header (contains common header keywords)
+        if is_first_line {
+            is_first_line = false;
+            let line_upper = trimmed.to_uppercase();
+            if line_upper.contains("N-NUMBER") ||
+               line_upper.contains("SERIAL") ||
+               line_upper.contains("REGISTRANT") {
+                continue;
+            }
+        }
+
+        let rec = Aircraft::from_fixed_width_line(trimmed)
+            .with_context(|| format!("Parsing line {}", lineno + 1))?;
+        out.push(rec);
+    }
+
+    Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_csv_parsing_with_valid_registrations() {
+        let csv_path = "tests/fixtures/faa/registrations-valid.csv";
+        let aircraft = read_aircraft_csv_file(csv_path).expect("Failed to read CSV file");
+
+        assert!(!aircraft.is_empty(), "Should parse at least one aircraft");
+
+        // Test first aircraft (152AS)
+        let first = &aircraft[0];
+        assert_eq!(first.n_number, "152AS");
+        assert_eq!(first.serial_number, "3545");
+        assert_eq!(first.mfr_mdl_code, Some("1660225".to_string()));
+        assert_eq!(first.year_mfr, Some(1980));
+        assert_eq!(first.type_registration_code, Some("3".to_string()));
+        assert_eq!(first.registrant_name, Some("ADIRONDACK SOARING ASSOCIATION INC".to_string()));
+        assert_eq!(first.city, Some("BALLSTON SPA".to_string()));
+        assert_eq!(first.state, Some("NY".to_string()));
+        assert_eq!(first.status_code, Some("V".to_string()));
+
+        // Test Mode S code parsing (hex)
+        assert_eq!(first.transponder_code, Some(0xA0D1AE));
+
+        // Test second aircraft (9845L)
+        let second = &aircraft[1];
+        assert_eq!(second.n_number, "9845L");
+        assert_eq!(second.serial_number, "17276634");
+        assert_eq!(second.year_mfr, Some(1986));
+        assert_eq!(second.registrant_name, Some("GALAXY AVIATION LLC".to_string()));
+        assert_eq!(second.city, Some("NANTUCKET".to_string()));
+        assert_eq!(second.state, Some("MA".to_string()));
+        assert_eq!(second.transponder_code, Some(0xADBD12));
+
+        // Test third aircraft (360EF)
+        let third = &aircraft[2];
+        assert_eq!(third.n_number, "360EF");
+        assert_eq!(third.serial_number, "3060");
+        assert_eq!(third.year_mfr, Some(1995));
+        assert_eq!(third.registrant_name, Some("US AIRFORCE SPECIAL OPERATIONS COMMAND".to_string()));
+        assert_eq!(third.city, Some("HURLBURT FIELD".to_string()));
+        assert_eq!(third.state, Some("FL".to_string()));
+        assert_eq!(third.transponder_code, Some(0xA40CB6));
+
+        // Test fourth aircraft (8437D)
+        let fourth = &aircraft[3];
+        assert_eq!(fourth.n_number, "8437D");
+        assert_eq!(fourth.serial_number, "22-5692");
+        assert_eq!(fourth.year_mfr, Some(1957));
+        assert_eq!(fourth.registrant_name, Some("CLARK DONALD S".to_string()));
+        assert_eq!(fourth.city, Some("ATLANTIC BEACH".to_string()));
+        assert_eq!(fourth.state, Some("FL".to_string()));
+        assert_eq!(fourth.transponder_code, Some(0xAB8E4F));
+    }
+
+    #[test]
+    fn test_header_skipping() {
+        let csv_path = "tests/fixtures/faa/registrations-valid.csv";
+        let aircraft = read_aircraft_csv_file(csv_path).expect("Failed to read CSV file");
+
+        // Ensure we don't parse the header as an aircraft
+        // The first aircraft should be 152AS, not the header line
+        assert_eq!(aircraft[0].n_number, "152AS");
+
+        // Verify we have exactly 4 aircraft records (not 5 with header)
+        assert_eq!(aircraft.len(), 4);
+    }
+
+    #[test]
+    fn test_mode_s_hex_parsing() {
+        // Test the Mode S hex parsing specifically
+        assert_eq!(parse_csv_mode_s("A0D1AE"), Some(0xA0D1AE));
+        assert_eq!(parse_csv_mode_s("ADBD12"), Some(0xADBD12));
+        assert_eq!(parse_csv_mode_s("A40CB6"), Some(0xA40CB6));
+        assert_eq!(parse_csv_mode_s("AB8E4F"), Some(0xAB8E4F));
+        assert_eq!(parse_csv_mode_s(""), None);
+        assert_eq!(parse_csv_mode_s("   "), None);
+    }
+}
