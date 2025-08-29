@@ -1,7 +1,51 @@
 -- Add up migration script here
 -- =========================================================
+-- Lookup tables (created first to satisfy foreign key constraints)
+-- =========================================================
+CREATE TABLE type_registrations (
+  code CHAR(1) PRIMARY KEY,
+  description TEXT NOT NULL
+);
+
+CREATE TABLE airworthiness_classes (
+  code CHAR(1) PRIMARY KEY,
+  description TEXT NOT NULL
+);
+
+CREATE TABLE type_aircraft (
+  code CHAR(1) PRIMARY KEY,
+  description TEXT NOT NULL
+);
+
+CREATE TABLE type_engines (
+  code VARCHAR(2) PRIMARY KEY,
+  description TEXT NOT NULL
+);
+
+CREATE TABLE status_codes (
+  code TEXT PRIMARY KEY,
+  description TEXT NOT NULL
+);
+
+CREATE TABLE regions (
+  code CHAR(1) PRIMARY KEY,
+  description TEXT NOT NULL
+);
+
+-- These two aren't enumerated in the first 8 pages; keep structure for your own seed lists.
+CREATE TABLE countries (
+  code CHAR(2) PRIMARY KEY,
+  name TEXT NOT NULL
+);
+
+CREATE TABLE states (
+  code CHAR(2) PRIMARY KEY,
+  name TEXT NOT NULL
+);
+
+-- =========================================================
 -- Core table: one row per aircraft (N-number)
--- (First 8 pages only; stops before “AIRCRAFT REFERENCE FILE”)
+-- (First 8 pages only; stops before "AIRCRAFT REFERENCE FILE")
 -- =========================================================
 CREATE TABLE aircraft_registrations (
   registration_number                 VARCHAR(5)  PRIMARY KEY,
@@ -94,57 +138,13 @@ CREATE TABLE aircraft_registrations (
 );
 
 -- =========================================================
--- Multi-value “Other Name” slots (normalize to rows 1..5)
+-- Multi-value "Other Name" slots (normalize to rows 1..5)
 -- =========================================================
 CREATE TABLE aircraft_other_names (
   registration_number   VARCHAR(5) REFERENCES aircraft_registrations(registration_number) ON DELETE CASCADE,
   seq        SMALLINT CHECK (seq BETWEEN 1 AND 5),
   other_name VARCHAR(50),
   PRIMARY KEY (registration_number, seq)
-);
-
--- =========================================================
--- Lookup tables (plural names; seed values below)
--- =========================================================
-CREATE TABLE type_registrations (
-  code CHAR(1) PRIMARY KEY,
-  description TEXT NOT NULL
-);
-
-CREATE TABLE airworthiness_classes (
-  code CHAR(1) PRIMARY KEY,
-  description TEXT NOT NULL
-);
-
-CREATE TABLE type_aircraft (
-  code CHAR(1) PRIMARY KEY,
-  description TEXT NOT NULL
-);
-
-CREATE TABLE type_engines (
-  code VARCHAR(2) PRIMARY KEY,
-  description TEXT NOT NULL
-);
-
-CREATE TABLE status_codes (
-  code TEXT PRIMARY KEY,
-  description TEXT NOT NULL
-);
-
-CREATE TABLE regions (
-  code CHAR(1) PRIMARY KEY,
-  description TEXT NOT NULL
-);
-
--- These two aren’t enumerated in the first 8 pages; keep structure for your own seed lists.
-CREATE TABLE countries (
-  code CHAR(2) PRIMARY KEY,
-  name TEXT NOT NULL
-);
-
-CREATE TABLE states (
-  code CHAR(2) PRIMARY KEY,
-  name TEXT NOT NULL
 );
 
 -- =========================================================

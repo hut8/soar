@@ -1,4 +1,5 @@
 pub mod ddb;
+pub mod device_repo;
 pub mod ogn_aprs_aircraft;
 pub mod aprs_client;
 pub mod faa_data;
@@ -11,6 +12,8 @@ use std::sync::Arc;
 use tracing::{info, error};
 
 use crate::aprs_client::{AprsClient, AprsClientConfigBuilder, MessageProcessor};
+use crate::ddb::DeviceDatabase;
+use crate::device_repo::DeviceRepository;
 use crate::faa_data::read_aircraft_file;
 
 // Embed migrations into the binary
@@ -33,6 +36,8 @@ enum Commands {
         #[arg(long)]
         faa_registrations: String,
     },
+    /// Pull devices from DDB and upsert them into the database
+    PullDevices,
     /// Run the main APRS client
     Run {
         /// APRS server hostname
@@ -145,6 +150,60 @@ async fn handle_load_registrations(faa_registrations_path: String) -> Result<()>
     Ok(())
 }
 
+async fn handle_pull_devices() -> Result<()> {
+    info!("Starting device pull from DDB...");
+
+    // Set up database connection
+    let pool = setup_database().await?;
+
+    // Create device database and fetch devices
+    let mut device_db = DeviceDatabase::new();
+    info!("Fetching devices from DDB...");
+
+    match device_db.fetch().await {
+        Ok(_) => {
+            let device_count = device_db.device_count();
+            info!("Successfully fetched {} devices from DDB", device_count);
+
+            if device_count == 0 {
+                info!("No devices found in DDB response");
+                return Ok(());
+            }
+
+            // Create device repository and upsert devices
+            let device_repo = DeviceRepository::new(pool);
+            let devices: Vec<_> = device_db.get_all_devices().values().cloned().collect();
+
+            info!("Upserting {} devices into database...", devices.len());
+            match device_repo.upsert_devices(devices).await {
+                Ok(upserted_count) => {
+                    info!("Successfully upserted {} devices", upserted_count);
+
+                    // Get final count from database
+                    match device_repo.get_device_count().await {
+                        Ok(total_count) => {
+                            info!("Total devices in database: {}", total_count);
+                        }
+                        Err(e) => {
+                            error!("Failed to get device count: {}", e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to upsert devices: {}", e);
+                    return Err(e);
+                }
+            }
+        }
+        Err(e) => {
+            error!("Failed to fetch devices from DDB: {}", e);
+            return Err(anyhow::anyhow!("Failed to fetch devices from DDB: {}", e));
+        }
+    }
+
+    Ok(())
+}
+
 async fn handle_run(
     server: String,
     port: u16,
@@ -199,6 +258,9 @@ async fn main() -> Result<()> {
     match cli.command {
         Commands::LoadRegistrations { faa_registrations } => {
             handle_load_registrations(faa_registrations).await
+        }
+        Commands::PullDevices => {
+            handle_pull_devices().await
         }
         Commands::Run {
             server,
