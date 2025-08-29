@@ -4,10 +4,12 @@ use std::collections::HashMap;
 const DDB_URL: &str = "http://ddb.glidernet.org/download/?j=1";
 
 #[derive(Debug, Clone, PartialEq)]
+#[derive(Default)]
 pub enum DeviceType {
     Flarm,
     Ogn,
     Icao,
+    #[default]
     Unknown,
 }
 
@@ -42,11 +44,6 @@ impl<'de> Deserialize<'de> for DeviceType {
     }
 }
 
-impl Default for DeviceType {
-    fn default() -> Self {
-        DeviceType::Unknown
-    }
-}
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Device {
@@ -66,15 +63,15 @@ struct DeviceResponse {
 }
 
 #[derive(Debug)]
+#[derive(Default)]
 pub struct DeviceDatabase {
     devices: HashMap<String, Device>,
 }
 
+
 impl DeviceDatabase {
     pub fn new() -> Self {
-        Self {
-            devices: HashMap::new(),
-        }
+        Self::default()
     }
 
     pub async fn fetch(&mut self) -> Result<(), Box<dyn std::error::Error>> {
