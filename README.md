@@ -1,6 +1,6 @@
-# SOAR - APRS Client with Message Archiving
+# SOAR - Soaring and Observation Records
 
-SOAR is a Rust library that provides an APRS client with optional message archiving capabilities. It can connect to APRS-IS servers and archive all incoming APRS messages to daily log files.
+SOAR is an application under active development that will automate many duty-manager functions for glider clubs, as well as provide a glider tracker.
 
 ## Features
 
