@@ -1,12 +1,56 @@
-use serde_derive::Deserialize;
-use serde_derive::Serialize;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
 
 const DDB_URL: &str = "http://ddb.glidernet.org/download/?j=1";
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum DeviceType {
+    Flarm,
+    Ogn,
+    Icao,
+    Unknown,
+}
+
+impl Serialize for DeviceType {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let s = match self {
+            DeviceType::Flarm => "F",
+            DeviceType::Ogn => "O",
+            DeviceType::Icao => "I",
+            DeviceType::Unknown => "",
+        };
+        serializer.serialize_str(s)
+    }
+}
+
+impl<'de> Deserialize<'de> for DeviceType {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        match s.as_str() {
+            "F" => Ok(DeviceType::Flarm),
+            "O" => Ok(DeviceType::Ogn),
+            "I" => Ok(DeviceType::Icao),
+            "" => Ok(DeviceType::Unknown),
+            _ => Ok(DeviceType::Unknown),
+        }
+    }
+}
+
+impl Default for DeviceType {
+    fn default() -> Self {
+        DeviceType::Unknown
+    }
+}
+
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Device {
-    pub device_type: String,
+    pub device_type: DeviceType,
     pub device_id: String,
     pub aircraft_model: String,
     pub registration: String,
@@ -73,7 +117,7 @@ mod tests {
     #[test]
     fn test_device_serialization() {
         let device = Device {
-            device_type: "F".to_string(),
+            device_type: DeviceType::Flarm,
             device_id: "000000".to_string(),
             aircraft_model: "SZD-41 Jantar Std".to_string(),
             registration: "HA-4403".to_string(),
@@ -96,5 +140,34 @@ mod tests {
         assert_eq!(response.devices.len(), 1);
         assert_eq!(response.devices[0].device_id, "000000");
         assert_eq!(response.devices[0].aircraft_model, "SZD-41 Jantar Std");
+        assert_eq!(response.devices[0].device_type, DeviceType::Flarm);
+    }
+
+    #[test]
+    fn test_device_type_deserialization() {
+        // Test Flarm device type
+        let flarm_json = r#"{"device_type":"F","device_id":"123456","aircraft_model":"Test","registration":"","cn":"","tracked":"","identified":""}"#;
+        let flarm_device: Device = serde_json::from_str(flarm_json).unwrap();
+        assert_eq!(flarm_device.device_type, DeviceType::Flarm);
+
+        // Test OGN device type
+        let ogn_json = r#"{"device_type":"O","device_id":"123456","aircraft_model":"Test","registration":"","cn":"","tracked":"","identified":""}"#;
+        let ogn_device: Device = serde_json::from_str(ogn_json).unwrap();
+        assert_eq!(ogn_device.device_type, DeviceType::Ogn);
+
+        // Test ICAO device type
+        let icao_json = r#"{"device_type":"I","device_id":"123456","aircraft_model":"Test","registration":"","cn":"","tracked":"","identified":""}"#;
+        let icao_device: Device = serde_json::from_str(icao_json).unwrap();
+        assert_eq!(icao_device.device_type, DeviceType::Icao);
+
+        // Test empty string (Unknown)
+        let unknown_json = r#"{"device_type":"","device_id":"123456","aircraft_model":"Test","registration":"","cn":"","tracked":"","identified":""}"#;
+        let unknown_device: Device = serde_json::from_str(unknown_json).unwrap();
+        assert_eq!(unknown_device.device_type, DeviceType::Unknown);
+
+        // Test unrecognized value (should default to Unknown)
+        let unrecognized_json = r#"{"device_type":"X","device_id":"123456","aircraft_model":"Test","registration":"","cn":"","tracked":"","identified":""}"#;
+        let unrecognized_device: Device = serde_json::from_str(unrecognized_json).unwrap();
+        assert_eq!(unrecognized_device.device_type, DeviceType::Unknown);
     }
 }
