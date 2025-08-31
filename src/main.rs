@@ -15,6 +15,9 @@ use crate::aprs_client::{AprsClient, AprsClientConfigBuilder, MessageProcessor};
 use crate::ddb::DeviceDatabase;
 use crate::device_repo::DeviceRepository;
 use crate::faa::aircraft_registrations::read_aircraft_file;
+use crate::faa::aircraft_models::read_aircraft_models_file;
+use crate::faa::aircraft_model_repo::AircraftModelRepository;
+use crate::faa::aircraft_registrations_repo::AircraftRegistrationsRepository;
 
 // Embed migrations into the binary
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!();
@@ -30,11 +33,14 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Load FAA aircraft registrations from CSV file
-    LoadRegistrations {
-        /// Path to the FAA registrations CSV file
+    /// Load FAA aircraft model and registration data
+    LoadFaaData {
+        /// Path to the FAA aircraft model data file
         #[arg(long)]
-        faa_registrations: String,
+        aircraft_models: String,
+        /// Path to the FAA aircraft registrations data file
+        #[arg(long)]
+        aircraft_registrations: String,
     },
     /// Pull devices from DDB and upsert them into the database
     PullDevices,
@@ -114,30 +120,75 @@ async fn setup_database() -> Result<PgPool> {
     Ok(pool)
 }
 
-async fn handle_load_registrations(faa_registrations_path: String) -> Result<()> {
-    info!("Loading FAA registrations from: {}", faa_registrations_path);
+async fn handle_load_faa_data(aircraft_models_path: String, aircraft_registrations_path: String) -> Result<()> {
+    info!("Loading FAA data - Models: {}, Registrations: {}", aircraft_models_path, aircraft_registrations_path);
 
     // Set up database connection
-    let _pool = setup_database().await?;
+    let pool = setup_database().await?;
 
-    // Read the aircraft registrations file
-    match read_aircraft_file(&faa_registrations_path) {
+    // Load aircraft models first
+    info!("Loading aircraft models from: {}", aircraft_models_path);
+    match read_aircraft_models_file(&aircraft_models_path) {
+        Ok(aircraft_models) => {
+            info!("Successfully loaded {} aircraft models", aircraft_models.len());
+
+            // Create aircraft model repository and upsert models
+            let model_repo = AircraftModelRepository::new(pool.clone());
+            info!("Upserting {} aircraft models into database...", aircraft_models.len());
+
+            match model_repo.upsert_aircraft_models(aircraft_models).await {
+                Ok(upserted_count) => {
+                    info!("Successfully upserted {} aircraft models", upserted_count);
+
+                    // Get final count from database
+                    match model_repo.get_aircraft_model_count().await {
+                        Ok(total_count) => {
+                            info!("Total aircraft models in database: {}", total_count);
+                        }
+                        Err(e) => {
+                            error!("Failed to get aircraft model count: {}", e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to upsert aircraft models: {}", e);
+                    return Err(e);
+                }
+            }
+        }
+        Err(e) => {
+            error!("Failed to read aircraft models file: {}", e);
+            return Err(e);
+        }
+    }
+
+    // Load aircraft registrations second
+    info!("Loading aircraft registrations from: {}", aircraft_registrations_path);
+    match read_aircraft_file(&aircraft_registrations_path) {
         Ok(aircraft_list) => {
             info!("Successfully loaded {} aircraft registrations", aircraft_list.len());
 
-            // For now, just discard the results as requested
-            // In the future, this is where we would insert into the database
-            info!("Discarding results as requested");
+            // Create aircraft registrations repository and upsert registrations
+            let registrations_repo = AircraftRegistrationsRepository::new(pool);
+            info!("Upserting {} aircraft registrations into database...", aircraft_list.len());
 
-            // Print a few examples for verification
-            if !aircraft_list.is_empty() {
-                info!("Sample aircraft records:");
-                for (i, aircraft) in aircraft_list.iter().take(3).enumerate() {
-                    info!("  {}. N-Number: {}, Serial: {}, Manufacturer: {:?}",
-                          i + 1,
-                          aircraft.n_number,
-                          aircraft.serial_number,
-                          aircraft.mfr_mdl_code);
+            match registrations_repo.upsert_aircraft_registrations(aircraft_list).await {
+                Ok(upserted_count) => {
+                    info!("Successfully upserted {} aircraft registrations", upserted_count);
+
+                    // Get final count from database
+                    match registrations_repo.get_aircraft_registration_count().await {
+                        Ok(total_count) => {
+                            info!("Total aircraft registrations in database: {}", total_count);
+                        }
+                        Err(e) => {
+                            error!("Failed to get aircraft registration count: {}", e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to upsert aircraft registrations: {}", e);
+                    return Err(e);
                 }
             }
         }
@@ -256,8 +307,8 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::LoadRegistrations { faa_registrations } => {
-            handle_load_registrations(faa_registrations).await
+        Commands::LoadFaaData { aircraft_models, aircraft_registrations } => {
+            handle_load_faa_data(aircraft_models, aircraft_registrations).await
         }
         Commands::PullDevices => {
             handle_pull_devices().await
