@@ -4,7 +4,7 @@
 //! and optionally archive all incoming messages to daily log files.
 
 pub mod ddb;
-pub mod faa_data;
+pub mod faa;
 pub mod ogn_aprs_aircraft;
 pub mod aprs_client;
 

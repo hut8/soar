@@ -2,7 +2,7 @@ pub mod ddb;
 pub mod device_repo;
 pub mod ogn_aprs_aircraft;
 pub mod aprs_client;
-pub mod faa_data;
+pub mod faa;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -14,7 +14,7 @@ use tracing::{info, error};
 use crate::aprs_client::{AprsClient, AprsClientConfigBuilder, MessageProcessor};
 use crate::ddb::DeviceDatabase;
 use crate::device_repo::DeviceRepository;
-use crate::faa_data::read_aircraft_file;
+use crate::faa::aircraft::read_aircraft_file;
 
 // Embed migrations into the binary
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!();
