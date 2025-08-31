@@ -97,22 +97,13 @@ When archiving is enabled, each message is logged with the following format:
 - `[HH:MM:SS]`: UTC timestamp when the message was received
 - Followed by the raw APRS message as received from the server
 
-### Example
+## Development
 
-See `examples/aprs_archive_example.rs` for a complete working example.
-
-To run the example:
+This is necessary to run migrations the first time (sqlx requires a correct schema in order to build).
 
 ```bash
-cargo run --example aprs_archive_example
+cargo install sqlx-cli --no-default-features --features rustls,postgres
 ```
-
-## Dependencies
-
-- `tokio`: Async runtime
-- `chrono`: Date/time handling for UTC-based logging
-- `ogn-parser`: APRS message parsing
-- `tracing`: Logging framework
 
 ## License
 
