@@ -2,7 +2,7 @@ use anyhow::Result;
 use sqlx::PgPool;
 use tracing::{info, warn};
 
-use crate::faa::models::{AircraftModel, AircraftType, EngineType, AircraftCategory, BuilderCertification, WeightClass};
+use crate::faa::aircraft_models::{AircraftModel, AircraftType, EngineType, AircraftCategory, BuilderCertification, WeightClass};
 
 pub struct AircraftModelRepository {
     pool: PgPool,
@@ -337,7 +337,7 @@ impl AircraftModelRepository {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::faa::models::{AircraftType, EngineType, AircraftCategory, BuilderCertification, WeightClass};
+    use crate::faa::aircraft_models::{AircraftType, EngineType, AircraftCategory, BuilderCertification, WeightClass};
 
     // Note: These tests would require a test database setup
     // For now, they're just structural examples
