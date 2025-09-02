@@ -257,7 +257,7 @@ impl Aircraft {
         let last_action_date = to_opt_date(fw(line, 220, 227));
         let certificate_issue_date = to_opt_date(fw(line, 229, 236));
 
-        let airworthiness_class_code = to_opt_string(fw(line, 238, 238));
+        let airworthiness_class_code = to_opt_string_no_zero(fw(line, 238, 238));
         let approved_operations_raw = to_opt_string_no_zero(fw(line, 239, 247));
 
         let approved_ops = if let (Some(class_code), Some(raw)) =
@@ -670,5 +670,16 @@ mod tests {
         assert_eq!(to_opt_string_no_zero("   "), None);
         assert_eq!(to_opt_string_no_zero("  0  "), None);
         assert_eq!(to_opt_string_no_zero("12345"), Some("12345".to_string()));
+    }
+
+    #[test]
+    fn test_airworthiness_class_code_zero_handling() {
+        // Test that "0" values for airworthiness_class_code are converted to None
+        assert_eq!(to_opt_string_no_zero("0"), None);
+        assert_eq!(to_opt_string_no_zero("1"), Some("1".to_string()));
+        assert_eq!(to_opt_string_no_zero("4"), Some("4".to_string()));
+        assert_eq!(to_opt_string_no_zero(""), None);
+        assert_eq!(to_opt_string_no_zero("   "), None);
+        assert_eq!(to_opt_string_no_zero("  0  "), None);
     }
 }

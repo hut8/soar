@@ -182,4 +182,8 @@ INSERT INTO countries (code, name) VALUES
   ('MP', 'Northern Mariana Islands'),
   ('VI', 'U.S. Virgin Islands'),
   ('RQ', 'Puerto Rico'),
-  ('UM', 'U.S. Minor Outlying Islands');
+  ('UM', 'U.S. Minor Outlying Islands'),
+  ('JE', 'Jersey'),
+  ('AI', 'Anguilla'),
+  ('PA', 'Panama'),
+  ('BS', 'Bahamas');
