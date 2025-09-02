@@ -1,0 +1,132 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Use GitHub API to fetch all release tags
+REPO="adsblol/globe_history_2025"
+API_URL="https://api.github.com/repos/$REPO/releases"
+OUTDIR="$HOME/aviation-data/adsb/2025"
+STATE_FILE="$OUTDIR/.pull-adsb-state"
+
+mkdir -p "$OUTDIR"
+echo "Output directory: $OUTDIR"
+
+# Initialize state file if it doesn't exist
+if [[ ! -f "$STATE_FILE" ]]; then
+    echo "# Pull-adsb state file - tracks processed files" > "$STATE_FILE"
+    echo "# Format: STATUS:FILENAME:TIMESTAMP" >> "$STATE_FILE"
+fi
+
+# Function to check if a file has been processed
+is_processed() {
+    local filename="$1"
+    grep -q "^EXTRACTED:$filename:" "$STATE_FILE" 2>/dev/null
+}
+
+# Function to mark a file as downloaded
+mark_downloaded() {
+    local filename="$1"
+    local timestamp
+    timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    echo "DOWNLOADED:$filename:$timestamp" >> "$STATE_FILE"
+}
+
+# Function to mark a file as extracted
+mark_extracted() {
+    local filename="$1"
+    local timestamp
+    timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    # Remove any previous entries for this file
+    grep -v ":$filename:" "$STATE_FILE" > "$STATE_FILE.tmp" 2>/dev/null || true
+    echo "EXTRACTED:$filename:$timestamp" >> "$STATE_FILE.tmp"
+    mv "$STATE_FILE.tmp" "$STATE_FILE"
+}
+
+# Fetch releases and extract tar part URLs
+echo "Fetching list of releases..."
+urls=$(curl -s "$API_URL" | jq -r '.[] | .assets[]?.browser_download_url' | grep '\.tar\.')
+
+if [[ -z "$urls" ]]; then
+  echo "No .tar download URLs found in releases."
+  exit 1
+fi
+
+echo "Found downloads:"
+echo "$urls"
+
+# Download each file (skip if already processed)
+while IFS= read -r url; do
+  fname=$(basename "$url")
+
+  if is_processed "$fname"; then
+    echo "Skipping $fname (already processed)"
+    continue
+  fi
+
+  if [[ -f "$OUTDIR/$fname" ]]; then
+    echo "File $fname already exists, skipping download"
+    mark_downloaded "$fname"
+  else
+    echo "Downloading $fname..."
+    curl -L -o "$OUTDIR/$fname" "$url"
+    mark_downloaded "$fname"
+  fi
+done <<< "$urls"
+
+echo "All downloads complete."
+
+# Process multi-part tar files
+echo "Processing multi-part tar files..."
+cd "$OUTDIR"
+
+# Find all .tar.aa files (first parts of multi-part archives)
+for aa_file in *.tar.aa; do
+  if [[ ! -f "$aa_file" ]]; then
+    continue
+  fi
+
+  # Extract base name (remove .tar.aa extension)
+  base_name="${aa_file%.tar.aa}"
+  tar_file="${base_name}.tar"
+
+  # Check if this archive has already been extracted
+  if is_processed "$aa_file"; then
+    echo "Skipping $base_name (already extracted)"
+    continue
+  fi
+
+  echo "Assembling $base_name..."
+
+  # Concatenate all parts (.aa, .ab, .ac, etc.)
+  cat "${base_name}.tar".* > "$tar_file"
+
+  # Create extraction directory
+  extract_dir="$base_name"
+  mkdir -p "$extract_dir"
+
+  echo "Extracting $tar_file to $extract_dir..."
+  tar -xf "$tar_file" -C "$extract_dir"
+
+  # Clean up: remove the assembled tar file and the parts
+  rm "$tar_file"
+  rm "${base_name}.tar".*
+
+  # Mark as extracted
+  mark_extracted "$aa_file"
+
+  echo "Completed processing $base_name"
+done
+
+echo "All tar files assembled and extracted."
+
+# Show summary of processed files
+echo ""
+echo "Summary of processed files:"
+if [[ -f "$STATE_FILE" ]]; then
+    extracted_count=$(grep -c "^EXTRACTED:" "$STATE_FILE" 2>/dev/null || echo "0")
+    echo "Total extracted archives: $extracted_count"
+
+    if [[ $extracted_count -gt 0 ]]; then
+        echo "Extracted files:"
+        grep "^EXTRACTED:" "$STATE_FILE" | cut -d: -f2 | sort
+    fi
+fi
