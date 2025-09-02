@@ -108,20 +108,24 @@ impl FromStr for EngineType {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self> {
-        match s.trim() {
-            "0" => Ok(EngineType::None),
-            "1" => Ok(EngineType::Reciprocating),
-            "2" => Ok(EngineType::TurboProp),
-            "3" => Ok(EngineType::TurboShaft),
-            "4" => Ok(EngineType::TurboJet),
-            "5" => Ok(EngineType::TurboFan),
-            "6" => Ok(EngineType::Ramjet),
-            "7" => Ok(EngineType::TwoCycle),
-            "8" => Ok(EngineType::FourCycle),
-            "9" => Ok(EngineType::Unknown),
-            "10" => Ok(EngineType::Electric),
-            "11" => Ok(EngineType::Rotary),
-            _ => Err(anyhow!("Invalid engine type code: {}", s)),
+        let trimmed = s.trim();
+        let code = trimmed.parse::<u8>()
+            .with_context(|| format!("Failed to parse engine type code as number: {}", trimmed))?;
+
+        match code {
+            0 => Ok(EngineType::None),
+            1 => Ok(EngineType::Reciprocating),
+            2 => Ok(EngineType::TurboProp),
+            3 => Ok(EngineType::TurboShaft),
+            4 => Ok(EngineType::TurboJet),
+            5 => Ok(EngineType::TurboFan),
+            6 => Ok(EngineType::Ramjet),
+            7 => Ok(EngineType::TwoCycle),
+            8 => Ok(EngineType::FourCycle),
+            9 => Ok(EngineType::Unknown),
+            10 => Ok(EngineType::Electric),
+            11 => Ok(EngineType::Rotary),
+            _ => Err(anyhow!("Invalid engine type code: {}", code)),
         }
     }
 }
@@ -224,11 +228,7 @@ impl FromStr for WeightClass {
 
     fn from_str(s: &str) -> Result<Self> {
         let trimmed = s.trim();
-        let code = if trimmed.starts_with("CLASS ") {
-            &trimmed[6..] // Remove "CLASS " prefix
-        } else {
-            trimmed
-        };
+        let code = trimmed.strip_prefix("CLASS ").unwrap_or(trimmed);
 
         match code {
             "1" => Ok(WeightClass::UpTo12499),
@@ -383,6 +383,11 @@ mod tests {
         assert_eq!(EngineType::from_str("1").unwrap(), EngineType::Reciprocating);
         assert_eq!(EngineType::from_str("10").unwrap(), EngineType::Electric);
         assert_eq!(EngineType::from_str("11").unwrap(), EngineType::Rotary);
+
+        // Test leading zeros are handled correctly
+        assert_eq!(EngineType::from_str("01").unwrap(), EngineType::Reciprocating);
+        assert_eq!(EngineType::from_str("02").unwrap(), EngineType::TurboProp);
+        assert_eq!(EngineType::from_str("00").unwrap(), EngineType::None);
 
         assert_eq!(EngineType::None.to_string(), "0");
         assert_eq!(EngineType::Electric.to_string(), "10");
