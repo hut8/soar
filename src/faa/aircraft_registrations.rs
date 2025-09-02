@@ -20,6 +20,11 @@ fn to_opt_string(s: &str) -> Option<String> {
     if t.is_empty() { None } else { Some(t.to_string()) }
 }
 
+fn to_opt_string_no_zero(s: &str) -> Option<String> {
+    let t = s.trim();
+    if t.is_empty() || t == "0" { None } else { Some(t.to_string()) }
+}
+
 fn to_string_trim(s: &str) -> String {
     s.trim().to_string()
 }
@@ -39,6 +44,16 @@ fn to_opt_u32(s: &str) -> Option<u32> {
     let t = s.trim();
     if t.is_empty() { return None; }
     t.parse::<u32>().ok()
+}
+
+fn to_opt_u32_nonzero(s: &str) -> Option<u32> {
+    let t = s.trim();
+    if t.is_empty() { return None; }
+    match t.parse::<u32>().ok() {
+        Some(0) => None,  // Convert zero to None
+        Some(n) => Some(n),
+        None => None,
+    }
 }
 
 fn yn_to_bool(s: &str) -> Option<bool> {
@@ -226,7 +241,7 @@ impl Aircraft {
 
         let mfr_mdl_code = to_opt_string(fw(line, 38, 44));
         let eng_mfr_mdl_code = to_opt_string(fw(line, 46, 50));
-        let year_mfr = to_opt_u32(fw(line, 52, 55)).map(|v| v as u16);
+        let year_mfr = to_opt_u32_nonzero(fw(line, 52, 55)).map(|v| v as u16);
 
         let type_registration_code = to_opt_string(fw(line, 57, 57));
         let registrant_name = to_opt_string(fw(line, 59, 108));
@@ -243,7 +258,7 @@ impl Aircraft {
         let certificate_issue_date = to_opt_date(fw(line, 229, 236));
 
         let airworthiness_class_code = to_opt_string(fw(line, 238, 238));
-        let approved_operations_raw = to_opt_string(fw(line, 239, 247));
+        let approved_operations_raw = to_opt_string_no_zero(fw(line, 239, 247));
 
         let approved_ops = if let (Some(class_code), Some(raw)) =
             (&airworthiness_class_code, &approved_operations_raw)
@@ -388,7 +403,7 @@ impl Aircraft {
         let serial_number = to_string_trim(fields[1]);
         let mfr_mdl_code = to_opt_string(fields[2]);
         let eng_mfr_mdl_code = to_opt_string(fields[3]);
-        let year_mfr = to_opt_u32(fields[4]).map(|v| v as u16);
+        let year_mfr = to_opt_u32_nonzero(fields[4]).map(|v| v as u16);
 
         let type_registration_code = to_opt_string(fields[5]);
         let registrant_name = to_opt_string(fields[6]);
@@ -634,5 +649,26 @@ mod tests {
         assert_eq!(parse_csv_mode_s("AB8E4F"), Some(0xAB8E4F));
         assert_eq!(parse_csv_mode_s(""), None);
         assert_eq!(parse_csv_mode_s("   "), None);
+    }
+
+    #[test]
+    fn test_year_mfr_zero_handling() {
+        // Test that zero year_mfr values are converted to None
+        assert_eq!(to_opt_u32_nonzero("0"), None);
+        assert_eq!(to_opt_u32_nonzero("1980"), Some(1980));
+        assert_eq!(to_opt_u32_nonzero(""), None);
+        assert_eq!(to_opt_u32_nonzero("   "), None);
+        assert_eq!(to_opt_u32_nonzero("2023"), Some(2023));
+    }
+
+    #[test]
+    fn test_approved_operations_zero_handling() {
+        // Test that "0" values for approved_operations_raw are converted to None
+        assert_eq!(to_opt_string_no_zero("0"), None);
+        assert_eq!(to_opt_string_no_zero("123"), Some("123".to_string()));
+        assert_eq!(to_opt_string_no_zero(""), None);
+        assert_eq!(to_opt_string_no_zero("   "), None);
+        assert_eq!(to_opt_string_no_zero("  0  "), None);
+        assert_eq!(to_opt_string_no_zero("12345"), Some("12345".to_string()));
     }
 }

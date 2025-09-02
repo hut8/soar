@@ -298,9 +298,10 @@ impl AircraftRegistrationsRepository {
                 }
                 Err(e) => {
                     warn!(
-                        "Failed to upsert aircraft registration {}: {}",
+                        "Failed to upsert aircraft registration {}: {}\nAircraft data: {:#?}",
                         aircraft_reg.n_number,
-                        e
+                        e,
+                        aircraft_reg
                     );
                     transaction.rollback().await?;
                     failed_count += 1;
