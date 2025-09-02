@@ -19,10 +19,14 @@ impl AircraftRegistrationsRepository {
     where
         I: IntoIterator<Item = Aircraft>,
     {
-        let mut transaction = self.pool.begin().await?;
+        let aircraft_vec: Vec<Aircraft> = aircraft.into_iter().collect();
         let mut upserted_count = 0;
+        let mut failed_count = 0;
 
-        for aircraft_reg in aircraft {
+        for aircraft_reg in aircraft_vec {
+            // Process each aircraft in its own transaction to avoid transaction abort issues
+            let mut transaction = self.pool.begin().await?;
+
             // Convert year_mfr from u16 to i32 for database storage
             let year_mfr = aircraft_reg.year_mfr.map(|y| y as i32);
 
@@ -228,17 +232,29 @@ impl AircraftRegistrationsRepository {
                     // Handle other names if present
                     if !aircraft_reg.other_names.is_empty() {
                         // First, delete existing other names for this aircraft
-                        let _ = sqlx::query!(
+                        let delete_result = sqlx::query!(
                             "DELETE FROM aircraft_other_names WHERE registration_number = $1",
                             aircraft_reg.n_number
                         )
                         .execute(&mut *transaction)
                         .await;
 
+                        if let Err(e) = delete_result {
+                            warn!(
+                                "Failed to delete other names for aircraft registration {}: {}",
+                                aircraft_reg.n_number,
+                                e
+                            );
+                            transaction.rollback().await?;
+                            failed_count += 1;
+                            continue;
+                        }
+
                         // Insert new other names
+                        let mut other_names_success = true;
                         for (seq, other_name) in aircraft_reg.other_names.iter().enumerate() {
                             let seq_num = (seq + 1) as i16; // Convert to 1-based index
-                            let _ = sqlx::query!(
+                            let insert_result = sqlx::query!(
                                 "INSERT INTO aircraft_other_names (registration_number, seq, other_name) VALUES ($1, $2, $3)",
                                 aircraft_reg.n_number,
                                 seq_num,
@@ -246,10 +262,39 @@ impl AircraftRegistrationsRepository {
                             )
                             .execute(&mut *transaction)
                             .await;
+
+                            if let Err(e) = insert_result {
+                                warn!(
+                                    "Failed to insert other name for aircraft registration {}: {}",
+                                    aircraft_reg.n_number,
+                                    e
+                                );
+                                other_names_success = false;
+                                break;
+                            }
+                        }
+
+                        if !other_names_success {
+                            transaction.rollback().await?;
+                            failed_count += 1;
+                            continue;
                         }
                     }
 
-                    upserted_count += 1;
+                    // Commit the transaction for this aircraft
+                    match transaction.commit().await {
+                        Ok(_) => {
+                            upserted_count += 1;
+                        }
+                        Err(e) => {
+                            warn!(
+                                "Failed to commit transaction for aircraft registration {}: {}",
+                                aircraft_reg.n_number,
+                                e
+                            );
+                            failed_count += 1;
+                        }
+                    }
                 }
                 Err(e) => {
                     warn!(
@@ -257,12 +302,15 @@ impl AircraftRegistrationsRepository {
                         aircraft_reg.n_number,
                         e
                     );
-                    // Continue with other aircraft registrations rather than failing the entire batch
+                    transaction.rollback().await?;
+                    failed_count += 1;
                 }
             }
         }
 
-        transaction.commit().await?;
+        if failed_count > 0 {
+            warn!("Failed to upsert {} aircraft registrations", failed_count);
+        }
         info!("Successfully upserted {} aircraft registrations", upserted_count);
 
         Ok(upserted_count)
