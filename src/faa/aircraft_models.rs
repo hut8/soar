@@ -223,7 +223,14 @@ impl FromStr for WeightClass {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self> {
-        match s.trim() {
+        let trimmed = s.trim();
+        let code = if trimmed.starts_with("CLASS ") {
+            &trimmed[6..] // Remove "CLASS " prefix
+        } else {
+            trimmed
+        };
+
+        match code {
             "1" => Ok(WeightClass::UpTo12499),
             "2" => Ok(WeightClass::From12500To19999),
             "3" => Ok(WeightClass::From20000AndOver),
@@ -236,10 +243,10 @@ impl FromStr for WeightClass {
 impl fmt::Display for WeightClass {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let code = match self {
-            WeightClass::UpTo12499 => "1",
-            WeightClass::From12500To19999 => "2",
-            WeightClass::From20000AndOver => "3",
-            WeightClass::UavUpTo55 => "4",
+            WeightClass::UpTo12499 => "CLASS 1",
+            WeightClass::From12500To19999 => "CLASS 2",
+            WeightClass::From20000AndOver => "CLASS 3",
+            WeightClass::UavUpTo55 => "CLASS 4",
         };
         write!(f, "{}", code)
     }
@@ -267,9 +274,9 @@ pub struct AircraftModel {
 
 impl AircraftModel {
     pub fn from_fixed_width_line(line: &str) -> Result<Self> {
-        // Expect at least the last position we touch (157)
-        if line.len() < 157 {
-            return Err(anyhow!("Line too short: expected at least 157 chars, got {}", line.len()));
+        // Expect at least the last position we touch (156, allowing for shorter lines)
+        if line.len() < 156 {
+            return Err(anyhow!("Line too short: expected at least 156 chars, got {}", line.len()));
         }
 
         let manufacturer_code = to_string_trim(fw(line, 1, 3));
@@ -337,7 +344,7 @@ pub fn read_aircraft_models_file<P: AsRef<Path>>(path: P) -> Result<Vec<Aircraft
     let reader = BufReader::new(f);
     let mut out = Vec::new();
 
-    for (lineno, line) in reader.lines().enumerate() {
+    for (lineno, line) in reader.lines().enumerate().skip(1) {
         let line = line.with_context(|| format!("Reading line {}", lineno + 1))?;
         let trimmed = line.trim_end_matches(&['\r', '\n'][..]);
 
@@ -412,17 +419,27 @@ mod tests {
 
     #[test]
     fn test_weight_class_enum() {
+        // Test parsing without "CLASS " prefix
         assert_eq!(WeightClass::from_str("1").unwrap(), WeightClass::UpTo12499);
         assert_eq!(WeightClass::from_str("2").unwrap(), WeightClass::From12500To19999);
         assert_eq!(WeightClass::from_str("3").unwrap(), WeightClass::From20000AndOver);
         assert_eq!(WeightClass::from_str("4").unwrap(), WeightClass::UavUpTo55);
 
-        assert_eq!(WeightClass::UpTo12499.to_string(), "1");
-        assert_eq!(WeightClass::From12500To19999.to_string(), "2");
-        assert_eq!(WeightClass::From20000AndOver.to_string(), "3");
-        assert_eq!(WeightClass::UavUpTo55.to_string(), "4");
+        // Test parsing with "CLASS " prefix
+        assert_eq!(WeightClass::from_str("CLASS 1").unwrap(), WeightClass::UpTo12499);
+        assert_eq!(WeightClass::from_str("CLASS 2").unwrap(), WeightClass::From12500To19999);
+        assert_eq!(WeightClass::from_str("CLASS 3").unwrap(), WeightClass::From20000AndOver);
+        assert_eq!(WeightClass::from_str("CLASS 4").unwrap(), WeightClass::UavUpTo55);
 
+        // Test Display format (should include "CLASS " prefix)
+        assert_eq!(WeightClass::UpTo12499.to_string(), "CLASS 1");
+        assert_eq!(WeightClass::From12500To19999.to_string(), "CLASS 2");
+        assert_eq!(WeightClass::From20000AndOver.to_string(), "CLASS 3");
+        assert_eq!(WeightClass::UavUpTo55.to_string(), "CLASS 4");
+
+        // Test invalid codes
         assert!(WeightClass::from_str("5").is_err());
+        assert!(WeightClass::from_str("CLASS 5").is_err());
     }
 
     #[test]
