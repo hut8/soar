@@ -18,7 +18,7 @@ CREATE TABLE type_aircraft (
 );
 
 CREATE TABLE type_engines (
-  code VARCHAR(2) PRIMARY KEY,
+  code SMALLINT PRIMARY KEY,
   description TEXT NOT NULL
 );
 
