@@ -181,5 +181,5 @@ INSERT INTO countries (code, name) VALUES
   ('GU', 'Guam'),
   ('MP', 'Northern Mariana Islands'),
   ('VI', 'U.S. Virgin Islands'),
-  ('PR', 'Puerto Rico'),
+  ('RQ', 'Puerto Rico'),
   ('UM', 'U.S. Minor Outlying Islands');
