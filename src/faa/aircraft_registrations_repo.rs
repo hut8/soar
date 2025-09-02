@@ -854,7 +854,7 @@ mod tests {
             approved_operations_raw: None,
             approved_ops: ApprovedOps::default(),
             type_aircraft_code: Some("4".to_string()),
-            type_engine_code: Some("01".to_string()),
+            type_engine_code: Some(1),
             status_code: Some("V".to_string()),
             transponder_code: Some(0xA12345),
             fractional_owner: Some(false),

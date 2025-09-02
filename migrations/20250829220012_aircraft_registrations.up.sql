@@ -114,7 +114,7 @@ CREATE TABLE aircraft_registrations (
   -- but that's already represented by type_aircraft_code at pos 249, so no extra flags here.
 
   type_aircraft_code        CHAR(1) REFERENCES type_aircraft(code),
-  type_engine_code          VARCHAR(2) REFERENCES type_engines(code),
+  type_engine_code          SMALLINT REFERENCES type_engines(code),
   status_code               TEXT REFERENCES status_codes(code), -- letters A..Z and numerics 1..29 appear
 
   -- Transponder / Mode S (store once, numerically)
@@ -201,18 +201,18 @@ INSERT INTO type_aircraft (code, description) VALUES
 
 -- Type Engine (pos 251–252)
 INSERT INTO type_engines (code, description) VALUES
-  ('00','None'),
-  ('01','Reciprocating'),
-  ('02','Turbo-prop'),
-  ('03','Turbo-shaft'),
-  ('04','Turbo-jet'),
-  ('05','Turbo-fan'),
-  ('06','Ramjet'),
-  ('07','2-Cycle'),
-  ('08','4-Cycle'),
-  ('09','Unknown'),
-  ('10','Electric'),
-  ('11','Rotary');
+  (0,'None'),
+  (1,'Reciprocating'),
+  (2,'Turbo-prop'),
+  (3,'Turbo-shaft'),
+  (4,'Turbo-jet'),
+  (5,'Turbo-fan'),
+  (6,'Ramjet'),
+  (7,'2-Cycle'),
+  (8,'4-Cycle'),
+  (9,'Unknown'),
+  (10,'Electric'),
+  (11,'Rotary');
 
 -- Regions (pos 211)
 INSERT INTO regions (code, description) VALUES

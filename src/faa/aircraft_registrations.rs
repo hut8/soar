@@ -187,7 +187,7 @@ pub struct Aircraft {
     pub approved_ops: ApprovedOps,                // mapped flags (best effort)
 
     pub type_aircraft_code: Option<String>,      // 249
-    pub type_engine_code: Option<String>,        // 251–252
+    pub type_engine_code: Option<i16>,           // 251–252
     pub status_code: Option<String>,             // 254–255
 
     // Mode S transponder as a single number
@@ -254,7 +254,7 @@ impl Aircraft {
         };
 
         let type_aircraft_code = to_opt_string(fw(line, 249, 249));
-        let type_engine_code = to_opt_string(fw(line, 251, 252));
+        let type_engine_code = to_opt_string(fw(line, 251, 252)).and_then(|s| s.parse().ok());
         let status_code = to_opt_string(fw(line, 254, 255));
 
         let transponder_code = parse_transponder_number(line);
@@ -406,7 +406,7 @@ impl Aircraft {
 
         let airworthiness_class_code = to_opt_string(fields[17]);
         let type_aircraft_code = to_opt_string(fields[18]);
-        let type_engine_code = to_opt_string(fields[19]);
+        let type_engine_code = to_opt_string(fields[19]).and_then(|s| s.parse().ok());
         let status_code = to_opt_string(fields[20]);
 
         // Try MODE S CODE HEX first (field 33), then MODE S CODE (field 21)
