@@ -331,7 +331,7 @@ pub fn read_aircraft_file<P: AsRef<Path>>(path: P) -> Result<Vec<Aircraft>> {
     let reader = BufReader::new(f);
     let mut out = Vec::new();
 
-    for (lineno, line) in reader.lines().enumerate() {
+    for (lineno, line) in reader.lines().enumerate().skip(1) {
         let line = line.with_context(|| format!("Reading line {}", lineno + 1))?;
         let trimmed = line.trim_end_matches(&['\r', '\n'][..]);
 
