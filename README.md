@@ -110,6 +110,8 @@ cargo install sqlx-cli --no-default-features --features rustls,postgres
 - Airport data should be pulled from https://www.openaip.net/data/exports?page=1&limit=50&sortBy=createdAt&sortDesc=true&contentType=airport&format=ndgeojson&country=US or directly from the bucket at https://console.cloud.google.com/storage/browser/29f98e10-a489-4c82-ae5e-489dbcd4912f;tab=objects?pli=1&prefix=&forceOnObjectsSortingFiltering=false
 - Alternative airport data: https://geodata.bts.gov/datasets/usdot::aviation-facilities/about (US only)
 - FAA Data (aircraft registrations and models) - https://www.faa.gov/licenses_certificates/aircraft_certification/aircraft_registry/releasable_aircraft_download
+- Ourairports (open, worldwide data) - https://ourairports.com/data/
+- FAA NASR: This seems like the best for the USA - https://www.faa.gov/air_traffic/flight_info/aeronav/aero_data/NASR_Subscription/2025-08-07/
 
 ## License
 
