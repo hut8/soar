@@ -1,139 +1,231 @@
-// https://www.openaip.net/data/exports?page=1&limit=50&sortBy=createdAt&sortDesc=true&contentType=airport&format=ndgeojson&country=US
+use anyhow::{anyhow, Context, Result};
+use std::fs::File;
+use std::io::{BufRead, BufReader};
+use std::path::Path;
 
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AirportFeature {
-    #[serde(rename = "type")]
-    pub feature_type: String,
-    pub id: u32,
-    pub properties: AirportProperties,
-    pub geometry: Geometry,
+fn to_opt_string(s: &str) -> Option<String> {
+    let t = s.trim();
+    if t.is_empty() { None } else { Some(t.to_string()) }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AirportProperties {
-    #[serde(rename = "_id")]
-    pub id: String,
-    pub name: String,
-    #[serde(rename = "icaoCode")]
-    pub icao_code: String,
-    #[serde(rename = "iataCode")]
-    pub iata_code: Option<String>,
-    #[serde(rename = "type")]
-    pub airport_type: u8,
-    #[serde(rename = "trafficType")]
-    pub traffic_type: Vec<u8>,
-    #[serde(rename = "magneticDeclination")]
-    pub magnetic_declination: f64,
-    pub country: String,
-    pub elevation: Elevation,
-    pub ppr: bool,
-    pub private: bool,
-    #[serde(rename = "skydiveActivity")]
-    pub skydive_activity: bool,
-    #[serde(rename = "winchOnly")]
-    pub winch_only: bool,
-    pub frequencies: Vec<Frequency>,
-    pub runways: Vec<Runway>,
-    #[serde(rename = "createdAt")]
-    pub created_at: String,
-    #[serde(rename = "updatedAt")]
-    pub updated_at: String,
-    #[serde(rename = "createdBy")]
-    pub created_by: String,
-    #[serde(rename = "updatedBy")]
-    pub updated_by: String,
-    #[serde(rename = "elevationGeoid")]
-    pub elevation_geoid: ElevationGeoid,
+fn to_string_trim(s: &str) -> String {
+    s.trim().to_string()
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Elevation {
-    pub value: u32,
-    pub unit: u8,
-    #[serde(rename = "referenceDatum")]
-    pub reference_datum: u8,
+fn to_opt_i32(s: &str) -> Option<i32> {
+    let t = s.trim();
+    if t.is_empty() { return None; }
+    t.parse::<i32>().ok()
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ElevationGeoid {
-    #[serde(rename = "geoidHeight")]
-    pub geoid_height: i32,
-    pub hae: u32,
+fn to_opt_f64(s: &str) -> Option<f64> {
+    let t = s.trim();
+    if t.is_empty() { return None; }
+    t.parse::<f64>().ok()
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Frequency {
-    pub value: String,
-    pub unit: u8,
-    #[serde(rename = "type")]
-    pub frequency_type: u8,
-    pub name: String,
-    pub primary: bool,
-    #[serde(rename = "publicUse")]
-    pub public_use: bool,
-    #[serde(rename = "_id")]
-    pub id: String,
+fn yes_no_to_bool(s: &str) -> bool {
+    match s.trim().to_lowercase().as_str() {
+        "yes" => true,
+        "no" => false,
+        _ => false, // Default to false for any other value
+    }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Runway {
-    pub designator: String,
-    #[serde(rename = "trueHeading")]
-    pub true_heading: u16,
-    #[serde(rename = "alignedTrueNorth")]
-    pub aligned_true_north: bool,
-    pub operations: u8,
-    #[serde(rename = "mainRunway")]
-    pub main_runway: bool,
-    #[serde(rename = "turnDirection")]
-    pub turn_direction: u8,
-    #[serde(rename = "takeOffOnly")]
-    pub take_off_only: bool,
-    #[serde(rename = "landingOnly")]
-    pub landing_only: bool,
-    pub surface: Surface,
-    pub dimension: Dimension,
-    #[serde(rename = "declaredDistance")]
-    pub declared_distance: DeclaredDistance,
-    #[serde(rename = "pilotCtrlLighting")]
-    pub pilot_ctrl_lighting: bool,
-    #[serde(rename = "_id")]
-    pub id: String,
+#[derive(Debug, Clone)]
+pub struct Airport {
+    pub id: i32,                                    // Internal OurAirports ID
+    pub ident: String,                              // Airport identifier (ICAO or local code)
+    pub airport_type: String,                       // Type of airport (large_airport, small_airport, etc.)
+    pub name: String,                               // Official airport name
+    pub latitude_deg: Option<f64>,                  // Latitude in decimal degrees
+    pub longitude_deg: Option<f64>,                 // Longitude in decimal degrees
+    pub elevation_ft: Option<i32>,                  // Elevation above MSL in feet
+    pub continent: Option<String>,                  // Continent code (NA, EU, etc.)
+    pub iso_country: Option<String>,                // ISO 3166-1 alpha-2 country code
+    pub iso_region: Option<String>,                 // ISO 3166-2 region code
+    pub municipality: Option<String>,               // Primary municipality served
+    pub scheduled_service: bool,                    // Whether airport has scheduled service
+    pub icao_code: Option<String>,                  // ICAO code
+    pub iata_code: Option<String>,                  // IATA code
+    pub gps_code: Option<String>,                   // GPS code
+    pub local_code: Option<String>,                 // Local country code
+    pub home_link: Option<String>,                  // Airport website URL
+    pub wikipedia_link: Option<String>,             // Wikipedia article URL
+    pub keywords: Option<String>,                   // Search keywords
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Surface {
-    pub composition: Vec<u8>,
-    #[serde(rename = "mainComposite")]
-    pub main_composite: u8,
-    pub condition: u8,
+impl Airport {
+    /// Parse an Airport from a CSV line with the OurAirports format
+    /// Expected CSV columns (0-based indices):
+    /// 0: id, 1: ident, 2: type, 3: name, 4: latitude_deg, 5: longitude_deg,
+    /// 6: elevation_ft, 7: continent, 8: iso_country, 9: iso_region,
+    /// 10: municipality, 11: scheduled_service, 12: icao_code, 13: iata_code,
+    /// 14: gps_code, 15: local_code, 16: home_link, 17: wikipedia_link, 18: keywords
+    pub fn from_csv_line(line: &str) -> Result<Self> {
+        // Parse CSV with proper quote handling
+        let fields = parse_csv_line(line)?;
+
+        if fields.len() < 19 {
+            return Err(anyhow!("CSV line has insufficient fields: expected at least 19, got {}", fields.len()));
+        }
+
+        let id = fields[0].trim().parse::<i32>()
+            .with_context(|| format!("Failed to parse airport ID: '{}'", fields[0]))?;
+
+        let ident = to_string_trim(&fields[1]);
+        if ident.is_empty() {
+            return Err(anyhow!("Missing airport identifier in CSV"));
+        }
+
+        let airport_type = to_string_trim(&fields[2]);
+        let name = to_string_trim(&fields[3]);
+        let latitude_deg = to_opt_f64(&fields[4]);
+        let longitude_deg = to_opt_f64(&fields[5]);
+        let elevation_ft = to_opt_i32(&fields[6]);
+        let continent = to_opt_string(&fields[7]);
+        let iso_country = to_opt_string(&fields[8]);
+        let iso_region = to_opt_string(&fields[9]);
+        let municipality = to_opt_string(&fields[10]);
+        let scheduled_service = yes_no_to_bool(&fields[11]);
+        let icao_code = to_opt_string(&fields[12]);
+        let iata_code = to_opt_string(&fields[13]);
+        let gps_code = to_opt_string(&fields[14]);
+        let local_code = to_opt_string(&fields[15]);
+        let home_link = to_opt_string(&fields[16]);
+        let wikipedia_link = to_opt_string(&fields[17]);
+        let keywords = to_opt_string(&fields[18]);
+
+        Ok(Airport {
+            id,
+            ident,
+            airport_type,
+            name,
+            latitude_deg,
+            longitude_deg,
+            elevation_ft,
+            continent,
+            iso_country,
+            iso_region,
+            municipality,
+            scheduled_service,
+            icao_code,
+            iata_code,
+            gps_code,
+            local_code,
+            home_link,
+            wikipedia_link,
+            keywords,
+        })
+    }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Dimension {
-    pub length: Measurement,
-    pub width: Measurement,
+/// Simple CSV parser that handles quoted fields
+fn parse_csv_line(line: &str) -> Result<Vec<String>> {
+    let mut fields = Vec::new();
+    let mut current_field = String::new();
+    let mut in_quotes = false;
+    let mut chars = line.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        match ch {
+            '"' => {
+                if in_quotes {
+                    // Check if this is an escaped quote (double quote)
+                    if chars.peek() == Some(&'"') {
+                        chars.next(); // consume the second quote
+                        current_field.push('"');
+                    } else {
+                        in_quotes = false;
+                    }
+                } else {
+                    in_quotes = true;
+                }
+            }
+            ',' if !in_quotes => {
+                fields.push(current_field.clone());
+                current_field.clear();
+            }
+            _ => {
+                current_field.push(ch);
+            }
+        }
+    }
+
+    // Add the last field
+    fields.push(current_field);
+
+    Ok(fields)
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DeclaredDistance {
-    pub tora: Measurement,
-    pub lda: Measurement,
+/// Read a CSV OurAirports file and parse all rows.
+/// Automatically skips the first line (header) and any blank lines.
+/// Returns an error on the first malformed line.
+pub fn read_airports_csv_file<P: AsRef<Path>>(path: P) -> Result<Vec<Airport>> {
+    let f = File::open(path.as_ref())
+        .with_context(|| format!("Opening {:?}", path.as_ref()))?;
+    let reader = BufReader::new(f);
+    let mut out = Vec::new();
+    let mut is_first_line = true;
+
+    for (lineno, line) in reader.lines().enumerate() {
+        let line = line.with_context(|| format!("Reading line {}", lineno + 1))?;
+        let trimmed = line.trim_end_matches(&['\r', '\n'][..]);
+
+        // Skip header line (first line)
+        if is_first_line {
+            is_first_line = false;
+            continue;
+        }
+
+        // Skip blank lines
+        if trimmed.trim().is_empty() {
+            continue;
+        }
+
+        let rec = Airport::from_csv_line(trimmed)
+            .with_context(|| format!("Parsing CSV line {}", lineno + 1))?;
+        out.push(rec);
+    }
+
+    Ok(out)
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Measurement {
-    pub value: u32,
-    pub unit: u8,
-}
+/// Read only the first N airports from a CSV file (useful for large files)
+pub fn read_airports_csv_sample<P: AsRef<Path>>(path: P, limit: usize) -> Result<Vec<Airport>> {
+    let f = File::open(path.as_ref())
+        .with_context(|| format!("Opening {:?}", path.as_ref()))?;
+    let reader = BufReader::new(f);
+    let mut out = Vec::new();
+    let mut is_first_line = true;
+    let mut count = 0;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Geometry {
-    #[serde(rename = "type")]
-    pub geometry_type: String,
-    pub coordinates: Vec<f64>,
+    for (lineno, line) in reader.lines().enumerate() {
+        let line = line.with_context(|| format!("Reading line {}", lineno + 1))?;
+        let trimmed = line.trim_end_matches(&['\r', '\n'][..]);
+
+        // Skip header line (first line)
+        if is_first_line {
+            is_first_line = false;
+            continue;
+        }
+
+        // Skip blank lines
+        if trimmed.trim().is_empty() {
+            continue;
+        }
+
+        if count >= limit {
+            break;
+        }
+
+        let rec = Airport::from_csv_line(trimmed)
+            .with_context(|| format!("Parsing CSV line {}", lineno + 1))?;
+        out.push(rec);
+        count += 1;
+    }
+
+    Ok(out)
 }
 
 #[cfg(test)]
@@ -141,117 +233,67 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_airport_deserialization() {
-        let json_data = r#"
-        {
-            "type":"Feature",
-            "id":4614,
-            "properties":{
-                "_id":"6261547d0e8346dfd9256ff4",
-                "name":"DENVER INTERNATIONAL AIRPORT",
-                "icaoCode":"KDEN",
-                "type":2,
-                "trafficType":[0],
-                "magneticDeclination":7,
-                "country":"US",
-                "elevation":{"value":1655,"unit":0,"referenceDatum":1},
-                "ppr":false,
-                "private":false,
-                "skydiveActivity":false,
-                "winchOnly":false,
-                "frequencies":[
-                    {
-                        "value":"119.300",
-                        "unit":2,
-                        "type":0,
-                        "name":"APP (NORTH)",
-                        "primary":false,
-                        "publicUse":true,
-                        "_id":"6261547d0e8346dfd9256ff5"
-                    }
-                ],
-                "runways":[
-                    {
-                        "designator":"08",
-                        "trueHeading":70,
-                        "alignedTrueNorth":false,
-                        "operations":0,
-                        "mainRunway":false,
-                        "turnDirection":2,
-                        "takeOffOnly":false,
-                        "landingOnly":false,
-                        "surface":{"composition":[1],"mainComposite":1,"condition":0},
-                        "dimension":{"length":{"value":3657,"unit":0},"width":{"value":45,"unit":0}},
-                        "declaredDistance":{"tora":{"value":3657,"unit":0},"lda":{"value":3657,"unit":0}},
-                        "pilotCtrlLighting":false,
-                        "_id":"6261547d0e8346dfd9257009"
-                    }
-                ],
-                "createdAt":"2022-04-21T12:56:29.331Z",
-                "updatedAt":"2024-06-21T19:44:51.409Z",
-                "createdBy":"AUTO-IMPORTER",
-                "updatedBy":"OPONcQnzWGOLiJSceNaf8pvx1fA2",
-                "elevationGeoid":{"geoidHeight":-18,"hae":1637},
-                "iataCode":"DEN"
-            },
-            "geometry":{
-                "type":"Point",
-                "coordinates":[-104.673,39.8617]
-            }
-        }
-        "#;
+    fn test_csv_parsing() {
+        let csv_line = r#"6523,"00A","heliport","Total RF Heliport",40.070985,-74.933689,11,"NA","US","US-PA","Bensalem","no",,,"K00A","00A","https://www.penndot.pa.gov/TravelInPA/airports-pa/Pages/Total-RF-Heliport.aspx",,"#;
 
-        let airport: Result<AirportFeature, _> = serde_json::from_str(json_data);
-        assert!(airport.is_ok());
+        let airport = Airport::from_csv_line(csv_line).expect("Failed to parse airport");
 
-        let airport = airport.unwrap();
-        assert_eq!(airport.properties.name, "DENVER INTERNATIONAL AIRPORT");
-        assert_eq!(airport.properties.icao_code, "KDEN");
-        assert_eq!(airport.properties.iata_code, Some("DEN".to_string()));
-        assert_eq!(airport.geometry.coordinates, vec![-104.673, 39.8617]);
+        assert_eq!(airport.id, 6523);
+        assert_eq!(airport.ident, "00A");
+        assert_eq!(airport.airport_type, "heliport");
+        assert_eq!(airport.name, "Total RF Heliport");
+        assert_eq!(airport.latitude_deg, Some(40.070985));
+        assert_eq!(airport.longitude_deg, Some(-74.933689));
+        assert_eq!(airport.elevation_ft, Some(11));
+        assert_eq!(airport.continent, Some("NA".to_string()));
+        assert_eq!(airport.iso_country, Some("US".to_string()));
+        assert_eq!(airport.iso_region, Some("US-PA".to_string()));
+        assert_eq!(airport.municipality, Some("Bensalem".to_string()));
+        assert_eq!(airport.scheduled_service, false);
+        assert_eq!(airport.icao_code, None);
+        assert_eq!(airport.iata_code, None);
+        assert_eq!(airport.gps_code, Some("K00A".to_string()));
+        assert_eq!(airport.local_code, Some("00A".to_string()));
+        assert!(airport.home_link.is_some());
+        assert_eq!(airport.wikipedia_link, None);
+        assert_eq!(airport.keywords, None);
     }
 
     #[test]
-    fn test_airport_serialization() {
-        let airport = AirportFeature {
-            feature_type: "Feature".to_string(),
-            id: 4614,
-            properties: AirportProperties {
-                id: "6261547d0e8346dfd9256ff4".to_string(),
-                name: "DENVER INTERNATIONAL AIRPORT".to_string(),
-                icao_code: "KDEN".to_string(),
-                iata_code: Some("DEN".to_string()),
-                airport_type: 2,
-                traffic_type: vec![0],
-                magnetic_declination: 7.0,
-                country: "US".to_string(),
-                elevation: Elevation {
-                    value: 1655,
-                    unit: 0,
-                    reference_datum: 1,
-                },
-                ppr: false,
-                private: false,
-                skydive_activity: false,
-                winch_only: false,
-                frequencies: vec![],
-                runways: vec![],
-                created_at: "2022-04-21T12:56:29.331Z".to_string(),
-                updated_at: "2024-06-21T19:44:51.409Z".to_string(),
-                created_by: "AUTO-IMPORTER".to_string(),
-                updated_by: "OPONcQnzWGOLiJSceNaf8pvx1fA2".to_string(),
-                elevation_geoid: ElevationGeoid {
-                    geoid_height: -18,
-                    hae: 1637,
-                },
-            },
-            geometry: Geometry {
-                geometry_type: "Point".to_string(),
-                coordinates: vec![-104.673, 39.8617],
-            },
-        };
+    fn test_yes_no_to_bool() {
+        assert_eq!(yes_no_to_bool("yes"), true);
+        assert_eq!(yes_no_to_bool("no"), false);
+        assert_eq!(yes_no_to_bool("YES"), true);
+        assert_eq!(yes_no_to_bool("NO"), false);
+        assert_eq!(yes_no_to_bool(""), false);
+        assert_eq!(yes_no_to_bool("maybe"), false);
+    }
 
-        let json = serde_json::to_string(&airport);
-        assert!(json.is_ok());
+    #[test]
+    fn test_csv_line_parsing() {
+        let line = r#"123,"test","quoted field","field with, comma",45.6,-123.4"#;
+        let fields = parse_csv_line(line).expect("Failed to parse CSV line");
+
+        assert_eq!(fields.len(), 6);
+        assert_eq!(fields[0], "123");
+        assert_eq!(fields[1], "test");
+        assert_eq!(fields[2], "quoted field");
+        assert_eq!(fields[3], "field with, comma");
+        assert_eq!(fields[4], "45.6");
+        assert_eq!(fields[5], "-123.4");
+    }
+
+    #[test]
+    fn test_empty_fields() {
+        let line = r#"123,"test",,,"",45.6"#;
+        let fields = parse_csv_line(line).expect("Failed to parse CSV line");
+
+        assert_eq!(fields.len(), 6);
+        assert_eq!(fields[0], "123");
+        assert_eq!(fields[1], "test");
+        assert_eq!(fields[2], "");
+        assert_eq!(fields[3], "");
+        assert_eq!(fields[4], "");
+        assert_eq!(fields[5], "45.6");
     }
 }
