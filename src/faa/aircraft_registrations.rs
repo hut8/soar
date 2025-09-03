@@ -269,6 +269,70 @@ impl Aircraft {
         RegistrantType::from(self.type_registration_code.clone())
     }
 
+    /// Returns a normalized club name if the aircraft appears to be registered to a gliding club
+    pub fn club_name(&self) -> Option<String> {
+        // Check if registrant type is one of the eligible types
+        let registrant_type = self.registrant_type();
+        match registrant_type {
+            RegistrantType::Corporation |
+            RegistrantType::CoOwned |
+            RegistrantType::Llc |
+            RegistrantType::Partnership |
+            RegistrantType::Unknown => {},
+            _ => return None,
+        }
+
+        // Get the registrant name
+        let name = self.registrant_name.as_ref()?;
+        let name_upper = name.to_uppercase();
+
+        // Check if it looks like a gliding club (contains "SOAR" or "CLUB")
+        if !name_upper.contains("SOAR") && !name_upper.contains("CLUB") {
+            return None;
+        }
+
+        // Normalize the name
+        let mut normalized = name_upper.clone();
+
+        // Replace ASSOCIATES and ASSOC with ASSOCIATION (but not if already ASSOCIATION)
+        normalized = normalized.replace("ASSOCIATES", "ASSOCIATION");
+        // Only replace ASSOC if it's not already part of ASSOCIATION
+        if !normalized.contains("ASSOCIATION") {
+            normalized = normalized.replace("ASSOC", "ASSOCIATION");
+        } else {
+            // Replace standalone ASSOC that's not part of ASSOCIATION
+            normalized = normalized.replace(" ASSOC ", " ASSOCIATION ");
+            if normalized.ends_with(" ASSOC") {
+                normalized = normalized.replace(" ASSOC", " ASSOCIATION");
+            }
+            if normalized.starts_with("ASSOC ") {
+                normalized = normalized.replace("ASSOC ", "ASSOCIATION ");
+            }
+        }
+
+        // Remove common business suffixes
+        let suffixes_to_remove = [
+            " LLC", " CO", " INC", " CORP", " CORPORATION", " LTD", " LIMITED",
+            " LP", " LLP", " PLLC", " PC", " PA", " COMPANY", " INCORPORATED", " PARTNERSHIP"
+        ];
+
+        for suffix in &suffixes_to_remove {
+            if normalized.ends_with(suffix) {
+                normalized = normalized[..normalized.len() - suffix.len()].to_string();
+                break; // Only remove one suffix
+            }
+        }
+
+        // Trim any trailing whitespace
+        normalized = normalized.trim().to_string();
+
+        if normalized.is_empty() {
+            None
+        } else {
+            Some(normalized)
+        }
+    }
+
     pub fn from_fixed_width_line(line: &str) -> Result<Self> {
         // Expect at least the last position we touch. Many files are 611/612 chars.
         if line.len() < 611 {
@@ -757,5 +821,113 @@ mod tests {
 
         // Test that the method works with the actual data
         assert_eq!(first.type_registration_code, Some("3".to_string()));
+    }
+
+    #[test]
+    fn test_club_name_method() {
+        // Test with actual data from CSV - first aircraft is "ADIRONDACK SOARING ASSOCIATION INC"
+        let csv_path = "tests/fixtures/faa/registrations-valid.csv";
+        let aircraft = read_aircraft_csv_file(csv_path).expect("Failed to read CSV file");
+
+        let first = &aircraft[0];
+        assert_eq!(first.registrant_name, Some("ADIRONDACK SOARING ASSOCIATION INC".to_string()));
+        assert_eq!(first.registrant_type(), RegistrantType::Corporation);
+
+        // Should return normalized club name (contains "SOAR" and is Corporation)
+        let club_name = first.club_name();
+        assert_eq!(club_name, Some("ADIRONDACK SOARING ASSOCIATION".to_string()));
+
+        // Test with manual Aircraft instances
+        let mut test_aircraft = Aircraft {
+            n_number: "TEST1".to_string(),
+            serial_number: "12345".to_string(),
+            type_registration_code: Some("3".to_string()), // Corporation
+            registrant_name: Some("MOUNTAIN SOARING CLUB INC".to_string()),
+            mfr_mdl_code: None,
+            eng_mfr_mdl_code: None,
+            year_mfr: None,
+            street1: None,
+            street2: None,
+            city: None,
+            state: None,
+            zip_code: None,
+            region_code: None,
+            county_mail_code: None,
+            country_mail_code: None,
+            last_action_date: None,
+            certificate_issue_date: None,
+            airworthiness_class_code: None,
+            approved_operations_raw: None,
+            approved_ops: ApprovedOps::default(),
+            type_aircraft_code: None,
+            type_engine_code: None,
+            status_code: None,
+            transponder_code: None,
+            fractional_owner: None,
+            airworthiness_date: None,
+            other_names: Vec::new(),
+            expiration_date: None,
+            unique_id: None,
+            kit_mfr_name: None,
+            kit_model_name: None,
+        };
+
+        // Test club with "SOAR" in name
+        assert_eq!(test_aircraft.club_name(), Some("MOUNTAIN SOARING CLUB".to_string()));
+
+        // Test club with "CLUB" in name
+        test_aircraft.registrant_name = Some("VALLEY GLIDING CLUB LLC".to_string());
+        assert_eq!(test_aircraft.club_name(), Some("VALLEY GLIDING CLUB".to_string()));
+
+        // Test ASSOCIATES -> ASSOCIATION replacement
+        test_aircraft.registrant_name = Some("RIDGE SOARING ASSOCIATES CO".to_string());
+        assert_eq!(test_aircraft.club_name(), Some("RIDGE SOARING ASSOCIATION".to_string()));
+
+        // Test ASSOC -> ASSOCIATION replacement
+        test_aircraft.registrant_name = Some("THERMAL SOARING ASSOC INC".to_string());
+        assert_eq!(test_aircraft.club_name(), Some("THERMAL SOARING ASSOCIATION".to_string()));
+
+        // Test with Individual registrant type (should return None)
+        test_aircraft.type_registration_code = Some("1".to_string()); // Individual
+        test_aircraft.registrant_name = Some("JOHN DOE SOARING CLUB".to_string());
+        assert_eq!(test_aircraft.club_name(), None);
+
+        // Test with Government registrant type (should return None)
+        test_aircraft.type_registration_code = Some("5".to_string()); // Government
+        assert_eq!(test_aircraft.club_name(), None);
+
+        // Test with eligible type but no "SOAR" or "CLUB" in name
+        test_aircraft.type_registration_code = Some("3".to_string()); // Corporation
+        test_aircraft.registrant_name = Some("AVIATION SERVICES INC".to_string());
+        assert_eq!(test_aircraft.club_name(), None);
+
+        // Test with LLC registrant type
+        test_aircraft.type_registration_code = Some("7".to_string()); // LLC
+        test_aircraft.registrant_name = Some("DESERT SOARING LLC".to_string());
+        assert_eq!(test_aircraft.club_name(), Some("DESERT SOARING".to_string()));
+
+        // Test with Partnership registrant type
+        test_aircraft.type_registration_code = Some("2".to_string()); // Partnership
+        test_aircraft.registrant_name = Some("COASTAL CLUB PARTNERSHIP".to_string());
+        assert_eq!(test_aircraft.club_name(), Some("COASTAL CLUB".to_string()));
+
+        // Test with CoOwned registrant type
+        test_aircraft.type_registration_code = Some("4".to_string()); // CoOwned
+        test_aircraft.registrant_name = Some("ALPINE SOARING CO-OWNED".to_string());
+        assert_eq!(test_aircraft.club_name(), Some("ALPINE SOARING CO-OWNED".to_string()));
+
+        // Test with Unknown registrant type
+        test_aircraft.type_registration_code = Some("X".to_string()); // Unknown
+        test_aircraft.registrant_name = Some("MYSTERY SOARING CLUB".to_string());
+        assert_eq!(test_aircraft.club_name(), Some("MYSTERY SOARING CLUB".to_string()));
+
+        // Test with no registrant name
+        test_aircraft.type_registration_code = Some("3".to_string()); // Corporation
+        test_aircraft.registrant_name = None;
+        assert_eq!(test_aircraft.club_name(), None);
+
+        // Test multiple suffix removal (should only remove one)
+        test_aircraft.registrant_name = Some("PEAK SOARING CORPORATION INC".to_string());
+        assert_eq!(test_aircraft.club_name(), Some("PEAK SOARING CORPORATION".to_string()));
     }
 }
