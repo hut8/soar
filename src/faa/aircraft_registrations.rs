@@ -4,6 +4,44 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RegistrantType {
+    Individual,
+    Partnership,
+    Corporation,
+    CoOwned,
+    Government,
+    Llc,
+    NonCitizenCorporation,
+    NonCitizenCoOwned,
+    Unknown,
+}
+
+impl From<&str> for RegistrantType {
+    fn from(code: &str) -> Self {
+        match code {
+            "1" => RegistrantType::Individual,
+            "2" => RegistrantType::Partnership,
+            "3" => RegistrantType::Corporation,
+            "4" => RegistrantType::CoOwned,
+            "5" => RegistrantType::Government,
+            "7" => RegistrantType::Llc,
+            "8" => RegistrantType::NonCitizenCorporation,
+            "9" => RegistrantType::NonCitizenCoOwned,
+            _ => RegistrantType::Unknown,
+        }
+    }
+}
+
+impl From<Option<String>> for RegistrantType {
+    fn from(code: Option<String>) -> Self {
+        match code {
+            Some(ref s) => RegistrantType::from(s.as_str()),
+            None => RegistrantType::Unknown,
+        }
+    }
+}
+
 /// Convenience: inclusive 1-based positions from the spec → 0-based Rust slice range
 fn fw(s: &str, start_1: usize, end_1: usize) -> &str {
     let start = start_1.saturating_sub(1);
@@ -226,6 +264,11 @@ pub struct Aircraft {
 }
 
 impl Aircraft {
+    /// Returns the registrant type based on the type_registration_code
+    pub fn registrant_type(&self) -> RegistrantType {
+        RegistrantType::from(self.type_registration_code.clone())
+    }
+
     pub fn from_fixed_width_line(line: &str) -> Result<Self> {
         // Expect at least the last position we touch. Many files are 611/612 chars.
         if line.len() < 611 {
@@ -681,5 +724,38 @@ mod tests {
         assert_eq!(to_opt_string_no_zero(""), None);
         assert_eq!(to_opt_string_no_zero("   "), None);
         assert_eq!(to_opt_string_no_zero("  0  "), None);
+    }
+
+    #[test]
+    fn test_registrant_type_enum() {
+        // Test RegistrantType enum conversion from string codes
+        assert_eq!(RegistrantType::from("1"), RegistrantType::Individual);
+        assert_eq!(RegistrantType::from("2"), RegistrantType::Partnership);
+        assert_eq!(RegistrantType::from("3"), RegistrantType::Corporation);
+        assert_eq!(RegistrantType::from("4"), RegistrantType::CoOwned);
+        assert_eq!(RegistrantType::from("5"), RegistrantType::Government);
+        assert_eq!(RegistrantType::from("7"), RegistrantType::Llc);
+        assert_eq!(RegistrantType::from("8"), RegistrantType::NonCitizenCorporation);
+        assert_eq!(RegistrantType::from("9"), RegistrantType::NonCitizenCoOwned);
+        assert_eq!(RegistrantType::from("6"), RegistrantType::Unknown); // Invalid code
+        assert_eq!(RegistrantType::from(""), RegistrantType::Unknown);
+        assert_eq!(RegistrantType::from("X"), RegistrantType::Unknown);
+
+        // Test conversion from Option<String>
+        assert_eq!(RegistrantType::from(Some("3".to_string())), RegistrantType::Corporation);
+        assert_eq!(RegistrantType::from(None), RegistrantType::Unknown);
+    }
+
+    #[test]
+    fn test_aircraft_registrant_type_method() {
+        let csv_path = "tests/fixtures/faa/registrations-valid.csv";
+        let aircraft = read_aircraft_csv_file(csv_path).expect("Failed to read CSV file");
+
+        // Test first aircraft (152AS) - should be Corporation (code "3")
+        let first = &aircraft[0];
+        assert_eq!(first.registrant_type(), RegistrantType::Corporation);
+
+        // Test that the method works with the actual data
+        assert_eq!(first.type_registration_code, Some("3".to_string()));
     }
 }
