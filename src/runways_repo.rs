@@ -621,8 +621,8 @@ mod tests {
         assert_eq!(runway.length_ft, Some(80));
         assert_eq!(runway.width_ft, Some(80));
         assert_eq!(runway.surface, Some("ASPH-G".to_string()));
-        assert_eq!(runway.lighted, true);
-        assert_eq!(runway.closed, false);
+        assert!(runway.lighted);
+        assert!(!runway.closed);
         assert_eq!(runway.le_ident, Some("H1".to_string()));
     }
 }

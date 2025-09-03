@@ -258,8 +258,8 @@ mod tests {
         assert_eq!(runway.length_ft, Some(80));
         assert_eq!(runway.width_ft, Some(80));
         assert_eq!(runway.surface, Some("ASPH-G".to_string()));
-        assert_eq!(runway.lighted, true);
-        assert_eq!(runway.closed, false);
+        assert!(runway.lighted);
+        assert!(!runway.closed);
         assert_eq!(runway.le_ident, Some("H1".to_string()));
         assert_eq!(runway.le_latitude_deg, None);
         assert_eq!(runway.le_longitude_deg, None);
@@ -268,11 +268,11 @@ mod tests {
 
     #[test]
     fn test_int_to_bool() {
-        assert_eq!(int_to_bool("1"), true);
-        assert_eq!(int_to_bool("0"), false);
-        assert_eq!(int_to_bool(""), false);
-        assert_eq!(int_to_bool("2"), false);
-        assert_eq!(int_to_bool("yes"), false);
+        assert!(int_to_bool("1"));
+        assert!(!int_to_bool("0"));
+        assert!(!int_to_bool(""));
+        assert!(!int_to_bool("2"));
+        assert!(!int_to_bool("yes"));
     }
 
     #[test]

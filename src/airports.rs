@@ -249,7 +249,7 @@ mod tests {
         assert_eq!(airport.iso_country, Some("US".to_string()));
         assert_eq!(airport.iso_region, Some("US-PA".to_string()));
         assert_eq!(airport.municipality, Some("Bensalem".to_string()));
-        assert_eq!(airport.scheduled_service, false);
+        assert!(!airport.scheduled_service);
         assert_eq!(airport.icao_code, None);
         assert_eq!(airport.iata_code, None);
         assert_eq!(airport.gps_code, Some("K00A".to_string()));
@@ -261,12 +261,12 @@ mod tests {
 
     #[test]
     fn test_yes_no_to_bool() {
-        assert_eq!(yes_no_to_bool("yes"), true);
-        assert_eq!(yes_no_to_bool("no"), false);
-        assert_eq!(yes_no_to_bool("YES"), true);
-        assert_eq!(yes_no_to_bool("NO"), false);
-        assert_eq!(yes_no_to_bool(""), false);
-        assert_eq!(yes_no_to_bool("maybe"), false);
+        assert!(yes_no_to_bool("yes"));
+        assert!(!yes_no_to_bool("no"));
+        assert!(yes_no_to_bool("YES"));
+        assert!(!yes_no_to_bool("NO"));
+        assert!(!yes_no_to_bool(""));
+        assert!(!yes_no_to_bool("maybe"));
     }
 
     #[test]
