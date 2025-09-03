@@ -1,8 +1,20 @@
 use anyhow::Result;
 use sqlx::PgPool;
 use tracing::{info, warn};
+use sqlx::types::{BigDecimal};
+use num_traits::{FromPrimitive, ToPrimitive};
 
 use crate::airports::Airport;
+
+/// Helper function to convert Option<f64> to Option<BigDecimal>
+fn f64_to_bigdecimal(value: Option<f64>) -> Option<BigDecimal> {
+    value.and_then(BigDecimal::from_f64)
+}
+
+/// Helper function to convert Option<BigDecimal> to Option<f64>
+fn bigdecimal_to_f64(value: Option<BigDecimal>) -> Option<f64> {
+    value.and_then(|v| v.to_f64())
+}
 
 pub struct AirportsRepository {
     pool: PgPool,
@@ -80,8 +92,8 @@ impl AirportsRepository {
                 airport.ident,
                 airport.airport_type,
                 airport.name,
-                airport.latitude_deg,
-                airport.longitude_deg,
+                f64_to_bigdecimal(airport.latitude_deg),
+                f64_to_bigdecimal(airport.longitude_deg),
                 airport.elevation_ft,
                 airport.continent,
                 airport.iso_country,
@@ -167,8 +179,8 @@ impl AirportsRepository {
                 ident: row.ident,
                 airport_type: row.r#type,
                 name: row.name,
-                latitude_deg: row.latitude_deg,
-                longitude_deg: row.longitude_deg,
+                latitude_deg: bigdecimal_to_f64(row.latitude_deg),
+                longitude_deg: bigdecimal_to_f64(row.longitude_deg),
                 elevation_ft: row.elevation_ft,
                 continent: row.continent,
                 iso_country: row.iso_country,
@@ -209,8 +221,8 @@ impl AirportsRepository {
                 ident: row.ident,
                 airport_type: row.r#type,
                 name: row.name,
-                latitude_deg: row.latitude_deg,
-                longitude_deg: row.longitude_deg,
+                latitude_deg: bigdecimal_to_f64(row.latitude_deg),
+                longitude_deg: bigdecimal_to_f64(row.longitude_deg),
                 elevation_ft: row.elevation_ft,
                 continent: row.continent,
                 iso_country: row.iso_country,
@@ -253,8 +265,8 @@ impl AirportsRepository {
                 ident: row.ident,
                 airport_type: row.r#type,
                 name: row.name,
-                latitude_deg: row.latitude_deg,
-                longitude_deg: row.longitude_deg,
+                latitude_deg: bigdecimal_to_f64(row.latitude_deg),
+                longitude_deg: bigdecimal_to_f64(row.longitude_deg),
                 elevation_ft: row.elevation_ft,
                 continent: row.continent,
                 iso_country: row.iso_country,
@@ -297,8 +309,8 @@ impl AirportsRepository {
                 ident: row.ident,
                 airport_type: row.r#type,
                 name: row.name,
-                latitude_deg: row.latitude_deg,
-                longitude_deg: row.longitude_deg,
+                latitude_deg: bigdecimal_to_f64(row.latitude_deg),
+                longitude_deg: bigdecimal_to_f64(row.longitude_deg),
                 elevation_ft: row.elevation_ft,
                 continent: row.continent,
                 iso_country: row.iso_country,
@@ -341,8 +353,8 @@ impl AirportsRepository {
                 ident: row.ident,
                 airport_type: row.r#type,
                 name: row.name,
-                latitude_deg: row.latitude_deg,
-                longitude_deg: row.longitude_deg,
+                latitude_deg: bigdecimal_to_f64(row.latitude_deg),
+                longitude_deg: bigdecimal_to_f64(row.longitude_deg),
                 elevation_ft: row.elevation_ft,
                 continent: row.continent,
                 iso_country: row.iso_country,
@@ -398,8 +410,8 @@ impl AirportsRepository {
                 ident: row.ident,
                 airport_type: row.r#type,
                 name: row.name,
-                latitude_deg: row.latitude_deg,
-                longitude_deg: row.longitude_deg,
+                latitude_deg: bigdecimal_to_f64(row.latitude_deg),
+                longitude_deg: bigdecimal_to_f64(row.longitude_deg),
                 elevation_ft: row.elevation_ft,
                 continent: row.continent,
                 iso_country: row.iso_country,
@@ -443,8 +455,8 @@ impl AirportsRepository {
                 ident: row.ident,
                 airport_type: row.r#type,
                 name: row.name,
-                latitude_deg: row.latitude_deg,
-                longitude_deg: row.longitude_deg,
+                latitude_deg: bigdecimal_to_f64(row.latitude_deg),
+                longitude_deg: bigdecimal_to_f64(row.longitude_deg),
                 elevation_ft: row.elevation_ft,
                 continent: row.continent,
                 iso_country: row.iso_country,
@@ -507,6 +519,6 @@ mod tests {
         assert_eq!(airport.longitude_deg, Some(-74.933689));
         assert_eq!(airport.elevation_ft, Some(11));
         assert_eq!(airport.iso_country, Some("US".to_string()));
-        assert_eq!(airport.scheduled_service, false);
+        assert!(!airport.scheduled_service);
     }
 }

@@ -318,8 +318,8 @@ mod tests {
         assert_eq!(runway.length_ft, Some(2500));
         assert_eq!(runway.width_ft, Some(70));
         assert_eq!(runway.surface, Some("GRVL".to_string()));
-        assert_eq!(runway.lighted, false);
-        assert_eq!(runway.closed, false);
+        assert!(!runway.lighted);
+        assert!(!runway.closed);
         assert_eq!(runway.le_ident, Some("N".to_string()));
         assert_eq!(runway.le_latitude_deg, Some(59.947733));
         assert_eq!(runway.le_longitude_deg, Some(-151.692524));

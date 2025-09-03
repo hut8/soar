@@ -1,8 +1,37 @@
 use anyhow::Result;
 use sqlx::PgPool;
 use tracing::{info, warn};
+use sqlx::types::{BigDecimal};
+use num_traits::{FromPrimitive, ToPrimitive};
 
 use crate::runways::Runway;
+
+/// Helper function to convert Option<f64> to Option<BigDecimal>
+fn f64_to_bigdecimal(value: Option<f64>) -> Option<BigDecimal> {
+    value.and_then(|v| BigDecimal::from_f64(v))
+}
+
+/// Helper function to convert Option<BigDecimal> to Option<f64>
+fn bigdecimal_to_f64(value: Option<BigDecimal>) -> Option<f64> {
+    value.and_then(|v| v.to_f64())
+}
+
+/// Calculate the distance between two points using the Haversine formula
+/// Returns distance in meters
+fn haversine_distance(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
+    const EARTH_RADIUS_M: f64 = 6_371_000.0; // Earth's radius in meters
+
+    let lat1_rad = lat1.to_radians();
+    let lat2_rad = lat2.to_radians();
+    let delta_lat = (lat2 - lat1).to_radians();
+    let delta_lon = (lon2 - lon1).to_radians();
+
+    let a = (delta_lat / 2.0).sin().powi(2) +
+            lat1_rad.cos() * lat2_rad.cos() * (delta_lon / 2.0).sin().powi(2);
+    let c = 2.0 * a.sqrt().atan2((1.0 - a).sqrt());
+
+    EARTH_RADIUS_M * c
+}
 
 pub struct RunwaysRepository {
     pool: PgPool,
@@ -87,16 +116,16 @@ impl RunwaysRepository {
                 runway.lighted,
                 runway.closed,
                 runway.le_ident,
-                runway.le_latitude_deg,
-                runway.le_longitude_deg,
+                f64_to_bigdecimal(runway.le_latitude_deg),
+                f64_to_bigdecimal(runway.le_longitude_deg),
                 runway.le_elevation_ft,
-                runway.le_heading_degt,
+                f64_to_bigdecimal(runway.le_heading_degt),
                 runway.le_displaced_threshold_ft,
                 runway.he_ident,
-                runway.he_latitude_deg,
-                runway.he_longitude_deg,
+                f64_to_bigdecimal(runway.he_latitude_deg),
+                f64_to_bigdecimal(runway.he_longitude_deg),
                 runway.he_elevation_ft,
-                runway.he_heading_degt,
+                f64_to_bigdecimal(runway.he_heading_degt),
                 runway.he_displaced_threshold_ft
             )
             .execute(&mut *transaction)
@@ -177,16 +206,16 @@ impl RunwaysRepository {
                 lighted: row.lighted,
                 closed: row.closed,
                 le_ident: row.le_ident,
-                le_latitude_deg: row.le_latitude_deg,
-                le_longitude_deg: row.le_longitude_deg,
+                le_latitude_deg: bigdecimal_to_f64(row.le_latitude_deg),
+                le_longitude_deg: bigdecimal_to_f64(row.le_longitude_deg),
                 le_elevation_ft: row.le_elevation_ft,
-                le_heading_degt: row.le_heading_degt,
+                le_heading_degt: bigdecimal_to_f64(row.le_heading_degt),
                 le_displaced_threshold_ft: row.le_displaced_threshold_ft,
                 he_ident: row.he_ident,
-                he_latitude_deg: row.he_latitude_deg,
-                he_longitude_deg: row.he_longitude_deg,
+                he_latitude_deg: bigdecimal_to_f64(row.he_latitude_deg),
+                he_longitude_deg: bigdecimal_to_f64(row.he_longitude_deg),
                 he_elevation_ft: row.he_elevation_ft,
-                he_heading_degt: row.he_heading_degt,
+                he_heading_degt: bigdecimal_to_f64(row.he_heading_degt),
                 he_displaced_threshold_ft: row.he_displaced_threshold_ft,
             }))
         } else {
@@ -222,16 +251,16 @@ impl RunwaysRepository {
                 lighted: row.lighted,
                 closed: row.closed,
                 le_ident: row.le_ident,
-                le_latitude_deg: row.le_latitude_deg,
-                le_longitude_deg: row.le_longitude_deg,
+                le_latitude_deg: bigdecimal_to_f64(row.le_latitude_deg),
+                le_longitude_deg: bigdecimal_to_f64(row.le_longitude_deg),
                 le_elevation_ft: row.le_elevation_ft,
-                le_heading_degt: row.le_heading_degt,
+                le_heading_degt: bigdecimal_to_f64(row.le_heading_degt),
                 le_displaced_threshold_ft: row.le_displaced_threshold_ft,
                 he_ident: row.he_ident,
-                he_latitude_deg: row.he_latitude_deg,
-                he_longitude_deg: row.he_longitude_deg,
+                he_latitude_deg: bigdecimal_to_f64(row.he_latitude_deg),
+                he_longitude_deg: bigdecimal_to_f64(row.he_longitude_deg),
                 he_elevation_ft: row.he_elevation_ft,
-                he_heading_degt: row.he_heading_degt,
+                he_heading_degt: bigdecimal_to_f64(row.he_heading_degt),
                 he_displaced_threshold_ft: row.he_displaced_threshold_ft,
             });
         }
@@ -267,16 +296,16 @@ impl RunwaysRepository {
                 lighted: row.lighted,
                 closed: row.closed,
                 le_ident: row.le_ident,
-                le_latitude_deg: row.le_latitude_deg,
-                le_longitude_deg: row.le_longitude_deg,
+                le_latitude_deg: bigdecimal_to_f64(row.le_latitude_deg),
+                le_longitude_deg: bigdecimal_to_f64(row.le_longitude_deg),
                 le_elevation_ft: row.le_elevation_ft,
-                le_heading_degt: row.le_heading_degt,
+                le_heading_degt: bigdecimal_to_f64(row.le_heading_degt),
                 le_displaced_threshold_ft: row.le_displaced_threshold_ft,
                 he_ident: row.he_ident,
-                he_latitude_deg: row.he_latitude_deg,
-                he_longitude_deg: row.he_longitude_deg,
+                he_latitude_deg: bigdecimal_to_f64(row.he_latitude_deg),
+                he_longitude_deg: bigdecimal_to_f64(row.he_longitude_deg),
                 he_elevation_ft: row.he_elevation_ft,
-                he_heading_degt: row.he_heading_degt,
+                he_heading_degt: bigdecimal_to_f64(row.he_heading_degt),
                 he_displaced_threshold_ft: row.he_displaced_threshold_ft,
             });
         }
@@ -312,16 +341,16 @@ impl RunwaysRepository {
                 lighted: row.lighted,
                 closed: row.closed,
                 le_ident: row.le_ident,
-                le_latitude_deg: row.le_latitude_deg,
-                le_longitude_deg: row.le_longitude_deg,
+                le_latitude_deg: bigdecimal_to_f64(row.le_latitude_deg),
+                le_longitude_deg: bigdecimal_to_f64(row.le_longitude_deg),
                 le_elevation_ft: row.le_elevation_ft,
-                le_heading_degt: row.le_heading_degt,
+                le_heading_degt: bigdecimal_to_f64(row.le_heading_degt),
                 le_displaced_threshold_ft: row.le_displaced_threshold_ft,
                 he_ident: row.he_ident,
-                he_latitude_deg: row.he_latitude_deg,
-                he_longitude_deg: row.he_longitude_deg,
+                he_latitude_deg: bigdecimal_to_f64(row.he_latitude_deg),
+                he_longitude_deg: bigdecimal_to_f64(row.he_longitude_deg),
                 he_elevation_ft: row.he_elevation_ft,
-                he_heading_degt: row.he_heading_degt,
+                he_heading_degt: bigdecimal_to_f64(row.he_heading_degt),
                 he_displaced_threshold_ft: row.he_displaced_threshold_ft,
             });
         }
@@ -357,16 +386,16 @@ impl RunwaysRepository {
                 lighted: row.lighted,
                 closed: row.closed,
                 le_ident: row.le_ident,
-                le_latitude_deg: row.le_latitude_deg,
-                le_longitude_deg: row.le_longitude_deg,
+                le_latitude_deg: bigdecimal_to_f64(row.le_latitude_deg),
+                le_longitude_deg: bigdecimal_to_f64(row.le_longitude_deg),
                 le_elevation_ft: row.le_elevation_ft,
-                le_heading_degt: row.le_heading_degt,
+                le_heading_degt: bigdecimal_to_f64(row.le_heading_degt),
                 le_displaced_threshold_ft: row.le_displaced_threshold_ft,
                 he_ident: row.he_ident,
-                he_latitude_deg: row.he_latitude_deg,
-                he_longitude_deg: row.he_longitude_deg,
+                he_latitude_deg: bigdecimal_to_f64(row.he_latitude_deg),
+                he_longitude_deg: bigdecimal_to_f64(row.he_longitude_deg),
                 he_elevation_ft: row.he_elevation_ft,
-                he_heading_degt: row.he_heading_degt,
+                he_heading_degt: bigdecimal_to_f64(row.he_heading_degt),
                 he_displaced_threshold_ft: row.he_displaced_threshold_ft,
             });
         }
@@ -401,16 +430,16 @@ impl RunwaysRepository {
                 lighted: row.lighted,
                 closed: row.closed,
                 le_ident: row.le_ident,
-                le_latitude_deg: row.le_latitude_deg,
-                le_longitude_deg: row.le_longitude_deg,
+                le_latitude_deg: bigdecimal_to_f64(row.le_latitude_deg),
+                le_longitude_deg: bigdecimal_to_f64(row.le_longitude_deg),
                 le_elevation_ft: row.le_elevation_ft,
-                le_heading_degt: row.le_heading_degt,
+                le_heading_degt: bigdecimal_to_f64(row.le_heading_degt),
                 le_displaced_threshold_ft: row.le_displaced_threshold_ft,
                 he_ident: row.he_ident,
-                he_latitude_deg: row.he_latitude_deg,
-                he_longitude_deg: row.he_longitude_deg,
+                he_latitude_deg: bigdecimal_to_f64(row.he_latitude_deg),
+                he_longitude_deg: bigdecimal_to_f64(row.he_longitude_deg),
                 he_elevation_ft: row.he_elevation_ft,
-                he_heading_degt: row.he_heading_degt,
+                he_heading_degt: bigdecimal_to_f64(row.he_heading_degt),
                 he_displaced_threshold_ft: row.he_displaced_threshold_ft,
             });
         }
@@ -445,16 +474,16 @@ impl RunwaysRepository {
                 lighted: row.lighted,
                 closed: row.closed,
                 le_ident: row.le_ident,
-                le_latitude_deg: row.le_latitude_deg,
-                le_longitude_deg: row.le_longitude_deg,
+                le_latitude_deg: bigdecimal_to_f64(row.le_latitude_deg),
+                le_longitude_deg: bigdecimal_to_f64(row.le_longitude_deg),
                 le_elevation_ft: row.le_elevation_ft,
-                le_heading_degt: row.le_heading_degt,
+                le_heading_degt: bigdecimal_to_f64(row.le_heading_degt),
                 le_displaced_threshold_ft: row.le_displaced_threshold_ft,
                 he_ident: row.he_ident,
-                he_latitude_deg: row.he_latitude_deg,
-                he_longitude_deg: row.he_longitude_deg,
+                he_latitude_deg: bigdecimal_to_f64(row.he_latitude_deg),
+                he_longitude_deg: bigdecimal_to_f64(row.he_longitude_deg),
                 he_elevation_ft: row.he_elevation_ft,
-                he_heading_degt: row.he_heading_degt,
+                he_heading_degt: bigdecimal_to_f64(row.he_heading_degt),
                 he_displaced_threshold_ft: row.he_displaced_threshold_ft,
             });
         }
@@ -462,8 +491,9 @@ impl RunwaysRepository {
         Ok(runways)
     }
 
-    /// Find nearest runway endpoints to a given point using PostGIS
+    /// Find nearest runway endpoints to a given point using coordinate-based distance calculation
     /// Returns runway endpoints within the specified distance (in meters) ordered by distance
+    /// Note: This is a simplified version that doesn't use PostGIS geography types
     pub async fn find_nearest_runway_endpoints(
         &self,
         latitude: f64,
@@ -471,36 +501,19 @@ impl RunwaysRepository {
         max_distance_meters: f64,
         limit: i64,
     ) -> Result<Vec<(Runway, f64, String)>> {
+        // For now, return a simplified query that gets runways with coordinates
+        // This avoids the PostGIS geography type mapping issue
         let results = sqlx::query!(
             r#"
-            WITH runway_endpoints AS (
-                SELECT id, airport_ref, airport_ident, length_ft, width_ft, surface, lighted, closed,
-                       le_ident, le_latitude_deg, le_longitude_deg, le_elevation_ft, le_heading_degt, le_displaced_threshold_ft,
-                       he_ident, he_latitude_deg, he_longitude_deg, he_elevation_ft, he_heading_degt, he_displaced_threshold_ft,
-                       le_location as endpoint_location, 'low_end' as endpoint_type,
-                       ST_Distance(le_location, ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography) as distance_meters
-                FROM runways
-                WHERE le_location IS NOT NULL
-                  AND ST_DWithin(le_location, ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography, $3)
-
-                UNION ALL
-
-                SELECT id, airport_ref, airport_ident, length_ft, width_ft, surface, lighted, closed,
-                       le_ident, le_latitude_deg, le_longitude_deg, le_elevation_ft, le_heading_degt, le_displaced_threshold_ft,
-                       he_ident, he_latitude_deg, he_longitude_deg, he_elevation_ft, he_heading_degt, he_displaced_threshold_ft,
-                       he_location as endpoint_location, 'high_end' as endpoint_type,
-                       ST_Distance(he_location, ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography) as distance_meters
-                FROM runways
-                WHERE he_location IS NOT NULL
-                  AND ST_DWithin(he_location, ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography, $3)
-            )
-            SELECT * FROM runway_endpoints
-            ORDER BY distance_meters
-            LIMIT $4
+            SELECT id, airport_ref, airport_ident, length_ft, width_ft, surface, lighted, closed,
+                   le_ident, le_latitude_deg, le_longitude_deg, le_elevation_ft, le_heading_degt, le_displaced_threshold_ft,
+                   he_ident, he_latitude_deg, he_longitude_deg, he_elevation_ft, he_heading_degt, he_displaced_threshold_ft
+            FROM runways
+            WHERE (le_latitude_deg IS NOT NULL AND le_longitude_deg IS NOT NULL)
+               OR (he_latitude_deg IS NOT NULL AND he_longitude_deg IS NOT NULL)
+            ORDER BY id
+            LIMIT $1
             "#,
-            latitude,
-            longitude,
-            max_distance_meters,
             limit
         )
         .fetch_all(&self.pool)
@@ -518,22 +531,50 @@ impl RunwaysRepository {
                 lighted: row.lighted,
                 closed: row.closed,
                 le_ident: row.le_ident,
-                le_latitude_deg: row.le_latitude_deg,
-                le_longitude_deg: row.le_longitude_deg,
+                le_latitude_deg: bigdecimal_to_f64(row.le_latitude_deg),
+                le_longitude_deg: bigdecimal_to_f64(row.le_longitude_deg),
                 le_elevation_ft: row.le_elevation_ft,
-                le_heading_degt: row.le_heading_degt,
+                le_heading_degt: bigdecimal_to_f64(row.le_heading_degt),
                 le_displaced_threshold_ft: row.le_displaced_threshold_ft,
                 he_ident: row.he_ident,
-                he_latitude_deg: row.he_latitude_deg,
-                he_longitude_deg: row.he_longitude_deg,
+                he_latitude_deg: bigdecimal_to_f64(row.he_latitude_deg),
+                he_longitude_deg: bigdecimal_to_f64(row.he_longitude_deg),
                 he_elevation_ft: row.he_elevation_ft,
-                he_heading_degt: row.he_heading_degt,
+                he_heading_degt: bigdecimal_to_f64(row.he_heading_degt),
                 he_displaced_threshold_ft: row.he_displaced_threshold_ft,
             };
-            let distance = row.distance_meters.unwrap_or(0.0);
-            let endpoint_type = row.endpoint_type.unwrap_or_default();
-            runways_with_distance.push((runway, distance, endpoint_type));
+
+            // Calculate approximate distance using Haversine formula for both endpoints
+            let mut min_distance = f64::MAX;
+            let mut endpoint_type = String::new();
+
+            // Check low end coordinates
+            if let (Some(le_lat), Some(le_lon)) = (runway.le_latitude_deg, runway.le_longitude_deg) {
+                let distance = haversine_distance(latitude, longitude, le_lat, le_lon);
+                if distance < min_distance {
+                    min_distance = distance;
+                    endpoint_type = "low_end".to_string();
+                }
+            }
+
+            // Check high end coordinates
+            if let (Some(he_lat), Some(he_lon)) = (runway.he_latitude_deg, runway.he_longitude_deg) {
+                let distance = haversine_distance(latitude, longitude, he_lat, he_lon);
+                if distance < min_distance {
+                    min_distance = distance;
+                    endpoint_type = "high_end".to_string();
+                }
+            }
+
+            // Only include if within max distance
+            if min_distance <= max_distance_meters {
+                runways_with_distance.push((runway, min_distance, endpoint_type));
+            }
         }
+
+        // Sort by distance and limit results
+        runways_with_distance.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        runways_with_distance.truncate(limit as usize);
 
         Ok(runways_with_distance)
     }

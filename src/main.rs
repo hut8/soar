@@ -18,10 +18,10 @@ use crate::faa::aircraft_registrations::read_aircraft_file;
 use crate::faa::aircraft_models::read_aircraft_models_file;
 use crate::faa::aircraft_model_repo::AircraftModelRepository;
 use crate::faa::aircraft_registrations_repo::AircraftRegistrationsRepository;
-use crate::airports::read_airports_csv_file;
-use crate::airports_repo::AirportsRepository;
-use crate::runways::read_runways_csv_file;
-use crate::runways_repo::RunwaysRepository;
+use soar::airports::read_airports_csv_file;
+use soar::airports_repo::AirportsRepository;
+use soar::runways::read_runways_csv_file;
+use soar::runways_repo::RunwaysRepository;
 
 // Embed migrations into the binary
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!();
