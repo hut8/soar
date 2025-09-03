@@ -18,6 +18,10 @@ use crate::faa::aircraft_registrations::read_aircraft_file;
 use crate::faa::aircraft_models::read_aircraft_models_file;
 use crate::faa::aircraft_model_repo::AircraftModelRepository;
 use crate::faa::aircraft_registrations_repo::AircraftRegistrationsRepository;
+use crate::airports::read_airports_csv_file;
+use crate::airports_repo::AirportsRepository;
+use crate::runways::read_runways_csv_file;
+use crate::runways_repo::RunwaysRepository;
 
 // Embed migrations into the binary
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!();
@@ -41,6 +45,12 @@ enum Commands {
         /// Path to the aircraft registrations data file
         #[arg(long)]
         aircraft_registrations: String,
+        /// Path to the airports CSV file
+        #[arg(long)]
+        airports: String,
+        /// Path to the runways CSV file
+        #[arg(long)]
+        runways: String,
     },
     /// Pull devices from DDB and upsert them into the database
     PullDevices,
@@ -120,8 +130,14 @@ async fn setup_database() -> Result<PgPool> {
     Ok(pool)
 }
 
-async fn handle_load_data(aircraft_models_path: String, aircraft_registrations_path: String) -> Result<()> {
-    info!("Loading aircraft data - Models: {}, Registrations: {}", aircraft_models_path, aircraft_registrations_path);
+async fn handle_load_data(
+    aircraft_models_path: String,
+    aircraft_registrations_path: String,
+    airports_path: String,
+    runways_path: String
+) -> Result<()> {
+    info!("Loading data - Models: {}, Registrations: {}, Airports: {}, Runways: {}",
+          aircraft_models_path, aircraft_registrations_path, airports_path, runways_path);
 
     // Set up database connection
     let pool = setup_database().await?;
@@ -169,7 +185,7 @@ async fn handle_load_data(aircraft_models_path: String, aircraft_registrations_p
             info!("Successfully loaded {} aircraft registrations", aircraft_list.len());
 
             // Create aircraft registrations repository and upsert registrations
-            let registrations_repo = AircraftRegistrationsRepository::new(pool);
+            let registrations_repo = AircraftRegistrationsRepository::new(pool.clone());
             info!("Upserting {} aircraft registrations into database...", aircraft_list.len());
 
             match registrations_repo.upsert_aircraft_registrations(aircraft_list).await {
@@ -194,6 +210,78 @@ async fn handle_load_data(aircraft_models_path: String, aircraft_registrations_p
         }
         Err(e) => {
             error!("Failed to read aircraft registrations file: {}", e);
+            return Err(e);
+        }
+    }
+
+    // Load airports third
+    info!("Loading airports from: {}", airports_path);
+    match read_airports_csv_file(&airports_path) {
+        Ok(airports_list) => {
+            info!("Successfully loaded {} airports", airports_list.len());
+
+            // Create airports repository and upsert airports
+            let airports_repo = AirportsRepository::new(pool.clone());
+            info!("Upserting {} airports into database...", airports_list.len());
+
+            match airports_repo.upsert_airports(airports_list).await {
+                Ok(upserted_count) => {
+                    info!("Successfully upserted {} airports", upserted_count);
+
+                    // Get final count from database
+                    match airports_repo.get_airport_count().await {
+                        Ok(total_count) => {
+                            info!("Total airports in database: {}", total_count);
+                        }
+                        Err(e) => {
+                            error!("Failed to get airport count: {}", e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to upsert airports: {}", e);
+                    return Err(e);
+                }
+            }
+        }
+        Err(e) => {
+            error!("Failed to read airports file: {}", e);
+            return Err(e);
+        }
+    }
+
+    // Load runways fourth
+    info!("Loading runways from: {}", runways_path);
+    match read_runways_csv_file(&runways_path) {
+        Ok(runways_list) => {
+            info!("Successfully loaded {} runways", runways_list.len());
+
+            // Create runways repository and upsert runways
+            let runways_repo = RunwaysRepository::new(pool);
+            info!("Upserting {} runways into database...", runways_list.len());
+
+            match runways_repo.upsert_runways(runways_list).await {
+                Ok(upserted_count) => {
+                    info!("Successfully upserted {} runways", upserted_count);
+
+                    // Get final count from database
+                    match runways_repo.get_runway_count().await {
+                        Ok(total_count) => {
+                            info!("Total runways in database: {}", total_count);
+                        }
+                        Err(e) => {
+                            error!("Failed to get runway count: {}", e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to upsert runways: {}", e);
+                    return Err(e);
+                }
+            }
+        }
+        Err(e) => {
+            error!("Failed to read runways file: {}", e);
             return Err(e);
         }
     }
@@ -307,8 +395,8 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::LoadData { aircraft_models, aircraft_registrations } => {
-            handle_load_data(aircraft_models, aircraft_registrations).await
+        Commands::LoadData { aircraft_models, aircraft_registrations, airports, runways } => {
+            handle_load_data(aircraft_models, aircraft_registrations, airports, runways).await
         }
         Commands::PullDevices => {
             handle_pull_devices().await
