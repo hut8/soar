@@ -1,6 +1,7 @@
 use anyhow::Result;
 use sqlx::PgPool;
 use tracing::{info, warn};
+use uuid::Uuid;
 
 use crate::faa::aircraft_registrations::{Aircraft, ApprovedOps};
 
@@ -11,6 +12,32 @@ pub struct AircraftRegistrationsRepository {
 impl AircraftRegistrationsRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
+    }
+
+    /// Find or create a club by name, returning its UUID
+    async fn find_or_create_club(&self, club_name: &str, transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>) -> Result<Uuid> {
+        // First try to find existing club
+        let existing_club = sqlx::query!(
+            "SELECT id FROM clubs WHERE name = $1",
+            club_name
+        )
+        .fetch_optional(&mut **transaction)
+        .await?;
+
+        if let Some(club) = existing_club {
+            return Ok(club.id);
+        }
+
+        // Club doesn't exist, create it
+        let new_club = sqlx::query!(
+            "INSERT INTO clubs (name) VALUES ($1) RETURNING id",
+            club_name
+        )
+        .fetch_one(&mut **transaction)
+        .await?;
+
+        info!("Created new club: {}", club_name);
+        Ok(new_club.id)
     }
 
     /// Upsert aircraft registrations into the database
@@ -32,6 +59,32 @@ impl AircraftRegistrationsRepository {
 
             // Convert transponder_code from u32 to i64 for database storage (BIGINT)
             let transponder_code = aircraft_reg.transponder_code.map(|t| t as i64);
+
+            // Handle club linking if aircraft has a valid club name
+            let club_id = if let Some(club_name) = aircraft_reg.club_name() {
+                // Check if aircraft already has a club_id set (never overwrite existing club_id)
+                let existing_club_id = sqlx::query!(
+                    "SELECT club_id FROM aircraft_registrations WHERE registration_number = $1",
+                    aircraft_reg.n_number
+                )
+                .fetch_optional(&mut *transaction)
+                .await?;
+
+                if let Some(existing) = existing_club_id {
+                    if existing.club_id.is_some() {
+                        // Aircraft already has a club_id, don't change it
+                        existing.club_id
+                    } else {
+                        // Aircraft exists but has no club_id, set it
+                        Some(self.find_or_create_club(&club_name, &mut transaction).await?)
+                    }
+                } else {
+                    // New aircraft, set club_id
+                    Some(self.find_or_create_club(&club_name, &mut transaction).await?)
+                }
+            } else {
+                None
+            };
 
             // Use ON CONFLICT to handle upserts
             let result = sqlx::query!(
@@ -95,13 +148,14 @@ impl AircraftRegistrationsRepository {
                     expiration_date,
                     unique_id,
                     kit_mfr_name,
-                    kit_model_name
+                    kit_model_name,
+                    club_id
                 )
                 VALUES (
                     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19,
                     $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36,
                     $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53,
-                    $54, $55, $56, $57, $58, $59
+                    $54, $55, $56, $57, $58, $59, $60
                 )
                 ON CONFLICT (registration_number)
                 DO UPDATE SET
@@ -162,7 +216,8 @@ impl AircraftRegistrationsRepository {
                     expiration_date = EXCLUDED.expiration_date,
                     unique_id = EXCLUDED.unique_id,
                     kit_mfr_name = EXCLUDED.kit_mfr_name,
-                    kit_model_name = EXCLUDED.kit_model_name
+                    kit_model_name = EXCLUDED.kit_model_name,
+                    club_id = CASE WHEN aircraft_registrations.club_id IS NOT NULL THEN aircraft_registrations.club_id ELSE EXCLUDED.club_id END
                 "#,
                 aircraft_reg.n_number,
                 aircraft_reg.serial_number,
@@ -222,7 +277,8 @@ impl AircraftRegistrationsRepository {
                 aircraft_reg.expiration_date,
                 aircraft_reg.unique_id,
                 aircraft_reg.kit_mfr_name,
-                aircraft_reg.kit_model_name
+                aircraft_reg.kit_model_name,
+                club_id
             )
             .execute(&mut *transaction)
             .await;
