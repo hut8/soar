@@ -186,4 +186,11 @@ INSERT INTO countries (code, name) VALUES
   ('JE', 'Jersey'),
   ('AI', 'Anguilla'),
   ('PA', 'Panama'),
-  ('BS', 'Bahamas');
+  ('BS', 'Bahamas'),
+  ('TC', 'Turks and Caicos Islands'),
+  ('KY', 'Cayman Islands'),
+  ('DO', 'Dominican Republic'),
+  ('AG', 'Antigua and Barbuda'),
+  ('AN', 'Netherlands Antilles'),
+  ('NF', 'Norfolk Island'),
+  ('IM', 'Isle of Man');
