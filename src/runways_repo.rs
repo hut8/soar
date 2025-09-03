@@ -8,7 +8,7 @@ use crate::runways::Runway;
 
 /// Helper function to convert Option<f64> to Option<BigDecimal>
 fn f64_to_bigdecimal(value: Option<f64>) -> Option<BigDecimal> {
-    value.and_then(|v| BigDecimal::from_f64(v))
+    value.and_then(BigDecimal::from_f64)
 }
 
 /// Helper function to convert Option<BigDecimal> to Option<f64>

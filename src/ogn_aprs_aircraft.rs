@@ -139,8 +139,8 @@ impl FromStr for OgnAprsParameters {
         let mut aprs_pe_lon_digit: Option<u8> = None;
 
         // Also search inline for a "!W..!" block (not necessarily whitespace-separated)
-        if let Some(w_start) = s.find("!W") {
-            if let Some(w_end) = s[w_start + 2..].find('!') {
+        if let Some(w_start) = s.find("!W")
+            && let Some(w_end) = s[w_start + 2..].find('!') {
                 let payload = &s[w_start + 2 .. w_start + 2 + w_end];
                 let bytes = payload.as_bytes();
                 if bytes.len() >= 2 && bytes[0].is_ascii_digit() && bytes[1].is_ascii_digit() {
@@ -148,7 +148,6 @@ impl FromStr for OgnAprsParameters {
                     aprs_pe_lon_digit = Some(bytes[1] - b'0');
                 }
             }
-        }
 
         // Parse unit-suffixed tokens (case-insensitive for the unit part)
         for tok in tokens {
