@@ -8,6 +8,8 @@ pub mod faa;
 pub mod ogn_aprs_aircraft;
 pub mod aprs_client;
 pub mod airports;
+pub mod airports_repo;
 pub mod runways;
+pub mod runways_repo;
 
 pub use aprs_client::{AprsClient, AprsClientConfig, AprsClientConfigBuilder, MessageProcessor};

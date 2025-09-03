@@ -1,0 +1,587 @@
+use anyhow::Result;
+use sqlx::PgPool;
+use tracing::{info, warn};
+
+use crate::runways::Runway;
+
+pub struct RunwaysRepository {
+    pool: PgPool,
+}
+
+impl RunwaysRepository {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+
+    /// Upsert runways into the database
+    /// This will insert new runways or update existing ones based on the primary key (id)
+    pub async fn upsert_runways<I>(&self, runways: I) -> Result<usize>
+    where
+        I: IntoIterator<Item = Runway>,
+    {
+        let runways_vec: Vec<Runway> = runways.into_iter().collect();
+        let mut upserted_count = 0;
+        let mut failed_count = 0;
+
+        for runway in runways_vec {
+            // Process each runway in its own transaction to avoid transaction abort issues
+            let mut transaction = self.pool.begin().await?;
+
+            // Use ON CONFLICT to handle upserts
+            let result = sqlx::query!(
+                r#"
+                INSERT INTO runways (
+                    id,
+                    airport_ref,
+                    airport_ident,
+                    length_ft,
+                    width_ft,
+                    surface,
+                    lighted,
+                    closed,
+                    le_ident,
+                    le_latitude_deg,
+                    le_longitude_deg,
+                    le_elevation_ft,
+                    le_heading_degt,
+                    le_displaced_threshold_ft,
+                    he_ident,
+                    he_latitude_deg,
+                    he_longitude_deg,
+                    he_elevation_ft,
+                    he_heading_degt,
+                    he_displaced_threshold_ft
+                )
+                VALUES (
+                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20
+                )
+                ON CONFLICT (id)
+                DO UPDATE SET
+                    airport_ref = EXCLUDED.airport_ref,
+                    airport_ident = EXCLUDED.airport_ident,
+                    length_ft = EXCLUDED.length_ft,
+                    width_ft = EXCLUDED.width_ft,
+                    surface = EXCLUDED.surface,
+                    lighted = EXCLUDED.lighted,
+                    closed = EXCLUDED.closed,
+                    le_ident = EXCLUDED.le_ident,
+                    le_latitude_deg = EXCLUDED.le_latitude_deg,
+                    le_longitude_deg = EXCLUDED.le_longitude_deg,
+                    le_elevation_ft = EXCLUDED.le_elevation_ft,
+                    le_heading_degt = EXCLUDED.le_heading_degt,
+                    le_displaced_threshold_ft = EXCLUDED.le_displaced_threshold_ft,
+                    he_ident = EXCLUDED.he_ident,
+                    he_latitude_deg = EXCLUDED.he_latitude_deg,
+                    he_longitude_deg = EXCLUDED.he_longitude_deg,
+                    he_elevation_ft = EXCLUDED.he_elevation_ft,
+                    he_heading_degt = EXCLUDED.he_heading_degt,
+                    he_displaced_threshold_ft = EXCLUDED.he_displaced_threshold_ft,
+                    updated_at = NOW()
+                "#,
+                runway.id,
+                runway.airport_ref,
+                runway.airport_ident,
+                runway.length_ft,
+                runway.width_ft,
+                runway.surface,
+                runway.lighted,
+                runway.closed,
+                runway.le_ident,
+                runway.le_latitude_deg,
+                runway.le_longitude_deg,
+                runway.le_elevation_ft,
+                runway.le_heading_degt,
+                runway.le_displaced_threshold_ft,
+                runway.he_ident,
+                runway.he_latitude_deg,
+                runway.he_longitude_deg,
+                runway.he_elevation_ft,
+                runway.he_heading_degt,
+                runway.he_displaced_threshold_ft
+            )
+            .execute(&mut *transaction)
+            .await;
+
+            match result {
+                Ok(_) => {
+                    // Commit the transaction for this runway
+                    match transaction.commit().await {
+                        Ok(_) => {
+                            upserted_count += 1;
+                        }
+                        Err(e) => {
+                            warn!(
+                                "Failed to commit transaction for runway {} at airport {}: {}",
+                                runway.id,
+                                runway.airport_ident,
+                                e
+                            );
+                            failed_count += 1;
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!(
+                        "Failed to upsert runway {} at airport {}: {}\nRunway data: {:#?}",
+                        runway.id,
+                        runway.airport_ident,
+                        e,
+                        runway
+                    );
+                    transaction.rollback().await?;
+                    failed_count += 1;
+                }
+            }
+        }
+
+        if failed_count > 0 {
+            warn!("Failed to upsert {} runways", failed_count);
+        }
+        info!("Successfully upserted {} runways", upserted_count);
+
+        Ok(upserted_count)
+    }
+
+    /// Get the total count of runways in the database
+    pub async fn get_runway_count(&self) -> Result<i64> {
+        let result = sqlx::query!("SELECT COUNT(*) as count FROM runways")
+            .fetch_one(&self.pool)
+            .await?;
+
+        Ok(result.count.unwrap_or(0))
+    }
+
+    /// Get a runway by its ID
+    pub async fn get_runway_by_id(&self, id: i32) -> Result<Option<Runway>> {
+        let result = sqlx::query!(
+            r#"
+            SELECT id, airport_ref, airport_ident, length_ft, width_ft, surface, lighted, closed,
+                   le_ident, le_latitude_deg, le_longitude_deg, le_elevation_ft, le_heading_degt, le_displaced_threshold_ft,
+                   he_ident, he_latitude_deg, he_longitude_deg, he_elevation_ft, he_heading_degt, he_displaced_threshold_ft
+            FROM runways
+            WHERE id = $1
+            "#,
+            id
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some(row) = result {
+            Ok(Some(Runway {
+                id: row.id,
+                airport_ref: row.airport_ref,
+                airport_ident: row.airport_ident,
+                length_ft: row.length_ft,
+                width_ft: row.width_ft,
+                surface: row.surface,
+                lighted: row.lighted,
+                closed: row.closed,
+                le_ident: row.le_ident,
+                le_latitude_deg: row.le_latitude_deg,
+                le_longitude_deg: row.le_longitude_deg,
+                le_elevation_ft: row.le_elevation_ft,
+                le_heading_degt: row.le_heading_degt,
+                le_displaced_threshold_ft: row.le_displaced_threshold_ft,
+                he_ident: row.he_ident,
+                he_latitude_deg: row.he_latitude_deg,
+                he_longitude_deg: row.he_longitude_deg,
+                he_elevation_ft: row.he_elevation_ft,
+                he_heading_degt: row.he_heading_degt,
+                he_displaced_threshold_ft: row.he_displaced_threshold_ft,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Get all runways for a specific airport by airport ID
+    pub async fn get_runways_by_airport_id(&self, airport_id: i32) -> Result<Vec<Runway>> {
+        let results = sqlx::query!(
+            r#"
+            SELECT id, airport_ref, airport_ident, length_ft, width_ft, surface, lighted, closed,
+                   le_ident, le_latitude_deg, le_longitude_deg, le_elevation_ft, le_heading_degt, le_displaced_threshold_ft,
+                   he_ident, he_latitude_deg, he_longitude_deg, he_elevation_ft, he_heading_degt, he_displaced_threshold_ft
+            FROM runways
+            WHERE airport_ref = $1
+            ORDER BY id
+            "#,
+            airport_id
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut runways = Vec::new();
+        for row in results {
+            runways.push(Runway {
+                id: row.id,
+                airport_ref: row.airport_ref,
+                airport_ident: row.airport_ident,
+                length_ft: row.length_ft,
+                width_ft: row.width_ft,
+                surface: row.surface,
+                lighted: row.lighted,
+                closed: row.closed,
+                le_ident: row.le_ident,
+                le_latitude_deg: row.le_latitude_deg,
+                le_longitude_deg: row.le_longitude_deg,
+                le_elevation_ft: row.le_elevation_ft,
+                le_heading_degt: row.le_heading_degt,
+                le_displaced_threshold_ft: row.le_displaced_threshold_ft,
+                he_ident: row.he_ident,
+                he_latitude_deg: row.he_latitude_deg,
+                he_longitude_deg: row.he_longitude_deg,
+                he_elevation_ft: row.he_elevation_ft,
+                he_heading_degt: row.he_heading_degt,
+                he_displaced_threshold_ft: row.he_displaced_threshold_ft,
+            });
+        }
+
+        Ok(runways)
+    }
+
+    /// Get all runways for a specific airport by airport identifier
+    pub async fn get_runways_by_airport_ident(&self, airport_ident: &str) -> Result<Vec<Runway>> {
+        let results = sqlx::query!(
+            r#"
+            SELECT id, airport_ref, airport_ident, length_ft, width_ft, surface, lighted, closed,
+                   le_ident, le_latitude_deg, le_longitude_deg, le_elevation_ft, le_heading_degt, le_displaced_threshold_ft,
+                   he_ident, he_latitude_deg, he_longitude_deg, he_elevation_ft, he_heading_degt, he_displaced_threshold_ft
+            FROM runways
+            WHERE airport_ident = $1
+            ORDER BY id
+            "#,
+            airport_ident
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut runways = Vec::new();
+        for row in results {
+            runways.push(Runway {
+                id: row.id,
+                airport_ref: row.airport_ref,
+                airport_ident: row.airport_ident,
+                length_ft: row.length_ft,
+                width_ft: row.width_ft,
+                surface: row.surface,
+                lighted: row.lighted,
+                closed: row.closed,
+                le_ident: row.le_ident,
+                le_latitude_deg: row.le_latitude_deg,
+                le_longitude_deg: row.le_longitude_deg,
+                le_elevation_ft: row.le_elevation_ft,
+                le_heading_degt: row.le_heading_degt,
+                le_displaced_threshold_ft: row.le_displaced_threshold_ft,
+                he_ident: row.he_ident,
+                he_latitude_deg: row.he_latitude_deg,
+                he_longitude_deg: row.he_longitude_deg,
+                he_elevation_ft: row.he_elevation_ft,
+                he_heading_degt: row.he_heading_degt,
+                he_displaced_threshold_ft: row.he_displaced_threshold_ft,
+            });
+        }
+
+        Ok(runways)
+    }
+
+    /// Search runways by surface type
+    pub async fn search_by_surface(&self, surface: &str) -> Result<Vec<Runway>> {
+        let results = sqlx::query!(
+            r#"
+            SELECT id, airport_ref, airport_ident, length_ft, width_ft, surface, lighted, closed,
+                   le_ident, le_latitude_deg, le_longitude_deg, le_elevation_ft, le_heading_degt, le_displaced_threshold_ft,
+                   he_ident, he_latitude_deg, he_longitude_deg, he_elevation_ft, he_heading_degt, he_displaced_threshold_ft
+            FROM runways
+            WHERE surface = $1
+            ORDER BY airport_ident, id
+            "#,
+            surface
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut runways = Vec::new();
+        for row in results {
+            runways.push(Runway {
+                id: row.id,
+                airport_ref: row.airport_ref,
+                airport_ident: row.airport_ident,
+                length_ft: row.length_ft,
+                width_ft: row.width_ft,
+                surface: row.surface,
+                lighted: row.lighted,
+                closed: row.closed,
+                le_ident: row.le_ident,
+                le_latitude_deg: row.le_latitude_deg,
+                le_longitude_deg: row.le_longitude_deg,
+                le_elevation_ft: row.le_elevation_ft,
+                le_heading_degt: row.le_heading_degt,
+                le_displaced_threshold_ft: row.le_displaced_threshold_ft,
+                he_ident: row.he_ident,
+                he_latitude_deg: row.he_latitude_deg,
+                he_longitude_deg: row.he_longitude_deg,
+                he_elevation_ft: row.he_elevation_ft,
+                he_heading_degt: row.he_heading_degt,
+                he_displaced_threshold_ft: row.he_displaced_threshold_ft,
+            });
+        }
+
+        Ok(runways)
+    }
+
+    /// Search runways by minimum length
+    pub async fn search_by_min_length(&self, min_length_ft: i32) -> Result<Vec<Runway>> {
+        let results = sqlx::query!(
+            r#"
+            SELECT id, airport_ref, airport_ident, length_ft, width_ft, surface, lighted, closed,
+                   le_ident, le_latitude_deg, le_longitude_deg, le_elevation_ft, le_heading_degt, le_displaced_threshold_ft,
+                   he_ident, he_latitude_deg, he_longitude_deg, he_elevation_ft, he_heading_degt, he_displaced_threshold_ft
+            FROM runways
+            WHERE length_ft >= $1
+            ORDER BY length_ft DESC, airport_ident, id
+            "#,
+            min_length_ft
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut runways = Vec::new();
+        for row in results {
+            runways.push(Runway {
+                id: row.id,
+                airport_ref: row.airport_ref,
+                airport_ident: row.airport_ident,
+                length_ft: row.length_ft,
+                width_ft: row.width_ft,
+                surface: row.surface,
+                lighted: row.lighted,
+                closed: row.closed,
+                le_ident: row.le_ident,
+                le_latitude_deg: row.le_latitude_deg,
+                le_longitude_deg: row.le_longitude_deg,
+                le_elevation_ft: row.le_elevation_ft,
+                le_heading_degt: row.le_heading_degt,
+                le_displaced_threshold_ft: row.le_displaced_threshold_ft,
+                he_ident: row.he_ident,
+                he_latitude_deg: row.he_latitude_deg,
+                he_longitude_deg: row.he_longitude_deg,
+                he_elevation_ft: row.he_elevation_ft,
+                he_heading_degt: row.he_heading_degt,
+                he_displaced_threshold_ft: row.he_displaced_threshold_ft,
+            });
+        }
+
+        Ok(runways)
+    }
+
+    /// Get lighted runways only
+    pub async fn get_lighted_runways(&self) -> Result<Vec<Runway>> {
+        let results = sqlx::query!(
+            r#"
+            SELECT id, airport_ref, airport_ident, length_ft, width_ft, surface, lighted, closed,
+                   le_ident, le_latitude_deg, le_longitude_deg, le_elevation_ft, le_heading_degt, le_displaced_threshold_ft,
+                   he_ident, he_latitude_deg, he_longitude_deg, he_elevation_ft, he_heading_degt, he_displaced_threshold_ft
+            FROM runways
+            WHERE lighted = true
+            ORDER BY airport_ident, id
+            "#
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut runways = Vec::new();
+        for row in results {
+            runways.push(Runway {
+                id: row.id,
+                airport_ref: row.airport_ref,
+                airport_ident: row.airport_ident,
+                length_ft: row.length_ft,
+                width_ft: row.width_ft,
+                surface: row.surface,
+                lighted: row.lighted,
+                closed: row.closed,
+                le_ident: row.le_ident,
+                le_latitude_deg: row.le_latitude_deg,
+                le_longitude_deg: row.le_longitude_deg,
+                le_elevation_ft: row.le_elevation_ft,
+                le_heading_degt: row.le_heading_degt,
+                le_displaced_threshold_ft: row.le_displaced_threshold_ft,
+                he_ident: row.he_ident,
+                he_latitude_deg: row.he_latitude_deg,
+                he_longitude_deg: row.he_longitude_deg,
+                he_elevation_ft: row.he_elevation_ft,
+                he_heading_degt: row.he_heading_degt,
+                he_displaced_threshold_ft: row.he_displaced_threshold_ft,
+            });
+        }
+
+        Ok(runways)
+    }
+
+    /// Get open (not closed) runways only
+    pub async fn get_open_runways(&self) -> Result<Vec<Runway>> {
+        let results = sqlx::query!(
+            r#"
+            SELECT id, airport_ref, airport_ident, length_ft, width_ft, surface, lighted, closed,
+                   le_ident, le_latitude_deg, le_longitude_deg, le_elevation_ft, le_heading_degt, le_displaced_threshold_ft,
+                   he_ident, he_latitude_deg, he_longitude_deg, he_elevation_ft, he_heading_degt, he_displaced_threshold_ft
+            FROM runways
+            WHERE closed = false
+            ORDER BY airport_ident, id
+            "#
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut runways = Vec::new();
+        for row in results {
+            runways.push(Runway {
+                id: row.id,
+                airport_ref: row.airport_ref,
+                airport_ident: row.airport_ident,
+                length_ft: row.length_ft,
+                width_ft: row.width_ft,
+                surface: row.surface,
+                lighted: row.lighted,
+                closed: row.closed,
+                le_ident: row.le_ident,
+                le_latitude_deg: row.le_latitude_deg,
+                le_longitude_deg: row.le_longitude_deg,
+                le_elevation_ft: row.le_elevation_ft,
+                le_heading_degt: row.le_heading_degt,
+                le_displaced_threshold_ft: row.le_displaced_threshold_ft,
+                he_ident: row.he_ident,
+                he_latitude_deg: row.he_latitude_deg,
+                he_longitude_deg: row.he_longitude_deg,
+                he_elevation_ft: row.he_elevation_ft,
+                he_heading_degt: row.he_heading_degt,
+                he_displaced_threshold_ft: row.he_displaced_threshold_ft,
+            });
+        }
+
+        Ok(runways)
+    }
+
+    /// Find nearest runway endpoints to a given point using PostGIS
+    /// Returns runway endpoints within the specified distance (in meters) ordered by distance
+    pub async fn find_nearest_runway_endpoints(
+        &self,
+        latitude: f64,
+        longitude: f64,
+        max_distance_meters: f64,
+        limit: i64,
+    ) -> Result<Vec<(Runway, f64, String)>> {
+        let results = sqlx::query!(
+            r#"
+            WITH runway_endpoints AS (
+                SELECT id, airport_ref, airport_ident, length_ft, width_ft, surface, lighted, closed,
+                       le_ident, le_latitude_deg, le_longitude_deg, le_elevation_ft, le_heading_degt, le_displaced_threshold_ft,
+                       he_ident, he_latitude_deg, he_longitude_deg, he_elevation_ft, he_heading_degt, he_displaced_threshold_ft,
+                       le_location as endpoint_location, 'low_end' as endpoint_type,
+                       ST_Distance(le_location, ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography) as distance_meters
+                FROM runways
+                WHERE le_location IS NOT NULL
+                  AND ST_DWithin(le_location, ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography, $3)
+
+                UNION ALL
+
+                SELECT id, airport_ref, airport_ident, length_ft, width_ft, surface, lighted, closed,
+                       le_ident, le_latitude_deg, le_longitude_deg, le_elevation_ft, le_heading_degt, le_displaced_threshold_ft,
+                       he_ident, he_latitude_deg, he_longitude_deg, he_elevation_ft, he_heading_degt, he_displaced_threshold_ft,
+                       he_location as endpoint_location, 'high_end' as endpoint_type,
+                       ST_Distance(he_location, ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography) as distance_meters
+                FROM runways
+                WHERE he_location IS NOT NULL
+                  AND ST_DWithin(he_location, ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography, $3)
+            )
+            SELECT * FROM runway_endpoints
+            ORDER BY distance_meters
+            LIMIT $4
+            "#,
+            latitude,
+            longitude,
+            max_distance_meters,
+            limit
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut runways_with_distance = Vec::new();
+        for row in results {
+            let runway = Runway {
+                id: row.id,
+                airport_ref: row.airport_ref,
+                airport_ident: row.airport_ident,
+                length_ft: row.length_ft,
+                width_ft: row.width_ft,
+                surface: row.surface,
+                lighted: row.lighted,
+                closed: row.closed,
+                le_ident: row.le_ident,
+                le_latitude_deg: row.le_latitude_deg,
+                le_longitude_deg: row.le_longitude_deg,
+                le_elevation_ft: row.le_elevation_ft,
+                le_heading_degt: row.le_heading_degt,
+                le_displaced_threshold_ft: row.le_displaced_threshold_ft,
+                he_ident: row.he_ident,
+                he_latitude_deg: row.he_latitude_deg,
+                he_longitude_deg: row.he_longitude_deg,
+                he_elevation_ft: row.he_elevation_ft,
+                he_heading_degt: row.he_heading_degt,
+                he_displaced_threshold_ft: row.he_displaced_threshold_ft,
+            };
+            let distance = row.distance_meters.unwrap_or(0.0);
+            let endpoint_type = row.endpoint_type.unwrap_or_default();
+            runways_with_distance.push((runway, distance, endpoint_type));
+        }
+
+        Ok(runways_with_distance)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::runways::Runway;
+
+    // Note: These tests would require a test database setup
+    // For now, they're just structural examples
+
+    fn create_test_runway() -> Runway {
+        Runway {
+            id: 269408,
+            airport_ref: 6523,
+            airport_ident: "00A".to_string(),
+            length_ft: Some(80),
+            width_ft: Some(80),
+            surface: Some("ASPH-G".to_string()),
+            lighted: true,
+            closed: false,
+            le_ident: Some("H1".to_string()),
+            le_latitude_deg: None,
+            le_longitude_deg: None,
+            le_elevation_ft: None,
+            le_heading_degt: None,
+            le_displaced_threshold_ft: None,
+            he_ident: None,
+            he_latitude_deg: None,
+            he_longitude_deg: None,
+            he_elevation_ft: None,
+            he_heading_degt: None,
+            he_displaced_threshold_ft: None,
+        }
+    }
+
+    #[test]
+    fn test_runway_creation() {
+        let runway = create_test_runway();
+        assert_eq!(runway.id, 269408);
+        assert_eq!(runway.airport_ref, 6523);
+        assert_eq!(runway.airport_ident, "00A");
+        assert_eq!(runway.length_ft, Some(80));
+        assert_eq!(runway.width_ft, Some(80));
+        assert_eq!(runway.surface, Some("ASPH-G".to_string()));
+        assert_eq!(runway.lighted, true);
+        assert_eq!(runway.closed, false);
+        assert_eq!(runway.le_ident, Some("H1".to_string()));
+    }
+}

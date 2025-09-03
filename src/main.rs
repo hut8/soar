@@ -33,12 +33,12 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Load FAA aircraft model and registration data
-    LoadFaaData {
-        /// Path to the FAA aircraft model data file
+    /// Load aircraft model and registration data
+    LoadData {
+        /// Path to the aircraft model data file
         #[arg(long)]
         aircraft_models: String,
-        /// Path to the FAA aircraft registrations data file
+        /// Path to the aircraft registrations data file
         #[arg(long)]
         aircraft_registrations: String,
     },
@@ -120,8 +120,8 @@ async fn setup_database() -> Result<PgPool> {
     Ok(pool)
 }
 
-async fn handle_load_faa_data(aircraft_models_path: String, aircraft_registrations_path: String) -> Result<()> {
-    info!("Loading FAA data - Models: {}, Registrations: {}", aircraft_models_path, aircraft_registrations_path);
+async fn handle_load_data(aircraft_models_path: String, aircraft_registrations_path: String) -> Result<()> {
+    info!("Loading aircraft data - Models: {}, Registrations: {}", aircraft_models_path, aircraft_registrations_path);
 
     // Set up database connection
     let pool = setup_database().await?;
@@ -307,8 +307,8 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::LoadFaaData { aircraft_models, aircraft_registrations } => {
-            handle_load_faa_data(aircraft_models, aircraft_registrations).await
+        Commands::LoadData { aircraft_models, aircraft_registrations } => {
+            handle_load_data(aircraft_models, aircraft_registrations).await
         }
         Commands::PullDevices => {
             handle_pull_devices().await
