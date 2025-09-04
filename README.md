@@ -13,66 +13,18 @@ SOAR is an application under active development that will automate many duty-man
 - **Configurable Filters**: Support for APRS-IS filters to limit received messages
 - **Retry Logic**: Built-in connection retry with configurable parameters
 
-## Usage
+## Deployment
 
-### Basic Configuration
+### NATS
 
-```rust
-use soar::{AprsClient, AprsClientConfigBuilder, MessageProcessor};
-use std::sync::Arc;
-use ogn_parser::AprsPacket;
+NATS allows the OGN data ingester to relay updates to interested subscribers in the web server process. To install, head over to [the NATS releases on GitHub](https://github.com/nats-io/nats-server/releases/) and download the latest AMD64 .deb package and install it via `dpkg -i`. For example:
 
-// Implement your message processor
-struct MyProcessor;
-
-impl MessageProcessor for MyProcessor {
-    fn process_message(&self, message: AprsPacket) {
-        println!("Received: {:?}", message);
-    }
-}
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let config = AprsClientConfigBuilder::new()
-        .server("aprs.glidernet.org")
-        .port(14580)
-        .callsign("N0CALL")  // Use your actual callsign
-        .password(None)      // Use None for read-only access
-        .build();
-
-    let processor = Arc::new(MyProcessor);
-    let mut client = AprsClient::new(config, processor);
-
-    client.start().await?;
-
-    // Keep running...
-    tokio::signal::ctrl_c().await?;
-    client.stop().await;
-
-    Ok(())
-}
+```bash
+ wget https://github.com/nats-io/nats-server/releases/download/v2.11.8/nats-server-v2.11.8-amd64.deb && sudo dpkg -i nats-server-*.deb
 ```
 
-### With Message Archiving
 
-To enable message archiving, simply add the `archive_base_dir` configuration:
 
-```rust
-let config = AprsClientConfigBuilder::new()
-    .server("aprs.glidernet.org")
-    .port(14580)
-    .callsign("N0CALL")
-    .password(None)
-    .filter(Some("r/47.0/-122.0/100".to_string())) // Optional filter
-    .archive_base_dir(Some("./aprs_logs".to_string())) // Enable archiving
-    .build();
-```
-
-This will:
-- Create the `./aprs_logs` directory if it doesn't exist
-- Create daily log files named `YYYY-MM-DD.log` (e.g., `2025-08-29.log`)
-- Log each incoming APRS message with a timestamp: `[HH:MM:SS] <APRS message>`
-- Automatically roll over to a new file at UTC midnight
 
 ### Configuration Options
 
