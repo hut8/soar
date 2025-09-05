@@ -24,6 +24,8 @@ use soar::airports::read_airports_csv_file;
 use soar::airports_repo::AirportsRepository;
 use soar::runways::read_runways_csv_file;
 use soar::runways_repo::RunwaysRepository;
+use soar::receivers::read_receivers_file;
+use soar::receiver_repo::ReceiverRepository;
 
 // Embed migrations into the binary
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!();
@@ -39,10 +41,11 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Load aircraft model and registration data, and optionally pull devices from DDB
+    /// Load aircraft model and registration data, receivers, and optionally pull devices from DDB
     ///
     /// Aircraft registrations and models should come from the "releasable aircraft" FAA database.
     /// Airports and runways should come from "our airports" database.
+    /// Receivers JSON file can be created from https://github.com/hut8/ogn-rdb
     LoadData {
         /// Path to the aircraft model data file (from ACFTREF.txt in the "releasable aircraft" FAA database
         /// https://www.faa.gov/licenses_certificates/aircraft_certification/aircraft_registry/releasable_aircraft_download)
@@ -60,6 +63,9 @@ enum Commands {
         /// https://davidmegginson.github.io/ourairports-data/runways.csv
         #[arg(long)]
         runways: Option<String>,
+        /// Path to the receivers JSON file (can be created from https://github.com/hut8/ogn-rdb)
+        #[arg(long)]
+        receivers: Option<String>,
         /// Also pull devices from DDB (Device Database) and upsert them into the database
         #[arg(long)]
         pull_devices: bool,
@@ -174,10 +180,11 @@ async fn handle_load_data(
     aircraft_registrations_path: Option<String>,
     airports_path: Option<String>,
     runways_path: Option<String>,
+    receivers_path: Option<String>,
     pull_devices: bool,
 ) -> Result<()> {
-    info!("Loading data - Models: {:?}, Registrations: {:?}, Airports: {:?}, Runways: {:?}, Pull Devices: {}",
-          aircraft_models_path, aircraft_registrations_path, airports_path, runways_path, pull_devices);
+    info!("Loading data - Models: {:?}, Registrations: {:?}, Airports: {:?}, Runways: {:?}, Receivers: {:?}, Pull Devices: {}",
+          aircraft_models_path, aircraft_registrations_path, airports_path, runways_path, receivers_path, pull_devices);
 
     // Set up database connection
     let pool = setup_database().await?;
@@ -342,6 +349,47 @@ async fn handle_load_data(
         info!("Skipping runways - no path provided");
     }
 
+    // Load receivers fifth (if provided)
+    if let Some(receivers_path) = receivers_path {
+        info!("Loading receivers from: {}", receivers_path);
+        match read_receivers_file(&receivers_path) {
+            Ok(receivers_data) => {
+                let receiver_count = receivers_data.receivers.as_ref().map(|r| r.len()).unwrap_or(0);
+                info!("Successfully loaded {} receivers", receiver_count);
+
+                // Create receivers repository and upsert receivers
+                let receivers_repo = ReceiverRepository::new(pool.clone());
+                info!("Upserting {} receivers into database...", receiver_count);
+
+                match receivers_repo.upsert_receivers_from_data(receivers_data).await {
+                    Ok(upserted_count) => {
+                        info!("Successfully upserted {} receivers", upserted_count);
+
+                        // Get final count from database
+                        match receivers_repo.get_receiver_count().await {
+                            Ok(total_count) => {
+                                info!("Total receivers in database: {}", total_count);
+                            }
+                            Err(e) => {
+                                error!("Failed to get receiver count: {}", e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        error!("Failed to upsert receivers: {}", e);
+                        return Err(e);
+                    }
+                }
+            }
+            Err(e) => {
+                error!("Failed to read receivers file: {}", e);
+                return Err(e);
+            }
+        }
+    } else {
+        info!("Skipping receivers - no path provided");
+    }
+
     // Pull devices if requested
     if pull_devices {
         info!("Pulling devices from DDB...");
@@ -467,8 +515,8 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::LoadData { aircraft_models, aircraft_registrations, airports, runways, pull_devices } => {
-            handle_load_data(aircraft_models, aircraft_registrations, airports, runways, pull_devices).await
+        Commands::LoadData { aircraft_models, aircraft_registrations, airports, runways, receivers, pull_devices } => {
+            handle_load_data(aircraft_models, aircraft_registrations, airports, runways, receivers, pull_devices).await
         }
         Commands::Run {
             server,
