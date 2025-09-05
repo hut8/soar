@@ -2320,6 +2320,7 @@ dependencies = [
  "dotenvy",
  "num-traits",
  "ogn-parser",
+ "regex",
  "reqwest",
  "serde",
  "serde_derive",
