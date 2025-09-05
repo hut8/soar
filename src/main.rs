@@ -1,6 +1,5 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use soar::message_processors::MessageArchive;
 use sqlx::postgres::PgPool;
 use std::env;
 use std::fs;
@@ -10,7 +9,7 @@ use tracing::{error, info};
 
 use soar::airports::read_airports_csv_file;
 use soar::airports_repo::AirportsRepository;
-use soar::aprs_client::{AprsClient, AprsClientConfigBuilder, FixProcessor, MessageProcessor};
+use soar::aprs_client::{AprsClient, AprsClientConfigBuilder, MessageProcessor};
 use soar::device_repo::DeviceRepository;
 use soar::devices::DeviceFetcher;
 use soar::faa::aircraft_model_repo::AircraftModelRepository;
