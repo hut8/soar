@@ -9,6 +9,8 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use sqlx::postgres::PgPool;
 use std::env;
+use std::fs;
+use std::path::Path;
 use std::sync::Arc;
 use tracing::{info, error};
 
@@ -100,6 +102,10 @@ enum Commands {
         #[arg(long)]
         archive_dir: Option<String>,
 
+        /// Enable automatic archiving (uses /var/soar/archive if writable, otherwise $HOME/soar-archive/)
+        #[arg(long)]
+        archive: bool,
+
         /// NATS server URL for pub/sub
         #[arg(long, default_value = "nats://localhost:4222")]
         nats_url: String,
@@ -116,7 +122,7 @@ impl CompositeMessageProcessor {
     pub async fn new(nats_url: String, db_pool: PgPool, archive_dir: Option<String>) -> Result<Self> {
         let nats_publisher = NatsAprsPublisher::new(&nats_url, db_pool).await?;
         let archive = archive_dir.map(|dir| Arc::new(crate::aprs_client::MessageArchive::new(dir)));
-        
+
         Ok(Self {
             nats_publisher,
             archive,
@@ -127,11 +133,11 @@ impl CompositeMessageProcessor {
 impl MessageProcessor for CompositeMessageProcessor {
     fn process_message(&self, message: ogn_parser::AprsPacket) {
         tracing::trace!("Parsed APRS packet: {:?}", message);
-        
+
         // Forward to NATS publisher
         self.nats_publisher.process_message(message);
     }
-    
+
     fn process_raw_message(&self, raw_message: &str) {
         // Log to file archive if configured
         if let Some(ref archive) = self.archive {
@@ -173,6 +179,40 @@ async fn setup_database() -> Result<PgPool> {
     }
 
     Ok(pool)
+}
+
+/// Determine the best archive directory to use
+fn determine_archive_dir() -> Result<String> {
+    let var_soar_archive = "/var/soar/archive";
+
+    // Check if /var/soar/archive exists and is writable
+    if Path::new(var_soar_archive).exists() {
+        // Test if we can write to it by trying to create a temporary file
+        let test_file = format!("{}/test_write_{}", var_soar_archive, std::process::id());
+        match fs::write(&test_file, b"test") {
+            Ok(_) => {
+                // Clean up test file
+                let _ = fs::remove_file(&test_file);
+                info!("Using archive directory: {}", var_soar_archive);
+                return Ok(var_soar_archive.to_string());
+            }
+            Err(_) => {
+                info!("/var/soar/archive exists but is not writable, falling back to $HOME/soar-archive/");
+            }
+        }
+    }
+
+    // Fallback to $HOME/soar-archive/
+    let home_dir = env::var("HOME")
+        .map_err(|_| anyhow::anyhow!("HOME environment variable not set"))?;
+    let home_archive = format!("{}/soar-archive", home_dir);
+
+    // Create the directory if it doesn't exist
+    fs::create_dir_all(&home_archive)
+        .map_err(|e| anyhow::anyhow!("Failed to create archive directory {}: {}", home_archive, e))?;
+
+    info!("Using archive directory: {}", home_archive);
+    Ok(home_archive)
 }
 
 async fn handle_load_data(
@@ -393,7 +433,7 @@ async fn handle_load_data(
     // Pull devices if requested
     if pull_devices {
         info!("Pulling devices from DDB...");
-        
+
         // Create device fetcher and fetch devices
         let device_fetcher = DeviceFetcher::new();
 
@@ -501,13 +541,13 @@ async fn handle_run(
 async fn main() -> Result<()> {
     // Initialize tracing with TRACE level by default, but silence async_nats TRACE/DEBUG
     use tracing_subscriber::{EnvFilter, FmtSubscriber};
-    
+
     let filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| {
             // Default filter: TRACE for soar, INFO for async_nats, WARN for everything else
-            EnvFilter::new("warn,soar=trace,async_nats=info")
+            EnvFilter::new("warn,soar=trace,async_nats=info,soar::nats_publisher=warn")
         });
-    
+
     FmtSubscriber::builder()
         .with_env_filter(filter)
         .init();
@@ -526,8 +566,16 @@ async fn main() -> Result<()> {
             max_retries,
             retry_delay,
             archive_dir,
+            archive,
             nats_url,
         } => {
+            // Determine archive directory if --archive flag is used
+            let final_archive_dir = if archive {
+                Some(determine_archive_dir()?)
+            } else {
+                archive_dir
+            };
+
             handle_run(
                 server,
                 port,
@@ -535,7 +583,7 @@ async fn main() -> Result<()> {
                 filter,
                 max_retries,
                 retry_delay,
-                archive_dir,
+                final_archive_dir,
                 nats_url,
             ).await
         }
