@@ -16,7 +16,7 @@ pub enum DeviceType {
 
 impl FromStr for DeviceType {
     type Err = ();
-    
+
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "F" => Ok(DeviceType::Flarm),
@@ -68,7 +68,7 @@ where
     Ok(s.eq_ignore_ascii_case("Y"))
 }
 
-// Custom serializer for boolean to string conversion  
+// Custom serializer for boolean to string conversion
 fn bool_to_string<S>(value: &bool, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
@@ -103,7 +103,7 @@ pub struct DeviceFetcher;
 
 impl DeviceFetcher {
     pub fn new() -> Self {
-        Self::default()
+        Self
     }
 
     /// Fetch all devices from the DDB API
@@ -152,8 +152,8 @@ mod tests {
         assert_eq!(response.devices[0].device_id, "000000");
         assert_eq!(response.devices[0].aircraft_model, "SZD-41 Jantar Std");
         assert_eq!(response.devices[0].device_type, DeviceType::Flarm);
-        assert_eq!(response.devices[0].tracked, true);
-        assert_eq!(response.devices[0].identified, false);
+        assert!(response.devices[0].tracked);
+        assert!(!response.devices[0].identified);
     }
 
     #[test]
@@ -184,13 +184,13 @@ mod tests {
         // Test tracked and identified field conversions
         let json_data = r#"{"device_type":"F","device_id":"123456","aircraft_model":"Test","registration":"","cn":"","tracked":"Y","identified":""}"#;
         let device: Device = serde_json::from_str(json_data).unwrap();
-        assert_eq!(device.tracked, true);
-        assert_eq!(device.identified, false);
+        assert!(device.tracked);
+        assert!(!device.identified);
 
         // Test case insensitive
         let json_data2 = r#"{"device_type":"F","device_id":"123456","aircraft_model":"Test","registration":"","cn":"","tracked":"y","identified":"N"}"#;
         let device2: Device = serde_json::from_str(json_data2).unwrap();
-        assert_eq!(device2.tracked, true);
-        assert_eq!(device2.identified, false);
+        assert!(device2.tracked);
+        assert!(!device2.identified);
     }
 }

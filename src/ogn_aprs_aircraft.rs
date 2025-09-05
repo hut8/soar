@@ -76,7 +76,7 @@ pub enum AdsbEmitterCategory {
     A5, // Heavy aircraft (> 300,000 lbs)
     A6, // High performance aircraft
     A7, // Rotorcraft
-    
+
     // Category B: Special aircraft types
     B0, // No ADS-B emitter category information
     B1, // Glider/sailplane
@@ -85,7 +85,7 @@ pub enum AdsbEmitterCategory {
     B4, // Ultralight/hang-glider/paraglider
     B6, // Unmanned aerial vehicle
     B7, // Space/trans-atmospheric vehicle
-    
+
     // Category C: Surface vehicles and obstacles
     C0, // No ADS-B emitter category information
     C1, // Surface emergency vehicle
@@ -126,7 +126,7 @@ impl AdsbEmitterCategory {
 
 impl FromStr for AdsbEmitterCategory {
     type Err = ();
-    
+
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_uppercase().as_str() {
             "A0" => Ok(AdsbEmitterCategory::A0),
@@ -182,7 +182,7 @@ pub struct OgnAprsParameters {
     /// Additional APRS fields
     pub flight_number: Option<String>,           // Flight number (e.g. BEL9AD)
     pub emitter_category: Option<AdsbEmitterCategory>, // ADS-B emitter category (e.g. A3)
-    pub registration: Option<String>,            // e.g. regOO-SNK  
+    pub registration: Option<String>,            // e.g. regOO-SNK
     pub model: Option<String>,                   // e.g. modelA320
     pub squawk: Option<String>,                  // Squawk code (e.g. Sq1351)
 }
@@ -304,7 +304,7 @@ impl FromStr for OgnAprsParameters {
             if let Some(colon_pos) = t.find(':') {
                 let prefix = &t[..colon_pos];
                 let flight_num = &t[colon_pos + 1..];
-                
+
                 // Try to parse with "fn" prefix first
                 if prefix.starts_with("fn") && prefix.len() == 4 {
                     let category_str = &prefix[2..];
@@ -314,15 +314,14 @@ impl FromStr for OgnAprsParameters {
                         continue;
                     }
                 }
-                
+
                 // Try to parse without "fn" prefix (just the category)
-                if prefix.len() == 2 {
-                    if let Ok(category) = prefix.parse::<AdsbEmitterCategory>() {
+                if prefix.len() == 2
+                    && let Ok(category) = prefix.parse::<AdsbEmitterCategory>() {
                         flight_number = Some(flight_num.to_string());
                         emitter_category = Some(category);
                         continue;
                     }
-                }
             }
 
             // Registration: regOO-SNK
@@ -336,7 +335,7 @@ impl FromStr for OgnAprsParameters {
                 model = Some(t[5..].to_string());
                 continue;
             }
-            
+
             // Squawk: Sq1351 (case insensitive, 4 digits)
             if t.len() == 6 && t.to_ascii_lowercase().starts_with("sq") {
                 let digits = &t[2..];
@@ -461,7 +460,7 @@ mod tests {
         assert_eq!(p.freq_offset_khz, Some(-4.3));
         assert_eq!(p.aprs_pe_lat_digit, Some(5));
         assert_eq!(p.aprs_pe_lon_digit, Some(2));
-        
+
         // Test the new fields
         assert_eq!(p.flight_number, Some("BEL9AD".to_string()));
         assert_eq!(p.emitter_category, Some(AdsbEmitterCategory::A3));
@@ -493,24 +492,24 @@ mod tests {
         assert_eq!(p.model, Some("B737".to_string()));
         assert_eq!(p.squawk, None);
     }
-    
+
     #[test]
     fn parses_squawk_codes() {
         let s1 = "id06DF0A52 Sq1351";
         let p1: OgnAprsParameters = s1.parse().unwrap();
         assert_eq!(p1.squawk, Some("1351".to_string()));
-        
+
         // Test case insensitive
         let s2 = "id06DF0A52 sq7777";
         let p2: OgnAprsParameters = s2.parse().unwrap();
         assert_eq!(p2.squawk, Some("7777".to_string()));
-        
+
         // Test mixed case
         let s3 = "id06DF0A52 Sq0012";
         let p3: OgnAprsParameters = s3.parse().unwrap();
         assert_eq!(p3.squawk, Some("0012".to_string()));
     }
-    
+
     #[test]
     fn parses_emitter_categories_with_flight_numbers() {
         // Test fnA3: format
@@ -518,31 +517,31 @@ mod tests {
         let p1: OgnAprsParameters = s1.parse().unwrap();
         assert_eq!(p1.flight_number, Some("BAW123".to_string()));
         assert_eq!(p1.emitter_category, Some(AdsbEmitterCategory::A3));
-        
+
         // Test direct A3: format
         let s2 = "id06DF0A52 A3:UAL456";
         let p2: OgnAprsParameters = s2.parse().unwrap();
         assert_eq!(p2.flight_number, Some("UAL456".to_string()));
         assert_eq!(p2.emitter_category, Some(AdsbEmitterCategory::A3));
-        
+
         // Test B1: format (glider)
         let s3 = "id06DF0A52 B1:GLIDER1";
         let p3: OgnAprsParameters = s3.parse().unwrap();
         assert_eq!(p3.flight_number, Some("GLIDER1".to_string()));
         assert_eq!(p3.emitter_category, Some(AdsbEmitterCategory::B1));
-        
+
         // Test C1: format (surface vehicle)
         let s4 = "id06DF0A52 C1:FIRE01";
         let p4: OgnAprsParameters = s4.parse().unwrap();
         assert_eq!(p4.flight_number, Some("FIRE01".to_string()));
         assert_eq!(p4.emitter_category, Some(AdsbEmitterCategory::C1));
     }
-    
+
     #[test]
     fn parses_complete_extended_message() {
         let s = "id06DF0A52 -019fpm +0.0rot 5.5dB 3e -4.3kHz !W52! fnA3:BEL9AD regOO-SNK modelA320 Sq1351";
         let p: OgnAprsParameters = s.parse().unwrap();
-        
+
         // Original fields
         assert_eq!(p.id_flags_raw, 0x06);
         assert_eq!(p.address, 0xDF0A52);
@@ -553,7 +552,7 @@ mod tests {
         assert_eq!(p.freq_offset_khz, Some(-4.3));
         assert_eq!(p.aprs_pe_lat_digit, Some(5));
         assert_eq!(p.aprs_pe_lon_digit, Some(2));
-        
+
         // Extended fields
         assert_eq!(p.flight_number, Some("BEL9AD".to_string()));
         assert_eq!(p.emitter_category, Some(AdsbEmitterCategory::A3));
@@ -561,7 +560,7 @@ mod tests {
         assert_eq!(p.model, Some("A320".to_string()));
         assert_eq!(p.squawk, Some("1351".to_string()));
     }
-    
+
     #[test]
     fn test_adsb_emitter_category_to_string() {
         assert_eq!(AdsbEmitterCategory::A0.to_string(), "A0");
@@ -569,16 +568,40 @@ mod tests {
         assert_eq!(AdsbEmitterCategory::B1.to_string(), "B1");
         assert_eq!(AdsbEmitterCategory::C5.to_string(), "C5");
     }
-    
+
     #[test]
     fn test_adsb_emitter_category_from_str() {
         assert_eq!("A0".parse::<AdsbEmitterCategory>().unwrap(), AdsbEmitterCategory::A0);
         assert_eq!("a3".parse::<AdsbEmitterCategory>().unwrap(), AdsbEmitterCategory::A3);
         assert_eq!("B1".parse::<AdsbEmitterCategory>().unwrap(), AdsbEmitterCategory::B1);
         assert_eq!("c5".parse::<AdsbEmitterCategory>().unwrap(), AdsbEmitterCategory::C5);
-        
+
         // Test invalid category
         assert!("Z9".parse::<AdsbEmitterCategory>().is_err());
         assert!("B5".parse::<AdsbEmitterCategory>().is_err()); // B5 doesn't exist
+    }
+
+    #[test]
+    fn parses_real_aprs_message_with_extended_fields() {
+        // Real APRS message: ICA39D304>OGADSB,qAS,AVX1244:/201219h4835.30N/00258.80E^329/278/A=008254 !W64! id2539D304 -1536fpm FL078.27 A3:TVF62XQ Sq5570
+        // Extract just the comment portion that our parser handles
+        let comment = "!W64! id2539D304 -1536fpm FL078.27 A3:TVF62XQ Sq5570";
+        let p: OgnAprsParameters = comment.parse().unwrap();
+
+        // Check basic OGN fields
+        assert_eq!(p.id_flags_raw, 0x25);
+        assert_eq!(p.address, 0x39D304);
+        assert_eq!(p.climb_fpm, Some(-1536));
+        assert_eq!(p.aprs_pe_lat_digit, Some(6));
+        assert_eq!(p.aprs_pe_lon_digit, Some(4));
+
+        // Check extended fields
+        assert_eq!(p.flight_number, Some("TVF62XQ".to_string()));
+        assert_eq!(p.emitter_category, Some(AdsbEmitterCategory::A3));
+        assert_eq!(p.squawk, Some("5570".to_string()));
+
+        // Fields not present in this message
+        assert_eq!(p.registration, None);
+        assert_eq!(p.model, None);
     }
 }
