@@ -1,8 +1,9 @@
-pub mod ddb;
+pub mod devices;
 pub mod device_repo;
 pub mod ogn_aprs_aircraft;
 pub mod aprs_client;
 pub mod faa;
+pub mod nats_publisher;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -12,8 +13,9 @@ use std::sync::Arc;
 use tracing::{info, error};
 
 use crate::aprs_client::{AprsClient, AprsClientConfigBuilder, MessageProcessor};
-use crate::ddb::DeviceDatabase;
+use crate::devices::DeviceFetcher;
 use crate::device_repo::DeviceRepository;
+use crate::nats_publisher::NatsAprsPublisher;
 use crate::faa::aircraft_registrations::read_aircraft_file;
 use crate::faa::aircraft_models::read_aircraft_models_file;
 use crate::faa::aircraft_model_repo::AircraftModelRepository;
@@ -67,7 +69,7 @@ enum Commands {
         #[arg(long, default_value = "aprs.glidernet.org")]
         server: String,
 
-        /// APRS server port
+        /// APRS server port (automatically switches to 10152 for full feed if no filter specified)
         #[arg(long, default_value = "14580")]
         port: u16,
 
@@ -75,7 +77,7 @@ enum Commands {
         #[arg(long, default_value = "N0CALL")]
         callsign: String,
 
-        /// APRS filter string (e.g., "r/47.0/-122.0/100" for radius filter)
+        /// APRS filter string (omit for full global feed via port 10152, or specify filter for port 14580)
         #[arg(long)]
         filter: Option<String>,
 
@@ -90,15 +92,44 @@ enum Commands {
         /// Base directory for message archive (optional)
         #[arg(long)]
         archive_dir: Option<String>,
+
+        /// NATS server URL for pub/sub
+        #[arg(long, default_value = "nats://localhost:4222")]
+        nats_url: String,
     },
 }
 
-/// Simple message processor that logs received APRS packets
-struct LoggingMessageProcessor;
+/// Composite message processor that combines NATS publishing with file streaming
+struct CompositeMessageProcessor {
+    nats_publisher: NatsAprsPublisher,
+    archive: Option<Arc<crate::aprs_client::MessageArchive>>,
+}
 
-impl MessageProcessor for LoggingMessageProcessor {
+impl CompositeMessageProcessor {
+    pub async fn new(nats_url: String, db_pool: PgPool, archive_dir: Option<String>) -> Result<Self> {
+        let nats_publisher = NatsAprsPublisher::new(&nats_url, db_pool).await?;
+        let archive = archive_dir.map(|dir| Arc::new(crate::aprs_client::MessageArchive::new(dir)));
+        
+        Ok(Self {
+            nats_publisher,
+            archive,
+        })
+    }
+}
+
+impl MessageProcessor for CompositeMessageProcessor {
     fn process_message(&self, message: ogn_parser::AprsPacket) {
-        info!("Received APRS packet: {:?}", message);
+        tracing::trace!("Parsed APRS packet: {:?}", message);
+        
+        // Forward to NATS publisher
+        self.nats_publisher.process_message(message);
+    }
+    
+    fn process_raw_message(&self, raw_message: &str) {
+        // Log to file archive if configured
+        if let Some(ref archive) = self.archive {
+            archive.log_message(raw_message);
+        }
     }
 }
 
@@ -318,13 +349,13 @@ async fn handle_pull_devices() -> Result<()> {
     // Set up database connection
     let pool = setup_database().await?;
 
-    // Create device database and fetch devices
-    let mut device_db = DeviceDatabase::new();
+    // Create device fetcher and fetch devices
+    let device_fetcher = DeviceFetcher::new();
     info!("Fetching devices from DDB...");
 
-    match device_db.fetch().await {
-        Ok(_) => {
-            let device_count = device_db.device_count();
+    match device_fetcher.fetch_all().await {
+        Ok(devices) => {
+            let device_count = devices.len();
             info!("Successfully fetched {} devices from DDB", device_count);
 
             if device_count == 0 {
@@ -334,7 +365,6 @@ async fn handle_pull_devices() -> Result<()> {
 
             // Create device repository and upsert devices
             let device_repo = DeviceRepository::new(pool);
-            let devices: Vec<_> = device_db.get_all_devices().values().cloned().collect();
 
             info!("Upserting {} devices into database...", devices.len());
             match device_repo.upsert_devices(devices).await {
@@ -374,25 +404,35 @@ async fn handle_run(
     max_retries: u32,
     retry_delay: u64,
     archive_dir: Option<String>,
+    nats_url: String,
 ) -> Result<()> {
     info!("Starting APRS client with server: {}:{}", server, port);
 
     // Set up database connection
-    let _pool = setup_database().await?;
+    let pool = setup_database().await?;
+
+    // Use port 10152 (full feed) if no filter is specified, otherwise use specified port
+    let actual_port = if filter.is_none() {
+        info!("No filter specified, using full feed port 10152");
+        10152
+    } else {
+        port
+    };
 
     // Create APRS client configuration
     let config = AprsClientConfigBuilder::new()
         .server(server)
-        .port(port)
+        .port(actual_port)
         .callsign(callsign)
         .filter(filter)
         .max_retries(max_retries)
         .retry_delay_seconds(retry_delay)
-        .archive_base_dir(archive_dir)
         .build();
 
-    // Create message processor
-    let processor: Arc<dyn MessageProcessor> = Arc::new(LoggingMessageProcessor);
+    // Create composite processor (NATS + file streaming)
+    info!("Creating composite processor with NATS URL: {}", nats_url);
+    let composite_processor = CompositeMessageProcessor::new(nats_url, pool, archive_dir).await?;
+    let processor: Arc<dyn MessageProcessor> = Arc::new(composite_processor);
 
     // Create and start APRS client
     let mut client = AprsClient::new(config, processor);
@@ -412,8 +452,10 @@ async fn handle_run(
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Initialize tracing
-    tracing_subscriber::fmt::init();
+    // Initialize tracing with TRACE level by default
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::TRACE)
+        .init();
 
     let cli = Cli::parse();
 
@@ -432,6 +474,7 @@ async fn main() -> Result<()> {
             max_retries,
             retry_delay,
             archive_dir,
+            nats_url,
         } => {
             handle_run(
                 server,
@@ -441,6 +484,7 @@ async fn main() -> Result<()> {
                 max_retries,
                 retry_delay,
                 archive_dir,
+                nats_url,
             ).await
         }
     }

@@ -1,9 +1,11 @@
 use anyhow::Result;
 use sqlx::PgPool;
+use std::str::FromStr;
 use tracing::{info, warn};
 
-use crate::ddb::{Device, DeviceType};
+use crate::devices::{Device, DeviceType};
 
+#[derive(Clone)]
 pub struct DeviceRepository {
     pool: PgPool,
 }
@@ -23,40 +25,34 @@ impl DeviceRepository {
         let mut upserted_count = 0;
 
         for device in devices {
-            // Convert DeviceType to string for database storage
-            let device_type_str = match device.device_type {
-                DeviceType::Flarm => "F",
-                DeviceType::Ogn => "O",
-                DeviceType::Icao => "I",
-                DeviceType::Unknown => "",
-            };
-
-            // Convert tracked and identified strings to booleans
-            let tracked = device.tracked.to_uppercase() == "Y";
-            let identified = device.identified.to_uppercase() == "Y";
+            // Convert enum to string for database storage
+            let device_type_str = device.device_type.to_string();
 
             // Use ON CONFLICT to handle upserts
             let result = sqlx::query!(
                 r#"
-                INSERT INTO devices (device_id, device_type, aircraft_model, registration, cn, tracked, identified)
+                INSERT INTO devices (
+                    device_type, device_id, aircraft_model, registration, 
+                    competition_number, tracked, identified
+                )
                 VALUES ($1, $2, $3, $4, $5, $6, $7)
                 ON CONFLICT (device_id)
                 DO UPDATE SET
                     device_type = EXCLUDED.device_type,
                     aircraft_model = EXCLUDED.aircraft_model,
                     registration = EXCLUDED.registration,
-                    cn = EXCLUDED.cn,
+                    competition_number = EXCLUDED.competition_number,
                     tracked = EXCLUDED.tracked,
                     identified = EXCLUDED.identified,
-                    updated_at = NOW()
+                    updated_at = CURRENT_TIMESTAMP
                 "#,
-                device.device_id,
                 device_type_str,
+                device.device_id,
                 device.aircraft_model,
                 device.registration,
                 device.competition_number,
-                tracked,
-                identified
+                device.tracked,
+                device.identified
             )
             .execute(&mut *transaction)
             .await;
@@ -89,32 +85,29 @@ impl DeviceRepository {
 
     /// Get a device by its device_id
     pub async fn get_device_by_id(&self, device_id: &str) -> Result<Option<Device>> {
-        let result = sqlx::query!(
-            "SELECT device_id, device_type, aircraft_model, registration, cn, tracked, identified FROM devices WHERE device_id = $1",
+        let row = sqlx::query!(
+            r#"
+            SELECT device_type, device_id, aircraft_model, registration, 
+                   competition_number, tracked, identified
+            FROM devices 
+            WHERE device_id = $1
+            "#,
             device_id
         )
         .fetch_optional(&self.pool)
         .await?;
 
-        if let Some(row) = result {
-            let device_type = match row.device_type.as_str() {
-                "F" => DeviceType::Flarm,
-                "O" => DeviceType::Ogn,
-                "I" => DeviceType::Icao,
-                _ => DeviceType::Unknown,
-            };
-
-            let tracked = if row.tracked { "Y" } else { "N" };
-            let identified = if row.identified { "Y" } else { "N" };
-
+        if let Some(row) = row {
+            let device_type = DeviceType::from_str(&row.device_type).unwrap_or(DeviceType::Unknown);
+            
             Ok(Some(Device {
-                device_id: row.device_id,
                 device_type,
+                device_id: row.device_id,
                 aircraft_model: row.aircraft_model,
                 registration: row.registration,
-                competition_number: row.cn,
-                tracked: tracked.to_string(),
-                identified: identified.to_string(),
+                competition_number: row.competition_number,
+                tracked: row.tracked,
+                identified: row.identified,
             }))
         } else {
             Ok(None)
@@ -125,7 +118,7 @@ impl DeviceRepository {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ddb::DeviceType;
+    use crate::devices::DeviceType;
 
     // Note: These tests would require a test database setup
     // For now, they're just structural examples
@@ -137,8 +130,8 @@ mod tests {
             aircraft_model: "Test Aircraft".to_string(),
             registration: "N123AB".to_string(),
             competition_number: "42".to_string(),
-            tracked: "Y".to_string(),
-            identified: "Y".to_string(),
+            tracked: true,
+            identified: true,
         }
     }
 

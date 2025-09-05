@@ -1,11 +1,13 @@
 use anyhow::Result;
 use chrono::Utc;
 use ogn_parser::AprsPacket;
+use regex::Regex;
 use std::fs::{OpenOptions, create_dir_all};
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::sync::OnceLock;
 use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
@@ -19,22 +21,64 @@ pub trait MessageProcessor: Send + Sync {
     /// Process a received APRS message
     ///
     /// # Arguments
-    /// * `message` - The raw APRS message string received from the server
+    /// * `message` - The parsed APRS packet
     fn process_message(&self, message: AprsPacket);
+
+    /// Process a raw APRS message (optional - for logging, archiving, etc.)
+    ///
+    /// # Arguments
+    /// * `raw_message` - The raw APRS message string received from the server
+    fn process_raw_message(&self, _raw_message: &str) {
+        // Default implementation does nothing
+    }
 }
 
 /// Type alias for boxed message processor trait objects
 pub type BoxedMessageProcessor = Box<dyn MessageProcessor>;
 
+/// Sanitize APRS message to fix invalid SSID values
+/// APRS SSIDs must be in range 0-15, but some stations use invalid values like -1347
+fn sanitize_aprs_message(message: &str) -> String {
+    static INVALID_SSID_REGEX: OnceLock<Regex> = OnceLock::new();
+    let regex = INVALID_SSID_REGEX.get_or_init(|| {
+        // Match callsigns with SSIDs and check them programmatically
+        // Pattern: CALLSIGN-DIGITS
+        Regex::new(r"([A-Z0-9]+)-(\d+)").unwrap()
+    });
+
+    let sanitized = regex.replace_all(message, |caps: &regex::Captures| {
+        let callsign = &caps[1];
+        let ssid_str = &caps[2];
+
+        // Parse the SSID and check if it's valid (0-15)
+        if let Ok(ssid) = ssid_str.parse::<u32>()
+            && ssid > 15
+        {
+            // Convert to valid range using modulo
+            let sanitized_ssid = ssid % 16;
+            debug!(
+                "Sanitized invalid SSID: {}-{} -> {}-{}",
+                callsign, ssid, callsign, sanitized_ssid
+            );
+            return format!("{}-{}", callsign, sanitized_ssid);
+        }
+
+        // SSID is valid or couldn't be parsed, return as-is
+        format!("{}-{}", callsign, ssid_str)
+    });
+
+    sanitized.to_string()
+}
+
 /// Message archive for logging APRS messages to daily files
-struct MessageArchive {
+pub struct MessageArchive {
     base_dir: String,
     current_file: Mutex<Option<std::fs::File>>,
     current_date: Mutex<String>,
 }
 
 impl MessageArchive {
-    fn new(base_dir: String) -> Self {
+    pub fn new(base_dir: String) -> Self {
         Self {
             base_dir,
             current_file: Mutex::new(None),
@@ -42,7 +86,7 @@ impl MessageArchive {
         }
     }
 
-    fn log_message(&self, message: &str) {
+    pub fn log_message(&self, message: &str) {
         let now = Utc::now();
         let date_str = now.format("%Y-%m-%d").to_string();
 
@@ -219,12 +263,6 @@ impl AprsClient {
             config.server, config.port
         );
 
-        // Create message archive if configured
-        let archive = config.archive_base_dir.as_ref().map(|base_dir| {
-            info!("Message archive enabled, base directory: {}", base_dir);
-            Arc::new(MessageArchive::new(base_dir.clone()))
-        });
-
         // Connect to the APRS server
         let stream = TcpStream::connect(format!("{}:{}", config.server, config.port)).await?;
         info!("Connected to APRS server");
@@ -234,12 +272,14 @@ impl AprsClient {
 
         // Send login command
         let login_cmd = Self::build_login_command(config);
+        info!("Sending login command: {}", login_cmd.trim());
         writer.write_all(login_cmd.as_bytes()).await?;
         writer.flush().await?;
-        debug!("Sent login command: {}", login_cmd.trim());
+        info!("Login command sent successfully");
 
         // Read and process messages
         let mut line = String::new();
+        let mut first_message = true;
         loop {
             line.clear();
             match buf_reader.read_line(&mut line).await? {
@@ -250,16 +290,17 @@ impl AprsClient {
                 _ => {
                     let trimmed_line = line.trim();
                     if !trimmed_line.is_empty() {
-                        debug!("Received: {}", trimmed_line);
-                        // Log to archive before processing (if archive is enabled)
-                        if let Some(ref archive) = archive {
-                            archive.log_message(trimmed_line);
+                        if first_message {
+                            info!("First message from server: {}", trimmed_line);
+                            first_message = false;
+                        } else {
+                            debug!("Received: {}", trimmed_line);
                         }
                         // Skip server messages (lines starting with #)
                         if !trimmed_line.starts_with('#') {
                             Self::process_message(trimmed_line, Arc::clone(&processor)).await;
                         } else {
-                            debug!("Server message: {}", trimmed_line);
+                            info!("Server message: {}", trimmed_line);
                         }
                     }
                 }
@@ -286,6 +327,7 @@ impl AprsClient {
         if let Some(filter) = &config.filter {
             login_cmd.push_str(" filter ");
             login_cmd.push_str(filter);
+            info!("Using APRS filter: {}", filter);
         }
 
         login_cmd.push_str("\r\n");
@@ -294,17 +336,23 @@ impl AprsClient {
 
     /// Process a received APRS message
     async fn process_message(message: &str, processor: Arc<dyn MessageProcessor>) {
-        // Try to parse the message using ogn-parser
-        match ogn_parser::parse(message) {
+        // Always call process_raw_message first (for logging/archiving)
+        processor.process_raw_message(message);
+
+        // Sanitize the message to fix invalid SSIDs
+        let sanitized_message = sanitize_aprs_message(message);
+
+        // Try to parse the sanitized message using ogn-parser
+        match ogn_parser::parse(&sanitized_message) {
             Ok(parsed) => {
-                debug!("Successfully parsed APRS message: {:?}", parsed);
-                // Call the processor with the original message
-                // Note: ogn-parser returns different types, so we pass the raw message
-                // The processor can decide how to handle it
+                // Call the processor with the parsed message
                 processor.process_message(parsed);
             }
             Err(e) => {
-                debug!("Failed to parse APRS message '{}': {}", message, e);
+                warn!(
+                    "Failed to parse APRS message '{}': {}",
+                    sanitized_message, e
+                );
             }
         }
     }
@@ -505,5 +553,30 @@ mod tests {
 
         // Clean up
         let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn test_ssid_sanitization() {
+        // Test the original failing message
+        let invalid_message = "ICAA8871E>OGADSB,qAS,SRP-1347:/025403h3315.58N\\11149.60W^232/075 !W19! id21A8871E +896fpm FL016.94 A1:ASI66";
+        let sanitized = sanitize_aprs_message(invalid_message);
+        assert!(sanitized.contains("SRP-3")); // 1347 % 16 = 3
+
+        // Test multiple invalid SSIDs
+        let multi_invalid = "TEST-999>APRS,qAS,GATE-1234:test message";
+        let sanitized = sanitize_aprs_message(multi_invalid);
+        assert!(sanitized.contains("TEST-7")); // 999 % 16 = 7
+        assert!(sanitized.contains("GATE-2")); // 1234 % 16 = 2
+
+        // Test valid SSIDs should remain unchanged
+        let valid_message = "N0CALL-15>APRS,qAS,GATE-1:test message";
+        let sanitized = sanitize_aprs_message(valid_message);
+        assert_eq!(sanitized, valid_message);
+
+        // Test edge cases
+        let edge_cases = "CALL-16>APRS,qAS,TEST-0:message"; // 16 should become 0
+        let sanitized = sanitize_aprs_message(edge_cases);
+        assert!(sanitized.contains("CALL-0"));
+        assert!(sanitized.contains("TEST-0"));
     }
 }
