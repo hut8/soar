@@ -39,7 +39,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Load aircraft model and registration data
+    /// Load aircraft model and registration data, and optionally pull devices from DDB
     ///
     /// Aircraft registrations and models should come from the "releasable aircraft" FAA database.
     /// Airports and runways should come from "our airports" database.
@@ -60,9 +60,10 @@ enum Commands {
         /// https://davidmegginson.github.io/ourairports-data/runways.csv
         #[arg(long)]
         runways: Option<String>,
+        /// Also pull devices from DDB (Device Database) and upsert them into the database
+        #[arg(long)]
+        pull_devices: bool,
     },
-    /// Pull devices from DDB and upsert them into the database
-    PullDevices,
     /// Run the main APRS client
     Run {
         /// APRS server hostname
@@ -172,10 +173,11 @@ async fn handle_load_data(
     aircraft_models_path: Option<String>,
     aircraft_registrations_path: Option<String>,
     airports_path: Option<String>,
-    runways_path: Option<String>
+    runways_path: Option<String>,
+    pull_devices: bool,
 ) -> Result<()> {
-    info!("Loading data - Models: {:?}, Registrations: {:?}, Airports: {:?}, Runways: {:?}",
-          aircraft_models_path, aircraft_registrations_path, airports_path, runways_path);
+    info!("Loading data - Models: {:?}, Registrations: {:?}, Airports: {:?}, Runways: {:?}, Pull Devices: {}",
+          aircraft_models_path, aircraft_registrations_path, airports_path, runways_path, pull_devices);
 
     // Set up database connection
     let pool = setup_database().await?;
@@ -308,7 +310,7 @@ async fn handle_load_data(
                 info!("Successfully loaded {} runways", runways_list.len());
 
                 // Create runways repository and upsert runways
-                let runways_repo = RunwaysRepository::new(pool);
+                let runways_repo = RunwaysRepository::new(pool.clone());
                 info!("Upserting {} runways into database...", runways_list.len());
 
                 match runways_repo.upsert_runways(runways_list).await {
@@ -340,61 +342,58 @@ async fn handle_load_data(
         info!("Skipping runways - no path provided");
     }
 
-    Ok(())
-}
+    // Pull devices if requested
+    if pull_devices {
+        info!("Pulling devices from DDB...");
+        
+        // Create device fetcher and fetch devices
+        let device_fetcher = DeviceFetcher::new();
 
-async fn handle_pull_devices() -> Result<()> {
-    info!("Starting device pull from DDB...");
+        match device_fetcher.fetch_all().await {
+            Ok(devices) => {
+                let device_count = devices.len();
+                info!("Successfully fetched {} devices from DDB", device_count);
 
-    // Set up database connection
-    let pool = setup_database().await?;
+                if device_count == 0 {
+                    info!("No devices found in DDB response");
+                } else {
+                    // Create device repository and upsert devices
+                    let device_repo = DeviceRepository::new(pool.clone());
 
-    // Create device fetcher and fetch devices
-    let device_fetcher = DeviceFetcher::new();
-    info!("Fetching devices from DDB...");
+                    info!("Upserting {} devices into database...", devices.len());
+                    match device_repo.upsert_devices(devices).await {
+                        Ok(upserted_count) => {
+                            info!("Successfully upserted {} devices", upserted_count);
 
-    match device_fetcher.fetch_all().await {
-        Ok(devices) => {
-            let device_count = devices.len();
-            info!("Successfully fetched {} devices from DDB", device_count);
-
-            if device_count == 0 {
-                info!("No devices found in DDB response");
-                return Ok(());
-            }
-
-            // Create device repository and upsert devices
-            let device_repo = DeviceRepository::new(pool);
-
-            info!("Upserting {} devices into database...", devices.len());
-            match device_repo.upsert_devices(devices).await {
-                Ok(upserted_count) => {
-                    info!("Successfully upserted {} devices", upserted_count);
-
-                    // Get final count from database
-                    match device_repo.get_device_count().await {
-                        Ok(total_count) => {
-                            info!("Total devices in database: {}", total_count);
+                            // Get final count from database
+                            match device_repo.get_device_count().await {
+                                Ok(total_count) => {
+                                    info!("Total devices in database: {}", total_count);
+                                }
+                                Err(e) => {
+                                    error!("Failed to get device count: {}", e);
+                                }
+                            }
                         }
                         Err(e) => {
-                            error!("Failed to get device count: {}", e);
+                            error!("Failed to upsert devices: {}", e);
+                            return Err(e);
                         }
                     }
                 }
-                Err(e) => {
-                    error!("Failed to upsert devices: {}", e);
-                    return Err(e);
-                }
+            }
+            Err(e) => {
+                error!("Failed to fetch devices from DDB: {}", e);
+                return Err(anyhow::anyhow!("Failed to fetch devices from DDB: {}", e));
             }
         }
-        Err(e) => {
-            error!("Failed to fetch devices from DDB: {}", e);
-            return Err(anyhow::anyhow!("Failed to fetch devices from DDB: {}", e));
-        }
+    } else {
+        info!("Skipping device pull - not requested");
     }
 
     Ok(())
 }
+
 
 async fn handle_run(
     server: String,
@@ -460,11 +459,8 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::LoadData { aircraft_models, aircraft_registrations, airports, runways } => {
-            handle_load_data(aircraft_models, aircraft_registrations, airports, runways).await
-        }
-        Commands::PullDevices => {
-            handle_pull_devices().await
+        Commands::LoadData { aircraft_models, aircraft_registrations, airports, runways, pull_devices } => {
+            handle_load_data(aircraft_models, aircraft_registrations, airports, runways, pull_devices).await
         }
         Commands::Run {
             server,
