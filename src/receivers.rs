@@ -58,7 +58,7 @@ pub struct ReceiverPhotoRecord {
 pub struct ReceiverLinkRecord {
     pub id: i32,
     pub receiver_id: i32,
-    pub rel: String,
+    pub rel: Option<String>,
     pub href: String,
     pub created_at: Option<chrono::DateTime<chrono::Utc>>,
 }

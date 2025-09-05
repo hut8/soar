@@ -2,7 +2,9 @@ use anyhow::Result;
 use sqlx::PgPool;
 use tracing::{info, warn};
 
-use crate::receivers::{Receiver, ReceiverRecord, ReceiverPhotoRecord, ReceiverLinkRecord, ReceiversData};
+use crate::receivers::{
+    Receiver, ReceiverLinkRecord, ReceiverPhotoRecord, ReceiverRecord, ReceiversData,
+};
 
 pub struct ReceiverRepository {
     pool: PgPool,
@@ -71,13 +73,19 @@ impl ReceiverRepository {
             };
 
             // Delete existing photos and links for this receiver
-            let _ = sqlx::query!("DELETE FROM receivers_photos WHERE receiver_id = $1", receiver_id)
-                .execute(&mut *transaction)
-                .await;
+            let _ = sqlx::query!(
+                "DELETE FROM receivers_photos WHERE receiver_id = $1",
+                receiver_id
+            )
+            .execute(&mut *transaction)
+            .await;
 
-            let _ = sqlx::query!("DELETE FROM receivers_links WHERE receiver_id = $1", receiver_id)
-                .execute(&mut *transaction)
-                .await;
+            let _ = sqlx::query!(
+                "DELETE FROM receivers_links WHERE receiver_id = $1",
+                receiver_id
+            )
+            .execute(&mut *transaction)
+            .await;
 
             // Insert photos
             if let Some(photos) = &receiver.photos {
@@ -211,7 +219,11 @@ impl ReceiverRepository {
             links.push(ReceiverLinkRecord {
                 id: row.id,
                 receiver_id: row.receiver_id,
-                rel: row.rel,
+                rel: if row.rel.is_empty() {
+                    None
+                } else {
+                    Some(row.rel)
+                },
                 href: row.href,
                 created_at: row.created_at,
             });
@@ -221,7 +233,16 @@ impl ReceiverRepository {
     }
 
     /// Get a complete receiver with photos and links
-    pub async fn get_complete_receiver(&self, callsign: &str) -> Result<Option<(ReceiverRecord, Vec<ReceiverPhotoRecord>, Vec<ReceiverLinkRecord>)>> {
+    pub async fn get_complete_receiver(
+        &self,
+        callsign: &str,
+    ) -> Result<
+        Option<(
+            ReceiverRecord,
+            Vec<ReceiverPhotoRecord>,
+            Vec<ReceiverLinkRecord>,
+        )>,
+    > {
         let receiver = match self.get_receiver_by_callsign(callsign).await? {
             Some(r) => r,
             None => return Ok(None),
@@ -296,7 +317,11 @@ impl ReceiverRepository {
     }
 
     /// Get all receivers with pagination
-    pub async fn get_receivers_paginated(&self, limit: i64, offset: i64) -> Result<Vec<ReceiverRecord>> {
+    pub async fn get_receivers_paginated(
+        &self,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<ReceiverRecord>> {
         let results = sqlx::query!(
             r#"
             SELECT id, callsign, description, contact, email, country, created_at, updated_at
@@ -342,13 +367,19 @@ impl ReceiverRepository {
         };
 
         // Delete photos and links (will cascade due to foreign key constraints, but being explicit)
-        sqlx::query!("DELETE FROM receivers_photos WHERE receiver_id = $1", receiver_id)
-            .execute(&mut *transaction)
-            .await?;
+        sqlx::query!(
+            "DELETE FROM receivers_photos WHERE receiver_id = $1",
+            receiver_id
+        )
+        .execute(&mut *transaction)
+        .await?;
 
-        sqlx::query!("DELETE FROM receivers_links WHERE receiver_id = $1", receiver_id)
-            .execute(&mut *transaction)
-            .await?;
+        sqlx::query!(
+            "DELETE FROM receivers_links WHERE receiver_id = $1",
+            receiver_id
+        )
+        .execute(&mut *transaction)
+        .await?;
 
         // Delete the receiver
         let result = sqlx::query!("DELETE FROM receivers WHERE id = $1", receiver_id)
@@ -393,7 +424,10 @@ mod tests {
     fn test_receiver_creation() {
         let receiver = create_test_receiver();
         assert_eq!(receiver.callsign, Some("TEST123".to_string()));
-        assert_eq!(receiver.description, Some("Test receiver description".to_string()));
+        assert_eq!(
+            receiver.description,
+            Some("Test receiver description".to_string())
+        );
         assert_eq!(receiver.contact, Some("Test Contact".to_string()));
         assert_eq!(receiver.email, Some("test@example.com".to_string()));
         assert_eq!(receiver.country, Some("US".to_string()));
