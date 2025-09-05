@@ -1,6 +1,7 @@
 use anyhow::Result;
 use chrono::Utc;
 use ogn_parser::AprsPacket;
+use crate::Fix;
 use regex::Regex;
 use std::fs::{OpenOptions, create_dir_all};
 use std::io::Write;
@@ -22,7 +23,9 @@ pub trait MessageProcessor: Send + Sync {
     ///
     /// # Arguments
     /// * `message` - The parsed APRS packet
-    fn process_message(&self, message: AprsPacket);
+    fn process_message(&self, _message: AprsPacket) {
+        // Default implementation does nothing
+    }
 
     /// Process a raw APRS message (optional - for logging, archiving, etc.)
     ///
@@ -31,6 +34,15 @@ pub trait MessageProcessor: Send + Sync {
     fn process_raw_message(&self, _raw_message: &str) {
         // Default implementation does nothing
     }
+}
+
+/// Trait for processing position fixes extracted from APRS messages
+pub trait FixProcessor: Send + Sync {
+    /// Process a position fix
+    ///
+    /// # Arguments
+    /// * `fix` - The position fix extracted from an APRS packet
+    fn process_fix(&self, fix: Fix);
 }
 
 /// Type alias for boxed message processor trait objects
@@ -68,80 +80,6 @@ fn sanitize_aprs_message(message: &str) -> String {
     });
 
     sanitized.to_string()
-}
-
-/// Message archive for logging APRS messages to daily files
-pub struct MessageArchive {
-    base_dir: String,
-    current_file: Mutex<Option<std::fs::File>>,
-    current_date: Mutex<String>,
-}
-
-impl MessageArchive {
-    pub fn new(base_dir: String) -> Self {
-        Self {
-            base_dir,
-            current_file: Mutex::new(None),
-            current_date: Mutex::new(String::new()),
-        }
-    }
-
-    pub fn log_message(&self, message: &str) {
-        let now = Utc::now();
-        let date_str = now.format("%Y-%m-%d").to_string();
-
-        let mut current_date = self.current_date.lock().unwrap();
-        let mut current_file = self.current_file.lock().unwrap();
-
-        // Check if we need to create a new file (new day or first time)
-        if *current_date != date_str {
-            // Close the current file if it exists
-            *current_file = None;
-
-            // Create the archive directory if it doesn't exist
-            let archive_path = PathBuf::from(&self.base_dir);
-            if let Err(e) = create_dir_all(&archive_path) {
-                error!(
-                    "Failed to create archive directory {}: {}",
-                    archive_path.display(),
-                    e
-                );
-                return;
-            }
-
-            // Create the new log file
-            let log_file_path = archive_path.join(format!("{date_str}.log"));
-            match OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(&log_file_path)
-            {
-                Ok(file) => {
-                    info!("Opened new archive log file: {}", log_file_path.display());
-                    *current_file = Some(file);
-                    *current_date = date_str;
-                }
-                Err(e) => {
-                    error!(
-                        "Failed to open archive log file {}: {}",
-                        log_file_path.display(),
-                        e
-                    );
-                    return;
-                }
-            }
-        }
-
-        // Write the message to the current file
-        if let Some(ref mut file) = *current_file {
-            let timestamp = now.format("%H:%M:%S").to_string();
-            if let Err(e) = writeln!(file, "[{timestamp}] {message}") {
-                error!("Failed to write to archive log file: {}", e);
-            } else if let Err(e) = file.flush() {
-                error!("Failed to flush archive log file: {}", e);
-            }
-        }
-    }
 }
 
 /// Configuration for the APRS client
@@ -183,16 +121,32 @@ impl Default for AprsClientConfig {
 /// APRS client that connects to an APRS-IS server via TCP
 pub struct AprsClient {
     config: AprsClientConfig,
-    processor: Arc<dyn MessageProcessor>,
+    message_processor: Arc<dyn MessageProcessor>,
+    fix_processor: Option<Arc<dyn FixProcessor>>,
     shutdown_tx: Option<mpsc::Sender<()>>,
 }
 
 impl AprsClient {
     /// Create a new APRS client with the given configuration and message processor
-    pub fn new(config: AprsClientConfig, processor: Arc<dyn MessageProcessor>) -> Self {
+    pub fn new(config: AprsClientConfig, message_processor: Arc<dyn MessageProcessor>) -> Self {
         Self {
             config,
-            processor,
+            message_processor,
+            fix_processor: None,
+            shutdown_tx: None,
+        }
+    }
+
+    /// Create a new APRS client with both message and fix processors
+    pub fn new_with_fix_processor(
+        config: AprsClientConfig,
+        message_processor: Arc<dyn MessageProcessor>,
+        fix_processor: Arc<dyn FixProcessor>
+    ) -> Self {
+        Self {
+            config,
+            message_processor,
+            fix_processor: Some(fix_processor),
             shutdown_tx: None,
         }
     }
@@ -204,7 +158,8 @@ impl AprsClient {
         self.shutdown_tx = Some(shutdown_tx);
 
         let config = self.config.clone();
-        let processor = Arc::clone(&self.processor);
+        let message_processor = Arc::clone(&self.message_processor);
+        let fix_processor = self.fix_processor.as_ref().map(Arc::clone);
 
         tokio::spawn(async move {
             let mut retry_count = 0;
@@ -216,7 +171,7 @@ impl AprsClient {
                     break;
                 }
 
-                match Self::connect_and_run(&config, Arc::clone(&processor)).await {
+                match Self::connect_and_run(&config, Arc::clone(&message_processor), fix_processor.as_ref().map(Arc::clone)).await {
                     Ok(_) => {
                         info!("APRS client connection ended normally");
                         retry_count = 0; // Reset retry count on successful connection
@@ -256,7 +211,8 @@ impl AprsClient {
     /// Connect to the APRS server and run the message processing loop
     async fn connect_and_run(
         config: &AprsClientConfig,
-        processor: Arc<dyn MessageProcessor>,
+        message_processor: Arc<dyn MessageProcessor>,
+        fix_processor: Option<Arc<dyn FixProcessor>>,
     ) -> Result<()> {
         info!(
             "Connecting to APRS server {}:{}",
@@ -298,7 +254,7 @@ impl AprsClient {
                         }
                         // Skip server messages (lines starting with #)
                         if !trimmed_line.starts_with('#') {
-                            Self::process_message(trimmed_line, Arc::clone(&processor)).await;
+                            Self::process_message(trimmed_line, Arc::clone(&message_processor), fix_processor.as_ref().map(Arc::clone)).await;
                         } else {
                             info!("Server message: {}", trimmed_line);
                         }
@@ -335,9 +291,9 @@ impl AprsClient {
     }
 
     /// Process a received APRS message
-    async fn process_message(message: &str, processor: Arc<dyn MessageProcessor>) {
+    async fn process_message(message: &str, message_processor: Arc<dyn MessageProcessor>, fix_processor: Option<Arc<dyn FixProcessor>>) {
         // Always call process_raw_message first (for logging/archiving)
-        processor.process_raw_message(message);
+        message_processor.process_raw_message(message);
 
         // Sanitize the message to fix invalid SSIDs
         let sanitized_message = sanitize_aprs_message(message);
@@ -345,8 +301,23 @@ impl AprsClient {
         // Try to parse the sanitized message using ogn-parser
         match ogn_parser::parse(&sanitized_message) {
             Ok(parsed) => {
-                // Call the processor with the parsed message
-                processor.process_message(parsed);
+                // Call the message processor with the parsed message
+                message_processor.process_message(parsed.clone());
+
+                // If we have a fix processor, try to extract a position fix
+                if let Some(fix_proc) = fix_processor {
+                    match Fix::from_aprs_packet(parsed) {
+                        Ok(Some(fix)) => {
+                            fix_proc.process_fix(fix);
+                        }
+                        Ok(None) => {
+                            // Not a position packet, that's fine
+                        }
+                        Err(e) => {
+                            debug!("Failed to extract fix from APRS packet: {}", e);
+                        }
+                    }
+                }
             }
             Err(e) => {
                 warn!(
@@ -505,7 +476,7 @@ mod tests {
         });
 
         // Simulate processing a message
-        AprsClient::process_message("TEST>APRS:>Test message", Arc::clone(&processor)).await;
+        AprsClient::process_message("TEST>APRS:>Test message", Arc::clone(&processor), None).await;
 
         assert_eq!(counter.load(Ordering::SeqCst), 1);
     }
@@ -528,32 +499,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_message_archive() {
-        use std::fs;
-        use std::path::Path;
-
-        let temp_dir = "/tmp/test_aprs_archive";
-        let archive = MessageArchive::new(temp_dir.to_string());
-
-        // Log a test message
-        archive.log_message("TEST>APRS:>Test archive message");
-
-        // Check that the directory was created
-        assert!(Path::new(temp_dir).exists());
-
-        // Check that a log file was created with today's date
-        let today = Utc::now().format("%Y-%m-%d").to_string();
-        let log_file_path = Path::new(temp_dir).join(format!("{today}.log"));
-        assert!(log_file_path.exists());
-
-        // Read the file content and verify the message was logged
-        let content = fs::read_to_string(&log_file_path).expect("Failed to read log file");
-        assert!(content.contains("TEST>APRS:>Test archive message"));
-
-        // Clean up
-        let _ = fs::remove_dir_all(temp_dir);
-    }
 
     #[test]
     fn test_ssid_sanitization() {

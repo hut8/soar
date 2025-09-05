@@ -1,7 +1,8 @@
 use std::str::FromStr;
+use std::fmt;
 use serde::{Serialize, Deserialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AddressType {
     Unknown,
     Icao,
@@ -9,7 +10,7 @@ pub enum AddressType {
     OgnTracker,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum AircraftType {
     Reserved0 = 0x0,
@@ -95,32 +96,32 @@ pub enum AdsbEmitterCategory {
     C5, // Line obstacle
 }
 
-impl AdsbEmitterCategory {
-    /// Convert the enum variant to its string representation
-    pub fn to_string(&self) -> String {
-        match self {
-            AdsbEmitterCategory::A0 => "A0".to_string(),
-            AdsbEmitterCategory::A1 => "A1".to_string(),
-            AdsbEmitterCategory::A2 => "A2".to_string(),
-            AdsbEmitterCategory::A3 => "A3".to_string(),
-            AdsbEmitterCategory::A4 => "A4".to_string(),
-            AdsbEmitterCategory::A5 => "A5".to_string(),
-            AdsbEmitterCategory::A6 => "A6".to_string(),
-            AdsbEmitterCategory::A7 => "A7".to_string(),
-            AdsbEmitterCategory::B0 => "B0".to_string(),
-            AdsbEmitterCategory::B1 => "B1".to_string(),
-            AdsbEmitterCategory::B2 => "B2".to_string(),
-            AdsbEmitterCategory::B3 => "B3".to_string(),
-            AdsbEmitterCategory::B4 => "B4".to_string(),
-            AdsbEmitterCategory::B6 => "B6".to_string(),
-            AdsbEmitterCategory::B7 => "B7".to_string(),
-            AdsbEmitterCategory::C0 => "C0".to_string(),
-            AdsbEmitterCategory::C1 => "C1".to_string(),
-            AdsbEmitterCategory::C2 => "C2".to_string(),
-            AdsbEmitterCategory::C3 => "C3".to_string(),
-            AdsbEmitterCategory::C4 => "C4".to_string(),
-            AdsbEmitterCategory::C5 => "C5".to_string(),
-        }
+impl fmt::Display for AdsbEmitterCategory {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            AdsbEmitterCategory::A0 => "A0",
+            AdsbEmitterCategory::A1 => "A1",
+            AdsbEmitterCategory::A2 => "A2",
+            AdsbEmitterCategory::A3 => "A3",
+            AdsbEmitterCategory::A4 => "A4",
+            AdsbEmitterCategory::A5 => "A5",
+            AdsbEmitterCategory::A6 => "A6",
+            AdsbEmitterCategory::A7 => "A7",
+            AdsbEmitterCategory::B0 => "B0",
+            AdsbEmitterCategory::B1 => "B1",
+            AdsbEmitterCategory::B2 => "B2",
+            AdsbEmitterCategory::B3 => "B3",
+            AdsbEmitterCategory::B4 => "B4",
+            AdsbEmitterCategory::B6 => "B6",
+            AdsbEmitterCategory::B7 => "B7",
+            AdsbEmitterCategory::C0 => "C0",
+            AdsbEmitterCategory::C1 => "C1",
+            AdsbEmitterCategory::C2 => "C2",
+            AdsbEmitterCategory::C3 => "C3",
+            AdsbEmitterCategory::C4 => "C4",
+            AdsbEmitterCategory::C5 => "C5",
+        };
+        write!(f, "{}", s)
     }
 }
 

@@ -1,33 +1,26 @@
-pub mod devices;
-pub mod device_repo;
-pub mod ogn_aprs_aircraft;
-pub mod aprs_client;
-pub mod faa;
-pub mod nats_publisher;
-
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use soar::message_processors::MessageArchive;
 use sqlx::postgres::PgPool;
 use std::env;
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
-use tracing::{info, error};
+use tracing::{error, info};
 
-use crate::aprs_client::{AprsClient, AprsClientConfigBuilder, MessageProcessor};
-use crate::devices::DeviceFetcher;
-use crate::device_repo::DeviceRepository;
-use crate::nats_publisher::NatsAprsPublisher;
-use crate::faa::aircraft_registrations::read_aircraft_file;
-use crate::faa::aircraft_models::read_aircraft_models_file;
-use crate::faa::aircraft_model_repo::AircraftModelRepository;
-use crate::faa::aircraft_registrations_repo::AircraftRegistrationsRepository;
 use soar::airports::read_airports_csv_file;
 use soar::airports_repo::AirportsRepository;
+use soar::aprs_client::{AprsClient, AprsClientConfigBuilder, FixProcessor, MessageProcessor};
+use soar::device_repo::DeviceRepository;
+use soar::devices::DeviceFetcher;
+use soar::faa::aircraft_model_repo::AircraftModelRepository;
+use soar::faa::aircraft_models::read_aircraft_models_file;
+use soar::faa::aircraft_registrations::read_aircraft_file;
+use soar::faa::aircraft_registrations_repo::AircraftRegistrationsRepository;
+use soar::receiver_repo::ReceiverRepository;
+use soar::receivers::read_receivers_file;
 use soar::runways::read_runways_csv_file;
 use soar::runways_repo::RunwaysRepository;
-use soar::receivers::read_receivers_file;
-use soar::receiver_repo::ReceiverRepository;
 
 // Embed migrations into the binary
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!();
@@ -112,47 +105,13 @@ enum Commands {
     },
 }
 
-/// Composite message processor that combines NATS publishing with file streaming
-struct CompositeMessageProcessor {
-    nats_publisher: NatsAprsPublisher,
-    archive: Option<Arc<crate::aprs_client::MessageArchive>>,
-}
-
-impl CompositeMessageProcessor {
-    pub async fn new(nats_url: String, db_pool: PgPool, archive_dir: Option<String>) -> Result<Self> {
-        let nats_publisher = NatsAprsPublisher::new(&nats_url, db_pool).await?;
-        let archive = archive_dir.map(|dir| Arc::new(crate::aprs_client::MessageArchive::new(dir)));
-
-        Ok(Self {
-            nats_publisher,
-            archive,
-        })
-    }
-}
-
-impl MessageProcessor for CompositeMessageProcessor {
-    fn process_message(&self, message: ogn_parser::AprsPacket) {
-        tracing::trace!("Parsed APRS packet: {:?}", message);
-
-        // Forward to NATS publisher
-        self.nats_publisher.process_message(message);
-    }
-
-    fn process_raw_message(&self, raw_message: &str) {
-        // Log to file archive if configured
-        if let Some(ref archive) = self.archive {
-            archive.log_message(raw_message);
-        }
-    }
-}
-
 async fn setup_database() -> Result<PgPool> {
     // Load environment variables from .env file
     dotenvy::dotenv().ok();
 
     // Get the database URL from environment variables
-    let database_url = env::var("DATABASE_URL")
-        .expect("DATABASE_URL must be set in environment variables");
+    let database_url =
+        env::var("DATABASE_URL").expect("DATABASE_URL must be set in environment variables");
 
     // Create a connection pool to the PostgreSQL database
     let pool = match PgPool::connect(&database_url).await {
@@ -197,19 +156,22 @@ fn determine_archive_dir() -> Result<String> {
                 return Ok(var_soar_archive.to_string());
             }
             Err(_) => {
-                info!("/var/soar/archive exists but is not writable, falling back to $HOME/soar-archive/");
+                info!(
+                    "/var/soar/archive exists but is not writable, falling back to $HOME/soar-archive/"
+                );
             }
         }
     }
 
     // Fallback to $HOME/soar-archive/
-    let home_dir = env::var("HOME")
-        .map_err(|_| anyhow::anyhow!("HOME environment variable not set"))?;
+    let home_dir =
+        env::var("HOME").map_err(|_| anyhow::anyhow!("HOME environment variable not set"))?;
     let home_archive = format!("{}/soar-archive", home_dir);
 
     // Create the directory if it doesn't exist
-    fs::create_dir_all(&home_archive)
-        .map_err(|e| anyhow::anyhow!("Failed to create archive directory {}: {}", home_archive, e))?;
+    fs::create_dir_all(&home_archive).map_err(|e| {
+        anyhow::anyhow!("Failed to create archive directory {}: {}", home_archive, e)
+    })?;
 
     info!("Using archive directory: {}", home_archive);
     Ok(home_archive)
@@ -223,8 +185,15 @@ async fn handle_load_data(
     receivers_path: Option<String>,
     pull_devices: bool,
 ) -> Result<()> {
-    info!("Loading data - Models: {:?}, Registrations: {:?}, Airports: {:?}, Runways: {:?}, Receivers: {:?}, Pull Devices: {}",
-          aircraft_models_path, aircraft_registrations_path, airports_path, runways_path, receivers_path, pull_devices);
+    info!(
+        "Loading data - Models: {:?}, Registrations: {:?}, Airports: {:?}, Runways: {:?}, Receivers: {:?}, Pull Devices: {}",
+        aircraft_models_path,
+        aircraft_registrations_path,
+        airports_path,
+        runways_path,
+        receivers_path,
+        pull_devices
+    );
 
     // Set up database connection
     let pool = setup_database().await?;
@@ -234,11 +203,17 @@ async fn handle_load_data(
         info!("Loading aircraft models from: {}", aircraft_models_path);
         match read_aircraft_models_file(&aircraft_models_path) {
             Ok(aircraft_models) => {
-                info!("Successfully loaded {} aircraft models", aircraft_models.len());
+                info!(
+                    "Successfully loaded {} aircraft models",
+                    aircraft_models.len()
+                );
 
                 // Create aircraft model repository and upsert models
                 let model_repo = AircraftModelRepository::new(pool.clone());
-                info!("Upserting {} aircraft models into database...", aircraft_models.len());
+                info!(
+                    "Upserting {} aircraft models into database...",
+                    aircraft_models.len()
+                );
 
                 match model_repo.upsert_aircraft_models(aircraft_models).await {
                     Ok(upserted_count) => {
@@ -271,18 +246,33 @@ async fn handle_load_data(
 
     // Load aircraft registrations second (if provided)
     if let Some(aircraft_registrations_path) = aircraft_registrations_path {
-        info!("Loading aircraft registrations from: {}", aircraft_registrations_path);
+        info!(
+            "Loading aircraft registrations from: {}",
+            aircraft_registrations_path
+        );
         match read_aircraft_file(&aircraft_registrations_path) {
             Ok(aircraft_list) => {
-                info!("Successfully loaded {} aircraft registrations", aircraft_list.len());
+                info!(
+                    "Successfully loaded {} aircraft registrations",
+                    aircraft_list.len()
+                );
 
                 // Create aircraft registrations repository and upsert registrations
                 let registrations_repo = AircraftRegistrationsRepository::new(pool.clone());
-                info!("Upserting {} aircraft registrations into database...", aircraft_list.len());
+                info!(
+                    "Upserting {} aircraft registrations into database...",
+                    aircraft_list.len()
+                );
 
-                match registrations_repo.upsert_aircraft_registrations(aircraft_list).await {
+                match registrations_repo
+                    .upsert_aircraft_registrations(aircraft_list)
+                    .await
+                {
                     Ok(upserted_count) => {
-                        info!("Successfully upserted {} aircraft registrations", upserted_count);
+                        info!(
+                            "Successfully upserted {} aircraft registrations",
+                            upserted_count
+                        );
 
                         // Get final count from database
                         match registrations_repo.get_aircraft_registration_count().await {
@@ -318,7 +308,10 @@ async fn handle_load_data(
 
                 // Create airports repository and upsert airports
                 let airports_repo = AirportsRepository::new(pool.clone());
-                info!("Upserting {} airports into database...", airports_list.len());
+                info!(
+                    "Upserting {} airports into database...",
+                    airports_list.len()
+                );
 
                 match airports_repo.upsert_airports(airports_list).await {
                     Ok(upserted_count) => {
@@ -394,14 +387,21 @@ async fn handle_load_data(
         info!("Loading receivers from: {}", receivers_path);
         match read_receivers_file(&receivers_path) {
             Ok(receivers_data) => {
-                let receiver_count = receivers_data.receivers.as_ref().map(|r| r.len()).unwrap_or(0);
+                let receiver_count = receivers_data
+                    .receivers
+                    .as_ref()
+                    .map(|r| r.len())
+                    .unwrap_or(0);
                 info!("Successfully loaded {} receivers", receiver_count);
 
                 // Create receivers repository and upsert receivers
                 let receivers_repo = ReceiverRepository::new(pool.clone());
                 info!("Upserting {} receivers into database...", receiver_count);
 
-                match receivers_repo.upsert_receivers_from_data(receivers_data).await {
+                match receivers_repo
+                    .upsert_receivers_from_data(receivers_data)
+                    .await
+                {
                     Ok(upserted_count) => {
                         info!("Successfully upserted {} receivers", upserted_count);
 
@@ -482,7 +482,6 @@ async fn handle_load_data(
     Ok(())
 }
 
-
 async fn handle_run(
     server: String,
     port: u16,
@@ -517,12 +516,16 @@ async fn handle_run(
         .build();
 
     // Create composite processor (NATS + file streaming)
-    info!("Creating composite processor with NATS URL: {}", nats_url);
-    let composite_processor = CompositeMessageProcessor::new(nats_url, pool, archive_dir).await?;
-    let processor: Arc<dyn MessageProcessor> = Arc::new(composite_processor);
+    info!(
+        "Setting up message processors - writing to directory: {:?}, NATS URL: {}",
+        archive_dir, nats_url
+    );
+    let archive_processor: Arc<dyn MessageProcessor> = Arc::new(
+        soar::message_processors::ArchiveMessageProcessor::new(archive_dir),
+    );
 
     // Create and start APRS client
-    let mut client = AprsClient::new(config, processor);
+    let mut client = AprsClient::new(config, archive_processor);
 
     info!("Starting APRS client...");
     client.start().await?;
@@ -542,21 +545,33 @@ async fn main() -> Result<()> {
     // Initialize tracing with TRACE level by default, but silence async_nats TRACE/DEBUG
     use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| {
-            // Default filter: TRACE for soar, INFO for async_nats, WARN for everything else
-            EnvFilter::new("warn,soar=trace,async_nats=info,soar::nats_publisher=warn")
-        });
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        // Default filter: TRACE for soar, INFO for async_nats, WARN for everything else
+        EnvFilter::new("warn,soar=trace,async_nats=info,soar::nats_publisher=warn")
+    });
 
-    FmtSubscriber::builder()
-        .with_env_filter(filter)
-        .init();
+    FmtSubscriber::builder().with_env_filter(filter).init();
 
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::LoadData { aircraft_models, aircraft_registrations, airports, runways, receivers, pull_devices } => {
-            handle_load_data(aircraft_models, aircraft_registrations, airports, runways, receivers, pull_devices).await
+        Commands::LoadData {
+            aircraft_models,
+            aircraft_registrations,
+            airports,
+            runways,
+            receivers,
+            pull_devices,
+        } => {
+            handle_load_data(
+                aircraft_models,
+                aircraft_registrations,
+                airports,
+                runways,
+                receivers,
+                pull_devices,
+            )
+            .await
         }
         Commands::Run {
             server,
@@ -585,7 +600,8 @@ async fn main() -> Result<()> {
                 retry_delay,
                 final_archive_dir,
                 nats_url,
-            ).await
+            )
+            .await
         }
     }
 }

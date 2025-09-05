@@ -15,5 +15,9 @@ pub mod runways_repo;
 pub mod receivers;
 pub mod receiver_repo;
 pub mod nats_publisher;
+pub mod position;
+pub mod message_processors;
 
-pub use aprs_client::{AprsClient, AprsClientConfig, AprsClientConfigBuilder, MessageProcessor};
+pub use aprs_client::{AprsClient, AprsClientConfig, AprsClientConfigBuilder, MessageProcessor, FixProcessor};
+pub use nats_publisher::NatsFixPublisher;
+pub use position::Fix;
