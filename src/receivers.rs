@@ -7,7 +7,7 @@ use std::path::Path;
 /// A link associated with a receiver
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReceiverLink {
-    pub rel: String,
+    pub rel: Option<String>,
     pub href: String,
 }
 
@@ -128,9 +128,9 @@ mod tests {
         assert_eq!(receiver.country, Some("US".to_string()));
 
         let links = receiver.links.as_ref().unwrap();
-        assert_eq!(links[0].rel, "homepage");
+        assert_eq!(links[0].rel, Some("homepage".to_string()));
         assert_eq!(links[0].href, "http://example.com");
-        assert_eq!(links[1].rel, "photo");
+        assert_eq!(links[1].rel, Some("photo".to_string()));
         assert_eq!(links[1].href, "http://example.com/photo.jpg");
     }
 
@@ -172,7 +172,7 @@ mod tests {
             email: Some("test@example.com".to_string()),
             links: Some(vec![
                 ReceiverLink {
-                    rel: "homepage".to_string(),
+                    rel: Some("homepage".to_string()),
                     href: "http://example.com".to_string(),
                 }
             ]),
@@ -192,7 +192,7 @@ mod tests {
         assert_eq!(photos[1], "photo2.jpg");
 
         assert_eq!(links.len(), 1);
-        assert_eq!(links[0].rel, "homepage");
+        assert_eq!(links[0].rel, Some("homepage".to_string()));
         assert_eq!(links[0].href, "http://example.com");
     }
 }

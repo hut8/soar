@@ -109,11 +109,12 @@ impl ReceiverRepository {
             // Insert links
             if let Some(links) = &receiver.links {
                 for link in links {
-                    if !link.rel.trim().is_empty() && !link.href.trim().is_empty() {
+                    if !link.href.trim().is_empty() {
+                        let rel_value = link.rel.as_ref().map(|r| r.trim()).filter(|r| !r.is_empty());
                         let link_result = sqlx::query!(
                             "INSERT INTO receivers_links (receiver_id, rel, href) VALUES ($1, $2, $3)",
                             receiver_id,
-                            link.rel.trim(),
+                            rel_value,
                             link.href.trim()
                         )
                         .execute(&mut *transaction)
@@ -219,11 +220,7 @@ impl ReceiverRepository {
             links.push(ReceiverLinkRecord {
                 id: row.id,
                 receiver_id: row.receiver_id,
-                rel: if row.rel.is_empty() {
-                    None
-                } else {
-                    Some(row.rel)
-                },
+                rel: row.rel,
                 href: row.href,
                 created_at: row.created_at,
             });
@@ -408,11 +405,11 @@ mod tests {
             email: Some("test@example.com".to_string()),
             links: Some(vec![
                 ReceiverLink {
-                    rel: "homepage".to_string(),
+                    rel: Some("homepage".to_string()),
                     href: "http://example.com".to_string(),
                 },
                 ReceiverLink {
-                    rel: "photo".to_string(),
+                    rel: Some("photo".to_string()),
                     href: "http://example.com/photo.jpg".to_string(),
                 },
             ]),
@@ -438,7 +435,7 @@ mod tests {
 
         let links = receiver.links.as_ref().unwrap();
         assert_eq!(links.len(), 2);
-        assert_eq!(links[0].rel, "homepage");
+        assert_eq!(links[0].rel, Some("homepage".to_string()));
         assert_eq!(links[0].href, "http://example.com");
     }
 }
