@@ -12,6 +12,8 @@ pub mod airports;
 pub mod airports_repo;
 pub mod runways;
 pub mod runways_repo;
+pub mod receivers;
+pub mod receiver_repo;
 pub mod nats_publisher;
 
 pub use aprs_client::{AprsClient, AprsClientConfig, AprsClientConfigBuilder, MessageProcessor};

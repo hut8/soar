@@ -451,9 +451,17 @@ async fn handle_run(
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Initialize tracing with TRACE level by default
-    tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::TRACE)
+    // Initialize tracing with TRACE level by default, but silence async_nats TRACE/DEBUG
+    use tracing_subscriber::{EnvFilter, FmtSubscriber};
+    
+    let filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| {
+            // Default filter: TRACE for soar, INFO for async_nats, WARN for everything else
+            EnvFilter::new("warn,soar=trace,async_nats=info")
+        });
+    
+    FmtSubscriber::builder()
+        .with_env_filter(filter)
         .init();
 
     let cli = Cli::parse();
