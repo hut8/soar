@@ -1,10 +1,19 @@
 use anyhow::Result;
+use axum::{
+    extract::State,
+    http::{HeaderMap, StatusCode, Uri},
+    response::IntoResponse,
+    Router,
+};
 use clap::{Parser, Subcommand};
+use include_dir::{include_dir, Dir};
+use mime_guess::from_path;
 use sqlx::postgres::PgPool;
 use std::env;
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
+use tower_http::trace::TraceLayer;
 use tracing::{error, info};
 
 use soar::airports::read_airports_csv_file;
@@ -23,6 +32,15 @@ use soar::runways_repo::RunwaysRepository;
 
 // Embed migrations into the binary
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!();
+
+// Embed web assets into the binary
+static ASSETS: Dir<'_> = include_dir!("web/build");
+
+// App state for sharing database pool
+#[derive(Clone)]
+struct AppState {
+    pool: PgPool,
+}
 
 #[derive(Parser)]
 #[command(name = "soar")]
@@ -102,6 +120,16 @@ enum Commands {
         #[arg(long, default_value = "nats://localhost:4222")]
         nats_url: String,
     },
+    /// Start the web server
+    Web {
+        /// Port to bind the web server to
+        #[arg(long, default_value = "1337")]
+        port: u16,
+
+        /// Interface to bind the web server to
+        #[arg(long, default_value = "localhost")]
+        interface: String,
+    },
 }
 
 async fn setup_database() -> Result<PgPool> {
@@ -174,6 +202,62 @@ fn determine_archive_dir() -> Result<String> {
 
     info!("Using archive directory: {}", home_archive);
     Ok(home_archive)
+}
+
+async fn handle_static_file(uri: Uri, _state: State<AppState>) -> impl IntoResponse {
+    let path = uri.path().trim_start_matches('/');
+    
+    // Try to find the exact file
+    if let Some(file) = ASSETS.get_file(path) {
+        let mime_type = from_path(path).first_or_octet_stream();
+        let mut headers = HeaderMap::new();
+        headers.insert("content-type", mime_type.as_ref().parse().unwrap());
+        return (StatusCode::OK, headers, file.contents()).into_response();
+    }
+    
+    // For HTML requests (based on Accept header or file extension), serve index.html for SPA
+    if path.is_empty() || path.ends_with(".html") || path.ends_with('/') {
+        if let Some(index_file) = ASSETS.get_file("index.html") {
+            let mut headers = HeaderMap::new();
+            headers.insert("content-type", "text/html".parse().unwrap());
+            return (StatusCode::OK, headers, index_file.contents()).into_response();
+        }
+    }
+    
+    // If no file found and it's not an API route, try serving index.html for SPA routing
+    if !path.starts_with("api/") {
+        if let Some(index_file) = ASSETS.get_file("index.html") {
+            let mut headers = HeaderMap::new();
+            headers.insert("content-type", "text/html".parse().unwrap());
+            return (StatusCode::OK, headers, index_file.contents()).into_response();
+        }
+    }
+    
+    (StatusCode::NOT_FOUND, "Not Found").into_response()
+}
+
+async fn handle_web(interface: String, port: u16) -> Result<()> {
+    info!("Starting web server on {}:{}", interface, port);
+    
+    // Set up database connection
+    let pool = setup_database().await?;
+    let app_state = AppState { pool };
+    
+    // Build the Axum application
+    let app = Router::new()
+        .fallback(handle_static_file)
+        .with_state(app_state)
+        .layer(TraceLayer::new_for_http());
+    
+    // Create the listener
+    let listener = tokio::net::TcpListener::bind(format!("{}:{}", interface, port)).await?;
+    
+    info!("Web server listening on http://{}:{}", interface, port);
+    
+    // Start the server
+    axum::serve(listener, app).await?;
+    
+    Ok(())
 }
 
 async fn handle_load_data(
@@ -601,6 +685,9 @@ async fn main() -> Result<()> {
                 nats_url,
             )
             .await
+        }
+        Commands::Web { interface, port } => {
+            handle_web(interface, port).await
         }
     }
 }
