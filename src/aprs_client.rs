@@ -272,7 +272,7 @@ impl AprsClient {
         message_processor.process_raw_message(message);
 
         // Try to parse the sanitized message using ogn-parser
-        match ogn_parser::parse(&message) {
+        match ogn_parser::parse(message) {
             Ok(parsed) => {
                 // Call the message processor with the parsed message
                 message_processor.process_message(parsed.clone());

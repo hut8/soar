@@ -252,7 +252,7 @@ impl FixesRepository {
 
         let results = sqlx::query!(
             r#"
-            SELECT 
+            SELECT
                 id, source, destination, via, raw_packet, timestamp,
                 latitude, longitude, altitude_feet,
                 aircraft_id, address, address_type::text, aircraft_type::text,
@@ -350,8 +350,8 @@ impl FixesRepository {
                 bit_errors_corrected: row.bit_errors_corrected.map(|b| b as u32),
                 freq_offset_khz: row.freq_offset_khz,
                 club_id: row.club_id,
-                created_at: row.created_at.unwrap_or_else(|| Utc::now()),
-                updated_at: row.updated_at.unwrap_or_else(|| Utc::now()),
+                created_at: row.created_at.unwrap_or_else(Utc::now),
+                updated_at: row.updated_at.unwrap_or_else(Utc::now),
             });
         }
 
@@ -373,7 +373,7 @@ impl FixesRepository {
 
         let results = sqlx::query!(
             r#"
-            SELECT 
+            SELECT
                 id, source, destination, via, raw_packet, timestamp,
                 latitude, longitude, altitude_feet,
                 aircraft_id, address, address_type::text, aircraft_type::text,
