@@ -964,6 +964,92 @@ impl AircraftRegistrationsRepository {
 
         Ok(aircraft_list)
     }
+
+    /// Get aircraft registrations that belong to clubs and haven't been geocoded yet
+    /// Returns a vector of (registration_number, address_string) tuples
+    pub async fn get_aircraft_for_geocoding(&self) -> Result<Vec<(String, String)>> {
+        let results = sqlx::query!(
+            r#"
+            SELECT registration_number, street1, street2, city, state, zip_code
+            FROM aircraft_registrations 
+            WHERE club_id IS NOT NULL 
+            AND registered_location IS NULL
+            AND street1 IS NOT NULL 
+            AND city IS NOT NULL 
+            AND state IS NOT NULL
+            "#
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut aircraft_addresses = Vec::new();
+        for row in results {
+            // Build address string from components
+            let mut address_parts = Vec::new();
+            
+            if let Some(street1) = &row.street1 {
+                if !street1.trim().is_empty() {
+                    address_parts.push(street1.trim());
+                }
+            }
+            
+            if let Some(street2) = &row.street2 {
+                if !street2.trim().is_empty() {
+                    address_parts.push(street2.trim());
+                }
+            }
+            
+            if let Some(city) = &row.city {
+                if !city.trim().is_empty() {
+                    address_parts.push(city.trim());
+                }
+            }
+            
+            if let Some(state) = &row.state {
+                if !state.trim().is_empty() {
+                    address_parts.push(state.trim());
+                }
+            }
+            
+            if let Some(zip_code) = &row.zip_code {
+                if !zip_code.trim().is_empty() {
+                    // Use only first 5 digits for geocoding
+                    let short_zip = if zip_code.len() >= 5 { 
+                        &zip_code[..5] 
+                    } else { 
+                        zip_code.trim() 
+                    };
+                    address_parts.push(short_zip);
+                }
+            }
+
+            // Only include if we have a meaningful address
+            if address_parts.len() >= 3 { // At least street, city, state
+                let address_string = address_parts.join(", ");
+                aircraft_addresses.push((row.registration_number, address_string));
+            }
+        }
+
+        Ok(aircraft_addresses)
+    }
+
+    /// Update the registered_location for a specific aircraft registration
+    pub async fn update_registered_location(&self, registration_number: &str, latitude: f64, longitude: f64) -> Result<()> {
+        sqlx::query!(
+            r#"
+            UPDATE aircraft_registrations 
+            SET registered_location = POINT($2, $3)
+            WHERE registration_number = $1
+            "#,
+            registration_number,
+            longitude,  // PostGIS POINT expects longitude first
+            latitude    // then latitude
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]

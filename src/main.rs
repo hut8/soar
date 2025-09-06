@@ -5,11 +5,12 @@ use std::env;
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use soar::airports::read_airports_csv_file;
 use soar::airports_repo::AirportsRepository;
 use soar::aprs_client::{AprsClient, AprsClientConfigBuilder, MessageProcessor};
+use soar::geocoding::Geocoder;
 use soar::device_repo::DeviceRepository;
 use soar::devices::DeviceFetcher;
 use soar::faa::aircraft_model_repo::AircraftModelRepository;
@@ -63,6 +64,9 @@ enum Commands {
         /// Also pull devices from DDB (Device Database) and upsert them into the database
         #[arg(long)]
         pull_devices: bool,
+        /// Geocode registered addresses of aircraft belonging to clubs that haven't been geocoded yet
+        #[arg(long)]
+        geocode: bool,
     },
     /// Run the main APRS client
     Run {
@@ -197,15 +201,17 @@ async fn handle_load_data(
     runways_path: Option<String>,
     receivers_path: Option<String>,
     pull_devices: bool,
+    geocode: bool,
 ) -> Result<()> {
     info!(
-        "Loading data - Models: {:?}, Registrations: {:?}, Airports: {:?}, Runways: {:?}, Receivers: {:?}, Pull Devices: {}",
+        "Loading data - Models: {:?}, Registrations: {:?}, Airports: {:?}, Runways: {:?}, Receivers: {:?}, Pull Devices: {}, Geocode: {}",
         aircraft_models_path,
         aircraft_registrations_path,
         airports_path,
         runways_path,
         receivers_path,
-        pull_devices
+        pull_devices,
+        geocode
     );
 
     // Set up database connection
@@ -492,6 +498,66 @@ async fn handle_load_data(
         info!("Skipping device pull - not requested");
     }
 
+    // Geocode aircraft addresses if requested
+    if geocode {
+        info!("Starting geocoding of aircraft registrations...");
+
+        // Create aircraft registrations repository and geocoder
+        let aircraft_repo = AircraftRegistrationsRepository::new(pool.clone());
+        let geocoder = Geocoder::new();
+
+        // Get aircraft that need geocoding
+        match aircraft_repo.get_aircraft_for_geocoding().await {
+            Ok(aircraft_addresses) => {
+                let aircraft_count = aircraft_addresses.len();
+                
+                if aircraft_count == 0 {
+                    info!("No aircraft registrations need geocoding");
+                } else {
+                    info!("Found {} aircraft registrations that need geocoding", aircraft_count);
+                    
+                    let mut successful_geocodes = 0;
+                    let mut failed_geocodes = 0;
+                    
+                    for (registration_number, address) in aircraft_addresses {
+                        info!("Geocoding {} - {}", registration_number, address);
+                        
+                        match geocoder.geocode_address(&address).await {
+                            Ok(point) => {
+                                // Update the database with the geocoded location
+                                match aircraft_repo.update_registered_location(&registration_number, point.latitude, point.longitude).await {
+                                    Ok(_) => {
+                                        info!("Successfully geocoded {} to ({}, {})", registration_number, point.latitude, point.longitude);
+                                        successful_geocodes += 1;
+                                    }
+                                    Err(e) => {
+                                        error!("Failed to update location for {}: {}", registration_number, e);
+                                        failed_geocodes += 1;
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                warn!("Failed to geocode {} ({}): {}", registration_number, address, e);
+                                failed_geocodes += 1;
+                            }
+                        }
+
+                        // Rate limiting: wait 1.1 seconds between requests to be respectful to Nominatim
+                        tokio::time::sleep(tokio::time::Duration::from_millis(1100)).await;
+                    }
+                    
+                    info!("Geocoding completed: {} successful, {} failed", successful_geocodes, failed_geocodes);
+                }
+            }
+            Err(e) => {
+                error!("Failed to get aircraft for geocoding: {}", e);
+                return Err(e);
+            }
+        }
+    } else {
+        info!("Skipping geocoding - not requested");
+    }
+
     Ok(())
 }
 
@@ -576,6 +642,7 @@ async fn main() -> Result<()> {
             runways,
             receivers,
             pull_devices,
+            geocode,
         } => {
             handle_load_data(
                 aircraft_models,
@@ -584,6 +651,7 @@ async fn main() -> Result<()> {
                 runways,
                 receivers,
                 pull_devices,
+                geocode,
             )
             .await
         }
