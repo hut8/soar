@@ -15,27 +15,22 @@ SOAR is an application under active development that will automate many duty-man
 
 ## Deployment
 
+### Database
+
+Needs PostgreSQL with PostGIS and pg_trgm. Tested on PostgreSQL 17 but should work on any modern version as long as those extensions are available. Use the environment variable `DATABASE_URL` in the form `postgres://user:password@server/database` as a connection string.
+
 ### NATS
 
 NATS allows the OGN data ingester to relay updates to interested subscribers in the web server process. To install, head over to [the NATS releases on GitHub](https://github.com/nats-io/nats-server/releases/) and download the latest AMD64 .deb package and install it via `dpkg -i`. For example:
 
 ```bash
- wget https://github.com/nats-io/nats-server/releases/download/v2.11.8/nats-server-v2.11.8-amd64.deb && sudo dpkg -i nats-server-*.deb
+# Install nats-server to /usr/local/bin/
+ wget https://github.com/nats-io/nats-server/releases/download/v2.11.8/nats-server-v2.11.8-amd64.deb && sudo dpkg -i nats-server-*.deb && rm nats-server-*.deb
+# Install into systemd
+sudo cp infrastructure/nats-server.service /etc/systemd/system/nats-server.service
+sudo systemctl daemon-reload
+sudo systemctl start nats-server
 ```
-
-
-
-
-### Configuration Options
-
-- `server`: APRS-IS server hostname (default: "aprs.glidernet.org")
-- `port`: APRS-IS server port (default: 14580)
-- `callsign`: Your amateur radio callsign (required)
-- `password`: APRS-IS password (use `None` for read-only access)
-- `filter`: APRS-IS filter string (optional)
-- `max_retries`: Maximum connection retry attempts (default: 5)
-- `retry_delay_seconds`: Delay between retry attempts (default: 5)
-- `archive_base_dir`: Base directory for message archives (optional)
 
 ### Log File Format
 
