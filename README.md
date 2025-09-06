@@ -32,18 +32,6 @@ sudo systemctl daemon-reload
 sudo systemctl start nats-server
 ```
 
-### Log File Format
-
-When archiving is enabled, each message is logged with the following format:
-
-```
-[14:30:25] N0CALL>APRS,TCPIP*:>Hello World
-[14:30:26] W1ABC-9>APRS,TCPIP*,qAC,T2SYDNEY:=3745.00N/12200.00W-Test Position
-```
-
-- `[HH:MM:SS]`: UTC timestamp when the message was received
-- Followed by the raw APRS message as received from the server
-
 ## Development
 
 This is necessary to run migrations the first time (sqlx requires a correct schema in order to build).

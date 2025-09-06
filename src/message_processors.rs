@@ -1,10 +1,11 @@
 use chrono::Utc;
-use std::fs::{OpenOptions, create_dir_all};
-use std::io::Write;
+use std::fs::{OpenOptions, create_dir_all, File};
+use std::io::{Write, BufWriter, BufReader};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex;
-use tracing::{error, info};
+use tracing::{error, info, warn};
+use zstd::stream::copy_encode;
 
 use crate::MessageProcessor;
 
@@ -71,8 +72,10 @@ impl MessageArchive {
 
         // Check if we need to create a new file (new day or first time)
         if *current_date != date_str {
-            // Close the current file if it exists
-            *current_file = None;
+            // Close the current file if it exists and compress it
+            if let Some(_) = current_file.take() {
+                self.compress_log_file(&*current_date);
+            }
 
             // Create the archive directory if it doesn't exist
             let archive_path = PathBuf::from(&self.base_dir);
@@ -110,11 +113,57 @@ impl MessageArchive {
 
         // Write the message to the current file
         if let Some(ref mut file) = *current_file {
-            let timestamp = now.format("%H:%M:%S").to_string();
+            let timestamp = now.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string();
             if let Err(e) = writeln!(file, "[{timestamp}] {message}") {
                 error!("Failed to write to archive log file: {}", e);
             } else if let Err(e) = file.flush() {
                 error!("Failed to flush archive log file: {}", e);
+            }
+        }
+    }
+
+    /// Compress the log file for the given date using zstd
+    fn compress_log_file(&self, date: &str) {
+        let archive_path = PathBuf::from(&self.base_dir);
+        let log_file_path = archive_path.join(format!("{date}.log"));
+        let compressed_file_path = archive_path.join(format!("{date}.log.zst"));
+
+        if !log_file_path.exists() {
+            return;
+        }
+
+        match (File::open(&log_file_path), File::create(&compressed_file_path)) {
+            (Ok(input_file), Ok(output_file)) => {
+                let mut input_reader = BufReader::new(input_file);
+                let mut output_writer = BufWriter::new(output_file);
+                
+                // Compress with zstd level 3 (good compression/speed tradeoff)
+                match copy_encode(&mut input_reader, &mut output_writer, 3) {
+                    Ok(_) => {
+                        info!("Compressed log file {} to {}", 
+                              log_file_path.display(), compressed_file_path.display());
+                        
+                        // Remove the original uncompressed file
+                        if let Err(e) = std::fs::remove_file(&log_file_path) {
+                            warn!("Failed to remove original log file {}: {}", 
+                                  log_file_path.display(), e);
+                        }
+                    }
+                    Err(e) => {
+                        error!("Failed to compress log file {}: {}", 
+                               log_file_path.display(), e);
+                        // Remove the incomplete compressed file
+                        let _ = std::fs::remove_file(&compressed_file_path);
+                    }
+                }
+            }
+            (Err(e), _) => {
+                error!("Failed to open log file {} for compression: {}", 
+                       log_file_path.display(), e);
+            }
+            (_, Err(e)) => {
+                error!("Failed to create compressed file {}: {}", 
+                       compressed_file_path.display(), e);
             }
         }
     }
