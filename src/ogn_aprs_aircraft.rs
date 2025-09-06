@@ -1,6 +1,6 @@
-use std::str::FromStr;
+use serde::{Deserialize, Serialize};
 use std::fmt;
-use serde::{Serialize, Deserialize};
+use std::str::FromStr;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AddressType {
@@ -170,22 +170,22 @@ pub struct OgnAprsParameters {
     pub address_type: AddressType,
 
     /// Optional measurements parsed from the comment
-    pub climb_fpm: Option<i32>,            // e.g. -19fpm
-    pub turn_rate_rot: Option<f32>,        // e.g. +0.0rot  (rot = half-turns per minute)
-    pub snr_db: Option<f32>,               // e.g. 5.5dB
+    pub climb_fpm: Option<i32>, // e.g. -19fpm
+    pub turn_rate_rot: Option<f32>, // e.g. +0.0rot  (rot = half-turns per minute)
+    pub snr_db: Option<f32>,        // e.g. 5.5dB
     pub bit_errors_corrected: Option<u32>, // e.g. 3e
-    pub freq_offset_khz: Option<f32>,      // e.g. -4.3kHz
+    pub freq_offset_khz: Option<f32>, // e.g. -4.3kHz
 
     /// APRS precision enhancement (e.g. !W52!)
-    pub aprs_pe_lat_digit: Option<u8>,     // '5'
-    pub aprs_pe_lon_digit: Option<u8>,     // '2'
+    pub aprs_pe_lat_digit: Option<u8>, // '5'
+    pub aprs_pe_lon_digit: Option<u8>, // '2'
 
     /// Additional APRS fields
-    pub flight_number: Option<String>,           // Flight number (e.g. BEL9AD)
+    pub flight_number: Option<String>, // Flight number (e.g. BEL9AD)
     pub emitter_category: Option<AdsbEmitterCategory>, // ADS-B emitter category (e.g. A3)
-    pub registration: Option<String>,            // e.g. regOO-SNK
-    pub model: Option<String>,                   // e.g. modelA320
-    pub squawk: Option<String>,                  // Squawk code (e.g. Sq1351)
+    pub registration: Option<String>,                  // e.g. regOO-SNK
+    pub model: Option<String>,                         // e.g. modelA320
+    pub squawk: Option<String>,                        // Squawk code (e.g. Sq1351)
 }
 
 #[derive(Debug)]
@@ -205,29 +205,33 @@ impl FromStr for OgnAprsParameters {
         let tokens: Vec<&str> = s.split_whitespace().collect();
 
         // Find the "idXXYYYYYY" token
-        let id_tok = tokens.iter().copied().find(|t| t.starts_with("id"))
+        let id_tok = tokens
+            .iter()
+            .copied()
+            .find(|t| t.starts_with("id"))
             .ok_or(ParseOgnError::MissingIdField)?;
 
-        let rest = id_tok.strip_prefix("id").ok_or(ParseOgnError::BadIdPrefix)?;
+        let rest = id_tok
+            .strip_prefix("id")
+            .ok_or(ParseOgnError::BadIdPrefix)?;
         // Expect 8 hex chars (2 for flags + 6 for address). Sometimes other OGN formats
         // can be longer (like trackers with more), but the canonical form is 8 after "id".
         if rest.len() < 8 {
             return Err(ParseOgnError::BadIdLength);
         }
         let flags_hex = &rest[..2];
-        let addr_hex  = &rest[2..8];
+        let addr_hex = &rest[2..8];
 
         let id_flags_raw =
             u8::from_str_radix(flags_hex, 16).map_err(|_| ParseOgnError::BadFlagsHex)?;
 
-        let address =
-            u32::from_str_radix(addr_hex, 16).map_err(|_| ParseOgnError::BadIdHex)?;
+        let address = u32::from_str_radix(addr_hex, 16).map_err(|_| ParseOgnError::BadIdHex)?;
 
         // Decode STttttaa (MSB -> LSB)
-        let stealth     = (id_flags_raw & 0b1000_0000) != 0;
+        let stealth = (id_flags_raw & 0b1000_0000) != 0;
         let no_tracking = (id_flags_raw & 0b0100_0000) != 0;
         let aircraft_type = AircraftType::from((id_flags_raw >> 2) & 0x0F);
-        let address_type  = AddressType::from(id_flags_raw & 0x03);
+        let address_type = AddressType::from(id_flags_raw & 0x03);
 
         // Defaults
         let mut climb_fpm: Option<i32> = None;
@@ -245,14 +249,15 @@ impl FromStr for OgnAprsParameters {
 
         // Also search inline for a "!W..!" block (not necessarily whitespace-separated)
         if let Some(w_start) = s.find("!W")
-            && let Some(w_end) = s[w_start + 2..].find('!') {
-                let payload = &s[w_start + 2 .. w_start + 2 + w_end];
-                let bytes = payload.as_bytes();
-                if bytes.len() >= 2 && bytes[0].is_ascii_digit() && bytes[1].is_ascii_digit() {
-                    aprs_pe_lat_digit = Some(bytes[0] - b'0');
-                    aprs_pe_lon_digit = Some(bytes[1] - b'0');
-                }
+            && let Some(w_end) = s[w_start + 2..].find('!')
+        {
+            let payload = &s[w_start + 2..w_start + 2 + w_end];
+            let bytes = payload.as_bytes();
+            if bytes.len() >= 2 && bytes[0].is_ascii_digit() && bytes[1].is_ascii_digit() {
+                aprs_pe_lat_digit = Some(bytes[0] - b'0');
+                aprs_pe_lon_digit = Some(bytes[1] - b'0');
             }
+        }
 
         // Parse unit-suffixed tokens (case-insensitive for the unit part)
         for tok in tokens {
@@ -285,7 +290,12 @@ impl FromStr for OgnAprsParameters {
 
             // 3e  (errors corrected)
             // Require the whole token to be digits followed by 'e' (or 'E')
-            if tl.ends_with('e') && tl.chars().take(tl.len().saturating_sub(1)).all(|c| c.is_ascii_digit()) {
+            if tl.ends_with('e')
+                && tl
+                    .chars()
+                    .take(tl.len().saturating_sub(1))
+                    .all(|c| c.is_ascii_digit())
+            {
                 if let Ok(v) = tl[..tl.len() - 1].parse::<u32>() {
                     bit_errors_corrected = Some(v);
                 }
@@ -318,11 +328,12 @@ impl FromStr for OgnAprsParameters {
 
                 // Try to parse without "fn" prefix (just the category)
                 if prefix.len() == 2
-                    && let Ok(category) = prefix.parse::<AdsbEmitterCategory>() {
-                        flight_number = Some(flight_num.to_string());
-                        emitter_category = Some(category);
-                        continue;
-                    }
+                    && let Ok(category) = prefix.parse::<AdsbEmitterCategory>()
+                {
+                    flight_number = Some(flight_num.to_string());
+                    emitter_category = Some(category);
+                    continue;
+                }
             }
 
             // Registration: regOO-SNK
@@ -572,10 +583,22 @@ mod tests {
 
     #[test]
     fn test_adsb_emitter_category_from_str() {
-        assert_eq!("A0".parse::<AdsbEmitterCategory>().unwrap(), AdsbEmitterCategory::A0);
-        assert_eq!("a3".parse::<AdsbEmitterCategory>().unwrap(), AdsbEmitterCategory::A3);
-        assert_eq!("B1".parse::<AdsbEmitterCategory>().unwrap(), AdsbEmitterCategory::B1);
-        assert_eq!("c5".parse::<AdsbEmitterCategory>().unwrap(), AdsbEmitterCategory::C5);
+        assert_eq!(
+            "A0".parse::<AdsbEmitterCategory>().unwrap(),
+            AdsbEmitterCategory::A0
+        );
+        assert_eq!(
+            "a3".parse::<AdsbEmitterCategory>().unwrap(),
+            AdsbEmitterCategory::A3
+        );
+        assert_eq!(
+            "B1".parse::<AdsbEmitterCategory>().unwrap(),
+            AdsbEmitterCategory::B1
+        );
+        assert_eq!(
+            "c5".parse::<AdsbEmitterCategory>().unwrap(),
+            AdsbEmitterCategory::C5
+        );
 
         // Test invalid category
         assert!("Z9".parse::<AdsbEmitterCategory>().is_err());

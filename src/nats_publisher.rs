@@ -5,13 +5,17 @@ use sqlx::PgPool;
 use std::sync::Arc;
 use tracing::{debug, error, info};
 
+use crate::Fix;
 use crate::aprs_client::FixProcessor;
 use crate::device_repo::DeviceRepository;
-use crate::Fix;
 
 /// Get registration number for a given device address
 /// This maps OGN/FLARM addresses to aircraft registration numbers
-async fn get_registration_for_address(device_repo: &DeviceRepository, address: u32, address_type: &str) -> Option<String> {
+async fn get_registration_for_address(
+    device_repo: &DeviceRepository,
+    address: u32,
+    address_type: &str,
+) -> Option<String> {
     // Convert address to device ID format expected by the device repository
     let device_id = format!("{:06X}", address);
 
@@ -25,7 +29,10 @@ async fn get_registration_for_address(device_repo: &DeviceRepository, address: u
             }
         }
         Ok(None) => {
-            debug!("No device found for address {} ({})", device_id, address_type);
+            debug!(
+                "No device found for address {} ({})",
+                device_id, address_type
+            );
             None
         }
         Err(e) => {
@@ -47,7 +54,6 @@ async fn publish_to_nats(nats_client: &Client, aircraft_id: &str, fix: &Fix) -> 
 
     Ok(())
 }
-
 
 /// NATS publisher for aircraft position fixes
 pub struct NatsFixPublisher {
@@ -88,11 +94,14 @@ impl FixProcessor for NatsFixPublisher {
                     _ => "Unknown",
                 };
 
-                if let Some(registration) = get_registration_for_address(&device_repo, address, address_type_str).await {
+                if let Some(registration) =
+                    get_registration_for_address(&device_repo, address, address_type_str).await
+                {
                     registration
                 } else {
                     // Use aircraft ID with type prefix if no registration found
-                    fix.get_aircraft_identifier().unwrap_or_else(|| format!("UNKNOWN-{}", fix.source))
+                    fix.get_aircraft_identifier()
+                        .unwrap_or_else(|| format!("UNKNOWN-{}", fix.source))
                 }
             } else {
                 // Fallback to source callsign

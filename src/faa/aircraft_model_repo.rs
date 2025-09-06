@@ -2,7 +2,9 @@ use anyhow::Result;
 use sqlx::PgPool;
 use tracing::{info, warn};
 
-use crate::faa::aircraft_models::{AircraftModel, AircraftType, EngineType, AircraftCategory, BuilderCertification, WeightClass};
+use crate::faa::aircraft_models::{
+    AircraftCategory, AircraftModel, AircraftType, BuilderCertification, EngineType, WeightClass,
+};
 
 pub struct AircraftModelRepository {
     pool: PgPool,
@@ -27,8 +29,14 @@ impl AircraftModelRepository {
             // Convert enum types to strings for database storage
             let aircraft_type_str = aircraft_model.aircraft_type.as_ref().map(|t| t.to_string());
             let engine_type_str = aircraft_model.engine_type.as_ref().map(|t| t.to_string());
-            let aircraft_category_str = aircraft_model.aircraft_category.as_ref().map(|t| t.to_string());
-            let builder_certification_str = aircraft_model.builder_certification.as_ref().map(|t| t.to_string());
+            let aircraft_category_str = aircraft_model
+                .aircraft_category
+                .as_ref()
+                .map(|t| t.to_string());
+            let builder_certification_str = aircraft_model
+                .builder_certification
+                .as_ref()
+                .map(|t| t.to_string());
             let weight_class_str = aircraft_model.weight_class.as_ref().map(|t| t.to_string());
 
             // Convert u16 to i16 for database storage (SMALLINT)
@@ -138,27 +146,32 @@ impl AircraftModelRepository {
 
         if let Some(row) = result {
             // Convert string types back to enums
-            let aircraft_type = row.aircraft_type
+            let aircraft_type = row
+                .aircraft_type
                 .as_ref()
                 .map(|s| s.parse::<AircraftType>())
                 .transpose()?;
 
-            let engine_type = row.engine_type
+            let engine_type = row
+                .engine_type
                 .as_ref()
                 .map(|s| s.parse::<EngineType>())
                 .transpose()?;
 
-            let aircraft_category = row.aircraft_category
+            let aircraft_category = row
+                .aircraft_category
                 .as_ref()
                 .map(|s| s.parse::<AircraftCategory>())
                 .transpose()?;
 
-            let builder_certification = row.builder_certification
+            let builder_certification = row
+                .builder_certification
                 .as_ref()
                 .map(|s| s.parse::<BuilderCertification>())
                 .transpose()?;
 
-            let weight_class = row.weight_class
+            let weight_class = row
+                .weight_class
                 .as_ref()
                 .map(|s| s.parse::<WeightClass>())
                 .transpose()?;
@@ -191,7 +204,10 @@ impl AircraftModelRepository {
     }
 
     /// Search aircraft models by manufacturer name (case-insensitive partial match)
-    pub async fn search_by_manufacturer(&self, manufacturer_name: &str) -> Result<Vec<AircraftModel>> {
+    pub async fn search_by_manufacturer(
+        &self,
+        manufacturer_name: &str,
+    ) -> Result<Vec<AircraftModel>> {
         let results = sqlx::query!(
             r#"
             SELECT manufacturer_code, model_code, series_code, manufacturer_name, model_name,
@@ -210,27 +226,32 @@ impl AircraftModelRepository {
         let mut aircraft_models = Vec::new();
         for row in results {
             // Convert string types back to enums
-            let aircraft_type = row.aircraft_type
+            let aircraft_type = row
+                .aircraft_type
                 .as_ref()
                 .map(|s| s.parse::<AircraftType>())
                 .transpose()?;
 
-            let engine_type = row.engine_type
+            let engine_type = row
+                .engine_type
                 .as_ref()
                 .map(|s| s.parse::<EngineType>())
                 .transpose()?;
 
-            let aircraft_category = row.aircraft_category
+            let aircraft_category = row
+                .aircraft_category
                 .as_ref()
                 .map(|s| s.parse::<AircraftCategory>())
                 .transpose()?;
 
-            let builder_certification = row.builder_certification
+            let builder_certification = row
+                .builder_certification
                 .as_ref()
                 .map(|s| s.parse::<BuilderCertification>())
                 .transpose()?;
 
-            let weight_class = row.weight_class
+            let weight_class = row
+                .weight_class
                 .as_ref()
                 .map(|s| s.parse::<WeightClass>())
                 .transpose()?;
@@ -282,27 +303,32 @@ impl AircraftModelRepository {
         let mut aircraft_models = Vec::new();
         for row in results {
             // Convert string types back to enums (reusing the same conversion logic)
-            let aircraft_type = row.aircraft_type
+            let aircraft_type = row
+                .aircraft_type
                 .as_ref()
                 .map(|s| s.parse::<AircraftType>())
                 .transpose()?;
 
-            let engine_type = row.engine_type
+            let engine_type = row
+                .engine_type
                 .as_ref()
                 .map(|s| s.parse::<EngineType>())
                 .transpose()?;
 
-            let aircraft_category = row.aircraft_category
+            let aircraft_category = row
+                .aircraft_category
                 .as_ref()
                 .map(|s| s.parse::<AircraftCategory>())
                 .transpose()?;
 
-            let builder_certification = row.builder_certification
+            let builder_certification = row
+                .builder_certification
                 .as_ref()
                 .map(|s| s.parse::<BuilderCertification>())
                 .transpose()?;
 
-            let weight_class = row.weight_class
+            let weight_class = row
+                .weight_class
                 .as_ref()
                 .map(|s| s.parse::<WeightClass>())
                 .transpose()?;
@@ -337,7 +363,9 @@ impl AircraftModelRepository {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::faa::aircraft_models::{AircraftType, EngineType, AircraftCategory, BuilderCertification, WeightClass};
+    use crate::faa::aircraft_models::{
+        AircraftCategory, AircraftType, BuilderCertification, EngineType, WeightClass,
+    };
 
     // Note: These tests would require a test database setup
     // For now, they're just structural examples
@@ -370,7 +398,10 @@ mod tests {
         assert_eq!(aircraft_model.series_code, "34");
         assert_eq!(aircraft_model.manufacturer_name, "Test Manufacturer");
         assert_eq!(aircraft_model.model_name, "Test Model");
-        assert_eq!(aircraft_model.aircraft_type, Some(AircraftType::FixedWingSingleEngine));
+        assert_eq!(
+            aircraft_model.aircraft_type,
+            Some(AircraftType::FixedWingSingleEngine)
+        );
         assert_eq!(aircraft_model.engine_type, Some(EngineType::Reciprocating));
     }
 }

@@ -1,12 +1,12 @@
 use anyhow::Result;
 use axum::{
+    Router,
     extract::State,
     http::{HeaderMap, StatusCode, Uri},
     response::IntoResponse,
-    Router,
 };
 use clap::{Parser, Subcommand};
-use include_dir::{include_dir, Dir};
+use include_dir::{Dir, include_dir};
 use mime_guess::from_path;
 use sqlx::postgres::PgPool;
 use std::env;
@@ -39,6 +39,7 @@ static ASSETS: Dir<'_> = include_dir!("web/build");
 // App state for sharing database pool
 #[derive(Clone)]
 struct AppState {
+    #[allow(dead_code)]
     pool: PgPool,
 }
 
@@ -206,7 +207,7 @@ fn determine_archive_dir() -> Result<String> {
 
 async fn handle_static_file(uri: Uri, _state: State<AppState>) -> impl IntoResponse {
     let path = uri.path().trim_start_matches('/');
-    
+
     // Try to find the exact file
     if let Some(file) = ASSETS.get_file(path) {
         let mime_type = from_path(path).first_or_octet_stream();
@@ -214,49 +215,49 @@ async fn handle_static_file(uri: Uri, _state: State<AppState>) -> impl IntoRespo
         headers.insert("content-type", mime_type.as_ref().parse().unwrap());
         return (StatusCode::OK, headers, file.contents()).into_response();
     }
-    
+
     // For HTML requests (based on Accept header or file extension), serve index.html for SPA
-    if path.is_empty() || path.ends_with(".html") || path.ends_with('/') {
-        if let Some(index_file) = ASSETS.get_file("index.html") {
-            let mut headers = HeaderMap::new();
-            headers.insert("content-type", "text/html".parse().unwrap());
-            return (StatusCode::OK, headers, index_file.contents()).into_response();
-        }
+    if (path.is_empty() || path.ends_with(".html") || path.ends_with('/'))
+        && let Some(index_file) = ASSETS.get_file("index.html")
+    {
+        let mut headers = HeaderMap::new();
+        headers.insert("content-type", "text/html".parse().unwrap());
+        return (StatusCode::OK, headers, index_file.contents()).into_response();
     }
-    
+
     // If no file found and it's not an API route, try serving index.html for SPA routing
-    if !path.starts_with("api/") {
-        if let Some(index_file) = ASSETS.get_file("index.html") {
-            let mut headers = HeaderMap::new();
-            headers.insert("content-type", "text/html".parse().unwrap());
-            return (StatusCode::OK, headers, index_file.contents()).into_response();
-        }
+    if !path.starts_with("api/")
+        && let Some(index_file) = ASSETS.get_file("index.html")
+    {
+        let mut headers = HeaderMap::new();
+        headers.insert("content-type", "text/html".parse().unwrap());
+        return (StatusCode::OK, headers, index_file.contents()).into_response();
     }
-    
+
     (StatusCode::NOT_FOUND, "Not Found").into_response()
 }
 
 async fn handle_web(interface: String, port: u16) -> Result<()> {
     info!("Starting web server on {}:{}", interface, port);
-    
+
     // Set up database connection
     let pool = setup_database().await?;
     let app_state = AppState { pool };
-    
+
     // Build the Axum application
     let app = Router::new()
         .fallback(handle_static_file)
         .with_state(app_state)
         .layer(TraceLayer::new_for_http());
-    
+
     // Create the listener
     let listener = tokio::net::TcpListener::bind(format!("{}:{}", interface, port)).await?;
-    
+
     info!("Web server listening on http://{}:{}", interface, port);
-    
+
     // Start the server
     axum::serve(listener, app).await?;
-    
+
     Ok(())
 }
 
@@ -565,6 +566,7 @@ async fn handle_load_data(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn handle_run(
     server: String,
     port: u16,
@@ -578,7 +580,7 @@ async fn handle_run(
     info!("Starting APRS client with server: {}:{}", server, port);
 
     // Set up database connection
-    let pool = setup_database().await?;
+    let _pool = setup_database().await?;
 
     // Use port 10152 (full feed) if no filter is specified, otherwise use specified port
     let actual_port = if filter.is_none() {
@@ -686,8 +688,6 @@ async fn main() -> Result<()> {
             )
             .await
         }
-        Commands::Web { interface, port } => {
-            handle_web(interface, port).await
-        }
+        Commands::Web { interface, port } => handle_web(interface, port).await,
     }
 }

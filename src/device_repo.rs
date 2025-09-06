@@ -99,7 +99,7 @@ impl DeviceRepository {
 
         if let Some(row) = row {
             let device_type = DeviceType::from_str(&row.device_type).unwrap_or(DeviceType::Unknown);
-            
+
             Ok(Some(Device {
                 device_type,
                 device_id: row.device_id,

@@ -1,8 +1,8 @@
 use anyhow::Result;
-use sqlx::PgPool;
-use tracing::{info, warn};
-use sqlx::types::{BigDecimal};
 use num_traits::{FromPrimitive, ToPrimitive};
+use sqlx::PgPool;
+use sqlx::types::BigDecimal;
+use tracing::{info, warn};
 
 use crate::runways::Runway;
 
@@ -26,8 +26,8 @@ fn haversine_distance(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
     let delta_lat = (lat2 - lat1).to_radians();
     let delta_lon = (lon2 - lon1).to_radians();
 
-    let a = (delta_lat / 2.0).sin().powi(2) +
-            lat1_rad.cos() * lat2_rad.cos() * (delta_lon / 2.0).sin().powi(2);
+    let a = (delta_lat / 2.0).sin().powi(2)
+        + lat1_rad.cos() * lat2_rad.cos() * (delta_lon / 2.0).sin().powi(2);
     let c = 2.0 * a.sqrt().atan2((1.0 - a).sqrt());
 
     EARTH_RADIUS_M * c
@@ -141,9 +141,7 @@ impl RunwaysRepository {
                         Err(e) => {
                             warn!(
                                 "Failed to commit transaction for runway {} at airport {}: {}",
-                                runway.id,
-                                runway.airport_ident,
-                                e
+                                runway.id, runway.airport_ident, e
                             );
                             failed_count += 1;
                         }
@@ -152,10 +150,7 @@ impl RunwaysRepository {
                 Err(e) => {
                     warn!(
                         "Failed to upsert runway {} at airport {}: {}\nRunway data: {:#?}",
-                        runway.id,
-                        runway.airport_ident,
-                        e,
-                        runway
+                        runway.id, runway.airport_ident, e, runway
                     );
                     transaction.rollback().await?;
                     failed_count += 1;
@@ -549,7 +544,8 @@ impl RunwaysRepository {
             let mut endpoint_type = String::new();
 
             // Check low end coordinates
-            if let (Some(le_lat), Some(le_lon)) = (runway.le_latitude_deg, runway.le_longitude_deg) {
+            if let (Some(le_lat), Some(le_lon)) = (runway.le_latitude_deg, runway.le_longitude_deg)
+            {
                 let distance = haversine_distance(latitude, longitude, le_lat, le_lon);
                 if distance < min_distance {
                     min_distance = distance;
@@ -558,7 +554,8 @@ impl RunwaysRepository {
             }
 
             // Check high end coordinates
-            if let (Some(he_lat), Some(he_lon)) = (runway.he_latitude_deg, runway.he_longitude_deg) {
+            if let (Some(he_lat), Some(he_lon)) = (runway.he_latitude_deg, runway.he_longitude_deg)
+            {
                 let distance = haversine_distance(latitude, longitude, he_lat, he_lon);
                 if distance < min_distance {
                     min_distance = distance;
@@ -573,7 +570,8 @@ impl RunwaysRepository {
         }
 
         // Sort by distance and limit results
-        runways_with_distance.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        runways_with_distance
+            .sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
         runways_with_distance.truncate(limit as usize);
 
         Ok(runways_with_distance)

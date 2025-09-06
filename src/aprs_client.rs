@@ -1,7 +1,6 @@
+use crate::Fix;
 use anyhow::Result;
 use ogn_parser::AprsPacket;
-use tracing::trace;
-use crate::Fix;
 use regex::Regex;
 use std::sync::Arc;
 use std::sync::OnceLock;
@@ -10,6 +9,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
 use tokio::time::sleep;
+use tracing::trace;
 use tracing::{debug, error, info, warn};
 
 /// Trait for processing APRS messages
@@ -137,7 +137,7 @@ impl AprsClient {
     pub fn new_with_fix_processor(
         config: AprsClientConfig,
         message_processor: Arc<dyn MessageProcessor>,
-        fix_processor: Arc<dyn FixProcessor>
+        fix_processor: Arc<dyn FixProcessor>,
     ) -> Self {
         Self {
             config,
@@ -167,7 +167,13 @@ impl AprsClient {
                     break;
                 }
 
-                match Self::connect_and_run(&config, Arc::clone(&message_processor), fix_processor.as_ref().map(Arc::clone)).await {
+                match Self::connect_and_run(
+                    &config,
+                    Arc::clone(&message_processor),
+                    fix_processor.as_ref().map(Arc::clone),
+                )
+                .await
+                {
                     Ok(_) => {
                         info!("APRS client connection ended normally");
                         retry_count = 0; // Reset retry count on successful connection
@@ -250,7 +256,12 @@ impl AprsClient {
                         }
                         // Skip server messages (lines starting with #)
                         if !trimmed_line.starts_with('#') {
-                            Self::process_message(trimmed_line, Arc::clone(&message_processor), fix_processor.as_ref().map(Arc::clone)).await;
+                            Self::process_message(
+                                trimmed_line,
+                                Arc::clone(&message_processor),
+                                fix_processor.as_ref().map(Arc::clone),
+                            )
+                            .await;
                         } else {
                             info!("Server message: {}", trimmed_line);
                         }
@@ -287,7 +298,11 @@ impl AprsClient {
     }
 
     /// Process a received APRS message
-    async fn process_message(message: &str, message_processor: Arc<dyn MessageProcessor>, fix_processor: Option<Arc<dyn FixProcessor>>) {
+    async fn process_message(
+        message: &str,
+        message_processor: Arc<dyn MessageProcessor>,
+        fix_processor: Option<Arc<dyn FixProcessor>>,
+    ) {
         // Always call process_raw_message first (for logging/archiving)
         message_processor.process_raw_message(message);
 
@@ -494,7 +509,6 @@ mod tests {
             Some("/tmp/aprs_archive".to_string())
         );
     }
-
 
     #[test]
     fn test_ssid_sanitization() {

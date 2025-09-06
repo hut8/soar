@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use std::fmt;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -18,7 +18,11 @@ fn fw(s: &str, start_1: usize, end_1: usize) -> &str {
 
 fn to_opt_string(s: &str) -> Option<String> {
     let t = s.trim();
-    if t.is_empty() { None } else { Some(t.to_string()) }
+    if t.is_empty() {
+        None
+    } else {
+        Some(t.to_string())
+    }
 }
 
 fn to_string_trim(s: &str) -> String {
@@ -27,7 +31,9 @@ fn to_string_trim(s: &str) -> String {
 
 fn to_opt_u16(s: &str) -> Option<u16> {
     let t = s.trim();
-    if t.is_empty() { return None; }
+    if t.is_empty() {
+        return None;
+    }
     t.parse::<u16>().ok()
 }
 
@@ -109,7 +115,8 @@ impl FromStr for EngineType {
 
     fn from_str(s: &str) -> Result<Self> {
         let trimmed = s.trim();
-        let code = trimmed.parse::<u8>()
+        let code = trimmed
+            .parse::<u8>()
             .with_context(|| format!("Failed to parse engine type code as number: {}", trimmed))?;
 
         match code {
@@ -255,19 +262,19 @@ impl fmt::Display for WeightClass {
 /// Aircraft Model record from FAA Aircraft Reference File
 #[derive(Debug, Clone)]
 pub struct AircraftModel {
-    pub manufacturer_code: String,           // positions 1–3
-    pub model_code: String,                  // positions 4–5
-    pub series_code: String,                 // positions 6–7
-    pub manufacturer_name: String,           // positions 9–38
-    pub model_name: String,                  // positions 40–59
-    pub aircraft_type: Option<AircraftType>, // position 61
-    pub engine_type: Option<EngineType>,     // positions 63–64
+    pub manufacturer_code: String,                   // positions 1–3
+    pub model_code: String,                          // positions 4–5
+    pub series_code: String,                         // positions 6–7
+    pub manufacturer_name: String,                   // positions 9–38
+    pub model_name: String,                          // positions 40–59
+    pub aircraft_type: Option<AircraftType>,         // position 61
+    pub engine_type: Option<EngineType>,             // positions 63–64
     pub aircraft_category: Option<AircraftCategory>, // position 66
     pub builder_certification: Option<BuilderCertification>, // position 68
-    pub number_of_engines: Option<u16>,      // positions 70–71
-    pub number_of_seats: Option<u16>,        // positions 73–75
-    pub weight_class: Option<WeightClass>,   // positions 77–83
-    pub cruising_speed: Option<u16>,         // positions 85–88
+    pub number_of_engines: Option<u16>,              // positions 70–71
+    pub number_of_seats: Option<u16>,                // positions 73–75
+    pub weight_class: Option<WeightClass>,           // positions 77–83
+    pub cruising_speed: Option<u16>,                 // positions 85–88
     pub type_certificate_data_sheet: Option<String>, // positions 90–105
     pub type_certificate_data_holder: Option<String>, // positions 107–157
 }
@@ -276,7 +283,10 @@ impl AircraftModel {
     pub fn from_fixed_width_line(line: &str) -> Result<Self> {
         // Expect at least the last position we touch (156, allowing for shorter lines)
         if line.len() < 156 {
-            return Err(anyhow!("Line too short: expected at least 156 chars, got {}", line.len()));
+            return Err(anyhow!(
+                "Line too short: expected at least 156 chars, got {}",
+                line.len()
+            ));
         }
 
         let manufacturer_code = to_string_trim(fw(line, 1, 3));
@@ -339,8 +349,7 @@ impl AircraftModel {
 /// Read a fixed-width FAA Aircraft Reference file and parse all rows.
 /// Skips blank lines. Returns an error on the first malformed (too-short) line.
 pub fn read_aircraft_models_file<P: AsRef<Path>>(path: P) -> Result<Vec<AircraftModel>> {
-    let f = File::open(path.as_ref())
-        .with_context(|| format!("Opening {:?}", path.as_ref()))?;
+    let f = File::open(path.as_ref()).with_context(|| format!("Opening {:?}", path.as_ref()))?;
     let reader = BufReader::new(f);
     let mut out = Vec::new();
 
@@ -366,8 +375,14 @@ mod tests {
     #[test]
     fn test_aircraft_type_enum() {
         assert_eq!(AircraftType::from_str("1").unwrap(), AircraftType::Glider);
-        assert_eq!(AircraftType::from_str("4").unwrap(), AircraftType::FixedWingSingleEngine);
-        assert_eq!(AircraftType::from_str("H").unwrap(), AircraftType::HybridLift);
+        assert_eq!(
+            AircraftType::from_str("4").unwrap(),
+            AircraftType::FixedWingSingleEngine
+        );
+        assert_eq!(
+            AircraftType::from_str("H").unwrap(),
+            AircraftType::HybridLift
+        );
         assert_eq!(AircraftType::from_str("O").unwrap(), AircraftType::Other);
 
         assert_eq!(AircraftType::Glider.to_string(), "1");
@@ -380,12 +395,18 @@ mod tests {
     #[test]
     fn test_engine_type_enum() {
         assert_eq!(EngineType::from_str("0").unwrap(), EngineType::None);
-        assert_eq!(EngineType::from_str("1").unwrap(), EngineType::Reciprocating);
+        assert_eq!(
+            EngineType::from_str("1").unwrap(),
+            EngineType::Reciprocating
+        );
         assert_eq!(EngineType::from_str("10").unwrap(), EngineType::Electric);
         assert_eq!(EngineType::from_str("11").unwrap(), EngineType::Rotary);
 
         // Test leading zeros are handled correctly
-        assert_eq!(EngineType::from_str("01").unwrap(), EngineType::Reciprocating);
+        assert_eq!(
+            EngineType::from_str("01").unwrap(),
+            EngineType::Reciprocating
+        );
         assert_eq!(EngineType::from_str("02").unwrap(), EngineType::TurboProp);
         assert_eq!(EngineType::from_str("00").unwrap(), EngineType::None);
 
@@ -398,9 +419,18 @@ mod tests {
 
     #[test]
     fn test_aircraft_category_enum() {
-        assert_eq!(AircraftCategory::from_str("1").unwrap(), AircraftCategory::Land);
-        assert_eq!(AircraftCategory::from_str("2").unwrap(), AircraftCategory::Sea);
-        assert_eq!(AircraftCategory::from_str("3").unwrap(), AircraftCategory::Amphibian);
+        assert_eq!(
+            AircraftCategory::from_str("1").unwrap(),
+            AircraftCategory::Land
+        );
+        assert_eq!(
+            AircraftCategory::from_str("2").unwrap(),
+            AircraftCategory::Sea
+        );
+        assert_eq!(
+            AircraftCategory::from_str("3").unwrap(),
+            AircraftCategory::Amphibian
+        );
 
         assert_eq!(AircraftCategory::Land.to_string(), "1");
         assert_eq!(AircraftCategory::Sea.to_string(), "2");
@@ -411,9 +441,18 @@ mod tests {
 
     #[test]
     fn test_builder_certification_enum() {
-        assert_eq!(BuilderCertification::from_str("0").unwrap(), BuilderCertification::TypeCertificated);
-        assert_eq!(BuilderCertification::from_str("1").unwrap(), BuilderCertification::NotTypeCertificated);
-        assert_eq!(BuilderCertification::from_str("2").unwrap(), BuilderCertification::LightSport);
+        assert_eq!(
+            BuilderCertification::from_str("0").unwrap(),
+            BuilderCertification::TypeCertificated
+        );
+        assert_eq!(
+            BuilderCertification::from_str("1").unwrap(),
+            BuilderCertification::NotTypeCertificated
+        );
+        assert_eq!(
+            BuilderCertification::from_str("2").unwrap(),
+            BuilderCertification::LightSport
+        );
 
         assert_eq!(BuilderCertification::TypeCertificated.to_string(), "0");
         assert_eq!(BuilderCertification::NotTypeCertificated.to_string(), "1");
@@ -426,15 +465,33 @@ mod tests {
     fn test_weight_class_enum() {
         // Test parsing without "CLASS " prefix
         assert_eq!(WeightClass::from_str("1").unwrap(), WeightClass::UpTo12499);
-        assert_eq!(WeightClass::from_str("2").unwrap(), WeightClass::From12500To19999);
-        assert_eq!(WeightClass::from_str("3").unwrap(), WeightClass::From20000AndOver);
+        assert_eq!(
+            WeightClass::from_str("2").unwrap(),
+            WeightClass::From12500To19999
+        );
+        assert_eq!(
+            WeightClass::from_str("3").unwrap(),
+            WeightClass::From20000AndOver
+        );
         assert_eq!(WeightClass::from_str("4").unwrap(), WeightClass::UavUpTo55);
 
         // Test parsing with "CLASS " prefix
-        assert_eq!(WeightClass::from_str("CLASS 1").unwrap(), WeightClass::UpTo12499);
-        assert_eq!(WeightClass::from_str("CLASS 2").unwrap(), WeightClass::From12500To19999);
-        assert_eq!(WeightClass::from_str("CLASS 3").unwrap(), WeightClass::From20000AndOver);
-        assert_eq!(WeightClass::from_str("CLASS 4").unwrap(), WeightClass::UavUpTo55);
+        assert_eq!(
+            WeightClass::from_str("CLASS 1").unwrap(),
+            WeightClass::UpTo12499
+        );
+        assert_eq!(
+            WeightClass::from_str("CLASS 2").unwrap(),
+            WeightClass::From12500To19999
+        );
+        assert_eq!(
+            WeightClass::from_str("CLASS 3").unwrap(),
+            WeightClass::From20000AndOver
+        );
+        assert_eq!(
+            WeightClass::from_str("CLASS 4").unwrap(),
+            WeightClass::UavUpTo55
+        );
 
         // Test Display format (should include "CLASS " prefix)
         assert_eq!(WeightClass::UpTo12499.to_string(), "CLASS 1");
@@ -516,15 +573,24 @@ mod tests {
         assert_eq!(model.series_code, "34");
         assert_eq!(model.manufacturer_name, "TEST MANUFACTURER");
         assert_eq!(model.model_name, "TEST MODEL");
-        assert_eq!(model.aircraft_type, Some(AircraftType::FixedWingSingleEngine));
+        assert_eq!(
+            model.aircraft_type,
+            Some(AircraftType::FixedWingSingleEngine)
+        );
         assert_eq!(model.engine_type, Some(EngineType::Reciprocating));
         assert_eq!(model.aircraft_category, Some(AircraftCategory::Land));
-        assert_eq!(model.builder_certification, Some(BuilderCertification::TypeCertificated));
+        assert_eq!(
+            model.builder_certification,
+            Some(BuilderCertification::TypeCertificated)
+        );
         assert_eq!(model.number_of_engines, Some(1));
         assert_eq!(model.number_of_seats, Some(4));
         assert_eq!(model.weight_class, Some(WeightClass::UpTo12499));
         assert_eq!(model.cruising_speed, Some(120));
         assert_eq!(model.type_certificate_data_sheet, Some("A23CE".to_string()));
-        assert_eq!(model.type_certificate_data_holder, Some("TEST CERTIFICATE HOLDER".to_string()));
+        assert_eq!(
+            model.type_certificate_data_holder,
+            Some("TEST CERTIFICATE HOLDER".to_string())
+        );
     }
 }

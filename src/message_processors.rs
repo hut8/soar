@@ -1,13 +1,12 @@
-use std::sync::Arc;
 use chrono::Utc;
 use std::fs::{OpenOptions, create_dir_all};
 use std::io::Write;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::sync::Mutex;
 use tracing::{error, info};
 
 use crate::MessageProcessor;
-
 
 /// Archive message processor for file streaming
 pub struct ArchiveMessageProcessor {
@@ -121,30 +120,29 @@ impl MessageArchive {
     }
 }
 
+#[test]
+fn test_message_archive() {
+    use std::fs;
+    use std::path::Path;
 
-    #[test]
-    fn test_message_archive() {
-        use std::fs;
-        use std::path::Path;
+    let temp_dir = "/tmp/test_aprs_archive";
+    let archive = MessageArchive::new(temp_dir.to_string());
 
-        let temp_dir = "/tmp/test_aprs_archive";
-        let archive = MessageArchive::new(temp_dir.to_string());
+    // Log a test message
+    archive.log_message("TEST>APRS:>Test archive message");
 
-        // Log a test message
-        archive.log_message("TEST>APRS:>Test archive message");
+    // Check that the directory was created
+    assert!(Path::new(temp_dir).exists());
 
-        // Check that the directory was created
-        assert!(Path::new(temp_dir).exists());
+    // Check that a log file was created with today's date
+    let today = Utc::now().format("%Y-%m-%d").to_string();
+    let log_file_path = Path::new(temp_dir).join(format!("{today}.log"));
+    assert!(log_file_path.exists());
 
-        // Check that a log file was created with today's date
-        let today = Utc::now().format("%Y-%m-%d").to_string();
-        let log_file_path = Path::new(temp_dir).join(format!("{today}.log"));
-        assert!(log_file_path.exists());
+    // Read the file content and verify the message was logged
+    let content = fs::read_to_string(&log_file_path).expect("Failed to read log file");
+    assert!(content.contains("TEST>APRS:>Test archive message"));
 
-        // Read the file content and verify the message was logged
-        let content = fs::read_to_string(&log_file_path).expect("Failed to read log file");
-        assert!(content.contains("TEST>APRS:>Test archive message"));
-
-        // Clean up
-        let _ = fs::remove_dir_all(temp_dir);
-    }
+    // Clean up
+    let _ = fs::remove_dir_all(temp_dir);
+}

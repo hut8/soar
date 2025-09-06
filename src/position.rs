@@ -26,8 +26,8 @@ pub struct Fix {
     pub altitude_feet: Option<i32>,
 
     /// Aircraft identification from OGN parameters
-    pub aircraft_id: Option<String>,      // Hex aircraft ID (e.g., "39D304")
-    pub address: Option<u32>,             // Raw address from OGN parameters
+    pub aircraft_id: Option<String>, // Hex aircraft ID (e.g., "39D304")
+    pub address: Option<u32>, // Raw address from OGN parameters
     pub address_type: Option<AddressType>,
     pub aircraft_type: Option<AircraftType>,
 
@@ -164,7 +164,8 @@ impl Fix {
     pub fn get_aircraft_identifier(&self) -> Option<String> {
         if let Some(ref reg) = self.registration {
             Some(reg.clone())
-        } else if let (Some(aircraft_id), Some(addr_type)) = (&self.aircraft_id, &self.address_type) {
+        } else if let (Some(aircraft_id), Some(addr_type)) = (&self.aircraft_id, &self.address_type)
+        {
             let type_prefix = match *addr_type {
                 AddressType::Icao => "ICAO",
                 AddressType::Flarm => "FLARM",

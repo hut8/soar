@@ -4,8 +4,7 @@ use std::str::FromStr;
 
 const DDB_URL: &str = "http://ddb.glidernet.org/download/?j=1";
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum DeviceType {
     Flarm,
     Ogn,

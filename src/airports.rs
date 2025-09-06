@@ -1,11 +1,15 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 
 fn to_opt_string(s: &str) -> Option<String> {
     let t = s.trim();
-    if t.is_empty() { None } else { Some(t.to_string()) }
+    if t.is_empty() {
+        None
+    } else {
+        Some(t.to_string())
+    }
 }
 
 fn to_string_trim(s: &str) -> String {
@@ -14,13 +18,17 @@ fn to_string_trim(s: &str) -> String {
 
 fn to_opt_i32(s: &str) -> Option<i32> {
     let t = s.trim();
-    if t.is_empty() { return None; }
+    if t.is_empty() {
+        return None;
+    }
     t.parse::<i32>().ok()
 }
 
 fn to_opt_f64(s: &str) -> Option<f64> {
     let t = s.trim();
-    if t.is_empty() { return None; }
+    if t.is_empty() {
+        return None;
+    }
     t.parse::<f64>().ok()
 }
 
@@ -34,25 +42,25 @@ fn yes_no_to_bool(s: &str) -> bool {
 
 #[derive(Debug, Clone)]
 pub struct Airport {
-    pub id: i32,                                    // Internal OurAirports ID
-    pub ident: String,                              // Airport identifier (ICAO or local code)
-    pub airport_type: String,                       // Type of airport (large_airport, small_airport, etc.)
-    pub name: String,                               // Official airport name
-    pub latitude_deg: Option<f64>,                  // Latitude in decimal degrees
-    pub longitude_deg: Option<f64>,                 // Longitude in decimal degrees
-    pub elevation_ft: Option<i32>,                  // Elevation above MSL in feet
-    pub continent: Option<String>,                  // Continent code (NA, EU, etc.)
-    pub iso_country: Option<String>,                // ISO 3166-1 alpha-2 country code
-    pub iso_region: Option<String>,                 // ISO 3166-2 region code
-    pub municipality: Option<String>,               // Primary municipality served
-    pub scheduled_service: bool,                    // Whether airport has scheduled service
-    pub icao_code: Option<String>,                  // ICAO code
-    pub iata_code: Option<String>,                  // IATA code
-    pub gps_code: Option<String>,                   // GPS code
-    pub local_code: Option<String>,                 // Local country code
-    pub home_link: Option<String>,                  // Airport website URL
-    pub wikipedia_link: Option<String>,             // Wikipedia article URL
-    pub keywords: Option<String>,                   // Search keywords
+    pub id: i32,                        // Internal OurAirports ID
+    pub ident: String,                  // Airport identifier (ICAO or local code)
+    pub airport_type: String,           // Type of airport (large_airport, small_airport, etc.)
+    pub name: String,                   // Official airport name
+    pub latitude_deg: Option<f64>,      // Latitude in decimal degrees
+    pub longitude_deg: Option<f64>,     // Longitude in decimal degrees
+    pub elevation_ft: Option<i32>,      // Elevation above MSL in feet
+    pub continent: Option<String>,      // Continent code (NA, EU, etc.)
+    pub iso_country: Option<String>,    // ISO 3166-1 alpha-2 country code
+    pub iso_region: Option<String>,     // ISO 3166-2 region code
+    pub municipality: Option<String>,   // Primary municipality served
+    pub scheduled_service: bool,        // Whether airport has scheduled service
+    pub icao_code: Option<String>,      // ICAO code
+    pub iata_code: Option<String>,      // IATA code
+    pub gps_code: Option<String>,       // GPS code
+    pub local_code: Option<String>,     // Local country code
+    pub home_link: Option<String>,      // Airport website URL
+    pub wikipedia_link: Option<String>, // Wikipedia article URL
+    pub keywords: Option<String>,       // Search keywords
 }
 
 impl Airport {
@@ -67,10 +75,15 @@ impl Airport {
         let fields = parse_csv_line(line)?;
 
         if fields.len() < 19 {
-            return Err(anyhow!("CSV line has insufficient fields: expected at least 19, got {}", fields.len()));
+            return Err(anyhow!(
+                "CSV line has insufficient fields: expected at least 19, got {}",
+                fields.len()
+            ));
         }
 
-        let id = fields[0].trim().parse::<i32>()
+        let id = fields[0]
+            .trim()
+            .parse::<i32>()
             .with_context(|| format!("Failed to parse airport ID: '{}'", fields[0]))?;
 
         let ident = to_string_trim(&fields[1]);
@@ -162,8 +175,7 @@ fn parse_csv_line(line: &str) -> Result<Vec<String>> {
 /// Automatically skips the first line (header) and any blank lines.
 /// Returns an error on the first malformed line.
 pub fn read_airports_csv_file<P: AsRef<Path>>(path: P) -> Result<Vec<Airport>> {
-    let f = File::open(path.as_ref())
-        .with_context(|| format!("Opening {:?}", path.as_ref()))?;
+    let f = File::open(path.as_ref()).with_context(|| format!("Opening {:?}", path.as_ref()))?;
     let reader = BufReader::new(f);
     let mut out = Vec::new();
     let mut is_first_line = true;
@@ -193,8 +205,7 @@ pub fn read_airports_csv_file<P: AsRef<Path>>(path: P) -> Result<Vec<Airport>> {
 
 /// Read only the first N airports from a CSV file (useful for large files)
 pub fn read_airports_csv_sample<P: AsRef<Path>>(path: P, limit: usize) -> Result<Vec<Airport>> {
-    let f = File::open(path.as_ref())
-        .with_context(|| format!("Opening {:?}", path.as_ref()))?;
+    let f = File::open(path.as_ref()).with_context(|| format!("Opening {:?}", path.as_ref()))?;
     let reader = BufReader::new(f);
     let mut out = Vec::new();
     let mut is_first_line = true;

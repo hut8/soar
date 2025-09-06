@@ -86,8 +86,7 @@ impl Receiver {
 
 /// Read a receivers JSON file and parse it
 pub fn read_receivers_file<P: AsRef<Path>>(path: P) -> Result<ReceiversData> {
-    let file = File::open(path.as_ref())
-        .with_context(|| format!("Opening {:?}", path.as_ref()))?;
+    let file = File::open(path.as_ref()).with_context(|| format!("Opening {:?}", path.as_ref()))?;
     let reader = BufReader::new(file);
 
     let data: ReceiversData = serde_json::from_reader(reader)
@@ -170,12 +169,10 @@ mod tests {
             photos: Some(vec!["photo1.jpg".to_string(), "photo2.jpg".to_string()]),
             contact: Some("Test Contact".to_string()),
             email: Some("test@example.com".to_string()),
-            links: Some(vec![
-                ReceiverLink {
-                    rel: Some("homepage".to_string()),
-                    href: "http://example.com".to_string(),
-                }
-            ]),
+            links: Some(vec![ReceiverLink {
+                rel: Some("homepage".to_string()),
+                href: "http://example.com".to_string(),
+            }]),
             country: Some("US".to_string()),
         };
 

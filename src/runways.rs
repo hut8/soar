@@ -1,11 +1,15 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 
 fn to_opt_string(s: &str) -> Option<String> {
     let t = s.trim();
-    if t.is_empty() { None } else { Some(t.to_string()) }
+    if t.is_empty() {
+        None
+    } else {
+        Some(t.to_string())
+    }
 }
 
 fn to_string_trim(s: &str) -> String {
@@ -14,13 +18,17 @@ fn to_string_trim(s: &str) -> String {
 
 fn to_opt_i32(s: &str) -> Option<i32> {
     let t = s.trim();
-    if t.is_empty() { return None; }
+    if t.is_empty() {
+        return None;
+    }
     t.parse::<i32>().ok()
 }
 
 fn to_opt_f64(s: &str) -> Option<f64> {
     let t = s.trim();
-    if t.is_empty() { return None; }
+    if t.is_empty() {
+        return None;
+    }
     t.parse::<f64>().ok()
 }
 
@@ -34,30 +42,30 @@ fn int_to_bool(s: &str) -> bool {
 
 #[derive(Debug, Clone)]
 pub struct Runway {
-    pub id: i32,                                    // Internal OurAirports ID
-    pub airport_ref: i32,                           // Foreign key to airports table (id)
-    pub airport_ident: String,                      // Airport identifier (matches airports.ident)
-    pub length_ft: Option<i32>,                     // Length of runway in feet
-    pub width_ft: Option<i32>,                      // Width of runway in feet
-    pub surface: Option<String>,                    // Surface type (ASP, CON, TURF, etc.)
-    pub lighted: bool,                              // Whether runway is lighted
-    pub closed: bool,                               // Whether runway is closed
+    pub id: i32,                 // Internal OurAirports ID
+    pub airport_ref: i32,        // Foreign key to airports table (id)
+    pub airport_ident: String,   // Airport identifier (matches airports.ident)
+    pub length_ft: Option<i32>,  // Length of runway in feet
+    pub width_ft: Option<i32>,   // Width of runway in feet
+    pub surface: Option<String>, // Surface type (ASP, CON, TURF, etc.)
+    pub lighted: bool,           // Whether runway is lighted
+    pub closed: bool,            // Whether runway is closed
 
     // Low-numbered end of runway
-    pub le_ident: Option<String>,                   // Low end identifier (e.g., "08L")
-    pub le_latitude_deg: Option<f64>,               // Low end latitude
-    pub le_longitude_deg: Option<f64>,              // Low end longitude
-    pub le_elevation_ft: Option<i32>,               // Low end elevation
-    pub le_heading_degt: Option<f64>,               // Low end heading in degrees true
-    pub le_displaced_threshold_ft: Option<i32>,     // Low end displaced threshold
+    pub le_ident: Option<String>,     // Low end identifier (e.g., "08L")
+    pub le_latitude_deg: Option<f64>, // Low end latitude
+    pub le_longitude_deg: Option<f64>, // Low end longitude
+    pub le_elevation_ft: Option<i32>, // Low end elevation
+    pub le_heading_degt: Option<f64>, // Low end heading in degrees true
+    pub le_displaced_threshold_ft: Option<i32>, // Low end displaced threshold
 
     // High-numbered end of runway
-    pub he_ident: Option<String>,                   // High end identifier (e.g., "26R")
-    pub he_latitude_deg: Option<f64>,               // High end latitude
-    pub he_longitude_deg: Option<f64>,              // High end longitude
-    pub he_elevation_ft: Option<i32>,               // High end elevation
-    pub he_heading_degt: Option<f64>,               // High end heading in degrees true
-    pub he_displaced_threshold_ft: Option<i32>,     // High end displaced threshold
+    pub he_ident: Option<String>, // High end identifier (e.g., "26R")
+    pub he_latitude_deg: Option<f64>, // High end latitude
+    pub he_longitude_deg: Option<f64>, // High end longitude
+    pub he_elevation_ft: Option<i32>, // High end elevation
+    pub he_heading_degt: Option<f64>, // High end heading in degrees true
+    pub he_displaced_threshold_ft: Option<i32>, // High end displaced threshold
 }
 
 impl Runway {
@@ -73,13 +81,20 @@ impl Runway {
         let fields = parse_csv_line(line)?;
 
         if fields.len() < 20 {
-            return Err(anyhow!("CSV line has insufficient fields: expected at least 20, got {}", fields.len()));
+            return Err(anyhow!(
+                "CSV line has insufficient fields: expected at least 20, got {}",
+                fields.len()
+            ));
         }
 
-        let id = fields[0].trim().parse::<i32>()
+        let id = fields[0]
+            .trim()
+            .parse::<i32>()
             .with_context(|| format!("Failed to parse runway ID: '{}'", fields[0]))?;
 
-        let airport_ref = fields[1].trim().parse::<i32>()
+        let airport_ref = fields[1]
+            .trim()
+            .parse::<i32>()
             .with_context(|| format!("Failed to parse airport_ref: '{}'", fields[1]))?;
 
         let airport_ident = to_string_trim(&fields[2]);
@@ -176,8 +191,7 @@ fn parse_csv_line(line: &str) -> Result<Vec<String>> {
 /// Automatically skips the first line (header) and any blank lines.
 /// Returns an error on the first malformed line.
 pub fn read_runways_csv_file<P: AsRef<Path>>(path: P) -> Result<Vec<Runway>> {
-    let f = File::open(path.as_ref())
-        .with_context(|| format!("Opening {:?}", path.as_ref()))?;
+    let f = File::open(path.as_ref()).with_context(|| format!("Opening {:?}", path.as_ref()))?;
     let reader = BufReader::new(f);
     let mut out = Vec::new();
     let mut is_first_line = true;
@@ -207,8 +221,7 @@ pub fn read_runways_csv_file<P: AsRef<Path>>(path: P) -> Result<Vec<Runway>> {
 
 /// Read only the first N runways from a CSV file (useful for large files)
 pub fn read_runways_csv_sample<P: AsRef<Path>>(path: P, limit: usize) -> Result<Vec<Runway>> {
-    let f = File::open(path.as_ref())
-        .with_context(|| format!("Opening {:?}", path.as_ref()))?;
+    let f = File::open(path.as_ref()).with_context(|| format!("Opening {:?}", path.as_ref()))?;
     let reader = BufReader::new(f);
     let mut out = Vec::new();
     let mut is_first_line = true;

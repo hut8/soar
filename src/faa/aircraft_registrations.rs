@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 use sqlx::types::Uuid;
@@ -60,12 +60,20 @@ fn fw(s: &str, start_1: usize, end_1: usize) -> &str {
 
 fn to_opt_string(s: &str) -> Option<String> {
     let t = s.trim();
-    if t.is_empty() { None } else { Some(t.to_string()) }
+    if t.is_empty() {
+        None
+    } else {
+        Some(t.to_string())
+    }
 }
 
 fn to_opt_string_no_zero(s: &str) -> Option<String> {
     let t = s.trim();
-    if t.is_empty() || t == "0" { None } else { Some(t.to_string()) }
+    if t.is_empty() || t == "0" {
+        None
+    } else {
+        Some(t.to_string())
+    }
 }
 
 fn to_string_trim(s: &str) -> String {
@@ -85,15 +93,19 @@ fn to_opt_date(yyyymmdd: &str) -> Option<NaiveDate> {
 
 fn to_opt_u32(s: &str) -> Option<u32> {
     let t = s.trim();
-    if t.is_empty() { return None; }
+    if t.is_empty() {
+        return None;
+    }
     t.parse::<u32>().ok()
 }
 
 fn to_opt_u32_nonzero(s: &str) -> Option<u32> {
     let t = s.trim();
-    if t.is_empty() { return None; }
+    if t.is_empty() {
+        return None;
+    }
     match t.parse::<u32>().ok() {
-        Some(0) => None,  // Convert zero to None
+        Some(0) => None, // Convert zero to None
         Some(n) => Some(n),
         None => None,
     }
@@ -155,14 +167,14 @@ pub struct ApprovedOps {
     pub exp_crew_training: bool,
     pub exp_market_survey: bool,
     pub exp_operating_kit_built: bool,
-    pub exp_lsa_reg_prior_2008: bool,        // 8A (legacy)
-    pub exp_lsa_operating_kit_built: bool,   // 8B
-    pub exp_lsa_prev_21_190: bool,           // 8C
-    pub exp_uas_research_development: bool,  // 9A
-    pub exp_uas_market_survey: bool,         // 9B
-    pub exp_uas_crew_training: bool,         // 9C
-    pub exp_uas_exhibition: bool,            // 9D
-    pub exp_uas_compliance_with_cfr: bool,   // 9E
+    pub exp_lsa_reg_prior_2008: bool,       // 8A (legacy)
+    pub exp_lsa_operating_kit_built: bool,  // 8B
+    pub exp_lsa_prev_21_190: bool,          // 8C
+    pub exp_uas_research_development: bool, // 9A
+    pub exp_uas_market_survey: bool,        // 9B
+    pub exp_uas_crew_training: bool,        // 9C
+    pub exp_uas_exhibition: bool,           // 9D
+    pub exp_uas_compliance_with_cfr: bool,  // 9E
 
     // Special Flight Permit
     pub sfp_ferry_for_repairs_alterations_storage: bool,
@@ -199,9 +211,18 @@ fn parse_approved_ops(airworthiness_class_code: &str, raw_239_247: &str) -> Appr
                     // If your source emits '9A'...'9E' explicitly, extend parsing here.
                 }
                 // Occasionally letters present for subcategories (8A/8B/8C, 9A..9E)
-                'A' => { ops.exp_lsa_reg_prior_2008 = true; ops.exp_uas_research_development = true; }
-                'B' => { ops.exp_lsa_operating_kit_built = true; ops.exp_uas_market_survey = true; }
-                'C' => { ops.exp_lsa_prev_21_190 = true; ops.exp_uas_crew_training = true; }
+                'A' => {
+                    ops.exp_lsa_reg_prior_2008 = true;
+                    ops.exp_uas_research_development = true;
+                }
+                'B' => {
+                    ops.exp_lsa_operating_kit_built = true;
+                    ops.exp_uas_market_survey = true;
+                }
+                'C' => {
+                    ops.exp_lsa_prev_21_190 = true;
+                    ops.exp_uas_crew_training = true;
+                }
                 'D' => ops.exp_uas_exhibition = true,
                 'E' => ops.exp_uas_compliance_with_cfr = true,
                 _ => {}
@@ -236,7 +257,7 @@ pub struct Aircraft {
     pub country_mail_code: Option<String>,      // 217–218
 
     // Dates
-    pub last_action_date: Option<NaiveDate>,     // 220–227
+    pub last_action_date: Option<NaiveDate>,       // 220–227
     pub certificate_issue_date: Option<NaiveDate>, // 229–236
 
     // Airworthiness & ops
@@ -244,32 +265,32 @@ pub struct Aircraft {
     pub approved_operations_raw: Option<String>,  // 239–247
     pub approved_ops: ApprovedOps,                // mapped flags (best effort)
 
-    pub type_aircraft_code: Option<String>,      // 249
-    pub type_engine_code: Option<i16>,           // 251–252
-    pub status_code: Option<String>,             // 254–255
+    pub type_aircraft_code: Option<String>, // 249
+    pub type_engine_code: Option<i16>,      // 251–252
+    pub status_code: Option<String>,        // 254–255
 
     // Mode S transponder as a single number
-    pub transponder_code: Option<u32>,           // from 602–611 (hex) or 257–264 (octal)
+    pub transponder_code: Option<u32>, // from 602–611 (hex) or 257–264 (octal)
 
-    pub fractional_owner: Option<bool>,          // 266
-    pub airworthiness_date: Option<NaiveDate>,   // 268–275
+    pub fractional_owner: Option<bool>,        // 266
+    pub airworthiness_date: Option<NaiveDate>, // 268–275
 
     // Other Names (up to 5)
-    pub other_names: Vec<String>,                // 277–326, 328–377, 379–428, 430–479, 481–530
+    pub other_names: Vec<String>, // 277–326, 328–377, 379–428, 430–479, 481–530
 
     // Registration expiration
-    pub expiration_date: Option<NaiveDate>,      // 532–539
+    pub expiration_date: Option<NaiveDate>, // 532–539
 
     // FAA unique ID
-    pub unique_id: Option<String>,               // 541–548
+    pub unique_id: Option<String>, // 541–548
 
     // Amateur/kit
-    pub kit_mfr_name: Option<String>,            // 550–579
-    pub kit_model_name: Option<String>,          // 581–600
-    
+    pub kit_mfr_name: Option<String>,   // 550–579
+    pub kit_model_name: Option<String>, // 581–600
+
     // New fields for location and airport relationships
-    pub home_base_airport_id: Option<Uuid>,     // Foreign key to airports table
-    pub registered_location: Option<Point>,     // WGS84 point of registration address
+    pub home_base_airport_id: Option<Uuid>, // Foreign key to airports table
+    pub registered_location: Option<Point>, // WGS84 point of registration address
 }
 
 impl Aircraft {
@@ -281,37 +302,37 @@ impl Aircraft {
     /// Get a complete address string for geocoding
     pub fn address_string(&self) -> Option<String> {
         let mut parts = Vec::new();
-        
-        if let Some(street1) = &self.street1 {
-            if !street1.trim().is_empty() {
-                parts.push(street1.trim().to_string());
-            }
+
+        if let Some(street1) = &self.street1
+            && !street1.trim().is_empty()
+        {
+            parts.push(street1.trim().to_string());
         }
-        
-        if let Some(street2) = &self.street2 {
-            if !street2.trim().is_empty() {
-                parts.push(street2.trim().to_string());
-            }
+
+        if let Some(street2) = &self.street2
+            && !street2.trim().is_empty()
+        {
+            parts.push(street2.trim().to_string());
         }
-        
-        if let Some(city) = &self.city {
-            if !city.trim().is_empty() {
-                parts.push(city.trim().to_string());
-            }
+
+        if let Some(city) = &self.city
+            && !city.trim().is_empty()
+        {
+            parts.push(city.trim().to_string());
         }
-        
-        if let Some(state) = &self.state {
-            if !state.trim().is_empty() {
-                parts.push(state.trim().to_string());
-            }
+
+        if let Some(state) = &self.state
+            && !state.trim().is_empty()
+        {
+            parts.push(state.trim().to_string());
         }
-        
-        if let Some(zip) = &self.zip_code {
-            if !zip.trim().is_empty() {
-                parts.push(zip.trim().to_string());
-            }
+
+        if let Some(zip) = &self.zip_code
+            && !zip.trim().is_empty()
+        {
+            parts.push(zip.trim().to_string());
         }
-        
+
         if parts.is_empty() {
             None
         } else {
@@ -324,11 +345,11 @@ impl Aircraft {
         // Check if registrant type is one of the eligible types
         let registrant_type = self.registrant_type();
         match registrant_type {
-            RegistrantType::Corporation |
-            RegistrantType::CoOwned |
-            RegistrantType::Llc |
-            RegistrantType::Partnership |
-            RegistrantType::Unknown => {},
+            RegistrantType::Corporation
+            | RegistrantType::CoOwned
+            | RegistrantType::Llc
+            | RegistrantType::Partnership
+            | RegistrantType::Unknown => {}
             _ => return None,
         }
 
@@ -362,8 +383,21 @@ impl Aircraft {
 
         // Remove common business suffixes
         let suffixes_to_remove = [
-            " LLC", " CO", " INC", " CORP", " CORPORATION", " LTD", " LIMITED",
-            " LP", " LLP", " PLLC", " PC", " PA", " COMPANY", " INCORPORATED", " PARTNERSHIP"
+            " LLC",
+            " CO",
+            " INC",
+            " CORP",
+            " CORPORATION",
+            " LTD",
+            " LIMITED",
+            " LP",
+            " LLP",
+            " PLLC",
+            " PC",
+            " PA",
+            " COMPANY",
+            " INCORPORATED",
+            " PARTNERSHIP",
         ];
 
         for suffix in &suffixes_to_remove {
@@ -386,7 +420,10 @@ impl Aircraft {
     pub fn from_fixed_width_line(line: &str) -> Result<Self> {
         // Expect at least the last position we touch. Many files are 611/612 chars.
         if line.len() < 611 {
-            return Err(anyhow!("Line too short: expected ~611 chars, got {}", line.len()));
+            return Err(anyhow!(
+                "Line too short: expected ~611 chars, got {}",
+                line.len()
+            ));
         }
 
         let n_number = to_string_trim(fw(line, 1, 5));
@@ -491,7 +528,7 @@ impl Aircraft {
 
             kit_mfr_name,
             kit_model_name,
-            
+
             // Initialize new fields as None/empty
             home_base_airport_id: None,
             registered_location: None,
@@ -502,8 +539,7 @@ impl Aircraft {
 /// Read a fixed-width FAA Aircraft Master file (first 8 pages spec) and parse all rows.
 /// Skips blank lines. Returns an error on the first malformed (too-short) line.
 pub fn read_aircraft_file<P: AsRef<Path>>(path: P) -> Result<Vec<Aircraft>> {
-    let f = File::open(path.as_ref())
-        .with_context(|| format!("Opening {:?}", path.as_ref()))?;
+    let f = File::open(path.as_ref()).with_context(|| format!("Opening {:?}", path.as_ref()))?;
     let reader = BufReader::new(f);
     let mut out = Vec::new();
 
@@ -553,7 +589,10 @@ impl Aircraft {
         let fields: Vec<&str> = line.split(',').collect();
 
         if fields.len() < 34 {
-            return Err(anyhow!("CSV line has insufficient fields: expected at least 34, got {}", fields.len()));
+            return Err(anyhow!(
+                "CSV line has insufficient fields: expected at least 34, got {}",
+                fields.len()
+            ));
         }
 
         let n_number = to_string_trim(fields[0]);
@@ -586,8 +625,7 @@ impl Aircraft {
         let status_code = to_opt_string(fields[20]);
 
         // Try MODE S CODE HEX first (field 33), then MODE S CODE (field 21)
-        let transponder_code = parse_csv_mode_s(fields[33])
-            .or_else(|| to_opt_u32(fields[21]));
+        let transponder_code = parse_csv_mode_s(fields[33]).or_else(|| to_opt_u32(fields[21]));
 
         let fractional_owner = yn_to_bool(fields[22]);
         let airworthiness_date = parse_csv_date(fields[23]);
@@ -648,7 +686,7 @@ impl Aircraft {
 
             kit_mfr_name,
             kit_model_name,
-            
+
             // Initialize new fields as None/empty
             home_base_airport_id: None,
             registered_location: None,
@@ -660,8 +698,7 @@ impl Aircraft {
 /// Automatically skips the first line (header) and any blank lines.
 /// Returns an error on the first malformed line.
 pub fn read_aircraft_csv_file<P: AsRef<Path>>(path: P) -> Result<Vec<Aircraft>> {
-    let f = File::open(path.as_ref())
-        .with_context(|| format!("Opening {:?}", path.as_ref()))?;
+    let f = File::open(path.as_ref()).with_context(|| format!("Opening {:?}", path.as_ref()))?;
     let reader = BufReader::new(f);
     let mut out = Vec::new();
     let mut is_first_line = true;
@@ -693,7 +730,8 @@ pub fn read_aircraft_csv_file<P: AsRef<Path>>(path: P) -> Result<Vec<Aircraft>> 
 /// Detects format based on file extension or content
 pub fn read_aircraft_file_with_header_skip<P: AsRef<Path>>(path: P) -> Result<Vec<Aircraft>> {
     let path_ref = path.as_ref();
-    let extension = path_ref.extension()
+    let extension = path_ref
+        .extension()
         .and_then(|ext| ext.to_str())
         .unwrap_or("");
 
@@ -702,8 +740,7 @@ pub fn read_aircraft_file_with_header_skip<P: AsRef<Path>>(path: P) -> Result<Ve
     }
 
     // For fixed-width files, also skip first line if it looks like a header
-    let f = File::open(path_ref)
-        .with_context(|| format!("Opening {path_ref:?}"))?;
+    let f = File::open(path_ref).with_context(|| format!("Opening {path_ref:?}"))?;
     let reader = BufReader::new(f);
     let mut out = Vec::new();
     let mut is_first_line = true;
@@ -720,9 +757,10 @@ pub fn read_aircraft_file_with_header_skip<P: AsRef<Path>>(path: P) -> Result<Ve
         if is_first_line {
             is_first_line = false;
             let line_upper = trimmed.to_uppercase();
-            if line_upper.contains("N-NUMBER") ||
-               line_upper.contains("SERIAL") ||
-               line_upper.contains("REGISTRANT") {
+            if line_upper.contains("N-NUMBER")
+                || line_upper.contains("SERIAL")
+                || line_upper.contains("REGISTRANT")
+            {
                 continue;
             }
         }
@@ -753,7 +791,10 @@ mod tests {
         assert_eq!(first.mfr_mdl_code, Some("1660225".to_string()));
         assert_eq!(first.year_mfr, Some(1980));
         assert_eq!(first.type_registration_code, Some("3".to_string()));
-        assert_eq!(first.registrant_name, Some("ADIRONDACK SOARING ASSOCIATION INC".to_string()));
+        assert_eq!(
+            first.registrant_name,
+            Some("ADIRONDACK SOARING ASSOCIATION INC".to_string())
+        );
         assert_eq!(first.city, Some("BALLSTON SPA".to_string()));
         assert_eq!(first.state, Some("NY".to_string()));
         assert_eq!(first.status_code, Some("V".to_string()));
@@ -766,7 +807,10 @@ mod tests {
         assert_eq!(second.n_number, "9845L");
         assert_eq!(second.serial_number, "17276634");
         assert_eq!(second.year_mfr, Some(1986));
-        assert_eq!(second.registrant_name, Some("GALAXY AVIATION LLC".to_string()));
+        assert_eq!(
+            second.registrant_name,
+            Some("GALAXY AVIATION LLC".to_string())
+        );
         assert_eq!(second.city, Some("NANTUCKET".to_string()));
         assert_eq!(second.state, Some("MA".to_string()));
         assert_eq!(second.transponder_code, Some(0xADBD12));
@@ -776,7 +820,10 @@ mod tests {
         assert_eq!(third.n_number, "360EF");
         assert_eq!(third.serial_number, "3060");
         assert_eq!(third.year_mfr, Some(1995));
-        assert_eq!(third.registrant_name, Some("US AIRFORCE SPECIAL OPERATIONS COMMAND".to_string()));
+        assert_eq!(
+            third.registrant_name,
+            Some("US AIRFORCE SPECIAL OPERATIONS COMMAND".to_string())
+        );
         assert_eq!(third.city, Some("HURLBURT FIELD".to_string()));
         assert_eq!(third.state, Some("FL".to_string()));
         assert_eq!(third.transponder_code, Some(0xA40CB6));
@@ -857,14 +904,20 @@ mod tests {
         assert_eq!(RegistrantType::from("4"), RegistrantType::CoOwned);
         assert_eq!(RegistrantType::from("5"), RegistrantType::Government);
         assert_eq!(RegistrantType::from("7"), RegistrantType::Llc);
-        assert_eq!(RegistrantType::from("8"), RegistrantType::NonCitizenCorporation);
+        assert_eq!(
+            RegistrantType::from("8"),
+            RegistrantType::NonCitizenCorporation
+        );
         assert_eq!(RegistrantType::from("9"), RegistrantType::NonCitizenCoOwned);
         assert_eq!(RegistrantType::from("6"), RegistrantType::Unknown); // Invalid code
         assert_eq!(RegistrantType::from(""), RegistrantType::Unknown);
         assert_eq!(RegistrantType::from("X"), RegistrantType::Unknown);
 
         // Test conversion from Option<String>
-        assert_eq!(RegistrantType::from(Some("3".to_string())), RegistrantType::Corporation);
+        assert_eq!(
+            RegistrantType::from(Some("3".to_string())),
+            RegistrantType::Corporation
+        );
         assert_eq!(RegistrantType::from(None), RegistrantType::Unknown);
     }
 
@@ -888,12 +941,18 @@ mod tests {
         let aircraft = read_aircraft_csv_file(csv_path).expect("Failed to read CSV file");
 
         let first = &aircraft[0];
-        assert_eq!(first.registrant_name, Some("ADIRONDACK SOARING ASSOCIATION INC".to_string()));
+        assert_eq!(
+            first.registrant_name,
+            Some("ADIRONDACK SOARING ASSOCIATION INC".to_string())
+        );
         assert_eq!(first.registrant_type(), RegistrantType::Corporation);
 
         // Should return normalized club name (contains "SOAR" and is Corporation)
         let club_name = first.club_name();
-        assert_eq!(club_name, Some("ADIRONDACK SOARING ASSOCIATION".to_string()));
+        assert_eq!(
+            club_name,
+            Some("ADIRONDACK SOARING ASSOCIATION".to_string())
+        );
 
         // Test with manual Aircraft instances
         let mut test_aircraft = Aircraft {
@@ -933,19 +992,31 @@ mod tests {
         };
 
         // Test club with "SOAR" in name
-        assert_eq!(test_aircraft.club_name(), Some("MOUNTAIN SOARING CLUB".to_string()));
+        assert_eq!(
+            test_aircraft.club_name(),
+            Some("MOUNTAIN SOARING CLUB".to_string())
+        );
 
         // Test club with "CLUB" in name
         test_aircraft.registrant_name = Some("VALLEY GLIDING CLUB LLC".to_string());
-        assert_eq!(test_aircraft.club_name(), Some("VALLEY GLIDING CLUB".to_string()));
+        assert_eq!(
+            test_aircraft.club_name(),
+            Some("VALLEY GLIDING CLUB".to_string())
+        );
 
         // Test ASSOCIATES -> ASSOCIATION replacement
         test_aircraft.registrant_name = Some("RIDGE SOARING ASSOCIATES CO".to_string());
-        assert_eq!(test_aircraft.club_name(), Some("RIDGE SOARING ASSOCIATION".to_string()));
+        assert_eq!(
+            test_aircraft.club_name(),
+            Some("RIDGE SOARING ASSOCIATION".to_string())
+        );
 
         // Test ASSOC -> ASSOCIATION replacement
         test_aircraft.registrant_name = Some("THERMAL SOARING ASSOC INC".to_string());
-        assert_eq!(test_aircraft.club_name(), Some("THERMAL SOARING ASSOCIATION".to_string()));
+        assert_eq!(
+            test_aircraft.club_name(),
+            Some("THERMAL SOARING ASSOCIATION".to_string())
+        );
 
         // Test with Individual registrant type (should return None)
         test_aircraft.type_registration_code = Some("1".to_string()); // Individual
@@ -964,7 +1035,10 @@ mod tests {
         // Test with LLC registrant type
         test_aircraft.type_registration_code = Some("7".to_string()); // LLC
         test_aircraft.registrant_name = Some("DESERT SOARING LLC".to_string());
-        assert_eq!(test_aircraft.club_name(), Some("DESERT SOARING".to_string()));
+        assert_eq!(
+            test_aircraft.club_name(),
+            Some("DESERT SOARING".to_string())
+        );
 
         // Test with Partnership registrant type
         test_aircraft.type_registration_code = Some("2".to_string()); // Partnership
@@ -974,12 +1048,18 @@ mod tests {
         // Test with CoOwned registrant type
         test_aircraft.type_registration_code = Some("4".to_string()); // CoOwned
         test_aircraft.registrant_name = Some("ALPINE SOARING CO-OWNED".to_string());
-        assert_eq!(test_aircraft.club_name(), Some("ALPINE SOARING CO-OWNED".to_string()));
+        assert_eq!(
+            test_aircraft.club_name(),
+            Some("ALPINE SOARING CO-OWNED".to_string())
+        );
 
         // Test with Unknown registrant type
         test_aircraft.type_registration_code = Some("X".to_string()); // Unknown
         test_aircraft.registrant_name = Some("MYSTERY SOARING CLUB".to_string());
-        assert_eq!(test_aircraft.club_name(), Some("MYSTERY SOARING CLUB".to_string()));
+        assert_eq!(
+            test_aircraft.club_name(),
+            Some("MYSTERY SOARING CLUB".to_string())
+        );
 
         // Test with no registrant name
         test_aircraft.type_registration_code = Some("3".to_string()); // Corporation
@@ -988,6 +1068,9 @@ mod tests {
 
         // Test multiple suffix removal (should only remove one)
         test_aircraft.registrant_name = Some("PEAK SOARING CORPORATION INC".to_string());
-        assert_eq!(test_aircraft.club_name(), Some("PEAK SOARING CORPORATION".to_string()));
+        assert_eq!(
+            test_aircraft.club_name(),
+            Some("PEAK SOARING CORPORATION".to_string())
+        );
     }
 }

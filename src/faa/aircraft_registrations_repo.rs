@@ -15,14 +15,15 @@ impl AircraftRegistrationsRepository {
     }
 
     /// Find or create a club by name, returning its UUID
-    async fn find_or_create_club(&self, club_name: &str, transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>) -> Result<Uuid> {
+    async fn find_or_create_club(
+        &self,
+        club_name: &str,
+        transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    ) -> Result<Uuid> {
         // First try to find existing club
-        let existing_club = sqlx::query!(
-            "SELECT id FROM clubs WHERE name = $1",
-            club_name
-        )
-        .fetch_optional(&mut **transaction)
-        .await?;
+        let existing_club = sqlx::query!("SELECT id FROM clubs WHERE name = $1", club_name)
+            .fetch_optional(&mut **transaction)
+            .await?;
 
         if let Some(club) = existing_club {
             return Ok(club.id);
@@ -76,11 +77,17 @@ impl AircraftRegistrationsRepository {
                         existing.club_id
                     } else {
                         // Aircraft exists but has no club_id, set it
-                        Some(self.find_or_create_club(&club_name, &mut transaction).await?)
+                        Some(
+                            self.find_or_create_club(&club_name, &mut transaction)
+                                .await?,
+                        )
                     }
                 } else {
                     // New aircraft, set club_id
-                    Some(self.find_or_create_club(&club_name, &mut transaction).await?)
+                    Some(
+                        self.find_or_create_club(&club_name, &mut transaction)
+                            .await?,
+                    )
                 }
             } else {
                 None
@@ -298,8 +305,7 @@ impl AircraftRegistrationsRepository {
                         if let Err(e) = delete_result {
                             warn!(
                                 "Failed to delete other names for aircraft registration {}: {}",
-                                aircraft_reg.n_number,
-                                e
+                                aircraft_reg.n_number, e
                             );
                             transaction.rollback().await?;
                             failed_count += 1;
@@ -322,8 +328,7 @@ impl AircraftRegistrationsRepository {
                             if let Err(e) = insert_result {
                                 warn!(
                                     "Failed to insert other name for aircraft registration {}: {}",
-                                    aircraft_reg.n_number,
-                                    e
+                                    aircraft_reg.n_number, e
                                 );
                                 other_names_success = false;
                                 break;
@@ -345,8 +350,7 @@ impl AircraftRegistrationsRepository {
                         Err(e) => {
                             warn!(
                                 "Failed to commit transaction for aircraft registration {}: {}",
-                                aircraft_reg.n_number,
-                                e
+                                aircraft_reg.n_number, e
                             );
                             failed_count += 1;
                         }
@@ -355,9 +359,7 @@ impl AircraftRegistrationsRepository {
                 Err(e) => {
                     warn!(
                         "Failed to upsert aircraft registration {}: {}\nAircraft data: {:#?}",
-                        aircraft_reg.n_number,
-                        e,
-                        aircraft_reg
+                        aircraft_reg.n_number, e, aircraft_reg
                     );
                     transaction.rollback().await?;
                     failed_count += 1;
@@ -368,7 +370,10 @@ impl AircraftRegistrationsRepository {
         if failed_count > 0 {
             warn!("Failed to upsert {} aircraft registrations", failed_count);
         }
-        info!("Successfully upserted {} aircraft registrations", upserted_count);
+        info!(
+            "Successfully upserted {} aircraft registrations",
+            upserted_count
+        );
 
         Ok(upserted_count)
     }
@@ -440,7 +445,9 @@ impl AircraftRegistrationsRepository {
                 restricted_other: row.op_restricted_other.unwrap_or(false),
                 restricted_ag_pest_control: row.op_restricted_ag_pest_control.unwrap_or(false),
                 restricted_aerial_surveying: row.op_restricted_aerial_surveying.unwrap_or(false),
-                restricted_aerial_advertising: row.op_restricted_aerial_advertising.unwrap_or(false),
+                restricted_aerial_advertising: row
+                    .op_restricted_aerial_advertising
+                    .unwrap_or(false),
                 restricted_forest: row.op_restricted_forest.unwrap_or(false),
                 restricted_patrolling: row.op_restricted_patrolling.unwrap_or(false),
                 restricted_weather_control: row.op_restricted_weather_control.unwrap_or(false),
@@ -453,19 +460,35 @@ impl AircraftRegistrationsRepository {
                 exp_crew_training: row.op_experimental_crew_training.unwrap_or(false),
                 exp_market_survey: row.op_experimental_market_survey.unwrap_or(false),
                 exp_operating_kit_built: row.op_experimental_operating_kit_built.unwrap_or(false),
-                exp_lsa_reg_prior_2008: row.op_experimental_light_sport_reg_prior_2008.unwrap_or(false),
-                exp_lsa_operating_kit_built: row.op_experimental_light_sport_operating_kit_built.unwrap_or(false),
+                exp_lsa_reg_prior_2008: row
+                    .op_experimental_light_sport_reg_prior_2008
+                    .unwrap_or(false),
+                exp_lsa_operating_kit_built: row
+                    .op_experimental_light_sport_operating_kit_built
+                    .unwrap_or(false),
                 exp_lsa_prev_21_190: row.op_experimental_light_sport_prev_21_190.unwrap_or(false),
-                exp_uas_research_development: row.op_experimental_uas_research_development.unwrap_or(false),
+                exp_uas_research_development: row
+                    .op_experimental_uas_research_development
+                    .unwrap_or(false),
                 exp_uas_market_survey: row.op_experimental_uas_market_survey.unwrap_or(false),
                 exp_uas_crew_training: row.op_experimental_uas_crew_training.unwrap_or(false),
                 exp_uas_exhibition: row.op_experimental_uas_exhibition.unwrap_or(false),
-                exp_uas_compliance_with_cfr: row.op_experimental_uas_compliance_with_cfr.unwrap_or(false),
-                sfp_ferry_for_repairs_alterations_storage: row.op_sfp_ferry_for_repairs_alterations_storage.unwrap_or(false),
-                sfp_evacuate_impending_danger: row.op_sfp_evacuate_impending_danger.unwrap_or(false),
-                sfp_excess_of_max_certificated: row.op_sfp_excess_of_max_certificated.unwrap_or(false),
+                exp_uas_compliance_with_cfr: row
+                    .op_experimental_uas_compliance_with_cfr
+                    .unwrap_or(false),
+                sfp_ferry_for_repairs_alterations_storage: row
+                    .op_sfp_ferry_for_repairs_alterations_storage
+                    .unwrap_or(false),
+                sfp_evacuate_impending_danger: row
+                    .op_sfp_evacuate_impending_danger
+                    .unwrap_or(false),
+                sfp_excess_of_max_certificated: row
+                    .op_sfp_excess_of_max_certificated
+                    .unwrap_or(false),
                 sfp_delivery_or_export: row.op_sfp_delivery_or_export.unwrap_or(false),
-                sfp_production_flight_testing: row.op_sfp_production_flight_testing.unwrap_or(false),
+                sfp_production_flight_testing: row
+                    .op_sfp_production_flight_testing
+                    .unwrap_or(false),
                 sfp_customer_demo: row.op_sfp_customer_demo.unwrap_or(false),
             };
 
@@ -566,7 +589,9 @@ impl AircraftRegistrationsRepository {
                 restricted_other: row.op_restricted_other.unwrap_or(false),
                 restricted_ag_pest_control: row.op_restricted_ag_pest_control.unwrap_or(false),
                 restricted_aerial_surveying: row.op_restricted_aerial_surveying.unwrap_or(false),
-                restricted_aerial_advertising: row.op_restricted_aerial_advertising.unwrap_or(false),
+                restricted_aerial_advertising: row
+                    .op_restricted_aerial_advertising
+                    .unwrap_or(false),
                 restricted_forest: row.op_restricted_forest.unwrap_or(false),
                 restricted_patrolling: row.op_restricted_patrolling.unwrap_or(false),
                 restricted_weather_control: row.op_restricted_weather_control.unwrap_or(false),
@@ -579,19 +604,35 @@ impl AircraftRegistrationsRepository {
                 exp_crew_training: row.op_experimental_crew_training.unwrap_or(false),
                 exp_market_survey: row.op_experimental_market_survey.unwrap_or(false),
                 exp_operating_kit_built: row.op_experimental_operating_kit_built.unwrap_or(false),
-                exp_lsa_reg_prior_2008: row.op_experimental_light_sport_reg_prior_2008.unwrap_or(false),
-                exp_lsa_operating_kit_built: row.op_experimental_light_sport_operating_kit_built.unwrap_or(false),
+                exp_lsa_reg_prior_2008: row
+                    .op_experimental_light_sport_reg_prior_2008
+                    .unwrap_or(false),
+                exp_lsa_operating_kit_built: row
+                    .op_experimental_light_sport_operating_kit_built
+                    .unwrap_or(false),
                 exp_lsa_prev_21_190: row.op_experimental_light_sport_prev_21_190.unwrap_or(false),
-                exp_uas_research_development: row.op_experimental_uas_research_development.unwrap_or(false),
+                exp_uas_research_development: row
+                    .op_experimental_uas_research_development
+                    .unwrap_or(false),
                 exp_uas_market_survey: row.op_experimental_uas_market_survey.unwrap_or(false),
                 exp_uas_crew_training: row.op_experimental_uas_crew_training.unwrap_or(false),
                 exp_uas_exhibition: row.op_experimental_uas_exhibition.unwrap_or(false),
-                exp_uas_compliance_with_cfr: row.op_experimental_uas_compliance_with_cfr.unwrap_or(false),
-                sfp_ferry_for_repairs_alterations_storage: row.op_sfp_ferry_for_repairs_alterations_storage.unwrap_or(false),
-                sfp_evacuate_impending_danger: row.op_sfp_evacuate_impending_danger.unwrap_or(false),
-                sfp_excess_of_max_certificated: row.op_sfp_excess_of_max_certificated.unwrap_or(false),
+                exp_uas_compliance_with_cfr: row
+                    .op_experimental_uas_compliance_with_cfr
+                    .unwrap_or(false),
+                sfp_ferry_for_repairs_alterations_storage: row
+                    .op_sfp_ferry_for_repairs_alterations_storage
+                    .unwrap_or(false),
+                sfp_evacuate_impending_danger: row
+                    .op_sfp_evacuate_impending_danger
+                    .unwrap_or(false),
+                sfp_excess_of_max_certificated: row
+                    .op_sfp_excess_of_max_certificated
+                    .unwrap_or(false),
                 sfp_delivery_or_export: row.op_sfp_delivery_or_export.unwrap_or(false),
-                sfp_production_flight_testing: row.op_sfp_production_flight_testing.unwrap_or(false),
+                sfp_production_flight_testing: row
+                    .op_sfp_production_flight_testing
+                    .unwrap_or(false),
                 sfp_customer_demo: row.op_sfp_customer_demo.unwrap_or(false),
             };
 
@@ -693,7 +734,9 @@ impl AircraftRegistrationsRepository {
                 restricted_other: row.op_restricted_other.unwrap_or(false),
                 restricted_ag_pest_control: row.op_restricted_ag_pest_control.unwrap_or(false),
                 restricted_aerial_surveying: row.op_restricted_aerial_surveying.unwrap_or(false),
-                restricted_aerial_advertising: row.op_restricted_aerial_advertising.unwrap_or(false),
+                restricted_aerial_advertising: row
+                    .op_restricted_aerial_advertising
+                    .unwrap_or(false),
                 restricted_forest: row.op_restricted_forest.unwrap_or(false),
                 restricted_patrolling: row.op_restricted_patrolling.unwrap_or(false),
                 restricted_weather_control: row.op_restricted_weather_control.unwrap_or(false),
@@ -706,19 +749,35 @@ impl AircraftRegistrationsRepository {
                 exp_crew_training: row.op_experimental_crew_training.unwrap_or(false),
                 exp_market_survey: row.op_experimental_market_survey.unwrap_or(false),
                 exp_operating_kit_built: row.op_experimental_operating_kit_built.unwrap_or(false),
-                exp_lsa_reg_prior_2008: row.op_experimental_light_sport_reg_prior_2008.unwrap_or(false),
-                exp_lsa_operating_kit_built: row.op_experimental_light_sport_operating_kit_built.unwrap_or(false),
+                exp_lsa_reg_prior_2008: row
+                    .op_experimental_light_sport_reg_prior_2008
+                    .unwrap_or(false),
+                exp_lsa_operating_kit_built: row
+                    .op_experimental_light_sport_operating_kit_built
+                    .unwrap_or(false),
                 exp_lsa_prev_21_190: row.op_experimental_light_sport_prev_21_190.unwrap_or(false),
-                exp_uas_research_development: row.op_experimental_uas_research_development.unwrap_or(false),
+                exp_uas_research_development: row
+                    .op_experimental_uas_research_development
+                    .unwrap_or(false),
                 exp_uas_market_survey: row.op_experimental_uas_market_survey.unwrap_or(false),
                 exp_uas_crew_training: row.op_experimental_uas_crew_training.unwrap_or(false),
                 exp_uas_exhibition: row.op_experimental_uas_exhibition.unwrap_or(false),
-                exp_uas_compliance_with_cfr: row.op_experimental_uas_compliance_with_cfr.unwrap_or(false),
-                sfp_ferry_for_repairs_alterations_storage: row.op_sfp_ferry_for_repairs_alterations_storage.unwrap_or(false),
-                sfp_evacuate_impending_danger: row.op_sfp_evacuate_impending_danger.unwrap_or(false),
-                sfp_excess_of_max_certificated: row.op_sfp_excess_of_max_certificated.unwrap_or(false),
+                exp_uas_compliance_with_cfr: row
+                    .op_experimental_uas_compliance_with_cfr
+                    .unwrap_or(false),
+                sfp_ferry_for_repairs_alterations_storage: row
+                    .op_sfp_ferry_for_repairs_alterations_storage
+                    .unwrap_or(false),
+                sfp_evacuate_impending_danger: row
+                    .op_sfp_evacuate_impending_danger
+                    .unwrap_or(false),
+                sfp_excess_of_max_certificated: row
+                    .op_sfp_excess_of_max_certificated
+                    .unwrap_or(false),
                 sfp_delivery_or_export: row.op_sfp_delivery_or_export.unwrap_or(false),
-                sfp_production_flight_testing: row.op_sfp_production_flight_testing.unwrap_or(false),
+                sfp_production_flight_testing: row
+                    .op_sfp_production_flight_testing
+                    .unwrap_or(false),
                 sfp_customer_demo: row.op_sfp_customer_demo.unwrap_or(false),
             };
 
@@ -819,7 +878,9 @@ impl AircraftRegistrationsRepository {
                 restricted_other: row.op_restricted_other.unwrap_or(false),
                 restricted_ag_pest_control: row.op_restricted_ag_pest_control.unwrap_or(false),
                 restricted_aerial_surveying: row.op_restricted_aerial_surveying.unwrap_or(false),
-                restricted_aerial_advertising: row.op_restricted_aerial_advertising.unwrap_or(false),
+                restricted_aerial_advertising: row
+                    .op_restricted_aerial_advertising
+                    .unwrap_or(false),
                 restricted_forest: row.op_restricted_forest.unwrap_or(false),
                 restricted_patrolling: row.op_restricted_patrolling.unwrap_or(false),
                 restricted_weather_control: row.op_restricted_weather_control.unwrap_or(false),
@@ -832,19 +893,35 @@ impl AircraftRegistrationsRepository {
                 exp_crew_training: row.op_experimental_crew_training.unwrap_or(false),
                 exp_market_survey: row.op_experimental_market_survey.unwrap_or(false),
                 exp_operating_kit_built: row.op_experimental_operating_kit_built.unwrap_or(false),
-                exp_lsa_reg_prior_2008: row.op_experimental_light_sport_reg_prior_2008.unwrap_or(false),
-                exp_lsa_operating_kit_built: row.op_experimental_light_sport_operating_kit_built.unwrap_or(false),
+                exp_lsa_reg_prior_2008: row
+                    .op_experimental_light_sport_reg_prior_2008
+                    .unwrap_or(false),
+                exp_lsa_operating_kit_built: row
+                    .op_experimental_light_sport_operating_kit_built
+                    .unwrap_or(false),
                 exp_lsa_prev_21_190: row.op_experimental_light_sport_prev_21_190.unwrap_or(false),
-                exp_uas_research_development: row.op_experimental_uas_research_development.unwrap_or(false),
+                exp_uas_research_development: row
+                    .op_experimental_uas_research_development
+                    .unwrap_or(false),
                 exp_uas_market_survey: row.op_experimental_uas_market_survey.unwrap_or(false),
                 exp_uas_crew_training: row.op_experimental_uas_crew_training.unwrap_or(false),
                 exp_uas_exhibition: row.op_experimental_uas_exhibition.unwrap_or(false),
-                exp_uas_compliance_with_cfr: row.op_experimental_uas_compliance_with_cfr.unwrap_or(false),
-                sfp_ferry_for_repairs_alterations_storage: row.op_sfp_ferry_for_repairs_alterations_storage.unwrap_or(false),
-                sfp_evacuate_impending_danger: row.op_sfp_evacuate_impending_danger.unwrap_or(false),
-                sfp_excess_of_max_certificated: row.op_sfp_excess_of_max_certificated.unwrap_or(false),
+                exp_uas_compliance_with_cfr: row
+                    .op_experimental_uas_compliance_with_cfr
+                    .unwrap_or(false),
+                sfp_ferry_for_repairs_alterations_storage: row
+                    .op_sfp_ferry_for_repairs_alterations_storage
+                    .unwrap_or(false),
+                sfp_evacuate_impending_danger: row
+                    .op_sfp_evacuate_impending_danger
+                    .unwrap_or(false),
+                sfp_excess_of_max_certificated: row
+                    .op_sfp_excess_of_max_certificated
+                    .unwrap_or(false),
                 sfp_delivery_or_export: row.op_sfp_delivery_or_export.unwrap_or(false),
-                sfp_production_flight_testing: row.op_sfp_production_flight_testing.unwrap_or(false),
+                sfp_production_flight_testing: row
+                    .op_sfp_production_flight_testing
+                    .unwrap_or(false),
                 sfp_customer_demo: row.op_sfp_customer_demo.unwrap_or(false),
             };
 

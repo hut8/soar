@@ -1,8 +1,8 @@
 use anyhow::Result;
-use sqlx::PgPool;
-use tracing::{info, warn};
-use sqlx::types::{BigDecimal};
 use num_traits::{FromPrimitive, ToPrimitive};
+use sqlx::PgPool;
+use sqlx::types::BigDecimal;
+use tracing::{info, warn};
 
 use crate::airports::Airport;
 
@@ -121,8 +121,7 @@ impl AirportsRepository {
                         Err(e) => {
                             warn!(
                                 "Failed to commit transaction for airport {}: {}",
-                                airport.ident,
-                                e
+                                airport.ident, e
                             );
                             failed_count += 1;
                         }
@@ -131,9 +130,7 @@ impl AirportsRepository {
                 Err(e) => {
                     warn!(
                         "Failed to upsert airport {}: {}\nAirport data: {:#?}",
-                        airport.ident,
-                        e,
-                        airport
+                        airport.ident, e, airport
                     );
                     transaction.rollback().await?;
                     failed_count += 1;
@@ -502,7 +499,10 @@ mod tests {
             iata_code: None,
             gps_code: Some("K00A".to_string()),
             local_code: Some("00A".to_string()),
-            home_link: Some("https://www.penndot.pa.gov/TravelInPA/airports-pa/Pages/Total-RF-Heliport.aspx".to_string()),
+            home_link: Some(
+                "https://www.penndot.pa.gov/TravelInPA/airports-pa/Pages/Total-RF-Heliport.aspx"
+                    .to_string(),
+            ),
             wikipedia_link: None,
             keywords: None,
         }

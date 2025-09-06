@@ -110,7 +110,11 @@ impl ReceiverRepository {
             if let Some(links) = &receiver.links {
                 for link in links {
                     if !link.href.trim().is_empty() {
-                        let rel_value = link.rel.as_ref().map(|r| r.trim()).filter(|r| !r.is_empty());
+                        let rel_value = link
+                            .rel
+                            .as_ref()
+                            .map(|r| r.trim())
+                            .filter(|r| !r.is_empty());
                         let link_result = sqlx::query!(
                             "INSERT INTO receivers_links (receiver_id, rel, href) VALUES ($1, $2, $3)",
                             receiver_id,
