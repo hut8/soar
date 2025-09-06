@@ -501,6 +501,8 @@ impl AircraftRegistrationsRepository {
                 unique_id: row.unique_id,
                 kit_mfr_name: row.kit_mfr_name,
                 kit_model_name: row.kit_model_name,
+                home_base_airport_id: None,
+                registered_location: None,
             }))
         } else {
             Ok(None)
@@ -625,6 +627,8 @@ impl AircraftRegistrationsRepository {
                 unique_id: row.unique_id,
                 kit_mfr_name: row.kit_mfr_name,
                 kit_model_name: row.kit_model_name,
+                home_base_airport_id: None,
+                registered_location: None,
             });
         }
 
@@ -750,6 +754,8 @@ impl AircraftRegistrationsRepository {
                 unique_id: row.unique_id,
                 kit_mfr_name: row.kit_mfr_name,
                 kit_model_name: row.kit_model_name,
+                home_base_airport_id: None,
+                registered_location: None,
             });
         }
 
@@ -874,6 +880,8 @@ impl AircraftRegistrationsRepository {
                 unique_id: row.unique_id,
                 kit_mfr_name: row.kit_mfr_name,
                 kit_model_name: row.kit_model_name,
+                home_base_airport_id: None,
+                registered_location: None,
             });
         }
 

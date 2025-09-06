@@ -14,6 +14,8 @@ pub mod runways;
 pub mod runways_repo;
 pub mod receivers;
 pub mod receiver_repo;
+pub mod clubs;
+pub mod geocoding;
 pub mod nats_publisher;
 pub mod position;
 pub mod message_processors;

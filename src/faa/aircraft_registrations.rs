@@ -1,8 +1,13 @@
 use anyhow::{anyhow, Context, Result};
 use chrono::NaiveDate;
+use serde::{Deserialize, Serialize};
+use sqlx::types::Uuid;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
+
+// Import Point from clubs module
+use crate::clubs::Point;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RegistrantType {
@@ -129,7 +134,7 @@ fn parse_transponder_number(line: &str) -> Option<u32> {
 /// Named Approved Operation flags (first 8 pages only).
 /// Keep the raw 9-char string for audit, and set flags via mapping by class/slots.
 /// You can tweak the mapping tables below to match your ingestion guide precisely.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ApprovedOps {
     // Restricted (examples)
     pub restricted_other: bool,
@@ -210,7 +215,7 @@ fn parse_approved_ops(airworthiness_class_code: &str, raw_239_247: &str) -> Appr
     ops
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Aircraft {
     pub n_number: String,                 // 1–5
     pub serial_number: String,            // 7–36
@@ -261,12 +266,57 @@ pub struct Aircraft {
     // Amateur/kit
     pub kit_mfr_name: Option<String>,            // 550–579
     pub kit_model_name: Option<String>,          // 581–600
+    
+    // New fields for location and airport relationships
+    pub home_base_airport_id: Option<Uuid>,     // Foreign key to airports table
+    pub registered_location: Option<Point>,     // WGS84 point of registration address
 }
 
 impl Aircraft {
     /// Returns the registrant type based on the type_registration_code
     pub fn registrant_type(&self) -> RegistrantType {
         RegistrantType::from(self.type_registration_code.clone())
+    }
+
+    /// Get a complete address string for geocoding
+    pub fn address_string(&self) -> Option<String> {
+        let mut parts = Vec::new();
+        
+        if let Some(street1) = &self.street1 {
+            if !street1.trim().is_empty() {
+                parts.push(street1.trim().to_string());
+            }
+        }
+        
+        if let Some(street2) = &self.street2 {
+            if !street2.trim().is_empty() {
+                parts.push(street2.trim().to_string());
+            }
+        }
+        
+        if let Some(city) = &self.city {
+            if !city.trim().is_empty() {
+                parts.push(city.trim().to_string());
+            }
+        }
+        
+        if let Some(state) = &self.state {
+            if !state.trim().is_empty() {
+                parts.push(state.trim().to_string());
+            }
+        }
+        
+        if let Some(zip) = &self.zip_code {
+            if !zip.trim().is_empty() {
+                parts.push(zip.trim().to_string());
+            }
+        }
+        
+        if parts.is_empty() {
+            None
+        } else {
+            Some(parts.join(", "))
+        }
     }
 
     /// Returns a normalized club name if the aircraft appears to be registered to a gliding club
@@ -441,6 +491,10 @@ impl Aircraft {
 
             kit_mfr_name,
             kit_model_name,
+            
+            // Initialize new fields as None/empty
+            home_base_airport_id: None,
+            registered_location: None,
         })
     }
 }
@@ -594,6 +648,10 @@ impl Aircraft {
 
             kit_mfr_name,
             kit_model_name,
+            
+            // Initialize new fields as None/empty
+            home_base_airport_id: None,
+            registered_location: None,
         })
     }
 }
@@ -870,6 +928,8 @@ mod tests {
             unique_id: None,
             kit_mfr_name: None,
             kit_model_name: None,
+            home_base_airport_id: None,
+            registered_location: None,
         };
 
         // Test club with "SOAR" in name
