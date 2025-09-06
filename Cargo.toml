@@ -5,19 +5,19 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0"
-async-nats = "0.42.0"
+async-nats = "0.42"
 axum = "0.7"
 chrono = { version = "0.4", features = ["serde"] }
-clap = { version = "4.5.46", features = ["derive"] }
-dotenvy = { version = "0.15.7", features = ["clap"] }
+clap = { version = "4.5", features = ["derive"] }
+dotenvy = { version = "0.15", features = ["clap"] }
 include_dir = "0.7"
 mime_guess = "2.0"
 num-traits = "0.2"
 ogn-parser = { git = "https://github.com/hut8/ogn-parser-rs", branch = "master" }
 regex = "1.0"
-reqwest = { version = "0.12.23", features = ["json"] }
-serde = { version = "1.0.219" }
-serde_derive = { version = "1.0.219" }
+reqwest = { version = "0.12", features = ["json"] }
+serde = { version = "1.0" }
+serde_derive = { version = "1.0" }
 serde_json = { version = "1.0" }
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "migrate", "chrono", "bigdecimal", "uuid"] }
 tokio = { version = "1.0", features = ["full"] }
@@ -25,5 +25,5 @@ tower = "0.5"
 tower-http = { version = "0.6", features = ["fs", "trace"] }
 tracing = { version = "0.1" }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-uuid = { version = "1.18.1", features = ["v4", "serde"] }
+uuid = { version = "1.0", features = ["v4", "serde"] }
 
