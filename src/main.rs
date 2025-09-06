@@ -10,7 +10,7 @@ use tracing::{error, info, warn};
 use soar::airports::read_airports_csv_file;
 use soar::airports_repo::AirportsRepository;
 use soar::aprs_client::{AprsClient, AprsClientConfigBuilder, MessageProcessor};
-use soar::geocoding::Geocoder;
+use soar::geocoding::geocode_components;
 use soar::device_repo::DeviceRepository;
 use soar::devices::DeviceFetcher;
 use soar::faa::aircraft_model_repo::AircraftModelRepository;
@@ -502,14 +502,13 @@ async fn handle_load_data(
     if geocode {
         info!("Starting geocoding of aircraft registrations...");
 
-        // Create aircraft registrations repository and geocoder
+        // Create aircraft registrations repository
         let aircraft_repo = AircraftRegistrationsRepository::new(pool.clone());
-        let geocoder = Geocoder::new();
 
         // Get aircraft that need geocoding
         match aircraft_repo.get_aircraft_for_geocoding().await {
-            Ok(aircraft_addresses) => {
-                let aircraft_count = aircraft_addresses.len();
+            Ok(aircraft_components) => {
+                let aircraft_count = aircraft_components.len();
                 
                 if aircraft_count == 0 {
                     info!("No aircraft registrations need geocoding");
@@ -519,10 +518,55 @@ async fn handle_load_data(
                     let mut successful_geocodes = 0;
                     let mut failed_geocodes = 0;
                     
-                    for (registration_number, address) in aircraft_addresses {
-                        info!("Geocoding {} - {}", registration_number, address);
+                    for (registration_number, street1, street2, city, state, zip_code, country) in aircraft_components {
+                        // Check if street1 is a PO Box and skip it for initial geocoding attempt
+                        let (use_street1, use_street2) = if let Some(street1_val) = &street1 {
+                            let street1_upper = street1_val.to_uppercase();
+                            if street1_upper.contains("PO BOX") || street1_upper.contains("P.O. BOX") || street1_upper.starts_with("BOX ") {
+                                // Skip PO Box addresses, use only city/state/zip/country
+                                (None, street2.clone()) 
+                            } else {
+                                (street1.clone(), street2.clone())
+                            }
+                        } else {
+                            (street1.clone(), street2.clone())
+                        };
+
+                        info!("Geocoding {} - {}, {}, {}, {}", 
+                            registration_number,
+                            use_street1.as_deref().unwrap_or(""),
+                            city.as_deref().unwrap_or(""),
+                            state.as_deref().unwrap_or(""),
+                            country.as_deref().unwrap_or("")
+                        );
                         
-                        match geocoder.geocode_address(&address).await {
+                        // First attempt: Try full address (excluding PO boxes)
+                        let result = geocode_components(
+                            use_street1.as_deref(),
+                            use_street2.as_deref(), 
+                            city.as_deref(),
+                            state.as_deref(),
+                            zip_code.as_deref(),
+                            country.as_deref()
+                        ).await;
+
+                        let final_result = match result {
+                            Ok(point) => Ok(point),
+                            Err(_) => {
+                                // Fallback: Try with just city, state, zip, country
+                                info!("Full address failed for {}, trying city/state/zip fallback", registration_number);
+                                geocode_components(
+                                    None, // No street
+                                    None, // No street2
+                                    city.as_deref(),
+                                    state.as_deref(),
+                                    zip_code.as_deref(),
+                                    country.as_deref()
+                                ).await
+                            }
+                        };
+
+                        match final_result {
                             Ok(point) => {
                                 // Update the database with the geocoded location
                                 match aircraft_repo.update_registered_location(&registration_number, point.latitude, point.longitude).await {
@@ -537,7 +581,12 @@ async fn handle_load_data(
                                 }
                             }
                             Err(e) => {
-                                warn!("Failed to geocode {} ({}): {}", registration_number, address, e);
+                                warn!("Failed to geocode {} (city: {}, state: {}): {}", 
+                                    registration_number, 
+                                    city.as_deref().unwrap_or("?"), 
+                                    state.as_deref().unwrap_or("?"), 
+                                    e
+                                );
                                 failed_geocodes += 1;
                             }
                         }

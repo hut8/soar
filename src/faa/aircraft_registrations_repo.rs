@@ -966,15 +966,14 @@ impl AircraftRegistrationsRepository {
     }
 
     /// Get aircraft registrations that belong to clubs and haven't been geocoded yet
-    /// Returns a vector of (registration_number, address_string) tuples
-    pub async fn get_aircraft_for_geocoding(&self) -> Result<Vec<(String, String)>> {
+    /// Returns a vector of (registration_number, street1, street2, city, state, zip_code, country_code) tuples
+    pub async fn get_aircraft_for_geocoding(&self) -> Result<Vec<(String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>)>> {
         let results = sqlx::query!(
             r#"
-            SELECT registration_number, street1, street2, city, state, zip_code
+            SELECT registration_number, street1, street2, city, state, zip_code, country_mail_code
             FROM aircraft_registrations 
             WHERE club_id IS NOT NULL 
             AND registered_location IS NULL
-            AND street1 IS NOT NULL 
             AND city IS NOT NULL 
             AND state IS NOT NULL
             "#
@@ -982,55 +981,38 @@ impl AircraftRegistrationsRepository {
         .fetch_all(&self.pool)
         .await?;
 
-        let mut aircraft_addresses = Vec::new();
+        let mut aircraft_components = Vec::new();
         for row in results {
-            // Build address string from components
-            let mut address_parts = Vec::new();
-            
-            if let Some(street1) = &row.street1 {
-                if !street1.trim().is_empty() {
-                    address_parts.push(street1.trim());
+            // Normalize zip code to 5 digits if available
+            let zip_code = row.zip_code.map(|zip| {
+                if zip.len() >= 5 { 
+                    zip[..5].to_string()
+                } else { 
+                    zip
                 }
-            }
-            
-            if let Some(street2) = &row.street2 {
-                if !street2.trim().is_empty() {
-                    address_parts.push(street2.trim());
-                }
-            }
-            
-            if let Some(city) = &row.city {
-                if !city.trim().is_empty() {
-                    address_parts.push(city.trim());
-                }
-            }
-            
-            if let Some(state) = &row.state {
-                if !state.trim().is_empty() {
-                    address_parts.push(state.trim());
-                }
-            }
-            
-            if let Some(zip_code) = &row.zip_code {
-                if !zip_code.trim().is_empty() {
-                    // Use only first 5 digits for geocoding
-                    let short_zip = if zip_code.len() >= 5 { 
-                        &zip_code[..5] 
-                    } else { 
-                        zip_code.trim() 
-                    };
-                    address_parts.push(short_zip);
-                }
-            }
+            });
 
-            // Only include if we have a meaningful address
-            if address_parts.len() >= 3 { // At least street, city, state
-                let address_string = address_parts.join(", ");
-                aircraft_addresses.push((row.registration_number, address_string));
-            }
+            // Map country code to full country name (defaulting to US)
+            let country = match row.country_mail_code.as_deref() {
+                Some("US") | None => Some("United States".to_string()),
+                Some("CA") => Some("Canada".to_string()),
+                Some("MX") => Some("Mexico".to_string()),
+                Some("GB") => Some("United Kingdom".to_string()),
+                Some(code) => Some(code.to_string()), // Use code as-is for other countries
+            };
+
+            aircraft_components.push((
+                row.registration_number,
+                row.street1,
+                row.street2,
+                row.city,
+                row.state,
+                zip_code,
+                country,
+            ));
         }
 
-        Ok(aircraft_addresses)
+        Ok(aircraft_components)
     }
 
     /// Update the registered_location for a specific aircraft registration
