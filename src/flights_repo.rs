@@ -88,8 +88,8 @@ impl FlightsRepository {
                 arrival_airport: row.arrival_airport,
                 tow_aircraft_id: row.tow_aircraft_id,
                 tow_release_height_msl: row.tow_release_height_msl,
-                created_at: row.created_at.unwrap_or_else(|| Utc::now()),
-                updated_at: row.updated_at.unwrap_or_else(|| Utc::now()),
+                created_at: row.created_at,
+                updated_at: row.updated_at,
             }))
         } else {
             Ok(None)
@@ -123,8 +123,8 @@ impl FlightsRepository {
                 arrival_airport: row.arrival_airport,
                 tow_aircraft_id: row.tow_aircraft_id,
                 tow_release_height_msl: row.tow_release_height_msl,
-                created_at: row.created_at.unwrap_or_else(|| Utc::now()),
-                updated_at: row.updated_at.unwrap_or_else(|| Utc::now()),
+                created_at: row.created_at,
+                updated_at: row.updated_at,
             });
         }
 
@@ -157,8 +157,8 @@ impl FlightsRepository {
                 arrival_airport: row.arrival_airport,
                 tow_aircraft_id: row.tow_aircraft_id,
                 tow_release_height_msl: row.tow_release_height_msl,
-                created_at: row.created_at.unwrap_or_else(|| Utc::now()),
-                updated_at: row.updated_at.unwrap_or_else(|| Utc::now()),
+                created_at: row.created_at,
+                updated_at: row.updated_at,
             });
         }
 
@@ -215,8 +215,8 @@ impl FlightsRepository {
                 arrival_airport: row.arrival_airport,
                 tow_aircraft_id: row.tow_aircraft_id,
                 tow_release_height_msl: row.tow_release_height_msl,
-                created_at: row.created_at.unwrap_or_else(|| Utc::now()),
-                updated_at: row.updated_at.unwrap_or_else(|| Utc::now()),
+                created_at: row.created_at,
+                updated_at: row.updated_at,
             });
         }
 
@@ -256,8 +256,8 @@ impl FlightsRepository {
                 arrival_airport: row.arrival_airport,
                 tow_aircraft_id: row.tow_aircraft_id,
                 tow_release_height_msl: row.tow_release_height_msl,
-                created_at: row.created_at.unwrap_or_else(|| Utc::now()),
-                updated_at: row.updated_at.unwrap_or_else(|| Utc::now()),
+                created_at: row.created_at,
+                updated_at: row.updated_at,
             });
         }
 
@@ -291,8 +291,8 @@ impl FlightsRepository {
                 arrival_airport: row.arrival_airport,
                 tow_aircraft_id: row.tow_aircraft_id,
                 tow_release_height_msl: row.tow_release_height_msl,
-                created_at: row.created_at.unwrap_or_else(|| Utc::now()),
-                updated_at: row.updated_at.unwrap_or_else(|| Utc::now()),
+                created_at: row.created_at,
+                updated_at: row.updated_at,
             });
         }
 
