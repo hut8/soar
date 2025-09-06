@@ -171,6 +171,127 @@ impl ClubsRepository {
         Ok(clubs)
     }
 
+    /// Fuzzy search soaring clubs only by name using trigram similarity
+    /// Returns soaring clubs (is_soaring=true) ordered by similarity score (best matches first)
+    pub async fn fuzzy_search_soaring(&self, query: &str, limit: Option<i64>) -> Result<Vec<Club>> {
+        let limit = limit.unwrap_or(20);
+        let query_upper = query.to_uppercase();
+        
+        let results = sqlx::query!(
+            r#"
+            SELECT id, name, is_soaring, home_base_airport_id,
+                   street1, street2, city, state, zip_code, region_code,
+                   county_mail_code, country_mail_code,
+                   ST_X(base_location::geometry) as longitude, ST_Y(base_location::geometry) as latitude,
+                   created_at, updated_at,
+                   SIMILARITY(UPPER(name), $1) as similarity_score
+            FROM clubs
+            WHERE SIMILARITY(UPPER(name), $1) > 0.05
+            AND is_soaring = true
+            ORDER BY similarity_score DESC, name
+            LIMIT $2
+            "#,
+            query_upper,
+            limit
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut clubs = Vec::new();
+        for row in results {
+            let base_location = if row.longitude.is_some() && row.latitude.is_some() {
+                Some(crate::clubs::Point::new(
+                    row.latitude.unwrap(),
+                    row.longitude.unwrap(),
+                ))
+            } else {
+                None
+            };
+
+            clubs.push(Club {
+                id: row.id,
+                name: row.name,
+                is_soaring: row.is_soaring,
+                home_base_airport_id: row.home_base_airport_id,
+                street1: row.street1,
+                street2: row.street2,
+                city: row.city,
+                state: row.state,
+                zip_code: row.zip_code,
+                region_code: row.region_code,
+                county_mail_code: row.county_mail_code,
+                country_mail_code: row.country_mail_code,
+                base_location,
+                created_at: row.created_at.unwrap_or_else(Utc::now),
+                updated_at: row.updated_at.unwrap_or_else(Utc::now),
+            });
+        }
+
+        Ok(clubs)
+    }
+
+    /// Search soaring clubs within a radius of a given point using PostGIS
+    /// Returns soaring clubs (is_soaring=true) within the specified radius (in kilometers)
+    pub async fn search_nearby_soaring(&self, latitude: f64, longitude: f64, radius_km: f64, limit: Option<i64>) -> Result<Vec<Club>> {
+        let limit = limit.unwrap_or(20);
+        let radius_m = radius_km * 1000.0; // Convert km to meters for PostGIS
+
+        let results = sqlx::query!(
+            r#"
+            SELECT id, name, is_soaring, home_base_airport_id,
+                   street1, street2, city, state, zip_code, region_code,
+                   county_mail_code, country_mail_code,
+                   ST_X(base_location::geometry) as longitude, ST_Y(base_location::geometry) as latitude,
+                   created_at, updated_at,
+                   ST_Distance(ST_SetSRID(base_location::geometry, 4326)::geography, ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography) as distance_meters
+            FROM clubs
+            WHERE base_location IS NOT NULL
+            AND is_soaring = true
+            AND ST_DWithin(ST_SetSRID(base_location::geometry, 4326)::geography, ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography, $3)
+            ORDER BY distance_meters
+            LIMIT $4
+            "#,
+            latitude,
+            longitude,
+            radius_m,
+            limit
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut clubs = Vec::new();
+        for row in results {
+            let base_location = if row.longitude.is_some() && row.latitude.is_some() {
+                Some(crate::clubs::Point::new(
+                    row.latitude.unwrap(),
+                    row.longitude.unwrap(),
+                ))
+            } else {
+                None
+            };
+
+            clubs.push(Club {
+                id: row.id,
+                name: row.name,
+                is_soaring: row.is_soaring,
+                home_base_airport_id: row.home_base_airport_id,
+                street1: row.street1,
+                street2: row.street2,
+                city: row.city,
+                state: row.state,
+                zip_code: row.zip_code,
+                region_code: row.region_code,
+                county_mail_code: row.county_mail_code,
+                country_mail_code: row.country_mail_code,
+                base_location,
+                created_at: row.created_at.unwrap_or_else(Utc::now),
+                updated_at: row.updated_at.unwrap_or_else(Utc::now),
+            });
+        }
+
+        Ok(clubs)
+    }
+
     /// Insert a new club
     pub async fn insert(&self, club: &Club) -> Result<()> {
         sqlx::query!(

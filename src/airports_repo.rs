@@ -533,6 +533,60 @@ impl AirportsRepository {
 
         Ok(airports)
     }
+
+    /// Search airports within a radius of a given point using PostGIS
+    /// Returns airports within the specified radius (in kilometers)
+    pub async fn search_nearby(&self, latitude: f64, longitude: f64, radius_km: f64, limit: Option<i64>) -> Result<Vec<Airport>> {
+        let limit = limit.unwrap_or(20);
+        let radius_m = radius_km * 1000.0; // Convert km to meters for PostGIS
+
+        let results = sqlx::query!(
+            r#"
+            SELECT id, ident, type, name, latitude_deg, longitude_deg, elevation_ft,
+                   continent, iso_country, iso_region, municipality, scheduled_service,
+                   icao_code, iata_code, gps_code, local_code, home_link, wikipedia_link, keywords,
+                   ST_Distance(location, ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography) as distance_meters
+            FROM airports
+            WHERE location IS NOT NULL
+            AND ST_DWithin(location, ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography, $3)
+            ORDER BY distance_meters
+            LIMIT $4
+            "#,
+            latitude,
+            longitude,
+            radius_m,
+            limit
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut airports = Vec::new();
+        for row in results {
+            airports.push(Airport {
+                id: row.id,
+                ident: row.ident,
+                airport_type: row.r#type,
+                name: row.name,
+                latitude_deg: bigdecimal_to_f64(row.latitude_deg),
+                longitude_deg: bigdecimal_to_f64(row.longitude_deg),
+                elevation_ft: row.elevation_ft,
+                continent: row.continent,
+                iso_country: row.iso_country,
+                iso_region: row.iso_region,
+                municipality: row.municipality,
+                scheduled_service: row.scheduled_service,
+                icao_code: row.icao_code,
+                iata_code: row.iata_code,
+                gps_code: row.gps_code,
+                local_code: row.local_code,
+                home_link: row.home_link,
+                wikipedia_link: row.wikipedia_link,
+                keywords: row.keywords,
+            });
+        }
+
+        Ok(airports)
+    }
 }
 
 #[cfg(test)]

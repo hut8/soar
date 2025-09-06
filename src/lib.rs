@@ -20,6 +20,7 @@ pub mod receiver_repo;
 pub mod receivers;
 pub mod runways;
 pub mod runways_repo;
+pub mod web;
 
 pub use aprs_client::{
     AprsClient, AprsClientConfig, AprsClientConfigBuilder, FixProcessor, MessageProcessor,
