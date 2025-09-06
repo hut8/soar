@@ -1,12 +1,41 @@
 <script lang="ts">
-	import '../app.css';
+	import '../app.postcss';
+	import { AppShell, AppBar } from '@skeletonlabs/skeleton';
 	import favicon from '$lib/assets/favicon.svg';
 
 	let { children } = $props();
 </script>
 
 <svelte:head>
+	<title>Glider Flights - Soaring Club Directory</title>
+	<meta name="description" content="Find soaring clubs and airports near you" />
 	<link rel="icon" href={favicon} />
 </svelte:head>
 
-{@render children?.()}
+<AppShell>
+	<svelte:fragment slot="header">
+		<AppBar>
+			<svelte:fragment slot="lead">
+				<a href="/" class="flex items-center space-x-2">
+					<div class="text-xl font-bold text-primary-500">✈️ Glider Flights</div>
+				</a>
+			</svelte:fragment>
+			<svelte:fragment slot="trail">
+				<nav class="hidden md:flex space-x-4">
+					<a href="/clubs" class="btn btn-sm variant-ghost-surface">Clubs</a>
+					<a href="/airports" class="btn btn-sm variant-ghost-surface">Airports</a>
+				</nav>
+			</svelte:fragment>
+		</AppBar>
+	</svelte:fragment>
+
+	<main class="container mx-auto p-4 space-y-4">
+		{@render children?.()}
+	</main>
+
+	<svelte:fragment slot="pageFooter">
+		<footer class="bg-surface-100-800-token p-4 text-center text-sm">
+			<p>&copy; 2024 Glider Flights. Connecting the soaring community.</p>
+		</footer>
+	</svelte:fragment>
+</AppShell>
