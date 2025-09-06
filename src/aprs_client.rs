@@ -1,9 +1,7 @@
 use crate::Fix;
 use anyhow::Result;
 use ogn_parser::AprsPacket;
-use regex::Regex;
 use std::sync::Arc;
-use std::sync::OnceLock;
 use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
@@ -44,40 +42,6 @@ pub trait FixProcessor: Send + Sync {
 
 /// Type alias for boxed message processor trait objects
 pub type BoxedMessageProcessor = Box<dyn MessageProcessor>;
-
-/// Sanitize APRS message to fix invalid SSID values
-/// APRS SSIDs must be in range 0-15, but some stations use invalid values like -1347
-fn sanitize_aprs_message(message: &str) -> String {
-    static INVALID_SSID_REGEX: OnceLock<Regex> = OnceLock::new();
-    let regex = INVALID_SSID_REGEX.get_or_init(|| {
-        // Match callsigns with SSIDs and check them programmatically
-        // Pattern: CALLSIGN-DIGITS
-        Regex::new(r"([A-Z0-9]+)-(\d+)").unwrap()
-    });
-
-    let sanitized = regex.replace_all(message, |caps: &regex::Captures| {
-        let callsign = &caps[1];
-        let ssid_str = &caps[2];
-
-        // Parse the SSID and check if it's valid (0-15)
-        if let Ok(ssid) = ssid_str.parse::<u32>()
-            && ssid > 15
-        {
-            // Convert to valid range using modulo
-            let sanitized_ssid = ssid % 16;
-            debug!(
-                "Sanitized invalid SSID: {}-{} -> {}-{}",
-                callsign, ssid, callsign, sanitized_ssid
-            );
-            return format!("{}-{}", callsign, sanitized_ssid);
-        }
-
-        // SSID is valid or couldn't be parsed, return as-is
-        format!("{}-{}", callsign, ssid_str)
-    });
-
-    sanitized.to_string()
-}
 
 /// Configuration for the APRS client
 #[derive(Debug, Clone)]
@@ -307,11 +271,8 @@ impl AprsClient {
         // Always call process_raw_message first (for logging/archiving)
         message_processor.process_raw_message(message);
 
-        // Sanitize the message to fix invalid SSIDs
-        let sanitized_message = sanitize_aprs_message(message);
-
         // Try to parse the sanitized message using ogn-parser
-        match ogn_parser::parse(&sanitized_message) {
+        match ogn_parser::parse(&message) {
             Ok(parsed) => {
                 // Call the message processor with the parsed message
                 message_processor.process_message(parsed.clone());
@@ -334,7 +295,7 @@ impl AprsClient {
             Err(e) => {
                 warn!(
                     "Failed to parse APRS message '{}': {}",
-                    sanitized_message, e
+                    message, e
                 );
             }
         }
@@ -509,30 +470,5 @@ mod tests {
             config.archive_base_dir,
             Some("/tmp/aprs_archive".to_string())
         );
-    }
-
-    #[test]
-    fn test_ssid_sanitization() {
-        // Test the original failing message
-        let invalid_message = "ICAA8871E>OGADSB,qAS,SRP-1347:/025403h3315.58N\\11149.60W^232/075 !W19! id21A8871E +896fpm FL016.94 A1:ASI66";
-        let sanitized = sanitize_aprs_message(invalid_message);
-        assert!(sanitized.contains("SRP-3")); // 1347 % 16 = 3
-
-        // Test multiple invalid SSIDs
-        let multi_invalid = "TEST-999>APRS,qAS,GATE-1234:test message";
-        let sanitized = sanitize_aprs_message(multi_invalid);
-        assert!(sanitized.contains("TEST-7")); // 999 % 16 = 7
-        assert!(sanitized.contains("GATE-2")); // 1234 % 16 = 2
-
-        // Test valid SSIDs should remain unchanged
-        let valid_message = "N0CALL-15>APRS,qAS,GATE-1:test message";
-        let sanitized = sanitize_aprs_message(valid_message);
-        assert_eq!(sanitized, valid_message);
-
-        // Test edge cases
-        let edge_cases = "CALL-16>APRS,qAS,TEST-0:message"; // 16 should become 0
-        let sanitized = sanitize_aprs_message(edge_cases);
-        assert!(sanitized.contains("CALL-0"));
-        assert!(sanitized.contains("TEST-0"));
     }
 }
