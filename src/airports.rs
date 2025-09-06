@@ -1,4 +1,5 @@
 use anyhow::{Context, Result, anyhow};
+use serde::Serialize;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
@@ -40,7 +41,7 @@ fn yes_no_to_bool(s: &str) -> bool {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Airport {
     pub id: i32,                        // Internal OurAirports ID
     pub ident: String,                  // Airport identifier (ICAO or local code)

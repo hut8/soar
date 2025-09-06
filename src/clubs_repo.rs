@@ -1,0 +1,245 @@
+use anyhow::Result;
+use chrono::Utc;
+use sqlx::postgres::types::PgPoint;
+use sqlx::PgPool;
+use sqlx::types::Uuid;
+
+use crate::clubs::Club;
+
+pub struct ClubsRepository {
+    pool: PgPool,
+}
+
+impl ClubsRepository {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+
+    /// Get club by ID
+    pub async fn get_by_id(&self, id: Uuid) -> Result<Option<Club>> {
+        let result = sqlx::query!(
+            r#"
+            SELECT id, name, is_soaring, home_base_airport_id,
+                   street1, street2, city, state, zip_code, region_code,
+                   county_mail_code, country_mail_code,
+                   ST_X(base_location::geometry) as longitude, ST_Y(base_location::geometry) as latitude,
+                   created_at, updated_at
+            FROM clubs
+            WHERE id = $1
+            "#,
+            id
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some(row) = result {
+            let base_location = if row.longitude.is_some() && row.latitude.is_some() {
+                Some(crate::clubs::Point::new(
+                    row.latitude.unwrap(),
+                    row.longitude.unwrap(),
+                ))
+            } else {
+                None
+            };
+
+            Ok(Some(Club {
+                id: row.id,
+                name: row.name,
+                is_soaring: row.is_soaring,
+                home_base_airport_id: row.home_base_airport_id,
+                street1: row.street1,
+                street2: row.street2,
+                city: row.city,
+                state: row.state,
+                zip_code: row.zip_code,
+                region_code: row.region_code,
+                county_mail_code: row.county_mail_code,
+                country_mail_code: row.country_mail_code,
+                base_location,
+                created_at: row.created_at.unwrap_or_else(Utc::now),
+                updated_at: row.updated_at.unwrap_or_else(Utc::now),
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Get all clubs
+    pub async fn get_all(&self) -> Result<Vec<Club>> {
+        let results = sqlx::query!(
+            r#"
+            SELECT id, name, is_soaring, home_base_airport_id,
+                   street1, street2, city, state, zip_code, region_code,
+                   county_mail_code, country_mail_code,
+                   ST_X(base_location::geometry) as longitude, ST_Y(base_location::geometry) as latitude,
+                   created_at, updated_at
+            FROM clubs
+            ORDER BY name
+            "#
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut clubs = Vec::new();
+        for row in results {
+            let base_location = if row.longitude.is_some() && row.latitude.is_some() {
+                Some(crate::clubs::Point::new(
+                    row.latitude.unwrap(),
+                    row.longitude.unwrap(),
+                ))
+            } else {
+                None
+            };
+
+            clubs.push(Club {
+                id: row.id,
+                name: row.name,
+                is_soaring: row.is_soaring,
+                home_base_airport_id: row.home_base_airport_id,
+                street1: row.street1,
+                street2: row.street2,
+                city: row.city,
+                state: row.state,
+                zip_code: row.zip_code,
+                region_code: row.region_code,
+                county_mail_code: row.county_mail_code,
+                country_mail_code: row.country_mail_code,
+                base_location,
+                created_at: row.created_at.unwrap_or_else(Utc::now),
+                updated_at: row.updated_at.unwrap_or_else(Utc::now),
+            });
+        }
+
+        Ok(clubs)
+    }
+
+    /// Fuzzy search clubs by name using trigram similarity
+    /// Returns clubs ordered by similarity score (best matches first)
+    pub async fn fuzzy_search(&self, query: &str, limit: Option<i64>) -> Result<Vec<Club>> {
+        let limit = limit.unwrap_or(20);
+        let query_upper = query.to_uppercase();
+        
+        let results = sqlx::query!(
+            r#"
+            SELECT id, name, is_soaring, home_base_airport_id,
+                   street1, street2, city, state, zip_code, region_code,
+                   county_mail_code, country_mail_code,
+                   ST_X(base_location::geometry) as longitude, ST_Y(base_location::geometry) as latitude,
+                   created_at, updated_at,
+                   SIMILARITY(UPPER(name), $1) as similarity_score
+            FROM clubs
+            WHERE SIMILARITY(UPPER(name), $1) > 0.05
+            ORDER BY similarity_score DESC, name
+            LIMIT $2
+            "#,
+            query_upper,
+            limit
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut clubs = Vec::new();
+        for row in results {
+            let base_location = if row.longitude.is_some() && row.latitude.is_some() {
+                Some(crate::clubs::Point::new(
+                    row.latitude.unwrap(),
+                    row.longitude.unwrap(),
+                ))
+            } else {
+                None
+            };
+
+            clubs.push(Club {
+                id: row.id,
+                name: row.name,
+                is_soaring: row.is_soaring,
+                home_base_airport_id: row.home_base_airport_id,
+                street1: row.street1,
+                street2: row.street2,
+                city: row.city,
+                state: row.state,
+                zip_code: row.zip_code,
+                region_code: row.region_code,
+                county_mail_code: row.county_mail_code,
+                country_mail_code: row.country_mail_code,
+                base_location,
+                created_at: row.created_at.unwrap_or_else(Utc::now),
+                updated_at: row.updated_at.unwrap_or_else(Utc::now),
+            });
+        }
+
+        Ok(clubs)
+    }
+
+    /// Insert a new club
+    pub async fn insert(&self, club: &Club) -> Result<()> {
+        sqlx::query!(
+            r#"
+            INSERT INTO clubs (
+                id, name, is_soaring, home_base_airport_id,
+                street1, street2, city, state, zip_code, region_code,
+                county_mail_code, country_mail_code, base_location,
+                created_at, updated_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+            "#,
+            club.id,
+            club.name,
+            club.is_soaring,
+            club.home_base_airport_id,
+            club.street1,
+            club.street2,
+            club.city,
+            club.state,
+            club.zip_code,
+            club.region_code,
+            club.county_mail_code,
+            club.country_mail_code,
+            club.base_location.as_ref().map(|p| PgPoint { x: p.longitude, y: p.latitude }),
+            club.created_at,
+            club.updated_at
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+
+    // Note: These tests would require a test database setup
+    // For now, they're just structural examples
+
+    fn create_test_club() -> Club {
+        Club {
+            id: Uuid::new_v4(),
+            name: "Adirondack Soaring Club".to_string(),
+            is_soaring: Some(true),
+            home_base_airport_id: None,
+            street1: Some("123 Mountain Rd".to_string()),
+            street2: None,
+            city: Some("Lake Placid".to_string()),
+            state: Some("NY".to_string()),
+            zip_code: Some("12946".to_string()),
+            region_code: None,
+            county_mail_code: None,
+            country_mail_code: None,
+            base_location: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    #[test]
+    fn test_club_creation() {
+        let club = create_test_club();
+        assert_eq!(club.name, "Adirondack Soaring Club");
+        assert_eq!(club.is_soaring, Some(true));
+        assert_eq!(club.city, Some("Lake Placid".to_string()));
+        assert_eq!(club.state, Some("NY".to_string()));
+    }
+}

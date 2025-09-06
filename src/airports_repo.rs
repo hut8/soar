@@ -472,6 +472,67 @@ impl AirportsRepository {
 
         Ok(airports)
     }
+
+    /// Fuzzy search airports by name, ICAO, IATA, or ident using trigram similarity
+    /// Returns airports ordered by similarity score (best matches first)
+    pub async fn fuzzy_search(&self, query: &str, limit: Option<i64>) -> Result<Vec<Airport>> {
+        let limit = limit.unwrap_or(20);
+        let query_upper = query.to_uppercase();
+        
+        let results = sqlx::query!(
+            r#"
+            SELECT id, ident, type, name, latitude_deg, longitude_deg, elevation_ft,
+                   continent, iso_country, iso_region, municipality, scheduled_service,
+                   icao_code, iata_code, gps_code, local_code, home_link, wikipedia_link, keywords,
+                   GREATEST(
+                       SIMILARITY(UPPER(name), $1),
+                       COALESCE(SIMILARITY(UPPER(icao_code), $1), 0),
+                       COALESCE(SIMILARITY(UPPER(iata_code), $1), 0),
+                       SIMILARITY(UPPER(ident), $1)
+                   ) as similarity_score
+            FROM airports
+            WHERE (
+                SIMILARITY(UPPER(name), $1) > 0.05 OR
+                COALESCE(SIMILARITY(UPPER(icao_code), $1), 0) > 0.05 OR  
+                COALESCE(SIMILARITY(UPPER(iata_code), $1), 0) > 0.05 OR
+                SIMILARITY(UPPER(ident), $1) > 0.05
+            )
+            ORDER BY similarity_score DESC, name
+            LIMIT $2
+            "#,
+            query_upper,
+            limit
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut airports = Vec::new();
+        for row in results {
+            airports.push(Airport {
+                id: row.id,
+                ident: row.ident,
+                airport_type: row.r#type,
+                name: row.name,
+                latitude_deg: bigdecimal_to_f64(row.latitude_deg),
+                longitude_deg: bigdecimal_to_f64(row.longitude_deg),
+                elevation_ft: row.elevation_ft,
+                continent: row.continent,
+                iso_country: row.iso_country,
+                iso_region: row.iso_region,
+                municipality: row.municipality,
+                scheduled_service: row.scheduled_service,
+                icao_code: row.icao_code,
+                iata_code: row.iata_code,
+                gps_code: row.gps_code,
+                local_code: row.local_code,
+                home_link: row.home_link,
+                wikipedia_link: row.wikipedia_link,
+                keywords: row.keywords,
+            });
+        }
+
+        Ok(airports)
+    }
 }
 
 #[cfg(test)]

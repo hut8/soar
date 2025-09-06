@@ -7,7 +7,7 @@ pub struct Club {
     pub id: Uuid,
     pub name: String,
     pub is_soaring: Option<bool>,
-    pub home_base_airport_id: Option<Uuid>,
+    pub home_base_airport_id: Option<i32>,
 
     // Address fields (matching aircraft registration table)
     pub street1: Option<String>,

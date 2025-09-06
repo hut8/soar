@@ -7,6 +7,7 @@ pub mod airports;
 pub mod airports_repo;
 pub mod aprs_client;
 pub mod clubs;
+pub mod clubs_repo;
 pub mod device_repo;
 pub mod devices;
 pub mod faa;

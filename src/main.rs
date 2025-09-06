@@ -1,13 +1,15 @@
 use anyhow::Result;
 use axum::{
     Router,
-    extract::State,
+    extract::{Query, State},
     http::{HeaderMap, StatusCode, Uri},
-    response::IntoResponse,
+    response::{IntoResponse, Json},
+    routing::get,
 };
 use clap::{Parser, Subcommand};
 use include_dir::{Dir, include_dir};
 use mime_guess::from_path;
+use serde::Deserialize;
 use sqlx::postgres::PgPool;
 use std::env;
 use std::fs;
@@ -19,6 +21,7 @@ use tracing::{error, info};
 use soar::airports::read_airports_csv_file;
 use soar::airports_repo::AirportsRepository;
 use soar::aprs_client::{AprsClient, AprsClientConfigBuilder, MessageProcessor};
+use soar::clubs_repo::ClubsRepository;
 use soar::device_repo::DeviceRepository;
 use soar::devices::DeviceFetcher;
 use soar::faa::aircraft_model_repo::AircraftModelRepository;
@@ -39,8 +42,13 @@ static ASSETS: Dir<'_> = include_dir!("web/build");
 // App state for sharing database pool
 #[derive(Clone)]
 struct AppState {
-    #[allow(dead_code)]
     pool: PgPool,
+}
+
+#[derive(Deserialize)]
+struct SearchQuery {
+    q: String,
+    limit: Option<i64>,
 }
 
 #[derive(Parser)]
@@ -237,6 +245,39 @@ async fn handle_static_file(uri: Uri, _state: State<AppState>) -> impl IntoRespo
     (StatusCode::NOT_FOUND, "Not Found").into_response()
 }
 
+async fn search_airports(
+    State(state): State<AppState>,
+    Query(params): Query<SearchQuery>,
+) -> impl IntoResponse {
+    let airports_repo = AirportsRepository::new(state.pool);
+    match airports_repo
+        .fuzzy_search(&params.q, params.limit)
+        .await
+    {
+        Ok(airports) => Json(airports).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Error searching airports: {}", e),
+        )
+            .into_response(),
+    }
+}
+
+async fn search_clubs(
+    State(state): State<AppState>,
+    Query(params): Query<SearchQuery>,
+) -> impl IntoResponse {
+    let clubs_repo = ClubsRepository::new(state.pool);
+    match clubs_repo.fuzzy_search(&params.q, params.limit).await {
+        Ok(clubs) => Json(clubs).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Error searching clubs: {}", e),
+        )
+            .into_response(),
+    }
+}
+
 async fn handle_web(interface: String, port: u16) -> Result<()> {
     info!("Starting web server on {}:{}", interface, port);
 
@@ -246,6 +287,8 @@ async fn handle_web(interface: String, port: u16) -> Result<()> {
 
     // Build the Axum application
     let app = Router::new()
+        .route("/api/search/airports", get(search_airports))
+        .route("/api/search/clubs", get(search_clubs))
         .fallback(handle_static_file)
         .with_state(app_state)
         .layer(TraceLayer::new_for_http());
