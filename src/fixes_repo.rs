@@ -6,6 +6,7 @@ use tracing::{debug, warn};
 use crate::fixes::Fix;
 use crate::ogn_aprs_aircraft::{AddressType, AdsbEmitterCategory, AircraftType};
 
+#[derive(Clone)]
 pub struct FixesRepository {
     pool: PgPool,
 }
@@ -31,8 +32,8 @@ impl FixesRepository {
             VALUES (
                 $1, $2, $3, $4, $5, $6,
                 $7, $8, $9,
-                $10, $11, $12::address_type, $13::aircraft_type,
-                $14, $15::adsb_emitter_category, $16, $17, $18,
+                $10, $11, $12::TEXT::address_type, $13::TEXT::aircraft_type,
+                $14, $15::TEXT::adsb_emitter_category, $16, $17, $18,
                 $19, $20, $21, $22,
                 $23, $24, $25,
                 $26, $27, $28
@@ -142,8 +143,8 @@ impl FixesRepository {
                 VALUES (
                     $1, $2, $3, $4, $5, $6,
                     $7, $8, $9,
-                    $10, $11, $12::address_type, $13::aircraft_type,
-                    $14, $15::adsb_emitter_category, $16, $17, $18,
+                    $10, $11, $12::TEXT::address_type, $13::TEXT::aircraft_type,
+                    $14, $15::TEXT::adsb_emitter_category, $16, $17, $18,
                     $19, $20, $21, $22,
                     $23, $24, $25,
                     $26, $27, $28
@@ -349,8 +350,8 @@ impl FixesRepository {
                 bit_errors_corrected: row.bit_errors_corrected.map(|b| b as u32),
                 freq_offset_khz: row.freq_offset_khz,
                 club_id: row.club_id,
-                created_at: row.created_at,
-                updated_at: row.updated_at,
+                created_at: row.created_at.unwrap_or_else(|| Utc::now()),
+                updated_at: row.updated_at.unwrap_or_else(|| Utc::now()),
             });
         }
 
@@ -472,8 +473,8 @@ impl FixesRepository {
                 bit_errors_corrected: row.bit_errors_corrected.map(|b| b as u32),
                 freq_offset_khz: row.freq_offset_khz,
                 club_id: row.club_id,
-                created_at: row.created_at,
-                updated_at: row.updated_at,
+                created_at: row.created_at.unwrap_or_else(|| Utc::now()),
+                updated_at: row.updated_at.unwrap_or_else(|| Utc::now()),
             });
         }
 

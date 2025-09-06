@@ -38,7 +38,8 @@ pub trait FixProcessor: Send + Sync {
     ///
     /// # Arguments
     /// * `fix` - The position fix extracted from an APRS packet
-    fn process_fix(&self, fix: Fix);
+    /// * `raw_message` - The raw APRS message that generated this fix
+    fn process_fix(&self, fix: Fix, raw_message: &str);
 }
 
 /// Type alias for boxed message processor trait objects
@@ -319,7 +320,7 @@ impl AprsClient {
                 if let Some(fix_proc) = fix_processor {
                     match Fix::from_aprs_packet(parsed) {
                         Ok(Some(fix)) => {
-                            fix_proc.process_fix(fix);
+                            fix_proc.process_fix(fix, message);
                         }
                         Ok(None) => {
                             trace!("No position fix in APRS packet");

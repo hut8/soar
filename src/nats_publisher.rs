@@ -75,7 +75,7 @@ impl NatsFixPublisher {
 }
 
 impl FixProcessor for NatsFixPublisher {
-    fn process_fix(&self, fix: Fix) {
+    fn process_fix(&self, fix: Fix, _raw_message: &str) {
         // Clone the client and device repo for the async task
         let nats_client = Arc::clone(&self.nats_client);
         let device_repo = self.device_repo.clone();

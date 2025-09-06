@@ -9,7 +9,7 @@ use tracing::{error, info, warn};
 
 use soar::airports::read_airports_csv_file;
 use soar::airports_repo::AirportsRepository;
-use soar::aprs_client::{AprsClient, AprsClientConfigBuilder, MessageProcessor};
+use soar::aprs_client::{AprsClient, AprsClientConfigBuilder, MessageProcessor, FixProcessor};
 use soar::geocoding::geocode_components;
 use soar::device_repo::DeviceRepository;
 use soar::devices::DeviceFetcher;
@@ -21,6 +21,7 @@ use soar::receiver_repo::ReceiverRepository;
 use soar::receivers::read_receivers_file;
 use soar::runways::read_runways_csv_file;
 use soar::runways_repo::RunwaysRepository;
+use soar::database_fix_processor::DatabaseFixProcessor;
 
 // Embed migrations into the binary
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!();
@@ -624,7 +625,7 @@ async fn handle_run(
     info!("Starting APRS client with server: {}:{}", server, port);
 
     // Set up database connection
-    let _pool = setup_database().await?;
+    let pool = setup_database().await?;
 
     // Use port 10152 (full feed) if no filter is specified, otherwise use specified port
     let actual_port = if filter.is_none() {
@@ -652,9 +653,14 @@ async fn handle_run(
     let archive_processor: Arc<dyn MessageProcessor> = Arc::new(
         soar::message_processors::ArchiveMessageProcessor::new(archive_dir),
     );
+    
+    // Create database fix processor to save all valid fixes to the database
+    let db_fix_processor: Arc<dyn FixProcessor> = Arc::new(
+        DatabaseFixProcessor::new(pool.clone())
+    );
 
-    // Create and start APRS client
-    let mut client = AprsClient::new(config, archive_processor);
+    // Create and start APRS client with both message and fix processors
+    let mut client = AprsClient::new_with_fix_processor(config, archive_processor, db_fix_processor);
 
     info!("Starting APRS client...");
     client.start().await?;
