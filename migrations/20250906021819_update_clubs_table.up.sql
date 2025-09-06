@@ -7,7 +7,7 @@
 ALTER TABLE clubs ADD COLUMN is_soaring BOOLEAN DEFAULT FALSE;
 
 -- Add home_base_airport_id as foreign key to airports table
-ALTER TABLE clubs ADD COLUMN home_base_airport_id UUID REFERENCES airports(id) ON DELETE SET NULL;
+ALTER TABLE clubs ADD COLUMN home_base_airport_id INT REFERENCES airports(id) ON DELETE SET NULL;
 
 -- Add base_location as WGS84 point
 ALTER TABLE clubs ADD COLUMN base_location POINT;
@@ -23,11 +23,11 @@ ALTER TABLE clubs ADD COLUMN county_mail_code VARCHAR(10);
 ALTER TABLE clubs ADD COLUMN country_mail_code VARCHAR(10);
 
 -- Set is_soaring to true for clubs containing soaring-related keywords
-UPDATE clubs 
-SET is_soaring = TRUE 
-WHERE UPPER(name) LIKE '%SOAR%' 
-   OR UPPER(name) LIKE '%GLIDING%' 
-   OR UPPER(name) LIKE '%SAILPLANE%' 
+UPDATE clubs
+SET is_soaring = TRUE
+WHERE UPPER(name) LIKE '%SOAR%'
+   OR UPPER(name) LIKE '%GLIDING%'
+   OR UPPER(name) LIKE '%SAILPLANE%'
    OR UPPER(name) LIKE '%GLIDER%';
 
 -- Create index on is_soaring for faster lookups

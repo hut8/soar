@@ -4,7 +4,7 @@
 -- =========================================================
 
 -- Add home_base_airport_id as foreign key to airports table
-ALTER TABLE aircraft_registrations ADD COLUMN home_base_airport_id UUID REFERENCES airports(id) ON DELETE SET NULL;
+ALTER TABLE aircraft_registrations ADD COLUMN home_base_airport_id INT REFERENCES airports(id) ON DELETE SET NULL;
 
 -- Add registered_location as WGS84 point (where the aircraft is registered)
 ALTER TABLE aircraft_registrations ADD COLUMN registered_location POINT;
