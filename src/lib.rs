@@ -13,6 +13,8 @@ pub mod devices;
 pub mod faa;
 pub mod fixes;
 pub mod fixes_repo;
+pub mod flights;
+pub mod flights_repo;
 pub mod geocoding;
 pub mod message_processors;
 pub mod nats_publisher;
