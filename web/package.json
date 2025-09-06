@@ -40,7 +40,7 @@
 		"vite-plugin-devtools-json": "^1.0.0"
 	},
 	"dependencies": {
-		"@skeletonlabs/skeleton": "^3.2.0",
+		"@skeletonlabs/skeleton": "^2.11.0",
 		"@skeletonlabs/tw-plugin": "^0.4.1",
 		"autoprefixer": "^10.4.21"
 	}

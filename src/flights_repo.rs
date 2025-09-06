@@ -1,7 +1,6 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use sqlx::PgPool;
-use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::flights::Flight;
@@ -89,8 +88,8 @@ impl FlightsRepository {
                 arrival_airport: row.arrival_airport,
                 tow_aircraft_id: row.tow_aircraft_id,
                 tow_release_height_msl: row.tow_release_height_msl,
-                created_at: row.created_at,
-                updated_at: row.updated_at,
+                created_at: row.created_at.unwrap_or_else(|| Utc::now()),
+                updated_at: row.updated_at.unwrap_or_else(|| Utc::now()),
             }))
         } else {
             Ok(None)
@@ -124,8 +123,8 @@ impl FlightsRepository {
                 arrival_airport: row.arrival_airport,
                 tow_aircraft_id: row.tow_aircraft_id,
                 tow_release_height_msl: row.tow_release_height_msl,
-                created_at: row.created_at,
-                updated_at: row.updated_at,
+                created_at: row.created_at.unwrap_or_else(|| Utc::now()),
+                updated_at: row.updated_at.unwrap_or_else(|| Utc::now()),
             });
         }
 
@@ -158,8 +157,8 @@ impl FlightsRepository {
                 arrival_airport: row.arrival_airport,
                 tow_aircraft_id: row.tow_aircraft_id,
                 tow_release_height_msl: row.tow_release_height_msl,
-                created_at: row.created_at,
-                updated_at: row.updated_at,
+                created_at: row.created_at.unwrap_or_else(|| Utc::now()),
+                updated_at: row.updated_at.unwrap_or_else(|| Utc::now()),
             });
         }
 
@@ -173,41 +172,37 @@ impl FlightsRepository {
         end_time: DateTime<Utc>,
         aircraft_id: Option<&str>,
     ) -> Result<Vec<Flight>> {
-        let results = if let Some(aircraft_id) = aircraft_id {
-            sqlx::query!(
-                r#"
-                SELECT id, aircraft_id, takeoff_time, landing_time, departure_airport,
-                       arrival_airport, tow_aircraft_id, tow_release_height_msl,
-                       created_at, updated_at
-                FROM flights
-                WHERE aircraft_id = $1 
-                AND takeoff_time >= $2 
-                AND takeoff_time <= $3
-                ORDER BY takeoff_time DESC
-                "#,
-                aircraft_id,
-                start_time,
-                end_time
-            )
-            .fetch_all(&self.pool)
-            .await?
+        if let Some(aircraft_id) = aircraft_id {
+            self.get_flights_in_time_range_for_aircraft(start_time, end_time, aircraft_id).await
         } else {
-            sqlx::query!(
-                r#"
-                SELECT id, aircraft_id, takeoff_time, landing_time, departure_airport,
-                       arrival_airport, tow_aircraft_id, tow_release_height_msl,
-                       created_at, updated_at
-                FROM flights
-                WHERE takeoff_time >= $1 
-                AND takeoff_time <= $2
-                ORDER BY takeoff_time DESC
-                "#,
-                start_time,
-                end_time
-            )
-            .fetch_all(&self.pool)
-            .await?
-        };
+            self.get_flights_in_time_range_all(start_time, end_time).await
+        }
+    }
+
+    /// Get flights within a time range for a specific aircraft
+    async fn get_flights_in_time_range_for_aircraft(
+        &self,
+        start_time: DateTime<Utc>,
+        end_time: DateTime<Utc>,
+        aircraft_id: &str,
+    ) -> Result<Vec<Flight>> {
+        let results = sqlx::query!(
+            r#"
+            SELECT id, aircraft_id, takeoff_time, landing_time, departure_airport,
+                   arrival_airport, tow_aircraft_id, tow_release_height_msl,
+                   created_at, updated_at
+            FROM flights
+            WHERE aircraft_id = $1 
+            AND takeoff_time >= $2 
+            AND takeoff_time <= $3
+            ORDER BY takeoff_time DESC
+            "#,
+            aircraft_id,
+            start_time,
+            end_time
+        )
+        .fetch_all(&self.pool)
+        .await?;
 
         let mut flights = Vec::new();
         for row in results {
@@ -220,8 +215,49 @@ impl FlightsRepository {
                 arrival_airport: row.arrival_airport,
                 tow_aircraft_id: row.tow_aircraft_id,
                 tow_release_height_msl: row.tow_release_height_msl,
-                created_at: row.created_at,
-                updated_at: row.updated_at,
+                created_at: row.created_at.unwrap_or_else(|| Utc::now()),
+                updated_at: row.updated_at.unwrap_or_else(|| Utc::now()),
+            });
+        }
+
+        Ok(flights)
+    }
+
+    /// Get all flights within a time range
+    async fn get_flights_in_time_range_all(
+        &self,
+        start_time: DateTime<Utc>,
+        end_time: DateTime<Utc>,
+    ) -> Result<Vec<Flight>> {
+        let results = sqlx::query!(
+            r#"
+            SELECT id, aircraft_id, takeoff_time, landing_time, departure_airport,
+                   arrival_airport, tow_aircraft_id, tow_release_height_msl,
+                   created_at, updated_at
+            FROM flights
+            WHERE takeoff_time >= $1 
+            AND takeoff_time <= $2
+            ORDER BY takeoff_time DESC
+            "#,
+            start_time,
+            end_time
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut flights = Vec::new();
+        for row in results {
+            flights.push(Flight {
+                id: row.id,
+                aircraft_id: row.aircraft_id,
+                takeoff_time: row.takeoff_time,
+                landing_time: row.landing_time,
+                departure_airport: row.departure_airport,
+                arrival_airport: row.arrival_airport,
+                tow_aircraft_id: row.tow_aircraft_id,
+                tow_release_height_msl: row.tow_release_height_msl,
+                created_at: row.created_at.unwrap_or_else(|| Utc::now()),
+                updated_at: row.updated_at.unwrap_or_else(|| Utc::now()),
             });
         }
 
@@ -255,8 +291,8 @@ impl FlightsRepository {
                 arrival_airport: row.arrival_airport,
                 tow_aircraft_id: row.tow_aircraft_id,
                 tow_release_height_msl: row.tow_release_height_msl,
-                created_at: row.created_at,
-                updated_at: row.updated_at,
+                created_at: row.created_at.unwrap_or_else(|| Utc::now()),
+                updated_at: row.updated_at.unwrap_or_else(|| Utc::now()),
             });
         }
 

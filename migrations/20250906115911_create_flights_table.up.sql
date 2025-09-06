@@ -23,17 +23,7 @@ CREATE TABLE flights (
     
     -- Database timestamps
     created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    
-    -- Constraint: if tow_aircraft_id is not null, the referenced aircraft must be a tow plane
-    CONSTRAINT valid_tow_plane CHECK (
-        tow_aircraft_id IS NULL OR 
-        EXISTS (
-            SELECT 1 FROM aircraft_registrations 
-            WHERE registration_number = tow_aircraft_id 
-            AND is_tow_plane = true
-        )
-    )
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Indexes for common queries
