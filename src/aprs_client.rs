@@ -1,8 +1,8 @@
 use anyhow::Result;
 use ogn_parser::AprsPacket;
+use tracing::trace;
 use crate::Fix;
 use regex::Regex;
-use std::io::Write;
 use std::sync::Arc;
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -307,7 +307,7 @@ impl AprsClient {
                             fix_proc.process_fix(fix);
                         }
                         Ok(None) => {
-                            // Not a position packet, that's fine
+                            trace!("No position fix in APRS packet");
                         }
                         Err(e) => {
                             debug!("Failed to extract fix from APRS packet: {}", e);

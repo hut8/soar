@@ -4,7 +4,6 @@ use std::fs::{OpenOptions, create_dir_all};
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Mutex;
-use tokio::io::AsyncWriteExt;
 use tracing::{error, info};
 
 use crate::MessageProcessor;
