@@ -929,6 +929,8 @@ mod tests {
             unique_id: Some("12345678".to_string()),
             kit_mfr_name: None,
             kit_model_name: None,
+            home_base_airport_id: None,
+            registered_location: None,
         }
     }
 
