@@ -1,10 +1,10 @@
-use tracing::{error, trace, warn};
 use sqlx::PgPool;
+use tracing::{error, trace, warn};
 
-use crate::{Fix, FixProcessor};
-use crate::fixes_repo::FixesRepository;
 use crate::device_repo::DeviceRepository;
 use crate::fixes;
+use crate::fixes_repo::FixesRepository;
+use crate::{Fix, FixProcessor};
 
 /// Database fix processor that saves valid fixes to the database
 pub struct DatabaseFixProcessor {
@@ -27,7 +27,7 @@ impl FixProcessor for DatabaseFixProcessor {
         if let Some(device_id) = fix.device_id {
             let device_repo = self.device_repo.clone();
             let fixes_repo = self.fixes_repo.clone();
-            
+            let raw_message = raw_message.to_string();
             tokio::spawn(async move {
                 // Check if device exists in database
                 match device_repo.get_device_by_id(device_id).await {
@@ -35,43 +35,41 @@ impl FixProcessor for DatabaseFixProcessor {
                         // Device exists, proceed with processing
                         // Convert the position::Fix to a database Fix struct
                         let db_fix = fixes::Fix::from_position_fix(&fix, raw_message.to_string());
-                        
+
                         // Save to database
                         match fixes_repo.insert(&db_fix).await {
                             Ok(_) => {
-                                trace!("Successfully saved fix to database for aircraft {:?}",
-                                       db_fix.aircraft_id);
+                                trace!(
+                                    "Successfully saved fix to database for aircraft {:?}",
+                                    db_fix.aircraft_id
+                                );
                             }
                             Err(e) => {
-                                error!("Failed to save fix to database for fix: {:?}\ncause:{:?}", db_fix, e);
+                                error!(
+                                    "Failed to save fix to database for fix: {:?}\ncause:{:?}",
+                                    db_fix, e
+                                );
                             }
                         }
                     }
                     Ok(None) => {
-                        warn!("Device ID {} not found in devices table, skipping fix processing", device_id);
+                        warn!(
+                            "Device ID {} not found in devices table, skipping fix processing",
+                            device_id
+                        );
                         return;
                     }
                     Err(e) => {
-                        warn!("Failed to lookup device ID {}: {}, skipping fix processing", device_id, e);
+                        warn!(
+                            "Failed to lookup device ID {}: {}, skipping fix processing",
+                            device_id, e
+                        );
                         return;
                     }
                 }
             });
         } else {
-            // No device_id in fix, process normally (for backward compatibility)
-            let db_fix = fixes::Fix::from_position_fix(&fix, raw_message.to_string());
-            let fixes_repo = self.fixes_repo.clone();
-            tokio::spawn(async move {
-                match fixes_repo.insert(&db_fix).await {
-                    Ok(_) => {
-                        trace!("Successfully saved fix to database for aircraft {:?}",
-                               db_fix.aircraft_id);
-                    }
-                    Err(e) => {
-                        error!("Failed to save fix to database for fix: {:?}\ncause:{:?}", db_fix, e);
-                    }
-                }
-            });
+            warn!("Fix has no device_id, skipping processing: {:?}", fix);
         }
     }
 }

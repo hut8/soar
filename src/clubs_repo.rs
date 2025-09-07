@@ -1,6 +1,5 @@
 use anyhow::Result;
 use chrono::Utc;
-use sqlx::postgres::types::PgPoint;
 use sqlx::PgPool;
 use sqlx::types::Uuid;
 
@@ -125,7 +124,7 @@ impl ClubsRepository {
     pub async fn fuzzy_search(&self, query: &str, limit: Option<i64>) -> Result<Vec<Club>> {
         let limit = limit.unwrap_or(20);
         let query_upper = query.to_uppercase();
-        
+
         let results = sqlx::query!(
             r#"
             SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, c.location_id,
@@ -185,7 +184,7 @@ impl ClubsRepository {
     pub async fn fuzzy_search_soaring(&self, query: &str, limit: Option<i64>) -> Result<Vec<Club>> {
         let limit = limit.unwrap_or(20);
         let query_upper = query.to_uppercase();
-        
+
         let results = sqlx::query!(
             r#"
             SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, c.location_id,
@@ -314,7 +313,7 @@ impl ClubsRepository {
             let location_geolocation = club.base_location.as_ref().map(|loc| {
                 crate::locations::Point::new(loc.latitude, loc.longitude)
             });
-            
+
             let location = self.locations_repo.find_or_create(
                 club.street1.clone(),
                 club.street2.clone(),

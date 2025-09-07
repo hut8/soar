@@ -5,7 +5,6 @@ use uuid::Uuid;
 
 use crate::faa::aircraft_registrations::{Aircraft, ApprovedOps, AirworthinessClass};
 use crate::locations_repo::LocationsRepository;
-use crate::clubs::Point;
 
 pub struct AircraftRegistrationsRepository {
     pool: PgPool,
@@ -593,8 +592,11 @@ impl AircraftRegistrationsRepository {
                    op_sfp_production_flight_testing, op_sfp_customer_demo,
                    type_aircraft_code, type_engine_code, status_code, transponder_code,
                    fractional_owner, airworthiness_date, expiration_date, unique_id,
-                   kit_mfr_name, kit_model_name
+                   kit_mfr_name, kit_model_name, location_id,
+                   l.street1, l.street2, l.city, l.state, l.zip_code,
+                   l.region_code, l.county_mail_code, l.country_mail_code
             FROM aircraft_registrations
+            LEFT JOIN locations l ON aircraft_registrations.location_id = l.id
             WHERE registrant_name ILIKE $1
             ORDER BY registrant_name, registration_number
             "#,
@@ -739,8 +741,11 @@ impl AircraftRegistrationsRepository {
                    op_sfp_production_flight_testing, op_sfp_customer_demo,
                    type_aircraft_code, type_engine_code, status_code, transponder_code,
                    fractional_owner, airworthiness_date, expiration_date, unique_id,
-                   kit_mfr_name, kit_model_name
+                   kit_mfr_name, kit_model_name, location_id,
+                   l.street1, l.street2, l.city, l.state, l.zip_code,
+                   l.region_code, l.county_mail_code, l.country_mail_code
             FROM aircraft_registrations
+            LEFT JOIN locations l ON aircraft_registrations.location_id = l.id
             WHERE transponder_code = $1
             ORDER BY registration_number
             "#,
@@ -1052,6 +1057,7 @@ mod tests {
             kit_model_name: None,
             home_base_airport_id: None,
             registered_location: None,
+            location_id: None,
         }
     }
 

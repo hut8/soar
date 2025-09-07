@@ -107,7 +107,7 @@ impl FixesRepository {
                     raw_packet,
                     timestamp,
                     latitude, longitude, altitude_feet,
-                    aircraft_id, address, address_type, aircraft_type,
+                    aircraft_id, device_id, device_type, aircraft_type,
                     flight_number, emitter_category, registration, model, squawk,
                     ground_speed_knots, track_degrees, climb_fpm, turn_rate_rot,
                     snr_db, bit_errors_corrected, freq_offset_khz,
@@ -133,8 +133,8 @@ impl FixesRepository {
                 fix.longitude,
                 fix.altitude_feet,
                 fix.aircraft_id,
-                fix.address.map(|a| a as i32),
-                fix.address_type as _,
+                fix.device_id.map(|a| a as i32),
+                fix.device_type as _,
                 fix.aircraft_type as _,
                 fix.flight_number,
                 fix.emitter_category as _,
@@ -184,7 +184,7 @@ impl FixesRepository {
             SELECT
                 id, source, destination, via, raw_packet, timestamp,
                 latitude, longitude, altitude_feet,
-                aircraft_id, address, address_type as "address_type: AddressType", aircraft_type as "aircraft_type: AircraftType",
+                aircraft_id, device_id, device_type as "device_type: AddressType", aircraft_type as "aircraft_type: AircraftType",
                 flight_number, emitter_category as "emitter_category: AdsbEmitterCategory", registration, model, squawk,
                 ground_speed_knots, track_degrees, climb_fpm, turn_rate_rot,
                 snr_db, bit_errors_corrected, freq_offset_khz,
@@ -258,7 +258,7 @@ impl FixesRepository {
             SELECT
                 id, source, destination, via, raw_packet, timestamp,
                 latitude, longitude, altitude_feet,
-                aircraft_id, address, address_type as "address_type: AddressType", aircraft_type as "aircraft_type: AircraftType",
+                aircraft_id, device_id, device_type as "device_type: AddressType", aircraft_type as "aircraft_type: AircraftType",
                 flight_number, emitter_category as "emitter_category: AdsbEmitterCategory", registration, model, squawk,
                 ground_speed_knots, track_degrees, climb_fpm, turn_rate_rot,
                 snr_db, bit_errors_corrected, freq_offset_khz,
@@ -329,7 +329,7 @@ impl FixesRepository {
             SELECT
                 id, source, destination, via, raw_packet, timestamp,
                 latitude, longitude, altitude_feet,
-                aircraft_id, address, address_type as "address_type: AddressType", aircraft_type as "aircraft_type: AircraftType",
+                aircraft_id, device_id, device_type as "device_type: AddressType", aircraft_type as "aircraft_type: AircraftType",
                 flight_number, emitter_category as "emitter_category: AdsbEmitterCategory", registration, model, squawk,
                 ground_speed_knots, track_degrees, climb_fpm, turn_rate_rot,
                 snr_db, bit_errors_corrected, freq_offset_khz,
@@ -396,7 +396,7 @@ impl FixesRepository {
             SELECT
                 id, source, destination, via, raw_packet, timestamp,
                 latitude, longitude, altitude_feet,
-                aircraft_id, address, address_type as "address_type: AddressType", aircraft_type as "aircraft_type: AircraftType",
+                aircraft_id, device_id, device_type as "device_type: AddressType", aircraft_type as "aircraft_type: AircraftType",
                 flight_number, emitter_category as "emitter_category: AdsbEmitterCategory", registration, model, squawk,
                 ground_speed_knots, track_degrees, climb_fpm, turn_rate_rot,
                 snr_db, bit_errors_corrected, freq_offset_khz,
@@ -457,7 +457,7 @@ impl FixesRepository {
             SELECT
                 id, source, destination, via, raw_packet, timestamp,
                 latitude, longitude, altitude_feet,
-                aircraft_id, address, address_type as "address_type: AddressType", aircraft_type as "aircraft_type: AircraftType",
+                aircraft_id, device_id, device_type as "device_type: AddressType", aircraft_type as "aircraft_type: AircraftType",
                 flight_number, emitter_category as "emitter_category: AdsbEmitterCategory", registration, model, squawk,
                 ground_speed_knots, track_degrees, climb_fpm, turn_rate_rot,
                 snr_db, bit_errors_corrected, freq_offset_khz,
@@ -534,7 +534,7 @@ impl FixesRepository {
             SELECT
                 id, source, destination, via, raw_packet, timestamp,
                 latitude, longitude, altitude_feet,
-                aircraft_id, address, address_type as "address_type: AddressType", aircraft_type as "aircraft_type: AircraftType",
+                aircraft_id, device_id, device_type as "device_type: AddressType", aircraft_type as "aircraft_type: AircraftType",
                 flight_number, emitter_category as "emitter_category: AdsbEmitterCategory", registration, model, squawk,
                 ground_speed_knots, track_degrees, climb_fpm, turn_rate_rot,
                 snr_db, bit_errors_corrected, freq_offset_khz,

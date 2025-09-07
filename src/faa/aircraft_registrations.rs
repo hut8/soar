@@ -1064,6 +1064,7 @@ mod tests {
             kit_model_name: None,
             home_base_airport_id: None,
             registered_location: None,
+            location_id: None,
         };
 
         // Test club with "SOAR" in name
