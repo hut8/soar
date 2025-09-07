@@ -3,7 +3,7 @@ use sqlx::PgPool;
 use tracing::{info, warn};
 use uuid::Uuid;
 
-use crate::faa::aircraft_registrations::{Aircraft, ApprovedOps};
+use crate::faa::aircraft_registrations::{Aircraft, ApprovedOps, AirworthinessClass};
 
 pub struct AircraftRegistrationsRepository {
     pool: PgPool,
@@ -61,9 +61,6 @@ impl AircraftRegistrationsRepository {
             // Convert transponder_code from u32 to i64 for database storage (BIGINT)
             let transponder_code = aircraft_reg.transponder_code.map(|t| t as i64);
 
-            // Convert airworthiness_class enum to string code for database storage
-            let airworthiness_class_code = aircraft_reg.airworthiness_class.as_ref().map(|ac| ac.code());
-
             // Handle club linking if aircraft has a valid club name
             let club_id = if let Some(club_name) = aircraft_reg.club_name() {
                 // Check if aircraft already has a club_id set (never overwrite existing club_id)
@@ -117,7 +114,7 @@ impl AircraftRegistrationsRepository {
                     country_mail_code,
                     last_action_date,
                     certificate_issue_date,
-                    airworthiness_class_code,
+                    airworthiness_class,
                     approved_operations_raw,
                     op_restricted_other,
                     op_restricted_ag_pest_control,
@@ -185,7 +182,7 @@ impl AircraftRegistrationsRepository {
                     country_mail_code = EXCLUDED.country_mail_code,
                     last_action_date = EXCLUDED.last_action_date,
                     certificate_issue_date = EXCLUDED.certificate_issue_date,
-                    airworthiness_class_code = EXCLUDED.airworthiness_class_code,
+                    airworthiness_class = EXCLUDED.airworthiness_class,
                     approved_operations_raw = EXCLUDED.approved_operations_raw,
                     op_restricted_other = EXCLUDED.op_restricted_other,
                     op_restricted_ag_pest_control = EXCLUDED.op_restricted_ag_pest_control,
@@ -246,7 +243,7 @@ impl AircraftRegistrationsRepository {
                 aircraft_reg.country_mail_code,
                 aircraft_reg.last_action_date,
                 aircraft_reg.certificate_issue_date,
-                airworthiness_class_code.as_deref(),
+                aircraft_reg.airworthiness_class as _,
                 aircraft_reg.approved_operations_raw,
                 aircraft_reg.approved_ops.restricted_other,
                 aircraft_reg.approved_ops.restricted_ag_pest_control,
@@ -400,7 +397,8 @@ impl AircraftRegistrationsRepository {
             SELECT registration_number, serial_number, mfr_mdl_code, eng_mfr_mdl_code, year_mfr,
                    type_registration_code, registrant_name, street1, street2, city, state, zip_code,
                    region_code, county_mail_code, country_mail_code, last_action_date, certificate_issue_date,
-                   airworthiness_class_code, approved_operations_raw,
+                   airworthiness_class as "airworthiness_class: AirworthinessClass",
+                   approved_operations_raw,
                    op_restricted_other, op_restricted_ag_pest_control, op_restricted_aerial_surveying,
                    op_restricted_aerial_advertising, op_restricted_forest, op_restricted_patrolling,
                    op_restricted_weather_control, op_restricted_carriage_of_cargo,
@@ -542,7 +540,7 @@ impl AircraftRegistrationsRepository {
             SELECT registration_number, serial_number, mfr_mdl_code, eng_mfr_mdl_code, year_mfr,
                    type_registration_code, registrant_name, street1, street2, city, state, zip_code,
                    region_code, county_mail_code, country_mail_code, last_action_date, certificate_issue_date,
-                   airworthiness_class_code, approved_operations_raw,
+                   airworthiness_class AS "airworthiness_class: AirworthinessClass", approved_operations_raw,
                    op_restricted_other, op_restricted_ag_pest_control, op_restricted_aerial_surveying,
                    op_restricted_aerial_advertising, op_restricted_forest, op_restricted_patrolling,
                    op_restricted_weather_control, op_restricted_carriage_of_cargo,
@@ -687,7 +685,8 @@ impl AircraftRegistrationsRepository {
             SELECT registration_number, serial_number, mfr_mdl_code, eng_mfr_mdl_code, year_mfr,
                    type_registration_code, registrant_name, street1, street2, city, state, zip_code,
                    region_code, county_mail_code, country_mail_code, last_action_date, certificate_issue_date,
-                   airworthiness_class_code, approved_operations_raw,
+                   airworthiness_class as "airworthiness_class: AirworthinessClass",
+                   approved_operations_raw,
                    op_restricted_other, op_restricted_ag_pest_control, op_restricted_aerial_surveying,
                    op_restricted_aerial_advertising, op_restricted_forest, op_restricted_patrolling,
                    op_restricted_weather_control, op_restricted_carriage_of_cargo,
@@ -831,7 +830,7 @@ impl AircraftRegistrationsRepository {
             SELECT registration_number, serial_number, mfr_mdl_code, eng_mfr_mdl_code, year_mfr,
                    type_registration_code, registrant_name, street1, street2, city, state, zip_code,
                    region_code, county_mail_code, country_mail_code, last_action_date, certificate_issue_date,
-                   airworthiness_class_code, approved_operations_raw,
+                   airworthiness_class as "airworthiness_class: AirworthinessClass", approved_operations_raw,
                    op_restricted_other, op_restricted_ag_pest_control, op_restricted_aerial_surveying,
                    op_restricted_aerial_advertising, op_restricted_forest, op_restricted_patrolling,
                    op_restricted_weather_control, op_restricted_carriage_of_cargo,
