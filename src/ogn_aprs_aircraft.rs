@@ -2,7 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
+#[sqlx(type_name = "address_type")]
 pub enum AddressType {
     Unknown,
     Icao,
@@ -10,25 +11,25 @@ pub enum AddressType {
     OgnTracker,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
+#[sqlx(type_name = "aircraft_type")]
 pub enum AircraftType {
-    Reserved0 = 0x0,
-    GliderMotorGlider = 0x1,
-    TowTug = 0x2,
-    HelicopterGyro = 0x3,
-    SkydiverParachute = 0x4,
-    DropPlane = 0x5,
-    HangGlider = 0x6,
-    Paraglider = 0x7,
-    RecipEngine = 0x8,
-    JetTurboprop = 0x9,
-    Unknown = 0xA,
-    Balloon = 0xB,
-    Airship = 0xC,
-    Uav = 0xD,
-    ReservedE = 0xE,
-    StaticObstacle = 0xF,
+    Reserved0,
+    GliderMotorGlider,
+    TowTug,
+    HelicopterGyro,
+    SkydiverParachute,
+    DropPlane,
+    HangGlider,
+    Paraglider,
+    RecipEngine,
+    JetTurboprop,
+    Unknown,
+    Balloon,
+    Airship,
+    Uav,
+    ReservedE,
+    StaticObstacle,
 }
 
 impl From<u8> for AircraftType {
@@ -66,7 +67,8 @@ impl From<u8> for AddressType {
 }
 
 /// ADS-B emitter category codes as per DO-260B specification
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
+#[sqlx(type_name = "adsb_emitter_category")]
 pub enum AdsbEmitterCategory {
     // Category A: Aircraft types
     A0, // No ADS-B emitter category information

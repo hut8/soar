@@ -10,50 +10,50 @@ use crate::ogn_aprs_aircraft::{AddressType, AdsbEmitterCategory, AircraftType};
 pub struct Fix {
     /// Unique identifier for this fix
     pub id: Uuid,
-    
+
     /// APRS packet header information
     pub source: String,
     pub destination: String,
     pub via: Vec<String>,
-    
+
     /// Raw APRS packet for debugging/audit purposes
     pub raw_packet: String,
-    
+
     /// Timestamp when this fix was received/parsed
     pub timestamp: DateTime<Utc>,
-    
+
     /// Aircraft position
     pub latitude: f64,
     pub longitude: f64,
     pub altitude_feet: Option<i32>,
-    
+
     /// Aircraft identification
     pub aircraft_id: Option<String>, // Hex aircraft ID (e.g., "39D304")
     pub address: Option<u32>,        // Raw address from OGN parameters
     pub address_type: Option<AddressType>,
     pub aircraft_type: Option<AircraftType>,
-    
+
     /// Flight information
     pub flight_number: Option<String>,
     pub emitter_category: Option<AdsbEmitterCategory>,
     pub registration: Option<String>,
     pub model: Option<String>,
     pub squawk: Option<String>,
-    
+
     /// Performance data
     pub ground_speed_knots: Option<f32>,
     pub track_degrees: Option<f32>,
     pub climb_fpm: Option<i32>,
     pub turn_rate_rot: Option<f32>,
-    
+
     /// Signal quality
     pub snr_db: Option<f32>,
     pub bit_errors_corrected: Option<u32>,
     pub freq_offset_khz: Option<f32>,
-    
+
     /// Club association
     pub club_id: Option<Uuid>,
-    
+
     /// Database timestamps
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -74,10 +74,10 @@ impl Fix {
             altitude_feet: position_fix.altitude_feet,
             aircraft_id: position_fix.aircraft_id.clone(),
             address: position_fix.address,
-            address_type: position_fix.address_type.clone(),
-            aircraft_type: position_fix.aircraft_type.clone(),
+            address_type: position_fix.address_type,
+            aircraft_type: position_fix.aircraft_type,
             flight_number: position_fix.flight_number.clone(),
-            emitter_category: position_fix.emitter_category.clone(),
+            emitter_category: position_fix.emitter_category,
             registration: position_fix.registration.clone(),
             model: position_fix.model.clone(),
             squawk: position_fix.squawk.clone(),
@@ -93,7 +93,7 @@ impl Fix {
             updated_at: Utc::now(),
         }
     }
-    
+
     /// Get a human-readable aircraft identifier
     /// Uses registration if available, otherwise falls back to aircraft ID with type prefix
     pub fn get_aircraft_identifier(&self) -> Option<String> {
