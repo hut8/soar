@@ -1,4 +1,4 @@
-use tracing::{error, debug};
+use tracing::{error, trace};
 use sqlx::PgPool;
 
 use crate::{Fix, FixProcessor};
@@ -28,11 +28,11 @@ impl FixProcessor for DatabaseFixProcessor {
         tokio::spawn(async move {
             match fixes_repo.insert(&db_fix).await {
                 Ok(_) => {
-                    debug!("Successfully saved fix to database for aircraft {:?}", 
+                    trace!("Successfully saved fix to database for aircraft {:?}",
                            db_fix.aircraft_id);
                 }
                 Err(e) => {
-                    error!("Failed to save fix to database: {:?}", e);
+                    error!("Failed to save fix to database for fix: {:?}\ncause:{:?}", db_fix, e);
                 }
             }
         });
