@@ -57,14 +57,12 @@ impl FixProcessor for DatabaseFixProcessor {
                             "Device ID {} not found in devices table, skipping fix processing",
                             device_id
                         );
-                        return;
                     }
                     Err(e) => {
                         warn!(
                             "Failed to lookup device ID {}: {}, skipping fix processing",
                             device_id, e
                         );
-                        return;
                     }
                 }
             });

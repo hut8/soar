@@ -511,22 +511,22 @@ async fn handle_load_data(
         match locations_repo.get_locations_for_geocoding(Some(1000)).await {
             Ok(locations) => {
                 let location_count = locations.len();
-                
+
                 if location_count == 0 {
                     info!("No locations need geocoding");
                 } else {
                     info!("Found {} locations that need geocoding", location_count);
-                    
+
                     let mut successful_geocodes = 0;
                     let mut failed_geocodes = 0;
-                    
+
                     for location in locations {
                         // Check if street1 is a PO Box and skip it for initial geocoding attempt
                         let (use_street1, use_street2) = if let Some(street1_val) = &location.street1 {
                             let street1_upper = street1_val.to_uppercase();
                             if street1_upper.contains("PO BOX") || street1_upper.contains("P.O. BOX") || street1_upper.starts_with("BOX ") {
                                 // Skip PO Box addresses, use only city/state/zip/country
-                                (None, location.street2.clone()) 
+                                (None, location.street2.clone())
                             } else {
                                 (location.street1.clone(), location.street2.clone())
                             }
@@ -534,14 +534,14 @@ async fn handle_load_data(
                             (location.street1.clone(), location.street2.clone())
                         };
 
-                        info!("Geocoding location {} - {}, {}, {}, {}", 
+                        info!("Geocoding location {} - {}, {}, {}, {}",
                             location.id,
                             use_street1.as_deref().unwrap_or(""),
                             location.city.as_deref().unwrap_or(""),
                             location.state.as_deref().unwrap_or(""),
                             location.country_mail_code.as_deref().unwrap_or("US")
                         );
-                        
+
                         // First attempt: Try full address (excluding PO boxes)
                         let country_name = match location.country_mail_code.as_deref() {
                             Some("US") | None => Some("United States".to_string()),
@@ -550,10 +550,10 @@ async fn handle_load_data(
                             Some("GB") => Some("United Kingdom".to_string()),
                             Some(code) => Some(code.to_string()),
                         };
-                        
+
                         let result = geocode_components(
                             use_street1.as_deref(),
-                            use_street2.as_deref(), 
+                            use_street2.as_deref(),
                             location.city.as_deref(),
                             location.state.as_deref(),
                             location.zip_code.as_deref(),
@@ -579,7 +579,7 @@ async fn handle_load_data(
                         match final_result {
                             Ok(point) => {
                                 // Update the location in the database with the geocoded coordinates
-                                let geolocation_point = crate::locations::Point::new(point.latitude, point.longitude);
+                                let geolocation_point = soar::locations::Point::new(point.latitude, point.longitude);
                                 match locations_repo.update_geolocation(location.id, geolocation_point).await {
                                     Ok(updated) => {
                                         if updated {
@@ -597,10 +597,10 @@ async fn handle_load_data(
                                 }
                             }
                             Err(e) => {
-                                warn!("Failed to geocode location {} (city: {}, state: {}): {}", 
-                                    location.id, 
-                                    location.city.as_deref().unwrap_or("?"), 
-                                    location.state.as_deref().unwrap_or("?"), 
+                                warn!("Failed to geocode location {} (city: {}, state: {}): {}",
+                                    location.id,
+                                    location.city.as_deref().unwrap_or("?"),
+                                    location.state.as_deref().unwrap_or("?"),
                                     e
                                 );
                                 failed_geocodes += 1;
@@ -610,7 +610,7 @@ async fn handle_load_data(
                         // Rate limiting: wait 1.1 seconds between requests to be respectful to Nominatim
                         tokio::time::sleep(tokio::time::Duration::from_millis(1100)).await;
                     }
-                    
+
                     info!("Geocoding completed: {} successful, {} failed", successful_geocodes, failed_geocodes);
                 }
             }
@@ -668,7 +668,7 @@ async fn handle_run(
     let archive_processor: Arc<dyn MessageProcessor> = Arc::new(
         soar::message_processors::ArchiveMessageProcessor::new(archive_dir),
     );
-    
+
     // Create database fix processor to save all valid fixes to the database
     let db_fix_processor: Arc<dyn FixProcessor> = Arc::new(
         DatabaseFixProcessor::new(pool.clone())
