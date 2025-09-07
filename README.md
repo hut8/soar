@@ -51,3 +51,35 @@ cargo install sqlx-cli --no-default-features --features rustls,postgres
 ## License
 
 This project is licensed under the MIT License.
+
+## Data Source Notes
+
+FANET
+
+- FNT11: [Seems to mean Manufacturer is FANET+](https://github.com/glidernet/ogn-aprs-protocol/blob/af7a1688d28f9c41fddf60c1105d92dc53adb4c1/FANET.protocol.txt#L248)
+- sF1: syncword: 0xF1
+- cr4: Seems to mean "Coding Rate 4"
+
+```
+In LoRa (which FANET usually uses):
+
+The coding rate is expressed as CR = 4/(4+N), where N = 1…4.
+
+So:
+
+CR1 → 4/5
+
+CR2 → 4/6
+
+CR3 → 4/7
+
+CR4 → 4/8
+
+That means “CR4” = 4/8 = 1/2, so:
+
+Half the transmitted bits are data, half are error-correction redundancy.
+
+This is the most robust (but slowest) option in LoRa.
+
+So if FANET says "CR4", they almost certainly mean LoRa coding rate 4/8.
+```
