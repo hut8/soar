@@ -1,6 +1,6 @@
 use crate::Fix;
 use anyhow::Result;
-use ogn_parser::AprsPacket;
+use ogn_parser::{AprsData, AprsPacket};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -271,9 +271,26 @@ impl AprsClient {
         // Always call process_raw_message first (for logging/archiving)
         message_processor.process_raw_message(message);
 
-        // Try to parse the sanitized message using ogn-parser
+        // Try to parse the message using ogn-parser
         match ogn_parser::parse(message) {
             Ok(parsed) => {
+                // Signal any unparsed fragments in position or status comments
+                match &parsed.data {
+                    AprsData::Position(pos) => {
+                        if let Some(unparsed) = &pos.comment.unparsed {
+                            error!(
+                                "Unparsed position fragment: {unparsed} from message: {message}"
+                            );
+                        }
+                    }
+                    AprsData::Status(status) => {
+                        if let Some(unparsed) = &status.comment.unparsed {
+                            error!("Unparsed status fragment: {unparsed} from message: {message}");
+                        }
+                    }
+                    _ => {}
+                }
+
                 // Call the message processor with the parsed message
                 message_processor.process_message(parsed.clone());
 
@@ -293,10 +310,7 @@ impl AprsClient {
                 }
             }
             Err(e) => {
-                warn!(
-                    "Failed to parse APRS message '{}': {}",
-                    message, e
-                );
+                error!("Failed to parse APRS message '{message}': {e}");
             }
         }
     }
