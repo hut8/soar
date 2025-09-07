@@ -29,8 +29,8 @@ pub struct Fix {
 
     /// Aircraft identification
     pub aircraft_id: Option<String>, // Hex aircraft ID (e.g., "39D304")
-    pub address: Option<u32>,        // Raw address from OGN parameters
-    pub address_type: Option<AddressType>,
+    pub device_id: Option<u32>,      // Raw device ID from OGN parameters (numeric)
+    pub device_type: Option<AddressType>,
     pub aircraft_type: Option<AircraftType>,
 
     /// Flight information
@@ -73,8 +73,8 @@ impl Fix {
             longitude: position_fix.longitude,
             altitude_feet: position_fix.altitude_feet,
             aircraft_id: position_fix.aircraft_id.clone(),
-            address: position_fix.address,
-            address_type: position_fix.address_type,
+            device_id: position_fix.device_id,
+            device_type: position_fix.device_type,
             aircraft_type: position_fix.aircraft_type,
             flight_number: position_fix.flight_number.clone(),
             emitter_category: position_fix.emitter_category,
@@ -99,8 +99,8 @@ impl Fix {
     pub fn get_aircraft_identifier(&self) -> Option<String> {
         if let Some(ref reg) = self.registration {
             Some(reg.clone())
-        } else if let (Some(aircraft_id), Some(addr_type)) = (&self.aircraft_id, &self.address_type) {
-            let type_prefix = match *addr_type {
+        } else if let (Some(aircraft_id), Some(dev_type)) = (&self.aircraft_id, &self.device_type) {
+            let type_prefix = match *dev_type {
                 AddressType::Icao => "ICAO",
                 AddressType::Flarm => "FLARM",
                 AddressType::OgnTracker => "OGN",

@@ -76,10 +76,26 @@ where
     serializer.serialize_str(s)
 }
 
+fn hex_to_u32<'de, D>(deserializer: D) -> Result<u32, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s: &str = Deserialize::deserialize(deserializer)?;
+    u32::from_str_radix(s, 16).map_err(serde::de::Error::custom)
+}
+
+fn u32_to_hex<S>(x: &u32, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.serialize_str(&format!("{:06X}", x))
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Device {
     pub device_type: DeviceType,
-    pub device_id: String,
+    #[serde(deserialize_with = "hex_to_u32", serialize_with = "u32_to_hex")]
+    pub device_id: u32,
     pub aircraft_model: String,
     pub registration: String,
     #[serde(rename = "cn")]
@@ -128,7 +144,7 @@ mod tests {
     fn test_device_serialization_with_booleans() {
         let device = Device {
             device_type: DeviceType::Flarm,
-            device_id: "000000".to_string(),
+            device_id: 0x000000,
             aircraft_model: "SZD-41 Jantar Std".to_string(),
             registration: "HA-4403".to_string(),
             competition_number: "J".to_string(),
@@ -148,7 +164,7 @@ mod tests {
 
         let response: DeviceResponse = serde_json::from_str(json_data).unwrap();
         assert_eq!(response.devices.len(), 1);
-        assert_eq!(response.devices[0].device_id, "000000");
+        assert_eq!(response.devices[0].device_id, 0x000000);
         assert_eq!(response.devices[0].aircraft_model, "SZD-41 Jantar Std");
         assert_eq!(response.devices[0].device_type, DeviceType::Flarm);
         assert!(response.devices[0].tracked);

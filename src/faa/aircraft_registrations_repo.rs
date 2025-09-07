@@ -37,7 +37,7 @@ impl AircraftRegistrationsRepository {
 
         // Club doesn't exist, create it using the first aircraft's address and location data
         let new_club_id = Uuid::new_v4();
-        
+
         // Determine if this is likely a soaring club based on the name
         let is_soaring = Some(club_name.to_uppercase().contains("SOAR") ||
                              club_name.to_uppercase().contains("GLIDING") ||
@@ -576,8 +576,7 @@ impl AircraftRegistrationsRepository {
         let results = sqlx::query!(
             r#"
             SELECT registration_number, serial_number, mfr_mdl_code, eng_mfr_mdl_code, year_mfr,
-                   type_registration_code, registrant_name, street1, street2, city, state, zip_code,
-                   region_code, county_mail_code, country_mail_code, last_action_date, certificate_issue_date,
+                   type_registration_code, registrant_name, last_action_date, certificate_issue_date,
                    airworthiness_class AS "airworthiness_class: AirworthinessClass", approved_operations_raw,
                    op_restricted_other, op_restricted_ag_pest_control, op_restricted_aerial_surveying,
                    op_restricted_aerial_advertising, op_restricted_forest, op_restricted_patrolling,
@@ -708,7 +707,7 @@ impl AircraftRegistrationsRepository {
                 kit_mfr_name: row.kit_mfr_name,
                 kit_model_name: row.kit_model_name,
                 home_base_airport_id: None,
-                location_id: None,
+                location_id: row.location_id,
                 registered_location: None,
             });
         }
@@ -722,8 +721,7 @@ impl AircraftRegistrationsRepository {
         let results = sqlx::query!(
             r#"
             SELECT registration_number, serial_number, mfr_mdl_code, eng_mfr_mdl_code, year_mfr,
-                   type_registration_code, registrant_name, street1, street2, city, state, zip_code,
-                   region_code, county_mail_code, country_mail_code, last_action_date, certificate_issue_date,
+                   type_registration_code, registrant_name, last_action_date, certificate_issue_date,
                    airworthiness_class as "airworthiness_class: AirworthinessClass",
                    approved_operations_raw,
                    op_restricted_other, op_restricted_ag_pest_control, op_restricted_aerial_surveying,
@@ -855,7 +853,7 @@ impl AircraftRegistrationsRepository {
                 kit_mfr_name: row.kit_mfr_name,
                 kit_model_name: row.kit_model_name,
                 home_base_airport_id: None,
-                location_id: None,
+                location_id: row.location_id,
                 registered_location: None,
             });
         }
@@ -867,28 +865,30 @@ impl AircraftRegistrationsRepository {
     pub async fn search_by_state(&self, state: &str) -> Result<Vec<Aircraft>> {
         let results = sqlx::query!(
             r#"
-            SELECT registration_number, serial_number, mfr_mdl_code, eng_mfr_mdl_code, year_mfr,
-                   type_registration_code, registrant_name, street1, street2, city, state, zip_code,
-                   region_code, county_mail_code, country_mail_code, last_action_date, certificate_issue_date,
-                   airworthiness_class as "airworthiness_class: AirworthinessClass", approved_operations_raw,
-                   op_restricted_other, op_restricted_ag_pest_control, op_restricted_aerial_surveying,
-                   op_restricted_aerial_advertising, op_restricted_forest, op_restricted_patrolling,
-                   op_restricted_weather_control, op_restricted_carriage_of_cargo,
-                   op_experimental_show_compliance, op_experimental_research_development, op_experimental_amateur_built,
-                   op_experimental_exhibition, op_experimental_racing, op_experimental_crew_training,
-                   op_experimental_market_survey, op_experimental_operating_kit_built,
-                   op_experimental_light_sport_reg_prior_2008, op_experimental_light_sport_operating_kit_built,
-                   op_experimental_light_sport_prev_21_190, op_experimental_uas_research_development,
-                   op_experimental_uas_market_survey, op_experimental_uas_crew_training,
-                   op_experimental_uas_exhibition, op_experimental_uas_compliance_with_cfr,
-                   op_sfp_ferry_for_repairs_alterations_storage, op_sfp_evacuate_impending_danger,
-                   op_sfp_excess_of_max_certificated, op_sfp_delivery_or_export,
-                   op_sfp_production_flight_testing, op_sfp_customer_demo,
-                   type_aircraft_code, type_engine_code, status_code, transponder_code,
-                   fractional_owner, airworthiness_date, expiration_date, unique_id,
-                   kit_mfr_name, kit_model_name
-            FROM aircraft_registrations
-            WHERE state = $1
+            SELECT a.registration_number, a.serial_number, a.mfr_mdl_code, a.eng_mfr_mdl_code, a.year_mfr,
+                   a.type_registration_code, a.registrant_name, a.last_action_date, a.certificate_issue_date,
+                   a.airworthiness_class as "airworthiness_class: AirworthinessClass", a.approved_operations_raw, a.location_id,
+                   l.street1, l.street2, l.city, l.state, l.zip_code,
+                   l.region_code, l.county_mail_code, l.country_mail_code,
+                   a.op_restricted_other, a.op_restricted_ag_pest_control, a.op_restricted_aerial_surveying,
+                   a.op_restricted_aerial_advertising, a.op_restricted_forest, a.op_restricted_patrolling,
+                   a.op_restricted_weather_control, a.op_restricted_carriage_of_cargo,
+                   a.op_experimental_show_compliance, a.op_experimental_research_development, a.op_experimental_amateur_built,
+                   a.op_experimental_exhibition, a.op_experimental_racing, a.op_experimental_crew_training,
+                   a.op_experimental_market_survey, a.op_experimental_operating_kit_built,
+                   a.op_experimental_light_sport_reg_prior_2008, a.op_experimental_light_sport_operating_kit_built,
+                   a.op_experimental_light_sport_prev_21_190, a.op_experimental_uas_research_development,
+                   a.op_experimental_uas_market_survey, a.op_experimental_uas_crew_training,
+                   a.op_experimental_uas_exhibition, a.op_experimental_uas_compliance_with_cfr,
+                   a.op_sfp_ferry_for_repairs_alterations_storage, a.op_sfp_evacuate_impending_danger,
+                   a.op_sfp_excess_of_max_certificated, a.op_sfp_delivery_or_export,
+                   a.op_sfp_production_flight_testing, a.op_sfp_customer_demo,
+                   a.type_aircraft_code, a.type_engine_code, a.status_code, a.transponder_code,
+                   a.fractional_owner, a.airworthiness_date, a.expiration_date, a.unique_id,
+                   a.kit_mfr_name, a.kit_model_name
+            FROM aircraft_registrations a
+            LEFT JOIN locations l ON a.location_id = l.id
+            WHERE l.state = $1
             ORDER BY registrant_name, registration_number
             "#,
             state
@@ -1000,7 +1000,7 @@ impl AircraftRegistrationsRepository {
                 kit_mfr_name: row.kit_mfr_name,
                 kit_model_name: row.kit_model_name,
                 home_base_airport_id: None,
-                location_id: None,
+                location_id: row.location_id,
                 registered_location: None,
             });
         }

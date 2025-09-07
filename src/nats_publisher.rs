@@ -9,17 +9,14 @@ use crate::Fix;
 use crate::aprs_client::FixProcessor;
 use crate::device_repo::DeviceRepository;
 
-/// Get registration number for a given device address
-/// This maps OGN/FLARM addresses to aircraft registration numbers
-async fn get_registration_for_address(
+/// Get registration number for a given device ID
+/// This maps OGN/FLARM device IDs to aircraft registration numbers
+async fn get_registration_for_device_id(
     device_repo: &DeviceRepository,
-    address: u32,
-    address_type: &str,
+    device_id: u32,
+    device_type: &str,
 ) -> Option<String> {
-    // Convert address to device ID format expected by the device repository
-    let device_id = format!("{:06X}", address);
-
-    match device_repo.get_device_by_id(&device_id).await {
+    match device_repo.get_device_by_id(device_id).await {
         Ok(Some(device)) => {
             if !device.registration.is_empty() {
                 Some(device.registration)
@@ -30,8 +27,8 @@ async fn get_registration_for_address(
         }
         Ok(None) => {
             debug!(
-                "No device found for address {} ({})",
-                device_id, address_type
+                "No device found for device ID {} ({})",
+                device_id, device_type
             );
             None
         }
@@ -85,9 +82,9 @@ impl FixProcessor for NatsFixPublisher {
             let aircraft_id = if let Some(registration) = &fix.registration {
                 // Use registration if available
                 registration.clone()
-            } else if let Some(address) = fix.address {
+            } else if let Some(device_id) = fix.device_id {
                 // Try to look up US registration first
-                let address_type_str = match fix.address_type {
+                let device_type_str = match fix.device_type {
                     Some(crate::ogn_aprs_aircraft::AddressType::Icao) => "ICAO",
                     Some(crate::ogn_aprs_aircraft::AddressType::Flarm) => "FLARM",
                     Some(crate::ogn_aprs_aircraft::AddressType::OgnTracker) => "OGN",
@@ -95,7 +92,7 @@ impl FixProcessor for NatsFixPublisher {
                 };
 
                 if let Some(registration) =
-                    get_registration_for_address(&device_repo, address, address_type_str).await
+                    get_registration_for_device_id(&device_repo, device_id, device_type_str).await
                 {
                     registration
                 } else {

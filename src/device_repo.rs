@@ -32,7 +32,7 @@ impl DeviceRepository {
             let result = sqlx::query!(
                 r#"
                 INSERT INTO devices (
-                    device_type, device_id, aircraft_model, registration, 
+                    device_type, device_id, aircraft_model, registration,
                     competition_number, tracked, identified
                 )
                 VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -47,7 +47,7 @@ impl DeviceRepository {
                     updated_at = CURRENT_TIMESTAMP
                 "#,
                 device_type_str,
-                device.device_id,
+                device.device_id as i32,
                 device.aircraft_model,
                 device.registration,
                 device.competition_number,
@@ -84,15 +84,15 @@ impl DeviceRepository {
     }
 
     /// Get a device by its device_id
-    pub async fn get_device_by_id(&self, device_id: &str) -> Result<Option<Device>> {
+    pub async fn get_device_by_id(&self, device_id: u32) -> Result<Option<Device>> {
         let row = sqlx::query!(
             r#"
-            SELECT device_type, device_id, aircraft_model, registration, 
+            SELECT device_type, device_id, aircraft_model, registration,
                    competition_number, tracked, identified
-            FROM devices 
+            FROM devices
             WHERE device_id = $1
             "#,
-            device_id
+            device_id as i32
         )
         .fetch_optional(&self.pool)
         .await?;
@@ -102,7 +102,7 @@ impl DeviceRepository {
 
             Ok(Some(Device {
                 device_type,
-                device_id: row.device_id,
+                device_id: row.device_id as u32,
                 aircraft_model: row.aircraft_model,
                 registration: row.registration,
                 competition_number: row.competition_number,
@@ -125,7 +125,7 @@ mod tests {
 
     fn create_test_device() -> Device {
         Device {
-            device_id: "123456".to_string(),
+            device_id: 123456,
             device_type: DeviceType::Flarm,
             aircraft_model: "Test Aircraft".to_string(),
             registration: "N123AB".to_string(),
@@ -138,7 +138,7 @@ mod tests {
     #[test]
     fn test_device_creation() {
         let device = create_test_device();
-        assert_eq!(device.device_id, "123456");
+        assert_eq!(device.device_id, 123456);
         assert_eq!(device.device_type, DeviceType::Flarm);
     }
 }
