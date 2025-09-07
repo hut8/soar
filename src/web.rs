@@ -84,7 +84,7 @@ async fn search_airports(
         }
 
         // Validate latitude
-        if lat < -90.0 || lat > 90.0 {
+        if !(-90.0..=90.0).contains(&lat) {
             return (
                 StatusCode::BAD_REQUEST,
                 "Latitude must be between -90 and 90 degrees",
@@ -93,7 +93,7 @@ async fn search_airports(
         }
 
         // Validate longitude
-        if lng < -180.0 || lng > 180.0 {
+        if !(-180.0..=180.0).contains(&lng) {
             return (
                 StatusCode::BAD_REQUEST,
                 "Longitude must be between -180 and 180 degrees",
@@ -159,7 +159,7 @@ async fn search_clubs(
         }
 
         // Validate latitude
-        if lat < -90.0 || lat > 90.0 {
+        if !(-90.0..=90.0).contains(&lat) {
             return (
                 StatusCode::BAD_REQUEST,
                 "Latitude must be between -90 and 90 degrees",
@@ -168,7 +168,7 @@ async fn search_clubs(
         }
 
         // Validate longitude
-        if lng < -180.0 || lng > 180.0 {
+        if !(-180.0..=180.0).contains(&lng) {
             return (
                 StatusCode::BAD_REQUEST,
                 "Longitude must be between -180 and 180 degrees",
