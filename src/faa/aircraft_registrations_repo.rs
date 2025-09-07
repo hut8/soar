@@ -4,20 +4,26 @@ use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::faa::aircraft_registrations::{Aircraft, ApprovedOps, AirworthinessClass};
+use crate::locations_repo::LocationsRepository;
+use crate::clubs::Point;
 
 pub struct AircraftRegistrationsRepository {
     pool: PgPool,
+    locations_repo: LocationsRepository,
 }
 
 impl AircraftRegistrationsRepository {
     pub fn new(pool: PgPool) -> Self {
-        Self { pool }
+        let locations_repo = LocationsRepository::new(pool.clone());
+        Self { pool, locations_repo }
     }
 
-    /// Find or create a club by name, returning its UUID
+    /// Find or create a club by name, using the aircraft registration data to populate address and location
+    /// for new clubs. Returns the club's UUID.
     async fn find_or_create_club(
         &self,
         club_name: &str,
+        aircraft_reg: &Aircraft,
         transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     ) -> Result<Uuid> {
         // First try to find existing club
@@ -29,16 +35,50 @@ impl AircraftRegistrationsRepository {
             return Ok(club.id);
         }
 
-        // Club doesn't exist, create it
-        let new_club = sqlx::query!(
-            "INSERT INTO clubs (name) VALUES ($1) RETURNING id",
-            club_name
+        // Club doesn't exist, create it using the first aircraft's address and location data
+        let new_club_id = Uuid::new_v4();
+        
+        // Determine if this is likely a soaring club based on the name
+        let is_soaring = Some(club_name.to_uppercase().contains("SOAR") ||
+                             club_name.to_uppercase().contains("GLIDING") ||
+                             club_name.to_uppercase().contains("SAILPLANE") ||
+                             club_name.to_uppercase().contains("GLIDER"));
+
+        // Create or find location for this club using the aircraft's address
+        let location_geolocation = aircraft_reg.registered_location.as_ref().map(|loc| {
+            crate::locations::Point::new(loc.latitude, loc.longitude)
+        });
+
+        let location = self.locations_repo.find_or_create(
+            aircraft_reg.street1.clone(),
+            aircraft_reg.street2.clone(),
+            aircraft_reg.city.clone(),
+            aircraft_reg.state.clone(),
+            aircraft_reg.zip_code.clone(),
+            aircraft_reg.region_code.clone(),
+            aircraft_reg.county_mail_code.clone(),
+            aircraft_reg.country_mail_code.clone(),
+            location_geolocation,
+        ).await?;
+
+        sqlx::query!(
+            r#"
+            INSERT INTO clubs (
+                id, name, is_soaring, location_id,
+                created_at, updated_at
+            )
+            VALUES ($1, $2, $3, $4, NOW(), NOW())
+            "#,
+            new_club_id,
+            club_name,
+            is_soaring,
+            location.id
         )
-        .fetch_one(&mut **transaction)
+        .execute(&mut **transaction)
         .await?;
 
-        info!("Created new club: {}", club_name);
-        Ok(new_club.id)
+        info!("Created new club: {} with location {} from aircraft {}", club_name, location.id, aircraft_reg.n_number);
+        Ok(new_club_id)
     }
 
     /// Upsert aircraft registrations into the database
@@ -61,6 +101,23 @@ impl AircraftRegistrationsRepository {
             // Convert transponder_code from u32 to i64 for database storage (BIGINT)
             let transponder_code = aircraft_reg.transponder_code.map(|t| t as i64);
 
+            // Create or find location for this aircraft
+            let location_geolocation = aircraft_reg.registered_location.as_ref().map(|loc| {
+                crate::locations::Point::new(loc.latitude, loc.longitude)
+            });
+
+            let location = self.locations_repo.find_or_create(
+                aircraft_reg.street1.clone(),
+                aircraft_reg.street2.clone(),
+                aircraft_reg.city.clone(),
+                aircraft_reg.state.clone(),
+                aircraft_reg.zip_code.clone(),
+                aircraft_reg.region_code.clone(),
+                aircraft_reg.county_mail_code.clone(),
+                aircraft_reg.country_mail_code.clone(),
+                location_geolocation,
+            ).await?;
+
             // Handle club linking if aircraft has a valid club name
             let club_id = if let Some(club_name) = aircraft_reg.club_name() {
                 // Check if aircraft already has a club_id set (never overwrite existing club_id)
@@ -78,14 +135,14 @@ impl AircraftRegistrationsRepository {
                     } else {
                         // Aircraft exists but has no club_id, set it
                         Some(
-                            self.find_or_create_club(&club_name, &mut transaction)
+                            self.find_or_create_club(&club_name, &aircraft_reg, &mut transaction)
                                 .await?,
                         )
                     }
                 } else {
                     // New aircraft, set club_id
                     Some(
-                        self.find_or_create_club(&club_name, &mut transaction)
+                        self.find_or_create_club(&club_name, &aircraft_reg, &mut transaction)
                             .await?,
                     )
                 }
@@ -104,14 +161,7 @@ impl AircraftRegistrationsRepository {
                     year_mfr,
                     type_registration_code,
                     registrant_name,
-                    street1,
-                    street2,
-                    city,
-                    state,
-                    zip_code,
-                    region_code,
-                    county_mail_code,
-                    country_mail_code,
+                    location_id,
                     last_action_date,
                     certificate_issue_date,
                     airworthiness_class,
@@ -161,8 +211,7 @@ impl AircraftRegistrationsRepository {
                 VALUES (
                     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19,
                     $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36,
-                    $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53,
-                    $54, $55, $56, $57, $58, $59, $60
+                    $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52
                 )
                 ON CONFLICT (registration_number)
                 DO UPDATE SET
@@ -172,14 +221,7 @@ impl AircraftRegistrationsRepository {
                     year_mfr = EXCLUDED.year_mfr,
                     type_registration_code = EXCLUDED.type_registration_code,
                     registrant_name = EXCLUDED.registrant_name,
-                    street1 = EXCLUDED.street1,
-                    street2 = EXCLUDED.street2,
-                    city = EXCLUDED.city,
-                    state = EXCLUDED.state,
-                    zip_code = EXCLUDED.zip_code,
-                    region_code = EXCLUDED.region_code,
-                    county_mail_code = EXCLUDED.county_mail_code,
-                    country_mail_code = EXCLUDED.country_mail_code,
+                    location_id = EXCLUDED.location_id,
                     last_action_date = EXCLUDED.last_action_date,
                     certificate_issue_date = EXCLUDED.certificate_issue_date,
                     airworthiness_class = EXCLUDED.airworthiness_class,
@@ -233,14 +275,7 @@ impl AircraftRegistrationsRepository {
                 year_mfr,
                 aircraft_reg.type_registration_code,
                 aircraft_reg.registrant_name,
-                aircraft_reg.street1,
-                aircraft_reg.street2,
-                aircraft_reg.city,
-                aircraft_reg.state,
-                aircraft_reg.zip_code,
-                aircraft_reg.region_code,
-                aircraft_reg.county_mail_code,
-                aircraft_reg.country_mail_code,
+                location.id,
                 aircraft_reg.last_action_date,
                 aircraft_reg.certificate_issue_date,
                 aircraft_reg.airworthiness_class as _,
@@ -394,29 +429,31 @@ impl AircraftRegistrationsRepository {
     ) -> Result<Option<Aircraft>> {
         let result = sqlx::query!(
             r#"
-            SELECT registration_number, serial_number, mfr_mdl_code, eng_mfr_mdl_code, year_mfr,
-                   type_registration_code, registrant_name, street1, street2, city, state, zip_code,
-                   region_code, county_mail_code, country_mail_code, last_action_date, certificate_issue_date,
-                   airworthiness_class as "airworthiness_class: AirworthinessClass",
-                   approved_operations_raw,
+            SELECT a.registration_number, a.serial_number, a.mfr_mdl_code, a.eng_mfr_mdl_code, a.year_mfr,
+                   a.type_registration_code, a.registrant_name, a.last_action_date, a.certificate_issue_date,
+                   a.airworthiness_class as "airworthiness_class: AirworthinessClass",
+                   a.approved_operations_raw, a.location_id,
+                   l.street1, l.street2, l.city, l.state, l.zip_code,
+                   l.region_code, l.county_mail_code, l.country_mail_code,
                    op_restricted_other, op_restricted_ag_pest_control, op_restricted_aerial_surveying,
                    op_restricted_aerial_advertising, op_restricted_forest, op_restricted_patrolling,
                    op_restricted_weather_control, op_restricted_carriage_of_cargo,
-                   op_experimental_show_compliance, op_experimental_research_development, op_experimental_amateur_built,
-                   op_experimental_exhibition, op_experimental_racing, op_experimental_crew_training,
-                   op_experimental_market_survey, op_experimental_operating_kit_built,
-                   op_experimental_light_sport_reg_prior_2008, op_experimental_light_sport_operating_kit_built,
-                   op_experimental_light_sport_prev_21_190, op_experimental_uas_research_development,
-                   op_experimental_uas_market_survey, op_experimental_uas_crew_training,
-                   op_experimental_uas_exhibition, op_experimental_uas_compliance_with_cfr,
-                   op_sfp_ferry_for_repairs_alterations_storage, op_sfp_evacuate_impending_danger,
-                   op_sfp_excess_of_max_certificated, op_sfp_delivery_or_export,
-                   op_sfp_production_flight_testing, op_sfp_customer_demo,
-                   type_aircraft_code, type_engine_code, status_code, transponder_code,
-                   fractional_owner, airworthiness_date, expiration_date, unique_id,
-                   kit_mfr_name, kit_model_name
-            FROM aircraft_registrations
-            WHERE registration_number = $1
+                   a.op_experimental_show_compliance, a.op_experimental_research_development, a.op_experimental_amateur_built,
+                   a.op_experimental_exhibition, a.op_experimental_racing, a.op_experimental_crew_training,
+                   a.op_experimental_market_survey, a.op_experimental_operating_kit_built,
+                   a.op_experimental_light_sport_reg_prior_2008, a.op_experimental_light_sport_operating_kit_built,
+                   a.op_experimental_light_sport_prev_21_190, a.op_experimental_uas_research_development,
+                   a.op_experimental_uas_market_survey, a.op_experimental_uas_crew_training,
+                   a.op_experimental_uas_exhibition, a.op_experimental_uas_compliance_with_cfr,
+                   a.op_sfp_ferry_for_repairs_alterations_storage, a.op_sfp_evacuate_impending_danger,
+                   a.op_sfp_excess_of_max_certificated, a.op_sfp_delivery_or_export,
+                   a.op_sfp_production_flight_testing, a.op_sfp_customer_demo,
+                   a.type_aircraft_code, a.type_engine_code, a.status_code, a.transponder_code,
+                   a.fractional_owner, a.airworthiness_date, a.expiration_date, a.unique_id,
+                   a.kit_mfr_name, a.kit_model_name
+            FROM aircraft_registrations a
+            LEFT JOIN locations l ON a.location_id = l.id
+            WHERE a.registration_number = $1
             "#,
             n_number
         )
@@ -526,6 +563,7 @@ impl AircraftRegistrationsRepository {
                 kit_mfr_name: row.kit_mfr_name,
                 kit_model_name: row.kit_model_name,
                 home_base_airport_id: None,
+                location_id: row.location_id,
                 registered_location: None,
             }))
         } else {
@@ -670,6 +708,7 @@ impl AircraftRegistrationsRepository {
                 kit_mfr_name: row.kit_mfr_name,
                 kit_model_name: row.kit_model_name,
                 home_base_airport_id: None,
+                location_id: None,
                 registered_location: None,
             });
         }
@@ -816,6 +855,7 @@ impl AircraftRegistrationsRepository {
                 kit_mfr_name: row.kit_mfr_name,
                 kit_model_name: row.kit_model_name,
                 home_base_airport_id: None,
+                location_id: None,
                 registered_location: None,
             });
         }
@@ -960,6 +1000,7 @@ impl AircraftRegistrationsRepository {
                 kit_mfr_name: row.kit_mfr_name,
                 kit_model_name: row.kit_model_name,
                 home_base_airport_id: None,
+                location_id: None,
                 registered_location: None,
             });
         }
@@ -967,73 +1008,6 @@ impl AircraftRegistrationsRepository {
         Ok(aircraft_list)
     }
 
-    /// Get aircraft registrations that belong to clubs and haven't been geocoded yet
-    /// Returns a vector of (registration_number, street1, street2, city, state, zip_code, country_code) tuples
-    pub async fn get_aircraft_for_geocoding(&self) -> Result<Vec<(String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>)>> {
-        let results = sqlx::query!(
-            r#"
-            SELECT registration_number, street1, street2, city, state, zip_code, country_mail_code
-            FROM aircraft_registrations
-            WHERE club_id IS NOT NULL
-            AND registered_location IS NULL
-            AND city IS NOT NULL
-            AND state IS NOT NULL
-            "#
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        let mut aircraft_components = Vec::new();
-        for row in results {
-            // Normalize zip code to 5 digits if available
-            let zip_code = row.zip_code.map(|zip| {
-                if zip.len() >= 5 {
-                    zip[..5].to_string()
-                } else {
-                    zip
-                }
-            });
-
-            // Map country code to full country name (defaulting to US)
-            let country = match row.country_mail_code.as_deref() {
-                Some("US") | None => Some("United States".to_string()),
-                Some("CA") => Some("Canada".to_string()),
-                Some("MX") => Some("Mexico".to_string()),
-                Some("GB") => Some("United Kingdom".to_string()),
-                Some(code) => Some(code.to_string()), // Use code as-is for other countries
-            };
-
-            aircraft_components.push((
-                row.registration_number,
-                row.street1,
-                row.street2,
-                row.city,
-                row.state,
-                zip_code,
-                country,
-            ));
-        }
-
-        Ok(aircraft_components)
-    }
-
-    /// Update the registered_location for a specific aircraft registration
-    pub async fn update_registered_location(&self, registration_number: &str, latitude: f64, longitude: f64) -> Result<()> {
-        sqlx::query!(
-            r#"
-            UPDATE aircraft_registrations
-            SET registered_location = POINT($2, $3)
-            WHERE registration_number = $1
-            "#,
-            registration_number,
-            longitude,  // PostGIS POINT expects longitude first
-            latitude    // then latitude
-        )
-        .execute(&self.pool)
-        .await?;
-
-        Ok(())
-    }
 }
 
 #[cfg(test)]

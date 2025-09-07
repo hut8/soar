@@ -22,6 +22,7 @@ use soar::receivers::read_receivers_file;
 use soar::runways::read_runways_csv_file;
 use soar::runways_repo::RunwaysRepository;
 use soar::database_fix_processor::DatabaseFixProcessor;
+use soar::locations_repo::LocationsRepository;
 
 // Embed migrations into the binary
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!();
@@ -499,93 +500,107 @@ async fn handle_load_data(
         info!("Skipping device pull - not requested");
     }
 
-    // Geocode aircraft addresses if requested
+    // Geocode locations if requested
     if geocode {
-        info!("Starting geocoding of aircraft registrations...");
+        info!("Starting geocoding of locations...");
 
-        // Create aircraft registrations repository
-        let aircraft_repo = AircraftRegistrationsRepository::new(pool.clone());
+        // Create locations repository
+        let locations_repo = LocationsRepository::new(pool.clone());
 
-        // Get aircraft that need geocoding
-        match aircraft_repo.get_aircraft_for_geocoding().await {
-            Ok(aircraft_components) => {
-                let aircraft_count = aircraft_components.len();
+        // Get locations that need geocoding
+        match locations_repo.get_locations_for_geocoding(Some(1000)).await {
+            Ok(locations) => {
+                let location_count = locations.len();
                 
-                if aircraft_count == 0 {
-                    info!("No aircraft registrations need geocoding");
+                if location_count == 0 {
+                    info!("No locations need geocoding");
                 } else {
-                    info!("Found {} aircraft registrations that need geocoding", aircraft_count);
+                    info!("Found {} locations that need geocoding", location_count);
                     
                     let mut successful_geocodes = 0;
                     let mut failed_geocodes = 0;
                     
-                    for (registration_number, street1, street2, city, state, zip_code, country) in aircraft_components {
+                    for location in locations {
                         // Check if street1 is a PO Box and skip it for initial geocoding attempt
-                        let (use_street1, use_street2) = if let Some(street1_val) = &street1 {
+                        let (use_street1, use_street2) = if let Some(street1_val) = &location.street1 {
                             let street1_upper = street1_val.to_uppercase();
                             if street1_upper.contains("PO BOX") || street1_upper.contains("P.O. BOX") || street1_upper.starts_with("BOX ") {
                                 // Skip PO Box addresses, use only city/state/zip/country
-                                (None, street2.clone()) 
+                                (None, location.street2.clone()) 
                             } else {
-                                (street1.clone(), street2.clone())
+                                (location.street1.clone(), location.street2.clone())
                             }
                         } else {
-                            (street1.clone(), street2.clone())
+                            (location.street1.clone(), location.street2.clone())
                         };
 
-                        info!("Geocoding {} - {}, {}, {}, {}", 
-                            registration_number,
+                        info!("Geocoding location {} - {}, {}, {}, {}", 
+                            location.id,
                             use_street1.as_deref().unwrap_or(""),
-                            city.as_deref().unwrap_or(""),
-                            state.as_deref().unwrap_or(""),
-                            country.as_deref().unwrap_or("")
+                            location.city.as_deref().unwrap_or(""),
+                            location.state.as_deref().unwrap_or(""),
+                            location.country_mail_code.as_deref().unwrap_or("US")
                         );
                         
                         // First attempt: Try full address (excluding PO boxes)
+                        let country_name = match location.country_mail_code.as_deref() {
+                            Some("US") | None => Some("United States".to_string()),
+                            Some("CA") => Some("Canada".to_string()),
+                            Some("MX") => Some("Mexico".to_string()),
+                            Some("GB") => Some("United Kingdom".to_string()),
+                            Some(code) => Some(code.to_string()),
+                        };
+                        
                         let result = geocode_components(
                             use_street1.as_deref(),
                             use_street2.as_deref(), 
-                            city.as_deref(),
-                            state.as_deref(),
-                            zip_code.as_deref(),
-                            country.as_deref()
+                            location.city.as_deref(),
+                            location.state.as_deref(),
+                            location.zip_code.as_deref(),
+                            country_name.as_deref()
                         ).await;
 
                         let final_result = match result {
                             Ok(point) => Ok(point),
                             Err(_) => {
                                 // Fallback: Try with just city, state, zip, country
-                                info!("Full address failed for {}, trying city/state/zip fallback", registration_number);
+                                info!("Full address failed for location {}, trying city/state/zip fallback", location.id);
                                 geocode_components(
                                     None, // No street
                                     None, // No street2
-                                    city.as_deref(),
-                                    state.as_deref(),
-                                    zip_code.as_deref(),
-                                    country.as_deref()
+                                    location.city.as_deref(),
+                                    location.state.as_deref(),
+                                    location.zip_code.as_deref(),
+                                    country_name.as_deref()
                                 ).await
                             }
                         };
 
                         match final_result {
                             Ok(point) => {
-                                // Update the database with the geocoded location
-                                match aircraft_repo.update_registered_location(&registration_number, point.latitude, point.longitude).await {
-                                    Ok(_) => {
-                                        info!("Successfully geocoded {} to ({}, {})", registration_number, point.latitude, point.longitude);
-                                        successful_geocodes += 1;
+                                // Update the location in the database with the geocoded coordinates
+                                let geolocation_point = crate::locations::Point::new(point.latitude, point.longitude);
+                                match locations_repo.update_geolocation(location.id, geolocation_point).await {
+                                    Ok(updated) => {
+                                        if updated {
+                                            info!("Successfully geocoded location {} to ({}, {})", location.id, point.latitude, point.longitude);
+                                            successful_geocodes += 1;
+                                        } else {
+                                            warn!("Location {} was not found for update", location.id);
+                                            failed_geocodes += 1;
+                                        }
                                     }
                                     Err(e) => {
-                                        error!("Failed to update location for {}: {}", registration_number, e);
+                                        error!("Failed to update location {}: {}", location.id, e);
                                         failed_geocodes += 1;
                                     }
                                 }
                             }
                             Err(e) => {
-                                warn!("Failed to geocode {} (city: {}, state: {}): {}", 
-                                    registration_number, 
-                                    city.as_deref().unwrap_or("?"), 
-                                    state.as_deref().unwrap_or("?"), 
+                                warn!("Failed to geocode location {} (city: {}, state: {}): {}", 
+                                    location.id, 
+                                    location.city.as_deref().unwrap_or("?"), 
+                                    location.state.as_deref().unwrap_or("?"), 
                                     e
                                 );
                                 failed_geocodes += 1;
@@ -600,7 +615,7 @@ async fn handle_load_data(
                 }
             }
             Err(e) => {
-                error!("Failed to get aircraft for geocoding: {}", e);
+                error!("Failed to get locations for geocoding: {}", e);
                 return Err(e);
             }
         }

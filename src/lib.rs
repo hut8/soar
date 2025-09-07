@@ -17,6 +17,8 @@ pub mod fixes_repo;
 pub mod flight_detection_processor;
 pub mod flights;
 pub mod flights_repo;
+pub mod locations;
+pub mod locations_repo;
 pub mod geocoding;
 pub mod message_processors;
 pub mod nats_publisher;

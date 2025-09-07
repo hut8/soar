@@ -306,14 +306,25 @@ pub struct Aircraft {
     // Registrant / address
     pub type_registration_code: Option<String>, // 57
     pub registrant_name: Option<String>,        // 59–108
-    pub street1: Option<String>,                // 110–142
-    pub street2: Option<String>,                // 144–176
-    pub city: Option<String>,                   // 178–195
-    pub state: Option<String>,                  // 197–198
-    pub zip_code: Option<String>,               // 200–209
-    pub region_code: Option<String>,            // 211
-    pub county_mail_code: Option<String>,       // 213–215
-    pub country_mail_code: Option<String>,      // 217–218
+    #[serde(skip_serializing)]
+    pub street1: Option<String>,                // 110–142 (legacy, kept for parsing)
+    #[serde(skip_serializing)]
+    pub street2: Option<String>,                // 144–176 (legacy, kept for parsing)
+    #[serde(skip_serializing)]
+    pub city: Option<String>,                   // 178–195 (legacy, kept for parsing)
+    #[serde(skip_serializing)]
+    pub state: Option<String>,                  // 197–198 (legacy, kept for parsing)
+    #[serde(skip_serializing)]
+    pub zip_code: Option<String>,               // 200–209 (legacy, kept for parsing)
+    #[serde(skip_serializing)]
+    pub region_code: Option<String>,            // 211 (legacy, kept for parsing)
+    #[serde(skip_serializing)]
+    pub county_mail_code: Option<String>,       // 213–215 (legacy, kept for parsing)
+    #[serde(skip_serializing)]
+    pub country_mail_code: Option<String>,      // 217–218 (legacy, kept for parsing)
+
+    // Location normalization
+    pub location_id: Option<Uuid>,              // Foreign key to locations table
 
     // Dates
     pub last_action_date: Option<NaiveDate>,       // 220–227
@@ -349,7 +360,8 @@ pub struct Aircraft {
 
     // New fields for location and airport relationships
     pub home_base_airport_id: Option<Uuid>, // Foreign key to airports table
-    pub registered_location: Option<Point>, // WGS84 point of registration address
+    #[serde(skip_serializing)]
+    pub registered_location: Option<Point>, // WGS84 point of registration address (legacy, now in locations table)
 }
 
 impl Aircraft {
@@ -591,6 +603,7 @@ impl Aircraft {
 
             // Initialize new fields as None/empty
             home_base_airport_id: None,
+            location_id: None,
             registered_location: None,
         })
     }
@@ -750,6 +763,7 @@ impl Aircraft {
 
             // Initialize new fields as None/empty
             home_base_airport_id: None,
+            location_id: None,
             registered_location: None,
         })
     }

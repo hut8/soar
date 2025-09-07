@@ -8,18 +8,30 @@ pub struct Club {
     pub name: String,
     pub is_soaring: Option<bool>,
     pub home_base_airport_id: Option<i32>,
+    
+    // Location normalization
+    pub location_id: Option<Uuid>,              // Foreign key to locations table
 
-    // Address fields (matching aircraft registration table)
+    // Address fields (legacy, kept for serialization compatibility)
+    #[serde(skip_serializing)]
     pub street1: Option<String>,
+    #[serde(skip_serializing)]
     pub street2: Option<String>,
+    #[serde(skip_serializing)]
     pub city: Option<String>,
+    #[serde(skip_serializing)]
     pub state: Option<String>,
+    #[serde(skip_serializing)]
     pub zip_code: Option<String>,
+    #[serde(skip_serializing)]
     pub region_code: Option<String>,
+    #[serde(skip_serializing)]
     pub county_mail_code: Option<String>,
+    #[serde(skip_serializing)]
     pub country_mail_code: Option<String>,
 
-    // Location points - we'll use custom types for PostGIS points
+    // Location points - we'll use custom types for PostGIS points (legacy)
+    #[serde(skip_serializing)]
     pub base_location: Option<Point>,
 
     pub created_at: DateTime<Utc>,
@@ -140,6 +152,7 @@ mod tests {
             name: "Mountain Soaring Club".to_string(),
             is_soaring: None,
             home_base_airport_id: None,
+            location_id: None,
             street1: None,
             street2: None,
             city: None,
@@ -175,6 +188,7 @@ mod tests {
             name: "Test Club".to_string(),
             is_soaring: None,
             home_base_airport_id: None,
+            location_id: None,
             street1: Some("123 Main St".to_string()),
             street2: Some("Suite 100".to_string()),
             city: Some("Anytown".to_string()),
@@ -201,6 +215,7 @@ mod tests {
             name: "Test Club".to_string(),
             is_soaring: None,
             home_base_airport_id: None,
+            location_id: None,
             street1: None,
             street2: None,
             city: None,

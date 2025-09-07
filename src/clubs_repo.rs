@@ -5,27 +5,31 @@ use sqlx::PgPool;
 use sqlx::types::Uuid;
 
 use crate::clubs::Club;
+use crate::locations_repo::LocationsRepository;
 
 pub struct ClubsRepository {
     pool: PgPool,
+    locations_repo: LocationsRepository,
 }
 
 impl ClubsRepository {
     pub fn new(pool: PgPool) -> Self {
-        Self { pool }
+        let locations_repo = LocationsRepository::new(pool.clone());
+        Self { pool, locations_repo }
     }
 
     /// Get club by ID
     pub async fn get_by_id(&self, id: Uuid) -> Result<Option<Club>> {
         let result = sqlx::query!(
             r#"
-            SELECT id, name, is_soaring, home_base_airport_id,
-                   street1, street2, city, state, zip_code, region_code,
-                   county_mail_code, country_mail_code,
-                   ST_X(base_location::geometry) as longitude, ST_Y(base_location::geometry) as latitude,
-                   created_at, updated_at
-            FROM clubs
-            WHERE id = $1
+            SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, c.location_id,
+                   l.street1, l.street2, l.city, l.state, l.zip_code, l.region_code,
+                   l.county_mail_code, l.country_mail_code,
+                   ST_X(l.geolocation::geometry) as longitude, ST_Y(l.geolocation::geometry) as latitude,
+                   c.created_at, c.updated_at
+            FROM clubs c
+            LEFT JOIN locations l ON c.location_id = l.id
+            WHERE c.id = $1
             "#,
             id
         )
@@ -47,6 +51,7 @@ impl ClubsRepository {
                 name: row.name,
                 is_soaring: row.is_soaring,
                 home_base_airport_id: row.home_base_airport_id,
+                location_id: row.location_id,
                 street1: row.street1,
                 street2: row.street2,
                 city: row.city,
@@ -68,13 +73,14 @@ impl ClubsRepository {
     pub async fn get_all(&self) -> Result<Vec<Club>> {
         let results = sqlx::query!(
             r#"
-            SELECT id, name, is_soaring, home_base_airport_id,
-                   street1, street2, city, state, zip_code, region_code,
-                   county_mail_code, country_mail_code,
-                   ST_X(base_location::geometry) as longitude, ST_Y(base_location::geometry) as latitude,
-                   created_at, updated_at
-            FROM clubs
-            ORDER BY name
+            SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, c.location_id,
+                   l.street1, l.street2, l.city, l.state, l.zip_code, l.region_code,
+                   l.county_mail_code, l.country_mail_code,
+                   ST_X(l.geolocation::geometry) as longitude, ST_Y(l.geolocation::geometry) as latitude,
+                   c.created_at, c.updated_at
+            FROM clubs c
+            LEFT JOIN locations l ON c.location_id = l.id
+            ORDER BY c.name
             "#
         )
         .fetch_all(&self.pool)
@@ -96,6 +102,7 @@ impl ClubsRepository {
                 name: row.name,
                 is_soaring: row.is_soaring,
                 home_base_airport_id: row.home_base_airport_id,
+                location_id: row.location_id,
                 street1: row.street1,
                 street2: row.street2,
                 city: row.city,
@@ -121,15 +128,16 @@ impl ClubsRepository {
         
         let results = sqlx::query!(
             r#"
-            SELECT id, name, is_soaring, home_base_airport_id,
-                   street1, street2, city, state, zip_code, region_code,
-                   county_mail_code, country_mail_code,
-                   ST_X(base_location::geometry) as longitude, ST_Y(base_location::geometry) as latitude,
-                   created_at, updated_at,
-                   SIMILARITY(UPPER(name), $1) as similarity_score
-            FROM clubs
-            WHERE SIMILARITY(UPPER(name), $1) > 0.05
-            ORDER BY similarity_score DESC, name
+            SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, c.location_id,
+                   l.street1, l.street2, l.city, l.state, l.zip_code, l.region_code,
+                   l.county_mail_code, l.country_mail_code,
+                   ST_X(l.geolocation::geometry) as longitude, ST_Y(l.geolocation::geometry) as latitude,
+                   c.created_at, c.updated_at,
+                   SIMILARITY(UPPER(c.name), $1) as similarity_score
+            FROM clubs c
+            LEFT JOIN locations l ON c.location_id = l.id
+            WHERE SIMILARITY(UPPER(c.name), $1) > 0.05
+            ORDER BY similarity_score DESC, c.name
             LIMIT $2
             "#,
             query_upper,
@@ -154,6 +162,7 @@ impl ClubsRepository {
                 name: row.name,
                 is_soaring: row.is_soaring,
                 home_base_airport_id: row.home_base_airport_id,
+                location_id: row.location_id,
                 street1: row.street1,
                 street2: row.street2,
                 city: row.city,
@@ -179,16 +188,17 @@ impl ClubsRepository {
         
         let results = sqlx::query!(
             r#"
-            SELECT id, name, is_soaring, home_base_airport_id,
-                   street1, street2, city, state, zip_code, region_code,
-                   county_mail_code, country_mail_code,
-                   ST_X(base_location::geometry) as longitude, ST_Y(base_location::geometry) as latitude,
-                   created_at, updated_at,
-                   SIMILARITY(UPPER(name), $1) as similarity_score
-            FROM clubs
-            WHERE SIMILARITY(UPPER(name), $1) > 0.05
-            AND is_soaring = true
-            ORDER BY similarity_score DESC, name
+            SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, c.location_id,
+                   l.street1, l.street2, l.city, l.state, l.zip_code, l.region_code,
+                   l.county_mail_code, l.country_mail_code,
+                   ST_X(l.geolocation::geometry) as longitude, ST_Y(l.geolocation::geometry) as latitude,
+                   c.created_at, c.updated_at,
+                   SIMILARITY(UPPER(c.name), $1) as similarity_score
+            FROM clubs c
+            LEFT JOIN locations l ON c.location_id = l.id
+            WHERE SIMILARITY(UPPER(c.name), $1) > 0.05
+            AND c.is_soaring = true
+            ORDER BY similarity_score DESC, c.name
             LIMIT $2
             "#,
             query_upper,
@@ -213,6 +223,7 @@ impl ClubsRepository {
                 name: row.name,
                 is_soaring: row.is_soaring,
                 home_base_airport_id: row.home_base_airport_id,
+                location_id: row.location_id,
                 street1: row.street1,
                 street2: row.street2,
                 city: row.city,
@@ -238,16 +249,17 @@ impl ClubsRepository {
 
         let results = sqlx::query!(
             r#"
-            SELECT id, name, is_soaring, home_base_airport_id,
-                   street1, street2, city, state, zip_code, region_code,
-                   county_mail_code, country_mail_code,
-                   ST_X(base_location::geometry) as longitude, ST_Y(base_location::geometry) as latitude,
-                   created_at, updated_at,
-                   ST_Distance(ST_SetSRID(base_location::geometry, 4326)::geography, ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography) as distance_meters
-            FROM clubs
-            WHERE base_location IS NOT NULL
-            AND is_soaring = true
-            AND ST_DWithin(ST_SetSRID(base_location::geometry, 4326)::geography, ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography, $3)
+            SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, c.location_id,
+                   l.street1, l.street2, l.city, l.state, l.zip_code, l.region_code,
+                   l.county_mail_code, l.country_mail_code,
+                   ST_X(l.geolocation::geometry) as longitude, ST_Y(l.geolocation::geometry) as latitude,
+                   c.created_at, c.updated_at,
+                   ST_Distance(ST_SetSRID(l.geolocation::geometry, 4326)::geography, ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography) as distance_meters
+            FROM clubs c
+            LEFT JOIN locations l ON c.location_id = l.id
+            WHERE l.geolocation IS NOT NULL
+            AND c.is_soaring = true
+            AND ST_DWithin(ST_SetSRID(l.geolocation::geometry, 4326)::geography, ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography, $3)
             ORDER BY distance_meters
             LIMIT $4
             "#,
@@ -275,6 +287,7 @@ impl ClubsRepository {
                 name: row.name,
                 is_soaring: row.is_soaring,
                 home_base_airport_id: row.home_base_airport_id,
+                location_id: row.location_id,
                 street1: row.street1,
                 street2: row.street2,
                 city: row.city,
@@ -294,29 +307,43 @@ impl ClubsRepository {
 
     /// Insert a new club
     pub async fn insert(&self, club: &Club) -> Result<()> {
+        // First create location if we have address data
+        let location_id = if let Some(location_id) = club.location_id {
+            location_id
+        } else if club.street1.is_some() || club.city.is_some() {
+            let location_geolocation = club.base_location.as_ref().map(|loc| {
+                crate::locations::Point::new(loc.latitude, loc.longitude)
+            });
+            
+            let location = self.locations_repo.find_or_create(
+                club.street1.clone(),
+                club.street2.clone(),
+                club.city.clone(),
+                club.state.clone(),
+                club.zip_code.clone(),
+                club.region_code.clone(),
+                club.county_mail_code.clone(),
+                club.country_mail_code.clone(),
+                location_geolocation,
+            ).await?;
+            location.id
+        } else {
+            return Err(anyhow::anyhow!("Club must have either location_id or address fields"));
+        };
+
         sqlx::query!(
             r#"
             INSERT INTO clubs (
-                id, name, is_soaring, home_base_airport_id,
-                street1, street2, city, state, zip_code, region_code,
-                county_mail_code, country_mail_code, base_location,
+                id, name, is_soaring, home_base_airport_id, location_id,
                 created_at, updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             "#,
             club.id,
             club.name,
             club.is_soaring,
             club.home_base_airport_id,
-            club.street1,
-            club.street2,
-            club.city,
-            club.state,
-            club.zip_code,
-            club.region_code,
-            club.county_mail_code,
-            club.country_mail_code,
-            club.base_location.as_ref().map(|p| PgPoint { x: p.longitude, y: p.latitude }),
+            location_id,
             club.created_at,
             club.updated_at
         )
@@ -341,6 +368,7 @@ mod tests {
             name: "Adirondack Soaring Club".to_string(),
             is_soaring: Some(true),
             home_base_airport_id: None,
+            location_id: None,
             street1: Some("123 Mountain Rd".to_string()),
             street2: None,
             city: Some("Lake Placid".to_string()),
