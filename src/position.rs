@@ -73,7 +73,9 @@ impl Fix {
                 let longitude = pos_packet.longitude.as_();
                 let altitude_feet = pos_packet.comment.altitude.map(|a| a as i32);
                 let ground_speed_knots = pos_packet.comment.speed.map(|s| s as f32);
-                let track_degrees = pos_packet.comment.course.map(|c| c as f32);
+                let track_degrees = pos_packet.comment.course
+                    .filter(|&c| c < 360)
+                    .map(|c| c as f32);
 
                 // Initialize OGN-related fields
                 let mut aircraft_id = None;
