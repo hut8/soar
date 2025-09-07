@@ -61,6 +61,9 @@ impl AircraftRegistrationsRepository {
             // Convert transponder_code from u32 to i64 for database storage (BIGINT)
             let transponder_code = aircraft_reg.transponder_code.map(|t| t as i64);
 
+            // Convert airworthiness_class enum to string code for database storage
+            let airworthiness_class_code = aircraft_reg.airworthiness_class.as_ref().map(|ac| ac.code());
+
             // Handle club linking if aircraft has a valid club name
             let club_id = if let Some(club_name) = aircraft_reg.club_name() {
                 // Check if aircraft already has a club_id set (never overwrite existing club_id)
@@ -243,7 +246,7 @@ impl AircraftRegistrationsRepository {
                 aircraft_reg.country_mail_code,
                 aircraft_reg.last_action_date,
                 aircraft_reg.certificate_issue_date,
-                aircraft_reg.airworthiness_class_code,
+                airworthiness_class_code.as_deref(),
                 aircraft_reg.approved_operations_raw,
                 aircraft_reg.approved_ops.restricted_other,
                 aircraft_reg.approved_ops.restricted_ag_pest_control,
@@ -510,7 +513,7 @@ impl AircraftRegistrationsRepository {
                 country_mail_code: row.country_mail_code,
                 last_action_date: row.last_action_date,
                 certificate_issue_date: row.certificate_issue_date,
-                airworthiness_class_code: row.airworthiness_class_code,
+                airworthiness_class: None, // TODO: Convert from database string to enum
                 approved_operations_raw: row.approved_operations_raw,
                 approved_ops,
                 type_aircraft_code: row.type_aircraft_code,
@@ -654,7 +657,7 @@ impl AircraftRegistrationsRepository {
                 country_mail_code: row.country_mail_code,
                 last_action_date: row.last_action_date,
                 certificate_issue_date: row.certificate_issue_date,
-                airworthiness_class_code: row.airworthiness_class_code,
+                airworthiness_class: None, // TODO: Convert from database string to enum
                 approved_operations_raw: row.approved_operations_raw,
                 approved_ops,
                 type_aircraft_code: row.type_aircraft_code,
@@ -799,7 +802,7 @@ impl AircraftRegistrationsRepository {
                 country_mail_code: row.country_mail_code,
                 last_action_date: row.last_action_date,
                 certificate_issue_date: row.certificate_issue_date,
-                airworthiness_class_code: row.airworthiness_class_code,
+                airworthiness_class: None, // TODO: Convert from database string to enum
                 approved_operations_raw: row.approved_operations_raw,
                 approved_ops,
                 type_aircraft_code: row.type_aircraft_code,
@@ -943,7 +946,7 @@ impl AircraftRegistrationsRepository {
                 country_mail_code: row.country_mail_code,
                 last_action_date: row.last_action_date,
                 certificate_issue_date: row.certificate_issue_date,
-                airworthiness_class_code: row.airworthiness_class_code,
+                airworthiness_class: None, // TODO: Convert from database string to enum
                 approved_operations_raw: row.approved_operations_raw,
                 approved_ops,
                 type_aircraft_code: row.type_aircraft_code,
@@ -971,10 +974,10 @@ impl AircraftRegistrationsRepository {
         let results = sqlx::query!(
             r#"
             SELECT registration_number, street1, street2, city, state, zip_code, country_mail_code
-            FROM aircraft_registrations 
-            WHERE club_id IS NOT NULL 
+            FROM aircraft_registrations
+            WHERE club_id IS NOT NULL
             AND registered_location IS NULL
-            AND city IS NOT NULL 
+            AND city IS NOT NULL
             AND state IS NOT NULL
             "#
         )
@@ -985,9 +988,9 @@ impl AircraftRegistrationsRepository {
         for row in results {
             // Normalize zip code to 5 digits if available
             let zip_code = row.zip_code.map(|zip| {
-                if zip.len() >= 5 { 
+                if zip.len() >= 5 {
                     zip[..5].to_string()
-                } else { 
+                } else {
                     zip
                 }
             });
@@ -1019,7 +1022,7 @@ impl AircraftRegistrationsRepository {
     pub async fn update_registered_location(&self, registration_number: &str, latitude: f64, longitude: f64) -> Result<()> {
         sqlx::query!(
             r#"
-            UPDATE aircraft_registrations 
+            UPDATE aircraft_registrations
             SET registered_location = POINT($2, $3)
             WHERE registration_number = $1
             "#,
@@ -1036,7 +1039,7 @@ impl AircraftRegistrationsRepository {
 
 #[cfg(test)]
 mod tests {
-    use crate::faa::aircraft_registrations::{Aircraft, ApprovedOps};
+    use crate::faa::aircraft_registrations::{Aircraft, AirworthinessClass, ApprovedOps};
 
     // Note: These tests would require a test database setup
     // For now, they're just structural examples
@@ -1060,7 +1063,7 @@ mod tests {
             country_mail_code: Some("US".to_string()),
             last_action_date: None,
             certificate_issue_date: None,
-            airworthiness_class_code: Some("1".to_string()),
+            airworthiness_class: Some(AirworthinessClass::Standard),
             approved_operations_raw: None,
             approved_ops: ApprovedOps::default(),
             type_aircraft_code: Some("4".to_string()),

@@ -9,6 +9,65 @@ use std::path::Path;
 // Import Point from clubs module
 use crate::clubs::Point;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
+#[sqlx(type_name = "airworthiness_class", rename_all = "PascalCase")]
+pub enum AirworthinessClass {
+    Standard,
+    Limited,
+    Restricted,
+    Experimental,
+    Provisional,
+    Multiple,
+    Primary,
+    #[sqlx(rename = "Special Flight Permit")]
+    SpecialFlightPermit,
+    #[sqlx(rename = "Light Sport")]
+    LightSport,
+}
+
+impl From<&str> for AirworthinessClass {
+    fn from(code: &str) -> Self {
+        match code {
+            "1" => AirworthinessClass::Standard,
+            "2" => AirworthinessClass::Limited,
+            "3" => AirworthinessClass::Restricted,
+            "4" => AirworthinessClass::Experimental,
+            "5" => AirworthinessClass::Provisional,
+            "6" => AirworthinessClass::Multiple,
+            "7" => AirworthinessClass::Primary,
+            "8" => AirworthinessClass::SpecialFlightPermit,
+            "9" => AirworthinessClass::LightSport,
+            _ => AirworthinessClass::Standard, // Default fallback
+        }
+    }
+}
+
+impl From<Option<String>> for AirworthinessClass {
+    fn from(code: Option<String>) -> Self {
+        match code {
+            Some(ref s) => AirworthinessClass::from(s.as_str()),
+            None => AirworthinessClass::Standard, // Default fallback
+        }
+    }
+}
+
+impl AirworthinessClass {
+    /// Get the legacy string code for this airworthiness class
+    pub fn code(&self) -> &'static str {
+        match self {
+            AirworthinessClass::Standard => "1",
+            AirworthinessClass::Limited => "2",
+            AirworthinessClass::Restricted => "3",
+            AirworthinessClass::Experimental => "4",
+            AirworthinessClass::Provisional => "5",
+            AirworthinessClass::Multiple => "6",
+            AirworthinessClass::Primary => "7",
+            AirworthinessClass::SpecialFlightPermit => "8",
+            AirworthinessClass::LightSport => "9",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RegistrantType {
     Individual,
@@ -261,7 +320,7 @@ pub struct Aircraft {
     pub certificate_issue_date: Option<NaiveDate>, // 229–236
 
     // Airworthiness & ops
-    pub airworthiness_class_code: Option<String>, // 238
+    pub airworthiness_class: Option<AirworthinessClass>, // 238
     pub approved_operations_raw: Option<String>,  // 239–247
     pub approved_ops: ApprovedOps,                // mapped flags (best effort)
 
@@ -452,6 +511,7 @@ impl Aircraft {
         let certificate_issue_date = to_opt_date(fw(line, 229, 236));
 
         let airworthiness_class_code = to_opt_string_no_zero(fw(line, 238, 238));
+        let airworthiness_class = airworthiness_class_code.as_ref().map(|code| AirworthinessClass::from(code.as_str()));
         let approved_operations_raw = to_opt_string_no_zero(fw(line, 239, 247));
 
         let approved_ops = if let (Some(class_code), Some(raw)) =
@@ -507,7 +567,7 @@ impl Aircraft {
             last_action_date,
             certificate_issue_date,
 
-            airworthiness_class_code,
+            airworthiness_class,
             approved_operations_raw,
             approved_ops,
 
@@ -620,6 +680,7 @@ impl Aircraft {
         let certificate_issue_date = parse_csv_date(fields[16]);
 
         let airworthiness_class_code = to_opt_string(fields[17]);
+        let airworthiness_class = airworthiness_class_code.as_ref().map(|code| AirworthinessClass::from(code.as_str()));
         let type_aircraft_code = to_opt_string(fields[18]);
         let type_engine_code = to_opt_string(fields[19]).and_then(|s| s.parse().ok());
         let status_code = to_opt_string(fields[20]);
@@ -665,7 +726,7 @@ impl Aircraft {
             last_action_date,
             certificate_issue_date,
 
-            airworthiness_class_code,
+            airworthiness_class,
             approved_operations_raw,
             approved_ops,
 
@@ -973,7 +1034,7 @@ mod tests {
             country_mail_code: None,
             last_action_date: None,
             certificate_issue_date: None,
-            airworthiness_class_code: None,
+            airworthiness_class: None,
             approved_operations_raw: None,
             approved_ops: ApprovedOps::default(),
             type_aircraft_code: None,

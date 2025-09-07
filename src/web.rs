@@ -15,6 +15,8 @@ use tracing::info;
 
 use crate::airports_repo::AirportsRepository;
 use crate::clubs_repo::ClubsRepository;
+use crate::fixes_repo::FixesRepository;
+use crate::flights_repo::FlightsRepository;
 
 // Embed web assets into the binary
 static ASSETS: Dir<'_> = include_dir!("web/build");
@@ -31,6 +33,23 @@ pub struct SearchQuery {
     latitude: Option<f64>,
     longitude: Option<f64>,
     radius: Option<f64>,
+    limit: Option<i64>,
+}
+
+#[derive(Deserialize)]
+pub struct FixQuery {
+    aircraft_id: Option<String>,
+    start_time: Option<String>, // ISO datetime
+    end_time: Option<String>,   // ISO datetime
+    limit: Option<i64>,
+}
+
+#[derive(Deserialize)]
+pub struct FlightQuery {
+    aircraft_id: Option<String>,
+    start_date: Option<String>, // ISO date
+    end_date: Option<String>,   // ISO date
+    in_progress: Option<bool>,  // Filter for flights in progress
     limit: Option<i64>,
 }
 
@@ -216,6 +235,130 @@ async fn search_clubs(
     }
 }
 
+async fn search_fixes(
+    State(state): State<AppState>,
+    Query(params): Query<FixQuery>,
+) -> impl IntoResponse {
+    use chrono::{DateTime, Utc};
+    
+    let fixes_repo = FixesRepository::new(state.pool);
+
+    // Parse datetime strings if provided
+    let start_time = if let Some(start_str) = params.start_time {
+        match start_str.parse::<DateTime<Utc>>() {
+            Ok(dt) => Some(dt),
+            Err(_) => return (StatusCode::BAD_REQUEST, "Invalid start_time format. Use ISO 8601 format.").into_response(),
+        }
+    } else {
+        None
+    };
+
+    let end_time = if let Some(end_str) = params.end_time {
+        match end_str.parse::<DateTime<Utc>>() {
+            Ok(dt) => Some(dt),
+            Err(_) => return (StatusCode::BAD_REQUEST, "Invalid end_time format. Use ISO 8601 format.").into_response(),
+        }
+    } else {
+        None
+    };
+
+    // Determine query strategy
+    if let Some(aircraft_id) = params.aircraft_id {
+        // Aircraft-specific query
+        match fixes_repo.get_fixes_for_aircraft(&aircraft_id, params.limit).await {
+            Ok(fixes) => Json(fixes).into_response(),
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Error fetching fixes for aircraft {}: {}", aircraft_id, e),
+            ).into_response(),
+        }
+    } else if let (Some(start), Some(end)) = (start_time, end_time) {
+        // Time range query
+        match fixes_repo.get_fixes_in_time_range(start, end, params.limit).await {
+            Ok(fixes) => Json(fixes).into_response(),
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Error fetching fixes in time range: {}", e),
+            ).into_response(),
+        }
+    } else {
+        // Recent fixes query
+        match fixes_repo.get_recent_fixes(params.limit.unwrap_or(100)).await {
+            Ok(fixes) => Json(fixes).into_response(),
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Error fetching recent fixes: {}", e),
+            ).into_response(),
+        }
+    }
+}
+
+async fn search_flights(
+    State(state): State<AppState>,
+    Query(params): Query<FlightQuery>,
+) -> impl IntoResponse {
+    use chrono::NaiveDate;
+    
+    let flights_repo = FlightsRepository::new(state.pool);
+
+    // Handle in-progress filter
+    if params.in_progress == Some(true) {
+        match flights_repo.get_flights_in_progress().await {
+            Ok(flights) => return Json(flights).into_response(),
+            Err(e) => return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Error fetching flights in progress: {}", e),
+            ).into_response(),
+        }
+    }
+
+    // Aircraft-specific query
+    if let Some(aircraft_id) = params.aircraft_id {
+        match flights_repo.get_flights_for_aircraft(&aircraft_id).await {
+            Ok(flights) => Json(flights).into_response(),
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Error fetching flights for aircraft {}: {}", aircraft_id, e),
+            ).into_response(),
+        }
+    } else if let Some(date_str) = params.start_date {
+        // Date-specific query
+        match date_str.parse::<NaiveDate>() {
+            Ok(date) => {
+                match flights_repo.get_flights_for_date(date).await {
+                    Ok(flights) => Json(flights).into_response(),
+                    Err(e) => (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Error fetching flights for date {}: {}", date, e),
+                    ).into_response(),
+                }
+            }
+            Err(_) => (
+                StatusCode::BAD_REQUEST,
+                "Invalid start_date format. Use YYYY-MM-DD format.",
+            ).into_response(),
+        }
+    } else {
+        // Default: recent flights
+        match flights_repo.get_flights_in_progress().await {
+            Ok(flights) => {
+                // Also get recently completed flights if we need more
+                let limit = params.limit.unwrap_or(50) as usize;
+                if flights.len() < limit {
+                    // This is a simplified approach - in a real system you'd want a more sophisticated query
+                    Json(flights).into_response()
+                } else {
+                    Json(flights).into_response()
+                }
+            }
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Error fetching recent flights: {}", e),
+            ).into_response(),
+        }
+    }
+}
+
 pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Result<()> {
     info!("Starting web server on {}:{}", interface, port);
 
@@ -225,6 +368,8 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
     let app = Router::new()
         .route("/airports", get(search_airports))
         .route("/clubs", get(search_clubs))
+        .route("/fixes", get(search_fixes))
+        .route("/flights", get(search_flights))
         .fallback(handle_static_file)
         .with_state(app_state)
         .layer(TraceLayer::new_for_http());

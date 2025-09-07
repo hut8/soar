@@ -14,6 +14,7 @@ pub mod devices;
 pub mod faa;
 pub mod fixes;
 pub mod fixes_repo;
+pub mod flight_detection_processor;
 pub mod flights;
 pub mod flights_repo;
 pub mod geocoding;

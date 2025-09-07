@@ -169,8 +169,8 @@ impl FixesRepository {
         Ok(inserted_count)
     }
 
-    /// Get fixes for a specific aircraft ID within a time range
-    pub async fn get_fixes_for_aircraft(
+    /// Get fixes for a specific aircraft ID within a time range (original method)
+    pub async fn get_fixes_for_aircraft_with_time_range(
         &self,
         aircraft_id: &str,
         start_time: DateTime<Utc>,
@@ -274,6 +274,280 @@ impl FixesRepository {
             center_lon,
             cutoff_time,
             radius_m,
+            limit
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut fixes = Vec::new();
+        for row in results {
+            fixes.push(Fix {
+                id: row.id,
+                source: row.source,
+                destination: row.destination,
+                via: row.via.unwrap_or_default(),
+                raw_packet: row.raw_packet,
+                timestamp: row.timestamp,
+                latitude: row.latitude,
+                longitude: row.longitude,
+                altitude_feet: row.altitude_feet,
+                aircraft_id: row.aircraft_id,
+                address: row.address.map(|a| a as u32),
+                address_type: row.address_type,
+                aircraft_type: row.aircraft_type,
+                flight_number: row.flight_number,
+                emitter_category: row.emitter_category,
+                registration: row.registration,
+                model: row.model,
+                squawk: row.squawk,
+                ground_speed_knots: row.ground_speed_knots,
+                track_degrees: row.track_degrees,
+                climb_fpm: row.climb_fpm,
+                turn_rate_rot: row.turn_rate_rot,
+                snr_db: row.snr_db,
+                bit_errors_corrected: row.bit_errors_corrected.map(|b| b as u32),
+                freq_offset_khz: row.freq_offset_khz,
+                club_id: row.club_id,
+                created_at: row.created_at.unwrap_or_else(Utc::now),
+                updated_at: row.updated_at.unwrap_or_else(Utc::now),
+            });
+        }
+
+        Ok(fixes)
+    }
+
+    /// Get recent fixes for an aircraft (without time range)
+    pub async fn get_fixes_for_aircraft(
+        &self,
+        aircraft_id: &str,
+        limit: Option<i64>,
+    ) -> Result<Vec<Fix>> {
+        let limit = limit.unwrap_or(100);
+
+        let results = sqlx::query!(
+            r#"
+            SELECT
+                id, source, destination, via, raw_packet, timestamp,
+                latitude, longitude, altitude_feet,
+                aircraft_id, address, address_type as "address_type: AddressType", aircraft_type as "aircraft_type: AircraftType",
+                flight_number, emitter_category as "emitter_category: AdsbEmitterCategory", registration, model, squawk,
+                ground_speed_knots, track_degrees, climb_fpm, turn_rate_rot,
+                snr_db, bit_errors_corrected, freq_offset_khz,
+                club_id, created_at, updated_at
+            FROM fixes
+            WHERE aircraft_id = $1
+            ORDER BY timestamp DESC
+            LIMIT $2
+            "#,
+            aircraft_id,
+            limit
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut fixes = Vec::new();
+        for row in results {
+            fixes.push(Fix {
+                id: row.id,
+                source: row.source,
+                destination: row.destination,
+                via: row.via.unwrap_or_default(),
+                raw_packet: row.raw_packet,
+                timestamp: row.timestamp,
+                latitude: row.latitude,
+                longitude: row.longitude,
+                altitude_feet: row.altitude_feet,
+                aircraft_id: row.aircraft_id,
+                address: row.address.map(|a| a as u32),
+                address_type: row.address_type,
+                aircraft_type: row.aircraft_type,
+                flight_number: row.flight_number,
+                emitter_category: row.emitter_category,
+                registration: row.registration,
+                model: row.model,
+                squawk: row.squawk,
+                ground_speed_knots: row.ground_speed_knots,
+                track_degrees: row.track_degrees,
+                climb_fpm: row.climb_fpm,
+                turn_rate_rot: row.turn_rate_rot,
+                snr_db: row.snr_db,
+                bit_errors_corrected: row.bit_errors_corrected.map(|b| b as u32),
+                freq_offset_khz: row.freq_offset_khz,
+                club_id: row.club_id,
+                created_at: row.created_at.unwrap_or_else(Utc::now),
+                updated_at: row.updated_at.unwrap_or_else(Utc::now),
+            });
+        }
+
+        Ok(fixes)
+    }
+
+    /// Get fixes within a time range
+    pub async fn get_fixes_in_time_range(
+        &self,
+        start_time: DateTime<Utc>,
+        end_time: DateTime<Utc>,
+        limit: Option<i64>,
+    ) -> Result<Vec<Fix>> {
+        let limit = limit.unwrap_or(1000);
+
+        let results = sqlx::query!(
+            r#"
+            SELECT
+                id, source, destination, via, raw_packet, timestamp,
+                latitude, longitude, altitude_feet,
+                aircraft_id, address, address_type as "address_type: AddressType", aircraft_type as "aircraft_type: AircraftType",
+                flight_number, emitter_category as "emitter_category: AdsbEmitterCategory", registration, model, squawk,
+                ground_speed_knots, track_degrees, climb_fpm, turn_rate_rot,
+                snr_db, bit_errors_corrected, freq_offset_khz,
+                club_id, created_at, updated_at
+            FROM fixes
+            WHERE timestamp BETWEEN $1 AND $2
+            ORDER BY timestamp DESC
+            LIMIT $3
+            "#,
+            start_time,
+            end_time,
+            limit
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut fixes = Vec::new();
+        for row in results {
+            fixes.push(Fix {
+                id: row.id,
+                source: row.source,
+                destination: row.destination,
+                via: row.via.unwrap_or_default(),
+                raw_packet: row.raw_packet,
+                timestamp: row.timestamp,
+                latitude: row.latitude,
+                longitude: row.longitude,
+                altitude_feet: row.altitude_feet,
+                aircraft_id: row.aircraft_id,
+                address: row.address.map(|a| a as u32),
+                address_type: row.address_type,
+                aircraft_type: row.aircraft_type,
+                flight_number: row.flight_number,
+                emitter_category: row.emitter_category,
+                registration: row.registration,
+                model: row.model,
+                squawk: row.squawk,
+                ground_speed_knots: row.ground_speed_knots,
+                track_degrees: row.track_degrees,
+                climb_fpm: row.climb_fpm,
+                turn_rate_rot: row.turn_rate_rot,
+                snr_db: row.snr_db,
+                bit_errors_corrected: row.bit_errors_corrected.map(|b| b as u32),
+                freq_offset_khz: row.freq_offset_khz,
+                club_id: row.club_id,
+                created_at: row.created_at.unwrap_or_else(Utc::now),
+                updated_at: row.updated_at.unwrap_or_else(Utc::now),
+            });
+        }
+
+        Ok(fixes)
+    }
+
+    /// Get recent fixes (most recent first)
+    pub async fn get_recent_fixes(&self, limit: i64) -> Result<Vec<Fix>> {
+        let results = sqlx::query!(
+            r#"
+            SELECT
+                id, source, destination, via, raw_packet, timestamp,
+                latitude, longitude, altitude_feet,
+                aircraft_id, address, address_type as "address_type: AddressType", aircraft_type as "aircraft_type: AircraftType",
+                flight_number, emitter_category as "emitter_category: AdsbEmitterCategory", registration, model, squawk,
+                ground_speed_knots, track_degrees, climb_fpm, turn_rate_rot,
+                snr_db, bit_errors_corrected, freq_offset_khz,
+                club_id, created_at, updated_at
+            FROM fixes
+            ORDER BY timestamp DESC
+            LIMIT $1
+            "#,
+            limit
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut fixes = Vec::new();
+        for row in results {
+            fixes.push(Fix {
+                id: row.id,
+                source: row.source,
+                destination: row.destination,
+                via: row.via.unwrap_or_default(),
+                raw_packet: row.raw_packet,
+                timestamp: row.timestamp,
+                latitude: row.latitude,
+                longitude: row.longitude,
+                altitude_feet: row.altitude_feet,
+                aircraft_id: row.aircraft_id,
+                address: row.address.map(|a| a as u32),
+                address_type: row.address_type,
+                aircraft_type: row.aircraft_type,
+                flight_number: row.flight_number,
+                emitter_category: row.emitter_category,
+                registration: row.registration,
+                model: row.model,
+                squawk: row.squawk,
+                ground_speed_knots: row.ground_speed_knots,
+                track_degrees: row.track_degrees,
+                climb_fpm: row.climb_fpm,
+                turn_rate_rot: row.turn_rate_rot,
+                snr_db: row.snr_db,
+                bit_errors_corrected: row.bit_errors_corrected.map(|b| b as u32),
+                freq_offset_khz: row.freq_offset_khz,
+                club_id: row.club_id,
+                created_at: row.created_at.unwrap_or_else(Utc::now),
+                updated_at: row.updated_at.unwrap_or_else(Utc::now),
+            });
+        }
+
+        Ok(fixes)
+    }
+
+    /// Get fixes for aircraft within time range (keeping the original method for compatibility)
+    pub async fn get_fixes_for_aircraft_in_time_range(
+        &self,
+        aircraft_id: &str,
+        start_time: DateTime<Utc>,
+        end_time: DateTime<Utc>,
+        limit: Option<i64>,
+    ) -> Result<Vec<Fix>> {
+        self.get_fixes_for_aircraft_in_time_range_impl(aircraft_id, start_time, end_time, limit).await
+    }
+
+    /// Private implementation for the original aircraft + time range method
+    async fn get_fixes_for_aircraft_in_time_range_impl(
+        &self,
+        aircraft_id: &str,
+        start_time: DateTime<Utc>,
+        end_time: DateTime<Utc>,
+        limit: Option<i64>,
+    ) -> Result<Vec<Fix>> {
+        let limit = limit.unwrap_or(1000);
+
+        let results = sqlx::query!(
+            r#"
+            SELECT
+                id, source, destination, via, raw_packet, timestamp,
+                latitude, longitude, altitude_feet,
+                aircraft_id, address, address_type as "address_type: AddressType", aircraft_type as "aircraft_type: AircraftType",
+                flight_number, emitter_category as "emitter_category: AdsbEmitterCategory", registration, model, squawk,
+                ground_speed_knots, track_degrees, climb_fpm, turn_rate_rot,
+                snr_db, bit_errors_corrected, freq_offset_khz,
+                club_id, created_at, updated_at
+            FROM fixes
+            WHERE aircraft_id = $1
+            AND timestamp BETWEEN $2 AND $3
+            ORDER BY timestamp DESC
+            LIMIT $4
+            "#,
+            aircraft_id,
+            start_time,
+            end_time,
             limit
         )
         .fetch_all(&self.pool)
