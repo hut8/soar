@@ -3,7 +3,35 @@
 	import { page } from '$app/stores';
 	import { ProgressRadial } from '@skeletonlabs/skeleton';
 
-	let airports = [];
+	interface Location {
+		latitude: number;
+		longitude: number;
+	}
+
+	interface Airport {
+		id: number;
+		ident: string;
+		airport_type?: string;
+		name?: string;
+		latitude_deg?: number;
+		longitude_deg?: number;
+		elevation_ft?: number;
+		continent?: string;
+		iso_country?: string;
+		iso_region?: string;
+		municipality?: string;
+		scheduled_service: boolean;
+		icao_code?: string;
+		iata_code?: string;
+		gps_code?: string;
+		local_code?: string;
+		home_link?: string;
+		wikipedia_link?: string;
+		keywords?: string;
+		location?: Location;
+	}
+
+	let airports: Airport[] = [];
 	let loading = false;
 	let error = '';
 	let searchQuery = '';
@@ -55,7 +83,8 @@
 
 			airports = await response.json();
 		} catch (err) {
-			error = `Failed to search airports: ${err.message}`;
+			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+			error = `Failed to search airports: ${errorMessage}`;
 			console.error('Error searching airports:', err);
 		} finally {
 			loading = false;
@@ -76,7 +105,7 @@
 		}
 	}
 
-	function formatAirportType(type) {
+	function formatAirportType(type: string | undefined): string {
 		switch (type) {
 			case 'large_airport':
 				return 'Large Airport';
@@ -97,7 +126,7 @@
 		}
 	}
 
-	function formatLocation(airport) {
+	function formatLocation(airport: Airport): string {
 		const parts = [];
 		if (airport.municipality) parts.push(airport.municipality);
 		if (airport.iso_region) parts.push(airport.iso_region);
@@ -247,27 +276,27 @@
 								</div>
 							{/if}
 
-							{#if airport.type}
+							{#if airport.airport_type}
 								<div class="flex items-center space-x-2">
 									<span class="text-surface-500">🏷️</span>
-									<span class="text-sm">{formatAirportType(airport.type)}</span>
+									<span class="text-sm">{formatAirportType(airport.airport_type)}</span>
 								</div>
 							{/if}
 						</div>
 
 						<footer class="card-footer">
 							<div class="flex flex-wrap gap-2">
-								{#if airport.type === 'small_airport'}
+								{#if airport.airport_type === 'small_airport'}
 									<span class="variant-filled-secondary badge">Small Airport</span>
-								{:else if airport.type === 'medium_airport'}
+								{:else if airport.airport_type === 'medium_airport'}
 									<span class="variant-filled-primary badge">Medium Airport</span>
-								{:else if airport.type === 'large_airport'}
+								{:else if airport.airport_type === 'large_airport'}
 									<span class="variant-filled-success badge">Large Airport</span>
-								{:else if airport.type === 'heliport'}
+								{:else if airport.airport_type === 'heliport'}
 									<span class="variant-filled-warning badge">Heliport</span>
-								{:else if airport.type === 'seaplane_base'}
+								{:else if airport.airport_type === 'seaplane_base'}
 									<span class="variant-filled-tertiary badge">Seaplane Base</span>
-								{:else if airport.type === 'closed'}
+								{:else if airport.airport_type === 'closed'}
 									<span class="variant-filled-error badge">Closed</span>
 								{:else}
 									<span class="variant-soft badge">Airport</span>

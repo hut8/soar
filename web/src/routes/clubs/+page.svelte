@@ -3,7 +3,31 @@
 	import { page } from '$app/stores';
 	import { ProgressRadial } from '@skeletonlabs/skeleton';
 
-	let clubs = [];
+	interface Point {
+		latitude: number;
+		longitude: number;
+	}
+
+	interface Club {
+		id: string;
+		name: string;
+		is_soaring?: boolean;
+		home_base_airport_id?: number;
+		location_id?: string;
+		street1?: string;
+		street2?: string;
+		city?: string;
+		state?: string;
+		zip_code?: string;
+		region_code?: string;
+		county_mail_code?: string;
+		country_mail_code?: string;
+		base_location?: Point;
+		created_at: string;
+		updated_at: string;
+	}
+
+	let clubs: Club[] = [];
 	let loading = false;
 	let error = '';
 	let searchQuery = '';
@@ -55,7 +79,8 @@
 
 			clubs = await response.json();
 		} catch (err) {
-			error = `Failed to search clubs: ${err.message}`;
+			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+			error = `Failed to search clubs: ${errorMessage}`;
 			console.error('Error searching clubs:', err);
 		} finally {
 			loading = false;
@@ -76,7 +101,7 @@
 		}
 	}
 
-	function formatAddress(club) {
+	function formatAddress(club: Club): string {
 		const parts = [];
 		if (club.street1) parts.push(club.street1);
 		if (club.street2) parts.push(club.street2);
