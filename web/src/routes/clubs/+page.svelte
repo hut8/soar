@@ -193,7 +193,7 @@
 			<h2 class="h2">Results ({clubs.length} clubs found)</h2>
 
 			<div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-				{#each clubs as club}
+				{#each clubs as club (club.id)}
 					<div class="card space-y-4 p-6">
 						<header class="card-header">
 							<h3 class="h3">{club.name}</h3>

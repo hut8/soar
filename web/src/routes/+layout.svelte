@@ -2,11 +2,11 @@
 	import '../app.css';
 	import { AppShell, AppBar } from '@skeletonlabs/skeleton';
 	import favicon from '$lib/assets/favicon.svg';
-    import { resolve } from '$app/paths';
+	import { resolve } from '$app/paths';
 
-    const base = resolve('/');
-    const clubsPath = resolve('/clubs');
-    const airportsPath = resolve('/airports');
+	const base = resolve('/');
+	const clubsPath = resolve('/clubs');
+	const airportsPath = resolve('/airports');
 
 	let { children } = $props();
 </script>

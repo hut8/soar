@@ -216,7 +216,7 @@
 			<h2 class="h2">Results ({airports.length} airports found)</h2>
 
 			<div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-				{#each airports as airport}
+				{#each airports as airport (airport.id)}
 					<div class="card space-y-4 p-6">
 						<header class="card-header">
 							<h3 class="h3">{airport.name}</h3>
