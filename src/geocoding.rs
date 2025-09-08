@@ -1,10 +1,42 @@
 use anyhow::{Result, anyhow};
+use google_maps::Client as GoogleMapsClient;
+use num_traits::ToPrimitive;
 use reqwest;
 use serde::Deserialize;
+use std::env;
 use std::time::Duration;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 use crate::clubs::Point;
+
+/// Enhanced geocoding module with Google Maps fallback capability
+/// 
+/// This module provides geocoding functionality using Nominatim as the primary service
+/// and Google Maps as a fallback when the GOOGLE_MAPS_API_KEY environment variable is set.
+/// 
+/// ## Usage
+/// 
+/// ### Basic usage without Google Maps fallback:
+/// ```rust
+/// use soar::geocoding::{Geocoder, geocode_components};
+/// 
+/// let geocoder = Geocoder::new();
+/// let point = geocoder.geocode_address("1600 Pennsylvania Avenue, Washington, DC").await?;
+/// ```
+/// 
+/// ### With Google Maps fallback:
+/// Set the GOOGLE_MAPS_API_KEY environment variable:
+/// ```bash
+/// export GOOGLE_MAPS_API_KEY="your_api_key_here"
+/// ```
+/// 
+/// Then use the geocoder normally - it will automatically fall back to Google Maps 
+/// when Nominatim fails:
+/// ```rust
+/// let geocoder = Geocoder::new();
+/// let point = geocoder.geocode_address("123 Hard to Find Address").await?;
+/// // Will try Nominatim first, then Google Maps if it fails
+/// ```
 
 // Nominatim API response structure
 #[derive(Debug, Deserialize)]
@@ -23,6 +55,7 @@ pub struct Geocoder {
     client: reqwest::Client,
     base_url: String,
     user_agent: String,
+    google_maps_client: Option<GoogleMapsClient>,
 }
 
 impl Default for Geocoder {
@@ -39,10 +72,31 @@ impl Geocoder {
             .build()
             .expect("Failed to create HTTP client");
 
+        // Initialize Google Maps client if API key is available
+        let google_maps_client = if let Ok(api_key) = env::var("GOOGLE_MAPS_API_KEY") {
+            if !api_key.trim().is_empty() {
+                debug!("Initializing Google Maps client as geocoding fallback");
+                match GoogleMapsClient::try_new(&api_key) {
+                    Ok(client) => Some(client),
+                    Err(e) => {
+                        warn!("Failed to create Google Maps client: {}", e);
+                        None
+                    }
+                }
+            } else {
+                debug!("GOOGLE_MAPS_API_KEY is set but empty, skipping Google Maps initialization");
+                None
+            }
+        } else {
+            debug!("GOOGLE_MAPS_API_KEY not set, Google Maps fallback unavailable");
+            None
+        };
+
         Self {
             client,
             base_url: "https://nominatim.openstreetmap.org".to_string(),
             user_agent: "SOAR Aircraft Geocoder/1.0 (https://github.com/hut8/soar)".to_string(),
+            google_maps_client,
         }
     }
 
@@ -53,20 +107,37 @@ impl Geocoder {
             .build()
             .expect("Failed to create HTTP client");
 
+        // Initialize Google Maps client if API key is available
+        let google_maps_client = if let Ok(api_key) = env::var("GOOGLE_MAPS_API_KEY") {
+            if !api_key.trim().is_empty() {
+                debug!("Initializing Google Maps client as geocoding fallback");
+                match GoogleMapsClient::try_new(&api_key) {
+                    Ok(client) => Some(client),
+                    Err(e) => {
+                        warn!("Failed to create Google Maps client: {}", e);
+                        None
+                    }
+                }
+            } else {
+                debug!("GOOGLE_MAPS_API_KEY is set but empty, skipping Google Maps initialization");
+                None
+            }
+        } else {
+            debug!("GOOGLE_MAPS_API_KEY not set, Google Maps fallback unavailable");
+            None
+        };
+
         Self {
             client,
             base_url,
             user_agent,
+            google_maps_client,
         }
     }
 
-    /// Geocode an address string to a WGS84 coordinate
-    pub async fn geocode_address(&self, address: &str) -> Result<Point> {
-        if address.trim().is_empty() {
-            return Err(anyhow!("Address cannot be empty"));
-        }
-
-        debug!("Geocoding address: {}", address);
+    /// Geocode an address using Nominatim
+    async fn geocode_with_nominatim(&self, address: &str) -> Result<Point> {
+        debug!("Geocoding address with Nominatim: {}", address);
 
         let url = format!("{}/search", self.base_url);
 
@@ -125,11 +196,115 @@ impl Geocoder {
         }
 
         debug!(
-            "Geocoded '{}' to ({}, {}) - {}",
+            "Nominatim geocoded '{}' to ({}, {}) - {}",
             address, latitude, longitude, result.display_name
         );
 
         Ok(Point::new(latitude, longitude))
+    }
+
+    /// Geocode an address using Google Maps as fallback
+    async fn geocode_with_google_maps(&self, address: &str) -> Result<Point> {
+        let google_client = self
+            .google_maps_client
+            .as_ref()
+            .ok_or_else(|| anyhow!("Google Maps client not available"))?;
+
+        debug!("Geocoding address with Google Maps: {}", address);
+
+        let geocoding_response = google_client
+            .geocoding()
+            .with_address(address)
+            .execute()
+            .await
+            .map_err(|e| anyhow!("Google Maps geocoding request failed: {}", e))?;
+
+        if geocoding_response.results.is_empty() {
+            return Err(anyhow!(
+                "No Google Maps geocoding results found for address: {}",
+                address
+            ));
+        }
+
+        let result = &geocoding_response.results[0];
+        let location = &result.geometry.location;
+
+        let latitude = location.latitude().to_f64()
+            .ok_or_else(|| anyhow!("Failed to convert latitude to f64"))?;
+        let longitude = location.longitude().to_f64()
+            .ok_or_else(|| anyhow!("Failed to convert longitude to f64"))?;
+
+        // Validate coordinates are reasonable
+        if !(-90.0..=90.0).contains(&latitude) {
+            return Err(anyhow!("Invalid latitude from Google Maps: {}", latitude));
+        }
+        if !(-180.0..=180.0).contains(&longitude) {
+            return Err(anyhow!("Invalid longitude from Google Maps: {}", longitude));
+        }
+
+        debug!(
+            "Google Maps geocoded '{}' to ({}, {})",
+            address,
+            latitude,
+            longitude
+        );
+
+        Ok(Point::new(latitude, longitude))
+    }
+
+    /// Geocode an address string to a WGS84 coordinate with Google Maps fallback
+    pub async fn geocode_address(&self, address: &str) -> Result<Point> {
+        if address.trim().is_empty() {
+            return Err(anyhow!("Address cannot be empty"));
+        }
+
+        debug!("Geocoding address: {}", address);
+
+        // First try Nominatim
+        match self.geocode_with_nominatim(address).await {
+            Ok(point) => {
+                debug!("Successfully geocoded with Nominatim: {}", address);
+                return Ok(point);
+            }
+            Err(nominatim_error) => {
+                warn!(
+                    "Nominatim geocoding failed for '{}': {}",
+                    address, nominatim_error
+                );
+
+                // Try Google Maps as fallback if available
+                if self.google_maps_client.is_some() {
+                    info!("Attempting Google Maps fallback for: {}", address);
+                    match self.geocode_with_google_maps(address).await {
+                        Ok(point) => {
+                            info!(
+                                "Successfully geocoded with Google Maps fallback: {}",
+                                address
+                            );
+                            return Ok(point);
+                        }
+                        Err(google_error) => {
+                            warn!(
+                                "Google Maps geocoding also failed for '{}': {}",
+                                address, google_error
+                            );
+                            return Err(anyhow!(
+                                "Both Nominatim and Google Maps geocoding failed for '{}'. Nominatim error: {}. Google Maps error: {}",
+                                address,
+                                nominatim_error,
+                                google_error
+                            ));
+                        }
+                    }
+                } else {
+                    return Err(anyhow!(
+                        "Nominatim geocoding failed for '{}' and Google Maps fallback not available: {}",
+                        address,
+                        nominatim_error
+                    ));
+                }
+            }
+        }
     }
 
     /// Geocode multiple addresses with rate limiting
@@ -254,6 +429,12 @@ mod tests {
         let geocoder = Geocoder::new();
         assert!(geocoder.base_url.contains("nominatim"));
         assert!(geocoder.user_agent.contains("SOAR"));
+        // Google Maps client should be None unless API key is set
+        if env::var("GOOGLE_MAPS_API_KEY").is_ok() {
+            assert!(geocoder.google_maps_client.is_some());
+        } else {
+            assert!(geocoder.google_maps_client.is_none());
+        }
     }
 
     #[test]
@@ -262,6 +443,12 @@ mod tests {
             Geocoder::with_settings("https://example.com".to_string(), "Test Agent".to_string());
         assert_eq!(geocoder.base_url, "https://example.com");
         assert_eq!(geocoder.user_agent, "Test Agent");
+        // Google Maps client availability depends on environment variable
+        if env::var("GOOGLE_MAPS_API_KEY").is_ok() {
+            assert!(geocoder.google_maps_client.is_some());
+        } else {
+            assert!(geocoder.google_maps_client.is_none());
+        }
     }
 
     #[tokio::test]

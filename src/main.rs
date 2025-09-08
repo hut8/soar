@@ -729,10 +729,8 @@ async fn handle_load_data(
                                                     info!(
                                                         "Successfully linked {} to airport {} ({})",
                                                         club.name,
-                                                        nearest_airport
-                                                            .name,
-                                                        nearest_airport
-                                                            .ident
+                                                        nearest_airport.name,
+                                                        nearest_airport.ident
                                                     );
                                                     linked_count += 1;
                                                 } else {
