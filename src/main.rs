@@ -551,12 +551,21 @@ async fn handle_load_data(
                             Some(code) => Some(code.to_string()),
                         };
 
+                        // Normalize zip code to 5 digits if available
+                        let zip_5_digits = location.zip_code.as_ref().map(|zip| {
+                            if zip.len() >= 5 {
+                                &zip[..5]
+                            } else {
+                                zip
+                            }
+                        });
+
                         let result = geocode_components(
                             use_street1.as_deref(),
                             use_street2.as_deref(),
                             location.city.as_deref(),
                             location.state.as_deref(),
-                            location.zip_code.as_deref(),
+                            zip_5_digits,
                             country_name.as_deref()
                         ).await;
 
@@ -570,7 +579,7 @@ async fn handle_load_data(
                                     None, // No street2
                                     location.city.as_deref(),
                                     location.state.as_deref(),
-                                    location.zip_code.as_deref(),
+                                    zip_5_digits,
                                     country_name.as_deref()
                                 ).await
                             }
