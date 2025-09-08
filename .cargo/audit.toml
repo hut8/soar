@@ -1,0 +1,2 @@
+[advisories]
+ignore = ["RUSTSEC-2023-0071"] # Marvin attack in RSA; sqlx does not have a version with fixed dependencies and we don't use RSA.
