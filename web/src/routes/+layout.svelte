@@ -2,6 +2,11 @@
 	import '../app.css';
 	import { AppShell, AppBar } from '@skeletonlabs/skeleton';
 	import favicon from '$lib/assets/favicon.svg';
+    import { resolve } from '$app/paths';
+
+    const base = resolve('/');
+    const clubsPath = resolve('/clubs');
+    const airportsPath = resolve('/airports');
 
 	let { children } = $props();
 </script>
@@ -16,14 +21,14 @@
 	<svelte:fragment slot="header">
 		<AppBar>
 			<svelte:fragment slot="lead">
-				<a href="/" class="flex items-center space-x-2">
+				<a href="/{base}" class="flex items-center space-x-2">
 					<div class="text-xl font-bold text-primary-500">✈️ Glider.flights</div>
 				</a>
 			</svelte:fragment>
 			<svelte:fragment slot="trail">
 				<nav class="hidden space-x-4 md:flex">
-					<a href="/clubs" class="variant-ghost-surface btn btn-sm">Clubs</a>
-					<a href="/airports" class="variant-ghost-surface btn btn-sm">Airports</a>
+					<a href="/{clubsPath}" class="variant-ghost-surface btn btn-sm">Clubs</a>
+					<a href="/{airportsPath}" class="variant-ghost-surface btn btn-sm">Airports</a>
 				</nav>
 			</svelte:fragment>
 		</AppBar>
