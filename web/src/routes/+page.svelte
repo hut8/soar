@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { resolve } from '$app/paths';
 
 	let searchQuery = '';
 	let searchType = 'clubs';
@@ -7,6 +7,9 @@
 	let latitude = '';
 	let longitude = '';
 	let radius = '50';
+
+	const clubsPath = resolve('/clubs');
+	const airportsPath = resolve('/airports');
 
 	function handleSearch() {
 		if (locationSearch) {
@@ -142,7 +145,7 @@
 				Discover active soaring clubs in your area. Connect with local gliding communities, find
 				instruction opportunities, and join fellow aviation enthusiasts.
 			</p>
-			<a href="/clubs" class="variant-filled-primary btn">Browse Clubs</a>
+			<a href={clubsPath} class="variant-filled-primary btn">Browse Clubs</a>
 		</div>
 
 		<div class="card space-y-4 p-6">
@@ -151,7 +154,7 @@
 				Search for airports and airfields suitable for gliding operations. Find runway information,
 				contact details, and facilities available for soaring activities.
 			</p>
-			<a href="/airports" class="variant-filled-primary btn">Browse Airports</a>
+			<a href={airportsPath} class="variant-filled-primary btn">Browse Airports</a>
 		</div>
 	</section>
 

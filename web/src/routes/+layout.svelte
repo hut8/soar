@@ -17,7 +17,7 @@
 		<AppBar>
 			<svelte:fragment slot="lead">
 				<a href="/" class="flex items-center space-x-2">
-					<div class="text-xl font-bold text-primary-500">✈️ Glider Flights</div>
+					<div class="text-xl font-bold text-primary-500">✈️ Glider.flights</div>
 				</a>
 			</svelte:fragment>
 			<svelte:fragment slot="trail">
@@ -35,7 +35,7 @@
 
 	<svelte:fragment slot="pageFooter">
 		<footer class="bg-surface-100-800-token p-4 text-center text-sm">
-			<p>&copy; 2024 Glider Flights. Connecting the soaring community.</p>
+			<p>&copy; 2025 Liam Bowen</p>
 		</footer>
 	</svelte:fragment>
 </AppShell>
