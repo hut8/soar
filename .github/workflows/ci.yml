@@ -113,6 +113,18 @@ jobs:
       - name: Check Rust formatting
         run: cargo fmt --check
 
+      - name: Install sqlx-cli
+        run: cargo install sqlx-cli --no-default-features --features postgres,runtime-tokio-rustls
+
+      - name: Run migrations
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/soar_test
+        run: sqlx migrate run
+
+      - name: Install JS dependencies for build during Rust tests
+        run: |
+          cd web && npm ci
+
       - name: Run Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
 
@@ -120,17 +132,6 @@ jobs:
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/soar_test
         run: cargo test --verbose
-
-      - name: Check that migrations work
-        env:
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/soar_test
-        run: |
-          # Run migrations using sqlx-cli if available, otherwise try with the binary
-          if command -v sqlx &> /dev/null; then
-            sqlx migrate run
-          else
-            echo "sqlx-cli not available, migrations will be tested during build"
-          fi
 
   build-release:
     name: Build Release Binary
