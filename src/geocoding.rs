@@ -10,27 +10,27 @@ use tracing::{debug, info, warn};
 use crate::clubs::Point;
 
 /// Enhanced geocoding module with Google Maps fallback capability
-/// 
+///
 /// This module provides geocoding functionality using Nominatim as the primary service
 /// and Google Maps as a fallback when the GOOGLE_MAPS_API_KEY environment variable is set.
-/// 
+///
 /// ## Usage
-/// 
+///
 /// ### Basic usage without Google Maps fallback:
 /// ```rust
 /// use soar::geocoding::{Geocoder, geocode_components};
-/// 
+///
 /// let geocoder = Geocoder::new();
 /// let point = geocoder.geocode_address("1600 Pennsylvania Avenue, Washington, DC").await?;
 /// ```
-/// 
+///
 /// ### With Google Maps fallback:
 /// Set the GOOGLE_MAPS_API_KEY environment variable:
 /// ```bash
 /// export GOOGLE_MAPS_API_KEY="your_api_key_here"
 /// ```
-/// 
-/// Then use the geocoder normally - it will automatically fall back to Google Maps 
+///
+/// Then use the geocoder normally - it will automatically fall back to Google Maps
 /// when Nominatim fails:
 /// ```rust
 /// let geocoder = Geocoder::new();
@@ -229,9 +229,13 @@ impl Geocoder {
         let result = &geocoding_response.results[0];
         let location = &result.geometry.location;
 
-        let latitude = location.latitude().to_f64()
+        let latitude = location
+            .latitude()
+            .to_f64()
             .ok_or_else(|| anyhow!("Failed to convert latitude to f64"))?;
-        let longitude = location.longitude().to_f64()
+        let longitude = location
+            .longitude()
+            .to_f64()
             .ok_or_else(|| anyhow!("Failed to convert longitude to f64"))?;
 
         // Validate coordinates are reasonable
@@ -244,9 +248,7 @@ impl Geocoder {
 
         debug!(
             "Google Maps geocoded '{}' to ({}, {})",
-            address,
-            latitude,
-            longitude
+            address, latitude, longitude
         );
 
         Ok(Point::new(latitude, longitude))
