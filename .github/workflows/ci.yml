@@ -89,10 +89,19 @@ jobs:
         with:
           components: clippy, rustfmt
 
-      - name: Install PostgreSQL client
+      - name: Install PostgreSQL client and PostGIS
         run: |
           sudo apt-get update
           sudo apt-get install -y postgresql-client
+
+      - name: Install PostGIS in PostgreSQL container
+        run: |
+          # Install PostGIS in the running PostgreSQL container
+          docker exec $(docker ps -q --filter ancestor=postgres:15) sh -c "
+            apt-get update &&
+            apt-get install -y postgresql-15-postgis-3 &&
+            echo 'PostGIS installed successfully'
+          "
 
       - name: Setup test database
         env:
