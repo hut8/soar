@@ -3,7 +3,7 @@ use sqlx::PgPool;
 use tracing::{info, warn};
 use uuid::Uuid;
 
-use crate::faa::aircraft_registrations::{Aircraft, ApprovedOps, AirworthinessClass};
+use crate::faa::aircraft_registrations::{Aircraft, AirworthinessClass, ApprovedOps};
 use crate::locations_repo::LocationsRepository;
 
 pub struct AircraftRegistrationsRepository {
@@ -14,7 +14,10 @@ pub struct AircraftRegistrationsRepository {
 impl AircraftRegistrationsRepository {
     pub fn new(pool: PgPool) -> Self {
         let locations_repo = LocationsRepository::new(pool.clone());
-        Self { pool, locations_repo }
+        Self {
+            pool,
+            locations_repo,
+        }
     }
 
     /// Find or create a club by name, using the aircraft registration data to populate address and location
@@ -38,27 +41,33 @@ impl AircraftRegistrationsRepository {
         let new_club_id = Uuid::new_v4();
 
         // Determine if this is likely a soaring club based on the name
-        let is_soaring = Some(club_name.to_uppercase().contains("SOAR") ||
-                             club_name.to_uppercase().contains("GLIDING") ||
-                             club_name.to_uppercase().contains("SAILPLANE") ||
-                             club_name.to_uppercase().contains("GLIDER"));
+        let is_soaring = Some(
+            club_name.to_uppercase().contains("SOAR")
+                || club_name.to_uppercase().contains("GLIDING")
+                || club_name.to_uppercase().contains("SAILPLANE")
+                || club_name.to_uppercase().contains("GLIDER"),
+        );
 
         // Create or find location for this club using the aircraft's address
-        let location_geolocation = aircraft_reg.registered_location.as_ref().map(|loc| {
-            crate::locations::Point::new(loc.latitude, loc.longitude)
-        });
+        let location_geolocation = aircraft_reg
+            .registered_location
+            .as_ref()
+            .map(|loc| crate::locations::Point::new(loc.latitude, loc.longitude));
 
-        let location = self.locations_repo.find_or_create(
-            aircraft_reg.street1.clone(),
-            aircraft_reg.street2.clone(),
-            aircraft_reg.city.clone(),
-            aircraft_reg.state.clone(),
-            aircraft_reg.zip_code.clone(),
-            aircraft_reg.region_code.clone(),
-            aircraft_reg.county_mail_code.clone(),
-            aircraft_reg.country_mail_code.clone(),
-            location_geolocation,
-        ).await?;
+        let location = self
+            .locations_repo
+            .find_or_create(
+                aircraft_reg.street1.clone(),
+                aircraft_reg.street2.clone(),
+                aircraft_reg.city.clone(),
+                aircraft_reg.state.clone(),
+                aircraft_reg.zip_code.clone(),
+                aircraft_reg.region_code.clone(),
+                aircraft_reg.county_mail_code.clone(),
+                aircraft_reg.country_mail_code.clone(),
+                location_geolocation,
+            )
+            .await?;
 
         sqlx::query!(
             r#"
@@ -76,7 +85,10 @@ impl AircraftRegistrationsRepository {
         .execute(&mut **transaction)
         .await?;
 
-        info!("Created new club: {} with location {} from aircraft {}", club_name, location.id, aircraft_reg.n_number);
+        info!(
+            "Created new club: {} with location {} from aircraft {}",
+            club_name, location.id, aircraft_reg.n_number
+        );
         Ok(new_club_id)
     }
 
@@ -101,21 +113,25 @@ impl AircraftRegistrationsRepository {
             let transponder_code = aircraft_reg.transponder_code.map(|t| t as i64);
 
             // Create or find location for this aircraft
-            let location_geolocation = aircraft_reg.registered_location.as_ref().map(|loc| {
-                crate::locations::Point::new(loc.latitude, loc.longitude)
-            });
+            let location_geolocation = aircraft_reg
+                .registered_location
+                .as_ref()
+                .map(|loc| crate::locations::Point::new(loc.latitude, loc.longitude));
 
-            let location = self.locations_repo.find_or_create(
-                aircraft_reg.street1.clone(),
-                aircraft_reg.street2.clone(),
-                aircraft_reg.city.clone(),
-                aircraft_reg.state.clone(),
-                aircraft_reg.zip_code.clone(),
-                aircraft_reg.region_code.clone(),
-                aircraft_reg.county_mail_code.clone(),
-                aircraft_reg.country_mail_code.clone(),
-                location_geolocation,
-            ).await?;
+            let location = self
+                .locations_repo
+                .find_or_create(
+                    aircraft_reg.street1.clone(),
+                    aircraft_reg.street2.clone(),
+                    aircraft_reg.city.clone(),
+                    aircraft_reg.state.clone(),
+                    aircraft_reg.zip_code.clone(),
+                    aircraft_reg.region_code.clone(),
+                    aircraft_reg.county_mail_code.clone(),
+                    aircraft_reg.country_mail_code.clone(),
+                    location_geolocation,
+                )
+                .await?;
 
             // Handle club linking if aircraft has a valid club name
             let club_id = if let Some(club_name) = aircraft_reg.club_name() {
@@ -1012,7 +1028,6 @@ impl AircraftRegistrationsRepository {
 
         Ok(aircraft_list)
     }
-
 }
 
 #[cfg(test)]

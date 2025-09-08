@@ -73,7 +73,9 @@ impl Fix {
                 let longitude = pos_packet.longitude.as_();
                 let altitude_feet = pos_packet.comment.altitude.map(|a| a as i32);
                 let ground_speed_knots = pos_packet.comment.speed.map(|s| s as f32);
-                let track_degrees = pos_packet.comment.course
+                let track_degrees = pos_packet
+                    .comment
+                    .course
                     .filter(|&c| c < 360)
                     .map(|c| c as f32);
 
@@ -166,8 +168,7 @@ impl Fix {
     pub fn get_aircraft_identifier(&self) -> Option<String> {
         if let Some(ref reg) = self.registration {
             Some(reg.clone())
-        } else if let (Some(aircraft_id), Some(dev_type)) = (&self.aircraft_id, &self.device_type)
-        {
+        } else if let (Some(aircraft_id), Some(dev_type)) = (&self.aircraft_id, &self.device_type) {
             let type_prefix = match *dev_type {
                 AddressType::Icao => "ICAO",
                 AddressType::Flarm => "FLARM",

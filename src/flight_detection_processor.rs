@@ -1,12 +1,12 @@
-use std::collections::HashMap;
-use chrono::{DateTime, Utc, Duration};
-use tracing::{debug, info, warn, error};
+use chrono::{DateTime, Duration, Utc};
 use sqlx::PgPool;
+use std::collections::HashMap;
+use tracing::{debug, error, info, warn};
 
-use crate::{Fix, FixProcessor};
 use crate::database_fix_processor::DatabaseFixProcessor;
-use crate::flights::{Flight};
+use crate::flights::Flight;
 use crate::flights_repo::FlightsRepository;
+use crate::{Fix, FixProcessor};
 
 /// Circular buffer to store recent fixes for flight state analysis
 #[derive(Debug, Clone)]
@@ -61,7 +61,7 @@ impl AircraftTracker {
     fn new() -> Self {
         Self {
             flight_state: FlightState::Ground, // Start as ground since existing APRS records are either ground or already airborne
-            fix_history: FixHistory::new(10), // Store last 10 fixes for analysis
+            fix_history: FixHistory::new(10),  // Store last 10 fixes for analysis
             current_flight_id: None,
             last_update: Utc::now(),
         }
@@ -76,10 +76,10 @@ pub struct FlightDetectionProcessor {
     pool: PgPool,
 
     // Configuration thresholds
-    takeoff_speed_threshold: f32,      // Minimum speed to consider takeoff (knots)
+    takeoff_speed_threshold: f32, // Minimum speed to consider takeoff (knots)
     takeoff_altitude_gain_threshold: i32, // Minimum altitude gain for takeoff (feet)
-    landing_speed_threshold: f32,       // Maximum speed to consider landed (knots)
-    ground_altitude_variance: i32,      // Maximum altitude variance on ground (feet)
+    landing_speed_threshold: f32, // Maximum speed to consider landed (knots)
+    ground_altitude_variance: i32, // Maximum altitude variance on ground (feet)
     min_fixes_for_state_change: usize, // Minimum consecutive fixes needed to change state
 }
 
@@ -109,23 +109,27 @@ impl FlightDetectionProcessor {
         let fixes: Vec<_> = history.iter().collect();
 
         // Check speed criteria - all recent fixes should be low speed
-        let low_speed = fixes.iter().rev().take(3).all(|fix| {
-            fix.ground_speed_knots.unwrap_or(0.0) <= self.landing_speed_threshold
-        });
+        let low_speed = fixes
+            .iter()
+            .rev()
+            .take(3)
+            .all(|fix| fix.ground_speed_knots.unwrap_or(0.0) <= self.landing_speed_threshold);
 
         // Check altitude variance - should be relatively stable on ground
-        if let Some(altitudes) = fixes.iter()
+        if let Some(altitudes) = fixes
+            .iter()
             .rev()
             .take(5)
             .map(|f| f.altitude_feet)
             .collect::<Option<Vec<_>>>()
-            && altitudes.len() >= 2 {
-                let min_alt = *altitudes.iter().min().unwrap();
-                let max_alt = *altitudes.iter().max().unwrap();
-                let stable_altitude = (max_alt - min_alt) <= self.ground_altitude_variance;
+            && altitudes.len() >= 2
+        {
+            let min_alt = *altitudes.iter().min().unwrap();
+            let max_alt = *altitudes.iter().max().unwrap();
+            let stable_altitude = (max_alt - min_alt) <= self.ground_altitude_variance;
 
-                return low_speed && stable_altitude;
-            }
+            return low_speed && stable_altitude;
+        }
 
         // Fallback to just speed check
         low_speed
@@ -140,7 +144,11 @@ impl FlightDetectionProcessor {
         let fixes: Vec<_> = history.iter().collect();
 
         // Check for speed increase pattern
-        let recent_fixes = fixes.iter().rev().take(self.min_fixes_for_state_change).collect::<Vec<_>>();
+        let recent_fixes = fixes
+            .iter()
+            .rev()
+            .take(self.min_fixes_for_state_change)
+            .collect::<Vec<_>>();
         let speed_increasing = recent_fixes.windows(2).all(|window| {
             let current_speed = window[0].ground_speed_knots.unwrap_or(0.0);
             let prev_speed = window[1].ground_speed_knots.unwrap_or(0.0);
@@ -148,15 +156,17 @@ impl FlightDetectionProcessor {
         });
 
         // Check for altitude gain pattern
-        if let Some(altitudes) = recent_fixes.iter()
+        if let Some(altitudes) = recent_fixes
+            .iter()
             .map(|f| f.altitude_feet)
             .collect::<Option<Vec<_>>>()
-            && altitudes.len() >= 2 {
-                let altitude_gain = altitudes.first().unwrap() - altitudes.last().unwrap();
-                let significant_climb = altitude_gain >= self.takeoff_altitude_gain_threshold;
+            && altitudes.len() >= 2
+        {
+            let altitude_gain = altitudes.first().unwrap() - altitudes.last().unwrap();
+            let significant_climb = altitude_gain >= self.takeoff_altitude_gain_threshold;
 
-                return speed_increasing && significant_climb;
-            }
+            return speed_increasing && significant_climb;
+        }
 
         // Fallback to just speed pattern
         speed_increasing
@@ -171,7 +181,11 @@ impl FlightDetectionProcessor {
         let fixes: Vec<_> = history.iter().collect();
 
         // Check for speed decrease and altitude loss pattern
-        let recent_fixes = fixes.iter().rev().take(self.min_fixes_for_state_change).collect::<Vec<_>>();
+        let recent_fixes = fixes
+            .iter()
+            .rev()
+            .take(self.min_fixes_for_state_change)
+            .collect::<Vec<_>>();
 
         let speed_decreasing = recent_fixes.windows(2).all(|window| {
             let current_speed = window[0].ground_speed_knots.unwrap_or(0.0);
@@ -179,21 +193,24 @@ impl FlightDetectionProcessor {
             current_speed <= prev_speed
         });
 
-        let final_speed_low = recent_fixes.first()
+        let final_speed_low = recent_fixes
+            .first()
             .and_then(|f| f.ground_speed_knots)
             .map(|s| s <= self.landing_speed_threshold)
             .unwrap_or(false);
 
         // Check for altitude decrease pattern
-        if let Some(altitudes) = recent_fixes.iter()
+        if let Some(altitudes) = recent_fixes
+            .iter()
             .map(|f| f.altitude_feet)
             .collect::<Option<Vec<_>>>()
-            && altitudes.len() >= 2 {
-                let altitude_change = altitudes.first().unwrap() - altitudes.last().unwrap();
-                let descending = altitude_change <= -100; // At least 100ft descent
+            && altitudes.len() >= 2
+        {
+            let altitude_change = altitudes.first().unwrap() - altitudes.last().unwrap();
+            let descending = altitude_change <= -100; // At least 100ft descent
 
-                return speed_decreasing && final_speed_low && descending;
-            }
+            return speed_decreasing && final_speed_low && descending;
+        }
 
         // Fallback to speed pattern
         speed_decreasing && final_speed_low
@@ -201,13 +218,21 @@ impl FlightDetectionProcessor {
 
     /// Process flight state transitions for an aircraft
     async fn process_flight_state_transition(&mut self, aircraft_id: &str, fix: &Fix) {
-        let current_state = self.aircraft_trackers.get(aircraft_id).unwrap().flight_state.clone();
+        let current_state = self
+            .aircraft_trackers
+            .get(aircraft_id)
+            .unwrap()
+            .flight_state
+            .clone();
         let should_takeoff = {
             let tracker = self.aircraft_trackers.get(aircraft_id).unwrap();
             self.is_taking_off(&tracker.fix_history)
         };
 
-        debug!("Processing flight state for aircraft {}: current state {:?}", aircraft_id, current_state);
+        debug!(
+            "Processing flight state for aircraft {}: current state {:?}",
+            aircraft_id, current_state
+        );
 
         match current_state {
             FlightState::Ground => {
@@ -224,10 +249,16 @@ impl FlightDetectionProcessor {
                             let tracker = self.aircraft_trackers.get_mut(aircraft_id).unwrap();
                             tracker.flight_state = FlightState::TakingOff;
                             tracker.current_flight_id = Some(flight_id);
-                            info!("Created flight record {} for aircraft {}", flight_id, aircraft_id);
+                            info!(
+                                "Created flight record {} for aircraft {}",
+                                flight_id, aircraft_id
+                            );
                         }
                         Err(e) => {
-                            error!("Failed to create flight record for aircraft {}: {}", aircraft_id, e);
+                            error!(
+                                "Failed to create flight record for aircraft {}: {}",
+                                aircraft_id, e
+                            );
                         }
                     }
                 }
@@ -237,11 +268,11 @@ impl FlightDetectionProcessor {
                 // Transition to airborne after sustained flight
                 let should_become_airborne = {
                     let tracker = self.aircraft_trackers.get(aircraft_id).unwrap();
-                    tracker.fix_history.len() >= 5 &&
-                    tracker.fix_history.iter().rev().take(3).all(|f| {
-                        f.ground_speed_knots.unwrap_or(0.0) >= self.takeoff_speed_threshold &&
-                        f.altitude_feet.unwrap_or(0) > 300 // Above 300 feet
-                    })
+                    tracker.fix_history.len() >= 5
+                        && tracker.fix_history.iter().rev().take(3).all(|f| {
+                            f.ground_speed_knots.unwrap_or(0.0) >= self.takeoff_speed_threshold
+                                && f.altitude_feet.unwrap_or(0) > 300 // Above 300 feet
+                        })
                 };
 
                 if should_become_airborne {
@@ -274,25 +305,42 @@ impl FlightDetectionProcessor {
                     info!("Detected landing for aircraft {}", aircraft_id);
 
                     // Get the flight ID before borrowing mutably
-                    let flight_id = self.aircraft_trackers.get(aircraft_id).unwrap().current_flight_id;
+                    let flight_id = self
+                        .aircraft_trackers
+                        .get(aircraft_id)
+                        .unwrap()
+                        .current_flight_id;
 
                     // Update flight record with landing time
                     if let Some(flight_id) = flight_id {
-                        match self.flights_repo.update_landing_time(flight_id, fix.timestamp).await {
+                        match self
+                            .flights_repo
+                            .update_landing_time(flight_id, fix.timestamp)
+                            .await
+                        {
                             Ok(true) => {
                                 let tracker = self.aircraft_trackers.get_mut(aircraft_id).unwrap();
                                 tracker.flight_state = FlightState::Ground;
                                 tracker.current_flight_id = None;
-                                info!("Updated flight record {} with landing time for aircraft {}", flight_id, aircraft_id);
+                                info!(
+                                    "Updated flight record {} with landing time for aircraft {}",
+                                    flight_id, aircraft_id
+                                );
                             }
                             Ok(false) => {
-                                warn!("Flight record {} not found when updating landing time for aircraft {}", flight_id, aircraft_id);
+                                warn!(
+                                    "Flight record {} not found when updating landing time for aircraft {}",
+                                    flight_id, aircraft_id
+                                );
                                 let tracker = self.aircraft_trackers.get_mut(aircraft_id).unwrap();
                                 tracker.flight_state = FlightState::Ground;
                                 tracker.current_flight_id = None;
                             }
                             Err(e) => {
-                                error!("Failed to update landing time for flight {}: {}", flight_id, e);
+                                error!(
+                                    "Failed to update landing time for flight {}: {}",
+                                    flight_id, e
+                                );
                             }
                         }
                     } else {
@@ -333,7 +381,9 @@ impl FixProcessor for FlightDetectionProcessor {
             tokio::spawn(async move {
                 // Get or create aircraft tracker
                 if !processor.aircraft_trackers.contains_key(&aircraft_id) {
-                    processor.aircraft_trackers.insert(aircraft_id.clone(), AircraftTracker::new());
+                    processor
+                        .aircraft_trackers
+                        .insert(aircraft_id.clone(), AircraftTracker::new());
                 }
 
                 // Update tracker with new fix
@@ -344,7 +394,9 @@ impl FixProcessor for FlightDetectionProcessor {
                 }
 
                 // Process flight state transitions
-                processor.process_flight_state_transition(&aircraft_id, &fix_clone).await;
+                processor
+                    .process_flight_state_transition(&aircraft_id, &fix_clone)
+                    .await;
 
                 // Periodic cleanup (run roughly every 256th fix processing)
                 // Use a simple hash-based check to avoid frequent cleanup

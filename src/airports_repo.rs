@@ -478,7 +478,7 @@ impl AirportsRepository {
     pub async fn fuzzy_search(&self, query: &str, limit: Option<i64>) -> Result<Vec<Airport>> {
         let limit = limit.unwrap_or(20);
         let query_upper = query.to_uppercase();
-        
+
         let results = sqlx::query!(
             r#"
             SELECT id, ident, type, name, latitude_deg, longitude_deg, elevation_ft,
@@ -536,7 +536,13 @@ impl AirportsRepository {
 
     /// Search airports within a radius of a given point using PostGIS
     /// Returns airports within the specified radius (in kilometers)
-    pub async fn search_nearby(&self, latitude: f64, longitude: f64, radius_km: f64, limit: Option<i64>) -> Result<Vec<Airport>> {
+    pub async fn search_nearby(
+        &self,
+        latitude: f64,
+        longitude: f64,
+        radius_km: f64,
+        limit: Option<i64>,
+    ) -> Result<Vec<Airport>> {
         let limit = limit.unwrap_or(20);
         let radius_m = radius_km * 1000.0; // Convert km to meters for PostGIS
 

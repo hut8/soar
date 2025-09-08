@@ -14,7 +14,10 @@ pub struct ClubsRepository {
 impl ClubsRepository {
     pub fn new(pool: PgPool) -> Self {
         let locations_repo = LocationsRepository::new(pool.clone());
-        Self { pool, locations_repo }
+        Self {
+            pool,
+            locations_repo,
+        }
     }
 
     /// Get club by ID
@@ -242,7 +245,13 @@ impl ClubsRepository {
 
     /// Search soaring clubs within a radius of a given point using PostGIS
     /// Returns soaring clubs (is_soaring=true) within the specified radius (in kilometers)
-    pub async fn search_nearby_soaring(&self, latitude: f64, longitude: f64, radius_km: f64, limit: Option<i64>) -> Result<Vec<Club>> {
+    pub async fn search_nearby_soaring(
+        &self,
+        latitude: f64,
+        longitude: f64,
+        radius_km: f64,
+        limit: Option<i64>,
+    ) -> Result<Vec<Club>> {
         let limit = limit.unwrap_or(20);
         let radius_m = radius_km * 1000.0; // Convert km to meters for PostGIS
 
@@ -304,30 +313,107 @@ impl ClubsRepository {
         Ok(clubs)
     }
 
+    /// Get soaring clubs that don't have a home base airport ID set
+    pub async fn get_soaring_clubs_without_home_base(&self) -> Result<Vec<Club>> {
+        let results = sqlx::query!(
+            r#"
+            SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, c.location_id,
+                   l.street1, l.street2, l.city, l.state, l.zip_code, l.region_code,
+                   l.county_mail_code, l.country_mail_code,
+                   ST_X(l.geolocation::geometry) as longitude, ST_Y(l.geolocation::geometry) as latitude,
+                   c.created_at, c.updated_at
+            FROM clubs c
+            LEFT JOIN locations l ON c.location_id = l.id
+            WHERE c.is_soaring = true
+            AND c.home_base_airport_id IS NULL
+            AND l.geolocation IS NOT NULL
+            ORDER BY c.name
+            "#
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut clubs = Vec::new();
+        for row in results {
+            let base_location = if row.longitude.is_some() && row.latitude.is_some() {
+                Some(crate::clubs::Point::new(
+                    row.latitude.unwrap(),
+                    row.longitude.unwrap(),
+                ))
+            } else {
+                None
+            };
+
+            clubs.push(Club {
+                id: row.id,
+                name: row.name,
+                is_soaring: row.is_soaring,
+                home_base_airport_id: row.home_base_airport_id,
+                location_id: row.location_id,
+                street1: row.street1,
+                street2: row.street2,
+                city: row.city,
+                state: row.state,
+                zip_code: row.zip_code,
+                region_code: row.region_code,
+                county_mail_code: row.county_mail_code,
+                country_mail_code: row.country_mail_code,
+                base_location,
+                created_at: row.created_at.unwrap_or_else(Utc::now),
+                updated_at: row.updated_at.unwrap_or_else(Utc::now),
+            });
+        }
+
+        Ok(clubs)
+    }
+
+    /// Update the home base airport ID for a club
+    pub async fn update_home_base_airport(&self, club_id: Uuid, airport_id: i32) -> Result<bool> {
+        let result = sqlx::query!(
+            r#"
+            UPDATE clubs
+            SET home_base_airport_id = $2, updated_at = NOW()
+            WHERE id = $1
+            "#,
+            club_id,
+            airport_id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.rows_affected() > 0)
+    }
+
     /// Insert a new club
     pub async fn insert(&self, club: &Club) -> Result<()> {
         // First create location if we have address data
         let location_id = if let Some(location_id) = club.location_id {
             location_id
         } else if club.street1.is_some() || club.city.is_some() {
-            let location_geolocation = club.base_location.as_ref().map(|loc| {
-                crate::locations::Point::new(loc.latitude, loc.longitude)
-            });
+            let location_geolocation = club
+                .base_location
+                .as_ref()
+                .map(|loc| crate::locations::Point::new(loc.latitude, loc.longitude));
 
-            let location = self.locations_repo.find_or_create(
-                club.street1.clone(),
-                club.street2.clone(),
-                club.city.clone(),
-                club.state.clone(),
-                club.zip_code.clone(),
-                club.region_code.clone(),
-                club.county_mail_code.clone(),
-                club.country_mail_code.clone(),
-                location_geolocation,
-            ).await?;
+            let location = self
+                .locations_repo
+                .find_or_create(
+                    club.street1.clone(),
+                    club.street2.clone(),
+                    club.city.clone(),
+                    club.state.clone(),
+                    club.zip_code.clone(),
+                    club.region_code.clone(),
+                    club.county_mail_code.clone(),
+                    club.country_mail_code.clone(),
+                    location_geolocation,
+                )
+                .await?;
             location.id
         } else {
-            return Err(anyhow::anyhow!("Club must have either location_id or address fields"));
+            return Err(anyhow::anyhow!(
+                "Club must have either location_id or address fields"
+            ));
         };
 
         sqlx::query!(

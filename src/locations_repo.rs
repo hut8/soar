@@ -1,6 +1,6 @@
 use anyhow::Result;
-use sqlx::postgres::types::PgPoint;
 use sqlx::PgPool;
+use sqlx::postgres::types::PgPoint;
 use sqlx::types::Uuid;
 
 use crate::locations::{Location, Point};
@@ -32,10 +32,7 @@ impl LocationsRepository {
 
         if let Some(row) = result {
             let geolocation = if row.longitude.is_some() && row.latitude.is_some() {
-                Some(Point::new(
-                    row.latitude.unwrap(),
-                    row.longitude.unwrap(),
-                ))
+                Some(Point::new(row.latitude.unwrap(), row.longitude.unwrap()))
             } else {
                 None
             };
@@ -95,10 +92,7 @@ impl LocationsRepository {
 
         if let Some(row) = result {
             let geolocation = if row.longitude.is_some() && row.latitude.is_some() {
-                Some(Point::new(
-                    row.latitude.unwrap(),
-                    row.longitude.unwrap(),
-                ))
+                Some(Point::new(row.latitude.unwrap(), row.longitude.unwrap()))
             } else {
                 None
             };
@@ -142,7 +136,10 @@ impl LocationsRepository {
             location.region_code,
             location.county_mail_code,
             location.country_mail_code,
-            location.geolocation.as_ref().map(|p| PgPoint { x: p.longitude, y: p.latitude }),
+            location.geolocation.as_ref().map(|p| PgPoint {
+                x: p.longitude,
+                y: p.latitude
+            }),
             location.created_at,
             location.updated_at
         )
@@ -161,7 +158,10 @@ impl LocationsRepository {
             WHERE id = $1
             "#,
             location_id,
-            PgPoint { x: geolocation.longitude, y: geolocation.latitude }
+            PgPoint {
+                x: geolocation.longitude,
+                y: geolocation.latitude
+            }
         )
         .execute(&self.pool)
         .await?;
@@ -193,10 +193,7 @@ impl LocationsRepository {
         let mut locations = Vec::new();
         for row in results {
             let geolocation = if row.longitude.is_some() && row.latitude.is_some() {
-                Some(Point::new(
-                    row.latitude.unwrap(),
-                    row.longitude.unwrap(),
-                ))
+                Some(Point::new(row.latitude.unwrap(), row.longitude.unwrap()))
             } else {
                 None
             };
@@ -235,14 +232,17 @@ impl LocationsRepository {
         geolocation: Option<Point>,
     ) -> Result<Location> {
         // Try to find existing location
-        if let Some(existing) = self.find_by_address(
-            street1.as_deref(),
-            street2.as_deref(),
-            city.as_deref(),
-            state.as_deref(),
-            zip_code.as_deref(),
-            country_mail_code.as_deref(),
-        ).await? {
+        if let Some(existing) = self
+            .find_by_address(
+                street1.as_deref(),
+                street2.as_deref(),
+                city.as_deref(),
+                state.as_deref(),
+                zip_code.as_deref(),
+                country_mail_code.as_deref(),
+            )
+            .await?
+        {
             return Ok(existing);
         }
 

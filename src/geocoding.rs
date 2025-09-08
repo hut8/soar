@@ -42,8 +42,7 @@ impl Geocoder {
         Self {
             client,
             base_url: "https://nominatim.openstreetmap.org".to_string(),
-            user_agent: "SOAR Aircraft Geocoder/1.0 (https://github.com/hut8/soar)"
-                .to_string(),
+            user_agent: "SOAR Aircraft Geocoder/1.0 (https://github.com/hut8/soar)".to_string(),
         }
     }
 

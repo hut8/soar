@@ -83,7 +83,10 @@ impl FixesRepository {
         .execute(&self.pool)
         .await?;
 
-        debug!("Inserted fix for aircraft: {:?}", fix.get_aircraft_identifier());
+        debug!(
+            "Inserted fix for aircraft: {:?}",
+            fix.get_aircraft_identifier()
+        );
         Ok(())
     }
 
@@ -158,7 +161,11 @@ impl FixesRepository {
             match result {
                 Ok(_) => inserted_count += 1,
                 Err(e) => {
-                    warn!("Failed to insert fix for {:?}: {}", fix.get_aircraft_identifier(), e);
+                    warn!(
+                        "Failed to insert fix for {:?}: {}",
+                        fix.get_aircraft_identifier(),
+                        e
+                    );
                     // Continue with other fixes rather than failing the entire batch
                 }
             }
@@ -516,7 +523,8 @@ impl FixesRepository {
         end_time: DateTime<Utc>,
         limit: Option<i64>,
     ) -> Result<Vec<Fix>> {
-        self.get_fixes_for_aircraft_in_time_range_impl(aircraft_id, start_time, end_time, limit).await
+        self.get_fixes_for_aircraft_in_time_range_impl(aircraft_id, start_time, end_time, limit)
+            .await
     }
 
     /// Private implementation for the original aircraft + time range method
@@ -594,12 +602,9 @@ impl FixesRepository {
     pub async fn delete_old_fixes(&self, retention_days: i32) -> Result<u64> {
         let cutoff_time = Utc::now() - chrono::Duration::days(retention_days as i64);
 
-        let result = sqlx::query!(
-            "DELETE FROM fixes WHERE timestamp < $1",
-            cutoff_time
-        )
-        .execute(&self.pool)
-        .await?;
+        let result = sqlx::query!("DELETE FROM fixes WHERE timestamp < $1", cutoff_time)
+            .execute(&self.pool)
+            .await?;
 
         Ok(result.rows_affected())
     }

@@ -8,9 +8,9 @@ pub struct Club {
     pub name: String,
     pub is_soaring: Option<bool>,
     pub home_base_airport_id: Option<i32>,
-    
+
     // Location normalization
-    pub location_id: Option<Uuid>,              // Foreign key to locations table
+    pub location_id: Option<Uuid>, // Foreign key to locations table
 
     // Address fields (legacy, kept for serialization compatibility)
     #[serde(skip_serializing)]

@@ -307,24 +307,24 @@ pub struct Aircraft {
     pub type_registration_code: Option<String>, // 57
     pub registrant_name: Option<String>,        // 59–108
     #[serde(skip_serializing)]
-    pub street1: Option<String>,                // 110–142 (legacy, kept for parsing)
+    pub street1: Option<String>, // 110–142 (legacy, kept for parsing)
     #[serde(skip_serializing)]
-    pub street2: Option<String>,                // 144–176 (legacy, kept for parsing)
+    pub street2: Option<String>, // 144–176 (legacy, kept for parsing)
     #[serde(skip_serializing)]
-    pub city: Option<String>,                   // 178–195 (legacy, kept for parsing)
+    pub city: Option<String>, // 178–195 (legacy, kept for parsing)
     #[serde(skip_serializing)]
-    pub state: Option<String>,                  // 197–198 (legacy, kept for parsing)
+    pub state: Option<String>, // 197–198 (legacy, kept for parsing)
     #[serde(skip_serializing)]
-    pub zip_code: Option<String>,               // 200–209 (legacy, kept for parsing)
+    pub zip_code: Option<String>, // 200–209 (legacy, kept for parsing)
     #[serde(skip_serializing)]
-    pub region_code: Option<String>,            // 211 (legacy, kept for parsing)
+    pub region_code: Option<String>, // 211 (legacy, kept for parsing)
     #[serde(skip_serializing)]
-    pub county_mail_code: Option<String>,       // 213–215 (legacy, kept for parsing)
+    pub county_mail_code: Option<String>, // 213–215 (legacy, kept for parsing)
     #[serde(skip_serializing)]
-    pub country_mail_code: Option<String>,      // 217–218 (legacy, kept for parsing)
+    pub country_mail_code: Option<String>, // 217–218 (legacy, kept for parsing)
 
     // Location normalization
-    pub location_id: Option<Uuid>,              // Foreign key to locations table
+    pub location_id: Option<Uuid>, // Foreign key to locations table
 
     // Dates
     pub last_action_date: Option<NaiveDate>,       // 220–227
@@ -332,8 +332,8 @@ pub struct Aircraft {
 
     // Airworthiness & ops
     pub airworthiness_class: Option<AirworthinessClass>, // 238
-    pub approved_operations_raw: Option<String>,  // 239–247
-    pub approved_ops: ApprovedOps,                // mapped flags (best effort)
+    pub approved_operations_raw: Option<String>,         // 239–247
+    pub approved_ops: ApprovedOps,                       // mapped flags (best effort)
 
     pub type_aircraft_code: Option<String>, // 249
     pub type_engine_code: Option<i16>,      // 251–252
@@ -523,7 +523,9 @@ impl Aircraft {
         let certificate_issue_date = to_opt_date(fw(line, 229, 236));
 
         let airworthiness_class_code = to_opt_string_no_zero(fw(line, 238, 238));
-        let airworthiness_class = airworthiness_class_code.as_ref().map(|code| AirworthinessClass::from(code.as_str()));
+        let airworthiness_class = airworthiness_class_code
+            .as_ref()
+            .map(|code| AirworthinessClass::from(code.as_str()));
         let approved_operations_raw = to_opt_string_no_zero(fw(line, 239, 247));
 
         let approved_ops = if let (Some(class_code), Some(raw)) =
@@ -693,7 +695,9 @@ impl Aircraft {
         let certificate_issue_date = parse_csv_date(fields[16]);
 
         let airworthiness_class_code = to_opt_string(fields[17]);
-        let airworthiness_class = airworthiness_class_code.as_ref().map(|code| AirworthinessClass::from(code.as_str()));
+        let airworthiness_class = airworthiness_class_code
+            .as_ref()
+            .map(|code| AirworthinessClass::from(code.as_str()));
         let type_aircraft_code = to_opt_string(fields[18]);
         let type_engine_code = to_opt_string(fields[19]).and_then(|s| s.parse().ok());
         let status_code = to_opt_string(fields[20]);

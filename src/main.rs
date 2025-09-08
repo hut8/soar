@@ -9,20 +9,21 @@ use tracing::{error, info, warn};
 
 use soar::airports::read_airports_csv_file;
 use soar::airports_repo::AirportsRepository;
-use soar::aprs_client::{AprsClient, AprsClientConfigBuilder, MessageProcessor, FixProcessor};
-use soar::geocoding::geocode_components;
+use soar::aprs_client::{AprsClient, AprsClientConfigBuilder, FixProcessor, MessageProcessor};
+use soar::clubs_repo::ClubsRepository;
+use soar::database_fix_processor::DatabaseFixProcessor;
 use soar::device_repo::DeviceRepository;
 use soar::devices::DeviceFetcher;
 use soar::faa::aircraft_model_repo::AircraftModelRepository;
 use soar::faa::aircraft_models::read_aircraft_models_file;
 use soar::faa::aircraft_registrations::read_aircraft_file;
 use soar::faa::aircraft_registrations_repo::AircraftRegistrationsRepository;
+use soar::geocoding::geocode_components;
+use soar::locations_repo::LocationsRepository;
 use soar::receiver_repo::ReceiverRepository;
 use soar::receivers::read_receivers_file;
 use soar::runways::read_runways_csv_file;
 use soar::runways_repo::RunwaysRepository;
-use soar::database_fix_processor::DatabaseFixProcessor;
-use soar::locations_repo::LocationsRepository;
 
 // Embed migrations into the binary
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!();
@@ -69,6 +70,9 @@ enum Commands {
         /// Geocode registered addresses of aircraft belonging to clubs that haven't been geocoded yet
         #[arg(long)]
         geocode: bool,
+        /// Link soaring clubs to their nearest airports (within 10 miles) as home bases
+        #[arg(long)]
+        link_home_bases: bool,
     },
     /// Run the main APRS client
     Run {
@@ -192,10 +196,7 @@ fn determine_archive_dir() -> Result<String> {
     Ok(home_archive)
 }
 
-
-
-
-
+#[allow(clippy::too_many_arguments)]
 async fn handle_load_data(
     aircraft_models_path: Option<String>,
     aircraft_registrations_path: Option<String>,
@@ -204,6 +205,7 @@ async fn handle_load_data(
     receivers_path: Option<String>,
     pull_devices: bool,
     geocode: bool,
+    link_home_bases: bool,
 ) -> Result<()> {
     info!(
         "Loading data - Models: {:?}, Registrations: {:?}, Airports: {:?}, Runways: {:?}, Receivers: {:?}, Pull Devices: {}, Geocode: {}",
@@ -522,19 +524,24 @@ async fn handle_load_data(
 
                     for location in locations {
                         // Check if street1 is a PO Box and skip it for initial geocoding attempt
-                        let (use_street1, use_street2) = if let Some(street1_val) = &location.street1 {
-                            let street1_upper = street1_val.to_uppercase();
-                            if street1_upper.contains("PO BOX") || street1_upper.contains("P.O. BOX") || street1_upper.starts_with("BOX ") {
-                                // Skip PO Box addresses, use only city/state/zip/country
-                                (None, location.street2.clone())
+                        let (use_street1, use_street2) =
+                            if let Some(street1_val) = &location.street1 {
+                                let street1_upper = street1_val.to_uppercase();
+                                if street1_upper.contains("PO BOX")
+                                    || street1_upper.contains("P.O. BOX")
+                                    || street1_upper.starts_with("BOX ")
+                                {
+                                    // Skip PO Box addresses, use only city/state/zip/country
+                                    (None, location.street2.clone())
+                                } else {
+                                    (location.street1.clone(), location.street2.clone())
+                                }
                             } else {
                                 (location.street1.clone(), location.street2.clone())
-                            }
-                        } else {
-                            (location.street1.clone(), location.street2.clone())
-                        };
+                            };
 
-                        info!("Geocoding location {} - {}, {}, {}, {}",
+                        info!(
+                            "Geocoding location {} - {}, {}, {}, {}",
                             location.id,
                             use_street1.as_deref().unwrap_or(""),
                             location.city.as_deref().unwrap_or(""),
@@ -552,13 +559,10 @@ async fn handle_load_data(
                         };
 
                         // Normalize zip code to 5 digits if available
-                        let zip_5_digits = location.zip_code.as_ref().map(|zip| {
-                            if zip.len() >= 5 {
-                                &zip[..5]
-                            } else {
-                                zip
-                            }
-                        });
+                        let zip_5_digits = location
+                            .zip_code
+                            .as_ref()
+                            .map(|zip| if zip.len() >= 5 { &zip[..5] } else { zip });
 
                         let result = geocode_components(
                             use_street1.as_deref(),
@@ -566,36 +570,51 @@ async fn handle_load_data(
                             location.city.as_deref(),
                             location.state.as_deref(),
                             zip_5_digits,
-                            country_name.as_deref()
-                        ).await;
+                            country_name.as_deref(),
+                        )
+                        .await;
 
                         let final_result = match result {
                             Ok(point) => Ok(point),
                             Err(_) => {
                                 // Fallback: Try with just city, state, zip, country
-                                info!("Full address failed for location {}, trying city/state/zip fallback", location.id);
+                                info!(
+                                    "Full address failed for location {}, trying city/state/zip fallback",
+                                    location.id
+                                );
                                 geocode_components(
                                     None, // No street
                                     None, // No street2
                                     location.city.as_deref(),
                                     location.state.as_deref(),
                                     zip_5_digits,
-                                    country_name.as_deref()
-                                ).await
+                                    country_name.as_deref(),
+                                )
+                                .await
                             }
                         };
 
                         match final_result {
                             Ok(point) => {
                                 // Update the location in the database with the geocoded coordinates
-                                let geolocation_point = soar::locations::Point::new(point.latitude, point.longitude);
-                                match locations_repo.update_geolocation(location.id, geolocation_point).await {
+                                let geolocation_point =
+                                    soar::locations::Point::new(point.latitude, point.longitude);
+                                match locations_repo
+                                    .update_geolocation(location.id, geolocation_point)
+                                    .await
+                                {
                                     Ok(updated) => {
                                         if updated {
-                                            info!("Successfully geocoded location {} to ({}, {})", location.id, point.latitude, point.longitude);
+                                            info!(
+                                                "Successfully geocoded location {} to ({}, {})",
+                                                location.id, point.latitude, point.longitude
+                                            );
                                             successful_geocodes += 1;
                                         } else {
-                                            warn!("Location {} was not found for update", location.id);
+                                            warn!(
+                                                "Location {} was not found for update",
+                                                location.id
+                                            );
                                             failed_geocodes += 1;
                                         }
                                     }
@@ -606,7 +625,8 @@ async fn handle_load_data(
                                 }
                             }
                             Err(e) => {
-                                warn!("Failed to geocode location {} (city: {}, state: {}): {}",
+                                warn!(
+                                    "Failed to geocode location {} (city: {}, state: {}): {}",
                                     location.id,
                                     location.city.as_deref().unwrap_or("?"),
                                     location.state.as_deref().unwrap_or("?"),
@@ -620,7 +640,10 @@ async fn handle_load_data(
                         tokio::time::sleep(tokio::time::Duration::from_millis(1100)).await;
                     }
 
-                    info!("Geocoding completed: {} successful, {} failed", successful_geocodes, failed_geocodes);
+                    info!(
+                        "Geocoding completed: {} successful, {} failed",
+                        successful_geocodes, failed_geocodes
+                    );
                 }
             }
             Err(e) => {
@@ -630,6 +653,138 @@ async fn handle_load_data(
         }
     } else {
         info!("Skipping geocoding - not requested");
+    }
+
+    // Link home bases if requested
+    if link_home_bases {
+        info!("Starting home base linking for soaring clubs...");
+
+        // Create repositories
+        let clubs_repo = ClubsRepository::new(pool.clone());
+        let airports_repo = AirportsRepository::new(pool.clone());
+
+        // Get soaring clubs without home base airport IDs
+        match clubs_repo.get_soaring_clubs_without_home_base().await {
+            Ok(clubs) => {
+                let club_count = clubs.len();
+
+                if club_count == 0 {
+                    info!("No soaring clubs need home base linking");
+                } else {
+                    info!(
+                        "Found {} soaring clubs that need home base linking",
+                        club_count
+                    );
+
+                    let mut linked_count = 0;
+                    let mut failed_count = 0;
+                    let max_distance_miles = 10.0;
+                    let max_distance_meters = max_distance_miles * 1609.34; // Convert miles to meters
+                    let allowed_types = ["large_airport", "medium_airport", "small_airport"];
+
+                    for club in clubs {
+                        if let Some(location) = club.base_location {
+                            info!(
+                                "Processing club: {} at ({}, {})",
+                                club.name, location.latitude, location.longitude
+                            );
+
+                            // Find nearest airports within 10 miles
+                            match airports_repo
+                                .find_nearest_airports(
+                                    location.latitude,
+                                    location.longitude,
+                                    max_distance_meters,
+                                    50, // limit to 50 results to check
+                                )
+                                .await
+                            {
+                                Ok(nearby_airports) => {
+                                    // Filter by allowed airport types
+                                    let suitable_airports: Vec<_> = nearby_airports
+                                        .into_iter()
+                                        .filter(|(airport, _distance)| {
+                                            allowed_types.contains(&airport.airport_type.as_str())
+                                        })
+                                        .collect();
+
+                                    if let Some((nearest_airport, distance)) =
+                                        suitable_airports.first()
+                                    {
+                                        info!(
+                                            "Found suitable airport: {} ({}) at {:.2} miles from {}",
+                                            nearest_airport.name,
+                                            nearest_airport.ident,
+                                            distance / 1609.34, // Convert meters to miles
+                                            club.name
+                                        );
+
+                                        // Update the club's home base airport ID
+                                        match clubs_repo
+                                            .update_home_base_airport(club.id, nearest_airport.id)
+                                            .await
+                                        {
+                                            Ok(updated) => {
+                                                if updated {
+                                                    info!(
+                                                        "Successfully linked {} to airport {} ({})",
+                                                        club.name,
+                                                        nearest_airport
+                                                            .name,
+                                                        nearest_airport
+                                                            .ident
+                                                    );
+                                                    linked_count += 1;
+                                                } else {
+                                                    warn!(
+                                                        "Failed to update club {} - not found",
+                                                        club.name
+                                                    );
+                                                    failed_count += 1;
+                                                }
+                                            }
+                                            Err(e) => {
+                                                error!(
+                                                    "Failed to update club {} home base: {}",
+                                                    club.name, e
+                                                );
+                                                failed_count += 1;
+                                            }
+                                        }
+                                    } else {
+                                        info!(
+                                            "No suitable airports found within {} miles of {}",
+                                            max_distance_miles, club.name
+                                        );
+                                    }
+                                }
+                                Err(e) => {
+                                    error!(
+                                        "Failed to find nearest airports for club {}: {}",
+                                        club.name, e
+                                    );
+                                    failed_count += 1;
+                                }
+                            }
+                        } else {
+                            warn!("Club {} has no geolocation data, skipping", club.name);
+                            failed_count += 1;
+                        }
+                    }
+
+                    info!(
+                        "Home base linking completed: {} successfully linked, {} failed",
+                        linked_count, failed_count
+                    );
+                }
+            }
+            Err(e) => {
+                error!("Failed to get clubs for home base linking: {}", e);
+                return Err(e);
+            }
+        }
+    } else {
+        info!("Skipping home base linking - not requested");
     }
 
     Ok(())
@@ -679,12 +834,11 @@ async fn handle_run(
     );
 
     // Create database fix processor to save all valid fixes to the database
-    let db_fix_processor: Arc<dyn FixProcessor> = Arc::new(
-        DatabaseFixProcessor::new(pool.clone())
-    );
+    let db_fix_processor: Arc<dyn FixProcessor> = Arc::new(DatabaseFixProcessor::new(pool.clone()));
 
     // Create and start APRS client with both message and fix processors
-    let mut client = AprsClient::new_with_fix_processor(config, archive_processor, db_fix_processor);
+    let mut client =
+        AprsClient::new_with_fix_processor(config, archive_processor, db_fix_processor);
 
     info!("Starting APRS client...");
     client.start().await?;
@@ -722,6 +876,7 @@ async fn main() -> Result<()> {
             receivers,
             pull_devices,
             geocode,
+            link_home_bases,
         } => {
             handle_load_data(
                 aircraft_models,
@@ -731,6 +886,7 @@ async fn main() -> Result<()> {
                 receivers,
                 pull_devices,
                 geocode,
+                link_home_bases,
             )
             .await
         }
@@ -767,6 +923,6 @@ async fn main() -> Result<()> {
         Commands::Web { interface, port } => {
             let pool = setup_database().await?;
             soar::web::start_web_server(interface, port, pool).await
-        },
+        }
     }
 }

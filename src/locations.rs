@@ -136,9 +136,11 @@ impl Location {
 
         // Add country if not US
         if let Some(country) = &self.country_mail_code
-            && country != "US" && !country.trim().is_empty() {
-                parts.push(country.trim().to_string());
-            }
+            && country != "US"
+            && !country.trim().is_empty()
+        {
+            parts.push(country.trim().to_string());
+        }
 
         if parts.is_empty() {
             None
@@ -220,17 +222,7 @@ mod tests {
 
     #[test]
     fn test_empty_address_string() {
-        let location = Location::new(
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        );
+        let location = Location::new(None, None, None, None, None, None, None, None, None);
 
         assert_eq!(location.address_string(), None);
     }

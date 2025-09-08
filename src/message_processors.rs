@@ -1,6 +1,6 @@
 use chrono::Utc;
-use std::fs::{OpenOptions, create_dir_all, File};
-use std::io::{Write, BufWriter, BufReader};
+use std::fs::{File, OpenOptions, create_dir_all};
+use std::io::{BufReader, BufWriter, Write};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -132,7 +132,10 @@ impl MessageArchive {
             return;
         }
 
-        match (File::open(&log_file_path), File::create(&compressed_file_path)) {
+        match (
+            File::open(&log_file_path),
+            File::create(&compressed_file_path),
+        ) {
             (Ok(input_file), Ok(output_file)) => {
                 let mut input_reader = BufReader::new(input_file);
                 let mut output_writer = BufWriter::new(output_file);
@@ -140,30 +143,45 @@ impl MessageArchive {
                 // Compress with zstd level 3 (good compression/speed tradeoff)
                 match copy_encode(&mut input_reader, &mut output_writer, 3) {
                     Ok(_) => {
-                        info!("Compressed log file {} to {}",
-                              log_file_path.display(), compressed_file_path.display());
+                        info!(
+                            "Compressed log file {} to {}",
+                            log_file_path.display(),
+                            compressed_file_path.display()
+                        );
 
                         // Remove the original uncompressed file
                         if let Err(e) = std::fs::remove_file(&log_file_path) {
-                            warn!("Failed to remove original log file {}: {}",
-                                  log_file_path.display(), e);
+                            warn!(
+                                "Failed to remove original log file {}: {}",
+                                log_file_path.display(),
+                                e
+                            );
                         }
                     }
                     Err(e) => {
-                        error!("Failed to compress log file {}: {}",
-                               log_file_path.display(), e);
+                        error!(
+                            "Failed to compress log file {}: {}",
+                            log_file_path.display(),
+                            e
+                        );
                         // Remove the incomplete compressed file
                         let _ = std::fs::remove_file(&compressed_file_path);
                     }
                 }
             }
             (Err(e), _) => {
-                error!("Failed to open log file {} for compression: {}",
-                       log_file_path.display(), e);
+                error!(
+                    "Failed to open log file {} for compression: {}",
+                    log_file_path.display(),
+                    e
+                );
             }
             (_, Err(e)) => {
-                error!("Failed to create compressed file {}: {}",
-                       compressed_file_path.display(), e);
+                error!(
+                    "Failed to create compressed file {}: {}",
+                    compressed_file_path.display(),
+                    e
+                );
             }
         }
     }

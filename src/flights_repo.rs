@@ -173,9 +173,11 @@ impl FlightsRepository {
         aircraft_id: Option<&str>,
     ) -> Result<Vec<Flight>> {
         if let Some(aircraft_id) = aircraft_id {
-            self.get_flights_in_time_range_for_aircraft(start_time, end_time, aircraft_id).await
+            self.get_flights_in_time_range_for_aircraft(start_time, end_time, aircraft_id)
+                .await
         } else {
-            self.get_flights_in_time_range_all(start_time, end_time).await
+            self.get_flights_in_time_range_all(start_time, end_time)
+                .await
         }
     }
 
@@ -310,11 +312,10 @@ impl FlightsRepository {
 
     /// Get the count of flights in progress
     pub async fn get_flights_in_progress_count(&self) -> Result<i64> {
-        let result = sqlx::query!(
-            "SELECT COUNT(*) as count FROM flights WHERE landing_time IS NULL"
-        )
-        .fetch_one(&self.pool)
-        .await?;
+        let result =
+            sqlx::query!("SELECT COUNT(*) as count FROM flights WHERE landing_time IS NULL")
+                .fetch_one(&self.pool)
+                .await?;
 
         Ok(result.count.unwrap_or(0))
     }

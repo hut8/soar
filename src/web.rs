@@ -1,10 +1,10 @@
 use anyhow::Result;
 use axum::{
+    Router,
     extract::{Query, State},
     http::{HeaderMap, StatusCode, Uri},
     response::{IntoResponse, Json},
     routing::get,
-    Router,
 };
 use include_dir::{Dir, include_dir};
 use mime_guess::from_path;
@@ -91,7 +91,8 @@ async fn search_airports(
     let airports_repo = AirportsRepository::new(state.pool);
 
     // Check if geographic search parameters are provided
-    if let (Some(lat), Some(lng), Some(radius)) = (params.latitude, params.longitude, params.radius) {
+    if let (Some(lat), Some(lng), Some(radius)) = (params.latitude, params.longitude, params.radius)
+    {
         // Validate radius
         if radius <= 0.0 || radius > 1000.0 {
             return (
@@ -119,7 +120,10 @@ async fn search_airports(
                 .into_response();
         }
 
-        match airports_repo.search_nearby(lat, lng, radius, params.limit).await {
+        match airports_repo
+            .search_nearby(lat, lng, radius, params.limit)
+            .await
+        {
             Ok(airports) => Json(airports).into_response(),
             Err(e) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -130,7 +134,10 @@ async fn search_airports(
     } else if let Some(query) = params.q {
         // Text-based search
         if query.trim().is_empty() {
-            return (StatusCode::BAD_REQUEST, "Query parameter 'q' cannot be empty")
+            return (
+                StatusCode::BAD_REQUEST,
+                "Query parameter 'q' cannot be empty",
+            )
                 .into_response();
         }
 
@@ -166,7 +173,8 @@ async fn search_clubs(
     let clubs_repo = ClubsRepository::new(state.pool);
 
     // Check if geographic search parameters are provided
-    if let (Some(lat), Some(lng), Some(radius)) = (params.latitude, params.longitude, params.radius) {
+    if let (Some(lat), Some(lng), Some(radius)) = (params.latitude, params.longitude, params.radius)
+    {
         // Validate radius
         if radius <= 0.0 || radius > 1000.0 {
             return (
@@ -194,7 +202,10 @@ async fn search_clubs(
                 .into_response();
         }
 
-        match clubs_repo.search_nearby_soaring(lat, lng, radius, params.limit).await {
+        match clubs_repo
+            .search_nearby_soaring(lat, lng, radius, params.limit)
+            .await
+        {
             Ok(clubs) => Json(clubs).into_response(),
             Err(e) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -205,7 +216,10 @@ async fn search_clubs(
     } else if let Some(query) = params.q {
         // Text-based search
         if query.trim().is_empty() {
-            return (StatusCode::BAD_REQUEST, "Query parameter 'q' cannot be empty")
+            return (
+                StatusCode::BAD_REQUEST,
+                "Query parameter 'q' cannot be empty",
+            )
                 .into_response();
         }
 
@@ -246,7 +260,13 @@ async fn search_fixes(
     let start_time = if let Some(start_str) = params.start_time {
         match start_str.parse::<DateTime<Utc>>() {
             Ok(dt) => Some(dt),
-            Err(_) => return (StatusCode::BAD_REQUEST, "Invalid start_time format. Use ISO 8601 format.").into_response(),
+            Err(_) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    "Invalid start_time format. Use ISO 8601 format.",
+                )
+                    .into_response();
+            }
         }
     } else {
         None
@@ -255,7 +275,13 @@ async fn search_fixes(
     let end_time = if let Some(end_str) = params.end_time {
         match end_str.parse::<DateTime<Utc>>() {
             Ok(dt) => Some(dt),
-            Err(_) => return (StatusCode::BAD_REQUEST, "Invalid end_time format. Use ISO 8601 format.").into_response(),
+            Err(_) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    "Invalid end_time format. Use ISO 8601 format.",
+                )
+                    .into_response();
+            }
         }
     } else {
         None
@@ -264,30 +290,42 @@ async fn search_fixes(
     // Determine query strategy
     if let Some(aircraft_id) = params.aircraft_id {
         // Aircraft-specific query
-        match fixes_repo.get_fixes_for_aircraft(&aircraft_id, params.limit).await {
+        match fixes_repo
+            .get_fixes_for_aircraft(&aircraft_id, params.limit)
+            .await
+        {
             Ok(fixes) => Json(fixes).into_response(),
             Err(e) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 format!("Error fetching fixes for aircraft {}: {}", aircraft_id, e),
-            ).into_response(),
+            )
+                .into_response(),
         }
     } else if let (Some(start), Some(end)) = (start_time, end_time) {
         // Time range query
-        match fixes_repo.get_fixes_in_time_range(start, end, params.limit).await {
+        match fixes_repo
+            .get_fixes_in_time_range(start, end, params.limit)
+            .await
+        {
             Ok(fixes) => Json(fixes).into_response(),
             Err(e) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 format!("Error fetching fixes in time range: {}", e),
-            ).into_response(),
+            )
+                .into_response(),
         }
     } else {
         // Recent fixes query
-        match fixes_repo.get_recent_fixes(params.limit.unwrap_or(100)).await {
+        match fixes_repo
+            .get_recent_fixes(params.limit.unwrap_or(100))
+            .await
+        {
             Ok(fixes) => Json(fixes).into_response(),
             Err(e) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 format!("Error fetching recent fixes: {}", e),
-            ).into_response(),
+            )
+                .into_response(),
         }
     }
 }
@@ -304,10 +342,13 @@ async fn search_flights(
     if params.in_progress == Some(true) {
         match flights_repo.get_flights_in_progress().await {
             Ok(flights) => return Json(flights).into_response(),
-            Err(e) => return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Error fetching flights in progress: {}", e),
-            ).into_response(),
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Error fetching flights in progress: {}", e),
+                )
+                    .into_response();
+            }
         }
     }
 
@@ -318,24 +359,25 @@ async fn search_flights(
             Err(e) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 format!("Error fetching flights for aircraft {}: {}", aircraft_id, e),
-            ).into_response(),
+            )
+                .into_response(),
         }
     } else if let Some(date_str) = params.start_date {
         // Date-specific query
         match date_str.parse::<NaiveDate>() {
-            Ok(date) => {
-                match flights_repo.get_flights_for_date(date).await {
-                    Ok(flights) => Json(flights).into_response(),
-                    Err(e) => (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Error fetching flights for date {}: {}", date, e),
-                    ).into_response(),
-                }
-            }
+            Ok(date) => match flights_repo.get_flights_for_date(date).await {
+                Ok(flights) => Json(flights).into_response(),
+                Err(e) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Error fetching flights for date {}: {}", date, e),
+                )
+                    .into_response(),
+            },
             Err(_) => (
                 StatusCode::BAD_REQUEST,
                 "Invalid start_date format. Use YYYY-MM-DD format.",
-            ).into_response(),
+            )
+                .into_response(),
         }
     } else {
         // Default: recent flights
@@ -353,7 +395,8 @@ async fn search_flights(
             Err(e) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 format!("Error fetching recent flights: {}", e),
-            ).into_response(),
+            )
+                .into_response(),
         }
     }
 }

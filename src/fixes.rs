@@ -29,7 +29,7 @@ pub struct Fix {
 
     /// Aircraft identification
     pub aircraft_id: Option<String>, // Hex aircraft ID (e.g., "39D304")
-    pub device_id: Option<u32>,      // Raw device ID from OGN parameters (numeric)
+    pub device_id: Option<u32>, // Raw device ID from OGN parameters (numeric)
     pub device_type: Option<AddressType>,
     pub aircraft_type: Option<AircraftType>,
 
