@@ -9,7 +9,7 @@ module.exports = {
 		join(require.resolve('@skeletonlabs/skeleton'), '../**/*.{html,js,svelte,ts}')
 	],
 	theme: {
-		extend: {},
+		extend: {}
 	},
 	plugins: [
 		skeleton({
@@ -17,10 +17,10 @@ module.exports = {
 				preset: [
 					{
 						name: 'skeleton',
-						enhancements: true,
-					},
-				],
-			},
-		}),
-	],
+						enhancements: true
+					}
+				]
+			}
+		})
+	]
 };

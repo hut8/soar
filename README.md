@@ -83,3 +83,7 @@ This is the most robust (but slowest) option in LoRa.
 
 So if FANET says "CR4", they almost certainly mean LoRa coding rate 4/8.
 ```
+
+## Related projects
+
+- https://github.com/tobiz/OGN-Flight-Logger_V2 - this might have good takeoff/landing detection

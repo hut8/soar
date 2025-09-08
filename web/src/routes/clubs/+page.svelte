@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { ProgressRadial } from '@skeletonlabs/skeleton';
-	
+
 	let clubs = [];
 	let loading = false;
 	let error = '';
@@ -36,10 +36,10 @@
 	async function searchClubs() {
 		loading = true;
 		error = '';
-		
+
 		try {
 			let url = 'http://localhost:1337/clubs?';
-			
+
 			if (locationSearch && latitude && longitude && radius) {
 				url += `latitude=${latitude}&longitude=${longitude}&radius=${radius}`;
 			} else if (searchQuery) {
@@ -52,7 +52,7 @@
 			if (!response.ok) {
 				throw new Error(`HTTP error! status: ${response.status}`);
 			}
-			
+
 			clubs = await response.json();
 		} catch (err) {
 			error = `Failed to search clubs: ${err.message}`;
@@ -92,28 +92,26 @@
 </svelte:head>
 
 <div class="space-y-6">
-	<header class="text-center space-y-4">
+	<header class="space-y-4 text-center">
 		<h1 class="h1">Soaring Clubs</h1>
-		<p class="text-surface-600-300-token">
-			Find active soaring clubs in your area
-		</p>
+		<p class="text-surface-600-300-token">Find active soaring clubs in your area</p>
 	</header>
 
 	<!-- Search Section -->
-	<section class="card p-6 space-y-4">
+	<section class="card space-y-4 p-6">
 		<h2 class="h2">Search Clubs</h2>
-		
+
 		<!-- Search Method Toggle -->
 		<div class="flex justify-center space-x-2">
-			<button 
+			<button
 				class="btn btn-sm {!locationSearch ? 'variant-filled-secondary' : 'variant-ghost-surface'}"
-				on:click={() => locationSearch = false}
+				on:click={() => (locationSearch = false)}
 			>
 				🔍 Name Search
 			</button>
-			<button 
+			<button
 				class="btn btn-sm {locationSearch ? 'variant-filled-secondary' : 'variant-ghost-surface'}"
-				on:click={() => locationSearch = true}
+				on:click={() => (locationSearch = true)}
 			>
 				📍 Location Search
 			</button>
@@ -130,14 +128,12 @@
 					on:keydown={(e) => e.key === 'Enter' && searchClubs()}
 				/>
 				<div class="flex justify-center">
-					<button class="btn variant-filled-primary" on:click={searchClubs}>
-						Search Clubs
-					</button>
+					<button class="variant-filled-primary btn" on:click={searchClubs}> Search Clubs </button>
 				</div>
 			</div>
 		{:else}
 			<div class="space-y-4">
-				<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+				<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
 					<input
 						bind:value={latitude}
 						class="input"
@@ -162,10 +158,10 @@
 					/>
 				</div>
 				<div class="flex justify-center space-x-2">
-					<button class="btn variant-ghost-surface" on:click={getCurrentLocation}>
+					<button class="variant-ghost-surface btn" on:click={getCurrentLocation}>
 						📱 Use My Location
 					</button>
-					<button class="btn variant-filled-primary" on:click={searchClubs}>
+					<button class="variant-filled-primary btn" on:click={searchClubs}>
 						Search Nearby Clubs
 					</button>
 				</div>
@@ -175,7 +171,7 @@
 
 	<!-- Loading State -->
 	{#if loading}
-		<div class="flex justify-center items-center py-8">
+		<div class="flex items-center justify-center py-8">
 			<ProgressRadial width="w-8" />
 			<span class="ml-2">Searching clubs...</span>
 		</div>
@@ -195,29 +191,31 @@
 	{#if !loading && !error && clubs.length > 0}
 		<section class="space-y-4">
 			<h2 class="h2">Results ({clubs.length} clubs found)</h2>
-			
-			<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+			<div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
 				{#each clubs as club}
-					<div class="card p-6 space-y-4">
+					<div class="card space-y-4 p-6">
 						<header class="card-header">
 							<h3 class="h3">{club.name}</h3>
 						</header>
-						
+
 						<div class="space-y-2">
 							<div class="flex items-start space-x-2">
 								<span class="text-surface-500">📍</span>
 								<span class="text-sm">{formatAddress(club)}</span>
 							</div>
-							
+
 							{#if club.base_location}
 								<div class="flex items-center space-x-2">
 									<span class="text-surface-500">🗺️</span>
 									<span class="text-sm">
-										{club.base_location.latitude.toFixed(4)}, {club.base_location.longitude.toFixed(4)}
+										{club.base_location.latitude.toFixed(4)}, {club.base_location.longitude.toFixed(
+											4
+										)}
 									</span>
 								</div>
 							{/if}
-							
+
 							{#if club.home_base_airport_id}
 								<div class="flex items-center space-x-2">
 									<span class="text-surface-500">✈️</span>
@@ -225,20 +223,18 @@
 								</div>
 							{/if}
 						</div>
-						
+
 						<footer class="card-footer">
-							<span class="badge variant-filled-success">Active Soaring Club</span>
+							<span class="variant-filled-success badge">Active Soaring Club</span>
 						</footer>
 					</div>
 				{/each}
 			</div>
 		</section>
 	{:else if !loading && !error && clubs.length === 0 && (searchQuery || (latitude && longitude))}
-		<div class="text-center py-8">
+		<div class="py-8 text-center">
 			<h3 class="h3">No clubs found</h3>
-			<p class="text-surface-600-300-token">
-				Try adjusting your search criteria or search radius.
-			</p>
+			<p class="text-surface-600-300-token">Try adjusting your search criteria or search radius.</p>
 		</div>
 	{/if}
 </div>

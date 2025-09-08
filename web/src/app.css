@@ -3,10 +3,11 @@
 @import 'tailwindcss/utilities';
 
 [data-theme='cerebus'] {
-	--text-scaling: 1.0;
+	--text-scaling: 1;
 	--base-font-color: var(--color-surface-950);
 	--base-font-color-dark: var(--color-surface-50);
-	--base-font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, 'DejaVu Sans Mono', monospace;
+	--base-font-family:
+		ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, 'DejaVu Sans Mono', monospace;
 	--base-font-size: 12px;
 	--base-line-height: inherit;
 	--base-font-weight: inherit;

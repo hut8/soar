@@ -21,15 +21,15 @@
 				</a>
 			</svelte:fragment>
 			<svelte:fragment slot="trail">
-				<nav class="hidden md:flex space-x-4">
-					<a href="/clubs" class="btn btn-sm variant-ghost-surface">Clubs</a>
-					<a href="/airports" class="btn btn-sm variant-ghost-surface">Airports</a>
+				<nav class="hidden space-x-4 md:flex">
+					<a href="/clubs" class="variant-ghost-surface btn btn-sm">Clubs</a>
+					<a href="/airports" class="variant-ghost-surface btn btn-sm">Airports</a>
 				</nav>
 			</svelte:fragment>
 		</AppBar>
 	</svelte:fragment>
 
-	<main class="container mx-auto p-4 space-y-4">
+	<main class="container mx-auto space-y-4 p-4">
 		{@render children?.()}
 	</main>
 
