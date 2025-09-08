@@ -156,7 +156,7 @@ impl LocationsRepository {
     pub async fn update_geolocation(&self, location_id: Uuid, geolocation: Point) -> Result<bool> {
         let result = sqlx::query!(
             r#"
-            UPDATE locations 
+            UPDATE locations
             SET geolocation = $2, updated_at = NOW()
             WHERE id = $1
             "#,
@@ -221,6 +221,7 @@ impl LocationsRepository {
     }
 
     /// Find or create a location by address
+    #[allow(clippy::too_many_arguments)]
     pub async fn find_or_create(
         &self,
         street1: Option<String>,

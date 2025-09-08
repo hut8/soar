@@ -71,6 +71,7 @@ impl sqlx::Decode<'_, sqlx::Postgres> for Point {
 
 impl Location {
     /// Create a new Location with generated UUID and current timestamps
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         street1: Option<String>,
         street2: Option<String>,
@@ -134,11 +135,10 @@ impl Location {
         }
 
         // Add country if not US
-        if let Some(country) = &self.country_mail_code {
-            if country != "US" && !country.trim().is_empty() {
+        if let Some(country) = &self.country_mail_code
+            && country != "US" && !country.trim().is_empty() {
                 parts.push(country.trim().to_string());
             }
-        }
 
         if parts.is_empty() {
             None

@@ -30,16 +30,8 @@ impl FixHistory {
         }
     }
 
-    fn is_empty(&self) -> bool {
-        self.fixes.is_empty()
-    }
-
     fn len(&self) -> usize {
         self.fixes.len()
-    }
-
-    fn last(&self) -> Option<&Fix> {
-        self.fixes.last()
     }
 
     fn iter(&'_ self) -> std::slice::Iter<'_, Fix> {

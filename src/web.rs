@@ -48,7 +48,6 @@ pub struct FixQuery {
 pub struct FlightQuery {
     aircraft_id: Option<String>,
     start_date: Option<String>, // ISO date
-    end_date: Option<String>,   // ISO date
     in_progress: Option<bool>,  // Filter for flights in progress
     limit: Option<i64>,
 }
@@ -240,7 +239,7 @@ async fn search_fixes(
     Query(params): Query<FixQuery>,
 ) -> impl IntoResponse {
     use chrono::{DateTime, Utc};
-    
+
     let fixes_repo = FixesRepository::new(state.pool);
 
     // Parse datetime strings if provided
@@ -298,7 +297,7 @@ async fn search_flights(
     Query(params): Query<FlightQuery>,
 ) -> impl IntoResponse {
     use chrono::NaiveDate;
-    
+
     let flights_repo = FlightsRepository::new(state.pool);
 
     // Handle in-progress filter
