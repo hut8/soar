@@ -114,7 +114,7 @@ jobs:
         run: cargo fmt --check
 
       - name: Install sqlx-cli
-        run: cargo install sqlx-cli --no-default-features --features postgres,runtime-tokio-rustls
+        run: cargo install sqlx-cli --no-default-features --features postgres,rustls
 
       - name: Run migrations
         env:
