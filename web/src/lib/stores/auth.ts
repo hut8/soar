@@ -66,7 +66,7 @@ function createAuthStore() {
 							token,
 							isLoading: false
 						});
-					} catch (error) {
+					} catch {
 						// Clear invalid data
 						localStorage.removeItem('auth_token');
 						localStorage.removeItem('auth_user');

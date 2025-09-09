@@ -1,0 +1,36 @@
+#!/bin/bash
+
+# Frontend build pipeline - lint, check, test, and build
+echo "Running frontend build pipeline..."
+
+cd web
+
+echo "Step 1/4: Running linter..."
+npm run lint
+if [ $? -ne 0 ]; then
+    echo "❌ Linting failed!"
+    exit 1
+fi
+
+echo "Step 2/4: Running type check..."
+npm run check
+if [ $? -ne 0 ]; then
+    echo "❌ Type check failed!"
+    exit 1
+fi
+
+echo "Step 3/4: Running tests..."
+npm run test
+if [ $? -ne 0 ]; then
+    echo "❌ Tests failed!"
+    exit 1
+fi
+
+echo "Step 4/4: Building project..."
+npm run build
+if [ $? -ne 0 ]; then
+    echo "❌ Build failed!"
+    exit 1
+fi
+
+echo "✅ Frontend build pipeline completed successfully!"

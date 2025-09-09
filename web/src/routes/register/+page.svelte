@@ -51,7 +51,7 @@
 		error = '';
 
 		try {
-			const user = await authApi.register({
+			await authApi.register({
 				first_name: firstName,
 				last_name: lastName,
 				email,
@@ -141,7 +141,7 @@
 				<span>Club (Optional)</span>
 				<select class="select" bind:value={clubId} disabled={loading || clubsLoading}>
 					<option value="">Select a club (optional)</option>
-					{#each clubs as club}
+					{#each clubs as club (club.id)}
 						<option value={club.id}>{club.name}</option>
 					{/each}
 				</select>

@@ -3,17 +3,6 @@
 	import { browser } from '$app/environment';
 	import '$lib/types/google-maps.d.ts';
 
-	// Type definitions for Google Maps
-	interface GoogleMap {
-		setCenter(latLng: LatLng): void;
-		setZoom(zoom: number): void;
-	}
-
-	interface LatLng {
-		lat: number;
-		lng: number;
-	}
-
 	// Placeholder for Google Maps API key - to be added later
 	const GOOGLE_MAPS_API_KEY = 'AIzaSyBaK8UU0l4z-k6b-UPlLzw3wv_Ti71XNy8';
 
@@ -46,7 +35,7 @@
 	async function loadGoogleMapsScript(): Promise<void> {
 		return new Promise((resolve, reject) => {
 			// Check if Google Maps is already loaded
-			if ((window as any).google && (window as any).google.maps) {
+			if (window.google && window.google.maps) {
 				resolve();
 				return;
 			}
@@ -65,34 +54,34 @@
 	}
 
 	function initializeMap(): void {
-		if (!mapContainer || !(window as any).google) return;
+		if (!mapContainer || !window.google) return;
 
 		// Initialize map centered on continental US
-		map = new (window as any).google.maps.Map(mapContainer, {
+		map = new window.google.maps.Map(mapContainer, {
 			center: CONUS_CENTER,
 			zoom: 4, // Shows continental US
-			mapTypeId: (window as any).google.maps.MapTypeId.TERRAIN,
+			mapTypeId: window.google.maps.MapTypeId.TERRAIN,
 			restriction: {
 				latLngBounds: CONUS_BOUNDS,
 				strictBounds: false
 			},
 			mapTypeControl: true,
 			mapTypeControlOptions: {
-				style: (window as any).google.maps.MapTypeControlStyle.HORIZONTAL_BAR,
-				position: (window as any).google.maps.ControlPosition.TOP_CENTER
+				style: window.google.maps.MapTypeControlStyle.HORIZONTAL_BAR,
+				position: window.google.maps.ControlPosition.TOP_CENTER
 			},
 			zoomControl: true,
 			zoomControlOptions: {
-				position: (window as any).google.maps.ControlPosition.RIGHT_CENTER
+				position: window.google.maps.ControlPosition.RIGHT_CENTER
 			},
 			scaleControl: true,
 			streetViewControl: true,
 			streetViewControlOptions: {
-				position: (window as any).google.maps.ControlPosition.RIGHT_TOP
+				position: window.google.maps.ControlPosition.RIGHT_TOP
 			},
 			fullscreenControl: true,
 			fullscreenControlOptions: {
-				position: (window as any).google.maps.ControlPosition.RIGHT_TOP
+				position: window.google.maps.ControlPosition.RIGHT_TOP
 			}
 		});
 
@@ -118,23 +107,23 @@
 			console.log('Map object:', map);
 
 			// Center map on user location - use the same object format as the marker
-			(map as any).setCenter(userLocation);
+			map?.setCenter(userLocation);
 
 			// Zoom to approximately 10 miles in the smaller dimension
 			// Zoom level 13-14 typically shows about 10-20 miles depending on screen size
-			(map as any).setZoom(13);
+			map?.setZoom(13);
 
 			console.log('Map centered and zoomed to user location');
 
 			// Add a marker for user location
-			new (window as any).google.maps.Marker({
+			new window.google.maps.Marker({
 				position: userLocation,
 				map: map,
 				title: 'Your Location',
 				icon: {
 					url: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iMTAiIGZpbGw9IiM0Mjg1RjQiIHN0cm9rZT0iI0ZGRkZGRiIgc3Ryb2tlLXdpZHRoPSIyIi8+CjxjaXJjbGUgY3g9IjEyIiBjeT0iMTIiIHI9IjMiIGZpbGw9IiNGRkZGRkYiLz4KPC9zdmc+',
-					scaledSize: new (window as any).google.maps.Size(24, 24),
-					anchor: new (window as any).google.maps.Point(12, 12)
+					size: new window.google.maps.Size(24, 24),
+					anchor: new window.google.maps.Point(12, 12)
 				}
 			});
 
