@@ -27,7 +27,7 @@
 		north: 49.3457868, // Northern border
 		south: 24.7433195, // Southern border
 		west: -124.7844079, // Western border
-		east: -66.9513812  // Eastern border
+		east: -66.9513812 // Eastern border
 	};
 
 	// Center of continental US
@@ -116,10 +116,10 @@
 
 			console.log(`User location found: ${userLocation.lat}, ${userLocation.lng}`);
 			console.log('Map object:', map);
-			
+
 			// Center map on user location - use the same object format as the marker
 			(map as any).setCenter(userLocation);
-			
+
 			// Zoom to approximately 10 miles in the smaller dimension
 			// Zoom level 13-14 typically shows about 10-20 miles depending on screen size
 			(map as any).setZoom(13);
@@ -149,18 +149,13 @@
 
 	function getCurrentPosition(): Promise<GeolocationPosition> {
 		return new Promise((resolve, reject) => {
-			navigator.geolocation.getCurrentPosition(
-				resolve,
-				reject,
-				{
-					enableHighAccuracy: true,
-					timeout: 10000,
-					maximumAge: 300000 // 5 minutes
-				}
-			);
+			navigator.geolocation.getCurrentPosition(resolve, reject, {
+				enableHighAccuracy: true,
+				timeout: 10000,
+				maximumAge: 300000 // 5 minutes
+			});
 		});
 	}
-
 </script>
 
 <svelte:head>
@@ -178,14 +173,16 @@
 		<div class="flex flex-col space-y-2">
 			<button
 				bind:this={userLocationButton}
-				class="btn variant-filled-primary"
+				class="variant-filled-primary btn"
 				class:opacity-50={isLocating}
 				disabled={isLocating}
 				on:click={locateUser}
 			>
 				{#if isLocating}
 					<div class="flex items-center space-x-2">
-						<div class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+						<div
+							class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
+						></div>
 						<span>Locating...</span>
 					</div>
 				{:else}
