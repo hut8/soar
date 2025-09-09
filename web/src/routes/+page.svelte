@@ -9,7 +9,6 @@
 	let radius = '50';
 
 	const clubsPath = resolve('/clubs');
-	const airportsPath = resolve('/airports');
 
 	function handleSearch() {
 		if (locationSearch) {
@@ -35,7 +34,7 @@
 </script>
 
 <svelte:head>
-	<title>Glider Flights - Find Soaring Clubs and Airports</title>
+	<title></title>
 </svelte:head>
 
 <div class="space-y-8">
@@ -140,21 +139,7 @@
 	<!-- Features Section -->
 	<section class="grid grid-cols-1 gap-6 md:grid-cols-2">
 		<div class="card space-y-4 p-6">
-			<h3 class="h3">🏛️ Find Soaring Clubs</h3>
-			<p>
-				Discover active soaring clubs in your area. Connect with local gliding communities, find
-				instruction opportunities, and join fellow aviation enthusiasts.
-			</p>
-			<a href={clubsPath} class="variant-filled-primary btn">Browse Clubs</a>
-		</div>
-
-		<div class="card space-y-4 p-6">
-			<h3 class="h3">✈️ Locate Airports</h3>
-			<p>
-				Search for airports and airfields suitable for gliding operations. Find runway information,
-				contact details, and facilities available for soaring activities.
-			</p>
-			<a href={airportsPath} class="variant-filled-primary btn">Browse Airports</a>
+		    <a href={clubsPath} class="variant-filled-primary btn">Browse Clubs</a>
 		</div>
 	</section>
 

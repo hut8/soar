@@ -29,6 +29,10 @@ export interface PasswordResetConfirm {
 	new_password: string;
 }
 
+export interface EmailVerificationConfirm {
+	token: string;
+}
+
 class AuthApiError extends Error {
 	constructor(
 		message: string,
@@ -68,8 +72,8 @@ export const authApi = {
 		});
 	},
 
-	async register(userData: RegisterRequest): Promise<User> {
-		return apiCall<User>('/auth/register', {
+	async register(userData: RegisterRequest): Promise<void> {
+		await apiCall<void>('/auth/register', {
 			method: 'POST',
 			body: JSON.stringify(userData)
 		});
@@ -94,6 +98,13 @@ export const authApi = {
 		await apiCall<void>('/auth/password-reset/confirm', {
 			method: 'POST',
 			body: JSON.stringify(data)
+		});
+	},
+
+	async verifyEmail(token: string): Promise<void> {
+		await apiCall<void>('/auth/verify-email', {
+			method: 'POST',
+			body: JSON.stringify({ token })
 		});
 	}
 };

@@ -1,5 +1,7 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/stores';
 	import { auth } from '$lib/stores/auth';
 	import { authApi, AuthApiError } from '$lib/api/auth';
 	import { resolve } from '$app/paths';
@@ -8,6 +10,15 @@
 	let password = '';
 	let error = '';
 	let loading = false;
+	let message = '';
+
+	onMount(() => {
+		// Check for success message from URL parameters
+		const urlMessage = $page.url.searchParams.get('message');
+		if (urlMessage) {
+			message = urlMessage;
+		}
+	});
 
 	async function handleLogin() {
 		if (!email || !password) {
@@ -57,6 +68,12 @@
 	</div>
 
 	<div class="card p-6">
+		{#if message}
+			<div class="variant-filled-success mb-4 rounded-lg p-3 text-sm">
+				{message}
+			</div>
+		{/if}
+
 		{#if error}
 			<div class="variant-filled-error mb-4 rounded-lg p-3 text-sm">
 				{error}

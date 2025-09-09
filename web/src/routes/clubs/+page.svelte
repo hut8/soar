@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
-	import { ProgressRadial } from '@skeletonlabs/skeleton';
+	import { ProgressRing  } from '@skeletonlabs/skeleton-svelte';
 
 	interface Point {
 		latitude: number;
@@ -197,7 +197,7 @@
 	<!-- Loading State -->
 	{#if loading}
 		<div class="flex items-center justify-center py-8">
-			<ProgressRadial width="w-8" />
+			<ProgressRing size="w-8" />
 			<span class="ml-2">Searching clubs...</span>
 		</div>
 	{/if}

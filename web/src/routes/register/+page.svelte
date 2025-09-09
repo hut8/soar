@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { auth } from '$lib/stores/auth';
 	import { authApi, AuthApiError } from '$lib/api/auth';
 	import { resolve } from '$app/paths';
 	import { onMount } from 'svelte';
@@ -59,12 +58,12 @@
 				club_id: clubId || undefined
 			});
 
-			// Auto-login after successful registration
-			const loginResponse = await authApi.login({ email, password });
-			auth.login(loginResponse.user, loginResponse.token);
-
-			// Redirect to home page
-			goto(resolve('/'));
+			// Redirect to login with success message
+			goto(
+				resolve(
+					'/login?message=Account created successfully! Please check your email to verify your account before signing in.'
+				)
+			);
 		} catch (err) {
 			if (err instanceof AuthApiError) {
 				if (err.status === 409) {
