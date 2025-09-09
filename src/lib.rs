@@ -6,11 +6,13 @@
 pub mod airports;
 pub mod airports_repo;
 pub mod aprs_client;
+pub mod auth;
 pub mod clubs;
 pub mod clubs_repo;
 pub mod database_fix_processor;
 pub mod device_repo;
 pub mod devices;
+pub mod email;
 pub mod faa;
 pub mod fixes;
 pub mod fixes_repo;
@@ -28,6 +30,8 @@ pub mod receiver_repo;
 pub mod receivers;
 pub mod runways;
 pub mod runways_repo;
+pub mod users;
+pub mod users_repo;
 pub mod web;
 
 pub use aprs_client::{

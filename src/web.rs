@@ -1,22 +1,29 @@
 use anyhow::Result;
 use axum::{
     Router,
-    extract::{Query, State},
+    extract::{Path, Query, State},
     http::{HeaderMap, StatusCode, Uri},
     response::{IntoResponse, Json},
-    routing::get,
+    routing::{delete, get, post, put},
 };
 use include_dir::{Dir, include_dir};
 use mime_guess::from_path;
 use serde::Deserialize;
-use sqlx::postgres::PgPool;
+use sqlx::{postgres::PgPool, types::Uuid};
 use tower_http::trace::TraceLayer;
-use tracing::info;
+use tracing::{error, info};
 
 use crate::airports_repo::AirportsRepository;
+use crate::auth::{AdminUser, AuthUser, JwtService, get_jwt_secret};
 use crate::clubs_repo::ClubsRepository;
+use crate::email::EmailService;
 use crate::fixes_repo::FixesRepository;
 use crate::flights_repo::FlightsRepository;
+use crate::users::{
+    CreateUserRequest, LoginRequest, LoginResponse, PasswordResetConfirm, PasswordResetRequest,
+    UpdateUserRequest, UserInfo,
+};
+use crate::users_repo::UsersRepository;
 
 // Embed web assets into the binary
 static ASSETS: Dir<'_> = include_dir!("web/build");
@@ -401,6 +408,290 @@ async fn search_flights(
     }
 }
 
+// User authentication endpoints
+
+async fn register_user(
+    State(state): State<AppState>,
+    Json(payload): Json<CreateUserRequest>,
+) -> impl IntoResponse {
+    let users_repo = UsersRepository::new(state.pool.clone());
+
+    // Check if user already exists
+    if let Ok(Some(_)) = users_repo.get_by_email(&payload.email).await {
+        return (StatusCode::CONFLICT, "User with this email already exists").into_response();
+    }
+
+    // Create user
+    match users_repo.create_user(&payload).await {
+        Ok(user) => {
+            // Send welcome email
+            if let Ok(email_service) = EmailService::new()
+                && let Err(e) = email_service
+                    .send_welcome_email(&user.email, &user.full_name())
+                    .await
+            {
+                error!("Failed to send welcome email: {}", e);
+            }
+
+            Json(user.to_user_info()).into_response()
+        }
+        Err(e) => {
+            error!("Failed to create user: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create user").into_response()
+        }
+    }
+}
+
+async fn login_user(
+    State(state): State<AppState>,
+    Json(payload): Json<LoginRequest>,
+) -> impl IntoResponse {
+    let users_repo = UsersRepository::new(state.pool);
+
+    match users_repo
+        .verify_password(&payload.email, &payload.password)
+        .await
+    {
+        Ok(Some(user)) => {
+            // Generate JWT token
+            match get_jwt_secret() {
+                Ok(secret) => {
+                    let jwt_service = JwtService::new(&secret);
+                    match jwt_service.generate_token(&user) {
+                        Ok(token) => {
+                            let response = LoginResponse {
+                                token,
+                                user: user.to_user_info(),
+                            };
+                            Json(response).into_response()
+                        }
+                        Err(e) => {
+                            error!("Failed to generate token: {}", e);
+                            (
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                "Failed to generate authentication token",
+                            )
+                                .into_response()
+                        }
+                    }
+                }
+                Err(e) => {
+                    error!("JWT secret not configured: {}", e);
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Authentication configuration error",
+                    )
+                        .into_response()
+                }
+            }
+        }
+        Ok(None) => (StatusCode::UNAUTHORIZED, "Invalid credentials").into_response(),
+        Err(e) => {
+            error!("Authentication error: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, "Authentication failed").into_response()
+        }
+    }
+}
+
+async fn get_current_user(auth_user: AuthUser) -> impl IntoResponse {
+    Json(auth_user.0.to_user_info())
+}
+
+async fn request_password_reset(
+    State(state): State<AppState>,
+    Json(payload): Json<PasswordResetRequest>,
+) -> impl IntoResponse {
+    let users_repo = UsersRepository::new(state.pool);
+
+    match users_repo.get_by_email(&payload.email).await {
+        Ok(Some(user)) => {
+            match users_repo.set_password_reset_token(user.id).await {
+                Ok(token) => {
+                    // Send password reset email
+                    if let Ok(email_service) = EmailService::new() {
+                        if let Err(e) = email_service
+                            .send_password_reset_email(&user.email, &user.full_name(), &token)
+                            .await
+                        {
+                            error!("Failed to send password reset email: {}", e);
+                            return (
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                "Failed to send password reset email",
+                            )
+                                .into_response();
+                        }
+                    } else {
+                        return (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "Email service not configured",
+                        )
+                            .into_response();
+                    }
+
+                    (StatusCode::OK, "Password reset email sent").into_response()
+                }
+                Err(e) => {
+                    error!("Failed to generate password reset token: {}", e);
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Failed to generate password reset token",
+                    )
+                        .into_response()
+                }
+            }
+        }
+        Ok(None) => {
+            // Don't reveal if email exists or not for security
+            (StatusCode::OK, "Password reset email sent").into_response()
+        }
+        Err(e) => {
+            error!("Database error during password reset: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to process password reset request",
+            )
+                .into_response()
+        }
+    }
+}
+
+async fn confirm_password_reset(
+    State(state): State<AppState>,
+    Json(payload): Json<PasswordResetConfirm>,
+) -> impl IntoResponse {
+    let users_repo = UsersRepository::new(state.pool);
+
+    match users_repo.get_by_reset_token(&payload.token).await {
+        Ok(Some(user)) => {
+            match users_repo
+                .update_password(user.id, &payload.new_password)
+                .await
+            {
+                Ok(true) => (StatusCode::OK, "Password updated successfully").into_response(),
+                Ok(false) => (StatusCode::NOT_FOUND, "User not found").into_response(),
+                Err(e) => {
+                    error!("Failed to update password: {}", e);
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Failed to update password",
+                    )
+                        .into_response()
+                }
+            }
+        }
+        Ok(None) => (StatusCode::BAD_REQUEST, "Invalid or expired token").into_response(),
+        Err(e) => {
+            error!("Database error during password reset confirmation: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to reset password",
+            )
+                .into_response()
+        }
+    }
+}
+
+// User management endpoints (admin only)
+
+async fn get_all_users(
+    _admin_user: AdminUser,
+    State(state): State<AppState>,
+    Query(params): Query<SearchQuery>,
+) -> impl IntoResponse {
+    let users_repo = UsersRepository::new(state.pool);
+
+    match users_repo.get_all(params.limit).await {
+        Ok(users) => {
+            let user_infos: Vec<UserInfo> = users.into_iter().map(|u| u.to_user_info()).collect();
+            Json(user_infos).into_response()
+        }
+        Err(e) => {
+            error!("Failed to get users: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get users").into_response()
+        }
+    }
+}
+
+async fn get_user_by_id(
+    _admin_user: AdminUser,
+    State(state): State<AppState>,
+    Path(user_id): Path<Uuid>,
+) -> impl IntoResponse {
+    let users_repo = UsersRepository::new(state.pool);
+
+    match users_repo.get_by_id(user_id).await {
+        Ok(Some(user)) => Json(user.to_user_info()).into_response(),
+        Ok(None) => (StatusCode::NOT_FOUND, "User not found").into_response(),
+        Err(e) => {
+            error!("Failed to get user: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get user").into_response()
+        }
+    }
+}
+
+async fn update_user_by_id(
+    _admin_user: AdminUser,
+    State(state): State<AppState>,
+    Path(user_id): Path<Uuid>,
+    Json(payload): Json<UpdateUserRequest>,
+) -> impl IntoResponse {
+    let users_repo = UsersRepository::new(state.pool);
+
+    match users_repo.update_user(user_id, &payload).await {
+        Ok(Some(user)) => Json(user.to_user_info()).into_response(),
+        Ok(None) => (StatusCode::NOT_FOUND, "User not found").into_response(),
+        Err(e) => {
+            error!("Failed to update user: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to update user").into_response()
+        }
+    }
+}
+
+async fn delete_user_by_id(
+    _admin_user: AdminUser,
+    State(state): State<AppState>,
+    Path(user_id): Path<Uuid>,
+) -> impl IntoResponse {
+    let users_repo = UsersRepository::new(state.pool);
+
+    match users_repo.delete_user(user_id).await {
+        Ok(true) => (StatusCode::NO_CONTENT, "").into_response(),
+        Ok(false) => (StatusCode::NOT_FOUND, "User not found").into_response(),
+        Err(e) => {
+            error!("Failed to delete user: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to delete user").into_response()
+        }
+    }
+}
+
+async fn get_users_by_club(
+    auth_user: AuthUser,
+    State(state): State<AppState>,
+    Path(club_id): Path<Uuid>,
+) -> impl IntoResponse {
+    let users_repo = UsersRepository::new(state.pool);
+
+    // Check if user is admin or belongs to the same club
+    if !auth_user.0.is_admin() && auth_user.0.club_id != Some(club_id) {
+        return (StatusCode::FORBIDDEN, "Insufficient permissions").into_response();
+    }
+
+    match users_repo.get_by_club_id(club_id).await {
+        Ok(users) => {
+            let user_infos: Vec<UserInfo> = users.into_iter().map(|u| u.to_user_info()).collect();
+            Json(user_infos).into_response()
+        }
+        Err(e) => {
+            error!("Failed to get users by club: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to get users by club",
+            )
+                .into_response()
+        }
+    }
+}
+
 pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Result<()> {
     info!("Starting web server on {}:{}", interface, port);
 
@@ -408,10 +699,23 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
 
     // Build the Axum application
     let app = Router::new()
+        // Existing API routes
         .route("/airports", get(search_airports))
         .route("/clubs", get(search_clubs))
         .route("/fixes", get(search_fixes))
         .route("/flights", get(search_flights))
+        // Authentication routes
+        .route("/auth/register", post(register_user))
+        .route("/auth/login", post(login_user))
+        .route("/auth/me", get(get_current_user))
+        .route("/auth/password-reset/request", post(request_password_reset))
+        .route("/auth/password-reset/confirm", post(confirm_password_reset))
+        // User management routes (admin only)
+        .route("/users", get(get_all_users))
+        .route("/users/:id", get(get_user_by_id))
+        .route("/users/:id", put(update_user_by_id))
+        .route("/users/:id", delete(delete_user_by_id))
+        .route("/clubs/:id/users", get(get_users_by_club))
         .fallback(handle_static_file)
         .with_state(app_state)
         .layer(TraceLayer::new_for_http());
