@@ -3,7 +3,7 @@ use sqlx::PgPool;
 use tracing::{info, warn};
 use uuid::Uuid;
 
-use crate::faa::aircraft_registrations::{Aircraft, AirworthinessClass, ApprovedOps};
+use crate::aircraft_registrations::{Aircraft, AirworthinessClass, ApprovedOps};
 use crate::locations_repo::LocationsRepository;
 
 pub struct AircraftRegistrationsRepository {
@@ -1028,11 +1028,158 @@ impl AircraftRegistrationsRepository {
 
         Ok(aircraft_list)
     }
+
+    /// Get all aircraft registrations for a specific club
+    pub async fn get_by_club_id(&self, club_id: Uuid) -> Result<Vec<Aircraft>> {
+        let results = sqlx::query!(
+            r#"
+            SELECT a.registration_number, a.serial_number, a.mfr_mdl_code, a.eng_mfr_mdl_code, a.year_mfr,
+                   a.type_registration_code, a.registrant_name, a.last_action_date, a.certificate_issue_date,
+                   a.airworthiness_class as "airworthiness_class: AirworthinessClass", a.approved_operations_raw, a.location_id,
+                   l.street1, l.street2, l.city, l.state, l.zip_code,
+                   l.region_code, l.county_mail_code, l.country_mail_code,
+                   a.op_restricted_other, a.op_restricted_ag_pest_control, a.op_restricted_aerial_surveying,
+                   a.op_restricted_aerial_advertising, a.op_restricted_forest, a.op_restricted_patrolling,
+                   a.op_restricted_weather_control, a.op_restricted_carriage_of_cargo,
+                   a.op_experimental_show_compliance, a.op_experimental_research_development, a.op_experimental_amateur_built,
+                   a.op_experimental_exhibition, a.op_experimental_racing, a.op_experimental_crew_training,
+                   a.op_experimental_market_survey, a.op_experimental_operating_kit_built,
+                   a.op_experimental_light_sport_reg_prior_2008, a.op_experimental_light_sport_operating_kit_built,
+                   a.op_experimental_light_sport_prev_21_190, a.op_experimental_uas_research_development,
+                   a.op_experimental_uas_market_survey, a.op_experimental_uas_crew_training,
+                   a.op_experimental_uas_exhibition, a.op_experimental_uas_compliance_with_cfr,
+                   a.op_sfp_ferry_for_repairs_alterations_storage, a.op_sfp_evacuate_impending_danger,
+                   a.op_sfp_excess_of_max_certificated, a.op_sfp_delivery_or_export,
+                   a.op_sfp_production_flight_testing, a.op_sfp_customer_demo,
+                   a.type_aircraft_code, a.type_engine_code, a.status_code, a.transponder_code,
+                   a.fractional_owner, a.airworthiness_date, a.expiration_date, a.unique_id,
+                   a.kit_mfr_name, a.kit_model_name
+            FROM aircraft_registrations a
+            LEFT JOIN locations l ON a.location_id = l.id
+            WHERE a.club_id = $1
+            ORDER BY a.registration_number
+            "#,
+            club_id
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut aircraft_list = Vec::new();
+        for row in results {
+            // Get other names for this aircraft
+            let other_names_result = sqlx::query!(
+                "SELECT other_name FROM aircraft_other_names WHERE registration_number = $1 ORDER BY seq",
+                row.registration_number
+            )
+            .fetch_all(&self.pool)
+            .await?;
+
+            let other_names = other_names_result
+                .into_iter()
+                .filter_map(|r| r.other_name)
+                .collect::<Vec<_>>();
+
+            // Convert database types back to Rust types
+            let year_mfr = row.year_mfr.map(|y| y as u16);
+            let transponder_code = row.transponder_code.map(|t| t as u32);
+
+            // Reconstruct ApprovedOps from database boolean fields
+            let approved_ops = ApprovedOps {
+                restricted_other: row.op_restricted_other.unwrap_or(false),
+                restricted_ag_pest_control: row.op_restricted_ag_pest_control.unwrap_or(false),
+                restricted_aerial_surveying: row.op_restricted_aerial_surveying.unwrap_or(false),
+                restricted_aerial_advertising: row
+                    .op_restricted_aerial_advertising
+                    .unwrap_or(false),
+                restricted_forest: row.op_restricted_forest.unwrap_or(false),
+                restricted_patrolling: row.op_restricted_patrolling.unwrap_or(false),
+                restricted_weather_control: row.op_restricted_weather_control.unwrap_or(false),
+                restricted_carriage_of_cargo: row.op_restricted_carriage_of_cargo.unwrap_or(false),
+                exp_show_compliance: row.op_experimental_show_compliance.unwrap_or(false),
+                exp_research_development: row.op_experimental_research_development.unwrap_or(false),
+                exp_amateur_built: row.op_experimental_amateur_built.unwrap_or(false),
+                exp_exhibition: row.op_experimental_exhibition.unwrap_or(false),
+                exp_racing: row.op_experimental_racing.unwrap_or(false),
+                exp_crew_training: row.op_experimental_crew_training.unwrap_or(false),
+                exp_market_survey: row.op_experimental_market_survey.unwrap_or(false),
+                exp_operating_kit_built: row.op_experimental_operating_kit_built.unwrap_or(false),
+                exp_lsa_reg_prior_2008: row
+                    .op_experimental_light_sport_reg_prior_2008
+                    .unwrap_or(false),
+                exp_lsa_operating_kit_built: row
+                    .op_experimental_light_sport_operating_kit_built
+                    .unwrap_or(false),
+                exp_lsa_prev_21_190: row.op_experimental_light_sport_prev_21_190.unwrap_or(false),
+                exp_uas_research_development: row
+                    .op_experimental_uas_research_development
+                    .unwrap_or(false),
+                exp_uas_market_survey: row.op_experimental_uas_market_survey.unwrap_or(false),
+                exp_uas_crew_training: row.op_experimental_uas_crew_training.unwrap_or(false),
+                exp_uas_exhibition: row.op_experimental_uas_exhibition.unwrap_or(false),
+                exp_uas_compliance_with_cfr: row
+                    .op_experimental_uas_compliance_with_cfr
+                    .unwrap_or(false),
+                sfp_ferry_for_repairs_alterations_storage: row
+                    .op_sfp_ferry_for_repairs_alterations_storage
+                    .unwrap_or(false),
+                sfp_evacuate_impending_danger: row
+                    .op_sfp_evacuate_impending_danger
+                    .unwrap_or(false),
+                sfp_excess_of_max_certificated: row
+                    .op_sfp_excess_of_max_certificated
+                    .unwrap_or(false),
+                sfp_delivery_or_export: row.op_sfp_delivery_or_export.unwrap_or(false),
+                sfp_production_flight_testing: row
+                    .op_sfp_production_flight_testing
+                    .unwrap_or(false),
+                sfp_customer_demo: row.op_sfp_customer_demo.unwrap_or(false),
+            };
+
+            aircraft_list.push(Aircraft {
+                n_number: row.registration_number,
+                serial_number: row.serial_number,
+                mfr_mdl_code: row.mfr_mdl_code,
+                eng_mfr_mdl_code: row.eng_mfr_mdl_code,
+                year_mfr,
+                type_registration_code: row.type_registration_code,
+                registrant_name: row.registrant_name,
+                street1: row.street1,
+                street2: row.street2,
+                city: row.city,
+                state: row.state,
+                zip_code: row.zip_code,
+                region_code: row.region_code,
+                county_mail_code: row.county_mail_code,
+                country_mail_code: row.country_mail_code,
+                location_id: row.location_id,
+                last_action_date: row.last_action_date,
+                certificate_issue_date: row.certificate_issue_date,
+                airworthiness_class: row.airworthiness_class,
+                approved_operations_raw: row.approved_operations_raw,
+                approved_ops,
+                type_aircraft_code: row.type_aircraft_code,
+                type_engine_code: row.type_engine_code,
+                status_code: row.status_code,
+                transponder_code,
+                fractional_owner: row.fractional_owner,
+                airworthiness_date: row.airworthiness_date,
+                other_names,
+                expiration_date: row.expiration_date,
+                unique_id: row.unique_id,
+                kit_mfr_name: row.kit_mfr_name,
+                kit_model_name: row.kit_model_name,
+                home_base_airport_id: None,
+                registered_location: None,
+            });
+        }
+
+        Ok(aircraft_list)
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::faa::aircraft_registrations::{Aircraft, AirworthinessClass, ApprovedOps};
+    use crate::aircraft_registrations::{Aircraft, AirworthinessClass, ApprovedOps};
 
     // Note: These tests would require a test database setup
     // For now, they're just structural examples

@@ -13,6 +13,7 @@ use sqlx::{postgres::PgPool, types::Uuid};
 use tower_http::trace::TraceLayer;
 use tracing::{error, info};
 
+use crate::aircraft_registrations_repo::AircraftRegistrationsRepository;
 use crate::airports_repo::AirportsRepository;
 use crate::auth::{AdminUser, AuthUser, JwtService, get_jwt_secret};
 use crate::clubs_repo::ClubsRepository;
@@ -20,7 +21,7 @@ use crate::email::EmailService;
 use crate::fixes_repo::FixesRepository;
 use crate::flights_repo::FlightsRepository;
 use crate::users::{
-    CreateUserRequest, EmailVerificationConfirm, LoginRequest, LoginResponse, 
+    CreateUserRequest, EmailVerificationConfirm, LoginRequest, LoginResponse,
     PasswordResetConfirm, PasswordResetRequest, UpdateUserRequest, UserInfo,
 };
 use crate::users_repo::UsersRepository;
@@ -484,14 +485,13 @@ async fn login_user(
                 match users_repo.set_email_verification_token(user.id).await {
                     Ok(token) => {
                         // Send new email verification email
-                        if let Ok(email_service) = EmailService::new() {
-                            if let Err(e) = email_service
+                        if let Ok(email_service) = EmailService::new()
+                            && let Err(e) = email_service
                                 .send_email_verification(&user.email, &user.full_name(), &token)
                                 .await
                             {
                                 error!("Failed to send email verification: {}", e);
                             }
-                        }
                         return (
                             StatusCode::FORBIDDEN,
                             "Email not verified. A new verification email has been sent to your email address.",
@@ -781,6 +781,31 @@ async fn get_users_by_club(
     }
 }
 
+async fn get_aircraft_by_club(
+    auth_user: AuthUser,
+    State(state): State<AppState>,
+    Path(club_id): Path<Uuid>,
+) -> impl IntoResponse {
+    let aircraft_repo = AircraftRegistrationsRepository::new(state.pool);
+
+    // Check if user is admin or belongs to the same club
+    if !auth_user.0.is_admin() && auth_user.0.club_id != Some(club_id) {
+        return (StatusCode::FORBIDDEN, "Insufficient permissions").into_response();
+    }
+
+    match aircraft_repo.get_by_club_id(club_id).await {
+        Ok(aircraft) => Json(aircraft).into_response(),
+        Err(e) => {
+            error!("Failed to get aircraft by club: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to get aircraft by club",
+            )
+                .into_response()
+        }
+    }
+}
+
 pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Result<()> {
     info!("Starting web server on {}:{}", interface, port);
 
@@ -791,6 +816,7 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         // Existing API routes
         .route("/airports", get(search_airports))
         .route("/clubs", get(search_clubs))
+        .route("/clubs/:id/aircraft", get(get_aircraft_by_club))
         .route("/fixes", get(search_fixes))
         .route("/flights", get(search_flights))
         // Authentication routes

@@ -3,6 +3,8 @@
 //! This library provides an APRS client that can connect to APRS-IS servers
 //! and optionally archive all incoming messages to daily log files.
 
+pub mod aircraft_registrations;
+pub mod aircraft_registrations_repo;
 pub mod airports;
 pub mod airports_repo;
 pub mod aprs_client;

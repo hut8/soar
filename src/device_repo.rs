@@ -113,6 +113,40 @@ impl DeviceRepository {
             Ok(None)
         }
     }
+
+    /// Get all devices (aircraft) assigned to a specific club
+    pub async fn get_devices_by_club_id(&self, club_id: sqlx::types::Uuid) -> Result<Vec<Device>> {
+        let rows = sqlx::query!(
+            r#"
+            SELECT d.device_type, d.device_id, d.aircraft_model, d.registration,
+                   d.competition_number, d.tracked, d.identified
+            FROM devices d
+            INNER JOIN aircraft_registrations ar ON d.registration = ar.registration_number
+            WHERE ar.club_id = $1
+            ORDER BY d.registration
+            "#,
+            club_id
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut devices = Vec::new();
+        for row in rows {
+            let device_type = DeviceType::from_str(&row.device_type).unwrap_or(DeviceType::Unknown);
+            
+            devices.push(Device {
+                device_type,
+                device_id: row.device_id as u32,
+                aircraft_model: row.aircraft_model,
+                registration: row.registration,
+                competition_number: row.competition_number,
+                tracked: row.tracked,
+                identified: row.identified,
+            });
+        }
+
+        Ok(devices)
+    }
 }
 
 #[cfg(test)]
