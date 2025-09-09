@@ -24,6 +24,10 @@ pub struct User {
     pub password_reset_token: Option<String>,
     #[serde(skip_serializing)]
     pub password_reset_expires_at: Option<DateTime<Utc>>,
+    #[serde(skip_serializing)]
+    pub email_verification_token: Option<String>,
+    #[serde(skip_serializing)]
+    pub email_verification_expires_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -79,6 +83,16 @@ pub struct PasswordResetRequest {
 pub struct PasswordResetConfirm {
     pub token: String,
     pub new_password: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct EmailVerificationRequest {
+    pub email: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct EmailVerificationConfirm {
+    pub token: String,
 }
 
 impl User {

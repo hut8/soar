@@ -86,6 +86,46 @@ The SOAR Team"#,
         Ok(response)
     }
 
+    pub async fn send_email_verification(
+        &self,
+        to_email: &str,
+        to_name: &str,
+        verification_token: &str,
+    ) -> Result<Response> {
+        let base_url =
+            std::env::var("BASE_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
+
+        let verification_url = format!("{}/verify-email?token={}", base_url, verification_token);
+
+        let subject = "Verify Your Email Address - SOAR";
+        let body = format!(
+            r#"Hello {},
+
+Thank you for registering with SOAR! To complete your account setup, please verify your email address.
+
+Click the following link to verify your email:
+{}
+
+This link will expire in 24 hours for security reasons.
+
+If you did not create an account with SOAR, please ignore this email.
+
+Best regards,
+The SOAR Team"#,
+            to_name, verification_url
+        );
+
+        let email = Message::builder()
+            .from(format!("{} <{}>", self.from_name, self.from_email).parse()?)
+            .to(format!("{} <{}>", to_name, to_email).parse()?)
+            .subject(subject)
+            .header(ContentType::TEXT_PLAIN)
+            .body(body)?;
+
+        let response = self.mailer.send(email).await?;
+        Ok(response)
+    }
+
     pub async fn send_welcome_email(&self, to_email: &str, to_name: &str) -> Result<Response> {
         let base_url =
             std::env::var("BASE_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());

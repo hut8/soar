@@ -20,8 +20,8 @@ use crate::email::EmailService;
 use crate::fixes_repo::FixesRepository;
 use crate::flights_repo::FlightsRepository;
 use crate::users::{
-    CreateUserRequest, LoginRequest, LoginResponse, PasswordResetConfirm, PasswordResetRequest,
-    UpdateUserRequest, UserInfo,
+    CreateUserRequest, EmailVerificationConfirm, LoginRequest, LoginResponse, 
+    PasswordResetConfirm, PasswordResetRequest, UpdateUserRequest, UserInfo,
 };
 use crate::users_repo::UsersRepository;
 
@@ -424,16 +424,41 @@ async fn register_user(
     // Create user
     match users_repo.create_user(&payload).await {
         Ok(user) => {
-            // Send welcome email
-            if let Ok(email_service) = EmailService::new()
-                && let Err(e) = email_service
-                    .send_welcome_email(&user.email, &user.full_name())
-                    .await
-            {
-                error!("Failed to send welcome email: {}", e);
-            }
+            // Generate and send email verification token
+            match users_repo.set_email_verification_token(user.id).await {
+                Ok(token) => {
+                    // Send email verification email
+                    if let Ok(email_service) = EmailService::new() {
+                        if let Err(e) = email_service
+                            .send_email_verification(&user.email, &user.full_name(), &token)
+                            .await
+                        {
+                            error!("Failed to send email verification: {}", e);
+                            return (
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                "Failed to send email verification",
+                            )
+                                .into_response();
+                        }
+                    } else {
+                        return (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "Email service not configured",
+                        )
+                            .into_response();
+                    }
 
-            Json(user.to_user_info()).into_response()
+                    (StatusCode::CREATED, "User created. Please check your email to verify your account.").into_response()
+                }
+                Err(e) => {
+                    error!("Failed to generate email verification token: {}", e);
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Failed to generate email verification token",
+                    )
+                        .into_response()
+                }
+            }
         }
         Err(e) => {
             error!("Failed to create user: {}", e);
@@ -453,6 +478,37 @@ async fn login_user(
         .await
     {
         Ok(Some(user)) => {
+            // Check if email is verified
+            if !user.email_verified {
+                // Generate new verification token and resend email
+                match users_repo.set_email_verification_token(user.id).await {
+                    Ok(token) => {
+                        // Send new email verification email
+                        if let Ok(email_service) = EmailService::new() {
+                            if let Err(e) = email_service
+                                .send_email_verification(&user.email, &user.full_name(), &token)
+                                .await
+                            {
+                                error!("Failed to send email verification: {}", e);
+                            }
+                        }
+                        return (
+                            StatusCode::FORBIDDEN,
+                            "Email not verified. A new verification email has been sent to your email address.",
+                        )
+                            .into_response();
+                    }
+                    Err(e) => {
+                        error!("Failed to generate email verification token: {}", e);
+                        return (
+                            StatusCode::FORBIDDEN,
+                            "Email not verified. Please contact support.",
+                        )
+                            .into_response();
+                    }
+                }
+            }
+
             // Generate JWT token
             match get_jwt_secret() {
                 Ok(secret) => {
@@ -495,6 +551,39 @@ async fn login_user(
 
 async fn get_current_user(auth_user: AuthUser) -> impl IntoResponse {
     Json(auth_user.0.to_user_info())
+}
+
+async fn verify_email(
+    State(state): State<AppState>,
+    Json(payload): Json<EmailVerificationConfirm>,
+) -> impl IntoResponse {
+    let users_repo = UsersRepository::new(state.pool);
+
+    match users_repo.get_by_verification_token(&payload.token).await {
+        Ok(Some(user)) => {
+            match users_repo.verify_user_email(user.id).await {
+                Ok(true) => (StatusCode::OK, "Email verified successfully").into_response(),
+                Ok(false) => (StatusCode::NOT_FOUND, "User not found").into_response(),
+                Err(e) => {
+                    error!("Failed to verify email: {}", e);
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Failed to verify email",
+                    )
+                        .into_response()
+                }
+            }
+        }
+        Ok(None) => (StatusCode::BAD_REQUEST, "Invalid or expired verification token").into_response(),
+        Err(e) => {
+            error!("Database error during email verification: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to verify email",
+            )
+                .into_response()
+        }
+    }
 }
 
 async fn request_password_reset(
@@ -708,6 +797,7 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         .route("/auth/register", post(register_user))
         .route("/auth/login", post(login_user))
         .route("/auth/me", get(get_current_user))
+        .route("/auth/verify-email", post(verify_email))
         .route("/auth/password-reset/request", post(request_password_reset))
         .route("/auth/password-reset/confirm", post(confirm_password_reset))
         // User management routes (admin only)

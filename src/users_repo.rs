@@ -26,6 +26,7 @@ impl UsersRepository {
             SELECT id, first_name, last_name, email, password_hash,
                    access_level as "access_level!: AccessLevel", club_id, email_verified,
                    password_reset_token, password_reset_expires_at,
+                   email_verification_token, email_verification_expires_at,
                    created_at, updated_at
             FROM users
             WHERE id = $1
@@ -46,6 +47,8 @@ impl UsersRepository {
             email_verified: row.email_verified.unwrap_or(false),
             password_reset_token: row.password_reset_token,
             password_reset_expires_at: row.password_reset_expires_at,
+            email_verification_token: row.email_verification_token,
+            email_verification_expires_at: row.email_verification_expires_at,
             created_at: row.created_at.unwrap_or_else(Utc::now),
             updated_at: row.updated_at.unwrap_or_else(Utc::now),
         }))
@@ -58,6 +61,7 @@ impl UsersRepository {
             SELECT id, first_name, last_name, email, password_hash,
                    access_level as "access_level!: AccessLevel", club_id, email_verified,
                    password_reset_token, password_reset_expires_at,
+                   email_verification_token, email_verification_expires_at,
                    created_at, updated_at
             FROM users
             WHERE email = $1
@@ -78,6 +82,8 @@ impl UsersRepository {
             email_verified: row.email_verified.unwrap_or(false),
             password_reset_token: row.password_reset_token,
             password_reset_expires_at: row.password_reset_expires_at,
+            email_verification_token: row.email_verification_token,
+            email_verification_expires_at: row.email_verification_expires_at,
             created_at: row.created_at.unwrap_or_else(Utc::now),
             updated_at: row.updated_at.unwrap_or_else(Utc::now),
         }))
@@ -90,6 +96,7 @@ impl UsersRepository {
             SELECT id, first_name, last_name, email, password_hash,
                    access_level as "access_level!: AccessLevel", club_id, email_verified,
                    password_reset_token, password_reset_expires_at,
+                   email_verification_token, email_verification_expires_at,
                    created_at, updated_at
             FROM users
             WHERE password_reset_token = $1
@@ -111,6 +118,8 @@ impl UsersRepository {
             email_verified: row.email_verified.unwrap_or(false),
             password_reset_token: row.password_reset_token,
             password_reset_expires_at: row.password_reset_expires_at,
+            email_verification_token: row.email_verification_token,
+            email_verification_expires_at: row.email_verification_expires_at,
             created_at: row.created_at.unwrap_or_else(Utc::now),
             updated_at: row.updated_at.unwrap_or_else(Utc::now),
         }))
@@ -125,6 +134,7 @@ impl UsersRepository {
             SELECT id, first_name, last_name, email, password_hash,
                    access_level as "access_level!: AccessLevel", club_id, email_verified,
                    password_reset_token, password_reset_expires_at,
+                   email_verification_token, email_verification_expires_at,
                    created_at, updated_at
             FROM users
             ORDER BY created_at DESC
@@ -148,6 +158,8 @@ impl UsersRepository {
                 email_verified: row.email_verified.unwrap_or(false),
                 password_reset_token: row.password_reset_token,
                 password_reset_expires_at: row.password_reset_expires_at,
+                email_verification_token: row.email_verification_token,
+                email_verification_expires_at: row.email_verification_expires_at,
                 created_at: row.created_at.unwrap_or_else(Utc::now),
                 updated_at: row.updated_at.unwrap_or_else(Utc::now),
             })
@@ -161,6 +173,7 @@ impl UsersRepository {
             SELECT id, first_name, last_name, email, password_hash,
                    access_level as "access_level!: AccessLevel", club_id, email_verified,
                    password_reset_token, password_reset_expires_at,
+                   email_verification_token, email_verification_expires_at,
                    created_at, updated_at
             FROM users
             WHERE club_id = $1
@@ -184,6 +197,8 @@ impl UsersRepository {
                 email_verified: row.email_verified.unwrap_or(false),
                 password_reset_token: row.password_reset_token,
                 password_reset_expires_at: row.password_reset_expires_at,
+                email_verification_token: row.email_verification_token,
+                email_verification_expires_at: row.email_verification_expires_at,
                 created_at: row.created_at.unwrap_or_else(Utc::now),
                 updated_at: row.updated_at.unwrap_or_else(Utc::now),
             })
@@ -207,6 +222,7 @@ impl UsersRepository {
             RETURNING id, first_name, last_name, email, password_hash,
                       access_level as "access_level!: AccessLevel", club_id, email_verified,
                       password_reset_token, password_reset_expires_at,
+                      email_verification_token, email_verification_expires_at,
                       created_at, updated_at
             "#,
             user_id,
@@ -234,6 +250,8 @@ impl UsersRepository {
             email_verified: row.email_verified.unwrap_or(false),
             password_reset_token: row.password_reset_token,
             password_reset_expires_at: row.password_reset_expires_at,
+            email_verification_token: row.email_verification_token,
+            email_verification_expires_at: row.email_verification_expires_at,
             created_at: row.created_at.unwrap_or_else(Utc::now),
             updated_at: row.updated_at.unwrap_or_else(Utc::now),
         })
@@ -433,6 +451,93 @@ impl UsersRepository {
 
     /// Generate a random password reset token
     fn generate_reset_token(&self) -> String {
+        let mut rng = rand::thread_rng();
+        let token: String = (0..32)
+            .map(|_| rng.sample(rand::distributions::Alphanumeric) as char)
+            .collect();
+        token
+    }
+
+    /// Set email verification token
+    pub async fn set_email_verification_token(&self, user_id: Uuid) -> Result<String> {
+        let token = self.generate_verification_token();
+        let expires_at = Utc::now() + chrono::Duration::hours(24); // Token expires in 24 hours
+
+        sqlx::query!(
+            r#"
+            UPDATE users 
+            SET email_verification_token = $2,
+                email_verification_expires_at = $3,
+                updated_at = NOW()
+            WHERE id = $1
+            "#,
+            user_id,
+            token,
+            expires_at
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(token)
+    }
+
+    /// Get user by email verification token
+    pub async fn get_by_verification_token(&self, token: &str) -> Result<Option<User>> {
+        let result = sqlx::query!(
+            r#"
+            SELECT id, first_name, last_name, email, password_hash,
+                   access_level as "access_level!: AccessLevel", club_id, email_verified,
+                   password_reset_token, password_reset_expires_at,
+                   email_verification_token, email_verification_expires_at,
+                   created_at, updated_at
+            FROM users
+            WHERE email_verification_token = $1
+            AND email_verification_expires_at > NOW()
+            "#,
+            token
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(result.map(|row| User {
+            id: row.id,
+            first_name: row.first_name,
+            last_name: row.last_name,
+            email: row.email,
+            password_hash: row.password_hash,
+            access_level: row.access_level,
+            club_id: row.club_id,
+            email_verified: row.email_verified.unwrap_or(false),
+            password_reset_token: row.password_reset_token,
+            password_reset_expires_at: row.password_reset_expires_at,
+            email_verification_token: row.email_verification_token,
+            email_verification_expires_at: row.email_verification_expires_at,
+            created_at: row.created_at.unwrap_or_else(Utc::now),
+            updated_at: row.updated_at.unwrap_or_else(Utc::now),
+        }))
+    }
+
+    /// Mark user's email as verified
+    pub async fn verify_user_email(&self, user_id: Uuid) -> Result<bool> {
+        let result = sqlx::query!(
+            r#"
+            UPDATE users 
+            SET email_verified = true,
+                email_verification_token = NULL,
+                email_verification_expires_at = NULL,
+                updated_at = NOW()
+            WHERE id = $1
+            "#,
+            user_id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.rows_affected() > 0)
+    }
+
+    /// Generate a random email verification token
+    fn generate_verification_token(&self) -> String {
         let mut rng = rand::thread_rng();
         let token: String = (0..32)
             .map(|_| rng.sample(rand::distributions::Alphanumeric) as char)
