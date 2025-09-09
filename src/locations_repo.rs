@@ -182,6 +182,11 @@ impl LocationsRepository {
             FROM locations
             WHERE geolocation IS NULL
               AND (street1 IS NOT NULL OR city IS NOT NULL OR state IS NOT NULL)
+              AND EXISTS (
+                  SELECT 1 FROM clubs c
+                  WHERE c.location_id = locations.id
+                  AND c.is_soaring = TRUE
+              )
             ORDER BY created_at ASC
             LIMIT $1
             "#,
