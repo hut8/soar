@@ -1,0 +1,249 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                id, source, destination, via, raw_packet, timestamp,\n                latitude, longitude, altitude_feet,\n                aircraft_id, device_id, device_type as \"device_type: AddressType\", aircraft_type as \"aircraft_type: AircraftType\",\n                flight_number, emitter_category as \"emitter_category: AdsbEmitterCategory\", registration, model, squawk,\n                ground_speed_knots, track_degrees, climb_fpm, turn_rate_rot,\n                snr_db, bit_errors_corrected, freq_offset_khz,\n                club_id, created_at, updated_at\n            FROM fixes\n            ORDER BY timestamp DESC\n            LIMIT $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "source",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "destination",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "via",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 4,
+        "name": "raw_packet",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "timestamp",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "latitude",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 7,
+        "name": "longitude",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 8,
+        "name": "altitude_feet",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 9,
+        "name": "aircraft_id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 10,
+        "name": "device_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 11,
+        "name": "device_type: AddressType",
+        "type_info": {
+          "Custom": {
+            "name": "address_type",
+            "kind": {
+              "Enum": [
+                "Unknown",
+                "Icao",
+                "Flarm",
+                "OgnTracker"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "aircraft_type: AircraftType",
+        "type_info": {
+          "Custom": {
+            "name": "aircraft_type",
+            "kind": {
+              "Enum": [
+                "Reserved0",
+                "GliderMotorGlider",
+                "TowTug",
+                "HelicopterGyro",
+                "SkydiverParachute",
+                "DropPlane",
+                "HangGlider",
+                "Paraglider",
+                "RecipEngine",
+                "JetTurboprop",
+                "Unknown",
+                "Balloon",
+                "Airship",
+                "Uav",
+                "ReservedE",
+                "StaticObstacle"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "flight_number",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 14,
+        "name": "emitter_category: AdsbEmitterCategory",
+        "type_info": {
+          "Custom": {
+            "name": "adsb_emitter_category",
+            "kind": {
+              "Enum": [
+                "A0",
+                "A1",
+                "A2",
+                "A3",
+                "A4",
+                "A5",
+                "A6",
+                "A7",
+                "B0",
+                "B1",
+                "B2",
+                "B3",
+                "B4",
+                "B6",
+                "B7",
+                "C0",
+                "C1",
+                "C2",
+                "C3",
+                "C4",
+                "C5"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "registration",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 16,
+        "name": "model",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 17,
+        "name": "squawk",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 18,
+        "name": "ground_speed_knots",
+        "type_info": "Float4"
+      },
+      {
+        "ordinal": 19,
+        "name": "track_degrees",
+        "type_info": "Float4"
+      },
+      {
+        "ordinal": 20,
+        "name": "climb_fpm",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 21,
+        "name": "turn_rate_rot",
+        "type_info": "Float4"
+      },
+      {
+        "ordinal": 22,
+        "name": "snr_db",
+        "type_info": "Float4"
+      },
+      {
+        "ordinal": 23,
+        "name": "bit_errors_corrected",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 24,
+        "name": "freq_offset_khz",
+        "type_info": "Float4"
+      },
+      {
+        "ordinal": 25,
+        "name": "club_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 26,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 27,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "2c1bc80d5665fd22da58b4864838a75920da4096f8dab4d2e55c3f7a5fe50920"
+}

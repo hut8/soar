@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO clubs (\n                id, name, is_soaring, location_id,\n                created_at, updated_at\n            )\n            VALUES ($1, $2, $3, $4, NOW(), NOW())\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Varchar",
+        "Bool",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "96cf62bc7af3d80628b782c14a855735db98040815cc9f2fd68c51870c1ec43f"
+}

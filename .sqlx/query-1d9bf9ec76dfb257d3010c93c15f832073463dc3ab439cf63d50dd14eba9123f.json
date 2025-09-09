@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT id, aircraft_id, takeoff_time, landing_time, departure_airport,\n                   arrival_airport, tow_aircraft_id, tow_release_height_msl,\n                   created_at, updated_at\n            FROM flights\n            WHERE tow_aircraft_id = $1\n            ORDER BY takeoff_time DESC\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "aircraft_id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "takeoff_time",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 3,
+        "name": "landing_time",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 4,
+        "name": "departure_airport",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "arrival_airport",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 6,
+        "name": "tow_aircraft_id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 7,
+        "name": "tow_release_height_msl",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 8,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 9,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "1d9bf9ec76dfb257d3010c93c15f832073463dc3ab439cf63d50dd14eba9123f"
+}

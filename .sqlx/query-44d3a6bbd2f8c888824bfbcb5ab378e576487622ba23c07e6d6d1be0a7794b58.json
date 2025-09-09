@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT id, receiver_id, rel, href, created_at\n            FROM receivers_links\n            WHERE receiver_id = $1\n            ORDER BY id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "receiver_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "rel",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "href",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "44d3a6bbd2f8c888824bfbcb5ab378e576487622ba23c07e6d6d1be0a7794b58"
+}

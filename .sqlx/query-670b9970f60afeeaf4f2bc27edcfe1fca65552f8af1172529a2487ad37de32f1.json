@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                INSERT INTO receivers (callsign, description, contact, email, country)\n                VALUES ($1, $2, $3, $4, $5)\n                ON CONFLICT (callsign)\n                DO UPDATE SET\n                    description = EXCLUDED.description,\n                    contact = EXCLUDED.contact,\n                    email = EXCLUDED.email,\n                    country = EXCLUDED.country,\n                    updated_at = NOW()\n                RETURNING id\n                ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "670b9970f60afeeaf4f2bc27edcfe1fca65552f8af1172529a2487ad37de32f1"
+}

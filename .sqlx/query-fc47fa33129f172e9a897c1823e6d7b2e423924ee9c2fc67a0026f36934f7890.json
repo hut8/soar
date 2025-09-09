@@ -1,0 +1,94 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT id, street1, street2, city, state, zip_code, region_code,\n                   county_mail_code, country_mail_code,\n                   ST_X(geolocation::geometry) as longitude, ST_Y(geolocation::geometry) as latitude,\n                   created_at, updated_at\n            FROM locations\n            WHERE id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "street1",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "street2",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "city",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "state",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "zip_code",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "region_code",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "county_mail_code",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "country_mail_code",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "longitude",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 10,
+        "name": "latitude",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 11,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 12,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      null,
+      null,
+      false,
+      false
+    ]
+  },
+  "hash": "fc47fa33129f172e9a897c1823e6d7b2e423924ee9c2fc67a0026f36934f7890"
+}

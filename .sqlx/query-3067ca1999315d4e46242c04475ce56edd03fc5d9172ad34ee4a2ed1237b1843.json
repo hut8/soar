@@ -1,0 +1,393 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT registration_number, serial_number, mfr_mdl_code, eng_mfr_mdl_code, year_mfr,\n                   type_registration_code, registrant_name, last_action_date, certificate_issue_date,\n                   airworthiness_class as \"airworthiness_class: AirworthinessClass\",\n                   approved_operations_raw,\n                   op_restricted_other, op_restricted_ag_pest_control, op_restricted_aerial_surveying,\n                   op_restricted_aerial_advertising, op_restricted_forest, op_restricted_patrolling,\n                   op_restricted_weather_control, op_restricted_carriage_of_cargo,\n                   op_experimental_show_compliance, op_experimental_research_development, op_experimental_amateur_built,\n                   op_experimental_exhibition, op_experimental_racing, op_experimental_crew_training,\n                   op_experimental_market_survey, op_experimental_operating_kit_built,\n                   op_experimental_light_sport_reg_prior_2008, op_experimental_light_sport_operating_kit_built,\n                   op_experimental_light_sport_prev_21_190, op_experimental_uas_research_development,\n                   op_experimental_uas_market_survey, op_experimental_uas_crew_training,\n                   op_experimental_uas_exhibition, op_experimental_uas_compliance_with_cfr,\n                   op_sfp_ferry_for_repairs_alterations_storage, op_sfp_evacuate_impending_danger,\n                   op_sfp_excess_of_max_certificated, op_sfp_delivery_or_export,\n                   op_sfp_production_flight_testing, op_sfp_customer_demo,\n                   type_aircraft_code, type_engine_code, status_code, transponder_code,\n                   fractional_owner, airworthiness_date, expiration_date, unique_id,\n                   kit_mfr_name, kit_model_name, location_id,\n                   l.street1, l.street2, l.city, l.state, l.zip_code,\n                   l.region_code, l.county_mail_code, l.country_mail_code\n            FROM aircraft_registrations\n            LEFT JOIN locations l ON aircraft_registrations.location_id = l.id\n            WHERE transponder_code = $1\n            ORDER BY registration_number\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "registration_number",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "serial_number",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "mfr_mdl_code",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "eng_mfr_mdl_code",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "year_mfr",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 5,
+        "name": "type_registration_code",
+        "type_info": "Bpchar"
+      },
+      {
+        "ordinal": 6,
+        "name": "registrant_name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 7,
+        "name": "last_action_date",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 8,
+        "name": "certificate_issue_date",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 9,
+        "name": "airworthiness_class: AirworthinessClass",
+        "type_info": {
+          "Custom": {
+            "name": "airworthiness_class",
+            "kind": {
+              "Enum": [
+                "Standard",
+                "Limited",
+                "Restricted",
+                "Experimental",
+                "Provisional",
+                "Multiple",
+                "Primary",
+                "Special Flight Permit",
+                "Light Sport"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "approved_operations_raw",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 11,
+        "name": "op_restricted_other",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 12,
+        "name": "op_restricted_ag_pest_control",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 13,
+        "name": "op_restricted_aerial_surveying",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 14,
+        "name": "op_restricted_aerial_advertising",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 15,
+        "name": "op_restricted_forest",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 16,
+        "name": "op_restricted_patrolling",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 17,
+        "name": "op_restricted_weather_control",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 18,
+        "name": "op_restricted_carriage_of_cargo",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 19,
+        "name": "op_experimental_show_compliance",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 20,
+        "name": "op_experimental_research_development",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 21,
+        "name": "op_experimental_amateur_built",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 22,
+        "name": "op_experimental_exhibition",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 23,
+        "name": "op_experimental_racing",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 24,
+        "name": "op_experimental_crew_training",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 25,
+        "name": "op_experimental_market_survey",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 26,
+        "name": "op_experimental_operating_kit_built",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 27,
+        "name": "op_experimental_light_sport_reg_prior_2008",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 28,
+        "name": "op_experimental_light_sport_operating_kit_built",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 29,
+        "name": "op_experimental_light_sport_prev_21_190",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 30,
+        "name": "op_experimental_uas_research_development",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 31,
+        "name": "op_experimental_uas_market_survey",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 32,
+        "name": "op_experimental_uas_crew_training",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 33,
+        "name": "op_experimental_uas_exhibition",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 34,
+        "name": "op_experimental_uas_compliance_with_cfr",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 35,
+        "name": "op_sfp_ferry_for_repairs_alterations_storage",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 36,
+        "name": "op_sfp_evacuate_impending_danger",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 37,
+        "name": "op_sfp_excess_of_max_certificated",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 38,
+        "name": "op_sfp_delivery_or_export",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 39,
+        "name": "op_sfp_production_flight_testing",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 40,
+        "name": "op_sfp_customer_demo",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 41,
+        "name": "type_aircraft_code",
+        "type_info": "Bpchar"
+      },
+      {
+        "ordinal": 42,
+        "name": "type_engine_code",
+        "type_info": "Int2"
+      },
+      {
+        "ordinal": 43,
+        "name": "status_code",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 44,
+        "name": "transponder_code",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 45,
+        "name": "fractional_owner",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 46,
+        "name": "airworthiness_date",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 47,
+        "name": "expiration_date",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 48,
+        "name": "unique_id",
+        "type_info": "Bpchar"
+      },
+      {
+        "ordinal": 49,
+        "name": "kit_mfr_name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 50,
+        "name": "kit_model_name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 51,
+        "name": "location_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 52,
+        "name": "street1",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 53,
+        "name": "street2",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 54,
+        "name": "city",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 55,
+        "name": "state",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 56,
+        "name": "zip_code",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 57,
+        "name": "region_code",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 58,
+        "name": "county_mail_code",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 59,
+        "name": "country_mail_code",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "3067ca1999315d4e46242c04475ce56edd03fc5d9172ad34ee4a2ed1237b1843"
+}

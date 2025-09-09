@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT device_type, device_id, aircraft_model, registration,\n                   competition_number, tracked, identified\n            FROM devices\n            WHERE device_id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "device_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "device_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "aircraft_model",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "registration",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "competition_number",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "tracked",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 6,
+        "name": "identified",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "3bacf1ee105874de9eee22f841029e897370e5a3bdd3d66ca7df69e849f05e4c"
+}
