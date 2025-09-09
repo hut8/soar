@@ -7,6 +7,12 @@ pub fn main() {
     println!("cargo:rerun-if-changed=web/package.json");
     println!("cargo:rerun-if-changed=web/package-lock.json");
 
+    // Skip web build if environment variable is set
+    if std::env::var("SKIP_WEB_BUILD").is_ok() {
+        println!("Skipping web build due to SKIP_WEB_BUILD environment variable");
+        return;
+    }
+
     // Check if we're in the web directory or the parent directory
     let web_dir = if Path::new("web").exists() {
         "web"
