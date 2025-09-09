@@ -7,6 +7,7 @@
 	const base = resolve('/');
 	const clubsPath = resolve('/clubs');
 	const airportsPath = resolve('/airports');
+	const operationsPath = resolve('/operations');
 
 	let { children } = $props();
 </script>
@@ -29,6 +30,7 @@
 				<nav class="hidden space-x-4 md:flex">
 					<a href={clubsPath} class="variant-ghost-surface btn btn-sm">Clubs</a>
 					<a href={airportsPath} class="variant-ghost-surface btn btn-sm">Airports</a>
+					<a href={operationsPath} class="variant-ghost-surface btn btn-sm">🗺️ Operations</a>
 				</nav>
 			</svelte:fragment>
 		</AppBar>
