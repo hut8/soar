@@ -17,7 +17,6 @@ pub fn main() {
     };
 
     // Run npm run build in the web directory
-    println!("cargo:warning=Running npm run build in {}", web_dir);
     let output = Command::new("npm")
         .args(["run", "build"])
         .current_dir(web_dir)
@@ -32,6 +31,4 @@ pub fn main() {
             stdout, stderr
         );
     }
-
-    println!("cargo:warning=npm run build completed successfully");
 }
