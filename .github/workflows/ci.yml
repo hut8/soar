@@ -126,6 +126,8 @@ jobs:
           cd web && npm ci
 
       - name: Run Clippy
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/soar_test
         run: cargo clippy --all-targets --all-features -- -D warnings
 
       - name: Run Rust tests
