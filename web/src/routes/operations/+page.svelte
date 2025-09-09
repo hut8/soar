@@ -15,7 +15,7 @@
 	}
 
 	// Placeholder for Google Maps API key - to be added later
-	const GOOGLE_MAPS_API_KEY = 'YOUR_GOOGLE_MAPS_API_KEY_HERE';
+	const GOOGLE_MAPS_API_KEY = 'AIzaSyBaK8UU0l4z-k6b-UPlLzw3wv_Ti71XNy8';
 
 	let mapContainer: HTMLElement;
 	let map: GoogleMap;
@@ -114,12 +114,17 @@
 				lng: position.coords.longitude
 			};
 
-			// Center map on user location
-			map.setCenter(userLocation);
+			console.log(`User location found: ${userLocation.lat}, ${userLocation.lng}`);
+			console.log('Map object:', map);
+			
+			// Center map on user location - use the same object format as the marker
+			(map as any).setCenter(userLocation);
 			
 			// Zoom to approximately 10 miles in the smaller dimension
 			// Zoom level 13-14 typically shows about 10-20 miles depending on screen size
-			map.setZoom(13);
+			(map as any).setZoom(13);
+
+			console.log('Map centered and zoomed to user location');
 
 			// Add a marker for user location
 			new (window as any).google.maps.Marker({
@@ -169,7 +174,7 @@
 	<!-- Control Panel -->
 	<div class="absolute left-4 top-4 z-10 rounded-lg bg-white p-4 shadow-lg">
 		<h2 class="mb-3 text-lg font-semibold">Operations Center</h2>
-		
+
 		<div class="flex flex-col space-y-2">
 			<button
 				bind:this={userLocationButton}
@@ -203,23 +208,6 @@
 			<p>• Location zoom shows approximately 10-mile radius</p>
 		</div>
 	</div>
-
-	<!-- Development Notice (remove when Google Maps API key is added) -->
-	{#if GOOGLE_MAPS_API_KEY === 'YOUR_GOOGLE_MAPS_API_KEY_HERE'}
-		<div class="absolute inset-0 z-20 flex items-center justify-center bg-black bg-opacity-75">
-			<div class="rounded-lg bg-white p-8 text-center shadow-xl">
-				<h2 class="mb-4 text-xl font-bold text-red-600">Development Mode</h2>
-				<p class="mb-4 text-gray-700">
-					Google Maps API key not configured.<br />
-					Please update the GOOGLE_MAPS_API_KEY variable in this component.
-				</p>
-				<div class="rounded bg-gray-100 p-4 font-mono text-sm">
-					<p>Location: /web/src/routes/operations/+page.svelte</p>
-					<p>Variable: GOOGLE_MAPS_API_KEY</p>
-				</div>
-			</div>
-		</div>
-	{/if}
 </div>
 
 <style>
