@@ -5,15 +5,21 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0"
+argon2 = "0.5"
 async-nats = "0.42"
-axum = "0.7"
+async-trait = "0.1"
+axum = { version = "0.7", features = ["macros"] }
+axum-extra = { version = "0.9", features = ["typed-header"] }
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.5", features = ["derive"] }
 dotenvy = { version = "0.15" }
 google_maps = { version="3.8.3", features=["geocoding", "elevation", "reqwest-rustls-tls"], default-features=false }
 hex = { version = "0.4", features = ["serde"] }
 include_dir = "0.7"
+jsonwebtoken = "9.0"
+lettre = { version = "0.11", features = ["tokio1-rustls-tls", "smtp-transport", "builder"], default-features = false }
 mime_guess = "2.0"
+rand = "0.8"
 num-traits = "0.2"
 ogn-parser = { git = "https://github.com/hut8/ogn-parser-rs", branch = "master" }
 regex = "1.0"
