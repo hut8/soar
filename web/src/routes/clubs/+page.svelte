@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
-	import { ProgressRing  } from '@skeletonlabs/skeleton-svelte';
+	import { ProgressRing } from '@skeletonlabs/skeleton-svelte';
 
 	interface Point {
 		latitude: number;
@@ -123,7 +123,7 @@
 	</header>
 
 	<!-- Search Section -->
-	<section class="card space-y-4 p-6">
+	<section class="space-y-4 card p-6">
 		<h2 class="h2">Search Clubs</h2>
 
 		<!-- Search Method Toggle -->
@@ -219,7 +219,7 @@
 
 			<div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
 				{#each clubs as club (club.id)}
-					<div class="card space-y-4 p-6">
+					<div class="space-y-4 card p-6">
 						<header class="card-header">
 							<h3 class="h3">{club.name}</h3>
 						</header>

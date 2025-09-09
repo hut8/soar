@@ -156,7 +156,7 @@
 	<div bind:this={mapContainer} class="h-full w-full"></div>
 
 	<!-- Control Panel -->
-	<div class="absolute left-4 top-4 z-10 rounded-lg bg-white p-4 shadow-lg">
+	<div class="absolute top-4 left-4 z-10 rounded-lg bg-white p-4 shadow-lg">
 		<h2 class="mb-3 text-lg font-semibold">Operations Center</h2>
 
 		<div class="flex flex-col space-y-2">

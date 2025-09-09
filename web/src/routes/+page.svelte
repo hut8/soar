@@ -47,7 +47,7 @@
 	</section>
 
 	<!-- Search Section -->
-	<section class="card space-y-4 p-6">
+	<section class="space-y-4 card p-6">
 		<h2 class="h2">Search</h2>
 
 		<!-- Search Type Toggle -->
@@ -138,13 +138,13 @@
 
 	<!-- Features Section -->
 	<section class="grid grid-cols-1 gap-6 md:grid-cols-2">
-		<div class="card space-y-4 p-6">
-		    <a href={clubsPath} class="variant-filled-primary btn">Browse Clubs</a>
+		<div class="space-y-4 card p-6">
+			<a href={clubsPath} class="variant-filled-primary btn">Browse Clubs</a>
 		</div>
 	</section>
 
 	<!-- About Section -->
-	<section class="card space-y-4 p-6">
+	<section class="space-y-4 card p-6">
 		<h3 class="h3">About Glider Flights</h3>
 		<p class="text-surface-600-300-token">
 			Glider Flights is your comprehensive directory for the soaring community. We help pilots,
