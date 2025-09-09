@@ -133,7 +133,7 @@ impl DeviceRepository {
         let mut devices = Vec::new();
         for row in rows {
             let device_type = DeviceType::from_str(&row.device_type).unwrap_or(DeviceType::Unknown);
-            
+
             devices.push(Device {
                 device_type,
                 device_id: row.device_id as u32,
