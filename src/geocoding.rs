@@ -266,7 +266,7 @@ impl Geocoder {
         match self.geocode_with_nominatim(address).await {
             Ok(point) => {
                 debug!("Successfully geocoded with Nominatim: {}", address);
-                return Ok(point);
+                Ok(point)
             }
             Err(nominatim_error) => {
                 warn!(
@@ -283,27 +283,27 @@ impl Geocoder {
                                 "Successfully geocoded with Google Maps fallback: {}",
                                 address
                             );
-                            return Ok(point);
+                            Ok(point)
                         }
                         Err(google_error) => {
                             warn!(
                                 "Google Maps geocoding also failed for '{}': {}",
                                 address, google_error
                             );
-                            return Err(anyhow!(
+                            Err(anyhow!(
                                 "Both Nominatim and Google Maps geocoding failed for '{}'. Nominatim error: {}. Google Maps error: {}",
                                 address,
                                 nominatim_error,
                                 google_error
-                            ));
+                            ))
                         }
                     }
                 } else {
-                    return Err(anyhow!(
+                    Err(anyhow!(
                         "Nominatim geocoding failed for '{}' and Google Maps fallback not available: {}",
                         address,
                         nominatim_error
-                    ));
+                    ))
                 }
             }
         }
