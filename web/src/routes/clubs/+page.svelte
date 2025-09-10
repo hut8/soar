@@ -164,7 +164,6 @@
 <div class="space-y-6">
 	<header class="space-y-4 text-center">
 		<h1 class="h1">Soaring Clubs</h1>
-		<p class="text-surface-600-300-token">Find active soaring clubs in your area</p>
 	</header>
 
 	<!-- Search Section -->
