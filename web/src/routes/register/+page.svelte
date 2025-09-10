@@ -60,9 +60,7 @@
 
 			// Redirect to login with success message
 			goto(
-				resolve(
-					'/login?message=Account created successfully! Please check your email to verify your account before signing in.'
-				)
+				'/login?message=Account created successfully! Please check your email to verify your account before signing in.'
 			);
 		} catch (err) {
 			if (err instanceof AuthApiError) {
