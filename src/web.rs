@@ -60,14 +60,13 @@ async fn handle_static_file(uri: Uri, _state: axum::extract::State<AppState>) ->
     }
 
     // For client-side routing, serve index.html for paths that don't exist
-    if !path.contains('.') && path != "favicon.ico" {
-        if let Some(index_file) = ASSETS.get_file("index.html") {
+    if !path.contains('.') && path != "favicon.ico"
+        && let Some(index_file) = ASSETS.get_file("index.html") {
             let mut headers = HeaderMap::new();
             headers.insert("content-type", "text/html".parse().unwrap());
             headers.insert("cache-control", "public, max-age=3600".parse().unwrap());
             return (StatusCode::OK, headers, index_file.contents()).into_response();
         }
-    }
 
     (StatusCode::NOT_FOUND, "Not Found").into_response()
 }

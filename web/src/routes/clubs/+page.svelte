@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { ProgressRing } from '@skeletonlabs/skeleton-svelte';
+	import { ClubSelector } from '$lib';
 
 	interface Point {
 		latitude: number;
@@ -31,6 +32,7 @@
 	let loading = false;
 	let error = '';
 	let searchQuery = '';
+	let selectedClub: string[] = [];
 	let locationSearch = false;
 	let latitude = '';
 	let longitude = '';
@@ -110,6 +112,49 @@
 		if (club.zip_code) parts.push(club.zip_code);
 		return parts.join(', ') || 'Address not available';
 	}
+
+	// Handle club selection from ClubSelector
+	function handleClubSelection(e: { value: string[] }) {
+		selectedClub = e.value;
+		if (selectedClub.length > 0) {
+			// Find the selected club and display it
+			displaySelectedClub(selectedClub[0]);
+		}
+	}
+
+	// Handle search input changes from ClubSelector
+	function handleSearchInput(e: { inputValue: string }) {
+		searchQuery = e.inputValue;
+	}
+
+	// Display a specific club when selected
+	async function displaySelectedClub(clubId: string) {
+		loading = true;
+		error = '';
+
+		try {
+			const response = await fetch(`http://localhost:1337/clubs?q=${clubId}`);
+			if (!response.ok) {
+				throw new Error(`HTTP error! status: ${response.status}`);
+			}
+
+			const allClubs = await response.json();
+			// Find the specific club by ID
+			const selectedClubData = allClubs.find((club: Club) => club.id === clubId);
+
+			if (selectedClubData) {
+				clubs = [selectedClubData];
+			} else {
+				clubs = [];
+			}
+		} catch (err) {
+			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+			error = `Failed to load selected club: ${errorMessage}`;
+			console.error('Error loading selected club:', err);
+		} finally {
+			loading = false;
+		}
+	}
 </script>
 
 <svelte:head>
@@ -145,15 +190,15 @@
 		<!-- Search Forms -->
 		{#if !locationSearch}
 			<div class="space-y-4">
-				<input
-					bind:value={searchQuery}
-					class="input"
-					type="text"
-					placeholder="Search clubs by name..."
-					on:keydown={(e) => e.key === 'Enter' && searchClubs()}
+				<ClubSelector
+					value={selectedClub}
+					onValueChange={handleClubSelection}
+					onInputValueChange={handleSearchInput}
+					label="Search and Select Club"
+					placeholder="Type to search clubs or select from dropdown..."
 				/>
 				<div class="flex justify-center">
-					<button class="variant-filled-primary btn" on:click={searchClubs}> Search Clubs </button>
+					<button class="variant-filled-primary btn" on:click={searchClubs}> Search All Clubs </button>
 				</div>
 			</div>
 		{:else}
