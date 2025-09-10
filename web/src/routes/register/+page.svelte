@@ -2,32 +2,24 @@
 	import { goto } from '$app/navigation';
 	import { authApi, AuthApiError } from '$lib/api/auth';
 	import { resolve } from '$app/paths';
-	import { onMount } from 'svelte';
+	import { ClubSelector } from '$lib';
 
 	let firstName = '';
 	let lastName = '';
 	let email = '';
 	let password = '';
 	let confirmPassword = '';
-	let clubId = '';
-	let clubs: Array<{ id: string; name: string }> = [];
+	let selectedClub: string[] = [];
 	let error = '';
 	let loading = false;
-	let clubsLoading = true;
 
-	onMount(async () => {
-		try {
-			// Load clubs for selection
-			const response = await fetch('/clubs?limit=100');
-			if (response.ok) {
-				clubs = await response.json();
-			}
-		} catch (err) {
-			console.warn('Failed to load clubs:', err);
-		} finally {
-			clubsLoading = false;
-		}
-	});
+	// Handle club selection
+	function handleClubChange(e: { value: string[] }) {
+		selectedClub = e.value;
+	}
+
+	// Get the club ID for registration
+	$: clubId = selectedClub.length > 0 ? selectedClub[0] : '';
 
 	async function handleRegister() {
 		// Validation
@@ -134,18 +126,15 @@
 				/>
 			</label>
 
-			<label class="label">
-				<span>Club (Optional)</span>
-				<select class="select" bind:value={clubId} disabled={loading || clubsLoading}>
-					<option value="">Select a club (optional)</option>
-					{#each clubs as club (club.id)}
-						<option value={club.id}>{club.name}</option>
-					{/each}
-				</select>
-				{#if clubsLoading}
-					<div class="text-surface-600-300-token text-xs">Loading clubs...</div>
-				{/if}
-			</label>
+			<div class="label">
+				<ClubSelector
+					value={selectedClub}
+					onValueChange={handleClubChange}
+					label="Club (Optional)"
+					placeholder="Select a club (optional)"
+					disabled={loading}
+				/>
+			</div>
 
 			<label class="label">
 				<span>Password *</span>

@@ -1,7 +1,7 @@
 use axum::{
     extract::{
-        ws::{Message, WebSocket, WebSocketUpgrade},
         State,
+        ws::{Message, WebSocket, WebSocketUpgrade},
     },
     response::Response,
 };
@@ -19,45 +19,43 @@ pub struct SubscriptionMessage {
     pub aircraft_ids: Vec<String>,
 }
 
-
-
-pub async fn fixes_live_websocket(
-    ws: WebSocketUpgrade,
-    State(state): State<AppState>,
-) -> Response {
+pub async fn fixes_live_websocket(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
     ws.on_upgrade(move |socket| handle_websocket(socket, state))
 }
 
 async fn handle_websocket(mut socket: WebSocket, _state: AppState) {
     info!("New WebSocket connection established for live fixes");
-    
+
     // Get live fix service - for now we'll simulate it since we need to pass it through app state
     // In a real implementation, you would get this from app state
     let live_fix_service = match std::env::var("NATS_URL") {
-        Ok(nats_url) => {
-            match LiveFixService::new(&nats_url).await {
-                Ok(service) => Some(service),
-                Err(e) => {
-                    error!("Failed to create live fix service: {}", e);
-                    let _ = socket.send(Message::Text(
-                        serde_json::json!({"error": "Live fixes service not available"}).to_string()
-                    )).await;
-                    return;
-                }
+        Ok(nats_url) => match LiveFixService::new(&nats_url).await {
+            Ok(service) => Some(service),
+            Err(e) => {
+                error!("Failed to create live fix service: {}", e);
+                let _ = socket
+                    .send(Message::Text(
+                        serde_json::json!({"error": "Live fixes service not available"})
+                            .to_string(),
+                    ))
+                    .await;
+                return;
             }
-        }
+        },
         Err(_) => {
             warn!("NATS_URL not configured, live fixes not available");
-            let _ = socket.send(Message::Text(
-                serde_json::json!({"error": "Live fixes service not configured"}).to_string()
-            )).await;
+            let _ = socket
+                .send(Message::Text(
+                    serde_json::json!({"error": "Live fixes service not configured"}).to_string(),
+                ))
+                .await;
             return;
         }
     };
-    
+
     let mut subscribed_aircraft: Vec<String> = Vec::new();
     let mut receivers: HashMap<String, broadcast::Receiver<LiveFix>> = HashMap::new();
-    
+
     loop {
         tokio::select! {
             // Handle incoming WebSocket messages from client
@@ -116,7 +114,7 @@ async fn handle_websocket(mut socket: WebSocket, _state: AppState) {
                     }
                 }
             }
-            
+
             // Handle incoming fixes from NATS for subscribed aircraft
             fix_result = async {
                 if receivers.is_empty() {
@@ -158,7 +156,7 @@ async fn handle_websocket(mut socket: WebSocket, _state: AppState) {
                                 continue;
                             }
                         };
-                        
+
                         if let Err(e) = socket.send(Message::Text(fix_json)).await {
                             error!("Failed to send fix to WebSocket client: {}", e);
                             break;
@@ -172,13 +170,13 @@ async fn handle_websocket(mut socket: WebSocket, _state: AppState) {
             }
         }
     }
-    
+
     // Cleanup subscriptions when connection closes
     if let Some(ref service) = live_fix_service {
         for aircraft_id in &subscribed_aircraft {
             service.cleanup_aircraft(aircraft_id).await;
         }
     }
-    
+
     info!("WebSocket connection terminated");
 }
