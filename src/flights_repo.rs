@@ -69,7 +69,7 @@ impl FlightsRepository {
             r#"
             SELECT id, aircraft_id, takeoff_time, landing_time, departure_airport,
                    arrival_airport, tow_aircraft_id, tow_release_height_msl,
-                   created_at, updated_at
+                   club_id, created_at, updated_at
             FROM flights
             WHERE id = $1
             "#,
@@ -88,6 +88,7 @@ impl FlightsRepository {
                 arrival_airport: row.arrival_airport,
                 tow_aircraft_id: row.tow_aircraft_id,
                 tow_release_height_msl: row.tow_release_height_msl,
+                club_id: row.club_id,
                 created_at: row.created_at,
                 updated_at: row.updated_at,
             }))
@@ -102,7 +103,7 @@ impl FlightsRepository {
             r#"
             SELECT id, aircraft_id, takeoff_time, landing_time, departure_airport,
                    arrival_airport, tow_aircraft_id, tow_release_height_msl,
-                   created_at, updated_at
+                   club_id, created_at, updated_at
             FROM flights
             WHERE aircraft_id = $1
             ORDER BY takeoff_time DESC
@@ -123,6 +124,7 @@ impl FlightsRepository {
                 arrival_airport: row.arrival_airport,
                 tow_aircraft_id: row.tow_aircraft_id,
                 tow_release_height_msl: row.tow_release_height_msl,
+                club_id: row.club_id,
                 created_at: row.created_at,
                 updated_at: row.updated_at,
             });
@@ -137,7 +139,7 @@ impl FlightsRepository {
             r#"
             SELECT id, aircraft_id, takeoff_time, landing_time, departure_airport,
                    arrival_airport, tow_aircraft_id, tow_release_height_msl,
-                   created_at, updated_at
+                   club_id, created_at, updated_at
             FROM flights
             WHERE landing_time IS NULL
             ORDER BY takeoff_time DESC
@@ -157,6 +159,7 @@ impl FlightsRepository {
                 arrival_airport: row.arrival_airport,
                 tow_aircraft_id: row.tow_aircraft_id,
                 tow_release_height_msl: row.tow_release_height_msl,
+                club_id: row.club_id,
                 created_at: row.created_at,
                 updated_at: row.updated_at,
             });
@@ -192,7 +195,7 @@ impl FlightsRepository {
             r#"
             SELECT id, aircraft_id, takeoff_time, landing_time, departure_airport,
                    arrival_airport, tow_aircraft_id, tow_release_height_msl,
-                   created_at, updated_at
+                   club_id, created_at, updated_at
             FROM flights
             WHERE aircraft_id = $1 
             AND takeoff_time >= $2 
@@ -217,6 +220,7 @@ impl FlightsRepository {
                 arrival_airport: row.arrival_airport,
                 tow_aircraft_id: row.tow_aircraft_id,
                 tow_release_height_msl: row.tow_release_height_msl,
+                club_id: row.club_id,
                 created_at: row.created_at,
                 updated_at: row.updated_at,
             });
@@ -235,7 +239,7 @@ impl FlightsRepository {
             r#"
             SELECT id, aircraft_id, takeoff_time, landing_time, departure_airport,
                    arrival_airport, tow_aircraft_id, tow_release_height_msl,
-                   created_at, updated_at
+                   club_id, created_at, updated_at
             FROM flights
             WHERE takeoff_time >= $1 
             AND takeoff_time <= $2
@@ -258,6 +262,7 @@ impl FlightsRepository {
                 arrival_airport: row.arrival_airport,
                 tow_aircraft_id: row.tow_aircraft_id,
                 tow_release_height_msl: row.tow_release_height_msl,
+                club_id: row.club_id,
                 created_at: row.created_at,
                 updated_at: row.updated_at,
             });
@@ -272,7 +277,7 @@ impl FlightsRepository {
             r#"
             SELECT id, aircraft_id, takeoff_time, landing_time, departure_airport,
                    arrival_airport, tow_aircraft_id, tow_release_height_msl,
-                   created_at, updated_at
+                   club_id, created_at, updated_at
             FROM flights
             WHERE tow_aircraft_id = $1
             ORDER BY takeoff_time DESC
@@ -293,6 +298,7 @@ impl FlightsRepository {
                 arrival_airport: row.arrival_airport,
                 tow_aircraft_id: row.tow_aircraft_id,
                 tow_release_height_msl: row.tow_release_height_msl,
+                club_id: row.club_id,
                 created_at: row.created_at,
                 updated_at: row.updated_at,
             });

@@ -30,6 +30,9 @@ pub struct Flight {
     /// Tow release height in meters MSL (Mean Sea Level)
     pub tow_release_height_msl: Option<i32>,
 
+    /// Club that owns the aircraft for this flight
+    pub club_id: Option<Uuid>,
+
     /// Database timestamps
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -48,6 +51,7 @@ impl Flight {
             arrival_airport: None,
             tow_aircraft_id: None,
             tow_release_height_msl: None,
+            club_id: None,
             created_at: now,
             updated_at: now,
         }
