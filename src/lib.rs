@@ -23,6 +23,7 @@ pub mod flight_detection_processor;
 pub mod flights;
 pub mod flights_repo;
 pub mod geocoding;
+pub mod live_fixes;
 pub mod locations;
 pub mod locations_repo;
 pub mod message_processors;

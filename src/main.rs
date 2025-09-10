@@ -8,6 +8,7 @@ use std::sync::Arc;
 use tracing::{error, info, warn};
 
 use soar::aircraft_registrations::read_aircraft_file;
+use soar::live_fixes::LiveFixService;
 use soar::aircraft_registrations_repo::AircraftRegistrationsRepository;
 use soar::airports::read_airports_csv_file;
 use soar::airports_repo::AirportsRepository;
@@ -920,6 +921,16 @@ async fn main() -> Result<()> {
         }
         Commands::Web { interface, port } => {
             let pool = setup_database().await?;
+            
+            // Start live fixes service if NATS URL is configured
+            if let Ok(nats_url) = env::var("NATS_URL") {
+                info!("Starting live fixes service with NATS URL: {}", nats_url);
+                let live_fix_service = LiveFixService::new(&nats_url).await?;
+                live_fix_service.start_listening().await?;
+            } else {
+                warn!("NATS_URL not configured, live fixes will not be available");
+            }
+            
             soar::web::start_web_server(interface, port, pool).await
         }
     }
