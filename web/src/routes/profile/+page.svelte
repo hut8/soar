@@ -30,17 +30,16 @@
 
 				<div class="space-y-3">
 					<div>
-						<label class="text-sm font-medium">Full Name</label>
 						<div class="text-surface-700-200-token">
+                            Full name:
 							{$auth.user.first_name}
 							{$auth.user.last_name}
 						</div>
 					</div>
 
 					<div>
-						<label class="text-sm font-medium">Email</label>
 						<div class="text-surface-700-200-token">
-							{$auth.user.email}
+							Email: {$auth.user.email}
 							{#if !$auth.user.email_verified}
 								<span class="variant-filled-warning ml-2 badge">Unverified</span>
 							{:else}
@@ -50,9 +49,8 @@
 					</div>
 
 					<div>
-						<label class="text-sm font-medium">Access Level</label>
 						<div class="text-surface-700-200-token capitalize">
-							{$auth.user.access_level}
+							Access Level: {$auth.user.access_level}
 							{#if $auth.user.access_level === 'admin'}
 								<span class="variant-filled-primary ml-2 badge">Administrator</span>
 							{/if}
@@ -61,14 +59,12 @@
 
 					{#if $auth.user.club_id}
 						<div>
-							<label class="text-sm font-medium">Club</label>
 							<div class="text-surface-700-200-token">
 								Member of club ID: {$auth.user.club_id}
 							</div>
 						</div>
 					{:else}
 						<div>
-							<label class="text-sm font-medium">Club</label>
 							<div class="text-surface-600-300-token">Not associated with a club</div>
 						</div>
 					{/if}
@@ -82,9 +78,6 @@
 				<div class="space-y-3">
 					<a href={resolve('/clubs')} class="variant-ghost-primary btn w-full justify-start">
 						🏢 Browse Clubs
-					</a>
-					<a href={resolve('/airports')} class="variant-ghost-primary btn w-full justify-start">
-						✈️ Find Airports
 					</a>
 					<a href={resolve('/operations')} class="variant-ghost-primary btn w-full justify-start">
 						🗺️ View Operations Map
