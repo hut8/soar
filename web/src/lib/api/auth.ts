@@ -1,6 +1,5 @@
 import type { User } from '$lib/stores/auth';
-
-const API_BASE = '/data';
+import { serverCall, ServerError } from './server';
 
 export interface LoginRequest {
 	email: string;
@@ -33,54 +32,31 @@ export interface EmailVerificationConfirm {
 	token: string;
 }
 
-class AuthApiError extends Error {
-	constructor(
-		message: string,
-		public status: number
-	) {
-		super(message);
+// Re-export ServerError as AuthApiError for backwards compatibility
+export class AuthApiError extends ServerError {
+	constructor(message: string, status: number) {
+		super(message, status);
 		this.name = 'AuthApiError';
 	}
 }
 
-async function apiCall<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-	const response = await fetch(`${API_BASE}${endpoint}`, {
-		...options,
-		headers: {
-			'Content-Type': 'application/json',
-			...options.headers
-		}
-	});
-
-	if (!response.ok) {
-		const errorText = await response.text();
-		throw new AuthApiError(errorText || 'Request failed', response.status);
-	}
-
-	if (response.status === 204) {
-		return {} as T;
-	}
-
-	return response.json();
-}
-
 export const authApi = {
 	async login(credentials: LoginRequest): Promise<LoginResponse> {
-		return apiCall<LoginResponse>('/auth/login', {
+		return serverCall<LoginResponse>('/auth/login', {
 			method: 'POST',
 			body: JSON.stringify(credentials)
 		});
 	},
 
 	async register(userData: RegisterRequest): Promise<void> {
-		await apiCall<void>('/auth/register', {
+		await serverCall<void>('/auth/register', {
 			method: 'POST',
 			body: JSON.stringify(userData)
 		});
 	},
 
 	async getCurrentUser(token: string): Promise<User> {
-		return apiCall<User>('/auth/me', {
+		return serverCall<User>('/auth/me', {
 			headers: {
 				Authorization: `Bearer ${token}`
 			}
@@ -88,25 +64,24 @@ export const authApi = {
 	},
 
 	async requestPasswordReset(data: PasswordResetRequest): Promise<void> {
-		await apiCall<void>('/auth/password-reset/request', {
+		await serverCall<void>('/auth/password-reset/request', {
 			method: 'POST',
 			body: JSON.stringify(data)
 		});
 	},
 
 	async confirmPasswordReset(data: PasswordResetConfirm): Promise<void> {
-		await apiCall<void>('/auth/password-reset/confirm', {
+		await serverCall<void>('/auth/password-reset/confirm', {
 			method: 'POST',
 			body: JSON.stringify(data)
 		});
 	},
 
 	async verifyEmail(token: string): Promise<void> {
-		await apiCall<void>('/auth/verify-email', {
+		await serverCall<void>('/auth/verify-email', {
 			method: 'POST',
 			body: JSON.stringify({ token })
 		});
 	}
 };
 
-export { AuthApiError };
