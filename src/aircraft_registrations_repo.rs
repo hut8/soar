@@ -221,12 +221,13 @@ impl AircraftRegistrationsRepository {
                     unique_id,
                     kit_mfr_name,
                     kit_model_name,
-                    club_id
+                    club_id,
+                    device_id
                 )
                 VALUES (
                     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19,
                     $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36,
-                    $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53
+                    $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54
                 )
                 ON CONFLICT (registration_number)
                 DO UPDATE SET
@@ -281,7 +282,8 @@ impl AircraftRegistrationsRepository {
                     unique_id = EXCLUDED.unique_id,
                     kit_mfr_name = EXCLUDED.kit_mfr_name,
                     kit_model_name = EXCLUDED.kit_model_name,
-                    club_id = CASE WHEN aircraft_registrations.club_id IS NOT NULL THEN aircraft_registrations.club_id ELSE EXCLUDED.club_id END
+                    club_id = CASE WHEN aircraft_registrations.club_id IS NOT NULL THEN aircraft_registrations.club_id ELSE EXCLUDED.club_id END,
+                    device_id = CASE WHEN aircraft_registrations.device_id IS NOT NULL THEN aircraft_registrations.device_id ELSE EXCLUDED.device_id END
                 "#,
                 aircraft_reg.n_number,
                 aircraft_reg.serial_number,
@@ -335,7 +337,8 @@ impl AircraftRegistrationsRepository {
                 aircraft_reg.unique_id,
                 aircraft_reg.kit_mfr_name,
                 aircraft_reg.kit_model_name,
-                club_id
+                club_id,
+                aircraft_reg.device_id
             )
             .execute(&mut *transaction)
             .await;
@@ -447,7 +450,7 @@ impl AircraftRegistrationsRepository {
             SELECT a.registration_number, a.serial_number, a.mfr_mdl_code, a.eng_mfr_mdl_code, a.year_mfr,
                    a.type_registration_code, a.registrant_name, a.last_action_date, a.certificate_issue_date,
                    a.airworthiness_class as "airworthiness_class: AirworthinessClass",
-                   a.approved_operations_raw, a.location_id,
+                   a.approved_operations_raw, a.location_id, a.device_id,
                    l.street1, l.street2, l.city, l.state, l.zip_code,
                    l.region_code, l.county_mail_code, l.country_mail_code,
                    op_restricted_other, op_restricted_ag_pest_control, op_restricted_aerial_surveying,
@@ -580,6 +583,7 @@ impl AircraftRegistrationsRepository {
                 home_base_airport_id: None,
                 location_id: row.location_id,
                 registered_location: None,
+                device_id: row.device_id,
             }))
         } else {
             Ok(None)
@@ -592,7 +596,7 @@ impl AircraftRegistrationsRepository {
             r#"
             SELECT registration_number, serial_number, mfr_mdl_code, eng_mfr_mdl_code, year_mfr,
                    type_registration_code, registrant_name, last_action_date, certificate_issue_date,
-                   airworthiness_class AS "airworthiness_class: AirworthinessClass", approved_operations_raw,
+                   airworthiness_class AS "airworthiness_class: AirworthinessClass", approved_operations_raw, device_id,
                    op_restricted_other, op_restricted_ag_pest_control, op_restricted_aerial_surveying,
                    op_restricted_aerial_advertising, op_restricted_forest, op_restricted_patrolling,
                    op_restricted_weather_control, op_restricted_carriage_of_cargo,
@@ -727,6 +731,7 @@ impl AircraftRegistrationsRepository {
                 home_base_airport_id: None,
                 location_id: row.location_id,
                 registered_location: None,
+                device_id: row.device_id,
             });
         }
 
@@ -741,7 +746,7 @@ impl AircraftRegistrationsRepository {
             SELECT registration_number, serial_number, mfr_mdl_code, eng_mfr_mdl_code, year_mfr,
                    type_registration_code, registrant_name, last_action_date, certificate_issue_date,
                    airworthiness_class as "airworthiness_class: AirworthinessClass",
-                   approved_operations_raw,
+                   approved_operations_raw, device_id,
                    op_restricted_other, op_restricted_ag_pest_control, op_restricted_aerial_surveying,
                    op_restricted_aerial_advertising, op_restricted_forest, op_restricted_patrolling,
                    op_restricted_weather_control, op_restricted_carriage_of_cargo,
@@ -876,6 +881,7 @@ impl AircraftRegistrationsRepository {
                 home_base_airport_id: None,
                 location_id: row.location_id,
                 registered_location: None,
+                device_id: row.device_id,
             });
         }
 
@@ -888,7 +894,7 @@ impl AircraftRegistrationsRepository {
             r#"
             SELECT a.registration_number, a.serial_number, a.mfr_mdl_code, a.eng_mfr_mdl_code, a.year_mfr,
                    a.type_registration_code, a.registrant_name, a.last_action_date, a.certificate_issue_date,
-                   a.airworthiness_class as "airworthiness_class: AirworthinessClass", a.approved_operations_raw, a.location_id,
+                   a.airworthiness_class as "airworthiness_class: AirworthinessClass", a.approved_operations_raw, a.location_id, a.device_id,
                    l.street1, l.street2, l.city, l.state, l.zip_code,
                    l.region_code, l.county_mail_code, l.country_mail_code,
                    a.op_restricted_other, a.op_restricted_ag_pest_control, a.op_restricted_aerial_surveying,
@@ -1023,6 +1029,7 @@ impl AircraftRegistrationsRepository {
                 home_base_airport_id: None,
                 location_id: row.location_id,
                 registered_location: None,
+                device_id: row.device_id,
             });
         }
 
@@ -1035,7 +1042,7 @@ impl AircraftRegistrationsRepository {
             r#"
             SELECT a.registration_number, a.serial_number, a.mfr_mdl_code, a.eng_mfr_mdl_code, a.year_mfr,
                    a.type_registration_code, a.registrant_name, a.last_action_date, a.certificate_issue_date,
-                   a.airworthiness_class as "airworthiness_class: AirworthinessClass", a.approved_operations_raw, a.location_id,
+                   a.airworthiness_class as "airworthiness_class: AirworthinessClass", a.approved_operations_raw, a.location_id, a.device_id,
                    l.street1, l.street2, l.city, l.state, l.zip_code,
                    l.region_code, l.county_mail_code, l.country_mail_code,
                    a.op_restricted_other, a.op_restricted_ag_pest_control, a.op_restricted_aerial_surveying,
@@ -1170,6 +1177,7 @@ impl AircraftRegistrationsRepository {
                 kit_model_name: row.kit_model_name,
                 home_base_airport_id: None,
                 registered_location: None,
+                device_id: row.device_id,
             });
         }
 
@@ -1220,6 +1228,7 @@ mod tests {
             home_base_airport_id: None,
             registered_location: None,
             location_id: None,
+            device_id: None,
         }
     }
 

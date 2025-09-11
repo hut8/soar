@@ -362,6 +362,9 @@ pub struct Aircraft {
     pub home_base_airport_id: Option<Uuid>, // Foreign key to airports table
     #[serde(skip_serializing)]
     pub registered_location: Option<Point>, // WGS84 point of registration address (legacy, now in locations table)
+    
+    // Device relationship
+    pub device_id: Option<i32>, // Foreign key to devices table
 }
 
 impl Aircraft {
@@ -607,6 +610,7 @@ impl Aircraft {
             home_base_airport_id: None,
             location_id: None,
             registered_location: None,
+            device_id: None,
         })
     }
 }
@@ -774,6 +778,7 @@ impl Aircraft {
             home_base_airport_id: None,
             location_id: None,
             registered_location: None,
+            device_id: None,
         })
     }
 }
@@ -1074,6 +1079,7 @@ mod tests {
             home_base_airport_id: None,
             registered_location: None,
             location_id: None,
+            device_id: None,
         };
 
         // Test club with "SOAR" in name

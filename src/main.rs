@@ -197,6 +197,30 @@ fn determine_archive_dir() -> Result<String> {
     Ok(home_archive)
 }
 
+/// Link aircraft registrations to devices based on matching registration numbers
+/// Only updates aircraft that don't already have a device_id set
+async fn link_aircraft_to_devices(pool: &PgPool) -> Result<u32> {
+    info!("Starting aircraft-device linking process...");
+    
+    // Query to find aircraft without device_id that have matching devices
+    let result = sqlx::query!(
+        r#"
+        UPDATE aircraft_registrations 
+        SET device_id = devices.device_id
+        FROM devices 
+        WHERE aircraft_registrations.registration_number = devices.registration
+        AND aircraft_registrations.device_id IS NULL
+        "#
+    )
+    .execute(pool)
+    .await?;
+    
+    let linked_count = result.rows_affected() as u32;
+    info!("Linked {} aircraft to devices", linked_count);
+    
+    Ok(linked_count)
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn handle_load_data(
     aircraft_models_path: Option<String>,
@@ -269,7 +293,7 @@ async fn handle_load_data(
     }
 
     // Load aircraft registrations second (if provided)
-    if let Some(aircraft_registrations_path) = aircraft_registrations_path {
+    if let Some(ref aircraft_registrations_path) = aircraft_registrations_path {
         info!(
             "Loading aircraft registrations from: {}",
             aircraft_registrations_path
@@ -784,6 +808,23 @@ async fn handle_load_data(
         }
     } else {
         info!("Skipping home base linking - not requested");
+    }
+
+    // Link aircraft to devices if either devices were pulled or aircraft were loaded
+    if pull_devices || aircraft_registrations_path.is_some() {
+        info!("Linking aircraft to devices based on registration numbers...");
+        
+        match link_aircraft_to_devices(&pool).await {
+            Ok(linked_count) => {
+                info!("Successfully linked {} aircraft to devices", linked_count);
+            }
+            Err(e) => {
+                error!("Failed to link aircraft to devices: {}", e);
+                // Don't return error - this is not critical for data loading
+            }
+        }
+    } else {
+        info!("Skipping aircraft-device linking - no devices pulled and no aircraft loaded");
     }
 
     Ok(())
