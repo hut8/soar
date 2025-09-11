@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Combobox } from '@skeletonlabs/skeleton-svelte';
 	import { onMount } from 'svelte';
+	import { serverCall } from '$lib/api/server';
 
 	interface Club {
 		id: string;
@@ -45,18 +46,12 @@
 			loading = true;
 			error = '';
 
-			const url = new URL('/clubs', window.location.origin);
+			let endpoint = '/clubs?limit=100';
 			if (query && query.trim()) {
-				url.searchParams.set('q', query.trim());
-			}
-			url.searchParams.set('limit', '100');
-
-			const response = await fetch(url.toString());
-			if (!response.ok) {
-				throw new Error(`Failed to load clubs: ${response.statusText}`);
+				endpoint += `&q=${encodeURIComponent(query.trim())}`;
 			}
 
-			clubs = await response.json();
+			clubs = await serverCall<Club[]>(endpoint);
 			comboboxData = transformClubsToComboboxData(clubs);
 		} catch (err) {
 			console.error('Failed to load clubs:', err);

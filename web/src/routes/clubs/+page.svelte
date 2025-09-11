@@ -1,9 +1,10 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
-	import { Users, Search, MapPinHouse } from '@lucide/svelte';
+	import { Users, Search, MapPinHouse, ExternalLink, Navigation, Plane } from '@lucide/svelte';
 	import { ProgressRing } from '@skeletonlabs/skeleton-svelte';
 	import { ClubSelector } from '$lib';
+	import { serverCall } from '$lib/api/server';
 
 	interface Point {
 		latitude: number;
@@ -65,22 +66,15 @@
 		error = '';
 
 		try {
-			let url = '/clubs?';
+			let endpoint = '/clubs';
 
 			if (locationSearch && latitude && longitude && radius) {
-				url += `latitude=${latitude}&longitude=${longitude}&radius=${radius}`;
+				endpoint += `?latitude=${latitude}&longitude=${longitude}&radius=${radius}`;
 			} else if (searchQuery) {
-				url += `q=${encodeURIComponent(searchQuery)}`;
-			} else {
-				url = '/clubs';
+				endpoint += `?q=${encodeURIComponent(searchQuery)}`;
 			}
 
-			const response = await fetch(url);
-			if (!response.ok) {
-				throw new Error(`HTTP error! status: ${response.status}`);
-			}
-
-			clubs = await response.json();
+			clubs = await serverCall<Club[]>(endpoint);
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			error = `Failed to search clubs: ${errorMessage}`;
@@ -134,12 +128,7 @@
 		error = '';
 
 		try {
-			const response = await fetch(`/clubs/${clubId}`);
-			if (!response.ok) {
-				throw new Error(`HTTP error! status: ${response.status}`);
-			}
-
-			const allClubs = await response.json();
+			const allClubs = await serverCall<Club[]>(`/clubs/${clubId}`);
 			// Find the specific club by ID
 			const selectedClubData = allClubs.find((club: Club) => club.id === clubId);
 
@@ -295,7 +284,7 @@
 
 							{#if club.base_location}
 								<div class="flex items-center gap-3">
-									<div class="w-4 h-4 text-surface-500">🗺️</div>
+									<Navigation class="w-4 h-4 text-surface-500" />
 									<span class="font-mono text-xs">
 										{club.base_location.latitude.toFixed(4)}, {club.base_location.longitude.toFixed(4)}
 									</span>
@@ -304,14 +293,17 @@
 
 							{#if club.home_base_airport_id}
 								<div class="flex items-center gap-3">
-									<div class="w-4 h-4 text-surface-500">✈️</div>
+									<Plane class="w-4 h-4 text-surface-500" />
 									<span>Airport ID: {club.home_base_airport_id}</span>
 								</div>
 							{/if}
 						</div>
 
-						<footer class="pt-2">
-
+						<footer class="pt-4 border-t border-surface-200-700-token">
+							<a href="/clubs/{club.id}" class="btn btn-sm variant-soft w-full">
+								<ExternalLink class="w-4 h-4 mr-2" />
+								View Details
+							</a>
 						</footer>
 					</article>
 				{/each}
@@ -319,7 +311,7 @@
 		</section>
 	{:else if !loading && !error && clubs.length === 0 && (searchQuery || (latitude && longitude))}
 		<div class="card p-12 text-center space-y-4">
-			<div class="text-6xl opacity-50">🔍</div>
+			<Search class="w-16 h-16 mx-auto text-surface-400 mb-4" />
 			<div class="space-y-2">
 				<h3 class="h3">No clubs found</h3>
 				<p class="text-surface-500-400-token">
