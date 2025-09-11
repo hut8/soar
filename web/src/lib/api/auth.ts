@@ -1,6 +1,6 @@
 import type { User } from '$lib/stores/auth';
 
-const API_BASE = '';
+const API_BASE = '/data';
 
 export interface LoginRequest {
 	email: string;

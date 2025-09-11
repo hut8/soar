@@ -8,7 +8,11 @@ use axum::{
 use include_dir::{Dir, include_dir};
 use mime_guess::from_path;
 use sqlx::postgres::PgPool;
-use tower_http::{trace::{DefaultOnRequest, DefaultOnResponse, TraceLayer}, LatencyUnit};
+use tower_http::{
+    cors::CorsLayer,
+    trace::{DefaultOnRequest, DefaultOnResponse, TraceLayer},
+    LatencyUnit
+};
 use tracing::{info, Level};
 
 use crate::actions;
@@ -86,6 +90,9 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
                 .latency_unit(LatencyUnit::Micros),
         );
 
+    // Create CORS layer that allows all origins and methods
+    let cors_layer = CorsLayer::permissive();
+
     // Create API sub-router rooted at "/data"
     let api_router = Router::new()
         // Search and data routes
@@ -123,6 +130,7 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         .nest("/data", api_router)
         .fallback(handle_static_file)
         .with_state(app_state.clone())
+        .layer(cors_layer)
         .layer(trace_layer);
 
     // Create the listener
