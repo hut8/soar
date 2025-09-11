@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::types::Uuid;
 use crate::locations::Point;
 
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, Default)]
 pub struct Club {
     pub id: Uuid,
     pub name: String,
@@ -13,26 +13,16 @@ pub struct Club {
     // Location normalization
     pub location_id: Option<Uuid>, // Foreign key to locations table
 
-    // Address fields (legacy, kept for serialization compatibility)
-    #[serde(skip_serializing)]
+    // Address fields
     pub street1: Option<String>,
-    #[serde(skip_serializing)]
     pub street2: Option<String>,
-    #[serde(skip_serializing)]
     pub city: Option<String>,
-    #[serde(skip_serializing)]
     pub state: Option<String>,
-    #[serde(skip_serializing)]
     pub zip_code: Option<String>,
-    #[serde(skip_serializing)]
     pub region_code: Option<String>,
-    #[serde(skip_serializing)]
     pub county_mail_code: Option<String>,
-    #[serde(skip_serializing)]
     pub country_mail_code: Option<String>,
 
-    // Location points - we'll use custom types for PostGIS points (legacy)
-    #[serde(skip_serializing)]
     pub base_location: Option<Point>,
 
     pub created_at: DateTime<Utc>,
