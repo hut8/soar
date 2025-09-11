@@ -253,7 +253,7 @@
 
 	<!-- Error State -->
 	{#if error}
-		<div class="alert variant-filled-error">
+		<div class="alert fill-error-500">
 			<div class="alert-message">
 				<h3 class="h3">Search Error</h3>
 				<p>{error}</p>
