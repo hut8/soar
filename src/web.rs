@@ -1,8 +1,10 @@
 use anyhow::Result;
 use axum::{
     Router,
-    http::{HeaderMap, StatusCode, Uri},
-    response::IntoResponse,
+    extract::{Request, State},
+    http::{HeaderMap, StatusCode, Uri, header::ACCEPT},
+    middleware::{self, Next},
+    response::{IntoResponse, Response},
     routing::{delete, get, post, put},
 };
 use include_dir::{Dir, include_dir};
@@ -71,6 +73,56 @@ async fn handle_static_file(uri: Uri, _state: axum::extract::State<AppState>) ->
     (StatusCode::NOT_FOUND, "Not Found").into_response()
 }
 
+// Routes that have corresponding Svelte pages and should support content negotiation
+static SPA_ROUTES: &[&str] = &[
+    "/clubs",
+    "/login",
+    "/register",
+    "/profile",
+    "/operations",
+    "/forgot-password",
+    "/reset-password",
+    "/verify-email",
+];
+
+// Content negotiation middleware
+async fn content_negotiation_middleware(
+    State(app_state): State<AppState>,
+    request: Request,
+    next: Next,
+) -> Response {
+    let uri = request.uri().clone();
+    let headers = request.headers().clone();
+    let path = uri.path();
+
+    // Check if this is a route that needs content negotiation
+    let needs_negotiation = SPA_ROUTES.contains(&path);
+
+    if needs_negotiation {
+        // Get the Accept header
+        let accept_header = headers
+            .get(ACCEPT)
+            .and_then(|h| h.to_str().ok())
+            .unwrap_or("");
+
+        // Check if the first content type preference is text/html
+        let prefers_html = accept_header
+            .split(',')
+            .next()
+            .map(|s| s.trim().to_lowercase())
+            .unwrap_or_default()
+            .starts_with("text/html");
+
+        // If client prefers HTML, serve the static file (SPA routing)
+        if prefers_html {
+            return handle_static_file(uri, State(app_state)).await.into_response();
+        }
+    }
+
+    // Continue with normal request processing
+    next.run(request).await
+}
+
 // All individual action functions have been moved to the actions module
 
 pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Result<()> {
@@ -108,7 +160,8 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         .route("/users/:id", delete(actions::delete_user_by_id))
         .route("/clubs/:id/users", get(actions::get_users_by_club))
         .fallback(handle_static_file)
-        .with_state(app_state)
+        .with_state(app_state.clone())
+        .layer(middleware::from_fn_with_state(app_state.clone(), content_negotiation_middleware))
         .layer(TraceLayer::new_for_http());
 
     // Create the listener

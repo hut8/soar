@@ -7,7 +7,7 @@ use std::io::{BufRead, BufReader};
 use std::path::Path;
 
 // Import Point from clubs module
-use crate::clubs::Point;
+use crate::locations::Point;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
 #[sqlx(type_name = "airworthiness_class", rename_all = "PascalCase")]

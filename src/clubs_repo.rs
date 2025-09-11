@@ -40,7 +40,7 @@ impl ClubsRepository {
 
         if let Some(row) = result {
             let base_location = if row.longitude.is_some() && row.latitude.is_some() {
-                Some(crate::clubs::Point::new(
+                Some(crate::locations::Point::new(
                     row.latitude.unwrap(),
                     row.longitude.unwrap(),
                 ))
@@ -91,7 +91,7 @@ impl ClubsRepository {
         let mut clubs = Vec::new();
         for row in results {
             let base_location = if row.longitude.is_some() && row.latitude.is_some() {
-                Some(crate::clubs::Point::new(
+                Some(crate::locations::Point::new(
                     row.latitude.unwrap(),
                     row.longitude.unwrap(),
                 ))
@@ -151,7 +151,7 @@ impl ClubsRepository {
         let mut clubs = Vec::new();
         for row in results {
             let base_location = if row.longitude.is_some() && row.latitude.is_some() {
-                Some(crate::clubs::Point::new(
+                Some(crate::locations::Point::new(
                     row.latitude.unwrap(),
                     row.longitude.unwrap(),
                 ))
@@ -212,7 +212,7 @@ impl ClubsRepository {
         let mut clubs = Vec::new();
         for row in results {
             let base_location = if row.longitude.is_some() && row.latitude.is_some() {
-                Some(crate::clubs::Point::new(
+                Some(crate::locations::Point::new(
                     row.latitude.unwrap(),
                     row.longitude.unwrap(),
                 ))
@@ -282,7 +282,7 @@ impl ClubsRepository {
         let mut clubs = Vec::new();
         for row in results {
             let base_location = if row.longitude.is_some() && row.latitude.is_some() {
-                Some(crate::clubs::Point::new(
+                Some(crate::locations::Point::new(
                     row.latitude.unwrap(),
                     row.longitude.unwrap(),
                 ))
@@ -336,7 +336,7 @@ impl ClubsRepository {
         let mut clubs = Vec::new();
         for row in results {
             let base_location = if row.longitude.is_some() && row.latitude.is_some() {
-                Some(crate::clubs::Point::new(
+                Some(crate::locations::Point::new(
                     row.latitude.unwrap(),
                     row.longitude.unwrap(),
                 ))

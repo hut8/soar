@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::types::Uuid;
+use crate::locations::Point;
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Club {
@@ -36,57 +37,6 @@ pub struct Club {
 
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-}
-
-// Simple Point struct for WGS84 coordinates
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Point {
-    pub latitude: f64,
-    pub longitude: f64,
-}
-
-impl Point {
-    pub fn new(latitude: f64, longitude: f64) -> Self {
-        Self {
-            latitude,
-            longitude,
-        }
-    }
-}
-
-// Custom sqlx type implementation for PostGIS POINT
-impl sqlx::Type<sqlx::Postgres> for Point {
-    fn type_info() -> sqlx::postgres::PgTypeInfo {
-        sqlx::postgres::PgTypeInfo::with_name("point")
-    }
-}
-
-impl sqlx::Encode<'_, sqlx::Postgres> for Point {
-    fn encode_by_ref(
-        &self,
-        buf: &mut sqlx::postgres::PgArgumentBuffer,
-    ) -> Result<sqlx::encode::IsNull, Box<dyn std::error::Error + Send + Sync>> {
-        let point_str = format!("({},{})", self.longitude, self.latitude);
-        sqlx::Encode::<sqlx::Postgres>::encode_by_ref(&point_str, buf)
-    }
-}
-
-impl sqlx::Decode<'_, sqlx::Postgres> for Point {
-    fn decode(value: sqlx::postgres::PgValueRef<'_>) -> Result<Self, sqlx::error::BoxDynError> {
-        let s = <&str as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
-        // Parse PostgreSQL point format: "(longitude,latitude)"
-        let s = s.trim_start_matches('(').trim_end_matches(')');
-        let coords: Vec<&str> = s.split(',').collect();
-
-        if coords.len() != 2 {
-            return Err("Invalid point format".into());
-        }
-
-        let longitude: f64 = coords[0].parse()?;
-        let latitude: f64 = coords[1].parse()?;
-
-        Ok(Point::new(latitude, longitude))
-    }
 }
 
 impl Club {

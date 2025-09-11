@@ -7,7 +7,7 @@ use std::env;
 use std::time::Duration;
 use tracing::{debug, info, warn};
 
-use crate::clubs::Point;
+use crate::locations::Point;
 
 /// Enhanced geocoding module with Google Maps fallback capability
 ///
