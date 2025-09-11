@@ -52,74 +52,76 @@
 	<link rel="icon" href={favicon} />
 </svelte:head>
 
-<AppBar>
-	{#snippet lead()}
-		<a href={base} class="flex items-center space-x-2">
-			<div class="text-primary-500 text-xl font-bold">
-				<PlaneTakeoff />
-				Glider.flights
-			</div>
-		</a>
-	{/snippet}
-	{#snippet trail()}
-		<nav class="hidden space-x-4 md:flex">
-			<a href={clubsPath} class="variant-ghost-surface btn btn-sm">
-				<Users /> Clubs
+<div class="flex min-h-screen flex-col">
+	<AppBar>
+		{#snippet lead()}
+			<a href={base} class="flex items-center space-x-2">
+				<div class="text-primary-500 text-xl font-bold">
+					<PlaneTakeoff />
+					Glider.flights
+				</div>
 			</a>
-			<a href={operationsPath} class="variant-ghost-surface btn btn-sm">
-				<Radar /> Operations
-			</a>
-		</nav>
+		{/snippet}
+		{#snippet trail()}
+			<nav class="hidden space-x-4 md:flex">
+				<a href={clubsPath} class="variant-ghost-surface btn btn-sm">
+					<Users /> Clubs
+				</a>
+				<a href={operationsPath} class="variant-ghost-surface btn btn-sm">
+					<Radar /> Operations
+				</a>
+			</nav>
 
-		{#if $auth.isAuthenticated && $auth.user}
-			<div class="user-menu relative">
-				<button
-					class="variant-ghost-surface btn btn-sm flex items-center space-x-2"
-					onclick={() => (showUserMenu = !showUserMenu)}
-				>
-					<Avatar
-						initials={[0, 1]}
-						background="bg-primary-500"
-						name="{$auth.user.first_name} {$auth.user.last_name}"
-						size="sm"
-					/>
-					<span class="hidden sm:inline">{$auth.user.first_name}</span>
-				</button>
+			{#if $auth.isAuthenticated && $auth.user}
+				<div class="user-menu relative">
+					<button
+						class="variant-ghost-surface btn btn-sm flex items-center space-x-2"
+						onclick={() => (showUserMenu = !showUserMenu)}
+					>
+						<Avatar
+							initials={[0, 1]}
+							background="bg-primary-500"
+							name="{$auth.user.first_name} {$auth.user.last_name}"
+							size="sm"
+						/>
+						<span class="hidden sm:inline">{$auth.user.first_name}</span>
+					</button>
 
-				{#if showUserMenu}
-					<div class="card absolute right-0 top-12 z-10 w-48 p-2">
-						<div class="space-y-1">
-							<div class="px-3 py-2 text-sm">
-								<div class="font-medium">{$auth.user.first_name} {$auth.user.last_name}</div>
-								<div class="text-surface-600-300-token">{$auth.user.email}</div>
+					{#if showUserMenu}
+						<div class="card absolute right-0 top-12 z-10 w-48 p-2">
+							<div class="space-y-1">
+								<div class="px-3 py-2 text-sm">
+									<div class="font-medium">{$auth.user.first_name} {$auth.user.last_name}</div>
+									<div class="text-surface-600-300-token">{$auth.user.email}</div>
+								</div>
+								<hr class="!my-2" />
+								<a href={profilePath} class="variant-ghost-surface btn btn-sm w-full justify-start">
+									👤 Profile
+								</a>
+								<button
+									class="variant-ghost-error btn btn-sm w-full justify-start"
+									onclick={handleLogout}
+								>
+									Sign out
+								</button>
 							</div>
-							<hr class="!my-2" />
-							<a href={profilePath} class="variant-ghost-surface btn btn-sm w-full justify-start">
-								👤 Profile
-							</a>
-							<button
-								class="variant-ghost-error btn btn-sm w-full justify-start"
-								onclick={handleLogout}
-							>
-								Sign out
-							</button>
 						</div>
-					</div>
-				{/if}
-			</div>
-		{:else}
-			<div class="flex space-x-2">
-				<a href={loginPath} class="variant-ghost-surface btn btn-sm"><UserCheck /> Login</a>
-				<a href={registerPath} class="variant-filled-primary btn btn-sm"><UserPlus /> Sign Up</a>
-			</div>
-		{/if}
-	{/snippet}
-</AppBar>
+					{/if}
+				</div>
+			{:else}
+				<div class="flex space-x-2">
+					<a href={loginPath} class="variant-ghost-surface btn btn-sm"><UserCheck /> Login</a>
+					<a href={registerPath} class="variant-filled-primary btn btn-sm"><UserPlus /> Sign Up</a>
+				</div>
+			{/if}
+		{/snippet}
+	</AppBar>
 
-<main class="container mx-auto space-y-4 p-4">
-	{@render children?.()}
-</main>
+	<main class="container mx-auto flex-1 space-y-4 p-4">
+		{@render children?.()}
+	</main>
 
-<footer class="bg-surface-100-800-token p-4 text-center text-sm">
-	<p>&copy; 2025 Liam Bowen</p>
-</footer>
+	<footer class="bg-surface-100-800-token p-4 text-center text-sm">
+		<p>&copy; 2025 Liam Bowen</p>
+	</footer>
+</div>

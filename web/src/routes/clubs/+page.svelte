@@ -128,10 +128,7 @@
 		error = '';
 
 		try {
-			const allClubs = await serverCall<Club[]>(`/clubs/${clubId}`);
-			// Find the specific club by ID
-			const selectedClubData = allClubs.find((club: Club) => club.id === clubId);
-
+			const selectedClubData = await serverCall<Club>(`/clubs/${clubId}`);
 			if (selectedClubData) {
 				clubs = [selectedClubData];
 			} else {

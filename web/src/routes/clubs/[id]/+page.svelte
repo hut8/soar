@@ -2,15 +2,15 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { 
-		ArrowLeft, 
-		Building, 
-		MapPin, 
-		Plane, 
-		Mail, 
-		Phone, 
-		Globe, 
-		Users, 
+	import {
+		ArrowLeft,
+		Building,
+		MapPin,
+		Plane,
+		Mail,
+		Phone,
+		Globe,
+		Users,
 		Calendar,
 		Navigation,
 		Info
@@ -84,14 +84,6 @@
 		return `${point.latitude.toFixed(6)}, ${point.longitude.toFixed(6)}`;
 	}
 
-	function formatDate(dateString: string): string {
-		return new Date(dateString).toLocaleDateString('en-US', {
-			year: 'numeric',
-			month: 'long',
-			day: 'numeric'
-		});
-	}
-
 	function goBack() {
 		goto('/clubs');
 	}
@@ -101,11 +93,11 @@
 	<title>{club?.name || 'Club Details'} - Soaring Clubs</title>
 </svelte:head>
 
-<div class="container mx-auto p-4 space-y-6 max-w-4xl">
+<div class="container mx-auto max-w-8xl space-y-6 p-4">
 	<!-- Back Button -->
 	<div class="flex items-center gap-4">
 		<button class="btn btn-sm variant-soft" on:click={goBack}>
-			<ArrowLeft class="w-4 h-4 mr-2" />
+			<ArrowLeft class="mr-2 h-4 w-4" />
 			Back to Clubs
 		</button>
 	</div>
@@ -127,9 +119,7 @@
 				<h3 class="h3">Error Loading Club</h3>
 				<p>{error}</p>
 				<div class="alert-actions">
-					<button class="btn variant-filled" on:click={loadClub}>
-						Try Again
-					</button>
+					<button class="btn variant-filled" on:click={loadClub}> Try Again </button>
 				</div>
 			</div>
 		</div>
@@ -140,15 +130,17 @@
 		<div class="space-y-6">
 			<!-- Header Card -->
 			<div class="card p-6">
-				<div class="flex items-start justify-between flex-wrap gap-4">
+				<div class="flex flex-wrap items-start justify-between gap-4">
 					<div class="flex-1">
-						<div class="flex items-center gap-3 mb-2">
-							<Building class="w-8 h-8 text-primary-500" />
+						<div class="mb-2 flex items-center gap-3">
+							<Building class="text-primary-500 h-8 w-10" />
 							<h1 class="h1">{club.name}</h1>
 						</div>
 						{#if club.is_soaring}
-							<div class="inline-flex items-center gap-2 bg-primary-500 text-white px-3 py-1 rounded-full text-sm">
-								<Plane class="w-4 h-4" />
+							<div
+								class="bg-primary-500 inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm text-white"
+							>
+								<Plane class="h-4 w-4" />
 								Soaring Club
 							</div>
 						{/if}
@@ -157,28 +149,35 @@
 			</div>
 
 			<!-- Main Content Grid -->
-			<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+			<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
 				<!-- Location Information -->
-				<div class="card p-6 space-y-4">
+				<div class="card space-y-4 p-6">
 					<h2 class="h2 flex items-center gap-2">
-						<MapPin class="w-6 h-6" />
+						<MapPin class="h-6 w-6" />
 						Location
 					</h2>
-					
+
 					<div class="space-y-3">
 						<div class="flex items-start gap-3">
-							<Info class="w-4 h-4 mt-1 text-surface-500" />
+							<Info class="text-surface-500 mt-1 h-4 w-4" />
 							<div>
-								<p class="text-sm text-surface-600-300-token mb-1">Address</p>
-								<p>{formatAddress(club)}</p>
+								<p class="text-surface-600-300-token mb-1 text-sm">Address</p>
+								<p>
+									{club.street1}<br />
+									{club.street2 && `${club.street2}<br />`}
+									{club.city && `${club.city}, `}
+									{club.state && `${club.state}`}
+									{club.zip_code && `${club.zip_code}`}
+									<br />{club.country_mail_code && `${club.country_mail_code}`}
+								</p>
 							</div>
 						</div>
 
 						{#if club.base_location}
 							<div class="flex items-start gap-3">
-								<Navigation class="w-4 h-4 mt-1 text-surface-500" />
+								<Navigation class="text-surface-500 mt-1 h-4 w-4" />
 								<div>
-									<p class="text-sm text-surface-600-300-token mb-1">Coordinates</p>
+									<p class="text-surface-600-300-token mb-1 text-sm">Coordinates</p>
 									<p class="font-mono text-sm">{formatCoordinates(club.base_location)}</p>
 								</div>
 							</div>
@@ -186,109 +185,13 @@
 
 						{#if club.home_base_airport_id}
 							<div class="flex items-start gap-3">
-								<Plane class="w-4 h-4 mt-1 text-surface-500" />
+								<Plane class="text-surface-500 mt-1 h-4 w-4" />
 								<div>
-									<p class="text-sm text-surface-600-300-token mb-1">Home Base Airport</p>
+									<p class="text-surface-600-300-token mb-1 text-sm">Home Base Airport</p>
 									<p>Airport ID: {club.home_base_airport_id}</p>
 								</div>
 							</div>
 						{/if}
-					</div>
-				</div>
-
-				<!-- Additional Information -->
-				<div class="card p-6 space-y-4">
-					<h2 class="h2 flex items-center gap-2">
-						<Info class="w-6 h-6" />
-						Details
-					</h2>
-					
-					<div class="space-y-3">
-						<div class="flex items-start gap-3">
-							<Users class="w-4 h-4 mt-1 text-surface-500" />
-							<div>
-								<p class="text-sm text-surface-600-300-token mb-1">Club ID</p>
-								<p class="font-mono text-sm">{club.id}</p>
-							</div>
-						</div>
-
-						{#if club.location_id}
-							<div class="flex items-start gap-3">
-								<MapPin class="w-4 h-4 mt-1 text-surface-500" />
-								<div>
-									<p class="text-sm text-surface-600-300-token mb-1">Location ID</p>
-									<p class="font-mono text-sm">{club.location_id}</p>
-								</div>
-							</div>
-						{/if}
-
-						{#if club.region_code}
-							<div class="flex items-start gap-3">
-								<Globe class="w-4 h-4 mt-1 text-surface-500" />
-								<div>
-									<p class="text-sm text-surface-600-300-token mb-1">Region</p>
-									<p>{club.region_code}</p>
-								</div>
-							</div>
-						{/if}
-					</div>
-				</div>
-
-				<!-- Administrative Information -->
-				{#if club.county_mail_code || club.country_mail_code}
-					<div class="card p-6 space-y-4">
-						<h2 class="h2 flex items-center gap-2">
-							<Mail class="w-6 h-6" />
-							Administrative
-						</h2>
-						
-						<div class="space-y-3">
-							{#if club.county_mail_code}
-								<div class="flex items-start gap-3">
-									<Info class="w-4 h-4 mt-1 text-surface-500" />
-									<div>
-										<p class="text-sm text-surface-600-300-token mb-1">County Mail Code</p>
-										<p>{club.county_mail_code}</p>
-									</div>
-								</div>
-							{/if}
-
-							{#if club.country_mail_code}
-								<div class="flex items-start gap-3">
-									<Globe class="w-4 h-4 mt-1 text-surface-500" />
-									<div>
-										<p class="text-sm text-surface-600-300-token mb-1">Country Mail Code</p>
-										<p>{club.country_mail_code}</p>
-									</div>
-								</div>
-							{/if}
-						</div>
-					</div>
-				{/if}
-
-				<!-- Timestamps -->
-				<div class="card p-6 space-y-4">
-					<h2 class="h2 flex items-center gap-2">
-						<Calendar class="w-6 h-6" />
-						Record Information
-					</h2>
-					
-					<div class="space-y-3">
-						<div class="flex items-start gap-3">
-							<Calendar class="w-4 h-4 mt-1 text-surface-500" />
-							<div>
-								<p class="text-sm text-surface-600-300-token mb-1">Created</p>
-								<p>{formatDate(club.created_at)}</p>
-							</div>
-						</div>
-
-						<div class="flex items-start gap-3">
-							<Calendar class="w-4 h-4 mt-1 text-surface-500" />
-							<div>
-								<p class="text-sm text-surface-600-300-token mb-1">Last Updated</p>
-								<p>{formatDate(club.updated_at)}</p>
-							</div>
-						</div>
 					</div>
 				</div>
 			</div>
@@ -296,16 +199,14 @@
 			<!-- Map Section (placeholder for future implementation) -->
 			{#if club.base_location}
 				<div class="card p-6">
-					<h2 class="h2 flex items-center gap-2 mb-4">
-						<Navigation class="w-6 h-6" />
+					<h2 class="h2 mb-4 flex items-center gap-2">
+						<Navigation class="h-6 w-6" />
 						Location Map
 					</h2>
 					<div class="bg-surface-100-800-token rounded-lg p-8 text-center">
-						<MapPin class="w-12 h-12 mx-auto text-surface-500 mb-4" />
-						<p class="text-surface-600-300-token">
-							Map integration coming soon
-						</p>
-						<p class="text-sm text-surface-500 mt-2">
+						<MapPin class="text-surface-500 mx-auto mb-4 h-12 w-12" />
+						<p class="text-surface-600-300-token">Map integration coming soon</p>
+						<p class="text-surface-500 mt-2 text-sm">
 							{formatCoordinates(club.base_location)}
 						</p>
 					</div>
