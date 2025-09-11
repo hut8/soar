@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { page } from '$app/stores';
-	import { Users, Search } from '@lucide/svelte';
+	import { page } from '$app/state';
+	import { Users, Search, MapPinHouse } from '@lucide/svelte';
 	import { ProgressRing } from '@skeletonlabs/skeleton-svelte';
 	import { ClubSelector } from '$lib';
 
@@ -39,7 +39,7 @@
 	let longitude = '';
 	let radius = '50';
 
-	$: queryParams = $page.url.searchParams;
+	$: queryParams = page.url.searchParams;
 
 	onMount(async () => {
 		const q = queryParams.get('q');
@@ -134,7 +134,7 @@
 		error = '';
 
 		try {
-			const response = await fetch(`http://localhost:1337/clubs?q=${clubId}`);
+			const response = await fetch(`/clubs/${clubId}`);
 			if (!response.ok) {
 				throw new Error(`HTTP error! status: ${response.status}`);
 			}
@@ -234,10 +234,10 @@
 				</div>
 				<div class="flex justify-center space-x-2">
 					<button class="variant-ghost-surface btn" on:click={getCurrentLocation}>
-						📱 Use My Location
+						<MapPinHouse /> Use My Location
 					</button>
 					<button class="variant-filled-primary btn" on:click={searchClubs}>
-						Search Nearby Clubs
+						<Search /> Search Nearby Clubs
 					</button>
 				</div>
 			</div>

@@ -5,6 +5,7 @@
 	import { resolve } from '$app/paths';
 	import { auth } from '$lib/stores/auth';
 	import { onMount } from 'svelte';
+    import { Radar, Users, PlaneTakeoff } from '@lucide/svelte';
 
 	const base = resolve('/');
 	const clubsPath = resolve('/clubs');
@@ -54,13 +55,20 @@
 <AppBar>
 	{#snippet lead()}
 		<a href={base} class="flex items-center space-x-2">
-			<div class="text-xl font-bold text-primary-500">✈️ Glider.flights</div>
+			<div class="text-xl font-bold text-primary-500">
+                <PlaneTakeoff />
+                Glider.flights
+            </div>
 		</a>
 	{/snippet}
 	{#snippet trail()}
 		<nav class="hidden space-x-4 md:flex">
-			<a href={clubsPath} class="variant-ghost-surface btn btn-sm">Clubs</a>
-			<a href={operationsPath} class="variant-ghost-surface btn btn-sm">🗺️ Operations</a>
+			<a href={clubsPath} class="variant-ghost-surface btn btn-sm">
+                <Users /> Clubs
+            </a>
+			<a href={operationsPath} class="variant-ghost-surface btn btn-sm">
+                <Radar /> Operations
+            </a>
 		</nav>
 
 		{#if $auth.isAuthenticated && $auth.user}
