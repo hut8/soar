@@ -888,9 +888,9 @@ mod tests {
 
         assert!(!aircraft.is_empty(), "Should parse at least one aircraft");
 
-        // Test first aircraft (152AS)
+        // Test first aircraft (152AS -> N152AS)
         let first = &aircraft[0];
-        assert_eq!(first.n_number, "152AS");
+        assert_eq!(first.n_number, "N152AS");
         assert_eq!(first.serial_number, "3545");
         assert_eq!(first.mfr_mdl_code, Some("1660225".to_string()));
         assert_eq!(first.year_mfr, Some(1980));
@@ -949,8 +949,8 @@ mod tests {
         let aircraft = read_aircraft_csv_file(csv_path).expect("Failed to read CSV file");
 
         // Ensure we don't parse the header as an aircraft
-        // The first aircraft should be 152AS, not the header line
-        assert_eq!(aircraft[0].n_number, "152AS");
+        // The first aircraft should be N152AS (152AS with N prefix), not the header line
+        assert_eq!(aircraft[0].n_number, "N152AS");
 
         // Verify we have exactly 4 aircraft records (not 5 with header)
         assert_eq!(aircraft.len(), 4);
