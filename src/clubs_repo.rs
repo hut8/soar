@@ -82,6 +82,7 @@ impl ClubsRepository {
                    c.created_at, c.updated_at
             FROM clubs c
             LEFT JOIN locations l ON c.location_id = l.id
+            WHERE is_soaring = true
             ORDER BY c.name
             "#
         )
@@ -139,6 +140,7 @@ impl ClubsRepository {
             FROM clubs c
             LEFT JOIN locations l ON c.location_id = l.id
             WHERE SIMILARITY(UPPER(c.name), $1) > 0.05
+            AND is_soaring = true
             ORDER BY similarity_score DESC, c.name
             LIMIT $2
             "#,
@@ -456,7 +458,7 @@ mod tests {
             location_id: None,
             street1: Some("123 Mountain Rd".to_string()),
             street2: None,
-            city: Some("Lake Placid".to_string()),
+            city: Some("Milton".to_string()),
             state: Some("NY".to_string()),
             zip_code: Some("12946".to_string()),
             region_code: None,
@@ -473,7 +475,7 @@ mod tests {
         let club = create_test_club();
         assert_eq!(club.name, "Adirondack Soaring Club");
         assert_eq!(club.is_soaring, Some(true));
-        assert_eq!(club.city, Some("Lake Placid".to_string()));
+        assert_eq!(club.city, Some("Milton".to_string()));
         assert_eq!(club.state, Some("NY".to_string()));
     }
 }
