@@ -10,8 +10,8 @@ use axum::{
 use include_dir::{Dir, include_dir};
 use mime_guess::from_path;
 use sqlx::postgres::PgPool;
-use tower_http::trace::TraceLayer;
-use tracing::info;
+use tower_http::{trace::{DefaultOnRequest, DefaultOnResponse, TraceLayer}, LatencyUnit};
+use tracing::{info, trace, Level};
 
 use crate::actions;
 
@@ -62,13 +62,15 @@ async fn handle_static_file(uri: Uri, _state: axum::extract::State<AppState>) ->
     }
 
     // For client-side routing, serve index.html for paths that don't exist
-    if !path.contains('.') && path != "favicon.ico"
-        && let Some(index_file) = ASSETS.get_file("index.html") {
-            let mut headers = HeaderMap::new();
-            headers.insert("content-type", "text/html".parse().unwrap());
-            headers.insert("cache-control", "public, max-age=3600".parse().unwrap());
-            return (StatusCode::OK, headers, index_file.contents()).into_response();
-        }
+    if !path.contains('.')
+        && path != "favicon.ico"
+        && let Some(index_file) = ASSETS.get_file("index.html")
+    {
+        let mut headers = HeaderMap::new();
+        headers.insert("content-type", "text/html".parse().unwrap());
+        headers.insert("cache-control", "public, max-age=3600".parse().unwrap());
+        return (StatusCode::OK, headers, index_file.contents()).into_response();
+    }
 
     (StatusCode::NOT_FOUND, "Not Found").into_response()
 }
@@ -99,6 +101,7 @@ async fn content_negotiation_middleware(
     let needs_negotiation = SPA_ROUTES.contains(&path);
 
     if needs_negotiation {
+        trace!("Content negotiation for path: {}", path);
         // Get the Accept header
         let accept_header = headers
             .get(ACCEPT)
@@ -115,7 +118,9 @@ async fn content_negotiation_middleware(
 
         // If client prefers HTML, serve the static file (SPA routing)
         if prefers_html {
-            return handle_static_file(uri, State(app_state)).await.into_response();
+            return handle_static_file(uri, State(app_state))
+                .await
+                .into_response();
         }
     }
 
@@ -129,6 +134,14 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
     info!("Starting web server on {}:{}", interface, port);
 
     let app_state = AppState { pool };
+
+    let trace_layer = TraceLayer::new_for_http()
+        .on_request(DefaultOnRequest::new().level(Level::INFO))
+        .on_response(
+            DefaultOnResponse::new()
+                .level(Level::INFO)
+                .latency_unit(LatencyUnit::Micros),
+        );
 
     // Build the Axum application
     let app = Router::new()
@@ -161,8 +174,11 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         .route("/clubs/:id/users", get(actions::get_users_by_club))
         .fallback(handle_static_file)
         .with_state(app_state.clone())
-        .layer(middleware::from_fn_with_state(app_state.clone(), content_negotiation_middleware))
-        .layer(TraceLayer::new_for_http());
+        .layer(middleware::from_fn_with_state(
+            app_state.clone(),
+            content_negotiation_middleware,
+        ))
+        .layer(trace_layer);
 
     // Create the listener
     let listener = tokio::net::TcpListener::bind(format!("{}:{}", interface, port)).await?;
