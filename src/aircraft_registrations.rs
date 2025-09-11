@@ -158,6 +158,21 @@ fn to_opt_u32(s: &str) -> Option<u32> {
     t.parse::<u32>().ok()
 }
 
+fn format_zip_code(s: &str) -> Option<String> {
+    let t = s.trim();
+    if t.is_empty() {
+        return None;
+    }
+    
+    // If it's 9 digits, insert a dash after the first 5
+    if t.len() == 9 && t.chars().all(|c| c.is_ascii_digit()) {
+        Some(format!("{}-{}", &t[0..5], &t[5..9]))
+    } else {
+        // Return as-is for 5-digit zips or other formats
+        Some(t.to_string())
+    }
+}
+
 fn to_opt_u32_nonzero(s: &str) -> Option<u32> {
     let t = s.trim();
     if t.is_empty() {
@@ -517,7 +532,7 @@ impl Aircraft {
         let street2 = to_opt_string(fw(line, 144, 176));
         let city = to_opt_string(fw(line, 178, 195));
         let state = to_opt_string(fw(line, 197, 198));
-        let zip_code = to_opt_string(fw(line, 200, 209));
+        let zip_code = format_zip_code(fw(line, 200, 209));
         let region_code = to_opt_string(fw(line, 211, 211));
         let county_mail_code = to_opt_string(fw(line, 213, 215));
         let country_mail_code = to_opt_string(fw(line, 217, 218));
@@ -695,7 +710,7 @@ impl Aircraft {
         let street2 = to_opt_string(fields[8]);
         let city = to_opt_string(fields[9]);
         let state = to_opt_string(fields[10]);
-        let zip_code = to_opt_string(fields[11]);
+        let zip_code = format_zip_code(fields[11]);
         let region_code = to_opt_string(fields[12]);
         let county_mail_code = to_opt_string(fields[13]);
         let country_mail_code = to_opt_string(fields[14]);
@@ -971,6 +986,33 @@ mod tests {
         assert_eq!(to_opt_string_no_zero("   "), None);
         assert_eq!(to_opt_string_no_zero("  0  "), None);
         assert_eq!(to_opt_string_no_zero("12345"), Some("12345".to_string()));
+    }
+
+    #[test]
+    fn test_zip_code_formatting() {
+        // Test 9-digit zip codes get formatted with dash
+        assert_eq!(format_zip_code("123456789"), Some("12345-6789".to_string()));
+        assert_eq!(format_zip_code("987654321"), Some("98765-4321".to_string()));
+        
+        // Test 5-digit zip codes remain unchanged
+        assert_eq!(format_zip_code("12345"), Some("12345".to_string()));
+        assert_eq!(format_zip_code("90210"), Some("90210".to_string()));
+        
+        // Test empty strings return None
+        assert_eq!(format_zip_code(""), None);
+        assert_eq!(format_zip_code("   "), None);
+        
+        // Test whitespace trimming
+        assert_eq!(format_zip_code("  12345  "), Some("12345".to_string()));
+        assert_eq!(format_zip_code("  123456789  "), Some("12345-6789".to_string()));
+        
+        // Test non-numeric 9-character strings remain unchanged
+        assert_eq!(format_zip_code("12345abcd"), Some("12345abcd".to_string()));
+        assert_eq!(format_zip_code("abcd56789"), Some("abcd56789".to_string()));
+        
+        // Test other lengths remain unchanged
+        assert_eq!(format_zip_code("1234"), Some("1234".to_string()));
+        assert_eq!(format_zip_code("1234567890"), Some("1234567890".to_string()));
     }
 
     #[test]
