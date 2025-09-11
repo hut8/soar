@@ -162,82 +162,102 @@
 	<title>Soaring Clubs - Glider Flights</title>
 </svelte:head>
 
-<div class="space-y-6">
-	<header class="space-y-4 text-center">
-		<h1 class="h1">
-			<Users />
+<div class="container mx-auto p-4 space-y-8">
+	<header class="text-center space-y-2">
+		<h1 class="h1 flex items-center justify-center gap-2">
+			<Users class="w-8 h-8" />
 			Soaring Clubs
 		</h1>
+		<p class="text-surface-500-400-token">Find and connect with soaring clubs worldwide</p>
 	</header>
 
 	<!-- Search Section -->
-	<section class="card space-y-4 p-6">
-		<h2 class="h2">Search Clubs</h2>
+	<section class="card p-6 space-y-6">
+		<header class="text-center">
+			<h2 class="h2">Find Clubs</h2>
+			<p class="text-surface-500-400-token">Search by name or location</p>
+		</header>
 
 		<!-- Search Method Toggle -->
-		<div class="flex justify-center space-x-2">
+		<div class="flex justify-center gap-2">
 			<button
-				class="btn btn-sm {!locationSearch ? 'variant-filled-secondary' : 'variant-ghost-surface'}"
+				class="btn btn-sm {!locationSearch ? 'variant-filled' : 'variant-soft'}"
 				on:click={() => (locationSearch = false)}
 			>
-				🔍 Name Search
+				<Search class="w-4 h-4 mr-2" />
+				Name Search
 			</button>
 			<button
-				class="btn btn-sm {locationSearch ? 'variant-filled-secondary' : 'variant-ghost-surface'}"
+				class="btn btn-sm {locationSearch ? 'variant-filled' : 'variant-soft'}"
 				on:click={() => (locationSearch = true)}
 			>
-				📍 Location Search
+				<MapPinHouse class="w-4 h-4 mr-2" />
+				Location Search
 			</button>
 		</div>
 
 		<!-- Search Forms -->
 		{#if !locationSearch}
 			<div class="space-y-4">
-				<ClubSelector
-					value={selectedClub}
-					onValueChange={handleClubSelection}
-					onInputValueChange={handleSearchInput}
-					label="Search and Select Club"
-					placeholder="Type to search clubs or select from dropdown..."
-				/>
+				<div class="max-w-2xl mx-auto">
+					<ClubSelector
+						value={selectedClub}
+						onValueChange={handleClubSelection}
+						onInputValueChange={handleSearchInput}
+						label="Search and Select Club"
+						placeholder="Type to search clubs or select from dropdown..."
+					/>
+				</div>
 				<div class="flex justify-center">
-					<button class="variant-filled-primary btn" on:click={searchClubs}
-						><Search class="mr-1 h-4 w-4" /> Search All Clubs
+					<button class="btn variant-filled" on:click={searchClubs}>
+						<Search class="w-4 h-4 mr-2" />
+						Search All Clubs
 					</button>
 				</div>
 			</div>
 		{:else}
 			<div class="space-y-4">
-				<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
-					<input
-						bind:value={latitude}
-						class="input"
-						type="number"
-						step="any"
-						placeholder="Latitude"
-					/>
-					<input
-						bind:value={longitude}
-						class="input"
-						type="number"
-						step="any"
-						placeholder="Longitude"
-					/>
-					<input
-						bind:value={radius}
-						class="input"
-						type="number"
-						min="1"
-						max="1000"
-						placeholder="Radius (km)"
-					/>
+				<div class="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-2xl mx-auto">
+					<label class="label">
+						<span>Latitude</span>
+						<input
+							bind:value={latitude}
+							class="input"
+							type="number"
+							step="any"
+							placeholder="e.g. 40.7128"
+						/>
+					</label>
+					<label class="label">
+						<span>Longitude</span>
+						<input
+							bind:value={longitude}
+							class="input"
+							type="number"
+							step="any"
+							placeholder="e.g. -74.0060"
+						/>
+					</label>
+					<label class="label">
+						<span>Radius (km)</span>
+						<input
+							bind:value={radius}
+							class="input"
+							type="number"
+							min="1"
+							max="1000"
+							placeholder="50"
+						/>
+					</label>
 				</div>
-				<div class="flex justify-center space-x-2">
-					<button class="variant-ghost-surface btn" on:click={getCurrentLocation}>
-						<MapPinHouse /> Use My Location
+				<div class="flex justify-center gap-4">
+					<button class="btn variant-soft" on:click={getCurrentLocation}>
+						<MapPinHouse class="w-4 h-4 mr-2" />
+						Use My Location
 					</button>
-					<button class="variant-filled-primary btn" on:click={searchClubs}>
-						<Search /> Search Nearby Clubs
+					<button class="btn variant-filled" on:click={searchClubs}>
+						<Search class="w-4 h-4 mr-2" />
+						Search Nearby
 					</button>
 				</div>
 			</div>
@@ -246,9 +266,11 @@
 
 	<!-- Loading State -->
 	{#if loading}
-		<div class="flex items-center justify-center py-8">
-			<ProgressRing size="w-8" />
-			<span class="ml-2">Searching clubs...</span>
+		<div class="card p-8">
+			<div class="flex items-center justify-center space-x-4">
+				<ProgressRing size="w-8 h-8" />
+				<span class="text-lg">Searching clubs...</span>
+			</div>
 		</div>
 	{/if}
 
@@ -256,7 +278,7 @@
 	{#if error}
 		<div class="alert variant-filled-error">
 			<div class="alert-message">
-				<h3 class="h3">Error</h3>
+				<h3 class="h3">Search Error</h3>
 				<p>{error}</p>
 			</div>
 		</div>
@@ -264,52 +286,58 @@
 
 	<!-- Results -->
 	{#if !loading && !error && clubs.length > 0}
-		<section class="space-y-4">
-			<h2 class="h2">Results ({clubs.length} clubs found)</h2>
+		<section class="space-y-6">
+			<header class="text-center">
+				<h2 class="h2">Search Results</h2>
+				<p class="text-surface-500-400-token">{clubs.length} club{clubs.length === 1 ? '' : 's'} found</p>
+			</header>
 
-			<div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+			<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 				{#each clubs as club (club.id)}
-					<div class="card space-y-4 p-6">
-						<header class="card-header">
-							<h3 class="h3">{club.name}</h3>
+					<article class="card p-6 space-y-4 hover:scale-[1.02] transition-transform duration-200">
+						<header>
+							<h3 class="h3 text-primary-500">{club.name}</h3>
 						</header>
 
-						<div class="space-y-2">
-							<div class="flex items-start space-x-2">
-								<span class="text-surface-500">📍</span>
-								<span class="text-sm">{formatAddress(club)}</span>
+						<div class="space-y-3 text-sm">
+							<div class="flex items-start gap-3">
+								<MapPinHouse class="w-4 h-4 mt-0.5 text-surface-500" />
+								<span class="flex-1">{formatAddress(club)}</span>
 							</div>
 
 							{#if club.base_location}
-								<div class="flex items-center space-x-2">
-									<span class="text-surface-500">🗺️</span>
-									<span class="text-sm">
-										{club.base_location.latitude.toFixed(4)}, {club.base_location.longitude.toFixed(
-											4
-										)}
+								<div class="flex items-center gap-3">
+									<div class="w-4 h-4 text-surface-500">🗺️</div>
+									<span class="font-mono text-xs">
+										{club.base_location.latitude.toFixed(4)}, {club.base_location.longitude.toFixed(4)}
 									</span>
 								</div>
 							{/if}
 
 							{#if club.home_base_airport_id}
-								<div class="flex items-center space-x-2">
-									<span class="text-surface-500">✈️</span>
-									<span class="text-sm">Airport: {club.home_base_airport_id}</span>
+								<div class="flex items-center gap-3">
+									<div class="w-4 h-4 text-surface-500">✈️</div>
+									<span>Airport ID: {club.home_base_airport_id}</span>
 								</div>
 							{/if}
 						</div>
 
-						<footer class="card-footer">
-							<span class="variant-filled-success badge">Active Soaring Club</span>
+						<footer class="pt-2">
+							<span class="badge variant-filled-success">Active Club</span>
 						</footer>
-					</div>
+					</article>
 				{/each}
 			</div>
 		</section>
 	{:else if !loading && !error && clubs.length === 0 && (searchQuery || (latitude && longitude))}
-		<div class="py-8 text-center">
-			<h3 class="h3">No clubs found</h3>
-			<p class="text-surface-600-300-token">Try adjusting your search criteria or search radius.</p>
+		<div class="card p-12 text-center space-y-4">
+			<div class="text-6xl opacity-50">🔍</div>
+			<div class="space-y-2">
+				<h3 class="h3">No clubs found</h3>
+				<p class="text-surface-500-400-token">
+					Try adjusting your search criteria or expanding your search radius.
+				</p>
+			</div>
 		</div>
 	{/if}
 </div>
