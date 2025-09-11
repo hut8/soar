@@ -160,7 +160,7 @@ impl Device {
 
     /// Pattern: One to five digits alone (e.g., N1, N12345)
     fn matches_digits_only(&self, suffix: &str) -> bool {
-        suffix.len() >= 1 && suffix.len() <= 5 && suffix.chars().all(|c| c.is_ascii_digit())
+        !suffix.is_empty() && suffix.len() <= 5 && suffix.chars().all(|c| c.is_ascii_digit())
     }
 
     /// Pattern: One to four digits plus one suffix letter (e.g., N1A, N123Z)

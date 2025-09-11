@@ -201,23 +201,23 @@ fn determine_archive_dir() -> Result<String> {
 /// Only updates aircraft that don't already have a device_id set
 async fn link_aircraft_to_devices(pool: &PgPool) -> Result<u32> {
     info!("Starting aircraft-device linking process...");
-    
+
     // Query to find aircraft without device_id that have matching devices
     let result = sqlx::query!(
         r#"
-        UPDATE aircraft_registrations 
+        UPDATE aircraft_registrations
         SET device_id = devices.device_id
-        FROM devices 
+        FROM devices
         WHERE aircraft_registrations.registration_number = devices.registration
         AND aircraft_registrations.device_id IS NULL
         "#
     )
     .execute(pool)
     .await?;
-    
+
     let linked_count = result.rows_affected() as u32;
     info!("Linked {} aircraft to devices", linked_count);
-    
+
     Ok(linked_count)
 }
 
@@ -298,7 +298,7 @@ async fn handle_load_data(
             "Loading aircraft registrations from: {}",
             aircraft_registrations_path
         );
-        match read_aircraft_file(&aircraft_registrations_path) {
+        match read_aircraft_file(aircraft_registrations_path) {
             Ok(aircraft_list) => {
                 info!(
                     "Successfully loaded {} aircraft registrations",
@@ -813,7 +813,7 @@ async fn handle_load_data(
     // Link aircraft to devices if either devices were pulled or aircraft were loaded
     if pull_devices || aircraft_registrations_path.is_some() {
         info!("Linking aircraft to devices based on registration numbers...");
-        
+
         match link_aircraft_to_devices(&pool).await {
             Ok(linked_count) => {
                 info!("Successfully linked {} aircraft to devices", linked_count);
