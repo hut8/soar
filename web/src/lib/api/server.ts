@@ -31,5 +31,5 @@ export async function serverCall<T>(endpoint: string, options: RequestInit = {})
 		return {} as T;
 	}
 
-	return response.json();
+	return await response.json();
 }
