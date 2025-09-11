@@ -13,14 +13,3 @@
 <div class="h-screen w-full overflow-hidden">
 	{@render children?.()}
 </div>
-
-<style>
-	/* Ensure full screen coverage for operations */
-	:global(html, body) {
-		margin: 0;
-		padding: 0;
-		height: 100vh;
-		width: 100vw;
-		overflow: hidden;
-	}
-</style>

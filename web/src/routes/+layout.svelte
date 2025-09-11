@@ -5,7 +5,7 @@
 	import { resolve } from '$app/paths';
 	import { auth } from '$lib/stores/auth';
 	import { onMount } from 'svelte';
-    import { Radar, Users, PlaneTakeoff } from '@lucide/svelte';
+	import { Radar, Users, PlaneTakeoff, UserPlus, UserCheck } from '@lucide/svelte';
 
 	const base = resolve('/');
 	const clubsPath = resolve('/clubs');
@@ -55,26 +55,26 @@
 <AppBar>
 	{#snippet lead()}
 		<a href={base} class="flex items-center space-x-2">
-			<div class="text-xl font-bold text-primary-500">
-                <PlaneTakeoff />
-                Glider.flights
-            </div>
+			<div class="text-primary-500 text-xl font-bold">
+				<PlaneTakeoff />
+				Glider.flights
+			</div>
 		</a>
 	{/snippet}
 	{#snippet trail()}
 		<nav class="hidden space-x-4 md:flex">
 			<a href={clubsPath} class="variant-ghost-surface btn btn-sm">
-                <Users /> Clubs
-            </a>
+				<Users /> Clubs
+			</a>
 			<a href={operationsPath} class="variant-ghost-surface btn btn-sm">
-                <Radar /> Operations
-            </a>
+				<Radar /> Operations
+			</a>
 		</nav>
 
 		{#if $auth.isAuthenticated && $auth.user}
 			<div class="user-menu relative">
 				<button
-					class="variant-ghost-surface btn flex items-center space-x-2 btn-sm"
+					class="variant-ghost-surface btn btn-sm flex items-center space-x-2"
 					onclick={() => (showUserMenu = !showUserMenu)}
 				>
 					<Avatar
@@ -87,18 +87,18 @@
 				</button>
 
 				{#if showUserMenu}
-					<div class="absolute top-12 right-0 z-10 w-48 card p-2">
+					<div class="card absolute right-0 top-12 z-10 w-48 p-2">
 						<div class="space-y-1">
 							<div class="px-3 py-2 text-sm">
 								<div class="font-medium">{$auth.user.first_name} {$auth.user.last_name}</div>
 								<div class="text-surface-600-300-token">{$auth.user.email}</div>
 							</div>
 							<hr class="!my-2" />
-							<a href={profilePath} class="variant-ghost-surface btn w-full justify-start btn-sm">
+							<a href={profilePath} class="variant-ghost-surface btn btn-sm w-full justify-start">
 								👤 Profile
 							</a>
 							<button
-								class="variant-ghost-error btn w-full justify-start btn-sm"
+								class="variant-ghost-error btn btn-sm w-full justify-start"
 								onclick={handleLogout}
 							>
 								Sign out
@@ -109,8 +109,8 @@
 			</div>
 		{:else}
 			<div class="flex space-x-2">
-				<a href={loginPath} class="variant-ghost-surface btn btn-sm">Login</a>
-				<a href={registerPath} class="variant-filled-primary btn btn-sm">Sign Up</a>
+				<a href={loginPath} class="variant-ghost-surface btn btn-sm"><UserCheck /> Login</a>
+				<a href={registerPath} class="variant-filled-primary btn btn-sm"><UserPlus /> Sign Up</a>
 			</div>
 		{/if}
 	{/snippet}

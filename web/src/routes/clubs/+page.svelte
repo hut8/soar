@@ -65,14 +65,14 @@
 		error = '';
 
 		try {
-			let url = 'http://localhost:1337/clubs?';
+			let url = '/clubs?';
 
 			if (locationSearch && latitude && longitude && radius) {
 				url += `latitude=${latitude}&longitude=${longitude}&radius=${radius}`;
 			} else if (searchQuery) {
 				url += `q=${encodeURIComponent(searchQuery)}`;
 			} else {
-				url = 'http://localhost:1337/clubs';
+				url = '/clubs';
 			}
 
 			const response = await fetch(url);
@@ -168,27 +168,21 @@
 			<Users class="w-8 h-8" />
 			Soaring Clubs
 		</h1>
-		<p class="text-surface-500-400-token">Find and connect with soaring clubs worldwide</p>
 	</header>
 
 	<!-- Search Section -->
 	<section class="card p-6 space-y-6">
-		<header class="text-center">
-			<h2 class="h2">Find Clubs</h2>
-			<p class="text-surface-500-400-token">Search by name or location</p>
-		</header>
-
 		<!-- Search Method Toggle -->
 		<div class="flex justify-center gap-2">
 			<button
-				class="btn btn-sm {!locationSearch ? 'variant-filled' : 'variant-soft'}"
+				class="btn btn-sm {!locationSearch ? 'preset-filled' : 'preset-soft'}"
 				on:click={() => (locationSearch = false)}
 			>
 				<Search class="w-4 h-4 mr-2" />
 				Name Search
 			</button>
 			<button
-				class="btn btn-sm {locationSearch ? 'variant-filled' : 'variant-soft'}"
+				class="btn btn-sm {locationSearch ? 'preset-filled' : 'preset-soft'}"
 				on:click={() => (locationSearch = true)}
 			>
 				<MapPinHouse class="w-4 h-4 mr-2" />
@@ -207,12 +201,6 @@
 						label="Search and Select Club"
 						placeholder="Type to search clubs or select from dropdown..."
 					/>
-				</div>
-				<div class="flex justify-center">
-					<button class="btn variant-filled" on:click={searchClubs}>
-						<Search class="w-4 h-4 mr-2" />
-						Search All Clubs
-					</button>
 				</div>
 			</div>
 		{:else}
