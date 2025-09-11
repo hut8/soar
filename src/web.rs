@@ -1,17 +1,15 @@
 use anyhow::Result;
 use axum::{
     Router,
-    extract::{Request, State},
-    http::{HeaderMap, StatusCode, Uri, header::ACCEPT},
-    middleware::{self, Next},
-    response::{IntoResponse, Response},
+    http::{HeaderMap, StatusCode, Uri},
+    response::IntoResponse,
     routing::{delete, get, post, put},
 };
 use include_dir::{Dir, include_dir};
 use mime_guess::from_path;
 use sqlx::postgres::PgPool;
 use tower_http::{trace::{DefaultOnRequest, DefaultOnResponse, TraceLayer}, LatencyUnit};
-use tracing::{info, trace, Level};
+use tracing::{info, Level};
 
 use crate::actions;
 
@@ -75,61 +73,6 @@ async fn handle_static_file(uri: Uri, _state: axum::extract::State<AppState>) ->
     (StatusCode::NOT_FOUND, "Not Found").into_response()
 }
 
-// Routes that have corresponding Svelte pages and should support content negotiation
-static SPA_ROUTES: &[&str] = &[
-    "/clubs",
-    "/login",
-    "/register",
-    "/profile",
-    "/operations",
-    "/forgot-password",
-    "/reset-password",
-    "/verify-email",
-];
-
-// Content negotiation middleware
-async fn content_negotiation_middleware(
-    State(app_state): State<AppState>,
-    request: Request,
-    next: Next,
-) -> Response {
-    let uri = request.uri().clone();
-    let headers = request.headers().clone();
-    let path = uri.path();
-
-    // Check if this is a route that needs content negotiation
-    let needs_negotiation = SPA_ROUTES.contains(&path);
-
-    if needs_negotiation {
-        trace!("Content negotiation for path: {}", path);
-        // Get the Accept header
-        let accept_header = headers
-            .get(ACCEPT)
-            .and_then(|h| h.to_str().ok())
-            .unwrap_or("");
-
-        // Check if the first content type preference is text/html
-        let prefers_html = accept_header
-            .split(',')
-            .next()
-            .map(|s| s.trim().to_lowercase())
-            .unwrap_or_default()
-            .starts_with("text/html");
-
-        // If client prefers HTML, serve the static file (SPA routing)
-        if prefers_html {
-            return handle_static_file(uri, State(app_state))
-                .await
-                .into_response();
-        }
-    }
-
-    // Continue with normal request processing
-    next.run(request).await
-}
-
-// All individual action functions have been moved to the actions module
-
 pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Result<()> {
     info!("Starting web server on {}:{}", interface, port);
 
@@ -143,11 +86,12 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
                 .latency_unit(LatencyUnit::Micros),
         );
 
-    // Build the Axum application
-    let app = Router::new()
+    // Create API sub-router rooted at "/data"
+    let api_router = Router::new()
         // Search and data routes
         .route("/airports", get(actions::search_airports))
         .route("/clubs", get(actions::search_clubs))
+        .route("/clubs/:id", get(actions::get_club_by_id))
         .route("/fixes", get(actions::search_fixes))
         .route("/fixes/live", get(actions::fixes_live_websocket))
         .route("/flights", get(actions::search_flights))
@@ -172,12 +116,13 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         .route("/users/:id", put(actions::update_user_by_id))
         .route("/users/:id", delete(actions::delete_user_by_id))
         .route("/clubs/:id/users", get(actions::get_users_by_club))
+        .with_state(app_state.clone());
+
+    // Build the main Axum application
+    let app = Router::new()
+        .nest("/data", api_router)
         .fallback(handle_static_file)
         .with_state(app_state.clone())
-        .layer(middleware::from_fn_with_state(
-            app_state.clone(),
-            content_negotiation_middleware,
-        ))
         .layer(trace_layer);
 
     // Create the listener

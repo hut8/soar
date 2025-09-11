@@ -131,8 +131,65 @@ pub async fn search_clubs(
 ) -> impl IntoResponse {
     let clubs_repo = ClubsRepository::new(state.pool);
 
-    match params.q {
-        Some(query) => match clubs_repo.fuzzy_search_soaring(&query, params.limit).await {
+    // Check if geographic search parameters are provided
+    if let (Some(lat), Some(lng)) = (params.latitude, params.longitude) {
+        let radius = params.radius.unwrap_or(50.0); // Default to 50km radius if not specified
+
+        // Validate radius
+        if radius <= 0.0 || radius > 1000.0 {
+            return (
+                StatusCode::BAD_REQUEST,
+                "Radius must be between 0 and 1000 kilometers",
+            )
+                .into_response();
+        }
+
+        // Validate latitude
+        if !(-90.0..=90.0).contains(&lat) {
+            return (
+                StatusCode::BAD_REQUEST,
+                "Latitude must be between -90 and 90 degrees",
+            )
+                .into_response();
+        }
+
+        // Validate longitude
+        if !(-180.0..=180.0).contains(&lng) {
+            return (
+                StatusCode::BAD_REQUEST,
+                "Longitude must be between -180 and 180 degrees",
+            )
+                .into_response();
+        }
+
+        match clubs_repo
+            .search_nearby_soaring(lat, lng, radius, params.limit)
+            .await
+        {
+            Ok(clubs) => {
+                let club_views: Vec<ClubView> = clubs.into_iter().map(ClubView::from).collect();
+                Json(club_views).into_response()
+            }
+            Err(e) => {
+                error!("Failed to search nearby clubs: {}", e);
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to search nearby clubs",
+                )
+                    .into_response()
+            }
+        }
+    } else if let Some(query) = params.q {
+        // Text-based search
+        if query.trim().is_empty() {
+            return (
+                StatusCode::BAD_REQUEST,
+                "Query parameter 'q' cannot be empty",
+            )
+                .into_response();
+        }
+
+        match clubs_repo.fuzzy_search_soaring(&query, params.limit).await {
             Ok(clubs) => {
                 let club_views: Vec<ClubView> = clubs.into_iter().map(ClubView::from).collect();
                 Json(club_views).into_response()
@@ -141,8 +198,17 @@ pub async fn search_clubs(
                 error!("Failed to search clubs: {}", e);
                 (StatusCode::INTERNAL_SERVER_ERROR, "Failed to search clubs").into_response()
             }
-        },
-        None => match clubs_repo.get_all().await {
+        }
+    } else if params.latitude.is_some() || params.longitude.is_some() || params.radius.is_some() {
+        // Some geographic parameters provided but not latitude and longitude
+        (
+            StatusCode::BAD_REQUEST,
+            "Geographic search requires at least latitude and longitude parameters",
+        )
+            .into_response()
+    } else {
+        // No search parameters provided - return all clubs
+        match clubs_repo.get_all().await {
             Ok(clubs) => {
                 let club_views: Vec<ClubView> = clubs.into_iter().map(ClubView::from).collect();
                 Json(club_views).into_response()
@@ -151,7 +217,7 @@ pub async fn search_clubs(
                 error!("Failed to get clubs: {}", e);
                 (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get clubs").into_response()
             }
-        },
+        }
     }
 }
 
