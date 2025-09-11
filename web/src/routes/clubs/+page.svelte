@@ -311,7 +311,7 @@
 						</div>
 
 						<footer class="pt-2">
-							<span class="badge variant-filled-success">Active Club</span>
+
 						</footer>
 					</article>
 				{/each}
