@@ -133,11 +133,11 @@ impl Device {
     }
 
     /// Checks if a registration follows U.S. N-number format
+    /// Restrictions: suffix letters I and O are not allowed
     /// Valid formats:
     /// - One to five digits alone (e.g., N1, N12345)
     /// - One to four digits plus one suffix letter (e.g., N1A, N123Z)
     /// - One to three digits plus two suffix letters (e.g., N12AB)
-    /// Restrictions: suffix letters I and O are not allowed
     fn is_us_n_number(&self, registration: &str) -> bool {
         // Must start with 'N' (case insensitive)
         if !registration.to_uppercase().starts_with('N') {

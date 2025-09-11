@@ -660,7 +660,7 @@ impl Aircraft {
     /// 17: CERTIFICATION, 18: TYPE AIRCRAFT, 19: TYPE ENGINE, 20: STATUS CODE,
     /// 21: MODE S CODE, 22: FRACT OWNER, 23: AIR WORTH DATE, 24-28: OTHER NAMES(1-5),
     /// 29: EXPIRATION DATE, 30: UNIQUE ID, 31: KIT MFR, 32: KIT MODEL, 33: MODE S CODE HEX
-    pub fn from_csv_line(line: &str) -> Result<Self> {
+    pub fn from_faa_csv_line(line: &str) -> Result<Self> {
         let fields: Vec<&str> = line.split(',').collect();
 
         if fields.len() < 34 {
@@ -674,6 +674,11 @@ impl Aircraft {
         if n_number.is_empty() {
             return Err(anyhow!("Missing N-number in CSV"));
         }
+        let n_number = if !n_number.starts_with("N") {
+            format!("N{}", n_number)
+        } else {
+            n_number
+        };
 
         let serial_number = to_string_trim(fields[1]);
         let mfr_mdl_code = to_opt_string(fields[2]);
@@ -797,7 +802,7 @@ pub fn read_aircraft_csv_file<P: AsRef<Path>>(path: P) -> Result<Vec<Aircraft>> 
             continue;
         }
 
-        let rec = Aircraft::from_csv_line(trimmed)
+        let rec = Aircraft::from_faa_csv_line(trimmed)
             .with_context(|| format!("Parsing CSV line {}", lineno + 1))?;
         out.push(rec);
     }
