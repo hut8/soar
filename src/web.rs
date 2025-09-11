@@ -9,11 +9,11 @@ use include_dir::{Dir, include_dir};
 use mime_guess::from_path;
 use sqlx::postgres::PgPool;
 use tower_http::{
+    LatencyUnit,
     cors::CorsLayer,
     trace::{DefaultOnRequest, DefaultOnResponse, TraceLayer},
-    LatencyUnit
 };
-use tracing::{info, Level};
+use tracing::{Level, info};
 
 use crate::actions;
 

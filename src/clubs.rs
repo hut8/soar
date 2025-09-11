@@ -1,7 +1,7 @@
+use crate::locations::Point;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::types::Uuid;
-use crate::locations::Point;
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, Default)]
 pub struct Club {

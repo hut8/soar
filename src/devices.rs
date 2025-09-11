@@ -93,7 +93,7 @@ where
 
 pub enum RegistrationCountry {
     UnitedStates,
-    Other
+    Other,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -153,9 +153,9 @@ impl Device {
         }
 
         // Check each valid pattern
-        self.matches_digits_only(suffix) ||
-        self.matches_digits_plus_one_letter(suffix) ||
-        self.matches_digits_plus_two_letters(suffix)
+        self.matches_digits_only(suffix)
+            || self.matches_digits_plus_one_letter(suffix)
+            || self.matches_digits_plus_two_letters(suffix)
     }
 
     /// Pattern: One to five digits alone (e.g., N1, N12345)
@@ -318,11 +318,17 @@ mod tests {
             let device = create_test_device(registration);
             let country = device.registration_country();
             if expected_us {
-                assert!(matches!(country, RegistrationCountry::UnitedStates),
-                    "Expected {} to be US registration", registration);
+                assert!(
+                    matches!(country, RegistrationCountry::UnitedStates),
+                    "Expected {} to be US registration",
+                    registration
+                );
             } else {
-                assert!(matches!(country, RegistrationCountry::Other),
-                    "Expected {} to be Other registration", registration);
+                assert!(
+                    matches!(country, RegistrationCountry::Other),
+                    "Expected {} to be Other registration",
+                    registration
+                );
             }
         }
     }
@@ -343,11 +349,17 @@ mod tests {
             let device = create_test_device(registration);
             let country = device.registration_country();
             if expected_us {
-                assert!(matches!(country, RegistrationCountry::UnitedStates),
-                    "Expected {} to be US registration", registration);
+                assert!(
+                    matches!(country, RegistrationCountry::UnitedStates),
+                    "Expected {} to be US registration",
+                    registration
+                );
             } else {
-                assert!(matches!(country, RegistrationCountry::Other),
-                    "Expected {} to be Other registration", registration);
+                assert!(
+                    matches!(country, RegistrationCountry::Other),
+                    "Expected {} to be Other registration",
+                    registration
+                );
             }
         }
     }
@@ -367,11 +379,17 @@ mod tests {
             let device = create_test_device(registration);
             let country = device.registration_country();
             if expected_us {
-                assert!(matches!(country, RegistrationCountry::UnitedStates),
-                    "Expected {} to be US registration", registration);
+                assert!(
+                    matches!(country, RegistrationCountry::UnitedStates),
+                    "Expected {} to be US registration",
+                    registration
+                );
             } else {
-                assert!(matches!(country, RegistrationCountry::Other),
-                    "Expected {} to be Other registration", registration);
+                assert!(
+                    matches!(country, RegistrationCountry::Other),
+                    "Expected {} to be Other registration",
+                    registration
+                );
             }
         }
     }
@@ -407,11 +425,17 @@ mod tests {
             let device = create_test_device(registration);
             let country = device.registration_country();
             if expected_us {
-                assert!(matches!(country, RegistrationCountry::UnitedStates),
-                    "Expected {} to be US registration", registration);
+                assert!(
+                    matches!(country, RegistrationCountry::UnitedStates),
+                    "Expected {} to be US registration",
+                    registration
+                );
             } else {
-                assert!(matches!(country, RegistrationCountry::Other),
-                    "Expected {} to be Other registration", registration);
+                assert!(
+                    matches!(country, RegistrationCountry::Other),
+                    "Expected {} to be Other registration",
+                    registration
+                );
             }
         }
     }
@@ -420,25 +444,28 @@ mod tests {
     fn test_registration_country_non_us_registrations() {
         // Test non-U.S. registrations
         let test_cases = vec![
-            "G-ABCD",    // UK
-            "D-ABCD",    // Germany
-            "F-ABCD",    // France
-            "HA-4403",   // Hungary (from existing test)
-            "VH-ABC",    // Australia
-            "C-GABC",    // Canada
-            "JA1234",    // Japan
-            "HL1234",    // South Korea
-            "B-1234",    // China
-            "ABC123",    // No country prefix
-            "123456",    // Just numbers
-            "",          // Empty string
+            "G-ABCD",  // UK
+            "D-ABCD",  // Germany
+            "F-ABCD",  // France
+            "HA-4403", // Hungary (from existing test)
+            "VH-ABC",  // Australia
+            "C-GABC",  // Canada
+            "JA1234",  // Japan
+            "HL1234",  // South Korea
+            "B-1234",  // China
+            "ABC123",  // No country prefix
+            "123456",  // Just numbers
+            "",        // Empty string
         ];
 
         for registration in test_cases {
             let device = create_test_device(registration);
             let country = device.registration_country();
-            assert!(matches!(country, RegistrationCountry::Other),
-                "Expected {} to be Other registration", registration);
+            assert!(
+                matches!(country, RegistrationCountry::Other),
+                "Expected {} to be Other registration",
+                registration
+            );
         }
     }
 
@@ -458,11 +485,17 @@ mod tests {
             let device = create_test_device(registration);
             let country = device.registration_country();
             if expected_us {
-                assert!(matches!(country, RegistrationCountry::UnitedStates),
-                    "Expected {} to be US registration", registration);
+                assert!(
+                    matches!(country, RegistrationCountry::UnitedStates),
+                    "Expected {} to be US registration",
+                    registration
+                );
             } else {
-                assert!(matches!(country, RegistrationCountry::Other),
-                    "Expected {} to be Other registration", registration);
+                assert!(
+                    matches!(country, RegistrationCountry::Other),
+                    "Expected {} to be Other registration",
+                    registration
+                );
             }
         }
     }
