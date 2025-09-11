@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
+	import { Users, Search } from '@lucide/svelte';
 	import { ProgressRing } from '@skeletonlabs/skeleton-svelte';
 	import { ClubSelector } from '$lib';
 
@@ -163,11 +164,14 @@
 
 <div class="space-y-6">
 	<header class="space-y-4 text-center">
-		<h1 class="h1">Soaring Clubs</h1>
+		<h1 class="h1">
+			<Users />
+			Soaring Clubs
+		</h1>
 	</header>
 
 	<!-- Search Section -->
-	<section class="space-y-4 card p-6">
+	<section class="card space-y-4 p-6">
 		<h2 class="h2">Search Clubs</h2>
 
 		<!-- Search Method Toggle -->
@@ -197,7 +201,9 @@
 					placeholder="Type to search clubs or select from dropdown..."
 				/>
 				<div class="flex justify-center">
-					<button class="variant-filled-primary btn" on:click={searchClubs}> Search All Clubs </button>
+					<button class="variant-filled-primary btn" on:click={searchClubs}
+						><Search class="mr-1 h-4 w-4" /> Search All Clubs
+					</button>
 				</div>
 			</div>
 		{:else}
@@ -263,7 +269,7 @@
 
 			<div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
 				{#each clubs as club (club.id)}
-					<div class="space-y-4 card p-6">
+					<div class="card space-y-4 p-6">
 						<header class="card-header">
 							<h3 class="h3">{club.name}</h3>
 						</header>
