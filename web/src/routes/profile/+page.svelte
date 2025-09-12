@@ -31,7 +31,7 @@
 				<div class="space-y-3">
 					<div>
 						<div class="text-surface-700-200-token">
-                            Full name:
+							Full name:
 							{$auth.user.first_name}
 							{$auth.user.last_name}
 						</div>

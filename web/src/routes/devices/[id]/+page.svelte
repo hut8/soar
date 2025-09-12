@@ -2,10 +2,10 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { 
-		ArrowLeft, 
-		Radio, 
-		Plane, 
+	import {
+		ArrowLeft,
+		Radio,
+		Plane,
 		User,
 		Calendar,
 		Info,
@@ -62,7 +62,7 @@
 	function parseDeviceId(hexString: string): number | null {
 		const cleaned = hexString.replace(/[^a-fA-F0-9]/g, '');
 		if (cleaned.length !== 6) return null;
-		
+
 		const parsed = parseInt(cleaned, 16);
 		return isNaN(parsed) ? null : parsed;
 	}
@@ -90,11 +90,13 @@
 
 		try {
 			device = await serverCall<Device>(`/devices/${deviceId}`);
-			
+
 			// Try to load linked aircraft information
 			if (device.registration) {
 				try {
-					linkedAircraft = await serverCall<Aircraft>(`/aircraft/registration/${device.registration}`);
+					linkedAircraft = await serverCall<Aircraft>(
+						`/aircraft/registration/${device.registration}`
+					);
 				} catch (aircraftErr) {
 					// Aircraft not found is okay, don't show error for this
 					console.log('No aircraft found for registration:', device.registration);
@@ -128,11 +130,11 @@
 	<title>{device?.registration || 'Device'} ({deviceHexId}) - Device Details</title>
 </svelte:head>
 
-<div class="container mx-auto p-4 space-y-6 max-w-6xl">
+<div class="container mx-auto max-w-6xl space-y-6 p-4">
 	<!-- Back Button -->
 	<div class="flex items-center gap-4">
-		<button class="btn btn-sm variant-soft" on:click={goBack}>
-			<ArrowLeft class="w-4 h-4 mr-2" />
+		<button class="variant-soft btn btn-sm" on:click={goBack}>
+			<ArrowLeft class="mr-2 h-4 w-4" />
 			Back to Devices
 		</button>
 	</div>
@@ -154,9 +156,7 @@
 				<h3 class="h3">Error Loading Device</h3>
 				<p>{error}</p>
 				<div class="alert-actions">
-					<button class="btn variant-filled" on:click={loadDevice}>
-						Try Again
-					</button>
+					<button class="variant-filled btn" on:click={loadDevice}> Try Again </button>
 				</div>
 			</div>
 		</div>
@@ -167,24 +167,32 @@
 		<div class="space-y-6">
 			<!-- Header Card -->
 			<div class="card p-6">
-				<div class="flex items-start justify-between flex-wrap gap-4">
+				<div class="flex flex-wrap items-start justify-between gap-4">
 					<div class="flex-1">
-						<div class="flex items-center gap-3 mb-2">
-							<Radio class="w-8 h-8 text-primary-500" />
+						<div class="mb-2 flex items-center gap-3">
+							<Radio class="h-8 w-8 text-primary-500" />
 							<div>
 								<h1 class="h1">{device.registration}</h1>
-								<p class="text-surface-600-300-token font-mono text-sm">Device ID: {formatDeviceId(device.device_id)}</p>
+								<p class="text-surface-600-300-token font-mono text-sm">
+									Device ID: {formatDeviceId(device.device_id)}
+								</p>
 							</div>
 						</div>
-						
-						<div class="flex flex-wrap gap-2 mt-3">
-							<span class="badge {device.tracked ? 'variant-filled-success' : 'variant-filled-surface'}">
+
+						<div class="mt-3 flex flex-wrap gap-2">
+							<span
+								class="badge {device.tracked ? 'variant-filled-success' : 'variant-filled-surface'}"
+							>
 								{device.tracked ? 'Tracked' : 'Not Tracked'}
 							</span>
-							<span class="badge {device.identified ? 'variant-filled-primary' : 'variant-filled-surface'}">
+							<span
+								class="badge {device.identified
+									? 'variant-filled-primary'
+									: 'variant-filled-surface'}"
+							>
 								{device.identified ? 'Identified' : 'Unidentified'}
 							</span>
-							<span class="badge variant-soft">
+							<span class="variant-soft badge">
 								{device.device_type}
 							</span>
 						</div>
@@ -193,45 +201,45 @@
 			</div>
 
 			<!-- Main Content Grid -->
-			<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+			<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
 				<!-- Device Information -->
-				<div class="card p-6 space-y-4">
-					<h2 class="h2 flex items-center gap-2">
-						<Settings class="w-6 h-6" />
+				<div class="space-y-4 card p-6">
+					<h2 class="flex items-center gap-2 h2">
+						<Settings class="h-6 w-6" />
 						Device Information
 					</h2>
-					
+
 					<div class="space-y-3">
 						<div class="flex items-start gap-3">
-							<Info class="w-4 h-4 mt-1 text-surface-500" />
+							<Info class="mt-1 h-4 w-4 text-surface-500" />
 							<div>
-								<p class="text-sm text-surface-600-300-token mb-1">Device Type</p>
+								<p class="text-surface-600-300-token mb-1 text-sm">Device Type</p>
 								<p>{device.device_type}</p>
 							</div>
 						</div>
 
 						<div class="flex items-start gap-3">
-							<Plane class="w-4 h-4 mt-1 text-surface-500" />
+							<Plane class="mt-1 h-4 w-4 text-surface-500" />
 							<div>
-								<p class="text-sm text-surface-600-300-token mb-1">Aircraft Model</p>
+								<p class="text-surface-600-300-token mb-1 text-sm">Aircraft Model</p>
 								<p>{device.aircraft_model}</p>
 							</div>
 						</div>
 
 						{#if device.competition_number}
 							<div class="flex items-start gap-3">
-								<Activity class="w-4 h-4 mt-1 text-surface-500" />
+								<Activity class="mt-1 h-4 w-4 text-surface-500" />
 								<div>
-									<p class="text-sm text-surface-600-300-token mb-1">Competition Number</p>
+									<p class="text-surface-600-300-token mb-1 text-sm">Competition Number</p>
 									<p class="font-mono">{device.competition_number}</p>
 								</div>
 							</div>
 						{/if}
 
 						<div class="flex items-start gap-3">
-							<User class="w-4 h-4 mt-1 text-surface-500" />
+							<User class="mt-1 h-4 w-4 text-surface-500" />
 							<div>
-								<p class="text-sm text-surface-600-300-token mb-1">Owner</p>
+								<p class="text-surface-600-300-token mb-1 text-sm">Owner</p>
 								<p>{device.user_id ? 'Assigned to user' : 'Unassigned'}</p>
 							</div>
 						</div>
@@ -239,27 +247,27 @@
 				</div>
 
 				<!-- Linked Aircraft Information -->
-				<div class="card p-6 space-y-4">
-					<h2 class="h2 flex items-center gap-2">
-						<Plane class="w-6 h-6" />
+				<div class="space-y-4 card p-6">
+					<h2 class="flex items-center gap-2 h2">
+						<Plane class="h-6 w-6" />
 						Aircraft Registration
 					</h2>
-					
+
 					{#if linkedAircraft}
 						<div class="space-y-3">
 							<div class="flex items-start gap-3">
-								<Info class="w-4 h-4 mt-1 text-surface-500" />
+								<Info class="mt-1 h-4 w-4 text-surface-500" />
 								<div>
-									<p class="text-sm text-surface-600-300-token mb-1">Registration Number</p>
+									<p class="text-surface-600-300-token mb-1 text-sm">Registration Number</p>
 									<p class="font-mono font-semibold">{linkedAircraft.registration_number}</p>
 								</div>
 							</div>
 
 							{#if linkedAircraft.manufacturer_model_code}
 								<div class="flex items-start gap-3">
-									<Plane class="w-4 h-4 mt-1 text-surface-500" />
+									<Plane class="mt-1 h-4 w-4 text-surface-500" />
 									<div>
-										<p class="text-sm text-surface-600-300-token mb-1">Manufacturer Model</p>
+										<p class="text-surface-600-300-token mb-1 text-sm">Manufacturer Model</p>
 										<p>{linkedAircraft.manufacturer_model_code}</p>
 									</div>
 								</div>
@@ -267,9 +275,9 @@
 
 							{#if linkedAircraft.year_manufactured}
 								<div class="flex items-start gap-3">
-									<Calendar class="w-4 h-4 mt-1 text-surface-500" />
+									<Calendar class="mt-1 h-4 w-4 text-surface-500" />
 									<div>
-										<p class="text-sm text-surface-600-300-token mb-1">Year Manufactured</p>
+										<p class="text-surface-600-300-token mb-1 text-sm">Year Manufactured</p>
 										<p>{linkedAircraft.year_manufactured}</p>
 									</div>
 								</div>
@@ -277,9 +285,9 @@
 
 							{#if linkedAircraft.registrant_name}
 								<div class="flex items-start gap-3">
-									<User class="w-4 h-4 mt-1 text-surface-500" />
+									<User class="mt-1 h-4 w-4 text-surface-500" />
 									<div>
-										<p class="text-sm text-surface-600-300-token mb-1">Owner</p>
+										<p class="text-surface-600-300-token mb-1 text-sm">Owner</p>
 										<p>{linkedAircraft.registrant_name}</p>
 									</div>
 								</div>
@@ -287,43 +295,47 @@
 
 							{#if linkedAircraft.transponder_code}
 								<div class="flex items-start gap-3">
-									<Radio class="w-4 h-4 mt-1 text-surface-500" />
+									<Radio class="mt-1 h-4 w-4 text-surface-500" />
 									<div>
-										<p class="text-sm text-surface-600-300-token mb-1">Transponder Code</p>
-										<p class="font-mono">{linkedAircraft.transponder_code.toString(16).toUpperCase()}</p>
+										<p class="text-surface-600-300-token mb-1 text-sm">Transponder Code</p>
+										<p class="font-mono">
+											{linkedAircraft.transponder_code.toString(16).toUpperCase()}
+										</p>
 									</div>
 								</div>
 							{/if}
 						</div>
 					{:else}
-						<div class="text-center py-8 text-surface-600-300-token">
-							<Plane class="w-12 h-12 mx-auto mb-4 text-surface-400" />
+						<div class="text-surface-600-300-token py-8 text-center">
+							<Plane class="mx-auto mb-4 h-12 w-12 text-surface-400" />
 							<p>No aircraft registration found for {device.registration}</p>
-							<p class="text-sm mt-2">The device may be linked to an aircraft not in our database</p>
+							<p class="mt-2 text-sm">
+								The device may be linked to an aircraft not in our database
+							</p>
 						</div>
 					{/if}
 				</div>
 
 				<!-- Timestamps -->
-				<div class="card p-6 space-y-4">
-					<h2 class="h2 flex items-center gap-2">
-						<Calendar class="w-6 h-6" />
+				<div class="space-y-4 card p-6">
+					<h2 class="flex items-center gap-2 h2">
+						<Calendar class="h-6 w-6" />
 						Record Information
 					</h2>
-					
+
 					<div class="space-y-3">
 						<div class="flex items-start gap-3">
-							<Calendar class="w-4 h-4 mt-1 text-surface-500" />
+							<Calendar class="mt-1 h-4 w-4 text-surface-500" />
 							<div>
-								<p class="text-sm text-surface-600-300-token mb-1">Created</p>
+								<p class="text-surface-600-300-token mb-1 text-sm">Created</p>
 								<p>{formatDate(device.created_at)}</p>
 							</div>
 						</div>
 
 						<div class="flex items-start gap-3">
-							<Calendar class="w-4 h-4 mt-1 text-surface-500" />
+							<Calendar class="mt-1 h-4 w-4 text-surface-500" />
 							<div>
-								<p class="text-sm text-surface-600-300-token mb-1">Last Updated</p>
+								<p class="text-surface-600-300-token mb-1 text-sm">Last Updated</p>
 								<p>{formatDate(device.updated_at)}</p>
 							</div>
 						</div>

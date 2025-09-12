@@ -11,7 +11,7 @@
 <div class="space-y-8">
 	<!-- Features Section -->
 	<section class="grid grid-cols-1 gap-6 md:grid-cols-2">
-		<div class="card space-y-4 p-6">
+		<div class="space-y-4 card p-6">
 			<a href={clubsPath} class="variant-filled-primary btn">Browse Clubs</a>
 		</div>
 	</section>

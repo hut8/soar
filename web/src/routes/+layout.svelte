@@ -57,7 +57,7 @@
 	<AppBar>
 		{#snippet lead()}
 			<a href={base} class="flex items-center space-x-2">
-				<div class="text-primary-500 text-xl font-bold">
+				<div class="text-xl font-bold text-primary-500">
 					<PlaneTakeoff />
 					Glider.flights
 				</div>
@@ -79,7 +79,7 @@
 			{#if $auth.isAuthenticated && $auth.user}
 				<div class="user-menu relative">
 					<button
-						class="variant-ghost-surface btn btn-sm flex items-center space-x-2"
+						class="variant-ghost-surface btn flex items-center space-x-2 btn-sm"
 						onclick={() => (showUserMenu = !showUserMenu)}
 					>
 						<Avatar
@@ -92,18 +92,18 @@
 					</button>
 
 					{#if showUserMenu}
-						<div class="card absolute right-0 top-12 z-10 w-48 p-2">
+						<div class="absolute top-12 right-0 z-10 w-48 card p-2">
 							<div class="space-y-1">
 								<div class="px-3 py-2 text-sm">
 									<div class="font-medium">{$auth.user.first_name} {$auth.user.last_name}</div>
 									<div class="text-surface-600-300-token">{$auth.user.email}</div>
 								</div>
 								<hr class="!my-2" />
-								<a href={profilePath} class="variant-ghost-surface btn btn-sm w-full justify-start">
+								<a href={profilePath} class="variant-ghost-surface btn w-full justify-start btn-sm">
 									👤 Profile
 								</a>
 								<button
-									class="variant-ghost-error btn btn-sm w-full justify-start"
+									class="variant-ghost-error btn w-full justify-start btn-sm"
 									onclick={handleLogout}
 								>
 									Sign out

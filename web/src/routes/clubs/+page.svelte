@@ -150,30 +150,30 @@
 	<title>Soaring Clubs - Glider Flights</title>
 </svelte:head>
 
-<div class="container mx-auto p-4 space-y-8">
-	<header class="text-center space-y-2">
-		<h1 class="h1 flex items-center justify-center gap-2">
-			<Users class="w-8 h-8" />
+<div class="container mx-auto space-y-8 p-4">
+	<header class="space-y-2 text-center">
+		<h1 class="flex items-center justify-center gap-2 h1">
+			<Users class="h-8 w-8" />
 			Soaring Clubs
 		</h1>
 	</header>
 
 	<!-- Search Section -->
-	<section class="card p-6 space-y-6">
+	<section class="space-y-6 card p-6">
 		<!-- Search Method Toggle -->
 		<div class="flex justify-center gap-2">
 			<button
 				class="btn btn-sm {!locationSearch ? 'preset-filled' : 'preset-soft'}"
 				on:click={() => (locationSearch = false)}
 			>
-				<Search class="w-4 h-4 mr-2" />
+				<Search class="mr-2 h-4 w-4" />
 				Name Search
 			</button>
 			<button
 				class="btn btn-sm {locationSearch ? 'preset-filled' : 'preset-soft'}"
 				on:click={() => (locationSearch = true)}
 			>
-				<MapPinHouse class="w-4 h-4 mr-2" />
+				<MapPinHouse class="mr-2 h-4 w-4" />
 				Location Search
 			</button>
 		</div>
@@ -181,7 +181,7 @@
 		<!-- Search Forms -->
 		{#if !locationSearch}
 			<div class="space-y-4">
-				<div class="max-w-2xl mx-auto">
+				<div class="mx-auto max-w-2xl">
 					<ClubSelector
 						value={selectedClub}
 						onValueChange={handleClubSelection}
@@ -193,7 +193,7 @@
 			</div>
 		{:else}
 			<div class="space-y-4">
-				<div class="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-2xl mx-auto">
+				<div class="mx-auto grid max-w-2xl grid-cols-1 gap-4 md:grid-cols-3">
 					<label class="label">
 						<span>Latitude</span>
 						<input
@@ -228,7 +228,7 @@
 				</div>
 				<div class="flex justify-center">
 					<button class="btn preset-filled-primary-500" on:click={getCurrentLocation}>
-						<MapPinHouse class="w-4 h-4 mr-2" />
+						<MapPinHouse class="mr-2 h-4 w-4" />
 						Use My Location
 					</button>
 				</div>
@@ -261,42 +261,46 @@
 		<section class="space-y-6">
 			<header class="text-center">
 				<h2 class="h2">Search Results</h2>
-				<p class="text-surface-500-400-token">{clubs.length} club{clubs.length === 1 ? '' : 's'} found</p>
+				<p class="text-surface-500-400-token">
+					{clubs.length} club{clubs.length === 1 ? '' : 's'} found
+				</p>
 			</header>
 
-			<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+			<div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
 				{#each clubs as club (club.id)}
-					<article class="card p-6 space-y-4 hover:scale-[1.02] transition-transform duration-200">
+					<article class="space-y-4 card p-6 transition-transform duration-200 hover:scale-[1.02]">
 						<header>
 							<h3 class="h3 text-primary-500">{club.name}</h3>
 						</header>
 
 						<div class="space-y-3 text-sm">
 							<div class="flex items-start gap-3">
-								<MapPinHouse class="w-4 h-4 mt-0.5 text-surface-500" />
+								<MapPinHouse class="mt-0.5 h-4 w-4 text-surface-500" />
 								<span class="flex-1">{formatAddress(club)}</span>
 							</div>
 
 							{#if club.base_location}
 								<div class="flex items-center gap-3">
-									<Navigation class="w-4 h-4 text-surface-500" />
+									<Navigation class="h-4 w-4 text-surface-500" />
 									<span class="font-mono text-xs">
-										{club.base_location.latitude.toFixed(4)}, {club.base_location.longitude.toFixed(4)}
+										{club.base_location.latitude.toFixed(4)}, {club.base_location.longitude.toFixed(
+											4
+										)}
 									</span>
 								</div>
 							{/if}
 
 							{#if club.home_base_airport_id}
 								<div class="flex items-center gap-3">
-									<Plane class="w-4 h-4 text-surface-500" />
+									<Plane class="h-4 w-4 text-surface-500" />
 									<span>Airport ID: {club.home_base_airport_id}</span>
 								</div>
 							{/if}
 						</div>
 
-						<footer class="pt-4 border-t border-surface-200-700-token">
-							<a href="/clubs/{club.id}" class="btn btn-sm variant-soft w-full">
-								<ExternalLink class="w-4 h-4 mr-2" />
+						<footer class="border-surface-200-700-token border-t pt-4">
+							<a href="/clubs/{club.id}" class="variant-soft btn w-full btn-sm">
+								<ExternalLink class="mr-2 h-4 w-4" />
 								View Details
 							</a>
 						</footer>
@@ -305,8 +309,8 @@
 			</div>
 		</section>
 	{:else if !loading && !error && clubs.length === 0 && (searchQuery || (latitude && longitude))}
-		<div class="card p-12 text-center space-y-4">
-			<Search class="w-16 h-16 mx-auto text-surface-400 mb-4" />
+		<div class="space-y-4 card p-12 text-center">
+			<Search class="mx-auto mb-4 h-16 w-16 text-surface-400" />
 			<div class="space-y-2">
 				<h3 class="h3">No clubs found</h3>
 				<p class="text-surface-500-400-token">
