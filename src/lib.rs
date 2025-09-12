@@ -37,6 +37,7 @@ pub mod runways_repo;
 pub mod users;
 pub mod users_repo;
 pub mod web;
+pub mod icao;
 
 pub use aprs_client::{
     AprsClient, AprsClientConfig, AprsClientConfigBuilder, FixProcessor, MessageProcessor,
