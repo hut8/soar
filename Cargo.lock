@@ -396,6 +396,7 @@ dependencies = [
  "num-bigint",
  "num-integer",
  "num-traits",
+ "serde",
 ]
 
 [[package]]
@@ -3147,6 +3148,7 @@ dependencies = [
  "axum",
  "axum-extra",
  "axum-tungstenite",
+ "bigdecimal",
  "chrono",
  "clap",
  "diesel",

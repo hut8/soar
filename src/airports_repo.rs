@@ -1,374 +1,246 @@
 use anyhow::Result;
-use num_traits::{FromPrimitive, ToPrimitive};
-use sqlx::PgPool;
-use sqlx::types::BigDecimal;
-use tracing::{info, warn};
+use diesel::prelude::*;
+use diesel::upsert::excluded;
+use tracing::info;
 
-use crate::airports::Airport;
+use crate::airports::{Airport, AirportModel, NewAirportModel};
+use crate::web::DieselPgPool;
 
-/// Helper function to convert Option<f64> to Option<BigDecimal>
-fn f64_to_bigdecimal(value: Option<f64>) -> Option<BigDecimal> {
-    value.and_then(BigDecimal::from_f64)
+#[derive(QueryableByName, Debug)]
+struct AirportWithDistance {
+    #[diesel(sql_type = diesel::sql_types::Integer)]
+    id: i32,
+    #[diesel(sql_type = diesel::sql_types::Varchar)]
+    ident: String,
+    #[diesel(sql_type = diesel::sql_types::Varchar)]
+    airport_type: String,
+    #[diesel(sql_type = diesel::sql_types::Varchar)]
+    name: String,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float8>)]
+    latitude_deg: Option<f64>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float8>)]
+    longitude_deg: Option<f64>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Integer>)]
+    elevation_ft: Option<i32>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    continent: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    iso_country: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    iso_region: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    municipality: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Bool)]
+    scheduled_service: bool,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    icao_code: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    iata_code: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    gps_code: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    local_code: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+    home_link: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+    wikipedia_link: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+    keywords: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float8>)]
+    distance_meters: Option<f64>,
 }
 
-/// Helper function to convert Option<BigDecimal> to Option<f64>
-fn bigdecimal_to_f64(value: Option<BigDecimal>) -> Option<f64> {
-    value.and_then(|v| v.to_f64())
+impl From<AirportWithDistance> for Airport {
+    fn from(awd: AirportWithDistance) -> Self {
+        Self {
+            id: awd.id,
+            ident: awd.ident,
+            airport_type: awd.airport_type,
+            name: awd.name,
+            latitude_deg: awd.latitude_deg,
+            longitude_deg: awd.longitude_deg,
+            elevation_ft: awd.elevation_ft,
+            continent: awd.continent,
+            iso_country: awd.iso_country,
+            iso_region: awd.iso_region,
+            municipality: awd.municipality,
+            scheduled_service: awd.scheduled_service,
+            icao_code: awd.icao_code,
+            iata_code: awd.iata_code,
+            gps_code: awd.gps_code,
+            local_code: awd.local_code,
+            home_link: awd.home_link,
+            wikipedia_link: awd.wikipedia_link,
+            keywords: awd.keywords,
+        }
+    }
 }
 
 pub struct AirportsRepository {
-    pool: PgPool,
+    pool: DieselPgPool,
 }
 
 impl AirportsRepository {
-    pub fn new(pool: PgPool) -> Self {
+    pub fn new(pool: DieselPgPool) -> Self {
         Self { pool }
     }
 
     /// Upsert airports into the database
     /// This will insert new airports or update existing ones based on the primary key (id)
-    pub async fn upsert_airports<I>(&self, airports: I) -> Result<usize>
+    pub async fn upsert_airports<I>(&self, airports_list: I) -> Result<usize>
     where
         I: IntoIterator<Item = Airport>,
     {
-        let airports_vec: Vec<Airport> = airports.into_iter().collect();
-        let mut upserted_count = 0;
-        let mut failed_count = 0;
+        use crate::schema::airports::dsl::*;
+        
+        let airports_vec: Vec<Airport> = airports_list.into_iter().collect();
+        let new_airports: Vec<NewAirportModel> = airports_vec.into_iter().map(|a| a.into()).collect();
+        
+        let pool = self.pool.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            
+            // Use Diesel's on_conflict for upserts
+            let upserted_count = diesel::insert_into(airports)
+                .values(&new_airports)
+                .on_conflict(id)
+                .do_update()
+                .set((
+                    ident.eq(excluded(ident)),
+                    airport_type.eq(excluded(airport_type)),
+                    name.eq(excluded(name)),
+                    latitude_deg.eq(excluded(latitude_deg)),
+                    longitude_deg.eq(excluded(longitude_deg)),
+                    elevation_ft.eq(excluded(elevation_ft)),
+                    continent.eq(excluded(continent)),
+                    iso_country.eq(excluded(iso_country)),
+                    iso_region.eq(excluded(iso_region)),
+                    municipality.eq(excluded(municipality)),
+                    scheduled_service.eq(excluded(scheduled_service)),
+                    icao_code.eq(excluded(icao_code)),
+                    iata_code.eq(excluded(iata_code)),
+                    gps_code.eq(excluded(gps_code)),
+                    local_code.eq(excluded(local_code)),
+                    home_link.eq(excluded(home_link)),
+                    wikipedia_link.eq(excluded(wikipedia_link)),
+                    keywords.eq(excluded(keywords)),
+                    updated_at.eq(diesel::dsl::now),
+                ))
+                .execute(&mut conn)?;
+                
+            Ok::<usize, anyhow::Error>(upserted_count)
+        }).await??;
 
-        for airport in airports_vec {
-            // Process each airport in its own transaction to avoid transaction abort issues
-            let mut transaction = self.pool.begin().await?;
-
-            // Use ON CONFLICT to handle upserts
-            let result = sqlx::query!(
-                r#"
-                INSERT INTO airports (
-                    id,
-                    ident,
-                    type,
-                    name,
-                    latitude_deg,
-                    longitude_deg,
-                    elevation_ft,
-                    continent,
-                    iso_country,
-                    iso_region,
-                    municipality,
-                    scheduled_service,
-                    icao_code,
-                    iata_code,
-                    gps_code,
-                    local_code,
-                    home_link,
-                    wikipedia_link,
-                    keywords
-                )
-                VALUES (
-                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
-                )
-                ON CONFLICT (id)
-                DO UPDATE SET
-                    ident = EXCLUDED.ident,
-                    type = EXCLUDED.type,
-                    name = EXCLUDED.name,
-                    latitude_deg = EXCLUDED.latitude_deg,
-                    longitude_deg = EXCLUDED.longitude_deg,
-                    elevation_ft = EXCLUDED.elevation_ft,
-                    continent = EXCLUDED.continent,
-                    iso_country = EXCLUDED.iso_country,
-                    iso_region = EXCLUDED.iso_region,
-                    municipality = EXCLUDED.municipality,
-                    scheduled_service = EXCLUDED.scheduled_service,
-                    icao_code = EXCLUDED.icao_code,
-                    iata_code = EXCLUDED.iata_code,
-                    gps_code = EXCLUDED.gps_code,
-                    local_code = EXCLUDED.local_code,
-                    home_link = EXCLUDED.home_link,
-                    wikipedia_link = EXCLUDED.wikipedia_link,
-                    keywords = EXCLUDED.keywords,
-                    updated_at = NOW()
-                "#,
-                airport.id,
-                airport.ident,
-                airport.airport_type,
-                airport.name,
-                f64_to_bigdecimal(airport.latitude_deg),
-                f64_to_bigdecimal(airport.longitude_deg),
-                airport.elevation_ft,
-                airport.continent,
-                airport.iso_country,
-                airport.iso_region,
-                airport.municipality,
-                airport.scheduled_service,
-                airport.icao_code,
-                airport.iata_code,
-                airport.gps_code,
-                airport.local_code,
-                airport.home_link,
-                airport.wikipedia_link,
-                airport.keywords
-            )
-            .execute(&mut *transaction)
-            .await;
-
-            match result {
-                Ok(_) => {
-                    // Commit the transaction for this airport
-                    match transaction.commit().await {
-                        Ok(_) => {
-                            upserted_count += 1;
-                        }
-                        Err(e) => {
-                            warn!(
-                                "Failed to commit transaction for airport {}: {}",
-                                airport.ident, e
-                            );
-                            failed_count += 1;
-                        }
-                    }
-                }
-                Err(e) => {
-                    warn!(
-                        "Failed to upsert airport {}: {}\nAirport data: {:#?}",
-                        airport.ident, e, airport
-                    );
-                    transaction.rollback().await?;
-                    failed_count += 1;
-                }
-            }
-        }
-
-        if failed_count > 0 {
-            warn!("Failed to upsert {} airports", failed_count);
-        }
-        info!("Successfully upserted {} airports", upserted_count);
-
-        Ok(upserted_count)
+        info!("Successfully upserted {} airports", result);
+        Ok(result)
     }
 
     /// Get the total count of airports in the database
     pub async fn get_airport_count(&self) -> Result<i64> {
-        let result = sqlx::query!("SELECT COUNT(*) as count FROM airports")
-            .fetch_one(&self.pool)
-            .await?;
+        use crate::schema::airports::dsl::*;
+        
+        let pool = self.pool.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            let count = airports.count().get_result::<i64>(&mut conn)?;
+            Ok::<i64, anyhow::Error>(count)
+        }).await??;
 
-        Ok(result.count.unwrap_or(0))
+        Ok(result)
     }
 
     /// Get an airport by its ID
-    pub async fn get_airport_by_id(&self, id: i32) -> Result<Option<Airport>> {
-        let result = sqlx::query!(
-            r#"
-            SELECT id, ident, type, name, latitude_deg, longitude_deg, elevation_ft,
-                   continent, iso_country, iso_region, municipality, scheduled_service,
-                   icao_code, iata_code, gps_code, local_code, home_link, wikipedia_link, keywords
-            FROM airports
-            WHERE id = $1
-            "#,
-            id
-        )
-        .fetch_optional(&self.pool)
-        .await?;
+    pub async fn get_airport_by_id(&self, airport_id: i32) -> Result<Option<Airport>> {
+        use crate::schema::airports::dsl::*;
+        
+        let pool = self.pool.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            let airport_model: Option<AirportModel> = airports
+                .filter(id.eq(airport_id))
+                .first::<AirportModel>(&mut conn)
+                .optional()?;
+                
+            Ok::<Option<AirportModel>, anyhow::Error>(airport_model)
+        }).await??;
 
-        if let Some(row) = result {
-            Ok(Some(Airport {
-                id: row.id,
-                ident: row.ident,
-                airport_type: row.r#type,
-                name: row.name,
-                latitude_deg: bigdecimal_to_f64(row.latitude_deg),
-                longitude_deg: bigdecimal_to_f64(row.longitude_deg),
-                elevation_ft: row.elevation_ft,
-                continent: row.continent,
-                iso_country: row.iso_country,
-                iso_region: row.iso_region,
-                municipality: row.municipality,
-                scheduled_service: row.scheduled_service,
-                icao_code: row.icao_code,
-                iata_code: row.iata_code,
-                gps_code: row.gps_code,
-                local_code: row.local_code,
-                home_link: row.home_link,
-                wikipedia_link: row.wikipedia_link,
-                keywords: row.keywords,
-            }))
-        } else {
-            Ok(None)
-        }
+        Ok(result.map(|model| model.into()))
     }
 
     /// Get an airport by its identifier (ICAO or local code)
-    pub async fn get_airport_by_ident(&self, ident: &str) -> Result<Option<Airport>> {
-        let result = sqlx::query!(
-            r#"
-            SELECT id, ident, type, name, latitude_deg, longitude_deg, elevation_ft,
-                   continent, iso_country, iso_region, municipality, scheduled_service,
-                   icao_code, iata_code, gps_code, local_code, home_link, wikipedia_link, keywords
-            FROM airports
-            WHERE ident = $1
-            "#,
-            ident
-        )
-        .fetch_optional(&self.pool)
-        .await?;
+    pub async fn get_airport_by_ident(&self, airport_ident: &str) -> Result<Option<Airport>> {
+        use crate::schema::airports::dsl::*;
+        
+        let airport_ident = airport_ident.to_string();
+        let pool = self.pool.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            let airport_model: Option<AirportModel> = airports
+                .filter(ident.eq(&airport_ident))
+                .first::<AirportModel>(&mut conn)
+                .optional()?;
+                
+            Ok::<Option<AirportModel>, anyhow::Error>(airport_model)
+        }).await??;
 
-        if let Some(row) = result {
-            Ok(Some(Airport {
-                id: row.id,
-                ident: row.ident,
-                airport_type: row.r#type,
-                name: row.name,
-                latitude_deg: bigdecimal_to_f64(row.latitude_deg),
-                longitude_deg: bigdecimal_to_f64(row.longitude_deg),
-                elevation_ft: row.elevation_ft,
-                continent: row.continent,
-                iso_country: row.iso_country,
-                iso_region: row.iso_region,
-                municipality: row.municipality,
-                scheduled_service: row.scheduled_service,
-                icao_code: row.icao_code,
-                iata_code: row.iata_code,
-                gps_code: row.gps_code,
-                local_code: row.local_code,
-                home_link: row.home_link,
-                wikipedia_link: row.wikipedia_link,
-                keywords: row.keywords,
-            }))
-        } else {
-            Ok(None)
-        }
+        Ok(result.map(|model| model.into()))
     }
 
     /// Search airports by name (case-insensitive partial match)
-    pub async fn search_by_name(&self, name: &str) -> Result<Vec<Airport>> {
-        let results = sqlx::query!(
-            r#"
-            SELECT id, ident, type, name, latitude_deg, longitude_deg, elevation_ft,
-                   continent, iso_country, iso_region, municipality, scheduled_service,
-                   icao_code, iata_code, gps_code, local_code, home_link, wikipedia_link, keywords
-            FROM airports
-            WHERE name ILIKE $1
-            ORDER BY name, ident
-            "#,
-            format!("%{}%", name)
-        )
-        .fetch_all(&self.pool)
-        .await?;
+    pub async fn search_by_name(&self, search_name: &str) -> Result<Vec<Airport>> {
+        use crate::schema::airports::dsl::*;
+        
+        let search_pattern = format!("%{}%", search_name);
+        let pool = self.pool.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            let airport_models: Vec<AirportModel> = airports
+                .filter(name.ilike(&search_pattern))
+                .order((name, ident))
+                .load::<AirportModel>(&mut conn)?;
+                
+            Ok::<Vec<AirportModel>, anyhow::Error>(airport_models)
+        }).await??;
 
-        let mut airports = Vec::new();
-        for row in results {
-            airports.push(Airport {
-                id: row.id,
-                ident: row.ident,
-                airport_type: row.r#type,
-                name: row.name,
-                latitude_deg: bigdecimal_to_f64(row.latitude_deg),
-                longitude_deg: bigdecimal_to_f64(row.longitude_deg),
-                elevation_ft: row.elevation_ft,
-                continent: row.continent,
-                iso_country: row.iso_country,
-                iso_region: row.iso_region,
-                municipality: row.municipality,
-                scheduled_service: row.scheduled_service,
-                icao_code: row.icao_code,
-                iata_code: row.iata_code,
-                gps_code: row.gps_code,
-                local_code: row.local_code,
-                home_link: row.home_link,
-                wikipedia_link: row.wikipedia_link,
-                keywords: row.keywords,
-            });
-        }
-
-        Ok(airports)
+        Ok(result.into_iter().map(|model| model.into()).collect())
     }
 
     /// Search airports by country
-    pub async fn search_by_country(&self, iso_country: &str) -> Result<Vec<Airport>> {
-        let results = sqlx::query!(
-            r#"
-            SELECT id, ident, type, name, latitude_deg, longitude_deg, elevation_ft,
-                   continent, iso_country, iso_region, municipality, scheduled_service,
-                   icao_code, iata_code, gps_code, local_code, home_link, wikipedia_link, keywords
-            FROM airports
-            WHERE iso_country = $1
-            ORDER BY name, ident
-            "#,
-            iso_country
-        )
-        .fetch_all(&self.pool)
-        .await?;
+    pub async fn search_by_country(&self, country_code: &str) -> Result<Vec<Airport>> {
+        use crate::schema::airports::dsl::*;
+        
+        let country_code = country_code.to_string();
+        let pool = self.pool.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            let airport_models: Vec<AirportModel> = airports
+                .filter(iso_country.eq(&country_code))
+                .order((name, ident))
+                .load::<AirportModel>(&mut conn)?;
+                
+            Ok::<Vec<AirportModel>, anyhow::Error>(airport_models)
+        }).await??;
 
-        let mut airports = Vec::new();
-        for row in results {
-            airports.push(Airport {
-                id: row.id,
-                ident: row.ident,
-                airport_type: row.r#type,
-                name: row.name,
-                latitude_deg: bigdecimal_to_f64(row.latitude_deg),
-                longitude_deg: bigdecimal_to_f64(row.longitude_deg),
-                elevation_ft: row.elevation_ft,
-                continent: row.continent,
-                iso_country: row.iso_country,
-                iso_region: row.iso_region,
-                municipality: row.municipality,
-                scheduled_service: row.scheduled_service,
-                icao_code: row.icao_code,
-                iata_code: row.iata_code,
-                gps_code: row.gps_code,
-                local_code: row.local_code,
-                home_link: row.home_link,
-                wikipedia_link: row.wikipedia_link,
-                keywords: row.keywords,
-            });
-        }
-
-        Ok(airports)
+        Ok(result.into_iter().map(|model| model.into()).collect())
     }
 
     /// Search airports by type
-    pub async fn search_by_type(&self, airport_type: &str) -> Result<Vec<Airport>> {
-        let results = sqlx::query!(
-            r#"
-            SELECT id, ident, type, name, latitude_deg, longitude_deg, elevation_ft,
-                   continent, iso_country, iso_region, municipality, scheduled_service,
-                   icao_code, iata_code, gps_code, local_code, home_link, wikipedia_link, keywords
-            FROM airports
-            WHERE type = $1
-            ORDER BY name, ident
-            "#,
-            airport_type
-        )
-        .fetch_all(&self.pool)
-        .await?;
+    pub async fn search_by_type(&self, type_filter: &str) -> Result<Vec<Airport>> {
+        use crate::schema::airports::dsl::*;
+        
+        let type_filter = type_filter.to_string();
+        let pool = self.pool.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            let airport_models: Vec<AirportModel> = airports
+                .filter(airport_type.eq(&type_filter))
+                .order((name, ident))
+                .load::<AirportModel>(&mut conn)?;
+                
+            Ok::<Vec<AirportModel>, anyhow::Error>(airport_models)
+        }).await??;
 
-        let mut airports = Vec::new();
-        for row in results {
-            airports.push(Airport {
-                id: row.id,
-                ident: row.ident,
-                airport_type: row.r#type,
-                name: row.name,
-                latitude_deg: bigdecimal_to_f64(row.latitude_deg),
-                longitude_deg: bigdecimal_to_f64(row.longitude_deg),
-                elevation_ft: row.elevation_ft,
-                continent: row.continent,
-                iso_country: row.iso_country,
-                iso_region: row.iso_region,
-                municipality: row.municipality,
-                scheduled_service: row.scheduled_service,
-                icao_code: row.icao_code,
-                iata_code: row.iata_code,
-                gps_code: row.gps_code,
-                local_code: row.local_code,
-                home_link: row.home_link,
-                wikipedia_link: row.wikipedia_link,
-                keywords: row.keywords,
-            });
-        }
-
-        Ok(airports)
+        Ok(result.into_iter().map(|model| model.into()).collect())
     }
 
     /// Find nearest airports to a given point using PostGIS
@@ -380,158 +252,171 @@ impl AirportsRepository {
         max_distance_meters: f64,
         limit: i64,
     ) -> Result<Vec<(Airport, f64)>> {
-        let results = sqlx::query!(
-            r#"
-            SELECT id, ident, type, name, latitude_deg, longitude_deg, elevation_ft,
-                   continent, iso_country, iso_region, municipality, scheduled_service,
-                   icao_code, iata_code, gps_code, local_code, home_link, wikipedia_link, keywords,
-                   ST_Distance(location, ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography) as distance_meters
-            FROM airports
-            WHERE location IS NOT NULL
-              AND ST_DWithin(location, ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography, $3)
-            ORDER BY location <-> ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography
-            LIMIT $4
-            "#,
-            latitude,
-            longitude,
-            max_distance_meters,
-            limit
-        )
-        .fetch_all(&self.pool)
-        .await?;
+        let pool = self.pool.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            
+            // Use raw SQL for PostGIS functions since Diesel doesn't have native support
+            let sql = r#"
+                SELECT id, ident, type as airport_type, name, latitude_deg, longitude_deg, elevation_ft,
+                       continent, iso_country, iso_region, municipality, scheduled_service,
+                       icao_code, iata_code, gps_code, local_code, home_link, wikipedia_link, keywords,
+                       ST_Distance(location, ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography) as distance_meters
+                FROM airports
+                WHERE location IS NOT NULL
+                  AND ST_DWithin(location, ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography, $3)
+                ORDER BY location <-> ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography
+                LIMIT $4
+            "#;
+            
+            let results: Vec<AirportWithDistance> = diesel::sql_query(sql)
+                .bind::<diesel::sql_types::Double, _>(latitude)
+                .bind::<diesel::sql_types::Double, _>(longitude)
+                .bind::<diesel::sql_types::Double, _>(max_distance_meters)
+                .bind::<diesel::sql_types::BigInt, _>(limit)
+                .load::<AirportWithDistance>(&mut conn)?;
+                
+            Ok::<Vec<AirportWithDistance>, anyhow::Error>(results)
+        }).await??;
 
-        let mut airports_with_distance = Vec::new();
-        for row in results {
-            let airport = Airport {
-                id: row.id,
-                ident: row.ident,
-                airport_type: row.r#type,
-                name: row.name,
-                latitude_deg: bigdecimal_to_f64(row.latitude_deg),
-                longitude_deg: bigdecimal_to_f64(row.longitude_deg),
-                elevation_ft: row.elevation_ft,
-                continent: row.continent,
-                iso_country: row.iso_country,
-                iso_region: row.iso_region,
-                municipality: row.municipality,
-                scheduled_service: row.scheduled_service,
-                icao_code: row.icao_code,
-                iata_code: row.iata_code,
-                gps_code: row.gps_code,
-                local_code: row.local_code,
-                home_link: row.home_link,
-                wikipedia_link: row.wikipedia_link,
-                keywords: row.keywords,
-            };
-            let distance = row.distance_meters.unwrap_or(0.0);
-            airports_with_distance.push((airport, distance));
-        }
+        let airports_with_distance: Vec<(Airport, f64)> = result
+            .into_iter()
+            .map(|awd| {
+                let distance = awd.distance_meters.unwrap_or(0.0);
+                let airport: Airport = awd.into();
+                (airport, distance)
+            })
+            .collect();
 
         Ok(airports_with_distance)
     }
 
     /// Get airports with scheduled service only
     pub async fn get_scheduled_service_airports(&self) -> Result<Vec<Airport>> {
-        let results = sqlx::query!(
-            r#"
-            SELECT id, ident, type, name, latitude_deg, longitude_deg, elevation_ft,
-                   continent, iso_country, iso_region, municipality, scheduled_service,
-                   icao_code, iata_code, gps_code, local_code, home_link, wikipedia_link, keywords
-            FROM airports
-            WHERE scheduled_service = true
-            ORDER BY name, ident
-            "#
-        )
-        .fetch_all(&self.pool)
-        .await?;
+        use crate::schema::airports::dsl::*;
+        
+        let pool = self.pool.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            let airport_models: Vec<AirportModel> = airports
+                .filter(scheduled_service.eq(true))
+                .order((name, ident))
+                .load::<AirportModel>(&mut conn)?;
+                
+            Ok::<Vec<AirportModel>, anyhow::Error>(airport_models)
+        }).await??;
 
-        let mut airports = Vec::new();
-        for row in results {
-            airports.push(Airport {
-                id: row.id,
-                ident: row.ident,
-                airport_type: row.r#type,
-                name: row.name,
-                latitude_deg: bigdecimal_to_f64(row.latitude_deg),
-                longitude_deg: bigdecimal_to_f64(row.longitude_deg),
-                elevation_ft: row.elevation_ft,
-                continent: row.continent,
-                iso_country: row.iso_country,
-                iso_region: row.iso_region,
-                municipality: row.municipality,
-                scheduled_service: row.scheduled_service,
-                icao_code: row.icao_code,
-                iata_code: row.iata_code,
-                gps_code: row.gps_code,
-                local_code: row.local_code,
-                home_link: row.home_link,
-                wikipedia_link: row.wikipedia_link,
-                keywords: row.keywords,
-            });
-        }
-
-        Ok(airports)
+        Ok(result.into_iter().map(|model| model.into()).collect())
     }
 
     /// Fuzzy search airports by name, ICAO, IATA, or ident using trigram similarity
     /// Returns airports ordered by similarity score (best matches first)
     pub async fn fuzzy_search(&self, query: &str, limit: Option<i64>) -> Result<Vec<Airport>> {
-        let limit = limit.unwrap_or(20);
         let query_upper = query.to_uppercase();
+        let search_limit = limit.unwrap_or(20);
+        
+        let pool = self.pool.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            
+            // Use raw SQL for trigram similarity functions
+            let sql = r#"
+                SELECT id, ident, type as airport_type, name, latitude_deg, longitude_deg, elevation_ft,
+                       continent, iso_country, iso_region, municipality, scheduled_service,
+                       icao_code, iata_code, gps_code, local_code, home_link, wikipedia_link, keywords,
+                       GREATEST(
+                           SIMILARITY(UPPER(name), $1),
+                           COALESCE(SIMILARITY(UPPER(icao_code), $1), 0),
+                           COALESCE(SIMILARITY(UPPER(iata_code), $1), 0),
+                           SIMILARITY(UPPER(ident), $1)
+                       ) as similarity_score
+                FROM airports
+                WHERE (
+                    SIMILARITY(UPPER(name), $1) > 0.05 OR
+                    COALESCE(SIMILARITY(UPPER(icao_code), $1), 0) > 0.05 OR  
+                    COALESCE(SIMILARITY(UPPER(iata_code), $1), 0) > 0.05 OR
+                    SIMILARITY(UPPER(ident), $1) > 0.05
+                )
+                ORDER BY similarity_score DESC, name
+                LIMIT $2
+            "#;
+            
+            // Create a custom struct for this query result
+            #[derive(QueryableByName, Debug)]
+            struct AirportWithSimilarity {
+                #[diesel(sql_type = diesel::sql_types::Integer)]
+                id: i32,
+                #[diesel(sql_type = diesel::sql_types::Varchar)]
+                ident: String,
+                #[diesel(sql_type = diesel::sql_types::Varchar)]
+                airport_type: String,
+                #[diesel(sql_type = diesel::sql_types::Varchar)]
+                name: String,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float8>)]
+                latitude_deg: Option<f64>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float8>)]
+                longitude_deg: Option<f64>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Integer>)]
+                elevation_ft: Option<i32>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+                continent: Option<String>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+                iso_country: Option<String>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+                iso_region: Option<String>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+                municipality: Option<String>,
+                #[diesel(sql_type = diesel::sql_types::Bool)]
+                scheduled_service: bool,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+                icao_code: Option<String>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+                iata_code: Option<String>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+                gps_code: Option<String>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+                local_code: Option<String>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+                home_link: Option<String>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+                wikipedia_link: Option<String>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+                keywords: Option<String>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float8>)]
+                similarity_score: Option<f64>,
+            }
+            
+            let results: Vec<AirportWithSimilarity> = diesel::sql_query(sql)
+                .bind::<diesel::sql_types::Varchar, _>(&query_upper)
+                .bind::<diesel::sql_types::BigInt, _>(search_limit)
+                .load::<AirportWithSimilarity>(&mut conn)?;
+                
+            let airports: Vec<Airport> = results.into_iter().map(|aws| Airport {
+                id: aws.id,
+                ident: aws.ident,
+                airport_type: aws.airport_type,
+                name: aws.name,
+                latitude_deg: aws.latitude_deg,
+                longitude_deg: aws.longitude_deg,
+                elevation_ft: aws.elevation_ft,
+                continent: aws.continent,
+                iso_country: aws.iso_country,
+                iso_region: aws.iso_region,
+                municipality: aws.municipality,
+                scheduled_service: aws.scheduled_service,
+                icao_code: aws.icao_code,
+                iata_code: aws.iata_code,
+                gps_code: aws.gps_code,
+                local_code: aws.local_code,
+                home_link: aws.home_link,
+                wikipedia_link: aws.wikipedia_link,
+                keywords: aws.keywords,
+            }).collect();
+                
+            Ok::<Vec<Airport>, anyhow::Error>(airports)
+        }).await??;
 
-        let results = sqlx::query!(
-            r#"
-            SELECT id, ident, type, name, latitude_deg, longitude_deg, elevation_ft,
-                   continent, iso_country, iso_region, municipality, scheduled_service,
-                   icao_code, iata_code, gps_code, local_code, home_link, wikipedia_link, keywords,
-                   GREATEST(
-                       SIMILARITY(UPPER(name), $1),
-                       COALESCE(SIMILARITY(UPPER(icao_code), $1), 0),
-                       COALESCE(SIMILARITY(UPPER(iata_code), $1), 0),
-                       SIMILARITY(UPPER(ident), $1)
-                   ) as similarity_score
-            FROM airports
-            WHERE (
-                SIMILARITY(UPPER(name), $1) > 0.05 OR
-                COALESCE(SIMILARITY(UPPER(icao_code), $1), 0) > 0.05 OR  
-                COALESCE(SIMILARITY(UPPER(iata_code), $1), 0) > 0.05 OR
-                SIMILARITY(UPPER(ident), $1) > 0.05
-            )
-            ORDER BY similarity_score DESC, name
-            LIMIT $2
-            "#,
-            query_upper,
-            limit
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        let mut airports = Vec::new();
-        for row in results {
-            airports.push(Airport {
-                id: row.id,
-                ident: row.ident,
-                airport_type: row.r#type,
-                name: row.name,
-                latitude_deg: bigdecimal_to_f64(row.latitude_deg),
-                longitude_deg: bigdecimal_to_f64(row.longitude_deg),
-                elevation_ft: row.elevation_ft,
-                continent: row.continent,
-                iso_country: row.iso_country,
-                iso_region: row.iso_region,
-                municipality: row.municipality,
-                scheduled_service: row.scheduled_service,
-                icao_code: row.icao_code,
-                iata_code: row.iata_code,
-                gps_code: row.gps_code,
-                local_code: row.local_code,
-                home_link: row.home_link,
-                wikipedia_link: row.wikipedia_link,
-                keywords: row.keywords,
-            });
-        }
-
-        Ok(airports)
+        Ok(result)
     }
 
     /// Search airports within a radius of a given point using PostGIS
@@ -543,55 +428,39 @@ impl AirportsRepository {
         radius_km: f64,
         limit: Option<i64>,
     ) -> Result<Vec<Airport>> {
-        let limit = limit.unwrap_or(20);
+        let search_limit = limit.unwrap_or(20);
         let radius_m = radius_km * 1000.0; // Convert km to meters for PostGIS
+        
+        let pool = self.pool.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            
+            // Use raw SQL for PostGIS functions
+            let sql = r#"
+                SELECT id, ident, type as airport_type, name, latitude_deg, longitude_deg, elevation_ft,
+                       continent, iso_country, iso_region, municipality, scheduled_service,
+                       icao_code, iata_code, gps_code, local_code, home_link, wikipedia_link, keywords,
+                       ST_Distance(location, ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography) as distance_meters
+                FROM airports
+                WHERE location IS NOT NULL
+                AND ST_DWithin(location, ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography, $3)
+                ORDER BY distance_meters
+                LIMIT $4
+            "#;
+            
+            let results: Vec<AirportWithDistance> = diesel::sql_query(sql)
+                .bind::<diesel::sql_types::Double, _>(latitude)
+                .bind::<diesel::sql_types::Double, _>(longitude)
+                .bind::<diesel::sql_types::Double, _>(radius_m)
+                .bind::<diesel::sql_types::BigInt, _>(search_limit)
+                .load::<AirportWithDistance>(&mut conn)?;
+                
+            let airports: Vec<Airport> = results.into_iter().map(|awd| awd.into()).collect();
+                
+            Ok::<Vec<Airport>, anyhow::Error>(airports)
+        }).await??;
 
-        let results = sqlx::query!(
-            r#"
-            SELECT id, ident, type, name, latitude_deg, longitude_deg, elevation_ft,
-                   continent, iso_country, iso_region, municipality, scheduled_service,
-                   icao_code, iata_code, gps_code, local_code, home_link, wikipedia_link, keywords,
-                   ST_Distance(location, ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography) as distance_meters
-            FROM airports
-            WHERE location IS NOT NULL
-            AND ST_DWithin(location, ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography, $3)
-            ORDER BY distance_meters
-            LIMIT $4
-            "#,
-            latitude,
-            longitude,
-            radius_m,
-            limit
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        let mut airports = Vec::new();
-        for row in results {
-            airports.push(Airport {
-                id: row.id,
-                ident: row.ident,
-                airport_type: row.r#type,
-                name: row.name,
-                latitude_deg: bigdecimal_to_f64(row.latitude_deg),
-                longitude_deg: bigdecimal_to_f64(row.longitude_deg),
-                elevation_ft: row.elevation_ft,
-                continent: row.continent,
-                iso_country: row.iso_country,
-                iso_region: row.iso_region,
-                municipality: row.municipality,
-                scheduled_service: row.scheduled_service,
-                icao_code: row.icao_code,
-                iata_code: row.iata_code,
-                gps_code: row.gps_code,
-                local_code: row.local_code,
-                home_link: row.home_link,
-                wikipedia_link: row.wikipedia_link,
-                keywords: row.keywords,
-            });
-        }
-
-        Ok(airports)
+        Ok(result)
     }
 }
 

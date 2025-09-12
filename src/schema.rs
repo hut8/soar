@@ -60,6 +60,34 @@ diesel::table! {
 }
 
 diesel::table! {
+    airports (id) {
+        id -> Int4,
+        ident -> Varchar,
+        #[sql_name = "type"]
+        airport_type -> Varchar,
+        name -> Varchar,
+        latitude_deg -> Nullable<Float8>,
+        longitude_deg -> Nullable<Float8>,
+        elevation_ft -> Nullable<Int4>,
+        continent -> Nullable<Varchar>,
+        iso_country -> Nullable<Varchar>,
+        iso_region -> Nullable<Varchar>,
+        municipality -> Nullable<Varchar>,
+        scheduled_service -> Bool,
+        icao_code -> Nullable<Varchar>,
+        iata_code -> Nullable<Varchar>,
+        gps_code -> Nullable<Varchar>,
+        local_code -> Nullable<Varchar>,
+        home_link -> Nullable<Text>,
+        wikipedia_link -> Nullable<Text>,
+        keywords -> Nullable<Text>,
+        created_at -> Nullable<Timestamptz>,
+        updated_at -> Nullable<Timestamptz>,
+        location -> Nullable<diesel::sql_types::Text>,
+    }
+}
+
+diesel::table! {
     devices (device_id) {
         device_id -> Int4,
         device_type -> Text,

@@ -155,7 +155,7 @@ pub async fn handle_load_data(
                 info!("Successfully loaded {} airports", airports_list.len());
 
                 // Create airports repository and upsert airports
-                let airports_repo = AirportsRepository::new(sqlx_pool.clone());
+                let airports_repo = AirportsRepository::new(diesel_pool.clone());
                 info!(
                     "Upserting {} airports into database...",
                     airports_list.len()
@@ -485,7 +485,7 @@ pub async fn handle_load_data(
 
         // Create repositories
         let clubs_repo = ClubsRepository::new(sqlx_pool.clone());
-        let airports_repo = AirportsRepository::new(sqlx_pool.clone());
+        let airports_repo = AirportsRepository::new(diesel_pool.clone());
 
         // Get soaring clubs without home base airport IDs
         match clubs_repo.get_soaring_clubs_without_home_base().await {

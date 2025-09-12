@@ -1,8 +1,10 @@
 use anyhow::{Context, Result, anyhow};
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
+use diesel::prelude::*;
+use chrono::{DateTime, Utc};
 
 fn to_opt_string(s: &str) -> Option<String> {
     let t = s.trim();
@@ -62,6 +64,146 @@ pub struct Airport {
     pub home_link: Option<String>,      // Airport website URL
     pub wikipedia_link: Option<String>, // Wikipedia article URL
     pub keywords: Option<String>,       // Search keywords
+}
+
+/// Diesel model for the airports table - used for database operations
+#[derive(Debug, Clone, Queryable, Selectable, Insertable, AsChangeset, QueryableByName, Serialize, Deserialize)]
+#[diesel(table_name = crate::schema::airports)]
+pub struct AirportModel {
+    pub id: i32,
+    pub ident: String,
+    #[diesel(column_name = airport_type)]
+    pub airport_type: String,
+    pub name: String,
+    pub latitude_deg: Option<f64>,
+    pub longitude_deg: Option<f64>,
+    pub elevation_ft: Option<i32>,
+    pub continent: Option<String>,
+    pub iso_country: Option<String>,
+    pub iso_region: Option<String>,
+    pub municipality: Option<String>,
+    pub scheduled_service: bool,
+    pub icao_code: Option<String>,
+    pub iata_code: Option<String>,
+    pub gps_code: Option<String>,
+    pub local_code: Option<String>,
+    pub home_link: Option<String>,
+    pub wikipedia_link: Option<String>,
+    pub keywords: Option<String>,
+    pub created_at: Option<DateTime<Utc>>,
+    pub updated_at: Option<DateTime<Utc>>,
+    pub location: Option<String>,
+}
+
+/// Insert model for new airports (without created_at, updated_at, location)
+#[derive(Debug, Clone, Insertable, Serialize, Deserialize)]
+#[diesel(table_name = crate::schema::airports)]
+pub struct NewAirportModel {
+    pub id: i32,
+    pub ident: String,
+    #[diesel(column_name = airport_type)]
+    pub airport_type: String,
+    pub name: String,
+    pub latitude_deg: Option<f64>,
+    pub longitude_deg: Option<f64>,
+    pub elevation_ft: Option<i32>,
+    pub continent: Option<String>,
+    pub iso_country: Option<String>,
+    pub iso_region: Option<String>,
+    pub municipality: Option<String>,
+    pub scheduled_service: bool,
+    pub icao_code: Option<String>,
+    pub iata_code: Option<String>,
+    pub gps_code: Option<String>,
+    pub local_code: Option<String>,
+    pub home_link: Option<String>,
+    pub wikipedia_link: Option<String>,
+    pub keywords: Option<String>,
+}
+
+
+/// Conversion from Airport (API model) to AirportModel (database model)
+impl From<Airport> for AirportModel {
+    fn from(airport: Airport) -> Self {
+        Self {
+            id: airport.id,
+            ident: airport.ident,
+            airport_type: airport.airport_type,
+            name: airport.name,
+            latitude_deg: airport.latitude_deg,
+            longitude_deg: airport.longitude_deg,
+            elevation_ft: airport.elevation_ft,
+            continent: airport.continent,
+            iso_country: airport.iso_country,
+            iso_region: airport.iso_region,
+            municipality: airport.municipality,
+            scheduled_service: airport.scheduled_service,
+            icao_code: airport.icao_code,
+            iata_code: airport.iata_code,
+            gps_code: airport.gps_code,
+            local_code: airport.local_code,
+            home_link: airport.home_link,
+            wikipedia_link: airport.wikipedia_link,
+            keywords: airport.keywords,
+            created_at: None,
+            updated_at: None,
+            location: None,
+        }
+    }
+}
+
+/// Conversion from Airport (API model) to NewAirportModel (insert model)
+impl From<Airport> for NewAirportModel {
+    fn from(airport: Airport) -> Self {
+        Self {
+            id: airport.id,
+            ident: airport.ident,
+            airport_type: airport.airport_type,
+            name: airport.name,
+            latitude_deg: airport.latitude_deg,
+            longitude_deg: airport.longitude_deg,
+            elevation_ft: airport.elevation_ft,
+            continent: airport.continent,
+            iso_country: airport.iso_country,
+            iso_region: airport.iso_region,
+            municipality: airport.municipality,
+            scheduled_service: airport.scheduled_service,
+            icao_code: airport.icao_code,
+            iata_code: airport.iata_code,
+            gps_code: airport.gps_code,
+            local_code: airport.local_code,
+            home_link: airport.home_link,
+            wikipedia_link: airport.wikipedia_link,
+            keywords: airport.keywords,
+        }
+    }
+}
+
+/// Conversion from AirportModel (database model) to Airport (API model)
+impl From<AirportModel> for Airport {
+    fn from(model: AirportModel) -> Self {
+        Self {
+            id: model.id,
+            ident: model.ident,
+            airport_type: model.airport_type,
+            name: model.name,
+            latitude_deg: model.latitude_deg,
+            longitude_deg: model.longitude_deg,
+            elevation_ft: model.elevation_ft,
+            continent: model.continent,
+            iso_country: model.iso_country,
+            iso_region: model.iso_region,
+            municipality: model.municipality,
+            scheduled_service: model.scheduled_service,
+            icao_code: model.icao_code,
+            iata_code: model.iata_code,
+            gps_code: model.gps_code,
+            local_code: model.local_code,
+            home_link: model.home_link,
+            wikipedia_link: model.wikipedia_link,
+            keywords: model.keywords,
+        }
+    }
 }
 
 impl Airport {

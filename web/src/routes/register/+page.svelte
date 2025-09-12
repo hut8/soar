@@ -3,6 +3,7 @@
 	import { authApi, AuthApiError } from '$lib/api/auth';
 	import { resolve } from '$app/paths';
 	import { ClubSelector } from '$lib';
+	import { page } from '$app/state';
 
 	let firstName = '';
 	let lastName = '';
@@ -51,11 +52,12 @@
 			});
 
 			// Redirect to login with success message
-			goto(
-				resolve(
-					'/login?message=Account created successfully! Please check your email to verify your account before signing in.'
-				)
-			);
+	const href = resolve([
+    '/login',
+    {},                                  // params
+    { message: 'Email verified successfully. Please log in.' } // query
+  ]);
+  void goto(href);     // matches goto(url: string | URL)
 		} catch (err) {
 			if (err instanceof AuthApiError) {
 				if (err.status === 409) {

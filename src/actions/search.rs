@@ -41,7 +41,7 @@ pub async fn search_airports(
     State(state): State<AppState>,
     Query(params): Query<SearchQueryParams>,
 ) -> impl IntoResponse {
-    let airports_repo = AirportsRepository::new(state.pool);
+    let airports_repo = AirportsRepository::new(state.diesel_pool);
 
     // Check if geographic search parameters are provided
     if let (Some(lat), Some(lng), Some(radius)) = (params.latitude, params.longitude, params.radius)

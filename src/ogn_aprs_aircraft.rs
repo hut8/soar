@@ -167,25 +167,6 @@ pub enum ParseOgnError {
     BadFlagsHex,
 }
 
-/// Parse the numeric prefix of a token that ends with a fixed unit of length `unit_len`.
-/// e.g. t="-019fpm", unit_len=3 -> returns Some(-19)
-fn parse_number_prefix<T>(t: &str, unit_len: usize) -> Option<T>
-where
-    T: std::str::FromStr,
-{
-    if t.len() < unit_len {
-        return None;
-    }
-    t[..t.len() - unit_len].parse::<T>().ok()
-}
-
-fn parse_float_prefix<T>(t: &str, unit_len: usize) -> Option<T>
-where
-    T: std::str::FromStr,
-{
-    parse_number_prefix::<T>(t, unit_len)
-}
-
 /* ---------------------- Tests ---------------------- */
 
 #[cfg(test)]
