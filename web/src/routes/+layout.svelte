@@ -5,11 +5,12 @@
 	import { resolve } from '$app/paths';
 	import { auth } from '$lib/stores/auth';
 	import { onMount } from 'svelte';
-	import { Radar, Users, PlaneTakeoff, UserPlus, UserCheck } from '@lucide/svelte';
+	import { Radar, Users, PlaneTakeoff, UserPlus, UserCheck, Radio } from '@lucide/svelte';
 
 	const base = resolve('/');
 	const clubsPath = resolve('/clubs');
 	const operationsPath = resolve('/operations');
+	const devicesPath = resolve('/devices');
 	const loginPath = resolve('/login');
 	const registerPath = resolve('/register');
 	const profilePath = resolve('/profile');
@@ -69,6 +70,9 @@
 				</a>
 				<a href={operationsPath} class="variant-ghost-surface btn btn-sm">
 					<Radar /> Operations
+				</a>
+				<a href={devicesPath} class="variant-ghost-surface btn btn-sm">
+					<Radio /> Devices
 				</a>
 			</nav>
 
