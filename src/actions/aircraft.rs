@@ -17,7 +17,7 @@ pub async fn get_aircraft_by_club(
     State(state): State<AppState>,
     Path(club_id): Path<Uuid>,
 ) -> impl IntoResponse {
-    let aircraft_repo = AircraftRegistrationsRepository::new(state.pool);
+    let aircraft_repo = AircraftRegistrationsRepository::new(state.diesel_pool);
 
     match aircraft_repo.get_by_club_id(club_id).await {
         Ok(aircraft_list) => {

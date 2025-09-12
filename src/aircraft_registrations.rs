@@ -1,5 +1,6 @@
 use anyhow::{Context, Result, anyhow};
 use chrono::NaiveDate;
+use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 use sqlx::types::Uuid;
 use std::fs::File;
@@ -65,6 +66,23 @@ impl AirworthinessClass {
             AirworthinessClass::SpecialFlightPermit => "8",
             AirworthinessClass::LightSport => "9",
         }
+    }
+}
+
+impl std::fmt::Display for AirworthinessClass {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            AirworthinessClass::Standard => "Standard",
+            AirworthinessClass::Limited => "Limited",
+            AirworthinessClass::Restricted => "Restricted",
+            AirworthinessClass::Experimental => "Experimental",
+            AirworthinessClass::Provisional => "Provisional",
+            AirworthinessClass::Multiple => "Multiple",
+            AirworthinessClass::Primary => "Primary",
+            AirworthinessClass::SpecialFlightPermit => "Special Flight Permit",
+            AirworthinessClass::LightSport => "Light Sport",
+        };
+        write!(f, "{}", s)
     }
 }
 
@@ -308,6 +326,126 @@ fn parse_approved_ops(airworthiness_class_code: &str, raw_239_247: &str) -> Appr
     // Leave default false unless you have an authoritative slot meaning table.
     // If Special Flight Permit (code '8'), similarly map as needed.
     ops
+}
+
+// Diesel database models for aircraft_registrations table
+#[derive(Debug, Clone, Queryable, Selectable, Insertable, AsChangeset, QueryableByName, Serialize, Deserialize)]
+#[diesel(table_name = crate::schema::aircraft_registrations)]
+pub struct AircraftRegistrationModel {
+    pub registration_number: String,
+    pub serial_number: String,
+    pub mfr_mdl_code: Option<String>,
+    pub eng_mfr_mdl_code: Option<String>,
+    pub year_mfr: Option<i32>,
+    pub type_registration_code: Option<String>,
+    pub registrant_name: Option<String>,
+    pub location_id: Option<Uuid>,
+    pub last_action_date: Option<NaiveDate>,
+    pub certificate_issue_date: Option<NaiveDate>,
+    pub airworthiness_class: Option<String>,
+    pub approved_operations_raw: Option<String>,
+    pub op_restricted_other: Option<bool>,
+    pub op_restricted_ag_pest_control: Option<bool>,
+    pub op_restricted_aerial_surveying: Option<bool>,
+    pub op_restricted_aerial_advertising: Option<bool>,
+    pub op_restricted_forest: Option<bool>,
+    pub op_restricted_patrolling: Option<bool>,
+    pub op_restricted_weather_control: Option<bool>,
+    pub op_restricted_carriage_of_cargo: Option<bool>,
+    pub op_experimental_show_compliance: Option<bool>,
+    pub op_experimental_research_development: Option<bool>,
+    pub op_experimental_amateur_built: Option<bool>,
+    pub op_experimental_exhibition: Option<bool>,
+    pub op_experimental_racing: Option<bool>,
+    pub op_experimental_crew_training: Option<bool>,
+    pub op_experimental_market_survey: Option<bool>,
+    pub op_experimental_operating_kit_built: Option<bool>,
+    pub op_experimental_light_sport_reg_prior_2008: Option<bool>,
+    pub op_experimental_light_sport_operating_kit_built: Option<bool>,
+    pub op_experimental_light_sport_prev_21_190: Option<bool>,
+    pub op_experimental_uas_research_development: Option<bool>,
+    pub op_experimental_uas_market_survey: Option<bool>,
+    pub op_experimental_uas_crew_training: Option<bool>,
+    pub op_experimental_uas_exhibition: Option<bool>,
+    pub op_experimental_uas_compliance_with_cfr: Option<bool>,
+    pub op_sfp_ferry_for_repairs_alterations_storage: Option<bool>,
+    pub op_sfp_evacuate_impending_danger: Option<bool>,
+    pub op_sfp_excess_of_max_certificated: Option<bool>,
+    pub op_sfp_delivery_or_export: Option<bool>,
+    pub op_sfp_production_flight_testing: Option<bool>,
+    pub op_sfp_customer_demo: Option<bool>,
+    pub type_aircraft_code: Option<String>,
+    pub type_engine_code: Option<i16>,
+    pub status_code: Option<String>,
+    pub transponder_code: Option<i64>,
+    pub fractional_owner: Option<bool>,
+    pub airworthiness_date: Option<NaiveDate>,
+    pub expiration_date: Option<NaiveDate>,
+    pub unique_id: Option<String>,
+    pub kit_mfr_name: Option<String>,
+    pub kit_model_name: Option<String>,
+    pub club_id: Option<Uuid>,
+    pub device_id: Option<i32>,
+}
+
+// Insertable model for new aircraft registrations (without generated fields)
+#[derive(Debug, Clone, Insertable, Serialize, Deserialize)]
+#[diesel(table_name = crate::schema::aircraft_registrations)]
+pub struct NewAircraftRegistration {
+    pub registration_number: String,
+    pub serial_number: String,
+    pub mfr_mdl_code: Option<String>,
+    pub eng_mfr_mdl_code: Option<String>,
+    pub year_mfr: Option<i32>,
+    pub type_registration_code: Option<String>,
+    pub registrant_name: Option<String>,
+    pub location_id: Option<Uuid>,
+    pub last_action_date: Option<NaiveDate>,
+    pub certificate_issue_date: Option<NaiveDate>,
+    pub airworthiness_class: Option<String>,
+    pub approved_operations_raw: Option<String>,
+    pub op_restricted_other: Option<bool>,
+    pub op_restricted_ag_pest_control: Option<bool>,
+    pub op_restricted_aerial_surveying: Option<bool>,
+    pub op_restricted_aerial_advertising: Option<bool>,
+    pub op_restricted_forest: Option<bool>,
+    pub op_restricted_patrolling: Option<bool>,
+    pub op_restricted_weather_control: Option<bool>,
+    pub op_restricted_carriage_of_cargo: Option<bool>,
+    pub op_experimental_show_compliance: Option<bool>,
+    pub op_experimental_research_development: Option<bool>,
+    pub op_experimental_amateur_built: Option<bool>,
+    pub op_experimental_exhibition: Option<bool>,
+    pub op_experimental_racing: Option<bool>,
+    pub op_experimental_crew_training: Option<bool>,
+    pub op_experimental_market_survey: Option<bool>,
+    pub op_experimental_operating_kit_built: Option<bool>,
+    pub op_experimental_light_sport_reg_prior_2008: Option<bool>,
+    pub op_experimental_light_sport_operating_kit_built: Option<bool>,
+    pub op_experimental_light_sport_prev_21_190: Option<bool>,
+    pub op_experimental_uas_research_development: Option<bool>,
+    pub op_experimental_uas_market_survey: Option<bool>,
+    pub op_experimental_uas_crew_training: Option<bool>,
+    pub op_experimental_uas_exhibition: Option<bool>,
+    pub op_experimental_uas_compliance_with_cfr: Option<bool>,
+    pub op_sfp_ferry_for_repairs_alterations_storage: Option<bool>,
+    pub op_sfp_evacuate_impending_danger: Option<bool>,
+    pub op_sfp_excess_of_max_certificated: Option<bool>,
+    pub op_sfp_delivery_or_export: Option<bool>,
+    pub op_sfp_production_flight_testing: Option<bool>,
+    pub op_sfp_customer_demo: Option<bool>,
+    pub type_aircraft_code: Option<String>,
+    pub type_engine_code: Option<i16>,
+    pub status_code: Option<String>,
+    pub transponder_code: Option<i64>,
+    pub fractional_owner: Option<bool>,
+    pub airworthiness_date: Option<NaiveDate>,
+    pub expiration_date: Option<NaiveDate>,
+    pub unique_id: Option<String>,
+    pub kit_mfr_name: Option<String>,
+    pub kit_model_name: Option<String>,
+    pub club_id: Option<Uuid>,
+    pub device_id: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -875,6 +1013,159 @@ pub fn read_aircraft_file_with_header_skip<P: AsRef<Path>>(path: P) -> Result<Ve
     }
 
     Ok(out)
+}
+
+// Conversion traits between API model and Diesel models
+impl From<Aircraft> for NewAircraftRegistration {
+    fn from(aircraft: Aircraft) -> Self {
+        // Create ApprovedOps struct from the aircraft's approved_ops
+        let ops = &aircraft.approved_ops;
+        
+        NewAircraftRegistration {
+            registration_number: aircraft.n_number,
+            serial_number: aircraft.serial_number,
+            mfr_mdl_code: aircraft.mfr_mdl_code,
+            eng_mfr_mdl_code: aircraft.eng_mfr_mdl_code,
+            year_mfr: aircraft.year_mfr.map(|y| y as i32),
+            type_registration_code: aircraft.type_registration_code,
+            registrant_name: aircraft.registrant_name,
+            location_id: aircraft.location_id,
+            last_action_date: aircraft.last_action_date,
+            certificate_issue_date: aircraft.certificate_issue_date,
+            airworthiness_class: aircraft.airworthiness_class.map(|ac| ac.to_string()),
+            approved_operations_raw: aircraft.approved_operations_raw,
+            op_restricted_other: Some(ops.restricted_other),
+            op_restricted_ag_pest_control: Some(ops.restricted_ag_pest_control),
+            op_restricted_aerial_surveying: Some(ops.restricted_aerial_surveying),
+            op_restricted_aerial_advertising: Some(ops.restricted_aerial_advertising),
+            op_restricted_forest: Some(ops.restricted_forest),
+            op_restricted_patrolling: Some(ops.restricted_patrolling),
+            op_restricted_weather_control: Some(ops.restricted_weather_control),
+            op_restricted_carriage_of_cargo: Some(ops.restricted_carriage_of_cargo),
+            op_experimental_show_compliance: Some(ops.exp_show_compliance),
+            op_experimental_research_development: Some(ops.exp_research_development),
+            op_experimental_amateur_built: Some(ops.exp_amateur_built),
+            op_experimental_exhibition: Some(ops.exp_exhibition),
+            op_experimental_racing: Some(ops.exp_racing),
+            op_experimental_crew_training: Some(ops.exp_crew_training),
+            op_experimental_market_survey: Some(ops.exp_market_survey),
+            op_experimental_operating_kit_built: Some(ops.exp_operating_kit_built),
+            op_experimental_light_sport_reg_prior_2008: Some(ops.exp_lsa_reg_prior_2008),
+            op_experimental_light_sport_operating_kit_built: Some(ops.exp_lsa_operating_kit_built),
+            op_experimental_light_sport_prev_21_190: Some(ops.exp_lsa_prev_21_190),
+            op_experimental_uas_research_development: Some(ops.exp_uas_research_development),
+            op_experimental_uas_market_survey: Some(ops.exp_uas_market_survey),
+            op_experimental_uas_crew_training: Some(ops.exp_uas_crew_training),
+            op_experimental_uas_exhibition: Some(ops.exp_uas_exhibition),
+            op_experimental_uas_compliance_with_cfr: Some(ops.exp_uas_compliance_with_cfr),
+            op_sfp_ferry_for_repairs_alterations_storage: Some(ops.sfp_ferry_for_repairs_alterations_storage),
+            op_sfp_evacuate_impending_danger: Some(ops.sfp_evacuate_impending_danger),
+            op_sfp_excess_of_max_certificated: Some(ops.sfp_excess_of_max_certificated),
+            op_sfp_delivery_or_export: Some(ops.sfp_delivery_or_export),
+            op_sfp_production_flight_testing: Some(ops.sfp_production_flight_testing),
+            op_sfp_customer_demo: Some(ops.sfp_customer_demo),
+            type_aircraft_code: aircraft.type_aircraft_code,
+            type_engine_code: aircraft.type_engine_code,
+            status_code: aircraft.status_code,
+            transponder_code: aircraft.transponder_code.map(|t| t as i64),
+            fractional_owner: aircraft.fractional_owner,
+            airworthiness_date: aircraft.airworthiness_date,
+            expiration_date: aircraft.expiration_date,
+            unique_id: aircraft.unique_id,
+            kit_mfr_name: aircraft.kit_mfr_name,
+            kit_model_name: aircraft.kit_model_name,
+            club_id: None, // Will be set by repository logic
+            device_id: aircraft.device_id,
+        }
+    }
+}
+
+impl From<AircraftRegistrationModel> for Aircraft {
+    fn from(model: AircraftRegistrationModel) -> Self {
+        // Convert the boolean flags back to ApprovedOps struct
+        let approved_ops = ApprovedOps {
+            restricted_other: model.op_restricted_other.unwrap_or(false),
+            restricted_ag_pest_control: model.op_restricted_ag_pest_control.unwrap_or(false),
+            restricted_aerial_surveying: model.op_restricted_aerial_surveying.unwrap_or(false),
+            restricted_aerial_advertising: model.op_restricted_aerial_advertising.unwrap_or(false),
+            restricted_forest: model.op_restricted_forest.unwrap_or(false),
+            restricted_patrolling: model.op_restricted_patrolling.unwrap_or(false),
+            restricted_weather_control: model.op_restricted_weather_control.unwrap_or(false),
+            restricted_carriage_of_cargo: model.op_restricted_carriage_of_cargo.unwrap_or(false),
+            exp_show_compliance: model.op_experimental_show_compliance.unwrap_or(false),
+            exp_research_development: model.op_experimental_research_development.unwrap_or(false),
+            exp_amateur_built: model.op_experimental_amateur_built.unwrap_or(false),
+            exp_exhibition: model.op_experimental_exhibition.unwrap_or(false),
+            exp_racing: model.op_experimental_racing.unwrap_or(false),
+            exp_crew_training: model.op_experimental_crew_training.unwrap_or(false),
+            exp_market_survey: model.op_experimental_market_survey.unwrap_or(false),
+            exp_operating_kit_built: model.op_experimental_operating_kit_built.unwrap_or(false),
+            exp_lsa_reg_prior_2008: model.op_experimental_light_sport_reg_prior_2008.unwrap_or(false),
+            exp_lsa_operating_kit_built: model.op_experimental_light_sport_operating_kit_built.unwrap_or(false),
+            exp_lsa_prev_21_190: model.op_experimental_light_sport_prev_21_190.unwrap_or(false),
+            exp_uas_research_development: model.op_experimental_uas_research_development.unwrap_or(false),
+            exp_uas_market_survey: model.op_experimental_uas_market_survey.unwrap_or(false),
+            exp_uas_crew_training: model.op_experimental_uas_crew_training.unwrap_or(false),
+            exp_uas_exhibition: model.op_experimental_uas_exhibition.unwrap_or(false),
+            exp_uas_compliance_with_cfr: model.op_experimental_uas_compliance_with_cfr.unwrap_or(false),
+            sfp_ferry_for_repairs_alterations_storage: model.op_sfp_ferry_for_repairs_alterations_storage.unwrap_or(false),
+            sfp_evacuate_impending_danger: model.op_sfp_evacuate_impending_danger.unwrap_or(false),
+            sfp_excess_of_max_certificated: model.op_sfp_excess_of_max_certificated.unwrap_or(false),
+            sfp_delivery_or_export: model.op_sfp_delivery_or_export.unwrap_or(false),
+            sfp_production_flight_testing: model.op_sfp_production_flight_testing.unwrap_or(false),
+            sfp_customer_demo: model.op_sfp_customer_demo.unwrap_or(false),
+        };
+
+        Aircraft {
+            n_number: model.registration_number,
+            serial_number: model.serial_number,
+            mfr_mdl_code: model.mfr_mdl_code,
+            eng_mfr_mdl_code: model.eng_mfr_mdl_code,
+            year_mfr: model.year_mfr.map(|y| y as u16),
+            type_registration_code: model.type_registration_code,
+            registrant_name: model.registrant_name,
+            // Legacy fields (not stored in database anymore, set to None)
+            street1: None,
+            street2: None,
+            city: None,
+            state: None,
+            zip_code: None,
+            region_code: None,
+            county_mail_code: None,
+            country_mail_code: None,
+            location_id: model.location_id,
+            last_action_date: model.last_action_date,
+            certificate_issue_date: model.certificate_issue_date,
+            airworthiness_class: model.airworthiness_class.and_then(|s| match s.as_str() {
+                "Standard" => Some(AirworthinessClass::Standard),
+                "Limited" => Some(AirworthinessClass::Limited),
+                "Restricted" => Some(AirworthinessClass::Restricted),
+                "Experimental" => Some(AirworthinessClass::Experimental),
+                "Provisional" => Some(AirworthinessClass::Provisional),
+                "Multiple" => Some(AirworthinessClass::Multiple),
+                "Primary" => Some(AirworthinessClass::Primary),
+                "Special Flight Permit" => Some(AirworthinessClass::SpecialFlightPermit),
+                "Light Sport" => Some(AirworthinessClass::LightSport),
+                _ => None,
+            }),
+            approved_operations_raw: model.approved_operations_raw,
+            approved_ops,
+            type_aircraft_code: model.type_aircraft_code,
+            type_engine_code: model.type_engine_code,
+            status_code: model.status_code,
+            transponder_code: model.transponder_code.map(|t| t as u32),
+            fractional_owner: model.fractional_owner,
+            airworthiness_date: model.airworthiness_date,
+            other_names: Vec::new(), // Would need separate query to fetch
+            expiration_date: model.expiration_date,
+            unique_id: model.unique_id,
+            kit_mfr_name: model.kit_mfr_name,
+            kit_model_name: model.kit_model_name,
+            home_base_airport_id: None, // Would need to derive from location or separate field
+            registered_location: None, // Legacy field, now in locations table
+            device_id: model.device_id,
+        }
+    }
 }
 
 #[cfg(test)]

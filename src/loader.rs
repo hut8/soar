@@ -106,7 +106,7 @@ pub async fn handle_load_data(
                 );
 
                 // Create aircraft registrations repository and upsert registrations
-                let registrations_repo = AircraftRegistrationsRepository::new(sqlx_pool.clone());
+                let registrations_repo = AircraftRegistrationsRepository::new(diesel_pool.clone());
                 info!(
                     "Upserting {} aircraft registrations into database...",
                     aircraft_list.len()

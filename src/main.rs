@@ -351,8 +351,6 @@ async fn main() -> Result<()> {
             .await
         }
         Commands::Web { interface, port } => {
-            let sqlx_pool = setup_database().await?;
-
             // Start live fixes service if NATS URL is configured
             if let Ok(nats_url) = env::var("NATS_URL") {
                 info!("Starting live fixes service with NATS URL: {}", nats_url);
@@ -362,7 +360,7 @@ async fn main() -> Result<()> {
                 warn!("NATS_URL not configured, live fixes will not be available");
             }
 
-            soar::web::start_web_server(interface, port, sqlx_pool).await
+            soar::web::start_web_server(interface, port, sqlx_pool, diesel_pool).await
         }
     }
 }
