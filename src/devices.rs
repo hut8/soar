@@ -2,6 +2,11 @@ use anyhow::Result;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::str::FromStr;
 
+// Diesel imports
+use diesel::prelude::*;
+use chrono::{DateTime, Utc};
+use uuid::Uuid;
+
 const DDB_URL: &str = "http://ddb.glidernet.org/download/?j=1";
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -109,6 +114,65 @@ pub struct Device {
     pub tracked: bool,
     #[serde(deserialize_with = "string_to_bool", serialize_with = "bool_to_string")]
     pub identified: bool,
+}
+
+// Diesel database model for devices table
+#[derive(Debug, Clone, Queryable, Selectable, Insertable, AsChangeset, QueryableByName, Serialize, Deserialize)]
+#[diesel(table_name = crate::schema::devices)]
+pub struct DeviceModel {
+    pub device_id: i32,
+    pub device_type: String,
+    pub aircraft_model: String,
+    pub registration: String,
+    pub competition_number: String,
+    pub tracked: bool,
+    pub identified: bool,
+    pub created_at: Option<DateTime<Utc>>,
+    pub updated_at: Option<DateTime<Utc>>,
+    pub user_id: Option<Uuid>,
+}
+
+// For inserting new devices (without timestamps which are set by DB)
+#[derive(Debug, Insertable, AsChangeset)]
+#[diesel(table_name = crate::schema::devices)]
+pub struct NewDevice {
+    pub device_id: i32,
+    pub device_type: String,
+    pub aircraft_model: String,
+    pub registration: String,
+    pub competition_number: String,
+    pub tracked: bool,
+    pub identified: bool,
+    pub user_id: Option<Uuid>,
+}
+
+impl From<Device> for NewDevice {
+    fn from(device: Device) -> Self {
+        Self {
+            device_id: device.device_id as i32,
+            device_type: device.device_type.to_string(),
+            aircraft_model: device.aircraft_model,
+            registration: device.registration,
+            competition_number: device.competition_number,
+            tracked: device.tracked,
+            identified: device.identified,
+            user_id: None, // Default to None for now
+        }
+    }
+}
+
+impl From<DeviceModel> for Device {
+    fn from(model: DeviceModel) -> Self {
+        Self {
+            device_type: DeviceType::from_str(&model.device_type).unwrap_or(DeviceType::Unknown),
+            device_id: model.device_id as u32,
+            aircraft_model: model.aircraft_model,
+            registration: model.registration,
+            competition_number: model.competition_number,
+            tracked: model.tracked,
+            identified: model.identified,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]

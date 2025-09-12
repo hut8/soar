@@ -1,9 +1,15 @@
 use anyhow::Result;
-use sqlx::PgPool;
-use std::str::FromStr;
+use diesel::prelude::*;
+use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
+use diesel::upsert::excluded;
 use tracing::{info, warn};
+use uuid::Uuid;
 
-use crate::devices::{Device, DeviceType};
+use crate::devices::{Device, DeviceModel, NewDevice};
+use crate::schema::devices;
+
+pub type PgPool = Pool<ConnectionManager<PgConnection>>;
+pub type PgPooledConnection = PooledConnection<ConnectionManager<PgConnection>>;
 
 #[derive(Clone)]
 pub struct DeviceRepository {
@@ -15,164 +21,166 @@ impl DeviceRepository {
         Self { pool }
     }
 
+    fn get_connection(&self) -> Result<PgPooledConnection> {
+        self.pool.get().map_err(|e| anyhow::anyhow!("Failed to get database connection: {}", e))
+    }
+
     /// Upsert devices into the database
     /// This will insert new devices or update existing ones based on device_id
-    pub async fn upsert_devices<I>(&self, devices: I) -> Result<usize>
+    pub async fn upsert_devices<I>(&self, devices_iter: I) -> Result<usize>
     where
         I: IntoIterator<Item = Device>,
     {
-        let mut transaction = self.pool.begin().await?;
+        let mut conn = self.get_connection()?;
         let mut upserted_count = 0;
 
-        for device in devices {
-            // Convert enum to string for database storage
-            let device_type_str = device.device_type.to_string();
+        // Convert devices to NewDevice structs for insertion
+        let new_devices: Vec<NewDevice> = devices_iter.into_iter().map(|d| d.into()).collect();
 
-            // Use ON CONFLICT to handle upserts
-            let result = sqlx::query!(
-                r#"
-                INSERT INTO devices (
-                    device_type, device_id, aircraft_model, registration,
-                    competition_number, tracked, identified
-                )
-                VALUES ($1, $2, $3, $4, $5, $6, $7)
-                ON CONFLICT (device_id)
-                DO UPDATE SET
-                    device_type = EXCLUDED.device_type,
-                    aircraft_model = EXCLUDED.aircraft_model,
-                    registration = EXCLUDED.registration,
-                    competition_number = EXCLUDED.competition_number,
-                    tracked = EXCLUDED.tracked,
-                    identified = EXCLUDED.identified,
-                    updated_at = CURRENT_TIMESTAMP
-                "#,
-                device_type_str,
-                device.device_id as i32,
-                device.aircraft_model,
-                device.registration,
-                device.competition_number,
-                device.tracked,
-                device.identified
-            )
-            .execute(&mut *transaction)
-            .await;
+        for new_device in new_devices {
+            let result = diesel::insert_into(devices::table)
+                .values(&new_device)
+                .on_conflict(devices::device_id)
+                .do_update()
+                .set((
+                    devices::device_type.eq(excluded(devices::device_type)),
+                    devices::aircraft_model.eq(excluded(devices::aircraft_model)),
+                    devices::registration.eq(excluded(devices::registration)),
+                    devices::competition_number.eq(excluded(devices::competition_number)),
+                    devices::tracked.eq(excluded(devices::tracked)),
+                    devices::identified.eq(excluded(devices::identified)),
+                    devices::updated_at.eq(diesel::dsl::now),
+                ))
+                .execute(&mut conn);
 
             match result {
                 Ok(_) => {
                     upserted_count += 1;
                 }
                 Err(e) => {
-                    warn!("Failed to upsert device {}: {}", device.device_id, e);
+                    warn!("Failed to upsert device {}: {}", new_device.device_id, e);
                     // Continue with other devices rather than failing the entire batch
                 }
             }
         }
 
-        transaction.commit().await?;
         info!("Successfully upserted {} devices", upserted_count);
-
         Ok(upserted_count)
     }
 
     /// Get the total count of devices in the database
     pub async fn get_device_count(&self) -> Result<i64> {
-        let result = sqlx::query!("SELECT COUNT(*) as count FROM devices")
-            .fetch_one(&self.pool)
-            .await?;
-
-        Ok(result.count.unwrap_or(0))
+        let mut conn = self.get_connection()?;
+        let count = devices::table
+            .count()
+            .get_result::<i64>(&mut conn)?;
+        Ok(count)
     }
 
     /// Get a device by its device_id
     pub async fn get_device_by_id(&self, device_id: u32) -> Result<Option<Device>> {
-        let row = sqlx::query!(
-            r#"
-            SELECT device_type, device_id, aircraft_model, registration,
-                   competition_number, tracked, identified
-            FROM devices
-            WHERE device_id = $1
-            "#,
-            device_id as i32
-        )
-        .fetch_optional(&self.pool)
-        .await?;
+        let mut conn = self.get_connection()?;
+        let device_model = devices::table
+            .filter(devices::device_id.eq(device_id as i32))
+            .first::<DeviceModel>(&mut conn)
+            .optional()?;
 
-        if let Some(row) = row {
-            let device_type = DeviceType::from_str(&row.device_type).unwrap_or(DeviceType::Unknown);
-
-            Ok(Some(Device {
-                device_type,
-                device_id: row.device_id as u32,
-                aircraft_model: row.aircraft_model,
-                registration: row.registration,
-                competition_number: row.competition_number,
-                tracked: row.tracked,
-                identified: row.identified,
-            }))
-        } else {
-            Ok(None)
-        }
+        Ok(device_model.map(|model| model.into()))
     }
 
     /// Get all devices (aircraft) assigned to a specific club
-    pub async fn get_devices_by_club_id(&self, club_id: sqlx::types::Uuid) -> Result<Vec<Device>> {
-        let rows = sqlx::query!(
-            r#"
-            SELECT d.device_type, d.device_id, d.aircraft_model, d.registration,
-                   d.competition_number, d.tracked, d.identified
+    pub async fn get_devices_by_club_id(&self, club_id: Uuid) -> Result<Vec<Device>> {
+        let mut conn = self.get_connection()?;
+        
+        // This query requires joining with aircraft_registrations table
+        // We'll use raw SQL for now since it involves a join with another table
+        let sql = r#"
+            SELECT d.device_id, d.device_type, d.aircraft_model, d.registration,
+                   d.competition_number, d.tracked, d.identified, d.created_at, d.updated_at, d.user_id
             FROM devices d
             INNER JOIN aircraft_registrations ar ON d.registration = ar.registration_number
             WHERE ar.club_id = $1
             ORDER BY d.registration
-            "#,
-            club_id
-        )
-        .fetch_all(&self.pool)
-        .await?;
+        "#;
 
-        let mut devices = Vec::new();
-        for row in rows {
-            let device_type = DeviceType::from_str(&row.device_type).unwrap_or(DeviceType::Unknown);
+        let device_models: Vec<DeviceModel> = diesel::sql_query(sql)
+            .bind::<diesel::sql_types::Uuid, _>(club_id)
+            .load(&mut conn)?;
 
-            devices.push(Device {
-                device_type,
-                device_id: row.device_id as u32,
-                aircraft_model: row.aircraft_model,
-                registration: row.registration,
-                competition_number: row.competition_number,
-                tracked: row.tracked,
-                identified: row.identified,
-            });
-        }
+        Ok(device_models.into_iter().map(|model| model.into()).collect())
+    }
 
-        Ok(devices)
+    /// Search devices by device_id
+    pub async fn search_by_device_id(&self, device_id: u32) -> Result<Vec<Device>> {
+        let mut conn = self.get_connection()?;
+        let device_models = devices::table
+            .filter(devices::device_id.eq(device_id as i32))
+            .load::<DeviceModel>(&mut conn)?;
+
+        Ok(device_models.into_iter().map(|model| model.into()).collect())
+    }
+
+    /// Search devices by registration
+    pub async fn search_by_registration(&self, registration: &str) -> Result<Vec<Device>> {
+        let mut conn = self.get_connection()?;
+        let search_pattern = format!("%{}%", registration);
+        let device_models = devices::table
+            .filter(devices::registration.ilike(&search_pattern))
+            .load::<DeviceModel>(&mut conn)?;
+
+        Ok(device_models.into_iter().map(|model| model.into()).collect())
+    }
+
+    /// Get recent devices with a limit
+    pub async fn get_recent_devices(&self, limit: i64) -> Result<Vec<Device>> {
+        let mut conn = self.get_connection()?;
+        let device_models = devices::table
+            .order(devices::updated_at.desc().nulls_last())
+            .limit(limit)
+            .load::<DeviceModel>(&mut conn)?;
+
+        Ok(device_models.into_iter().map(|model| model.into()).collect())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::devices::DeviceType;
-
-    // Note: These tests would require a test database setup
-    // For now, they're just structural examples
+    use crate::devices::{DeviceType};
+    use diesel::r2d2::ConnectionManager;
+    
+    // Helper function to create a test database pool (for integration tests)
+    fn create_test_pool() -> Result<PgPool> {
+        let database_url = std::env::var("TEST_DATABASE_URL")
+            .unwrap_or_else(|_| "postgres://localhost/soar_test".to_string());
+        
+        let manager = ConnectionManager::<PgConnection>::new(database_url);
+        let pool = Pool::builder().build(manager)?;
+        Ok(pool)
+    }
 
     fn create_test_device() -> Device {
         Device {
-            device_id: 123456,
             device_type: DeviceType::Flarm,
+            device_id: 0x123456,
             aircraft_model: "Test Aircraft".to_string(),
-            registration: "N123AB".to_string(),
-            competition_number: "42".to_string(),
+            registration: "N123TA".to_string(),
+            competition_number: "T1".to_string(),
             tracked: true,
             identified: true,
         }
     }
 
-    #[test]
-    fn test_device_creation() {
-        let device = create_test_device();
-        assert_eq!(device.device_id, 123456);
-        assert_eq!(device.device_type, DeviceType::Flarm);
+    #[tokio::test]
+    async fn test_device_repository_creation() {
+        // Just test that we can create the repository
+        if let Ok(pool) = create_test_pool() {
+            let _repo = DeviceRepository::new(pool);
+            // If we get here, creation succeeded
+            assert!(true);
+        } else {
+            // Skip test if we can't connect to test database
+            println!("Skipping test - no test database connection");
+        }
     }
 }

@@ -7,7 +7,7 @@ use tracing::{debug, error, info};
 
 use crate::Fix;
 use crate::aprs_client::FixProcessor;
-use crate::device_repo::DeviceRepository;
+use crate::device_repo::{DeviceRepository, PgPool as DieselPgPool};
 
 /// Get registration number for a given device ID
 /// This maps OGN/FLARM device IDs to aircraft registration numbers
@@ -60,13 +60,13 @@ pub struct NatsFixPublisher {
 
 impl NatsFixPublisher {
     /// Create a new NATS publisher for position fixes
-    pub async fn new(nats_url: &str, db_pool: PgPool) -> Result<Self> {
+    pub async fn new(nats_url: &str, _sqlx_pool: PgPool, diesel_pool: DieselPgPool) -> Result<Self> {
         info!("Connecting to NATS server at {}", nats_url);
         let nats_client = async_nats::connect(nats_url).await?;
 
         Ok(Self {
             nats_client: Arc::new(nats_client),
-            device_repo: DeviceRepository::new(db_pool),
+            device_repo: DeviceRepository::new(diesel_pool),
         })
     }
 }

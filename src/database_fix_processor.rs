@@ -1,7 +1,7 @@
 use sqlx::PgPool;
 use tracing::{error, trace, warn};
 
-use crate::device_repo::DeviceRepository;
+use crate::device_repo::{DeviceRepository, PgPool as DieselPgPool};
 use crate::fixes;
 use crate::fixes_repo::FixesRepository;
 use crate::{Fix, FixProcessor};
@@ -13,10 +13,10 @@ pub struct DatabaseFixProcessor {
 }
 
 impl DatabaseFixProcessor {
-    pub fn new(pool: PgPool) -> Self {
+    pub fn new(sqlx_pool: PgPool, diesel_pool: DieselPgPool) -> Self {
         Self {
-            fixes_repo: FixesRepository::new(pool.clone()),
-            device_repo: DeviceRepository::new(pool),
+            fixes_repo: FixesRepository::new(sqlx_pool),
+            device_repo: DeviceRepository::new(diesel_pool),
         }
     }
 }

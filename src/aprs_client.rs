@@ -3,6 +3,7 @@ use anyhow::Result;
 use ogn_parser::{AprsData, AprsPacket};
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::fs::OpenOptions;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
@@ -62,6 +63,8 @@ pub struct AprsClientConfig {
     pub retry_delay_seconds: u64,
     /// Base directory for message archive (optional)
     pub archive_base_dir: Option<String>,
+    /// Path to CSV log file for unparsed APRS fragments (optional)
+    pub unparsed_log_path: Option<String>,
 }
 
 impl Default for AprsClientConfig {
@@ -75,6 +78,7 @@ impl Default for AprsClientConfig {
             filter: None,
             retry_delay_seconds: 5,
             archive_base_dir: None,
+            unparsed_log_path: None,
         }
     }
 }
@@ -225,6 +229,7 @@ impl AprsClient {
                                 trimmed_line,
                                 Arc::clone(&message_processor),
                                 fix_processor.as_ref().map(Arc::clone),
+                                config,
                             )
                             .await;
                         } else {
@@ -267,6 +272,7 @@ impl AprsClient {
         message: &str,
         message_processor: Arc<dyn MessageProcessor>,
         fix_processor: Option<Arc<dyn FixProcessor>>,
+        config: &AprsClientConfig,
     ) {
         // Always call process_raw_message first (for logging/archiving)
         message_processor.process_raw_message(message);
@@ -281,11 +287,30 @@ impl AprsClient {
                             error!(
                                 "Unparsed position fragment: {unparsed} from message: {message}"
                             );
+
+                            // Log to CSV if configured
+                            if let Some(log_path) = &config.unparsed_log_path
+                                && let Err(e) = Self::log_unparsed_to_csv(
+                                    log_path, "position", unparsed, message,
+                                )
+                                .await
+                            {
+                                warn!("Failed to write to unparsed log: {}", e);
+                            }
                         }
                     }
                     AprsData::Status(status) => {
                         if let Some(unparsed) = &status.comment.unparsed {
                             error!("Unparsed status fragment: {unparsed} from message: {message}");
+
+                            // Log to CSV if configured
+                            if let Some(log_path) = &config.unparsed_log_path
+                                && let Err(e) =
+                                    Self::log_unparsed_to_csv(log_path, "status", unparsed, message)
+                                        .await
+                            {
+                                warn!("Failed to write to unparsed log: {}", e);
+                            }
                         }
                     }
                     _ => {}
@@ -313,6 +338,34 @@ impl AprsClient {
                 error!("Failed to parse APRS message '{message}': {e}");
             }
         }
+    }
+
+    /// Log unparsed APRS fragments to CSV file
+    async fn log_unparsed_to_csv(
+        log_path: &str,
+        fragment_type: &str,
+        unparsed_fragment: &str,
+        whole_message: &str,
+    ) -> Result<()> {
+        // Escape CSV fields by wrapping in quotes and escaping internal quotes
+        let escaped_fragment = unparsed_fragment.replace('"', "\"\"");
+        let escaped_message = whole_message.replace('"', "\"\"");
+
+        let csv_line = format!(
+            "{},\"{}\",\"{}\"\n",
+            fragment_type, escaped_fragment, escaped_message
+        );
+
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(log_path)
+            .await?;
+
+        file.write_all(csv_line.as_bytes()).await?;
+        file.flush().await?;
+
+        Ok(())
     }
 }
 
@@ -368,6 +421,11 @@ impl AprsClientConfigBuilder {
         self
     }
 
+    pub fn unparsed_log_path<S: Into<String>>(mut self, unparsed_log_path: Option<S>) -> Self {
+        self.config.unparsed_log_path = unparsed_log_path.map(|p| p.into());
+        self
+    }
+
     pub fn build(self) -> AprsClientConfig {
         self.config
     }
@@ -416,6 +474,7 @@ mod tests {
             max_retries: 3,
             retry_delay_seconds: 5,
             archive_base_dir: None,
+            unparsed_log_path: None,
         };
 
         let login_cmd = AprsClient::build_login_command(&config);
@@ -436,6 +495,7 @@ mod tests {
             max_retries: 3,
             retry_delay_seconds: 5,
             archive_base_dir: None,
+            unparsed_log_path: None,
         };
 
         let login_cmd = AprsClient::build_login_command(&config);
@@ -462,8 +522,16 @@ mod tests {
             counter: Arc::clone(&counter),
         });
 
+        let config = AprsClientConfig::default();
+
         // Simulate processing a message
-        AprsClient::process_message("TEST>APRS:>Test message", Arc::clone(&processor), None).await;
+        AprsClient::process_message(
+            "TEST>APRS:>Test message",
+            Arc::clone(&processor),
+            None,
+            &config,
+        )
+        .await;
 
         assert_eq!(counter.load(Ordering::SeqCst), 1);
     }

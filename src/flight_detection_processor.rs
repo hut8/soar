@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use tracing::{debug, error, info, warn};
 
 use crate::database_fix_processor::DatabaseFixProcessor;
+use crate::device_repo::PgPool as DieselPgPool;
 use crate::flights::Flight;
 use crate::flights_repo::FlightsRepository;
 use crate::{Fix, FixProcessor};
@@ -74,6 +75,7 @@ pub struct FlightDetectionProcessor {
     flights_repo: FlightsRepository,
     aircraft_trackers: HashMap<String, AircraftTracker>,
     pool: PgPool,
+    diesel_pool: DieselPgPool,
 
     // Configuration thresholds
     takeoff_speed_threshold: f32, // Minimum speed to consider takeoff (knots)
@@ -84,12 +86,13 @@ pub struct FlightDetectionProcessor {
 }
 
 impl FlightDetectionProcessor {
-    pub fn new(pool: PgPool) -> Self {
+    pub fn new(sqlx_pool: PgPool, diesel_pool: DieselPgPool) -> Self {
         Self {
-            db_processor: DatabaseFixProcessor::new(pool.clone()),
-            flights_repo: FlightsRepository::new(pool.clone()),
+            db_processor: DatabaseFixProcessor::new(sqlx_pool.clone(), diesel_pool.clone()),
+            flights_repo: FlightsRepository::new(sqlx_pool.clone()),
             aircraft_trackers: HashMap::new(),
-            pool,
+            pool: sqlx_pool,
+            diesel_pool,
 
             // Default thresholds - can be made configurable later
             takeoff_speed_threshold: 35.0,        // 35 knots
@@ -416,10 +419,11 @@ impl FixProcessor for FlightDetectionProcessor {
 impl Clone for FlightDetectionProcessor {
     fn clone(&self) -> Self {
         Self {
-            db_processor: DatabaseFixProcessor::new(self.pool.clone()),
+            db_processor: DatabaseFixProcessor::new(self.pool.clone(), self.diesel_pool.clone()),
             flights_repo: FlightsRepository::new(self.pool.clone()),
             aircraft_trackers: self.aircraft_trackers.clone(),
             pool: self.pool.clone(),
+            diesel_pool: self.diesel_pool.clone(),
             takeoff_speed_threshold: self.takeoff_speed_threshold,
             takeoff_altitude_gain_threshold: self.takeoff_altitude_gain_threshold,
             landing_speed_threshold: self.landing_speed_threshold,
