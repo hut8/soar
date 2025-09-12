@@ -9,14 +9,11 @@ ALTER TABLE aircraft_registrations DROP COLUMN IF EXISTS device_id;
 
 -- Step 2: Rename device_id to id in devices table and change to BYTEA with 3-byte constraint
 ALTER TABLE devices RENAME COLUMN device_id TO id;
-ALTER TABLE devices ALTER COLUMN id TYPE BYTEA USING NULL;
-
--- Add CHECK constraint to ensure the id is exactly 3 bytes
-ALTER TABLE devices ADD CONSTRAINT devices_id_3bytes_check CHECK (octet_length(id) = 3);
+ALTER TABLE devices ALTER COLUMN id TYPE BIT(24) USING NULL;
 
 -- Step 3: Recreate device_id columns in dependent tables with BYTEA type and 3-byte constraint
-ALTER TABLE fixes ADD COLUMN device_id BYTEA CHECK (octet_length(device_id) = 3);
-ALTER TABLE aircraft_registrations ADD COLUMN device_id BYTEA CHECK (octet_length(device_id) = 3);
+ALTER TABLE fixes ADD COLUMN device_id BIT(24);
+ALTER TABLE aircraft_registrations ADD COLUMN device_id BIT(24);
 
 -- Step 4: Add foreign key constraints back
 ALTER TABLE fixes ADD CONSTRAINT fixes_device_id_fkey FOREIGN KEY (device_id) REFERENCES devices(id);
