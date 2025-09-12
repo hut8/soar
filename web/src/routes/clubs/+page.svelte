@@ -90,6 +90,8 @@
 				(position) => {
 					latitude = position.coords.latitude.toString();
 					longitude = position.coords.longitude.toString();
+					// Automatically trigger search after getting location
+					searchClubs();
 				},
 				(error) => {
 					console.error('Error getting location:', error);
@@ -224,14 +226,10 @@
 						/>
 					</label>
 				</div>
-				<div class="flex justify-center gap-4">
-					<button class="btn variant-soft" on:click={getCurrentLocation}>
+				<div class="flex justify-center">
+					<button class="btn preset-filled-primary-500" on:click={getCurrentLocation}>
 						<MapPinHouse class="w-4 h-4 mr-2" />
 						Use My Location
-					</button>
-					<button class="btn variant-filled" on:click={searchClubs}>
-						<Search class="w-4 h-4 mr-2" />
-						Search Nearby
 					</button>
 				</div>
 			</div>
