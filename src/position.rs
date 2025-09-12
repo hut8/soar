@@ -4,7 +4,7 @@ use num_traits::AsPrimitive;
 use ogn_parser::AprsPacket;
 use serde::{Deserialize, Serialize};
 
-use crate::ogn_aprs_aircraft::{AddressType, AdsbEmitterCategory, AircraftType, OgnAprsParameters};
+use crate::ogn_aprs_aircraft::{AddressType, AdsbEmitterCategory, AircraftType};
 
 /// A position fix representing an aircraft's location and associated data
 /// This is the main domain entity for position updates, agnostic to source (APRS) and destination (database, NATS)
@@ -109,24 +109,6 @@ impl Fix {
                     });
                     // For now, we'll extract aircraft type from the OGN parameters if available
                     aircraft_type = None;
-                } else if let Some(ref comment) = pos_packet.comment.unparsed {
-                    // Try to parse OGN parameters from unparsed comment
-                    if let Ok(ogn_params) = comment.parse::<OgnAprsParameters>() {
-                        aircraft_id = Some(format!("{:06X}", ogn_params.address));
-                        device_id = Some(ogn_params.address);
-                        device_type = Some(ogn_params.address_type);
-                        aircraft_type = Some(ogn_params.aircraft_type);
-                        flight_number = ogn_params.flight_number;
-                        emitter_category = ogn_params.emitter_category;
-                        registration = ogn_params.registration;
-                        model = ogn_params.model;
-                        squawk = ogn_params.squawk;
-                        climb_fpm = ogn_params.climb_fpm;
-                        turn_rate_rot = ogn_params.turn_rate_rot;
-                        snr_db = ogn_params.snr_db;
-                        bit_errors_corrected = ogn_params.bit_errors_corrected;
-                        freq_offset_khz = ogn_params.freq_offset_khz;
-                    }
                 }
 
                 Ok(Some(Fix {

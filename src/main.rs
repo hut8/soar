@@ -900,7 +900,7 @@ async fn main() -> Result<()> {
 
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
         // Default filter: TRACE for soar, INFO for async_nats, WARN for everything else
-        EnvFilter::new("warn,soar=trace,async_nats=info,soar::nats_publisher=warn")
+        EnvFilter::new("info,soar=debug,async_nats=warn,soar::nats_publisher=warn")
     });
 
     FmtSubscriber::builder().with_env_filter(filter).init();
