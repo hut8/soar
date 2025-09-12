@@ -17,11 +17,14 @@ use crate::locations::Point;
 /// ## Usage
 ///
 /// ### Basic usage without Google Maps fallback:
-/// ```rust
-/// use soar::geocoding::{Geocoder, geocode_components};
-///
+/// ```rust,no_run
+/// use soar::geocoding::Geocoder;
+/// 
+/// # async fn example() -> anyhow::Result<()> {
 /// let geocoder = Geocoder::new();
 /// let point = geocoder.geocode_address("1600 Pennsylvania Avenue, Washington, DC").await?;
+/// # Ok(())
+/// # }
 /// ```
 ///
 /// ### With Google Maps fallback:
@@ -32,10 +35,15 @@ use crate::locations::Point;
 ///
 /// Then use the geocoder normally - it will automatically fall back to Google Maps
 /// when Nominatim fails:
-/// ```rust
+/// ```rust,no_run
+/// use soar::geocoding::Geocoder;
+/// 
+/// # async fn example() -> anyhow::Result<()> {
 /// let geocoder = Geocoder::new();
 /// let point = geocoder.geocode_address("123 Hard to Find Address").await?;
 /// // Will try Nominatim first, then Google Maps if it fails
+/// # Ok(())
+/// # }
 /// ```
 
 // Nominatim API response structure
