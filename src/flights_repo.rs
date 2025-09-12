@@ -20,10 +20,10 @@ impl FlightsRepository {
             r#"
             INSERT INTO flights (
                 id, aircraft_id, takeoff_time, landing_time, departure_airport,
-                arrival_airport, tow_aircraft_id, tow_release_height_msl,
+                arrival_airport, tow_aircraft_id, tow_release_height_msl, club_id,
                 created_at, updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             "#,
             flight.id,
             flight.aircraft_id,
@@ -33,6 +33,7 @@ impl FlightsRepository {
             flight.arrival_airport,
             flight.tow_aircraft_id,
             flight.tow_release_height_msl,
+            flight.club_id,
             flight.created_at,
             flight.updated_at
         )
@@ -65,105 +66,38 @@ impl FlightsRepository {
 
     /// Get a flight by its ID
     pub async fn get_flight_by_id(&self, flight_id: Uuid) -> Result<Option<Flight>> {
-        let result = sqlx::query!(
-            r#"
-            SELECT id, aircraft_id, takeoff_time, landing_time, departure_airport,
-                   arrival_airport, tow_aircraft_id, tow_release_height_msl,
-                   club_id, created_at, updated_at
-            FROM flights
-            WHERE id = $1
-            "#,
+        let flight = sqlx::query_as!(
+            Flight,
+            "SELECT * FROM flights WHERE id = $1",
             flight_id
         )
         .fetch_optional(&self.pool)
         .await?;
 
-        if let Some(row) = result {
-            Ok(Some(Flight {
-                id: row.id,
-                aircraft_id: row.aircraft_id,
-                takeoff_time: row.takeoff_time,
-                landing_time: row.landing_time,
-                departure_airport: row.departure_airport,
-                arrival_airport: row.arrival_airport,
-                tow_aircraft_id: row.tow_aircraft_id,
-                tow_release_height_msl: row.tow_release_height_msl,
-                club_id: row.club_id,
-                created_at: row.created_at,
-                updated_at: row.updated_at,
-            }))
-        } else {
-            Ok(None)
-        }
+        Ok(flight)
     }
 
     /// Get all flights for a specific aircraft, ordered by takeoff time descending
     pub async fn get_flights_for_aircraft(&self, aircraft_id: &str) -> Result<Vec<Flight>> {
-        let results = sqlx::query!(
-            r#"
-            SELECT id, aircraft_id, takeoff_time, landing_time, departure_airport,
-                   arrival_airport, tow_aircraft_id, tow_release_height_msl,
-                   club_id, created_at, updated_at
-            FROM flights
-            WHERE aircraft_id = $1
-            ORDER BY takeoff_time DESC
-            "#,
+        let flights = sqlx::query_as!(
+            Flight,
+            "SELECT * FROM flights WHERE aircraft_id = $1 ORDER BY takeoff_time DESC",
             aircraft_id
         )
         .fetch_all(&self.pool)
         .await?;
-
-        let mut flights = Vec::new();
-        for row in results {
-            flights.push(Flight {
-                id: row.id,
-                aircraft_id: row.aircraft_id,
-                takeoff_time: row.takeoff_time,
-                landing_time: row.landing_time,
-                departure_airport: row.departure_airport,
-                arrival_airport: row.arrival_airport,
-                tow_aircraft_id: row.tow_aircraft_id,
-                tow_release_height_msl: row.tow_release_height_msl,
-                club_id: row.club_id,
-                created_at: row.created_at,
-                updated_at: row.updated_at,
-            });
-        }
 
         Ok(flights)
     }
 
     /// Get all flights in progress (no landing time) ordered by takeoff time descending
     pub async fn get_flights_in_progress(&self) -> Result<Vec<Flight>> {
-        let results = sqlx::query!(
-            r#"
-            SELECT id, aircraft_id, takeoff_time, landing_time, departure_airport,
-                   arrival_airport, tow_aircraft_id, tow_release_height_msl,
-                   club_id, created_at, updated_at
-            FROM flights
-            WHERE landing_time IS NULL
-            ORDER BY takeoff_time DESC
-            "#
+        let flights = sqlx::query_as!(
+            Flight,
+            "SELECT * FROM flights WHERE landing_time IS NULL ORDER BY takeoff_time DESC"
         )
         .fetch_all(&self.pool)
         .await?;
-
-        let mut flights = Vec::new();
-        for row in results {
-            flights.push(Flight {
-                id: row.id,
-                aircraft_id: row.aircraft_id,
-                takeoff_time: row.takeoff_time,
-                landing_time: row.landing_time,
-                departure_airport: row.departure_airport,
-                arrival_airport: row.arrival_airport,
-                tow_aircraft_id: row.tow_aircraft_id,
-                tow_release_height_msl: row.tow_release_height_msl,
-                club_id: row.club_id,
-                created_at: row.created_at,
-                updated_at: row.updated_at,
-            });
-        }
 
         Ok(flights)
     }
@@ -191,12 +125,10 @@ impl FlightsRepository {
         end_time: DateTime<Utc>,
         aircraft_id: &str,
     ) -> Result<Vec<Flight>> {
-        let results = sqlx::query!(
+        let flights = sqlx::query_as!(
+            Flight,
             r#"
-            SELECT id, aircraft_id, takeoff_time, landing_time, departure_airport,
-                   arrival_airport, tow_aircraft_id, tow_release_height_msl,
-                   club_id, created_at, updated_at
-            FROM flights
+            SELECT * FROM flights
             WHERE aircraft_id = $1
             AND takeoff_time >= $2
             AND takeoff_time <= $3
@@ -209,23 +141,6 @@ impl FlightsRepository {
         .fetch_all(&self.pool)
         .await?;
 
-        let mut flights = Vec::new();
-        for row in results {
-            flights.push(Flight {
-                id: row.id,
-                aircraft_id: row.aircraft_id,
-                takeoff_time: row.takeoff_time,
-                landing_time: row.landing_time,
-                departure_airport: row.departure_airport,
-                arrival_airport: row.arrival_airport,
-                tow_aircraft_id: row.tow_aircraft_id,
-                tow_release_height_msl: row.tow_release_height_msl,
-                club_id: row.club_id,
-                created_at: row.created_at,
-                updated_at: row.updated_at,
-            });
-        }
-
         Ok(flights)
     }
 
@@ -235,12 +150,10 @@ impl FlightsRepository {
         start_time: DateTime<Utc>,
         end_time: DateTime<Utc>,
     ) -> Result<Vec<Flight>> {
-        let results = sqlx::query!(
+        let flights = sqlx::query_as!(
+            Flight,
             r#"
-            SELECT id, aircraft_id, takeoff_time, landing_time, departure_airport,
-                   arrival_airport, tow_aircraft_id, tow_release_height_msl,
-                   club_id, created_at, updated_at
-            FROM flights
+            SELECT * FROM flights
             WHERE takeoff_time >= $1
             AND takeoff_time <= $2
             ORDER BY takeoff_time DESC
@@ -251,58 +164,18 @@ impl FlightsRepository {
         .fetch_all(&self.pool)
         .await?;
 
-        let mut flights = Vec::new();
-        for row in results {
-            flights.push(Flight {
-                id: row.id,
-                aircraft_id: row.aircraft_id,
-                takeoff_time: row.takeoff_time,
-                landing_time: row.landing_time,
-                departure_airport: row.departure_airport,
-                arrival_airport: row.arrival_airport,
-                tow_aircraft_id: row.tow_aircraft_id,
-                tow_release_height_msl: row.tow_release_height_msl,
-                club_id: row.club_id,
-                created_at: row.created_at,
-                updated_at: row.updated_at,
-            });
-        }
-
         Ok(flights)
     }
 
     /// Get flights that used a specific tow aircraft
     pub async fn get_flights_by_tow_aircraft(&self, tow_aircraft_id: &str) -> Result<Vec<Flight>> {
-        let results = sqlx::query!(
-            r#"
-            SELECT id, aircraft_id, takeoff_time, landing_time, departure_airport,
-                   arrival_airport, tow_aircraft_id, tow_release_height_msl,
-                   club_id, created_at, updated_at
-            FROM flights
-            WHERE tow_aircraft_id = $1
-            ORDER BY takeoff_time DESC
-            "#,
+        let flights = sqlx::query_as!(
+            Flight,
+            "SELECT * FROM flights WHERE tow_aircraft_id = $1 ORDER BY takeoff_time DESC",
             tow_aircraft_id
         )
         .fetch_all(&self.pool)
         .await?;
-
-        let mut flights = Vec::new();
-        for row in results {
-            flights.push(Flight {
-                id: row.id,
-                aircraft_id: row.aircraft_id,
-                takeoff_time: row.takeoff_time,
-                landing_time: row.landing_time,
-                departure_airport: row.departure_airport,
-                arrival_airport: row.arrival_airport,
-                tow_aircraft_id: row.tow_aircraft_id,
-                tow_release_height_msl: row.tow_release_height_msl,
-                club_id: row.club_id,
-                created_at: row.created_at,
-                updated_at: row.updated_at,
-            });
-        }
 
         Ok(flights)
     }
