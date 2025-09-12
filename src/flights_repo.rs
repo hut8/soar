@@ -50,7 +50,7 @@ impl FlightsRepository {
     ) -> Result<bool> {
         let result = sqlx::query!(
             r#"
-            UPDATE flights 
+            UPDATE flights
             SET landing_time = $1, updated_at = NOW()
             WHERE id = $2
             "#,
@@ -197,8 +197,8 @@ impl FlightsRepository {
                    arrival_airport, tow_aircraft_id, tow_release_height_msl,
                    club_id, created_at, updated_at
             FROM flights
-            WHERE aircraft_id = $1 
-            AND takeoff_time >= $2 
+            WHERE aircraft_id = $1
+            AND takeoff_time >= $2
             AND takeoff_time <= $3
             ORDER BY takeoff_time DESC
             "#,
@@ -241,7 +241,7 @@ impl FlightsRepository {
                    arrival_airport, tow_aircraft_id, tow_release_height_msl,
                    club_id, created_at, updated_at
             FROM flights
-            WHERE takeoff_time >= $1 
+            WHERE takeoff_time >= $1
             AND takeoff_time <= $2
             ORDER BY takeoff_time DESC
             "#,
@@ -337,10 +337,10 @@ impl FlightsRepository {
     ) -> Result<bool> {
         let result = sqlx::query!(
             r#"
-            UPDATE flights 
-            SET departure_airport = $1, 
-                arrival_airport = $2, 
-                tow_aircraft_id = $3, 
+            UPDATE flights
+            SET departure_airport = $1,
+                arrival_airport = $2,
+                tow_aircraft_id = $3,
                 tow_release_height_msl = $4,
                 updated_at = NOW()
             WHERE id = $5

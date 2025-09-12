@@ -13,7 +13,7 @@ use crate::web::AppState;
 use super::views::AircraftView;
 
 pub async fn get_aircraft_by_club(
-    auth_user: AuthUser,
+    _auth_user: AuthUser,
     State(state): State<AppState>,
     Path(club_id): Path<Uuid>,
 ) -> impl IntoResponse {
