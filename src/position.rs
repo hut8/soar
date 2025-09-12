@@ -84,16 +84,16 @@ impl Fix {
                 let mut device_id = None;
                 let mut device_type = None;
                 let mut aircraft_type = None;
-                let mut flight_number = None;
-                let mut emitter_category = None;
-                let mut registration = None;
-                let mut model = None;
-                let mut squawk = None;
-                let mut climb_fpm = None;
-                let mut turn_rate_rot = None;
-                let mut snr_db = None;
-                let mut bit_errors_corrected = None;
-                let mut freq_offset_khz = None;
+                let flight_number = None;
+                let emitter_category = None;
+                let registration = None;
+                let model = None;
+                let squawk = None;
+                let climb_fpm = None;
+                let turn_rate_rot = None;
+                let snr_db = None;
+                let bit_errors_corrected = None;
+                let freq_offset_khz = None;
 
                 // Try to parse OGN parameters from comment
                 if let Some(ref id) = pos_packet.comment.id {

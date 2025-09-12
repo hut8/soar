@@ -9,22 +9,9 @@ use std::path::Path;
 use std::sync::Arc;
 use tracing::{error, info, warn};
 
-use soar::aircraft_registrations::read_aircraft_file;
-use soar::aircraft_registrations_repo::AircraftRegistrationsRepository;
-use soar::airports::read_airports_csv_file;
-use soar::airports_repo::AirportsRepository;
 use soar::aprs_client::{AprsClient, AprsClientConfigBuilder, FixProcessor, MessageProcessor};
-use soar::clubs_repo::ClubsRepository;
 use soar::database_fix_processor::DatabaseFixProcessor;
-use soar::device_repo::DeviceRepository;
-use soar::faa::aircraft_model_repo::AircraftModelRepository;
-use soar::geocoding::geocode_components;
 use soar::live_fixes::LiveFixService;
-use soar::locations_repo::LocationsRepository;
-use soar::receiver_repo::ReceiverRepository;
-use soar::receivers::read_receivers_file;
-use soar::runways::read_runways_csv_file;
-use soar::runways_repo::RunwaysRepository;
 
 // Embed migrations into the binary
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!();
