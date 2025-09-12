@@ -122,6 +122,7 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         .route("/users/:id", get(actions::get_user_by_id))
         .route("/users/:id", put(actions::update_user_by_id))
         .route("/users/:id", delete(actions::delete_user_by_id))
+        .route("/users/set-club", put(actions::set_user_club))
         .route("/clubs/:id/users", get(actions::get_users_by_club))
         .with_state(app_state.clone());
 

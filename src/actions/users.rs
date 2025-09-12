@@ -15,6 +15,11 @@ use crate::web::AppState;
 use super::views::UserView;
 
 #[derive(Debug, Deserialize)]
+pub struct SetClubRequest {
+    pub club_id: Uuid,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct UserQueryParams {
     pub limit: Option<i64>,
 }
@@ -119,6 +124,36 @@ pub async fn get_users_by_club(
                 "Failed to get users by club",
             )
                 .into_response()
+        }
+    }
+}
+
+pub async fn set_user_club(
+    auth_user: AuthUser,
+    State(state): State<AppState>,
+    Json(payload): Json<SetClubRequest>,
+) -> impl IntoResponse {
+    let users_repo = UsersRepository::new(state.pool);
+
+    // Users can only set their own club membership
+    let user_id = auth_user.0.id;
+
+    // Create update request with just the club_id
+    let update_request = UpdateUserRequest {
+        first_name: None,
+        last_name: None,
+        email: None,
+        access_level: None,
+        club_id: Some(payload.club_id),
+        email_verified: None,
+    };
+
+    match users_repo.update_user(user_id, &update_request).await {
+        Ok(Some(user)) => Json(UserView::from(user)).into_response(),
+        Ok(None) => (StatusCode::NOT_FOUND, "User not found").into_response(),
+        Err(e) => {
+            error!("Failed to set user club: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to set user club").into_response()
         }
     }
 }
