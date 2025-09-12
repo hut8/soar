@@ -19,11 +19,6 @@ pub async fn get_aircraft_by_club(
 ) -> impl IntoResponse {
     let aircraft_repo = AircraftRegistrationsRepository::new(state.pool);
 
-    // Check if user is admin or belongs to the same club
-    if !auth_user.0.is_admin() && auth_user.0.club_id != Some(club_id) {
-        return (StatusCode::FORBIDDEN, "Insufficient permissions").into_response();
-    }
-
     match aircraft_repo.get_by_club_id(club_id).await {
         Ok(aircraft_list) => {
             let aircraft_views: Vec<AircraftView> = aircraft_list
