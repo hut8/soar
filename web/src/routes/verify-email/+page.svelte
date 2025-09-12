@@ -32,7 +32,7 @@
 
 			// Redirect to login after 3 seconds
 			setTimeout(() => {
-				goto('/login?message=Email verified successfully. Please log in.');
+				goto(resolve('/login?message=Email verified successfully. Please log in.'));
 			}, 3000);
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to verify email';

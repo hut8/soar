@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
+	import { resolve } from '$app/paths';
 	import { Users, Search, MapPinHouse, ExternalLink, Navigation, Plane } from '@lucide/svelte';
 	import { ProgressRing } from '@skeletonlabs/skeleton-svelte';
 	import { ClubSelector } from '$lib';
@@ -40,9 +41,8 @@
 	let longitude = '';
 	let radius = '50';
 
-	$: queryParams = page.url.searchParams;
-
 	onMount(async () => {
+		const queryParams = page.url.searchParams;
 		const q = queryParams.get('q');
 		const lat = queryParams.get('latitude');
 		const lng = queryParams.get('longitude');
@@ -299,7 +299,7 @@
 						</div>
 
 						<footer class="border-surface-200-700-token border-t pt-4">
-							<a href="/clubs/{club.id}" class="variant-soft btn w-full btn-sm">
+							<a href={resolve(`/clubs/${club.id}`)} class="variant-soft btn w-full btn-sm">
 								<ExternalLink class="mr-2 h-4 w-4" />
 								View Details
 							</a>

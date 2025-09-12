@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import {
 		ArrowLeft,
 		Radio,
@@ -97,7 +98,7 @@
 					linkedAircraft = await serverCall<Aircraft>(
 						`/aircraft/registration/${device.registration}`
 					);
-				} catch (aircraftErr) {
+				} catch {
 					// Aircraft not found is okay, don't show error for this
 					console.log('No aircraft found for registration:', device.registration);
 				}
@@ -122,7 +123,7 @@
 	}
 
 	function goBack() {
-		goto('/devices');
+		goto(resolve('/devices'));
 	}
 </script>
 

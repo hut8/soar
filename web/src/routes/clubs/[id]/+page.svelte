@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { ArrowLeft, Building, MapPin, Plane, Navigation, Info, UserCheck } from '@lucide/svelte';
 	import { ProgressRing } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall } from '$lib/api/server';
@@ -107,22 +108,12 @@
 		}
 	}
 
-	function formatAddress(club: Club): string {
-		const parts = [];
-		if (club.street1) parts.push(club.street1);
-		if (club.street2) parts.push(club.street2);
-		if (club.city) parts.push(club.city);
-		if (club.state) parts.push(club.state);
-		if (club.zip_code) parts.push(club.zip_code);
-		return parts.join(', ') || 'Address not available';
-	}
-
 	function formatCoordinates(point: Point): string {
 		return `${point.latitude.toFixed(6)}, ${point.longitude.toFixed(6)}`;
 	}
 
 	function goBack() {
-		goto('/clubs');
+		goto(resolve('/clubs'));
 	}
 
 	async function setAsMyClub() {
@@ -141,7 +132,6 @@
 			// Load aircraft now that user is part of the club
 			await loadAircraft();
 		} catch (err) {
-			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			console.error('Error setting club:', err);
 			// You could add a toast notification here
 		} finally {
@@ -312,7 +302,7 @@
 						</div>
 					{:else}
 						<div class="space-y-3">
-							{#each aircraft as plane}
+							{#each aircraft as plane (plane.registration_number)}
 								<div class="bg-surface-100-800-token rounded-lg p-4">
 									<div class="flex items-start justify-between">
 										<div class="flex-1">

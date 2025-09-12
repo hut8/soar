@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { Search, Radio, Plane, ExternalLink, User } from '@lucide/svelte';
+	import { Search, Radio, Plane, User } from '@lucide/svelte';
 	import { ProgressRing } from '@skeletonlabs/skeleton-svelte';
+	import { resolve } from '$app/paths';
 	import { serverCall } from '$lib/api/server';
 
 	interface Device {
@@ -210,11 +211,11 @@
 						</tr>
 					</thead>
 					<tbody>
-						{#each devices as device}
+						{#each devices as device (device.device_id)}
 							<tr>
 								<td>
 									<a
-										href="/devices/{formatDeviceId(device.device_id)}"
+										href={resolve(`/devices/${formatDeviceId(device.device_id)}`)}
 										class="anchor font-mono text-primary-500 hover:text-primary-600"
 									>
 										{formatDeviceId(device.device_id)}
