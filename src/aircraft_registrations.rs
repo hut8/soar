@@ -901,6 +901,7 @@ mod tests {
         );
         assert_eq!(first.city, Some("BALLSTON SPA".to_string()));
         assert_eq!(first.state, Some("NY".to_string()));
+        assert_eq!(first.zip_code, Some("12020-2816".to_string())); // Test zip code formatting
         assert_eq!(first.status_code, Some("V".to_string()));
 
         // Test Mode S code parsing (hex)
@@ -908,7 +909,7 @@ mod tests {
 
         // Test second aircraft (9845L)
         let second = &aircraft[1];
-        assert_eq!(second.n_number, "9845L");
+        assert_eq!(second.n_number, "N9845L");
         assert_eq!(second.serial_number, "17276634");
         assert_eq!(second.year_mfr, Some(1986));
         assert_eq!(
@@ -921,7 +922,7 @@ mod tests {
 
         // Test third aircraft (360EF)
         let third = &aircraft[2];
-        assert_eq!(third.n_number, "360EF");
+        assert_eq!(third.n_number, "N360EF");
         assert_eq!(third.serial_number, "3060");
         assert_eq!(third.year_mfr, Some(1995));
         assert_eq!(
@@ -934,7 +935,7 @@ mod tests {
 
         // Test fourth aircraft (8437D)
         let fourth = &aircraft[3];
-        assert_eq!(fourth.n_number, "8437D");
+        assert_eq!(fourth.n_number, "N8437D");
         assert_eq!(fourth.serial_number, "22-5692");
         assert_eq!(fourth.year_mfr, Some(1957));
         assert_eq!(fourth.registrant_name, Some("CLARK DONALD S".to_string()));
