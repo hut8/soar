@@ -1,0 +1,39 @@
+[Unit]
+Description=SOAR Run - APRS Data Collection Service
+Documentation=https://github.com/your-repo/soar
+After=network-online.target postgresql.service nats-server.service
+Wants=network-online.target
+Requires=postgresql.service nats-server.service
+
+[Service]
+Type=simple
+User=soar
+Group=soar
+WorkingDirectory=/var/lib/soar
+ExecStart=/usr/local/bin/soar run --archive --unparsed-log /var/lib/soar/logs/unparsed.csv
+ExecReload=/bin/kill -s HUP $MAINPID
+
+# Environment variables
+Environment=DATABASE_URL=postgres://soar:password@localhost/soar
+Environment=RUST_LOG=info
+Environment=NATS_URL=nats://localhost:4222
+
+# Security settings
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/soar/logs
+ReadWritePaths=/var/soar/archive
+
+# Restart configuration
+Restart=on-failure
+RestartSec=5
+StartLimitInterval=60s
+StartLimitBurst=3
+
+# Process limits
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
