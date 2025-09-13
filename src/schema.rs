@@ -110,7 +110,6 @@ diesel::table! {
         identified -> Bool,
         created_at -> Nullable<Timestamptz>,
         updated_at -> Nullable<Timestamptz>,
-        user_id -> Nullable<Uuid>,
     }
 }
 

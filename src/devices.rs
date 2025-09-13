@@ -5,7 +5,6 @@ use std::str::FromStr;
 // Diesel imports
 use diesel::prelude::*;
 use chrono::{DateTime, Utc};
-use uuid::Uuid;
 
 const DDB_URL: &str = "http://ddb.glidernet.org/download/?j=1";
 
@@ -129,7 +128,6 @@ pub struct DeviceModel {
     pub identified: bool,
     pub created_at: Option<DateTime<Utc>>,
     pub updated_at: Option<DateTime<Utc>>,
-    pub user_id: Option<Uuid>,
 }
 
 // For inserting new devices (without timestamps which are set by DB)
@@ -143,7 +141,6 @@ pub struct NewDevice {
     pub competition_number: String,
     pub tracked: bool,
     pub identified: bool,
-    pub user_id: Option<Uuid>,
 }
 
 impl From<Device> for NewDevice {
@@ -156,7 +153,6 @@ impl From<Device> for NewDevice {
             competition_number: device.competition_number,
             tracked: device.tracked,
             identified: device.identified,
-            user_id: None, // Default to None for now
         }
     }
 }

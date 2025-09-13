@@ -96,7 +96,7 @@ impl DeviceRepository {
         // We'll use raw SQL for now since it involves a join with another table
         let sql = r#"
             SELECT d.device_id, d.device_type, d.aircraft_model, d.registration,
-                   d.competition_number, d.tracked, d.identified, d.created_at, d.updated_at, d.user_id
+                   d.competition_number, d.tracked, d.identified, d.created_at, d.updated_at
             FROM devices d
             INNER JOIN aircraft_registrations ar ON d.registration = ar.registration_number
             WHERE ar.club_id = $1
