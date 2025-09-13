@@ -38,6 +38,65 @@ if [[ $EUID -eq 0 ]]; then
     exit 1
 fi
 
+# Create environment file from .env if it doesn't exist
+if [ ! -f "/etc/soar/env" ]; then
+    log_info "Creating environment file from .env..."
+
+    if [ ! -f ".env" ]; then
+        log_error ".env file not found in current directory"
+        log_error "Please create .env file with your configuration first"
+        exit 1
+    fi
+
+    # Create /etc/soar directory
+    sudo mkdir -p /etc/soar
+
+    # Create environment file from .env with production modifications
+    {
+        echo "# SOAR Environment Configuration - Auto-generated from .env"
+        echo "# Generated on $(date)"
+        echo ""
+
+        # Process .env file, changing soar_dev to soar and BASE_URL to production port
+        while IFS= read -r line || [ -n "$line" ]; do
+            # Skip empty lines and comments
+            if [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]]; then
+                continue
+            fi
+
+            # Change database from soar_dev to soar
+            if [[ "$line" =~ ^DATABASE_URL= ]]; then
+                echo "$line" | sed 's/soar_dev/soar/g'
+            # Change BASE_URL to production port
+            elif [[ "$line" =~ ^BASE_URL= ]]; then
+                echo "$line" | sed 's/:1338/:1337/g'
+            # Add SOAR_ENV=production if not present
+            else
+                echo "$line"
+            fi
+        done < .env
+
+        # Ensure SOAR_ENV is set to production
+        if ! grep -q "^SOAR_ENV=" .env; then
+            echo ""
+            echo "# Environment setting"
+            echo "SOAR_ENV=production"
+        fi
+
+        # Ensure RUST_LOG is set
+        if ! grep -q "^RUST_LOG=" .env; then
+            echo ""
+            echo "# Logging level"
+            echo "RUST_LOG=info"
+        fi
+
+    } | sudo tee /etc/soar/env > /dev/null
+
+    log_info "Environment file created at /etc/soar/env"
+else
+    log_info "Environment file /etc/soar/env already exists"
+fi
+
 # Stop services if running
 log_info "Stopping SOAR services if running..."
 sudo systemctl stop ${RUN_SERVICE_NAME} 2>/dev/null || true
@@ -65,6 +124,17 @@ fi
 log_info "Creating deployment and archive directories..."
 sudo mkdir -p ${DEPLOY_PATH}/logs
 sudo mkdir -p ${ARCHIVE_PATH}
+
+# Ensure /etc/soar directory exists and has correct permissions
+log_info "Ensuring /etc/soar directory has correct permissions..."
+sudo mkdir -p /etc/soar
+sudo chown root:${SERVICE_GROUP} /etc/soar
+sudo chmod 750 /etc/soar
+
+# Verify environment file permissions
+log_info "Verifying environment file permissions..."
+sudo chown root:${SERVICE_GROUP} /etc/soar/env
+sudo chmod 640 /etc/soar/env
 
 # Copy binary
 log_info "Copying binary to ${BINARY_PATH}..."

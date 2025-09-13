@@ -1,0 +1,29 @@
+# SOAR Environment Configuration
+# This file should be installed to /etc/soar/env with mode 600 and owned by root:soar
+
+# Database connection string
+DATABASE_URL=postgres://soar:password@localhost/soar
+
+# Logging level (trace, debug, info, warn, error)
+RUST_LOG=info
+
+# NATS server connection URL
+NATS_URL=nats://localhost:4222
+
+# Environment (development, production)
+SOAR_ENV=production
+
+# Optional: JWT secret for authentication (generate with: openssl rand -hex 32)
+#JWT_SECRET=your_jwt_secret_here
+
+# Optional: Google Maps API key for geocoding
+#GOOGLE_MAPS_API_KEY=your_google_maps_api_key_here
+
+# Optional: Email configuration for notifications
+#SMTP_HOST=smtp.gmail.com
+#SMTP_PORT=587
+#SMTP_USERNAME=your_email@gmail.com
+#SMTP_PASSWORD=your_app_password
+
+# Optional: Sentry DSN for error reporting
+#SENTRY_DSN=https://your_sentry_dsn_here
