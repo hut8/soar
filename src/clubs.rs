@@ -2,8 +2,9 @@ use crate::locations::Point;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::types::Uuid;
+use diesel::prelude::*;
 
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Club {
     pub id: Uuid,
     pub name: String,
@@ -77,6 +78,58 @@ impl Club {
             None
         } else {
             Some(parts.join(", "))
+        }
+    }
+}
+
+/// Diesel model for the clubs table - used for database operations
+#[derive(Debug, Clone, Queryable, Selectable, Insertable, AsChangeset, Serialize, Deserialize)]
+#[diesel(table_name = crate::schema::clubs)]
+pub struct ClubModel {
+    pub id: Uuid,
+    pub name: String,
+    pub is_soaring: Option<bool>,
+    pub home_base_airport_id: Option<i32>,
+    pub location_id: Option<Uuid>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// Insert model for new clubs
+#[derive(Debug, Clone, Insertable, Serialize, Deserialize)]
+#[diesel(table_name = crate::schema::clubs)]
+pub struct NewClubModel {
+    pub id: Uuid,
+    pub name: String,
+    pub is_soaring: Option<bool>,
+    pub home_base_airport_id: Option<i32>,
+    pub location_id: Option<Uuid>,
+}
+
+/// Conversion from Club (API model) to ClubModel (database model)
+impl From<Club> for ClubModel {
+    fn from(club: Club) -> Self {
+        Self {
+            id: club.id,
+            name: club.name,
+            is_soaring: club.is_soaring,
+            home_base_airport_id: club.home_base_airport_id,
+            location_id: club.location_id,
+            created_at: club.created_at,
+            updated_at: club.updated_at,
+        }
+    }
+}
+
+/// Conversion from Club (API model) to NewClubModel (insert model)
+impl From<Club> for NewClubModel {
+    fn from(club: Club) -> Self {
+        Self {
+            id: club.id,
+            name: club.name,
+            is_soaring: club.is_soaring,
+            home_base_airport_id: club.home_base_airport_id,
+            location_id: club.location_id,
         }
     }
 }

@@ -1,8 +1,9 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::types::Uuid;
+use diesel::prelude::*;
 
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Location {
     pub id: Uuid,
     pub street1: Option<String>,
@@ -66,6 +67,122 @@ impl sqlx::Decode<'_, sqlx::Postgres> for Point {
         let latitude: f64 = coords[1].parse()?;
 
         Ok(Point::new(latitude, longitude))
+    }
+}
+
+/// Diesel model for the locations table - used for database operations
+#[derive(Debug, Clone, Queryable, Selectable, Insertable, AsChangeset, Serialize, Deserialize)]
+#[diesel(table_name = crate::schema::locations)]
+pub struct LocationModel {
+    pub id: Uuid,
+    pub street1: Option<String>,
+    pub street2: Option<String>,
+    pub city: Option<String>,
+    pub state: Option<String>,
+    pub zip_code: Option<String>,
+    pub region_code: Option<String>,
+    pub county_mail_code: Option<String>,
+    pub country_mail_code: Option<String>,
+    pub geolocation: Option<String>, // PostGIS point as text representation
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// Insert model for new locations
+#[derive(Debug, Clone, Insertable, Serialize, Deserialize)]
+#[diesel(table_name = crate::schema::locations)]
+pub struct NewLocationModel {
+    pub id: Uuid,
+    pub street1: Option<String>,
+    pub street2: Option<String>,
+    pub city: Option<String>,
+    pub state: Option<String>,
+    pub zip_code: Option<String>,
+    pub region_code: Option<String>,
+    pub county_mail_code: Option<String>,
+    pub country_mail_code: Option<String>,
+    pub geolocation: Option<String>, // PostGIS point as text representation
+}
+
+/// Convert Point to PostGIS text representation
+fn point_to_postgis_text(point: &Point) -> String {
+    format!("POINT({} {})", point.longitude, point.latitude)
+}
+
+/// Convert PostGIS text representation to Point
+fn postgis_text_to_point(text: &str) -> Option<Point> {
+    // Parse "POINT(longitude latitude)" format
+    let coords = text
+        .strip_prefix("POINT(")?
+        .strip_suffix(")")?
+        .split_whitespace()
+        .collect::<Vec<_>>();
+    
+    if coords.len() != 2 {
+        return None;
+    }
+    
+    let longitude: f64 = coords[0].parse().ok()?;
+    let latitude: f64 = coords[1].parse().ok()?;
+    
+    Some(Point::new(latitude, longitude))
+}
+
+/// Conversion from Location (API model) to LocationModel (database model)
+impl From<Location> for LocationModel {
+    fn from(location: Location) -> Self {
+        Self {
+            id: location.id,
+            street1: location.street1,
+            street2: location.street2,
+            city: location.city,
+            state: location.state,
+            zip_code: location.zip_code,
+            region_code: location.region_code,
+            county_mail_code: location.county_mail_code,
+            country_mail_code: location.country_mail_code,
+            geolocation: location.geolocation.map(|p| point_to_postgis_text(&p)),
+            created_at: location.created_at,
+            updated_at: location.updated_at,
+        }
+    }
+}
+
+/// Conversion from Location (API model) to NewLocationModel (insert model)
+impl From<Location> for NewLocationModel {
+    fn from(location: Location) -> Self {
+        Self {
+            id: location.id,
+            street1: location.street1,
+            street2: location.street2,
+            city: location.city,
+            state: location.state,
+            zip_code: location.zip_code,
+            region_code: location.region_code,
+            county_mail_code: location.county_mail_code,
+            country_mail_code: location.country_mail_code,
+            geolocation: location.geolocation.map(|p| point_to_postgis_text(&p)),
+        }
+    }
+}
+
+/// Conversion from LocationModel (database model) to Location (API model)
+impl From<LocationModel> for Location {
+    fn from(model: LocationModel) -> Self {
+        Self {
+            id: model.id,
+            street1: model.street1,
+            street2: model.street2,
+            city: model.city,
+            state: model.state,
+            zip_code: model.zip_code,
+            region_code: model.region_code,
+            county_mail_code: model.county_mail_code,
+            country_mail_code: model.country_mail_code,
+            geolocation: model.geolocation.and_then(|text| postgis_text_to_point(&text)),
+            created_at: model.created_at,
+            updated_at: model.updated_at,
+        }
     }
 }
 

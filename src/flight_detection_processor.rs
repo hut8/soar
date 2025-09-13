@@ -89,7 +89,7 @@ impl FlightDetectionProcessor {
     pub fn new(sqlx_pool: PgPool, diesel_pool: DieselPgPool) -> Self {
         Self {
             db_processor: DatabaseFixProcessor::new(sqlx_pool.clone(), diesel_pool.clone()),
-            flights_repo: FlightsRepository::new(sqlx_pool.clone()),
+            flights_repo: FlightsRepository::new(diesel_pool.clone()),
             aircraft_trackers: HashMap::new(),
             pool: sqlx_pool,
             diesel_pool,
@@ -420,7 +420,7 @@ impl Clone for FlightDetectionProcessor {
     fn clone(&self) -> Self {
         Self {
             db_processor: DatabaseFixProcessor::new(self.pool.clone(), self.diesel_pool.clone()),
-            flights_repo: FlightsRepository::new(self.pool.clone()),
+            flights_repo: FlightsRepository::new(self.diesel_pool.clone()),
             aircraft_trackers: self.aircraft_trackers.clone(),
             pool: self.pool.clone(),
             diesel_pool: self.diesel_pool.clone(),

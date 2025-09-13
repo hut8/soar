@@ -332,7 +332,7 @@ pub async fn handle_load_data(
         info!("Starting geocoding of locations...");
 
         // Create locations repository
-        let locations_repo = LocationsRepository::new(sqlx_pool.clone());
+        let locations_repo = LocationsRepository::new(diesel_pool.clone());
 
         // Get locations that need geocoding
         match locations_repo.get_locations_for_geocoding(Some(1000)).await {
@@ -484,7 +484,7 @@ pub async fn handle_load_data(
         info!("Starting home base linking for soaring clubs...");
 
         // Create repositories
-        let clubs_repo = ClubsRepository::new(sqlx_pool.clone());
+        let clubs_repo = ClubsRepository::new(diesel_pool.clone());
         let airports_repo = AirportsRepository::new(diesel_pool.clone());
 
         // Get soaring clubs without home base airport IDs

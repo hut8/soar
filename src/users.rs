@@ -9,7 +9,7 @@ pub enum AccessLevel {
     Admin,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
     pub id: Uuid,
     pub first_name: String,

@@ -256,7 +256,9 @@ impl ReceiverRepository {
     }
 
     /// Search receivers by callsign (case-insensitive partial match)
-    pub async fn search_by_callsign(&self, callsign: &str) -> Result<Vec<ReceiverRecord>> {
+    pub async fn search_by_callsign(&self, callsign_param: &str) -> Result<Vec<ReceiverRecord>> {
+        let search_pattern = format!("%{}%", callsign_param);
+        
         let results = sqlx::query!(
             r#"
             SELECT id, callsign, description, contact, email, country, created_at, updated_at
@@ -264,7 +266,7 @@ impl ReceiverRepository {
             WHERE callsign ILIKE $1
             ORDER BY callsign
             "#,
-            format!("%{}%", callsign)
+            search_pattern
         )
         .fetch_all(&self.pool)
         .await?;
@@ -287,7 +289,7 @@ impl ReceiverRepository {
     }
 
     /// Search receivers by country
-    pub async fn search_by_country(&self, country: &str) -> Result<Vec<ReceiverRecord>> {
+    pub async fn search_by_country(&self, country_param: &str) -> Result<Vec<ReceiverRecord>> {
         let results = sqlx::query!(
             r#"
             SELECT id, callsign, description, contact, email, country, created_at, updated_at
@@ -295,7 +297,7 @@ impl ReceiverRepository {
             WHERE country = $1
             ORDER BY callsign
             "#,
-            country
+            country_param
         )
         .fetch_all(&self.pool)
         .await?;

@@ -88,6 +88,18 @@ diesel::table! {
 }
 
 diesel::table! {
+    clubs (id) {
+        id -> Uuid,
+        name -> Varchar,
+        is_soaring -> Nullable<Bool>,
+        home_base_airport_id -> Nullable<Int4>,
+        location_id -> Nullable<Uuid>,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
     devices (device_id) {
         device_id -> Int4,
         device_type -> Text,
@@ -99,6 +111,168 @@ diesel::table! {
         created_at -> Nullable<Timestamptz>,
         updated_at -> Nullable<Timestamptz>,
         user_id -> Nullable<Uuid>,
+    }
+}
+
+diesel::table! {
+    flights (id) {
+        id -> Uuid,
+        aircraft_id -> Varchar,
+        takeoff_time -> Timestamptz,
+        landing_time -> Nullable<Timestamptz>,
+        departure_airport -> Nullable<Varchar>,
+        arrival_airport -> Nullable<Varchar>,
+        tow_aircraft_id -> Nullable<Varchar>,
+        tow_release_height_msl -> Nullable<Int4>,
+        club_id -> Nullable<Uuid>,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    locations (id) {
+        id -> Uuid,
+        street1 -> Nullable<Varchar>,
+        street2 -> Nullable<Varchar>,
+        city -> Nullable<Varchar>,
+        state -> Nullable<Varchar>,
+        zip_code -> Nullable<Varchar>,
+        region_code -> Nullable<Varchar>,
+        county_mail_code -> Nullable<Varchar>,
+        country_mail_code -> Nullable<Varchar>,
+        geolocation -> Nullable<diesel::sql_types::Text>, // Using text for PostGIS compatibility
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    receivers (id) {
+        id -> Int4,
+        callsign -> Varchar,
+        description -> Nullable<Text>,
+        contact -> Nullable<Varchar>,
+        email -> Nullable<Varchar>,
+        country -> Nullable<Varchar>,
+        created_at -> Nullable<Timestamptz>,
+        updated_at -> Nullable<Timestamptz>,
+    }
+}
+
+diesel::table! {
+    receivers_photos (id) {
+        id -> Int4,
+        receiver_id -> Int4,
+        photo_url -> Varchar,
+        created_at -> Nullable<Timestamptz>,
+    }
+}
+
+diesel::table! {
+    receivers_links (id) {
+        id -> Int4,
+        receiver_id -> Int4,
+        rel -> Nullable<Varchar>,
+        href -> Varchar,
+        created_at -> Nullable<Timestamptz>,
+    }
+}
+
+diesel::table! {
+    fixes (id) {
+        id -> Uuid,
+        source -> Varchar,
+        destination -> Varchar,
+        via -> Array<Text>,
+        raw_packet -> Text,
+        timestamp -> Timestamptz,
+        latitude -> Float8,
+        longitude -> Float8,
+        altitude_feet -> Nullable<Int4>,
+        aircraft_id -> Nullable<Varchar>,
+        device_id -> Nullable<Int4>,
+        device_type -> Nullable<Text>,
+        aircraft_type -> Nullable<Text>,
+        flight_number -> Nullable<Varchar>,
+        emitter_category -> Nullable<Text>,
+        registration -> Nullable<Varchar>,
+        model -> Nullable<Varchar>,
+        squawk -> Nullable<Varchar>,
+        ground_speed_knots -> Nullable<Float4>,
+        track_degrees -> Nullable<Float4>,
+        climb_fpm -> Nullable<Int4>,
+        turn_rate_rot -> Nullable<Float4>,
+        snr_db -> Nullable<Float4>,
+        bit_errors_corrected -> Nullable<Int4>,
+        freq_offset_khz -> Nullable<Float4>,
+        club_id -> Nullable<Uuid>,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    users (id) {
+        id -> Uuid,
+        first_name -> Varchar,
+        last_name -> Varchar,
+        email -> Varchar,
+        password_hash -> Varchar,
+        access_level -> Text, // Will map to enum
+        club_id -> Nullable<Uuid>,
+        email_verified -> Nullable<Bool>,
+        password_reset_token -> Nullable<Varchar>,
+        password_reset_expires_at -> Nullable<Timestamptz>,
+        email_verification_token -> Nullable<Varchar>,
+        email_verification_expires_at -> Nullable<Timestamptz>,
+        created_at -> Nullable<Timestamptz>,
+        updated_at -> Nullable<Timestamptz>,
+    }
+}
+
+diesel::table! {
+    runways (id) {
+        id -> Int4,
+        airport_ref -> Int4,
+        airport_ident -> Varchar,
+        length_ft -> Nullable<Int4>,
+        width_ft -> Nullable<Int4>,
+        surface -> Nullable<Varchar>,
+        lighted -> Bool,
+        closed -> Bool,
+        le_ident -> Nullable<Varchar>,
+        le_latitude_deg -> Nullable<Numeric>,
+        le_longitude_deg -> Nullable<Numeric>,
+        le_elevation_ft -> Nullable<Int4>,
+        le_heading_degt -> Nullable<Numeric>,
+        le_displaced_threshold_ft -> Nullable<Int4>,
+        he_ident -> Nullable<Varchar>,
+        he_latitude_deg -> Nullable<Numeric>,
+        he_longitude_deg -> Nullable<Numeric>,
+        he_elevation_ft -> Nullable<Int4>,
+        he_heading_degt -> Nullable<Numeric>,
+        he_displaced_threshold_ft -> Nullable<Int4>,
+        created_at -> Nullable<Timestamptz>,
+        updated_at -> Nullable<Timestamptz>,
+    }
+}
+
+diesel::table! {
+    aircraft_model (code) {
+        code -> Varchar,
+        manufacturer -> Nullable<Varchar>,
+        model -> Nullable<Varchar>,
+        type_acft -> Nullable<Int2>,
+        type_eng -> Nullable<Int2>,
+        ac_cat -> Nullable<Int2>,
+        build_cert_ind -> Nullable<Int2>,
+        no_eng -> Nullable<Int2>,
+        no_seats -> Nullable<Int2>,
+        ac_weight -> Nullable<Varchar>,
+        speed -> Nullable<Int2>,
+        created_at -> Nullable<Timestamptz>,
+        updated_at -> Nullable<Timestamptz>,
     }
 }
 

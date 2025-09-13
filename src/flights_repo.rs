@@ -1,45 +1,37 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
-use sqlx::PgPool;
+use diesel::prelude::*;
 use uuid::Uuid;
 
-use crate::flights::Flight;
+use crate::flights::{Flight, FlightModel};
+use crate::web::DieselPgPool;
 
 pub struct FlightsRepository {
-    pool: PgPool,
+    pool: DieselPgPool,
 }
 
 impl FlightsRepository {
-    pub fn new(pool: PgPool) -> Self {
+    pub fn new(pool: DieselPgPool) -> Self {
         Self { pool }
     }
 
     /// Insert a new flight into the database
     pub async fn insert_flight(&self, flight: &Flight) -> Result<()> {
-        sqlx::query!(
-            r#"
-            INSERT INTO flights (
-                id, aircraft_id, takeoff_time, landing_time, departure_airport,
-                arrival_airport, tow_aircraft_id, tow_release_height_msl, club_id,
-                created_at, updated_at
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-            "#,
-            flight.id,
-            flight.aircraft_id,
-            flight.takeoff_time,
-            flight.landing_time,
-            flight.departure_airport,
-            flight.arrival_airport,
-            flight.tow_aircraft_id,
-            flight.tow_release_height_msl,
-            flight.club_id,
-            flight.created_at,
-            flight.updated_at
-        )
-        .execute(&self.pool)
-        .await?;
-
+        use crate::schema::flights;
+        
+        let pool = self.pool.clone();
+        let flight_model: FlightModel = flight.clone().into();
+        
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            
+            diesel::insert_into(flights::table)
+                .values(&flight_model)
+                .execute(&mut conn)?;
+                
+            Ok::<(), anyhow::Error>(())
+        }).await??;
+        
         Ok(())
     }
 
@@ -47,59 +39,87 @@ impl FlightsRepository {
     pub async fn update_landing_time(
         &self,
         flight_id: Uuid,
-        landing_time: DateTime<Utc>,
+        landing_time_param: DateTime<Utc>,
     ) -> Result<bool> {
-        let result = sqlx::query!(
-            r#"
-            UPDATE flights
-            SET landing_time = $1, updated_at = NOW()
-            WHERE id = $2
-            "#,
-            landing_time,
-            flight_id
-        )
-        .execute(&self.pool)
-        .await?;
+        use crate::schema::flights::dsl::*;
+        
+        let pool = self.pool.clone();
+        
+        let rows_affected = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            
+            let rows = diesel::update(flights.filter(id.eq(flight_id)))
+                .set((
+                    landing_time.eq(&Some(landing_time_param)),
+                    updated_at.eq(Utc::now())
+                ))
+                .execute(&mut conn)?;
+                
+            Ok::<usize, anyhow::Error>(rows)
+        }).await??;
 
-        Ok(result.rows_affected() > 0)
+        Ok(rows_affected > 0)
     }
 
     /// Get a flight by its ID
     pub async fn get_flight_by_id(&self, flight_id: Uuid) -> Result<Option<Flight>> {
-        let flight = sqlx::query_as!(
-            Flight,
-            "SELECT * FROM flights WHERE id = $1",
-            flight_id
-        )
-        .fetch_optional(&self.pool)
-        .await?;
+        use crate::schema::flights::dsl::*;
+        
+        let pool = self.pool.clone();
+        
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            
+            let flight_model: Option<FlightModel> = flights
+                .filter(id.eq(flight_id))
+                .first::<FlightModel>(&mut conn)
+                .optional()?;
+                
+            Ok::<Option<FlightModel>, anyhow::Error>(flight_model)
+        }).await??;
 
-        Ok(flight)
+        Ok(result.map(|model| model.into()))
     }
 
     /// Get all flights for a specific aircraft, ordered by takeoff time descending
-    pub async fn get_flights_for_aircraft(&self, aircraft_id: &str) -> Result<Vec<Flight>> {
-        let flights = sqlx::query_as!(
-            Flight,
-            "SELECT * FROM flights WHERE aircraft_id = $1 ORDER BY takeoff_time DESC",
-            aircraft_id
-        )
-        .fetch_all(&self.pool)
-        .await?;
+    pub async fn get_flights_for_aircraft(&self, aircraft_id_param: &str) -> Result<Vec<Flight>> {
+        use crate::schema::flights::dsl::*;
+        
+        let pool = self.pool.clone();
+        let aircraft_id_val = aircraft_id_param.to_string();
+        
+        let results = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            
+            let flight_models: Vec<FlightModel> = flights
+                .filter(aircraft_id.eq(&aircraft_id_val))
+                .order(takeoff_time.desc())
+                .load::<FlightModel>(&mut conn)?;
+                
+            Ok::<Vec<FlightModel>, anyhow::Error>(flight_models)
+        }).await??;
 
-        Ok(flights)
+        Ok(results.into_iter().map(|model| model.into()).collect())
     }
 
     /// Get all flights in progress (no landing time) ordered by takeoff time descending
     pub async fn get_flights_in_progress(&self) -> Result<Vec<Flight>> {
-        let flights = sqlx::query_as!(
-            Flight,
-            "SELECT * FROM flights WHERE landing_time IS NULL ORDER BY takeoff_time DESC"
-        )
-        .fetch_all(&self.pool)
-        .await?;
+        use crate::schema::flights::dsl::*;
+        
+        let pool = self.pool.clone();
+        
+        let results = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            
+            let flight_models: Vec<FlightModel> = flights
+                .filter(landing_time.is_null())
+                .order(takeoff_time.desc())
+                .load::<FlightModel>(&mut conn)?;
+                
+            Ok::<Vec<FlightModel>, anyhow::Error>(flight_models)
+        }).await??;
 
-        Ok(flights)
+        Ok(results.into_iter().map(|model| model.into()).collect())
     }
 
     /// Get flights within a time range, optionally filtered by aircraft
@@ -123,25 +143,27 @@ impl FlightsRepository {
         &self,
         start_time: DateTime<Utc>,
         end_time: DateTime<Utc>,
-        aircraft_id: &str,
+        aircraft_id_param: &str,
     ) -> Result<Vec<Flight>> {
-        let flights = sqlx::query_as!(
-            Flight,
-            r#"
-            SELECT * FROM flights
-            WHERE aircraft_id = $1
-            AND takeoff_time >= $2
-            AND takeoff_time <= $3
-            ORDER BY takeoff_time DESC
-            "#,
-            aircraft_id,
-            start_time,
-            end_time
-        )
-        .fetch_all(&self.pool)
-        .await?;
+        use crate::schema::flights::dsl::*;
+        
+        let pool = self.pool.clone();
+        let aircraft_id_val = aircraft_id_param.to_string();
+        
+        let results = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            
+            let flight_models: Vec<FlightModel> = flights
+                .filter(aircraft_id.eq(&aircraft_id_val))
+                .filter(takeoff_time.ge(&start_time))
+                .filter(takeoff_time.le(&end_time))
+                .order(takeoff_time.desc())
+                .load::<FlightModel>(&mut conn)?;
+                
+            Ok::<Vec<FlightModel>, anyhow::Error>(flight_models)
+        }).await??;
 
-        Ok(flights)
+        Ok(results.into_iter().map(|model| model.into()).collect())
     }
 
     /// Get all flights within a time range
@@ -150,93 +172,133 @@ impl FlightsRepository {
         start_time: DateTime<Utc>,
         end_time: DateTime<Utc>,
     ) -> Result<Vec<Flight>> {
-        let flights = sqlx::query_as!(
-            Flight,
-            r#"
-            SELECT * FROM flights
-            WHERE takeoff_time >= $1
-            AND takeoff_time <= $2
-            ORDER BY takeoff_time DESC
-            "#,
-            start_time,
-            end_time
-        )
-        .fetch_all(&self.pool)
-        .await?;
+        use crate::schema::flights::dsl::*;
+        
+        let pool = self.pool.clone();
+        
+        let results = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            
+            let flight_models: Vec<FlightModel> = flights
+                .filter(takeoff_time.ge(&start_time))
+                .filter(takeoff_time.le(&end_time))
+                .order(takeoff_time.desc())
+                .load::<FlightModel>(&mut conn)?;
+                
+            Ok::<Vec<FlightModel>, anyhow::Error>(flight_models)
+        }).await??;
 
-        Ok(flights)
+        Ok(results.into_iter().map(|model| model.into()).collect())
     }
 
     /// Get flights that used a specific tow aircraft
-    pub async fn get_flights_by_tow_aircraft(&self, tow_aircraft_id: &str) -> Result<Vec<Flight>> {
-        let flights = sqlx::query_as!(
-            Flight,
-            "SELECT * FROM flights WHERE tow_aircraft_id = $1 ORDER BY takeoff_time DESC",
-            tow_aircraft_id
-        )
-        .fetch_all(&self.pool)
-        .await?;
+    pub async fn get_flights_by_tow_aircraft(&self, tow_aircraft_id_param: &str) -> Result<Vec<Flight>> {
+        use crate::schema::flights::dsl::*;
+        
+        let pool = self.pool.clone();
+        let tow_aircraft_id_val = tow_aircraft_id_param.to_string();
+        
+        let results = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            
+            let flight_models: Vec<FlightModel> = flights
+                .filter(tow_aircraft_id.eq(&Some(tow_aircraft_id_val)))
+                .order(takeoff_time.desc())
+                .load::<FlightModel>(&mut conn)?;
+                
+            Ok::<Vec<FlightModel>, anyhow::Error>(flight_models)
+        }).await??;
 
-        Ok(flights)
+        Ok(results.into_iter().map(|model| model.into()).collect())
     }
 
     /// Get the total count of flights in the database
     pub async fn get_flight_count(&self) -> Result<i64> {
-        let result = sqlx::query!("SELECT COUNT(*) as count FROM flights")
-            .fetch_one(&self.pool)
-            .await?;
+        use crate::schema::flights::dsl::*;
+        
+        let pool = self.pool.clone();
+        
+        let count = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            
+            let count = flights
+                .count()
+                .get_result::<i64>(&mut conn)?;
+                
+            Ok::<i64, anyhow::Error>(count)
+        }).await??;
 
-        Ok(result.count.unwrap_or(0))
+        Ok(count)
     }
 
     /// Get the count of flights in progress
     pub async fn get_flights_in_progress_count(&self) -> Result<i64> {
-        let result =
-            sqlx::query!("SELECT COUNT(*) as count FROM flights WHERE landing_time IS NULL")
-                .fetch_one(&self.pool)
-                .await?;
+        use crate::schema::flights::dsl::*;
+        
+        let pool = self.pool.clone();
+        
+        let count = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            
+            let count = flights
+                .filter(landing_time.is_null())
+                .count()
+                .get_result::<i64>(&mut conn)?;
+                
+            Ok::<i64, anyhow::Error>(count)
+        }).await??;
 
-        Ok(result.count.unwrap_or(0))
+        Ok(count)
     }
 
     /// Update flight details (departure/arrival airports, tow info)
     pub async fn update_flight_details(
         &self,
         flight_id: Uuid,
-        departure_airport: Option<String>,
-        arrival_airport: Option<String>,
-        tow_aircraft_id: Option<String>,
-        tow_release_height_msl: Option<i32>,
+        departure_airport_param: Option<String>,
+        arrival_airport_param: Option<String>,
+        tow_aircraft_id_param: Option<String>,
+        tow_release_height_msl_param: Option<i32>,
     ) -> Result<bool> {
-        let result = sqlx::query!(
-            r#"
-            UPDATE flights
-            SET departure_airport = $1,
-                arrival_airport = $2,
-                tow_aircraft_id = $3,
-                tow_release_height_msl = $4,
-                updated_at = NOW()
-            WHERE id = $5
-            "#,
-            departure_airport,
-            arrival_airport,
-            tow_aircraft_id,
-            tow_release_height_msl,
-            flight_id
-        )
-        .execute(&self.pool)
-        .await?;
+        use crate::schema::flights::dsl::*;
+        
+        let pool = self.pool.clone();
+        
+        let rows_affected = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            
+            let rows = diesel::update(flights.filter(id.eq(flight_id)))
+                .set((
+                    departure_airport.eq(&departure_airport_param),
+                    arrival_airport.eq(&arrival_airport_param),
+                    tow_aircraft_id.eq(&tow_aircraft_id_param),
+                    tow_release_height_msl.eq(&tow_release_height_msl_param),
+                    updated_at.eq(Utc::now())
+                ))
+                .execute(&mut conn)?;
+                
+            Ok::<usize, anyhow::Error>(rows)
+        }).await??;
 
-        Ok(result.rows_affected() > 0)
+        Ok(rows_affected > 0)
     }
 
     /// Delete a flight by ID
     pub async fn delete_flight(&self, flight_id: Uuid) -> Result<bool> {
-        let result = sqlx::query!("DELETE FROM flights WHERE id = $1", flight_id)
-            .execute(&self.pool)
-            .await?;
+        use crate::schema::flights::dsl::*;
+        
+        let pool = self.pool.clone();
+        
+        let rows_affected = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            
+            let rows = diesel::delete(flights.filter(id.eq(flight_id)))
+                .execute(&mut conn)?;
+                
+            Ok::<usize, anyhow::Error>(rows)
+        }).await??;
 
-        Ok(result.rows_affected() > 0)
+        Ok(rows_affected > 0)
     }
 
     /// Get flights for a specific date (all flights that took off on that date)

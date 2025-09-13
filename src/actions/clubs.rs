@@ -15,7 +15,7 @@ pub async fn get_club_by_id(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
-    let clubs_repo = ClubsRepository::new(state.pool);
+    let clubs_repo = ClubsRepository::new(state.diesel_pool);
 
     match clubs_repo.get_by_id(id).await {
         Ok(Some(club)) => {

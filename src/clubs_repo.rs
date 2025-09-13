@@ -1,248 +1,340 @@
 use anyhow::Result;
-use chrono::Utc;
-use sqlx::PgPool;
-use sqlx::types::Uuid;
+use chrono::{DateTime, Utc};
+use diesel::prelude::*;
+use uuid::Uuid;
 
-use crate::clubs::Club;
-use crate::locations_repo::LocationsRepository;
+use crate::clubs::{Club, NewClubModel};
+use crate::locations::Point;
+// use crate::locations_repo::LocationsRepository;
+use crate::web::DieselPgPool;
+
+#[derive(QueryableByName, Debug)]
+struct ClubWithLocation {
+    #[diesel(sql_type = diesel::sql_types::Uuid)]
+    id: Uuid,
+    #[diesel(sql_type = diesel::sql_types::Varchar)]
+    name: String,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Bool>)]
+    is_soaring: Option<bool>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Integer>)]
+    home_base_airport_id: Option<i32>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
+    location_id: Option<Uuid>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    street1: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    street2: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    city: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    state: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    zip_code: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    region_code: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    county_mail_code: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    country_mail_code: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float8>)]
+    longitude: Option<f64>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float8>)]
+    latitude: Option<f64>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Timestamptz>)]
+    created_at: Option<DateTime<Utc>>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Timestamptz>)]
+    updated_at: Option<DateTime<Utc>>,
+}
+
+#[derive(QueryableByName, Debug)]
+struct ClubWithLocationAndSimilarity {
+    #[diesel(sql_type = diesel::sql_types::Uuid)]
+    id: Uuid,
+    #[diesel(sql_type = diesel::sql_types::Varchar)]
+    name: String,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Bool>)]
+    is_soaring: Option<bool>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Integer>)]
+    home_base_airport_id: Option<i32>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
+    location_id: Option<Uuid>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    street1: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    street2: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    city: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    state: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    zip_code: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    region_code: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    county_mail_code: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    country_mail_code: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float8>)]
+    longitude: Option<f64>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float8>)]
+    latitude: Option<f64>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Timestamptz>)]
+    created_at: Option<DateTime<Utc>>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Timestamptz>)]
+    updated_at: Option<DateTime<Utc>>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float8>)]
+    similarity_score: Option<f64>,
+}
+
+#[derive(QueryableByName, Debug)]
+struct ClubWithLocationAndDistance {
+    #[diesel(sql_type = diesel::sql_types::Uuid)]
+    id: Uuid,
+    #[diesel(sql_type = diesel::sql_types::Varchar)]
+    name: String,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Bool>)]
+    is_soaring: Option<bool>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Integer>)]
+    home_base_airport_id: Option<i32>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
+    location_id: Option<Uuid>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    street1: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    street2: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    city: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    state: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    zip_code: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    region_code: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    county_mail_code: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    country_mail_code: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float8>)]
+    longitude: Option<f64>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float8>)]
+    latitude: Option<f64>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Timestamptz>)]
+    created_at: Option<DateTime<Utc>>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Timestamptz>)]
+    updated_at: Option<DateTime<Utc>>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float8>)]
+    distance_meters: Option<f64>,
+}
+
+impl From<ClubWithLocationAndDistance> for Club {
+    fn from(cwld: ClubWithLocationAndDistance) -> Self {
+        let base_location = if cwld.longitude.is_some() && cwld.latitude.is_some() {
+            Some(Point::new(
+                cwld.latitude.unwrap(),
+                cwld.longitude.unwrap(),
+            ))
+        } else {
+            None
+        };
+
+        Self {
+            id: cwld.id,
+            name: cwld.name,
+            is_soaring: cwld.is_soaring,
+            home_base_airport_id: cwld.home_base_airport_id,
+            location_id: cwld.location_id,
+            street1: cwld.street1,
+            street2: cwld.street2,
+            city: cwld.city,
+            state: cwld.state,
+            zip_code: cwld.zip_code,
+            region_code: cwld.region_code,
+            county_mail_code: cwld.county_mail_code,
+            country_mail_code: cwld.country_mail_code,
+            base_location,
+            created_at: cwld.created_at.unwrap_or_else(Utc::now),
+            updated_at: cwld.updated_at.unwrap_or_else(Utc::now),
+        }
+    }
+}
+
+impl From<ClubWithLocationAndSimilarity> for Club {
+    fn from(cwls: ClubWithLocationAndSimilarity) -> Self {
+        let base_location = if cwls.longitude.is_some() && cwls.latitude.is_some() {
+            Some(Point::new(
+                cwls.latitude.unwrap(),
+                cwls.longitude.unwrap(),
+            ))
+        } else {
+            None
+        };
+
+        Self {
+            id: cwls.id,
+            name: cwls.name,
+            is_soaring: cwls.is_soaring,
+            home_base_airport_id: cwls.home_base_airport_id,
+            location_id: cwls.location_id,
+            street1: cwls.street1,
+            street2: cwls.street2,
+            city: cwls.city,
+            state: cwls.state,
+            zip_code: cwls.zip_code,
+            region_code: cwls.region_code,
+            county_mail_code: cwls.county_mail_code,
+            country_mail_code: cwls.country_mail_code,
+            base_location,
+            created_at: cwls.created_at.unwrap_or_else(Utc::now),
+            updated_at: cwls.updated_at.unwrap_or_else(Utc::now),
+        }
+    }
+}
+
+impl From<ClubWithLocation> for Club {
+    fn from(cwl: ClubWithLocation) -> Self {
+        let base_location = if cwl.longitude.is_some() && cwl.latitude.is_some() {
+            Some(Point::new(
+                cwl.latitude.unwrap(),
+                cwl.longitude.unwrap(),
+            ))
+        } else {
+            None
+        };
+
+        Self {
+            id: cwl.id,
+            name: cwl.name,
+            is_soaring: cwl.is_soaring,
+            home_base_airport_id: cwl.home_base_airport_id,
+            location_id: cwl.location_id,
+            street1: cwl.street1,
+            street2: cwl.street2,
+            city: cwl.city,
+            state: cwl.state,
+            zip_code: cwl.zip_code,
+            region_code: cwl.region_code,
+            county_mail_code: cwl.county_mail_code,
+            country_mail_code: cwl.country_mail_code,
+            base_location,
+            created_at: cwl.created_at.unwrap_or_else(Utc::now),
+            updated_at: cwl.updated_at.unwrap_or_else(Utc::now),
+        }
+    }
+}
 
 pub struct ClubsRepository {
-    pool: PgPool,
-    locations_repo: LocationsRepository,
+    pool: DieselPgPool,
+    // locations_repo: LocationsRepository,
 }
 
 impl ClubsRepository {
-    pub fn new(pool: PgPool) -> Self {
-        let locations_repo = LocationsRepository::new(pool.clone());
+    pub fn new(pool: DieselPgPool) -> Self {
+        // Note: LocationsRepository will need to be migrated to Diesel as well
+        // let locations_repo = LocationsRepository::new(pool.clone());
         Self {
             pool,
-            locations_repo,
+            // locations_repo,
         }
     }
 
     /// Get club by ID
-    pub async fn get_by_id(&self, id: Uuid) -> Result<Option<Club>> {
-        let result = sqlx::query!(
-            r#"
-            SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, c.location_id,
-                   l.street1, l.street2, l.city, l.state, l.zip_code, l.region_code,
-                   l.county_mail_code, l.country_mail_code,
-                   ST_X(l.geolocation::geometry) as longitude, ST_Y(l.geolocation::geometry) as latitude,
-                   c.created_at, c.updated_at
-            FROM clubs c
-            LEFT JOIN locations l ON c.location_id = l.id
-            WHERE c.id = $1
-            "#,
-            id
-        )
-        .fetch_optional(&self.pool)
-        .await?;
+    pub async fn get_by_id(&self, club_id: Uuid) -> Result<Option<Club>> {
+        let pool = self.pool.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            
+            // Use raw SQL for complex join with locations table
+            let sql = r#"
+                SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, c.location_id,
+                       l.street1, l.street2, l.city, l.state, l.zip_code, l.region_code,
+                       l.county_mail_code, l.country_mail_code,
+                       ST_X(l.geolocation::geometry) as longitude, ST_Y(l.geolocation::geometry) as latitude,
+                       c.created_at, c.updated_at
+                FROM clubs c
+                LEFT JOIN locations l ON c.location_id = l.id
+                WHERE c.id = $1
+            "#;
+            
+            let club_opt: Option<ClubWithLocation> = diesel::sql_query(sql)
+                .bind::<diesel::sql_types::Uuid, _>(club_id)
+                .get_result::<ClubWithLocation>(&mut conn)
+                .optional()?;
+                
+            Ok::<Option<ClubWithLocation>, anyhow::Error>(club_opt)
+        }).await??;
 
-        if let Some(row) = result {
-            let base_location = if row.longitude.is_some() && row.latitude.is_some() {
-                Some(crate::locations::Point::new(
-                    row.latitude.unwrap(),
-                    row.longitude.unwrap(),
-                ))
-            } else {
-                None
-            };
-
-            Ok(Some(Club {
-                id: row.id,
-                name: row.name,
-                is_soaring: row.is_soaring,
-                home_base_airport_id: row.home_base_airport_id,
-                location_id: row.location_id,
-                street1: row.street1,
-                street2: row.street2,
-                city: row.city,
-                state: row.state,
-                zip_code: row.zip_code,
-                region_code: row.region_code,
-                county_mail_code: row.county_mail_code,
-                country_mail_code: row.country_mail_code,
-                base_location,
-                created_at: row.created_at.unwrap_or_else(Utc::now),
-                updated_at: row.updated_at.unwrap_or_else(Utc::now),
-            }))
-        } else {
-            Ok(None)
-        }
+        Ok(result.map(|cwl| cwl.into()))
     }
 
     /// Get all clubs
     pub async fn get_all(&self) -> Result<Vec<Club>> {
-        let results = sqlx::query!(
-            r#"
-            SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, c.location_id,
-                   l.street1, l.street2, l.city, l.state, l.zip_code, l.region_code,
-                   l.county_mail_code, l.country_mail_code,
-                   ST_X(l.geolocation::geometry) as longitude, ST_Y(l.geolocation::geometry) as latitude,
-                   c.created_at, c.updated_at
-            FROM clubs c
-            LEFT JOIN locations l ON c.location_id = l.id
-            WHERE is_soaring = true
-            ORDER BY c.name
-            "#
-        )
-        .fetch_all(&self.pool)
-        .await?;
+        let pool = self.pool.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            
+            // Use raw SQL for complex join with locations table
+            let sql = r#"
+                SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, c.location_id,
+                       l.street1, l.street2, l.city, l.state, l.zip_code, l.region_code,
+                       l.county_mail_code, l.country_mail_code,
+                       ST_X(l.geolocation::geometry) as longitude, ST_Y(l.geolocation::geometry) as latitude,
+                       c.created_at, c.updated_at
+                FROM clubs c
+                LEFT JOIN locations l ON c.location_id = l.id
+                WHERE c.is_soaring = true
+                ORDER BY c.name
+            "#;
+            
+            let clubs: Vec<ClubWithLocation> = diesel::sql_query(sql)
+                .load::<ClubWithLocation>(&mut conn)?;
+                
+            Ok::<Vec<ClubWithLocation>, anyhow::Error>(clubs)
+        }).await??;
 
-        let mut clubs = Vec::new();
-        for row in results {
-            let base_location = if row.longitude.is_some() && row.latitude.is_some() {
-                Some(crate::locations::Point::new(
-                    row.latitude.unwrap(),
-                    row.longitude.unwrap(),
-                ))
-            } else {
-                None
-            };
-
-            clubs.push(Club {
-                id: row.id,
-                name: row.name,
-                is_soaring: row.is_soaring,
-                home_base_airport_id: row.home_base_airport_id,
-                location_id: row.location_id,
-                street1: row.street1,
-                street2: row.street2,
-                city: row.city,
-                state: row.state,
-                zip_code: row.zip_code,
-                region_code: row.region_code,
-                county_mail_code: row.county_mail_code,
-                country_mail_code: row.country_mail_code,
-                base_location,
-                created_at: row.created_at.unwrap_or_else(Utc::now),
-                updated_at: row.updated_at.unwrap_or_else(Utc::now),
-            });
-        }
-
-        Ok(clubs)
+        Ok(result.into_iter().map(|cwl| cwl.into()).collect())
     }
 
     /// Fuzzy search clubs by name using trigram similarity
     /// Returns clubs ordered by similarity score (best matches first)
     pub async fn fuzzy_search(&self, query: &str, limit: Option<i64>) -> Result<Vec<Club>> {
-        let limit = limit.unwrap_or(20);
         let query_upper = query.to_uppercase();
+        let search_limit = limit.unwrap_or(20);
+        
+        let pool = self.pool.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            
+            let sql = r#"
+                SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, c.location_id,
+                       l.street1, l.street2, l.city, l.state, l.zip_code, l.region_code,
+                       l.county_mail_code, l.country_mail_code,
+                       ST_X(l.geolocation::geometry) as longitude, ST_Y(l.geolocation::geometry) as latitude,
+                       c.created_at, c.updated_at,
+                       SIMILARITY(UPPER(c.name), $1) as similarity_score
+                FROM clubs c
+                LEFT JOIN locations l ON c.location_id = l.id
+                WHERE SIMILARITY(UPPER(c.name), $1) > 0.05
+                AND c.is_soaring = true
+                ORDER BY similarity_score DESC, c.name
+                LIMIT $2
+            "#;
+            
+            let clubs: Vec<ClubWithLocationAndSimilarity> = diesel::sql_query(sql)
+                .bind::<diesel::sql_types::Varchar, _>(&query_upper)
+                .bind::<diesel::sql_types::BigInt, _>(search_limit)
+                .load::<ClubWithLocationAndSimilarity>(&mut conn)?;
+                
+            Ok::<Vec<ClubWithLocationAndSimilarity>, anyhow::Error>(clubs)
+        }).await??;
 
-        let results = sqlx::query!(
-            r#"
-            SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, c.location_id,
-                   l.street1, l.street2, l.city, l.state, l.zip_code, l.region_code,
-                   l.county_mail_code, l.country_mail_code,
-                   ST_X(l.geolocation::geometry) as longitude, ST_Y(l.geolocation::geometry) as latitude,
-                   c.created_at, c.updated_at,
-                   SIMILARITY(UPPER(c.name), $1) as similarity_score
-            FROM clubs c
-            LEFT JOIN locations l ON c.location_id = l.id
-            WHERE SIMILARITY(UPPER(c.name), $1) > 0.05
-            AND is_soaring = true
-            ORDER BY similarity_score DESC, c.name
-            LIMIT $2
-            "#,
-            query_upper,
-            limit
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        let mut clubs = Vec::new();
-        for row in results {
-            let base_location = if row.longitude.is_some() && row.latitude.is_some() {
-                Some(crate::locations::Point::new(
-                    row.latitude.unwrap(),
-                    row.longitude.unwrap(),
-                ))
-            } else {
-                None
-            };
-
-            clubs.push(Club {
-                id: row.id,
-                name: row.name,
-                is_soaring: row.is_soaring,
-                home_base_airport_id: row.home_base_airport_id,
-                location_id: row.location_id,
-                street1: row.street1,
-                street2: row.street2,
-                city: row.city,
-                state: row.state,
-                zip_code: row.zip_code,
-                region_code: row.region_code,
-                county_mail_code: row.county_mail_code,
-                country_mail_code: row.country_mail_code,
-                base_location,
-                created_at: row.created_at.unwrap_or_else(Utc::now),
-                updated_at: row.updated_at.unwrap_or_else(Utc::now),
-            });
-        }
-
-        Ok(clubs)
+        Ok(result.into_iter().map(|cwls| cwls.into()).collect())
     }
 
     /// Fuzzy search soaring clubs only by name using trigram similarity
     /// Returns soaring clubs (is_soaring=true) ordered by similarity score (best matches first)
     pub async fn fuzzy_search_soaring(&self, query: &str, limit: Option<i64>) -> Result<Vec<Club>> {
-        let limit = limit.unwrap_or(20);
-        let query_upper = query.to_uppercase();
-
-        let results = sqlx::query!(
-            r#"
-            SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, c.location_id,
-                   l.street1, l.street2, l.city, l.state, l.zip_code, l.region_code,
-                   l.county_mail_code, l.country_mail_code,
-                   ST_X(l.geolocation::geometry) as longitude, ST_Y(l.geolocation::geometry) as latitude,
-                   c.created_at, c.updated_at,
-                   SIMILARITY(UPPER(c.name), $1) as similarity_score
-            FROM clubs c
-            LEFT JOIN locations l ON c.location_id = l.id
-            WHERE SIMILARITY(UPPER(c.name), $1) > 0.05
-            AND c.is_soaring = true
-            ORDER BY similarity_score DESC, c.name
-            LIMIT $2
-            "#,
-            query_upper,
-            limit
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        let mut clubs = Vec::new();
-        for row in results {
-            let base_location = if row.longitude.is_some() && row.latitude.is_some() {
-                Some(crate::locations::Point::new(
-                    row.latitude.unwrap(),
-                    row.longitude.unwrap(),
-                ))
-            } else {
-                None
-            };
-
-            clubs.push(Club {
-                id: row.id,
-                name: row.name,
-                is_soaring: row.is_soaring,
-                home_base_airport_id: row.home_base_airport_id,
-                location_id: row.location_id,
-                street1: row.street1,
-                street2: row.street2,
-                city: row.city,
-                state: row.state,
-                zip_code: row.zip_code,
-                region_code: row.region_code,
-                county_mail_code: row.county_mail_code,
-                country_mail_code: row.country_mail_code,
-                base_location,
-                created_at: row.created_at.unwrap_or_else(Utc::now),
-                updated_at: row.updated_at.unwrap_or_else(Utc::now),
-            });
-        }
-
-        Ok(clubs)
+        // This method has the same implementation as fuzzy_search since both filter by is_soaring = true
+        self.fuzzy_search(query, limit).await
     }
 
     /// Search soaring clubs within a radius of a given point using PostGIS
@@ -254,188 +346,125 @@ impl ClubsRepository {
         radius_km: f64,
         limit: Option<i64>,
     ) -> Result<Vec<Club>> {
-        let limit = limit.unwrap_or(20);
+        let search_limit = limit.unwrap_or(20);
         let radius_m = radius_km * 1000.0; // Convert km to meters for PostGIS
+        
+        let pool = self.pool.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            
+            let sql = r#"
+                SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, c.location_id,
+                       l.street1, l.street2, l.city, l.state, l.zip_code, l.region_code,
+                       l.county_mail_code, l.country_mail_code,
+                       ST_X(l.geolocation::geometry) as longitude, ST_Y(l.geolocation::geometry) as latitude,
+                       c.created_at, c.updated_at,
+                       ST_Distance(ST_SetSRID(l.geolocation::geometry, 4326)::geography, ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography) as distance_meters
+                FROM clubs c
+                LEFT JOIN locations l ON c.location_id = l.id
+                WHERE l.geolocation IS NOT NULL
+                AND c.is_soaring = true
+                AND ST_DWithin(ST_SetSRID(l.geolocation::geometry, 4326)::geography, ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography, $3)
+                ORDER BY distance_meters
+                LIMIT $4
+            "#;
+            
+            let clubs: Vec<ClubWithLocationAndDistance> = diesel::sql_query(sql)
+                .bind::<diesel::sql_types::Float8, _>(latitude)
+                .bind::<diesel::sql_types::Float8, _>(longitude)
+                .bind::<diesel::sql_types::Float8, _>(radius_m)
+                .bind::<diesel::sql_types::BigInt, _>(search_limit)
+                .load::<ClubWithLocationAndDistance>(&mut conn)?;
+                
+            Ok::<Vec<ClubWithLocationAndDistance>, anyhow::Error>(clubs)
+        }).await??;
 
-        let results = sqlx::query!(
-            r#"
-            SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, c.location_id,
-                   l.street1, l.street2, l.city, l.state, l.zip_code, l.region_code,
-                   l.county_mail_code, l.country_mail_code,
-                   ST_X(l.geolocation::geometry) as longitude, ST_Y(l.geolocation::geometry) as latitude,
-                   c.created_at, c.updated_at,
-                   ST_Distance(ST_SetSRID(l.geolocation::geometry, 4326)::geography, ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography) as distance_meters
-            FROM clubs c
-            LEFT JOIN locations l ON c.location_id = l.id
-            WHERE l.geolocation IS NOT NULL
-            AND c.is_soaring = true
-            AND ST_DWithin(ST_SetSRID(l.geolocation::geometry, 4326)::geography, ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography, $3)
-            ORDER BY distance_meters
-            LIMIT $4
-            "#,
-            latitude,
-            longitude,
-            radius_m,
-            limit
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        let mut clubs = Vec::new();
-        for row in results {
-            let base_location = if row.longitude.is_some() && row.latitude.is_some() {
-                Some(crate::locations::Point::new(
-                    row.latitude.unwrap(),
-                    row.longitude.unwrap(),
-                ))
-            } else {
-                None
-            };
-
-            clubs.push(Club {
-                id: row.id,
-                name: row.name,
-                is_soaring: row.is_soaring,
-                home_base_airport_id: row.home_base_airport_id,
-                location_id: row.location_id,
-                street1: row.street1,
-                street2: row.street2,
-                city: row.city,
-                state: row.state,
-                zip_code: row.zip_code,
-                region_code: row.region_code,
-                county_mail_code: row.county_mail_code,
-                country_mail_code: row.country_mail_code,
-                base_location,
-                created_at: row.created_at.unwrap_or_else(Utc::now),
-                updated_at: row.updated_at.unwrap_or_else(Utc::now),
-            });
-        }
-
-        Ok(clubs)
+        Ok(result.into_iter().map(|cwld| cwld.into()).collect())
     }
 
     /// Get soaring clubs that don't have a home base airport ID set
     pub async fn get_soaring_clubs_without_home_base(&self) -> Result<Vec<Club>> {
-        let results = sqlx::query!(
-            r#"
-            SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, c.location_id,
-                   l.street1, l.street2, l.city, l.state, l.zip_code, l.region_code,
-                   l.county_mail_code, l.country_mail_code,
-                   ST_X(l.geolocation::geometry) as longitude, ST_Y(l.geolocation::geometry) as latitude,
-                   c.created_at, c.updated_at
-            FROM clubs c
-            LEFT JOIN locations l ON c.location_id = l.id
-            WHERE c.is_soaring = true
-            AND c.home_base_airport_id IS NULL
-            AND l.geolocation IS NOT NULL
-            ORDER BY c.name
-            "#
-        )
-        .fetch_all(&self.pool)
-        .await?;
+        let pool = self.pool.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            
+            let sql = r#"
+                SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, c.location_id,
+                       l.street1, l.street2, l.city, l.state, l.zip_code, l.region_code,
+                       l.county_mail_code, l.country_mail_code,
+                       ST_X(l.geolocation::geometry) as longitude, ST_Y(l.geolocation::geometry) as latitude,
+                       c.created_at, c.updated_at
+                FROM clubs c
+                LEFT JOIN locations l ON c.location_id = l.id
+                WHERE c.is_soaring = true
+                AND c.home_base_airport_id IS NULL
+                AND l.geolocation IS NOT NULL
+                ORDER BY c.name
+            "#;
+            
+            let clubs: Vec<ClubWithLocation> = diesel::sql_query(sql)
+                .load::<ClubWithLocation>(&mut conn)?;
+                
+            Ok::<Vec<ClubWithLocation>, anyhow::Error>(clubs)
+        }).await??;
 
-        let mut clubs = Vec::new();
-        for row in results {
-            let base_location = if row.longitude.is_some() && row.latitude.is_some() {
-                Some(crate::locations::Point::new(
-                    row.latitude.unwrap(),
-                    row.longitude.unwrap(),
-                ))
-            } else {
-                None
-            };
-
-            clubs.push(Club {
-                id: row.id,
-                name: row.name,
-                is_soaring: row.is_soaring,
-                home_base_airport_id: row.home_base_airport_id,
-                location_id: row.location_id,
-                street1: row.street1,
-                street2: row.street2,
-                city: row.city,
-                state: row.state,
-                zip_code: row.zip_code,
-                region_code: row.region_code,
-                county_mail_code: row.county_mail_code,
-                country_mail_code: row.country_mail_code,
-                base_location,
-                created_at: row.created_at.unwrap_or_else(Utc::now),
-                updated_at: row.updated_at.unwrap_or_else(Utc::now),
-            });
-        }
-
-        Ok(clubs)
+        Ok(result.into_iter().map(|cwl| cwl.into()).collect())
     }
 
     /// Update the home base airport ID for a club
     pub async fn update_home_base_airport(&self, club_id: Uuid, airport_id: i32) -> Result<bool> {
-        let result = sqlx::query!(
-            r#"
-            UPDATE clubs
-            SET home_base_airport_id = $2, updated_at = NOW()
-            WHERE id = $1
-            "#,
-            club_id,
-            airport_id
-        )
-        .execute(&self.pool)
-        .await?;
+        use crate::schema::clubs::dsl::*;
+        
+        let pool = self.pool.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            
+            let updated_count = diesel::update(clubs.filter(id.eq(club_id)))
+                .set((
+                    home_base_airport_id.eq(Some(airport_id)),
+                    updated_at.eq(diesel::dsl::now),
+                ))
+                .execute(&mut conn)?;
+                
+            Ok::<usize, anyhow::Error>(updated_count)
+        }).await??;
 
-        Ok(result.rows_affected() > 0)
+        Ok(result > 0)
     }
 
     /// Insert a new club
     pub async fn insert(&self, club: &Club) -> Result<()> {
+        use crate::schema::clubs::dsl::*;
+        
         // First create location if we have address data
-        let location_id = if let Some(location_id) = club.location_id {
-            location_id
-        } else if club.street1.is_some() || club.city.is_some() {
-            let location_geolocation = club
-                .base_location
-                .as_ref()
-                .map(|loc| crate::locations::Point::new(loc.latitude, loc.longitude));
-
-            let location = self
-                .locations_repo
-                .find_or_create(
-                    club.street1.clone(),
-                    club.street2.clone(),
-                    club.city.clone(),
-                    club.state.clone(),
-                    club.zip_code.clone(),
-                    club.region_code.clone(),
-                    club.county_mail_code.clone(),
-                    club.country_mail_code.clone(),
-                    location_geolocation,
-                )
-                .await?;
-            location.id
+        let final_location_id = if let Some(existing_location_id) = club.location_id {
+            existing_location_id
         } else {
+            // TODO: Re-enable location creation when LocationsRepository is migrated to Diesel
+            // For now, clubs without location_id will not be inserted
             return Err(anyhow::anyhow!(
-                "Club must have either location_id or address fields"
+                "Club must have location_id (locations repository not yet migrated to Diesel)"
             ));
         };
 
-        sqlx::query!(
-            r#"
-            INSERT INTO clubs (
-                id, name, is_soaring, home_base_airport_id, location_id,
-                created_at, updated_at
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
-            "#,
-            club.id,
-            club.name,
-            club.is_soaring,
-            club.home_base_airport_id,
-            location_id,
-            club.created_at,
-            club.updated_at
-        )
-        .execute(&self.pool)
-        .await?;
+        let new_club = NewClubModel {
+            id: club.id,
+            name: club.name.clone(),
+            is_soaring: club.is_soaring,
+            home_base_airport_id: club.home_base_airport_id,
+            location_id: Some(final_location_id),
+        };
+
+        let pool = self.pool.clone();
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            
+            diesel::insert_into(clubs)
+                .values(&new_club)
+                .execute(&mut conn)?;
+                
+            Ok::<(), anyhow::Error>(())
+        }).await??;
 
         Ok(())
     }

@@ -129,7 +129,7 @@ pub async fn search_clubs(
     State(state): State<AppState>,
     Query(params): Query<SearchQueryParams>,
 ) -> impl IntoResponse {
-    let clubs_repo = ClubsRepository::new(state.pool);
+    let clubs_repo = ClubsRepository::new(state.diesel_pool);
 
     // Check if geographic search parameters are provided
     if let (Some(lat), Some(lng)) = (params.latitude, params.longitude) {
@@ -281,7 +281,7 @@ pub async fn search_flights(
     State(state): State<AppState>,
     Query(params): Query<FlightsQueryParams>,
 ) -> impl IntoResponse {
-    let flights_repo = FlightsRepository::new(state.pool);
+    let flights_repo = FlightsRepository::new(state.diesel_pool);
 
     if let Some(device_id) = params.device_id {
         match flights_repo

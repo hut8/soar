@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
+use diesel::prelude::*;
 
 /// A link associated with a receiver
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -81,6 +82,151 @@ impl Receiver {
         };
 
         (receiver_record, photos, links)
+    }
+}
+
+/// Diesel model for the receivers table - used for database operations
+#[derive(Debug, Clone, Queryable, Selectable, Insertable, AsChangeset, Serialize, Deserialize)]
+#[diesel(table_name = crate::schema::receivers)]
+pub struct ReceiverModel {
+    pub id: i32,
+    pub callsign: String,
+    pub description: Option<String>,
+    pub contact: Option<String>,
+    pub email: Option<String>,
+    pub country: Option<String>,
+    pub created_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub updated_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+/// Insert model for new receivers
+#[derive(Debug, Clone, Insertable, Serialize, Deserialize)]
+#[diesel(table_name = crate::schema::receivers)]
+pub struct NewReceiverModel {
+    pub callsign: String,
+    pub description: Option<String>,
+    pub contact: Option<String>,
+    pub email: Option<String>,
+    pub country: Option<String>,
+}
+
+/// Diesel model for the receivers_photos table
+#[derive(Debug, Clone, Queryable, Selectable, Insertable, AsChangeset, Serialize, Deserialize)]
+#[diesel(table_name = crate::schema::receivers_photos)]
+pub struct ReceiverPhotoModel {
+    pub id: i32,
+    pub receiver_id: i32,
+    pub photo_url: String,
+    pub created_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+/// Insert model for new receiver photos
+#[derive(Debug, Clone, Insertable, Serialize, Deserialize)]
+#[diesel(table_name = crate::schema::receivers_photos)]
+pub struct NewReceiverPhotoModel {
+    pub receiver_id: i32,
+    pub photo_url: String,
+}
+
+/// Diesel model for the receivers_links table
+#[derive(Debug, Clone, Queryable, Selectable, Insertable, AsChangeset, Serialize, Deserialize)]
+#[diesel(table_name = crate::schema::receivers_links)]
+pub struct ReceiverLinkModel {
+    pub id: i32,
+    pub receiver_id: i32,
+    pub rel: Option<String>,
+    pub href: String,
+    pub created_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+/// Insert model for new receiver links
+#[derive(Debug, Clone, Insertable, Serialize, Deserialize)]
+#[diesel(table_name = crate::schema::receivers_links)]
+pub struct NewReceiverLinkModel {
+    pub receiver_id: i32,
+    pub rel: Option<String>,
+    pub href: String,
+}
+
+/// Conversion from ReceiverRecord (API model) to ReceiverModel (database model)
+impl From<ReceiverRecord> for ReceiverModel {
+    fn from(record: ReceiverRecord) -> Self {
+        Self {
+            id: record.id,
+            callsign: record.callsign,
+            description: record.description,
+            contact: record.contact,
+            email: record.email,
+            country: record.country,
+            created_at: record.created_at,
+            updated_at: record.updated_at,
+        }
+    }
+}
+
+/// Conversion from ReceiverModel (database model) to ReceiverRecord (API model)
+impl From<ReceiverModel> for ReceiverRecord {
+    fn from(model: ReceiverModel) -> Self {
+        Self {
+            id: model.id,
+            callsign: model.callsign,
+            description: model.description,
+            contact: model.contact,
+            email: model.email,
+            country: model.country,
+            created_at: model.created_at,
+            updated_at: model.updated_at,
+        }
+    }
+}
+
+/// Conversion from ReceiverPhotoRecord (API model) to ReceiverPhotoModel (database model)
+impl From<ReceiverPhotoRecord> for ReceiverPhotoModel {
+    fn from(record: ReceiverPhotoRecord) -> Self {
+        Self {
+            id: record.id,
+            receiver_id: record.receiver_id,
+            photo_url: record.photo_url,
+            created_at: record.created_at,
+        }
+    }
+}
+
+/// Conversion from ReceiverPhotoModel (database model) to ReceiverPhotoRecord (API model)
+impl From<ReceiverPhotoModel> for ReceiverPhotoRecord {
+    fn from(model: ReceiverPhotoModel) -> Self {
+        Self {
+            id: model.id,
+            receiver_id: model.receiver_id,
+            photo_url: model.photo_url,
+            created_at: model.created_at,
+        }
+    }
+}
+
+/// Conversion from ReceiverLinkRecord (API model) to ReceiverLinkModel (database model)
+impl From<ReceiverLinkRecord> for ReceiverLinkModel {
+    fn from(record: ReceiverLinkRecord) -> Self {
+        Self {
+            id: record.id,
+            receiver_id: record.receiver_id,
+            rel: record.rel,
+            href: record.href,
+            created_at: record.created_at,
+        }
+    }
+}
+
+/// Conversion from ReceiverLinkModel (database model) to ReceiverLinkRecord (API model)
+impl From<ReceiverLinkModel> for ReceiverLinkRecord {
+    fn from(model: ReceiverLinkModel) -> Self {
+        Self {
+            id: model.id,
+            receiver_id: model.receiver_id,
+            rel: model.rel,
+            href: model.href,
+            created_at: model.created_at,
+        }
     }
 }
 

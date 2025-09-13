@@ -1,208 +1,182 @@
 use anyhow::Result;
-use sqlx::PgPool;
-use sqlx::postgres::types::PgPoint;
-use sqlx::types::Uuid;
+use diesel::prelude::*;
+use diesel::sql_types::*;
+use uuid::Uuid;
 
-use crate::locations::{Location, Point};
+use crate::locations::{Location, LocationModel, Point};
+use crate::web::DieselPgPool;
+
+#[derive(QueryableByName, Debug)]
+struct LocationForGeocoding {
+    #[diesel(sql_type = diesel::sql_types::Uuid)]
+    id: Uuid,
+    #[diesel(sql_type = Nullable<Varchar>)]
+    street1: Option<String>,
+    #[diesel(sql_type = Nullable<Varchar>)]
+    street2: Option<String>,
+    #[diesel(sql_type = Nullable<Varchar>)]
+    city: Option<String>,
+    #[diesel(sql_type = Nullable<Varchar>)]
+    state: Option<String>,
+    #[diesel(sql_type = Nullable<Varchar>)]
+    zip_code: Option<String>,
+    #[diesel(sql_type = Nullable<Varchar>)]
+    region_code: Option<String>,
+    #[diesel(sql_type = Nullable<Varchar>)]
+    county_mail_code: Option<String>,
+    #[diesel(sql_type = Nullable<Varchar>)]
+    country_mail_code: Option<String>,
+    #[diesel(sql_type = Timestamptz)]
+    created_at: chrono::DateTime<chrono::Utc>,
+    #[diesel(sql_type = Timestamptz)]
+    updated_at: chrono::DateTime<chrono::Utc>,
+}
 
 pub struct LocationsRepository {
-    pool: PgPool,
+    pool: DieselPgPool,
 }
 
 impl LocationsRepository {
-    pub fn new(pool: PgPool) -> Self {
+    pub fn new(pool: DieselPgPool) -> Self {
         Self { pool }
     }
 
     /// Get location by ID
-    pub async fn get_by_id(&self, id: Uuid) -> Result<Option<Location>> {
-        let result = sqlx::query!(
-            r#"
-            SELECT id, street1, street2, city, state, zip_code, region_code,
-                   county_mail_code, country_mail_code,
-                   ST_X(geolocation::geometry) as longitude, ST_Y(geolocation::geometry) as latitude,
-                   created_at, updated_at
-            FROM locations
-            WHERE id = $1
-            "#,
-            id
-        )
-        .fetch_optional(&self.pool)
-        .await?;
+    pub async fn get_by_id(&self, location_id: Uuid) -> Result<Option<Location>> {
+        use crate::schema::locations::dsl::*;
+        
+        let pool = self.pool.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            
+            let location_model: Option<LocationModel> = locations
+                .filter(id.eq(location_id))
+                .first::<LocationModel>(&mut conn)
+                .optional()?;
+                
+            Ok::<Option<LocationModel>, anyhow::Error>(location_model)
+        }).await??;
 
-        if let Some(row) = result {
-            let geolocation = if row.longitude.is_some() && row.latitude.is_some() {
-                Some(Point::new(row.latitude.unwrap(), row.longitude.unwrap()))
-            } else {
-                None
-            };
-
-            Ok(Some(Location {
-                id: row.id,
-                street1: row.street1,
-                street2: row.street2,
-                city: row.city,
-                state: row.state,
-                zip_code: row.zip_code,
-                region_code: row.region_code,
-                county_mail_code: row.county_mail_code,
-                country_mail_code: row.country_mail_code,
-                geolocation,
-                created_at: row.created_at,
-                updated_at: row.updated_at,
-            }))
-        } else {
-            Ok(None)
-        }
+        Ok(result.map(|model| model.into()))
     }
 
     /// Find location by address fields
     pub async fn find_by_address(
         &self,
-        street1: Option<&str>,
-        street2: Option<&str>,
-        city: Option<&str>,
-        state: Option<&str>,
-        zip_code: Option<&str>,
-        country_mail_code: Option<&str>,
+        street1_param: Option<&str>,
+        street2_param: Option<&str>,
+        city_param: Option<&str>,
+        state_param: Option<&str>,
+        zip_code_param: Option<&str>,
+        country_mail_code_param: Option<&str>,
     ) -> Result<Option<Location>> {
-        let result = sqlx::query!(
-            r#"
-            SELECT id, street1, street2, city, state, zip_code, region_code,
-                   county_mail_code, country_mail_code,
-                   ST_X(geolocation::geometry) as longitude, ST_Y(geolocation::geometry) as latitude,
-                   created_at, updated_at
-            FROM locations
-            WHERE COALESCE(street1, '') = COALESCE($1, '')
-              AND COALESCE(street2, '') = COALESCE($2, '')
-              AND COALESCE(city, '') = COALESCE($3, '')
-              AND COALESCE(state, '') = COALESCE($4, '')
-              AND COALESCE(zip_code, '') = COALESCE($5, '')
-              AND COALESCE(country_mail_code, 'US') = COALESCE($6, 'US')
-            "#,
-            street1,
-            street2,
-            city,
-            state,
-            zip_code,
-            country_mail_code.unwrap_or("US")
-        )
-        .fetch_optional(&self.pool)
-        .await?;
+        use crate::schema::locations::dsl::*;
+        
+        let pool = self.pool.clone();
+        let street1_val = street1_param.map(|s| s.to_string());
+        let street2_val = street2_param.map(|s| s.to_string());
+        let city_val = city_param.map(|s| s.to_string());
+        let state_val = state_param.map(|s| s.to_string());
+        let zip_code_val = zip_code_param.map(|s| s.to_string());
+        let country_val = country_mail_code_param.unwrap_or("US").to_string();
+        
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            
+            let location_model: Option<LocationModel> = locations
+                .filter(
+                    street1.eq(&street1_val)
+                    .and(street2.eq(&street2_val))
+                    .and(city.eq(&city_val))
+                    .and(state.eq(&state_val))
+                    .and(zip_code.eq(&zip_code_val))
+                    .and(country_mail_code.eq(&country_val))
+                )
+                .first::<LocationModel>(&mut conn)
+                .optional()?;
+                
+            Ok::<Option<LocationModel>, anyhow::Error>(location_model)
+        }).await??;
 
-        if let Some(row) = result {
-            let geolocation = if row.longitude.is_some() && row.latitude.is_some() {
-                Some(Point::new(row.latitude.unwrap(), row.longitude.unwrap()))
-            } else {
-                None
-            };
-
-            Ok(Some(Location {
-                id: row.id,
-                street1: row.street1,
-                street2: row.street2,
-                city: row.city,
-                state: row.state,
-                zip_code: row.zip_code,
-                region_code: row.region_code,
-                county_mail_code: row.county_mail_code,
-                country_mail_code: row.country_mail_code,
-                geolocation,
-                created_at: row.created_at,
-                updated_at: row.updated_at,
-            }))
-        } else {
-            Ok(None)
-        }
+        Ok(result.map(|model| model.into()))
     }
 
     /// Insert a new location
     pub async fn insert(&self, location: &Location) -> Result<()> {
-        sqlx::query!(
-            r#"
-            INSERT INTO locations (
-                id, street1, street2, city, state, zip_code, region_code,
-                county_mail_code, country_mail_code, geolocation,
-                created_at, updated_at
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-            "#,
-            location.id,
-            location.street1,
-            location.street2,
-            location.city,
-            location.state,
-            location.zip_code,
-            location.region_code,
-            location.county_mail_code,
-            location.country_mail_code,
-            location.geolocation.as_ref().map(|p| PgPoint {
-                x: p.longitude,
-                y: p.latitude
-            }),
-            location.created_at,
-            location.updated_at
-        )
-        .execute(&self.pool)
-        .await?;
-
+        use crate::schema::locations;
+        
+        let pool = self.pool.clone();
+        let location_model: LocationModel = location.clone().into();
+        
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            
+            diesel::insert_into(locations::table)
+                .values(&location_model)
+                .execute(&mut conn)?;
+                
+            Ok::<(), anyhow::Error>(())
+        }).await??;
+        
         Ok(())
     }
 
     /// Update geolocation for a location
-    pub async fn update_geolocation(&self, location_id: Uuid, geolocation: Point) -> Result<bool> {
-        let result = sqlx::query!(
-            r#"
-            UPDATE locations
-            SET geolocation = $2, updated_at = NOW()
-            WHERE id = $1
-            "#,
-            location_id,
-            PgPoint {
-                x: geolocation.longitude,
-                y: geolocation.latitude
-            }
-        )
-        .execute(&self.pool)
-        .await?;
+    pub async fn update_geolocation(&self, location_id: Uuid, existing_geolocation: Point) -> Result<bool> {
+        use crate::schema::locations::dsl::*;
+        use chrono::Utc;
+        
+        let pool = self.pool.clone();
+        let geolocation_text = format!("POINT({} {})", existing_geolocation.longitude, existing_geolocation.latitude);
+        
+        let rows_affected = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            
+            let rows = diesel::update(locations.filter(id.eq(location_id)))
+                .set((
+                    geolocation.eq(&geolocation_text),
+                    updated_at.eq(Utc::now())
+                ))
+                .execute(&mut conn)?;
+                
+            Ok::<usize, anyhow::Error>(rows)
+        }).await??;
 
-        Ok(result.rows_affected() > 0)
+        Ok(rows_affected > 0)
     }
 
     /// Get locations that need geocoding (have address but no geolocation)
     pub async fn get_locations_for_geocoding(&self, limit: Option<i64>) -> Result<Vec<Location>> {
-        let limit = limit.unwrap_or(100);
-
-        let results = sqlx::query!(
-            r#"
-            SELECT id, street1, street2, city, state, zip_code, region_code,
-                   county_mail_code, country_mail_code,
-                   ST_X(geolocation::geometry) as longitude, ST_Y(geolocation::geometry) as latitude,
-                   created_at, updated_at
-            FROM locations
-            WHERE geolocation IS NULL
-              AND (street1 IS NOT NULL OR city IS NOT NULL OR state IS NOT NULL)
-              AND EXISTS (
-                  SELECT 1 FROM clubs c
-                  WHERE c.location_id = locations.id
-                  AND c.is_soaring = TRUE
-              )
-            ORDER BY created_at ASC
-            LIMIT $1
-            "#,
-            limit
-        )
-        .fetch_all(&self.pool)
-        .await?;
+        let pool = self.pool.clone();
+        let query_limit = limit.unwrap_or(100);
+        
+        let results = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            
+            let raw_query = format!(
+                "SELECT id, street1, street2, city, state, zip_code, region_code,
+                        county_mail_code, country_mail_code, created_at, updated_at
+                 FROM locations
+                 WHERE geolocation IS NULL
+                   AND (street1 IS NOT NULL OR city IS NOT NULL OR state IS NOT NULL)
+                   AND EXISTS (
+                       SELECT 1 FROM clubs c
+                       WHERE c.location_id = locations.id
+                       AND c.is_soaring = TRUE
+                   )
+                 ORDER BY created_at ASC
+                 LIMIT {}",
+                query_limit
+            );
+            
+            let location_results: Vec<LocationForGeocoding> = diesel::sql_query(&raw_query)
+                .load::<LocationForGeocoding>(&mut conn)?;
+                
+            Ok::<Vec<LocationForGeocoding>, anyhow::Error>(location_results)
+        }).await??;
 
         let mut locations = Vec::new();
         for row in results {
-            let geolocation = if row.longitude.is_some() && row.latitude.is_some() {
-                Some(Point::new(row.latitude.unwrap(), row.longitude.unwrap()))
-            } else {
-                None
-            };
-
             locations.push(Location {
                 id: row.id,
                 street1: row.street1,
@@ -213,7 +187,7 @@ impl LocationsRepository {
                 region_code: row.region_code,
                 county_mail_code: row.county_mail_code,
                 country_mail_code: row.country_mail_code,
-                geolocation,
+                geolocation: None, // These locations need geocoding, so no geolocation
                 created_at: row.created_at,
                 updated_at: row.updated_at,
             });
