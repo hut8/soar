@@ -1,5 +1,4 @@
 use chrono::{DateTime, Duration, Utc};
-use sqlx::PgPool;
 use std::collections::HashMap;
 use tracing::{debug, error, info, warn};
 
@@ -74,7 +73,7 @@ pub struct FlightDetectionProcessor {
     db_processor: DatabaseFixProcessor,
     flights_repo: FlightsRepository,
     aircraft_trackers: HashMap<String, AircraftTracker>,
-    pool: PgPool,
+    sqlx_pool: sqlx::PgPool,
     diesel_pool: DieselPgPool,
 
     // Configuration thresholds
@@ -86,12 +85,12 @@ pub struct FlightDetectionProcessor {
 }
 
 impl FlightDetectionProcessor {
-    pub fn new(sqlx_pool: PgPool, diesel_pool: DieselPgPool) -> Self {
+    pub fn new(sqlx_pool: sqlx::PgPool, diesel_pool: DieselPgPool) -> Self {
         Self {
             db_processor: DatabaseFixProcessor::new(sqlx_pool.clone(), diesel_pool.clone()),
             flights_repo: FlightsRepository::new(diesel_pool.clone()),
             aircraft_trackers: HashMap::new(),
-            pool: sqlx_pool,
+            sqlx_pool,
             diesel_pool,
 
             // Default thresholds - can be made configurable later
@@ -419,10 +418,10 @@ impl FixProcessor for FlightDetectionProcessor {
 impl Clone for FlightDetectionProcessor {
     fn clone(&self) -> Self {
         Self {
-            db_processor: DatabaseFixProcessor::new(self.pool.clone(), self.diesel_pool.clone()),
+            db_processor: DatabaseFixProcessor::new(self.sqlx_pool.clone(), self.diesel_pool.clone()),
             flights_repo: FlightsRepository::new(self.diesel_pool.clone()),
             aircraft_trackers: self.aircraft_trackers.clone(),
-            pool: self.pool.clone(),
+            sqlx_pool: self.sqlx_pool.clone(),
             diesel_pool: self.diesel_pool.clone(),
             takeoff_speed_threshold: self.takeoff_speed_threshold,
             takeoff_altitude_gain_threshold: self.takeoff_altitude_gain_threshold,

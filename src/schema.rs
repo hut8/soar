@@ -259,18 +259,22 @@ diesel::table! {
 }
 
 diesel::table! {
-    aircraft_model (code) {
-        code -> Varchar,
-        manufacturer -> Nullable<Varchar>,
-        model -> Nullable<Varchar>,
-        type_acft -> Nullable<Int2>,
-        type_eng -> Nullable<Int2>,
-        ac_cat -> Nullable<Int2>,
-        build_cert_ind -> Nullable<Int2>,
-        no_eng -> Nullable<Int2>,
-        no_seats -> Nullable<Int2>,
-        ac_weight -> Nullable<Varchar>,
-        speed -> Nullable<Int2>,
+    aircraft_model (manufacturer_code, model_code, series_code) {
+        manufacturer_code -> Text,
+        model_code -> Text,
+        series_code -> Text,
+        manufacturer_name -> Text,
+        model_name -> Text,
+        aircraft_type -> Nullable<Text>,
+        engine_type -> Nullable<Text>,
+        aircraft_category -> Nullable<Text>,
+        builder_certification -> Nullable<Text>,
+        number_of_engines -> Nullable<Int2>,
+        number_of_seats -> Nullable<Int2>,
+        weight_class -> Nullable<Text>,
+        cruising_speed -> Nullable<Int2>,
+        type_certificate_data_sheet -> Nullable<Text>,
+        type_certificate_data_holder -> Nullable<Text>,
         created_at -> Nullable<Timestamptz>,
         updated_at -> Nullable<Timestamptz>,
     }

@@ -1,17 +1,177 @@
 use anyhow::Result;
-use sqlx::PgPool;
+use chrono::{DateTime, Utc};
+use diesel::prelude::*;
+use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
+use diesel::upsert::excluded;
 use tracing::{info, warn};
 
 use crate::faa::aircraft_models::{
     AircraftCategory, AircraftModel, AircraftType, BuilderCertification, EngineType, WeightClass,
 };
+use crate::schema::aircraft_model;
+
+pub type DieselPgPool = Pool<ConnectionManager<PgConnection>>;
+pub type DieselPgPooledConnection = PooledConnection<ConnectionManager<PgConnection>>;
+
+/// Diesel model for the aircraft_model table - used for database operations
+#[derive(Debug, Clone, Queryable, Selectable, Insertable, AsChangeset)]
+#[diesel(table_name = aircraft_model)]
+pub struct AircraftModelRecord {
+    pub manufacturer_code: String,
+    pub model_code: String,
+    pub series_code: String,
+    pub manufacturer_name: String,
+    pub model_name: String,
+    pub aircraft_type: Option<String>,
+    pub engine_type: Option<String>,
+    pub aircraft_category: Option<String>,
+    pub builder_certification: Option<String>,
+    pub number_of_engines: Option<i16>,
+    pub number_of_seats: Option<i16>,
+    pub weight_class: Option<String>,
+    pub cruising_speed: Option<i16>,
+    pub type_certificate_data_sheet: Option<String>,
+    pub type_certificate_data_holder: Option<String>,
+    pub created_at: Option<DateTime<Utc>>,
+    pub updated_at: Option<DateTime<Utc>>,
+}
+
+/// Insert model for new aircraft models
+#[derive(Debug, Clone, Insertable)]
+#[diesel(table_name = aircraft_model)]
+pub struct NewAircraftModelRecord {
+    pub manufacturer_code: String,
+    pub model_code: String,
+    pub series_code: String,
+    pub manufacturer_name: String,
+    pub model_name: String,
+    pub aircraft_type: Option<String>,
+    pub engine_type: Option<String>,
+    pub aircraft_category: Option<String>,
+    pub builder_certification: Option<String>,
+    pub number_of_engines: Option<i16>,
+    pub number_of_seats: Option<i16>,
+    pub weight_class: Option<String>,
+    pub cruising_speed: Option<i16>,
+    pub type_certificate_data_sheet: Option<String>,
+    pub type_certificate_data_holder: Option<String>,
+}
+
+/// Conversion from AircraftModel (API model) to AircraftModelRecord (database model)
+impl From<AircraftModel> for AircraftModelRecord {
+    fn from(model: AircraftModel) -> Self {
+        Self {
+            manufacturer_code: model.manufacturer_code,
+            model_code: model.model_code,
+            series_code: model.series_code,
+            manufacturer_name: model.manufacturer_name,
+            model_name: model.model_name,
+            aircraft_type: model.aircraft_type.map(|t| t.to_string()),
+            engine_type: model.engine_type.map(|t| t.to_string()),
+            aircraft_category: model.aircraft_category.map(|t| t.to_string()),
+            builder_certification: model.builder_certification.map(|t| t.to_string()),
+            number_of_engines: model.number_of_engines.map(|n| n as i16),
+            number_of_seats: model.number_of_seats.map(|n| n as i16),
+            weight_class: model.weight_class.map(|t| t.to_string()),
+            cruising_speed: model.cruising_speed.map(|n| n as i16),
+            type_certificate_data_sheet: model.type_certificate_data_sheet,
+            type_certificate_data_holder: model.type_certificate_data_holder,
+            created_at: None, // Will be set by database
+            updated_at: None, // Will be set by database
+        }
+    }
+}
+
+/// Conversion from AircraftModel (API model) to NewAircraftModelRecord (insert model)
+impl From<AircraftModel> for NewAircraftModelRecord {
+    fn from(model: AircraftModel) -> Self {
+        Self {
+            manufacturer_code: model.manufacturer_code,
+            model_code: model.model_code,
+            series_code: model.series_code,
+            manufacturer_name: model.manufacturer_name,
+            model_name: model.model_name,
+            aircraft_type: model.aircraft_type.map(|t| t.to_string()),
+            engine_type: model.engine_type.map(|t| t.to_string()),
+            aircraft_category: model.aircraft_category.map(|t| t.to_string()),
+            builder_certification: model.builder_certification.map(|t| t.to_string()),
+            number_of_engines: model.number_of_engines.map(|n| n as i16),
+            number_of_seats: model.number_of_seats.map(|n| n as i16),
+            weight_class: model.weight_class.map(|t| t.to_string()),
+            cruising_speed: model.cruising_speed.map(|n| n as i16),
+            type_certificate_data_sheet: model.type_certificate_data_sheet,
+            type_certificate_data_holder: model.type_certificate_data_holder,
+        }
+    }
+}
+
+/// Conversion from AircraftModelRecord (database model) to AircraftModel (API model)
+impl TryFrom<AircraftModelRecord> for AircraftModel {
+    type Error = anyhow::Error;
+
+    fn try_from(record: AircraftModelRecord) -> Result<Self> {
+        // Convert string types back to enums
+        let aircraft_type = record
+            .aircraft_type
+            .as_ref()
+            .map(|s| s.parse::<AircraftType>())
+            .transpose()?;
+
+        let engine_type = record
+            .engine_type
+            .as_ref()
+            .map(|s| s.parse::<EngineType>())
+            .transpose()?;
+
+        let aircraft_category = record
+            .aircraft_category
+            .as_ref()
+            .map(|s| s.parse::<AircraftCategory>())
+            .transpose()?;
+
+        let builder_certification = record
+            .builder_certification
+            .as_ref()
+            .map(|s| s.parse::<BuilderCertification>())
+            .transpose()?;
+
+        let weight_class = record
+            .weight_class
+            .as_ref()
+            .map(|s| s.parse::<WeightClass>())
+            .transpose()?;
+
+        // Convert i16 back to u16
+        let number_of_engines = record.number_of_engines.map(|n| n as u16);
+        let number_of_seats = record.number_of_seats.map(|n| n as u16);
+        let cruising_speed = record.cruising_speed.map(|n| n as u16);
+
+        Ok(AircraftModel {
+            manufacturer_code: record.manufacturer_code,
+            model_code: record.model_code,
+            series_code: record.series_code,
+            manufacturer_name: record.manufacturer_name,
+            model_name: record.model_name,
+            aircraft_type,
+            engine_type,
+            aircraft_category,
+            builder_certification,
+            number_of_engines,
+            number_of_seats,
+            weight_class,
+            cruising_speed,
+            type_certificate_data_sheet: record.type_certificate_data_sheet,
+            type_certificate_data_holder: record.type_certificate_data_holder,
+        })
+    }
+}
 
 pub struct AircraftModelRepository {
-    pool: PgPool,
+    pool: DieselPgPool,
 }
 
 impl AircraftModelRepository {
-    pub fn new(pool: PgPool) -> Self {
+    pub fn new(pool: DieselPgPool) -> Self {
         Self { pool }
     }
 
@@ -22,341 +182,162 @@ impl AircraftModelRepository {
     where
         I: IntoIterator<Item = AircraftModel>,
     {
-        let mut transaction = self.pool.begin().await?;
-        let mut upserted_count = 0;
-
-        for aircraft_model in aircraft_models {
-            // Convert enum types to strings for database storage
-            let aircraft_type_str = aircraft_model.aircraft_type.as_ref().map(|t| t.to_string());
-            let engine_type_str = aircraft_model.engine_type.as_ref().map(|t| t.to_string());
-            let aircraft_category_str = aircraft_model
-                .aircraft_category
-                .as_ref()
-                .map(|t| t.to_string());
-            let builder_certification_str = aircraft_model
-                .builder_certification
-                .as_ref()
-                .map(|t| t.to_string());
-            let weight_class_str = aircraft_model.weight_class.as_ref().map(|t| t.to_string());
-
-            // Convert u16 to i16 for database storage (SMALLINT)
-            let number_of_engines = aircraft_model.number_of_engines.map(|n| n as i16);
-            let number_of_seats = aircraft_model.number_of_seats.map(|n| n as i16);
-            let cruising_speed = aircraft_model.cruising_speed.map(|n| n as i16);
-
-            // Use ON CONFLICT to handle upserts
-            let result = sqlx::query!(
-                r#"
-                INSERT INTO aircraft_model (
-                    manufacturer_code, model_code, series_code, manufacturer_name, model_name,
-                    aircraft_type, engine_type, aircraft_category, builder_certification,
-                    number_of_engines, number_of_seats, weight_class, cruising_speed,
-                    type_certificate_data_sheet, type_certificate_data_holder
-                )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-                ON CONFLICT (manufacturer_code, model_code, series_code)
-                DO UPDATE SET
-                    manufacturer_name = EXCLUDED.manufacturer_name,
-                    model_name = EXCLUDED.model_name,
-                    aircraft_type = EXCLUDED.aircraft_type,
-                    engine_type = EXCLUDED.engine_type,
-                    aircraft_category = EXCLUDED.aircraft_category,
-                    builder_certification = EXCLUDED.builder_certification,
-                    number_of_engines = EXCLUDED.number_of_engines,
-                    number_of_seats = EXCLUDED.number_of_seats,
-                    weight_class = EXCLUDED.weight_class,
-                    cruising_speed = EXCLUDED.cruising_speed,
-                    type_certificate_data_sheet = EXCLUDED.type_certificate_data_sheet,
-                    type_certificate_data_holder = EXCLUDED.type_certificate_data_holder,
-                    updated_at = NOW()
-                "#,
-                aircraft_model.manufacturer_code,
-                aircraft_model.model_code,
-                aircraft_model.series_code,
-                aircraft_model.manufacturer_name,
-                aircraft_model.model_name,
-                aircraft_type_str,
-                engine_type_str,
-                aircraft_category_str,
-                builder_certification_str,
-                number_of_engines,
-                number_of_seats,
-                weight_class_str,
-                cruising_speed,
-                aircraft_model.type_certificate_data_sheet,
-                aircraft_model.type_certificate_data_holder
-            )
-            .execute(&mut *transaction)
-            .await;
-
-            match result {
-                Ok(_) => {
-                    upserted_count += 1;
+        use chrono::Utc;
+        
+        let pool = self.pool.clone();
+        let models: Vec<AircraftModel> = aircraft_models.into_iter().collect();
+        let model_count = models.len();
+        
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            let mut upserted_count = 0;
+            
+            // Use a transaction for the batch operation
+            conn.transaction::<_, anyhow::Error, _>(|conn| {
+                for model in models {
+                    let new_record = NewAircraftModelRecord::from(model.clone());
+                    
+                    // Use Diesel's ON CONFLICT functionality
+                    let result = diesel::insert_into(aircraft_model::table)
+                        .values(&new_record)
+                        .on_conflict((aircraft_model::manufacturer_code, aircraft_model::model_code, aircraft_model::series_code))
+                        .do_update()
+                        .set((
+                            aircraft_model::manufacturer_name.eq(excluded(aircraft_model::manufacturer_name)),
+                            aircraft_model::model_name.eq(excluded(aircraft_model::model_name)),
+                            aircraft_model::aircraft_type.eq(excluded(aircraft_model::aircraft_type)),
+                            aircraft_model::engine_type.eq(excluded(aircraft_model::engine_type)),
+                            aircraft_model::aircraft_category.eq(excluded(aircraft_model::aircraft_category)),
+                            aircraft_model::builder_certification.eq(excluded(aircraft_model::builder_certification)),
+                            aircraft_model::number_of_engines.eq(excluded(aircraft_model::number_of_engines)),
+                            aircraft_model::number_of_seats.eq(excluded(aircraft_model::number_of_seats)),
+                            aircraft_model::weight_class.eq(excluded(aircraft_model::weight_class)),
+                            aircraft_model::cruising_speed.eq(excluded(aircraft_model::cruising_speed)),
+                            aircraft_model::type_certificate_data_sheet.eq(excluded(aircraft_model::type_certificate_data_sheet)),
+                            aircraft_model::type_certificate_data_holder.eq(excluded(aircraft_model::type_certificate_data_holder)),
+                            aircraft_model::updated_at.eq(Utc::now()),
+                        ))
+                        .execute(conn);
+                        
+                    match result {
+                        Ok(_) => {
+                            upserted_count += 1;
+                        }
+                        Err(e) => {
+                            warn!(
+                                "Failed to upsert aircraft model {}-{}-{}: {}",
+                                model.manufacturer_code,
+                                model.model_code,
+                                model.series_code,
+                                e
+                            );
+                            // Continue with other aircraft models rather than failing the entire batch
+                        }
+                    }
                 }
-                Err(e) => {
-                    warn!(
-                        "Failed to upsert aircraft model {}-{}-{}: {}",
-                        aircraft_model.manufacturer_code,
-                        aircraft_model.model_code,
-                        aircraft_model.series_code,
-                        e
-                    );
-                    // Continue with other aircraft models rather than failing the entire batch
-                }
-            }
-        }
-
-        transaction.commit().await?;
-        info!("Successfully upserted {} aircraft models", upserted_count);
-
-        Ok(upserted_count)
+                
+                Ok(())
+            })?;
+            
+            info!("Successfully upserted {} aircraft models", upserted_count);
+            Ok::<usize, anyhow::Error>(upserted_count)
+        })
+        .await?
     }
 
     /// Get the total count of aircraft models in the database
     pub async fn get_aircraft_model_count(&self) -> Result<i64> {
-        let result = sqlx::query!("SELECT COUNT(*) as count FROM aircraft_model")
-            .fetch_one(&self.pool)
-            .await?;
-
-        Ok(result.count.unwrap_or(0))
+        let pool = self.pool.clone();
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            let count = aircraft_model::table.count().get_result::<i64>(&mut conn)?;
+            Ok::<i64, anyhow::Error>(count)
+        })
+        .await?
     }
 
     /// Get an aircraft model by its composite primary key
     pub async fn get_aircraft_model_by_key(
         &self,
-        manufacturer_code: &str,
-        model_code: &str,
-        series_code: &str,
+        manufacturer_code_param: &str,
+        model_code_param: &str,
+        series_code_param: &str,
     ) -> Result<Option<AircraftModel>> {
-        let result = sqlx::query!(
-            r#"
-            SELECT manufacturer_code, model_code, series_code, manufacturer_name, model_name,
-                   aircraft_type, engine_type, aircraft_category, builder_certification,
-                   number_of_engines, number_of_seats, weight_class, cruising_speed,
-                   type_certificate_data_sheet, type_certificate_data_holder
-            FROM aircraft_model
-            WHERE manufacturer_code = $1 AND model_code = $2 AND series_code = $3
-            "#,
-            manufacturer_code,
-            model_code,
-            series_code
-        )
-        .fetch_optional(&self.pool)
-        .await?;
-
-        if let Some(row) = result {
-            // Convert string types back to enums
-            let aircraft_type = row
-                .aircraft_type
-                .as_ref()
-                .map(|s| s.parse::<AircraftType>())
-                .transpose()?;
-
-            let engine_type = row
-                .engine_type
-                .as_ref()
-                .map(|s| s.parse::<EngineType>())
-                .transpose()?;
-
-            let aircraft_category = row
-                .aircraft_category
-                .as_ref()
-                .map(|s| s.parse::<AircraftCategory>())
-                .transpose()?;
-
-            let builder_certification = row
-                .builder_certification
-                .as_ref()
-                .map(|s| s.parse::<BuilderCertification>())
-                .transpose()?;
-
-            let weight_class = row
-                .weight_class
-                .as_ref()
-                .map(|s| s.parse::<WeightClass>())
-                .transpose()?;
-
-            // Convert i16 back to u16
-            let number_of_engines = row.number_of_engines.map(|n| n as u16);
-            let number_of_seats = row.number_of_seats.map(|n| n as u16);
-            let cruising_speed = row.cruising_speed.map(|n| n as u16);
-
-            Ok(Some(AircraftModel {
-                manufacturer_code: row.manufacturer_code,
-                model_code: row.model_code,
-                series_code: row.series_code,
-                manufacturer_name: row.manufacturer_name,
-                model_name: row.model_name,
-                aircraft_type,
-                engine_type,
-                aircraft_category,
-                builder_certification,
-                number_of_engines,
-                number_of_seats,
-                weight_class,
-                cruising_speed,
-                type_certificate_data_sheet: row.type_certificate_data_sheet,
-                type_certificate_data_holder: row.type_certificate_data_holder,
-            }))
-        } else {
-            Ok(None)
-        }
+        let pool = self.pool.clone();
+        let manufacturer_code_param = manufacturer_code_param.to_string();
+        let model_code_param = model_code_param.to_string();
+        let series_code_param = series_code_param.to_string();
+        
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            
+            let result = aircraft_model::table
+                .filter(aircraft_model::manufacturer_code.eq(&manufacturer_code_param))
+                .filter(aircraft_model::model_code.eq(&model_code_param))
+                .filter(aircraft_model::series_code.eq(&series_code_param))
+                .first::<AircraftModelRecord>(&mut conn)
+                .optional()?;
+                
+            match result {
+                Some(record) => {
+                    let model = AircraftModel::try_from(record)?;
+                    Ok(Some(model))
+                }
+                None => Ok(None),
+            }
+        })
+        .await?
     }
 
     /// Search aircraft models by manufacturer name (case-insensitive partial match)
     pub async fn search_by_manufacturer(
         &self,
-        manufacturer_name: &str,
+        manufacturer_name_param: &str,
     ) -> Result<Vec<AircraftModel>> {
-        let results = sqlx::query!(
-            r#"
-            SELECT manufacturer_code, model_code, series_code, manufacturer_name, model_name,
-                   aircraft_type, engine_type, aircraft_category, builder_certification,
-                   number_of_engines, number_of_seats, weight_class, cruising_speed,
-                   type_certificate_data_sheet, type_certificate_data_holder
-            FROM aircraft_model
-            WHERE manufacturer_name ILIKE $1
-            ORDER BY manufacturer_name, model_name
-            "#,
-            format!("%{}%", manufacturer_name)
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        let mut aircraft_models = Vec::new();
-        for row in results {
-            // Convert string types back to enums
-            let aircraft_type = row
-                .aircraft_type
-                .as_ref()
-                .map(|s| s.parse::<AircraftType>())
-                .transpose()?;
-
-            let engine_type = row
-                .engine_type
-                .as_ref()
-                .map(|s| s.parse::<EngineType>())
-                .transpose()?;
-
-            let aircraft_category = row
-                .aircraft_category
-                .as_ref()
-                .map(|s| s.parse::<AircraftCategory>())
-                .transpose()?;
-
-            let builder_certification = row
-                .builder_certification
-                .as_ref()
-                .map(|s| s.parse::<BuilderCertification>())
-                .transpose()?;
-
-            let weight_class = row
-                .weight_class
-                .as_ref()
-                .map(|s| s.parse::<WeightClass>())
-                .transpose()?;
-
-            // Convert i16 back to u16
-            let number_of_engines = row.number_of_engines.map(|n| n as u16);
-            let number_of_seats = row.number_of_seats.map(|n| n as u16);
-            let cruising_speed = row.cruising_speed.map(|n| n as u16);
-
-            aircraft_models.push(AircraftModel {
-                manufacturer_code: row.manufacturer_code,
-                model_code: row.model_code,
-                series_code: row.series_code,
-                manufacturer_name: row.manufacturer_name,
-                model_name: row.model_name,
-                aircraft_type,
-                engine_type,
-                aircraft_category,
-                builder_certification,
-                number_of_engines,
-                number_of_seats,
-                weight_class,
-                cruising_speed,
-                type_certificate_data_sheet: row.type_certificate_data_sheet,
-                type_certificate_data_holder: row.type_certificate_data_holder,
-            });
-        }
-
-        Ok(aircraft_models)
+        let pool = self.pool.clone();
+        let search_pattern = format!("%{}%", manufacturer_name_param);
+        
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            
+            let results = aircraft_model::table
+                .filter(aircraft_model::manufacturer_name.ilike(&search_pattern))
+                .order((aircraft_model::manufacturer_name.asc(), aircraft_model::model_name.asc()))
+                .load::<AircraftModelRecord>(&mut conn)?;
+                
+            let mut aircraft_models = Vec::new();
+            for record in results {
+                let model = AircraftModel::try_from(record)?;
+                aircraft_models.push(model);
+            }
+            
+            Ok::<Vec<AircraftModel>, anyhow::Error>(aircraft_models)
+        })
+        .await?
     }
 
     /// Search aircraft models by model name (case-insensitive partial match)
-    pub async fn search_by_model(&self, model_name: &str) -> Result<Vec<AircraftModel>> {
-        let results = sqlx::query!(
-            r#"
-            SELECT manufacturer_code, model_code, series_code, manufacturer_name, model_name,
-                   aircraft_type, engine_type, aircraft_category, builder_certification,
-                   number_of_engines, number_of_seats, weight_class, cruising_speed,
-                   type_certificate_data_sheet, type_certificate_data_holder
-            FROM aircraft_model
-            WHERE model_name ILIKE $1
-            ORDER BY manufacturer_name, model_name
-            "#,
-            format!("%{}%", model_name)
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        let mut aircraft_models = Vec::new();
-        for row in results {
-            // Convert string types back to enums (reusing the same conversion logic)
-            let aircraft_type = row
-                .aircraft_type
-                .as_ref()
-                .map(|s| s.parse::<AircraftType>())
-                .transpose()?;
-
-            let engine_type = row
-                .engine_type
-                .as_ref()
-                .map(|s| s.parse::<EngineType>())
-                .transpose()?;
-
-            let aircraft_category = row
-                .aircraft_category
-                .as_ref()
-                .map(|s| s.parse::<AircraftCategory>())
-                .transpose()?;
-
-            let builder_certification = row
-                .builder_certification
-                .as_ref()
-                .map(|s| s.parse::<BuilderCertification>())
-                .transpose()?;
-
-            let weight_class = row
-                .weight_class
-                .as_ref()
-                .map(|s| s.parse::<WeightClass>())
-                .transpose()?;
-
-            let number_of_engines = row.number_of_engines.map(|n| n as u16);
-            let number_of_seats = row.number_of_seats.map(|n| n as u16);
-            let cruising_speed = row.cruising_speed.map(|n| n as u16);
-
-            aircraft_models.push(AircraftModel {
-                manufacturer_code: row.manufacturer_code,
-                model_code: row.model_code,
-                series_code: row.series_code,
-                manufacturer_name: row.manufacturer_name,
-                model_name: row.model_name,
-                aircraft_type,
-                engine_type,
-                aircraft_category,
-                builder_certification,
-                number_of_engines,
-                number_of_seats,
-                weight_class,
-                cruising_speed,
-                type_certificate_data_sheet: row.type_certificate_data_sheet,
-                type_certificate_data_holder: row.type_certificate_data_holder,
-            });
-        }
-
-        Ok(aircraft_models)
+    pub async fn search_by_model(&self, model_name_param: &str) -> Result<Vec<AircraftModel>> {
+        let pool = self.pool.clone();
+        let search_pattern = format!("%{}%", model_name_param);
+        
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            
+            let results = aircraft_model::table
+                .filter(aircraft_model::model_name.ilike(&search_pattern))
+                .order((aircraft_model::manufacturer_name.asc(), aircraft_model::model_name.asc()))
+                .load::<AircraftModelRecord>(&mut conn)?;
+                
+            let mut aircraft_models = Vec::new();
+            for record in results {
+                let model = AircraftModel::try_from(record)?;
+                aircraft_models.push(model);
+            }
+            
+            Ok::<Vec<AircraftModel>, anyhow::Error>(aircraft_models)
+        })
+        .await?
     }
 }
 

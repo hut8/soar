@@ -3,7 +3,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Json},
 };
-use sqlx::types::Uuid;
+use uuid::Uuid;
 use tracing::error;
 
 use crate::aircraft_registrations_repo::AircraftRegistrationsRepository;

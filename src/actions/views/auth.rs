@@ -14,7 +14,7 @@ pub struct CreateUserRequest {
     pub last_name: String,
     pub email: String,
     pub password: String,
-    pub club_id: Option<sqlx::types::Uuid>,
+    pub club_id: Option<uuid::Uuid>,
 }
 
 #[derive(Debug, Deserialize)]

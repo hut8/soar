@@ -1,7 +1,7 @@
 use crate::locations::Point;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::types::Uuid;
+use uuid::Uuid;
 use diesel::prelude::*;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

@@ -7,9 +7,10 @@ use axum::{
 };
 use include_dir::{Dir, include_dir};
 use mime_guess::from_path;
-use sqlx::postgres::PgPool;
 use diesel::r2d2::{ConnectionManager, Pool};
 use diesel::PgConnection;
+
+type PgPool = Pool<ConnectionManager<PgConnection>>;
 use tower_http::{
     LatencyUnit,
     cors::CorsLayer,

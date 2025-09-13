@@ -4,7 +4,7 @@ use axum::{
     response::{IntoResponse, Json},
 };
 use serde::Deserialize;
-use sqlx::types::Uuid;
+use uuid::Uuid;
 use tracing::error;
 
 use crate::auth::{AdminUser, AuthUser};

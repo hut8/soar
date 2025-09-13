@@ -6,7 +6,7 @@ use argon2::{
 use chrono::Utc;
 use rand::Rng;
 use sqlx::PgPool;
-use sqlx::types::Uuid;
+use uuid::Uuid;
 
 use crate::users::{AccessLevel, CreateUserRequest, UpdateUserRequest, User};
 

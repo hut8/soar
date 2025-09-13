@@ -1,4 +1,3 @@
-use sqlx::PgPool;
 use tracing::{error, trace, warn};
 
 use crate::device_repo::{DeviceRepository, PgPool as DieselPgPool};
@@ -13,7 +12,7 @@ pub struct DatabaseFixProcessor {
 }
 
 impl DatabaseFixProcessor {
-    pub fn new(sqlx_pool: PgPool, diesel_pool: DieselPgPool) -> Self {
+    pub fn new(sqlx_pool: sqlx::PgPool, diesel_pool: DieselPgPool) -> Self {
         Self {
             fixes_repo: FixesRepository::new(sqlx_pool),
             device_repo: DeviceRepository::new(diesel_pool),

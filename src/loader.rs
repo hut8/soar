@@ -2,7 +2,6 @@ use anyhow::Result;
 use diesel::PgConnection;
 use diesel::r2d2::ConnectionManager;
 use r2d2::Pool;
-use sqlx::PgPool;
 use tracing::{error, info, warn};
 
 use crate::aircraft_registrations::read_aircraft_file;
@@ -24,7 +23,7 @@ use crate::runways_repo::RunwaysRepository;
 
 #[allow(clippy::too_many_arguments)]
 pub async fn handle_load_data(
-    sqlx_pool: PgPool,
+    sqlx_pool: sqlx::PgPool,
     diesel_pool: Pool<ConnectionManager<PgConnection>>,
     aircraft_models_path: Option<String>,
     aircraft_registrations_path: Option<String>,
@@ -57,7 +56,7 @@ pub async fn handle_load_data(
                 );
 
                 // Create aircraft model repository and upsert models
-                let model_repo = AircraftModelRepository::new(sqlx_pool.clone());
+                let model_repo = AircraftModelRepository::new(diesel_pool.clone());
                 info!(
                     "Upserting {} aircraft models into database...",
                     aircraft_models.len()
@@ -198,7 +197,7 @@ pub async fn handle_load_data(
                 info!("Successfully loaded {} runways", runways_list.len());
 
                 // Create runways repository and upsert runways
-                let runways_repo = RunwaysRepository::new(sqlx_pool.clone());
+                let runways_repo = RunwaysRepository::new(diesel_pool.clone());
                 info!("Upserting {} runways into database...", runways_list.len());
 
                 match runways_repo.upsert_runways(runways_list).await {
@@ -631,7 +630,7 @@ pub async fn handle_load_data(
 
 /// Link aircraft registrations to devices based on matching registration numbers
 /// Only updates aircraft that don't already have a device_id set
-async fn link_aircraft_to_devices(pool: &PgPool) -> Result<u32> {
+async fn link_aircraft_to_devices(pool: &sqlx::PgPool) -> Result<u32> {
     info!("Starting aircraft-device linking process...");
 
     // Query to find aircraft without device_id that have matching devices

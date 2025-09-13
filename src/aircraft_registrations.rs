@@ -2,7 +2,7 @@ use anyhow::{Context, Result, anyhow};
 use chrono::NaiveDate;
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
-use sqlx::types::Uuid;
+use uuid::Uuid;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;

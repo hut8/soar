@@ -1,13 +1,14 @@
 use anyhow::Result;
 use async_nats::Client;
 use serde_json;
-use sqlx::PgPool;
 use std::sync::Arc;
 use tracing::{debug, error, info};
 
 use crate::Fix;
 use crate::aprs_client::FixProcessor;
 use crate::device_repo::{DeviceRepository, PgPool as DieselPgPool};
+
+type PgPool = sqlx::PgPool;
 
 /// Get registration number for a given device ID
 /// This maps OGN/FLARM device IDs to aircraft registration numbers

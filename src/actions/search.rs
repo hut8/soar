@@ -26,14 +26,14 @@ pub struct SearchQueryParams {
 #[derive(Debug, Deserialize)]
 pub struct FixesQueryParams {
     pub device_id: Option<u32>,
-    pub flight_id: Option<sqlx::types::Uuid>,
+    pub flight_id: Option<uuid::Uuid>,
     pub limit: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct FlightsQueryParams {
     pub device_id: Option<u32>,
-    pub club_id: Option<sqlx::types::Uuid>,
+    pub club_id: Option<uuid::Uuid>,
     pub limit: Option<i64>,
 }
 
