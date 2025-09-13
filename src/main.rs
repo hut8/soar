@@ -311,6 +311,22 @@ async fn main() -> Result<()> {
             .await
         }
         Commands::Web { interface, port } => {
+            // Check SOAR_ENV and override port if not production
+            let final_port = match env::var("SOAR_ENV") {
+                Ok(soar_env) if soar_env == "production" => {
+                    info!("Running in production mode on port {}", port);
+                    port
+                }
+                Ok(soar_env) => {
+                    info!("Running in {} mode, overriding port to 1338", soar_env);
+                    1338
+                }
+                Err(_) => {
+                    info!("SOAR_ENV not set, defaulting to development mode on port 1338");
+                    1338
+                }
+            };
+
             // Start live fixes service if NATS URL is configured
             if let Ok(nats_url) = env::var("NATS_URL") {
                 info!("Starting live fixes service with NATS URL: {}", nats_url);
@@ -320,7 +336,7 @@ async fn main() -> Result<()> {
                 warn!("NATS_URL not configured, live fixes will not be available");
             }
 
-            soar::web::start_web_server(interface, port, diesel_pool).await
+            soar::web::start_web_server(interface, final_port, diesel_pool).await
         }
     }
 }

@@ -142,8 +142,13 @@ else
 fi
 
 log_info "🎉 Deployment completed successfully!"
+log_info ""
+log_info "Environment Configuration:"
+log_info "  SOAR_ENV=production (services will use port 1337)"
+log_info "  For development, unset SOAR_ENV to use port 1338"
+log_info ""
 log_info "Commands:"
 log_info "  Status: sudo systemctl status ${RUN_SERVICE_NAME} ${WEB_SERVICE_NAME}"
 log_info "  Logs: sudo journalctl -u ${RUN_SERVICE_NAME} -f"
 log_info "  Web logs: sudo journalctl -u ${WEB_SERVICE_NAME} -f"
-log_info "  Web interface: http://localhost:1337"
+log_info "  Web interface: http://localhost:1337 (production)"
