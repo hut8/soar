@@ -23,7 +23,6 @@ use crate::runways_repo::RunwaysRepository;
 
 #[allow(clippy::too_many_arguments)]
 pub async fn handle_load_data(
-    sqlx_pool: sqlx::PgPool,
     diesel_pool: Pool<ConnectionManager<PgConnection>>,
     aircraft_models_path: Option<String>,
     aircraft_registrations_path: Option<String>,
@@ -242,7 +241,7 @@ pub async fn handle_load_data(
                 info!("Successfully loaded {} receivers", receiver_count);
 
                 // Create receivers repository and upsert receivers
-                let receivers_repo = ReceiverRepository::new(sqlx_pool.clone());
+                let receivers_repo = ReceiverRepository::new(diesel_pool.clone());
                 info!("Upserting {} receivers into database...", receiver_count);
 
                 match receivers_repo
@@ -612,7 +611,7 @@ pub async fn handle_load_data(
     if pull_devices || aircraft_registrations_path.is_some() {
         info!("Linking aircraft to devices based on registration numbers...");
 
-        match link_aircraft_to_devices(&sqlx_pool).await {
+        match link_aircraft_to_devices(&diesel_pool).await {
             Ok(linked_count) => {
                 info!("Successfully linked {} aircraft to devices", linked_count);
             }
@@ -630,11 +629,16 @@ pub async fn handle_load_data(
 
 /// Link aircraft registrations to devices based on matching registration numbers
 /// Only updates aircraft that don't already have a device_id set
-async fn link_aircraft_to_devices(pool: &sqlx::PgPool) -> Result<u32> {
+async fn link_aircraft_to_devices(diesel_pool: &Pool<ConnectionManager<PgConnection>>) -> Result<u32> {
     info!("Starting aircraft-device linking process...");
 
-    // Query to find aircraft without device_id that have matching devices
-    let result = sqlx::query!(
+    use diesel::sql_query;
+    use diesel::RunQueryDsl;
+
+    let mut conn = diesel_pool.get()?;
+
+    // Use raw SQL with Diesel to execute the update query
+    let result: diesel::QueryResult<usize> = sql_query(
         r#"
         UPDATE aircraft_registrations
         SET device_id = devices.device_id
@@ -643,10 +647,9 @@ async fn link_aircraft_to_devices(pool: &sqlx::PgPool) -> Result<u32> {
         AND aircraft_registrations.device_id IS NULL
         "#
     )
-    .execute(pool)
-    .await?;
+    .execute(&mut conn);
 
-    let linked_count = result.rows_affected() as u32;
+    let linked_count = result? as u32;
     info!("Linked {} aircraft to devices", linked_count);
 
     Ok(linked_count)

@@ -10,8 +10,8 @@ use std::path::Path;
 // Import Point from clubs module
 use crate::locations::Point;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
-#[sqlx(type_name = "airworthiness_class", rename_all = "PascalCase")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
 pub enum AirworthinessClass {
     Standard,
     Limited,
@@ -20,9 +20,9 @@ pub enum AirworthinessClass {
     Provisional,
     Multiple,
     Primary,
-    #[sqlx(rename = "Special Flight Permit")]
+    #[serde(rename = "Special Flight Permit")]
     SpecialFlightPermit,
-    #[sqlx(rename = "Light Sport")]
+    #[serde(rename = "Light Sport")]
     LightSport,
 }
 

@@ -3,7 +3,8 @@ use std::collections::HashMap;
 use tracing::{debug, error, info, warn};
 
 use crate::database_fix_processor::DatabaseFixProcessor;
-use crate::device_repo::PgPool as DieselPgPool;
+use diesel::r2d2::{ConnectionManager, Pool};
+use diesel::PgConnection;
 use crate::flights::Flight;
 use crate::flights_repo::FlightsRepository;
 use crate::{Fix, FixProcessor};
@@ -73,8 +74,7 @@ pub struct FlightDetectionProcessor {
     db_processor: DatabaseFixProcessor,
     flights_repo: FlightsRepository,
     aircraft_trackers: HashMap<String, AircraftTracker>,
-    sqlx_pool: sqlx::PgPool,
-    diesel_pool: DieselPgPool,
+    diesel_pool: Pool<ConnectionManager<PgConnection>>,
 
     // Configuration thresholds
     takeoff_speed_threshold: f32, // Minimum speed to consider takeoff (knots)
@@ -85,12 +85,11 @@ pub struct FlightDetectionProcessor {
 }
 
 impl FlightDetectionProcessor {
-    pub fn new(sqlx_pool: sqlx::PgPool, diesel_pool: DieselPgPool) -> Self {
+    pub fn new(diesel_pool: Pool<ConnectionManager<PgConnection>>) -> Self {
         Self {
-            db_processor: DatabaseFixProcessor::new(sqlx_pool.clone(), diesel_pool.clone()),
+            db_processor: DatabaseFixProcessor::new(diesel_pool.clone()),
             flights_repo: FlightsRepository::new(diesel_pool.clone()),
             aircraft_trackers: HashMap::new(),
-            sqlx_pool,
             diesel_pool,
 
             // Default thresholds - can be made configurable later
@@ -418,10 +417,9 @@ impl FixProcessor for FlightDetectionProcessor {
 impl Clone for FlightDetectionProcessor {
     fn clone(&self) -> Self {
         Self {
-            db_processor: DatabaseFixProcessor::new(self.sqlx_pool.clone(), self.diesel_pool.clone()),
+            db_processor: DatabaseFixProcessor::new(self.diesel_pool.clone()),
             flights_repo: FlightsRepository::new(self.diesel_pool.clone()),
             aircraft_trackers: self.aircraft_trackers.clone(),
-            sqlx_pool: self.sqlx_pool.clone(),
             diesel_pool: self.diesel_pool.clone(),
             takeoff_speed_threshold: self.takeoff_speed_threshold,
             takeoff_altitude_gain_threshold: self.takeoff_altitude_gain_threshold,

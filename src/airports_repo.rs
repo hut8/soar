@@ -4,7 +4,7 @@ use diesel::upsert::excluded;
 use tracing::info;
 
 use crate::airports::{Airport, AirportModel, NewAirportModel};
-use crate::web::DieselPgPool;
+use crate::web::PgPool;
 
 #[derive(QueryableByName, Debug)]
 struct AirportWithDistance {
@@ -77,11 +77,11 @@ impl From<AirportWithDistance> for Airport {
 }
 
 pub struct AirportsRepository {
-    pool: DieselPgPool,
+    pool: PgPool,
 }
 
 impl AirportsRepository {
-    pub fn new(pool: DieselPgPool) -> Self {
+    pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
 

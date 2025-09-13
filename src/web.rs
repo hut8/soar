@@ -10,7 +10,6 @@ use mime_guess::from_path;
 use diesel::r2d2::{ConnectionManager, Pool};
 use diesel::PgConnection;
 
-type PgPool = Pool<ConnectionManager<PgConnection>>;
 use tower_http::{
     LatencyUnit,
     cors::CorsLayer,
@@ -23,13 +22,12 @@ use crate::actions;
 // Embed web assets into the binary
 static ASSETS: Dir<'_> = include_dir!("web/build");
 
-pub type DieselPgPool = Pool<ConnectionManager<PgConnection>>;
+pub type PgPool = Pool<ConnectionManager<PgConnection>>;
 
-// App state for sharing database pools
+// App state for sharing database pool
 #[derive(Clone)]
 pub struct AppState {
-    pub pool: PgPool, // SQLx pool for most operations
-    pub diesel_pool: DieselPgPool, // Diesel pool for migrated modules
+    pub pool: PgPool, // Diesel pool for all operations
 }
 
 async fn handle_static_file(uri: Uri, _state: axum::extract::State<AppState>) -> impl IntoResponse {
@@ -83,10 +81,10 @@ async fn handle_static_file(uri: Uri, _state: axum::extract::State<AppState>) ->
     (StatusCode::NOT_FOUND, "Not Found").into_response()
 }
 
-pub async fn start_web_server(interface: String, port: u16, pool: PgPool, diesel_pool: DieselPgPool) -> Result<()> {
+pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Result<()> {
     info!("Starting web server on {}:{}", interface, port);
 
-    let app_state = AppState { pool, diesel_pool };
+    let app_state = AppState { pool };
 
     let trace_layer = TraceLayer::new_for_http()
         .on_request(DefaultOnRequest::new().level(Level::INFO))

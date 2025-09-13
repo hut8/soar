@@ -6,7 +6,7 @@ use uuid::Uuid;
 use crate::clubs::{Club, NewClubModel};
 use crate::locations::Point;
 // use crate::locations_repo::LocationsRepository;
-use crate::web::DieselPgPool;
+use crate::web::PgPool;
 
 #[derive(QueryableByName, Debug)]
 struct ClubWithLocation {
@@ -223,12 +223,12 @@ impl From<ClubWithLocation> for Club {
 }
 
 pub struct ClubsRepository {
-    pool: DieselPgPool,
+    pool: PgPool,
     // locations_repo: LocationsRepository,
 }
 
 impl ClubsRepository {
-    pub fn new(pool: DieselPgPool) -> Self {
+    pub fn new(pool: PgPool) -> Self {
         // Note: LocationsRepository will need to be migrated to Diesel as well
         // let locations_repo = LocationsRepository::new(pool.clone());
         Self {

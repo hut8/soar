@@ -1,10 +1,17 @@
 use anyhow::Result;
-use sqlx::PgPool;
+use chrono::Utc;
+use diesel::prelude::*;
+use diesel::r2d2::{ConnectionManager, Pool};
 use tracing::{info, warn};
 
 use crate::receivers::{
     Receiver, ReceiverLinkRecord, ReceiverPhotoRecord, ReceiverRecord, ReceiversData,
+    ReceiverModel, NewReceiverModel, ReceiverPhotoModel, NewReceiverPhotoModel,
+    ReceiverLinkModel, NewReceiverLinkModel,
 };
+use crate::schema::{receivers, receivers_photos, receivers_links};
+
+type PgPool = Pool<ConnectionManager<PgConnection>>;
 
 pub struct ReceiverRepository {
     pool: PgPool,
@@ -28,209 +35,181 @@ impl ReceiverRepository {
     where
         I: IntoIterator<Item = Receiver>,
     {
-        let mut transaction = self.pool.begin().await?;
-        let mut upserted_count = 0;
+        let receivers_vec: Vec<Receiver> = receivers.into_iter().collect();
+        let pool = self.pool.clone();
+        
+        tokio::task::spawn_blocking(move || -> Result<usize> {
+            let mut conn = pool.get()?;
+            let mut upserted_count = 0;
 
-        for receiver in receivers {
-            // Skip receivers without callsign as it's our unique identifier
-            let callsign = match &receiver.callsign {
-                Some(cs) if !cs.trim().is_empty() => cs.trim(),
-                _ => {
-                    warn!("Skipping receiver without callsign: {:?}", receiver);
-                    continue;
-                }
-            };
+            // Use a transaction for all operations
+            conn.transaction::<_, anyhow::Error, _>(|conn| {
+                for receiver in receivers_vec {
+                    // Skip receivers without callsign as it's our unique identifier
+                    let callsign = match &receiver.callsign {
+                        Some(cs) if !cs.trim().is_empty() => cs.trim(),
+                        _ => {
+                            warn!("Skipping receiver without callsign: {:?}", receiver);
+                            continue;
+                        }
+                    };
 
-            // Insert or update the main receiver record
-            let receiver_result = sqlx::query!(
-                r#"
-                INSERT INTO receivers (callsign, description, contact, email, country)
-                VALUES ($1, $2, $3, $4, $5)
-                ON CONFLICT (callsign)
-                DO UPDATE SET
-                    description = EXCLUDED.description,
-                    contact = EXCLUDED.contact,
-                    email = EXCLUDED.email,
-                    country = EXCLUDED.country,
-                    updated_at = NOW()
-                RETURNING id
-                "#,
-                callsign,
-                receiver.description,
-                receiver.contact,
-                receiver.email,
-                receiver.country
-            )
-            .fetch_one(&mut *transaction)
-            .await;
+                    // Insert or update the main receiver record
+                    let new_receiver = NewReceiverModel {
+                        callsign: callsign.to_string(),
+                        description: receiver.description.clone(),
+                        contact: receiver.contact.clone(),
+                        email: receiver.email.clone(),
+                        country: receiver.country.clone(),
+                    };
 
-            let receiver_id = match receiver_result {
-                Ok(row) => row.id,
-                Err(e) => {
-                    warn!("Failed to upsert receiver {}: {}", callsign, e);
-                    continue;
-                }
-            };
+                    let receiver_result = diesel::insert_into(receivers::table)
+                        .values(&new_receiver)
+                        .on_conflict(receivers::callsign)
+                        .do_update()
+                        .set((
+                            receivers::description.eq(&new_receiver.description),
+                            receivers::contact.eq(&new_receiver.contact),
+                            receivers::email.eq(&new_receiver.email),
+                            receivers::country.eq(&new_receiver.country),
+                            receivers::updated_at.eq(Some(Utc::now())),
+                        ))
+                        .returning(receivers::id)
+                        .get_result::<i32>(conn);
 
-            // Delete existing photos and links for this receiver
-            let _ = sqlx::query!(
-                "DELETE FROM receivers_photos WHERE receiver_id = $1",
-                receiver_id
-            )
-            .execute(&mut *transaction)
-            .await;
+                    let receiver_id = match receiver_result {
+                        Ok(id) => id,
+                        Err(e) => {
+                            warn!("Failed to upsert receiver {}: {}", callsign, e);
+                            continue;
+                        }
+                    };
 
-            let _ = sqlx::query!(
-                "DELETE FROM receivers_links WHERE receiver_id = $1",
-                receiver_id
-            )
-            .execute(&mut *transaction)
-            .await;
+                    // Delete existing photos and links for this receiver
+                    let _ = diesel::delete(receivers_photos::table.filter(receivers_photos::receiver_id.eq(receiver_id)))
+                        .execute(conn);
 
-            // Insert photos
-            if let Some(photos) = &receiver.photos {
-                for photo_url in photos {
-                    if !photo_url.trim().is_empty() {
-                        let photo_result = sqlx::query!(
-                            "INSERT INTO receivers_photos (receiver_id, photo_url) VALUES ($1, $2)",
-                            receiver_id,
-                            photo_url.trim()
-                        )
-                        .execute(&mut *transaction)
-                        .await;
+                    let _ = diesel::delete(receivers_links::table.filter(receivers_links::receiver_id.eq(receiver_id)))
+                        .execute(conn);
 
-                        if let Err(e) = photo_result {
-                            warn!("Failed to insert photo for receiver {}: {}", callsign, e);
+                    // Insert photos
+                    if let Some(photos) = &receiver.photos {
+                        for photo_url in photos {
+                            if !photo_url.trim().is_empty() {
+                                let new_photo = NewReceiverPhotoModel {
+                                    receiver_id,
+                                    photo_url: photo_url.trim().to_string(),
+                                };
+
+                                let photo_result = diesel::insert_into(receivers_photos::table)
+                                    .values(&new_photo)
+                                    .execute(conn);
+
+                                if let Err(e) = photo_result {
+                                    warn!("Failed to insert photo for receiver {}: {}", callsign, e);
+                                }
+                            }
                         }
                     }
-                }
-            }
 
-            // Insert links
-            if let Some(links) = &receiver.links {
-                for link in links {
-                    if !link.href.trim().is_empty() {
-                        let rel_value = link
-                            .rel
-                            .as_ref()
-                            .map(|r| r.trim())
-                            .filter(|r| !r.is_empty());
-                        let link_result = sqlx::query!(
-                            "INSERT INTO receivers_links (receiver_id, rel, href) VALUES ($1, $2, $3)",
-                            receiver_id,
-                            rel_value,
-                            link.href.trim()
-                        )
-                        .execute(&mut *transaction)
-                        .await;
+                    // Insert links
+                    if let Some(links) = &receiver.links {
+                        for link in links {
+                            if !link.href.trim().is_empty() {
+                                let rel_value = link
+                                    .rel
+                                    .as_ref()
+                                    .map(|r| r.trim())
+                                    .filter(|r| !r.is_empty())
+                                    .map(|r| r.to_string());
+                                
+                                let new_link = NewReceiverLinkModel {
+                                    receiver_id,
+                                    rel: rel_value,
+                                    href: link.href.trim().to_string(),
+                                };
 
-                        if let Err(e) = link_result {
-                            warn!("Failed to insert link for receiver {}: {}", callsign, e);
+                                let link_result = diesel::insert_into(receivers_links::table)
+                                    .values(&new_link)
+                                    .execute(conn);
+
+                                if let Err(e) = link_result {
+                                    warn!("Failed to insert link for receiver {}: {}", callsign, e);
+                                }
+                            }
                         }
                     }
+
+                    upserted_count += 1;
                 }
-            }
 
-            upserted_count += 1;
-        }
+                Ok(())
+            })?;
 
-        transaction.commit().await?;
-        info!("Successfully upserted {} receivers", upserted_count);
-
-        Ok(upserted_count)
+            info!("Successfully upserted {} receivers", upserted_count);
+            Ok(upserted_count)
+        })
+        .await?
     }
 
     /// Get the total count of receivers in the database
     pub async fn get_receiver_count(&self) -> Result<i64> {
-        let result = sqlx::query!("SELECT COUNT(*) as count FROM receivers")
-            .fetch_one(&self.pool)
-            .await?;
-
-        Ok(result.count.unwrap_or(0))
+        let pool = self.pool.clone();
+        tokio::task::spawn_blocking(move || -> Result<i64> {
+            let mut conn = pool.get()?;
+            let count: i64 = receivers::table.count().get_result(&mut conn)?;
+            Ok(count)
+        })
+        .await?
     }
 
     /// Get a receiver by callsign
     pub async fn get_receiver_by_callsign(&self, callsign: &str) -> Result<Option<ReceiverRecord>> {
-        let result = sqlx::query!(
-            r#"
-            SELECT id, callsign, description, contact, email, country, created_at, updated_at
-            FROM receivers
-            WHERE callsign = $1
-            "#,
-            callsign
-        )
-        .fetch_optional(&self.pool)
-        .await?;
-
-        if let Some(row) = result {
-            Ok(Some(ReceiverRecord {
-                id: row.id,
-                callsign: row.callsign,
-                description: row.description,
-                contact: row.contact,
-                email: row.email,
-                country: row.country,
-                created_at: row.created_at,
-                updated_at: row.updated_at,
-            }))
-        } else {
-            Ok(None)
-        }
+        let pool = self.pool.clone();
+        let callsign = callsign.to_string();
+        tokio::task::spawn_blocking(move || -> Result<Option<ReceiverRecord>> {
+            let mut conn = pool.get()?;
+            let receiver_model = receivers::table
+                .filter(receivers::callsign.eq(&callsign))
+                .select(ReceiverModel::as_select())
+                .first::<ReceiverModel>(&mut conn)
+                .optional()?;
+            
+            Ok(receiver_model.map(ReceiverRecord::from))
+        })
+        .await?
     }
 
     /// Get all photos for a receiver
     pub async fn get_receiver_photos(&self, receiver_id: i32) -> Result<Vec<ReceiverPhotoRecord>> {
-        let results = sqlx::query!(
-            r#"
-            SELECT id, receiver_id, photo_url, created_at
-            FROM receivers_photos
-            WHERE receiver_id = $1
-            ORDER BY id
-            "#,
-            receiver_id
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        let mut photos = Vec::new();
-        for row in results {
-            photos.push(ReceiverPhotoRecord {
-                id: row.id,
-                receiver_id: row.receiver_id,
-                photo_url: row.photo_url,
-                created_at: row.created_at,
-            });
-        }
-
-        Ok(photos)
+        let pool = self.pool.clone();
+        tokio::task::spawn_blocking(move || -> Result<Vec<ReceiverPhotoRecord>> {
+            let mut conn = pool.get()?;
+            let photo_models = receivers_photos::table
+                .filter(receivers_photos::receiver_id.eq(receiver_id))
+                .order(receivers_photos::id.asc())
+                .select(ReceiverPhotoModel::as_select())
+                .load::<ReceiverPhotoModel>(&mut conn)?;
+            
+            Ok(photo_models.into_iter().map(ReceiverPhotoRecord::from).collect())
+        })
+        .await?
     }
 
     /// Get all links for a receiver
     pub async fn get_receiver_links(&self, receiver_id: i32) -> Result<Vec<ReceiverLinkRecord>> {
-        let results = sqlx::query!(
-            r#"
-            SELECT id, receiver_id, rel, href, created_at
-            FROM receivers_links
-            WHERE receiver_id = $1
-            ORDER BY id
-            "#,
-            receiver_id
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        let mut links = Vec::new();
-        for row in results {
-            links.push(ReceiverLinkRecord {
-                id: row.id,
-                receiver_id: row.receiver_id,
-                rel: row.rel,
-                href: row.href,
-                created_at: row.created_at,
-            });
-        }
-
-        Ok(links)
+        let pool = self.pool.clone();
+        tokio::task::spawn_blocking(move || -> Result<Vec<ReceiverLinkRecord>> {
+            let mut conn = pool.get()?;
+            let link_models = receivers_links::table
+                .filter(receivers_links::receiver_id.eq(receiver_id))
+                .order(receivers_links::id.asc())
+                .select(ReceiverLinkModel::as_select())
+                .load::<ReceiverLinkModel>(&mut conn)?;
+            
+            Ok(link_models.into_iter().map(ReceiverLinkRecord::from).collect())
+        })
+        .await?
     }
 
     /// Get a complete receiver with photos and links
@@ -257,66 +236,38 @@ impl ReceiverRepository {
 
     /// Search receivers by callsign (case-insensitive partial match)
     pub async fn search_by_callsign(&self, callsign_param: &str) -> Result<Vec<ReceiverRecord>> {
+        let pool = self.pool.clone();
         let search_pattern = format!("%{}%", callsign_param);
         
-        let results = sqlx::query!(
-            r#"
-            SELECT id, callsign, description, contact, email, country, created_at, updated_at
-            FROM receivers
-            WHERE callsign ILIKE $1
-            ORDER BY callsign
-            "#,
-            search_pattern
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        let mut receivers = Vec::new();
-        for row in results {
-            receivers.push(ReceiverRecord {
-                id: row.id,
-                callsign: row.callsign,
-                description: row.description,
-                contact: row.contact,
-                email: row.email,
-                country: row.country,
-                created_at: row.created_at,
-                updated_at: row.updated_at,
-            });
-        }
-
-        Ok(receivers)
+        tokio::task::spawn_blocking(move || -> Result<Vec<ReceiverRecord>> {
+            let mut conn = pool.get()?;
+            let receiver_models = receivers::table
+                .filter(receivers::callsign.ilike(&search_pattern))
+                .order(receivers::callsign.asc())
+                .select(ReceiverModel::as_select())
+                .load::<ReceiverModel>(&mut conn)?;
+            
+            Ok(receiver_models.into_iter().map(ReceiverRecord::from).collect())
+        })
+        .await?
     }
 
     /// Search receivers by country
     pub async fn search_by_country(&self, country_param: &str) -> Result<Vec<ReceiverRecord>> {
-        let results = sqlx::query!(
-            r#"
-            SELECT id, callsign, description, contact, email, country, created_at, updated_at
-            FROM receivers
-            WHERE country = $1
-            ORDER BY callsign
-            "#,
-            country_param
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        let mut receivers = Vec::new();
-        for row in results {
-            receivers.push(ReceiverRecord {
-                id: row.id,
-                callsign: row.callsign,
-                description: row.description,
-                contact: row.contact,
-                email: row.email,
-                country: row.country,
-                created_at: row.created_at,
-                updated_at: row.updated_at,
-            });
-        }
-
-        Ok(receivers)
+        let pool = self.pool.clone();
+        let country_param = country_param.to_string();
+        
+        tokio::task::spawn_blocking(move || -> Result<Vec<ReceiverRecord>> {
+            let mut conn = pool.get()?;
+            let receiver_models = receivers::table
+                .filter(receivers::country.eq(&country_param))
+                .order(receivers::callsign.asc())
+                .select(ReceiverModel::as_select())
+                .load::<ReceiverModel>(&mut conn)?;
+            
+            Ok(receiver_models.into_iter().map(ReceiverRecord::from).collect())
+        })
+        .await?
     }
 
     /// Get all receivers with pagination
@@ -325,73 +276,58 @@ impl ReceiverRepository {
         limit: i64,
         offset: i64,
     ) -> Result<Vec<ReceiverRecord>> {
-        let results = sqlx::query!(
-            r#"
-            SELECT id, callsign, description, contact, email, country, created_at, updated_at
-            FROM receivers
-            ORDER BY callsign
-            LIMIT $1 OFFSET $2
-            "#,
-            limit,
-            offset
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        let mut receivers = Vec::new();
-        for row in results {
-            receivers.push(ReceiverRecord {
-                id: row.id,
-                callsign: row.callsign,
-                description: row.description,
-                contact: row.contact,
-                email: row.email,
-                country: row.country,
-                created_at: row.created_at,
-                updated_at: row.updated_at,
-            });
-        }
-
-        Ok(receivers)
+        let pool = self.pool.clone();
+        
+        tokio::task::spawn_blocking(move || -> Result<Vec<ReceiverRecord>> {
+            let mut conn = pool.get()?;
+            let receiver_models = receivers::table
+                .order(receivers::callsign.asc())
+                .limit(limit)
+                .offset(offset)
+                .select(ReceiverModel::as_select())
+                .load::<ReceiverModel>(&mut conn)?;
+            
+            Ok(receiver_models.into_iter().map(ReceiverRecord::from).collect())
+        })
+        .await?
     }
 
     /// Delete a receiver and all associated photos and links
     pub async fn delete_receiver(&self, callsign: &str) -> Result<bool> {
-        let mut transaction = self.pool.begin().await?;
+        let pool = self.pool.clone();
+        let callsign = callsign.to_string();
+        
+        tokio::task::spawn_blocking(move || -> Result<bool> {
+            let mut conn = pool.get()?;
+            
+            conn.transaction::<_, anyhow::Error, _>(|conn| {
+                // Get receiver ID first
+                let receiver_id_result = receivers::table
+                    .filter(receivers::callsign.eq(&callsign))
+                    .select(receivers::id)
+                    .first::<i32>(conn)
+                    .optional()?;
 
-        // Get receiver ID first
-        let receiver = sqlx::query!("SELECT id FROM receivers WHERE callsign = $1", callsign)
-            .fetch_optional(&mut *transaction)
-            .await?;
+                let receiver_id = match receiver_id_result {
+                    Some(id) => id,
+                    None => return Ok(false), // Receiver not found
+                };
 
-        let receiver_id = match receiver {
-            Some(r) => r.id,
-            None => return Ok(false), // Receiver not found
-        };
+                // Delete photos and links (will cascade due to foreign key constraints, but being explicit)
+                diesel::delete(receivers_photos::table.filter(receivers_photos::receiver_id.eq(receiver_id)))
+                    .execute(conn)?;
 
-        // Delete photos and links (will cascade due to foreign key constraints, but being explicit)
-        sqlx::query!(
-            "DELETE FROM receivers_photos WHERE receiver_id = $1",
-            receiver_id
-        )
-        .execute(&mut *transaction)
-        .await?;
+                diesel::delete(receivers_links::table.filter(receivers_links::receiver_id.eq(receiver_id)))
+                    .execute(conn)?;
 
-        sqlx::query!(
-            "DELETE FROM receivers_links WHERE receiver_id = $1",
-            receiver_id
-        )
-        .execute(&mut *transaction)
-        .await?;
+                // Delete the receiver
+                let rows_affected = diesel::delete(receivers::table.filter(receivers::id.eq(receiver_id)))
+                    .execute(conn)?;
 
-        // Delete the receiver
-        let result = sqlx::query!("DELETE FROM receivers WHERE id = $1", receiver_id)
-            .execute(&mut *transaction)
-            .await?;
-
-        transaction.commit().await?;
-
-        Ok(result.rows_affected() > 0)
+                Ok(rows_affected > 0)
+            })
+        })
+        .await?
     }
 }
 

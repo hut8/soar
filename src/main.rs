@@ -1,20 +1,17 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use sqlx::postgres::PgPool;
 use diesel::r2d2::{ConnectionManager, Pool};
 use diesel::PgConnection;
 use std::env;
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 
 use soar::aprs_client::{AprsClient, AprsClientConfigBuilder, FixProcessor, MessageProcessor};
 use soar::database_fix_processor::DatabaseFixProcessor;
 use soar::live_fixes::LiveFixService;
 
-// Embed migrations into the binary
-static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!();
 
 #[derive(Parser)]
 #[command(name = "soar")]
@@ -116,40 +113,6 @@ enum Commands {
     },
 }
 
-async fn setup_database() -> Result<PgPool> {
-    // Load environment variables from .env file
-    dotenvy::dotenv().ok();
-
-    // Get the database URL from environment variables
-    let database_url =
-        env::var("DATABASE_URL").expect("DATABASE_URL must be set in environment variables");
-
-    // Create a connection pool to the PostgreSQL database
-    let pool = match PgPool::connect(&database_url).await {
-        Ok(pool) => {
-            info!("Successfully connected to PostgreSQL database");
-            pool
-        }
-        Err(e) => {
-            error!("Failed to connect to PostgreSQL database: {e}");
-            std::process::exit(1);
-        }
-    };
-
-    // Run pending migrations
-    info!("Running database migrations...");
-    match MIGRATOR.run(&pool).await {
-        Ok(_) => {
-            info!("Database migrations completed successfully");
-        }
-        Err(e) => {
-            error!("Failed to run database migrations: {e}");
-            std::process::exit(1);
-        }
-    }
-
-    Ok(pool)
-}
 
 async fn setup_diesel_database() -> Result<Pool<ConnectionManager<PgConnection>>> {
     // Load environment variables from .env file
@@ -222,8 +185,7 @@ async fn handle_run(
 ) -> Result<()> {
     info!("Starting APRS client with server: {}:{}", server, port);
 
-    // Set up database connections
-    let sqlx_pool = setup_database().await?;
+    // Set up database connection
     let diesel_pool = setup_diesel_database().await?;
 
     // Use port 10152 (full feed) if no filter is specified, otherwise use specified port
@@ -255,7 +217,7 @@ async fn handle_run(
     );
 
     // Create database fix processor to save all valid fixes to the database
-    let db_fix_processor: Arc<dyn FixProcessor> = Arc::new(DatabaseFixProcessor::new(sqlx_pool.clone(), diesel_pool.clone()));
+    let db_fix_processor: Arc<dyn FixProcessor> = Arc::new(DatabaseFixProcessor::new(diesel_pool.clone()));
 
     // Create and start APRS client with both message and fix processors
     let mut client =
@@ -289,8 +251,7 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
 
-    // Set up database connections - SQLx for most repositories, Diesel for devices
-    let sqlx_pool = setup_database().await?;
+    // Set up database connection - Diesel for all repositories
     let diesel_pool = setup_diesel_database().await?;
 
     match cli.command {
@@ -305,7 +266,6 @@ async fn main() -> Result<()> {
             link_home_bases,
         } => {
             soar::loader::handle_load_data(
-                sqlx_pool,
                 diesel_pool,
                 aircraft_models,
                 aircraft_registrations,
@@ -360,7 +320,7 @@ async fn main() -> Result<()> {
                 warn!("NATS_URL not configured, live fixes will not be available");
             }
 
-            soar::web::start_web_server(interface, port, sqlx_pool, diesel_pool).await
+            soar::web::start_web_server(interface, port, diesel_pool).await
         }
     }
 }

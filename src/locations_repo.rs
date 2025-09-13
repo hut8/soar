@@ -4,7 +4,7 @@ use diesel::sql_types::*;
 use uuid::Uuid;
 
 use crate::locations::{Location, LocationModel, Point};
-use crate::web::DieselPgPool;
+use crate::web::PgPool;
 
 #[derive(QueryableByName, Debug)]
 struct LocationForGeocoding {
@@ -33,11 +33,11 @@ struct LocationForGeocoding {
 }
 
 pub struct LocationsRepository {
-    pool: DieselPgPool,
+    pool: PgPool,
 }
 
 impl LocationsRepository {
-    pub fn new(pool: DieselPgPool) -> Self {
+    pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
 

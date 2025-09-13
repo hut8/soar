@@ -3,12 +3,81 @@ use argon2::{
     Argon2,
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng},
 };
-use chrono::Utc;
+use chrono::{DateTime, Utc};
+use diesel::prelude::*;
+use diesel::r2d2::{ConnectionManager, Pool};
 use rand::Rng;
-use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::schema::users;
 use crate::users::{AccessLevel, CreateUserRequest, UpdateUserRequest, User};
+
+type PgPool = Pool<ConnectionManager<PgConnection>>;
+
+#[derive(Queryable, Selectable, Debug, Clone)]
+#[diesel(table_name = users)]
+pub struct UserRecord {
+    pub id: Uuid,
+    pub first_name: String,
+    pub last_name: String,
+    pub email: String,
+    pub password_hash: String,
+    pub access_level: String,
+    pub club_id: Option<Uuid>,
+    pub email_verified: Option<bool>,
+    pub password_reset_token: Option<String>,
+    pub password_reset_expires_at: Option<DateTime<Utc>>,
+    pub email_verification_token: Option<String>,
+    pub email_verification_expires_at: Option<DateTime<Utc>>,
+    pub created_at: Option<DateTime<Utc>>,
+    pub updated_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = users)]
+pub struct NewUser {
+    pub id: Uuid,
+    pub first_name: String,
+    pub last_name: String,
+    pub email: String,
+    pub password_hash: String,
+    pub access_level: String,
+    pub club_id: Option<Uuid>,
+    pub email_verified: Option<bool>,
+    pub created_at: Option<DateTime<Utc>>,
+    pub updated_at: Option<DateTime<Utc>>,
+}
+
+impl From<UserRecord> for User {
+    fn from(record: UserRecord) -> Self {
+        User {
+            id: record.id,
+            first_name: record.first_name,
+            last_name: record.last_name,
+            email: record.email,
+            password_hash: record.password_hash,
+            access_level: match record.access_level.as_str() {
+                "admin" => AccessLevel::Admin,
+                _ => AccessLevel::Standard,
+            },
+            club_id: record.club_id,
+            email_verified: record.email_verified.unwrap_or(false),
+            password_reset_token: record.password_reset_token,
+            password_reset_expires_at: record.password_reset_expires_at,
+            email_verification_token: record.email_verification_token,
+            email_verification_expires_at: record.email_verification_expires_at,
+            created_at: record.created_at.unwrap_or_else(Utc::now),
+            updated_at: record.updated_at.unwrap_or_else(Utc::now),
+        }
+    }
+}
+
+fn access_level_to_string(access_level: &AccessLevel) -> String {
+    match access_level {
+        AccessLevel::Admin => "admin".to_string(),
+        AccessLevel::Standard => "standard".to_string(),
+    }
+}
 
 pub struct UsersRepository {
     pool: PgPool,
@@ -21,188 +90,76 @@ impl UsersRepository {
 
     /// Get user by ID
     pub async fn get_by_id(&self, id: Uuid) -> Result<Option<User>> {
-        let result = sqlx::query!(
-            r#"
-            SELECT id, first_name, last_name, email, password_hash,
-                   access_level as "access_level!: AccessLevel", club_id, email_verified,
-                   password_reset_token, password_reset_expires_at,
-                   email_verification_token, email_verification_expires_at,
-                   created_at, updated_at
-            FROM users
-            WHERE id = $1
-            "#,
-            id
-        )
-        .fetch_optional(&self.pool)
-        .await?;
-
-        Ok(result.map(|row| User {
-            id: row.id,
-            first_name: row.first_name,
-            last_name: row.last_name,
-            email: row.email,
-            password_hash: row.password_hash,
-            access_level: row.access_level,
-            club_id: row.club_id,
-            email_verified: row.email_verified.unwrap_or(false),
-            password_reset_token: row.password_reset_token,
-            password_reset_expires_at: row.password_reset_expires_at,
-            email_verification_token: row.email_verification_token,
-            email_verification_expires_at: row.email_verification_expires_at,
-            created_at: row.created_at.unwrap_or_else(Utc::now),
-            updated_at: row.updated_at.unwrap_or_else(Utc::now),
-        }))
+        let pool = self.pool.clone();
+        tokio::task::spawn_blocking(move || -> Result<Option<User>> {
+            let mut conn = pool.get()?;
+            let user = users::table
+                .filter(users::id.eq(id))
+                .first::<UserRecord>(&mut conn)
+                .optional()?;
+            Ok(user.map(|record| record.into()))
+        })
+        .await?
     }
 
     /// Get user by email
     pub async fn get_by_email(&self, email: &str) -> Result<Option<User>> {
-        let result = sqlx::query!(
-            r#"
-            SELECT id, first_name, last_name, email, password_hash,
-                   access_level as "access_level!: AccessLevel", club_id, email_verified,
-                   password_reset_token, password_reset_expires_at,
-                   email_verification_token, email_verification_expires_at,
-                   created_at, updated_at
-            FROM users
-            WHERE email = $1
-            "#,
-            email
-        )
-        .fetch_optional(&self.pool)
-        .await?;
-
-        Ok(result.map(|row| User {
-            id: row.id,
-            first_name: row.first_name,
-            last_name: row.last_name,
-            email: row.email,
-            password_hash: row.password_hash,
-            access_level: row.access_level,
-            club_id: row.club_id,
-            email_verified: row.email_verified.unwrap_or(false),
-            password_reset_token: row.password_reset_token,
-            password_reset_expires_at: row.password_reset_expires_at,
-            email_verification_token: row.email_verification_token,
-            email_verification_expires_at: row.email_verification_expires_at,
-            created_at: row.created_at.unwrap_or_else(Utc::now),
-            updated_at: row.updated_at.unwrap_or_else(Utc::now),
-        }))
+        let pool = self.pool.clone();
+        let email = email.to_string();
+        tokio::task::spawn_blocking(move || -> Result<Option<User>> {
+            let mut conn = pool.get()?;
+            let user = users::table
+                .filter(users::email.eq(&email))
+                .first::<UserRecord>(&mut conn)
+                .optional()?;
+            Ok(user.map(|record| record.into()))
+        })
+        .await?
     }
 
     /// Get user by password reset token
     pub async fn get_by_reset_token(&self, token: &str) -> Result<Option<User>> {
-        let result = sqlx::query!(
-            r#"
-            SELECT id, first_name, last_name, email, password_hash,
-                   access_level as "access_level!: AccessLevel", club_id, email_verified,
-                   password_reset_token, password_reset_expires_at,
-                   email_verification_token, email_verification_expires_at,
-                   created_at, updated_at
-            FROM users
-            WHERE password_reset_token = $1
-            AND password_reset_expires_at > NOW()
-            "#,
-            token
-        )
-        .fetch_optional(&self.pool)
-        .await?;
-
-        Ok(result.map(|row| User {
-            id: row.id,
-            first_name: row.first_name,
-            last_name: row.last_name,
-            email: row.email,
-            password_hash: row.password_hash,
-            access_level: row.access_level,
-            club_id: row.club_id,
-            email_verified: row.email_verified.unwrap_or(false),
-            password_reset_token: row.password_reset_token,
-            password_reset_expires_at: row.password_reset_expires_at,
-            email_verification_token: row.email_verification_token,
-            email_verification_expires_at: row.email_verification_expires_at,
-            created_at: row.created_at.unwrap_or_else(Utc::now),
-            updated_at: row.updated_at.unwrap_or_else(Utc::now),
-        }))
+        let pool = self.pool.clone();
+        let token = token.to_string();
+        tokio::task::spawn_blocking(move || -> Result<Option<User>> {
+            let mut conn = pool.get()?;
+            let user = users::table
+                .filter(users::password_reset_token.eq(&token))
+                .filter(users::password_reset_expires_at.gt(Utc::now()))
+                .first::<UserRecord>(&mut conn)
+                .optional()?;
+            Ok(user.map(|record| record.into()))
+        })
+        .await?
     }
 
     /// Get all users (admin only)
     pub async fn get_all(&self, limit: Option<i64>) -> Result<Vec<User>> {
+        let pool = self.pool.clone();
         let limit = limit.unwrap_or(100);
-
-        let results = sqlx::query!(
-            r#"
-            SELECT id, first_name, last_name, email, password_hash,
-                   access_level as "access_level!: AccessLevel", club_id, email_verified,
-                   password_reset_token, password_reset_expires_at,
-                   email_verification_token, email_verification_expires_at,
-                   created_at, updated_at
-            FROM users
-            ORDER BY created_at DESC
-            LIMIT $1
-            "#,
-            limit
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        Ok(results
-            .into_iter()
-            .map(|row| User {
-                id: row.id,
-                first_name: row.first_name,
-                last_name: row.last_name,
-                email: row.email,
-                password_hash: row.password_hash,
-                access_level: row.access_level,
-                club_id: row.club_id,
-                email_verified: row.email_verified.unwrap_or(false),
-                password_reset_token: row.password_reset_token,
-                password_reset_expires_at: row.password_reset_expires_at,
-                email_verification_token: row.email_verification_token,
-                email_verification_expires_at: row.email_verification_expires_at,
-                created_at: row.created_at.unwrap_or_else(Utc::now),
-                updated_at: row.updated_at.unwrap_or_else(Utc::now),
-            })
-            .collect())
+        tokio::task::spawn_blocking(move || -> Result<Vec<User>> {
+            let mut conn = pool.get()?;
+            let users = users::table
+                .order(users::created_at.desc())
+                .limit(limit)
+                .load::<UserRecord>(&mut conn)?;
+            Ok(users.into_iter().map(|record| record.into()).collect())
+        })
+        .await?
     }
 
     /// Get users by club ID
     pub async fn get_by_club_id(&self, club_id: Uuid) -> Result<Vec<User>> {
-        let results = sqlx::query!(
-            r#"
-            SELECT id, first_name, last_name, email, password_hash,
-                   access_level as "access_level!: AccessLevel", club_id, email_verified,
-                   password_reset_token, password_reset_expires_at,
-                   email_verification_token, email_verification_expires_at,
-                   created_at, updated_at
-            FROM users
-            WHERE club_id = $1
-            ORDER BY last_name, first_name
-            "#,
-            club_id
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        Ok(results
-            .into_iter()
-            .map(|row| User {
-                id: row.id,
-                first_name: row.first_name,
-                last_name: row.last_name,
-                email: row.email,
-                password_hash: row.password_hash,
-                access_level: row.access_level,
-                club_id: row.club_id,
-                email_verified: row.email_verified.unwrap_or(false),
-                password_reset_token: row.password_reset_token,
-                password_reset_expires_at: row.password_reset_expires_at,
-                email_verification_token: row.email_verification_token,
-                email_verification_expires_at: row.email_verification_expires_at,
-                created_at: row.created_at.unwrap_or_else(Utc::now),
-                updated_at: row.updated_at.unwrap_or_else(Utc::now),
-            })
-            .collect())
+        let pool = self.pool.clone();
+        tokio::task::spawn_blocking(move || -> Result<Vec<User>> {
+            let mut conn = pool.get()?;
+            let users = users::table
+                .filter(users::club_id.eq(club_id))
+                .order((users::last_name.asc(), users::first_name.asc()))
+                .load::<UserRecord>(&mut conn)?;
+            Ok(users.into_iter().map(|record| record.into()).collect())
+        })
+        .await?
     }
 
     /// Create a new user
@@ -211,50 +168,29 @@ impl UsersRepository {
         let password_hash = self.hash_password(&request.password)?;
         let user_id = Uuid::new_v4();
         let now = Utc::now();
-
-        let row = sqlx::query!(
-            r#"
-            INSERT INTO users (
-                id, first_name, last_name, email, password_hash,
-                access_level, club_id, email_verified, created_at, updated_at
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-            RETURNING id, first_name, last_name, email, password_hash,
-                      access_level as "access_level!: AccessLevel", club_id, email_verified,
-                      password_reset_token, password_reset_expires_at,
-                      email_verification_token, email_verification_expires_at,
-                      created_at, updated_at
-            "#,
-            user_id,
-            request.first_name,
-            request.last_name,
-            request.email,
+        
+        let pool = self.pool.clone();
+        let new_user = NewUser {
+            id: user_id,
+            first_name: request.first_name.clone(),
+            last_name: request.last_name.clone(),
+            email: request.email.clone(),
             password_hash,
-            AccessLevel::Standard as AccessLevel,
-            request.club_id,
-            false, // email_verified defaults to false
-            now,
-            now
-        )
-        .fetch_one(&self.pool)
-        .await?;
-
-        Ok(User {
-            id: row.id,
-            first_name: row.first_name,
-            last_name: row.last_name,
-            email: row.email,
-            password_hash: row.password_hash,
-            access_level: row.access_level,
-            club_id: row.club_id,
-            email_verified: row.email_verified.unwrap_or(false),
-            password_reset_token: row.password_reset_token,
-            password_reset_expires_at: row.password_reset_expires_at,
-            email_verification_token: row.email_verification_token,
-            email_verification_expires_at: row.email_verification_expires_at,
-            created_at: row.created_at.unwrap_or_else(Utc::now),
-            updated_at: row.updated_at.unwrap_or_else(Utc::now),
+            access_level: access_level_to_string(&AccessLevel::Standard),
+            club_id: request.club_id,
+            email_verified: Some(false),
+            created_at: Some(now),
+            updated_at: Some(now),
+        };
+        
+        tokio::task::spawn_blocking(move || -> Result<User> {
+            let mut conn = pool.get()?;
+            let user = diesel::insert_into(users::table)
+                .values(&new_user)
+                .get_result::<UserRecord>(&mut conn)?;
+            Ok(user.into())
         })
+        .await?
     }
 
     /// Update user
@@ -263,71 +199,79 @@ impl UsersRepository {
         user_id: Uuid,
         request: &UpdateUserRequest,
     ) -> Result<Option<User>> {
-        // Build dynamic update query
-        let mut query_builder = sqlx::QueryBuilder::new("UPDATE users SET updated_at = NOW()");
-        let mut has_updates = false;
-
-        if let Some(first_name) = &request.first_name {
-            query_builder.push(", first_name = ");
-            query_builder.push_bind(first_name);
-            has_updates = true;
-        }
-
-        if let Some(last_name) = &request.last_name {
-            query_builder.push(", last_name = ");
-            query_builder.push_bind(last_name);
-            has_updates = true;
-        }
-
-        if let Some(email) = &request.email {
-            query_builder.push(", email = ");
-            query_builder.push_bind(email);
-            has_updates = true;
-        }
-
-        if let Some(access_level) = &request.access_level {
-            query_builder.push(", access_level = ");
-            query_builder.push_bind(access_level);
-            has_updates = true;
-        }
-
-        if let Some(club_id) = &request.club_id {
-            query_builder.push(", club_id = ");
-            query_builder.push_bind(club_id);
-            has_updates = true;
-        }
-
-        if let Some(email_verified) = &request.email_verified {
-            query_builder.push(", email_verified = ");
-            query_builder.push_bind(email_verified);
-            has_updates = true;
-        }
-
-        if !has_updates {
-            // No updates to make, just return current user
-            return self.get_by_id(user_id).await;
-        }
-
-        query_builder.push(" WHERE id = ");
-        query_builder.push_bind(user_id);
-
-        let update_query = query_builder.build();
-        let rows_affected = update_query.execute(&self.pool).await?.rows_affected();
-
-        if rows_affected > 0 {
-            self.get_by_id(user_id).await
-        } else {
-            Ok(None)
-        }
+        let pool = self.pool.clone();
+        let request_clone = request.clone();
+        
+        tokio::task::spawn_blocking(move || -> Result<Option<User>> {
+            let mut conn = pool.get()?;
+            let now = Utc::now();
+            
+            // Check if any field needs updating
+            let has_updates = request_clone.first_name.is_some() || 
+                             request_clone.last_name.is_some() || 
+                             request_clone.email.is_some() || 
+                             request_clone.access_level.is_some() || 
+                             request_clone.club_id.is_some() || 
+                             request_clone.email_verified.is_some();
+            
+            if !has_updates {
+                // No updates to make, just return current user
+                let user = users::table
+                    .filter(users::id.eq(user_id))
+                    .first::<UserRecord>(&mut conn)
+                    .optional()?;
+                return Ok(user.map(|record| record.into()));
+            }
+            
+            // Fetch the current user to merge with updates
+            let current_user = users::table
+                .filter(users::id.eq(user_id))
+                .first::<UserRecord>(&mut conn)
+                .optional()?;
+                
+            if let Some(current) = current_user {
+                let access_level_str = request_clone.access_level
+                    .map(|level| access_level_to_string(&level))
+                    .unwrap_or(current.access_level);
+                
+                let rows_affected = diesel::update(users::table.filter(users::id.eq(user_id)))
+                    .set((
+                        users::first_name.eq(request_clone.first_name.unwrap_or(current.first_name)),
+                        users::last_name.eq(request_clone.last_name.unwrap_or(current.last_name)),
+                        users::email.eq(request_clone.email.unwrap_or(current.email)),
+                        users::access_level.eq(access_level_str),
+                        users::club_id.eq(request_clone.club_id.or(current.club_id)),
+                        users::email_verified.eq(request_clone.email_verified.or(current.email_verified)),
+                        users::updated_at.eq(Some(now)),
+                    ))
+                    .execute(&mut conn)?;
+                
+                if rows_affected > 0 {
+                    let updated_user = users::table
+                        .filter(users::id.eq(user_id))
+                        .first::<UserRecord>(&mut conn)
+                        .optional()?;
+                    Ok(updated_user.map(|record| record.into()))
+                } else {
+                    Ok(None)
+                }
+            } else {
+                Ok(None)
+            }
+        })
+        .await?
     }
 
     /// Delete user
     pub async fn delete_user(&self, user_id: Uuid) -> Result<bool> {
-        let result = sqlx::query!("DELETE FROM users WHERE id = $1", user_id)
-            .execute(&self.pool)
-            .await?;
-
-        Ok(result.rows_affected() > 0)
+        let pool = self.pool.clone();
+        tokio::task::spawn_blocking(move || -> Result<bool> {
+            let mut conn = pool.get()?;
+            let rows_affected = diesel::delete(users::table.filter(users::id.eq(user_id)))
+                .execute(&mut conn)?;
+            Ok(rows_affected > 0)
+        })
+        .await?
     }
 
     /// Verify user password
@@ -348,81 +292,81 @@ impl UsersRepository {
     /// Update user password
     pub async fn update_password(&self, user_id: Uuid, new_password: &str) -> Result<bool> {
         let password_hash = self.hash_password(new_password)?;
-
-        let result = sqlx::query!(
-            r#"
-            UPDATE users 
-            SET password_hash = $2, 
-                password_reset_token = NULL,
-                password_reset_expires_at = NULL,
-                updated_at = NOW()
-            WHERE id = $1
-            "#,
-            user_id,
-            password_hash
-        )
-        .execute(&self.pool)
-        .await?;
-
-        Ok(result.rows_affected() > 0)
+        let pool = self.pool.clone();
+        let now = Utc::now();
+        
+        tokio::task::spawn_blocking(move || -> Result<bool> {
+            let mut conn = pool.get()?;
+            let rows_affected = diesel::update(users::table.filter(users::id.eq(user_id)))
+                .set((
+                    users::password_hash.eq(password_hash),
+                    users::password_reset_token.eq(None::<String>),
+                    users::password_reset_expires_at.eq(None::<DateTime<Utc>>),
+                    users::updated_at.eq(Some(now)),
+                ))
+                .execute(&mut conn)?;
+            Ok(rows_affected > 0)
+        })
+        .await?
     }
 
     /// Set password reset token
     pub async fn set_password_reset_token(&self, user_id: Uuid) -> Result<String> {
         let token = self.generate_reset_token();
         let expires_at = Utc::now() + chrono::Duration::hours(1); // Token expires in 1 hour
+        let pool = self.pool.clone();
+        let token_clone = token.clone();
+        let now = Utc::now();
 
-        sqlx::query!(
-            r#"
-            UPDATE users 
-            SET password_reset_token = $2,
-                password_reset_expires_at = $3,
-                updated_at = NOW()
-            WHERE id = $1
-            "#,
-            user_id,
-            token,
-            expires_at
-        )
-        .execute(&self.pool)
-        .await?;
-
-        Ok(token)
+        tokio::task::spawn_blocking(move || -> Result<String> {
+            let mut conn = pool.get()?;
+            diesel::update(users::table.filter(users::id.eq(user_id)))
+                .set((
+                    users::password_reset_token.eq(Some(token_clone.clone())),
+                    users::password_reset_expires_at.eq(Some(expires_at)),
+                    users::updated_at.eq(Some(now)),
+                ))
+                .execute(&mut conn)?;
+            Ok(token_clone)
+        })
+        .await?
     }
 
     /// Clear password reset token
     pub async fn clear_password_reset_token(&self, user_id: Uuid) -> Result<bool> {
-        let result = sqlx::query!(
-            r#"
-            UPDATE users 
-            SET password_reset_token = NULL,
-                password_reset_expires_at = NULL,
-                updated_at = NOW()
-            WHERE id = $1
-            "#,
-            user_id
-        )
-        .execute(&self.pool)
-        .await?;
-
-        Ok(result.rows_affected() > 0)
+        let pool = self.pool.clone();
+        let now = Utc::now();
+        
+        tokio::task::spawn_blocking(move || -> Result<bool> {
+            let mut conn = pool.get()?;
+            let rows_affected = diesel::update(users::table.filter(users::id.eq(user_id)))
+                .set((
+                    users::password_reset_token.eq(None::<String>),
+                    users::password_reset_expires_at.eq(None::<DateTime<Utc>>),
+                    users::updated_at.eq(Some(now)),
+                ))
+                .execute(&mut conn)?;
+            Ok(rows_affected > 0)
+        })
+        .await?
     }
 
     /// Verify email
     pub async fn verify_email(&self, user_id: Uuid) -> Result<bool> {
-        let result = sqlx::query!(
-            r#"
-            UPDATE users 
-            SET email_verified = true,
-                updated_at = NOW()
-            WHERE id = $1
-            "#,
-            user_id
-        )
-        .execute(&self.pool)
-        .await?;
-
-        Ok(result.rows_affected() > 0)
+        let pool = self.pool.clone();
+        let now = Utc::now();
+        
+        tokio::task::spawn_blocking(move || -> Result<bool> {
+            let mut conn = pool.get()?;
+            let rows_affected = diesel::update(users::table.filter(users::id.eq(user_id)))
+                .set((
+                    users::email_verified.eq(Some(true)),
+                    users::updated_at.eq(Some(now)),
+                ))
+                .execute(&mut conn)?;
+            Ok(rows_affected > 0)
+        })
+        .await?
     }
 
     /// Hash password using Argon2
@@ -462,78 +406,58 @@ impl UsersRepository {
     pub async fn set_email_verification_token(&self, user_id: Uuid) -> Result<String> {
         let token = self.generate_verification_token();
         let expires_at = Utc::now() + chrono::Duration::hours(24); // Token expires in 24 hours
+        let pool = self.pool.clone();
+        let token_clone = token.clone();
+        let now = Utc::now();
 
-        sqlx::query!(
-            r#"
-            UPDATE users 
-            SET email_verification_token = $2,
-                email_verification_expires_at = $3,
-                updated_at = NOW()
-            WHERE id = $1
-            "#,
-            user_id,
-            token,
-            expires_at
-        )
-        .execute(&self.pool)
-        .await?;
-
-        Ok(token)
+        tokio::task::spawn_blocking(move || -> Result<String> {
+            let mut conn = pool.get()?;
+            diesel::update(users::table.filter(users::id.eq(user_id)))
+                .set((
+                    users::email_verification_token.eq(Some(token_clone.clone())),
+                    users::email_verification_expires_at.eq(Some(expires_at)),
+                    users::updated_at.eq(Some(now)),
+                ))
+                .execute(&mut conn)?;
+            Ok(token_clone)
+        })
+        .await?
     }
 
     /// Get user by email verification token
     pub async fn get_by_verification_token(&self, token: &str) -> Result<Option<User>> {
-        let result = sqlx::query!(
-            r#"
-            SELECT id, first_name, last_name, email, password_hash,
-                   access_level as "access_level!: AccessLevel", club_id, email_verified,
-                   password_reset_token, password_reset_expires_at,
-                   email_verification_token, email_verification_expires_at,
-                   created_at, updated_at
-            FROM users
-            WHERE email_verification_token = $1
-            AND email_verification_expires_at > NOW()
-            "#,
-            token
-        )
-        .fetch_optional(&self.pool)
-        .await?;
-
-        Ok(result.map(|row| User {
-            id: row.id,
-            first_name: row.first_name,
-            last_name: row.last_name,
-            email: row.email,
-            password_hash: row.password_hash,
-            access_level: row.access_level,
-            club_id: row.club_id,
-            email_verified: row.email_verified.unwrap_or(false),
-            password_reset_token: row.password_reset_token,
-            password_reset_expires_at: row.password_reset_expires_at,
-            email_verification_token: row.email_verification_token,
-            email_verification_expires_at: row.email_verification_expires_at,
-            created_at: row.created_at.unwrap_or_else(Utc::now),
-            updated_at: row.updated_at.unwrap_or_else(Utc::now),
-        }))
+        let pool = self.pool.clone();
+        let token = token.to_string();
+        tokio::task::spawn_blocking(move || -> Result<Option<User>> {
+            let mut conn = pool.get()?;
+            let user = users::table
+                .filter(users::email_verification_token.eq(&token))
+                .filter(users::email_verification_expires_at.gt(Utc::now()))
+                .first::<UserRecord>(&mut conn)
+                .optional()?;
+            Ok(user.map(|record| record.into()))
+        })
+        .await?
     }
 
     /// Mark user's email as verified
     pub async fn verify_user_email(&self, user_id: Uuid) -> Result<bool> {
-        let result = sqlx::query!(
-            r#"
-            UPDATE users 
-            SET email_verified = true,
-                email_verification_token = NULL,
-                email_verification_expires_at = NULL,
-                updated_at = NOW()
-            WHERE id = $1
-            "#,
-            user_id
-        )
-        .execute(&self.pool)
-        .await?;
-
-        Ok(result.rows_affected() > 0)
+        let pool = self.pool.clone();
+        let now = Utc::now();
+        
+        tokio::task::spawn_blocking(move || -> Result<bool> {
+            let mut conn = pool.get()?;
+            let rows_affected = diesel::update(users::table.filter(users::id.eq(user_id)))
+                .set((
+                    users::email_verified.eq(Some(true)),
+                    users::email_verification_token.eq(None::<String>),
+                    users::email_verification_expires_at.eq(None::<DateTime<Utc>>),
+                    users::updated_at.eq(Some(now)),
+                ))
+                .execute(&mut conn)?;
+            Ok(rows_affected > 0)
+        })
+        .await?
     }
 
     /// Generate a random email verification token

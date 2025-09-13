@@ -4,14 +4,14 @@ use diesel::prelude::*;
 use uuid::Uuid;
 
 use crate::flights::{Flight, FlightModel};
-use crate::web::DieselPgPool;
+use crate::web::PgPool;
 
 pub struct FlightsRepository {
-    pool: DieselPgPool,
+    pool: PgPool,
 }
 
 impl FlightsRepository {
-    pub fn new(pool: DieselPgPool) -> Self {
+    pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
 
