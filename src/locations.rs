@@ -1,8 +1,12 @@
 use chrono::{DateTime, Utc};
-use postgis_diesel::sql_types::Geography;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use diesel::prelude::*;
+use diesel::deserialize::{self, FromSql};
+use diesel::serialize::{self, ToSql, Output};
+use diesel::pg::{Pg, PgValue};
+use diesel::expression::AsExpression;
+use std::io::Write;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Location {
@@ -21,7 +25,8 @@ pub struct Location {
 }
 
 // Simple Point struct for WGS84 coordinates (reuse from clubs.rs)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, AsExpression)]
+#[diesel(sql_type = crate::schema::sql_types::Point)]
 pub struct Point {
     pub latitude: f64,
     pub longitude: f64,
@@ -35,6 +40,40 @@ impl Point {
         }
     }
 }
+
+// Implement FromSql for Point to work with PostgreSQL point type
+impl FromSql<crate::schema::sql_types::Point, Pg> for Point {
+    fn from_sql(bytes: PgValue<'_>) -> deserialize::Result<Self> {
+        // PostgreSQL point is stored as binary data, read as bytes
+        let bytes = bytes.as_bytes();
+        if bytes.len() < 16 {
+            return Err("Invalid point data length".into());
+        }
+
+        // PostgreSQL stores point as two 8-byte floats (longitude, latitude) in network byte order
+        let longitude = f64::from_be_bytes([
+            bytes[0], bytes[1], bytes[2], bytes[3],
+            bytes[4], bytes[5], bytes[6], bytes[7],
+        ]);
+        let latitude = f64::from_be_bytes([
+            bytes[8], bytes[9], bytes[10], bytes[11],
+            bytes[12], bytes[13], bytes[14], bytes[15],
+        ]);
+
+        Ok(Point::new(latitude, longitude))
+    }
+}
+
+// Implement ToSql for Point to work with PostgreSQL point type
+impl ToSql<crate::schema::sql_types::Point, Pg> for Point {
+    fn to_sql<'b>(&'b self, out: &mut Output<'b, '_, Pg>) -> serialize::Result {
+        // Write longitude and latitude as 8-byte floats in network byte order
+        out.write_all(&self.longitude.to_be_bytes())?;
+        out.write_all(&self.latitude.to_be_bytes())?;
+        Ok(serialize::IsNull::No)
+    }
+}
+
 
 
 /// Diesel model for the locations table - used for database operations
@@ -51,7 +90,7 @@ pub struct LocationModel {
     pub region_code: Option<String>,
     pub county_mail_code: Option<String>,
     pub country_mail_code: Option<String>,
-    pub geolocation: Option<Geography>, // PostGIS point as text representation
+    pub geolocation: Option<Point>, // PostgreSQL point type
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -70,32 +109,9 @@ pub struct NewLocationModel {
     pub region_code: Option<String>,
     pub county_mail_code: Option<String>,
     pub country_mail_code: Option<String>,
-    pub geolocation: Option<Geography>,
+    pub geolocation: Option<Point>, // PostgreSQL point type
 }
 
-/// Convert Point to PostGIS text representation
-fn point_to_postgis_text(point: &Point) -> String {
-    format!("POINT({} {})", point.longitude, point.latitude)
-}
-
-/// Convert PostGIS text representation to Point
-fn postgis_text_to_point(text: &str) -> Option<Point> {
-    // Parse "POINT(longitude latitude)" format
-    let coords = text
-        .strip_prefix("POINT(")?
-        .strip_suffix(")")?
-        .split_whitespace()
-        .collect::<Vec<_>>();
-
-    if coords.len() != 2 {
-        return None;
-    }
-
-    let longitude: f64 = coords[0].parse().ok()?;
-    let latitude: f64 = coords[1].parse().ok()?;
-
-    Some(Point::new(latitude, longitude))
-}
 
 /// Conversion from Location (API model) to LocationModel (database model)
 impl From<Location> for LocationModel {
