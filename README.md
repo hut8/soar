@@ -13,7 +13,7 @@ SOAR is an application under active development that will automate many duty-man
 - **Configurable Filters**: Support for APRS-IS filters to limit received messages
 - **Retry Logic**: Built-in connection retry with configurable parameters
 
-## Deployment
+## Provisioning
 
 ### Database
 
@@ -31,6 +31,23 @@ sudo cp infrastructure/nats-server.service /etc/systemd/system/nats-server.servi
 sudo systemctl daemon-reload
 sudo systemctl start nats-server
 ```
+
+### Reverse proxy
+
+Some reverse proxy should be put in front of the web service to terminate SSL and provide other benefits, like load balancing (if necessary). By default, the production web server will listen on localhost at port 1337. If using Caddy, you will simply need a block at `/etc/caddy/Caddyfile` that looks something like this:
+
+```
+glider.flights {
+        reverse_proxy localhost:1337
+        log {
+                output file /var/log/caddy/glider.flights.log
+        }
+}
+```
+
+## Deployment
+
+Deployment is accomplished via the `deploy` script in the root of the project. The first time this is run, a file is created with appropriate permissions at `/etc/soar/env` which contains necessary environment variables. Edit these as needed. Two systemd files will be installed: `soar-run.service` and `soar-web.service`. Their content is self-explanatory.
 
 ## Development
 

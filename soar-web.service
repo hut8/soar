@@ -10,7 +10,7 @@ Type=simple
 User=soar
 Group=soar
 WorkingDirectory=/var/lib/soar
-ExecStart=/usr/local/bin/soar web --interface 0.0.0.0 --port 1337
+ExecStart=/usr/local/bin/soar web --interface 127.0.0.1 --port 1337
 ExecReload=/bin/kill -s HUP $MAINPID
 
 # Environment variables
