@@ -138,7 +138,7 @@ pub struct ReceiverLinkModel {
     pub receiver_id: i32,
     pub rel: Option<String>,
     pub href: String,
-    pub created_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 /// Insert model for new receiver links
