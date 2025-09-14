@@ -19,7 +19,7 @@ impl AircraftRegistrationsRepository {
     pub fn new(pool: DieselPgPool) -> Self {
         Self { pool }
     }
-    
+
     fn get_connection(&self) -> Result<DieselPgPooledConnection> {
         self.pool.get().map_err(|e| anyhow::anyhow!("Failed to get database connection: {}", e))
     }
@@ -53,6 +53,38 @@ impl AircraftRegistrationsRepository {
                     aircraft_registrations::certificate_issue_date.eq(excluded(aircraft_registrations::certificate_issue_date)),
                     aircraft_registrations::airworthiness_class.eq(excluded(aircraft_registrations::airworthiness_class)),
                     aircraft_registrations::approved_operations_raw.eq(excluded(aircraft_registrations::approved_operations_raw)),
+                    // Operational flags
+                    aircraft_registrations::op_restricted_other.eq(excluded(aircraft_registrations::op_restricted_other)),
+                    aircraft_registrations::op_restricted_ag_pest_control.eq(excluded(aircraft_registrations::op_restricted_ag_pest_control)),
+                    aircraft_registrations::op_restricted_aerial_surveying.eq(excluded(aircraft_registrations::op_restricted_aerial_surveying)),
+                    aircraft_registrations::op_restricted_aerial_advertising.eq(excluded(aircraft_registrations::op_restricted_aerial_advertising)),
+                    aircraft_registrations::op_restricted_forest.eq(excluded(aircraft_registrations::op_restricted_forest)),
+                    aircraft_registrations::op_restricted_patrolling.eq(excluded(aircraft_registrations::op_restricted_patrolling)),
+                    aircraft_registrations::op_restricted_weather_control.eq(excluded(aircraft_registrations::op_restricted_weather_control)),
+                    aircraft_registrations::op_restricted_carriage_of_cargo.eq(excluded(aircraft_registrations::op_restricted_carriage_of_cargo)),
+                    aircraft_registrations::op_experimental_show_compliance.eq(excluded(aircraft_registrations::op_experimental_show_compliance)),
+                    aircraft_registrations::op_experimental_research_development.eq(excluded(aircraft_registrations::op_experimental_research_development)),
+                    aircraft_registrations::op_experimental_amateur_built.eq(excluded(aircraft_registrations::op_experimental_amateur_built)),
+                    aircraft_registrations::op_experimental_exhibition.eq(excluded(aircraft_registrations::op_experimental_exhibition)),
+                    aircraft_registrations::op_experimental_racing.eq(excluded(aircraft_registrations::op_experimental_racing)),
+                    aircraft_registrations::op_experimental_crew_training.eq(excluded(aircraft_registrations::op_experimental_crew_training)),
+                    aircraft_registrations::op_experimental_market_survey.eq(excluded(aircraft_registrations::op_experimental_market_survey)),
+                    aircraft_registrations::op_experimental_operating_kit_built.eq(excluded(aircraft_registrations::op_experimental_operating_kit_built)),
+                    aircraft_registrations::op_experimental_light_sport_reg_prior_2008.eq(excluded(aircraft_registrations::op_experimental_light_sport_reg_prior_2008)),
+                    aircraft_registrations::op_experimental_light_sport_operating_kit_built.eq(excluded(aircraft_registrations::op_experimental_light_sport_operating_kit_built)),
+                    aircraft_registrations::op_experimental_light_sport_prev_21_190.eq(excluded(aircraft_registrations::op_experimental_light_sport_prev_21_190)),
+                    aircraft_registrations::op_experimental_uas_research_development.eq(excluded(aircraft_registrations::op_experimental_uas_research_development)),
+                    aircraft_registrations::op_experimental_uas_market_survey.eq(excluded(aircraft_registrations::op_experimental_uas_market_survey)),
+                    aircraft_registrations::op_experimental_uas_crew_training.eq(excluded(aircraft_registrations::op_experimental_uas_crew_training)),
+                    aircraft_registrations::op_experimental_uas_exhibition.eq(excluded(aircraft_registrations::op_experimental_uas_exhibition)),
+                    aircraft_registrations::op_experimental_uas_compliance_with_cfr.eq(excluded(aircraft_registrations::op_experimental_uas_compliance_with_cfr)),
+                    aircraft_registrations::op_sfp_ferry_for_repairs_alterations_storage.eq(excluded(aircraft_registrations::op_sfp_ferry_for_repairs_alterations_storage)),
+                    aircraft_registrations::op_sfp_evacuate_impending_danger.eq(excluded(aircraft_registrations::op_sfp_evacuate_impending_danger)),
+                    aircraft_registrations::op_sfp_excess_of_max_certificated.eq(excluded(aircraft_registrations::op_sfp_excess_of_max_certificated)),
+                    aircraft_registrations::op_sfp_delivery_or_export.eq(excluded(aircraft_registrations::op_sfp_delivery_or_export)),
+                    aircraft_registrations::op_sfp_production_flight_testing.eq(excluded(aircraft_registrations::op_sfp_production_flight_testing)),
+                    aircraft_registrations::op_sfp_customer_demo.eq(excluded(aircraft_registrations::op_sfp_customer_demo)),
+                    // Other fields
                     aircraft_registrations::type_aircraft_code.eq(excluded(aircraft_registrations::type_aircraft_code)),
                     aircraft_registrations::type_engine_code.eq(excluded(aircraft_registrations::type_engine_code)),
                     aircraft_registrations::status_code.eq(excluded(aircraft_registrations::status_code)),
@@ -99,6 +131,7 @@ impl AircraftRegistrationsRepository {
         let mut conn = self.get_connection()?;
         let aircraft_model = aircraft_registrations::table
             .filter(aircraft_registrations::registration_number.eq(registration_number))
+            .select(AircraftRegistrationModel::as_select())
             .first::<AircraftRegistrationModel>(&mut conn)
             .optional()?;
 
@@ -111,6 +144,7 @@ impl AircraftRegistrationsRepository {
         let search_pattern = format!("%{}%", registrant_name);
         let aircraft_models = aircraft_registrations::table
             .filter(aircraft_registrations::registrant_name.ilike(&search_pattern))
+            .select(AircraftRegistrationModel::as_select())
             .load::<AircraftRegistrationModel>(&mut conn)?;
 
         Ok(aircraft_models.into_iter().map(|model| model.into()).collect())
@@ -122,18 +156,10 @@ impl AircraftRegistrationsRepository {
         let transponder_code_i64 = transponder_code as i64;
         let aircraft_models = aircraft_registrations::table
             .filter(aircraft_registrations::transponder_code.eq(transponder_code_i64))
+            .select(AircraftRegistrationModel::as_select())
             .load::<AircraftRegistrationModel>(&mut conn)?;
 
         Ok(aircraft_models.into_iter().map(|model| model.into()).collect())
-    }
-
-    /// Search aircraft registrations by state
-    pub async fn search_by_state(&self, _state: &str) -> Result<Vec<Aircraft>> {
-        // Note: State is no longer stored directly in aircraft_registrations table.
-        // It's now in the locations table via location_id.
-        // For now, return empty result until locations integration is implemented.
-        warn!("search_by_state not fully implemented - state data is now in locations table");
-        Ok(Vec::new())
     }
 
     /// Get aircraft registrations by club ID
@@ -141,6 +167,7 @@ impl AircraftRegistrationsRepository {
         let mut conn = self.get_connection()?;
         let aircraft_models = aircraft_registrations::table
             .filter(aircraft_registrations::club_id.eq(club_id))
+            .select(AircraftRegistrationModel::as_select())
             .load::<AircraftRegistrationModel>(&mut conn)?;
 
         Ok(aircraft_models.into_iter().map(|model| model.into()).collect())

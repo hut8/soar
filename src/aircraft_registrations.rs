@@ -332,7 +332,8 @@ fn parse_approved_ops(airworthiness_class_code: &str, raw_239_247: &str) -> Appr
 
 // Diesel database models for aircraft_registrations table
 #[derive(Debug, Clone, Queryable, Selectable, QueryableByName, Serialize, Deserialize)]
-#[diesel(table_name = crate::schema::aircraft_registrations, check_for_backend(diesel::pg::Pg))]
+#[diesel(table_name = crate::schema::aircraft_registrations)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct AircraftRegistrationModel {
     pub registration_number: String,
     pub serial_number: String,
