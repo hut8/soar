@@ -10,7 +10,7 @@ use rand::Rng;
 use uuid::Uuid;
 
 use crate::schema::users;
-use crate::users::{AccessLevel, CreateUserRequest, UpdateUserRequest, User};
+use crate::users::{CreateUserRequest, UpdateUserRequest, User};
 
 type PgPool = Pool<ConnectionManager<PgConnection>>;
 
@@ -22,7 +22,7 @@ pub struct UserRecord {
     pub last_name: String,
     pub email: String,
     pub password_hash: String,
-    pub access_level: String,
+    pub is_admin: bool,
     pub club_id: Option<Uuid>,
     pub email_verified: Option<bool>,
     pub password_reset_token: Option<String>,
@@ -41,7 +41,7 @@ pub struct NewUser {
     pub last_name: String,
     pub email: String,
     pub password_hash: String,
-    pub access_level: String,
+    pub is_admin: bool,
     pub club_id: Option<Uuid>,
     pub email_verified: Option<bool>,
     pub created_at: Option<DateTime<Utc>>,
@@ -56,10 +56,7 @@ impl From<UserRecord> for User {
             last_name: record.last_name,
             email: record.email,
             password_hash: record.password_hash,
-            access_level: match record.access_level.as_str() {
-                "admin" => AccessLevel::Admin,
-                _ => AccessLevel::Standard,
-            },
+            is_admin: record.is_admin,
             club_id: record.club_id,
             email_verified: record.email_verified.unwrap_or(false),
             password_reset_token: record.password_reset_token,
@@ -69,13 +66,6 @@ impl From<UserRecord> for User {
             created_at: record.created_at.unwrap_or_else(Utc::now),
             updated_at: record.updated_at.unwrap_or_else(Utc::now),
         }
-    }
-}
-
-fn access_level_to_string(access_level: &AccessLevel) -> String {
-    match access_level {
-        AccessLevel::Admin => "admin".to_string(),
-        AccessLevel::Standard => "standard".to_string(),
     }
 }
 
@@ -168,7 +158,7 @@ impl UsersRepository {
         let password_hash = self.hash_password(&request.password)?;
         let user_id = Uuid::new_v4();
         let now = Utc::now();
-        
+
         let pool = self.pool.clone();
         let new_user = NewUser {
             id: user_id,
@@ -176,13 +166,13 @@ impl UsersRepository {
             last_name: request.last_name.clone(),
             email: request.email.clone(),
             password_hash,
-            access_level: access_level_to_string(&AccessLevel::Standard),
+            is_admin: request.is_admin,
             club_id: request.club_id,
             email_verified: Some(false),
             created_at: Some(now),
             updated_at: Some(now),
         };
-        
+
         tokio::task::spawn_blocking(move || -> Result<User> {
             let mut conn = pool.get()?;
             let user = diesel::insert_into(users::table)
@@ -201,19 +191,19 @@ impl UsersRepository {
     ) -> Result<Option<User>> {
         let pool = self.pool.clone();
         let request_clone = request.clone();
-        
+
         tokio::task::spawn_blocking(move || -> Result<Option<User>> {
             let mut conn = pool.get()?;
             let now = Utc::now();
-            
+
             // Check if any field needs updating
-            let has_updates = request_clone.first_name.is_some() || 
-                             request_clone.last_name.is_some() || 
-                             request_clone.email.is_some() || 
-                             request_clone.access_level.is_some() || 
-                             request_clone.club_id.is_some() || 
+            let has_updates = request_clone.first_name.is_some() ||
+                             request_clone.last_name.is_some() ||
+                             request_clone.email.is_some() ||
+                             request_clone.is_admin.is_some() ||
+                             request_clone.club_id.is_some() ||
                              request_clone.email_verified.is_some();
-            
+
             if !has_updates {
                 // No updates to make, just return current user
                 let user = users::table
@@ -222,30 +212,26 @@ impl UsersRepository {
                     .optional()?;
                 return Ok(user.map(|record| record.into()));
             }
-            
+
             // Fetch the current user to merge with updates
             let current_user = users::table
                 .filter(users::id.eq(user_id))
                 .first::<UserRecord>(&mut conn)
                 .optional()?;
-                
+
             if let Some(current) = current_user {
-                let access_level_str = request_clone.access_level
-                    .map(|level| access_level_to_string(&level))
-                    .unwrap_or(current.access_level);
-                
                 let rows_affected = diesel::update(users::table.filter(users::id.eq(user_id)))
                     .set((
                         users::first_name.eq(request_clone.first_name.unwrap_or(current.first_name)),
                         users::last_name.eq(request_clone.last_name.unwrap_or(current.last_name)),
                         users::email.eq(request_clone.email.unwrap_or(current.email)),
-                        users::access_level.eq(access_level_str),
+                        users::is_admin.eq(request_clone.is_admin.unwrap_or(current.is_admin)),
                         users::club_id.eq(request_clone.club_id.or(current.club_id)),
                         users::email_verified.eq(request_clone.email_verified.or(current.email_verified)),
                         users::updated_at.eq(Some(now)),
                     ))
                     .execute(&mut conn)?;
-                
+
                 if rows_affected > 0 {
                     let updated_user = users::table
                         .filter(users::id.eq(user_id))
@@ -294,7 +280,7 @@ impl UsersRepository {
         let password_hash = self.hash_password(new_password)?;
         let pool = self.pool.clone();
         let now = Utc::now();
-        
+
         tokio::task::spawn_blocking(move || -> Result<bool> {
             let mut conn = pool.get()?;
             let rows_affected = diesel::update(users::table.filter(users::id.eq(user_id)))
@@ -336,7 +322,7 @@ impl UsersRepository {
     pub async fn clear_password_reset_token(&self, user_id: Uuid) -> Result<bool> {
         let pool = self.pool.clone();
         let now = Utc::now();
-        
+
         tokio::task::spawn_blocking(move || -> Result<bool> {
             let mut conn = pool.get()?;
             let rows_affected = diesel::update(users::table.filter(users::id.eq(user_id)))
@@ -355,7 +341,7 @@ impl UsersRepository {
     pub async fn verify_email(&self, user_id: Uuid) -> Result<bool> {
         let pool = self.pool.clone();
         let now = Utc::now();
-        
+
         tokio::task::spawn_blocking(move || -> Result<bool> {
             let mut conn = pool.get()?;
             let rows_affected = diesel::update(users::table.filter(users::id.eq(user_id)))
@@ -444,7 +430,7 @@ impl UsersRepository {
     pub async fn verify_user_email(&self, user_id: Uuid) -> Result<bool> {
         let pool = self.pool.clone();
         let now = Utc::now();
-        
+
         tokio::task::spawn_blocking(move || -> Result<bool> {
             let mut conn = pool.get()?;
             let rows_affected = diesel::update(users::table.filter(users::id.eq(user_id)))

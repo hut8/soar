@@ -1,12 +1,7 @@
 use chrono::{DateTime, Utc};
+use diesel_derive_enum::DbEnum;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum AccessLevel {
-    Standard,
-    Admin,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
@@ -16,7 +11,7 @@ pub struct User {
     pub email: String,
     #[serde(skip_serializing)]
     pub password_hash: String,
-    pub access_level: AccessLevel,
+    pub is_admin: bool,
     pub club_id: Option<Uuid>,
     pub email_verified: bool,
     #[serde(skip_serializing)]
@@ -45,7 +40,7 @@ pub struct UpdateUserRequest {
     pub first_name: Option<String>,
     pub last_name: Option<String>,
     pub email: Option<String>,
-    pub access_level: Option<AccessLevel>,
+    pub is_admin: Option<bool>,
     pub club_id: Option<Uuid>,
     pub email_verified: Option<bool>,
 }
@@ -68,7 +63,7 @@ pub struct UserInfo {
     pub first_name: String,
     pub last_name: String,
     pub email: String,
-    pub access_level: AccessLevel,
+    pub is_admin: bool,
     pub club_id: Option<Uuid>,
     pub email_verified: bool,
 }
@@ -99,17 +94,13 @@ impl User {
         format!("{} {}", self.first_name, self.last_name)
     }
 
-    pub fn is_admin(&self) -> bool {
-        matches!(self.access_level, AccessLevel::Admin)
-    }
-
     pub fn to_user_info(&self) -> UserInfo {
         UserInfo {
             id: self.id,
             first_name: self.first_name.clone(),
             last_name: self.last_name.clone(),
             email: self.email.clone(),
-            access_level: self.access_level,
+            is_admin: self.is_admin,
             club_id: self.club_id,
             email_verified: self.email_verified,
         }
