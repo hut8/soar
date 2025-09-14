@@ -5,14 +5,20 @@ use std::str::FromStr;
 // Diesel imports
 use diesel::prelude::*;
 use chrono::{DateTime, Utc};
+use diesel_derive_enum::DbEnum;
 
 const DDB_URL: &str = "http://ddb.glidernet.org/download/?j=1";
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, PartialEq, Eq, Default, DbEnum, Serialize, Deserialize)]
+#[ExistingTypePath = "crate::schema::sql_types::DeviceTypeEnum"]
 pub enum DeviceType {
+    #[db_rename = "flarm"]
     Flarm,
+    #[db_rename = "ogn"]
     Ogn,
+    #[db_rename = "icao"]
     Icao,
+    #[db_rename = "unknown"]
     #[default]
     Unknown,
 }
@@ -43,24 +49,7 @@ impl std::fmt::Display for DeviceType {
     }
 }
 
-impl Serialize for DeviceType {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_str(&self.to_string())
-    }
-}
 
-impl<'de> Deserialize<'de> for DeviceType {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-        Ok(DeviceType::from_str(&s).unwrap_or(DeviceType::Unknown))
-    }
-}
 
 // Custom deserializer for string to boolean conversion
 fn string_to_bool<'de, D>(deserializer: D) -> Result<bool, D::Error>
@@ -120,7 +109,7 @@ pub struct Device {
 #[diesel(table_name = crate::schema::devices)]
 pub struct DeviceModel {
     pub device_id: i32,
-    pub device_type: String,
+    pub device_type: DeviceType,
     pub aircraft_model: String,
     pub registration: String,
     pub competition_number: String,
@@ -135,7 +124,7 @@ pub struct DeviceModel {
 #[diesel(table_name = crate::schema::devices)]
 pub struct NewDevice {
     pub device_id: i32,
-    pub device_type: String,
+    pub device_type: DeviceType,
     pub aircraft_model: String,
     pub registration: String,
     pub competition_number: String,
@@ -147,7 +136,7 @@ impl From<Device> for NewDevice {
     fn from(device: Device) -> Self {
         Self {
             device_id: device.device_id as i32,
-            device_type: device.device_type.to_string(),
+            device_type: device.device_type,
             aircraft_model: device.aircraft_model,
             registration: device.registration,
             competition_number: device.competition_number,
@@ -160,7 +149,7 @@ impl From<Device> for NewDevice {
 impl From<DeviceModel> for Device {
     fn from(model: DeviceModel) -> Self {
         Self {
-            device_type: DeviceType::from_str(&model.device_type).unwrap_or(DeviceType::Unknown),
+            device_type: model.device_type,
             device_id: model.device_id as u32,
             aircraft_model: model.aircraft_model,
             registration: model.registration,

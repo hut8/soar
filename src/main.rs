@@ -238,6 +238,24 @@ async fn handle_run(
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Load environment variables from .env file early
+    dotenvy::dotenv().ok();
+
+    // Initialize Sentry for error tracking (errors only, no performance monitoring)
+    let _guard = if let Ok(sentry_dsn) = env::var("SENTRY_DSN") {
+        info!("Initializing Sentry with DSN");
+        Some(sentry::init(sentry::ClientOptions {
+            dsn: Some(sentry_dsn.parse().expect("Invalid SENTRY_DSN format")),
+            traces_sample_rate: 0.0, // Disable performance monitoring
+            session_mode: sentry::SessionMode::Request,
+            auto_session_tracking: false, // Disable session tracking
+            ..Default::default()
+        }))
+    } else {
+        info!("SENTRY_DSN not configured, Sentry disabled");
+        None
+    };
+
     // Initialize tracing with TRACE level by default, but silence async_nats TRACE/DEBUG
     use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
