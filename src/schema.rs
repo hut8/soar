@@ -21,7 +21,7 @@ pub mod sql_types {
     #[diesel(postgres_type(name = "airworthiness_class"))]
     pub struct AirworthinessClass;
 
-    #[derive(diesel::query_builder::QueryId, diesel::sql_types::SqlType)]
+    #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "device_type_enum"))]
     pub struct DeviceTypeEnum;
 
@@ -32,17 +32,6 @@ pub mod sql_types {
     #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "point", schema = "pg_catalog"))]
     pub struct Point;
-}
-
-diesel::table! {
-    _sqlx_migrations (version) {
-        version -> Int8,
-        description -> Text,
-        installed_on -> Timestamptz,
-        success -> Bool,
-        checksum -> Bytea,
-        execution_time -> Int8,
-    }
 }
 
 diesel::table! {
@@ -62,8 +51,8 @@ diesel::table! {
         cruising_speed -> Nullable<Int2>,
         type_certificate_data_sheet -> Nullable<Text>,
         type_certificate_data_holder -> Nullable<Text>,
-        created_at -> Nullable<Timestamptz>,
-        updated_at -> Nullable<Timestamptz>,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
     }
 }
 
@@ -73,7 +62,7 @@ diesel::table! {
         registration_number -> Varchar,
         seq -> Int2,
         #[max_length = 50]
-        other_name -> Nullable<Varchar>,
+        other_name -> Varchar,
     }
 }
 
@@ -97,36 +86,36 @@ diesel::table! {
         registrant_name -> Nullable<Varchar>,
         last_action_date -> Nullable<Date>,
         certificate_issue_date -> Nullable<Date>,
-        op_restricted_other -> Nullable<Bool>,
-        op_restricted_ag_pest_control -> Nullable<Bool>,
-        op_restricted_aerial_surveying -> Nullable<Bool>,
-        op_restricted_aerial_advertising -> Nullable<Bool>,
-        op_restricted_forest -> Nullable<Bool>,
-        op_restricted_patrolling -> Nullable<Bool>,
-        op_restricted_weather_control -> Nullable<Bool>,
-        op_restricted_carriage_of_cargo -> Nullable<Bool>,
-        op_experimental_show_compliance -> Nullable<Bool>,
-        op_experimental_research_development -> Nullable<Bool>,
-        op_experimental_amateur_built -> Nullable<Bool>,
-        op_experimental_exhibition -> Nullable<Bool>,
-        op_experimental_racing -> Nullable<Bool>,
-        op_experimental_crew_training -> Nullable<Bool>,
-        op_experimental_market_survey -> Nullable<Bool>,
-        op_experimental_operating_kit_built -> Nullable<Bool>,
-        op_experimental_light_sport_reg_prior_2008 -> Nullable<Bool>,
-        op_experimental_light_sport_operating_kit_built -> Nullable<Bool>,
-        op_experimental_light_sport_prev_21_190 -> Nullable<Bool>,
-        op_experimental_uas_research_development -> Nullable<Bool>,
-        op_experimental_uas_market_survey -> Nullable<Bool>,
-        op_experimental_uas_crew_training -> Nullable<Bool>,
-        op_experimental_uas_exhibition -> Nullable<Bool>,
-        op_experimental_uas_compliance_with_cfr -> Nullable<Bool>,
-        op_sfp_ferry_for_repairs_alterations_storage -> Nullable<Bool>,
-        op_sfp_evacuate_impending_danger -> Nullable<Bool>,
-        op_sfp_excess_of_max_certificated -> Nullable<Bool>,
-        op_sfp_delivery_or_export -> Nullable<Bool>,
-        op_sfp_production_flight_testing -> Nullable<Bool>,
-        op_sfp_customer_demo -> Nullable<Bool>,
+        op_restricted_other -> Bool,
+        op_restricted_ag_pest_control -> Bool,
+        op_restricted_aerial_surveying -> Bool,
+        op_restricted_aerial_advertising -> Bool,
+        op_restricted_forest -> Bool,
+        op_restricted_patrolling -> Bool,
+        op_restricted_weather_control -> Bool,
+        op_restricted_carriage_of_cargo -> Bool,
+        op_experimental_show_compliance -> Bool,
+        op_experimental_research_development -> Bool,
+        op_experimental_amateur_built -> Bool,
+        op_experimental_exhibition -> Bool,
+        op_experimental_racing -> Bool,
+        op_experimental_crew_training -> Bool,
+        op_experimental_market_survey -> Bool,
+        op_experimental_operating_kit_built -> Bool,
+        op_experimental_light_sport_reg_prior_2008 -> Bool,
+        op_experimental_light_sport_operating_kit_built -> Bool,
+        op_experimental_light_sport_prev_21_190 -> Bool,
+        op_experimental_uas_research_development -> Bool,
+        op_experimental_uas_market_survey -> Bool,
+        op_experimental_uas_crew_training -> Bool,
+        op_experimental_uas_exhibition -> Bool,
+        op_experimental_uas_compliance_with_cfr -> Bool,
+        op_sfp_ferry_for_repairs_alterations_storage -> Bool,
+        op_sfp_evacuate_impending_danger -> Bool,
+        op_sfp_excess_of_max_certificated -> Bool,
+        op_sfp_delivery_or_export -> Bool,
+        op_sfp_production_flight_testing -> Bool,
+        op_sfp_customer_demo -> Bool,
         #[max_length = 1]
         type_aircraft_code -> Nullable<Bpchar>,
         type_engine_code -> Nullable<Int2>,
@@ -189,8 +178,8 @@ diesel::table! {
         home_link -> Nullable<Text>,
         wikipedia_link -> Nullable<Text>,
         keywords -> Nullable<Text>,
-        created_at -> Nullable<Timestamptz>,
-        updated_at -> Nullable<Timestamptz>,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
     }
 }
 
@@ -199,11 +188,11 @@ diesel::table! {
         id -> Uuid,
         #[max_length = 255]
         name -> Varchar,
-        created_at -> Nullable<Timestamptz>,
-        updated_at -> Nullable<Timestamptz>,
         is_soaring -> Nullable<Bool>,
         home_base_airport_id -> Nullable<Int4>,
         location_id -> Nullable<Uuid>,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
     }
 }
 
@@ -221,6 +210,7 @@ diesel::table! {
 
     devices (device_id) {
         device_id -> Int4,
+        device_type -> DeviceTypeEnum,
         aircraft_model -> Text,
         registration -> Text,
         competition_number -> Text,
@@ -228,7 +218,6 @@ diesel::table! {
         identified -> Bool,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
-        device_type -> DeviceTypeEnum,
     }
 }
 
@@ -273,8 +262,6 @@ diesel::table! {
         bit_errors_corrected -> Nullable<Int4>,
         freq_offset_khz -> Nullable<Float4>,
         club_id -> Nullable<Uuid>,
-        created_at -> Nullable<Timestamptz>,
-        updated_at -> Nullable<Timestamptz>,
         flight_id -> Nullable<Uuid>,
         device_id -> Nullable<Int4>,
     }
@@ -294,9 +281,9 @@ diesel::table! {
         #[max_length = 5]
         tow_aircraft_id -> Nullable<Varchar>,
         tow_release_height_msl -> Nullable<Int4>,
+        club_id -> Nullable<Uuid>,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
-        club_id -> Nullable<Uuid>,
     }
 }
 
@@ -328,8 +315,8 @@ diesel::table! {
         contact -> Nullable<Text>,
         email -> Nullable<Text>,
         country -> Nullable<Text>,
-        created_at -> Nullable<Timestamptz>,
-        updated_at -> Nullable<Timestamptz>,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
     }
 }
 
@@ -339,7 +326,7 @@ diesel::table! {
         receiver_id -> Int4,
         rel -> Nullable<Text>,
         href -> Text,
-        created_at -> Nullable<Timestamptz>,
+        created_at -> Timestamptz,
     }
 }
 
@@ -348,7 +335,7 @@ diesel::table! {
         id -> Int4,
         receiver_id -> Int4,
         photo_url -> Text,
-        created_at -> Nullable<Timestamptz>,
+        created_at -> Timestamptz,
     }
 }
 
@@ -391,8 +378,8 @@ diesel::table! {
         he_elevation_ft -> Nullable<Int4>,
         he_heading_degt -> Nullable<Numeric>,
         he_displaced_threshold_ft -> Nullable<Int4>,
-        created_at -> Nullable<Timestamptz>,
-        updated_at -> Nullable<Timestamptz>,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
     }
 }
 
@@ -467,11 +454,11 @@ diesel::table! {
         #[max_length = 255]
         password_reset_token -> Nullable<Varchar>,
         password_reset_expires_at -> Nullable<Timestamptz>,
-        created_at -> Nullable<Timestamptz>,
-        updated_at -> Nullable<Timestamptz>,
         #[max_length = 255]
         email_verification_token -> Nullable<Varchar>,
         email_verification_expires_at -> Nullable<Timestamptz>,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
     }
 }
 
@@ -495,7 +482,6 @@ diesel::joinable!(receivers_photos -> receivers (receiver_id));
 diesel::joinable!(users -> clubs (club_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
-    _sqlx_migrations,
     aircraft_model,
     aircraft_other_names,
     aircraft_registrations,
