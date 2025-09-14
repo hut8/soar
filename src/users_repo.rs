@@ -17,7 +17,6 @@ type PgPool = Pool<ConnectionManager<PgConnection>>;
 #[derive(Queryable, Selectable, Debug, Clone)]
 #[diesel(table_name = users)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
-
 pub struct UserRecord {
     pub id: Uuid,
     pub first_name: String,
@@ -26,7 +25,7 @@ pub struct UserRecord {
     pub password_hash: String,
     pub is_admin: bool,
     pub club_id: Option<Uuid>,
-    pub email_verified: Option<bool>,
+    pub email_verified: bool,
     pub password_reset_token: Option<String>,
     pub password_reset_expires_at: Option<DateTime<Utc>>,
     pub email_verification_token: Option<String>,
@@ -38,7 +37,6 @@ pub struct UserRecord {
 #[derive(Insertable)]
 #[diesel(table_name = users)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
-
 pub struct NewUser {
     pub id: Uuid,
     pub first_name: String,
@@ -47,7 +45,6 @@ pub struct NewUser {
     pub password_hash: String,
     pub is_admin: bool,
     pub club_id: Option<Uuid>,
-    pub email_verified: Option<bool>,
 }
 
 impl From<UserRecord> for User {
@@ -60,7 +57,7 @@ impl From<UserRecord> for User {
             password_hash: record.password_hash,
             is_admin: record.is_admin,
             club_id: record.club_id,
-            email_verified: record.email_verified.unwrap_or(false),
+            email_verified: record.email_verified,
             password_reset_token: record.password_reset_token,
             password_reset_expires_at: record.password_reset_expires_at,
             email_verification_token: record.email_verification_token,
@@ -170,7 +167,6 @@ impl UsersRepository {
             password_hash,
             is_admin: false,
             club_id: request.club_id,
-            email_verified: Some(false),
         };
 
         tokio::task::spawn_blocking(move || -> Result<User> {
@@ -227,8 +223,8 @@ impl UsersRepository {
                         users::email.eq(request_clone.email.unwrap_or(current.email)),
                         users::is_admin.eq(request_clone.is_admin.unwrap_or(current.is_admin)),
                         users::club_id.eq(request_clone.club_id.or(current.club_id)),
-                        users::email_verified.eq(request_clone.email_verified.or(current.email_verified)),
-                        users::updated_at.eq(Some(now)),
+                        users::email_verified.eq(request_clone.email_verified.unwrap_or(current.email_verified)),
+                        users::updated_at.eq(now),
                     ))
                     .execute(&mut conn)?;
 
@@ -288,7 +284,7 @@ impl UsersRepository {
                     users::password_hash.eq(password_hash),
                     users::password_reset_token.eq(None::<String>),
                     users::password_reset_expires_at.eq(None::<DateTime<Utc>>),
-                    users::updated_at.eq(Some(now)),
+                    users::updated_at.eq(now),
                 ))
                 .execute(&mut conn)?;
             Ok(rows_affected > 0)
@@ -310,7 +306,7 @@ impl UsersRepository {
                 .set((
                     users::password_reset_token.eq(Some(token_clone.clone())),
                     users::password_reset_expires_at.eq(Some(expires_at)),
-                    users::updated_at.eq(Some(now)),
+                    users::updated_at.eq(now),
                 ))
                 .execute(&mut conn)?;
             Ok(token_clone)
@@ -329,7 +325,7 @@ impl UsersRepository {
                 .set((
                     users::password_reset_token.eq(None::<String>),
                     users::password_reset_expires_at.eq(None::<DateTime<Utc>>),
-                    users::updated_at.eq(Some(now)),
+                    users::updated_at.eq(now),
                 ))
                 .execute(&mut conn)?;
             Ok(rows_affected > 0)
@@ -346,8 +342,8 @@ impl UsersRepository {
             let mut conn = pool.get()?;
             let rows_affected = diesel::update(users::table.filter(users::id.eq(user_id)))
                 .set((
-                    users::email_verified.eq(Some(true)),
-                    users::updated_at.eq(Some(now)),
+                    users::email_verified.eq(true),
+                    users::updated_at.eq(now),
                 ))
                 .execute(&mut conn)?;
             Ok(rows_affected > 0)
@@ -402,7 +398,7 @@ impl UsersRepository {
                 .set((
                     users::email_verification_token.eq(Some(token_clone.clone())),
                     users::email_verification_expires_at.eq(Some(expires_at)),
-                    users::updated_at.eq(Some(now)),
+                    users::updated_at.eq(now),
                 ))
                 .execute(&mut conn)?;
             Ok(token_clone)
