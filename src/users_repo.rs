@@ -16,6 +16,8 @@ type PgPool = Pool<ConnectionManager<PgConnection>>;
 
 #[derive(Queryable, Selectable, Debug, Clone)]
 #[diesel(table_name = users)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+
 pub struct UserRecord {
     pub id: Uuid,
     pub first_name: String,
@@ -29,12 +31,14 @@ pub struct UserRecord {
     pub password_reset_expires_at: Option<DateTime<Utc>>,
     pub email_verification_token: Option<String>,
     pub email_verification_expires_at: Option<DateTime<Utc>>,
-    pub created_at: Option<DateTime<Utc>>,
-    pub updated_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 #[derive(Insertable)]
 #[diesel(table_name = users)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+
 pub struct NewUser {
     pub id: Uuid,
     pub first_name: String,
@@ -44,8 +48,6 @@ pub struct NewUser {
     pub is_admin: bool,
     pub club_id: Option<Uuid>,
     pub email_verified: Option<bool>,
-    pub created_at: Option<DateTime<Utc>>,
-    pub updated_at: Option<DateTime<Utc>>,
 }
 
 impl From<UserRecord> for User {
@@ -63,8 +65,8 @@ impl From<UserRecord> for User {
             password_reset_expires_at: record.password_reset_expires_at,
             email_verification_token: record.email_verification_token,
             email_verification_expires_at: record.email_verification_expires_at,
-            created_at: record.created_at.unwrap_or_else(Utc::now),
-            updated_at: record.updated_at.unwrap_or_else(Utc::now),
+            created_at: record.created_at,
+            updated_at: record.updated_at,
         }
     }
 }
@@ -166,11 +168,9 @@ impl UsersRepository {
             last_name: request.last_name.clone(),
             email: request.email.clone(),
             password_hash,
-            is_admin: request.is_admin,
+            is_admin: false,
             club_id: request.club_id,
             email_verified: Some(false),
-            created_at: Some(now),
-            updated_at: Some(now),
         };
 
         tokio::task::spawn_blocking(move || -> Result<User> {
@@ -435,10 +435,9 @@ impl UsersRepository {
             let mut conn = pool.get()?;
             let rows_affected = diesel::update(users::table.filter(users::id.eq(user_id)))
                 .set((
-                    users::email_verified.eq(Some(true)),
+                    users::email_verified.eq(true),
                     users::email_verification_token.eq(None::<String>),
                     users::email_verification_expires_at.eq(None::<DateTime<Utc>>),
-                    users::updated_at.eq(Some(now)),
                 ))
                 .execute(&mut conn)?;
             Ok(rows_affected > 0)

@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use postgis_diesel::sql_types::Geography;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use diesel::prelude::*;
@@ -37,8 +38,9 @@ impl Point {
 
 
 /// Diesel model for the locations table - used for database operations
-#[derive(Debug, Clone, Queryable, Selectable, Insertable, AsChangeset, Serialize, Deserialize)]
+#[derive(Debug, Clone, Queryable, Selectable, Serialize, Deserialize)]
 #[diesel(table_name = crate::schema::locations)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct LocationModel {
     pub id: Uuid,
     pub street1: Option<String>,
@@ -49,7 +51,7 @@ pub struct LocationModel {
     pub region_code: Option<String>,
     pub county_mail_code: Option<String>,
     pub country_mail_code: Option<String>,
-    pub geolocation: Option<String>, // PostGIS point as text representation
+    pub geolocation: Option<Geography>, // PostGIS point as text representation
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -57,6 +59,7 @@ pub struct LocationModel {
 /// Insert model for new locations
 #[derive(Debug, Clone, Insertable, Serialize, Deserialize)]
 #[diesel(table_name = crate::schema::locations)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct NewLocationModel {
     pub id: Uuid,
     pub street1: Option<String>,
@@ -67,7 +70,7 @@ pub struct NewLocationModel {
     pub region_code: Option<String>,
     pub county_mail_code: Option<String>,
     pub country_mail_code: Option<String>,
-    pub geolocation: Option<String>, // PostGIS point as text representation
+    pub geolocation: Option<Geography>,
 }
 
 /// Convert Point to PostGIS text representation
@@ -83,14 +86,14 @@ fn postgis_text_to_point(text: &str) -> Option<Point> {
         .strip_suffix(")")?
         .split_whitespace()
         .collect::<Vec<_>>();
-    
+
     if coords.len() != 2 {
         return None;
     }
-    
+
     let longitude: f64 = coords[0].parse().ok()?;
     let latitude: f64 = coords[1].parse().ok()?;
-    
+
     Some(Point::new(latitude, longitude))
 }
 
@@ -107,7 +110,7 @@ impl From<Location> for LocationModel {
             region_code: location.region_code,
             county_mail_code: location.county_mail_code,
             country_mail_code: location.country_mail_code,
-            geolocation: location.geolocation.map(|p| point_to_postgis_text(&p)),
+            geolocation: location.geolocation,
             created_at: location.created_at,
             updated_at: location.updated_at,
         }
@@ -127,7 +130,7 @@ impl From<Location> for NewLocationModel {
             region_code: location.region_code,
             county_mail_code: location.county_mail_code,
             country_mail_code: location.country_mail_code,
-            geolocation: location.geolocation.map(|p| point_to_postgis_text(&p)),
+            geolocation: location.geolocation,
         }
     }
 }
@@ -145,7 +148,7 @@ impl From<LocationModel> for Location {
             region_code: model.region_code,
             county_mail_code: model.county_mail_code,
             country_mail_code: model.country_mail_code,
-            geolocation: model.geolocation.and_then(|text| postgis_text_to_point(&text)),
+            geolocation: model.geolocation,
             created_at: model.created_at,
             updated_at: model.updated_at,
         }

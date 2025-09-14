@@ -102,6 +102,7 @@ pub struct ReceiverModel {
 /// Insert model for new receivers
 #[derive(Debug, Clone, Insertable, Serialize, Deserialize)]
 #[diesel(table_name = crate::schema::receivers)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct NewReceiverModel {
     pub callsign: String,
     pub description: Option<String>,
@@ -113,11 +114,12 @@ pub struct NewReceiverModel {
 /// Diesel model for the receivers_photos table
 #[derive(Debug, Clone, Queryable, Selectable, Insertable, AsChangeset, Serialize, Deserialize)]
 #[diesel(table_name = crate::schema::receivers_photos)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct ReceiverPhotoModel {
     pub id: i32,
     pub receiver_id: i32,
     pub photo_url: String,
-    pub created_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 /// Insert model for new receiver photos
@@ -142,6 +144,7 @@ pub struct ReceiverLinkModel {
 /// Insert model for new receiver links
 #[derive(Debug, Clone, Insertable, Serialize, Deserialize)]
 #[diesel(table_name = crate::schema::receivers_links)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct NewReceiverLinkModel {
     pub receiver_id: i32,
     pub rel: Option<String>,

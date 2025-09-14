@@ -92,14 +92,14 @@ impl AirportsRepository {
         I: IntoIterator<Item = Airport>,
     {
         use crate::schema::airports::dsl::*;
-        
+
         let airports_vec: Vec<Airport> = airports_list.into_iter().collect();
         let new_airports: Vec<NewAirportModel> = airports_vec.into_iter().map(|a| a.into()).collect();
-        
+
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            
+
             // Use Diesel's on_conflict for upserts
             let upserted_count = diesel::insert_into(airports)
                 .values(&new_airports)
@@ -107,7 +107,7 @@ impl AirportsRepository {
                 .do_update()
                 .set((
                     ident.eq(excluded(ident)),
-                    airport_type.eq(excluded(airport_type)),
+                    type_.eq(excluded(type_)),
                     name.eq(excluded(name)),
                     latitude_deg.eq(excluded(latitude_deg)),
                     longitude_deg.eq(excluded(longitude_deg)),
@@ -127,7 +127,7 @@ impl AirportsRepository {
                     updated_at.eq(diesel::dsl::now),
                 ))
                 .execute(&mut conn)?;
-                
+
             Ok::<usize, anyhow::Error>(upserted_count)
         }).await??;
 
@@ -138,7 +138,7 @@ impl AirportsRepository {
     /// Get the total count of airports in the database
     pub async fn get_airport_count(&self) -> Result<i64> {
         use crate::schema::airports::dsl::*;
-        
+
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
@@ -152,7 +152,7 @@ impl AirportsRepository {
     /// Get an airport by its ID
     pub async fn get_airport_by_id(&self, airport_id: i32) -> Result<Option<Airport>> {
         use crate::schema::airports::dsl::*;
-        
+
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
@@ -160,7 +160,7 @@ impl AirportsRepository {
                 .filter(id.eq(airport_id))
                 .first::<AirportModel>(&mut conn)
                 .optional()?;
-                
+
             Ok::<Option<AirportModel>, anyhow::Error>(airport_model)
         }).await??;
 
@@ -170,7 +170,7 @@ impl AirportsRepository {
     /// Get an airport by its identifier (ICAO or local code)
     pub async fn get_airport_by_ident(&self, airport_ident: &str) -> Result<Option<Airport>> {
         use crate::schema::airports::dsl::*;
-        
+
         let airport_ident = airport_ident.to_string();
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
@@ -179,7 +179,7 @@ impl AirportsRepository {
                 .filter(ident.eq(&airport_ident))
                 .first::<AirportModel>(&mut conn)
                 .optional()?;
-                
+
             Ok::<Option<AirportModel>, anyhow::Error>(airport_model)
         }).await??;
 
@@ -189,7 +189,7 @@ impl AirportsRepository {
     /// Search airports by name (case-insensitive partial match)
     pub async fn search_by_name(&self, search_name: &str) -> Result<Vec<Airport>> {
         use crate::schema::airports::dsl::*;
-        
+
         let search_pattern = format!("%{}%", search_name);
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
@@ -198,7 +198,7 @@ impl AirportsRepository {
                 .filter(name.ilike(&search_pattern))
                 .order((name, ident))
                 .load::<AirportModel>(&mut conn)?;
-                
+
             Ok::<Vec<AirportModel>, anyhow::Error>(airport_models)
         }).await??;
 
@@ -208,7 +208,7 @@ impl AirportsRepository {
     /// Search airports by country
     pub async fn search_by_country(&self, country_code: &str) -> Result<Vec<Airport>> {
         use crate::schema::airports::dsl::*;
-        
+
         let country_code = country_code.to_string();
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
@@ -217,7 +217,7 @@ impl AirportsRepository {
                 .filter(iso_country.eq(&country_code))
                 .order((name, ident))
                 .load::<AirportModel>(&mut conn)?;
-                
+
             Ok::<Vec<AirportModel>, anyhow::Error>(airport_models)
         }).await??;
 
@@ -227,16 +227,16 @@ impl AirportsRepository {
     /// Search airports by type
     pub async fn search_by_type(&self, type_filter: &str) -> Result<Vec<Airport>> {
         use crate::schema::airports::dsl::*;
-        
+
         let type_filter = type_filter.to_string();
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
             let airport_models: Vec<AirportModel> = airports
-                .filter(airport_type.eq(&type_filter))
+                .filter(type_.eq(&type_filter))
                 .order((name, ident))
                 .load::<AirportModel>(&mut conn)?;
-                
+
             Ok::<Vec<AirportModel>, anyhow::Error>(airport_models)
         }).await??;
 
@@ -255,7 +255,7 @@ impl AirportsRepository {
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            
+
             // Use raw SQL for PostGIS functions since Diesel doesn't have native support
             let sql = r#"
                 SELECT id, ident, type as airport_type, name, latitude_deg, longitude_deg, elevation_ft,
@@ -268,14 +268,14 @@ impl AirportsRepository {
                 ORDER BY location <-> ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography
                 LIMIT $4
             "#;
-            
+
             let results: Vec<AirportWithDistance> = diesel::sql_query(sql)
                 .bind::<diesel::sql_types::Double, _>(latitude)
                 .bind::<diesel::sql_types::Double, _>(longitude)
                 .bind::<diesel::sql_types::Double, _>(max_distance_meters)
                 .bind::<diesel::sql_types::BigInt, _>(limit)
                 .load::<AirportWithDistance>(&mut conn)?;
-                
+
             Ok::<Vec<AirportWithDistance>, anyhow::Error>(results)
         }).await??;
 
@@ -294,7 +294,7 @@ impl AirportsRepository {
     /// Get airports with scheduled service only
     pub async fn get_scheduled_service_airports(&self) -> Result<Vec<Airport>> {
         use crate::schema::airports::dsl::*;
-        
+
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
@@ -302,7 +302,7 @@ impl AirportsRepository {
                 .filter(scheduled_service.eq(true))
                 .order((name, ident))
                 .load::<AirportModel>(&mut conn)?;
-                
+
             Ok::<Vec<AirportModel>, anyhow::Error>(airport_models)
         }).await??;
 
@@ -314,11 +314,11 @@ impl AirportsRepository {
     pub async fn fuzzy_search(&self, query: &str, limit: Option<i64>) -> Result<Vec<Airport>> {
         let query_upper = query.to_uppercase();
         let search_limit = limit.unwrap_or(20);
-        
+
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            
+
             // Use raw SQL for trigram similarity functions
             let sql = r#"
                 SELECT id, ident, type as airport_type, name, latitude_deg, longitude_deg, elevation_ft,
@@ -333,14 +333,14 @@ impl AirportsRepository {
                 FROM airports
                 WHERE (
                     SIMILARITY(UPPER(name), $1) > 0.05 OR
-                    COALESCE(SIMILARITY(UPPER(icao_code), $1), 0) > 0.05 OR  
+                    COALESCE(SIMILARITY(UPPER(icao_code), $1), 0) > 0.05 OR
                     COALESCE(SIMILARITY(UPPER(iata_code), $1), 0) > 0.05 OR
                     SIMILARITY(UPPER(ident), $1) > 0.05
                 )
                 ORDER BY similarity_score DESC, name
                 LIMIT $2
             "#;
-            
+
             // Create a custom struct for this query result
             #[derive(QueryableByName, Debug)]
             struct AirportWithSimilarity {
@@ -385,12 +385,12 @@ impl AirportsRepository {
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float8>)]
                 similarity_score: Option<f64>,
             }
-            
+
             let results: Vec<AirportWithSimilarity> = diesel::sql_query(sql)
                 .bind::<diesel::sql_types::Varchar, _>(&query_upper)
                 .bind::<diesel::sql_types::BigInt, _>(search_limit)
                 .load::<AirportWithSimilarity>(&mut conn)?;
-                
+
             let airports: Vec<Airport> = results.into_iter().map(|aws| Airport {
                 id: aws.id,
                 ident: aws.ident,
@@ -412,7 +412,7 @@ impl AirportsRepository {
                 wikipedia_link: aws.wikipedia_link,
                 keywords: aws.keywords,
             }).collect();
-                
+
             Ok::<Vec<Airport>, anyhow::Error>(airports)
         }).await??;
 
@@ -430,11 +430,11 @@ impl AirportsRepository {
     ) -> Result<Vec<Airport>> {
         let search_limit = limit.unwrap_or(20);
         let radius_m = radius_km * 1000.0; // Convert km to meters for PostGIS
-        
+
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            
+
             // Use raw SQL for PostGIS functions
             let sql = r#"
                 SELECT id, ident, type as airport_type, name, latitude_deg, longitude_deg, elevation_ft,
@@ -447,16 +447,16 @@ impl AirportsRepository {
                 ORDER BY distance_meters
                 LIMIT $4
             "#;
-            
+
             let results: Vec<AirportWithDistance> = diesel::sql_query(sql)
                 .bind::<diesel::sql_types::Double, _>(latitude)
                 .bind::<diesel::sql_types::Double, _>(longitude)
                 .bind::<diesel::sql_types::Double, _>(radius_m)
                 .bind::<diesel::sql_types::BigInt, _>(search_limit)
                 .load::<AirportWithDistance>(&mut conn)?;
-                
+
             let airports: Vec<Airport> = results.into_iter().map(|awd| awd.into()).collect();
-                
+
             Ok::<Vec<Airport>, anyhow::Error>(airports)
         }).await??;
 

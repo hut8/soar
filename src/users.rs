@@ -1,5 +1,4 @@
 use chrono::{DateTime, Utc};
-use diesel_derive_enum::DbEnum;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 

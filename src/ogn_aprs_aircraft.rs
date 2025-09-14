@@ -1,3 +1,4 @@
+use diesel_derive_enum::DbEnum;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
@@ -65,7 +66,8 @@ impl From<u8> for AddressType {
 }
 
 /// ADS-B emitter category codes as per DO-260B specification
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum)]
+#[db_enum(existing_type_path = "crate::schema::sql_types::AdsbEmitterCategory")]
 pub enum AdsbEmitterCategory {
     // Category A: Aircraft types
     A0, // No ADS-B emitter category information

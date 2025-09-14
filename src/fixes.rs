@@ -53,10 +53,6 @@ pub struct Fix {
 
     /// Club association
     pub club_id: Option<Uuid>,
-
-    /// Database timestamps
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
 }
 
 impl Fix {
@@ -89,8 +85,6 @@ impl Fix {
             bit_errors_corrected: position_fix.bit_errors_corrected,
             freq_offset_khz: position_fix.freq_offset_khz,
             club_id: None, // Will be set by repository based on aircraft registration
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
         }
     }
 

@@ -2,10 +2,6 @@
 
 pub mod sql_types {
     #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
-    #[diesel(postgres_type(name = "access_level"))]
-    pub struct AccessLevel;
-
-    #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "address_type"))]
     pub struct AddressType;
 
@@ -435,9 +431,6 @@ diesel::table! {
 }
 
 diesel::table! {
-    use diesel::sql_types::*;
-    use super::sql_types::AccessLevel;
-
     users (id) {
         id -> Uuid,
         #[max_length = 255]
@@ -448,9 +441,9 @@ diesel::table! {
         email -> Varchar,
         #[max_length = 255]
         password_hash -> Varchar,
-        access_level -> AccessLevel,
+        is_admin -> Bool,
         club_id -> Nullable<Uuid>,
-        email_verified -> Nullable<Bool>,
+        email_verified -> Bool,
         #[max_length = 255]
         password_reset_token -> Nullable<Varchar>,
         password_reset_expires_at -> Nullable<Timestamptz>,

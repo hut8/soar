@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    users::{AccessLevel, User},
+    users::User,
     users_repo::UsersRepository,
     web::AppState,
 };
@@ -24,7 +24,7 @@ use crate::{
 pub struct Claims {
     pub sub: String, // user ID
     pub email: String,
-    pub access_level: AccessLevel,
+    pub is_admin: bool,
     pub club_id: Option<Uuid>,
     pub exp: i64, // expiration timestamp
     pub iat: i64, // issued at timestamp
@@ -38,7 +38,7 @@ impl Claims {
         Self {
             sub: user.id.to_string(),
             email: user.email.clone(),
-            access_level: user.access_level,
+            is_admin: user.is_admin,
             club_id: user.club_id,
             exp: exp.timestamp(),
             iat: now.timestamp(),
@@ -131,7 +131,7 @@ impl FromRequestParts<AppState> for AdminUser {
     ) -> Result<Self, Self::Rejection> {
         let AuthUser(user) = AuthUser::from_request_parts(parts, state).await?;
 
-        if !user.is_admin() {
+        if !user.is_admin {
             return Err(AuthError::InsufficientPermissions);
         }
 

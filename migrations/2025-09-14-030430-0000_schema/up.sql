@@ -408,7 +408,7 @@ CREATE TABLE public.users (
     password_hash character varying(255) NOT NULL,
     is_admin boolean DEFAULT false NOT NULL,
     club_id uuid,
-    email_verified boolean DEFAULT false,
+    email_verified boolean DEFAULT false NOT NULL,
     password_reset_token character varying(255),
     password_reset_expires_at timestamp with time zone,
     email_verification_token character varying(255),

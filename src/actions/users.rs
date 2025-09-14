@@ -51,7 +51,7 @@ pub async fn get_user_by_id(
     let users_repo = UsersRepository::new(state.pool);
 
     // Check if user is admin or requesting their own info
-    if !auth_user.0.is_admin() && auth_user.0.id != user_id {
+    if !auth_user.0.is_admin && auth_user.0.id != user_id {
         return (StatusCode::FORBIDDEN, "Insufficient permissions").into_response();
     }
 
@@ -108,7 +108,7 @@ pub async fn get_users_by_club(
     let users_repo = UsersRepository::new(state.pool);
 
     // Check if user is admin or belongs to the same club
-    if !auth_user.0.is_admin() && auth_user.0.club_id != Some(club_id) {
+    if !auth_user.0.is_admin && auth_user.0.club_id != Some(club_id) {
         return (StatusCode::FORBIDDEN, "Insufficient permissions").into_response();
     }
 
@@ -143,7 +143,7 @@ pub async fn set_user_club(
         first_name: None,
         last_name: None,
         email: None,
-        access_level: None,
+        is_admin: None,
         club_id: Some(payload.club_id),
         email_verified: None,
     };

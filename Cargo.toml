@@ -14,11 +14,19 @@ axum-extra = { version = "0.9", features = ["typed-header"] }
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.5", features = ["derive"] }
 dotenvy = { version = "0.15" }
-google_maps = { version="3.8.3", features=["geocoding", "elevation", "reqwest-rustls-tls"], default-features=false }
+google_maps = { version = "3.8.3", features = [
+    "geocoding",
+    "elevation",
+    "reqwest-rustls-tls",
+], default-features = false }
 hex = { version = "0.4", features = ["serde"] }
 include_dir = "0.7"
 jsonwebtoken = "9.0"
-lettre = { version = "0.11", features = ["tokio1-rustls-tls", "smtp-transport", "builder"], default-features = false }
+lettre = { version = "0.11", features = [
+    "tokio1-rustls-tls",
+    "smtp-transport",
+    "builder",
+], default-features = false }
 mime_guess = "2.0"
 rand = "0.8"
 num-traits = "0.2"
@@ -28,9 +36,17 @@ reqwest = { version = "0.12", features = ["json"] }
 serde = { version = "1.0" }
 serde_derive = { version = "1.0" }
 serde_json = { version = "1.0" }
-diesel = { version = "2.2", features = ["postgres", "chrono", "uuid", "serde_json", "r2d2", "64-column-tables", "numeric"] }
+diesel = { version = "2.2", features = [
+    "postgres",
+    "chrono",
+    "uuid",
+    "serde_json",
+    "r2d2",
+    "64-column-tables",
+    "numeric",
+] }
 diesel_migrations = "2.2"
-diesel-derive-enum = { version = "2.1.0", features = ["postgres"] }
+diesel-derive-enum = { version = "3.0.0-beta.1", features = ["postgres"] }
 r2d2 = "0.8"
 tokio = { version = "1.0", features = ["full"] }
 tower = "0.5"
@@ -42,6 +58,7 @@ zstd = "0.13"
 axum-tungstenite = "0.3.0"
 futures-util = "0.3.31"
 sentry = "0.42.0"
+postgis_diesel = { version = "3.0.1", features = ["serde", "serde_geojson"] }
 
 [profile.release]
 debug = true

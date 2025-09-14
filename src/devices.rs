@@ -3,22 +3,21 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::str::FromStr;
 
 // Diesel imports
-use diesel::prelude::*;
 use chrono::{DateTime, Utc};
+use diesel::prelude::*;
 use diesel_derive_enum::DbEnum;
 
 const DDB_URL: &str = "http://ddb.glidernet.org/download/?j=1";
 
-#[derive(Debug, PartialEq, Eq, Default, DbEnum, Serialize, Deserialize)]
-#[ExistingTypePath = "crate::schema::sql_types::DeviceTypeEnum"]
+#[derive(Debug, Clone, PartialEq, Eq, Default, DbEnum, Serialize, Deserialize)]
+#[db_enum(
+    existing_type_path = "crate::schema::sql_types::DeviceTypeEnum",
+    value_style = "snake_case"
+)]
 pub enum DeviceType {
-    #[db_rename = "flarm"]
     Flarm,
-    #[db_rename = "ogn"]
     Ogn,
-    #[db_rename = "icao"]
     Icao,
-    #[db_rename = "unknown"]
     #[default]
     Unknown,
 }
@@ -48,8 +47,6 @@ impl std::fmt::Display for DeviceType {
         write!(f, "{}", s)
     }
 }
-
-
 
 // Custom deserializer for string to boolean conversion
 fn string_to_bool<'de, D>(deserializer: D) -> Result<bool, D::Error>
@@ -105,7 +102,17 @@ pub struct Device {
 }
 
 // Diesel database model for devices table
-#[derive(Debug, Clone, Queryable, Selectable, Insertable, AsChangeset, QueryableByName, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Queryable,
+    Selectable,
+    Insertable,
+    AsChangeset,
+    QueryableByName,
+    Serialize,
+    Deserialize,
+)]
 #[diesel(table_name = crate::schema::devices)]
 pub struct DeviceModel {
     pub device_id: i32,
@@ -115,8 +122,8 @@ pub struct DeviceModel {
     pub competition_number: String,
     pub tracked: bool,
     pub identified: bool,
-    pub created_at: Option<DateTime<Utc>>,
-    pub updated_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 // For inserting new devices (without timestamps which are set by DB)

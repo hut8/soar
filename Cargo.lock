@@ -932,9 +932,9 @@ dependencies = [
 
 [[package]]
 name = "diesel-derive-enum"
-version = "2.1.0"
+version = "3.0.0-beta.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "81c5131a2895ef64741dad1d483f358c2a229a3a2d1b256778cdc5e146db64d4"
+checksum = "50a8c082045d01debc8589f8a0db9f2855a37c99c9b031325c856b5b98e1625f"
 dependencies = [
  "heck 0.4.1",
  "proc-macro2",
@@ -2423,6 +2423,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f84267b20a16ea918e43c6a88433c2d54fa145c92a811b5b047ccbe153674483"
 
 [[package]]
+name = "postgis_diesel"
+version = "3.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3e4170476ddcb0a1e66759055f6da11809286b50580e49b2254c7c452366fcde"
+dependencies = [
+ "byteorder",
+ "diesel",
+ "serde",
+]
+
+[[package]]
 name = "potential_utf"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3351,6 +3362,7 @@ dependencies = [
  "mime_guess",
  "num-traits",
  "ogn-parser",
+ "postgis_diesel",
  "r2d2",
  "rand 0.8.5",
  "regex",

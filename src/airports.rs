@@ -1,10 +1,13 @@
 use anyhow::{Context, Result, anyhow};
+use bigdecimal::BigDecimal;
 use serde::{Serialize, Deserialize};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 use diesel::prelude::*;
 use chrono::{DateTime, Utc};
+
+use crate::schema::sql_types::Geography;
 
 fn to_opt_string(s: &str) -> Option<String> {
     let t = s.trim();
@@ -67,13 +70,12 @@ pub struct Airport {
 }
 
 /// Diesel model for the airports table - used for database operations
-#[derive(Debug, Clone, Queryable, Selectable, Insertable, AsChangeset, QueryableByName, Serialize, Deserialize)]
+#[derive(Debug, Clone, Queryable, Selectable, QueryableByName, Serialize, Deserialize)]
 #[diesel(table_name = crate::schema::airports)]
 pub struct AirportModel {
     pub id: i32,
     pub ident: String,
-    #[diesel(column_name = airport_type)]
-    pub airport_type: String,
+    pub type_: String,
     pub name: String,
     pub latitude_deg: Option<f64>,
     pub longitude_deg: Option<f64>,
@@ -90,9 +92,9 @@ pub struct AirportModel {
     pub home_link: Option<String>,
     pub wikipedia_link: Option<String>,
     pub keywords: Option<String>,
-    pub created_at: Option<DateTime<Utc>>,
-    pub updated_at: Option<DateTime<Utc>>,
-    pub location: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub location: Option<Geography>,
 }
 
 /// Insert model for new airports (without created_at, updated_at, location)
@@ -101,11 +103,10 @@ pub struct AirportModel {
 pub struct NewAirportModel {
     pub id: i32,
     pub ident: String,
-    #[diesel(column_name = airport_type)]
-    pub airport_type: String,
+    pub type_: String,
     pub name: String,
-    pub latitude_deg: Option<f64>,
-    pub longitude_deg: Option<f64>,
+    pub latitude_deg: Option<BigDecimal>,
+    pub longitude_deg: Option<BigDecimal>,
     pub elevation_ft: Option<i32>,
     pub continent: Option<String>,
     pub iso_country: Option<String>,
@@ -128,7 +129,7 @@ impl From<Airport> for AirportModel {
         Self {
             id: airport.id,
             ident: airport.ident,
-            airport_type: airport.airport_type,
+            type_: airport.airport_type,
             name: airport.name,
             latitude_deg: airport.latitude_deg,
             longitude_deg: airport.longitude_deg,

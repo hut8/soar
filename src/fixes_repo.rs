@@ -12,6 +12,7 @@ use crate::web::PgPool;
 // Diesel model for inserting new fixes
 #[derive(Insertable)]
 #[diesel(table_name = crate::schema::fixes)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
 struct NewFix {
     id: Uuid,
     source: String,
@@ -24,10 +25,10 @@ struct NewFix {
     altitude_feet: Option<i32>,
     aircraft_id: Option<String>,
     device_id: Option<i32>,
-    device_type: Option<String>, // Convert from enum to string
-    aircraft_type: Option<String>, // Convert from enum to string
+    device_type: Option<AddressType>,
+    aircraft_type: Option<AircraftType>,
     flight_number: Option<String>,
-    emitter_category: Option<String>, // Convert from enum to string
+    emitter_category: Option<AdsbEmitterCategory>,
     registration: Option<String>,
     model: Option<String>,
     squawk: Option<String>,
@@ -39,8 +40,6 @@ struct NewFix {
     bit_errors_corrected: Option<i32>,
     freq_offset_khz: Option<f32>,
     club_id: Option<Uuid>,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
 }
 
 impl From<&Fix> for NewFix {
@@ -57,10 +56,10 @@ impl From<&Fix> for NewFix {
             altitude_feet: fix.altitude_feet,
             aircraft_id: fix.aircraft_id.clone(),
             device_id: fix.device_id.map(|d| d as i32),
-            device_type: fix.device_type.map(|dt| format!("{:?}", dt)),
-            aircraft_type: fix.aircraft_type.map(|at| format!("{:?}", at)),
+            device_type: fix.device_type,
+            aircraft_type: fix.aircraft_type,
             flight_number: fix.flight_number.clone(),
-            emitter_category: fix.emitter_category.map(|ec| format!("{}", ec)),
+            emitter_category: fix.emitter_category,
             registration: fix.registration.clone(),
             model: fix.model.clone(),
             squawk: fix.squawk.clone(),
@@ -72,8 +71,6 @@ impl From<&Fix> for NewFix {
             bit_errors_corrected: fix.bit_errors_corrected.map(|b| b as i32),
             freq_offset_khz: fix.freq_offset_khz,
             club_id: fix.club_id,
-            created_at: fix.created_at,
-            updated_at: fix.updated_at,
         }
     }
 }
@@ -133,10 +130,6 @@ struct FixRow {
     freq_offset_khz: Option<f32>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
     club_id: Option<Uuid>,
-    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Timestamptz>)]
-    created_at: Option<DateTime<Utc>>,
-    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Timestamptz>)]
-    updated_at: Option<DateTime<Utc>>,
 }
 
 impl From<FixRow> for Fix {
@@ -205,8 +198,6 @@ impl From<FixRow> for Fix {
             bit_errors_corrected: row.bit_errors_corrected.map(|b| b as u32),
             freq_offset_khz: row.freq_offset_khz,
             club_id: row.club_id,
-            created_at: row.created_at.unwrap_or_else(Utc::now),
-            updated_at: row.updated_at.unwrap_or_else(Utc::now),
         }
     }
 }
@@ -224,18 +215,18 @@ impl FixesRepository {
     /// Insert a new fix into the database
     pub async fn insert(&self, fix: &Fix) -> Result<()> {
         use crate::schema::fixes::dsl::*;
-        
+
         let pool = self.pool.clone();
         let new_fix = NewFix::from(fix);
         let aircraft_identifier = fix.get_aircraft_identifier();
-        
+
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            
+
             diesel::insert_into(fixes)
                 .values(&new_fix)
                 .execute(&mut conn)?;
-                
+
             Ok::<(), anyhow::Error>(())
         }).await??;
 
@@ -251,17 +242,17 @@ impl FixesRepository {
         if fix_list.is_empty() {
             return Ok(0);
         }
-        
+
         use crate::schema::fixes::dsl::*;
-        
+
         let pool = self.pool.clone();
         let fixes_data: Vec<NewFix> = fix_list.iter().map(NewFix::from).collect();
         let fixes_count = fixes_data.len();
-        
+
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
             let mut inserted_count = 0;
-            
+
             // Use a transaction for batch processing
             conn.transaction(|conn| {
                 for fix_data in fixes_data {
@@ -280,10 +271,10 @@ impl FixesRepository {
                         }
                     }
                 }
-                
+
                 Ok::<(), diesel::result::Error>(())
             })?;
-            
+
             Ok::<usize, anyhow::Error>(inserted_count)
         }).await??;
 
@@ -301,11 +292,11 @@ impl FixesRepository {
     ) -> Result<Vec<Fix>> {
         let limit = limit.unwrap_or(1000);
         let aircraft_id = aircraft_id.to_string();
-        
+
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            
+
             let sql = r#"
                 SELECT
                     id, source, destination, via, raw_packet, timestamp,
@@ -314,21 +305,21 @@ impl FixesRepository {
                     flight_number, emitter_category, registration, model, squawk,
                     ground_speed_knots, track_degrees, climb_fpm, turn_rate_rot,
                     snr_db, bit_errors_corrected, freq_offset_khz,
-                    club_id, created_at, updated_at
+                    club_id
                 FROM fixes
                 WHERE aircraft_id = $1
                 AND timestamp BETWEEN $2 AND $3
                 ORDER BY timestamp DESC
                 LIMIT $4
             "#;
-            
+
             let results: Vec<FixRow> = sql_query(sql)
                 .bind::<diesel::sql_types::Varchar, _>(&aircraft_id)
                 .bind::<diesel::sql_types::Timestamptz, _>(start_time)
                 .bind::<diesel::sql_types::Timestamptz, _>(end_time)
                 .bind::<diesel::sql_types::BigInt, _>(limit)
                 .load::<FixRow>(&mut conn)?;
-                
+
             Ok::<Vec<FixRow>, anyhow::Error>(results)
         }).await??;
 
@@ -347,11 +338,11 @@ impl FixesRepository {
         let limit = limit.unwrap_or(100);
         let radius_m = radius_km * 1000.0;
         let cutoff_time = Utc::now() - chrono::Duration::minutes(max_age_minutes as i64);
-        
+
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            
+
             // Note: The spatial query uses a virtual 'location' column created from lat/lon
             // We need to construct the point from latitude and longitude in the query
             let sql = r#"
@@ -362,18 +353,18 @@ impl FixesRepository {
                     flight_number, emitter_category, registration, model, squawk,
                     ground_speed_knots, track_degrees, climb_fpm, turn_rate_rot,
                     snr_db, bit_errors_corrected, freq_offset_khz,
-                    club_id, created_at, updated_at
+                    club_id
                 FROM fixes
                 WHERE timestamp > $3
                 AND ST_DWithin(
-                    ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)::geography, 
-                    ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography, 
+                    ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)::geography,
+                    ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography,
                     $4
                 )
                 ORDER BY timestamp DESC
                 LIMIT $5
             "#;
-            
+
             let results: Vec<FixRow> = sql_query(sql)
                 .bind::<diesel::sql_types::Float8, _>(center_lat)
                 .bind::<diesel::sql_types::Float8, _>(center_lon)
@@ -381,7 +372,7 @@ impl FixesRepository {
                 .bind::<diesel::sql_types::Float8, _>(radius_m)
                 .bind::<diesel::sql_types::BigInt, _>(limit)
                 .load::<FixRow>(&mut conn)?;
-                
+
             Ok::<Vec<FixRow>, anyhow::Error>(results)
         }).await??;
 
@@ -396,11 +387,11 @@ impl FixesRepository {
     ) -> Result<Vec<Fix>> {
         let limit = limit.unwrap_or(100);
         let aircraft_id = aircraft_id.to_string();
-        
+
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            
+
             let sql = r#"
                 SELECT
                     id, source, destination, via, raw_packet, timestamp,
@@ -409,18 +400,18 @@ impl FixesRepository {
                     flight_number, emitter_category, registration, model, squawk,
                     ground_speed_knots, track_degrees, climb_fpm, turn_rate_rot,
                     snr_db, bit_errors_corrected, freq_offset_khz,
-                    club_id, created_at, updated_at
+                    club_id
                 FROM fixes
                 WHERE aircraft_id = $1
                 ORDER BY timestamp DESC
                 LIMIT $2
             "#;
-            
+
             let results: Vec<FixRow> = sql_query(sql)
                 .bind::<diesel::sql_types::Varchar, _>(&aircraft_id)
                 .bind::<diesel::sql_types::BigInt, _>(limit)
                 .load::<FixRow>(&mut conn)?;
-                
+
             Ok::<Vec<FixRow>, anyhow::Error>(results)
         }).await??;
 
@@ -435,11 +426,11 @@ impl FixesRepository {
         limit: Option<i64>,
     ) -> Result<Vec<Fix>> {
         let limit = limit.unwrap_or(1000);
-        
+
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            
+
             let sql = r#"
                 SELECT
                     id, source, destination, via, raw_packet, timestamp,
@@ -448,19 +439,19 @@ impl FixesRepository {
                     flight_number, emitter_category, registration, model, squawk,
                     ground_speed_knots, track_degrees, climb_fpm, turn_rate_rot,
                     snr_db, bit_errors_corrected, freq_offset_khz,
-                    club_id, created_at, updated_at
+                    club_id
                 FROM fixes
                 WHERE timestamp BETWEEN $1 AND $2
                 ORDER BY timestamp DESC
                 LIMIT $3
             "#;
-            
+
             let results: Vec<FixRow> = sql_query(sql)
                 .bind::<diesel::sql_types::Timestamptz, _>(start_time)
                 .bind::<diesel::sql_types::Timestamptz, _>(end_time)
                 .bind::<diesel::sql_types::BigInt, _>(limit)
                 .load::<FixRow>(&mut conn)?;
-                
+
             Ok::<Vec<FixRow>, anyhow::Error>(results)
         }).await??;
 
@@ -472,7 +463,7 @@ impl FixesRepository {
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            
+
             let sql = r#"
                 SELECT
                     id, source, destination, via, raw_packet, timestamp,
@@ -481,16 +472,16 @@ impl FixesRepository {
                     flight_number, emitter_category, registration, model, squawk,
                     ground_speed_knots, track_degrees, climb_fpm, turn_rate_rot,
                     snr_db, bit_errors_corrected, freq_offset_khz,
-                    club_id, created_at, updated_at
+                    club_id
                 FROM fixes
                 ORDER BY timestamp DESC
                 LIMIT $1
             "#;
-            
+
             let results: Vec<FixRow> = sql_query(sql)
                 .bind::<diesel::sql_types::BigInt, _>(limit)
                 .load::<FixRow>(&mut conn)?;
-                
+
             Ok::<Vec<FixRow>, anyhow::Error>(results)
         }).await??;
 
@@ -526,16 +517,16 @@ impl FixesRepository {
     /// Delete old fixes beyond a retention period
     pub async fn delete_old_fixes(&self, retention_days: i32) -> Result<u64> {
         use crate::schema::fixes::dsl::*;
-        
+
         let cutoff_time = Utc::now() - chrono::Duration::days(retention_days as i64);
         let pool = self.pool.clone();
-        
+
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            
+
             let deleted_count = diesel::delete(fixes.filter(timestamp.lt(cutoff_time)))
                 .execute(&mut conn)?;
-                
+
             Ok::<usize, anyhow::Error>(deleted_count)
         }).await??;
 
