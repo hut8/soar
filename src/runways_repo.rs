@@ -44,6 +44,7 @@ fn haversine_distance(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
 /// Diesel model for the runways table - used for database operations
 #[derive(Debug, Clone, Queryable, Selectable, Insertable, AsChangeset)]
 #[diesel(table_name = runways)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct RunwayModel {
     pub id: i32,
     pub airport_ref: i32,
@@ -65,13 +66,14 @@ pub struct RunwayModel {
     pub he_elevation_ft: Option<i32>,
     pub he_heading_degt: Option<BigDecimal>,
     pub he_displaced_threshold_ft: Option<i32>,
-    pub created_at: Option<DateTime<Utc>>,
-    pub updated_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 /// Insert model for new runways
 #[derive(Debug, Clone, Insertable)]
 #[diesel(table_name = runways)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct NewRunwayModel {
     pub id: i32,
     pub airport_ref: i32,
@@ -119,8 +121,8 @@ impl From<Runway> for RunwayModel {
             he_elevation_ft: runway.he_elevation_ft,
             he_heading_degt: f64_to_bigdecimal(runway.he_heading_degt),
             he_displaced_threshold_ft: runway.he_displaced_threshold_ft,
-            created_at: None, // Will be set by database
-            updated_at: None, // Will be set by database
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
         }
     }
 }
@@ -266,7 +268,7 @@ impl RunwaysRepository {
     /// Get the total count of runways in the database
     pub async fn get_runway_count(&self) -> Result<i64> {
         use crate::schema::runways::dsl::*;
-        
+
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
@@ -280,17 +282,17 @@ impl RunwaysRepository {
     /// Get a runway by its ID
     pub async fn get_runway_by_id(&self, runway_id: i32) -> Result<Option<Runway>> {
         use crate::schema::runways::dsl::*;
-        
+
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            
+
             let runway_model: Option<RunwayModel> = runways
                 .filter(id.eq(runway_id))
                 .select(RunwayModel::as_select())
                 .first::<RunwayModel>(&mut conn)
                 .optional()?;
-                
+
             Ok::<Option<RunwayModel>, anyhow::Error>(runway_model)
         }).await??;
 
@@ -300,17 +302,17 @@ impl RunwaysRepository {
     /// Get all runways for a specific airport by airport ID
     pub async fn get_runways_by_airport_id(&self, airport_id: i32) -> Result<Vec<Runway>> {
         use crate::schema::runways::dsl::*;
-        
+
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            
+
             let runway_models: Vec<RunwayModel> = runways
                 .filter(airport_ref.eq(airport_id))
                 .order(id.asc())
                 .select(RunwayModel::as_select())
                 .load::<RunwayModel>(&mut conn)?;
-                
+
             Ok::<Vec<RunwayModel>, anyhow::Error>(runway_models)
         }).await??;
 
@@ -320,18 +322,18 @@ impl RunwaysRepository {
     /// Get all runways for a specific airport by airport identifier
     pub async fn get_runways_by_airport_ident(&self, airport_ident_param: &str) -> Result<Vec<Runway>> {
         use crate::schema::runways::dsl::*;
-        
+
         let pool = self.pool.clone();
         let airport_ident_param = airport_ident_param.to_string();
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            
+
             let runway_models: Vec<RunwayModel> = runways
                 .filter(airport_ident.eq(airport_ident_param))
                 .order(id.asc())
                 .select(RunwayModel::as_select())
                 .load::<RunwayModel>(&mut conn)?;
-                
+
             Ok::<Vec<RunwayModel>, anyhow::Error>(runway_models)
         }).await??;
 
@@ -341,18 +343,18 @@ impl RunwaysRepository {
     /// Search runways by surface type
     pub async fn search_by_surface(&self, surface_param: &str) -> Result<Vec<Runway>> {
         use crate::schema::runways::dsl::*;
-        
+
         let pool = self.pool.clone();
         let surface_param = surface_param.to_string();
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            
+
             let runway_models: Vec<RunwayModel> = runways
                 .filter(surface.eq(surface_param))
                 .order((airport_ident.asc(), id.asc()))
                 .select(RunwayModel::as_select())
                 .load::<RunwayModel>(&mut conn)?;
-                
+
             Ok::<Vec<RunwayModel>, anyhow::Error>(runway_models)
         }).await??;
 
@@ -362,17 +364,17 @@ impl RunwaysRepository {
     /// Search runways by minimum length
     pub async fn search_by_min_length(&self, min_length_ft_param: i32) -> Result<Vec<Runway>> {
         use crate::schema::runways::dsl::*;
-        
+
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            
+
             let runway_models: Vec<RunwayModel> = runways
                 .filter(length_ft.ge(min_length_ft_param))
                 .order((length_ft.desc(), airport_ident.asc(), id.asc()))
                 .select(RunwayModel::as_select())
                 .load::<RunwayModel>(&mut conn)?;
-                
+
             Ok::<Vec<RunwayModel>, anyhow::Error>(runway_models)
         }).await??;
 
@@ -382,17 +384,17 @@ impl RunwaysRepository {
     /// Get lighted runways only
     pub async fn get_lighted_runways(&self) -> Result<Vec<Runway>> {
         use crate::schema::runways::dsl::*;
-        
+
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            
+
             let runway_models: Vec<RunwayModel> = runways
                 .filter(lighted.eq(true))
                 .order((airport_ident.asc(), id.asc()))
                 .select(RunwayModel::as_select())
                 .load::<RunwayModel>(&mut conn)?;
-                
+
             Ok::<Vec<RunwayModel>, anyhow::Error>(runway_models)
         }).await??;
 
@@ -402,17 +404,17 @@ impl RunwaysRepository {
     /// Get open (not closed) runways only
     pub async fn get_open_runways(&self) -> Result<Vec<Runway>> {
         use crate::schema::runways::dsl::*;
-        
+
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            
+
             let runway_models: Vec<RunwayModel> = runways
                 .filter(closed.eq(false))
                 .order((airport_ident.asc(), id.asc()))
                 .select(RunwayModel::as_select())
                 .load::<RunwayModel>(&mut conn)?;
-                
+
             Ok::<Vec<RunwayModel>, anyhow::Error>(runway_models)
         }).await??;
 
@@ -430,11 +432,11 @@ impl RunwaysRepository {
         limit: i64,
     ) -> Result<Vec<(Runway, f64, String)>> {
         use crate::schema::runways::dsl::*;
-        
+
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            
+
             // Get runways that have coordinates for either endpoint
             let runway_models: Vec<RunwayModel> = runways
                 .filter(
@@ -445,7 +447,7 @@ impl RunwaysRepository {
                 .limit(limit)
                 .select(RunwayModel::as_select())
                 .load::<RunwayModel>(&mut conn)?;
-                
+
             Ok::<Vec<RunwayModel>, anyhow::Error>(runway_models)
         }).await??;
 
