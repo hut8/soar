@@ -602,19 +602,6 @@ impl FixesRepository {
             .await
     }
 
-    /// Private implementation for the original aircraft + time range method
-    async fn get_fixes_for_aircraft_in_time_range_impl(
-        &self,
-        aircraft_id: &str,
-        start_time: DateTime<Utc>,
-        end_time: DateTime<Utc>,
-        limit: Option<i64>,
-    ) -> Result<Vec<Fix>> {
-        // This is now the same as get_fixes_for_aircraft_with_time_range
-        self.get_fixes_for_aircraft_with_time_range(aircraft_id, start_time, end_time, limit)
-            .await
-    }
-
     /// Delete old fixes beyond a retention period
     pub async fn delete_old_fixes(&self, retention_days: i32) -> Result<u64> {
         use crate::schema::fixes::dsl::*;

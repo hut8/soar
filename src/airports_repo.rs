@@ -1,4 +1,5 @@
 use anyhow::Result;
+use bigdecimal::BigDecimal;
 use diesel::prelude::*;
 use diesel::upsert::excluded;
 use tracing::info;
@@ -7,6 +8,7 @@ use crate::airports::{Airport, AirportModel, NewAirportModel};
 use crate::web::PgPool;
 
 #[derive(QueryableByName, Debug)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
 struct AirportWithDistance {
     #[diesel(sql_type = diesel::sql_types::Integer)]
     id: i32,
@@ -16,10 +18,10 @@ struct AirportWithDistance {
     airport_type: String,
     #[diesel(sql_type = diesel::sql_types::Varchar)]
     name: String,
-    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float8>)]
-    latitude_deg: Option<f64>,
-    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float8>)]
-    longitude_deg: Option<f64>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Numeric>)]
+    latitude_deg: Option<BigDecimal>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Numeric>)]
+    longitude_deg: Option<BigDecimal>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Integer>)]
     elevation_ft: Option<i32>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
@@ -158,7 +160,13 @@ impl AirportsRepository {
             let mut conn = pool.get()?;
             let airport_model: Option<AirportModel> = airports
                 .filter(id.eq(airport_id))
-                .first::<AirportModel>(&mut conn)
+                .select((
+                    id, ident, type_, name, latitude_deg, longitude_deg,
+                    elevation_ft, continent, iso_country, iso_region, municipality,
+                    scheduled_service, gps_code, icao_code, iata_code, local_code,
+                    home_link, wikipedia_link, keywords, created_at, updated_at
+                ))
+                .first(&mut conn)
                 .optional()?;
 
             Ok::<Option<AirportModel>, anyhow::Error>(airport_model)
@@ -177,7 +185,13 @@ impl AirportsRepository {
             let mut conn = pool.get()?;
             let airport_model: Option<AirportModel> = airports
                 .filter(ident.eq(&airport_ident))
-                .first::<AirportModel>(&mut conn)
+                .select((
+                    id, ident, type_, name, latitude_deg, longitude_deg,
+                    elevation_ft, continent, iso_country, iso_region, municipality,
+                    scheduled_service, gps_code, icao_code, iata_code, local_code,
+                    home_link, wikipedia_link, keywords, created_at, updated_at
+                ))
+                .first(&mut conn)
                 .optional()?;
 
             Ok::<Option<AirportModel>, anyhow::Error>(airport_model)
@@ -197,7 +211,13 @@ impl AirportsRepository {
             let airport_models: Vec<AirportModel> = airports
                 .filter(name.ilike(&search_pattern))
                 .order((name, ident))
-                .load::<AirportModel>(&mut conn)?;
+                .select((
+                    id, ident, type_, name, latitude_deg, longitude_deg,
+                    elevation_ft, continent, iso_country, iso_region, municipality,
+                    scheduled_service, gps_code, icao_code, iata_code, local_code,
+                    home_link, wikipedia_link, keywords, created_at, updated_at
+                ))
+                .load(&mut conn)?;
 
             Ok::<Vec<AirportModel>, anyhow::Error>(airport_models)
         }).await??;
@@ -216,7 +236,13 @@ impl AirportsRepository {
             let airport_models: Vec<AirportModel> = airports
                 .filter(iso_country.eq(&country_code))
                 .order((name, ident))
-                .load::<AirportModel>(&mut conn)?;
+                .select((
+                    id, ident, type_, name, latitude_deg, longitude_deg,
+                    elevation_ft, continent, iso_country, iso_region, municipality,
+                    scheduled_service, gps_code, icao_code, iata_code, local_code,
+                    home_link, wikipedia_link, keywords, created_at, updated_at
+                ))
+                .load(&mut conn)?;
 
             Ok::<Vec<AirportModel>, anyhow::Error>(airport_models)
         }).await??;
@@ -235,7 +261,13 @@ impl AirportsRepository {
             let airport_models: Vec<AirportModel> = airports
                 .filter(type_.eq(&type_filter))
                 .order((name, ident))
-                .load::<AirportModel>(&mut conn)?;
+                .select((
+                    id, ident, type_, name, latitude_deg, longitude_deg,
+                    elevation_ft, continent, iso_country, iso_region, municipality,
+                    scheduled_service, gps_code, icao_code, iata_code, local_code,
+                    home_link, wikipedia_link, keywords, created_at, updated_at
+                ))
+                .load(&mut conn)?;
 
             Ok::<Vec<AirportModel>, anyhow::Error>(airport_models)
         }).await??;
@@ -301,7 +333,13 @@ impl AirportsRepository {
             let airport_models: Vec<AirportModel> = airports
                 .filter(scheduled_service.eq(true))
                 .order((name, ident))
-                .load::<AirportModel>(&mut conn)?;
+                .select((
+                    id, ident, type_, name, latitude_deg, longitude_deg,
+                    elevation_ft, continent, iso_country, iso_region, municipality,
+                    scheduled_service, gps_code, icao_code, iata_code, local_code,
+                    home_link, wikipedia_link, keywords, created_at, updated_at
+                ))
+                .load(&mut conn)?;
 
             Ok::<Vec<AirportModel>, anyhow::Error>(airport_models)
         }).await??;
@@ -343,6 +381,7 @@ impl AirportsRepository {
 
             // Create a custom struct for this query result
             #[derive(QueryableByName, Debug)]
+            #[diesel(check_for_backend(diesel::pg::Pg))]
             struct AirportWithSimilarity {
                 #[diesel(sql_type = diesel::sql_types::Integer)]
                 id: i32,
@@ -352,10 +391,10 @@ impl AirportsRepository {
                 airport_type: String,
                 #[diesel(sql_type = diesel::sql_types::Varchar)]
                 name: String,
-                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float8>)]
-                latitude_deg: Option<f64>,
-                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float8>)]
-                longitude_deg: Option<f64>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Numeric>)]
+                latitude_deg: Option<BigDecimal>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Numeric>)]
+                longitude_deg: Option<BigDecimal>,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Integer>)]
                 elevation_ft: Option<i32>,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
@@ -466,6 +505,10 @@ impl AirportsRepository {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
+    use bigdecimal::BigDecimal;
+
     use crate::airports::Airport;
 
     // Note: These tests would require a test database setup
@@ -477,8 +520,8 @@ mod tests {
             ident: "00A".to_string(),
             airport_type: "heliport".to_string(),
             name: "Total RF Heliport".to_string(),
-            latitude_deg: Some(40.070985),
-            longitude_deg: Some(-74.933689),
+            latitude_deg: Some(BigDecimal::from_str("40.070985").unwrap()),
+            longitude_deg: Some(BigDecimal::from_str("-74.933689").unwrap()),
             elevation_ft: Some(11),
             continent: Some("NA".to_string()),
             iso_country: Some("US".to_string()),
@@ -505,8 +548,8 @@ mod tests {
         assert_eq!(airport.ident, "00A");
         assert_eq!(airport.airport_type, "heliport");
         assert_eq!(airport.name, "Total RF Heliport");
-        assert_eq!(airport.latitude_deg, Some(40.070985));
-        assert_eq!(airport.longitude_deg, Some(-74.933689));
+        assert_eq!(airport.latitude_deg, BigDecimal::from_str("40.070985").ok());
+        assert_eq!(airport.longitude_deg, BigDecimal::from_str("-74.933689").ok());
         assert_eq!(airport.elevation_ft, Some(11));
         assert_eq!(airport.iso_country, Some("US".to_string()));
         assert!(!airport.scheduled_service);

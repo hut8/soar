@@ -156,7 +156,6 @@ impl UsersRepository {
         // Hash password
         let password_hash = self.hash_password(&request.password)?;
         let user_id = Uuid::new_v4();
-        let now = Utc::now();
 
         let pool = self.pool.clone();
         let new_user = NewUser {
@@ -425,7 +424,6 @@ impl UsersRepository {
     /// Mark user's email as verified
     pub async fn verify_user_email(&self, user_id: Uuid) -> Result<bool> {
         let pool = self.pool.clone();
-        let now = Utc::now();
 
         tokio::task::spawn_blocking(move || -> Result<bool> {
             let mut conn = pool.get()?;

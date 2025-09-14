@@ -37,7 +37,7 @@ impl ReceiverRepository {
     {
         let receivers_vec: Vec<Receiver> = receivers.into_iter().collect();
         let pool = self.pool.clone();
-        
+
         tokio::task::spawn_blocking(move || -> Result<usize> {
             let mut conn = pool.get()?;
             let mut upserted_count = 0;
@@ -72,7 +72,7 @@ impl ReceiverRepository {
                             receivers::contact.eq(&new_receiver.contact),
                             receivers::email.eq(&new_receiver.email),
                             receivers::country.eq(&new_receiver.country),
-                            receivers::updated_at.eq(Some(Utc::now())),
+                            receivers::updated_at.eq(Utc::now()),
                         ))
                         .returning(receivers::id)
                         .get_result::<i32>(conn);
@@ -122,7 +122,7 @@ impl ReceiverRepository {
                                     .map(|r| r.trim())
                                     .filter(|r| !r.is_empty())
                                     .map(|r| r.to_string());
-                                
+
                                 let new_link = NewReceiverLinkModel {
                                     receiver_id,
                                     rel: rel_value,
@@ -174,7 +174,7 @@ impl ReceiverRepository {
                 .select(ReceiverModel::as_select())
                 .first::<ReceiverModel>(&mut conn)
                 .optional()?;
-            
+
             Ok(receiver_model.map(ReceiverRecord::from))
         })
         .await?
@@ -190,7 +190,7 @@ impl ReceiverRepository {
                 .order(receivers_photos::id.asc())
                 .select(ReceiverPhotoModel::as_select())
                 .load::<ReceiverPhotoModel>(&mut conn)?;
-            
+
             Ok(photo_models.into_iter().map(ReceiverPhotoRecord::from).collect())
         })
         .await?
@@ -206,7 +206,7 @@ impl ReceiverRepository {
                 .order(receivers_links::id.asc())
                 .select(ReceiverLinkModel::as_select())
                 .load::<ReceiverLinkModel>(&mut conn)?;
-            
+
             Ok(link_models.into_iter().map(ReceiverLinkRecord::from).collect())
         })
         .await?
@@ -238,7 +238,7 @@ impl ReceiverRepository {
     pub async fn search_by_callsign(&self, callsign_param: &str) -> Result<Vec<ReceiverRecord>> {
         let pool = self.pool.clone();
         let search_pattern = format!("%{}%", callsign_param);
-        
+
         tokio::task::spawn_blocking(move || -> Result<Vec<ReceiverRecord>> {
             let mut conn = pool.get()?;
             let receiver_models = receivers::table
@@ -246,7 +246,7 @@ impl ReceiverRepository {
                 .order(receivers::callsign.asc())
                 .select(ReceiverModel::as_select())
                 .load::<ReceiverModel>(&mut conn)?;
-            
+
             Ok(receiver_models.into_iter().map(ReceiverRecord::from).collect())
         })
         .await?
@@ -256,7 +256,7 @@ impl ReceiverRepository {
     pub async fn search_by_country(&self, country_param: &str) -> Result<Vec<ReceiverRecord>> {
         let pool = self.pool.clone();
         let country_param = country_param.to_string();
-        
+
         tokio::task::spawn_blocking(move || -> Result<Vec<ReceiverRecord>> {
             let mut conn = pool.get()?;
             let receiver_models = receivers::table
@@ -264,7 +264,7 @@ impl ReceiverRepository {
                 .order(receivers::callsign.asc())
                 .select(ReceiverModel::as_select())
                 .load::<ReceiverModel>(&mut conn)?;
-            
+
             Ok(receiver_models.into_iter().map(ReceiverRecord::from).collect())
         })
         .await?
@@ -277,7 +277,7 @@ impl ReceiverRepository {
         offset: i64,
     ) -> Result<Vec<ReceiverRecord>> {
         let pool = self.pool.clone();
-        
+
         tokio::task::spawn_blocking(move || -> Result<Vec<ReceiverRecord>> {
             let mut conn = pool.get()?;
             let receiver_models = receivers::table
@@ -286,7 +286,7 @@ impl ReceiverRepository {
                 .offset(offset)
                 .select(ReceiverModel::as_select())
                 .load::<ReceiverModel>(&mut conn)?;
-            
+
             Ok(receiver_models.into_iter().map(ReceiverRecord::from).collect())
         })
         .await?
@@ -296,10 +296,10 @@ impl ReceiverRepository {
     pub async fn delete_receiver(&self, callsign: &str) -> Result<bool> {
         let pool = self.pool.clone();
         let callsign = callsign.to_string();
-        
+
         tokio::task::spawn_blocking(move || -> Result<bool> {
             let mut conn = pool.get()?;
-            
+
             conn.transaction::<_, anyhow::Error, _>(|conn| {
                 // Get receiver ID first
                 let receiver_id_result = receivers::table

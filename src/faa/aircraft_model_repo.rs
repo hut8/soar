@@ -16,6 +16,7 @@ pub type DieselPgPooledConnection = PooledConnection<ConnectionManager<PgConnect
 /// Diesel model for the aircraft_model table - used for database operations
 #[derive(Debug, Clone, Queryable, Selectable, Insertable, AsChangeset)]
 #[diesel(table_name = aircraft_model)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct AircraftModelRecord {
     pub manufacturer_code: String,
     pub model_code: String,
@@ -32,13 +33,14 @@ pub struct AircraftModelRecord {
     pub cruising_speed: Option<i16>,
     pub type_certificate_data_sheet: Option<String>,
     pub type_certificate_data_holder: Option<String>,
-    pub created_at: Option<DateTime<Utc>>,
-    pub updated_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 /// Insert model for new aircraft models
 #[derive(Debug, Clone, Insertable)]
 #[diesel(table_name = aircraft_model)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct NewAircraftModelRecord {
     pub manufacturer_code: String,
     pub model_code: String,
@@ -76,8 +78,8 @@ impl From<AircraftModel> for AircraftModelRecord {
             cruising_speed: model.cruising_speed.map(|n| n as i16),
             type_certificate_data_sheet: model.type_certificate_data_sheet,
             type_certificate_data_holder: model.type_certificate_data_holder,
-            created_at: None, // Will be set by database
-            updated_at: None, // Will be set by database
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
         }
     }
 }
@@ -183,20 +185,19 @@ impl AircraftModelRepository {
         I: IntoIterator<Item = AircraftModel>,
     {
         use chrono::Utc;
-        
+
         let pool = self.pool.clone();
         let models: Vec<AircraftModel> = aircraft_models.into_iter().collect();
-        let model_count = models.len();
-        
+
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
             let mut upserted_count = 0;
-            
+
             // Use a transaction for the batch operation
             conn.transaction::<_, anyhow::Error, _>(|conn| {
                 for model in models {
                     let new_record = NewAircraftModelRecord::from(model.clone());
-                    
+
                     // Use Diesel's ON CONFLICT functionality
                     let result = diesel::insert_into(aircraft_model::table)
                         .values(&new_record)
@@ -218,7 +219,7 @@ impl AircraftModelRepository {
                             aircraft_model::updated_at.eq(Utc::now()),
                         ))
                         .execute(conn);
-                        
+
                     match result {
                         Ok(_) => {
                             upserted_count += 1;
@@ -235,10 +236,10 @@ impl AircraftModelRepository {
                         }
                     }
                 }
-                
+
                 Ok(())
             })?;
-            
+
             info!("Successfully upserted {} aircraft models", upserted_count);
             Ok::<usize, anyhow::Error>(upserted_count)
         })
@@ -267,17 +268,18 @@ impl AircraftModelRepository {
         let manufacturer_code_param = manufacturer_code_param.to_string();
         let model_code_param = model_code_param.to_string();
         let series_code_param = series_code_param.to_string();
-        
+
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            
+
             let result = aircraft_model::table
                 .filter(aircraft_model::manufacturer_code.eq(&manufacturer_code_param))
                 .filter(aircraft_model::model_code.eq(&model_code_param))
                 .filter(aircraft_model::series_code.eq(&series_code_param))
+                .select(AircraftModelRecord::as_select())
                 .first::<AircraftModelRecord>(&mut conn)
                 .optional()?;
-                
+
             match result {
                 Some(record) => {
                     let model = AircraftModel::try_from(record)?;
@@ -296,21 +298,21 @@ impl AircraftModelRepository {
     ) -> Result<Vec<AircraftModel>> {
         let pool = self.pool.clone();
         let search_pattern = format!("%{}%", manufacturer_name_param);
-        
+
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            
+
             let results = aircraft_model::table
                 .filter(aircraft_model::manufacturer_name.ilike(&search_pattern))
                 .order((aircraft_model::manufacturer_name.asc(), aircraft_model::model_name.asc()))
                 .load::<AircraftModelRecord>(&mut conn)?;
-                
+
             let mut aircraft_models = Vec::new();
             for record in results {
                 let model = AircraftModel::try_from(record)?;
                 aircraft_models.push(model);
             }
-            
+
             Ok::<Vec<AircraftModel>, anyhow::Error>(aircraft_models)
         })
         .await?
@@ -320,21 +322,21 @@ impl AircraftModelRepository {
     pub async fn search_by_model(&self, model_name_param: &str) -> Result<Vec<AircraftModel>> {
         let pool = self.pool.clone();
         let search_pattern = format!("%{}%", model_name_param);
-        
+
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            
+
             let results = aircraft_model::table
                 .filter(aircraft_model::model_name.ilike(&search_pattern))
                 .order((aircraft_model::manufacturer_name.asc(), aircraft_model::model_name.asc()))
                 .load::<AircraftModelRecord>(&mut conn)?;
-                
+
             let mut aircraft_models = Vec::new();
             for record in results {
                 let model = AircraftModel::try_from(record)?;
                 aircraft_models.push(model);
             }
-            
+
             Ok::<Vec<AircraftModel>, anyhow::Error>(aircraft_models)
         })
         .await?

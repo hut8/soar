@@ -3,7 +3,7 @@ use diesel::prelude::*;
 use diesel::sql_types::*;
 use uuid::Uuid;
 
-use crate::locations::{Location, LocationModel, Point};
+use crate::locations::{Location, LocationModel, NewLocationModel, Point};
 use crate::web::PgPool;
 
 #[derive(QueryableByName, Debug)]
@@ -44,16 +44,17 @@ impl LocationsRepository {
     /// Get location by ID
     pub async fn get_by_id(&self, location_id: Uuid) -> Result<Option<Location>> {
         use crate::schema::locations::dsl::*;
-        
+
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            
+
             let location_model: Option<LocationModel> = locations
                 .filter(id.eq(location_id))
-                .first::<LocationModel>(&mut conn)
+                .select(LocationModel::as_select())
+                .first(&mut conn)
                 .optional()?;
-                
+
             Ok::<Option<LocationModel>, anyhow::Error>(location_model)
         }).await??;
 
@@ -71,7 +72,7 @@ impl LocationsRepository {
         country_mail_code_param: Option<&str>,
     ) -> Result<Option<Location>> {
         use crate::schema::locations::dsl::*;
-        
+
         let pool = self.pool.clone();
         let street1_val = street1_param.map(|s| s.to_string());
         let street2_val = street2_param.map(|s| s.to_string());
@@ -79,10 +80,10 @@ impl LocationsRepository {
         let state_val = state_param.map(|s| s.to_string());
         let zip_code_val = zip_code_param.map(|s| s.to_string());
         let country_val = country_mail_code_param.unwrap_or("US").to_string();
-        
+
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            
+
             let location_model: Option<LocationModel> = locations
                 .filter(
                     street1.eq(&street1_val)
@@ -92,9 +93,10 @@ impl LocationsRepository {
                     .and(zip_code.eq(&zip_code_val))
                     .and(country_mail_code.eq(&country_val))
                 )
-                .first::<LocationModel>(&mut conn)
+                .select(LocationModel::as_select())
+                .first(&mut conn)
                 .optional()?;
-                
+
             Ok::<Option<LocationModel>, anyhow::Error>(location_model)
         }).await??;
 
@@ -104,41 +106,40 @@ impl LocationsRepository {
     /// Insert a new location
     pub async fn insert(&self, location: &Location) -> Result<()> {
         use crate::schema::locations;
-        
+
         let pool = self.pool.clone();
-        let location_model: LocationModel = location.clone().into();
-        
+        let new_location_model: NewLocationModel = location.clone().into();
+
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            
+
             diesel::insert_into(locations::table)
-                .values(&location_model)
+                .values(&new_location_model)
                 .execute(&mut conn)?;
-                
+
             Ok::<(), anyhow::Error>(())
         }).await??;
-        
+
         Ok(())
     }
 
     /// Update geolocation for a location
-    pub async fn update_geolocation(&self, location_id: Uuid, existing_geolocation: Point) -> Result<bool> {
+    pub async fn update_geolocation(&self, location_id: Uuid, new_geolocation: Point) -> Result<bool> {
         use crate::schema::locations::dsl::*;
         use chrono::Utc;
-        
+
         let pool = self.pool.clone();
-        let geolocation_text = format!("POINT({} {})", existing_geolocation.longitude, existing_geolocation.latitude);
-        
+
         let rows_affected = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            
+
             let rows = diesel::update(locations.filter(id.eq(location_id)))
                 .set((
-                    geolocation.eq(&geolocation_text),
+                    geolocation.eq(&new_geolocation),
                     updated_at.eq(Utc::now())
                 ))
                 .execute(&mut conn)?;
-                
+
             Ok::<usize, anyhow::Error>(rows)
         }).await??;
 
@@ -149,10 +150,10 @@ impl LocationsRepository {
     pub async fn get_locations_for_geocoding(&self, limit: Option<i64>) -> Result<Vec<Location>> {
         let pool = self.pool.clone();
         let query_limit = limit.unwrap_or(100);
-        
+
         let results = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            
+
             let raw_query = format!(
                 "SELECT id, street1, street2, city, state, zip_code, region_code,
                         county_mail_code, country_mail_code, created_at, updated_at
@@ -168,10 +169,10 @@ impl LocationsRepository {
                  LIMIT {}",
                 query_limit
             );
-            
+
             let location_results: Vec<LocationForGeocoding> = diesel::sql_query(&raw_query)
                 .load::<LocationForGeocoding>(&mut conn)?;
-                
+
             Ok::<Vec<LocationForGeocoding>, anyhow::Error>(location_results)
         }).await??;
 

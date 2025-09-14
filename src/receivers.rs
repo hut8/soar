@@ -41,8 +41,8 @@ pub struct ReceiverRecord {
     pub contact: Option<String>,
     pub email: Option<String>,
     pub country: Option<String>,
-    pub created_at: Option<chrono::DateTime<chrono::Utc>>,
-    pub updated_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
 /// Database representation of a receiver photo
@@ -51,7 +51,7 @@ pub struct ReceiverPhotoRecord {
     pub id: i32,
     pub receiver_id: i32,
     pub photo_url: String,
-    pub created_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 /// Database representation of a receiver link
@@ -61,7 +61,7 @@ pub struct ReceiverLinkRecord {
     pub receiver_id: i32,
     pub rel: Option<String>,
     pub href: String,
-    pub created_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 impl Receiver {
@@ -77,8 +77,8 @@ impl Receiver {
             contact: self.contact.clone(),
             email: self.email.clone(),
             country: self.country.clone(),
-            created_at: Some(chrono::Utc::now()),
-            updated_at: Some(chrono::Utc::now()),
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
         };
 
         (receiver_record, photos, links)
@@ -95,8 +95,8 @@ pub struct ReceiverModel {
     pub contact: Option<String>,
     pub email: Option<String>,
     pub country: Option<String>,
-    pub created_at: Option<chrono::DateTime<chrono::Utc>>,
-    pub updated_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
 /// Insert model for new receivers

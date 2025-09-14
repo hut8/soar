@@ -1,13 +1,11 @@
 use anyhow::{Context, Result, anyhow};
 use bigdecimal::BigDecimal;
-use serde::{Serialize, Deserialize};
+use chrono::{DateTime, Utc};
+use diesel::prelude::*;
+use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
-use diesel::prelude::*;
-use chrono::{DateTime, Utc};
-
-use crate::schema::sql_types::Geography;
 
 fn to_opt_string(s: &str) -> Option<String> {
     let t = s.trim();
@@ -38,6 +36,14 @@ fn to_opt_f64(s: &str) -> Option<f64> {
     t.parse::<f64>().ok()
 }
 
+fn to_opt_bigdecimal(s: &str) -> Option<BigDecimal> {
+    let t = s.trim();
+    if t.is_empty() {
+        return None;
+    }
+    BigDecimal::parse_bytes(t.as_bytes(), 10)
+}
+
 fn yes_no_to_bool(s: &str) -> bool {
     match s.trim().to_lowercase().as_str() {
         "yes" => true,
@@ -48,53 +54,53 @@ fn yes_no_to_bool(s: &str) -> bool {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Airport {
-    pub id: i32,                        // Internal OurAirports ID
-    pub ident: String,                  // Airport identifier (ICAO or local code)
-    pub airport_type: String,           // Type of airport (large_airport, small_airport, etc.)
-    pub name: String,                   // Official airport name
-    pub latitude_deg: Option<f64>,      // Latitude in decimal degrees
-    pub longitude_deg: Option<f64>,     // Longitude in decimal degrees
-    pub elevation_ft: Option<i32>,      // Elevation above MSL in feet
-    pub continent: Option<String>,      // Continent code (NA, EU, etc.)
-    pub iso_country: Option<String>,    // ISO 3166-1 alpha-2 country code
-    pub iso_region: Option<String>,     // ISO 3166-2 region code
-    pub municipality: Option<String>,   // Primary municipality served
-    pub scheduled_service: bool,        // Whether airport has scheduled service
-    pub icao_code: Option<String>,      // ICAO code
-    pub iata_code: Option<String>,      // IATA code
-    pub gps_code: Option<String>,       // GPS code
-    pub local_code: Option<String>,     // Local country code
-    pub home_link: Option<String>,      // Airport website URL
-    pub wikipedia_link: Option<String>, // Wikipedia article URL
-    pub keywords: Option<String>,       // Search keywords
+    pub id: i32,                           // Internal OurAirports ID
+    pub ident: String,                     // Airport identifier (ICAO or local code)
+    pub airport_type: String,              // Type of airport (large_airport, small_airport, etc.)
+    pub name: String,                      // Official airport name
+    pub latitude_deg: Option<BigDecimal>,  // Latitude in decimal degrees
+    pub longitude_deg: Option<BigDecimal>, // Longitude in decimal degrees
+    pub elevation_ft: Option<i32>,         // Elevation above MSL in feet
+    pub continent: Option<String>,         // Continent code (NA, EU, etc.)
+    pub iso_country: Option<String>,       // ISO 3166-1 alpha-2 country code
+    pub iso_region: Option<String>,        // ISO 3166-2 region code
+    pub municipality: Option<String>,      // Primary municipality served
+    pub scheduled_service: bool,           // Whether airport has scheduled service
+    pub icao_code: Option<String>,         // ICAO code
+    pub iata_code: Option<String>,         // IATA code
+    pub gps_code: Option<String>,          // GPS code
+    pub local_code: Option<String>,        // Local country code
+    pub home_link: Option<String>,         // Airport website URL
+    pub wikipedia_link: Option<String>,    // Wikipedia article URL
+    pub keywords: Option<String>,          // Search keywords
 }
 
 /// Diesel model for the airports table - used for database operations
-#[derive(Debug, Clone, Queryable, Selectable, QueryableByName, Serialize, Deserialize)]
+#[derive(Debug, Clone, Queryable, QueryableByName, Selectable, Serialize, Deserialize)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
 #[diesel(table_name = crate::schema::airports)]
 pub struct AirportModel {
     pub id: i32,
     pub ident: String,
     pub type_: String,
     pub name: String,
-    pub latitude_deg: Option<f64>,
-    pub longitude_deg: Option<f64>,
+    pub latitude_deg: Option<BigDecimal>,
+    pub longitude_deg: Option<BigDecimal>,
     pub elevation_ft: Option<i32>,
     pub continent: Option<String>,
     pub iso_country: Option<String>,
     pub iso_region: Option<String>,
     pub municipality: Option<String>,
     pub scheduled_service: bool,
+    pub gps_code: Option<String>,
     pub icao_code: Option<String>,
     pub iata_code: Option<String>,
-    pub gps_code: Option<String>,
     pub local_code: Option<String>,
     pub home_link: Option<String>,
     pub wikipedia_link: Option<String>,
     pub keywords: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-    pub location: Option<Geography>,
 }
 
 /// Insert model for new airports (without created_at, updated_at, location)
@@ -122,7 +128,6 @@ pub struct NewAirportModel {
     pub keywords: Option<String>,
 }
 
-
 /// Conversion from Airport (API model) to AirportModel (database model)
 impl From<Airport> for AirportModel {
     fn from(airport: Airport) -> Self {
@@ -139,16 +144,15 @@ impl From<Airport> for AirportModel {
             iso_region: airport.iso_region,
             municipality: airport.municipality,
             scheduled_service: airport.scheduled_service,
+            gps_code: airport.gps_code,
             icao_code: airport.icao_code,
             iata_code: airport.iata_code,
-            gps_code: airport.gps_code,
             local_code: airport.local_code,
             home_link: airport.home_link,
             wikipedia_link: airport.wikipedia_link,
             keywords: airport.keywords,
-            created_at: None,
-            updated_at: None,
-            location: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
         }
     }
 }
@@ -159,7 +163,6 @@ impl From<Airport> for NewAirportModel {
         Self {
             id: airport.id,
             ident: airport.ident,
-            airport_type: airport.airport_type,
             name: airport.name,
             latitude_deg: airport.latitude_deg,
             longitude_deg: airport.longitude_deg,
@@ -176,6 +179,7 @@ impl From<Airport> for NewAirportModel {
             home_link: airport.home_link,
             wikipedia_link: airport.wikipedia_link,
             keywords: airport.keywords,
+            type_: airport.airport_type,
         }
     }
 }
@@ -186,7 +190,7 @@ impl From<AirportModel> for Airport {
         Self {
             id: model.id,
             ident: model.ident,
-            airport_type: model.airport_type,
+            airport_type: model.type_,
             name: model.name,
             latitude_deg: model.latitude_deg,
             longitude_deg: model.longitude_deg,
@@ -237,8 +241,8 @@ impl Airport {
 
         let airport_type = to_string_trim(&fields[2]);
         let name = to_string_trim(&fields[3]);
-        let latitude_deg = to_opt_f64(&fields[4]);
-        let longitude_deg = to_opt_f64(&fields[5]);
+        let latitude_deg = to_opt_bigdecimal(&fields[4]);
+        let longitude_deg = to_opt_bigdecimal(&fields[5]);
         let elevation_ft = to_opt_i32(&fields[6]);
         let continent = to_opt_string(&fields[7]);
         let iso_country = to_opt_string(&fields[8]);
@@ -386,6 +390,7 @@ pub fn read_airports_csv_sample<P: AsRef<Path>>(path: P, limit: usize) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::str::FromStr;
 
     #[test]
     fn test_csv_parsing() {
@@ -397,8 +402,14 @@ mod tests {
         assert_eq!(airport.ident, "00A");
         assert_eq!(airport.airport_type, "heliport");
         assert_eq!(airport.name, "Total RF Heliport");
-        assert_eq!(airport.latitude_deg, Some(40.070985));
-        assert_eq!(airport.longitude_deg, Some(-74.933689));
+        assert_eq!(
+            airport.latitude_deg,
+            Some(BigDecimal::from_str("40.070985").unwrap())
+        );
+        assert_eq!(
+            airport.longitude_deg,
+            Some(BigDecimal::from_str("-74.933689").unwrap())
+        );
         assert_eq!(airport.elevation_ft, Some(11));
         assert_eq!(airport.continent, Some("NA".to_string()));
         assert_eq!(airport.iso_country, Some("US".to_string()));
