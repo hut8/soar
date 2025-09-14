@@ -25,5 +25,5 @@ SOAR_ENV=production
 #SMTP_USERNAME=your_email@gmail.com
 #SMTP_PASSWORD=your_app_password
 
-# Optional: Sentry DSN for error reporting
+# Sentry DSN for error reporting and deployment tracking
 #SENTRY_DSN=https://your_sentry_dsn_here
