@@ -2,10 +2,6 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;
 COMMENT ON EXTENSION pg_trgm IS 'text similarity measurement and index searching based on trigrams';
 CREATE EXTENSION IF NOT EXISTS postgis WITH SCHEMA public;
 COMMENT ON EXTENSION postgis IS 'PostGIS geometry and geography spatial types and functions';
-CREATE TYPE public.access_level AS ENUM (
-    'standard',
-    'admin'
-);
 CREATE TYPE public.address_type AS ENUM (
     'Unknown',
     'Icao',
@@ -410,7 +406,7 @@ CREATE TABLE public.users (
     last_name character varying(255) NOT NULL,
     email character varying(320) NOT NULL,
     password_hash character varying(255) NOT NULL,
-    access_level public.access_level DEFAULT 'standard'::public.access_level NOT NULL,
+    is_admin boolean DEFAULT false NOT NULL,
     club_id uuid,
     email_verified boolean DEFAULT false,
     password_reset_token character varying(255),
@@ -538,7 +534,6 @@ CREATE INDEX idx_runways_lighted ON public.runways USING btree (lighted) WHERE (
 CREATE INDEX idx_runways_surface ON public.runways USING btree (surface);
 CREATE UNIQUE INDEX locations_address_unique_idx ON public.locations USING btree (COALESCE(street1, ''::text), COALESCE(street2, ''::text), COALESCE(city, ''::text), COALESCE(state, ''::text), COALESCE(zip_code, ''::text), COALESCE(country_mail_code, 'US'::text));
 CREATE INDEX locations_geolocation_idx ON public.locations USING gist (geolocation);
-CREATE INDEX users_access_level_idx ON public.users USING btree (access_level);
 CREATE INDEX users_club_id_idx ON public.users USING btree (club_id);
 CREATE INDEX users_email_idx ON public.users USING btree (email);
 CREATE INDEX users_email_verification_token_idx ON public.users USING btree (email_verification_token);
