@@ -211,6 +211,30 @@ else
     log_info "✅ Both services are running successfully!"
 fi
 
+# Track deployment in Sentry if configured
+if [ -f "/etc/soar/env" ]; then
+    SENTRY_DSN=$(grep "^SENTRY_DSN=" /etc/soar/env 2>/dev/null | cut -d'=' -f2- | tr -d '"' || echo "")
+    if [ -n "$SENTRY_DSN" ]; then
+        log_info "Tracking deployment in Sentry..."
+
+        # Get version from git
+        GIT_COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+        GIT_TAG=$(git describe --tags --exact-match 2>/dev/null || echo "")
+        VERSION=${GIT_TAG:-$GIT_COMMIT}
+
+        # Send deployment event to Sentry
+        curl -s -X POST \
+            "${SENTRY_DSN%/*}/api/0/organizations/*/releases/" \
+            -H "Authorization: Bearer YOUR_SENTRY_AUTH_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{
+                \"version\": \"${VERSION}\",
+                \"projects\": [\"soar\"],
+                \"dateReleased\": \"$(date -Iseconds)\"
+            }" > /dev/null 2>&1 || log_warn "Failed to track deployment in Sentry (this is non-critical)"
+    fi
+fi
+
 log_info "🎉 Deployment completed successfully!"
 log_info ""
 log_info "Environment Configuration:"
