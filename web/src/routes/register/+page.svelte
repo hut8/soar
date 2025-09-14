@@ -51,13 +51,9 @@
 				club_id: clubId || undefined
 			});
 
-			// Redirect to login with success message
-	const href = resolve([
-    '/login',
-    {},                                  // params
-    { message: 'Email verified successfully. Please log in.' } // query
-  ]);
-  void goto(href);     // matches goto(url: string | URL)
+			const message = 'Email verified successfully. Please log in.';
+            const href = `/login?message=${encodeURIComponent(message)}`;
+			void goto(href);
 		} catch (err) {
 			if (err instanceof AuthApiError) {
 				if (err.status === 409) {
