@@ -2,12 +2,113 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use diesel::sql_query;
+use diesel_derive_enum::DbEnum;
 use tracing::{debug, warn};
 use uuid::Uuid;
 
 use crate::fixes::Fix;
-use crate::ogn_aprs_aircraft::{AddressType, AdsbEmitterCategory, AircraftType};
+use crate::ogn_aprs_aircraft::{AddressType as ForeignAddressType, AdsbEmitterCategory, AircraftType as ForeignAircraftType};
 use crate::web::PgPool;
+
+// Diesel-compatible wrapper enums for foreign types
+#[derive(Debug, Clone, Copy, PartialEq, Eq, DbEnum)]
+#[db_enum(existing_type_path = "crate::schema::sql_types::AddressType")]
+pub enum AddressType {
+    Unknown,
+    Icao,
+    Flarm,
+    OgnTracker,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, DbEnum)]
+#[db_enum(existing_type_path = "crate::schema::sql_types::AircraftType")]
+pub enum AircraftType {
+    Reserved0,
+    GliderMotorGlider,
+    TowTug,
+    HelicopterGyro,
+    SkydiverParachute,
+    DropPlane,
+    HangGlider,
+    Paraglider,
+    RecipEngine,
+    JetTurboprop,
+    Unknown,
+    Balloon,
+    Airship,
+    Uav,
+    ReservedE,
+    StaticObstacle,
+}
+
+// Conversions between foreign types and wrapper types
+impl From<ForeignAddressType> for AddressType {
+    fn from(foreign_type: ForeignAddressType) -> Self {
+        match foreign_type {
+            ForeignAddressType::Unknown => AddressType::Unknown,
+            ForeignAddressType::Icao => AddressType::Icao,
+            ForeignAddressType::Flarm => AddressType::Flarm,
+            ForeignAddressType::OgnTracker => AddressType::OgnTracker,
+        }
+    }
+}
+
+impl From<AddressType> for ForeignAddressType {
+    fn from(wrapper_type: AddressType) -> Self {
+        match wrapper_type {
+            AddressType::Unknown => ForeignAddressType::Unknown,
+            AddressType::Icao => ForeignAddressType::Icao,
+            AddressType::Flarm => ForeignAddressType::Flarm,
+            AddressType::OgnTracker => ForeignAddressType::OgnTracker,
+        }
+    }
+}
+
+impl From<ForeignAircraftType> for AircraftType {
+    fn from(foreign_type: ForeignAircraftType) -> Self {
+        match foreign_type {
+            ForeignAircraftType::Reserved0 => AircraftType::Reserved0,
+            ForeignAircraftType::GliderMotorGlider => AircraftType::GliderMotorGlider,
+            ForeignAircraftType::TowTug => AircraftType::TowTug,
+            ForeignAircraftType::HelicopterGyro => AircraftType::HelicopterGyro,
+            ForeignAircraftType::SkydiverParachute => AircraftType::SkydiverParachute,
+            ForeignAircraftType::DropPlane => AircraftType::DropPlane,
+            ForeignAircraftType::HangGlider => AircraftType::HangGlider,
+            ForeignAircraftType::Paraglider => AircraftType::Paraglider,
+            ForeignAircraftType::RecipEngine => AircraftType::RecipEngine,
+            ForeignAircraftType::JetTurboprop => AircraftType::JetTurboprop,
+            ForeignAircraftType::Unknown => AircraftType::Unknown,
+            ForeignAircraftType::Balloon => AircraftType::Balloon,
+            ForeignAircraftType::Airship => AircraftType::Airship,
+            ForeignAircraftType::Uav => AircraftType::Uav,
+            ForeignAircraftType::ReservedE => AircraftType::ReservedE,
+            ForeignAircraftType::StaticObstacle => AircraftType::StaticObstacle,
+        }
+    }
+}
+
+impl From<AircraftType> for ForeignAircraftType {
+    fn from(wrapper_type: AircraftType) -> Self {
+        match wrapper_type {
+            AircraftType::Reserved0 => ForeignAircraftType::Reserved0,
+            AircraftType::GliderMotorGlider => ForeignAircraftType::GliderMotorGlider,
+            AircraftType::TowTug => ForeignAircraftType::TowTug,
+            AircraftType::HelicopterGyro => ForeignAircraftType::HelicopterGyro,
+            AircraftType::SkydiverParachute => ForeignAircraftType::SkydiverParachute,
+            AircraftType::DropPlane => ForeignAircraftType::DropPlane,
+            AircraftType::HangGlider => ForeignAircraftType::HangGlider,
+            AircraftType::Paraglider => ForeignAircraftType::Paraglider,
+            AircraftType::RecipEngine => ForeignAircraftType::RecipEngine,
+            AircraftType::JetTurboprop => ForeignAircraftType::JetTurboprop,
+            AircraftType::Unknown => ForeignAircraftType::Unknown,
+            AircraftType::Balloon => ForeignAircraftType::Balloon,
+            AircraftType::Airship => ForeignAircraftType::Airship,
+            AircraftType::Uav => ForeignAircraftType::Uav,
+            AircraftType::ReservedE => ForeignAircraftType::ReservedE,
+            AircraftType::StaticObstacle => ForeignAircraftType::StaticObstacle,
+        }
+    }
+}
 
 // Diesel model for inserting new fixes
 #[derive(Insertable)]
@@ -56,8 +157,8 @@ impl From<&Fix> for NewFix {
             altitude_feet: fix.altitude_feet,
             aircraft_id: fix.aircraft_id.clone(),
             device_id: fix.device_id.map(|d| d as i32),
-            device_type: fix.device_type,
-            aircraft_type: fix.aircraft_type,
+            device_type: fix.device_type.map(AddressType::from),
+            aircraft_type: fix.aircraft_type.map(AircraftType::from),
             flight_number: fix.flight_number.clone(),
             emitter_category: fix.emitter_category,
             registration: fix.registration.clone(),
@@ -135,34 +236,34 @@ struct FixRow {
 impl From<FixRow> for Fix {
     fn from(row: FixRow) -> Self {
         // Helper function to parse enum from string
-        fn parse_device_type(s: Option<String>) -> Option<AddressType> {
+        fn parse_device_type(s: Option<String>) -> Option<ForeignAddressType> {
             s.and_then(|s| match s.as_str() {
-                "Unknown" => Some(AddressType::Unknown),
-                "Icao" => Some(AddressType::Icao),
-                "Flarm" => Some(AddressType::Flarm),
-                "OgnTracker" => Some(AddressType::OgnTracker),
+                "Unknown" => Some(ForeignAddressType::Unknown),
+                "Icao" => Some(ForeignAddressType::Icao),
+                "Flarm" => Some(ForeignAddressType::Flarm),
+                "OgnTracker" => Some(ForeignAddressType::OgnTracker),
                 _ => None,
             })
         }
 
-        fn parse_aircraft_type(s: Option<String>) -> Option<AircraftType> {
+        fn parse_aircraft_type(s: Option<String>) -> Option<ForeignAircraftType> {
             s.and_then(|s| match s.as_str() {
-                "Reserved0" => Some(AircraftType::Reserved0),
-                "GliderMotorGlider" => Some(AircraftType::GliderMotorGlider),
-                "TowTug" => Some(AircraftType::TowTug),
-                "HelicopterGyro" => Some(AircraftType::HelicopterGyro),
-                "SkydiverParachute" => Some(AircraftType::SkydiverParachute),
-                "DropPlane" => Some(AircraftType::DropPlane),
-                "HangGlider" => Some(AircraftType::HangGlider),
-                "Paraglider" => Some(AircraftType::Paraglider),
-                "RecipEngine" => Some(AircraftType::RecipEngine),
-                "JetTurboprop" => Some(AircraftType::JetTurboprop),
-                "Unknown" => Some(AircraftType::Unknown),
-                "Balloon" => Some(AircraftType::Balloon),
-                "Airship" => Some(AircraftType::Airship),
-                "Uav" => Some(AircraftType::Uav),
-                "ReservedE" => Some(AircraftType::ReservedE),
-                "StaticObstacle" => Some(AircraftType::StaticObstacle),
+                "Reserved0" => Some(ForeignAircraftType::Reserved0),
+                "GliderMotorGlider" => Some(ForeignAircraftType::GliderMotorGlider),
+                "TowTug" => Some(ForeignAircraftType::TowTug),
+                "HelicopterGyro" => Some(ForeignAircraftType::HelicopterGyro),
+                "SkydiverParachute" => Some(ForeignAircraftType::SkydiverParachute),
+                "DropPlane" => Some(ForeignAircraftType::DropPlane),
+                "HangGlider" => Some(ForeignAircraftType::HangGlider),
+                "Paraglider" => Some(ForeignAircraftType::Paraglider),
+                "RecipEngine" => Some(ForeignAircraftType::RecipEngine),
+                "JetTurboprop" => Some(ForeignAircraftType::JetTurboprop),
+                "Unknown" => Some(ForeignAircraftType::Unknown),
+                "Balloon" => Some(ForeignAircraftType::Balloon),
+                "Airship" => Some(ForeignAircraftType::Airship),
+                "Uav" => Some(ForeignAircraftType::Uav),
+                "ReservedE" => Some(ForeignAircraftType::ReservedE),
+                "StaticObstacle" => Some(ForeignAircraftType::StaticObstacle),
                 _ => None,
             })
         }
