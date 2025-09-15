@@ -131,9 +131,9 @@ diesel::table! {
         club_id -> Nullable<Uuid>,
         home_base_airport_id -> Nullable<Int4>,
         is_tow_plane -> Nullable<Bool>,
-        airworthiness_class -> Nullable<AirworthinessClass>,
         location_id -> Nullable<Uuid>,
         device_id -> Nullable<Int4>,
+        airworthiness_class -> Nullable<AirworthinessClass>,
     }
 }
 
@@ -143,7 +143,7 @@ diesel::table! {
 
     airports (id) {
         id -> Int4,
-        #[max_length = 7]
+        #[max_length = 16]
         ident -> Varchar,
         #[sql_name = "type"]
         #[max_length = 50]
