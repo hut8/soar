@@ -1,12 +1,12 @@
 use chrono::{SecondsFormat, Utc};
 use clap::Parser;
 use once_cell::sync::Lazy;
-use rand::{distributions::Alphanumeric, Rng};
+use rand::{Rng, distributions::Alphanumeric};
 use regex::{Captures, Regex};
-use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE, COOKIE};
+use reqwest::header::{CONTENT_TYPE, COOKIE, HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
-use tracing::info;
 use std::{borrow::Cow, collections::HashMap, fs::File, io::Write};
+use tracing::info;
 
 static WIKI_URL: &str = "http://wiki.glidernet.org/ajax-module-connector.php";
 
@@ -16,13 +16,15 @@ static HEADING_RE: Lazy<Regex> =
 
 /// Table row for receiver lines
 static RECEIVER_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?xm)
+    Regex::new(
+        r"(?xm)
         ^\|\|\ \|\|\ \[\[\#\ (?P<aprsname>.*?)\]\] .*? \|\|
         (?P<desc>.*?) \|\|
         (?P<photos>.*?) \|\|
         .*? \|\|
         (?P<contact>.*?)\|\| \s*$
-    ")
+    ",
+    )
     .unwrap()
 });
 
@@ -37,9 +39,8 @@ static PHOTOS_RE: Lazy<Regex> =
 static IMAGE_URL_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(?i).*\.(svg|jpeg|pdf|apng|mng|jpg|png|gif)$").unwrap());
 
-static MAIL_ADDRESS_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?i)^[a-z0-9+\-_%.]+@[a-z0-9+\-_%.]+\.[a-z]{2,}$").unwrap()
-});
+static MAIL_ADDRESS_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?i)^[a-z0-9+\-_%.]+@[a-z0-9+\-_%.]+\.[a-z]{2,}$").unwrap());
 
 static CONTACT_MAIL_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r#"\[\[\[mailto:(?P<email>[^?\ ]*)(?P<subject>.*)\|\ *(?P<name>.*)\]\]\]"#).unwrap()
@@ -107,7 +108,10 @@ static COUNTRIES: Lazy<HashMap<&'static str, &'static str>> = Lazy::new(|| {
 });
 
 fn normalize_country_section(name: &str) -> &'static str {
-    COUNTRIES.get(&name.to_ascii_lowercase()[..]).copied().unwrap_or("ZZ")
+    COUNTRIES
+        .get(&name.to_ascii_lowercase()[..])
+        .copied()
+        .unwrap_or("ZZ")
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -167,7 +171,10 @@ async fn fetch_page(client: &reqwest::Client, url: &str, page_id: i64) -> reqwes
 
     // Build headers including cookie
     let mut headers = HeaderMap::new();
-    headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/x-www-form-urlencoded"));
+    headers.insert(
+        CONTENT_TYPE,
+        HeaderValue::from_static("application/x-www-form-urlencoded"),
+    );
     headers.insert(
         COOKIE,
         HeaderValue::from_str(&format!("wikidot_token7={}", token)).unwrap(),
@@ -201,7 +208,10 @@ fn parse_description_links(mut text: String) -> (String, Vec<Link>) {
     let replaced = WIKIDOT_LINK_RE.replace_all(&text, |caps: &Captures| {
         let href = caps.get(1).unwrap().as_str().to_string();
         let rel = caps.get(2).unwrap().as_str().to_string();
-        links.push(Link { href, rel: Some(rel.clone()) });
+        links.push(Link {
+            href,
+            rel: Some(rel.clone()),
+        });
         Cow::Owned(rel) // replace token with rel (label)
     });
 
@@ -223,7 +233,10 @@ fn parse_contact(raw: &str) -> (String, String, Vec<Link>) {
     } else if let Some(c) = CONTACT_URL_RE.captures(raw) {
         let url = c.name("url").map(|m| m.as_str()).unwrap_or("").to_string();
         let name = c.name("name").map(|m| m.as_str()).unwrap_or("").to_string();
-        links.push(Link { href: url, rel: Some("contact".to_string()) });
+        links.push(Link {
+            href: url,
+            rel: Some("contact".to_string()),
+        });
         return (name, String::new(), links);
     } else if let Some(c) = CONTACT_INTERN_RE.captures(raw) {
         // Join name0/name1/name2 if present

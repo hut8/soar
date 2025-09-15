@@ -21,7 +21,9 @@ impl AircraftRegistrationsRepository {
     }
 
     fn get_connection(&self) -> Result<DieselPgPooledConnection> {
-        self.pool.get().map_err(|e| anyhow::anyhow!("Failed to get database connection: {}", e))
+        self.pool
+            .get()
+            .map_err(|e| anyhow::anyhow!("Failed to get database connection: {}", e))
     }
 
     /// Upsert aircraft registrations into the database
@@ -34,7 +36,8 @@ impl AircraftRegistrationsRepository {
         let mut upserted_count = 0;
 
         // Convert aircraft to NewAircraftRegistration structs for insertion
-        let new_aircraft: Vec<NewAircraftRegistration> = aircraft.into_iter().map(|a| a.into()).collect();
+        let new_aircraft: Vec<NewAircraftRegistration> =
+            aircraft.into_iter().map(|a| a.into()).collect();
 
         for new_aircraft_reg in new_aircraft {
             let result = diesel::insert_into(aircraft_registrations::table)
@@ -42,60 +45,140 @@ impl AircraftRegistrationsRepository {
                 .on_conflict(aircraft_registrations::registration_number)
                 .do_update()
                 .set((
-                    aircraft_registrations::serial_number.eq(excluded(aircraft_registrations::serial_number)),
-                    aircraft_registrations::mfr_mdl_code.eq(excluded(aircraft_registrations::mfr_mdl_code)),
-                    aircraft_registrations::eng_mfr_mdl_code.eq(excluded(aircraft_registrations::eng_mfr_mdl_code)),
+                    aircraft_registrations::serial_number
+                        .eq(excluded(aircraft_registrations::serial_number)),
+                    aircraft_registrations::mfr_mdl_code
+                        .eq(excluded(aircraft_registrations::mfr_mdl_code)),
+                    aircraft_registrations::eng_mfr_mdl_code
+                        .eq(excluded(aircraft_registrations::eng_mfr_mdl_code)),
                     aircraft_registrations::year_mfr.eq(excluded(aircraft_registrations::year_mfr)),
-                    aircraft_registrations::type_registration_code.eq(excluded(aircraft_registrations::type_registration_code)),
-                    aircraft_registrations::registrant_name.eq(excluded(aircraft_registrations::registrant_name)),
-                    aircraft_registrations::location_id.eq(excluded(aircraft_registrations::location_id)),
-                    aircraft_registrations::last_action_date.eq(excluded(aircraft_registrations::last_action_date)),
-                    aircraft_registrations::certificate_issue_date.eq(excluded(aircraft_registrations::certificate_issue_date)),
-                    aircraft_registrations::airworthiness_class.eq(excluded(aircraft_registrations::airworthiness_class)),
-                    aircraft_registrations::approved_operations_raw.eq(excluded(aircraft_registrations::approved_operations_raw)),
+                    aircraft_registrations::type_registration_code
+                        .eq(excluded(aircraft_registrations::type_registration_code)),
+                    aircraft_registrations::registrant_name
+                        .eq(excluded(aircraft_registrations::registrant_name)),
+                    aircraft_registrations::location_id
+                        .eq(excluded(aircraft_registrations::location_id)),
+                    aircraft_registrations::last_action_date
+                        .eq(excluded(aircraft_registrations::last_action_date)),
+                    aircraft_registrations::certificate_issue_date
+                        .eq(excluded(aircraft_registrations::certificate_issue_date)),
+                    aircraft_registrations::airworthiness_class
+                        .eq(excluded(aircraft_registrations::airworthiness_class)),
+                    aircraft_registrations::approved_operations_raw
+                        .eq(excluded(aircraft_registrations::approved_operations_raw)),
                     // Operational flags
-                    aircraft_registrations::op_restricted_other.eq(excluded(aircraft_registrations::op_restricted_other)),
-                    aircraft_registrations::op_restricted_ag_pest_control.eq(excluded(aircraft_registrations::op_restricted_ag_pest_control)),
-                    aircraft_registrations::op_restricted_aerial_surveying.eq(excluded(aircraft_registrations::op_restricted_aerial_surveying)),
-                    aircraft_registrations::op_restricted_aerial_advertising.eq(excluded(aircraft_registrations::op_restricted_aerial_advertising)),
-                    aircraft_registrations::op_restricted_forest.eq(excluded(aircraft_registrations::op_restricted_forest)),
-                    aircraft_registrations::op_restricted_patrolling.eq(excluded(aircraft_registrations::op_restricted_patrolling)),
-                    aircraft_registrations::op_restricted_weather_control.eq(excluded(aircraft_registrations::op_restricted_weather_control)),
-                    aircraft_registrations::op_restricted_carriage_of_cargo.eq(excluded(aircraft_registrations::op_restricted_carriage_of_cargo)),
-                    aircraft_registrations::op_experimental_show_compliance.eq(excluded(aircraft_registrations::op_experimental_show_compliance)),
-                    aircraft_registrations::op_experimental_research_development.eq(excluded(aircraft_registrations::op_experimental_research_development)),
-                    aircraft_registrations::op_experimental_amateur_built.eq(excluded(aircraft_registrations::op_experimental_amateur_built)),
-                    aircraft_registrations::op_experimental_exhibition.eq(excluded(aircraft_registrations::op_experimental_exhibition)),
-                    aircraft_registrations::op_experimental_racing.eq(excluded(aircraft_registrations::op_experimental_racing)),
-                    aircraft_registrations::op_experimental_crew_training.eq(excluded(aircraft_registrations::op_experimental_crew_training)),
-                    aircraft_registrations::op_experimental_market_survey.eq(excluded(aircraft_registrations::op_experimental_market_survey)),
-                    aircraft_registrations::op_experimental_operating_kit_built.eq(excluded(aircraft_registrations::op_experimental_operating_kit_built)),
-                    aircraft_registrations::op_experimental_light_sport_reg_prior_2008.eq(excluded(aircraft_registrations::op_experimental_light_sport_reg_prior_2008)),
-                    aircraft_registrations::op_experimental_light_sport_operating_kit_built.eq(excluded(aircraft_registrations::op_experimental_light_sport_operating_kit_built)),
-                    aircraft_registrations::op_experimental_light_sport_prev_21_190.eq(excluded(aircraft_registrations::op_experimental_light_sport_prev_21_190)),
-                    aircraft_registrations::op_experimental_uas_research_development.eq(excluded(aircraft_registrations::op_experimental_uas_research_development)),
-                    aircraft_registrations::op_experimental_uas_market_survey.eq(excluded(aircraft_registrations::op_experimental_uas_market_survey)),
-                    aircraft_registrations::op_experimental_uas_crew_training.eq(excluded(aircraft_registrations::op_experimental_uas_crew_training)),
-                    aircraft_registrations::op_experimental_uas_exhibition.eq(excluded(aircraft_registrations::op_experimental_uas_exhibition)),
-                    aircraft_registrations::op_experimental_uas_compliance_with_cfr.eq(excluded(aircraft_registrations::op_experimental_uas_compliance_with_cfr)),
-                    aircraft_registrations::op_sfp_ferry_for_repairs_alterations_storage.eq(excluded(aircraft_registrations::op_sfp_ferry_for_repairs_alterations_storage)),
-                    aircraft_registrations::op_sfp_evacuate_impending_danger.eq(excluded(aircraft_registrations::op_sfp_evacuate_impending_danger)),
-                    aircraft_registrations::op_sfp_excess_of_max_certificated.eq(excluded(aircraft_registrations::op_sfp_excess_of_max_certificated)),
-                    aircraft_registrations::op_sfp_delivery_or_export.eq(excluded(aircraft_registrations::op_sfp_delivery_or_export)),
-                    aircraft_registrations::op_sfp_production_flight_testing.eq(excluded(aircraft_registrations::op_sfp_production_flight_testing)),
-                    aircraft_registrations::op_sfp_customer_demo.eq(excluded(aircraft_registrations::op_sfp_customer_demo)),
+                    aircraft_registrations::op_restricted_other
+                        .eq(excluded(aircraft_registrations::op_restricted_other)),
+                    aircraft_registrations::op_restricted_ag_pest_control.eq(excluded(
+                        aircraft_registrations::op_restricted_ag_pest_control,
+                    )),
+                    aircraft_registrations::op_restricted_aerial_surveying.eq(excluded(
+                        aircraft_registrations::op_restricted_aerial_surveying,
+                    )),
+                    aircraft_registrations::op_restricted_aerial_advertising.eq(excluded(
+                        aircraft_registrations::op_restricted_aerial_advertising,
+                    )),
+                    aircraft_registrations::op_restricted_forest
+                        .eq(excluded(aircraft_registrations::op_restricted_forest)),
+                    aircraft_registrations::op_restricted_patrolling
+                        .eq(excluded(aircraft_registrations::op_restricted_patrolling)),
+                    aircraft_registrations::op_restricted_weather_control.eq(excluded(
+                        aircraft_registrations::op_restricted_weather_control,
+                    )),
+                    aircraft_registrations::op_restricted_carriage_of_cargo.eq(excluded(
+                        aircraft_registrations::op_restricted_carriage_of_cargo,
+                    )),
+                    aircraft_registrations::op_experimental_show_compliance.eq(excluded(
+                        aircraft_registrations::op_experimental_show_compliance,
+                    )),
+                    aircraft_registrations::op_experimental_research_development.eq(excluded(
+                        aircraft_registrations::op_experimental_research_development,
+                    )),
+                    aircraft_registrations::op_experimental_amateur_built.eq(excluded(
+                        aircraft_registrations::op_experimental_amateur_built,
+                    )),
+                    aircraft_registrations::op_experimental_exhibition
+                        .eq(excluded(aircraft_registrations::op_experimental_exhibition)),
+                    aircraft_registrations::op_experimental_racing
+                        .eq(excluded(aircraft_registrations::op_experimental_racing)),
+                    aircraft_registrations::op_experimental_crew_training.eq(excluded(
+                        aircraft_registrations::op_experimental_crew_training,
+                    )),
+                    aircraft_registrations::op_experimental_market_survey.eq(excluded(
+                        aircraft_registrations::op_experimental_market_survey,
+                    )),
+                    aircraft_registrations::op_experimental_operating_kit_built.eq(excluded(
+                        aircraft_registrations::op_experimental_operating_kit_built,
+                    )),
+                    aircraft_registrations::op_experimental_light_sport_reg_prior_2008.eq(
+                        excluded(
+                            aircraft_registrations::op_experimental_light_sport_reg_prior_2008,
+                        ),
+                    ),
+                    aircraft_registrations::op_experimental_light_sport_operating_kit_built.eq(
+                        excluded(
+                            aircraft_registrations::op_experimental_light_sport_operating_kit_built,
+                        ),
+                    ),
+                    aircraft_registrations::op_experimental_light_sport_prev_21_190.eq(excluded(
+                        aircraft_registrations::op_experimental_light_sport_prev_21_190,
+                    )),
+                    aircraft_registrations::op_experimental_uas_research_development.eq(excluded(
+                        aircraft_registrations::op_experimental_uas_research_development,
+                    )),
+                    aircraft_registrations::op_experimental_uas_market_survey.eq(excluded(
+                        aircraft_registrations::op_experimental_uas_market_survey,
+                    )),
+                    aircraft_registrations::op_experimental_uas_crew_training.eq(excluded(
+                        aircraft_registrations::op_experimental_uas_crew_training,
+                    )),
+                    aircraft_registrations::op_experimental_uas_exhibition.eq(excluded(
+                        aircraft_registrations::op_experimental_uas_exhibition,
+                    )),
+                    aircraft_registrations::op_experimental_uas_compliance_with_cfr.eq(excluded(
+                        aircraft_registrations::op_experimental_uas_compliance_with_cfr,
+                    )),
+                    aircraft_registrations::op_sfp_ferry_for_repairs_alterations_storage.eq(
+                        excluded(
+                            aircraft_registrations::op_sfp_ferry_for_repairs_alterations_storage,
+                        ),
+                    ),
+                    aircraft_registrations::op_sfp_evacuate_impending_danger.eq(excluded(
+                        aircraft_registrations::op_sfp_evacuate_impending_danger,
+                    )),
+                    aircraft_registrations::op_sfp_excess_of_max_certificated.eq(excluded(
+                        aircraft_registrations::op_sfp_excess_of_max_certificated,
+                    )),
+                    aircraft_registrations::op_sfp_delivery_or_export
+                        .eq(excluded(aircraft_registrations::op_sfp_delivery_or_export)),
+                    aircraft_registrations::op_sfp_production_flight_testing.eq(excluded(
+                        aircraft_registrations::op_sfp_production_flight_testing,
+                    )),
+                    aircraft_registrations::op_sfp_customer_demo
+                        .eq(excluded(aircraft_registrations::op_sfp_customer_demo)),
                     // Other fields
-                    aircraft_registrations::type_aircraft_code.eq(excluded(aircraft_registrations::type_aircraft_code)),
-                    aircraft_registrations::type_engine_code.eq(excluded(aircraft_registrations::type_engine_code)),
-                    aircraft_registrations::status_code.eq(excluded(aircraft_registrations::status_code)),
-                    aircraft_registrations::transponder_code.eq(excluded(aircraft_registrations::transponder_code)),
-                    aircraft_registrations::fractional_owner.eq(excluded(aircraft_registrations::fractional_owner)),
-                    aircraft_registrations::airworthiness_date.eq(excluded(aircraft_registrations::airworthiness_date)),
-                    aircraft_registrations::expiration_date.eq(excluded(aircraft_registrations::expiration_date)),
-                    aircraft_registrations::unique_id.eq(excluded(aircraft_registrations::unique_id)),
-                    aircraft_registrations::kit_mfr_name.eq(excluded(aircraft_registrations::kit_mfr_name)),
-                    aircraft_registrations::kit_model_name.eq(excluded(aircraft_registrations::kit_model_name)),
-                    aircraft_registrations::device_id.eq(excluded(aircraft_registrations::device_id)),
+                    aircraft_registrations::type_aircraft_code
+                        .eq(excluded(aircraft_registrations::type_aircraft_code)),
+                    aircraft_registrations::type_engine_code
+                        .eq(excluded(aircraft_registrations::type_engine_code)),
+                    aircraft_registrations::status_code
+                        .eq(excluded(aircraft_registrations::status_code)),
+                    aircraft_registrations::transponder_code
+                        .eq(excluded(aircraft_registrations::transponder_code)),
+                    aircraft_registrations::fractional_owner
+                        .eq(excluded(aircraft_registrations::fractional_owner)),
+                    aircraft_registrations::airworthiness_date
+                        .eq(excluded(aircraft_registrations::airworthiness_date)),
+                    aircraft_registrations::expiration_date
+                        .eq(excluded(aircraft_registrations::expiration_date)),
+                    aircraft_registrations::unique_id
+                        .eq(excluded(aircraft_registrations::unique_id)),
+                    aircraft_registrations::kit_mfr_name
+                        .eq(excluded(aircraft_registrations::kit_mfr_name)),
+                    aircraft_registrations::kit_model_name
+                        .eq(excluded(aircraft_registrations::kit_model_name)),
+                    aircraft_registrations::device_id
+                        .eq(excluded(aircraft_registrations::device_id)),
                 ))
                 .execute(&mut conn);
 
@@ -104,13 +187,19 @@ impl AircraftRegistrationsRepository {
                     upserted_count += 1;
                 }
                 Err(e) => {
-                    warn!("Failed to upsert aircraft registration {}: {}", new_aircraft_reg.registration_number, e);
+                    warn!(
+                        "Failed to upsert aircraft registration {}: {}",
+                        new_aircraft_reg.registration_number, e
+                    );
                     // Continue with other aircraft rather than failing the entire batch
                 }
             }
         }
 
-        info!("Successfully upserted {} aircraft registrations", upserted_count);
+        info!(
+            "Successfully upserted {} aircraft registrations",
+            upserted_count
+        );
         Ok(upserted_count)
     }
 
@@ -147,7 +236,10 @@ impl AircraftRegistrationsRepository {
             .select(AircraftRegistrationModel::as_select())
             .load::<AircraftRegistrationModel>(&mut conn)?;
 
-        Ok(aircraft_models.into_iter().map(|model| model.into()).collect())
+        Ok(aircraft_models
+            .into_iter()
+            .map(|model| model.into())
+            .collect())
     }
 
     /// Search aircraft registrations by transponder code
@@ -159,7 +251,10 @@ impl AircraftRegistrationsRepository {
             .select(AircraftRegistrationModel::as_select())
             .load::<AircraftRegistrationModel>(&mut conn)?;
 
-        Ok(aircraft_models.into_iter().map(|model| model.into()).collect())
+        Ok(aircraft_models
+            .into_iter()
+            .map(|model| model.into())
+            .collect())
     }
 
     /// Get aircraft registrations by club ID
@@ -170,6 +265,9 @@ impl AircraftRegistrationsRepository {
             .select(AircraftRegistrationModel::as_select())
             .load::<AircraftRegistrationModel>(&mut conn)?;
 
-        Ok(aircraft_models.into_iter().map(|model| model.into()).collect())
+        Ok(aircraft_models
+            .into_iter()
+            .map(|model| model.into())
+            .collect())
     }
 }

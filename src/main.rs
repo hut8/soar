@@ -5,6 +5,7 @@ use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
 use std::env;
 use std::fs;
+use std::io;
 use std::path::Path;
 use std::sync::Arc;
 use tracing::{info, warn};
@@ -273,15 +274,48 @@ async fn handle_pull_data(diesel_pool: Pool<ConnectionManager<PgConnection>>) ->
     fs::write(&runways_path, runways_content)?;
     info!("Runways data saved to: {}", runways_path);
 
+    // Download FAA ReleasableAircraft.zip
+    let faa_url = "https://registry.faa.gov/database/ReleasableAircraft.zip";
+    let zip_path = format!("{}/ReleasableAircraft.zip", temp_dir);
+    info!("Downloading FAA aircraft data from: {}", faa_url);
+
+    let faa_response = client.get(faa_url).send().await?;
+    let zip_content = faa_response.bytes().await?;
+    fs::write(&zip_path, zip_content)?;
+    info!("FAA zip file saved to: {}", zip_path);
+
+    // Extract ACFTREF.txt and MASTER.txt from the zip file
+    info!("Extracting aircraft files from zip...");
+    let zip_file = fs::File::open(&zip_path)?;
+    let mut archive = zip::ZipArchive::new(zip_file)?;
+
+    // Extract ACFTREF.txt (aircraft models)
+    let acftref_path = format!("{}/ACFTREF.txt", temp_dir);
+    {
+        let mut acftref_file = archive.by_name("ACFTREF.txt")?;
+        let mut acftref_output = fs::File::create(&acftref_path)?;
+        io::copy(&mut acftref_file, &mut acftref_output)?;
+    }
+    info!("Aircraft models data extracted to: {}", acftref_path);
+
+    // Extract MASTER.txt (aircraft registrations)
+    let master_path = format!("{}/MASTER.txt", temp_dir);
+    {
+        let mut master_file = archive.by_name("MASTER.txt")?;
+        let mut master_output = fs::File::create(&master_path)?;
+        io::copy(&mut master_file, &mut master_output)?;
+    }
+    info!("Aircraft registrations data extracted to: {}", master_path);
+
     // Display the temporary directory
     info!("Temporary directory created at: {}", temp_dir);
 
-    // Invoke handle_load_data with the downloaded files
+    // Invoke handle_load_data with all downloaded files
     info!("Invoking load data procedures...");
     soar::loader::handle_load_data(
         diesel_pool,
-        None, // aircraft_models
-        None, // aircraft_registrations
+        Some(acftref_path), // aircraft_models
+        Some(master_path),  // aircraft_registrations
         Some(airports_path),
         Some(runways_path),
         None, // receivers

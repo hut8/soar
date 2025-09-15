@@ -1,8 +1,8 @@
 use anyhow::Result;
 use bigdecimal::BigDecimal;
 use chrono::{DateTime, Utc};
-use diesel::prelude::*;
 use diesel::PgConnection;
+use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
 use diesel::upsert::excluded;
 use num_traits::{FromPrimitive, ToPrimitive};
@@ -200,10 +200,8 @@ impl RunwaysRepository {
     {
         let runways_vec: Vec<Runway> = runways.into_iter().collect();
         let pool = self.pool.clone();
-        let runway_models: Vec<NewRunwayModel> = runways_vec
-            .into_iter()
-            .map(NewRunwayModel::from)
-            .collect();
+        let runway_models: Vec<NewRunwayModel> =
+            runways_vec.into_iter().map(NewRunwayModel::from).collect();
 
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
@@ -229,13 +227,15 @@ impl RunwaysRepository {
                         runways::le_longitude_deg.eq(excluded(runways::le_longitude_deg)),
                         runways::le_elevation_ft.eq(excluded(runways::le_elevation_ft)),
                         runways::le_heading_degt.eq(excluded(runways::le_heading_degt)),
-                        runways::le_displaced_threshold_ft.eq(excluded(runways::le_displaced_threshold_ft)),
+                        runways::le_displaced_threshold_ft
+                            .eq(excluded(runways::le_displaced_threshold_ft)),
                         runways::he_ident.eq(excluded(runways::he_ident)),
                         runways::he_latitude_deg.eq(excluded(runways::he_latitude_deg)),
                         runways::he_longitude_deg.eq(excluded(runways::he_longitude_deg)),
                         runways::he_elevation_ft.eq(excluded(runways::he_elevation_ft)),
                         runways::he_heading_degt.eq(excluded(runways::he_heading_degt)),
-                        runways::he_displaced_threshold_ft.eq(excluded(runways::he_displaced_threshold_ft)),
+                        runways::he_displaced_threshold_ft
+                            .eq(excluded(runways::he_displaced_threshold_ft)),
                         runways::updated_at.eq(diesel::dsl::now),
                     ))
                     .execute(&mut conn);
@@ -260,7 +260,8 @@ impl RunwaysRepository {
             info!("Successfully upserted {} runways", upserted_count);
 
             Ok::<usize, anyhow::Error>(upserted_count)
-        }).await??;
+        })
+        .await??;
 
         Ok(result)
     }
@@ -274,7 +275,8 @@ impl RunwaysRepository {
             let mut conn = pool.get()?;
             let count: i64 = runways.count().get_result(&mut conn)?;
             Ok::<i64, anyhow::Error>(count)
-        }).await??;
+        })
+        .await??;
 
         Ok(result)
     }
@@ -294,7 +296,8 @@ impl RunwaysRepository {
                 .optional()?;
 
             Ok::<Option<RunwayModel>, anyhow::Error>(runway_model)
-        }).await??;
+        })
+        .await??;
 
         Ok(result.map(Runway::from))
     }
@@ -314,13 +317,17 @@ impl RunwaysRepository {
                 .load::<RunwayModel>(&mut conn)?;
 
             Ok::<Vec<RunwayModel>, anyhow::Error>(runway_models)
-        }).await??;
+        })
+        .await??;
 
         Ok(result.into_iter().map(Runway::from).collect())
     }
 
     /// Get all runways for a specific airport by airport identifier
-    pub async fn get_runways_by_airport_ident(&self, airport_ident_param: &str) -> Result<Vec<Runway>> {
+    pub async fn get_runways_by_airport_ident(
+        &self,
+        airport_ident_param: &str,
+    ) -> Result<Vec<Runway>> {
         use crate::schema::runways::dsl::*;
 
         let pool = self.pool.clone();
@@ -335,7 +342,8 @@ impl RunwaysRepository {
                 .load::<RunwayModel>(&mut conn)?;
 
             Ok::<Vec<RunwayModel>, anyhow::Error>(runway_models)
-        }).await??;
+        })
+        .await??;
 
         Ok(result.into_iter().map(Runway::from).collect())
     }
@@ -356,7 +364,8 @@ impl RunwaysRepository {
                 .load::<RunwayModel>(&mut conn)?;
 
             Ok::<Vec<RunwayModel>, anyhow::Error>(runway_models)
-        }).await??;
+        })
+        .await??;
 
         Ok(result.into_iter().map(Runway::from).collect())
     }
@@ -376,7 +385,8 @@ impl RunwaysRepository {
                 .load::<RunwayModel>(&mut conn)?;
 
             Ok::<Vec<RunwayModel>, anyhow::Error>(runway_models)
-        }).await??;
+        })
+        .await??;
 
         Ok(result.into_iter().map(Runway::from).collect())
     }
@@ -396,7 +406,8 @@ impl RunwaysRepository {
                 .load::<RunwayModel>(&mut conn)?;
 
             Ok::<Vec<RunwayModel>, anyhow::Error>(runway_models)
-        }).await??;
+        })
+        .await??;
 
         Ok(result.into_iter().map(Runway::from).collect())
     }
@@ -416,7 +427,8 @@ impl RunwaysRepository {
                 .load::<RunwayModel>(&mut conn)?;
 
             Ok::<Vec<RunwayModel>, anyhow::Error>(runway_models)
-        }).await??;
+        })
+        .await??;
 
         Ok(result.into_iter().map(Runway::from).collect())
     }
@@ -440,8 +452,12 @@ impl RunwaysRepository {
             // Get runways that have coordinates for either endpoint
             let runway_models: Vec<RunwayModel> = runways
                 .filter(
-                    (le_latitude_deg.is_not_null().and(le_longitude_deg.is_not_null()))
-                        .or(he_latitude_deg.is_not_null().and(he_longitude_deg.is_not_null()))
+                    (le_latitude_deg
+                        .is_not_null()
+                        .and(le_longitude_deg.is_not_null()))
+                    .or(he_latitude_deg
+                        .is_not_null()
+                        .and(he_longitude_deg.is_not_null())),
                 )
                 .order(id.asc())
                 .limit(limit)
@@ -449,7 +465,8 @@ impl RunwaysRepository {
                 .load::<RunwayModel>(&mut conn)?;
 
             Ok::<Vec<RunwayModel>, anyhow::Error>(runway_models)
-        }).await??;
+        })
+        .await??;
 
         let mut runways_with_distance = Vec::new();
         for runway_model in result {

@@ -5,10 +5,10 @@ use axum::{
     response::IntoResponse,
     routing::{delete, get, post, put},
 };
+use diesel::PgConnection;
+use diesel::r2d2::{ConnectionManager, Pool};
 use include_dir::{Dir, include_dir};
 use mime_guess::from_path;
-use diesel::r2d2::{ConnectionManager, Pool};
-use diesel::PgConnection;
 
 use tower_http::{
     LatencyUnit,

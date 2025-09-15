@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::{
     clubs::Club,
-    clubs_repo::{ClubWithLocationAndDistance, ClubWithLocationAndSimilarity}
+    clubs_repo::{ClubWithLocationAndDistance, ClubWithLocationAndSimilarity},
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -3,8 +3,8 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Json},
 };
-use uuid::Uuid;
 use tracing::error;
+use uuid::Uuid;
 
 use crate::aircraft_registrations_repo::AircraftRegistrationsRepository;
 use crate::auth::AuthUser;

@@ -7,7 +7,9 @@ use tracing::{debug, warn};
 use uuid::Uuid;
 
 use crate::fixes::Fix;
-use crate::ogn_aprs_aircraft::{AddressType as ForeignAddressType, AdsbEmitterCategory, AircraftType as ForeignAircraftType};
+use crate::ogn_aprs_aircraft::{
+    AddressType as ForeignAddressType, AdsbEmitterCategory, AircraftType as ForeignAircraftType,
+};
 use crate::web::PgPool;
 
 // Diesel-compatible wrapper enums for foreign types
@@ -329,12 +331,10 @@ impl FixesRepository {
                 .execute(&mut conn)?;
 
             Ok::<(), anyhow::Error>(())
-        }).await??;
+        })
+        .await??;
 
-        debug!(
-            "Inserted fix for aircraft: {:?}",
-            aircraft_identifier
-        );
+        debug!("Inserted fix for aircraft: {:?}", aircraft_identifier);
         Ok(())
     }
 
@@ -357,17 +357,10 @@ impl FixesRepository {
             // Use a transaction for batch processing
             conn.transaction(|conn| {
                 for fix_data in fixes_data {
-                    match diesel::insert_into(fixes)
-                        .values(&fix_data)
-                        .execute(conn)
-                    {
+                    match diesel::insert_into(fixes).values(&fix_data).execute(conn) {
                         Ok(_) => inserted_count += 1,
                         Err(e) => {
-                            warn!(
-                                "Failed to insert fix with ID {:?}: {}",
-                                fix_data.id,
-                                e
-                            );
+                            warn!("Failed to insert fix with ID {:?}: {}", fix_data.id, e);
                             // Continue with other fixes rather than failing the entire batch
                         }
                     }
@@ -377,7 +370,8 @@ impl FixesRepository {
             })?;
 
             Ok::<usize, anyhow::Error>(inserted_count)
-        }).await??;
+        })
+        .await??;
 
         debug!("Inserted {} out of {} fixes in batch", result, fixes_count);
         Ok(result)
@@ -422,7 +416,8 @@ impl FixesRepository {
                 .load::<FixRow>(&mut conn)?;
 
             Ok::<Vec<FixRow>, anyhow::Error>(results)
-        }).await??;
+        })
+        .await??;
 
         Ok(result.into_iter().map(Fix::from).collect())
     }
@@ -475,7 +470,8 @@ impl FixesRepository {
                 .load::<FixRow>(&mut conn)?;
 
             Ok::<Vec<FixRow>, anyhow::Error>(results)
-        }).await??;
+        })
+        .await??;
 
         Ok(result.into_iter().map(Fix::from).collect())
     }
@@ -514,7 +510,8 @@ impl FixesRepository {
                 .load::<FixRow>(&mut conn)?;
 
             Ok::<Vec<FixRow>, anyhow::Error>(results)
-        }).await??;
+        })
+        .await??;
 
         Ok(result.into_iter().map(Fix::from).collect())
     }
@@ -554,7 +551,8 @@ impl FixesRepository {
                 .load::<FixRow>(&mut conn)?;
 
             Ok::<Vec<FixRow>, anyhow::Error>(results)
-        }).await??;
+        })
+        .await??;
 
         Ok(result.into_iter().map(Fix::from).collect())
     }
@@ -584,7 +582,8 @@ impl FixesRepository {
                 .load::<FixRow>(&mut conn)?;
 
             Ok::<Vec<FixRow>, anyhow::Error>(results)
-        }).await??;
+        })
+        .await??;
 
         Ok(result.into_iter().map(Fix::from).collect())
     }
@@ -612,11 +611,12 @@ impl FixesRepository {
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            let deleted_count = diesel::delete(fixes.filter(timestamp.lt(cutoff_time)))
-                .execute(&mut conn)?;
+            let deleted_count =
+                diesel::delete(fixes.filter(timestamp.lt(cutoff_time))).execute(&mut conn)?;
 
             Ok::<usize, anyhow::Error>(deleted_count)
-        }).await??;
+        })
+        .await??;
 
         Ok(result as u64)
     }

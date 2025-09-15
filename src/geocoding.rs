@@ -19,7 +19,7 @@ use crate::locations::Point;
 /// ### Basic usage without Google Maps fallback:
 /// ```rust,no_run
 /// use soar::geocoding::Geocoder;
-/// 
+///
 /// # async fn example() -> anyhow::Result<()> {
 /// let geocoder = Geocoder::new();
 /// let point = geocoder.geocode_address("1600 Pennsylvania Avenue, Washington, DC").await?;
@@ -37,7 +37,7 @@ use crate::locations::Point;
 /// when Nominatim fails:
 /// ```rust,no_run
 /// use soar::geocoding::Geocoder;
-/// 
+///
 /// # async fn example() -> anyhow::Result<()> {
 /// let geocoder = Geocoder::new();
 /// let point = geocoder.geocode_address("123 Hard to Find Address").await?;

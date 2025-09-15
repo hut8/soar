@@ -22,7 +22,9 @@ impl DeviceRepository {
     }
 
     fn get_connection(&self) -> Result<PgPooledConnection> {
-        self.pool.get().map_err(|e| anyhow::anyhow!("Failed to get database connection: {}", e))
+        self.pool
+            .get()
+            .map_err(|e| anyhow::anyhow!("Failed to get database connection: {}", e))
     }
 
     /// Upsert devices into the database
@@ -71,9 +73,7 @@ impl DeviceRepository {
     /// Get the total count of devices in the database
     pub async fn get_device_count(&self) -> Result<i64> {
         let mut conn = self.get_connection()?;
-        let count = devices::table
-            .count()
-            .get_result::<i64>(&mut conn)?;
+        let count = devices::table.count().get_result::<i64>(&mut conn)?;
         Ok(count)
     }
 
@@ -107,7 +107,10 @@ impl DeviceRepository {
             .bind::<diesel::sql_types::Uuid, _>(club_id)
             .load(&mut conn)?;
 
-        Ok(device_models.into_iter().map(|model| model.into()).collect())
+        Ok(device_models
+            .into_iter()
+            .map(|model| model.into())
+            .collect())
     }
 
     /// Search devices by device_id
@@ -117,7 +120,10 @@ impl DeviceRepository {
             .filter(devices::device_id.eq(device_id as i32))
             .load::<DeviceModel>(&mut conn)?;
 
-        Ok(device_models.into_iter().map(|model| model.into()).collect())
+        Ok(device_models
+            .into_iter()
+            .map(|model| model.into())
+            .collect())
     }
 
     /// Search devices by registration
@@ -128,7 +134,10 @@ impl DeviceRepository {
             .filter(devices::registration.ilike(&search_pattern))
             .load::<DeviceModel>(&mut conn)?;
 
-        Ok(device_models.into_iter().map(|model| model.into()).collect())
+        Ok(device_models
+            .into_iter()
+            .map(|model| model.into())
+            .collect())
     }
 
     /// Get recent devices with a limit
@@ -139,7 +148,10 @@ impl DeviceRepository {
             .limit(limit)
             .load::<DeviceModel>(&mut conn)?;
 
-        Ok(device_models.into_iter().map(|model| model.into()).collect())
+        Ok(device_models
+            .into_iter()
+            .map(|model| model.into())
+            .collect())
     }
 }
 
@@ -157,7 +169,6 @@ mod tests {
         let pool = Pool::builder().build(manager)?;
         Ok(pool)
     }
-
 
     #[tokio::test]
     async fn test_device_repository_creation() {

@@ -56,7 +56,8 @@ impl LocationsRepository {
                 .optional()?;
 
             Ok::<Option<LocationModel>, anyhow::Error>(location_model)
-        }).await??;
+        })
+        .await??;
 
         Ok(result.map(|model| model.into()))
     }
@@ -86,19 +87,21 @@ impl LocationsRepository {
 
             let location_model: Option<LocationModel> = locations
                 .filter(
-                    street1.eq(&street1_val)
-                    .and(street2.eq(&street2_val))
-                    .and(city.eq(&city_val))
-                    .and(state.eq(&state_val))
-                    .and(zip_code.eq(&zip_code_val))
-                    .and(country_mail_code.eq(&country_val))
+                    street1
+                        .eq(&street1_val)
+                        .and(street2.eq(&street2_val))
+                        .and(city.eq(&city_val))
+                        .and(state.eq(&state_val))
+                        .and(zip_code.eq(&zip_code_val))
+                        .and(country_mail_code.eq(&country_val)),
                 )
                 .select(LocationModel::as_select())
                 .first(&mut conn)
                 .optional()?;
 
             Ok::<Option<LocationModel>, anyhow::Error>(location_model)
-        }).await??;
+        })
+        .await??;
 
         Ok(result.map(|model| model.into()))
     }
@@ -118,13 +121,18 @@ impl LocationsRepository {
                 .execute(&mut conn)?;
 
             Ok::<(), anyhow::Error>(())
-        }).await??;
+        })
+        .await??;
 
         Ok(())
     }
 
     /// Update geolocation for a location
-    pub async fn update_geolocation(&self, location_id: Uuid, new_geolocation: Point) -> Result<bool> {
+    pub async fn update_geolocation(
+        &self,
+        location_id: Uuid,
+        new_geolocation: Point,
+    ) -> Result<bool> {
         use crate::schema::locations::dsl::*;
         use chrono::Utc;
 
@@ -134,14 +142,12 @@ impl LocationsRepository {
             let mut conn = pool.get()?;
 
             let rows = diesel::update(locations.filter(id.eq(location_id)))
-                .set((
-                    geolocation.eq(&new_geolocation),
-                    updated_at.eq(Utc::now())
-                ))
+                .set((geolocation.eq(&new_geolocation), updated_at.eq(Utc::now())))
                 .execute(&mut conn)?;
 
             Ok::<usize, anyhow::Error>(rows)
-        }).await??;
+        })
+        .await??;
 
         Ok(rows_affected > 0)
     }
@@ -170,11 +176,12 @@ impl LocationsRepository {
                 query_limit
             );
 
-            let location_results: Vec<LocationForGeocoding> = diesel::sql_query(&raw_query)
-                .load::<LocationForGeocoding>(&mut conn)?;
+            let location_results: Vec<LocationForGeocoding> =
+                diesel::sql_query(&raw_query).load::<LocationForGeocoding>(&mut conn)?;
 
             Ok::<Vec<LocationForGeocoding>, anyhow::Error>(location_results)
-        }).await??;
+        })
+        .await??;
 
         let mut locations = Vec::new();
         for row in results {

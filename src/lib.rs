@@ -15,7 +15,6 @@ pub mod clubs_repo;
 pub mod database_fix_processor;
 pub mod device_repo;
 pub mod devices;
-pub mod schema;
 pub mod email;
 pub mod faa;
 pub mod fetch_receivers;
@@ -25,6 +24,7 @@ pub mod flight_detection_processor;
 pub mod flights;
 pub mod flights_repo;
 pub mod geocoding;
+pub mod icao;
 pub mod live_fixes;
 pub mod loader;
 pub mod locations;
@@ -37,10 +37,10 @@ pub mod receiver_repo;
 pub mod receivers;
 pub mod runways;
 pub mod runways_repo;
+pub mod schema;
 pub mod users;
 pub mod users_repo;
 pub mod web;
-pub mod icao;
 
 pub use aprs_client::{
     AprsClient, AprsClientConfig, AprsClientConfigBuilder, FixProcessor, MessageProcessor,

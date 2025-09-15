@@ -129,10 +129,7 @@ pub struct ClubWithLocationAndDistance {
 impl From<ClubWithLocationAndDistance> for Club {
     fn from(cwld: ClubWithLocationAndDistance) -> Self {
         let base_location = if cwld.longitude.is_some() && cwld.latitude.is_some() {
-            Some(Point::new(
-                cwld.latitude.unwrap(),
-                cwld.longitude.unwrap(),
-            ))
+            Some(Point::new(cwld.latitude.unwrap(), cwld.longitude.unwrap()))
         } else {
             None
         };
@@ -161,10 +158,7 @@ impl From<ClubWithLocationAndDistance> for Club {
 impl From<ClubWithLocationAndSimilarity> for Club {
     fn from(cwls: ClubWithLocationAndSimilarity) -> Self {
         let base_location = if cwls.longitude.is_some() && cwls.latitude.is_some() {
-            Some(Point::new(
-                cwls.latitude.unwrap(),
-                cwls.longitude.unwrap(),
-            ))
+            Some(Point::new(cwls.latitude.unwrap(), cwls.longitude.unwrap()))
         } else {
             None
         };
@@ -193,10 +187,7 @@ impl From<ClubWithLocationAndSimilarity> for Club {
 impl From<ClubWithLocation> for Club {
     fn from(cwl: ClubWithLocation) -> Self {
         let base_location = if cwl.longitude.is_some() && cwl.latitude.is_some() {
-            Some(Point::new(
-                cwl.latitude.unwrap(),
-                cwl.longitude.unwrap(),
-            ))
+            Some(Point::new(cwl.latitude.unwrap(), cwl.longitude.unwrap()))
         } else {
             None
         };
@@ -427,7 +418,8 @@ impl ClubsRepository {
                 .execute(&mut conn)?;
 
             Ok::<usize, anyhow::Error>(updated_count)
-        }).await??;
+        })
+        .await??;
 
         Ok(result > 0)
     }
@@ -464,7 +456,8 @@ impl ClubsRepository {
                 .execute(&mut conn)?;
 
             Ok::<(), anyhow::Error>(())
-        }).await??;
+        })
+        .await??;
 
         Ok(())
     }

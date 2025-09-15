@@ -47,7 +47,9 @@ fn us_n_to_icao_u32(reg: &str) -> Result<u32, String> {
             return Err(format!("Invalid char {}", ch));
         }
     }
-    let numeric: u32 = digits.parse::<u32>().map_err(|e: ParseIntError| e.to_string())?;
+    let numeric: u32 = digits
+        .parse::<u32>()
+        .map_err(|e: ParseIntError| e.to_string())?;
     if !(1..=999).contains(&numeric) {
         return Err("Numeric part out of range (1–999)".into());
     }
@@ -114,7 +116,10 @@ fn canada_to_icao_u32(reg: &str) -> Result<u32, String> {
     if SKIP_CG && block == 'G' {
         return Err("CG skipped".into());
     }
-    let idx_block = CA_BLOCKS.iter().position(|&b| b == block).ok_or("Bad block")?;
+    let idx_block = CA_BLOCKS
+        .iter()
+        .position(|&b| b == block)
+        .ok_or("Bad block")?;
     let a = letter_index(it.next().unwrap()).ok_or("bad A")?;
     let b = letter_index(it.next().unwrap()).ok_or("bad B")?;
     let c = letter_index(it.next().unwrap()).ok_or("bad C")?;

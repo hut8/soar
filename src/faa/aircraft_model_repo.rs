@@ -201,21 +201,34 @@ impl AircraftModelRepository {
                     // Use Diesel's ON CONFLICT functionality
                     let result = diesel::insert_into(aircraft_model::table)
                         .values(&new_record)
-                        .on_conflict((aircraft_model::manufacturer_code, aircraft_model::model_code, aircraft_model::series_code))
+                        .on_conflict((
+                            aircraft_model::manufacturer_code,
+                            aircraft_model::model_code,
+                            aircraft_model::series_code,
+                        ))
                         .do_update()
                         .set((
-                            aircraft_model::manufacturer_name.eq(excluded(aircraft_model::manufacturer_name)),
+                            aircraft_model::manufacturer_name
+                                .eq(excluded(aircraft_model::manufacturer_name)),
                             aircraft_model::model_name.eq(excluded(aircraft_model::model_name)),
-                            aircraft_model::aircraft_type.eq(excluded(aircraft_model::aircraft_type)),
+                            aircraft_model::aircraft_type
+                                .eq(excluded(aircraft_model::aircraft_type)),
                             aircraft_model::engine_type.eq(excluded(aircraft_model::engine_type)),
-                            aircraft_model::aircraft_category.eq(excluded(aircraft_model::aircraft_category)),
-                            aircraft_model::builder_certification.eq(excluded(aircraft_model::builder_certification)),
-                            aircraft_model::number_of_engines.eq(excluded(aircraft_model::number_of_engines)),
-                            aircraft_model::number_of_seats.eq(excluded(aircraft_model::number_of_seats)),
+                            aircraft_model::aircraft_category
+                                .eq(excluded(aircraft_model::aircraft_category)),
+                            aircraft_model::builder_certification
+                                .eq(excluded(aircraft_model::builder_certification)),
+                            aircraft_model::number_of_engines
+                                .eq(excluded(aircraft_model::number_of_engines)),
+                            aircraft_model::number_of_seats
+                                .eq(excluded(aircraft_model::number_of_seats)),
                             aircraft_model::weight_class.eq(excluded(aircraft_model::weight_class)),
-                            aircraft_model::cruising_speed.eq(excluded(aircraft_model::cruising_speed)),
-                            aircraft_model::type_certificate_data_sheet.eq(excluded(aircraft_model::type_certificate_data_sheet)),
-                            aircraft_model::type_certificate_data_holder.eq(excluded(aircraft_model::type_certificate_data_holder)),
+                            aircraft_model::cruising_speed
+                                .eq(excluded(aircraft_model::cruising_speed)),
+                            aircraft_model::type_certificate_data_sheet
+                                .eq(excluded(aircraft_model::type_certificate_data_sheet)),
+                            aircraft_model::type_certificate_data_holder
+                                .eq(excluded(aircraft_model::type_certificate_data_holder)),
                             aircraft_model::updated_at.eq(Utc::now()),
                         ))
                         .execute(conn);
@@ -227,10 +240,7 @@ impl AircraftModelRepository {
                         Err(e) => {
                             warn!(
                                 "Failed to upsert aircraft model {}-{}-{}: {}",
-                                model.manufacturer_code,
-                                model.model_code,
-                                model.series_code,
-                                e
+                                model.manufacturer_code, model.model_code, model.series_code, e
                             );
                             // Continue with other aircraft models rather than failing the entire batch
                         }
@@ -304,7 +314,10 @@ impl AircraftModelRepository {
 
             let results = aircraft_model::table
                 .filter(aircraft_model::manufacturer_name.ilike(&search_pattern))
-                .order((aircraft_model::manufacturer_name.asc(), aircraft_model::model_name.asc()))
+                .order((
+                    aircraft_model::manufacturer_name.asc(),
+                    aircraft_model::model_name.asc(),
+                ))
                 .load::<AircraftModelRecord>(&mut conn)?;
 
             let mut aircraft_models = Vec::new();
@@ -328,7 +341,10 @@ impl AircraftModelRepository {
 
             let results = aircraft_model::table
                 .filter(aircraft_model::model_name.ilike(&search_pattern))
-                .order((aircraft_model::manufacturer_name.asc(), aircraft_model::model_name.asc()))
+                .order((
+                    aircraft_model::manufacturer_name.asc(),
+                    aircraft_model::model_name.asc(),
+                ))
                 .load::<AircraftModelRecord>(&mut conn)?;
 
             let mut aircraft_models = Vec::new();

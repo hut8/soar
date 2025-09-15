@@ -14,11 +14,7 @@ use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode}
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{
-    users::User,
-    users_repo::UsersRepository,
-    web::AppState,
-};
+use crate::{users::User, users_repo::UsersRepository, web::AppState};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {

@@ -1,11 +1,11 @@
 use tracing::{error, trace, warn};
 
 use crate::device_repo::DeviceRepository;
-use diesel::r2d2::{ConnectionManager, Pool};
-use diesel::PgConnection;
 use crate::fixes;
 use crate::fixes_repo::FixesRepository;
 use crate::{Fix, FixProcessor};
+use diesel::PgConnection;
+use diesel::r2d2::{ConnectionManager, Pool};
 
 /// Database fix processor that saves valid fixes to the database
 pub struct DatabaseFixProcessor {

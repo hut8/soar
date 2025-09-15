@@ -1,8 +1,8 @@
 use crate::locations::Point;
 use chrono::{DateTime, Utc};
+use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use diesel::prelude::*;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Club {

@@ -629,11 +629,13 @@ pub async fn handle_load_data(
 
 /// Link aircraft registrations to devices based on matching registration numbers
 /// Only updates aircraft that don't already have a device_id set
-async fn link_aircraft_to_devices(diesel_pool: &Pool<ConnectionManager<PgConnection>>) -> Result<u32> {
+async fn link_aircraft_to_devices(
+    diesel_pool: &Pool<ConnectionManager<PgConnection>>,
+) -> Result<u32> {
     info!("Starting aircraft-device linking process...");
 
-    use diesel::sql_query;
     use diesel::RunQueryDsl;
+    use diesel::sql_query;
 
     let mut conn = diesel_pool.get()?;
 
@@ -645,7 +647,7 @@ async fn link_aircraft_to_devices(diesel_pool: &Pool<ConnectionManager<PgConnect
         FROM devices
         WHERE aircraft_registrations.registration_number = devices.registration
         AND aircraft_registrations.device_id IS NULL
-        "#
+        "#,
     )
     .execute(&mut conn);
 

@@ -1,9 +1,9 @@
 use anyhow::{Context, Result};
+use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
-use diesel::prelude::*;
 
 /// A link associated with a receiver
 #[derive(Debug, Clone, Serialize, Deserialize)]

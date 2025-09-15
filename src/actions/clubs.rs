@@ -3,8 +3,8 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Json},
 };
-use uuid::Uuid;
 use tracing::error;
+use uuid::Uuid;
 
 use crate::clubs_repo::ClubsRepository;
 use crate::web::AppState;

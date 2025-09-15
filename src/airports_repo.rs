@@ -96,7 +96,8 @@ impl AirportsRepository {
         use crate::schema::airports::dsl::*;
 
         let airports_vec: Vec<Airport> = airports_list.into_iter().collect();
-        let new_airports: Vec<NewAirportModel> = airports_vec.into_iter().map(|a| a.into()).collect();
+        let new_airports: Vec<NewAirportModel> =
+            airports_vec.into_iter().map(|a| a.into()).collect();
 
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
@@ -131,7 +132,8 @@ impl AirportsRepository {
                 .execute(&mut conn)?;
 
             Ok::<usize, anyhow::Error>(upserted_count)
-        }).await??;
+        })
+        .await??;
 
         info!("Successfully upserted {} airports", result);
         Ok(result)
@@ -146,7 +148,8 @@ impl AirportsRepository {
             let mut conn = pool.get()?;
             let count = airports.count().get_result::<i64>(&mut conn)?;
             Ok::<i64, anyhow::Error>(count)
-        }).await??;
+        })
+        .await??;
 
         Ok(result)
     }
@@ -161,16 +164,34 @@ impl AirportsRepository {
             let airport_model: Option<AirportModel> = airports
                 .filter(id.eq(airport_id))
                 .select((
-                    id, ident, type_, name, latitude_deg, longitude_deg,
-                    elevation_ft, continent, iso_country, iso_region, municipality,
-                    scheduled_service, gps_code, icao_code, iata_code, local_code,
-                    home_link, wikipedia_link, keywords, created_at, updated_at
+                    id,
+                    ident,
+                    type_,
+                    name,
+                    latitude_deg,
+                    longitude_deg,
+                    elevation_ft,
+                    continent,
+                    iso_country,
+                    iso_region,
+                    municipality,
+                    scheduled_service,
+                    gps_code,
+                    icao_code,
+                    iata_code,
+                    local_code,
+                    home_link,
+                    wikipedia_link,
+                    keywords,
+                    created_at,
+                    updated_at,
                 ))
                 .first(&mut conn)
                 .optional()?;
 
             Ok::<Option<AirportModel>, anyhow::Error>(airport_model)
-        }).await??;
+        })
+        .await??;
 
         Ok(result.map(|model| model.into()))
     }
@@ -186,16 +207,34 @@ impl AirportsRepository {
             let airport_model: Option<AirportModel> = airports
                 .filter(ident.eq(&airport_ident))
                 .select((
-                    id, ident, type_, name, latitude_deg, longitude_deg,
-                    elevation_ft, continent, iso_country, iso_region, municipality,
-                    scheduled_service, gps_code, icao_code, iata_code, local_code,
-                    home_link, wikipedia_link, keywords, created_at, updated_at
+                    id,
+                    ident,
+                    type_,
+                    name,
+                    latitude_deg,
+                    longitude_deg,
+                    elevation_ft,
+                    continent,
+                    iso_country,
+                    iso_region,
+                    municipality,
+                    scheduled_service,
+                    gps_code,
+                    icao_code,
+                    iata_code,
+                    local_code,
+                    home_link,
+                    wikipedia_link,
+                    keywords,
+                    created_at,
+                    updated_at,
                 ))
                 .first(&mut conn)
                 .optional()?;
 
             Ok::<Option<AirportModel>, anyhow::Error>(airport_model)
-        }).await??;
+        })
+        .await??;
 
         Ok(result.map(|model| model.into()))
     }
@@ -212,15 +251,33 @@ impl AirportsRepository {
                 .filter(name.ilike(&search_pattern))
                 .order((name, ident))
                 .select((
-                    id, ident, type_, name, latitude_deg, longitude_deg,
-                    elevation_ft, continent, iso_country, iso_region, municipality,
-                    scheduled_service, gps_code, icao_code, iata_code, local_code,
-                    home_link, wikipedia_link, keywords, created_at, updated_at
+                    id,
+                    ident,
+                    type_,
+                    name,
+                    latitude_deg,
+                    longitude_deg,
+                    elevation_ft,
+                    continent,
+                    iso_country,
+                    iso_region,
+                    municipality,
+                    scheduled_service,
+                    gps_code,
+                    icao_code,
+                    iata_code,
+                    local_code,
+                    home_link,
+                    wikipedia_link,
+                    keywords,
+                    created_at,
+                    updated_at,
                 ))
                 .load(&mut conn)?;
 
             Ok::<Vec<AirportModel>, anyhow::Error>(airport_models)
-        }).await??;
+        })
+        .await??;
 
         Ok(result.into_iter().map(|model| model.into()).collect())
     }
@@ -237,15 +294,33 @@ impl AirportsRepository {
                 .filter(iso_country.eq(&country_code))
                 .order((name, ident))
                 .select((
-                    id, ident, type_, name, latitude_deg, longitude_deg,
-                    elevation_ft, continent, iso_country, iso_region, municipality,
-                    scheduled_service, gps_code, icao_code, iata_code, local_code,
-                    home_link, wikipedia_link, keywords, created_at, updated_at
+                    id,
+                    ident,
+                    type_,
+                    name,
+                    latitude_deg,
+                    longitude_deg,
+                    elevation_ft,
+                    continent,
+                    iso_country,
+                    iso_region,
+                    municipality,
+                    scheduled_service,
+                    gps_code,
+                    icao_code,
+                    iata_code,
+                    local_code,
+                    home_link,
+                    wikipedia_link,
+                    keywords,
+                    created_at,
+                    updated_at,
                 ))
                 .load(&mut conn)?;
 
             Ok::<Vec<AirportModel>, anyhow::Error>(airport_models)
-        }).await??;
+        })
+        .await??;
 
         Ok(result.into_iter().map(|model| model.into()).collect())
     }
@@ -262,15 +337,33 @@ impl AirportsRepository {
                 .filter(type_.eq(&type_filter))
                 .order((name, ident))
                 .select((
-                    id, ident, type_, name, latitude_deg, longitude_deg,
-                    elevation_ft, continent, iso_country, iso_region, municipality,
-                    scheduled_service, gps_code, icao_code, iata_code, local_code,
-                    home_link, wikipedia_link, keywords, created_at, updated_at
+                    id,
+                    ident,
+                    type_,
+                    name,
+                    latitude_deg,
+                    longitude_deg,
+                    elevation_ft,
+                    continent,
+                    iso_country,
+                    iso_region,
+                    municipality,
+                    scheduled_service,
+                    gps_code,
+                    icao_code,
+                    iata_code,
+                    local_code,
+                    home_link,
+                    wikipedia_link,
+                    keywords,
+                    created_at,
+                    updated_at,
                 ))
                 .load(&mut conn)?;
 
             Ok::<Vec<AirportModel>, anyhow::Error>(airport_models)
-        }).await??;
+        })
+        .await??;
 
         Ok(result.into_iter().map(|model| model.into()).collect())
     }
@@ -334,15 +427,33 @@ impl AirportsRepository {
                 .filter(scheduled_service.eq(true))
                 .order((name, ident))
                 .select((
-                    id, ident, type_, name, latitude_deg, longitude_deg,
-                    elevation_ft, continent, iso_country, iso_region, municipality,
-                    scheduled_service, gps_code, icao_code, iata_code, local_code,
-                    home_link, wikipedia_link, keywords, created_at, updated_at
+                    id,
+                    ident,
+                    type_,
+                    name,
+                    latitude_deg,
+                    longitude_deg,
+                    elevation_ft,
+                    continent,
+                    iso_country,
+                    iso_region,
+                    municipality,
+                    scheduled_service,
+                    gps_code,
+                    icao_code,
+                    iata_code,
+                    local_code,
+                    home_link,
+                    wikipedia_link,
+                    keywords,
+                    created_at,
+                    updated_at,
                 ))
                 .load(&mut conn)?;
 
             Ok::<Vec<AirportModel>, anyhow::Error>(airport_models)
-        }).await??;
+        })
+        .await??;
 
         Ok(result.into_iter().map(|model| model.into()).collect())
     }
@@ -550,7 +661,10 @@ mod tests {
         assert_eq!(airport.airport_type, "heliport");
         assert_eq!(airport.name, "Total RF Heliport");
         assert_eq!(airport.latitude_deg, BigDecimal::from_str("40.070985").ok());
-        assert_eq!(airport.longitude_deg, BigDecimal::from_str("-74.933689").ok());
+        assert_eq!(
+            airport.longitude_deg,
+            BigDecimal::from_str("-74.933689").ok()
+        );
         assert_eq!(airport.elevation_ft, Some(11));
         assert_eq!(airport.iso_country, Some("US".to_string()));
         assert!(!airport.scheduled_service);

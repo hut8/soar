@@ -5,11 +5,11 @@ use diesel::r2d2::{ConnectionManager, Pool};
 use tracing::{info, warn};
 
 use crate::receivers::{
-    Receiver, ReceiverLinkRecord, ReceiverPhotoRecord, ReceiverRecord, ReceiversData,
-    ReceiverModel, NewReceiverModel, ReceiverPhotoModel, NewReceiverPhotoModel,
-    ReceiverLinkModel, NewReceiverLinkModel,
+    NewReceiverLinkModel, NewReceiverModel, NewReceiverPhotoModel, Receiver, ReceiverLinkModel,
+    ReceiverLinkRecord, ReceiverModel, ReceiverPhotoModel, ReceiverPhotoRecord, ReceiverRecord,
+    ReceiversData,
 };
-use crate::schema::{receivers, receivers_photos, receivers_links};
+use crate::schema::{receivers, receivers_links, receivers_photos};
 
 type PgPool = Pool<ConnectionManager<PgConnection>>;
 
@@ -86,11 +86,16 @@ impl ReceiverRepository {
                     };
 
                     // Delete existing photos and links for this receiver
-                    let _ = diesel::delete(receivers_photos::table.filter(receivers_photos::receiver_id.eq(receiver_id)))
-                        .execute(conn);
+                    let _ = diesel::delete(
+                        receivers_photos::table
+                            .filter(receivers_photos::receiver_id.eq(receiver_id)),
+                    )
+                    .execute(conn);
 
-                    let _ = diesel::delete(receivers_links::table.filter(receivers_links::receiver_id.eq(receiver_id)))
-                        .execute(conn);
+                    let _ = diesel::delete(
+                        receivers_links::table.filter(receivers_links::receiver_id.eq(receiver_id)),
+                    )
+                    .execute(conn);
 
                     // Insert photos
                     if let Some(photos) = &receiver.photos {
@@ -106,7 +111,10 @@ impl ReceiverRepository {
                                     .execute(conn);
 
                                 if let Err(e) = photo_result {
-                                    warn!("Failed to insert photo for receiver {}: {}", callsign, e);
+                                    warn!(
+                                        "Failed to insert photo for receiver {}: {}",
+                                        callsign, e
+                                    );
                                 }
                             }
                         }
@@ -191,7 +199,10 @@ impl ReceiverRepository {
                 .select(ReceiverPhotoModel::as_select())
                 .load::<ReceiverPhotoModel>(&mut conn)?;
 
-            Ok(photo_models.into_iter().map(ReceiverPhotoRecord::from).collect())
+            Ok(photo_models
+                .into_iter()
+                .map(ReceiverPhotoRecord::from)
+                .collect())
         })
         .await?
     }
@@ -207,7 +218,10 @@ impl ReceiverRepository {
                 .select(ReceiverLinkModel::as_select())
                 .load::<ReceiverLinkModel>(&mut conn)?;
 
-            Ok(link_models.into_iter().map(ReceiverLinkRecord::from).collect())
+            Ok(link_models
+                .into_iter()
+                .map(ReceiverLinkRecord::from)
+                .collect())
         })
         .await?
     }
@@ -247,7 +261,10 @@ impl ReceiverRepository {
                 .select(ReceiverModel::as_select())
                 .load::<ReceiverModel>(&mut conn)?;
 
-            Ok(receiver_models.into_iter().map(ReceiverRecord::from).collect())
+            Ok(receiver_models
+                .into_iter()
+                .map(ReceiverRecord::from)
+                .collect())
         })
         .await?
     }
@@ -265,7 +282,10 @@ impl ReceiverRepository {
                 .select(ReceiverModel::as_select())
                 .load::<ReceiverModel>(&mut conn)?;
 
-            Ok(receiver_models.into_iter().map(ReceiverRecord::from).collect())
+            Ok(receiver_models
+                .into_iter()
+                .map(ReceiverRecord::from)
+                .collect())
         })
         .await?
     }
@@ -287,7 +307,10 @@ impl ReceiverRepository {
                 .select(ReceiverModel::as_select())
                 .load::<ReceiverModel>(&mut conn)?;
 
-            Ok(receiver_models.into_iter().map(ReceiverRecord::from).collect())
+            Ok(receiver_models
+                .into_iter()
+                .map(ReceiverRecord::from)
+                .collect())
         })
         .await?
     }
@@ -314,15 +337,20 @@ impl ReceiverRepository {
                 };
 
                 // Delete photos and links (will cascade due to foreign key constraints, but being explicit)
-                diesel::delete(receivers_photos::table.filter(receivers_photos::receiver_id.eq(receiver_id)))
-                    .execute(conn)?;
+                diesel::delete(
+                    receivers_photos::table.filter(receivers_photos::receiver_id.eq(receiver_id)),
+                )
+                .execute(conn)?;
 
-                diesel::delete(receivers_links::table.filter(receivers_links::receiver_id.eq(receiver_id)))
-                    .execute(conn)?;
+                diesel::delete(
+                    receivers_links::table.filter(receivers_links::receiver_id.eq(receiver_id)),
+                )
+                .execute(conn)?;
 
                 // Delete the receiver
-                let rows_affected = diesel::delete(receivers::table.filter(receivers::id.eq(receiver_id)))
-                    .execute(conn)?;
+                let rows_affected =
+                    diesel::delete(receivers::table.filter(receivers::id.eq(receiver_id)))
+                        .execute(conn)?;
 
                 Ok(rows_affected > 0)
             })

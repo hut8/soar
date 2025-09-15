@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
+use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use diesel::prelude::*;
 
 /// A flight representing a complete takeoff to landing sequence
 #[derive(Debug, Clone, Serialize, Deserialize)]

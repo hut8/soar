@@ -1,12 +1,12 @@
 use anyhow::{Context, Result, anyhow};
 use chrono::NaiveDate;
 use diesel::prelude::*;
+use diesel_derive_enum::DbEnum;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
-use diesel_derive_enum::DbEnum;
+use uuid::Uuid;
 
 // Import Point from clubs module
 use crate::locations::Point;
@@ -1061,7 +1061,8 @@ impl From<Aircraft> for NewAircraftRegistration {
             op_experimental_uas_crew_training: ops.exp_uas_crew_training,
             op_experimental_uas_exhibition: ops.exp_uas_exhibition,
             op_experimental_uas_compliance_with_cfr: ops.exp_uas_compliance_with_cfr,
-            op_sfp_ferry_for_repairs_alterations_storage: ops.sfp_ferry_for_repairs_alterations_storage,
+            op_sfp_ferry_for_repairs_alterations_storage: ops
+                .sfp_ferry_for_repairs_alterations_storage,
             op_sfp_evacuate_impending_danger: ops.sfp_evacuate_impending_danger,
             op_sfp_excess_of_max_certificated: ops.sfp_excess_of_max_certificated,
             op_sfp_delivery_or_export: ops.sfp_delivery_or_export,
@@ -1111,7 +1112,8 @@ impl From<AircraftRegistrationModel> for Aircraft {
             exp_uas_crew_training: model.op_experimental_uas_crew_training,
             exp_uas_exhibition: model.op_experimental_uas_exhibition,
             exp_uas_compliance_with_cfr: model.op_experimental_uas_compliance_with_cfr,
-            sfp_ferry_for_repairs_alterations_storage: model.op_sfp_ferry_for_repairs_alterations_storage,
+            sfp_ferry_for_repairs_alterations_storage: model
+                .op_sfp_ferry_for_repairs_alterations_storage,
             sfp_evacuate_impending_danger: model.op_sfp_evacuate_impending_danger,
             sfp_excess_of_max_certificated: model.op_sfp_excess_of_max_certificated,
             sfp_delivery_or_export: model.op_sfp_delivery_or_export,
@@ -1154,7 +1156,7 @@ impl From<AircraftRegistrationModel> for Aircraft {
             kit_mfr_name: model.kit_mfr_name,
             kit_model_name: model.kit_model_name,
             home_base_airport_id: None, // Would need to derive from location or separate field
-            registered_location: None, // Legacy field, now in locations table
+            registered_location: None,  // Legacy field, now in locations table
             device_id: model.device_id,
         }
     }
@@ -1288,7 +1290,10 @@ mod tests {
 
         // Test whitespace trimming
         assert_eq!(format_zip_code("  12345  "), Some("12345".to_string()));
-        assert_eq!(format_zip_code("  123456789  "), Some("12345-6789".to_string()));
+        assert_eq!(
+            format_zip_code("  123456789  "),
+            Some("12345-6789".to_string())
+        );
 
         // Test non-numeric 9-character strings remain unchanged
         assert_eq!(format_zip_code("12345abcd"), Some("12345abcd".to_string()));
@@ -1296,7 +1301,10 @@ mod tests {
 
         // Test other lengths remain unchanged
         assert_eq!(format_zip_code("1234"), Some("1234".to_string()));
-        assert_eq!(format_zip_code("1234567890"), Some("1234567890".to_string()));
+        assert_eq!(
+            format_zip_code("1234567890"),
+            Some("1234567890".to_string())
+        );
     }
 
     #[test]

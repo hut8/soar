@@ -4,8 +4,8 @@ use axum::{
     response::{IntoResponse, Json},
 };
 use serde::Deserialize;
-use uuid::Uuid;
 use tracing::error;
+use uuid::Uuid;
 
 use crate::auth::{AdminUser, AuthUser};
 use crate::users::UpdateUserRequest;

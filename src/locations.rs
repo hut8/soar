@@ -1,12 +1,12 @@
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
-use uuid::Uuid;
-use diesel::prelude::*;
 use diesel::deserialize::{self, FromSql};
-use diesel::serialize::{self, ToSql, Output};
-use diesel::pg::{Pg, PgValue};
 use diesel::expression::AsExpression;
+use diesel::pg::{Pg, PgValue};
+use diesel::prelude::*;
+use diesel::serialize::{self, Output, ToSql};
+use serde::{Deserialize, Serialize};
 use std::io::Write;
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Location {
@@ -52,12 +52,10 @@ impl FromSql<crate::schema::sql_types::Point, Pg> for Point {
 
         // PostgreSQL stores point as two 8-byte floats (longitude, latitude) in network byte order
         let longitude = f64::from_be_bytes([
-            bytes[0], bytes[1], bytes[2], bytes[3],
-            bytes[4], bytes[5], bytes[6], bytes[7],
+            bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
         ]);
         let latitude = f64::from_be_bytes([
-            bytes[8], bytes[9], bytes[10], bytes[11],
-            bytes[12], bytes[13], bytes[14], bytes[15],
+            bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15],
         ]);
 
         Ok(Point::new(latitude, longitude))
@@ -73,8 +71,6 @@ impl ToSql<crate::schema::sql_types::Point, Pg> for Point {
         Ok(serialize::IsNull::No)
     }
 }
-
-
 
 /// Diesel model for the locations table - used for database operations
 #[derive(Debug, Clone, Queryable, Selectable, Serialize, Deserialize)]
@@ -111,7 +107,6 @@ pub struct NewLocationModel {
     pub country_mail_code: Option<String>,
     pub geolocation: Option<Point>, // PostgreSQL point type
 }
-
 
 /// Conversion from Location (API model) to LocationModel (database model)
 impl From<Location> for LocationModel {

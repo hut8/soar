@@ -3,11 +3,11 @@ use std::collections::HashMap;
 use tracing::{debug, error, info, warn};
 
 use crate::database_fix_processor::DatabaseFixProcessor;
-use diesel::r2d2::{ConnectionManager, Pool};
-use diesel::PgConnection;
 use crate::flights::Flight;
 use crate::flights_repo::FlightsRepository;
 use crate::{Fix, FixProcessor};
+use diesel::PgConnection;
+use diesel::r2d2::{ConnectionManager, Pool};
 
 /// Circular buffer to store recent fixes for flight state analysis
 #[derive(Debug, Clone)]

@@ -192,12 +192,12 @@ impl UsersRepository {
             let now = Utc::now();
 
             // Check if any field needs updating
-            let has_updates = request_clone.first_name.is_some() ||
-                             request_clone.last_name.is_some() ||
-                             request_clone.email.is_some() ||
-                             request_clone.is_admin.is_some() ||
-                             request_clone.club_id.is_some() ||
-                             request_clone.email_verified.is_some();
+            let has_updates = request_clone.first_name.is_some()
+                || request_clone.last_name.is_some()
+                || request_clone.email.is_some()
+                || request_clone.is_admin.is_some()
+                || request_clone.club_id.is_some()
+                || request_clone.email_verified.is_some();
 
             if !has_updates {
                 // No updates to make, just return current user
@@ -217,12 +217,15 @@ impl UsersRepository {
             if let Some(current) = current_user {
                 let rows_affected = diesel::update(users::table.filter(users::id.eq(user_id)))
                     .set((
-                        users::first_name.eq(request_clone.first_name.unwrap_or(current.first_name)),
+                        users::first_name
+                            .eq(request_clone.first_name.unwrap_or(current.first_name)),
                         users::last_name.eq(request_clone.last_name.unwrap_or(current.last_name)),
                         users::email.eq(request_clone.email.unwrap_or(current.email)),
                         users::is_admin.eq(request_clone.is_admin.unwrap_or(current.is_admin)),
                         users::club_id.eq(request_clone.club_id.or(current.club_id)),
-                        users::email_verified.eq(request_clone.email_verified.unwrap_or(current.email_verified)),
+                        users::email_verified.eq(request_clone
+                            .email_verified
+                            .unwrap_or(current.email_verified)),
                         users::updated_at.eq(now),
                     ))
                     .execute(&mut conn)?;
@@ -248,8 +251,8 @@ impl UsersRepository {
         let pool = self.pool.clone();
         tokio::task::spawn_blocking(move || -> Result<bool> {
             let mut conn = pool.get()?;
-            let rows_affected = diesel::delete(users::table.filter(users::id.eq(user_id)))
-                .execute(&mut conn)?;
+            let rows_affected =
+                diesel::delete(users::table.filter(users::id.eq(user_id))).execute(&mut conn)?;
             Ok(rows_affected > 0)
         })
         .await?
@@ -340,10 +343,7 @@ impl UsersRepository {
         tokio::task::spawn_blocking(move || -> Result<bool> {
             let mut conn = pool.get()?;
             let rows_affected = diesel::update(users::table.filter(users::id.eq(user_id)))
-                .set((
-                    users::email_verified.eq(true),
-                    users::updated_at.eq(now),
-                ))
+                .set((users::email_verified.eq(true), users::updated_at.eq(now)))
                 .execute(&mut conn)?;
             Ok(rows_affected > 0)
         })
