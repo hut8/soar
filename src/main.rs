@@ -3,7 +3,7 @@ use chrono::Local;
 use clap::{Parser, Subcommand};
 use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
-use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
+use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
 use std::env;
 use std::fs;
 use std::io;
@@ -143,10 +143,12 @@ async fn setup_diesel_database() -> Result<Pool<ConnectionManager<PgConnection>>
 
     // Run embedded migrations
     info!("Running database migrations...");
-    let mut connection = pool.get()
+    let mut connection = pool
+        .get()
         .map_err(|e| anyhow::anyhow!("Failed to get database connection for migrations: {}", e))?;
 
-    connection.run_pending_migrations(MIGRATIONS)
+    connection
+        .run_pending_migrations(MIGRATIONS)
         .map_err(|e| anyhow::anyhow!("Failed to run migrations: {}", e))?;
 
     info!("Database migrations completed successfully");
