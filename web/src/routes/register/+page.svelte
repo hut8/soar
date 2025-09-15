@@ -3,7 +3,6 @@
 	import { authApi, AuthApiError } from '$lib/api/auth';
 	import { resolve } from '$app/paths';
 	import { ClubSelector } from '$lib';
-	import { page } from '$app/state';
 
 	let firstName = '';
 	let lastName = '';

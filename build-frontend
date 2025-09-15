@@ -3,34 +3,30 @@
 # Frontend build pipeline - lint, check, test, and build
 echo "Running frontend build pipeline..."
 
-cd web
+cd web || { echo "Directory 'web' not found!"; exit 1; }
 
 echo "Step 1/4: Running linter..."
-npm run lint
-if [ $? -ne 0 ]; then
+npm run lint || {
     echo "❌ Linting failed!"
     exit 1
-fi
+}
 
 echo "Step 2/4: Running type check..."
-npm run check
-if [ $? -ne 0 ]; then
+npm run check || {
     echo "❌ Type check failed!"
     exit 1
-fi
+}
 
 echo "Step 3/4: Running tests..."
-npm run test
-if [ $? -ne 0 ]; then
+npm run test || {
     echo "❌ Tests failed!"
     exit 1
-fi
+}
 
 echo "Step 4/4: Building project..."
-npm run build
-if [ $? -ne 0 ]; then
+npm run build || {
     echo "❌ Build failed!"
     exit 1
-fi
+}
 
 echo "✅ Frontend build pipeline completed successfully!"
