@@ -3,6 +3,7 @@ use chrono::Local;
 use clap::{Parser, Subcommand};
 use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
+use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use std::env;
 use std::fs;
 use std::io;
@@ -13,6 +14,9 @@ use tracing::{info, warn};
 use soar::aprs_client::{AprsClient, AprsClientConfigBuilder, FixProcessor, MessageProcessor};
 use soar::database_fix_processor::DatabaseFixProcessor;
 use soar::live_fixes::LiveFixService;
+
+// Embed migrations at compile time
+pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/");
 
 #[derive(Parser)]
 #[command(name = "soar")]
@@ -136,6 +140,16 @@ async fn setup_diesel_database() -> Result<Pool<ConnectionManager<PgConnection>>
         .map_err(|e| anyhow::anyhow!("Failed to create Diesel connection pool: {}", e))?;
 
     info!("Successfully created Diesel connection pool");
+
+    // Run embedded migrations
+    info!("Running database migrations...");
+    let mut connection = pool.get()
+        .map_err(|e| anyhow::anyhow!("Failed to get database connection for migrations: {}", e))?;
+
+    connection.run_pending_migrations(MIGRATIONS)
+        .map_err(|e| anyhow::anyhow!("Failed to run migrations: {}", e))?;
+
+    info!("Database migrations completed successfully");
 
     Ok(pool)
 }
