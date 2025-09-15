@@ -1,7 +1,8 @@
 use anyhow::Result;
+use chrono::Local;
 use clap::{Parser, Subcommand};
-use diesel::r2d2::{ConnectionManager, Pool};
 use diesel::PgConnection;
+use diesel::r2d2::{ConnectionManager, Pool};
 use std::env;
 use std::fs;
 use std::path::Path;
@@ -11,7 +12,6 @@ use tracing::{info, warn};
 use soar::aprs_client::{AprsClient, AprsClientConfigBuilder, FixProcessor, MessageProcessor};
 use soar::database_fix_processor::DatabaseFixProcessor;
 use soar::live_fixes::LiveFixService;
-
 
 #[derive(Parser)]
 #[command(name = "soar")]
@@ -32,10 +32,12 @@ enum Commands {
     LoadData {
         /// Path to the aircraft model data file (from ACFTREF.txt in the "releasable aircraft" FAA database
         /// https://www.faa.gov/licenses_certificates/aircraft_certification/aircraft_registry/releasable_aircraft_download)
+        /// https://registry.faa.gov/database/ReleasableAircraft.zip
         #[arg(long)]
         aircraft_models: Option<String>,
         /// Path to the aircraft registrations data file (from MASTER.txt in the "releasable aircraft" FAA database)
         /// https://www.faa.gov/licenses_certificates/aircraft_certification/aircraft_registry/releasable_aircraft_download
+        /// https://registry.faa.gov/database/ReleasableAircraft.zip
         #[arg(long)]
         aircraft_registrations: Option<String>,
         /// Path to the airports CSV file (from "our airports" database)
@@ -59,6 +61,11 @@ enum Commands {
         #[arg(long)]
         link_home_bases: bool,
     },
+    /// Pull data from HTTP sources and then load it
+    ///
+    /// Downloads airports and runways data from ourairports-data, creates a temporary directory,
+    /// and then invokes the same procedures as load-data.
+    PullData {},
     /// Run the main APRS client
     Run {
         /// APRS server hostname
@@ -112,7 +119,6 @@ enum Commands {
         interface: String,
     },
 }
-
 
 async fn setup_diesel_database() -> Result<Pool<ConnectionManager<PgConnection>>> {
     // Load environment variables from .env file
@@ -170,7 +176,6 @@ fn determine_archive_dir() -> Result<String> {
     Ok(home_archive)
 }
 
-
 #[allow(clippy::too_many_arguments)]
 async fn handle_run(
     server: String,
@@ -217,7 +222,8 @@ async fn handle_run(
     );
 
     // Create database fix processor to save all valid fixes to the database
-    let db_fix_processor: Arc<dyn FixProcessor> = Arc::new(DatabaseFixProcessor::new(diesel_pool.clone()));
+    let db_fix_processor: Arc<dyn FixProcessor> =
+        Arc::new(DatabaseFixProcessor::new(diesel_pool.clone()));
 
     // Create and start APRS client with both message and fix processors
     let mut client =
@@ -234,6 +240,56 @@ async fn handle_run(
     loop {
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
     }
+}
+
+async fn handle_pull_data(diesel_pool: Pool<ConnectionManager<PgConnection>>) -> Result<()> {
+    info!("Starting pull-data operation");
+
+    // Create temporary directory with timestamp
+    let timestamp = Local::now().format("%Y%m%d-%H%M%S");
+    let temp_dir = format!("/tmp/soar/data-{}", timestamp);
+
+    info!("Creating temporary directory: {}", temp_dir);
+    fs::create_dir_all(&temp_dir)?;
+
+    // Download airports.csv
+    let airports_url = "https://davidmegginson.github.io/ourairports-data/airports.csv";
+    let airports_path = format!("{}/airports.csv", temp_dir);
+    info!("Downloading airports data from: {}", airports_url);
+
+    let client = reqwest::Client::new();
+    let airports_response = client.get(airports_url).send().await?;
+    let airports_content = airports_response.text().await?;
+    fs::write(&airports_path, airports_content)?;
+    info!("Airports data saved to: {}", airports_path);
+
+    // Download runways.csv
+    let runways_url = "https://davidmegginson.github.io/ourairports-data/runways.csv";
+    let runways_path = format!("{}/runways.csv", temp_dir);
+    info!("Downloading runways data from: {}", runways_url);
+
+    let runways_response = client.get(runways_url).send().await?;
+    let runways_content = runways_response.text().await?;
+    fs::write(&runways_path, runways_content)?;
+    info!("Runways data saved to: {}", runways_path);
+
+    // Display the temporary directory
+    info!("Temporary directory created at: {}", temp_dir);
+
+    // Invoke handle_load_data with the downloaded files
+    info!("Invoking load data procedures...");
+    soar::loader::handle_load_data(
+        diesel_pool,
+        None, // aircraft_models
+        None, // aircraft_registrations
+        Some(airports_path),
+        Some(runways_path),
+        None, // receivers
+        true,
+        true,
+        true,
+    )
+    .await
 }
 
 #[tokio::main]
@@ -268,7 +324,6 @@ async fn main() -> Result<()> {
 
     let cli = Cli::parse();
 
-
     // Set up database connection - Diesel for all repositories
     let diesel_pool = setup_diesel_database().await?;
 
@@ -296,6 +351,7 @@ async fn main() -> Result<()> {
             )
             .await
         }
+        Commands::PullData {} => handle_pull_data(diesel_pool).await,
         Commands::Run {
             server,
             port,
