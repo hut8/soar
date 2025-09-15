@@ -10,7 +10,7 @@ Type=oneshot
 User=soar
 Group=soar
 WorkingDirectory=/var/lib/soar
-ExecStart=/usr/local/bin/soar pull-data --pull-devices --geocode --link-home-bases
+ExecStart=/usr/local/bin/soar pull-data
 
 # Environment variables
 EnvironmentFile=/etc/soar/env
