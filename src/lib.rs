@@ -18,6 +18,7 @@ pub mod devices;
 pub mod schema;
 pub mod email;
 pub mod faa;
+pub mod fetch_receivers;
 pub mod fixes;
 pub mod fixes_repo;
 pub mod flight_detection_processor;
