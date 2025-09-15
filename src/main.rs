@@ -1,8 +1,8 @@
 use anyhow::Result;
 use chrono::Local;
 use clap::{Parser, Subcommand};
-use diesel::{PgConnection, RunQueryDsl};
 use diesel::r2d2::{ConnectionManager, Pool};
+use diesel::{PgConnection, RunQueryDsl};
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
 use std::env;
 use std::fs;
@@ -284,6 +284,12 @@ async fn handle_pull_data(diesel_pool: Pool<ConnectionManager<PgConnection>>) ->
     info!("Creating temporary directory: {}", temp_dir);
     fs::create_dir_all(&temp_dir)?;
 
+    // Pull receiver data from OGN RDB
+    let receivers_path = format!("{}/receivers.json", temp_dir);
+    info!("Pulling receiver data from OGN RDB...");
+    soar::fetch_receivers::fetch_receivers(&receivers_path).await?;
+    info!("Receivers data saved to: {}", receivers_path);
+
     // Download airports.csv
     let airports_url = "https://davidmegginson.github.io/ourairports-data/airports.csv";
     let airports_path = format!("{}/airports.csv", temp_dir);
@@ -339,7 +345,7 @@ async fn handle_pull_data(diesel_pool: Pool<ConnectionManager<PgConnection>>) ->
     info!("Aircraft registrations data extracted to: {}", master_path);
 
     // Display the temporary directory
-    info!("Temporary directory created at: {}", temp_dir);
+    info!("Data directory located at: {}", temp_dir);
 
     // Invoke handle_load_data with all downloaded files
     info!("Invoking load data procedures...");
@@ -349,7 +355,7 @@ async fn handle_pull_data(diesel_pool: Pool<ConnectionManager<PgConnection>>) ->
         Some(master_path),  // aircraft_registrations
         Some(airports_path),
         Some(runways_path),
-        None, // receivers
+        Some(receivers_path),
         true,
         true,
         true,

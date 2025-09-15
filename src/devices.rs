@@ -48,6 +48,23 @@ impl std::fmt::Display for DeviceType {
     }
 }
 
+// Custom deserializer for DeviceType to handle single character strings
+fn device_type_from_str<'de, D>(deserializer: D) -> Result<DeviceType, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    DeviceType::from_str(&s).map_err(|_| serde::de::Error::custom("Invalid device type"))
+}
+
+// Custom serializer for DeviceType to output single character strings
+fn device_type_to_str<S>(device_type: &DeviceType, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    serializer.serialize_str(&device_type.to_string())
+}
+
 // Custom deserializer for string to boolean conversion
 fn string_to_bool<'de, D>(deserializer: D) -> Result<bool, D::Error>
 where
@@ -88,6 +105,10 @@ pub enum RegistrationCountry {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Device {
+    #[serde(
+        deserialize_with = "device_type_from_str",
+        serialize_with = "device_type_to_str"
+    )]
     pub device_type: DeviceType,
     #[serde(deserialize_with = "hex_to_u32", serialize_with = "u32_to_hex")]
     pub device_id: u32,

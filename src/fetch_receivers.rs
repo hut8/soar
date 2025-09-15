@@ -352,7 +352,7 @@ fn parse_receiver_list(page: &str) -> Vec<Receiver> {
     receivers
 }
 
-pub async fn fetch_receivers(out_file: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn fetch_receivers(out_file: &str) -> anyhow::Result<()> {
     let client = reqwest::Client::builder()
         .user_agent("ogn-receiver-scraper/0.2 (+reqwest)")
         .build()?;
