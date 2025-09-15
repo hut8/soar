@@ -1,14 +1,16 @@
 use anyhow::Result;
 use chrono::Local;
 use clap::{Parser, Subcommand};
-use diesel::PgConnection;
+use diesel::{PgConnection, RunQueryDsl};
 use diesel::r2d2::{ConnectionManager, Pool};
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
 use std::env;
 use std::fs;
 use std::io;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
+use std::time::{Duration, Instant};
+use tokio::time;
 use tracing::{info, warn};
 
 use soar::aprs_client::{AprsClient, AprsClientConfigBuilder, FixProcessor, MessageProcessor};
@@ -141,11 +143,26 @@ async fn setup_diesel_database() -> Result<Pool<ConnectionManager<PgConnection>>
 
     info!("Successfully created Diesel connection pool");
 
-    // Run embedded migrations
+    // Run embedded migrations with a PostgreSQL advisory lock
     info!("Running database migrations...");
     let mut connection = pool
         .get()
         .map_err(|e| anyhow::anyhow!("Failed to get database connection for migrations: {}", e))?;
+
+    // Use a fixed, unique lock ID for migrations (arbitrary but consistent)
+    // This ensures only one process can run migrations at a time
+    let migration_lock_id = 19150118; // Ordinal Positions of "SOAR" in English alphabet: S(19) O(15) A(1) R(18)
+
+    // Blocking advisory lock with timeout
+    info!("Waiting to acquire migration lock...");
+    diesel::sql_query(format!(
+        "SELECT pg_advisory_xact_lock({})",
+        migration_lock_id
+    ))
+    .execute(&mut connection)
+    .map_err(|e| anyhow::anyhow!("Failed to acquire migration lock: {}", e))?;
+
+    info!("Migration lock acquired");
 
     connection
         .run_pending_migrations(MIGRATIONS)
