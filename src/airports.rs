@@ -28,14 +28,6 @@ fn to_opt_i32(s: &str) -> Option<i32> {
     t.parse::<i32>().ok()
 }
 
-fn to_opt_f64(s: &str) -> Option<f64> {
-    let t = s.trim();
-    if t.is_empty() {
-        return None;
-    }
-    t.parse::<f64>().ok()
-}
-
 fn to_opt_bigdecimal(s: &str) -> Option<BigDecimal> {
     let t = s.trim();
     if t.is_empty() {
