@@ -32,7 +32,7 @@
 
 			// Redirect to login after 3 seconds
 			setTimeout(() => {
-				goto(resolve('/login?message=Email verified successfully. Please log in.'));
+				goto('/login?message=Email verified successfully. Please log in.');
 			}, 3000);
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to verify email';
@@ -50,12 +50,12 @@
 
 			{#if loading}
 				<div class="flex flex-col items-center space-y-4">
-					<div class="h-12 w-12 animate-spin rounded-full border-b-2 border-primary-500"></div>
+					<div class="border-primary-500 h-12 w-12 animate-spin rounded-full border-b-2"></div>
 					<p>Verifying your email address...</p>
 				</div>
 			{:else if success}
 				<div class="flex flex-col items-center space-y-4">
-					<div class="flex h-16 w-16 items-center justify-center rounded-full bg-success-500">
+					<div class="bg-success-500 flex h-16 w-16 items-center justify-center rounded-full">
 						<svg class="h-8 w-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path
 								stroke-linecap="round"
@@ -65,7 +65,7 @@
 							></path>
 						</svg>
 					</div>
-					<h2 class="text-xl font-semibold text-success-500">Email Verified!</h2>
+					<h2 class="text-success-500 text-xl font-semibold">Email Verified!</h2>
 					<p class="text-surface-600-300-token">
 						Your email address has been successfully verified. You will be redirected to the login
 						page shortly.
@@ -73,7 +73,7 @@
 				</div>
 			{:else if error}
 				<div class="flex flex-col items-center space-y-4">
-					<div class="flex h-16 w-16 items-center justify-center rounded-full bg-error-500">
+					<div class="bg-error-500 flex h-16 w-16 items-center justify-center rounded-full">
 						<svg class="h-8 w-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path
 								stroke-linecap="round"
@@ -83,7 +83,7 @@
 							></path>
 						</svg>
 					</div>
-					<h2 class="text-xl font-semibold text-error-500">Verification Failed</h2>
+					<h2 class="text-error-500 text-xl font-semibold">Verification Failed</h2>
 					<p class="text-surface-600-300-token mb-4">{error}</p>
 					<div class="space-y-2">
 						<button
