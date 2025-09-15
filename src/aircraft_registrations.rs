@@ -12,7 +12,6 @@ use uuid::Uuid;
 use crate::locations::Point;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum)]
-#[serde(rename_all = "PascalCase")]
 #[db_enum(existing_type_path = "crate::schema::sql_types::AirworthinessClass")]
 pub enum AirworthinessClass {
     Standard,
