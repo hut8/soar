@@ -96,7 +96,7 @@ if [ ! -f "/etc/soar/env" ]; then
 
     log_info "Environment file created at /etc/soar/env"
 else
-    log_info "Environment file /etc/soar/env already exists"
+    log_info "Environment file /etc/soar/env already exists - preserving existing configuration"
 fi
 
 # Stop services if running
@@ -135,9 +135,13 @@ sudo chown root:${SERVICE_GROUP} /etc/soar
 sudo chmod 750 /etc/soar
 
 # Verify environment file permissions
-log_info "Verifying environment file permissions..."
-sudo chown root:${SERVICE_GROUP} /etc/soar/env
-sudo chmod 640 /etc/soar/env
+if [ -f "/etc/soar/env" ]; then
+    log_info "Verifying environment file permissions..."
+    sudo chown root:${SERVICE_GROUP} /etc/soar/env
+    sudo chmod 640 /etc/soar/env
+else
+    log_warn "Environment file /etc/soar/env not found - skipping permission setup"
+fi
 
 # Copy binary
 log_info "Copying binary to ${BINARY_PATH}..."
