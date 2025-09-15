@@ -7,6 +7,8 @@ echo "🚀 Starting SOAR deployment..."
 # Configuration
 RUN_SERVICE_NAME="soar-run"
 WEB_SERVICE_NAME="soar-web"
+PULL_DATA_SERVICE_NAME="soar-pull-data"
+PULL_DATA_TIMER_NAME="soar-pull-data"
 BINARY_PATH="/usr/local/bin"
 DEPLOY_PATH="/var/lib/soar"
 ARCHIVE_PATH="/var/soar/archive"
@@ -101,6 +103,7 @@ fi
 log_info "Stopping SOAR services if running..."
 sudo systemctl stop ${RUN_SERVICE_NAME} 2>/dev/null || true
 sudo systemctl stop ${WEB_SERVICE_NAME} 2>/dev/null || true
+sudo systemctl stop ${PULL_DATA_TIMER_NAME}.timer 2>/dev/null || true
 
 # Build the application
 log_info "Building SOAR application..."
@@ -156,6 +159,8 @@ sudo chmod +x ${BINARY_PATH}/${BINARY_NAME}
 log_info "Installing systemd services..."
 sudo cp ${RUN_SERVICE_NAME}.service /etc/systemd/system/
 sudo cp ${WEB_SERVICE_NAME}.service /etc/systemd/system/
+sudo cp ${PULL_DATA_SERVICE_NAME}.service /etc/systemd/system/
+sudo cp ${PULL_DATA_TIMER_NAME}.timer /etc/systemd/system/
 
 # Reload systemd
 log_info "Reloading systemd daemon..."
@@ -165,16 +170,19 @@ sudo systemctl daemon-reload
 log_info "Enabling SOAR services..."
 sudo systemctl enable ${RUN_SERVICE_NAME}
 sudo systemctl enable ${WEB_SERVICE_NAME}
+sudo systemctl enable ${PULL_DATA_TIMER_NAME}.timer
 
 # Start services
 log_info "Starting SOAR services..."
 sudo systemctl start ${RUN_SERVICE_NAME}
 sudo systemctl start ${WEB_SERVICE_NAME}
+sudo systemctl start ${PULL_DATA_TIMER_NAME}.timer
 
 # Check service status
 sleep 3
 run_status=""
 web_status=""
+timer_status=""
 
 if sudo systemctl is-active --quiet ${RUN_SERVICE_NAME}; then
     run_status="✅ RUNNING"
@@ -188,12 +196,19 @@ else
     web_status="❌ FAILED"
 fi
 
+if sudo systemctl is-active --quiet ${PULL_DATA_TIMER_NAME}.timer; then
+    timer_status="✅ ACTIVE"
+else
+    timer_status="❌ INACTIVE"
+fi
+
 log_info "Service Status:"
 log_info "  ${RUN_SERVICE_NAME}: ${run_status}"
 log_info "  ${WEB_SERVICE_NAME}: ${web_status}"
+log_info "  ${PULL_DATA_TIMER_NAME}.timer: ${timer_status}"
 
 # Show detailed status if any service failed
-if [[ "$run_status" == *"FAILED"* ]] || [[ "$web_status" == *"FAILED"* ]]; then
+if [[ "$run_status" == *"FAILED"* ]] || [[ "$web_status" == *"FAILED"* ]] || [[ "$timer_status" == *"INACTIVE"* ]]; then
     log_error "One or more services failed to start"
     
     if [[ "$run_status" == *"FAILED"* ]]; then
@@ -205,10 +220,15 @@ if [[ "$run_status" == *"FAILED"* ]] || [[ "$web_status" == *"FAILED"* ]]; then
         log_info "Checking ${WEB_SERVICE_NAME} logs:"
         sudo journalctl -u ${WEB_SERVICE_NAME} --no-pager -l -n 10
     fi
-    
+
+    if [[ "$timer_status" == *"INACTIVE"* ]]; then
+        log_info "Checking ${PULL_DATA_TIMER_NAME} timer status:"
+        sudo systemctl status ${PULL_DATA_TIMER_NAME}.timer --no-pager -l
+    fi
+
     exit 1
 else
-    log_info "✅ Both services are running successfully!"
+    log_info "✅ All services are running successfully!"
 fi
 
 # Track deployment in Sentry if configured
@@ -243,6 +263,13 @@ log_info "  For development, unset SOAR_ENV to use port 1338"
 log_info ""
 log_info "Commands:"
 log_info "  Status: sudo systemctl status ${RUN_SERVICE_NAME} ${WEB_SERVICE_NAME}"
+log_info "  Timer Status: sudo systemctl list-timers ${PULL_DATA_TIMER_NAME}.timer"
 log_info "  Logs: sudo journalctl -u ${RUN_SERVICE_NAME} -f"
 log_info "  Web logs: sudo journalctl -u ${WEB_SERVICE_NAME} -f"
+log_info "  Pull-data logs: sudo journalctl -u ${PULL_DATA_SERVICE_NAME} -f"
+log_info "  Manual data pull: sudo systemctl start ${PULL_DATA_SERVICE_NAME}"
 log_info "  Web interface: http://localhost:1337 (production)"
+log_info ""
+log_info "Data Import:"
+log_info "  The pull-data timer runs daily at 3:00 AM"
+log_info "  It automatically downloads airports, runways, and aircraft data"
