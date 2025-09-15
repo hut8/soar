@@ -89,6 +89,7 @@ impl AirportsRepository {
 
     /// Upsert airports into the database
     /// This will insert new airports or update existing ones based on the primary key (id)
+    /// Processes airports in batches to avoid PostgreSQL's parameter limit
     pub async fn upsert_airports<I>(&self, airports_list: I) -> Result<usize>
     where
         I: IntoIterator<Item = Airport>,
@@ -99,44 +100,67 @@ impl AirportsRepository {
         let new_airports: Vec<NewAirportModel> =
             airports_vec.into_iter().map(|a| a.into()).collect();
 
-        let pool = self.pool.clone();
-        let result = tokio::task::spawn_blocking(move || {
-            let mut conn = pool.get()?;
+        // Process in batches of 1000 to avoid PostgreSQL parameter limits
+        const BATCH_SIZE: usize = 1000;
+        let total_airports = new_airports.len();
+        let mut total_upserted = 0;
 
-            // Use Diesel's on_conflict for upserts
-            let upserted_count = diesel::insert_into(airports)
-                .values(&new_airports)
-                .on_conflict(id)
-                .do_update()
-                .set((
-                    ident.eq(excluded(ident)),
-                    type_.eq(excluded(type_)),
-                    name.eq(excluded(name)),
-                    latitude_deg.eq(excluded(latitude_deg)),
-                    longitude_deg.eq(excluded(longitude_deg)),
-                    elevation_ft.eq(excluded(elevation_ft)),
-                    continent.eq(excluded(continent)),
-                    iso_country.eq(excluded(iso_country)),
-                    iso_region.eq(excluded(iso_region)),
-                    municipality.eq(excluded(municipality)),
-                    scheduled_service.eq(excluded(scheduled_service)),
-                    icao_code.eq(excluded(icao_code)),
-                    iata_code.eq(excluded(iata_code)),
-                    gps_code.eq(excluded(gps_code)),
-                    local_code.eq(excluded(local_code)),
-                    home_link.eq(excluded(home_link)),
-                    wikipedia_link.eq(excluded(wikipedia_link)),
-                    keywords.eq(excluded(keywords)),
-                    updated_at.eq(diesel::dsl::now),
-                ))
-                .execute(&mut conn)?;
+        for (batch_num, batch) in new_airports.chunks(BATCH_SIZE).enumerate() {
+            let pool = self.pool.clone();
+            let batch_vec = batch.to_vec();
 
-            Ok::<usize, anyhow::Error>(upserted_count)
-        })
-        .await??;
+            let batch_result = tokio::task::spawn_blocking(move || {
+                let mut conn = pool.get()?;
 
-        info!("Successfully upserted {} airports", result);
-        Ok(result)
+                // Use Diesel's on_conflict for upserts
+                let upserted_count = diesel::insert_into(airports)
+                    .values(&batch_vec)
+                    .on_conflict(id)
+                    .do_update()
+                    .set((
+                        ident.eq(excluded(ident)),
+                        type_.eq(excluded(type_)),
+                        name.eq(excluded(name)),
+                        latitude_deg.eq(excluded(latitude_deg)),
+                        longitude_deg.eq(excluded(longitude_deg)),
+                        elevation_ft.eq(excluded(elevation_ft)),
+                        continent.eq(excluded(continent)),
+                        iso_country.eq(excluded(iso_country)),
+                        iso_region.eq(excluded(iso_region)),
+                        municipality.eq(excluded(municipality)),
+                        scheduled_service.eq(excluded(scheduled_service)),
+                        icao_code.eq(excluded(icao_code)),
+                        iata_code.eq(excluded(iata_code)),
+                        gps_code.eq(excluded(gps_code)),
+                        local_code.eq(excluded(local_code)),
+                        home_link.eq(excluded(home_link)),
+                        wikipedia_link.eq(excluded(wikipedia_link)),
+                        keywords.eq(excluded(keywords)),
+                        updated_at.eq(diesel::dsl::now),
+                    ))
+                    .execute(&mut conn)?;
+
+                Ok::<usize, anyhow::Error>(upserted_count)
+            })
+            .await??;
+
+            total_upserted += batch_result;
+
+            // Log progress for large batches
+            if total_airports > BATCH_SIZE {
+                info!(
+                    "Processed batch {} of {}: {} airports ({}/{} total)",
+                    batch_num + 1,
+                    (total_airports + BATCH_SIZE - 1) / BATCH_SIZE,
+                    batch_result,
+                    total_upserted,
+                    total_airports
+                );
+            }
+        }
+
+        info!("Successfully upserted {} airports in total", total_upserted);
+        Ok(total_upserted)
     }
 
     /// Get the total count of airports in the database
