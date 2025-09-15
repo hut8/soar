@@ -34,11 +34,11 @@ sudo systemctl start nats-server
 
 ### Reverse proxy
 
-Some reverse proxy should be put in front of the web service to terminate SSL and provide other benefits, like load balancing (if necessary). By default, the production web server will listen on localhost at port 1337. If using Caddy, you will simply need a block at `/etc/caddy/Caddyfile` that looks something like this:
+Some reverse proxy should be put in front of the web service to terminate SSL and provide other benefits, like load balancing (if necessary). By default, the production web server will listen on localhost at port 61225. If using Caddy, you will simply need a block at `/etc/caddy/Caddyfile` that looks something like this:
 
 ```
 glider.flights {
-        reverse_proxy localhost:1337
+        reverse_proxy localhost:61225
         log {
                 output file /var/log/caddy/glider.flights.log
         }

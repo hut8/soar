@@ -71,7 +71,7 @@ The release workflow is triggered when a git tag starting with 'v' is pushed (e.
 Builds release binaries for multiple platforms:
 
 - **Linux x64** (GNU libc)
-- **Linux x64** (musl libc) 
+- **Linux x64** (musl libc)
 - **macOS x64** (Intel)
 - **macOS ARM64** (Apple Silicon)
 - **Windows x64**
@@ -99,7 +99,7 @@ The project includes a multi-stage Dockerfile:
 Key features:
 - Runs as non-root user
 - Includes health check
-- Exposes port 1337 by default
+- Exposes port 61225 by default
 - Optimized for size and security
 
 ## Environment Variables
@@ -131,7 +131,7 @@ npm run check
 npm test
 npm run build
 
-# Rust checks  
+# Rust checks
 cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test --verbose
@@ -151,7 +151,7 @@ cargo audit
 docker build -t soar:local .
 
 # Run the container
-docker run --rm -p 1337:1337 soar:local soar web
+docker run --rm -p 61225:61225 soar:local soar web
 
 # Or run with help
 docker run --rm soar:local soar --help

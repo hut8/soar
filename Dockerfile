@@ -73,7 +73,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 CMD ["soar", "--help"]
 
 # Expose default web server port
-EXPOSE 1337
+EXPOSE 61225
 
 # Add labels for metadata
 LABEL org.opencontainers.image.title="SOAR"

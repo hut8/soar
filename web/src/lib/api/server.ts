@@ -1,7 +1,7 @@
 import { dev } from '$app/environment';
 
 // Detect development mode and set appropriate API base URL
-export const API_BASE = dev ? 'http://localhost:1337/data' : '/data';
+export const API_BASE = dev ? 'http://localhost:61225/data' : '/data';
 
 export class ServerError extends Error {
 	constructor(

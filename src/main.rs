@@ -116,7 +116,7 @@ enum Commands {
     /// Start the web server
     Web {
         /// Port to bind the web server to
-        #[arg(long, default_value = "1337")]
+        #[arg(long, default_value = "61225")]
         port: u16,
 
         /// Interface to bind the web server to
@@ -457,12 +457,12 @@ async fn main() -> Result<()> {
                     port
                 }
                 Ok(soar_env) => {
-                    info!("Running in {} mode, overriding port to 1338", soar_env);
-                    1338
+                    info!("Running in {} mode, overriding port to 1337", soar_env);
+                    1337
                 }
                 Err(_) => {
-                    info!("SOAR_ENV not set, defaulting to development mode on port 1338");
-                    1338
+                    info!("SOAR_ENV not set, defaulting to development mode on port 1337");
+                    1337
                 }
             };
 
