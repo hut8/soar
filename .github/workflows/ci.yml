@@ -92,7 +92,7 @@ jobs:
       - name: Install PostgreSQL client and PostGIS
         run: |
           sudo apt-get update
-          sudo apt-get install -y postgresql-client
+          sudo apt-get install -y postgresql-client curl
 
       - name: Install PostGIS in PostgreSQL container
         run: |
@@ -113,13 +113,13 @@ jobs:
       - name: Check Rust formatting
         run: cargo fmt --check
 
-      - name: Install sqlx-cli
-        run: cargo install sqlx-cli --no-default-features --features postgres,rustls
+      - name: Install Diesel CLI
+        run: cargo install diesel_cli --no-default-features --features postgres
 
       - name: Run migrations
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/soar_test
-        run: sqlx migrate run
+        run: diesel migration run
 
       - name: Install JS dependencies for build during Rust tests
         run: |
