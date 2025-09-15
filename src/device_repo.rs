@@ -91,7 +91,7 @@ impl DeviceRepository {
     /// Get all devices (aircraft) assigned to a specific club
     pub async fn get_devices_by_club_id(&self, club_id: Uuid) -> Result<Vec<Device>> {
         let mut conn = self.get_connection()?;
-        
+
         // This query requires joining with aircraft_registrations table
         // We'll use raw SQL for now since it involves a join with another table
         let sql = r#"
@@ -146,38 +146,24 @@ impl DeviceRepository {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::devices::{DeviceType};
     use diesel::r2d2::ConnectionManager;
-    
+
     // Helper function to create a test database pool (for integration tests)
     fn create_test_pool() -> Result<PgPool> {
         let database_url = std::env::var("TEST_DATABASE_URL")
             .unwrap_or_else(|_| "postgres://localhost/soar_test".to_string());
-        
+
         let manager = ConnectionManager::<PgConnection>::new(database_url);
         let pool = Pool::builder().build(manager)?;
         Ok(pool)
     }
 
-    fn create_test_device() -> Device {
-        Device {
-            device_type: DeviceType::Flarm,
-            device_id: 0x123456,
-            aircraft_model: "Test Aircraft".to_string(),
-            registration: "N123TA".to_string(),
-            competition_number: "T1".to_string(),
-            tracked: true,
-            identified: true,
-        }
-    }
 
     #[tokio::test]
     async fn test_device_repository_creation() {
         // Just test that we can create the repository
         if let Ok(pool) = create_test_pool() {
             let _repo = DeviceRepository::new(pool);
-            // If we get here, creation succeeded
-            assert!(true);
         } else {
             // Skip test if we can't connect to test database
             println!("Skipping test - no test database connection");
