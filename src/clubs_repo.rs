@@ -40,90 +40,90 @@ struct ClubWithLocation {
     longitude: Option<f64>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float8>)]
     latitude: Option<f64>,
-    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Timestamptz>)]
-    created_at: Option<DateTime<Utc>>,
-    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Timestamptz>)]
-    updated_at: Option<DateTime<Utc>>,
+    #[diesel(sql_type = diesel::sql_types::Timestamptz)]
+    created_at: DateTime<Utc>,
+    #[diesel(sql_type = diesel::sql_types::Timestamptz)]
+    updated_at: DateTime<Utc>,
 }
 
 #[derive(QueryableByName, Debug)]
-struct ClubWithLocationAndSimilarity {
+pub struct ClubWithLocationAndSimilarity {
     #[diesel(sql_type = diesel::sql_types::Uuid)]
-    id: Uuid,
+    pub id: Uuid,
     #[diesel(sql_type = diesel::sql_types::Varchar)]
-    name: String,
+    pub name: String,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Bool>)]
-    is_soaring: Option<bool>,
+    pub is_soaring: Option<bool>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Integer>)]
-    home_base_airport_id: Option<i32>,
+    pub home_base_airport_id: Option<i32>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
-    location_id: Option<Uuid>,
+    pub location_id: Option<Uuid>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
-    street1: Option<String>,
+    pub street1: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
-    street2: Option<String>,
+    pub street2: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
-    city: Option<String>,
+    pub city: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
-    state: Option<String>,
+    pub state: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
-    zip_code: Option<String>,
+    pub zip_code: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
-    region_code: Option<String>,
+    pub region_code: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
-    county_mail_code: Option<String>,
+    pub county_mail_code: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
-    country_mail_code: Option<String>,
+    pub country_mail_code: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float8>)]
-    longitude: Option<f64>,
+    pub longitude: Option<f64>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float8>)]
-    latitude: Option<f64>,
-    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Timestamptz>)]
-    created_at: Option<DateTime<Utc>>,
-    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Timestamptz>)]
-    updated_at: Option<DateTime<Utc>>,
+    pub latitude: Option<f64>,
+    #[diesel(sql_type = diesel::sql_types::Timestamptz)]
+    pub created_at: DateTime<Utc>,
+    #[diesel(sql_type = diesel::sql_types::Timestamptz)]
+    pub updated_at: DateTime<Utc>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float8>)]
-    similarity_score: Option<f64>,
+    pub similarity_score: Option<f64>,
 }
 
 #[derive(QueryableByName, Debug)]
-struct ClubWithLocationAndDistance {
+pub struct ClubWithLocationAndDistance {
     #[diesel(sql_type = diesel::sql_types::Uuid)]
-    id: Uuid,
+    pub id: Uuid,
     #[diesel(sql_type = diesel::sql_types::Varchar)]
-    name: String,
+    pub name: String,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Bool>)]
-    is_soaring: Option<bool>,
+    pub is_soaring: Option<bool>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Integer>)]
-    home_base_airport_id: Option<i32>,
+    pub home_base_airport_id: Option<i32>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
-    location_id: Option<Uuid>,
+    pub location_id: Option<Uuid>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
-    street1: Option<String>,
+    pub street1: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
-    street2: Option<String>,
+    pub street2: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
-    city: Option<String>,
+    pub city: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
-    state: Option<String>,
+    pub state: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
-    zip_code: Option<String>,
+    pub zip_code: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
-    region_code: Option<String>,
+    pub region_code: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
-    county_mail_code: Option<String>,
+    pub county_mail_code: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
-    country_mail_code: Option<String>,
+    pub country_mail_code: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float8>)]
-    longitude: Option<f64>,
+    pub longitude: Option<f64>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float8>)]
-    latitude: Option<f64>,
-    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Timestamptz>)]
-    created_at: Option<DateTime<Utc>>,
-    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Timestamptz>)]
-    updated_at: Option<DateTime<Utc>>,
+    pub latitude: Option<f64>,
+    #[diesel(sql_type = diesel::sql_types::Timestamptz)]
+    pub created_at: DateTime<Utc>,
+    #[diesel(sql_type = diesel::sql_types::Timestamptz)]
+    pub updated_at: DateTime<Utc>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float8>)]
-    distance_meters: Option<f64>,
+    pub distance_meters: Option<f64>,
 }
 
 impl From<ClubWithLocationAndDistance> for Club {
@@ -152,8 +152,8 @@ impl From<ClubWithLocationAndDistance> for Club {
             county_mail_code: cwld.county_mail_code,
             country_mail_code: cwld.country_mail_code,
             base_location,
-            created_at: cwld.created_at.unwrap_or_else(Utc::now),
-            updated_at: cwld.updated_at.unwrap_or_else(Utc::now),
+            created_at: cwld.created_at,
+            updated_at: cwld.updated_at,
         }
     }
 }
@@ -184,8 +184,8 @@ impl From<ClubWithLocationAndSimilarity> for Club {
             county_mail_code: cwls.county_mail_code,
             country_mail_code: cwls.country_mail_code,
             base_location,
-            created_at: cwls.created_at.unwrap_or_else(Utc::now),
-            updated_at: cwls.updated_at.unwrap_or_else(Utc::now),
+            created_at: cwls.created_at,
+            updated_at: cwls.updated_at,
         }
     }
 }
@@ -216,8 +216,8 @@ impl From<ClubWithLocation> for Club {
             county_mail_code: cwl.county_mail_code,
             country_mail_code: cwl.country_mail_code,
             base_location,
-            created_at: cwl.created_at.unwrap_or_else(Utc::now),
-            updated_at: cwl.updated_at.unwrap_or_else(Utc::now),
+            created_at: cwl.created_at,
+            updated_at: cwl.updated_at,
         }
     }
 }
@@ -242,7 +242,7 @@ impl ClubsRepository {
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            
+
             // Use raw SQL for complex join with locations table
             let sql = r#"
                 SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, c.location_id,
@@ -254,12 +254,12 @@ impl ClubsRepository {
                 LEFT JOIN locations l ON c.location_id = l.id
                 WHERE c.id = $1
             "#;
-            
+
             let club_opt: Option<ClubWithLocation> = diesel::sql_query(sql)
                 .bind::<diesel::sql_types::Uuid, _>(club_id)
                 .get_result::<ClubWithLocation>(&mut conn)
                 .optional()?;
-                
+
             Ok::<Option<ClubWithLocation>, anyhow::Error>(club_opt)
         }).await??;
 
@@ -271,7 +271,7 @@ impl ClubsRepository {
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            
+
             // Use raw SQL for complex join with locations table
             let sql = r#"
                 SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, c.location_id,
@@ -284,10 +284,10 @@ impl ClubsRepository {
                 WHERE c.is_soaring = true
                 ORDER BY c.name
             "#;
-            
+
             let clubs: Vec<ClubWithLocation> = diesel::sql_query(sql)
                 .load::<ClubWithLocation>(&mut conn)?;
-                
+
             Ok::<Vec<ClubWithLocation>, anyhow::Error>(clubs)
         }).await??;
 
@@ -299,11 +299,11 @@ impl ClubsRepository {
     pub async fn fuzzy_search(&self, query: &str, limit: Option<i64>) -> Result<Vec<Club>> {
         let query_upper = query.to_uppercase();
         let search_limit = limit.unwrap_or(20);
-        
+
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            
+
             let sql = r#"
                 SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, c.location_id,
                        l.street1, l.street2, l.city, l.state, l.zip_code, l.region_code,
@@ -318,12 +318,12 @@ impl ClubsRepository {
                 ORDER BY similarity_score DESC, c.name
                 LIMIT $2
             "#;
-            
+
             let clubs: Vec<ClubWithLocationAndSimilarity> = diesel::sql_query(sql)
                 .bind::<diesel::sql_types::Varchar, _>(&query_upper)
                 .bind::<diesel::sql_types::BigInt, _>(search_limit)
                 .load::<ClubWithLocationAndSimilarity>(&mut conn)?;
-                
+
             Ok::<Vec<ClubWithLocationAndSimilarity>, anyhow::Error>(clubs)
         }).await??;
 
@@ -348,11 +348,11 @@ impl ClubsRepository {
     ) -> Result<Vec<Club>> {
         let search_limit = limit.unwrap_or(20);
         let radius_m = radius_km * 1000.0; // Convert km to meters for PostGIS
-        
+
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            
+
             let sql = r#"
                 SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, c.location_id,
                        l.street1, l.street2, l.city, l.state, l.zip_code, l.region_code,
@@ -368,14 +368,14 @@ impl ClubsRepository {
                 ORDER BY distance_meters
                 LIMIT $4
             "#;
-            
+
             let clubs: Vec<ClubWithLocationAndDistance> = diesel::sql_query(sql)
                 .bind::<diesel::sql_types::Float8, _>(latitude)
                 .bind::<diesel::sql_types::Float8, _>(longitude)
                 .bind::<diesel::sql_types::Float8, _>(radius_m)
                 .bind::<diesel::sql_types::BigInt, _>(search_limit)
                 .load::<ClubWithLocationAndDistance>(&mut conn)?;
-                
+
             Ok::<Vec<ClubWithLocationAndDistance>, anyhow::Error>(clubs)
         }).await??;
 
@@ -387,7 +387,7 @@ impl ClubsRepository {
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            
+
             let sql = r#"
                 SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, c.location_id,
                        l.street1, l.street2, l.city, l.state, l.zip_code, l.region_code,
@@ -401,10 +401,10 @@ impl ClubsRepository {
                 AND l.geolocation IS NOT NULL
                 ORDER BY c.name
             "#;
-            
+
             let clubs: Vec<ClubWithLocation> = diesel::sql_query(sql)
                 .load::<ClubWithLocation>(&mut conn)?;
-                
+
             Ok::<Vec<ClubWithLocation>, anyhow::Error>(clubs)
         }).await??;
 
@@ -414,18 +414,18 @@ impl ClubsRepository {
     /// Update the home base airport ID for a club
     pub async fn update_home_base_airport(&self, club_id: Uuid, airport_id: i32) -> Result<bool> {
         use crate::schema::clubs::dsl::*;
-        
+
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            
+
             let updated_count = diesel::update(clubs.filter(id.eq(club_id)))
                 .set((
                     home_base_airport_id.eq(Some(airport_id)),
                     updated_at.eq(diesel::dsl::now),
                 ))
                 .execute(&mut conn)?;
-                
+
             Ok::<usize, anyhow::Error>(updated_count)
         }).await??;
 
@@ -435,7 +435,7 @@ impl ClubsRepository {
     /// Insert a new club
     pub async fn insert(&self, club: &Club) -> Result<()> {
         use crate::schema::clubs::dsl::*;
-        
+
         // First create location if we have address data
         let final_location_id = if let Some(existing_location_id) = club.location_id {
             existing_location_id
@@ -458,11 +458,11 @@ impl ClubsRepository {
         let pool = self.pool.clone();
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            
+
             diesel::insert_into(clubs)
                 .values(&new_club)
                 .execute(&mut conn)?;
-                
+
             Ok::<(), anyhow::Error>(())
         }).await??;
 
