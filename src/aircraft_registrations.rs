@@ -53,6 +53,7 @@ impl From<Option<String>> for AirworthinessClass {
     }
 }
 
+
 impl AirworthinessClass {
     /// Get the legacy string code for this airworthiness class
     pub fn code(&self) -> &'static str {
