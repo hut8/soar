@@ -151,7 +151,7 @@ impl AirportsRepository {
                 info!(
                     "Processed batch {} of {}: {} airports ({}/{} total)",
                     batch_num + 1,
-                    (total_airports + BATCH_SIZE - 1) / BATCH_SIZE,
+                    total_airports.div_ceil(BATCH_SIZE),
                     batch_result,
                     total_upserted,
                     total_airports

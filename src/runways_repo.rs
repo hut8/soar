@@ -256,7 +256,7 @@ impl RunwaysRepository {
                 info!(
                     "Processed batch {} of {}: {} runways ({}/{} total)",
                     batch_num + 1,
-                    (total_runways + BATCH_SIZE - 1) / BATCH_SIZE,
+                    total_runways.div_ceil(BATCH_SIZE),
                     batch_result,
                     total_upserted,
                     total_runways
