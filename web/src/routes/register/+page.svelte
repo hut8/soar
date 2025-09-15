@@ -52,7 +52,7 @@
 			});
 
 			const message = 'Email verified successfully. Please log in.';
-            const href = `/login?message=${encodeURIComponent(message)}`;
+			const href = `/login?message=${encodeURIComponent(message)}`;
 			void goto(href);
 		} catch (err) {
 			if (err instanceof AuthApiError) {
