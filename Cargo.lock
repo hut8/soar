@@ -3362,6 +3362,7 @@ dependencies = [
  "mime_guess",
  "num-traits",
  "ogn-parser",
+ "once_cell",
  "postgis_diesel",
  "r2d2",
  "rand 0.8.5",
