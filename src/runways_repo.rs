@@ -194,7 +194,83 @@ impl RunwaysRepository {
 
     /// Upsert runways into the database
     /// This will insert new runways or update existing ones based on the primary key (id)
+    /// Processes runways in batches for better performance
     pub async fn upsert_runways<I>(&self, runways: I) -> Result<usize>
+    where
+        I: IntoIterator<Item = Runway>,
+    {
+        let runways_vec: Vec<Runway> = runways.into_iter().collect();
+        let runway_models: Vec<NewRunwayModel> =
+            runways_vec.into_iter().map(NewRunwayModel::from).collect();
+
+        // Process in batches of 1000 to balance performance and parameter limits
+        const BATCH_SIZE: usize = 1000;
+        let total_runways = runway_models.len();
+        let mut total_upserted = 0;
+
+        for (batch_num, batch) in runway_models.chunks(BATCH_SIZE).enumerate() {
+            let pool = self.pool.clone();
+            let batch_vec = batch.to_vec();
+
+            let batch_result = tokio::task::spawn_blocking(move || {
+                let mut conn = pool.get()?;
+
+                let upserted_count = diesel::insert_into(runways::table)
+                    .values(&batch_vec)
+                    .on_conflict(runways::id)
+                    .do_update()
+                    .set((
+                        runways::airport_ref.eq(excluded(runways::airport_ref)),
+                        runways::airport_ident.eq(excluded(runways::airport_ident)),
+                        runways::length_ft.eq(excluded(runways::length_ft)),
+                        runways::width_ft.eq(excluded(runways::width_ft)),
+                        runways::surface.eq(excluded(runways::surface)),
+                        runways::lighted.eq(excluded(runways::lighted)),
+                        runways::closed.eq(excluded(runways::closed)),
+                        runways::le_ident.eq(excluded(runways::le_ident)),
+                        runways::le_latitude_deg.eq(excluded(runways::le_latitude_deg)),
+                        runways::le_longitude_deg.eq(excluded(runways::le_longitude_deg)),
+                        runways::le_elevation_ft.eq(excluded(runways::le_elevation_ft)),
+                        runways::le_heading_degt.eq(excluded(runways::le_heading_degt)),
+                        runways::le_displaced_threshold_ft
+                            .eq(excluded(runways::le_displaced_threshold_ft)),
+                        runways::he_ident.eq(excluded(runways::he_ident)),
+                        runways::he_latitude_deg.eq(excluded(runways::he_latitude_deg)),
+                        runways::he_longitude_deg.eq(excluded(runways::he_longitude_deg)),
+                        runways::he_elevation_ft.eq(excluded(runways::he_elevation_ft)),
+                        runways::he_heading_degt.eq(excluded(runways::he_heading_degt)),
+                        runways::he_displaced_threshold_ft
+                            .eq(excluded(runways::he_displaced_threshold_ft)),
+                        runways::updated_at.eq(diesel::dsl::now),
+                    ))
+                    .execute(&mut conn)?;
+
+                Ok::<usize, anyhow::Error>(upserted_count)
+            })
+            .await??;
+
+            total_upserted += batch_result;
+
+            // Log progress for large batches
+            if total_runways > BATCH_SIZE {
+                info!(
+                    "Processed batch {} of {}: {} runways ({}/{} total)",
+                    batch_num + 1,
+                    (total_runways + BATCH_SIZE - 1) / BATCH_SIZE,
+                    batch_result,
+                    total_upserted,
+                    total_runways
+                );
+            }
+        }
+
+        info!("Successfully upserted {} runways in total", total_upserted);
+        Ok(total_upserted)
+    }
+
+    /// Legacy single-runway upsert method - kept for backward compatibility but not used
+    #[allow(dead_code)]
+    async fn upsert_runways_one_by_one<I>(&self, runways: I) -> Result<usize>
     where
         I: IntoIterator<Item = Runway>,
     {
@@ -208,7 +284,7 @@ impl RunwaysRepository {
             let mut upserted_count = 0;
             let mut failed_count = 0;
 
-            // Process runways in batches to handle potential conflicts
+            // Process runways one by one (legacy approach)
             for runway_model in runway_models {
                 let result = diesel::insert_into(runways::table)
                     .values(&runway_model)
