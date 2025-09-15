@@ -422,6 +422,7 @@ impl AirportsRepository {
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
                 keywords: Option<String>,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float8>)]
+                #[allow(dead_code)]
                 similarity_score: Option<f64>,
             }
 
