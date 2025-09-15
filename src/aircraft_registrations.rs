@@ -74,15 +74,15 @@ impl AirworthinessClass {
 impl std::fmt::Display for AirworthinessClass {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = match self {
-            AirworthinessClass::Standard => "Standard",
-            AirworthinessClass::Limited => "Limited",
-            AirworthinessClass::Restricted => "Restricted",
-            AirworthinessClass::Experimental => "Experimental",
-            AirworthinessClass::Provisional => "Provisional",
-            AirworthinessClass::Multiple => "Multiple",
-            AirworthinessClass::Primary => "Primary",
-            AirworthinessClass::SpecialFlightPermit => "Special Flight Permit",
-            AirworthinessClass::LightSport => "Light Sport",
+            AirworthinessClass::Standard => "standard",
+            AirworthinessClass::Limited => "limited",
+            AirworthinessClass::Restricted => "restricted",
+            AirworthinessClass::Experimental => "experimental",
+            AirworthinessClass::Provisional => "provisional",
+            AirworthinessClass::Multiple => "multiple",
+            AirworthinessClass::Primary => "primary",
+            AirworthinessClass::SpecialFlightPermit => "special_flight_permit",
+            AirworthinessClass::LightSport => "light_sport",
         };
         write!(f, "{}", s)
     }
