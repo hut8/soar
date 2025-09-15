@@ -8,9 +8,7 @@ use std::env;
 use std::fs;
 use std::io;
 use std::path::Path;
-use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
-use std::time::{Duration, Instant};
-use tokio::time;
+use std::sync::Arc;
 use tracing::{info, warn};
 
 use soar::aprs_client::{AprsClient, AprsClientConfigBuilder, FixProcessor, MessageProcessor};
