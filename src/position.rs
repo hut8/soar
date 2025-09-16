@@ -139,7 +139,7 @@ impl Fix {
                     bit_errors_corrected,
                     freq_offset_khz,
                     club_name: None,     // To be implemented later
-                    unparsed_data: None, // Could be populated with unparsed parts of packet
+                    unparsed_data: pos_packet.comment.unparsed.clone(),
                 }))
             }
             _ => {
