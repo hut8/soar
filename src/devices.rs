@@ -10,16 +10,13 @@ use diesel_derive_enum::DbEnum;
 const DDB_URL: &str = "http://ddb.glidernet.org/download/?j=1";
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, DbEnum, Serialize, Deserialize)]
-#[db_enum(
-    existing_type_path = "crate::schema::sql_types::DeviceType",
-    value_style = "snake_case"
-)]
+#[db_enum(existing_type_path = "crate::schema::sql_types::DeviceType")]
 pub enum DeviceType {
-    FlarmId,
-    OgnTracker,
-    IcaoAddress,
+    Flarm,
+    Ogn,
+    Icao,
     #[default]
-    UnknownType,
+    Unknown,
 }
 
 impl FromStr for DeviceType {
@@ -27,11 +24,11 @@ impl FromStr for DeviceType {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "F" => Ok(DeviceType::FlarmId),
-            "O" => Ok(DeviceType::OgnTracker),
-            "I" => Ok(DeviceType::IcaoAddress),
-            "" => Ok(DeviceType::UnknownType),
-            _ => Ok(DeviceType::UnknownType),
+            "F" => Ok(DeviceType::Flarm),
+            "O" => Ok(DeviceType::Ogn),
+            "I" => Ok(DeviceType::Icao),
+            "" => Ok(DeviceType::Unknown),
+            _ => Ok(DeviceType::Unknown),
         }
     }
 }
@@ -39,10 +36,10 @@ impl FromStr for DeviceType {
 impl std::fmt::Display for DeviceType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = match self {
-            DeviceType::FlarmId => "F",
-            DeviceType::OgnTracker => "O",
-            DeviceType::IcaoAddress => "I",
-            DeviceType::UnknownType => "",
+            DeviceType::Flarm => "F",
+            DeviceType::Ogn => "O",
+            DeviceType::Icao => "I",
+            DeviceType::Unknown => "",
         };
         write!(f, "{}", s)
     }

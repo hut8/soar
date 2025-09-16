@@ -10,9 +10,9 @@ CREATE TYPE address_type AS ENUM ('unknown_type', 'icao_address', 'flarm_id', 'o
 -- Step 3: Update the fixes table to use address_type again
 ALTER TABLE fixes ALTER COLUMN device_type TYPE address_type USING
     CASE device_type::text
-        WHEN 'unknown_type' THEN 'unknown_type'::address_type
-        WHEN 'icao_address' THEN 'icao_address'::address_type
-        WHEN 'flarm_id' THEN 'flarm_id'::address_type
-        WHEN 'ogn_tracker' THEN 'ogn_tracker'::address_type
+        WHEN 'unknown' THEN 'unknown_type'::address_type
+        WHEN 'icao' THEN 'icao_address'::address_type
+        WHEN 'flarm' THEN 'flarm_id'::address_type
+        WHEN 'ogn' THEN 'ogn_tracker'::address_type
         ELSE 'unknown_type'::address_type
     END;

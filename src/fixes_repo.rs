@@ -40,10 +40,10 @@ pub enum AircraftType {
 impl From<ForeignAddressType> for DeviceType {
     fn from(foreign_type: ForeignAddressType) -> Self {
         match foreign_type {
-            ForeignAddressType::Unknown => DeviceType::UnknownType,
-            ForeignAddressType::Icao => DeviceType::IcaoAddress,
-            ForeignAddressType::Flarm => DeviceType::FlarmId,
-            ForeignAddressType::OgnTracker => DeviceType::OgnTracker,
+            ForeignAddressType::Unknown => DeviceType::Unknown,
+            ForeignAddressType::Icao => DeviceType::Icao,
+            ForeignAddressType::Flarm => DeviceType::Flarm,
+            ForeignAddressType::OgnTracker => DeviceType::Ogn,
         }
     }
 }
@@ -51,10 +51,10 @@ impl From<ForeignAddressType> for DeviceType {
 impl From<DeviceType> for ForeignAddressType {
     fn from(wrapper_type: DeviceType) -> Self {
         match wrapper_type {
-            DeviceType::UnknownType => ForeignAddressType::Unknown,
-            DeviceType::IcaoAddress => ForeignAddressType::Icao,
-            DeviceType::FlarmId => ForeignAddressType::Flarm,
-            DeviceType::OgnTracker => ForeignAddressType::OgnTracker,
+            DeviceType::Unknown => ForeignAddressType::Unknown,
+            DeviceType::Icao => ForeignAddressType::Icao,
+            DeviceType::Flarm => ForeignAddressType::Flarm,
+            DeviceType::Ogn => ForeignAddressType::OgnTracker,
         }
     }
 }
@@ -233,6 +233,11 @@ impl From<FixRow> for Fix {
         // Helper function to parse enum from string
         fn parse_device_type(s: Option<String>) -> Option<ForeignAddressType> {
             s.and_then(|s| match s.as_str() {
+                "unknown" => Some(ForeignAddressType::Unknown),
+                "icao" => Some(ForeignAddressType::Icao),
+                "flarm" => Some(ForeignAddressType::Flarm),
+                "ogn" => Some(ForeignAddressType::OgnTracker),
+                // Support legacy snake_case values for backward compatibility
                 "unknown_type" => Some(ForeignAddressType::Unknown),
                 "icao_address" => Some(ForeignAddressType::Icao),
                 "flarm_id" => Some(ForeignAddressType::Flarm),
