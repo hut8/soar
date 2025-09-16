@@ -354,8 +354,7 @@ diesel::table! {
         airport_ident -> Varchar,
         length_ft -> Nullable<Int4>,
         width_ft -> Nullable<Int4>,
-        #[max_length = 10]
-        surface -> Nullable<Varchar>,
+        surface -> Nullable<Text>,
         lighted -> Bool,
         closed -> Bool,
         #[max_length = 7]

@@ -11,18 +11,6 @@ INSERT INTO type_registrations (code, description) VALUES
   ('8','Non-Citizen Corporation'),
   ('9','Non-Citizen Co-Owned');
 
--- Airworthiness Class (pos 238)
-INSERT INTO airworthiness_classes (code, description) VALUES
-  ('1','Standard'),
-  ('2','Limited'),
-  ('3','Restricted'),
-  ('4','Experimental'),
-  ('5','Provisional'),
-  ('6','Multiple'),
-  ('7','Primary'),
-  ('8','Special Flight Permit'),
-  ('9','Light Sport');
-
 -- Type Aircraft (pos 249)
 INSERT INTO type_aircraft (code, description) VALUES
   ('1','Glider'),
