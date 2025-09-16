@@ -256,6 +256,7 @@ diesel::table! {
         club_id -> Nullable<Uuid>,
         flight_id -> Nullable<Uuid>,
         device_id -> Nullable<Int4>,
+        unparsed_data -> Nullable<Varchar>,
     }
 }
 
@@ -353,16 +354,14 @@ diesel::table! {
         surface -> Nullable<Text>,
         lighted -> Bool,
         closed -> Bool,
-        #[max_length = 7]
-        le_ident -> Nullable<Varchar>,
+        le_ident -> Nullable<Text>,
         le_latitude_deg -> Nullable<Numeric>,
         le_longitude_deg -> Nullable<Numeric>,
         le_location -> Nullable<Geography>,
         le_elevation_ft -> Nullable<Int4>,
         le_heading_degt -> Nullable<Numeric>,
         le_displaced_threshold_ft -> Nullable<Int4>,
-        #[max_length = 7]
-        he_ident -> Nullable<Varchar>,
+        he_ident -> Nullable<Text>,
         he_latitude_deg -> Nullable<Numeric>,
         he_longitude_deg -> Nullable<Numeric>,
         he_location -> Nullable<Geography>,

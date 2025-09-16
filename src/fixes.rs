@@ -53,6 +53,9 @@ pub struct Fix {
 
     /// Club association
     pub club_id: Option<Uuid>,
+
+    /// Unparsed portion of the packet (if any)
+    pub unparsed_data: Option<String>,
 }
 
 impl Fix {
@@ -85,6 +88,7 @@ impl Fix {
             bit_errors_corrected: position_fix.bit_errors_corrected,
             freq_offset_khz: position_fix.freq_offset_khz,
             club_id: None, // Will be set by repository based on aircraft registration
+            unparsed_data: position_fix.unparsed_data.clone(),
         }
     }
 

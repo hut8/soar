@@ -136,6 +136,7 @@ struct NewFix {
     bit_errors_corrected: Option<i32>,
     freq_offset_khz: Option<f32>,
     club_id: Option<Uuid>,
+    unparsed_data: Option<String>,
 }
 
 impl From<&Fix> for NewFix {
@@ -167,6 +168,7 @@ impl From<&Fix> for NewFix {
             bit_errors_corrected: fix.bit_errors_corrected.map(|b| b as i32),
             freq_offset_khz: fix.freq_offset_khz,
             club_id: fix.club_id,
+            unparsed_data: fix.unparsed_data.clone(),
         }
     }
 }
@@ -226,6 +228,8 @@ struct FixRow {
     freq_offset_khz: Option<f32>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
     club_id: Option<Uuid>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    unparsed_data: Option<String>,
 }
 
 impl From<FixRow> for Fix {
@@ -304,6 +308,7 @@ impl From<FixRow> for Fix {
             bit_errors_corrected: row.bit_errors_corrected.map(|b| b as u32),
             freq_offset_khz: row.freq_offset_khz,
             club_id: row.club_id,
+            unparsed_data: row.unparsed_data,
         }
     }
 }

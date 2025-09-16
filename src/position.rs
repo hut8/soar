@@ -51,6 +51,9 @@ pub struct Fix {
 
     /// Club association (to be implemented later)
     pub club_name: Option<String>,
+
+    /// Unparsed portion of the packet (if any)
+    pub unparsed_data: Option<String>,
 }
 
 impl Fix {
@@ -136,6 +139,7 @@ impl Fix {
                     bit_errors_corrected,
                     freq_offset_khz,
                     club_name: None, // To be implemented later
+                    unparsed_data: None, // Could be populated with unparsed parts of packet
                 }))
             }
             _ => {
