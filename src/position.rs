@@ -138,7 +138,7 @@ impl Fix {
                     snr_db,
                     bit_errors_corrected,
                     freq_offset_khz,
-                    club_name: None,     // To be implemented later
+                    club_name: None, // To be implemented later
                     unparsed_data: pos_packet.comment.unparsed.clone(),
                 }))
             }

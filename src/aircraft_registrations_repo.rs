@@ -44,7 +44,10 @@ impl AircraftRegistrationsRepository {
         for aircraft_reg in aircraft_vec {
             // Check if this aircraft has a club name
             let club_id = if let Some(club_name) = aircraft_reg.club_name() {
-                info!("Processing aircraft {} with club name: {}", aircraft_reg.n_number, club_name);
+                info!(
+                    "Processing aircraft {} with club name: {}",
+                    aircraft_reg.n_number, club_name
+                );
 
                 // Find or create the club
                 match self.clubs_repo.find_or_create_club(&club_name).await {
@@ -53,8 +56,10 @@ impl AircraftRegistrationsRepository {
                         Some(club.id)
                     }
                     Err(e) => {
-                        error!("Failed to find/create club '{}' for aircraft {}: {}",
-                              club_name, aircraft_reg.n_number, e);
+                        error!(
+                            "Failed to find/create club '{}' for aircraft {}: {}",
+                            club_name, aircraft_reg.n_number, e
+                        );
                         None
                     }
                 }
@@ -204,8 +209,7 @@ impl AircraftRegistrationsRepository {
                         .eq(excluded(aircraft_registrations::kit_model_name)),
                     aircraft_registrations::device_id
                         .eq(excluded(aircraft_registrations::device_id)),
-                    aircraft_registrations::club_id
-                        .eq(excluded(aircraft_registrations::club_id)),
+                    aircraft_registrations::club_id.eq(excluded(aircraft_registrations::club_id)),
                 ))
                 .execute(&mut conn);
 

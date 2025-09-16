@@ -413,8 +413,10 @@ mod tests {
         // Debug output to see what we get
         eprintln!("Found {} receivers", receivers.len());
         for (i, receiver) in receivers.iter().take(5).enumerate() {
-            eprintln!("Receiver {}: callsign='{}', description='{}', country='{}'",
-                     i, receiver.callsign, receiver.description, receiver.country);
+            eprintln!(
+                "Receiver {}: callsign='{}', description='{}', country='{}'",
+                i, receiver.callsign, receiver.description, receiver.country
+            );
         }
 
         // We should find multiple receivers
@@ -481,8 +483,10 @@ mod tests {
 
         for test_case in test_cases {
             let (contact, email, links) = parse_contact(test_case);
-            eprintln!("Contact parsing - Input: '{}' -> Contact: '{}', Email: '{}', Links: {:?}",
-                     test_case, contact, email, links);
+            eprintln!(
+                "Contact parsing - Input: '{}' -> Contact: '{}', Email: '{}', Links: {:?}",
+                test_case, contact, email, links
+            );
         }
     }
 
@@ -495,8 +499,10 @@ mod tests {
 
         for test_case in test_cases {
             let (photos, links) = parse_photo_links(test_case);
-            eprintln!("Photo parsing - Input: '{}' -> Photos: {:?}, Links: {:?}",
-                     test_case, photos, links);
+            eprintln!(
+                "Photo parsing - Input: '{}' -> Photos: {:?}, Links: {:?}",
+                test_case, photos, links
+            );
         }
     }
 
@@ -520,12 +526,21 @@ mod tests {
 
         // Validate some photos are proper URLs
         for photo in &first_receiver.photos {
-            assert!(photo.starts_with("http"), "Photo should be a URL: {}", photo);
+            assert!(
+                photo.starts_with("http"),
+                "Photo should be a URL: {}",
+                photo
+            );
         }
 
         // Check that emails are valid format
-        let email_regex = regex::Regex::new(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$").unwrap();
-        assert!(email_regex.is_match(&first_receiver.email), "Email should be valid format: {}", first_receiver.email);
+        let email_regex =
+            regex::Regex::new(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$").unwrap();
+        assert!(
+            email_regex.is_match(&first_receiver.email),
+            "Email should be valid format: {}",
+            first_receiver.email
+        );
 
         eprintln!("First receiver validation passed:");
         eprintln!("  Callsign: {}", first_receiver.callsign);
