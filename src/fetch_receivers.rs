@@ -18,11 +18,11 @@ static HEADING_RE: Lazy<Regex> =
 static RECEIVER_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(
         r"(?xm)
-        ^\|\|\ \|\|\ \[\[\#\ (?P<aprsname>.*?)\]\] .*? \|\|
-        (?P<desc>.*?) \|\|
-        (?P<photos>.*?) \|\|
-        .*? \|\|
-        (?P<contact>.*?)\|\| \s*$
+        ^\|\|\ \|\|\ \[\[\#\ ?(?P<aprsname>.*?)\]\].*?\|\|
+        (?P<desc>.*?)\|\|
+        (?P<photos>.*?)\|\|
+        .*?\|\|
+        (?P<contact>.*?)\|\|(?:<br\s*/?>)?\s*$
     ",
     )
     .unwrap()
@@ -396,4 +396,143 @@ pub async fn fetch_receivers(out_file: &str) -> anyhow::Result<()> {
     f.write_all(json.as_bytes())?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_receiver_list_with_fixture() {
+        // Read the test fixture
+        let fixture_content = std::fs::read_to_string("tests/fixtures/ogn/receivers-page.html")
+            .expect("Failed to read test fixture");
+
+        let receivers = parse_receiver_list(&fixture_content);
+
+        // Debug output to see what we get
+        eprintln!("Found {} receivers", receivers.len());
+        for (i, receiver) in receivers.iter().take(5).enumerate() {
+            eprintln!("Receiver {}: callsign='{}', description='{}', country='{}'",
+                     i, receiver.callsign, receiver.description, receiver.country);
+        }
+
+        // We should find multiple receivers
+        assert!(receivers.len() > 0, "Should find at least one receiver");
+    }
+
+    #[test]
+    fn test_receiver_regex_with_sample_line() {
+        let sample_line = r#"|| || [[# Agathazel]][*http://ognrange.onglide.com/#Agathazel Agathazel] || Agathazell glider airfield. [*http://www.agathazell.info Luftsportverein Agathazell]|| [*http://www.agathazell.info/images/joomlaplates/Banner.jpg Airfield] [*http://agathazell.info/images/joomlaplates/Open-Glider-Network-Antenna-Agathazell.JPG Antenna] [*http://agathazell.info/images/joomlaplates/Open-Glider-Network-Receiver-Agathazell.jpg Receiver] [*http://agathazell.info/images/joomlaplates/Open-Glider-Network-Antenna2-Agathazell.JPG.jpg Antenna2]|| [[image http://glidertracking.fai.org/availability.php?station=Agathazel]] || [[[mailto:1.vorstand.lsg@agathazell.info?subject=OGN receiver: Agathazel | LSG Oberallgäu e.V.]]] ||<br />"#;
+
+        let captures = RECEIVER_RE.captures(sample_line);
+        match captures {
+            Some(caps) => {
+                let callsign = caps.name("aprsname").unwrap().as_str();
+                let desc = caps.name("desc").unwrap().as_str().trim();
+                let photos = caps.name("photos").unwrap().as_str();
+                let contact = caps.name("contact").unwrap().as_str();
+
+                eprintln!("Callsign: '{}'", callsign);
+                eprintln!("Description: '{}'", desc);
+                eprintln!("Photos: '{}'", photos);
+                eprintln!("Contact: '{}'", contact);
+
+                assert_eq!(callsign, "Agathazel");
+                assert!(desc.contains("Agathazell glider airfield"));
+            }
+            None => {
+                eprintln!("Regex did not match sample line");
+                panic!("RECEIVER_RE should match the sample line");
+            }
+        }
+    }
+
+    #[test]
+    fn test_heading_regex() {
+        let heading_samples = vec![
+            "++ Germany [[germany",
+            "++ France [[france",
+            "++ United Kingdom [[uk",
+        ];
+
+        for sample in heading_samples {
+            let captures = HEADING_RE.captures(sample);
+            match captures {
+                Some(caps) => {
+                    let text = caps.name("text").unwrap().as_str();
+                    let tag = caps.name("tag").unwrap().as_str();
+                    eprintln!("Heading - Text: '{}', Tag: '{}'", text, tag);
+                }
+                None => {
+                    eprintln!("Heading regex did not match: '{}'", sample);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_contact_parsing() {
+        let test_cases = vec![
+            "[[[mailto:1.vorstand.lsg@agathazell.info?subject=OGN receiver: Agathazel | LSG Oberallgäu e.V.]]]",
+            "[[[mailto:domspreitz@googlemail.com?subject=OGN receiver: Altdorf | Dominic]]]",
+            "[[[http://example.com | Example Contact]]]",
+        ];
+
+        for test_case in test_cases {
+            let (contact, email, links) = parse_contact(test_case);
+            eprintln!("Contact parsing - Input: '{}' -> Contact: '{}', Email: '{}', Links: {:?}",
+                     test_case, contact, email, links);
+        }
+    }
+
+    #[test]
+    fn test_photo_parsing() {
+        let test_cases = vec![
+            "[*http://www.agathazell.info/images/joomlaplates/Banner.jpg Airfield] [*http://agathazell.info/images/joomlaplates/Open-Glider-Network-Antenna-Agathazell.JPG Antenna]",
+            "[*https://sfvbw.de/wp-content/uploads/OGN-Antenne_1.jpg Antenna1] [*https://sfvbw.de/wp-content/uploads/OGN-Antenne_2.jpg Antenna2]",
+        ];
+
+        for test_case in test_cases {
+            let (photos, links) = parse_photo_links(test_case);
+            eprintln!("Photo parsing - Input: '{}' -> Photos: {:?}, Links: {:?}",
+                     test_case, photos, links);
+        }
+    }
+
+    #[test]
+    fn test_receiver_structure_validation() {
+        // Read the test fixture
+        let fixture_content = std::fs::read_to_string("tests/fixtures/ogn/receivers-page.html")
+            .expect("Failed to read test fixture");
+
+        let receivers = parse_receiver_list(&fixture_content);
+
+        // Validate first receiver in detail
+        assert!(receivers.len() > 0, "Should have at least one receiver");
+
+        let first_receiver = &receivers[0];
+        assert_eq!(first_receiver.callsign, "Agathazel");
+        assert!(!first_receiver.description.is_empty());
+        assert!(!first_receiver.contact.is_empty());
+        assert!(!first_receiver.email.is_empty());
+        assert!(first_receiver.photos.len() > 0, "Should have photos");
+
+        // Validate some photos are proper URLs
+        for photo in &first_receiver.photos {
+            assert!(photo.starts_with("http"), "Photo should be a URL: {}", photo);
+        }
+
+        // Check that emails are valid format
+        let email_regex = regex::Regex::new(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$").unwrap();
+        assert!(email_regex.is_match(&first_receiver.email), "Email should be valid format: {}", first_receiver.email);
+
+        eprintln!("First receiver validation passed:");
+        eprintln!("  Callsign: {}", first_receiver.callsign);
+        eprintln!("  Description: {}", first_receiver.description);
+        eprintln!("  Contact: {}", first_receiver.contact);
+        eprintln!("  Email: {}", first_receiver.email);
+        eprintln!("  Photos: {:?}", first_receiver.photos);
+        eprintln!("  Links: {:?}", first_receiver.links);
+    }
 }
