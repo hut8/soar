@@ -12,15 +12,8 @@ use crate::ogn_aprs_aircraft::{
 };
 use crate::web::PgPool;
 
-// Diesel-compatible wrapper enums for foreign types
-#[derive(Debug, Clone, Copy, PartialEq, Eq, DbEnum)]
-#[db_enum(existing_type_path = "crate::schema::sql_types::AddressType")]
-pub enum AddressType {
-    Unknown,
-    Icao,
-    Flarm,
-    OgnTracker,
-}
+// Import the main DeviceType from devices module
+use crate::devices::DeviceType;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, DbEnum)]
 #[db_enum(existing_type_path = "crate::schema::sql_types::AircraftType")]
@@ -44,24 +37,24 @@ pub enum AircraftType {
 }
 
 // Conversions between foreign types and wrapper types
-impl From<ForeignAddressType> for AddressType {
+impl From<ForeignAddressType> for DeviceType {
     fn from(foreign_type: ForeignAddressType) -> Self {
         match foreign_type {
-            ForeignAddressType::Unknown => AddressType::Unknown,
-            ForeignAddressType::Icao => AddressType::Icao,
-            ForeignAddressType::Flarm => AddressType::Flarm,
-            ForeignAddressType::OgnTracker => AddressType::OgnTracker,
+            ForeignAddressType::Unknown => DeviceType::UnknownType,
+            ForeignAddressType::Icao => DeviceType::IcaoAddress,
+            ForeignAddressType::Flarm => DeviceType::FlarmId,
+            ForeignAddressType::OgnTracker => DeviceType::OgnTracker,
         }
     }
 }
 
-impl From<AddressType> for ForeignAddressType {
-    fn from(wrapper_type: AddressType) -> Self {
+impl From<DeviceType> for ForeignAddressType {
+    fn from(wrapper_type: DeviceType) -> Self {
         match wrapper_type {
-            AddressType::Unknown => ForeignAddressType::Unknown,
-            AddressType::Icao => ForeignAddressType::Icao,
-            AddressType::Flarm => ForeignAddressType::Flarm,
-            AddressType::OgnTracker => ForeignAddressType::OgnTracker,
+            DeviceType::UnknownType => ForeignAddressType::Unknown,
+            DeviceType::IcaoAddress => ForeignAddressType::Icao,
+            DeviceType::FlarmId => ForeignAddressType::Flarm,
+            DeviceType::OgnTracker => ForeignAddressType::OgnTracker,
         }
     }
 }
@@ -128,7 +121,7 @@ struct NewFix {
     altitude_feet: Option<i32>,
     aircraft_id: Option<String>,
     device_id: Option<i32>,
-    device_type: Option<AddressType>,
+    device_type: Option<DeviceType>,
     aircraft_type: Option<AircraftType>,
     flight_number: Option<String>,
     emitter_category: Option<AdsbEmitterCategory>,
@@ -159,7 +152,7 @@ impl From<&Fix> for NewFix {
             altitude_feet: fix.altitude_feet,
             aircraft_id: fix.aircraft_id.clone(),
             device_id: fix.device_id.map(|d| d as i32),
-            device_type: fix.device_type.map(AddressType::from),
+            device_type: fix.device_type.map(DeviceType::from),
             aircraft_type: fix.aircraft_type.map(AircraftType::from),
             flight_number: fix.flight_number.clone(),
             emitter_category: fix.emitter_category,
@@ -240,6 +233,11 @@ impl From<FixRow> for Fix {
         // Helper function to parse enum from string
         fn parse_device_type(s: Option<String>) -> Option<ForeignAddressType> {
             s.and_then(|s| match s.as_str() {
+                "unknown_type" => Some(ForeignAddressType::Unknown),
+                "icao_address" => Some(ForeignAddressType::Icao),
+                "flarm_id" => Some(ForeignAddressType::Flarm),
+                "ogn_tracker" => Some(ForeignAddressType::OgnTracker),
+                // Support legacy CamelCase values for backward compatibility during migration
                 "Unknown" => Some(ForeignAddressType::Unknown),
                 "Icao" => Some(ForeignAddressType::Icao),
                 "Flarm" => Some(ForeignAddressType::Flarm),

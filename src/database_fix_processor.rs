@@ -54,13 +54,13 @@ impl FixProcessor for DatabaseFixProcessor {
                         }
                     }
                     Ok(None) => {
-                        warn!(
+                        trace!(
                             "Device ID {} not found in devices table, skipping fix processing",
                             device_id
                         );
                     }
                     Err(e) => {
-                        warn!(
+                        error!(
                             "Failed to lookup device ID {}: {}, skipping fix processing",
                             device_id, e
                         );

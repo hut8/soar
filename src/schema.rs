@@ -2,10 +2,6 @@
 
 pub mod sql_types {
     #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
-    #[diesel(postgres_type(name = "address_type"))]
-    pub struct AddressType;
-
-    #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "adsb_emitter_category"))]
     pub struct AdsbEmitterCategory;
 
@@ -18,8 +14,8 @@ pub mod sql_types {
     pub struct AirworthinessClass;
 
     #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
-    #[diesel(postgres_type(name = "device_type_enum"))]
-    pub struct DeviceTypeEnum;
+    #[diesel(postgres_type(name = "device_type"))]
+    pub struct DeviceType;
 
     #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "geography"))]
@@ -202,11 +198,11 @@ diesel::table! {
 
 diesel::table! {
     use diesel::sql_types::*;
-    use super::sql_types::DeviceTypeEnum;
+    use super::sql_types::DeviceType;
 
     devices (device_id) {
         device_id -> Int4,
-        device_type -> DeviceTypeEnum,
+        device_type -> DeviceType,
         aircraft_model -> Text,
         registration -> Text,
         competition_number -> Text,
@@ -220,7 +216,7 @@ diesel::table! {
 diesel::table! {
     use diesel::sql_types::*;
     use super::sql_types::Geography;
-    use super::sql_types::AddressType;
+    use super::sql_types::DeviceType;
     use super::sql_types::AircraftType;
     use super::sql_types::AdsbEmitterCategory;
 
@@ -239,7 +235,7 @@ diesel::table! {
         altitude_feet -> Nullable<Int4>,
         #[max_length = 10]
         aircraft_id -> Nullable<Varchar>,
-        device_type -> Nullable<AddressType>,
+        device_type -> Nullable<DeviceType>,
         aircraft_type -> Nullable<AircraftType>,
         #[max_length = 20]
         flight_number -> Nullable<Varchar>,
