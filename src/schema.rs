@@ -350,7 +350,7 @@ diesel::table! {
     runways (id) {
         id -> Int4,
         airport_ref -> Int4,
-        #[max_length = 7]
+        #[max_length = 16]
         airport_ident -> Varchar,
         length_ft -> Nullable<Int4>,
         width_ft -> Nullable<Int4>,
