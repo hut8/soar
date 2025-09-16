@@ -6,7 +6,7 @@ use regex::{Captures, Regex};
 use reqwest::header::{CONTENT_TYPE, COOKIE, HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, collections::HashMap, fs::File, io::Write};
-use tracing::info;
+use tracing::{debug, info};
 
 static WIKI_URL: &str = "http://wiki.glidernet.org/ajax-module-connector.php";
 
@@ -197,6 +197,8 @@ async fn fetch_page(client: &reqwest::Client, url: &str, page_id: i64) -> reqwes
         .json::<WikidotResp>()
         .await?;
 
+    debug!("Fetched page_id={}:\n{}", page_id, resp.body);
+
     Ok(resp.body)
 }
 
@@ -361,6 +363,7 @@ pub async fn fetch_receivers(out_file: &str) -> anyhow::Result<()> {
     let mut all: Vec<Receiver> = Vec::new();
 
     for (country_key, page_id) in RECEIVER_LIST_PAGE_IDS.iter() {
+        debug!(country_key, page_id);
         let page = fetch_page(&client, WIKI_URL, *page_id).await?;
         let mut receivers = parse_receiver_list(&page);
 
