@@ -354,10 +354,10 @@ fn parse_receiver_list(page: &str) -> Vec<Receiver> {
 
 pub async fn fetch_receivers(out_file: &str) -> anyhow::Result<()> {
     let client = reqwest::Client::builder()
-        .user_agent("ogn-receiver-scraper/0.2 (+reqwest)")
+        .user_agent("ogn-receiver-scraper/0.2")
         .build()?;
 
-    println!("Fetch and parse lists of receivers");
+    info!("Fetch and parse lists of receivers");
     let mut all: Vec<Receiver> = Vec::new();
 
     for (country_key, page_id) in RECEIVER_LIST_PAGE_IDS.iter() {
@@ -387,7 +387,7 @@ pub async fn fetch_receivers(out_file: &str) -> anyhow::Result<()> {
         timestamp: ts,
     };
 
-    println!("Save to {}", out_file);
+    info!("Saving receivers to {}", out_file);
     let mut f = File::create(out_file)?;
     let json = serde_json::to_string(&out)?;
     f.write_all(json.as_bytes())?;

@@ -2,7 +2,7 @@ use anyhow::Result;
 use chrono::Local;
 use clap::{Parser, Subcommand};
 use diesel::r2d2::{ConnectionManager, Pool};
-use diesel::{PgConnection, RunQueryDsl};
+use diesel::{PgConnection, RunQueryDsl, QueryableByName};
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
 use std::env;
 use std::fs;
@@ -17,6 +17,12 @@ use soar::live_fixes::LiveFixService;
 
 // Embed migrations at compile time
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/");
+
+#[derive(QueryableByName)]
+struct LockResult {
+    #[diesel(sql_type = diesel::sql_types::Bool)]
+    pg_try_advisory_lock: bool,
+}
 
 #[derive(Parser)]
 #[command(name = "soar")]
@@ -151,22 +157,72 @@ async fn setup_diesel_database() -> Result<Pool<ConnectionManager<PgConnection>>
     // This ensures only one process can run migrations at a time
     let migration_lock_id = 19150118; // Ordinal Positions of "SOAR" in English alphabet: S(19) O(15) A(1) R(18)
 
-    // Blocking advisory lock with timeout
-    info!("Waiting to acquire migration lock...");
-    diesel::sql_query(format!(
-        "SELECT pg_advisory_xact_lock({})",
-        migration_lock_id
-    ))
-    .execute(&mut connection)
-    .map_err(|e| anyhow::anyhow!("Failed to acquire migration lock: {}", e))?;
+    // Use session-scoped advisory lock with retry logic
+    info!("Attempting to acquire migration lock...");
 
-    info!("Migration lock acquired");
+    // Try to acquire the lock with retries (total ~30 seconds)
+    let mut attempts = 0;
+    let max_attempts = 30;
+    let mut lock_acquired = false;
 
-    connection
-        .run_pending_migrations(MIGRATIONS)
-        .map_err(|e| anyhow::anyhow!("Failed to run migrations: {}", e))?;
+    while attempts < max_attempts && !lock_acquired {
+        let lock_result = diesel::sql_query(format!(
+            "SELECT pg_try_advisory_lock({})",
+            migration_lock_id
+        ))
+        .get_result::<LockResult>(&mut connection)
+        .map_err(|e| anyhow::anyhow!("Failed to attempt migration lock acquisition: {}", e))?;
 
-    info!("Database migrations completed successfully");
+        let result = lock_result.pg_try_advisory_lock;
+
+        if result {
+            lock_acquired = true;
+            info!("Migration lock acquired on attempt {}", attempts + 1);
+        } else {
+            attempts += 1;
+            if attempts < max_attempts {
+                info!(
+                    "Migration lock unavailable, retrying in 1 second... (attempt {}/{})",
+                    attempts, max_attempts
+                );
+                std::thread::sleep(std::time::Duration::from_secs(1));
+            }
+        }
+    }
+
+    if !lock_acquired {
+        return Err(anyhow::anyhow!(
+            "Failed to acquire migration lock after {} attempts. Another migration process may be running.",
+            max_attempts
+        ));
+    }
+
+    info!("Migration lock acquired successfully");
+
+    // Run migrations while holding the lock and handle result immediately
+    match connection.run_pending_migrations(MIGRATIONS) {
+        Ok(_) => {
+            info!("Database migrations completed successfully");
+            // Release the advisory lock after successful migrations
+            diesel::sql_query(format!("SELECT pg_advisory_unlock({})", migration_lock_id))
+                .execute(&mut connection)
+                .map_err(|e| anyhow::anyhow!("Failed to release migration lock after successful migrations: {}", e))?;
+            info!("Migration lock released");
+        }
+        Err(migration_error) => {
+            // Release the advisory lock even if migrations failed
+            let unlock_result = diesel::sql_query(format!("SELECT pg_advisory_unlock({})", migration_lock_id))
+                .execute(&mut connection);
+            info!("Migration lock released after failure");
+
+            // Log unlock error but prioritize migration error
+            if let Err(unlock_error) = unlock_result {
+                warn!("Also failed to release migration lock: {}", unlock_error);
+            }
+
+            return Err(anyhow::anyhow!("Failed to run migrations: {}", migration_error));
+        }
+    }
 
     Ok(pool)
 }
@@ -373,7 +429,10 @@ async fn main() -> Result<()> {
         info!("Initializing Sentry with DSN");
         Some(sentry::init(sentry::ClientOptions {
             dsn: Some(sentry_dsn.parse().expect("Invalid SENTRY_DSN format")),
-            traces_sample_rate: 0.0, // Disable performance monitoring
+            traces_sample_rate: 0.2, // Disable performance monitoring
+            attach_stacktrace: true,
+            release: Some(env!("CARGO_PKG_VERSION").into()),
+            environment: env::var("SOAR_ENV").ok().map(Into::into),
             session_mode: sentry::SessionMode::Request,
             auto_session_tracking: false, // Disable session tracking
             ..Default::default()
