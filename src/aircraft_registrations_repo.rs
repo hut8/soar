@@ -2,10 +2,11 @@ use anyhow::Result;
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
 use diesel::upsert::excluded;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use crate::aircraft_registrations::{Aircraft, AircraftRegistrationModel, NewAircraftRegistration};
+use crate::clubs_repo::ClubsRepository;
 use crate::schema::aircraft_registrations;
 
 pub type DieselPgPool = Pool<ConnectionManager<PgConnection>>;
@@ -13,11 +14,13 @@ pub type DieselPgPooledConnection = PooledConnection<ConnectionManager<PgConnect
 
 pub struct AircraftRegistrationsRepository {
     pool: DieselPgPool,
+    clubs_repo: ClubsRepository,
 }
 
 impl AircraftRegistrationsRepository {
     pub fn new(pool: DieselPgPool) -> Self {
-        Self { pool }
+        let clubs_repo = ClubsRepository::new(pool.clone());
+        Self { pool, clubs_repo }
     }
 
     fn get_connection(&self) -> Result<DieselPgPooledConnection> {
@@ -35,11 +38,33 @@ impl AircraftRegistrationsRepository {
         let mut conn = self.get_connection()?;
         let mut upserted_count = 0;
 
-        // Convert aircraft to NewAircraftRegistration structs for insertion
-        let new_aircraft: Vec<NewAircraftRegistration> =
-            aircraft.into_iter().map(|a| a.into()).collect();
+        // Process each aircraft for club linking and conversion
+        let aircraft_vec: Vec<Aircraft> = aircraft.into_iter().collect();
 
-        for new_aircraft_reg in new_aircraft {
+        for aircraft_reg in aircraft_vec {
+            // Check if this aircraft has a club name
+            let club_id = if let Some(club_name) = aircraft_reg.club_name() {
+                info!("Processing aircraft {} with club name: {}", aircraft_reg.n_number, club_name);
+
+                // Find or create the club
+                match self.clubs_repo.find_or_create_club(&club_name).await {
+                    Ok(club) => {
+                        info!("Found/created club '{}' with ID: {}", club.name, club.id);
+                        Some(club.id)
+                    }
+                    Err(e) => {
+                        error!("Failed to find/create club '{}' for aircraft {}: {}",
+                              club_name, aircraft_reg.n_number, e);
+                        None
+                    }
+                }
+            } else {
+                None
+            };
+
+            // Create NewAircraftRegistration with club_id
+            let mut new_aircraft_reg: NewAircraftRegistration = aircraft_reg.into();
+            new_aircraft_reg.club_id = club_id;
             let result = diesel::insert_into(aircraft_registrations::table)
                 .values(&new_aircraft_reg)
                 .on_conflict(aircraft_registrations::registration_number)
@@ -179,6 +204,8 @@ impl AircraftRegistrationsRepository {
                         .eq(excluded(aircraft_registrations::kit_model_name)),
                     aircraft_registrations::device_id
                         .eq(excluded(aircraft_registrations::device_id)),
+                    aircraft_registrations::club_id
+                        .eq(excluded(aircraft_registrations::club_id)),
                 ))
                 .execute(&mut conn);
 

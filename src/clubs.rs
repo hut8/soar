@@ -85,6 +85,7 @@ impl Club {
 /// Diesel model for the clubs table - used for database operations
 #[derive(Debug, Clone, Queryable, Selectable, Insertable, AsChangeset, Serialize, Deserialize)]
 #[diesel(table_name = crate::schema::clubs)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct ClubModel {
     pub id: Uuid,
     pub name: String,
@@ -130,6 +131,30 @@ impl From<Club> for NewClubModel {
             is_soaring: club.is_soaring,
             home_base_airport_id: club.home_base_airport_id,
             location_id: club.location_id,
+        }
+    }
+}
+
+/// Conversion from ClubModel (database model) to Club (API model)
+impl From<ClubModel> for Club {
+    fn from(club_model: ClubModel) -> Self {
+        Self {
+            id: club_model.id,
+            name: club_model.name,
+            is_soaring: club_model.is_soaring,
+            home_base_airport_id: club_model.home_base_airport_id,
+            location_id: club_model.location_id,
+            street1: None,
+            street2: None,
+            city: None,
+            state: None,
+            zip_code: None,
+            region_code: None,
+            county_mail_code: None,
+            country_mail_code: None,
+            base_location: None,
+            created_at: club_model.created_at,
+            updated_at: club_model.updated_at,
         }
     }
 }

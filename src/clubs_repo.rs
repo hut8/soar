@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use uuid::Uuid;
 
-use crate::clubs::{Club, NewClubModel};
+use crate::clubs::{Club, ClubModel, NewClubModel};
 use crate::locations::Point;
 // use crate::locations_repo::LocationsRepository;
 use crate::web::PgPool;
@@ -228,6 +228,37 @@ impl ClubsRepository {
         }
     }
 
+    /// Find club by exact name match
+    pub async fn find_by_name(&self, name: &str) -> Result<Option<Club>> {
+        let pool = self.pool.clone();
+        let name_upper = name.to_uppercase();
+
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            let sql = r#"
+                SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, c.location_id,
+                       l.street1, l.street2, l.city, l.state, l.zip_code, l.region_code,
+                       l.county_mail_code, l.country_mail_code,
+                       ST_X(l.geolocation::geometry) as longitude, ST_Y(l.geolocation::geometry) as latitude,
+                       c.created_at, c.updated_at
+                FROM clubs c
+                LEFT JOIN locations l ON c.location_id = l.id
+                WHERE UPPER(c.name) = $1
+                LIMIT 1
+            "#;
+
+            let club_opt: Option<ClubWithLocation> = diesel::sql_query(sql)
+                .bind::<diesel::sql_types::Varchar, _>(&name_upper)
+                .get_result::<ClubWithLocation>(&mut conn)
+                .optional()?;
+
+            Ok::<Option<ClubWithLocation>, anyhow::Error>(club_opt)
+        }).await??;
+
+        Ok(result.map(|cwl| cwl.into()))
+    }
+
     /// Get club by ID
     pub async fn get_by_id(&self, club_id: Uuid) -> Result<Option<Club>> {
         let pool = self.pool.clone();
@@ -422,6 +453,46 @@ impl ClubsRepository {
         .await??;
 
         Ok(result > 0)
+    }
+
+    /// Insert a new club with minimal data (for aircraft registration club creation)
+    pub async fn create_simple_club(&self, club_name: &str) -> Result<Club> {
+        use crate::schema::clubs::dsl::*;
+
+        let club_id = Uuid::new_v4();
+        let new_club = NewClubModel {
+            id: club_id,
+            name: club_name.to_string(),
+            is_soaring: Some(true), // Assume soaring clubs from aircraft registrations
+            home_base_airport_id: None,
+            location_id: None, // Will be populated later if needed
+        };
+
+        let pool = self.pool.clone();
+        let created_club = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            // Use RETURNING to get the inserted record directly
+            let inserted_club: ClubModel = diesel::insert_into(clubs)
+                .values(&new_club)
+                .get_result(&mut conn)?;
+
+            Ok::<Club, anyhow::Error>(inserted_club.into())
+        })
+        .await??;
+
+        Ok(created_club)
+    }
+
+    /// Find a club by name, or create it if it doesn't exist
+    pub async fn find_or_create_club(&self, club_name: &str) -> Result<Club> {
+        // First try to find existing club
+        if let Some(existing_club) = self.find_by_name(club_name).await? {
+            Ok(existing_club)
+        } else {
+            // Create new club
+            self.create_simple_club(club_name).await
+        }
     }
 
     /// Insert a new club
