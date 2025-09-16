@@ -82,6 +82,9 @@ async fn handle_static_file(uri: Uri, _state: axum::extract::State<AppState>) ->
 }
 
 pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Result<()> {
+    sentry::configure_scope(|scope| {
+        scope.set_tag("operation", "web-server");
+    });
     info!("Starting web server on {}:{}", interface, port);
 
     let app_state = AppState { pool };

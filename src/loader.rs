@@ -33,6 +33,9 @@ pub async fn handle_load_data(
     geocode: bool,
     link_home_bases: bool,
 ) -> Result<()> {
+    sentry::configure_scope(|scope| {
+        scope.set_tag("operation", "load-data");
+    });
     info!(
         "Loading data - Models: {:?}, Registrations: {:?}, Airports: {:?}, Runways: {:?}, Receivers: {:?}, Pull Devices: {}, Geocode: {}",
         aircraft_models_path,

@@ -2,7 +2,7 @@ use anyhow::Result;
 use chrono::Local;
 use clap::{Parser, Subcommand};
 use diesel::r2d2::{ConnectionManager, Pool};
-use diesel::{PgConnection, RunQueryDsl, QueryableByName};
+use diesel::{PgConnection, QueryableByName, RunQueryDsl};
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
 use std::env;
 use std::fs;
@@ -206,13 +206,19 @@ async fn setup_diesel_database() -> Result<Pool<ConnectionManager<PgConnection>>
             // Release the advisory lock after successful migrations
             diesel::sql_query(format!("SELECT pg_advisory_unlock({})", migration_lock_id))
                 .execute(&mut connection)
-                .map_err(|e| anyhow::anyhow!("Failed to release migration lock after successful migrations: {}", e))?;
+                .map_err(|e| {
+                    anyhow::anyhow!(
+                        "Failed to release migration lock after successful migrations: {}",
+                        e
+                    )
+                })?;
             info!("Migration lock released");
         }
         Err(migration_error) => {
             // Release the advisory lock even if migrations failed
-            let unlock_result = diesel::sql_query(format!("SELECT pg_advisory_unlock({})", migration_lock_id))
-                .execute(&mut connection);
+            let unlock_result =
+                diesel::sql_query(format!("SELECT pg_advisory_unlock({})", migration_lock_id))
+                    .execute(&mut connection);
             info!("Migration lock released after failure");
 
             // Log unlock error but prioritize migration error
@@ -220,7 +226,10 @@ async fn setup_diesel_database() -> Result<Pool<ConnectionManager<PgConnection>>
                 warn!("Also failed to release migration lock: {}", unlock_error);
             }
 
-            return Err(anyhow::anyhow!("Failed to run migrations: {}", migration_error));
+            return Err(anyhow::anyhow!(
+                "Failed to run migrations: {}",
+                migration_error
+            ));
         }
     }
 
@@ -276,6 +285,9 @@ async fn handle_run(
     nats_url: String,
     unparsed_log: Option<String>,
 ) -> Result<()> {
+    sentry::configure_scope(|scope| {
+        scope.set_tag("operation", "run");
+    });
     info!("Starting APRS client with server: {}:{}", server, port);
 
     // Set up database connection
@@ -331,6 +343,9 @@ async fn handle_run(
 }
 
 async fn handle_pull_data(diesel_pool: Pool<ConnectionManager<PgConnection>>) -> Result<()> {
+    sentry::configure_scope(|scope| {
+        scope.set_tag("operation", "pull-data");
+    });
     info!("Starting pull-data operation");
 
     // Create temporary directory with timestamp
