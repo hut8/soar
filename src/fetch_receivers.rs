@@ -420,7 +420,7 @@ mod tests {
         }
 
         // We should find multiple receivers
-        assert!(receivers.len() > 0, "Should find at least one receiver");
+        assert!(!receivers.is_empty(), "Should find at least one receiver");
     }
 
     #[test]
@@ -515,14 +515,14 @@ mod tests {
         let receivers = parse_receiver_list(&fixture_content);
 
         // Validate first receiver in detail
-        assert!(receivers.len() > 0, "Should have at least one receiver");
+        assert!(!receivers.is_empty(), "Should have at least one receiver");
 
         let first_receiver = &receivers[0];
         assert_eq!(first_receiver.callsign, "Agathazel");
         assert!(!first_receiver.description.is_empty());
         assert!(!first_receiver.contact.is_empty());
         assert!(!first_receiver.email.is_empty());
-        assert!(first_receiver.photos.len() > 0, "Should have photos");
+        assert!(!first_receiver.photos.is_empty(), "Should have photos");
 
         // Validate some photos are proper URLs
         for photo in &first_receiver.photos {

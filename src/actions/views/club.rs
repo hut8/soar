@@ -92,7 +92,7 @@ impl From<ClubWithLocationAndSimilarity> for ClubView {
             home_base_airport_id: club.home_base_airport_id,
             created_at: club.created_at,
             updated_at: club.updated_at,
-            similarity_score: club.similarity_score,
+            similarity_score: club.similarity_score.map(|s| s as f64),
             distance_meters: None,
         }
     }
