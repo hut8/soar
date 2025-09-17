@@ -6,7 +6,7 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use crate::aircraft_registrations::{Aircraft, AircraftRegistrationModel, NewAircraftRegistration};
-use crate::clubs_repo::ClubsRepository;
+use crate::clubs_repo::{ClubsRepository, LocationParams};
 use crate::schema::aircraft_registrations;
 
 pub type DieselPgPool = Pool<ConnectionManager<PgConnection>>;
@@ -49,8 +49,22 @@ impl AircraftRegistrationsRepository {
                     aircraft_reg.n_number, club_name
                 );
 
-                // Find or create the club
-                match self.clubs_repo.find_or_create_club(&club_name).await {
+                // Find or create the club with location data from aircraft registration
+                let location_params = LocationParams {
+                    street1: aircraft_reg.street1.clone(),
+                    street2: aircraft_reg.street2.clone(),
+                    city: aircraft_reg.city.clone(),
+                    state: aircraft_reg.state.clone(),
+                    zip_code: aircraft_reg.zip_code.clone(),
+                    region_code: aircraft_reg.region_code.clone(),
+                    county_mail_code: aircraft_reg.county_mail_code.clone(),
+                    country_mail_code: aircraft_reg.country_mail_code.clone(),
+                };
+                match self
+                    .clubs_repo
+                    .find_or_create_club(&club_name, location_params)
+                    .await
+                {
                     Ok(club) => {
                         info!("Found/created club '{}' with ID: {}", club.name, club.id);
                         Some(club.id)

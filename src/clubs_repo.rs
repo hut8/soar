@@ -6,7 +6,7 @@ use num_traits::ToPrimitive;
 use uuid::Uuid;
 
 use crate::clubs::{Club, ClubModel, NewClubModel};
-use crate::locations::Point;
+use crate::locations::{NewLocationModel, Point};
 // use crate::locations_repo::LocationsRepository;
 use crate::web::PgPool;
 
@@ -242,6 +242,19 @@ impl From<ClubWithLocation> for Club {
             updated_at: cwl.updated_at,
         }
     }
+}
+
+/// Location parameters for club creation
+#[derive(Debug, Clone)]
+pub struct LocationParams {
+    pub street1: Option<String>,
+    pub street2: Option<String>,
+    pub city: Option<String>,
+    pub state: Option<String>,
+    pub zip_code: Option<String>,
+    pub region_code: Option<String>,
+    pub county_mail_code: Option<String>,
+    pub country_mail_code: Option<String>,
 }
 
 pub struct ClubsRepository {
@@ -524,14 +537,78 @@ impl ClubsRepository {
         Ok(created_club)
     }
 
+    /// Create a new club with location data
+    pub async fn create_club_with_location(
+        &self,
+        club_name: &str,
+        location_params: LocationParams,
+    ) -> Result<Club> {
+        use crate::schema::{clubs::dsl::*, locations::dsl::locations};
+
+        let club_id = Uuid::new_v4();
+        let new_location_id = Uuid::new_v4();
+
+        // Create the location first
+        let new_location = NewLocationModel {
+            id: new_location_id,
+            street1: location_params.street1,
+            street2: location_params.street2,
+            city: location_params.city,
+            state: location_params.state,
+            zip_code: location_params.zip_code,
+            region_code: location_params.region_code,
+            county_mail_code: location_params.county_mail_code,
+            country_mail_code: location_params.country_mail_code,
+            geolocation: None, // Will be set by triggers if coordinates are available
+        };
+
+        // Create the club with the location_id
+        let new_club = NewClubModel {
+            id: club_id,
+            name: club_name.to_string(),
+            is_soaring: Some(is_soaring_club(club_name)),
+            home_base_airport_id: None,
+            location_id: Some(new_location_id),
+        };
+
+        let pool = self.pool.clone();
+        let created_club = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            // Use a transaction to ensure both location and club are created atomically
+            conn.transaction::<Club, anyhow::Error, _>(|conn| {
+                // Insert the location first
+                diesel::insert_into(locations)
+                    .values(&new_location)
+                    .execute(conn)?;
+
+                // Insert the club
+                let inserted_club: ClubModel = diesel::insert_into(clubs)
+                    .values(&new_club)
+                    .get_result(conn)?;
+
+                Ok(inserted_club.into())
+            })
+        })
+        .await??;
+
+        Ok(created_club)
+    }
+
     /// Find a club by name, or create it if it doesn't exist
-    pub async fn find_or_create_club(&self, club_name: &str) -> Result<Club> {
+    /// Takes location data to create a proper location for new clubs
+    pub async fn find_or_create_club(
+        &self,
+        club_name: &str,
+        location_params: LocationParams,
+    ) -> Result<Club> {
         // First try to find existing club
         if let Some(existing_club) = self.find_by_name(club_name).await? {
             Ok(existing_club)
         } else {
-            // Create new club
-            self.create_simple_club(club_name).await
+            // Create new club with location data
+            self.create_club_with_location(club_name, location_params)
+                .await
         }
     }
 
