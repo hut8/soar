@@ -1,28 +1,67 @@
+use bigdecimal::BigDecimal;
 use chrono::{DateTime, Utc};
+use num_traits::ToPrimitive;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
     clubs::Club,
     clubs_repo::{ClubWithLocationAndDistance, ClubWithLocationAndSimilarity},
+    locations::{Location, Point},
 };
+
+/// Helper function to convert Option<BigDecimal> to Option<f64>
+fn bigdecimal_to_f64(value: Option<BigDecimal>) -> Option<f64> {
+    value.and_then(|v| v.to_f64())
+}
+
+/// Helper function to create a Location object from individual address fields
+/// Returns None if location_id is None or all address fields are empty
+#[allow(clippy::too_many_arguments)]
+fn create_location_from_fields(
+    location_id: Option<Uuid>,
+    street1: Option<String>,
+    street2: Option<String>,
+    city: Option<String>,
+    state: Option<String>,
+    zip_code: Option<String>,
+    region_code: Option<String>,
+    county_mail_code: Option<String>,
+    country_mail_code: Option<String>,
+    latitude: Option<f64>,
+    longitude: Option<f64>,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+) -> Option<Location> {
+    location_id.map(|id| Location {
+        id,
+        street1,
+        street2,
+        city,
+        state,
+        zip_code,
+        region_code,
+        county_mail_code,
+        country_mail_code,
+        geolocation: if let (Some(lat), Some(lng)) = (latitude, longitude) {
+            Some(Point::new(lat, lng))
+        } else {
+            None
+        },
+        created_at,
+        updated_at,
+    })
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClubView {
     pub id: Uuid,
     pub name: String,
-    pub location_id: Option<Uuid>,
+    pub home_base_airport_id: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub location: Option<Location>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-    pub street1: Option<String>,
-    pub street2: Option<String>,
-    pub city: Option<String>,
-    pub state: Option<String>,
-    pub zip_code: Option<String>,
-    pub region_code: Option<String>,
-    pub county_mail_code: Option<String>,
-    pub country_mail_code: Option<String>,
-    pub home_base_airport_id: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub similarity_score: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -31,19 +70,27 @@ pub struct ClubView {
 
 impl From<Club> for ClubView {
     fn from(club: Club) -> Self {
+        let location = create_location_from_fields(
+            club.location_id,
+            club.street1,
+            club.street2,
+            club.city,
+            club.state,
+            club.zip_code,
+            club.region_code,
+            club.county_mail_code,
+            club.country_mail_code,
+            club.base_location.as_ref().map(|p| p.latitude),
+            club.base_location.as_ref().map(|p| p.longitude),
+            club.created_at,
+            club.updated_at,
+        );
+
         Self {
             id: club.id,
             name: club.name,
-            location_id: club.location_id,
-            street1: club.street1,
-            street2: club.street2,
-            city: club.city,
-            state: club.state,
-            zip_code: club.zip_code,
-            region_code: club.region_code,
-            county_mail_code: club.county_mail_code,
-            country_mail_code: club.country_mail_code,
             home_base_airport_id: club.home_base_airport_id,
+            location,
             created_at: club.created_at,
             updated_at: club.updated_at,
             similarity_score: None,
@@ -54,19 +101,27 @@ impl From<Club> for ClubView {
 
 impl From<ClubWithLocationAndDistance> for ClubView {
     fn from(club: ClubWithLocationAndDistance) -> Self {
+        let location = create_location_from_fields(
+            club.location_id,
+            club.street1,
+            club.street2,
+            club.city,
+            club.state,
+            club.zip_code,
+            club.region_code,
+            club.county_mail_code,
+            club.country_mail_code,
+            bigdecimal_to_f64(club.latitude),
+            bigdecimal_to_f64(club.longitude),
+            club.created_at,
+            club.updated_at,
+        );
+
         Self {
             id: club.id,
             name: club.name,
-            location_id: club.location_id,
-            street1: club.street1,
-            street2: club.street2,
-            city: club.city,
-            state: club.state,
-            zip_code: club.zip_code,
-            region_code: club.region_code,
-            county_mail_code: club.county_mail_code,
-            country_mail_code: club.country_mail_code,
             home_base_airport_id: club.home_base_airport_id,
+            location,
             created_at: club.created_at,
             updated_at: club.updated_at,
             similarity_score: None,
@@ -77,19 +132,27 @@ impl From<ClubWithLocationAndDistance> for ClubView {
 
 impl From<ClubWithLocationAndSimilarity> for ClubView {
     fn from(club: ClubWithLocationAndSimilarity) -> Self {
+        let location = create_location_from_fields(
+            club.location_id,
+            club.street1,
+            club.street2,
+            club.city,
+            club.state,
+            club.zip_code,
+            club.region_code,
+            club.county_mail_code,
+            club.country_mail_code,
+            bigdecimal_to_f64(club.latitude),
+            bigdecimal_to_f64(club.longitude),
+            club.created_at,
+            club.updated_at,
+        );
+
         Self {
             id: club.id,
             name: club.name,
-            location_id: club.location_id,
-            street1: club.street1,
-            street2: club.street2,
-            city: club.city,
-            state: club.state,
-            zip_code: club.zip_code,
-            region_code: club.region_code,
-            county_mail_code: club.county_mail_code,
-            country_mail_code: club.country_mail_code,
             home_base_airport_id: club.home_base_airport_id,
+            location,
             created_at: club.created_at,
             updated_at: club.updated_at,
             similarity_score: club.similarity_score.map(|s| s as f64),

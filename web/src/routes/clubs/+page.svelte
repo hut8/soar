@@ -6,32 +6,9 @@
 	import { ProgressRing } from '@skeletonlabs/skeleton-svelte';
 	import { ClubSelector } from '$lib';
 	import { serverCall } from '$lib/api/server';
+	import type { ClubWithSoaring } from '$lib/types';
 
-	interface Point {
-		latitude: number;
-		longitude: number;
-	}
-
-	interface Club {
-		id: string;
-		name: string;
-		is_soaring?: boolean;
-		home_base_airport_id?: number;
-		location_id?: string;
-		street1?: string;
-		street2?: string;
-		city?: string;
-		state?: string;
-		zip_code?: string;
-		region_code?: string;
-		county_mail_code?: string;
-		country_mail_code?: string;
-		base_location?: Point;
-		created_at: string;
-		updated_at: string;
-	}
-
-	let clubs: Club[] = [];
+	let clubs: ClubWithSoaring[] = [];
 	let loading = false;
 	let error = '';
 	let searchQuery = '';
@@ -74,7 +51,7 @@
 				endpoint += `?q=${encodeURIComponent(searchQuery)}`;
 			}
 
-			clubs = await serverCall<Club[]>(endpoint);
+			clubs = await serverCall<ClubWithSoaring[]>(endpoint);
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			error = `Failed to search clubs: ${errorMessage}`;
@@ -100,13 +77,17 @@
 		}
 	}
 
-	function formatAddress(club: Club): string {
+	function formatAddress(club: ClubWithSoaring): string {
+		if (!club.location) {
+			return 'Address not available';
+		}
+
 		const parts = [];
-		if (club.street1) parts.push(club.street1);
-		if (club.street2) parts.push(club.street2);
-		if (club.city) parts.push(club.city);
-		if (club.state) parts.push(club.state);
-		if (club.zip_code) parts.push(club.zip_code);
+		if (club.location.street1) parts.push(club.location.street1);
+		if (club.location.street2) parts.push(club.location.street2);
+		if (club.location.city) parts.push(club.location.city);
+		if (club.location.state) parts.push(club.location.state);
+		if (club.location.zip_code) parts.push(club.location.zip_code);
 		return parts.join(', ') || 'Address not available';
 	}
 
@@ -130,7 +111,7 @@
 		error = '';
 
 		try {
-			const selectedClubData = await serverCall<Club>(`/clubs/${clubId}`);
+			const selectedClubData = await serverCall<ClubWithSoaring>(`/clubs/${clubId}`);
 			if (selectedClubData) {
 				clubs = [selectedClubData];
 			} else {
@@ -279,11 +260,11 @@
 								<span class="flex-1">{formatAddress(club)}</span>
 							</div>
 
-							{#if club.base_location}
+							{#if club.location?.geolocation}
 								<div class="flex items-center gap-3">
 									<Navigation class="h-4 w-4 text-surface-500" />
 									<span class="font-mono text-xs">
-										{club.base_location.latitude.toFixed(4)}, {club.base_location.longitude.toFixed(
+										{club.location.geolocation.latitude.toFixed(4)}, {club.location.geolocation.longitude.toFixed(
 											4
 										)}
 									</span>

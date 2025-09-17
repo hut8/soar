@@ -2,18 +2,7 @@
 	import { Combobox } from '@skeletonlabs/skeleton-svelte';
 	import { onMount } from 'svelte';
 	import { serverCall } from '$lib/api/server';
-
-	interface Club {
-		id: string;
-		name: string;
-		is_soaring?: boolean;
-	}
-
-	interface ComboboxData {
-		label: string;
-		value: string;
-		club: Club;
-	}
+	import type { ClubWithSoaring, ComboboxData } from '$lib/types';
 
 	// Props
 	export let value: string[] = [];
@@ -26,13 +15,13 @@
 	export let onInputValueChange: ((e: { inputValue: string }) => void) | undefined = undefined;
 
 	// Internal state
-	let clubs: Club[] = [];
+	let clubs: ClubWithSoaring[] = [];
 	let comboboxData: ComboboxData[] = [];
 	let loading = true;
 	let error = '';
 
 	// Convert clubs to combobox data format
-	function transformClubsToComboboxData(clubList: Club[]): ComboboxData[] {
+	function transformClubsToComboboxData(clubList: ClubWithSoaring[]): ComboboxData[] {
 		return clubList.map((club) => ({
 			label: club.name,
 			value: club.id,
@@ -51,7 +40,7 @@
 				endpoint += `&q=${encodeURIComponent(query.trim())}`;
 			}
 
-			clubs = await serverCall<Club[]>(endpoint);
+			clubs = await serverCall<ClubWithSoaring[]>(endpoint);
 			comboboxData = transformClubsToComboboxData(clubs);
 		} catch (err) {
 			console.error('Failed to load clubs:', err);

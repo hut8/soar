@@ -7,30 +7,7 @@
 	import { ProgressRing } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall } from '$lib/api/server';
 	import { auth, type User } from '$lib/stores/auth';
-
-	interface Point {
-		latitude: number;
-		longitude: number;
-	}
-
-	interface Club {
-		id: string;
-		name: string;
-		is_soaring?: boolean;
-		home_base_airport_id?: number;
-		location_id?: string;
-		street1?: string;
-		street2?: string;
-		city?: string;
-		state?: string;
-		zip_code?: string;
-		region_code?: string;
-		county_mail_code?: string;
-		country_mail_code?: string;
-		base_location?: Point;
-		created_at: string;
-		updated_at: string;
-	}
+	import type { ClubWithSoaring } from '$lib/types';
 
 	interface Aircraft {
 		registration_number: string;
@@ -55,7 +32,7 @@
 		other_names: string[];
 	}
 
-	let club: Club | null = null;
+	let club: ClubWithSoaring | null = null;
 	let aircraft: Aircraft[] = [];
 	let loading = true;
 	let loadingAircraft = false;
@@ -81,7 +58,7 @@
 		error = '';
 
 		try {
-			club = await serverCall<Club>(`/clubs/${clubId}`);
+			club = await serverCall<ClubWithSoaring>(`/clubs/${clubId}`);
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			error = `Failed to load club: ${errorMessage}`;
@@ -108,7 +85,7 @@
 		}
 	}
 
-	function formatCoordinates(point: Point): string {
+	function formatCoordinates(point: import('$lib/types').Point): string {
 		return `${point.latitude.toFixed(6)}, ${point.longitude.toFixed(6)}`;
 	}
 
@@ -240,23 +217,27 @@
 							<Info class="mt-1 h-4 w-4 text-surface-500" />
 							<div>
 								<p class="text-surface-600-300-token mb-1 text-sm">Address</p>
-								<p>
-									{club.street1}<br />
-									{club.street2 && `${club.street2}<br />`}
-									{club.city && `${club.city}, `}
-									{club.state && `${club.state}`}
-									{club.zip_code && `${club.zip_code}`}
-									<br />{club.country_mail_code && `${club.country_mail_code}`}
-								</p>
+								{#if club.location}
+									<p>
+										{club.location.street1 || ''}<br />
+										{club.location.street2 && `${club.location.street2}<br />`}
+										{club.location.city && `${club.location.city}, `}
+										{club.location.state && `${club.location.state}`}
+										{club.location.zip_code && ` ${club.location.zip_code}`}
+										<br />{club.location.country_mail_code && `${club.location.country_mail_code}`}
+									</p>
+								{:else}
+									<p class="text-surface-500">Address not available</p>
+								{/if}
 							</div>
 						</div>
 
-						{#if club.base_location}
+						{#if club.location?.geolocation}
 							<div class="flex items-start gap-3">
 								<Navigation class="mt-1 h-4 w-4 text-surface-500" />
 								<div>
 									<p class="text-surface-600-300-token mb-1 text-sm">Coordinates</p>
-									<p class="font-mono text-sm">{formatCoordinates(club.base_location)}</p>
+									<p class="font-mono text-sm">{formatCoordinates(club.location.geolocation)}</p>
 								</div>
 							</div>
 						{/if}
@@ -353,7 +334,7 @@
 			</div>
 
 			<!-- Map Section (placeholder for future implementation) -->
-			{#if club.base_location}
+			{#if club.location?.geolocation}
 				<div class="card p-6">
 					<h2 class="mb-4 flex items-center gap-2 h2">
 						<Navigation class="h-6 w-6" />
@@ -362,9 +343,11 @@
 					<div class="bg-surface-100-800-token rounded-lg p-8 text-center">
 						<MapPin class="mx-auto mb-4 h-12 w-12 text-surface-500" />
 						<p class="text-surface-600-300-token">Map integration coming soon</p>
-						<p class="mt-2 text-sm text-surface-500">
-							{formatCoordinates(club.base_location)}
-						</p>
+						{#if club.location?.geolocation}
+							<p class="mt-2 text-sm text-surface-500">
+								{formatCoordinates(club.location.geolocation)}
+							</p>
+						{/if}
 					</div>
 				</div>
 			{/if}
