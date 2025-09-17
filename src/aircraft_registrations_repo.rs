@@ -7,6 +7,7 @@ use uuid::Uuid;
 
 use crate::aircraft_registrations::{Aircraft, AircraftRegistrationModel, NewAircraftRegistration};
 use crate::clubs_repo::{ClubsRepository, LocationParams};
+use crate::locations_repo::LocationsRepository;
 use crate::schema::aircraft_registrations;
 
 pub type DieselPgPool = Pool<ConnectionManager<PgConnection>>;
@@ -15,12 +16,18 @@ pub type DieselPgPooledConnection = PooledConnection<ConnectionManager<PgConnect
 pub struct AircraftRegistrationsRepository {
     pool: DieselPgPool,
     clubs_repo: ClubsRepository,
+    locations_repo: LocationsRepository,
 }
 
 impl AircraftRegistrationsRepository {
     pub fn new(pool: DieselPgPool) -> Self {
         let clubs_repo = ClubsRepository::new(pool.clone());
-        Self { pool, clubs_repo }
+        let locations_repo = LocationsRepository::new(pool.clone());
+        Self {
+            pool,
+            clubs_repo,
+            locations_repo,
+        }
     }
 
     fn get_connection(&self) -> Result<DieselPgPooledConnection> {
@@ -42,6 +49,33 @@ impl AircraftRegistrationsRepository {
         let aircraft_vec: Vec<Aircraft> = aircraft.into_iter().collect();
 
         for aircraft_reg in aircraft_vec {
+            // First, create/find location for this aircraft registration's address
+            let location = match self
+                .locations_repo
+                .find_or_create(
+                    aircraft_reg.street1.clone(),
+                    aircraft_reg.street2.clone(),
+                    aircraft_reg.city.clone(),
+                    aircraft_reg.state.clone(),
+                    aircraft_reg.zip_code.clone(),
+                    aircraft_reg.region_code.clone(),
+                    aircraft_reg.county_mail_code.clone(),
+                    aircraft_reg.country_mail_code.clone(),
+                    None, // geolocation will be set by triggers if coordinates are available
+                )
+                .await
+            {
+                Ok(location) => location,
+                Err(e) => {
+                    error!(
+                        "Failed to create/find location for aircraft {}: {}",
+                        aircraft_reg.n_number, e
+                    );
+                    // Continue processing other aircraft
+                    continue;
+                }
+            };
+
             // Check if this aircraft has a club name
             let club_id = if let Some(club_name) = aircraft_reg.club_name() {
                 info!(
@@ -81,9 +115,10 @@ impl AircraftRegistrationsRepository {
                 None
             };
 
-            // Create NewAircraftRegistration with club_id
+            // Create NewAircraftRegistration with club_id and location_id
             let mut new_aircraft_reg: NewAircraftRegistration = aircraft_reg.into();
             new_aircraft_reg.club_id = club_id;
+            new_aircraft_reg.location_id = Some(location.id);
             let result = diesel::insert_into(aircraft_registrations::table)
                 .values(&new_aircraft_reg)
                 .on_conflict(aircraft_registrations::registration_number)

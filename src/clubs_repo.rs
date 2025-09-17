@@ -6,8 +6,8 @@ use num_traits::ToPrimitive;
 use uuid::Uuid;
 
 use crate::clubs::{Club, ClubModel, NewClubModel};
-use crate::locations::{NewLocationModel, Point};
-// use crate::locations_repo::LocationsRepository;
+use crate::locations::Point;
+use crate::locations_repo::LocationsRepository;
 use crate::web::PgPool;
 
 #[derive(QueryableByName, Debug)]
@@ -259,16 +259,15 @@ pub struct LocationParams {
 
 pub struct ClubsRepository {
     pool: PgPool,
-    // locations_repo: LocationsRepository,
+    locations_repo: LocationsRepository,
 }
 
 impl ClubsRepository {
     pub fn new(pool: PgPool) -> Self {
-        // Note: LocationsRepository will need to be migrated to Diesel as well
-        // let locations_repo = LocationsRepository::new(pool.clone());
+        let locations_repo = LocationsRepository::new(pool.clone());
         Self {
             pool,
-            // locations_repo,
+            locations_repo,
         }
     }
 
@@ -543,52 +542,44 @@ impl ClubsRepository {
         club_name: &str,
         location_params: LocationParams,
     ) -> Result<Club> {
-        use crate::schema::{clubs::dsl::*, locations::dsl::locations};
+        use crate::schema::clubs::dsl::*;
 
-        let club_id = Uuid::new_v4();
-        let new_location_id = Uuid::new_v4();
-
-        // Create the location first
-        let new_location = NewLocationModel {
-            id: new_location_id,
-            street1: location_params.street1,
-            street2: location_params.street2,
-            city: location_params.city,
-            state: location_params.state,
-            zip_code: location_params.zip_code,
-            region_code: location_params.region_code,
-            county_mail_code: location_params.county_mail_code,
-            country_mail_code: location_params.country_mail_code,
-            geolocation: None, // Will be set by triggers if coordinates are available
-        };
+        // Use LocationsRepository to find or create the location
+        let location = self
+            .locations_repo
+            .find_or_create(
+                location_params.street1,
+                location_params.street2,
+                location_params.city,
+                location_params.state,
+                location_params.zip_code,
+                location_params.region_code,
+                location_params.county_mail_code,
+                location_params.country_mail_code,
+                None, // geolocation will be set by triggers if coordinates are available
+            )
+            .await?;
 
         // Create the club with the location_id
+        let club_id = Uuid::new_v4();
         let new_club = NewClubModel {
             id: club_id,
             name: club_name.to_string(),
             is_soaring: Some(is_soaring_club(club_name)),
             home_base_airport_id: None,
-            location_id: Some(new_location_id),
+            location_id: Some(location.id),
         };
 
         let pool = self.pool.clone();
         let created_club = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            // Use a transaction to ensure both location and club are created atomically
-            conn.transaction::<Club, anyhow::Error, _>(|conn| {
-                // Insert the location first
-                diesel::insert_into(locations)
-                    .values(&new_location)
-                    .execute(conn)?;
+            // Insert the club
+            let inserted_club: ClubModel = diesel::insert_into(clubs)
+                .values(&new_club)
+                .get_result(&mut conn)?;
 
-                // Insert the club
-                let inserted_club: ClubModel = diesel::insert_into(clubs)
-                    .values(&new_club)
-                    .get_result(conn)?;
-
-                Ok(inserted_club.into())
-            })
+            Ok::<Club, anyhow::Error>(inserted_club.into())
         })
         .await??;
 
