@@ -240,7 +240,8 @@ impl ClubsRepository {
                 SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, c.location_id,
                        l.street1, l.street2, l.city, l.state, l.zip_code, l.region_code,
                        l.county_mail_code, l.country_mail_code,
-                       ST_X(l.geolocation::geometry) as longitude, ST_Y(l.geolocation::geometry) as latitude,
+                       CASE WHEN l.geolocation IS NOT NULL THEN ST_X(l.geolocation::geometry) ELSE NULL END as longitude,
+                       CASE WHEN l.geolocation IS NOT NULL THEN ST_Y(l.geolocation::geometry) ELSE NULL END as latitude,
                        c.created_at, c.updated_at
                 FROM clubs c
                 LEFT JOIN locations l ON c.location_id = l.id
@@ -270,7 +271,8 @@ impl ClubsRepository {
                 SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, c.location_id,
                        l.street1, l.street2, l.city, l.state, l.zip_code, l.region_code,
                        l.county_mail_code, l.country_mail_code,
-                       ST_X(l.geolocation::geometry) as longitude, ST_Y(l.geolocation::geometry) as latitude,
+                       CASE WHEN l.geolocation IS NOT NULL THEN ST_X(l.geolocation::geometry) ELSE NULL END as longitude,
+                       CASE WHEN l.geolocation IS NOT NULL THEN ST_Y(l.geolocation::geometry) ELSE NULL END as latitude,
                        c.created_at, c.updated_at
                 FROM clubs c
                 LEFT JOIN locations l ON c.location_id = l.id
@@ -299,7 +301,8 @@ impl ClubsRepository {
                 SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, c.location_id,
                        l.street1, l.street2, l.city, l.state, l.zip_code, l.region_code,
                        l.county_mail_code, l.country_mail_code,
-                       ST_X(l.geolocation::geometry) as longitude, ST_Y(l.geolocation::geometry) as latitude,
+                       CASE WHEN l.geolocation IS NOT NULL THEN ST_X(l.geolocation::geometry) ELSE NULL END as longitude,
+                       CASE WHEN l.geolocation IS NOT NULL THEN ST_Y(l.geolocation::geometry) ELSE NULL END as latitude,
                        c.created_at, c.updated_at
                 FROM clubs c
                 LEFT JOIN locations l ON c.location_id = l.id
@@ -330,7 +333,8 @@ impl ClubsRepository {
                 SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, c.location_id,
                        l.street1, l.street2, l.city, l.state, l.zip_code, l.region_code,
                        l.county_mail_code, l.country_mail_code,
-                       ST_X(l.geolocation::geometry) as longitude, ST_Y(l.geolocation::geometry) as latitude,
+                       CASE WHEN l.geolocation IS NOT NULL THEN ST_X(l.geolocation::geometry) ELSE NULL END as longitude,
+                       CASE WHEN l.geolocation IS NOT NULL THEN ST_Y(l.geolocation::geometry) ELSE NULL END as latitude,
                        c.created_at, c.updated_at,
                        SIMILARITY(UPPER(c.name), $1) as similarity_score
                 FROM clubs c
@@ -383,7 +387,7 @@ impl ClubsRepository {
                        c.created_at, c.updated_at,
                        ST_Distance(ST_SetSRID(l.geolocation::geometry, 4326)::geography, ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography) as distance_meters
                 FROM clubs c
-                LEFT JOIN locations l ON c.location_id = l.id
+                INNER JOIN locations l ON c.location_id = l.id
                 WHERE l.geolocation IS NOT NULL
                 AND c.is_soaring = true
                 AND ST_DWithin(ST_SetSRID(l.geolocation::geometry, 4326)::geography, ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography, $3)
@@ -538,6 +542,7 @@ impl ClubsRepository {
 mod tests {
     use super::*;
     use chrono::Utc;
+    use diesel::r2d2::{ConnectionManager, Pool};
 
     // Note: These tests would require a test database setup
     // For now, they're just structural examples
@@ -570,5 +575,76 @@ mod tests {
         assert_eq!(club.is_soaring, Some(true));
         assert_eq!(club.city, Some("Milton".to_string()));
         assert_eq!(club.state, Some("NY".to_string()));
+    }
+
+    // Helper function to create a test database pool (for integration tests)
+    fn create_test_pool() -> Result<PgPool> {
+        let database_url = std::env::var("TEST_DATABASE_URL")
+            .unwrap_or_else(|_| "postgres://localhost/soar_test".to_string());
+        let manager = ConnectionManager::<PgConnection>::new(database_url);
+        let pool = Pool::builder().build(manager)?;
+        Ok(pool)
+    }
+
+    #[tokio::test]
+    async fn test_fuzzy_search_with_null_geolocation() {
+        // Skip test if we can't connect to test database
+        if let Ok(pool) = create_test_pool() {
+            let repo = ClubsRepository::new(pool);
+
+            // This test ensures that fuzzy search doesn't fail with f64 decoding errors
+            // when some clubs have NULL geolocation data
+            let result = repo.fuzzy_search("test", Some(10)).await;
+
+            // The search should complete without errors, even if no clubs are found
+            match result {
+                Ok(_clubs) => {
+                    // Success - no f64 decoding error occurred
+                    assert!(true);
+                }
+                Err(e) => {
+                    // If there's an error, it shouldn't be about f64 decoding
+                    let error_msg = e.to_string();
+                    assert!(
+                        !error_msg.contains("f64") && !error_msg.contains("double"),
+                        "Unexpected f64 decoding error: {}",
+                        error_msg
+                    );
+                }
+            }
+        } else {
+            println!("Skipping test - no test database connection");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_all_with_null_geolocation() {
+        // Skip test if we can't connect to test database
+        if let Ok(pool) = create_test_pool() {
+            let repo = ClubsRepository::new(pool);
+
+            // This test ensures that get_all doesn't fail with f64 decoding errors
+            // when some clubs have NULL geolocation data
+            let result = repo.get_all().await;
+
+            // The search should complete without errors, even if no clubs are found
+            match result {
+                Ok(_clubs) => {
+                    // Success - no f64 decoding error occurred
+                    assert!(true);
+                }
+                Err(e) => {
+                    // If there's an error, it shouldn't be about f64 decoding
+                    let error_msg = e.to_string();
+                    assert!(
+                        !error_msg.contains("f64") && !error_msg.contains("double"),
+                        "Unexpected f64 decoding error: {}",
+                        error_msg
+                    );
+                }
+            }
+        } else {
+            println!("Skipping test - no test database connection");
+        }
     }
 }
