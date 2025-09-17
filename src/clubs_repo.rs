@@ -133,6 +133,12 @@ fn bigdecimal_to_f64(value: Option<BigDecimal>) -> Option<f64> {
     value.and_then(|v| v.to_f64())
 }
 
+/// Helper function to determine if a club name indicates it's a soaring club
+fn is_soaring_club(club_name: &str) -> bool {
+    let name_lower = club_name.to_lowercase();
+    name_lower.contains("soar") || name_lower.contains("glider")
+}
+
 impl From<ClubWithLocationAndDistance> for Club {
     fn from(cwld: ClubWithLocationAndDistance) -> Self {
         let base_location = if cwld.longitude.is_some() && cwld.latitude.is_some() {
@@ -497,7 +503,7 @@ impl ClubsRepository {
         let new_club = NewClubModel {
             id: club_id,
             name: club_name.to_string(),
-            is_soaring: Some(true), // Assume soaring clubs from aircraft registrations
+            is_soaring: Some(is_soaring_club(club_name)),
             home_base_airport_id: None,
             location_id: None, // Will be populated later if needed
         };
@@ -605,6 +611,24 @@ mod tests {
         assert_eq!(club.is_soaring, Some(true));
         assert_eq!(club.city, Some("Milton".to_string()));
         assert_eq!(club.state, Some("NY".to_string()));
+    }
+
+    #[test]
+    fn test_is_soaring_club_detection() {
+        // Test soaring-related names
+        assert!(is_soaring_club("Adirondack Soaring Club"));
+        assert!(is_soaring_club("Valley Soaring Association"));
+        assert!(is_soaring_club("SOARING CLUB OF WESTERN PA"));
+        assert!(is_soaring_club("Central Valley Glider Club"));
+        assert!(is_soaring_club("GLIDER CLUB"));
+        assert!(is_soaring_club("Mountain Gliders"));
+
+        // Test non-soaring names
+        assert!(!is_soaring_club("Flying Club"));
+        assert!(!is_soaring_club("Cessna Pilots Association"));
+        assert!(!is_soaring_club("EAA Chapter 123"));
+        assert!(!is_soaring_club("Private Aircraft Owners"));
+        assert!(!is_soaring_club("Aviation Club"));
     }
 
     // Helper function to create a test database pool (for integration tests)
