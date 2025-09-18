@@ -1,5 +1,15 @@
 use crate::Fix;
 use anyhow::Result;
+
+/// Result type for connection attempts
+enum ConnectionResult {
+    /// Connection was successful and ran until completion/disconnection
+    Success,
+    /// Connection failed immediately (couldn't establish connection)
+    ConnectionFailed(anyhow::Error),
+    /// Connection was established but failed during operation
+    OperationFailed(anyhow::Error),
+}
 use ogn_parser::{AprsData, AprsPacket};
 use std::sync::Arc;
 use std::time::Duration;
@@ -143,12 +153,12 @@ impl AprsClient {
                 )
                 .await
                 {
-                    Ok(_) => {
+                    ConnectionResult::Success => {
                         info!("APRS client connection ended normally");
                         retry_count = 0; // Reset retry count on successful connection
                     }
-                    Err(e) => {
-                        error!("APRS client error: {}", e);
+                    ConnectionResult::ConnectionFailed(e) => {
+                        error!("APRS client connection failed: {}", e);
                         retry_count += 1;
 
                         if retry_count >= config.max_retries {
@@ -162,6 +172,20 @@ impl AprsClient {
                         warn!(
                             "Retrying connection in {} seconds (attempt {}/{})",
                             config.retry_delay_seconds, retry_count, config.max_retries
+                        );
+                        sleep(Duration::from_secs(config.retry_delay_seconds)).await;
+                    }
+                    ConnectionResult::OperationFailed(e) => {
+                        error!(
+                            "APRS client operation failed after successful connection: {}",
+                            e
+                        );
+                        // Reset retry count since connection was initially successful
+                        retry_count = 0;
+
+                        warn!(
+                            "Retrying connection in {} seconds (connection was successful)",
+                            config.retry_delay_seconds
                         );
                         sleep(Duration::from_secs(config.retry_delay_seconds)).await;
                     }
@@ -184,15 +208,22 @@ impl AprsClient {
         config: &AprsClientConfig,
         message_processor: Arc<dyn MessageProcessor>,
         fix_processor: Option<Arc<dyn FixProcessor>>,
-    ) -> Result<()> {
+    ) -> ConnectionResult {
         info!(
             "Connecting to APRS server {}:{}",
             config.server, config.port
         );
 
         // Connect to the APRS server
-        let stream = TcpStream::connect(format!("{}:{}", config.server, config.port)).await?;
-        info!("Connected to APRS server");
+        let stream = match TcpStream::connect(format!("{}:{}", config.server, config.port)).await {
+            Ok(stream) => {
+                info!("Connected to APRS server");
+                stream
+            }
+            Err(e) => {
+                return ConnectionResult::ConnectionFailed(e.into());
+            }
+        };
 
         let (reader, mut writer) = stream.into_split();
         let mut buf_reader = BufReader::new(reader);
@@ -200,8 +231,12 @@ impl AprsClient {
         // Send login command
         let login_cmd = Self::build_login_command(config);
         info!("Sending login command: {}", login_cmd.trim());
-        writer.write_all(login_cmd.as_bytes()).await?;
-        writer.flush().await?;
+        if let Err(e) = writer.write_all(login_cmd.as_bytes()).await {
+            return ConnectionResult::OperationFailed(e.into());
+        }
+        if let Err(e) = writer.flush().await {
+            return ConnectionResult::OperationFailed(e.into());
+        }
         info!("Login command sent successfully");
 
         // Read and process messages
@@ -209,12 +244,12 @@ impl AprsClient {
         let mut first_message = true;
         loop {
             line.clear();
-            match buf_reader.read_line(&mut line).await? {
-                0 => {
+            match buf_reader.read_line(&mut line).await {
+                Ok(0) => {
                     warn!("Connection closed by server");
                     break;
                 }
-                _ => {
+                Ok(_) => {
                     let trimmed_line = line.trim();
                     if !trimmed_line.is_empty() {
                         if first_message {
@@ -237,10 +272,13 @@ impl AprsClient {
                         }
                     }
                 }
+                Err(e) => {
+                    return ConnectionResult::OperationFailed(e.into());
+                }
             }
         }
 
-        Ok(())
+        ConnectionResult::Success
     }
 
     /// Build the login command for APRS-IS authentication
