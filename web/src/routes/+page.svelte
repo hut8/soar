@@ -1,7 +1,14 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import { goto } from '$app/navigation';
+	import { auth } from '$lib/stores/auth';
 
 	const clubsPath = resolve('/clubs');
+
+	// Watch for auth changes and redirect when user becomes authenticated
+	$: if ($auth.isAuthenticated && $auth.user) {
+		goto(clubsPath);
+	}
 </script>
 
 <svelte:head>
