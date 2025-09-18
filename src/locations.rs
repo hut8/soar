@@ -73,7 +73,7 @@ impl ToSql<crate::schema::sql_types::Point, Pg> for Point {
 }
 
 /// Diesel model for the locations table - used for database operations
-#[derive(Debug, Clone, Queryable, Selectable, Serialize, Deserialize)]
+#[derive(Debug, Clone, Queryable, QueryableByName, Selectable, Serialize, Deserialize)]
 #[diesel(table_name = crate::schema::locations)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct LocationModel {

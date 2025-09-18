@@ -204,7 +204,7 @@ impl LocationsRepository {
         Ok(locations)
     }
 
-    /// Find or create a location by address
+    /// Find or create a location by address (atomic operation)
     #[allow(clippy::too_many_arguments)]
     pub async fn find_or_create(
         &self,
@@ -218,36 +218,78 @@ impl LocationsRepository {
         country_mail_code: Option<String>,
         geolocation: Option<Point>,
     ) -> Result<Location> {
-        // Try to find existing location
-        if let Some(existing) = self
-            .find_by_address(
-                street1.as_deref(),
-                street2.as_deref(),
-                city.as_deref(),
-                state.as_deref(),
-                zip_code.as_deref(),
-                country_mail_code.as_deref(),
+        use crate::schema::locations::dsl::locations as locations_table;
+
+        let pool = self.pool.clone();
+
+        // Clone values for the closure
+        let param_street1 = street1.clone();
+        let param_street2 = street2.clone();
+        let param_city = city.clone();
+        let param_state = state.clone();
+        let param_zip_code = zip_code.clone();
+        let param_region_code = region_code.clone();
+        let param_county_mail_code = county_mail_code.clone();
+        let param_country_mail_code = country_mail_code.clone();
+        let param_geolocation = geolocation;
+
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            // First, try to insert the new location using ON CONFLICT DO NOTHING
+            let new_location = Location::new(
+                param_street1.clone(),
+                param_street2.clone(),
+                param_city.clone(),
+                param_state.clone(),
+                param_zip_code.clone(),
+                param_region_code.clone(),
+                param_county_mail_code.clone(),
+                param_country_mail_code.clone(),
+                param_geolocation,
+            );
+
+            let new_location_model: NewLocationModel = new_location.into();
+
+            // Use INSERT ... ON CONFLICT DO NOTHING for atomic upsert
+            diesel::insert_into(locations_table)
+                .values(&new_location_model)
+                .on_conflict_do_nothing()
+                .execute(&mut conn)?;
+
+            // Now select the location (either the one we just created or the existing one)
+            // We need to match the exact COALESCE logic from the unique constraint
+            let search_street1 = param_street1.as_deref().unwrap_or("");
+            let search_street2 = param_street2.as_deref().unwrap_or("");
+            let search_city = param_city.as_deref().unwrap_or("");
+            let search_state = param_state.as_deref().unwrap_or("");
+            let search_zip_code = param_zip_code.as_deref().unwrap_or("");
+            let search_country = param_country_mail_code.as_deref().unwrap_or("US");
+
+            // Use SQL to match the exact same COALESCE logic as the unique constraint
+            let location_model = diesel::sql_query(
+                "SELECT id, street1, street2, city, state, zip_code, region_code, county_mail_code, country_mail_code, geolocation, created_at, updated_at
+                 FROM locations
+                 WHERE COALESCE(street1, '') = $1
+                   AND COALESCE(street2, '') = $2
+                   AND COALESCE(city, '') = $3
+                   AND COALESCE(state, '') = $4
+                   AND COALESCE(zip_code, '') = $5
+                   AND COALESCE(country_mail_code, 'US') = $6"
             )
-            .await?
-        {
-            return Ok(existing);
-        }
+            .bind::<diesel::sql_types::Text, _>(search_street1)
+            .bind::<diesel::sql_types::Text, _>(search_street2)
+            .bind::<diesel::sql_types::Text, _>(search_city)
+            .bind::<diesel::sql_types::Text, _>(search_state)
+            .bind::<diesel::sql_types::Text, _>(search_zip_code)
+            .bind::<diesel::sql_types::Text, _>(search_country)
+            .get_result::<LocationModel>(&mut conn)?;
 
-        // Create new location
-        let location = Location::new(
-            street1,
-            street2,
-            city,
-            state,
-            zip_code,
-            region_code,
-            county_mail_code,
-            country_mail_code,
-            geolocation,
-        );
+            Ok::<Location, anyhow::Error>(location_model.into())
+        })
+        .await??;
 
-        self.insert(&location).await?;
-        Ok(location)
+        Ok(result)
     }
 }
 
