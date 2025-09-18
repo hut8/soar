@@ -51,6 +51,26 @@ pub trait FixProcessor: Send + Sync {
     fn process_fix(&self, fix: Fix, raw_message: &str);
 }
 
+/// Trait for processing APRS position messages
+pub trait PositionProcessor: Send + Sync {
+    /// Process an APRS position message
+    ///
+    /// # Arguments
+    /// * `packet` - The complete APRS packet containing position data
+    /// * `raw_message` - The raw APRS message string
+    fn process_position(&self, packet: &AprsPacket, raw_message: &str);
+}
+
+/// Trait for processing APRS status messages
+pub trait StatusProcessor: Send + Sync {
+    /// Process an APRS status message
+    ///
+    /// # Arguments
+    /// * `packet` - The complete APRS packet containing status data
+    /// * `raw_message` - The raw APRS message string
+    fn process_status(&self, packet: &AprsPacket, raw_message: &str);
+}
+
 /// Type alias for boxed message processor trait objects
 pub type BoxedMessageProcessor = Box<dyn MessageProcessor>;
 
@@ -98,6 +118,8 @@ pub struct AprsClient {
     config: AprsClientConfig,
     message_processor: Arc<dyn MessageProcessor>,
     fix_processor: Option<Arc<dyn FixProcessor>>,
+    position_processor: Option<Arc<dyn PositionProcessor>>,
+    status_processor: Option<Arc<dyn StatusProcessor>>,
     shutdown_tx: Option<mpsc::Sender<()>>,
 }
 
@@ -108,6 +130,8 @@ impl AprsClient {
             config,
             message_processor,
             fix_processor: None,
+            position_processor: None,
+            status_processor: None,
             shutdown_tx: None,
         }
     }
@@ -122,6 +146,43 @@ impl AprsClient {
             config,
             message_processor,
             fix_processor: Some(fix_processor),
+            position_processor: None,
+            status_processor: None,
+            shutdown_tx: None,
+        }
+    }
+
+    /// Create a new APRS client with position and status processors
+    pub fn new_with_processors(
+        config: AprsClientConfig,
+        message_processor: Arc<dyn MessageProcessor>,
+        position_processor: Option<Arc<dyn PositionProcessor>>,
+        status_processor: Option<Arc<dyn StatusProcessor>>,
+    ) -> Self {
+        Self {
+            config,
+            message_processor,
+            fix_processor: None,
+            position_processor,
+            status_processor,
+            shutdown_tx: None,
+        }
+    }
+
+    /// Create a new APRS client with all processor types
+    pub fn new_with_all_processors(
+        config: AprsClientConfig,
+        message_processor: Arc<dyn MessageProcessor>,
+        fix_processor: Option<Arc<dyn FixProcessor>>,
+        position_processor: Option<Arc<dyn PositionProcessor>>,
+        status_processor: Option<Arc<dyn StatusProcessor>>,
+    ) -> Self {
+        Self {
+            config,
+            message_processor,
+            fix_processor,
+            position_processor,
+            status_processor,
             shutdown_tx: None,
         }
     }
@@ -135,6 +196,8 @@ impl AprsClient {
         let config = self.config.clone();
         let message_processor = Arc::clone(&self.message_processor);
         let fix_processor = self.fix_processor.as_ref().map(Arc::clone);
+        let position_processor = self.position_processor.as_ref().map(Arc::clone);
+        let status_processor = self.status_processor.as_ref().map(Arc::clone);
 
         tokio::spawn(async move {
             let mut retry_count = 0;
@@ -150,6 +213,8 @@ impl AprsClient {
                     &config,
                     Arc::clone(&message_processor),
                     fix_processor.as_ref().map(Arc::clone),
+                    position_processor.as_ref().map(Arc::clone),
+                    status_processor.as_ref().map(Arc::clone),
                 )
                 .await
                 {
@@ -208,6 +273,8 @@ impl AprsClient {
         config: &AprsClientConfig,
         message_processor: Arc<dyn MessageProcessor>,
         fix_processor: Option<Arc<dyn FixProcessor>>,
+        position_processor: Option<Arc<dyn PositionProcessor>>,
+        status_processor: Option<Arc<dyn StatusProcessor>>,
     ) -> ConnectionResult {
         info!(
             "Connecting to APRS server {}:{}",
@@ -264,6 +331,8 @@ impl AprsClient {
                                 trimmed_line,
                                 Arc::clone(&message_processor),
                                 fix_processor.as_ref().map(Arc::clone),
+                                position_processor.as_ref().map(Arc::clone),
+                                status_processor.as_ref().map(Arc::clone),
                                 config,
                             )
                             .await;
@@ -310,6 +379,8 @@ impl AprsClient {
         message: &str,
         message_processor: Arc<dyn MessageProcessor>,
         fix_processor: Option<Arc<dyn FixProcessor>>,
+        position_processor: Option<Arc<dyn PositionProcessor>>,
+        status_processor: Option<Arc<dyn StatusProcessor>>,
         config: &AprsClientConfig,
     ) {
         // Always call process_raw_message first (for logging/archiving)
@@ -318,9 +389,13 @@ impl AprsClient {
         // Try to parse the message using ogn-parser
         match ogn_parser::parse(message) {
             Ok(parsed) => {
-                // Signal any unparsed fragments in position or status comments
+                // Call the general message processor with the parsed message
+                message_processor.process_message(parsed.clone());
+
+                // Process specific message types with their dedicated processors
                 match &parsed.data {
                     AprsData::Position(pos) => {
+                        // Log unparsed fragments if present
                         if let Some(unparsed) = &pos.comment.unparsed {
                             error!(
                                 "Unparsed position fragment: {unparsed} from message: {message}"
@@ -336,8 +411,34 @@ impl AprsClient {
                                 warn!("Failed to write to unparsed log: {}", e);
                             }
                         }
+
+                        // Process with position processor if available
+                        if let Some(pos_proc) = &position_processor {
+                            pos_proc.process_position(&parsed, message);
+                        } else {
+                            trace!("No position processor configured, skipping position message");
+                        }
+
+                        // Also process with fix processor if available (backward compatibility)
+                        if let Some(fix_proc) = &fix_processor {
+                            match Fix::from_aprs_packet(parsed) {
+                                Ok(Some(fix)) => {
+                                    fix_proc.process_fix(fix, message);
+                                }
+                                Ok(None) => {
+                                    trace!("No position fix in APRS position packet");
+                                }
+                                Err(e) => {
+                                    debug!(
+                                        "Failed to extract fix from APRS position packet: {}",
+                                        e
+                                    );
+                                }
+                            }
+                        }
                     }
                     AprsData::Status(status) => {
+                        // Log unparsed fragments if present
                         if let Some(unparsed) = &status.comment.unparsed {
                             error!("Unparsed status fragment: {unparsed} from message: {message}");
 
@@ -350,25 +451,18 @@ impl AprsClient {
                                 warn!("Failed to write to unparsed log: {}", e);
                             }
                         }
+
+                        // Process with status processor if available
+                        if let Some(status_proc) = &status_processor {
+                            status_proc.process_status(&parsed, message);
+                        } else {
+                            trace!("No status processor configured, skipping status message");
+                        }
                     }
-                    _ => {}
-                }
-
-                // Call the message processor with the parsed message
-                message_processor.process_message(parsed.clone());
-
-                // If we have a fix processor, try to extract a position fix
-                if let Some(fix_proc) = fix_processor {
-                    match Fix::from_aprs_packet(parsed) {
-                        Ok(Some(fix)) => {
-                            fix_proc.process_fix(fix, message);
-                        }
-                        Ok(None) => {
-                            trace!("No position fix in APRS packet");
-                        }
-                        Err(e) => {
-                            debug!("Failed to extract fix from APRS packet: {}", e);
-                        }
+                    _ => {
+                        trace!(
+                            "Received non-position/non-status message, only general message processor called"
+                        );
                     }
                 }
             }
@@ -566,6 +660,8 @@ mod tests {
         AprsClient::process_message(
             "TEST>APRS:>Test message",
             Arc::clone(&processor),
+            None,
+            None,
             None,
             &config,
         )
