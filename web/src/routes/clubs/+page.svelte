@@ -2,9 +2,9 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
+	import { goto } from '$app/navigation';
 	import { Users, Search, MapPinHouse, ExternalLink, Navigation, Plane, Map } from '@lucide/svelte';
 	import { ProgressRing } from '@skeletonlabs/skeleton-svelte';
-	import { ClubSelector } from '$lib';
 	import { serverCall } from '$lib/api/server';
 	import type { ClubWithSoaring } from '$lib/types';
 
@@ -12,7 +12,9 @@
 	let loading = false;
 	let error = '';
 	let searchQuery = '';
-	let selectedClub: string[] = [];
+	let filteredClubs: ClubWithSoaring[] = [];
+	let searchInput = '';
+	let showResults = false;
 	let locationSearch = false;
 	let latitude = '';
 	let longitude = '';
@@ -111,39 +113,32 @@
 		return '';
 	}
 
-	// Handle club selection from ClubSelector
-	function handleClubSelection(e: { value: string[] }) {
-		selectedClub = e.value;
-		if (selectedClub.length > 0) {
-			// Find the selected club and display it
-			displaySelectedClub(selectedClub[0]);
+	// Handle search input changes
+	async function handleSearchInput(value: string) {
+		searchInput = value;
+		if (value.length > 0) {
+			await searchClubsForFilter(value);
+			showResults = true;
+		} else {
+			filteredClubs = [];
+			showResults = false;
 		}
 	}
 
-	// Handle search input changes from ClubSelector
-	function handleSearchInput(e: { inputValue: string }) {
-		searchQuery = e.inputValue;
-	}
-
-	// Display a specific club when selected
-	async function displaySelectedClub(clubId: string) {
-		loading = true;
-		error = '';
-
+	// Search clubs for filtering
+	async function searchClubsForFilter(query: string) {
 		try {
-			const selectedClubData = await serverCall<ClubWithSoaring>(`/clubs/${clubId}`);
-			if (selectedClubData) {
-				clubs = [selectedClubData];
-			} else {
-				clubs = [];
-			}
+			const endpoint = `/clubs?q=${encodeURIComponent(query)}`;
+			filteredClubs = await serverCall<ClubWithSoaring[]>(endpoint);
 		} catch (err) {
-			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-			error = `Failed to load selected club: ${errorMessage}`;
-			console.error('Error loading selected club:', err);
-		} finally {
-			loading = false;
+			console.error('Error searching clubs:', err);
+			filteredClubs = [];
 		}
+	}
+
+	// Navigate to selected club
+	function selectClub(clubId: string) {
+		goto(resolve(`/clubs/${clubId}`));
 	}
 </script>
 
@@ -182,14 +177,43 @@
 		<!-- Search Forms -->
 		{#if !locationSearch}
 			<div class="space-y-4">
-				<div class="mx-auto max-w-2xl">
-					<ClubSelector
-						value={selectedClub}
-						onValueChange={handleClubSelection}
-						onInputValueChange={handleSearchInput}
-						label="Search and Select Club"
-						placeholder="Type to search clubs or select from dropdown..."
-					/>
+				<div class="relative mx-auto max-w-2xl">
+					<label class="label">
+						<span>Search and Select Club</span>
+						<input
+							bind:value={searchInput}
+							on:input={(e) => handleSearchInput((e.target as HTMLInputElement).value)}
+							class="input"
+							type="text"
+							placeholder="Type to search clubs..."
+							autocomplete="off"
+						/>
+					</label>
+
+					<!-- Search Results -->
+					{#if showResults && filteredClubs.length > 0}
+						<div
+							class="bg-surface-100-800-token border-surface-300-600-token absolute z-10 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border shadow-lg"
+						>
+							{#each filteredClubs as club (club.id)}
+								<button
+									on:click={() => selectClub(club.id)}
+									class="hover:bg-surface-200-700-token border-surface-200-700-token w-full border-b px-4 py-3 text-left transition-colors last:border-b-0"
+								>
+									<div class="font-medium text-primary-500">{club.name}</div>
+									<div class="text-surface-600-300-token text-sm">{formatAddress(club)}</div>
+								</button>
+							{/each}
+						</div>
+					{:else if showResults && searchInput.length > 0}
+						<div
+							class="bg-surface-100-800-token border-surface-300-600-token absolute z-10 mt-1 w-full rounded-lg border p-4 shadow-lg"
+						>
+							<div class="text-surface-600-300-token text-center">
+								No clubs found matching "{searchInput}"
+							</div>
+						</div>
+					{/if}
 				</div>
 			</div>
 		{:else}
