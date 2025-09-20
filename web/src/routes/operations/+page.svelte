@@ -1,15 +1,15 @@
 <script lang="ts">
+	/// <reference types="@types/google.maps" />
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
-	import '$lib/types/google-maps.d.ts';
-
 	// Placeholder for Google Maps API key - to be added later
 	const GOOGLE_MAPS_API_KEY = 'AIzaSyBaK8UU0l4z-k6b-UPlLzw3wv_Ti71XNy8';
 
 	let mapContainer: HTMLElement;
-	let map: GoogleMap;
+	let map: google.maps.Map;
 	let userLocationButton: HTMLButtonElement;
 	let isLocating = false;
+	let userMarker: google.maps.marker.AdvancedMarkerElement | null = null;
 
 	// Continental US bounds for initial display
 	const CONUS_BOUNDS = {
@@ -42,7 +42,7 @@
 
 			// Create script element
 			const script = document.createElement('script');
-			script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=geometry`;
+			script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=geometry,marker`;
 			script.async = true;
 			script.defer = true;
 
@@ -57,7 +57,8 @@
 		if (!mapContainer || !window.google) return;
 
 		// Initialize map centered on continental US
-		map = new window.google.maps.Map(mapContainer, {
+		map = new google.maps.Map(mapContainer, {
+			mapId: 'DEMO_MAP_ID', // Required for AdvancedMarkerElement
 			center: CONUS_CENTER,
 			zoom: 4, // Shows continental US
 			mapTypeId: window.google.maps.MapTypeId.TERRAIN,
@@ -104,35 +105,80 @@
 			};
 
 			console.log(`User location found: ${userLocation.lat}, ${userLocation.lng}`);
-			console.log('Map object:', map);
 
-			// Center map on user location - use the same object format as the marker
-			map?.setCenter(userLocation);
+			// Step 1: First place the marker at user location
+			// Create a custom content element for the marker
+			const markerContent = document.createElement('div');
+			markerContent.innerHTML = `
+				<div style="
+					width: 24px;
+					height: 24px;
+					background: #4285F4;
+					border: 2px solid #FFFFFF;
+					border-radius: 50%;
+					position: relative;
+					box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+				">
+					<div style="
+						width: 6px;
+						height: 6px;
+						background: #FFFFFF;
+						border-radius: 50%;
+						position: absolute;
+						top: 50%;
+						left: 50%;
+						transform: translate(-50%, -50%);
+					"></div>
+				</div>
+			`;
 
-			// Zoom to approximately 10 miles in the smaller dimension
-			// Zoom level 13-14 typically shows about 10-20 miles depending on screen size
-			map?.setZoom(13);
+			// Remove existing marker if present
+			if (userMarker) {
+				userMarker.map = null;
+			}
 
-			console.log('Map centered and zoomed to user location');
-
-			// Add a marker for user location
-			new window.google.maps.Marker({
+			userMarker = new google.maps.marker.AdvancedMarkerElement({
 				position: userLocation,
 				map: map,
 				title: 'Your Location',
-				icon: {
-					url: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iMTAiIGZpbGw9IiM0Mjg1RjQiIHN0cm9rZT0iI0ZGRkZGRiIgc3Ryb2tlLXdpZHRoPSIyIi8+CjxjaXJjbGUgY3g9IjEyIiBjeT0iMTIiIHI9IjMiIGZpbGw9IiNGRkZGRkYiLz4KPC9zdmc+',
-					size: new window.google.maps.Size(24, 24),
-					anchor: new window.google.maps.Point(12, 12)
-				}
+				content: markerContent
 			});
 
-			console.log(`User located at: ${userLocation.lat}, ${userLocation.lng}`);
+			// Step 2: Animate pan to user location
+			map?.panTo(userLocation);
+
+			// Step 3: Wait for pan animation to complete, then zoom in smoothly
+			// Use a timeout to allow the pan animation to finish
+			setTimeout(() => {
+				if (map) {
+					// Smooth zoom animation to show approximately 10-mile radius
+					const targetZoom = 13;
+					const currentZoom = map.getZoom() || 4;
+
+					// Animate zoom gradually for smoother transition
+					animateZoom(currentZoom, targetZoom);
+				}
+			}, 1000); // Wait 1 second for pan animation
+
+			console.log(`User located and animated to: ${userLocation.lat}, ${userLocation.lng}`);
 		} catch (error) {
 			console.error('Error getting user location:', error);
 			alert('Unable to get your location. Please make sure location services are enabled.');
 		} finally {
 			isLocating = false;
+		}
+	}
+
+	function animateZoom(currentZoom: number, targetZoom: number): void {
+		if (!map || currentZoom >= targetZoom) return;
+
+		const zoomStep = Math.min(1, targetZoom - currentZoom);
+		const nextZoom = currentZoom + zoomStep;
+
+		map.setZoom(nextZoom);
+
+		if (nextZoom < targetZoom) {
+			setTimeout(() => animateZoom(nextZoom, targetZoom), 200);
 		}
 	}
 
