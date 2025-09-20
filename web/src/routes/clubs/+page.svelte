@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
-	import { Users, Search, MapPinHouse, ExternalLink, Navigation, Plane } from '@lucide/svelte';
+	import { Users, Search, MapPinHouse, ExternalLink, Navigation, Plane, Map } from '@lucide/svelte';
 	import { ProgressRing } from '@skeletonlabs/skeleton-svelte';
 	import { ClubSelector } from '$lib';
 	import { serverCall } from '$lib/api/server';
@@ -89,6 +89,26 @@
 		if (club.location.state) parts.push(club.location.state);
 		if (club.location.zip_code) parts.push(club.location.zip_code);
 		return parts.join(', ') || 'Address not available';
+	}
+
+	function generateGoogleMapsUrl(club: ClubWithSoaring): string {
+		if (club.location?.geolocation) {
+			const { latitude, longitude } = club.location.geolocation;
+			return `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
+		} else if (club.location) {
+			// Fallback to address search if no coordinates
+			const address = [
+				club.location.street1,
+				club.location.street2,
+				club.location.city,
+				club.location.state,
+				club.location.zip_code
+			]
+				.filter(Boolean)
+				.join(', ');
+			return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+		}
+		return '';
 	}
 
 	// Handle club selection from ClubSelector
@@ -280,10 +300,36 @@
 						</div>
 
 						<footer class="border-surface-200-700-token border-t pt-4">
-							<a href={resolve(`/clubs/${club.id}`)} class="variant-soft btn w-full btn-sm">
-								<ExternalLink class="mr-2 h-4 w-4" />
-								View Details
-							</a>
+							<div class="space-y-2">
+								<a href={resolve(`/clubs/${club.id}`)} class="variant-soft btn w-full btn-sm">
+									<ExternalLink class="mr-2 h-4 w-4" />
+									View Details
+								</a>
+								{#if generateGoogleMapsUrl(club)}
+									<div class="flex gap-1">
+										<a
+											href={generateGoogleMapsUrl(club)}
+											target="_blank"
+											rel="noopener noreferrer"
+											class="variant-ghost-primary btn flex-1 btn-sm"
+										>
+											<Map class="mr-1 h-3 w-3" />
+											Maps
+										</a>
+										{#if club.location?.geolocation}
+											<a
+												href={`https://www.google.com/maps/dir/?api=1&destination=${club.location.geolocation.latitude},${club.location.geolocation.longitude}`}
+												target="_blank"
+												rel="noopener noreferrer"
+												class="variant-ghost-secondary btn flex-1 btn-sm"
+											>
+												<Navigation class="mr-1 h-3 w-3" />
+												Directions
+											</a>
+										{/if}
+									</div>
+								{/if}
+							</div>
 						</footer>
 					</article>
 				{/each}

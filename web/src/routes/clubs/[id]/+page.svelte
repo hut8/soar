@@ -3,7 +3,16 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { ArrowLeft, Building, MapPin, Plane, Navigation, Info, UserCheck } from '@lucide/svelte';
+	import {
+		ArrowLeft,
+		Building,
+		MapPin,
+		Plane,
+		Navigation,
+		Info,
+		UserCheck,
+		ExternalLink
+	} from '@lucide/svelte';
 	import { ProgressRing } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall } from '$lib/api/server';
 	import { auth, type User } from '$lib/stores/auth';
@@ -87,6 +96,26 @@
 
 	function formatCoordinates(point: import('$lib/types').Point): string {
 		return `${point.latitude.toFixed(6)}, ${point.longitude.toFixed(6)}`;
+	}
+
+	function generateGoogleMapsUrl(club: ClubWithSoaring): string {
+		if (club.location?.geolocation) {
+			const { latitude, longitude } = club.location.geolocation;
+			return `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
+		} else if (club.location) {
+			// Fallback to address search if no coordinates
+			const address = [
+				club.location.street1,
+				club.location.street2,
+				club.location.city,
+				club.location.state,
+				club.location.zip_code
+			]
+				.filter(Boolean)
+				.join(', ');
+			return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+		}
+		return '';
 	}
 
 	function goBack() {
@@ -235,9 +264,37 @@
 						{#if club.location?.geolocation}
 							<div class="flex items-start gap-3">
 								<Navigation class="mt-1 h-4 w-4 text-surface-500" />
-								<div>
+								<div class="flex-1">
 									<p class="text-surface-600-300-token mb-1 text-sm">Coordinates</p>
 									<p class="font-mono text-sm">{formatCoordinates(club.location.geolocation)}</p>
+								</div>
+							</div>
+						{/if}
+
+						<!-- Google Maps Links -->
+						{#if club.location && generateGoogleMapsUrl(club)}
+							<div class="border-surface-200-700-token border-t pt-3">
+								<div class="flex flex-wrap gap-2">
+									<a
+										href={generateGoogleMapsUrl(club)}
+										target="_blank"
+										rel="noopener noreferrer"
+										class="variant-soft-primary btn btn-sm"
+									>
+										<ExternalLink class="mr-2 h-4 w-4" />
+										Open in Google Maps
+									</a>
+									{#if club.location?.geolocation}
+										<a
+											href={`https://www.google.com/maps/dir/?api=1&destination=${club.location.geolocation.latitude},${club.location.geolocation.longitude}`}
+											target="_blank"
+											rel="noopener noreferrer"
+											class="variant-soft-secondary btn btn-sm"
+										>
+											<Navigation class="mr-2 h-4 w-4" />
+											Get Directions
+										</a>
+									{/if}
 								</div>
 							</div>
 						{/if}
@@ -333,21 +390,45 @@
 				</div>
 			</div>
 
-			<!-- Map Section (placeholder for future implementation) -->
+			<!-- Map Section -->
 			{#if club.location?.geolocation}
 				<div class="card p-6">
 					<h2 class="mb-4 flex items-center gap-2 h2">
 						<Navigation class="h-6 w-6" />
 						Location Map
 					</h2>
-					<div class="bg-surface-100-800-token rounded-lg p-8 text-center">
-						<MapPin class="mx-auto mb-4 h-12 w-12 text-surface-500" />
-						<p class="text-surface-600-300-token">Map integration coming soon</p>
-						{#if club.location?.geolocation}
-							<p class="mt-2 text-sm text-surface-500">
-								{formatCoordinates(club.location.geolocation)}
-							</p>
-						{/if}
+					<div class="border-surface-300-600-token overflow-hidden rounded-lg border">
+						<!-- Embedded Google Map -->
+						<iframe
+							src={`https://www.google.com/maps/embed?pb=!1m14!1m12!1m3!1d3000!2d${club.location.geolocation.longitude}!3d${club.location.geolocation.latitude}!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!5e0!3m2!1sen!2sus!4v1693234567890!5m2!1sen!2sus`}
+							width="100%"
+							height="300"
+							style="border:0;"
+							allowfullscreen
+							loading="lazy"
+							referrerpolicy="no-referrer-when-downgrade"
+							title="Location map for {club.name}"
+						></iframe>
+					</div>
+					<div class="mt-3 flex flex-wrap gap-2">
+						<a
+							href={generateGoogleMapsUrl(club)}
+							target="_blank"
+							rel="noopener noreferrer"
+							class="variant-ghost-primary btn btn-sm"
+						>
+							<ExternalLink class="mr-2 h-4 w-4" />
+							View Larger Map
+						</a>
+						<a
+							href={`https://www.google.com/maps/dir/?api=1&destination=${club.location.geolocation.latitude},${club.location.geolocation.longitude}`}
+							target="_blank"
+							rel="noopener noreferrer"
+							class="variant-ghost-secondary btn btn-sm"
+						>
+							<Navigation class="mr-2 h-4 w-4" />
+							Get Directions
+						</a>
 					</div>
 				</div>
 			{/if}
