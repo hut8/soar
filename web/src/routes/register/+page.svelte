@@ -50,7 +50,7 @@
 				club_id: clubId || undefined
 			});
 
-			const message = 'Email verified successfully. Please log in.';
+			const message = 'Registration successful. Please check your email to verify your account.';
 			const href = `/login?message=${encodeURIComponent(message)}`;
 			void goto(href);
 		} catch (err) {
