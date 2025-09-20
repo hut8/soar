@@ -62,11 +62,10 @@ pub async fn register_user(
                             .into_response();
                     }
 
-                    (
-                        StatusCode::CREATED,
-                        "User created. Please check your email to verify your account.",
-                    )
-                        .into_response()
+                    Json(serde_json::json!({
+                        "message": "User created. Please check your email to verify your account."
+                    }))
+                    .into_response()
                 }
                 Err(e) => {
                     error!("Failed to generate email verification token: {}", e);
@@ -178,7 +177,10 @@ pub async fn verify_email(
 
     match users_repo.get_by_verification_token(&payload.token).await {
         Ok(Some(user)) => match users_repo.verify_user_email(user.id).await {
-            Ok(true) => (StatusCode::OK, "Email verified successfully").into_response(),
+            Ok(true) => Json(serde_json::json!({
+                "message": "Email verified successfully"
+            }))
+            .into_response(),
             Ok(false) => (StatusCode::NOT_FOUND, "User not found").into_response(),
             Err(e) => {
                 error!("Failed to verify email: {}", e);
