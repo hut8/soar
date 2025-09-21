@@ -292,7 +292,7 @@ impl From<FixRow> for Fix {
             longitude: row.longitude,
             altitude_feet: row.altitude_feet,
             aircraft_id: row.aircraft_id,
-            device_id: None, // TODO: Look up raw device_id from devices table if needed
+            device_id: None,
             device_type: parse_device_type(row.device_type),
             aircraft_type: parse_aircraft_type(row.aircraft_type),
             flight_number: row.flight_number,
@@ -327,13 +327,13 @@ impl FixesRepository {
     fn lookup_device_uuid(
         conn: &mut diesel::PgConnection,
         raw_device_id: u32,
-        device_type: AddressType,
+        address_type_: AddressType,
     ) -> Result<Option<Uuid>> {
         use crate::schema::devices::dsl::*;
 
         let device_uuid = devices
             .filter(address.eq(raw_device_id as i32))
-            .filter(address_type.eq(device_type))
+            .filter(address_type.eq(address_type_))
             .select(id)
             .first::<Uuid>(conn)
             .optional()?;

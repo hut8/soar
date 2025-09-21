@@ -2,6 +2,10 @@
 
 pub mod sql_types {
     #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
+    #[diesel(postgres_type(name = "address_type"))]
+    pub struct AddressType;
+
+    #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "adsb_emitter_category"))]
     pub struct AdsbEmitterCategory;
 
@@ -12,10 +16,6 @@ pub mod sql_types {
     #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "airworthiness_class"))]
     pub struct AirworthinessClass;
-
-    #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
-    #[diesel(postgres_type(name = "address_type"))]
-    pub struct AddressType;
 
     #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "geography"))]
@@ -302,6 +302,43 @@ diesel::table! {
 }
 
 diesel::table! {
+    receiver_statuses (id) {
+        id -> Uuid,
+        receiver_id -> Int4,
+        received_at -> Timestamptz,
+        version -> Nullable<Text>,
+        platform -> Nullable<Text>,
+        cpu_load -> Nullable<Numeric>,
+        ram_free -> Nullable<Numeric>,
+        ram_total -> Nullable<Numeric>,
+        ntp_offset -> Nullable<Numeric>,
+        ntp_correction -> Nullable<Numeric>,
+        voltage -> Nullable<Numeric>,
+        amperage -> Nullable<Numeric>,
+        cpu_temperature -> Nullable<Numeric>,
+        visible_senders -> Nullable<Int2>,
+        latency -> Nullable<Numeric>,
+        senders -> Nullable<Int2>,
+        rf_correction_manual -> Nullable<Int2>,
+        rf_correction_automatic -> Nullable<Numeric>,
+        noise -> Nullable<Numeric>,
+        senders_signal_quality -> Nullable<Numeric>,
+        senders_messages -> Nullable<Int4>,
+        good_senders_signal_quality -> Nullable<Numeric>,
+        good_senders -> Nullable<Int2>,
+        good_and_bad_senders -> Nullable<Int2>,
+        geoid_offset -> Nullable<Int2>,
+        name -> Nullable<Text>,
+        demodulation_snr_db -> Nullable<Numeric>,
+        ognr_pilotaware_version -> Nullable<Text>,
+        unparsed_data -> Nullable<Text>,
+        lag -> Nullable<Int4>,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
     receivers (id) {
         id -> Int4,
         callsign -> Text,
@@ -466,6 +503,7 @@ diesel::joinable!(fixes -> devices (device_id));
 diesel::joinable!(fixes -> flights (flight_id));
 diesel::joinable!(flights -> aircraft_registrations (tow_aircraft_id));
 diesel::joinable!(flights -> clubs (club_id));
+diesel::joinable!(receiver_statuses -> receivers (receiver_id));
 diesel::joinable!(receivers_links -> receivers (receiver_id));
 diesel::joinable!(receivers_photos -> receivers (receiver_id));
 diesel::joinable!(users -> clubs (club_id));
@@ -481,6 +519,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     fixes,
     flights,
     locations,
+    receiver_statuses,
     receivers,
     receivers_links,
     receivers_photos,
