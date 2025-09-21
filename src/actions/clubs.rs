@@ -25,7 +25,11 @@ pub async fn get_club_by_id(
         Ok(None) => json_error(StatusCode::NOT_FOUND, "Club not found").into_response(),
         Err(e) => {
             error!("Failed to get club by ID: {}", e);
-            json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get club by ID").into_response()
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to get club by ID",
+            )
+            .into_response()
         }
     }
 }

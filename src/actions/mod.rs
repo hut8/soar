@@ -21,7 +21,10 @@ use serde_json::json;
 
 /// Helper function to create consistent JSON error responses
 pub fn json_error(status: StatusCode, message: &str) -> impl IntoResponse {
-    (status, Json(json!({
-        "errors": message
-    })))
+    (
+        status,
+        Json(json!({
+            "errors": message
+        })),
+    )
 }

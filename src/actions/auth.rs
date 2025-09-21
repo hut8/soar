@@ -10,10 +10,13 @@ use crate::email::EmailService;
 use crate::users_repo::UsersRepository;
 use crate::web::AppState;
 
-use super::{json_error, views::{
-    CreateUserRequest, EmailVerificationConfirm, LoginRequest, LoginResponse, PasswordResetConfirm,
-    PasswordResetRequest, UserView,
-}};
+use super::{
+    json_error,
+    views::{
+        CreateUserRequest, EmailVerificationConfirm, LoginRequest, LoginResponse,
+        PasswordResetConfirm, PasswordResetRequest, UserView,
+    },
+};
 
 pub async fn register_user(
     State(state): State<AppState>,
@@ -23,7 +26,8 @@ pub async fn register_user(
 
     // Check if user already exists
     if let Ok(Some(_)) = users_repo.get_by_email(&payload.email).await {
-        return json_error(StatusCode::CONFLICT, "User with this email already exists").into_response();
+        return json_error(StatusCode::CONFLICT, "User with this email already exists")
+            .into_response();
     }
 
     // Convert view request to domain request
@@ -51,13 +55,15 @@ pub async fn register_user(
                             return json_error(
                                 StatusCode::INTERNAL_SERVER_ERROR,
                                 "Failed to send email verification",
-                            ).into_response();
+                            )
+                            .into_response();
                         }
                     } else {
                         return json_error(
                             StatusCode::INTERNAL_SERVER_ERROR,
                             "Email service not configured",
-                        ).into_response();
+                        )
+                        .into_response();
                     }
 
                     Json(serde_json::json!({
@@ -116,7 +122,8 @@ pub async fn login_user(
                         return json_error(
                             StatusCode::FORBIDDEN,
                             "Email not verified. Please contact support.",
-                        ).into_response();
+                        )
+                        .into_response();
                     }
                 }
             }
@@ -180,7 +187,8 @@ pub async fn verify_email(
             Ok(false) => (StatusCode::NOT_FOUND, "User not found").into_response(),
             Err(e) => {
                 error!("Failed to verify email: {}", e);
-                json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to verify email").into_response()
+                json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to verify email")
+                    .into_response()
             }
         },
         Ok(None) => (
@@ -213,7 +221,8 @@ pub async fn request_password_reset(
                         return json_error(
                             StatusCode::INTERNAL_SERVER_ERROR,
                             "Failed to send password reset email",
-                        ).into_response();
+                        )
+                        .into_response();
                     }
                 } else {
                     return (
