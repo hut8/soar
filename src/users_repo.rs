@@ -376,9 +376,9 @@ impl UsersRepository {
 
     /// Generate a random password reset token
     fn generate_reset_token(&self) -> String {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let token: String = (0..32)
-            .map(|_| rng.sample(rand::distributions::Alphanumeric) as char)
+            .map(|_| rng.sample(rand::distr::Alphanumeric) as char)
             .collect();
         token
     }
@@ -441,9 +441,9 @@ impl UsersRepository {
 
     /// Generate a random email verification token
     fn generate_verification_token(&self) -> String {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let token: String = (0..32)
-            .map(|_| rng.sample(rand::distributions::Alphanumeric) as char)
+            .map(|_| rng.sample(rand::distr::Alphanumeric) as char)
             .collect();
         token
     }

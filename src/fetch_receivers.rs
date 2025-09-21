@@ -1,7 +1,7 @@
 use chrono::{SecondsFormat, Utc};
 use clap::Parser;
 use once_cell::sync::Lazy;
-use rand::{Rng, distributions::Alphanumeric};
+use rand::{Rng, distr::Alphanumeric};
 use regex::{Captures, Regex};
 use reqwest::header::{CONTENT_TYPE, COOKIE, HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
@@ -158,7 +158,7 @@ struct Args {
 }
 
 fn gen_token() -> String {
-    rand::thread_rng()
+    rand::rng()
         .sample_iter(&Alphanumeric)
         .filter(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
         .map(char::from)
