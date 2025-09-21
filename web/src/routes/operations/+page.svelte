@@ -144,21 +144,20 @@
 				content: markerContent
 			});
 
-			// Step 2: Animate pan to user location
-			map?.panTo(userLocation);
+			// Step 2: Recenter the map at user location
+			if (map) {
+				map.setCenter(userLocation);
 
-			// Step 3: Wait for pan animation to complete, then zoom in smoothly
-			// Use a timeout to allow the pan animation to finish
-			setTimeout(() => {
-				if (map) {
+				// Step 3: Wait briefly then zoom in smoothly
+				setTimeout(() => {
 					// Smooth zoom animation to show approximately 10-mile radius
 					const targetZoom = 13;
 					const currentZoom = map.getZoom() || 4;
 
 					// Animate zoom gradually for smoother transition
 					animateZoom(currentZoom, targetZoom);
-				}
-			}, 1000); // Wait 1 second for pan animation
+				}, 500); // Shorter wait since setCenter is immediate
+			}
 
 			console.log(`User located and animated to: ${userLocation.lat}, ${userLocation.lng}`);
 		} catch (error) {
