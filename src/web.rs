@@ -11,13 +11,11 @@ use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
 use include_dir::{Dir, include_dir};
 use mime_guess::from_path;
+use std::time::Instant;
+use uuid::Uuid;
 
-use tower_http::{
-    LatencyUnit,
-    cors::CorsLayer,
-    trace::{DefaultOnRequest, DefaultOnResponse, TraceLayer},
-};
-use tracing::{Level, error, info};
+use tower_http::cors::CorsLayer;
+use tracing::{error, info};
 
 use crate::actions;
 
@@ -83,6 +81,31 @@ async fn handle_static_file(uri: Uri, _state: axum::extract::State<AppState>) ->
     (StatusCode::NOT_FOUND, "Not Found").into_response()
 }
 
+// Middleware for request logging with correlation ID
+async fn request_logging_middleware(request: Request<Body>, next: Next) -> Response {
+    let method = request.method().clone();
+    let path = request.uri().path().to_string();
+    let request_id = Uuid::new_v4().to_string()[..8].to_string();
+    let start_time = Instant::now();
+
+    info!("Started {} {} [{}]", method, path, request_id);
+
+    let response = next.run(request).await;
+    let duration = start_time.elapsed();
+    let status = response.status();
+
+    info!(
+        "Completed {} {} [{}] {} in {:.2}ms",
+        method,
+        path,
+        request_id,
+        status.as_u16(),
+        duration.as_secs_f64() * 1000.0
+    );
+
+    response
+}
+
 // Middleware to capture HTTP errors to Sentry
 async fn sentry_error_middleware(request: Request<Body>, next: Next) -> Response {
     let method = request.method().clone();
@@ -118,13 +141,6 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
 
     let app_state = AppState { pool };
 
-    let trace_layer = TraceLayer::new_for_http()
-        .on_request(DefaultOnRequest::new().level(Level::INFO))
-        .on_response(
-            DefaultOnResponse::new()
-                .level(Level::INFO)
-                .latency_unit(LatencyUnit::Micros),
-        );
 
     // Create CORS layer that allows all origins and methods
     let cors_layer = CorsLayer::permissive();
@@ -167,9 +183,9 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         .nest("/data", api_router)
         .fallback(handle_static_file)
         .with_state(app_state.clone())
+        .layer(middleware::from_fn(request_logging_middleware))
         .layer(middleware::from_fn(sentry_error_middleware))
-        .layer(cors_layer)
-        .layer(trace_layer);
+        .layer(cors_layer);
 
     // Create the listener
     let listener = tokio::net::TcpListener::bind(format!("{}:{}", interface, port)).await?;

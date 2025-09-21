@@ -7,13 +7,11 @@ use tracing::error;
 use uuid::Uuid;
 
 use crate::aircraft_registrations_repo::AircraftRegistrationsRepository;
-use crate::auth::AuthUser;
 use crate::web::AppState;
 
 use super::views::AircraftView;
 
 pub async fn get_aircraft_by_club(
-    _auth_user: AuthUser,
     State(state): State<AppState>,
     Path(club_id): Path<Uuid>,
 ) -> impl IntoResponse {
