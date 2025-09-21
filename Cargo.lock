@@ -3537,7 +3537,7 @@ dependencies = [
  "once_cell",
  "postgis_diesel",
  "r2d2",
- "rand 0.8.5",
+ "rand 0.9.2",
  "regex",
  "reqwest",
  "sentry",
