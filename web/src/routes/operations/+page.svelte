@@ -58,14 +58,14 @@
 
 		// Initialize map centered on continental US
 		map = new google.maps.Map(mapContainer, {
-			mapId: 'DEMO_MAP_ID', // Required for AdvancedMarkerElement
+			mapId: 'SOAR_MAP', // Required for AdvancedMarkerElement
 			center: CONUS_CENTER,
 			zoom: 4, // Shows continental US
 			mapTypeId: window.google.maps.MapTypeId.TERRAIN,
-			restriction: {
-				latLngBounds: CONUS_BOUNDS,
-				strictBounds: false
-			},
+			// restriction: {
+			// 	latLngBounds: CONUS_BOUNDS,
+			// 	strictBounds: false
+			// },
 			mapTypeControl: true,
 			mapTypeControlOptions: {
 				style: window.google.maps.MapTypeControlStyle.HORIZONTAL_BAR,
