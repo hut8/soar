@@ -12,7 +12,7 @@ use crate::fixes_repo::FixesRepository;
 use crate::flights_repo::FlightsRepository;
 use crate::web::AppState;
 
-use super::views::ClubView;
+use super::{json_error, views::ClubView};
 
 #[derive(Debug, Deserialize)]
 pub struct SearchQueryParams {
@@ -48,29 +48,26 @@ pub async fn search_airports(
     {
         // Validate radius
         if radius <= 0.0 || radius > 1000.0 {
-            return (
+            return json_error(
                 StatusCode::BAD_REQUEST,
                 "Radius must be between 0 and 1000 kilometers",
-            )
-                .into_response();
+            ).into_response();
         }
 
         // Validate latitude
         if !(-90.0..=90.0).contains(&lat) {
-            return (
+            return json_error(
                 StatusCode::BAD_REQUEST,
                 "Latitude must be between -90 and 90 degrees",
-            )
-                .into_response();
+            ).into_response();
         }
 
         // Validate longitude
         if !(-180.0..=180.0).contains(&lng) {
-            return (
+            return json_error(
                 StatusCode::BAD_REQUEST,
                 "Longitude must be between -180 and 180 degrees",
-            )
-                .into_response();
+            ).into_response();
         }
 
         match airports_repo
@@ -80,48 +77,43 @@ pub async fn search_airports(
             Ok(airports) => Json(airports).into_response(),
             Err(e) => {
                 error!("Failed to search nearby airports: {}", e);
-                (
+                json_error(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Failed to search nearby airports",
-                )
-                    .into_response()
+                ).into_response()
             }
         }
     } else if let Some(query) = params.q {
         // Text-based search
         if query.trim().is_empty() {
-            return (
+            return json_error(
                 StatusCode::BAD_REQUEST,
                 "Query parameter 'q' cannot be empty",
-            )
-                .into_response();
+            ).into_response();
         }
 
         match airports_repo.fuzzy_search(&query, params.limit).await {
             Ok(airports) => Json(airports).into_response(),
             Err(e) => {
                 error!("Failed to search airports: {}", e);
-                (
+                json_error(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Failed to search airports",
-                )
-                    .into_response()
+                ).into_response()
             }
         }
     } else if params.latitude.is_some() || params.longitude.is_some() || params.radius.is_some() {
         // Some geographic parameters provided but not all
-        (
+        json_error(
             StatusCode::BAD_REQUEST,
             "Geographic search requires all three parameters: latitude, longitude, and radius",
-        )
-            .into_response()
+        ).into_response()
     } else {
         // No search parameters provided
-        (
+        json_error(
             StatusCode::BAD_REQUEST,
             "Either 'q' for text search or 'latitude', 'longitude', and 'radius' for geographic search must be provided",
-        )
-            .into_response()
+        ).into_response()
     }
 }
 
@@ -137,29 +129,26 @@ pub async fn search_clubs(
 
         // Validate radius
         if radius <= 0.0 || radius > 1000.0 {
-            return (
+            return json_error(
                 StatusCode::BAD_REQUEST,
                 "Radius must be between 0 and 1000 kilometers",
-            )
-                .into_response();
+            ).into_response();
         }
 
         // Validate latitude
         if !(-90.0..=90.0).contains(&lat) {
-            return (
+            return json_error(
                 StatusCode::BAD_REQUEST,
                 "Latitude must be between -90 and 90 degrees",
-            )
-                .into_response();
+            ).into_response();
         }
 
         // Validate longitude
         if !(-180.0..=180.0).contains(&lng) {
-            return (
+            return json_error(
                 StatusCode::BAD_REQUEST,
                 "Longitude must be between -180 and 180 degrees",
-            )
-                .into_response();
+            ).into_response();
         }
 
         match clubs_repo
@@ -172,21 +161,19 @@ pub async fn search_clubs(
             }
             Err(e) => {
                 error!("Failed to search nearby clubs: {}", e);
-                (
+                json_error(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Failed to search nearby clubs",
-                )
-                    .into_response()
+                ).into_response()
             }
         }
     } else if let Some(query) = params.q {
         // Text-based search
         if query.trim().is_empty() {
-            return (
+            return json_error(
                 StatusCode::BAD_REQUEST,
                 "Query parameter 'q' cannot be empty",
-            )
-                .into_response();
+            ).into_response();
         }
 
         match clubs_repo.fuzzy_search_soaring(&query, params.limit).await {
@@ -196,16 +183,15 @@ pub async fn search_clubs(
             }
             Err(e) => {
                 error!("Failed to search clubs: {}", e);
-                (StatusCode::INTERNAL_SERVER_ERROR, "Failed to search clubs").into_response()
+                json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to search clubs").into_response()
             }
         }
     } else if params.latitude.is_some() || params.longitude.is_some() || params.radius.is_some() {
         // Some geographic parameters provided but not latitude and longitude
-        (
+        json_error(
             StatusCode::BAD_REQUEST,
             "Geographic search requires at least latitude and longitude parameters",
-        )
-            .into_response()
+        ).into_response()
     } else {
         // No search parameters provided - return all clubs
         match clubs_repo.get_all().await {
@@ -215,7 +201,7 @@ pub async fn search_clubs(
             }
             Err(e) => {
                 error!("Failed to get clubs: {}", e);
-                (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get clubs").into_response()
+                json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get clubs").into_response()
             }
         }
     }
@@ -235,11 +221,10 @@ pub async fn search_fixes(
             Ok(fixes) => Json(fixes).into_response(),
             Err(e) => {
                 error!("Failed to get fixes by device ID: {}", e);
-                (
+                json_error(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Failed to get fixes by device ID",
-                )
-                    .into_response()
+                ).into_response()
             }
         }
     } else if let Some(_flight_id) = params.flight_id {
@@ -252,11 +237,10 @@ pub async fn search_fixes(
             Ok(fixes) => Json(fixes).into_response(),
             Err(e) => {
                 error!("Failed to get fixes by flight ID: {}", e);
-                (
+                json_error(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Failed to get fixes by flight ID",
-                )
-                    .into_response()
+                ).into_response()
             }
         }
     } else {
@@ -267,11 +251,10 @@ pub async fn search_fixes(
             Ok(fixes) => Json(fixes).into_response(),
             Err(e) => {
                 error!("Failed to get recent fixes: {}", e);
-                (
+                json_error(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Failed to get recent fixes",
-                )
-                    .into_response()
+                ).into_response()
             }
         }
     }
@@ -291,11 +274,10 @@ pub async fn search_flights(
             Ok(flights) => Json(flights).into_response(),
             Err(e) => {
                 error!("Failed to get flights by device ID: {}", e);
-                (
+                json_error(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Failed to get flights by device ID",
-                )
-                    .into_response()
+                ).into_response()
             }
         }
     } else if let Some(_club_id) = params.club_id {
@@ -305,11 +287,10 @@ pub async fn search_flights(
             Ok(flights) => Json(flights).into_response(),
             Err(e) => {
                 error!("Failed to get flights by club ID: {}", e);
-                (
+                json_error(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Failed to get flights by club ID",
-                )
-                    .into_response()
+                ).into_response()
             }
         }
     } else {
@@ -317,11 +298,10 @@ pub async fn search_flights(
             Ok(flights) => Json(flights).into_response(),
             Err(e) => {
                 error!("Failed to get recent flights: {}", e);
-                (
+                json_error(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Failed to get recent flights",
-                )
-                    .into_response()
+                ).into_response()
             }
         }
     }

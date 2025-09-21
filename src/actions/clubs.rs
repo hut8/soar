@@ -9,7 +9,7 @@ use uuid::Uuid;
 use crate::clubs_repo::ClubsRepository;
 use crate::web::AppState;
 
-use super::views::ClubView;
+use super::{json_error, views::ClubView};
 
 pub async fn get_club_by_id(
     State(state): State<AppState>,
@@ -22,14 +22,10 @@ pub async fn get_club_by_id(
             let club_view = ClubView::from(club);
             Json(club_view).into_response()
         }
-        Ok(None) => (StatusCode::NOT_FOUND, "Club not found").into_response(),
+        Ok(None) => json_error(StatusCode::NOT_FOUND, "Club not found").into_response(),
         Err(e) => {
             error!("Failed to get club by ID: {}", e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to get club by ID",
-            )
-                .into_response()
+            json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get club by ID").into_response()
         }
     }
 }
