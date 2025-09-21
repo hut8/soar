@@ -359,9 +359,10 @@ async fn main() -> Result<()> {
             traces_sample_rate: 0.2,
             attach_stacktrace: true,
             release: Some(env!("CARGO_PKG_VERSION").into()),
+            enable_logs: true,
             environment: env::var("SOAR_ENV").ok().map(Into::into),
             session_mode: sentry::SessionMode::Request,
-            auto_session_tracking: false,
+            auto_session_tracking: true,
             before_send: Some(std::sync::Arc::new(
                 move |event: sentry::protocol::Event<'static>| {
                     // Always capture error-level events

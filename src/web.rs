@@ -65,12 +65,12 @@ async fn handle_static_file(uri: Uri, request: Request<Body>) -> impl IntoRespon
         .and_then(|h| h.to_str().ok());
 
     // If client has the same timestamp, return 304 Not Modified
-    if let Some(client_timestamp) = if_modified_since {
-        if client_timestamp == compilation_timestamp {
-            let mut headers = HeaderMap::new();
-            headers.insert("last-modified", compilation_timestamp.parse().unwrap());
-            return (StatusCode::NOT_MODIFIED, headers, "").into_response();
-        }
+    if let Some(client_timestamp) = if_modified_since
+        && client_timestamp == compilation_timestamp
+    {
+        let mut headers = HeaderMap::new();
+        headers.insert("last-modified", compilation_timestamp.parse().unwrap());
+        return (StatusCode::NOT_MODIFIED, headers, "").into_response();
     }
 
     // Handle root path
