@@ -10,7 +10,7 @@ enum ConnectionResult {
     /// Connection was established but failed during operation
     OperationFailed(anyhow::Error),
 }
-use ogn_parser::{AprsData, AprsPacket};
+use ogn_parser::{AprsData, AprsPacket, PositionSourceType};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::fs::OpenOptions;
@@ -420,20 +420,28 @@ impl AprsClient {
                         }
 
                         // Also process with fix processor if available (backward compatibility)
+                        // Only process aircraft position sources for fixes
                         if let Some(fix_proc) = &fix_processor {
-                            match Fix::from_aprs_packet(parsed) {
-                                Ok(Some(fix)) => {
-                                    fix_proc.process_fix(fix, message);
+                            if parsed.position_source_type() == PositionSourceType::Aircraft {
+                                match Fix::from_aprs_packet(parsed) {
+                                    Ok(Some(fix)) => {
+                                        fix_proc.process_fix(fix, message);
+                                    }
+                                    Ok(None) => {
+                                        trace!("No position fix in APRS position packet");
+                                    }
+                                    Err(e) => {
+                                        debug!(
+                                            "Failed to extract fix from APRS position packet: {}",
+                                            e
+                                        );
+                                    }
                                 }
-                                Ok(None) => {
-                                    trace!("No position fix in APRS position packet");
-                                }
-                                Err(e) => {
-                                    debug!(
-                                        "Failed to extract fix from APRS position packet: {}",
-                                        e
-                                    );
-                                }
+                            } else {
+                                trace!(
+                                    "Skipping fix processing for non-aircraft position source: {:?}",
+                                    parsed.position_source_type()
+                                );
                             }
                         }
                     }
