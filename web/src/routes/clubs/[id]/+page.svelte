@@ -188,12 +188,12 @@
 				<div class="flex flex-wrap items-start justify-between gap-4">
 					<div class="flex-1">
 						<div class="mb-2 flex items-center gap-3">
-							<Building class="text-primary-500 h-8 w-10" />
+							<Building class="h-8 w-10 text-primary-500" />
 							<h1 class="h1">{club.name}</h1>
 						</div>
 						{#if club.is_soaring}
 							<div
-								class="bg-primary-500 inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm text-white"
+								class="inline-flex items-center gap-2 rounded-full bg-primary-500 px-3 py-1 text-sm text-white"
 							>
 								<Plane class="h-4 w-4" />
 								Soaring Club
@@ -220,7 +220,7 @@
 					{:else if $auth.isAuthenticated && isCurrentClub}
 						<div class="flex-shrink-0">
 							<div
-								class="bg-success-500 inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm text-white"
+								class="inline-flex items-center gap-2 rounded-full bg-success-500 px-4 py-2 text-sm text-white"
 							>
 								<UserCheck class="h-4 w-4" />
 								My Club
@@ -233,15 +233,15 @@
 			<!-- Main Content Grid -->
 			<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
 				<!-- Location Information -->
-				<div class="card space-y-4 p-6">
-					<h2 class="h2 flex items-center gap-2">
+				<div class="space-y-4 card p-6">
+					<h2 class="flex items-center gap-2 h2">
 						<MapPin class="h-6 w-6" />
 						Location
 					</h2>
 
 					<div class="space-y-3">
 						<div class="flex items-start gap-3">
-							<Info class="text-surface-500 mt-1 h-4 w-4" />
+							<Info class="mt-1 h-4 w-4 text-surface-500" />
 							<div>
 								<p class="text-surface-600-300-token mb-1 text-sm">Address</p>
 								{#if club.location}
@@ -261,7 +261,7 @@
 
 						{#if club.location?.geolocation}
 							<div class="flex items-start gap-3">
-								<Navigation class="text-surface-500 mt-1 h-4 w-4" />
+								<Navigation class="mt-1 h-4 w-4 text-surface-500" />
 								<div class="flex-1">
 									<p class="text-surface-600-300-token mb-1 text-sm">Coordinates</p>
 									<p class="font-mono text-sm">{formatCoordinates(club.location.geolocation)}</p>
@@ -299,7 +299,7 @@
 
 						{#if club.home_base_airport_id}
 							<div class="flex items-start gap-3">
-								<Plane class="text-surface-500 mt-1 h-4 w-4" />
+								<Plane class="mt-1 h-4 w-4 text-surface-500" />
 								<div>
 									<p class="text-surface-600-300-token mb-1 text-sm">Home Base Airport</p>
 									<p>Airport ID: {club.home_base_airport_id}</p>
@@ -311,8 +311,8 @@
 
 				<!-- Aircraft Information -->
 
-				<div class="card space-y-4 p-6">
-					<h2 class="h2 flex items-center gap-2">
+				<div class="space-y-4 card p-6">
+					<h2 class="flex items-center gap-2 h2">
 						<Plane class="h-6 w-6" />
 						Club Aircraft
 					</h2>
@@ -333,7 +333,7 @@
 						</div>
 					{:else if aircraft.length === 0}
 						<div class="text-surface-600-300-token py-8 text-center">
-							<Plane class="text-surface-500 mx-auto mb-4 h-12 w-12" />
+							<Plane class="mx-auto mb-4 h-12 w-12 text-surface-500" />
 							<p>No aircraft registered to this club</p>
 						</div>
 					{:else}
@@ -391,7 +391,7 @@
 			<!-- Map Section -->
 			{#if club.location?.geolocation}
 				<div class="card p-6">
-					<h2 class="h2 mb-4 flex items-center gap-2">
+					<h2 class="mb-4 flex items-center gap-2 h2">
 						<Navigation class="h-6 w-6" />
 						Location Map
 					</h2>
