@@ -1,5 +1,7 @@
 use crate::Fix;
 use anyhow::Result;
+use crate::receiver_status_repo::ReceiverStatusRepository;
+use crate::receiver_statuses::NewReceiverStatus;
 
 /// Result type for connection attempts
 enum ConnectionResult {
@@ -21,14 +23,14 @@ use tokio::time::sleep;
 use tracing::trace;
 use tracing::{debug, error, info, warn};
 
-/// Trait for processing APRS messages
-/// Implementors can define custom logic for handling received APRS messages
-pub trait MessageProcessor: Send + Sync {
-    /// Process a received APRS message
+/// Trait for processing APRS packets
+/// Implementors can define custom logic for handling received APRS packets
+pub trait PacketProcessor: Send + Sync {
+    /// Process a received APRS packet
     ///
     /// # Arguments
-    /// * `message` - The parsed APRS packet
-    fn process_message(&self, _message: AprsPacket) {
+    /// * `packet` - The parsed APRS packet
+    fn process_packet(&self, _packet: AprsPacket) {
         // Default implementation does nothing
     }
 
@@ -75,8 +77,8 @@ pub trait StatusProcessor: Send + Sync {
 /// This simplifies APRS client construction by grouping all processors together
 #[derive(Clone)]
 pub struct AprsProcessors {
-    /// Processor for general APRS messages and raw message handling
-    pub message_processor: Arc<dyn MessageProcessor>,
+    /// Processor for general APRS packets and raw message handling
+    pub packet_processor: Arc<dyn PacketProcessor>,
     /// Optional processor for position fixes (backward compatibility)
     pub fix_processor: Option<Arc<dyn FixProcessor>>,
     /// Optional processor for position messages
@@ -86,37 +88,43 @@ pub struct AprsProcessors {
 }
 
 impl AprsProcessors {
-    /// Create a new AprsProcessors with just a message processor
-    pub fn new(message_processor: Arc<dyn MessageProcessor>) -> Self {
+    /// Create a new AprsProcessors with just a packet processor
+    pub fn new(packet_processor: Arc<dyn PacketProcessor>) -> Self {
         Self {
-            message_processor,
+            packet_processor,
             fix_processor: None,
             position_processor: None,
             status_processor: None,
         }
     }
 
-    /// Create a new AprsProcessors with message and fix processors
+    /// Create a new AprsProcessors with a PacketRouter (recommended approach)
+    /// This is the modern way to configure APRS processing
+    pub fn with_packet_router(router: PacketRouter) -> Self {
+        Self::new(Arc::new(router))
+    }
+
+    /// Create a new AprsProcessors with packet and fix processors
     pub fn with_fix_processor(
-        message_processor: Arc<dyn MessageProcessor>,
+        packet_processor: Arc<dyn PacketProcessor>,
         fix_processor: Arc<dyn FixProcessor>,
     ) -> Self {
         Self {
-            message_processor,
+            packet_processor,
             fix_processor: Some(fix_processor),
             position_processor: None,
             status_processor: None,
         }
     }
 
-    /// Create a new AprsProcessors with message, position, and status processors
+    /// Create a new AprsProcessors with packet, position, and status processors
     pub fn with_processors(
-        message_processor: Arc<dyn MessageProcessor>,
+        packet_processor: Arc<dyn PacketProcessor>,
         position_processor: Option<Arc<dyn PositionProcessor>>,
         status_processor: Option<Arc<dyn StatusProcessor>>,
     ) -> Self {
         Self {
-            message_processor,
+            packet_processor,
             fix_processor: None,
             position_processor,
             status_processor,
@@ -125,13 +133,13 @@ impl AprsProcessors {
 
     /// Create a new AprsProcessors with all processor types
     pub fn with_all_processors(
-        message_processor: Arc<dyn MessageProcessor>,
+        packet_processor: Arc<dyn PacketProcessor>,
         fix_processor: Option<Arc<dyn FixProcessor>>,
         position_processor: Option<Arc<dyn PositionProcessor>>,
         status_processor: Option<Arc<dyn StatusProcessor>>,
     ) -> Self {
         Self {
-            message_processor,
+            packet_processor,
             fix_processor,
             position_processor,
             status_processor,
@@ -157,8 +165,8 @@ impl AprsProcessors {
     }
 }
 
-/// Type alias for boxed message processor trait objects
-pub type BoxedMessageProcessor = Box<dyn MessageProcessor>;
+/// Type alias for boxed packet processor trait objects
+pub type BoxedPacketProcessor = Box<dyn PacketProcessor>;
 
 /// Configuration for the APRS client
 #[derive(Debug, Clone)]
@@ -217,24 +225,30 @@ impl AprsClient {
         }
     }
 
-    /// Create a new APRS client with just a message processor (backward compatibility)
-    pub fn new_with_message_processor(config: AprsClientConfig, message_processor: Arc<dyn MessageProcessor>) -> Self {
+    /// Create a new APRS client with a PacketRouter (modern recommended approach)
+    /// This is the simplest way to create an APRS client with the new architecture
+    pub fn with_packet_router(config: AprsClientConfig, router: PacketRouter) -> Self {
+        Self::new(config, AprsProcessors::with_packet_router(router))
+    }
+
+    /// Create a new APRS client with just a packet processor (backward compatibility)
+    pub fn new_with_packet_processor(config: AprsClientConfig, packet_processor: Arc<dyn PacketProcessor>) -> Self {
         Self {
             config,
-            processors: AprsProcessors::new(message_processor),
+            processors: AprsProcessors::new(packet_processor),
             shutdown_tx: None,
         }
     }
 
-    /// Create a new APRS client with both message and fix processors (backward compatibility)
+    /// Create a new APRS client with both packet and fix processors (backward compatibility)
     pub fn new_with_fix_processor(
         config: AprsClientConfig,
-        message_processor: Arc<dyn MessageProcessor>,
+        packet_processor: Arc<dyn PacketProcessor>,
         fix_processor: Arc<dyn FixProcessor>,
     ) -> Self {
         Self {
             config,
-            processors: AprsProcessors::with_fix_processor(message_processor, fix_processor),
+            processors: AprsProcessors::with_fix_processor(packet_processor, fix_processor),
             shutdown_tx: None,
         }
     }
@@ -242,13 +256,13 @@ impl AprsClient {
     /// Create a new APRS client with position and status processors (backward compatibility)
     pub fn new_with_processors(
         config: AprsClientConfig,
-        message_processor: Arc<dyn MessageProcessor>,
+        packet_processor: Arc<dyn PacketProcessor>,
         position_processor: Option<Arc<dyn PositionProcessor>>,
         status_processor: Option<Arc<dyn StatusProcessor>>,
     ) -> Self {
         Self {
             config,
-            processors: AprsProcessors::with_processors(message_processor, position_processor, status_processor),
+            processors: AprsProcessors::with_processors(packet_processor, position_processor, status_processor),
             shutdown_tx: None,
         }
     }
@@ -256,14 +270,14 @@ impl AprsClient {
     /// Create a new APRS client with all processor types (backward compatibility)
     pub fn new_with_all_processors(
         config: AprsClientConfig,
-        message_processor: Arc<dyn MessageProcessor>,
+        packet_processor: Arc<dyn PacketProcessor>,
         fix_processor: Option<Arc<dyn FixProcessor>>,
         position_processor: Option<Arc<dyn PositionProcessor>>,
         status_processor: Option<Arc<dyn StatusProcessor>>,
     ) -> Self {
         Self {
             config,
-            processors: AprsProcessors::with_all_processors(message_processor, fix_processor, position_processor, status_processor),
+            processors: AprsProcessors::with_all_processors(packet_processor, fix_processor, position_processor, status_processor),
             shutdown_tx: None,
         }
     }
@@ -434,104 +448,104 @@ impl AprsClient {
     }
 
     /// Process a received APRS message
+    /// The AprsClient is now focused only on packet dispatching
     async fn process_message(
         message: &str,
         processors: &AprsProcessors,
         config: &AprsClientConfig,
     ) {
         // Always call process_raw_message first (for logging/archiving)
-        processors.message_processor.process_raw_message(message);
+        processors.packet_processor.process_raw_message(message);
 
         // Try to parse the message using ogn-parser
         match ogn_parser::parse(message) {
             Ok(parsed) => {
-                // Call the general message processor with the parsed message
-                processors.message_processor.process_message(parsed.clone());
+                // Log unparsed fragments if present and configured
+                Self::log_unparsed_fragments_if_configured(&parsed, message, config).await;
 
-                // Process specific message types with their dedicated processors
-                match &parsed.data {
-                    AprsData::Position(pos) => {
-                        // Log unparsed fragments if present
-                        if let Some(unparsed) = &pos.comment.unparsed {
-                            error!(
-                                "Unparsed position fragment: {unparsed} from message: {message}"
-                            );
+                // Dispatch the packet to the packet processor - this is the primary responsibility
+                processors.packet_processor.process_packet(parsed.clone());
 
-                            // Log to CSV if configured
-                            if let Some(log_path) = &config.unparsed_log_path
-                                && let Err(e) = Self::log_unparsed_to_csv(
-                                    log_path, "position", unparsed, message,
-                                )
-                                .await
-                            {
-                                warn!("Failed to write to unparsed log: {}", e);
-                            }
-                        }
-
-                        // Process with position processor if available
-                        if let Some(pos_proc) = &processors.position_processor {
-                            pos_proc.process_position(&parsed, message);
-                        } else {
-                            trace!("No position processor configured, skipping position message");
-                        }
-
-                        // Also process with fix processor if available (backward compatibility)
-                        // Only process aircraft position sources for fixes
-                        if let Some(fix_proc) = &processors.fix_processor {
-                            if parsed.position_source_type() == PositionSourceType::Aircraft {
-                                match Fix::from_aprs_packet(parsed) {
-                                    Ok(Some(fix)) => {
-                                        fix_proc.process_fix(fix, message);
-                                    }
-                                    Ok(None) => {
-                                        trace!("No position fix in APRS position packet");
-                                    }
-                                    Err(e) => {
-                                        debug!(
-                                            "Failed to extract fix from APRS position packet: {}",
-                                            e
-                                        );
-                                    }
-                                }
-                            } else {
-                                trace!(
-                                    "Skipping fix processing for non-aircraft position source: {:?}",
-                                    parsed.position_source_type()
-                                );
-                            }
-                        }
-                    }
-                    AprsData::Status(status) => {
-                        // Log unparsed fragments if present
-                        if let Some(unparsed) = &status.comment.unparsed {
-                            error!("Unparsed status fragment: {unparsed} from message: {message}");
-
-                            // Log to CSV if configured
-                            if let Some(log_path) = &config.unparsed_log_path
-                                && let Err(e) =
-                                    Self::log_unparsed_to_csv(log_path, "status", unparsed, message)
-                                        .await
-                            {
-                                warn!("Failed to write to unparsed log: {}", e);
-                            }
-                        }
-
-                        // Process with status processor if available
-                        if let Some(status_proc) = &processors.status_processor {
-                            status_proc.process_status(&parsed, message);
-                        } else {
-                            trace!("No status processor configured, skipping status message");
-                        }
-                    }
-                    _ => {
-                        trace!(
-                            "Received non-position/non-status message, only general message processor called"
-                        );
-                    }
-                }
+                // Backward compatibility: still support the old processor interfaces
+                Self::handle_backward_compatibility(&parsed, message, processors).await;
             }
             Err(e) => {
                 error!("Failed to parse APRS message '{message}': {e}");
+            }
+        }
+    }
+
+    /// Handle unparsed fragment logging if configured
+    async fn log_unparsed_fragments_if_configured(
+        packet: &AprsPacket,
+        message: &str,
+        config: &AprsClientConfig,
+    ) {
+        if let Some(log_path) = &config.unparsed_log_path {
+            match &packet.data {
+                AprsData::Position(pos) => {
+                    if let Some(unparsed) = &pos.comment.unparsed {
+                        error!("Unparsed position fragment: {unparsed} from message: {message}");
+                        if let Err(e) = Self::log_unparsed_to_csv(log_path, "position", unparsed, message).await {
+                            warn!("Failed to write to unparsed log: {}", e);
+                        }
+                    }
+                }
+                AprsData::Status(status) => {
+                    if let Some(unparsed) = &status.comment.unparsed {
+                        error!("Unparsed status fragment: {unparsed} from message: {message}");
+                        if let Err(e) = Self::log_unparsed_to_csv(log_path, "status", unparsed, message).await {
+                            warn!("Failed to write to unparsed log: {}", e);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// Handle backward compatibility with old processor interfaces
+    async fn handle_backward_compatibility(
+        packet: &AprsPacket,
+        message: &str,
+        processors: &AprsProcessors,
+    ) {
+        match &packet.data {
+            AprsData::Position(_) => {
+                // Process with position processor if available (backward compatibility)
+                if let Some(pos_proc) = &processors.position_processor {
+                    pos_proc.process_position(packet, message);
+                }
+
+                // Process with fix processor if available (backward compatibility)
+                // Only process aircraft position sources for fixes
+                if let Some(fix_proc) = &processors.fix_processor {
+                    if packet.position_source_type() == PositionSourceType::Aircraft {
+                        match Fix::from_aprs_packet(packet.clone()) {
+                            Ok(Some(fix)) => {
+                                fix_proc.process_fix(fix, message);
+                            }
+                            Ok(None) => {
+                                trace!("No position fix in APRS position packet");
+                            }
+                            Err(e) => {
+                                debug!("Failed to extract fix from APRS position packet: {}", e);
+                            }
+                        }
+                    } else {
+                        trace!("Skipping fix processing for non-aircraft position source: {:?}",
+                               packet.position_source_type());
+                    }
+                }
+            }
+            AprsData::Status(_) => {
+                // Process with status processor if available (backward compatibility)
+                if let Some(status_proc) = &processors.status_processor {
+                    status_proc.process_status(packet, message);
+                }
+            }
+            _ => {
+                trace!("Received non-position/non-status message, only packet processor called");
             }
         }
     }
@@ -633,6 +647,229 @@ impl Default for AprsClientConfigBuilder {
     }
 }
 
+/// PacketRouter implements PacketProcessor and routes packets to appropriate specialized processors
+/// This is the main router that the AprsClient should use
+pub struct PacketRouter {
+    /// Optional base directory for message archival
+    archive_base_dir: Option<String>,
+    /// Position packet processor for handling position data
+    position_processor: Option<PositionPacketProcessor>,
+    /// Receiver status processor for handling status data from receivers
+    receiver_status_processor: Option<ReceiverStatusProcessor>,
+}
+
+impl PacketRouter {
+    /// Create a new PacketRouter with optional archival
+    pub fn new(archive_base_dir: Option<String>) -> Self {
+        Self {
+            archive_base_dir,
+            position_processor: None,
+            receiver_status_processor: None,
+        }
+    }
+
+    /// Add a position processor to the router
+    pub fn with_position_processor(mut self, processor: PositionPacketProcessor) -> Self {
+        self.position_processor = Some(processor);
+        self
+    }
+
+    /// Add a receiver status processor to the router
+    pub fn with_receiver_status_processor(mut self, processor: ReceiverStatusProcessor) -> Self {
+        self.receiver_status_processor = Some(processor);
+        self
+    }
+}
+
+impl PacketProcessor for PacketRouter {
+    fn process_raw_message(&self, raw_message: &str) {
+        // Handle archival if configured
+        if let Some(base_dir) = &self.archive_base_dir {
+            // TODO: Implement daily log file archival
+            // For now, just trace log it
+            trace!("Would archive to {}: {}", base_dir, raw_message);
+        }
+    }
+
+    fn process_packet(&self, packet: AprsPacket) {
+        match &packet.data {
+            AprsData::Position(_) => {
+                if let Some(pos_proc) = &self.position_processor {
+                    pos_proc.process_position_packet(&packet);
+                } else {
+                    trace!("No position processor configured, skipping position packet");
+                }
+            }
+            AprsData::Status(_) => {
+                if let Some(status_proc) = &self.receiver_status_processor {
+                    status_proc.process_status_packet(&packet);
+                } else {
+                    trace!("No receiver status processor configured, skipping status packet");
+                }
+            }
+            _ => {
+                debug!("Received packet of type {:?}, no specific handler",
+                      std::mem::discriminant(&packet.data));
+            }
+        }
+    }
+}
+
+/// Processor for handling position packets from various sources
+pub struct PositionPacketProcessor {
+    /// Aircraft position processor for handling aircraft-specific logic
+    aircraft_processor: Option<AircraftPositionProcessor>,
+}
+
+impl PositionPacketProcessor {
+    /// Create a new PositionPacketProcessor
+    pub fn new() -> Self {
+        Self {
+            aircraft_processor: None,
+        }
+    }
+
+    /// Add an aircraft position processor
+    pub fn with_aircraft_processor(mut self, processor: AircraftPositionProcessor) -> Self {
+        self.aircraft_processor = Some(processor);
+        self
+    }
+
+    /// Process a position packet, routing based on source type
+    pub fn process_position_packet(&self, packet: &AprsPacket) {
+        match packet.position_source_type() {
+            PositionSourceType::Aircraft => {
+                if let Some(aircraft_proc) = &self.aircraft_processor {
+                    aircraft_proc.process_aircraft_position(packet);
+                } else {
+                    trace!("No aircraft processor configured, skipping aircraft position");
+                }
+            }
+            source_type => {
+                trace!("Position from non-aircraft source {:?} - not implemented yet", source_type);
+            }
+        }
+    }
+}
+
+/// Processor for handling aircraft position packets
+pub struct AircraftPositionProcessor {
+    /// Fix processor for database storage
+    fix_processor: Option<Arc<dyn FixProcessor>>,
+    /// Flight detection processor for flight tracking
+    flight_detection_enabled: bool,
+}
+
+impl AircraftPositionProcessor {
+    /// Create a new AircraftPositionProcessor
+    pub fn new() -> Self {
+        Self {
+            fix_processor: None,
+            flight_detection_enabled: false,
+        }
+    }
+
+    /// Add a fix processor for database storage
+    pub fn with_fix_processor(mut self, processor: Arc<dyn FixProcessor>) -> Self {
+        self.fix_processor = Some(processor);
+        self
+    }
+
+    /// Enable flight detection processing
+    pub fn with_flight_detection(mut self) -> Self {
+        self.flight_detection_enabled = true;
+        self
+    }
+
+    /// Process an aircraft position packet
+    pub fn process_aircraft_position(&self, packet: &AprsPacket) {
+        // Convert to Fix and process with fix processor if available
+        if let Some(fix_proc) = &self.fix_processor {
+            match Fix::from_aprs_packet(packet.clone()) {
+                Ok(Some(fix)) => {
+                    // TODO: Get raw message - for now use a placeholder
+                    let raw_message = format!("{:?}", packet); // Placeholder
+                    fix_proc.process_fix(fix, &raw_message);
+                }
+                Ok(None) => {
+                    trace!("No position fix extracted from aircraft packet");
+                }
+                Err(e) => {
+                    debug!("Failed to extract fix from aircraft packet: {}", e);
+                }
+            }
+        }
+
+        // TODO: Invoke flight detection processor if enabled
+        if self.flight_detection_enabled {
+            trace!("Flight detection processing not yet implemented");
+        }
+    }
+}
+
+/// Processor for handling receiver status packets
+pub struct ReceiverStatusProcessor {
+    /// Repository for storing receiver status data
+    status_repo: ReceiverStatusRepository,
+}
+
+impl ReceiverStatusProcessor {
+    /// Create a new ReceiverStatusProcessor
+    pub fn new(status_repo: ReceiverStatusRepository) -> Self {
+        Self { status_repo }
+    }
+
+    /// Process a status packet from a receiver
+    pub fn process_status_packet(&self, packet: &AprsPacket) {
+        // Ensure this is from a receiver
+        match packet.position_source_type() {
+            PositionSourceType::Receiver => {
+                if let AprsData::Status(status) = &packet.data {
+                    // Extract receiver ID from packet source (callsign)
+                    // For now, use a placeholder implementation
+                    let receiver_id = self.extract_receiver_id(&packet.from.to_string());
+
+                    if let Some(recv_id) = receiver_id {
+                        // Create NewReceiverStatus from status comment if available
+                        // The status.comment is already a StatusComment structure
+                        let new_status = NewReceiverStatus::from_status_comment(
+                            recv_id,
+                            &status.comment,
+                            chrono::Utc::now(), // packet timestamp (placeholder)
+                            chrono::Utc::now(), // received_at
+                        );
+
+                        // Store in database (async call would need runtime context)
+                        tokio::spawn({
+                            let repo = self.status_repo.clone();
+                            async move {
+                                if let Err(e) = repo.insert(&new_status).await {
+                                    error!("Failed to insert receiver status: {}", e);
+                                }
+                            }
+                        });
+                    } else {
+                        debug!("Could not extract receiver ID from source: {}", packet.from);
+                    }
+                } else {
+                    warn!("Expected status packet but got different packet type");
+                }
+            }
+            source_type => {
+                trace!("Status packet from non-receiver source {:?} - ignoring", source_type);
+            }
+        }
+    }
+
+    /// Extract receiver ID from callsign
+    /// TODO: Implement proper lookup from receivers table
+    fn extract_receiver_id(&self, callsign: &str) -> Option<i32> {
+        // Placeholder implementation - in real code, this should query the receivers table
+        trace!("Would look up receiver ID for callsign: {}", callsign);
+        None // For now, return None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -701,20 +938,20 @@ mod tests {
         );
     }
 
-    struct TestMessageProcessor {
+    struct TestPacketProcessor {
         counter: Arc<AtomicUsize>,
     }
 
-    impl MessageProcessor for TestMessageProcessor {
-        fn process_message(&self, _message: AprsPacket) {
+    impl PacketProcessor for TestPacketProcessor {
+        fn process_packet(&self, _packet: AprsPacket) {
             self.counter.fetch_add(1, Ordering::SeqCst);
         }
     }
 
     #[tokio::test]
-    async fn test_message_processor() {
+    async fn test_packet_processor() {
         let counter = Arc::new(AtomicUsize::new(0));
-        let processor: Arc<dyn MessageProcessor> = Arc::new(TestMessageProcessor {
+        let processor: Arc<dyn PacketProcessor> = Arc::new(TestPacketProcessor {
             counter: Arc::clone(&counter),
         });
 

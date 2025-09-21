@@ -7,7 +7,7 @@ use std::sync::Mutex;
 use tracing::{error, info, warn};
 use zstd::stream::copy_encode;
 
-use crate::MessageProcessor;
+use crate::PacketProcessor;
 
 /// Archive message processor for file streaming
 pub struct ArchiveMessageProcessor {
@@ -21,10 +21,10 @@ impl ArchiveMessageProcessor {
     }
 }
 
-impl MessageProcessor for ArchiveMessageProcessor {
-    fn process_message(&self, message: ogn_parser::AprsPacket) {
-        tracing::trace!("Parsed APRS packet: {:?}", message);
-        // Archive processor doesn't need to do anything with parsed messages
+impl PacketProcessor for ArchiveMessageProcessor {
+    fn process_packet(&self, packet: ogn_parser::AprsPacket) {
+        tracing::trace!("Parsed APRS packet: {:?}", packet);
+        // Archive processor doesn't need to do anything with parsed packets
     }
 
     fn process_raw_message(&self, raw_message: &str) {
@@ -35,10 +35,10 @@ impl MessageProcessor for ArchiveMessageProcessor {
     }
 }
 
-pub struct NoOpMessageProcessor;
+pub struct NoOpPacketProcessor;
 
-impl MessageProcessor for NoOpMessageProcessor {
-    fn process_message(&self, _message: ogn_parser::AprsPacket) {
+impl PacketProcessor for NoOpPacketProcessor {
+    fn process_packet(&self, _packet: ogn_parser::AprsPacket) {
         // No-op implementation
     }
 

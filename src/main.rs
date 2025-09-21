@@ -10,7 +10,7 @@ use std::path::Path;
 use std::sync::Arc;
 use tracing::{info, warn};
 
-use soar::aprs_client::{AprsClient, AprsClientConfigBuilder, FixProcessor, MessageProcessor};
+use soar::aprs_client::{AprsClient, AprsClientConfigBuilder, FixProcessor, PacketProcessor};
 use soar::database_fix_processor::DatabaseFixProcessor;
 use soar::live_fixes::LiveFixService;
 
@@ -316,7 +316,7 @@ async fn handle_run(
         "Setting up message processors - writing to directory: {:?}, NATS URL: {}",
         archive_dir, nats_url
     );
-    let archive_processor: Arc<dyn MessageProcessor> = Arc::new(
+    let archive_processor: Arc<dyn PacketProcessor> = Arc::new(
         soar::message_processors::ArchiveMessageProcessor::new(archive_dir),
     );
 
