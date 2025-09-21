@@ -42,7 +42,7 @@ impl FixProcessor for DatabaseFixProcessor {
                             Ok(_) => {
                                 trace!(
                                     "Successfully saved fix to database for aircraft {:?}",
-                                    db_fix.aircraft_id
+                                    db_fix.device_address
                                 );
                             }
                             Err(e) => {

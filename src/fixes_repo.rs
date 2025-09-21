@@ -119,9 +119,9 @@ struct NewFix {
     latitude: f64,
     longitude: f64,
     altitude_feet: Option<i32>,
-    aircraft_id: Option<String>,
+    device_address: Option<String>,
     device_id: Option<Uuid>,
-    device_type: Option<AddressType>,
+    address_type: Option<AddressType>,
     aircraft_type: Option<AircraftType>,
     flight_number: Option<String>,
     emitter_category: Option<AdsbEmitterCategory>,
@@ -151,9 +151,9 @@ impl From<&Fix> for NewFix {
             latitude: fix.latitude,
             longitude: fix.longitude,
             altitude_feet: fix.altitude_feet,
-            aircraft_id: fix.aircraft_id.clone(),
-            device_id: None, // Will be resolved during insertion based on raw device_id and device_type
-            device_type: fix.device_type.map(AddressType::from),
+            device_address: fix.device_address.clone(),
+            device_id: None, // Will be resolved during insertion based on raw device_id and address_type
+            address_type: fix.address_type.map(AddressType::from),
             aircraft_type: fix.aircraft_type.map(AircraftType::from),
             flight_number: fix.flight_number.clone(),
             emitter_category: fix.emitter_category,
@@ -195,11 +195,11 @@ struct FixRow {
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Integer>)]
     altitude_feet: Option<i32>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
-    aircraft_id: Option<String>,
+    device_address: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
     device_id: Option<Uuid>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
-    device_type: Option<String>,
+    address_type: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
     aircraft_type: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
@@ -235,7 +235,7 @@ struct FixRow {
 impl From<FixRow> for Fix {
     fn from(row: FixRow) -> Self {
         // Helper function to parse enum from string
-        fn parse_device_type(s: Option<String>) -> Option<ForeignAddressType> {
+        fn parse_address_type(s: Option<String>) -> Option<ForeignAddressType> {
             s.and_then(|s| match s.as_str() {
                 "unknown" => Some(ForeignAddressType::Unknown),
                 "icao" => Some(ForeignAddressType::Icao),
@@ -291,9 +291,9 @@ impl From<FixRow> for Fix {
             latitude: row.latitude,
             longitude: row.longitude,
             altitude_feet: row.altitude_feet,
-            aircraft_id: row.aircraft_id,
+            device_address: row.device_address,
             device_id: None,
-            device_type: parse_device_type(row.device_type),
+            address_type: parse_address_type(row.address_type),
             aircraft_type: parse_aircraft_type(row.aircraft_type),
             flight_number: row.flight_number,
             emitter_category: parse_emitter_category(row.emitter_category),
@@ -323,7 +323,33 @@ impl FixesRepository {
         Self { pool }
     }
 
-    /// Look up device UUID by raw device_id and device_type
+    /// Look up device UUID by device_address (hex string) and address_type
+    fn lookup_device_uuid_by_address(
+        conn: &mut diesel::PgConnection,
+        device_address: &str,
+        address_type_: AddressType,
+    ) -> Result<Option<Uuid>> {
+        use crate::schema::devices::dsl::*;
+
+        // Convert hex string to integer for database lookup
+        let device_address_int = if let Ok(addr) = u32::from_str_radix(device_address, 16) {
+            addr as i32
+        } else {
+            // If hex parsing fails, return None
+            return Ok(None);
+        };
+
+        let device_uuid = devices
+            .filter(address.eq(device_address_int))
+            .filter(address_type.eq(address_type_))
+            .select(id)
+            .first::<Uuid>(conn)
+            .optional()?;
+
+        Ok(device_uuid)
+    }
+
+    /// Look up device UUID by raw device_id and address_type (legacy method)
     fn lookup_device_uuid(
         conn: &mut diesel::PgConnection,
         raw_device_id: u32,
@@ -349,18 +375,19 @@ impl FixesRepository {
         let mut new_fix = NewFix::from(fix);
         let aircraft_identifier = fix.get_aircraft_identifier();
 
-        // Look up device UUID if we have raw device info
-        if let (Some(raw_device_id), Some(device_type_ref)) =
-            (fix.device_id, fix.device_type.as_ref())
+        // Look up device UUID if we have device address and address type
+        if let (Some(dev_address), Some(address_type_ref)) =
+            (fix.device_address.as_ref(), fix.address_type.as_ref())
         {
-            let device_type_enum = AddressType::from(*device_type_ref);
+            let address_type_enum = AddressType::from(*address_type_ref);
+            let dev_address_owned = dev_address.clone();
 
             tokio::task::spawn_blocking(move || {
                 let mut conn = pool.get()?;
 
-                // Look up the device UUID
+                // Look up the device UUID using device address and address type
                 new_fix.device_id =
-                    Self::lookup_device_uuid(&mut conn, raw_device_id, device_type_enum)?;
+                    Self::lookup_device_uuid_by_address(&mut conn, &dev_address_owned, address_type_enum)?;
 
                 diesel::insert_into(fixes)
                     .values(&new_fix)
@@ -409,12 +436,12 @@ impl FixesRepository {
             conn.transaction(|conn| {
                 for (original_fix, mut fix_data) in fixes_data {
                     // Look up device UUID if we have raw device info
-                    if let (Some(raw_device_id), Some(device_type_ref)) =
-                        (original_fix.device_id, original_fix.device_type.as_ref())
+                    if let (Some(dev_address), Some(address_type_ref)) =
+                        (original_fix.device_address.as_ref(), original_fix.address_type.as_ref())
                     {
-                        let device_type_enum = AddressType::from(*device_type_ref);
+                        let address_type_enum = AddressType::from(*address_type_ref);
                         if let Ok(Some(device_uuid)) =
-                            Self::lookup_device_uuid(conn, raw_device_id, device_type_enum)
+                            Self::lookup_device_uuid_by_address(conn, dev_address, address_type_enum)
                         {
                             fix_data.device_id = Some(device_uuid);
                         }
@@ -443,13 +470,13 @@ impl FixesRepository {
     /// Get fixes for a specific aircraft ID within a time range (original method)
     pub async fn get_fixes_for_aircraft_with_time_range(
         &self,
-        aircraft_id: &str,
+        device_address: &str,
         start_time: DateTime<Utc>,
         end_time: DateTime<Utc>,
         limit: Option<i64>,
     ) -> Result<Vec<Fix>> {
         let limit = limit.unwrap_or(1000);
-        let aircraft_id = aircraft_id.to_string();
+        let device_address = device_address.to_string();
 
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
@@ -459,20 +486,20 @@ impl FixesRepository {
                 SELECT
                     id, source, destination, via, raw_packet, timestamp,
                     latitude, longitude, altitude_feet,
-                    aircraft_id, device_id, device_type, aircraft_type,
+                    device_address, device_id, address_type, aircraft_type,
                     flight_number, emitter_category, registration, model, squawk,
                     ground_speed_knots, track_degrees, climb_fpm, turn_rate_rot,
                     snr_db, bit_errors_corrected, freq_offset_khz,
                     club_id
                 FROM fixes
-                WHERE aircraft_id = $1
+                WHERE device_address = $1
                 AND timestamp BETWEEN $2 AND $3
                 ORDER BY timestamp DESC
                 LIMIT $4
             "#;
 
             let results: Vec<FixRow> = sql_query(sql)
-                .bind::<diesel::sql_types::Varchar, _>(&aircraft_id)
+                .bind::<diesel::sql_types::Varchar, _>(&device_address)
                 .bind::<diesel::sql_types::Timestamptz, _>(start_time)
                 .bind::<diesel::sql_types::Timestamptz, _>(end_time)
                 .bind::<diesel::sql_types::BigInt, _>(limit)
@@ -508,7 +535,7 @@ impl FixesRepository {
                 SELECT
                     id, source, destination, via, raw_packet, timestamp,
                     latitude, longitude, altitude_feet,
-                    aircraft_id, device_id, device_type, aircraft_type,
+                    device_address, device_id, address_type, aircraft_type,
                     flight_number, emitter_category, registration, model, squawk,
                     ground_speed_knots, track_degrees, climb_fpm, turn_rate_rot,
                     snr_db, bit_errors_corrected, freq_offset_khz,
@@ -542,11 +569,11 @@ impl FixesRepository {
     /// Get recent fixes for an aircraft (without time range)
     pub async fn get_fixes_for_aircraft(
         &self,
-        aircraft_id: &str,
+        device_address: &str,
         limit: Option<i64>,
     ) -> Result<Vec<Fix>> {
         let limit = limit.unwrap_or(100);
-        let aircraft_id = aircraft_id.to_string();
+        let device_address = device_address.to_string();
 
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
@@ -556,19 +583,19 @@ impl FixesRepository {
                 SELECT
                     id, source, destination, via, raw_packet, timestamp,
                     latitude, longitude, altitude_feet,
-                    aircraft_id, device_id, device_type, aircraft_type,
+                    device_address, device_id, address_type, aircraft_type,
                     flight_number, emitter_category, registration, model, squawk,
                     ground_speed_knots, track_degrees, climb_fpm, turn_rate_rot,
                     snr_db, bit_errors_corrected, freq_offset_khz,
                     club_id
                 FROM fixes
-                WHERE aircraft_id = $1
+                WHERE device_address = $1
                 ORDER BY timestamp DESC
                 LIMIT $2
             "#;
 
             let results: Vec<FixRow> = sql_query(sql)
-                .bind::<diesel::sql_types::Varchar, _>(&aircraft_id)
+                .bind::<diesel::sql_types::Varchar, _>(&device_address)
                 .bind::<diesel::sql_types::BigInt, _>(limit)
                 .load::<FixRow>(&mut conn)?;
 
@@ -596,7 +623,7 @@ impl FixesRepository {
                 SELECT
                     id, source, destination, via, raw_packet, timestamp,
                     latitude, longitude, altitude_feet,
-                    aircraft_id, device_id, device_type, aircraft_type,
+                    device_address, device_id, address_type, aircraft_type,
                     flight_number, emitter_category, registration, model, squawk,
                     ground_speed_knots, track_degrees, climb_fpm, turn_rate_rot,
                     snr_db, bit_errors_corrected, freq_offset_khz,
@@ -630,7 +657,7 @@ impl FixesRepository {
                 SELECT
                     id, source, destination, via, raw_packet, timestamp,
                     latitude, longitude, altitude_feet,
-                    aircraft_id, device_id, device_type, aircraft_type,
+                    device_address, device_id, address_type, aircraft_type,
                     flight_number, emitter_category, registration, model, squawk,
                     ground_speed_knots, track_degrees, climb_fpm, turn_rate_rot,
                     snr_db, bit_errors_corrected, freq_offset_khz,
@@ -654,13 +681,13 @@ impl FixesRepository {
     /// Get fixes for aircraft within time range (keeping the original method for compatibility)
     pub async fn get_fixes_for_aircraft_in_time_range(
         &self,
-        aircraft_id: &str,
+        device_address: &str,
         start_time: DateTime<Utc>,
         end_time: DateTime<Utc>,
         limit: Option<i64>,
     ) -> Result<Vec<Fix>> {
         // This is now the same as get_fixes_for_aircraft_with_time_range
-        self.get_fixes_for_aircraft_with_time_range(aircraft_id, start_time, end_time, limit)
+        self.get_fixes_for_aircraft_with_time_range(device_address, start_time, end_time, limit)
             .await
     }
 
@@ -698,7 +725,7 @@ impl FixesRepository {
             let sql = if after.is_some() {
                 r#"
                     SELECT id, source, destination, via, raw_packet, timestamp,
-                           latitude, longitude, altitude_feet, aircraft_id, device_type,
+                           latitude, longitude, altitude_feet, device_address, address_type,
                            aircraft_type, flight_number, emitter_category, registration,
                            model, squawk, ground_speed_knots, track_degrees, climb_fpm,
                            turn_rate_rot, snr_db, bit_errors_corrected, freq_offset_khz,
@@ -711,7 +738,7 @@ impl FixesRepository {
             } else {
                 r#"
                     SELECT id, source, destination, via, raw_packet, timestamp,
-                           latitude, longitude, altitude_feet, aircraft_id, device_type,
+                           latitude, longitude, altitude_feet, device_address, address_type,
                            aircraft_type, flight_number, emitter_category, registration,
                            model, squawk, ground_speed_knots, track_degrees, climb_fpm,
                            turn_rate_rot, snr_db, bit_errors_corrected, freq_offset_khz,

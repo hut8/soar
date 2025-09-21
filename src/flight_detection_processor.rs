@@ -218,47 +218,47 @@ impl FlightDetectionProcessor {
     }
 
     /// Process flight state transitions for an aircraft
-    async fn process_flight_state_transition(&mut self, aircraft_id: &str, fix: &Fix) {
+    async fn process_flight_state_transition(&mut self, device_address: &str, fix: &Fix) {
         let current_state = self
             .aircraft_trackers
-            .get(aircraft_id)
+            .get(device_address)
             .unwrap()
             .flight_state
             .clone();
         let should_takeoff = {
-            let tracker = self.aircraft_trackers.get(aircraft_id).unwrap();
+            let tracker = self.aircraft_trackers.get(device_address).unwrap();
             self.is_taking_off(&tracker.fix_history)
         };
 
         debug!(
             "Processing flight state for aircraft {}: current state {:?}",
-            aircraft_id, current_state
+            device_address, current_state
         );
 
         match current_state {
             FlightState::Ground => {
                 if should_takeoff {
-                    info!("Detected takeoff for aircraft {}", aircraft_id);
+                    info!("Detected takeoff for aircraft {}", device_address);
 
                     // Create new flight record
-                    let flight = Flight::new(aircraft_id.to_string(), fix.timestamp);
+                    let flight = Flight::new(device_address.to_string(), fix.timestamp);
                     let flight_id = flight.id;
 
                     // Save to database
                     match self.flights_repo.insert_flight(&flight).await {
                         Ok(_) => {
-                            let tracker = self.aircraft_trackers.get_mut(aircraft_id).unwrap();
+                            let tracker = self.aircraft_trackers.get_mut(device_address).unwrap();
                             tracker.flight_state = FlightState::TakingOff;
                             tracker.current_flight_id = Some(flight_id);
                             info!(
                                 "Created flight record {} for aircraft {}",
-                                flight_id, aircraft_id
+                                flight_id, device_address
                             );
                         }
                         Err(e) => {
                             error!(
                                 "Failed to create flight record for aircraft {}: {}",
-                                aircraft_id, e
+                                device_address, e
                             );
                         }
                     }
@@ -268,7 +268,7 @@ impl FlightDetectionProcessor {
             FlightState::TakingOff => {
                 // Transition to airborne after sustained flight
                 let should_become_airborne = {
-                    let tracker = self.aircraft_trackers.get(aircraft_id).unwrap();
+                    let tracker = self.aircraft_trackers.get(device_address).unwrap();
                     tracker.fix_history.len() >= 5
                         && tracker.fix_history.iter().rev().take(3).all(|f| {
                             f.ground_speed_knots.unwrap_or(0.0) >= self.takeoff_speed_threshold
@@ -277,38 +277,38 @@ impl FlightDetectionProcessor {
                 };
 
                 if should_become_airborne {
-                    let tracker = self.aircraft_trackers.get_mut(aircraft_id).unwrap();
+                    let tracker = self.aircraft_trackers.get_mut(device_address).unwrap();
                     tracker.flight_state = FlightState::Airborne;
-                    debug!("Aircraft {} transitioned to airborne", aircraft_id);
+                    debug!("Aircraft {} transitioned to airborne", device_address);
                 }
             }
 
             FlightState::Airborne => {
                 let should_land = {
-                    let tracker = self.aircraft_trackers.get(aircraft_id).unwrap();
+                    let tracker = self.aircraft_trackers.get(device_address).unwrap();
                     self.is_landing(&tracker.fix_history)
                 };
 
                 if should_land {
-                    let tracker = self.aircraft_trackers.get_mut(aircraft_id).unwrap();
+                    let tracker = self.aircraft_trackers.get_mut(device_address).unwrap();
                     tracker.flight_state = FlightState::Landing;
-                    debug!("Aircraft {} appears to be landing", aircraft_id);
+                    debug!("Aircraft {} appears to be landing", device_address);
                 }
             }
 
             FlightState::Landing => {
                 let should_complete_landing = {
-                    let tracker = self.aircraft_trackers.get(aircraft_id).unwrap();
+                    let tracker = self.aircraft_trackers.get(device_address).unwrap();
                     self.is_on_ground(&tracker.fix_history)
                 };
 
                 if should_complete_landing {
-                    info!("Detected landing for aircraft {}", aircraft_id);
+                    info!("Detected landing for aircraft {}", device_address);
 
                     // Get the flight ID before borrowing mutably
                     let flight_id = self
                         .aircraft_trackers
-                        .get(aircraft_id)
+                        .get(device_address)
                         .unwrap()
                         .current_flight_id;
 
@@ -320,20 +320,20 @@ impl FlightDetectionProcessor {
                             .await
                         {
                             Ok(true) => {
-                                let tracker = self.aircraft_trackers.get_mut(aircraft_id).unwrap();
+                                let tracker = self.aircraft_trackers.get_mut(device_address).unwrap();
                                 tracker.flight_state = FlightState::Ground;
                                 tracker.current_flight_id = None;
                                 info!(
                                     "Updated flight record {} with landing time for aircraft {}",
-                                    flight_id, aircraft_id
+                                    flight_id, device_address
                                 );
                             }
                             Ok(false) => {
                                 warn!(
                                     "Flight record {} not found when updating landing time for aircraft {}",
-                                    flight_id, aircraft_id
+                                    flight_id, device_address
                                 );
-                                let tracker = self.aircraft_trackers.get_mut(aircraft_id).unwrap();
+                                let tracker = self.aircraft_trackers.get_mut(device_address).unwrap();
                                 tracker.flight_state = FlightState::Ground;
                                 tracker.current_flight_id = None;
                             }
@@ -345,8 +345,8 @@ impl FlightDetectionProcessor {
                             }
                         }
                     } else {
-                        warn!("Aircraft {} landed but no current flight ID", aircraft_id);
-                        let tracker = self.aircraft_trackers.get_mut(aircraft_id).unwrap();
+                        warn!("Aircraft {} landed but no current flight ID", device_address);
+                        let tracker = self.aircraft_trackers.get_mut(device_address).unwrap();
                         tracker.flight_state = FlightState::Ground;
                     }
                 }
@@ -357,10 +357,10 @@ impl FlightDetectionProcessor {
     /// Clean up old aircraft trackers to prevent memory leaks
     fn cleanup_old_trackers(&mut self) {
         let cutoff = Utc::now() - Duration::hours(6); // Remove trackers older than 6 hours
-        self.aircraft_trackers.retain(|aircraft_id, tracker| {
+        self.aircraft_trackers.retain(|device_address, tracker| {
             let should_retain = tracker.last_update > cutoff;
             if !should_retain {
-                debug!("Removing old tracker for aircraft {}", aircraft_id);
+                debug!("Removing old tracker for aircraft {}", device_address);
             }
             should_retain
         });
@@ -372,31 +372,31 @@ impl FixProcessor for FlightDetectionProcessor {
         // First, delegate to the database processor
         self.db_processor.process_fix(fix.clone(), raw_message);
 
-        // Only process fixes that have aircraft ID
-        if let Some(aircraft_id) = &fix.aircraft_id {
+        // Only process fixes that have device address
+        if let Some(device_address) = &fix.device_address {
             // Clone self for async processing
             let mut processor = self.clone();
-            let aircraft_id = aircraft_id.clone();
+            let device_address = device_address.clone();
             let fix_clone = fix.clone();
 
             tokio::spawn(async move {
                 // Get or create aircraft tracker
-                if !processor.aircraft_trackers.contains_key(&aircraft_id) {
+                if !processor.aircraft_trackers.contains_key(&device_address) {
                     processor
                         .aircraft_trackers
-                        .insert(aircraft_id.clone(), AircraftTracker::new());
+                        .insert(device_address.clone(), AircraftTracker::new());
                 }
 
                 // Update tracker with new fix
                 {
-                    let tracker = processor.aircraft_trackers.get_mut(&aircraft_id).unwrap();
+                    let tracker = processor.aircraft_trackers.get_mut(&device_address).unwrap();
                     tracker.fix_history.push(fix_clone.clone());
                     tracker.last_update = Utc::now();
                 }
 
                 // Process flight state transitions
                 processor
-                    .process_flight_state_transition(&aircraft_id, &fix_clone)
+                    .process_flight_state_transition(&device_address, &fix_clone)
                     .await;
 
                 // Periodic cleanup (run roughly every 256th fix processing)
@@ -404,7 +404,7 @@ impl FixProcessor for FlightDetectionProcessor {
                 use std::collections::hash_map::DefaultHasher;
                 use std::hash::{Hash, Hasher};
                 let mut hasher = DefaultHasher::new();
-                aircraft_id.hash(&mut hasher);
+                device_address.hash(&mut hasher);
                 if hasher.finish().is_multiple_of(256) {
                     processor.cleanup_old_trackers();
                 }

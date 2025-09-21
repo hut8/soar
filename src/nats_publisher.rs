@@ -88,7 +88,7 @@ impl FixProcessor for NatsFixPublisher {
                 registration.clone()
             } else if let Some(device_id) = fix.device_id {
                 // Try to look up US registration first
-                let device_type_str = match fix.device_type {
+                let device_type_str = match fix.address_type {
                     Some(crate::ogn_aprs_aircraft::AddressType::Icao) => "ICAO",
                     Some(crate::ogn_aprs_aircraft::AddressType::Flarm) => "FLARM",
                     Some(crate::ogn_aprs_aircraft::AddressType::OgnTracker) => "OGN",

@@ -235,8 +235,8 @@ diesel::table! {
         location -> Nullable<Geography>,
         altitude_feet -> Nullable<Int4>,
         #[max_length = 10]
-        aircraft_id -> Nullable<Varchar>,
-        device_type -> Nullable<AddressType>,
+        device_address -> Nullable<Varchar>,
+        address_type -> Nullable<AddressType>,
         aircraft_type -> Nullable<AircraftType>,
         #[max_length = 20]
         flight_number -> Nullable<Varchar>,

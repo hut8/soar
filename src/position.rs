@@ -26,9 +26,9 @@ pub struct Fix {
     pub altitude_feet: Option<i32>,
 
     /// Aircraft identification from OGN parameters
-    pub aircraft_id: Option<String>, // Hex aircraft ID (e.g., "39D304")
+    pub device_address: Option<String>, // Hex device address (e.g., "39D304")
     pub device_id: Option<u32>, // Raw device ID from OGN parameters (numeric)
-    pub device_type: Option<AddressType>,
+    pub address_type: Option<AddressType>,
     pub aircraft_type: Option<AircraftType>,
 
     /// Flight information
@@ -83,9 +83,9 @@ impl Fix {
                     .map(|c| c as f32);
 
                 // Initialize OGN-related fields
-                let mut aircraft_id = None;
+                let mut device_address = None;
                 let mut device_id = None;
-                let mut device_type = None;
+                let mut address_type = None;
                 let mut aircraft_type = None;
                 let flight_number = None;
                 let emitter_category = None;
@@ -101,9 +101,9 @@ impl Fix {
                 // Try to parse OGN parameters from comment
                 if let Some(ref id) = pos_packet.comment.id {
                     // Use pre-parsed ID information
-                    aircraft_id = Some(format!("{:06X}", id.address));
+                    device_address = Some(format!("{:06X}", id.address));
                     device_id = Some(id.address);
-                    device_type = Some(match id.address_type {
+                    address_type = Some(match id.address_type {
                         0 => AddressType::Unknown,
                         1 => AddressType::Icao,
                         2 => AddressType::Flarm,
@@ -122,9 +122,9 @@ impl Fix {
                     latitude,
                     longitude,
                     altitude_feet,
-                    aircraft_id,
+                    device_address,
                     device_id,
-                    device_type,
+                    address_type,
                     aircraft_type,
                     flight_number,
                     emitter_category,
@@ -154,14 +154,14 @@ impl Fix {
     pub fn get_aircraft_identifier(&self) -> Option<String> {
         if let Some(ref reg) = self.registration {
             Some(reg.clone())
-        } else if let (Some(aircraft_id), Some(dev_type)) = (&self.aircraft_id, &self.device_type) {
-            let type_prefix = match *dev_type {
+        } else if let (Some(device_address), Some(addr_type)) = (&self.device_address, &self.address_type) {
+            let type_prefix = match *addr_type {
                 AddressType::Icao => "ICAO",
                 AddressType::Flarm => "FLARM",
                 AddressType::OgnTracker => "OGN",
                 AddressType::Unknown => "Unknown",
             };
-            Some(format!("{}-{}", type_prefix, aircraft_id))
+            Some(format!("{}-{}", type_prefix, device_address))
         } else {
             None
         }
