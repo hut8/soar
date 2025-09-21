@@ -231,6 +231,14 @@
 </div>
 
 <style>
+	/* Override container class to make operations page full-screen */
+	:global(main.container) {
+		max-width: none;
+		padding: 0;
+		margin: 0;
+		width: 100%;
+	}
+
 	/* Custom button styling for location button */
 	.btn {
 		padding: 1rem 1.5rem;
