@@ -128,8 +128,8 @@ diesel::table! {
         home_base_airport_id -> Nullable<Int4>,
         is_tow_plane -> Nullable<Bool>,
         location_id -> Nullable<Uuid>,
-        device_id -> Nullable<Int4>,
         airworthiness_class -> Nullable<AirworthinessClass>,
+        device_id -> Nullable<Uuid>,
     }
 }
 
@@ -200,9 +200,9 @@ diesel::table! {
     use diesel::sql_types::*;
     use super::sql_types::DeviceType;
 
-    devices (device_id) {
+    devices (id) {
         device_id -> Int4,
-        device_type -> DeviceType,
+        device_id_type -> DeviceType,
         aircraft_model -> Text,
         registration -> Text,
         competition_number -> Text,
@@ -210,6 +210,7 @@ diesel::table! {
         identified -> Bool,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
+        id -> Uuid,
     }
 }
 
@@ -255,8 +256,8 @@ diesel::table! {
         freq_offset_khz -> Nullable<Float4>,
         club_id -> Nullable<Uuid>,
         flight_id -> Nullable<Uuid>,
-        device_id -> Nullable<Int4>,
         unparsed_data -> Nullable<Varchar>,
+        device_id -> Nullable<Uuid>,
     }
 }
 
@@ -461,6 +462,7 @@ diesel::joinable!(aircraft_registrations -> type_registrations (type_registratio
 diesel::joinable!(clubs -> airports (home_base_airport_id));
 diesel::joinable!(clubs -> locations (location_id));
 diesel::joinable!(fixes -> clubs (club_id));
+diesel::joinable!(fixes -> devices (device_id));
 diesel::joinable!(fixes -> flights (flight_id));
 diesel::joinable!(flights -> aircraft_registrations (tow_aircraft_id));
 diesel::joinable!(flights -> clubs (club_id));

@@ -120,7 +120,7 @@ struct NewFix {
     longitude: f64,
     altitude_feet: Option<i32>,
     aircraft_id: Option<String>,
-    device_id: Option<i32>,
+    device_id: Option<Uuid>,
     device_type: Option<DeviceType>,
     aircraft_type: Option<AircraftType>,
     flight_number: Option<String>,
@@ -152,7 +152,7 @@ impl From<&Fix> for NewFix {
             longitude: fix.longitude,
             altitude_feet: fix.altitude_feet,
             aircraft_id: fix.aircraft_id.clone(),
-            device_id: fix.device_id.map(|d| d as i32),
+            device_id: None, // Will be resolved during insertion based on raw device_id and device_type
             device_type: fix.device_type.map(DeviceType::from),
             aircraft_type: fix.aircraft_type.map(AircraftType::from),
             flight_number: fix.flight_number.clone(),
@@ -196,8 +196,8 @@ struct FixRow {
     altitude_feet: Option<i32>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
     aircraft_id: Option<String>,
-    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Integer>)]
-    device_id: Option<i32>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
+    device_id: Option<Uuid>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
     device_type: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
@@ -292,7 +292,7 @@ impl From<FixRow> for Fix {
             longitude: row.longitude,
             altitude_feet: row.altitude_feet,
             aircraft_id: row.aircraft_id,
-            device_id: row.device_id.map(|d| d as u32),
+            device_id: None, // TODO: Look up raw device_id from devices table if needed
             device_type: parse_device_type(row.device_type),
             aircraft_type: parse_aircraft_type(row.aircraft_type),
             flight_number: row.flight_number,
@@ -323,24 +323,64 @@ impl FixesRepository {
         Self { pool }
     }
 
+    /// Look up device UUID by raw device_id and device_type
+    fn lookup_device_uuid(
+        conn: &mut diesel::PgConnection,
+        raw_device_id: u32,
+        device_type: DeviceType,
+    ) -> Result<Option<Uuid>> {
+        use crate::schema::devices::dsl::*;
+
+        let device_uuid = devices
+            .filter(device_id.eq(raw_device_id as i32))
+            .filter(device_id_type.eq(device_type))
+            .select(id)
+            .first::<Uuid>(conn)
+            .optional()?;
+
+        Ok(device_uuid)
+    }
+
     /// Insert a new fix into the database
     pub async fn insert(&self, fix: &Fix) -> Result<()> {
         use crate::schema::fixes::dsl::*;
 
         let pool = self.pool.clone();
-        let new_fix = NewFix::from(fix);
+        let mut new_fix = NewFix::from(fix);
         let aircraft_identifier = fix.get_aircraft_identifier();
 
-        tokio::task::spawn_blocking(move || {
-            let mut conn = pool.get()?;
+        // Look up device UUID if we have raw device info
+        if let (Some(raw_device_id), Some(device_type_ref)) =
+            (fix.device_id, fix.device_type.as_ref())
+        {
+            let device_type_enum = DeviceType::from(*device_type_ref);
 
-            diesel::insert_into(fixes)
-                .values(&new_fix)
-                .execute(&mut conn)?;
+            tokio::task::spawn_blocking(move || {
+                let mut conn = pool.get()?;
 
-            Ok::<(), anyhow::Error>(())
-        })
-        .await??;
+                // Look up the device UUID
+                new_fix.device_id =
+                    Self::lookup_device_uuid(&mut conn, raw_device_id, device_type_enum)?;
+
+                diesel::insert_into(fixes)
+                    .values(&new_fix)
+                    .execute(&mut conn)?;
+
+                Ok::<(), anyhow::Error>(())
+            })
+            .await??;
+        } else {
+            tokio::task::spawn_blocking(move || {
+                let mut conn = pool.get()?;
+
+                diesel::insert_into(fixes)
+                    .values(&new_fix)
+                    .execute(&mut conn)?;
+
+                Ok::<(), anyhow::Error>(())
+            })
+            .await??;
+        }
 
         debug!("Inserted fix for aircraft: {:?}", aircraft_identifier);
         Ok(())
@@ -355,7 +395,10 @@ impl FixesRepository {
         use crate::schema::fixes::dsl::*;
 
         let pool = self.pool.clone();
-        let fixes_data: Vec<NewFix> = fix_list.iter().map(NewFix::from).collect();
+        let fixes_data: Vec<(Fix, NewFix)> = fix_list
+            .iter()
+            .map(|fix| (fix.clone(), NewFix::from(fix)))
+            .collect();
         let fixes_count = fixes_data.len();
 
         let result = tokio::task::spawn_blocking(move || {
@@ -364,7 +407,19 @@ impl FixesRepository {
 
             // Use a transaction for batch processing
             conn.transaction(|conn| {
-                for fix_data in fixes_data {
+                for (original_fix, mut fix_data) in fixes_data {
+                    // Look up device UUID if we have raw device info
+                    if let (Some(raw_device_id), Some(device_type_ref)) =
+                        (original_fix.device_id, original_fix.device_type.as_ref())
+                    {
+                        let device_type_enum = DeviceType::from(*device_type_ref);
+                        if let Ok(Some(device_uuid)) =
+                            Self::lookup_device_uuid(conn, raw_device_id, device_type_enum)
+                        {
+                            fix_data.device_id = Some(device_uuid);
+                        }
+                    }
+
                     match diesel::insert_into(fixes).values(&fix_data).execute(conn) {
                         Ok(_) => inserted_count += 1,
                         Err(e) => {

@@ -42,10 +42,9 @@ impl DeviceRepository {
         for new_device in new_devices {
             let result = diesel::insert_into(devices::table)
                 .values(&new_device)
-                .on_conflict(devices::device_id)
+                .on_conflict((devices::device_id_type, devices::device_id))
                 .do_update()
                 .set((
-                    devices::device_type.eq(excluded(devices::device_type)),
                     devices::aircraft_model.eq(excluded(devices::aircraft_model)),
                     devices::registration.eq(excluded(devices::registration)),
                     devices::competition_number.eq(excluded(devices::competition_number)),

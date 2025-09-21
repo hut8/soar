@@ -387,7 +387,7 @@ pub struct AircraftRegistrationModel {
     pub kit_mfr_name: Option<String>,
     pub kit_model_name: Option<String>,
     pub club_id: Option<Uuid>,
-    pub device_id: Option<i32>,
+    pub device_id: Option<Uuid>,
 }
 
 // Insertable model for new aircraft registrations (without generated fields)
@@ -447,7 +447,7 @@ pub struct NewAircraftRegistration {
     pub kit_mfr_name: Option<String>,
     pub kit_model_name: Option<String>,
     pub club_id: Option<Uuid>,
-    pub device_id: Option<i32>,
+    pub device_id: Option<Uuid>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -519,7 +519,7 @@ pub struct Aircraft {
     pub registered_location: Option<Point>, // WGS84 point of registration address (legacy, now in locations table)
 
     // Device relationship
-    pub device_id: Option<i32>, // Foreign key to devices table
+    pub device_id: Option<Uuid>, // Foreign key to devices table
 }
 
 impl Aircraft {

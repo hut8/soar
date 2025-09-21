@@ -143,7 +143,7 @@ pub struct Device {
 #[diesel(table_name = crate::schema::devices)]
 pub struct DeviceModel {
     pub device_id: i32,
-    pub device_type: DeviceType,
+    pub device_id_type: DeviceType,
     pub aircraft_model: String,
     pub registration: String,
     pub competition_number: String,
@@ -151,6 +151,7 @@ pub struct DeviceModel {
     pub identified: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub id: uuid::Uuid,
 }
 
 // For inserting new devices (without timestamps which are set by DB)
@@ -158,7 +159,7 @@ pub struct DeviceModel {
 #[diesel(table_name = crate::schema::devices)]
 pub struct NewDevice {
     pub device_id: i32,
-    pub device_type: DeviceType,
+    pub device_id_type: DeviceType,
     pub aircraft_model: String,
     pub registration: String,
     pub competition_number: String,
@@ -170,7 +171,7 @@ impl From<Device> for NewDevice {
     fn from(device: Device) -> Self {
         Self {
             device_id: device.device_id as i32,
-            device_type: device.device_type,
+            device_id_type: device.device_type,
             aircraft_model: device.aircraft_model,
             registration: device.registration,
             competition_number: device.competition_number,
@@ -183,7 +184,7 @@ impl From<Device> for NewDevice {
 impl From<DeviceModel> for Device {
     fn from(model: DeviceModel) -> Self {
         Self {
-            device_type: model.device_type,
+            device_type: model.device_id_type,
             device_id: model.device_id as u32,
             aircraft_model: model.aircraft_model,
             registration: model.registration,
