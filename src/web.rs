@@ -141,7 +141,6 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
 
     let app_state = AppState { pool };
 
-
     // Create CORS layer that allows all origins and methods
     let cors_layer = CorsLayer::permissive();
 

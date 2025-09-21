@@ -77,7 +77,6 @@ impl JwtService {
 #[derive(Debug)]
 pub struct AuthUser(pub User);
 
-#[async_trait::async_trait]
 impl FromRequestParts<AppState> for AuthUser {
     type Rejection = AuthError;
 
@@ -117,7 +116,6 @@ impl FromRequestParts<AppState> for AuthUser {
 #[derive(Debug)]
 pub struct AdminUser(pub User);
 
-#[async_trait::async_trait]
 impl FromRequestParts<AppState> for AdminUser {
     type Rejection = AuthError;
 

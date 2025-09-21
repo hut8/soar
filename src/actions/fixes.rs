@@ -35,7 +35,9 @@ async fn handle_websocket(mut socket: WebSocket, _state: AppState) {
                 error!("Failed to create live fix service: {}", e);
                 let _ = socket
                     .send(Message::Text(
-                        serde_json::json!({"error": "Live fixes service not available"}).to_string().into(),
+                        serde_json::json!({"error": "Live fixes service not available"})
+                            .to_string()
+                            .into(),
                     ))
                     .await;
                 return;
@@ -45,7 +47,9 @@ async fn handle_websocket(mut socket: WebSocket, _state: AppState) {
             warn!("NATS_URL not configured, live fixes not available");
             let _ = socket
                 .send(Message::Text(
-                    serde_json::json!({"error": "Live fixes service not configured"}).to_string().into(),
+                    serde_json::json!({"error": "Live fixes service not configured"})
+                        .to_string()
+                        .into(),
                 ))
                 .await;
             return;
