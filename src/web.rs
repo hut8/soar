@@ -1,8 +1,10 @@
 use anyhow::Result;
 use axum::{
     Router,
-    http::{HeaderMap, StatusCode, Uri},
-    response::IntoResponse,
+    body::Body,
+    http::{HeaderMap, Request, StatusCode, Uri},
+    middleware::{self, Next},
+    response::{IntoResponse, Response},
     routing::{delete, get, post, put},
 };
 use diesel::PgConnection;
@@ -15,7 +17,7 @@ use tower_http::{
     cors::CorsLayer,
     trace::{DefaultOnRequest, DefaultOnResponse, TraceLayer},
 };
-use tracing::{Level, info};
+use tracing::{Level, error, info};
 
 use crate::actions;
 
@@ -81,6 +83,33 @@ async fn handle_static_file(uri: Uri, _state: axum::extract::State<AppState>) ->
     (StatusCode::NOT_FOUND, "Not Found").into_response()
 }
 
+// Middleware to capture HTTP errors to Sentry
+async fn sentry_error_middleware(request: Request<Body>, next: Next) -> Response {
+    let method = request.method().clone();
+    let uri = request.uri().clone();
+
+    let response = next.run(request).await;
+
+    // Capture HTTP 5xx errors to Sentry
+    if response.status().is_server_error() {
+        let status = response.status();
+        error!("HTTP {} error on {} {}", status.as_u16(), method, uri);
+
+        sentry::configure_scope(|scope| {
+            scope.set_tag("http.method", method.as_str());
+            scope.set_tag("http.url", uri.to_string());
+            scope.set_tag("http.status_code", status.as_u16().to_string());
+        });
+
+        sentry::capture_message(
+            &format!("HTTP {} error on {} {}", status.as_u16(), method, uri),
+            sentry::Level::Error,
+        );
+    }
+
+    response
+}
+
 pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Result<()> {
     sentry::configure_scope(|scope| {
         scope.set_tag("operation", "web-server");
@@ -138,6 +167,7 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         .nest("/data", api_router)
         .fallback(handle_static_file)
         .with_state(app_state.clone())
+        .layer(middleware::from_fn(sentry_error_middleware))
         .layer(cors_layer)
         .layer(trace_layer);
 
