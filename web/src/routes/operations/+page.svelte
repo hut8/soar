@@ -144,11 +144,11 @@
 				content: markerContent
 			});
 
-			// Step 2: Recenter the map at user location
+			// Step 2: Animate pan to user location
 			if (map) {
-				map.setCenter(userLocation);
+				map.panTo(userLocation);
 
-				// Step 3: Wait briefly then zoom in smoothly
+				// Step 3: Wait for pan animation to complete, then zoom in smoothly
 				setTimeout(() => {
 					// Smooth zoom animation to show approximately 10-mile radius
 					const targetZoom = 13;
@@ -156,7 +156,7 @@
 
 					// Animate zoom gradually for smoother transition
 					animateZoom(currentZoom, targetZoom);
-				}, 500); // Shorter wait since setCenter is immediate
+				}, 1000); // Wait for pan animation to complete
 			}
 
 			console.log(`User located and animated to: ${userLocation.lat}, ${userLocation.lng}`);
@@ -226,17 +226,6 @@
 					</div>
 				{/if}
 			</button>
-		</div>
-	</div>
-
-	<!-- Info Panel -->
-	<div class="absolute bottom-4 left-4 z-10 max-w-sm rounded-lg bg-white p-4 shadow-lg">
-		<h3 class="mb-2 font-semibold">Map Information</h3>
-		<div class="space-y-1 text-sm text-gray-600">
-			<p>• Use map controls to navigate and zoom</p>
-			<p>• Click "Find My Location" to center on your position</p>
-			<p>• Initial view shows the continental United States</p>
-			<p>• Location zoom shows approximately 10-mile radius</p>
 		</div>
 	</div>
 </div>
