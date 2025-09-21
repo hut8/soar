@@ -74,7 +74,7 @@ impl Fix {
             ogn_parser::AprsData::Position(pos_packet) => {
                 let latitude = pos_packet.latitude.as_();
                 let longitude = pos_packet.longitude.as_();
-                let altitude_feet = pos_packet.comment.altitude.map(|a| a as i32);
+                let altitude_feet = pos_packet.comment.altitude;
                 let ground_speed_knots = pos_packet.comment.speed.map(|s| s as f32);
                 let track_degrees = pos_packet
                     .comment
