@@ -17,7 +17,7 @@ async fn get_registration_for_device_id(
     device_id: u32,
     device_type: &str,
 ) -> Option<String> {
-    match device_repo.get_device_by_id(device_id).await {
+    match device_repo.get_device_by_address(device_id).await {
         Ok(Some(device)) => {
             if !device.registration.is_empty() {
                 Some(device.registration)

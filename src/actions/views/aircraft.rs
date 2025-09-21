@@ -75,8 +75,8 @@ pub struct DeviceView {
 impl DeviceView {
     pub fn from_device(device: crate::devices::Device) -> Self {
         Self {
-            device_type: device.device_type.to_string(),
-            device_id: device.device_id,
+            device_type: device.address_type.to_string(),
+            device_id: device.address,
             aircraft_model: device.aircraft_model,
             competition_number: device.competition_number,
             tracked: device.tracked,

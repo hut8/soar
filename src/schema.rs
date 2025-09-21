@@ -14,8 +14,8 @@ pub mod sql_types {
     pub struct AirworthinessClass;
 
     #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
-    #[diesel(postgres_type(name = "device_type"))]
-    pub struct DeviceType;
+    #[diesel(postgres_type(name = "address_type"))]
+    pub struct AddressType;
 
     #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "geography"))]
@@ -198,11 +198,11 @@ diesel::table! {
 
 diesel::table! {
     use diesel::sql_types::*;
-    use super::sql_types::DeviceType;
+    use super::sql_types::AddressType;
 
     devices (id) {
-        device_id -> Int4,
-        device_id_type -> DeviceType,
+        address -> Int4,
+        address_type -> AddressType,
         aircraft_model -> Text,
         registration -> Text,
         competition_number -> Text,
@@ -217,7 +217,7 @@ diesel::table! {
 diesel::table! {
     use diesel::sql_types::*;
     use super::sql_types::Geography;
-    use super::sql_types::DeviceType;
+    use super::sql_types::AddressType;
     use super::sql_types::AircraftType;
     use super::sql_types::AdsbEmitterCategory;
 
@@ -236,7 +236,7 @@ diesel::table! {
         altitude_feet -> Nullable<Int4>,
         #[max_length = 10]
         aircraft_id -> Nullable<Varchar>,
-        device_type -> Nullable<DeviceType>,
+        device_type -> Nullable<AddressType>,
         aircraft_type -> Nullable<AircraftType>,
         #[max_length = 20]
         flight_number -> Nullable<Varchar>,

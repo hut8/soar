@@ -12,8 +12,8 @@ use crate::ogn_aprs_aircraft::{
 };
 use crate::web::PgPool;
 
-// Import the main DeviceType from devices module
-use crate::devices::DeviceType;
+// Import the main AddressType from devices module
+use crate::devices::AddressType;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, DbEnum)]
 #[db_enum(existing_type_path = "crate::schema::sql_types::AircraftType")]
@@ -37,24 +37,24 @@ pub enum AircraftType {
 }
 
 // Conversions between foreign types and wrapper types
-impl From<ForeignAddressType> for DeviceType {
+impl From<ForeignAddressType> for AddressType {
     fn from(foreign_type: ForeignAddressType) -> Self {
         match foreign_type {
-            ForeignAddressType::Unknown => DeviceType::Unknown,
-            ForeignAddressType::Icao => DeviceType::Icao,
-            ForeignAddressType::Flarm => DeviceType::Flarm,
-            ForeignAddressType::OgnTracker => DeviceType::Ogn,
+            ForeignAddressType::Unknown => AddressType::Unknown,
+            ForeignAddressType::Icao => AddressType::Icao,
+            ForeignAddressType::Flarm => AddressType::Flarm,
+            ForeignAddressType::OgnTracker => AddressType::Ogn,
         }
     }
 }
 
-impl From<DeviceType> for ForeignAddressType {
-    fn from(wrapper_type: DeviceType) -> Self {
+impl From<AddressType> for ForeignAddressType {
+    fn from(wrapper_type: AddressType) -> Self {
         match wrapper_type {
-            DeviceType::Unknown => ForeignAddressType::Unknown,
-            DeviceType::Icao => ForeignAddressType::Icao,
-            DeviceType::Flarm => ForeignAddressType::Flarm,
-            DeviceType::Ogn => ForeignAddressType::OgnTracker,
+            AddressType::Unknown => ForeignAddressType::Unknown,
+            AddressType::Icao => ForeignAddressType::Icao,
+            AddressType::Flarm => ForeignAddressType::Flarm,
+            AddressType::Ogn => ForeignAddressType::OgnTracker,
         }
     }
 }
@@ -121,7 +121,7 @@ struct NewFix {
     altitude_feet: Option<i32>,
     aircraft_id: Option<String>,
     device_id: Option<Uuid>,
-    device_type: Option<DeviceType>,
+    device_type: Option<AddressType>,
     aircraft_type: Option<AircraftType>,
     flight_number: Option<String>,
     emitter_category: Option<AdsbEmitterCategory>,
@@ -153,7 +153,7 @@ impl From<&Fix> for NewFix {
             altitude_feet: fix.altitude_feet,
             aircraft_id: fix.aircraft_id.clone(),
             device_id: None, // Will be resolved during insertion based on raw device_id and device_type
-            device_type: fix.device_type.map(DeviceType::from),
+            device_type: fix.device_type.map(AddressType::from),
             aircraft_type: fix.aircraft_type.map(AircraftType::from),
             flight_number: fix.flight_number.clone(),
             emitter_category: fix.emitter_category,
@@ -327,13 +327,13 @@ impl FixesRepository {
     fn lookup_device_uuid(
         conn: &mut diesel::PgConnection,
         raw_device_id: u32,
-        device_type: DeviceType,
+        device_type: AddressType,
     ) -> Result<Option<Uuid>> {
         use crate::schema::devices::dsl::*;
 
         let device_uuid = devices
-            .filter(device_id.eq(raw_device_id as i32))
-            .filter(device_id_type.eq(device_type))
+            .filter(address.eq(raw_device_id as i32))
+            .filter(address_type.eq(device_type))
             .select(id)
             .first::<Uuid>(conn)
             .optional()?;
@@ -353,7 +353,7 @@ impl FixesRepository {
         if let (Some(raw_device_id), Some(device_type_ref)) =
             (fix.device_id, fix.device_type.as_ref())
         {
-            let device_type_enum = DeviceType::from(*device_type_ref);
+            let device_type_enum = AddressType::from(*device_type_ref);
 
             tokio::task::spawn_blocking(move || {
                 let mut conn = pool.get()?;
@@ -412,7 +412,7 @@ impl FixesRepository {
                     if let (Some(raw_device_id), Some(device_type_ref)) =
                         (original_fix.device_id, original_fix.device_type.as_ref())
                     {
-                        let device_type_enum = DeviceType::from(*device_type_ref);
+                        let device_type_enum = AddressType::from(*device_type_ref);
                         if let Ok(Some(device_uuid)) =
                             Self::lookup_device_uuid(conn, raw_device_id, device_type_enum)
                         {

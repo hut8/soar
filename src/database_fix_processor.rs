@@ -31,7 +31,7 @@ impl FixProcessor for DatabaseFixProcessor {
             let raw_message = raw_message.to_string();
             tokio::spawn(async move {
                 // Check if device exists in database
-                match device_repo.get_device_by_id(device_id).await {
+                match device_repo.get_device_by_address(device_id).await {
                     Ok(Some(_device)) => {
                         // Device exists, proceed with processing
                         // Convert the position::Fix to a database Fix struct

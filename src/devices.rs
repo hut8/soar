@@ -19,8 +19,8 @@ pub enum DeviceSource {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, DbEnum, Serialize, Deserialize)]
-#[db_enum(existing_type_path = "crate::schema::sql_types::DeviceType")]
-pub enum DeviceType {
+#[db_enum(existing_type_path = "crate::schema::sql_types::AddressType")]
+pub enum AddressType {
     Flarm,
     Ogn,
     Icao,
@@ -28,47 +28,47 @@ pub enum DeviceType {
     Unknown,
 }
 
-impl FromStr for DeviceType {
+impl FromStr for AddressType {
     type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "F" => Ok(DeviceType::Flarm),
-            "O" => Ok(DeviceType::Ogn),
-            "I" => Ok(DeviceType::Icao),
-            "" => Ok(DeviceType::Unknown),
-            _ => Ok(DeviceType::Unknown),
+            "F" => Ok(AddressType::Flarm),
+            "O" => Ok(AddressType::Ogn),
+            "I" => Ok(AddressType::Icao),
+            "" => Ok(AddressType::Unknown),
+            _ => Ok(AddressType::Unknown),
         }
     }
 }
 
-impl std::fmt::Display for DeviceType {
+impl std::fmt::Display for AddressType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = match self {
-            DeviceType::Flarm => "F",
-            DeviceType::Ogn => "O",
-            DeviceType::Icao => "I",
-            DeviceType::Unknown => "",
+            AddressType::Flarm => "F",
+            AddressType::Ogn => "O",
+            AddressType::Icao => "I",
+            AddressType::Unknown => "",
         };
         write!(f, "{}", s)
     }
 }
 
-// Custom deserializer for DeviceType to handle single character strings
-fn device_type_from_str<'de, D>(deserializer: D) -> Result<DeviceType, D::Error>
+// Custom deserializer for AddressType to handle single character strings
+fn address_type_from_str<'de, D>(deserializer: D) -> Result<AddressType, D::Error>
 where
     D: Deserializer<'de>,
 {
     let s = String::deserialize(deserializer)?;
-    DeviceType::from_str(&s).map_err(|_| serde::de::Error::custom("Invalid device type"))
+    AddressType::from_str(&s).map_err(|_| serde::de::Error::custom("Invalid address type"))
 }
 
-// Custom serializer for DeviceType to output single character strings
-fn device_type_to_str<S>(device_type: &DeviceType, serializer: S) -> Result<S::Ok, S::Error>
+// Custom serializer for AddressType to output single character strings
+fn address_type_to_str<S>(address_type: &AddressType, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
-    serializer.serialize_str(&device_type.to_string())
+    serializer.serialize_str(&address_type.to_string())
 }
 
 // Custom deserializer for string to boolean conversion
@@ -112,12 +112,19 @@ pub enum RegistrationCountry {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Device {
     #[serde(
-        deserialize_with = "device_type_from_str",
-        serialize_with = "device_type_to_str"
+        alias = "device_type",
+        rename(serialize = "address_type"),
+        deserialize_with = "address_type_from_str",
+        serialize_with = "address_type_to_str"
     )]
-    pub device_type: DeviceType,
-    #[serde(deserialize_with = "hex_to_u32", serialize_with = "u32_to_hex")]
-    pub device_id: u32,
+    pub address_type: AddressType,
+    #[serde(
+        alias = "device_id",
+        rename(serialize = "address"),
+        deserialize_with = "hex_to_u32",
+        serialize_with = "u32_to_hex"
+    )]
+    pub address: u32,
     pub aircraft_model: String,
     pub registration: String,
     #[serde(rename = "cn")]
@@ -142,8 +149,8 @@ pub struct Device {
 )]
 #[diesel(table_name = crate::schema::devices)]
 pub struct DeviceModel {
-    pub device_id: i32,
-    pub device_id_type: DeviceType,
+    pub address: i32,
+    pub address_type: AddressType,
     pub aircraft_model: String,
     pub registration: String,
     pub competition_number: String,
@@ -158,8 +165,8 @@ pub struct DeviceModel {
 #[derive(Debug, Insertable, AsChangeset)]
 #[diesel(table_name = crate::schema::devices)]
 pub struct NewDevice {
-    pub device_id: i32,
-    pub device_id_type: DeviceType,
+    pub address: i32,
+    pub address_type: AddressType,
     pub aircraft_model: String,
     pub registration: String,
     pub competition_number: String,
@@ -170,8 +177,8 @@ pub struct NewDevice {
 impl From<Device> for NewDevice {
     fn from(device: Device) -> Self {
         Self {
-            device_id: device.device_id as i32,
-            device_id_type: device.device_type,
+            address: device.address as i32,
+            address_type: device.address_type,
             aircraft_model: device.aircraft_model,
             registration: device.registration,
             competition_number: device.competition_number,
@@ -184,8 +191,8 @@ impl From<Device> for NewDevice {
 impl From<DeviceModel> for Device {
     fn from(model: DeviceModel) -> Self {
         Self {
-            device_type: model.device_id_type,
-            device_id: model.device_id as u32,
+            address_type: model.address_type,
+            address: model.address as u32,
             aircraft_model: model.aircraft_model,
             registration: model.registration,
             competition_number: model.competition_number,
@@ -365,7 +372,7 @@ impl DeviceFetcher {
         // Add Flarmnet devices first (lower priority)
         for device in flarmnet_devices {
             device_map.insert(
-                device.device_id,
+                device.address,
                 DeviceWithSource {
                     device,
                     source: DeviceSource::Flarmnet,
@@ -376,17 +383,17 @@ impl DeviceFetcher {
         // Add Glidernet devices (higher priority - will overwrite conflicts)
         let mut conflicts = 0;
         for device in glidernet_devices {
-            if let Some(existing) = device_map.get(&device.device_id)
+            if let Some(existing) = device_map.get(&device.address)
                 && existing.source == DeviceSource::Flarmnet
             {
                 conflicts += 1;
                 warn!(
                     "Device conflict for ID {}: using Glidernet data over Flarmnet data (registration: {} vs {})",
-                    device.device_id, device.registration, existing.device.registration
+                    device.address, device.registration, existing.device.registration
                 );
             }
             device_map.insert(
-                device.device_id,
+                device.address,
                 DeviceWithSource {
                     device,
                     source: DeviceSource::Glidernet,
@@ -442,8 +449,8 @@ mod tests {
     #[test]
     fn test_device_serialization_with_booleans() {
         let device = Device {
-            device_type: DeviceType::Flarm,
-            device_id: 0x000000,
+            address_type: AddressType::Flarm,
+            address: 0x000000,
             aircraft_model: "SZD-41 Jantar Std".to_string(),
             registration: "HA-4403".to_string(),
             competition_number: "J".to_string(),
@@ -463,34 +470,34 @@ mod tests {
 
         let response: DeviceResponse = serde_json::from_str(json_data).unwrap();
         assert_eq!(response.devices.len(), 1);
-        assert_eq!(response.devices[0].device_id, 0x000000);
+        assert_eq!(response.devices[0].address, 0x000000);
         assert_eq!(response.devices[0].aircraft_model, "SZD-41 Jantar Std");
-        assert_eq!(response.devices[0].device_type, DeviceType::Flarm);
+        assert_eq!(response.devices[0].address_type, AddressType::Flarm);
         assert!(response.devices[0].tracked);
         assert!(!response.devices[0].identified);
     }
 
     #[test]
-    fn test_device_type_deserialization() {
-        // Test Flarm device type
+    fn test_address_type_deserialization() {
+        // Test Flarm address type
         let flarm_json = r#"{"device_type":"F","device_id":"123456","aircraft_model":"Test","registration":"","cn":"","tracked":"Y","identified":"Y"}"#;
         let flarm_device: Device = serde_json::from_str(flarm_json).unwrap();
-        assert_eq!(flarm_device.device_type, DeviceType::Flarm);
+        assert_eq!(flarm_device.address_type, AddressType::Flarm);
 
-        // Test OGN device type
+        // Test OGN address type
         let ogn_json = r#"{"device_type":"O","device_id":"123456","aircraft_model":"Test","registration":"","cn":"","tracked":"Y","identified":"Y"}"#;
         let ogn_device: Device = serde_json::from_str(ogn_json).unwrap();
-        assert_eq!(ogn_device.device_type, DeviceType::Ogn);
+        assert_eq!(ogn_device.address_type, AddressType::Ogn);
 
-        // Test ICAO device type
+        // Test ICAO address type
         let icao_json = r#"{"device_type":"I","device_id":"123456","aircraft_model":"Test","registration":"","cn":"","tracked":"Y","identified":"Y"}"#;
         let icao_device: Device = serde_json::from_str(icao_json).unwrap();
-        assert_eq!(icao_device.device_type, DeviceType::Icao);
+        assert_eq!(icao_device.address_type, AddressType::Icao);
 
         // Test empty string (Unknown)
         let unknown_json = r#"{"device_type":"","device_id":"123456","aircraft_model":"Test","registration":"","cn":"","tracked":"Y","identified":"Y"}"#;
         let unknown_device: Device = serde_json::from_str(unknown_json).unwrap();
-        assert_eq!(unknown_device.device_type, DeviceType::Unknown);
+        assert_eq!(unknown_device.address_type, AddressType::Unknown);
     }
 
     #[test]
@@ -708,8 +715,8 @@ mod tests {
     // Helper function to create a test device with a specific registration
     fn create_test_device(registration: &str) -> Device {
         Device {
-            device_type: DeviceType::Flarm,
-            device_id: 0x123456,
+            address_type: AddressType::Flarm,
+            address: 0x123456,
             aircraft_model: "Test Aircraft".to_string(),
             registration: registration.to_string(),
             competition_number: "T".to_string(),

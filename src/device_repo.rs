@@ -42,7 +42,7 @@ impl DeviceRepository {
         for new_device in new_devices {
             let result = diesel::insert_into(devices::table)
                 .values(&new_device)
-                .on_conflict((devices::device_id_type, devices::device_id))
+                .on_conflict((devices::address_type, devices::address))
                 .do_update()
                 .set((
                     devices::aircraft_model.eq(excluded(devices::aircraft_model)),
@@ -59,7 +59,7 @@ impl DeviceRepository {
                     upserted_count += 1;
                 }
                 Err(e) => {
-                    warn!("Failed to upsert device {}: {}", new_device.device_id, e);
+                    warn!("Failed to upsert device {}: {}", new_device.address, e);
                     // Continue with other devices rather than failing the entire batch
                 }
             }
@@ -76,11 +76,11 @@ impl DeviceRepository {
         Ok(count)
     }
 
-    /// Get a device by its device_id
-    pub async fn get_device_by_id(&self, device_id: u32) -> Result<Option<Device>> {
+    /// Get a device by its address
+    pub async fn get_device_by_address(&self, address: u32) -> Result<Option<Device>> {
         let mut conn = self.get_connection()?;
         let device_model = devices::table
-            .filter(devices::device_id.eq(device_id as i32))
+            .filter(devices::address.eq(address as i32))
             .first::<DeviceModel>(&mut conn)
             .optional()?;
 
@@ -94,8 +94,8 @@ impl DeviceRepository {
         // This query requires joining with aircraft_registrations table
         // We'll use raw SQL for now since it involves a join with another table
         let sql = r#"
-            SELECT d.device_id, d.device_type, d.aircraft_model, d.registration,
-                   d.competition_number, d.tracked, d.identified, d.created_at, d.updated_at
+            SELECT d.address, d.address_type, d.aircraft_model, d.registration,
+                   d.competition_number, d.tracked, d.identified, d.created_at, d.updated_at, d.id
             FROM devices d
             INNER JOIN aircraft_registrations ar ON d.registration = ar.registration_number
             WHERE ar.club_id = $1
@@ -112,11 +112,11 @@ impl DeviceRepository {
             .collect())
     }
 
-    /// Search devices by device_id
-    pub async fn search_by_device_id(&self, device_id: u32) -> Result<Vec<Device>> {
+    /// Search devices by address
+    pub async fn search_by_address(&self, address: u32) -> Result<Vec<Device>> {
         let mut conn = self.get_connection()?;
         let device_models = devices::table
-            .filter(devices::device_id.eq(device_id as i32))
+            .filter(devices::address.eq(address as i32))
             .load::<DeviceModel>(&mut conn)?;
 
         Ok(device_models
