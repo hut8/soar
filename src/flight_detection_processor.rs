@@ -405,7 +405,7 @@ impl FixProcessor for FlightDetectionProcessor {
                 use std::hash::{Hash, Hasher};
                 let mut hasher = DefaultHasher::new();
                 aircraft_id.hash(&mut hasher);
-                if (hasher.finish() % 256) == 0 {
+                if hasher.finish().is_multiple_of(256) {
                     processor.cleanup_old_trackers();
                 }
             });
