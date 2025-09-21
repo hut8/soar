@@ -33,6 +33,7 @@ pub mod message_processors;
 pub mod nats_publisher;
 pub mod ogn_aprs_aircraft;
 pub mod position;
+pub mod pull;
 pub mod receiver_repo;
 pub mod receivers;
 pub mod runways;
