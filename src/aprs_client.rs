@@ -71,6 +71,92 @@ pub trait StatusProcessor: Send + Sync {
     fn process_status(&self, packet: &AprsPacket, raw_message: &str);
 }
 
+/// Unified processor struct that contains all processor types
+/// This simplifies APRS client construction by grouping all processors together
+#[derive(Clone)]
+pub struct AprsProcessors {
+    /// Processor for general APRS messages and raw message handling
+    pub message_processor: Arc<dyn MessageProcessor>,
+    /// Optional processor for position fixes (backward compatibility)
+    pub fix_processor: Option<Arc<dyn FixProcessor>>,
+    /// Optional processor for position messages
+    pub position_processor: Option<Arc<dyn PositionProcessor>>,
+    /// Optional processor for status messages
+    pub status_processor: Option<Arc<dyn StatusProcessor>>,
+}
+
+impl AprsProcessors {
+    /// Create a new AprsProcessors with just a message processor
+    pub fn new(message_processor: Arc<dyn MessageProcessor>) -> Self {
+        Self {
+            message_processor,
+            fix_processor: None,
+            position_processor: None,
+            status_processor: None,
+        }
+    }
+
+    /// Create a new AprsProcessors with message and fix processors
+    pub fn with_fix_processor(
+        message_processor: Arc<dyn MessageProcessor>,
+        fix_processor: Arc<dyn FixProcessor>,
+    ) -> Self {
+        Self {
+            message_processor,
+            fix_processor: Some(fix_processor),
+            position_processor: None,
+            status_processor: None,
+        }
+    }
+
+    /// Create a new AprsProcessors with message, position, and status processors
+    pub fn with_processors(
+        message_processor: Arc<dyn MessageProcessor>,
+        position_processor: Option<Arc<dyn PositionProcessor>>,
+        status_processor: Option<Arc<dyn StatusProcessor>>,
+    ) -> Self {
+        Self {
+            message_processor,
+            fix_processor: None,
+            position_processor,
+            status_processor,
+        }
+    }
+
+    /// Create a new AprsProcessors with all processor types
+    pub fn with_all_processors(
+        message_processor: Arc<dyn MessageProcessor>,
+        fix_processor: Option<Arc<dyn FixProcessor>>,
+        position_processor: Option<Arc<dyn PositionProcessor>>,
+        status_processor: Option<Arc<dyn StatusProcessor>>,
+    ) -> Self {
+        Self {
+            message_processor,
+            fix_processor,
+            position_processor,
+            status_processor,
+        }
+    }
+
+    /// Add a fix processor to existing processors
+    pub fn add_fix_processor(mut self, fix_processor: Arc<dyn FixProcessor>) -> Self {
+        self.fix_processor = Some(fix_processor);
+        self
+    }
+
+    /// Add a position processor to existing processors
+    pub fn add_position_processor(mut self, position_processor: Arc<dyn PositionProcessor>) -> Self {
+        self.position_processor = Some(position_processor);
+        self
+    }
+
+    /// Add a status processor to existing processors
+    pub fn add_status_processor(mut self, status_processor: Arc<dyn StatusProcessor>) -> Self {
+        self.status_processor = Some(status_processor);
+        self
+    }
+}
+
 /// Type alias for boxed message processor trait objects
 pub type BoxedMessageProcessor = Box<dyn MessageProcessor>;
 
@@ -116,27 +202,31 @@ impl Default for AprsClientConfig {
 /// APRS client that connects to an APRS-IS server via TCP
 pub struct AprsClient {
     config: AprsClientConfig,
-    message_processor: Arc<dyn MessageProcessor>,
-    fix_processor: Option<Arc<dyn FixProcessor>>,
-    position_processor: Option<Arc<dyn PositionProcessor>>,
-    status_processor: Option<Arc<dyn StatusProcessor>>,
+    processors: AprsProcessors,
     shutdown_tx: Option<mpsc::Sender<()>>,
 }
 
 impl AprsClient {
-    /// Create a new APRS client with the given configuration and message processor
-    pub fn new(config: AprsClientConfig, message_processor: Arc<dyn MessageProcessor>) -> Self {
+    /// Create a new APRS client with unified processors
+    /// This is the recommended constructor that takes an AprsProcessors struct
+    pub fn new(config: AprsClientConfig, processors: AprsProcessors) -> Self {
         Self {
             config,
-            message_processor,
-            fix_processor: None,
-            position_processor: None,
-            status_processor: None,
+            processors,
             shutdown_tx: None,
         }
     }
 
-    /// Create a new APRS client with both message and fix processors
+    /// Create a new APRS client with just a message processor (backward compatibility)
+    pub fn new_with_message_processor(config: AprsClientConfig, message_processor: Arc<dyn MessageProcessor>) -> Self {
+        Self {
+            config,
+            processors: AprsProcessors::new(message_processor),
+            shutdown_tx: None,
+        }
+    }
+
+    /// Create a new APRS client with both message and fix processors (backward compatibility)
     pub fn new_with_fix_processor(
         config: AprsClientConfig,
         message_processor: Arc<dyn MessageProcessor>,
@@ -144,15 +234,12 @@ impl AprsClient {
     ) -> Self {
         Self {
             config,
-            message_processor,
-            fix_processor: Some(fix_processor),
-            position_processor: None,
-            status_processor: None,
+            processors: AprsProcessors::with_fix_processor(message_processor, fix_processor),
             shutdown_tx: None,
         }
     }
 
-    /// Create a new APRS client with position and status processors
+    /// Create a new APRS client with position and status processors (backward compatibility)
     pub fn new_with_processors(
         config: AprsClientConfig,
         message_processor: Arc<dyn MessageProcessor>,
@@ -161,15 +248,12 @@ impl AprsClient {
     ) -> Self {
         Self {
             config,
-            message_processor,
-            fix_processor: None,
-            position_processor,
-            status_processor,
+            processors: AprsProcessors::with_processors(message_processor, position_processor, status_processor),
             shutdown_tx: None,
         }
     }
 
-    /// Create a new APRS client with all processor types
+    /// Create a new APRS client with all processor types (backward compatibility)
     pub fn new_with_all_processors(
         config: AprsClientConfig,
         message_processor: Arc<dyn MessageProcessor>,
@@ -179,10 +263,7 @@ impl AprsClient {
     ) -> Self {
         Self {
             config,
-            message_processor,
-            fix_processor,
-            position_processor,
-            status_processor,
+            processors: AprsProcessors::with_all_processors(message_processor, fix_processor, position_processor, status_processor),
             shutdown_tx: None,
         }
     }
@@ -194,10 +275,7 @@ impl AprsClient {
         self.shutdown_tx = Some(shutdown_tx);
 
         let config = self.config.clone();
-        let message_processor = Arc::clone(&self.message_processor);
-        let fix_processor = self.fix_processor.as_ref().map(Arc::clone);
-        let position_processor = self.position_processor.as_ref().map(Arc::clone);
-        let status_processor = self.status_processor.as_ref().map(Arc::clone);
+        let processors = self.processors.clone();
 
         tokio::spawn(async move {
             let mut retry_count = 0;
@@ -209,15 +287,7 @@ impl AprsClient {
                     break;
                 }
 
-                match Self::connect_and_run(
-                    &config,
-                    Arc::clone(&message_processor),
-                    fix_processor.as_ref().map(Arc::clone),
-                    position_processor.as_ref().map(Arc::clone),
-                    status_processor.as_ref().map(Arc::clone),
-                )
-                .await
-                {
+                match Self::connect_and_run(&config, processors.clone()).await {
                     ConnectionResult::Success => {
                         info!("APRS client connection ended normally");
                         retry_count = 0; // Reset retry count on successful connection
@@ -271,10 +341,7 @@ impl AprsClient {
     /// Connect to the APRS server and run the message processing loop
     async fn connect_and_run(
         config: &AprsClientConfig,
-        message_processor: Arc<dyn MessageProcessor>,
-        fix_processor: Option<Arc<dyn FixProcessor>>,
-        position_processor: Option<Arc<dyn PositionProcessor>>,
-        status_processor: Option<Arc<dyn StatusProcessor>>,
+        processors: AprsProcessors,
     ) -> ConnectionResult {
         info!(
             "Connecting to APRS server {}:{}",
@@ -327,15 +394,7 @@ impl AprsClient {
                         }
                         // Skip server messages (lines starting with #)
                         if !trimmed_line.starts_with('#') {
-                            Self::process_message(
-                                trimmed_line,
-                                Arc::clone(&message_processor),
-                                fix_processor.as_ref().map(Arc::clone),
-                                position_processor.as_ref().map(Arc::clone),
-                                status_processor.as_ref().map(Arc::clone),
-                                config,
-                            )
-                            .await;
+                            Self::process_message(trimmed_line, &processors, config).await;
                         } else {
                             info!("Server message: {}", trimmed_line);
                         }
@@ -377,20 +436,17 @@ impl AprsClient {
     /// Process a received APRS message
     async fn process_message(
         message: &str,
-        message_processor: Arc<dyn MessageProcessor>,
-        fix_processor: Option<Arc<dyn FixProcessor>>,
-        position_processor: Option<Arc<dyn PositionProcessor>>,
-        status_processor: Option<Arc<dyn StatusProcessor>>,
+        processors: &AprsProcessors,
         config: &AprsClientConfig,
     ) {
         // Always call process_raw_message first (for logging/archiving)
-        message_processor.process_raw_message(message);
+        processors.message_processor.process_raw_message(message);
 
         // Try to parse the message using ogn-parser
         match ogn_parser::parse(message) {
             Ok(parsed) => {
                 // Call the general message processor with the parsed message
-                message_processor.process_message(parsed.clone());
+                processors.message_processor.process_message(parsed.clone());
 
                 // Process specific message types with their dedicated processors
                 match &parsed.data {
@@ -413,7 +469,7 @@ impl AprsClient {
                         }
 
                         // Process with position processor if available
-                        if let Some(pos_proc) = &position_processor {
+                        if let Some(pos_proc) = &processors.position_processor {
                             pos_proc.process_position(&parsed, message);
                         } else {
                             trace!("No position processor configured, skipping position message");
@@ -421,7 +477,7 @@ impl AprsClient {
 
                         // Also process with fix processor if available (backward compatibility)
                         // Only process aircraft position sources for fixes
-                        if let Some(fix_proc) = &fix_processor {
+                        if let Some(fix_proc) = &processors.fix_processor {
                             if parsed.position_source_type() == PositionSourceType::Aircraft {
                                 match Fix::from_aprs_packet(parsed) {
                                     Ok(Some(fix)) => {
@@ -461,7 +517,7 @@ impl AprsClient {
                         }
 
                         // Process with status processor if available
-                        if let Some(status_proc) = &status_processor {
+                        if let Some(status_proc) = &processors.status_processor {
                             status_proc.process_status(&parsed, message);
                         } else {
                             trace!("No status processor configured, skipping status message");
@@ -663,17 +719,10 @@ mod tests {
         });
 
         let config = AprsClientConfig::default();
+        let processors = AprsProcessors::new(processor);
 
         // Simulate processing a message
-        AprsClient::process_message(
-            "TEST>APRS:>Test message",
-            Arc::clone(&processor),
-            None,
-            None,
-            None,
-            &config,
-        )
-        .await;
+        AprsClient::process_message("TEST>APRS:>Test message", &processors, &config).await;
 
         assert_eq!(counter.load(Ordering::SeqCst), 1);
     }

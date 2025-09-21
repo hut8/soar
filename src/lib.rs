@@ -46,7 +46,7 @@ pub mod users_repo;
 pub mod web;
 
 pub use aprs_client::{
-    AprsClient, AprsClientConfig, AprsClientConfigBuilder, FixProcessor, MessageProcessor,
+    AprsClient, AprsClientConfig, AprsClientConfigBuilder, AprsProcessors, FixProcessor, MessageProcessor, PositionProcessor, StatusProcessor,
 };
 pub use nats_publisher::NatsFixPublisher;
 pub use position::Fix;
