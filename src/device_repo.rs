@@ -87,6 +87,17 @@ impl DeviceRepository {
         Ok(device_model.map(|model| model.into()))
     }
 
+    /// Get a device by its UUID
+    pub async fn get_device_by_uuid(&self, device_uuid: Uuid) -> Result<Option<Device>> {
+        let mut conn = self.get_connection()?;
+        let device_model = devices::table
+            .filter(devices::id.eq(device_uuid))
+            .first::<DeviceModel>(&mut conn)
+            .optional()?;
+
+        Ok(device_model.map(|model| model.into()))
+    }
+
     /// Get all devices (aircraft) assigned to a specific club
     pub async fn get_devices_by_club_id(&self, club_id: Uuid) -> Result<Vec<Device>> {
         let mut conn = self.get_connection()?;

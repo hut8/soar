@@ -683,4 +683,63 @@ impl FixesRepository {
 
         Ok(result as u64)
     }
+
+    /// Get fixes for a specific device with optional after timestamp and limit
+    pub async fn get_fixes_by_device(
+        &self,
+        device_uuid: Uuid,
+        after: Option<DateTime<Utc>>,
+        limit: i64,
+    ) -> Result<Vec<Fix>> {
+        let pool = self.pool.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            let sql = if after.is_some() {
+                r#"
+                    SELECT id, source, destination, via, raw_packet, timestamp,
+                           latitude, longitude, altitude_feet, aircraft_id, device_type,
+                           aircraft_type, flight_number, emitter_category, registration,
+                           model, squawk, ground_speed_knots, track_degrees, climb_fpm,
+                           turn_rate_rot, snr_db, bit_errors_corrected, freq_offset_khz,
+                           club_id, flight_id, unparsed_data, device_id
+                    FROM fixes
+                    WHERE device_id = $1 AND timestamp > $2
+                    ORDER BY timestamp DESC
+                    LIMIT $3
+                "#
+            } else {
+                r#"
+                    SELECT id, source, destination, via, raw_packet, timestamp,
+                           latitude, longitude, altitude_feet, aircraft_id, device_type,
+                           aircraft_type, flight_number, emitter_category, registration,
+                           model, squawk, ground_speed_knots, track_degrees, climb_fpm,
+                           turn_rate_rot, snr_db, bit_errors_corrected, freq_offset_khz,
+                           club_id, flight_id, unparsed_data, device_id
+                    FROM fixes
+                    WHERE device_id = $1
+                    ORDER BY timestamp DESC
+                    LIMIT $2
+                "#
+            };
+
+            let results: Vec<FixRow> = if let Some(after_time) = after {
+                diesel::sql_query(sql)
+                    .bind::<diesel::sql_types::Uuid, _>(device_uuid)
+                    .bind::<diesel::sql_types::Timestamptz, _>(after_time)
+                    .bind::<diesel::sql_types::BigInt, _>(limit)
+                    .load::<FixRow>(&mut conn)?
+            } else {
+                diesel::sql_query(sql)
+                    .bind::<diesel::sql_types::Uuid, _>(device_uuid)
+                    .bind::<diesel::sql_types::BigInt, _>(limit)
+                    .load::<FixRow>(&mut conn)?
+            };
+
+            Ok::<Vec<FixRow>, anyhow::Error>(results)
+        })
+        .await??;
+
+        Ok(result.into_iter().map(Fix::from).collect())
+    }
 }
