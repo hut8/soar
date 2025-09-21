@@ -11,14 +11,6 @@
 	let isLocating = false;
 	let userMarker: google.maps.marker.AdvancedMarkerElement | null = null;
 
-	// Continental US bounds for initial display
-	const CONUS_BOUNDS = {
-		north: 49.3457868, // Northern border
-		south: 24.7433195, // Southern border
-		west: -124.7844079, // Western border
-		east: -66.9513812 // Eastern border
-	};
-
 	// Center of continental US
 	const CONUS_CENTER = {
 		lat: 39.8283,
