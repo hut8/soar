@@ -28,22 +28,22 @@ fn get_compilation_timestamp() -> String {
     use std::sync::OnceLock;
     static TIMESTAMP: OnceLock<String> = OnceLock::new();
 
-    TIMESTAMP.get_or_init(|| {
-        use chrono::{TimeZone, Utc};
-        use std::time::{SystemTime, UNIX_EPOCH};
+    TIMESTAMP
+        .get_or_init(|| {
+            use chrono::{TimeZone, Utc};
+            use std::time::{SystemTime, UNIX_EPOCH};
 
-        // Get current time (this will be consistent for the binary)
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
+            // Get current time (this will be consistent for the binary)
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
 
-        // Format as HTTP date
-        let datetime = Utc.timestamp_opt(now as i64, 0)
-            .single()
-            .unwrap();
-        datetime.format("%a, %d %b %Y %H:%M:%S GMT").to_string()
-    }).clone()
+            // Format as HTTP date
+            let datetime = Utc.timestamp_opt(now as i64, 0).single().unwrap();
+            datetime.format("%a, %d %b %Y %H:%M:%S GMT").to_string()
+        })
+        .clone()
 }
 
 pub type PgPool = Pool<ConnectionManager<PgConnection>>;
@@ -81,7 +81,10 @@ async fn handle_static_file(uri: Uri, request: Request<Body>) -> impl IntoRespon
         headers.insert("content-type", "text/html".parse().unwrap());
         headers.insert("last-modified", compilation_timestamp.parse().unwrap());
         // HTML files should be revalidated
-        headers.insert("cache-control", "public, max-age=0, must-revalidate".parse().unwrap());
+        headers.insert(
+            "cache-control",
+            "public, max-age=0, must-revalidate".parse().unwrap(),
+        );
         return (StatusCode::OK, headers, index_file.contents()).into_response();
     }
 
@@ -103,7 +106,10 @@ async fn handle_static_file(uri: Uri, request: Request<Body>) -> impl IntoRespon
             );
         } else {
             // Other static files should be revalidated
-            headers.insert("cache-control", "public, max-age=3600, must-revalidate".parse().unwrap());
+            headers.insert(
+                "cache-control",
+                "public, max-age=3600, must-revalidate".parse().unwrap(),
+            );
         }
 
         return (StatusCode::OK, headers, file.contents()).into_response();
@@ -117,7 +123,10 @@ async fn handle_static_file(uri: Uri, request: Request<Body>) -> impl IntoRespon
         let mut headers = HeaderMap::new();
         headers.insert("content-type", "text/html".parse().unwrap());
         headers.insert("last-modified", compilation_timestamp.parse().unwrap());
-        headers.insert("cache-control", "public, max-age=0, must-revalidate".parse().unwrap());
+        headers.insert(
+            "cache-control",
+            "public, max-age=0, must-revalidate".parse().unwrap(),
+        );
         return (StatusCode::OK, headers, index_file.contents()).into_response();
     }
 

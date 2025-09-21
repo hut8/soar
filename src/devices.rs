@@ -1,13 +1,22 @@
 use anyhow::Result;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::collections::HashMap;
 use std::str::FromStr;
+use tracing::{info, warn};
 
 // Diesel imports
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use diesel_derive_enum::DbEnum;
 
-const DDB_URL: &str = "http://ddb.glidernet.org/download/?j=1";
+const DDB_URL_GLIDERNET: &str = "http://ddb.glidernet.org/download/?j=1";
+const DDB_URL_FLARMNET: &str = "https://www.flarmnet.org/files/ddb.json";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DeviceSource {
+    Glidernet,
+    Flarmnet,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, DbEnum, Serialize, Deserialize)]
 #[db_enum(existing_type_path = "crate::schema::sql_types::DeviceType")]
@@ -190,6 +199,12 @@ struct DeviceResponse {
     devices: Vec<Device>,
 }
 
+#[derive(Debug, Clone)]
+pub struct DeviceWithSource {
+    pub device: Device,
+    pub source: DeviceSource,
+}
+
 /// Fetcher for devices from the DDB (Device Database)
 /// This struct is responsible only for fetching and parsing device data
 #[derive(Debug, Default)]
@@ -289,11 +304,103 @@ impl DeviceFetcher {
         Self
     }
 
-    /// Fetch all devices from the DDB API
-    pub async fn fetch_all(&self) -> Result<Vec<Device>> {
-        let response = reqwest::get(DDB_URL).await?;
+    /// Fetch devices from Glidernet DDB
+    async fn fetch_glidernet(&self) -> Result<Vec<Device>> {
+        info!("Fetching devices from Glidernet DDB...");
+        let response = reqwest::get(DDB_URL_GLIDERNET).await?;
         let device_response: DeviceResponse = response.json().await?;
+        info!(
+            "Successfully fetched {} devices from Glidernet",
+            device_response.devices.len()
+        );
         Ok(device_response.devices)
+    }
+
+    /// Fetch devices from Flarmnet DDB
+    async fn fetch_flarmnet(&self) -> Result<Vec<Device>> {
+        info!("Fetching devices from Flarmnet DDB...");
+        let response = reqwest::get(DDB_URL_FLARMNET).await?;
+        let device_response: DeviceResponse = response.json().await?;
+        info!(
+            "Successfully fetched {} devices from Flarmnet",
+            device_response.devices.len()
+        );
+        Ok(device_response.devices)
+    }
+
+    /// Fetch all devices from both DDB sources and merge them
+    /// In case of conflicts (same device_id), Glidernet takes precedence
+    pub async fn fetch_all(&self) -> Result<Vec<Device>> {
+        // Fetch from both sources in parallel
+        let (glidernet_result, flarmnet_result) =
+            tokio::join!(self.fetch_glidernet(), self.fetch_flarmnet());
+
+        let glidernet_devices = match glidernet_result {
+            Ok(devices) => devices,
+            Err(e) => {
+                warn!("Failed to fetch from Glidernet: {}", e);
+                Vec::new()
+            }
+        };
+
+        let flarmnet_devices = match flarmnet_result {
+            Ok(devices) => devices,
+            Err(e) => {
+                warn!("Failed to fetch from Flarmnet: {}", e);
+                Vec::new()
+            }
+        };
+
+        // If we couldn't fetch from either source, return an error
+        if glidernet_devices.is_empty() && flarmnet_devices.is_empty() {
+            return Err(anyhow::anyhow!(
+                "Failed to fetch devices from both Glidernet and Flarmnet"
+            ));
+        }
+
+        // Create a map of device_id -> Device for conflict resolution
+        let mut device_map: HashMap<u32, DeviceWithSource> = HashMap::new();
+
+        // Add Flarmnet devices first (lower priority)
+        for device in flarmnet_devices {
+            device_map.insert(
+                device.device_id,
+                DeviceWithSource {
+                    device,
+                    source: DeviceSource::Flarmnet,
+                },
+            );
+        }
+
+        // Add Glidernet devices (higher priority - will overwrite conflicts)
+        let mut conflicts = 0;
+        for device in glidernet_devices {
+            if let Some(existing) = device_map.get(&device.device_id)
+                && existing.source == DeviceSource::Flarmnet
+            {
+                conflicts += 1;
+                warn!(
+                    "Device conflict for ID {}: using Glidernet data over Flarmnet data (registration: {} vs {})",
+                    device.device_id, device.registration, existing.device.registration
+                );
+            }
+            device_map.insert(
+                device.device_id,
+                DeviceWithSource {
+                    device,
+                    source: DeviceSource::Glidernet,
+                },
+            );
+        }
+
+        let total_devices = device_map.len();
+        info!(
+            "Merged device databases: {} total devices ({} conflicts resolved in favor of Glidernet)",
+            total_devices, conflicts
+        );
+
+        // Extract just the devices for return
+        Ok(device_map.into_values().map(|dws| dws.device).collect())
     }
 }
 
@@ -306,6 +413,29 @@ mod tests {
         let fetcher = DeviceFetcher::new();
         // Just test that it can be created - actual fetch requires network
         assert_eq!(std::mem::size_of_val(&fetcher), 0); // Zero-sized struct
+    }
+
+    #[test]
+    fn test_device_source_enum() {
+        // Test that DeviceSource enum works correctly
+        let glidernet = DeviceSource::Glidernet;
+        let flarmnet = DeviceSource::Flarmnet;
+
+        assert_eq!(glidernet, DeviceSource::Glidernet);
+        assert_eq!(flarmnet, DeviceSource::Flarmnet);
+        assert_ne!(glidernet, flarmnet);
+    }
+
+    #[test]
+    fn test_device_with_source() {
+        let device = create_test_device("N123AB");
+        let device_with_source = DeviceWithSource {
+            device: device.clone(),
+            source: DeviceSource::Glidernet,
+        };
+
+        assert_eq!(device_with_source.device, device);
+        assert_eq!(device_with_source.source, DeviceSource::Glidernet);
     }
 
     #[test]
