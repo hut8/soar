@@ -17,7 +17,7 @@
 	},
 	"devDependencies": {
 		"@eslint/compat": "^1.2.5",
-		"@eslint/js": "^9.18.0",
+		"@eslint/js": "^9.36.0",
 		"@playwright/test": "^1.49.1",
 		"@skeletonlabs/skeleton-svelte": "^1.5.1",
 		"@sveltejs/adapter-static": "^3.0.8",
