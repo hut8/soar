@@ -22,6 +22,30 @@ use crate::actions;
 // Embed web assets into the binary
 static ASSETS: Dir<'_> = include_dir!("web/build");
 
+// Helper function to format compilation timestamp for HTTP headers
+fn get_compilation_timestamp() -> String {
+    // For now, use a simple approach - generate timestamp at first call
+    use std::sync::OnceLock;
+    static TIMESTAMP: OnceLock<String> = OnceLock::new();
+
+    TIMESTAMP.get_or_init(|| {
+        use chrono::{TimeZone, Utc};
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        // Get current time (this will be consistent for the binary)
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        // Format as HTTP date
+        let datetime = Utc.timestamp_opt(now as i64, 0)
+            .single()
+            .unwrap();
+        datetime.format("%a, %d %b %Y %H:%M:%S GMT").to_string()
+    }).clone()
+}
+
 pub type PgPool = Pool<ConnectionManager<PgConnection>>;
 
 // App state for sharing database pool
@@ -30,8 +54,24 @@ pub struct AppState {
     pub pool: PgPool, // Diesel pool for all operations
 }
 
-async fn handle_static_file(uri: Uri, _state: axum::extract::State<AppState>) -> impl IntoResponse {
+async fn handle_static_file(uri: Uri, request: Request<Body>) -> impl IntoResponse {
     let path = uri.path().trim_start_matches('/');
+    let compilation_timestamp = get_compilation_timestamp();
+
+    // Check if client sent If-Modified-Since header
+    let if_modified_since = request
+        .headers()
+        .get("if-modified-since")
+        .and_then(|h| h.to_str().ok());
+
+    // If client has the same timestamp, return 304 Not Modified
+    if let Some(client_timestamp) = if_modified_since {
+        if client_timestamp == compilation_timestamp {
+            let mut headers = HeaderMap::new();
+            headers.insert("last-modified", compilation_timestamp.parse().unwrap());
+            return (StatusCode::NOT_MODIFIED, headers, "").into_response();
+        }
+    }
 
     // Handle root path
     if (path.is_empty() || path == "index.html")
@@ -39,10 +79,9 @@ async fn handle_static_file(uri: Uri, _state: axum::extract::State<AppState>) ->
     {
         let mut headers = HeaderMap::new();
         headers.insert("content-type", "text/html".parse().unwrap());
-        headers.insert(
-            "cache-control",
-            "public, max-age=31536000, immutable".parse().unwrap(),
-        );
+        headers.insert("last-modified", compilation_timestamp.parse().unwrap());
+        // HTML files should be revalidated
+        headers.insert("cache-control", "public, max-age=0, must-revalidate".parse().unwrap());
         return (StatusCode::OK, headers, index_file.contents()).into_response();
     }
 
@@ -53,15 +92,18 @@ async fn handle_static_file(uri: Uri, _state: axum::extract::State<AppState>) ->
         // Set content type based on file extension
         let content_type = from_path(path).first_or_octet_stream();
         headers.insert("content-type", content_type.as_ref().parse().unwrap());
+        headers.insert("last-modified", compilation_timestamp.parse().unwrap());
 
         // Set cache control headers for static assets
         if path.starts_with("_app/") || path.starts_with("assets/") {
+            // Hashed assets can be cached forever, but still include Last-Modified for completeness
             headers.insert(
                 "cache-control",
                 "public, max-age=31536000, immutable".parse().unwrap(),
             );
         } else {
-            headers.insert("cache-control", "public, max-age=3600".parse().unwrap());
+            // Other static files should be revalidated
+            headers.insert("cache-control", "public, max-age=3600, must-revalidate".parse().unwrap());
         }
 
         return (StatusCode::OK, headers, file.contents()).into_response();
@@ -74,7 +116,8 @@ async fn handle_static_file(uri: Uri, _state: axum::extract::State<AppState>) ->
     {
         let mut headers = HeaderMap::new();
         headers.insert("content-type", "text/html".parse().unwrap());
-        headers.insert("cache-control", "public, max-age=3600".parse().unwrap());
+        headers.insert("last-modified", compilation_timestamp.parse().unwrap());
+        headers.insert("cache-control", "public, max-age=0, must-revalidate".parse().unwrap());
         return (StatusCode::OK, headers, index_file.contents()).into_response();
     }
 
