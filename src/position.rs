@@ -110,8 +110,8 @@ impl Fix {
                         3 => AddressType::OgnTracker,
                         _ => AddressType::Unknown,
                     });
-                    // For now, we'll extract aircraft type from the OGN parameters if available
-                    aircraft_type = None;
+                    // Extract aircraft type from the OGN parameters
+                    aircraft_type = Some(AircraftType::from(id.aircraft_type));
                 }
 
                 Ok(Some(Fix {

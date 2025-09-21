@@ -744,6 +744,12 @@ pub struct PositionPacketProcessor {
     aircraft_processor: Option<AircraftPositionProcessor>,
 }
 
+impl Default for PositionPacketProcessor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PositionPacketProcessor {
     /// Create a new PositionPacketProcessor
     pub fn new() -> Self {
@@ -784,6 +790,12 @@ pub struct AircraftPositionProcessor {
     fix_processor: Option<Arc<dyn FixProcessor>>,
     /// Flight detection processor for flight tracking
     flight_detection_enabled: bool,
+}
+
+impl Default for AircraftPositionProcessor {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl AircraftPositionProcessor {
