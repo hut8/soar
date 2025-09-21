@@ -439,33 +439,108 @@ async fn main() -> Result<()> {
     // Load environment variables from .env file early
     dotenvy::dotenv().ok();
 
+    // Check if we're in production mode
+    let is_production = env::var("SOAR_ENV")
+        .map(|env| env == "production")
+        .unwrap_or(false);
+
     // Initialize Sentry for error tracking (errors only, no performance monitoring)
     let _guard = if let Ok(sentry_dsn) = env::var("SENTRY_DSN") {
         info!("Initializing Sentry with DSN");
         Some(sentry::init(sentry::ClientOptions {
             dsn: Some(sentry_dsn.parse().expect("Invalid SENTRY_DSN format")),
-            traces_sample_rate: 0.2, // Disable performance monitoring
+            traces_sample_rate: 0.2,
             attach_stacktrace: true,
             release: Some(env!("CARGO_PKG_VERSION").into()),
             environment: env::var("SOAR_ENV").ok().map(Into::into),
             session_mode: sentry::SessionMode::Request,
-            auto_session_tracking: false, // Disable session tracking
+            auto_session_tracking: false,
+            before_send: Some(std::sync::Arc::new(
+                move |event: sentry::protocol::Event<'static>| {
+                    // Always capture error-level events
+                    if event.level >= sentry::Level::Error {
+                        Some(event)
+                    } else {
+                        // For non-error events, only capture in production
+                        if is_production { Some(event) } else { None }
+                    }
+                },
+            )),
             ..Default::default()
         }))
     } else {
+        if is_production {
+            eprintln!("ERROR: SENTRY_DSN environment variable is required in production mode");
+            std::process::exit(1);
+        }
         info!("SENTRY_DSN not configured, Sentry disabled");
         None
     };
 
+    // Test Sentry integration if enabled
+    if _guard.is_some() {
+        info!("Sentry initialized successfully");
+
+        // Set up panic hook to capture panics in Sentry
+        std::panic::set_hook(Box::new(|panic_info| {
+            let panic_msg = if let Some(s) = panic_info.payload().downcast_ref::<&str>() {
+                s.to_string()
+            } else if let Some(s) = panic_info.payload().downcast_ref::<String>() {
+                s.clone()
+            } else {
+                "Unknown panic".to_string()
+            };
+
+            let location = if let Some(location) = panic_info.location() {
+                format!(
+                    "{}:{}:{}",
+                    location.file(),
+                    location.line(),
+                    location.column()
+                )
+            } else {
+                "Unknown location".to_string()
+            };
+
+            sentry::configure_scope(|scope| {
+                scope.set_tag("panic.location", location);
+            });
+
+            sentry::capture_message(&format!("Panic: {}", panic_msg), sentry::Level::Fatal);
+
+            // Flush Sentry before the process exits
+            if let Some(client) = sentry::Hub::current().client() {
+                let _ = client.flush(Some(std::time::Duration::from_secs(2)));
+            }
+        }));
+
+        // Send a test event to verify Sentry is working
+        sentry::configure_scope(|scope| {
+            scope.set_tag("startup", "test");
+        });
+        sentry::capture_message("Application started", sentry::Level::Info);
+    }
+
     // Initialize tracing with TRACE level by default, but silence async_nats TRACE/DEBUG
-    use tracing_subscriber::{EnvFilter, FmtSubscriber};
+    use tracing_subscriber::{
+        EnvFilter, FmtSubscriber, layer::SubscriberExt, util::SubscriberInitExt,
+    };
 
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
         // Default filter: TRACE for soar, INFO for async_nats, WARN for everything else
         EnvFilter::new("info,soar=debug,async_nats=warn,soar::nats_publisher=warn")
     });
 
-    FmtSubscriber::builder().with_env_filter(filter).init();
+    // Create base subscriber
+    let subscriber = FmtSubscriber::builder().with_env_filter(filter).finish();
+
+    // Add Sentry layer if Sentry is enabled
+    if _guard.is_some() {
+        let sentry_layer = sentry::integrations::tracing::layer();
+        subscriber.with(sentry_layer).init();
+    } else {
+        subscriber.init();
+    }
 
     let cli = Cli::parse();
 

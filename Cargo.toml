@@ -58,7 +58,7 @@ uuid = { version = "1.0", features = ["v4", "serde"] }
 zstd = "0.13"
 axum-tungstenite = "0.3.0"
 futures-util = "0.3.31"
-sentry = "0.42.0"
+sentry = { version = "0.42.0", features = ["tracing"] }
 postgis_diesel = { version = "3.0.1", features = ["serde", "serde_geojson"] }
 zip = "2.1"
 

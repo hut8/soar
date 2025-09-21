@@ -52,21 +52,24 @@ else
     log_info "Environment file /etc/soar/env exists"
 fi
 
-# Stop services if running
-log_info "Stopping SOAR services if running..."
-sudo systemctl stop ${RUN_SERVICE_NAME} 2>/dev/null || true
-sudo systemctl stop ${WEB_SERVICE_NAME} 2>/dev/null || true
-sudo systemctl stop ${PULL_DATA_TIMER_NAME}.timer 2>/dev/null || true
-
-# Build the application
+# Build the application first (before stopping services)
 log_info "Building SOAR application..."
 cargo build --release
 
 # Check if build succeeded
 if [ ! -f "target/release/${BINARY_NAME}" ]; then
     log_error "Build failed - binary not found at target/release/${BINARY_NAME}"
+    log_error "Services were not stopped. No deployment changes made."
     exit 1
 fi
+
+log_info "Build successful! Now stopping services to deploy..."
+
+# Stop services only after successful build
+log_info "Stopping SOAR services..."
+sudo systemctl stop ${RUN_SERVICE_NAME} 2>/dev/null || true
+sudo systemctl stop ${WEB_SERVICE_NAME} 2>/dev/null || true
+sudo systemctl stop ${PULL_DATA_TIMER_NAME}.timer 2>/dev/null || true
 
 # Create service user if it doesn't exist
 if ! id "${SERVICE_USER}" &>/dev/null; then
