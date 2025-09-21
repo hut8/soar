@@ -201,12 +201,12 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         // Search and data routes
         .route("/airports", get(actions::search_airports))
         .route("/clubs", get(actions::search_clubs))
-        .route("/clubs/:id", get(actions::get_club_by_id))
+        .route("/clubs/{id}", get(actions::get_club_by_id))
         .route("/fixes", get(actions::search_fixes))
         .route("/fixes/live", get(actions::fixes_live_websocket))
         .route("/flights", get(actions::search_flights))
         // Aircraft routes
-        .route("/clubs/:id/aircraft", get(actions::get_aircraft_by_club))
+        .route("/clubs/{id}/aircraft", get(actions::get_aircraft_by_club))
         // Authentication routes
         .route("/auth/register", post(actions::register_user))
         .route("/auth/login", post(actions::login_user))
@@ -222,11 +222,11 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         )
         // User management routes
         .route("/users", get(actions::get_all_users))
-        .route("/users/:id", get(actions::get_user_by_id))
-        .route("/users/:id", put(actions::update_user_by_id))
-        .route("/users/:id", delete(actions::delete_user_by_id))
+        .route("/users/{id}", get(actions::get_user_by_id))
+        .route("/users/{id}", put(actions::update_user_by_id))
+        .route("/users/{id}", delete(actions::delete_user_by_id))
         .route("/users/set-club", put(actions::set_user_club))
-        .route("/clubs/:id/users", get(actions::get_users_by_club))
+        .route("/clubs/{id}/users", get(actions::get_users_by_club))
         .with_state(app_state.clone());
 
     // Build the main Axum application
