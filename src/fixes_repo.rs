@@ -386,8 +386,11 @@ impl FixesRepository {
                 let mut conn = pool.get()?;
 
                 // Look up the device UUID using device address and address type
-                new_fix.device_id =
-                    Self::lookup_device_uuid_by_address(&mut conn, &dev_address_owned, address_type_enum)?;
+                new_fix.device_id = Self::lookup_device_uuid_by_address(
+                    &mut conn,
+                    &dev_address_owned,
+                    address_type_enum,
+                )?;
 
                 diesel::insert_into(fixes)
                     .values(&new_fix)
@@ -436,13 +439,16 @@ impl FixesRepository {
             conn.transaction(|conn| {
                 for (original_fix, mut fix_data) in fixes_data {
                     // Look up device UUID if we have raw device info
-                    if let (Some(dev_address), Some(address_type_ref)) =
-                        (original_fix.device_address.as_ref(), original_fix.address_type.as_ref())
-                    {
+                    if let (Some(dev_address), Some(address_type_ref)) = (
+                        original_fix.device_address.as_ref(),
+                        original_fix.address_type.as_ref(),
+                    ) {
                         let address_type_enum = AddressType::from(*address_type_ref);
-                        if let Ok(Some(device_uuid)) =
-                            Self::lookup_device_uuid_by_address(conn, dev_address, address_type_enum)
-                        {
+                        if let Ok(Some(device_uuid)) = Self::lookup_device_uuid_by_address(
+                            conn,
+                            dev_address,
+                            address_type_enum,
+                        ) {
                             fix_data.device_id = Some(device_uuid);
                         }
                     }

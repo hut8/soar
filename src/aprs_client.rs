@@ -1,7 +1,7 @@
 use crate::Fix;
-use anyhow::Result;
 use crate::receiver_status_repo::ReceiverStatusRepository;
 use crate::receiver_statuses::NewReceiverStatus;
+use anyhow::Result;
 
 /// Result type for connection attempts
 enum ConnectionResult {
@@ -153,7 +153,10 @@ impl AprsProcessors {
     }
 
     /// Add a position processor to existing processors
-    pub fn add_position_processor(mut self, position_processor: Arc<dyn PositionProcessor>) -> Self {
+    pub fn add_position_processor(
+        mut self,
+        position_processor: Arc<dyn PositionProcessor>,
+    ) -> Self {
         self.position_processor = Some(position_processor);
         self
     }
@@ -232,7 +235,10 @@ impl AprsClient {
     }
 
     /// Create a new APRS client with just a packet processor (backward compatibility)
-    pub fn new_with_packet_processor(config: AprsClientConfig, packet_processor: Arc<dyn PacketProcessor>) -> Self {
+    pub fn new_with_packet_processor(
+        config: AprsClientConfig,
+        packet_processor: Arc<dyn PacketProcessor>,
+    ) -> Self {
         Self {
             config,
             processors: AprsProcessors::new(packet_processor),
@@ -262,7 +268,11 @@ impl AprsClient {
     ) -> Self {
         Self {
             config,
-            processors: AprsProcessors::with_processors(packet_processor, position_processor, status_processor),
+            processors: AprsProcessors::with_processors(
+                packet_processor,
+                position_processor,
+                status_processor,
+            ),
             shutdown_tx: None,
         }
     }
@@ -277,7 +287,12 @@ impl AprsClient {
     ) -> Self {
         Self {
             config,
-            processors: AprsProcessors::with_all_processors(packet_processor, fix_processor, position_processor, status_processor),
+            processors: AprsProcessors::with_all_processors(
+                packet_processor,
+                fix_processor,
+                position_processor,
+                status_processor,
+            ),
             shutdown_tx: None,
         }
     }
@@ -486,7 +501,9 @@ impl AprsClient {
                 AprsData::Position(pos) => {
                     if let Some(unparsed) = &pos.comment.unparsed {
                         error!("Unparsed position fragment: {unparsed} from message: {message}");
-                        if let Err(e) = Self::log_unparsed_to_csv(log_path, "position", unparsed, message).await {
+                        if let Err(e) =
+                            Self::log_unparsed_to_csv(log_path, "position", unparsed, message).await
+                        {
                             warn!("Failed to write to unparsed log: {}", e);
                         }
                     }
@@ -494,7 +511,9 @@ impl AprsClient {
                 AprsData::Status(status) => {
                     if let Some(unparsed) = &status.comment.unparsed {
                         error!("Unparsed status fragment: {unparsed} from message: {message}");
-                        if let Err(e) = Self::log_unparsed_to_csv(log_path, "status", unparsed, message).await {
+                        if let Err(e) =
+                            Self::log_unparsed_to_csv(log_path, "status", unparsed, message).await
+                        {
                             warn!("Failed to write to unparsed log: {}", e);
                         }
                     }
@@ -533,8 +552,10 @@ impl AprsClient {
                             }
                         }
                     } else {
-                        trace!("Skipping fix processing for non-aircraft position source: {:?}",
-                               packet.position_source_type());
+                        trace!(
+                            "Skipping fix processing for non-aircraft position source: {:?}",
+                            packet.position_source_type()
+                        );
                     }
                 }
             }
@@ -708,8 +729,10 @@ impl PacketProcessor for PacketRouter {
                 }
             }
             _ => {
-                debug!("Received packet of type {:?}, no specific handler",
-                      std::mem::discriminant(&packet.data));
+                debug!(
+                    "Received packet of type {:?}, no specific handler",
+                    std::mem::discriminant(&packet.data)
+                );
             }
         }
     }
@@ -746,7 +769,10 @@ impl PositionPacketProcessor {
                 }
             }
             source_type => {
-                trace!("Position from non-aircraft source {:?} - not implemented yet", source_type);
+                trace!(
+                    "Position from non-aircraft source {:?} - not implemented yet",
+                    source_type
+                );
             }
         }
     }
@@ -856,7 +882,10 @@ impl ReceiverStatusProcessor {
                 }
             }
             source_type => {
-                trace!("Status packet from non-receiver source {:?} - ignoring", source_type);
+                trace!(
+                    "Status packet from non-receiver source {:?} - ignoring",
+                    source_type
+                );
             }
         }
     }

@@ -97,7 +97,9 @@ impl Fix {
     pub fn get_aircraft_identifier(&self) -> Option<String> {
         if let Some(ref reg) = self.registration {
             Some(reg.clone())
-        } else if let (Some(device_address), Some(addr_type)) = (&self.device_address, &self.address_type) {
+        } else if let (Some(device_address), Some(addr_type)) =
+            (&self.device_address, &self.address_type)
+        {
             let type_prefix = match *addr_type {
                 AddressType::Icao => "ICAO",
                 AddressType::Flarm => "FLARM",

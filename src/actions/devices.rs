@@ -7,11 +7,11 @@ use chrono::{DateTime, NaiveDateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::device_repo::DeviceRepository;
-use crate::fixes_repo::FixesRepository;
 use crate::actions::json_error;
+use crate::device_repo::DeviceRepository;
 use crate::devices::Device;
 use crate::fixes::Fix;
+use crate::fixes_repo::FixesRepository;
 use crate::web::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -40,9 +40,7 @@ pub async fn get_device_by_id(
 
     // First try to find the device by UUID in the devices table
     match device_repo.get_device_by_uuid(id).await {
-        Ok(Some(device)) => {
-            Json(DeviceResponse { device }).into_response()
-        }
+        Ok(Some(device)) => Json(DeviceResponse { device }).into_response(),
         Ok(None) => json_error(StatusCode::NOT_FOUND, "Device not found").into_response(),
         Err(e) => {
             tracing::error!("Failed to get device by ID {}: {}", id, e);
@@ -71,21 +69,29 @@ pub async fn get_device_fixes(
                         return json_error(
                             StatusCode::BAD_REQUEST,
                             "Invalid 'after' parameter format. Expected YYYYMMDDHHMMSS",
-                        ).into_response();
+                        )
+                        .into_response();
                     }
                 }
             } else {
                 None
             };
 
-            match fixes_repo.get_fixes_by_device(id, after_datetime, 1000).await {
+            match fixes_repo
+                .get_fixes_by_device(id, after_datetime, 1000)
+                .await
+            {
                 Ok(fixes) => {
                     let count = fixes.len();
                     Json(DeviceFixesResponse { fixes, count }).into_response()
                 }
                 Err(e) => {
                     tracing::error!("Failed to get fixes for device {}: {}", id, e);
-                    json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get device fixes").into_response()
+                    json_error(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Failed to get device fixes",
+                    )
+                    .into_response()
                 }
             }
         }

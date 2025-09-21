@@ -320,7 +320,8 @@ impl FlightDetectionProcessor {
                             .await
                         {
                             Ok(true) => {
-                                let tracker = self.aircraft_trackers.get_mut(device_address).unwrap();
+                                let tracker =
+                                    self.aircraft_trackers.get_mut(device_address).unwrap();
                                 tracker.flight_state = FlightState::Ground;
                                 tracker.current_flight_id = None;
                                 info!(
@@ -333,7 +334,8 @@ impl FlightDetectionProcessor {
                                     "Flight record {} not found when updating landing time for aircraft {}",
                                     flight_id, device_address
                                 );
-                                let tracker = self.aircraft_trackers.get_mut(device_address).unwrap();
+                                let tracker =
+                                    self.aircraft_trackers.get_mut(device_address).unwrap();
                                 tracker.flight_state = FlightState::Ground;
                                 tracker.current_flight_id = None;
                             }
@@ -345,7 +347,10 @@ impl FlightDetectionProcessor {
                             }
                         }
                     } else {
-                        warn!("Aircraft {} landed but no current flight ID", device_address);
+                        warn!(
+                            "Aircraft {} landed but no current flight ID",
+                            device_address
+                        );
                         let tracker = self.aircraft_trackers.get_mut(device_address).unwrap();
                         tracker.flight_state = FlightState::Ground;
                     }
@@ -389,7 +394,10 @@ impl FixProcessor for FlightDetectionProcessor {
 
                 // Update tracker with new fix
                 {
-                    let tracker = processor.aircraft_trackers.get_mut(&device_address).unwrap();
+                    let tracker = processor
+                        .aircraft_trackers
+                        .get_mut(&device_address)
+                        .unwrap();
                     tracker.fix_history.push(fix_clone.clone());
                     tracker.last_update = Utc::now();
                 }

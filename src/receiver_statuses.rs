@@ -1,13 +1,23 @@
+use bigdecimal::BigDecimal;
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
-use bigdecimal::BigDecimal;
-use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 use ogn_parser::StatusComment;
+use serde::{Deserialize, Serialize};
 use std::str::FromStr;
+use uuid::Uuid;
 
 /// Database model for receiver status information
-#[derive(Debug, Clone, Queryable, Selectable, Insertable, AsChangeset, QueryableByName, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Queryable,
+    Selectable,
+    Insertable,
+    AsChangeset,
+    QueryableByName,
+    Serialize,
+    Deserialize,
+)]
 #[diesel(table_name = crate::schema::receiver_statuses)]
 pub struct ReceiverStatus {
     pub id: Uuid,
@@ -117,11 +127,17 @@ impl NewReceiverStatus {
             latency: Self::convert_decimal(status_comment.latency.as_ref()),
             senders: status_comment.senders.map(|v| v as i16),
             rf_correction_manual: status_comment.rf_correction_manual,
-            rf_correction_automatic: Self::convert_decimal(status_comment.rf_correction_automatic.as_ref()),
+            rf_correction_automatic: Self::convert_decimal(
+                status_comment.rf_correction_automatic.as_ref(),
+            ),
             noise: Self::convert_decimal(status_comment.noise.as_ref()),
-            senders_signal_quality: Self::convert_decimal(status_comment.senders_signal_quality.as_ref()),
+            senders_signal_quality: Self::convert_decimal(
+                status_comment.senders_signal_quality.as_ref(),
+            ),
             senders_messages: status_comment.senders_messages.map(|v| v as i32),
-            good_senders_signal_quality: Self::convert_decimal(status_comment.good_senders_signal_quality.as_ref()),
+            good_senders_signal_quality: Self::convert_decimal(
+                status_comment.good_senders_signal_quality.as_ref(),
+            ),
             good_senders: status_comment.good_senders.map(|v| v as i16),
             good_and_bad_senders: status_comment.good_and_bad_senders.map(|v| v as i16),
             geoid_offset: status_comment.geoid_offset,
@@ -142,8 +158,8 @@ impl NewReceiverStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::TimeZone;
     use bigdecimal::BigDecimal;
+    use chrono::TimeZone;
 
     #[test]
     fn test_new_receiver_status_from_status_comment() {
@@ -152,21 +168,21 @@ mod tests {
         let status_comment = StatusComment {
             version: Some("1.0.0".to_string()),
             platform: Some("Linux".to_string()),
-            cpu_load: Some(Decimal::new(75, 2)), // 0.75
-            ram_free: Some(Decimal::new(1024, 0)), // 1024
-            ram_total: Some(Decimal::new(2048, 0)), // 2048
-            ntp_offset: Some(Decimal::new(5, 3)), // 0.005
-            ntp_correction: Some(Decimal::new(10, 3)), // 0.010
-            voltage: Some(Decimal::new(12, 1)), // 1.2
-            amperage: Some(Decimal::new(500, 3)), // 0.500
+            cpu_load: Some(Decimal::new(75, 2)),        // 0.75
+            ram_free: Some(Decimal::new(1024, 0)),      // 1024
+            ram_total: Some(Decimal::new(2048, 0)),     // 2048
+            ntp_offset: Some(Decimal::new(5, 3)),       // 0.005
+            ntp_correction: Some(Decimal::new(10, 3)),  // 0.010
+            voltage: Some(Decimal::new(12, 1)),         // 1.2
+            amperage: Some(Decimal::new(500, 3)),       // 0.500
             cpu_temperature: Some(Decimal::new(45, 1)), // 4.5
             visible_senders: Some(25),
             latency: Some(Decimal::new(100, 3)), // 0.100
             senders: Some(30),
             rf_correction_manual: Some(10),
             rf_correction_automatic: Some(Decimal::new(15, 2)), // 0.15
-            noise: Some(Decimal::new(25, 2)), // 0.25
-            senders_signal_quality: Some(Decimal::new(85, 2)), // 0.85
+            noise: Some(Decimal::new(25, 2)),                   // 0.25
+            senders_signal_quality: Some(Decimal::new(85, 2)),  // 0.85
             senders_messages: Some(1000),
             good_senders_signal_quality: Some(Decimal::new(90, 2)), // 0.90
             good_senders: Some(20),

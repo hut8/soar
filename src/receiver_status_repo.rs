@@ -39,7 +39,10 @@ impl ReceiverStatusRepository {
     }
 
     /// Insert multiple receiver statuses in a batch
-    pub async fn insert_batch(&self, statuses: &[NewReceiverStatus]) -> Result<Vec<ReceiverStatus>> {
+    pub async fn insert_batch(
+        &self,
+        statuses: &[NewReceiverStatus],
+    ) -> Result<Vec<ReceiverStatus>> {
         if statuses.is_empty() {
             return Ok(Vec::new());
         }
@@ -105,7 +108,10 @@ impl ReceiverStatusRepository {
     }
 
     /// Get all recent statuses across all receivers
-    pub async fn get_recent_all_receivers(&self, limit: Option<i64>) -> Result<Vec<ReceiverStatus>> {
+    pub async fn get_recent_all_receivers(
+        &self,
+        limit: Option<i64>,
+    ) -> Result<Vec<ReceiverStatus>> {
         let limit = limit.unwrap_or(100);
         let mut conn = self.get_connection()?;
 
@@ -134,8 +140,7 @@ impl ReceiverStatusRepository {
             ORDER BY receiver_id, received_at DESC
         "#;
 
-        let statuses = diesel::sql_query(sql)
-            .load::<ReceiverStatus>(&mut conn)?;
+        let statuses = diesel::sql_query(sql).load::<ReceiverStatus>(&mut conn)?;
 
         Ok(statuses)
     }
@@ -146,7 +151,7 @@ impl ReceiverStatusRepository {
         let mut conn = self.get_connection()?;
 
         let deleted_count = diesel::delete(
-            receiver_statuses::table.filter(receiver_statuses::received_at.lt(cutoff_time))
+            receiver_statuses::table.filter(receiver_statuses::received_at.lt(cutoff_time)),
         )
         .execute(&mut conn)?;
 
@@ -256,8 +261,8 @@ mod tests {
     fn test_receiver_status_repository_creation() {
         // This is a simple test to ensure the repository can be created
         // Actual database tests would require a test database setup
-        use diesel::r2d2::ConnectionManager;
         use diesel::PgConnection;
+        use diesel::r2d2::ConnectionManager;
         use std::env;
 
         // Only run if DATABASE_URL is set (for CI environments)
