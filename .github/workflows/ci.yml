@@ -214,3 +214,91 @@ jobs:
         run: |
           cargo install cargo-outdated
           cargo outdated --exit-code 1 || echo "Some dependencies are outdated (non-critical)"
+
+  deploy:
+    name: Deploy to Server
+    runs-on: ubuntu-latest
+    needs: [test-sveltekit, test-rust, build-release, security-audit]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download release binary
+        uses: actions/download-artifact@v4
+        with:
+          name: soar-linux-x64
+          path: ./
+
+      - name: Extract binary
+        run: |
+          tar -xzf soar-linux-x64.tar.gz
+          chmod +x soar
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.DEPLOY_SERVER }} >> ~/.ssh/known_hosts
+
+      - name: Deploy binary
+        run: |
+          # Create a unique temporary filename for the new binary
+          TIMESTAMP=$(date +%s)
+          TEMP_BINARY="/tmp/soar-$TIMESTAMP"
+
+          echo "Uploading new binary to server..."
+          scp soar soar@${{ secrets.DEPLOY_SERVER }}:$TEMP_BINARY
+
+          echo "Deploying binary safely..."
+          ssh soar@${{ secrets.DEPLOY_SERVER }} << EOF
+            set -e
+
+            echo "Stopping SOAR services..."
+            sudo systemctl stop soar || echo "SOAR services were not running"
+
+            echo "Backing up current binary..."
+            if [ -f /usr/local/bin/soar ]; then
+              cp /usr/local/bin/soar /home/soar/soar.backup.\$(date +%s)
+            fi
+
+            echo "Installing new binary..."
+            sudo mv $TEMP_BINARY /usr/local/bin/soar
+            sudo chmod +x /usr/local/bin/soar
+            sudo chown root:root /usr/local/bin/soar
+
+            echo "Starting SOAR services..."
+            sudo systemctl start soar
+
+            echo "Checking service status..."
+            sleep 5
+            sudo systemctl status soar --no-pager || true
+
+            echo "Cleaning up old backups (keeping last 5)..."
+            ls -t /home/soar/soar.backup.* 2>/dev/null | tail -n +6 | xargs rm -f || true
+
+            echo "Deployment completed successfully!"
+          EOF
+
+      - name: Verify deployment
+        run: |
+          echo "Verifying deployment..."
+          ssh soar@${{ secrets.DEPLOY_SERVER }} << 'EOF'
+            echo "Binary version:"
+            /usr/local/bin/soar --help | head -3 || echo "Could not get version info"
+
+            echo ""
+            echo "Service status:"
+            sudo systemctl is-active soar || echo "Service is not active"
+
+            echo ""
+            echo "Recent logs:"
+            sudo journalctl -u soar --no-pager --lines=10 || echo "Could not retrieve logs"
+          EOF
+
+      - name: Cleanup SSH
+        if: always()
+        run: |
+          rm -f ~/.ssh/id_rsa

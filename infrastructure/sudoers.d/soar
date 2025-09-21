@@ -1,0 +1,47 @@
+# SOAR Deployment Sudoers Configuration
+#
+# This file grants the 'soar' user the necessary sudo privileges for automated deployment
+# via CI/CD pipelines. It allows specific systemctl commands and file operations needed
+# for safe binary updates without granting full root access.
+#
+# Installation:
+#   sudo cp soar-deploy /etc/sudoers.d/
+#   sudo chmod 440 /etc/sudoers.d/soar-deploy
+#   sudo visudo -c  # Verify syntax
+#
+# Security: This grants minimal privileges needed for deployment automation
+
+# Allow soar user to manage SOAR services
+soar ALL=(root) NOPASSWD: /usr/bin/systemctl stop soar
+soar ALL=(root) NOPASSWD: /usr/bin/systemctl start soar
+soar ALL=(root) NOPASSWD: /usr/bin/systemctl restart soar
+soar ALL=(root) NOPASSWD: /usr/bin/systemctl status soar
+soar ALL=(root) NOPASSWD: /usr/bin/systemctl is-active soar
+
+# Allow soar user to manage individual SOAR services
+soar ALL=(root) NOPASSWD: /usr/bin/systemctl stop soar-run.service
+soar ALL=(root) NOPASSWD: /usr/bin/systemctl start soar-run.service
+soar ALL=(root) NOPASSWD: /usr/bin/systemctl restart soar-run.service
+soar ALL=(root) NOPASSWD: /usr/bin/systemctl status soar-run.service
+
+soar ALL=(root) NOPASSWD: /usr/bin/systemctl stop soar-web.service
+soar ALL=(root) NOPASSWD: /usr/bin/systemctl start soar-web.service
+soar ALL=(root) NOPASSWD: /usr/bin/systemctl restart soar-web.service
+soar ALL=(root) NOPASSWD: /usr/bin/systemctl status soar-web.service
+
+soar ALL=(root) NOPASSWD: /usr/bin/systemctl stop soar-pull-data.timer
+soar ALL=(root) NOPASSWD: /usr/bin/systemctl start soar-pull-data.timer
+soar ALL=(root) NOPASSWD: /usr/bin/systemctl restart soar-pull-data.timer
+soar ALL=(root) NOPASSWD: /usr/bin/systemctl status soar-pull-data.timer
+
+# Allow soar user to manage the binary installation
+soar ALL=(root) NOPASSWD: /usr/bin/cp /tmp/soar-* /usr/local/bin/soar
+soar ALL=(root) NOPASSWD: /usr/bin/mv /tmp/soar-* /usr/local/bin/soar
+soar ALL=(root) NOPASSWD: /usr/bin/chmod +x /usr/local/bin/soar
+soar ALL=(root) NOPASSWD: /usr/bin/chown root\:root /usr/local/bin/soar
+
+# Allow reading logs for deployment verification
+soar ALL=(root) NOPASSWD: /usr/bin/journalctl -u soar --no-pager --lines=*
+soar ALL=(root) NOPASSWD: /usr/bin/journalctl -u soar-run.service --no-pager --lines=*
+soar ALL=(root) NOPASSWD: /usr/bin/journalctl -u soar-web.service --no-pager --lines=*
+soar ALL=(root) NOPASSWD: /usr/bin/journalctl -u soar-pull-data.service --no-pager --lines=*
