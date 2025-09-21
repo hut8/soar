@@ -29,4 +29,4 @@ LimitNOFILE=65536
 TimeoutStartSec=1800
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=multi-user.target soar.target
