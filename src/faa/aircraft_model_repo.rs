@@ -8,14 +8,14 @@ use tracing::{info, warn};
 use crate::faa::aircraft_models::{
     AircraftCategory, AircraftModel, AircraftType, BuilderCertification, EngineType, WeightClass,
 };
-use crate::schema::aircraft_model;
+use crate::schema::aircraft_models;
 
 pub type DieselPgPool = Pool<ConnectionManager<PgConnection>>;
 pub type DieselPgPooledConnection = PooledConnection<ConnectionManager<PgConnection>>;
 
 /// Diesel model for the aircraft_model table - used for database operations
 #[derive(Debug, Clone, Queryable, Selectable, Insertable, AsChangeset)]
-#[diesel(table_name = aircraft_model)]
+#[diesel(table_name = aircraft_models)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct AircraftModelRecord {
     pub manufacturer_code: String,
@@ -39,7 +39,7 @@ pub struct AircraftModelRecord {
 
 /// Insert model for new aircraft models
 #[derive(Debug, Clone, Insertable)]
-#[diesel(table_name = aircraft_model)]
+#[diesel(table_name = aircraft_models)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct NewAircraftModelRecord {
     pub manufacturer_code: String,
@@ -199,37 +199,37 @@ impl AircraftModelRepository {
                     let new_record = NewAircraftModelRecord::from(model.clone());
 
                     // Use Diesel's ON CONFLICT functionality
-                    let result = diesel::insert_into(aircraft_model::table)
+                    let result = diesel::insert_into(aircraft_models::table)
                         .values(&new_record)
                         .on_conflict((
-                            aircraft_model::manufacturer_code,
-                            aircraft_model::model_code,
-                            aircraft_model::series_code,
+                            aircraft_models::manufacturer_code,
+                            aircraft_models::model_code,
+                            aircraft_models::series_code,
                         ))
                         .do_update()
                         .set((
-                            aircraft_model::manufacturer_name
-                                .eq(excluded(aircraft_model::manufacturer_name)),
-                            aircraft_model::model_name.eq(excluded(aircraft_model::model_name)),
-                            aircraft_model::aircraft_type
-                                .eq(excluded(aircraft_model::aircraft_type)),
-                            aircraft_model::engine_type.eq(excluded(aircraft_model::engine_type)),
-                            aircraft_model::aircraft_category
-                                .eq(excluded(aircraft_model::aircraft_category)),
-                            aircraft_model::builder_certification
-                                .eq(excluded(aircraft_model::builder_certification)),
-                            aircraft_model::number_of_engines
-                                .eq(excluded(aircraft_model::number_of_engines)),
-                            aircraft_model::number_of_seats
-                                .eq(excluded(aircraft_model::number_of_seats)),
-                            aircraft_model::weight_class.eq(excluded(aircraft_model::weight_class)),
-                            aircraft_model::cruising_speed
-                                .eq(excluded(aircraft_model::cruising_speed)),
-                            aircraft_model::type_certificate_data_sheet
-                                .eq(excluded(aircraft_model::type_certificate_data_sheet)),
-                            aircraft_model::type_certificate_data_holder
-                                .eq(excluded(aircraft_model::type_certificate_data_holder)),
-                            aircraft_model::updated_at.eq(Utc::now()),
+                            aircraft_models::manufacturer_name
+                                .eq(excluded(aircraft_models::manufacturer_name)),
+                            aircraft_models::model_name.eq(excluded(aircraft_models::model_name)),
+                            aircraft_models::aircraft_type
+                                .eq(excluded(aircraft_models::aircraft_type)),
+                            aircraft_models::engine_type.eq(excluded(aircraft_models::engine_type)),
+                            aircraft_models::aircraft_category
+                                .eq(excluded(aircraft_models::aircraft_category)),
+                            aircraft_models::builder_certification
+                                .eq(excluded(aircraft_models::builder_certification)),
+                            aircraft_models::number_of_engines
+                                .eq(excluded(aircraft_models::number_of_engines)),
+                            aircraft_models::number_of_seats
+                                .eq(excluded(aircraft_models::number_of_seats)),
+                            aircraft_models::weight_class.eq(excluded(aircraft_models::weight_class)),
+                            aircraft_models::cruising_speed
+                                .eq(excluded(aircraft_models::cruising_speed)),
+                            aircraft_models::type_certificate_data_sheet
+                                .eq(excluded(aircraft_models::type_certificate_data_sheet)),
+                            aircraft_models::type_certificate_data_holder
+                                .eq(excluded(aircraft_models::type_certificate_data_holder)),
+                            aircraft_models::updated_at.eq(Utc::now()),
                         ))
                         .execute(conn);
 
@@ -261,7 +261,7 @@ impl AircraftModelRepository {
         let pool = self.pool.clone();
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            let count = aircraft_model::table.count().get_result::<i64>(&mut conn)?;
+            let count = aircraft_models::table.count().get_result::<i64>(&mut conn)?;
             Ok::<i64, anyhow::Error>(count)
         })
         .await?
@@ -282,10 +282,10 @@ impl AircraftModelRepository {
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            let result = aircraft_model::table
-                .filter(aircraft_model::manufacturer_code.eq(&manufacturer_code_param))
-                .filter(aircraft_model::model_code.eq(&model_code_param))
-                .filter(aircraft_model::series_code.eq(&series_code_param))
+            let result = aircraft_models::table
+                .filter(aircraft_models::manufacturer_code.eq(&manufacturer_code_param))
+                .filter(aircraft_models::model_code.eq(&model_code_param))
+                .filter(aircraft_models::series_code.eq(&series_code_param))
                 .select(AircraftModelRecord::as_select())
                 .first::<AircraftModelRecord>(&mut conn)
                 .optional()?;
@@ -312,11 +312,11 @@ impl AircraftModelRepository {
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            let results = aircraft_model::table
-                .filter(aircraft_model::manufacturer_name.ilike(&search_pattern))
+            let results = aircraft_models::table
+                .filter(aircraft_models::manufacturer_name.ilike(&search_pattern))
                 .order((
-                    aircraft_model::manufacturer_name.asc(),
-                    aircraft_model::model_name.asc(),
+                    aircraft_models::manufacturer_name.asc(),
+                    aircraft_models::model_name.asc(),
                 ))
                 .load::<AircraftModelRecord>(&mut conn)?;
 
@@ -339,11 +339,11 @@ impl AircraftModelRepository {
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            let results = aircraft_model::table
-                .filter(aircraft_model::model_name.ilike(&search_pattern))
+            let results = aircraft_models::table
+                .filter(aircraft_models::model_name.ilike(&search_pattern))
                 .order((
-                    aircraft_model::manufacturer_name.asc(),
-                    aircraft_model::model_name.asc(),
+                    aircraft_models::manufacturer_name.asc(),
+                    aircraft_models::model_name.asc(),
                 ))
                 .load::<AircraftModelRecord>(&mut conn)?;
 

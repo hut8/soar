@@ -336,7 +336,9 @@ fn parse_approved_ops(airworthiness_class_code: &str, raw_239_247: &str) -> Appr
 pub struct AircraftRegistrationModel {
     pub registration_number: String,
     pub serial_number: String,
-    pub mfr_mdl_code: Option<String>,
+    pub manufacturer_code: Option<String>,
+    pub model_code: Option<String>,
+    pub series_code: Option<String>,
     pub eng_mfr_mdl_code: Option<String>,
     pub year_mfr: Option<i32>,
     pub type_registration_code: Option<String>,
@@ -396,7 +398,9 @@ pub struct AircraftRegistrationModel {
 pub struct NewAircraftRegistration {
     pub registration_number: String,
     pub serial_number: String,
-    pub mfr_mdl_code: Option<String>,
+    pub manufacturer_code: Option<String>,
+    pub model_code: Option<String>,
+    pub series_code: Option<String>,
     pub eng_mfr_mdl_code: Option<String>,
     pub year_mfr: Option<i32>,
     pub type_registration_code: Option<String>,
@@ -452,11 +456,13 @@ pub struct NewAircraftRegistration {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Aircraft {
-    pub n_number: String,                 // 1–5
-    pub serial_number: String,            // 7–36
-    pub mfr_mdl_code: Option<String>,     // 38–44
-    pub eng_mfr_mdl_code: Option<String>, // 46–50
-    pub year_mfr: Option<u16>,            // 52–55
+    pub n_number: String,                    // 1–5
+    pub serial_number: String,               // 7–36
+    pub manufacturer_code: Option<String>,   // 38–40
+    pub model_code: Option<String>,          // 41–42
+    pub series_code: Option<String>,         // 43–44
+    pub eng_mfr_mdl_code: Option<String>,    // 46–50
+    pub year_mfr: Option<u16>,               // 52–55
 
     // Registrant / address
     pub type_registration_code: Option<String>, // 57
@@ -662,7 +668,9 @@ impl Aircraft {
 
         let serial_number = to_string_trim(fw(line, 7, 36));
 
-        let mfr_mdl_code = to_opt_string(fw(line, 38, 44));
+        let manufacturer_code = to_opt_string(fw(line, 38, 40));
+        let model_code = to_opt_string(fw(line, 41, 42));
+        let series_code = to_opt_string(fw(line, 43, 44));
         let eng_mfr_mdl_code = to_opt_string(fw(line, 46, 50));
         let year_mfr = to_opt_u32_nonzero(fw(line, 52, 55)).map(|v| v as u16);
 
@@ -721,7 +729,9 @@ impl Aircraft {
         Ok(Aircraft {
             n_number,
             serial_number,
-            mfr_mdl_code,
+            manufacturer_code,
+            model_code,
+            series_code,
             eng_mfr_mdl_code,
             year_mfr,
 
@@ -840,7 +850,31 @@ impl Aircraft {
         };
 
         let serial_number = to_string_trim(fields[1]);
+
+        // Split the old mfr_mdl_code field into three parts
         let mfr_mdl_code = to_opt_string(fields[2]);
+        let (manufacturer_code, model_code, series_code) = if let Some(ref code) = mfr_mdl_code {
+            let code_chars: Vec<char> = code.chars().collect();
+            let manufacturer_code = if code_chars.len() >= 3 {
+                Some(code_chars.iter().take(3).collect::<String>())
+            } else {
+                None
+            };
+            let model_code = if code_chars.len() >= 5 {
+                Some(code_chars.iter().skip(3).take(2).collect::<String>())
+            } else {
+                None
+            };
+            let series_code = if code_chars.len() >= 7 {
+                Some(code_chars.iter().skip(5).take(2).collect::<String>())
+            } else {
+                None
+            };
+            (manufacturer_code, model_code, series_code)
+        } else {
+            (None, None, None)
+        };
+
         let eng_mfr_mdl_code = to_opt_string(fields[3]);
         let year_mfr = to_opt_u32_nonzero(fields[4]).map(|v| v as u16);
 
@@ -889,7 +923,9 @@ impl Aircraft {
         Ok(Aircraft {
             n_number,
             serial_number,
-            mfr_mdl_code,
+            manufacturer_code,
+            model_code,
+            series_code,
             eng_mfr_mdl_code,
             year_mfr,
 
@@ -1026,7 +1062,9 @@ impl From<Aircraft> for NewAircraftRegistration {
         NewAircraftRegistration {
             registration_number: aircraft.n_number,
             serial_number: aircraft.serial_number,
-            mfr_mdl_code: aircraft.mfr_mdl_code,
+            manufacturer_code: aircraft.manufacturer_code,
+            model_code: aircraft.model_code,
+            series_code: aircraft.series_code,
             eng_mfr_mdl_code: aircraft.eng_mfr_mdl_code,
             year_mfr: aircraft.year_mfr.map(|y| y as i32),
             type_registration_code: aircraft.type_registration_code,
@@ -1123,7 +1161,9 @@ impl From<AircraftRegistrationModel> for Aircraft {
         Aircraft {
             n_number: model.registration_number,
             serial_number: model.serial_number,
-            mfr_mdl_code: model.mfr_mdl_code,
+            manufacturer_code: model.manufacturer_code,
+            model_code: model.model_code,
+            series_code: model.series_code,
             eng_mfr_mdl_code: model.eng_mfr_mdl_code,
             year_mfr: model.year_mfr.map(|y| y as u16),
             type_registration_code: model.type_registration_code,
@@ -1176,7 +1216,9 @@ mod tests {
         let first = &aircraft[0];
         assert_eq!(first.n_number, "N152AS");
         assert_eq!(first.serial_number, "3545");
-        assert_eq!(first.mfr_mdl_code, Some("1660225".to_string()));
+        assert_eq!(first.manufacturer_code, Some("166".to_string()));
+        assert_eq!(first.model_code, Some("02".to_string()));
+        assert_eq!(first.series_code, Some("25".to_string()));
         assert_eq!(first.year_mfr, Some(1980));
         assert_eq!(first.type_registration_code, Some("3".to_string()));
         assert_eq!(
@@ -1382,7 +1424,9 @@ mod tests {
             serial_number: "12345".to_string(),
             type_registration_code: Some("3".to_string()), // Corporation
             registrant_name: Some("MOUNTAIN SOARING CLUB INC".to_string()),
-            mfr_mdl_code: None,
+            manufacturer_code: None,
+            model_code: None,
+            series_code: None,
             eng_mfr_mdl_code: None,
             year_mfr: None,
             street1: None,

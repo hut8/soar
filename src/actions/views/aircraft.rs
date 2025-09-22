@@ -8,7 +8,9 @@ use crate::aircraft_registrations::{Aircraft, AirworthinessClass};
 pub struct AircraftView {
     pub registration_number: String,
     pub serial_number: String,
-    pub manufacturer_model_code: Option<String>,
+    pub manufacturer_code: Option<String>,
+    pub model_code: Option<String>,
+    pub series_code: Option<String>,
     pub engine_manufacturer_model_code: Option<String>,
     pub year_manufactured: Option<u16>,
     pub registrant_type: Option<String>,
@@ -33,7 +35,9 @@ impl From<Aircraft> for AircraftView {
         Self {
             registration_number: aircraft.n_number,
             serial_number: aircraft.serial_number,
-            manufacturer_model_code: aircraft.mfr_mdl_code,
+            manufacturer_code: aircraft.manufacturer_code,
+            model_code: aircraft.model_code,
+            series_code: aircraft.series_code,
             engine_manufacturer_model_code: aircraft.eng_mfr_mdl_code,
             year_manufactured: aircraft.year_mfr,
             registrant_type: aircraft.type_registration_code,

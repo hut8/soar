@@ -27,7 +27,7 @@ pub mod sql_types {
 }
 
 diesel::table! {
-    aircraft_model (manufacturer_code, model_code, series_code) {
+    aircraft_models (manufacturer_code, model_code, series_code) {
         manufacturer_code -> Text,
         model_code -> Text,
         series_code -> Text,
@@ -67,8 +67,6 @@ diesel::table! {
         registration_number -> Varchar,
         #[max_length = 30]
         serial_number -> Varchar,
-        #[max_length = 7]
-        mfr_mdl_code -> Nullable<Varchar>,
         #[max_length = 5]
         eng_mfr_mdl_code -> Nullable<Varchar>,
         year_mfr -> Nullable<Int4>,
@@ -130,6 +128,12 @@ diesel::table! {
         location_id -> Nullable<Uuid>,
         airworthiness_class -> Nullable<AirworthinessClass>,
         device_id -> Nullable<Uuid>,
+        #[max_length = 3]
+        manufacturer_code -> Nullable<Varchar>,
+        #[max_length = 2]
+        model_code -> Nullable<Varchar>,
+        #[max_length = 2]
+        series_code -> Nullable<Varchar>,
     }
 }
 
@@ -525,7 +529,7 @@ diesel::joinable!(receivers_photos -> receivers (receiver_id));
 diesel::joinable!(users -> clubs (club_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
-    aircraft_model,
+    aircraft_models,
     aircraft_other_names,
     aircraft_registrations,
     airports,
