@@ -18,7 +18,7 @@ use crate::devices::AddressType;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, DbEnum)]
 #[db_enum(existing_type_path = "crate::schema::sql_types::AircraftType")]
 pub enum AircraftType {
-    Reserved0,
+    Reserved,
     Glider,
     TowTug,
     HelicopterGyro,
@@ -32,7 +32,6 @@ pub enum AircraftType {
     Balloon,
     Airship,
     Uav,
-    ReservedE,
     StaticObstacle,
 }
 
@@ -62,7 +61,7 @@ impl From<AddressType> for ForeignAddressType {
 impl From<ForeignAircraftType> for AircraftType {
     fn from(foreign_type: ForeignAircraftType) -> Self {
         match foreign_type {
-            ForeignAircraftType::Reserved0 => AircraftType::Reserved0,
+            ForeignAircraftType::Reserved => AircraftType::Reserved,
             ForeignAircraftType::Glider => AircraftType::Glider,
             ForeignAircraftType::TowTug => AircraftType::TowTug,
             ForeignAircraftType::HelicopterGyro => AircraftType::HelicopterGyro,
@@ -76,7 +75,6 @@ impl From<ForeignAircraftType> for AircraftType {
             ForeignAircraftType::Balloon => AircraftType::Balloon,
             ForeignAircraftType::Airship => AircraftType::Airship,
             ForeignAircraftType::Uav => AircraftType::Uav,
-            ForeignAircraftType::ReservedE => AircraftType::ReservedE,
             ForeignAircraftType::StaticObstacle => AircraftType::StaticObstacle,
         }
     }
@@ -85,7 +83,7 @@ impl From<ForeignAircraftType> for AircraftType {
 impl From<AircraftType> for ForeignAircraftType {
     fn from(wrapper_type: AircraftType) -> Self {
         match wrapper_type {
-            AircraftType::Reserved0 => ForeignAircraftType::Reserved0,
+            AircraftType::Reserved => ForeignAircraftType::Reserved,
             AircraftType::Glider => ForeignAircraftType::Glider,
             AircraftType::TowTug => ForeignAircraftType::TowTug,
             AircraftType::HelicopterGyro => ForeignAircraftType::HelicopterGyro,
@@ -99,7 +97,6 @@ impl From<AircraftType> for ForeignAircraftType {
             AircraftType::Balloon => ForeignAircraftType::Balloon,
             AircraftType::Airship => ForeignAircraftType::Airship,
             AircraftType::Uav => ForeignAircraftType::Uav,
-            AircraftType::ReservedE => ForeignAircraftType::ReservedE,
             AircraftType::StaticObstacle => ForeignAircraftType::StaticObstacle,
         }
     }
@@ -257,22 +254,37 @@ impl From<FixRow> for Fix {
 
         fn parse_aircraft_type(s: Option<String>) -> Option<ForeignAircraftType> {
             s.and_then(|s| match s.as_str() {
-                "Reserved0" => Some(ForeignAircraftType::Reserved0),
-                "Glider" => Some(ForeignAircraftType::Glider),
-                "TowTug" => Some(ForeignAircraftType::TowTug),
-                "HelicopterGyro" => Some(ForeignAircraftType::HelicopterGyro),
-                "SkydiverParachute" => Some(ForeignAircraftType::SkydiverParachute),
-                "DropPlane" => Some(ForeignAircraftType::DropPlane),
-                "HangGlider" => Some(ForeignAircraftType::HangGlider),
-                "Paraglider" => Some(ForeignAircraftType::Paraglider),
-                "RecipEngine" => Some(ForeignAircraftType::RecipEngine),
-                "JetTurboprop" => Some(ForeignAircraftType::JetTurboprop),
-                "Unknown" => Some(ForeignAircraftType::Unknown),
-                "Balloon" => Some(ForeignAircraftType::Balloon),
-                "Airship" => Some(ForeignAircraftType::Airship),
-                "Uav" => Some(ForeignAircraftType::Uav),
-                "ReservedE" => Some(ForeignAircraftType::ReservedE),
-                "StaticObstacle" => Some(ForeignAircraftType::StaticObstacle),
+                "reserved" => Some(ForeignAircraftType::Reserved),
+                "Reserved0" => Some(ForeignAircraftType::Reserved), // Legacy compatibility
+                "ReservedE" => Some(ForeignAircraftType::Reserved), // Legacy compatibility
+                "glider" => Some(ForeignAircraftType::Glider),
+                "Glider" => Some(ForeignAircraftType::Glider), // Legacy compatibility
+                "tow_tug" => Some(ForeignAircraftType::TowTug),
+                "TowTug" => Some(ForeignAircraftType::TowTug), // Legacy compatibility
+                "helicopter_gyro" => Some(ForeignAircraftType::HelicopterGyro),
+                "HelicopterGyro" => Some(ForeignAircraftType::HelicopterGyro), // Legacy compatibility
+                "skydiver_parachute" => Some(ForeignAircraftType::SkydiverParachute),
+                "SkydiverParachute" => Some(ForeignAircraftType::SkydiverParachute), // Legacy compatibility
+                "drop_plane" => Some(ForeignAircraftType::DropPlane),
+                "DropPlane" => Some(ForeignAircraftType::DropPlane), // Legacy compatibility
+                "hang_glider" => Some(ForeignAircraftType::HangGlider),
+                "HangGlider" => Some(ForeignAircraftType::HangGlider), // Legacy compatibility
+                "paraglider" => Some(ForeignAircraftType::Paraglider),
+                "Paraglider" => Some(ForeignAircraftType::Paraglider), // Legacy compatibility
+                "recip_engine" => Some(ForeignAircraftType::RecipEngine),
+                "RecipEngine" => Some(ForeignAircraftType::RecipEngine), // Legacy compatibility
+                "jet_turboprop" => Some(ForeignAircraftType::JetTurboprop),
+                "JetTurboprop" => Some(ForeignAircraftType::JetTurboprop), // Legacy compatibility
+                "unknown" => Some(ForeignAircraftType::Unknown),
+                "Unknown" => Some(ForeignAircraftType::Unknown), // Legacy compatibility
+                "balloon" => Some(ForeignAircraftType::Balloon),
+                "Balloon" => Some(ForeignAircraftType::Balloon), // Legacy compatibility
+                "airship" => Some(ForeignAircraftType::Airship),
+                "Airship" => Some(ForeignAircraftType::Airship), // Legacy compatibility
+                "uav" => Some(ForeignAircraftType::Uav),
+                "Uav" => Some(ForeignAircraftType::Uav), // Legacy compatibility
+                "static_obstacle" => Some(ForeignAircraftType::StaticObstacle),
+                "StaticObstacle" => Some(ForeignAircraftType::StaticObstacle), // Legacy compatibility
                 _ => None,
             })
         }
