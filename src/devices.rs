@@ -18,7 +18,7 @@ pub enum DeviceSource {
     Flarmnet,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default, DbEnum, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default, DbEnum, Serialize, Deserialize)]
 #[db_enum(existing_type_path = "crate::schema::sql_types::AddressType")]
 pub enum AddressType {
     Flarm,

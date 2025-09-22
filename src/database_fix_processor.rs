@@ -29,6 +29,7 @@ impl FixProcessor for DatabaseFixProcessor {
             let device_repo = self.device_repo.clone();
             let fixes_repo = self.fixes_repo.clone();
             let raw_message = raw_message.to_string();
+            let fix_clone = fix.clone();
             tokio::spawn(async move {
                 // Check if device exists in database
                 match device_repo
@@ -38,14 +39,14 @@ impl FixProcessor for DatabaseFixProcessor {
                     Ok(Some(_device)) => {
                         // Device exists, proceed with processing
                         // Convert the position::Fix to a database Fix struct
-                        let db_fix = fixes::Fix::from_position_fix(&fix, raw_message.to_string());
+                        let db_fix = fixes::Fix::from_position_fix(&fix_clone, raw_message.to_string());
 
                         // Save to database
                         match fixes_repo.insert(&db_fix).await {
                             Ok(_) => {
                                 trace!(
                                     "Successfully saved fix to database for aircraft {}",
-                                    fix.device_address_hex()
+                                    fix_clone.device_address_hex()
                                 );
                             }
                             Err(e) => {
@@ -59,14 +60,14 @@ impl FixProcessor for DatabaseFixProcessor {
                     Ok(None) => {
                         trace!(
                             "Device address {} ({:?}) not found in devices table, skipping fix processing",
-                            fix.device_address_hex(),
+                            fix_clone.device_address_hex(),
                             address_type
                         );
                     }
                     Err(e) => {
                         error!(
                             "Failed to lookup device address {} ({:?}): {}, skipping fix processing",
-                            fix.device_address_hex(),
+                            fix_clone.device_address_hex(),
                             address_type,
                             e
                         );
