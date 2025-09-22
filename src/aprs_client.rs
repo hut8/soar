@@ -426,6 +426,7 @@ impl AprsClient {
             .as_any()
             .downcast_ref::<PacketRouter>()
         {
+            trace!("Successfully downcast to PacketRouter, processing server message");
             router.process_server_message(message).await;
         } else {
             trace!("Packet processor is not a PacketRouter, server message only logged");
@@ -685,6 +686,7 @@ impl PacketRouter {
     /// Process a server message (line starting with #)
     pub async fn process_server_message(&self, raw_message: &str) {
         if let Some(server_proc) = &self.server_status_processor {
+            trace!("PacketRouter processing server message with ServerStatusProcessor");
             server_proc.process_server_message(raw_message).await;
         } else {
             trace!(
@@ -964,8 +966,11 @@ impl ServerStatusProcessor {
         let trimmed = raw_message.trim_start_matches('#').trim();
         let parts: Vec<&str> = trimmed.split_whitespace().collect();
 
+        trace!("Parsing server message parts: {:?}", parts);
+
         // Need at least: software version, date (3 parts), time, GMT, server_name, endpoint
         if parts.len() < 8 {
+            debug!("Server message has {} parts, need at least 8: {}", parts.len(), raw_message);
             return None;
         }
 
@@ -1026,6 +1031,34 @@ mod tests {
         assert_eq!(config.filter, Some("r/47.0/-122.0/100".to_string()));
         assert_eq!(config.max_retries, 3);
         assert_eq!(config.retry_delay_seconds, 10);
+    }
+
+    #[test]
+    fn test_server_message_parsing_logic() {
+        // Test just the parsing logic by testing it directly
+        let raw_message = "# aprsc 2.1.19-g730c5c0 22 Sep 2025 23:10:51 GMT GLIDERN3 85.188.1.173:10152";
+        let trimmed = raw_message.trim_start_matches('#').trim();
+        let parts: Vec<&str> = trimmed.split_whitespace().collect();
+
+        // Verify we have the right number of parts
+        assert!(parts.len() >= 8, "Should have at least 8 parts");
+
+        // Test software extraction
+        let software = format!("{} {}", parts[0], parts[1]);
+        assert_eq!(software, "aprsc 2.1.19-g730c5c0");
+
+        // Test timestamp parsing
+        let date_time_str = format!("{} {} {} {} {}", parts[2], parts[3], parts[4], parts[5], parts[6]);
+        assert_eq!(date_time_str, "22 Sep 2025 23:10:51 GMT");
+
+        let server_timestamp = NaiveDateTime::parse_from_str(&date_time_str, "%d %b %Y %H:%M:%S GMT");
+        assert!(server_timestamp.is_ok(), "Should parse timestamp correctly");
+
+        // Test server name and endpoint extraction
+        let server_name = parts[7];
+        let server_endpoint = parts[8];
+        assert_eq!(server_name, "GLIDERN3");
+        assert_eq!(server_endpoint, "85.188.1.173:10152");
     }
 
     #[test]

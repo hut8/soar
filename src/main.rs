@@ -3,15 +3,16 @@ use clap::{Parser, Subcommand};
 use diesel::r2d2::{ConnectionManager, Pool};
 use diesel::{PgConnection, QueryableByName, RunQueryDsl};
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
-use soar::{AprsProcessors, pull};
+use soar::pull;
 use std::env;
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 use tracing::{info, warn};
 
-use soar::aprs_client::{AprsClient, AprsClientConfigBuilder, FixHandler, PacketHandler};
+use soar::aprs_client::{AprsClient, AprsClientConfigBuilder, FixHandler, PacketRouter, PositionPacketProcessor, AircraftPositionProcessor, ServerStatusProcessor};
 use soar::fix_processor::FixProcessor;
+use soar::server_messages_repo::ServerMessagesRepository;
 use soar::live_fixes::LiveFixService;
 
 // Embed migrations at compile time
@@ -311,27 +312,34 @@ async fn handle_run(
         .unparsed_log_path(unparsed_log)
         .build();
 
-    // Create composite processor (NATS + file streaming)
-    info!(
-        "Setting up message processors - writing to directory: {:?}, NATS URL: {}",
-        archive_dir, nats_url
-    );
-    let archive_processor: Arc<dyn PacketHandler> = Arc::new(
-        soar::message_processors::ArchiveMessageProcessor::new(archive_dir),
-    );
-
     // Create database fix processor to save all valid fixes to the database
     let fix_processor: Arc<dyn FixHandler> = Arc::new(FixProcessor::new(diesel_pool.clone()));
 
-    let processors = AprsProcessors {
-        fix_processor: Some(fix_processor.clone()),
-        packet_processor: archive_processor,
-        position_processor: None,
-        status_processor: None,
-    };
+    // Create server status processor for server messages
+    let server_messages_repo = ServerMessagesRepository::new(diesel_pool.clone());
+    let server_status_processor = ServerStatusProcessor::new(server_messages_repo);
 
-    // Create and start APRS client with both message and fix processors
-    let mut client = AprsClient::new_with_processors(config, &processors);
+    // Create aircraft position processor
+    let aircraft_position_processor = AircraftPositionProcessor::new()
+        .with_fix_processor(fix_processor.clone())
+        .with_flight_detection();
+
+    // Create position packet processor
+    let position_processor = PositionPacketProcessor::new()
+        .with_aircraft_processor(aircraft_position_processor);
+
+    // Create PacketRouter with all processors
+    let packet_router = PacketRouter::new(archive_dir.clone())
+        .with_position_processor(position_processor)
+        .with_server_status_processor(server_status_processor);
+
+    info!(
+        "Setting up APRS client with PacketRouter - archive directory: {:?}, NATS URL: {}",
+        archive_dir, nats_url
+    );
+
+    // Create and start APRS client with PacketRouter
+    let mut client = AprsClient::with_packet_router(config, packet_router);
 
     info!("Starting APRS client...");
     client.start().await?;
