@@ -378,25 +378,25 @@ impl FixProcessor for FlightDetectionProcessor {
         self.db_processor.process_fix(fix.clone(), raw_message);
 
         // Only process fixes that have device address
-        if let Some(device_address) = &fix.device_address {
+        if fix.device_address.is_some() {
             // Clone self for async processing
             let mut processor = self.clone();
-            let device_address = device_address.clone();
+            let device_address_hex = fix.device_address_hex();
             let fix_clone = fix.clone();
 
             tokio::spawn(async move {
                 // Get or create aircraft tracker
-                if !processor.aircraft_trackers.contains_key(&device_address) {
+                if !processor.aircraft_trackers.contains_key(&device_address_hex) {
                     processor
                         .aircraft_trackers
-                        .insert(device_address.clone(), AircraftTracker::new());
+                        .insert(device_address_hex.clone(), AircraftTracker::new());
                 }
 
                 // Update tracker with new fix
                 {
                     let tracker = processor
                         .aircraft_trackers
-                        .get_mut(&device_address)
+                        .get_mut(&device_address_hex)
                         .unwrap();
                     tracker.fix_history.push(fix_clone.clone());
                     tracker.last_update = Utc::now();
@@ -404,7 +404,7 @@ impl FixProcessor for FlightDetectionProcessor {
 
                 // Process flight state transitions
                 processor
-                    .process_flight_state_transition(&device_address, &fix_clone)
+                    .process_flight_state_transition(&device_address_hex, &fix_clone)
                     .await;
 
                 // Periodic cleanup (run roughly every 256th fix processing)
@@ -412,7 +412,7 @@ impl FixProcessor for FlightDetectionProcessor {
                 use std::collections::hash_map::DefaultHasher;
                 use std::hash::{Hash, Hasher};
                 let mut hasher = DefaultHasher::new();
-                device_address.hash(&mut hasher);
+                device_address_hex.hash(&mut hasher);
                 if hasher.finish().is_multiple_of(256) {
                     processor.cleanup_old_trackers();
                 }

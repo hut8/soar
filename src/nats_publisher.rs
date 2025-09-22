@@ -91,13 +91,17 @@ impl FixProcessor for NatsFixPublisher {
         let device_repo = self.device_repo.clone();
 
         tokio::spawn(async move {
+            // Extract values we need to avoid partial moves
+            let registration = fix.registration.clone();
+            let device_address = fix.device_address;
+            let address_type = fix.address_type;
+            let source = fix.source.clone();
+
             // Get aircraft identifier from the fix
-            let aircraft_id = if let Some(registration) = &fix.registration {
+            let aircraft_id = if let Some(registration) = registration {
                 // Use registration if available
-                registration.clone()
-            } else if let (Some(device_address), Some(address_type)) =
-                (fix.device_address, fix.address_type)
-            {
+                registration
+            } else if let (Some(device_address), Some(address_type)) = (device_address, address_type) {
                 // Try to look up registration from device database
                 if let Some(registration) =
                     get_registration_for_device(&device_repo, device_address, address_type).await
@@ -106,11 +110,11 @@ impl FixProcessor for NatsFixPublisher {
                 } else {
                     // Use aircraft ID with type prefix if no registration found
                     fix.get_aircraft_identifier()
-                        .unwrap_or_else(|| format!("UNKNOWN-{}", fix.source))
+                        .unwrap_or_else(|| format!("UNKNOWN-{}", source))
                 }
             } else {
                 // Fallback to source callsign
-                fix.source.clone()
+                source
             };
 
             if let Err(e) = publish_to_nats(&nats_client, &aircraft_id, &fix).await {

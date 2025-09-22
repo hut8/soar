@@ -2,7 +2,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::ogn_aprs_aircraft::{AddressType, AdsbEmitterCategory, AircraftType};
+use crate::devices::AddressType;
+use crate::ogn_aprs_aircraft::{AdsbEmitterCategory, AircraftType};
 
 /// A position fix stored in the database
 /// This represents position data that has been persisted from APRS packets
@@ -29,7 +30,6 @@ pub struct Fix {
 
     /// Aircraft identification
     pub device_address_hex: Option<String>, // Hex device address (e.g., "39D304")
-    pub device_id: Option<u32>, // Raw device ID from OGN parameters (numeric)
     pub address_type: Option<AddressType>,
     pub aircraft_type: Option<AircraftType>,
 
@@ -71,8 +71,7 @@ impl Fix {
             latitude: position_fix.latitude,
             longitude: position_fix.longitude,
             altitude_feet: position_fix.altitude_feet,
-            device_address_hex: position_fix.device_address.clone(),
-            device_id: position_fix.device_id,
+            device_address_hex: position_fix.device_address.map(|addr| format!("{:06X}", addr)),
             address_type: position_fix.address_type,
             aircraft_type: position_fix.aircraft_type,
             flight_number: position_fix.flight_number.clone(),
@@ -103,7 +102,7 @@ impl Fix {
             let type_prefix = match *addr_type {
                 AddressType::Icao => "ICAO",
                 AddressType::Flarm => "FLARM",
-                AddressType::OgnTracker => "OGN",
+                AddressType::Ogn => "OGN",
                 AddressType::Unknown => "Unknown",
             };
             Some(format!("{}-{}", type_prefix, device_address))

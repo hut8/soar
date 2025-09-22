@@ -196,8 +196,6 @@ struct FixRow {
     altitude_feet: Option<i32>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
     device_address: Option<String>,
-    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
-    device_id: Option<Uuid>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
     address_type: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
@@ -235,22 +233,22 @@ struct FixRow {
 impl From<FixRow> for Fix {
     fn from(row: FixRow) -> Self {
         // Helper function to parse enum from string
-        fn parse_address_type(s: Option<String>) -> Option<ForeignAddressType> {
+        fn parse_address_type(s: Option<String>) -> Option<AddressType> {
             s.and_then(|s| match s.as_str() {
-                "unknown" => Some(ForeignAddressType::Unknown),
-                "icao" => Some(ForeignAddressType::Icao),
-                "flarm" => Some(ForeignAddressType::Flarm),
-                "ogn" => Some(ForeignAddressType::OgnTracker),
+                "unknown" => Some(AddressType::Unknown),
+                "icao" => Some(AddressType::Icao),
+                "flarm" => Some(AddressType::Flarm),
+                "ogn" => Some(AddressType::Ogn),
                 // Support legacy snake_case values for backward compatibility
-                "unknown_type" => Some(ForeignAddressType::Unknown),
-                "icao_address" => Some(ForeignAddressType::Icao),
-                "flarm_id" => Some(ForeignAddressType::Flarm),
-                "ogn_tracker" => Some(ForeignAddressType::OgnTracker),
+                "unknown_type" => Some(AddressType::Unknown),
+                "icao_address" => Some(AddressType::Icao),
+                "flarm_id" => Some(AddressType::Flarm),
+                "ogn_tracker" => Some(AddressType::Ogn),
                 // Support legacy CamelCase values for backward compatibility during migration
-                "Unknown" => Some(ForeignAddressType::Unknown),
-                "Icao" => Some(ForeignAddressType::Icao),
-                "Flarm" => Some(ForeignAddressType::Flarm),
-                "OgnTracker" => Some(ForeignAddressType::OgnTracker),
+                "Unknown" => Some(AddressType::Unknown),
+                "Icao" => Some(AddressType::Icao),
+                "Flarm" => Some(AddressType::Flarm),
+                "OgnTracker" => Some(AddressType::Ogn),
                 _ => None,
             })
         }
@@ -292,7 +290,6 @@ impl From<FixRow> for Fix {
             longitude: row.longitude,
             altitude_feet: row.altitude_feet,
             device_address_hex: row.device_address,
-            device_id: row.device_id,
             address_type: parse_address_type(row.address_type),
             aircraft_type: parse_aircraft_type(row.aircraft_type),
             flight_number: row.flight_number,
