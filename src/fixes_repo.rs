@@ -151,7 +151,7 @@ impl From<&Fix> for NewFix {
             latitude: fix.latitude,
             longitude: fix.longitude,
             altitude_feet: fix.altitude_feet,
-            device_address: fix.device_address.clone(),
+            device_address: fix.device_address_hex.clone(),
             device_id: None, // Will be resolved during insertion based on raw device_id and address_type
             address_type: fix.address_type.map(AddressType::from),
             aircraft_type: fix.aircraft_type.map(AircraftType::from),
@@ -291,8 +291,8 @@ impl From<FixRow> for Fix {
             latitude: row.latitude,
             longitude: row.longitude,
             altitude_feet: row.altitude_feet,
-            device_address: row.device_address,
-            device_id: None,
+            device_address_hex: row.device_address,
+            device_id: row.device_id,
             address_type: parse_address_type(row.address_type),
             aircraft_type: parse_aircraft_type(row.aircraft_type),
             flight_number: row.flight_number,
@@ -329,24 +329,15 @@ impl FixesRepository {
         device_address: &str,
         address_type_: AddressType,
     ) -> Result<Option<Uuid>> {
-        use crate::schema::devices::dsl::*;
-
         // Convert hex string to integer for database lookup
         let device_address_int = if let Ok(addr) = u32::from_str_radix(device_address, 16) {
-            addr as i32
+            addr
         } else {
             // If hex parsing fails, return None
             return Ok(None);
         };
 
-        let device_uuid = devices
-            .filter(address.eq(device_address_int))
-            .filter(address_type.eq(address_type_))
-            .select(id)
-            .first::<Uuid>(conn)
-            .optional()?;
-
-        Ok(device_uuid)
+        Self::lookup_device_uuid(conn, device_address_int, address_type_)
     }
 
     /// Look up device UUID by raw device_id and address_type (legacy method)
@@ -377,7 +368,7 @@ impl FixesRepository {
 
         // Look up device UUID if we have device address and address type
         if let (Some(dev_address), Some(address_type_ref)) =
-            (fix.device_address.as_ref(), fix.address_type.as_ref())
+            (fix.device_address_hex.as_ref(), fix.address_type.as_ref())
         {
             let address_type_enum = AddressType::from(*address_type_ref);
             let dev_address_owned = dev_address.clone();
@@ -440,7 +431,7 @@ impl FixesRepository {
                 for (original_fix, mut fix_data) in fixes_data {
                     // Look up device UUID if we have raw device info
                     if let (Some(dev_address), Some(address_type_ref)) = (
-                        original_fix.device_address.as_ref(),
+                        original_fix.device_address_hex.as_ref(),
                         original_fix.address_type.as_ref(),
                     ) {
                         let address_type_enum = AddressType::from(*address_type_ref);

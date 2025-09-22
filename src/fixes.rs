@@ -28,7 +28,7 @@ pub struct Fix {
     pub altitude_feet: Option<i32>,
 
     /// Aircraft identification
-    pub device_address: Option<String>, // Hex device address (e.g., "39D304")
+    pub device_address_hex: Option<String>, // Hex device address (e.g., "39D304")
     pub device_id: Option<u32>, // Raw device ID from OGN parameters (numeric)
     pub address_type: Option<AddressType>,
     pub aircraft_type: Option<AircraftType>,
@@ -71,7 +71,7 @@ impl Fix {
             latitude: position_fix.latitude,
             longitude: position_fix.longitude,
             altitude_feet: position_fix.altitude_feet,
-            device_address: position_fix.device_address.clone(),
+            device_address_hex: position_fix.device_address.clone(),
             device_id: position_fix.device_id,
             address_type: position_fix.address_type,
             aircraft_type: position_fix.aircraft_type,
@@ -98,7 +98,7 @@ impl Fix {
         if let Some(ref reg) = self.registration {
             Some(reg.clone())
         } else if let (Some(device_address), Some(addr_type)) =
-            (&self.device_address, &self.address_type)
+            (&self.device_address_hex, &self.address_type)
         {
             let type_prefix = match *addr_type {
                 AddressType::Icao => "ICAO",

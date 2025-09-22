@@ -10,31 +10,40 @@ use crate::device_repo::DeviceRepository;
 use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
 
-/// Get registration number for a given device ID
-/// This maps OGN/FLARM device IDs to aircraft registration numbers
-async fn get_registration_for_device_id(
+/// Get registration number for a given device address and type
+/// This maps OGN/FLARM device addresses to aircraft registration numbers
+async fn get_registration_for_device(
     device_repo: &DeviceRepository,
-    device_id: u32,
-    device_type: &str,
+    device_address: u32,
+    address_type: crate::devices::AddressType,
 ) -> Option<String> {
-    match device_repo.get_device_by_address(device_id).await {
+    match device_repo
+        .get_device_by_address(device_address, address_type)
+        .await
+    {
         Ok(Some(device)) => {
             if !device.registration.is_empty() {
                 Some(device.registration)
             } else {
-                debug!("Device {} found but has no registration", device_id);
+                debug!(
+                    "Device {:06X} ({:?}) found but has no registration",
+                    device_address, address_type
+                );
                 None
             }
         }
         Ok(None) => {
             debug!(
-                "No device found for device ID {} ({})",
-                device_id, device_type
+                "No device found for address {:06X} ({:?})",
+                device_address, address_type
             );
             None
         }
         Err(e) => {
-            error!("Failed to lookup device {}: {}", device_id, e);
+            error!(
+                "Failed to lookup device {:06X} ({:?}): {}",
+                device_address, address_type, e
+            );
             None
         }
     }
@@ -86,17 +95,12 @@ impl FixProcessor for NatsFixPublisher {
             let aircraft_id = if let Some(registration) = &fix.registration {
                 // Use registration if available
                 registration.clone()
-            } else if let Some(device_id) = fix.device_id {
-                // Try to look up US registration first
-                let device_type_str = match fix.address_type {
-                    Some(crate::ogn_aprs_aircraft::AddressType::Icao) => "ICAO",
-                    Some(crate::ogn_aprs_aircraft::AddressType::Flarm) => "FLARM",
-                    Some(crate::ogn_aprs_aircraft::AddressType::OgnTracker) => "OGN",
-                    _ => "Unknown",
-                };
-
+            } else if let (Some(device_address), Some(address_type)) =
+                (fix.device_address, fix.address_type)
+            {
+                // Try to look up registration from device database
                 if let Some(registration) =
-                    get_registration_for_device_id(&device_repo, device_id, device_type_str).await
+                    get_registration_for_device(&device_repo, device_address, address_type).await
                 {
                     registration
                 } else {

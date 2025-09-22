@@ -4,7 +4,8 @@ use num_traits::AsPrimitive;
 use ogn_parser::AprsPacket;
 use serde::{Deserialize, Serialize};
 
-use crate::ogn_aprs_aircraft::{AddressType, AdsbEmitterCategory, AircraftType};
+use crate::devices::AddressType;
+use crate::ogn_aprs_aircraft::{AdsbEmitterCategory, AircraftType};
 
 /// A position fix representing an aircraft's location and associated data
 /// This is the main domain entity for position updates, agnostic to source (APRS) and destination (database, NATS)
@@ -26,8 +27,7 @@ pub struct Fix {
     pub altitude_feet: Option<i32>,
 
     /// Aircraft identification from OGN parameters
-    pub device_address: Option<String>, // Hex device address (e.g., "39D304")
-    pub device_id: Option<u32>, // Raw device ID from OGN parameters (numeric)
+    pub device_address: Option<u32>, // Raw device address from OGN parameters (numeric)
     pub address_type: Option<AddressType>,
     pub aircraft_type: Option<AircraftType>,
 
@@ -84,7 +84,6 @@ impl Fix {
 
                 // Initialize OGN-related fields
                 let mut device_address = None;
-                let mut device_id = None;
                 let mut address_type = None;
                 let mut aircraft_type = None;
                 let flight_number = None;
@@ -101,13 +100,12 @@ impl Fix {
                 // Try to parse OGN parameters from comment
                 if let Some(ref id) = pos_packet.comment.id {
                     // Use pre-parsed ID information
-                    device_address = Some(format!("{:06X}", id.address));
-                    device_id = Some(id.address);
+                    device_address = Some(id.address);
                     address_type = Some(match id.address_type {
                         0 => AddressType::Unknown,
                         1 => AddressType::Icao,
                         2 => AddressType::Flarm,
-                        3 => AddressType::OgnTracker,
+                        3 => AddressType::Ogn,
                         _ => AddressType::Unknown,
                     });
                     // Extract aircraft type from the OGN parameters
@@ -123,7 +121,6 @@ impl Fix {
                     longitude,
                     altitude_feet,
                     device_address,
-                    device_id,
                     address_type,
                     aircraft_type,
                     flight_number,
@@ -149,6 +146,14 @@ impl Fix {
         }
     }
 
+    /// Convert device address to 6-character uppercase hex string
+    pub fn device_address_hex(&self) -> String {
+        match self.device_address {
+            Some(addr) => format!("{:06X}", addr),
+            None => "000000".to_string(),
+        }
+    }
+
     /// Get a human-readable aircraft identifier
     /// Uses registration if available, otherwise falls back to aircraft ID with type prefix
     pub fn get_aircraft_identifier(&self) -> Option<String> {
@@ -160,10 +165,10 @@ impl Fix {
             let type_prefix = match *addr_type {
                 AddressType::Icao => "ICAO",
                 AddressType::Flarm => "FLARM",
-                AddressType::OgnTracker => "OGN",
+                AddressType::Ogn => "OGN",
                 AddressType::Unknown => "Unknown",
             };
-            Some(format!("{}-{}", type_prefix, device_address))
+            Some(format!("{}-{}", type_prefix, self.device_address_hex()))
         } else {
             None
         }

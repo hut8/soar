@@ -158,7 +158,6 @@ impl NewReceiverStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bigdecimal::BigDecimal;
     use chrono::TimeZone;
 
     #[test]

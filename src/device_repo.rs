@@ -5,7 +5,7 @@ use diesel::upsert::excluded;
 use tracing::{info, warn};
 use uuid::Uuid;
 
-use crate::devices::{Device, DeviceModel, NewDevice};
+use crate::devices::{AddressType, Device, DeviceModel, NewDevice};
 use crate::schema::devices;
 
 pub type PgPool = Pool<ConnectionManager<PgConnection>>;
@@ -76,11 +76,17 @@ impl DeviceRepository {
         Ok(count)
     }
 
-    /// Get a device by its address
-    pub async fn get_device_by_address(&self, address: u32) -> Result<Option<Device>> {
+    /// Get a device by its address and address type
+    /// Address alone is not unique - must be combined with address_type for proper lookup
+    pub async fn get_device_by_address(
+        &self,
+        address: u32,
+        address_type: AddressType,
+    ) -> Result<Option<Device>> {
         let mut conn = self.get_connection()?;
         let device_model = devices::table
             .filter(devices::address.eq(address as i32))
+            .filter(devices::address_type.eq(address_type))
             .first::<DeviceModel>(&mut conn)
             .optional()?;
 
@@ -123,7 +129,7 @@ impl DeviceRepository {
             .collect())
     }
 
-    /// Search devices by address
+    /// Search devices by address (returns all devices with this address across all address types)
     pub async fn search_by_address(&self, address: u32) -> Result<Vec<Device>> {
         let mut conn = self.get_connection()?;
         let device_models = devices::table
@@ -134,6 +140,23 @@ impl DeviceRepository {
             .into_iter()
             .map(|model| model.into())
             .collect())
+    }
+
+    /// Search devices by address and address type combination
+    /// Returns a single device since (address, address_type) is a unique key
+    pub async fn search_by_address_and_type(
+        &self,
+        address: u32,
+        address_type: AddressType,
+    ) -> Result<Option<Device>> {
+        let mut conn = self.get_connection()?;
+        let device_model = devices::table
+            .filter(devices::address.eq(address as i32))
+            .filter(devices::address_type.eq(address_type))
+            .first::<DeviceModel>(&mut conn)
+            .optional()?;
+
+        Ok(device_model.map(|model| model.into()))
     }
 
     /// Search devices by registration
