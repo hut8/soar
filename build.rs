@@ -32,8 +32,6 @@ pub fn main() {
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         let stdout = String::from_utf8_lossy(&output.stdout);
-        panic!(
-            "npm run build failed:\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}"
-        );
+        panic!("npm run build failed:\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
     }
 }
