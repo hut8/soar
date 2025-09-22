@@ -113,6 +113,8 @@ struct NewFix {
     via: Vec<String>,
     raw_packet: String,
     timestamp: DateTime<Utc>,
+    received_at: DateTime<Utc>,
+    lag: Option<i32>,
     latitude: f64,
     longitude: f64,
     altitude_feet: Option<i32>,
@@ -145,6 +147,8 @@ impl From<&Fix> for NewFix {
             via: fix.via.clone(),
             raw_packet: fix.raw_packet.clone(),
             timestamp: fix.timestamp,
+            received_at: fix.received_at,
+            lag: fix.lag,
             latitude: fix.latitude,
             longitude: fix.longitude,
             altitude_feet: fix.altitude_feet,
@@ -185,6 +189,10 @@ struct FixRow {
     raw_packet: String,
     #[diesel(sql_type = diesel::sql_types::Timestamptz)]
     timestamp: DateTime<Utc>,
+    #[diesel(sql_type = diesel::sql_types::Timestamptz)]
+    received_at: DateTime<Utc>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Integer>)]
+    lag: Option<i32>,
     #[diesel(sql_type = diesel::sql_types::Float8)]
     latitude: f64,
     #[diesel(sql_type = diesel::sql_types::Float8)]
@@ -300,6 +308,8 @@ impl From<FixRow> for Fix {
             via: row.via.unwrap_or_default(),
             raw_packet: row.raw_packet,
             timestamp: row.timestamp,
+            received_at: row.received_at,
+            lag: row.lag,
             latitude: row.latitude,
             longitude: row.longitude,
             altitude_feet: row.altitude_feet,
@@ -493,7 +503,7 @@ impl FixesRepository {
 
             let sql = r#"
                 SELECT
-                    id, source, destination, via, raw_packet, timestamp,
+                    id, source, destination, via, raw_packet, timestamp, received_at, lag,
                     latitude, longitude, altitude_feet,
                     device_address, device_id, address_type, aircraft_type,
                     flight_number, emitter_category, registration, model, squawk,
@@ -542,7 +552,7 @@ impl FixesRepository {
             // We need to construct the point from latitude and longitude in the query
             let sql = r#"
                 SELECT
-                    id, source, destination, via, raw_packet, timestamp,
+                    id, source, destination, via, raw_packet, timestamp, received_at, lag,
                     latitude, longitude, altitude_feet,
                     device_address, device_id, address_type, aircraft_type,
                     flight_number, emitter_category, registration, model, squawk,
@@ -590,7 +600,7 @@ impl FixesRepository {
 
             let sql = r#"
                 SELECT
-                    id, source, destination, via, raw_packet, timestamp,
+                    id, source, destination, via, raw_packet, timestamp, received_at, lag,
                     latitude, longitude, altitude_feet,
                     device_address, device_id, address_type, aircraft_type,
                     flight_number, emitter_category, registration, model, squawk,
@@ -630,7 +640,7 @@ impl FixesRepository {
 
             let sql = r#"
                 SELECT
-                    id, source, destination, via, raw_packet, timestamp,
+                    id, source, destination, via, raw_packet, timestamp, received_at, lag,
                     latitude, longitude, altitude_feet,
                     device_address, device_id, address_type, aircraft_type,
                     flight_number, emitter_category, registration, model, squawk,
@@ -664,7 +674,7 @@ impl FixesRepository {
 
             let sql = r#"
                 SELECT
-                    id, source, destination, via, raw_packet, timestamp,
+                    id, source, destination, via, raw_packet, timestamp, received_at, lag,
                     latitude, longitude, altitude_feet,
                     device_address, device_id, address_type, aircraft_type,
                     flight_number, emitter_category, registration, model, squawk,
@@ -733,7 +743,7 @@ impl FixesRepository {
 
             let sql = if after.is_some() {
                 r#"
-                    SELECT id, source, destination, via, raw_packet, timestamp,
+                    SELECT id, source, destination, via, raw_packet, timestamp, received_at, lag,
                            latitude, longitude, altitude_feet, device_address, address_type,
                            aircraft_type, flight_number, emitter_category, registration,
                            model, squawk, ground_speed_knots, track_degrees, climb_fpm,
@@ -746,7 +756,7 @@ impl FixesRepository {
                 "#
             } else {
                 r#"
-                    SELECT id, source, destination, via, raw_packet, timestamp,
+                    SELECT id, source, destination, via, raw_packet, timestamp, received_at, lag,
                            latitude, longitude, altitude_feet, device_address, address_type,
                            aircraft_type, flight_number, emitter_category, registration,
                            model, squawk, ground_speed_knots, track_degrees, climb_fpm,

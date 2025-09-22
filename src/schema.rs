@@ -258,6 +258,8 @@ diesel::table! {
         flight_id -> Nullable<Uuid>,
         unparsed_data -> Nullable<Varchar>,
         device_id -> Nullable<Uuid>,
+        received_at -> Timestamptz,
+        lag -> Nullable<Int4>,
     }
 }
 

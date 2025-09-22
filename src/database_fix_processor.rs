@@ -1,4 +1,4 @@
-use tracing::{error, trace, warn};
+use tracing::{error, trace};
 
 use crate::device_repo::DeviceRepository;
 use crate::fixes;
@@ -76,7 +76,7 @@ impl FixProcessor for DatabaseFixProcessor {
                 }
             });
         } else {
-            warn!(
+            trace!(
                 "Fix has no device_address or address_type, skipping processing: {:?}",
                 fix
             );

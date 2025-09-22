@@ -540,7 +540,8 @@ impl AprsClient {
                 // Only process aircraft position sources for fixes
                 if let Some(fix_proc) = &processors.fix_processor {
                     if packet.position_source_type() == PositionSourceType::Aircraft {
-                        match Fix::from_aprs_packet(packet.clone()) {
+                        let received_at = chrono::Utc::now();
+                        match Fix::from_aprs_packet(packet.clone(), received_at) {
                             Ok(Some(fix)) => {
                                 fix_proc.process_fix(fix, message);
                             }
@@ -823,7 +824,8 @@ impl AircraftPositionProcessor {
     pub fn process_aircraft_position(&self, packet: &AprsPacket) {
         // Convert to Fix and process with fix processor if available
         if let Some(fix_proc) = &self.fix_processor {
-            match Fix::from_aprs_packet(packet.clone()) {
+            let received_at = chrono::Utc::now();
+            match Fix::from_aprs_packet(packet.clone(), received_at) {
                 Ok(Some(fix)) => {
                     // TODO: Get raw message - for now use a placeholder
                     let raw_message = format!("{:?}", packet); // Placeholder

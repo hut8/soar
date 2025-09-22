@@ -21,6 +21,12 @@ pub struct Fix {
     /// Timestamp when this fix was received/parsed
     pub timestamp: DateTime<Utc>,
 
+    /// Timestamp when we received/processed the packet
+    pub received_at: DateTime<Utc>,
+
+    /// Lag between packet timestamp and when we received it (in milliseconds)
+    pub lag: Option<i32>,
+
     /// Aircraft position
     pub latitude: f64,
     pub longitude: f64,
@@ -61,8 +67,16 @@ impl Fix {
     /// Returns Ok(None) if the packet doesn't represent a position fix
     /// Returns Ok(Some(fix)) for valid position fixes
     /// Returns Err for parsing failures
-    pub fn from_aprs_packet(packet: AprsPacket) -> Result<Option<Self>> {
-        let timestamp = Utc::now();
+    pub fn from_aprs_packet(
+        packet: AprsPacket,
+        received_at: DateTime<Utc>,
+    ) -> Result<Option<Self>> {
+        // For now, use received_at as the packet timestamp
+        // TODO: In the future, try to extract actual timestamp from packet if available
+        let timestamp = received_at;
+
+        // Calculate lag (difference between received_at and timestamp in milliseconds)
+        let lag = Some((received_at - timestamp).num_milliseconds() as i32);
 
         // Extract source, destination, and via from packet header
         let source = packet.from.to_string();
@@ -117,6 +131,8 @@ impl Fix {
                     destination,
                     via,
                     timestamp,
+                    received_at,
+                    lag,
                     latitude,
                     longitude,
                     altitude_feet,

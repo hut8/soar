@@ -23,6 +23,12 @@ pub struct Fix {
     /// Timestamp when this fix was received/parsed
     pub timestamp: DateTime<Utc>,
 
+    /// Timestamp when we received/processed the packet
+    pub received_at: DateTime<Utc>,
+
+    /// Lag between packet timestamp and when we received it (in milliseconds)
+    pub lag: Option<i32>,
+
     /// Aircraft position
     pub latitude: f64,
     pub longitude: f64,
@@ -71,6 +77,8 @@ impl Fix {
             via: position_fix.via.clone(),
             raw_packet,
             timestamp: position_fix.timestamp,
+            received_at: position_fix.received_at,
+            lag: position_fix.lag,
             latitude: position_fix.latitude,
             longitude: position_fix.longitude,
             altitude_feet: position_fix.altitude_feet,
