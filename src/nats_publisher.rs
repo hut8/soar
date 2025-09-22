@@ -101,7 +101,9 @@ impl FixProcessor for NatsFixPublisher {
             let aircraft_id = if let Some(registration) = registration {
                 // Use registration if available
                 registration
-            } else if let (Some(device_address), Some(address_type)) = (device_address, address_type) {
+            } else if let (Some(device_address), Some(address_type)) =
+                (device_address, address_type)
+            {
                 // Try to look up registration from device database
                 if let Some(registration) =
                     get_registration_for_device(&device_repo, device_address, address_type).await

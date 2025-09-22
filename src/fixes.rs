@@ -54,6 +54,9 @@ pub struct Fix {
     /// Club association
     pub club_id: Option<Uuid>,
 
+    // Device association
+    pub device_id: Option<Uuid>,
+
     /// Unparsed portion of the packet (if any)
     pub unparsed_data: Option<String>,
 }
@@ -71,7 +74,9 @@ impl Fix {
             latitude: position_fix.latitude,
             longitude: position_fix.longitude,
             altitude_feet: position_fix.altitude_feet,
-            device_address_hex: position_fix.device_address.map(|addr| format!("{:06X}", addr)),
+            device_address_hex: position_fix
+                .device_address
+                .map(|addr| format!("{:06X}", addr)),
             address_type: position_fix.address_type,
             aircraft_type: position_fix.aircraft_type,
             flight_number: position_fix.flight_number.clone(),
@@ -88,6 +93,7 @@ impl Fix {
             freq_offset_khz: position_fix.freq_offset_khz,
             club_id: None, // Will be set by repository based on aircraft registration
             unparsed_data: position_fix.unparsed_data.clone(),
+            device_id: None, // Will be set by repository based on device address
         }
     }
 

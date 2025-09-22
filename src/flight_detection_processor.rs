@@ -386,7 +386,10 @@ impl FixProcessor for FlightDetectionProcessor {
 
             tokio::spawn(async move {
                 // Get or create aircraft tracker
-                if !processor.aircraft_trackers.contains_key(&device_address_hex) {
+                if !processor
+                    .aircraft_trackers
+                    .contains_key(&device_address_hex)
+                {
                     processor
                         .aircraft_trackers
                         .insert(device_address_hex.clone(), AircraftTracker::new());

@@ -153,7 +153,7 @@ impl From<&Fix> for NewFix {
             altitude_feet: fix.altitude_feet,
             device_address: fix.device_address_hex.clone(),
             device_id: None, // Will be resolved during insertion based on raw device_id and address_type
-            address_type: fix.address_type.map(AddressType::from),
+            address_type: fix.address_type,
             aircraft_type: fix.aircraft_type.map(AircraftType::from),
             flight_number: fix.flight_number.clone(),
             emitter_category: fix.emitter_category,
@@ -228,6 +228,8 @@ struct FixRow {
     club_id: Option<Uuid>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
     unparsed_data: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
+    device_id: Option<Uuid>,
 }
 
 impl From<FixRow> for Fix {
@@ -306,6 +308,7 @@ impl From<FixRow> for Fix {
             freq_offset_khz: row.freq_offset_khz,
             club_id: row.club_id,
             unparsed_data: row.unparsed_data,
+            device_id: row.device_id,
         }
     }
 }
@@ -367,7 +370,7 @@ impl FixesRepository {
         if let (Some(dev_address), Some(address_type_ref)) =
             (fix.device_address_hex.as_ref(), fix.address_type.as_ref())
         {
-            let address_type_enum = AddressType::from(*address_type_ref);
+            let address_type_enum = *address_type_ref;
             let dev_address_owned = dev_address.clone();
 
             tokio::task::spawn_blocking(move || {
@@ -431,7 +434,7 @@ impl FixesRepository {
                         original_fix.device_address_hex.as_ref(),
                         original_fix.address_type.as_ref(),
                     ) {
-                        let address_type_enum = AddressType::from(*address_type_ref);
+                        let address_type_enum = *address_type_ref;
                         if let Ok(Some(device_uuid)) = Self::lookup_device_uuid_by_address(
                             conn,
                             dev_address,

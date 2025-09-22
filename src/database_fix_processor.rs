@@ -39,7 +39,8 @@ impl FixProcessor for DatabaseFixProcessor {
                     Ok(Some(_device)) => {
                         // Device exists, proceed with processing
                         // Convert the position::Fix to a database Fix struct
-                        let db_fix = fixes::Fix::from_position_fix(&fix_clone, raw_message.to_string());
+                        let db_fix =
+                            fixes::Fix::from_position_fix(&fix_clone, raw_message.to_string());
 
                         // Save to database
                         match fixes_repo.insert(&db_fix).await {
