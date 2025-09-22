@@ -93,7 +93,8 @@ impl ServerMessagesRepository {
                 .values(&new_message)
                 .execute(&mut conn)?;
             Ok::<(), anyhow::Error>(())
-        }).await??;
+        })
+        .await??;
 
         debug!("Inserted server message: {:?}", message);
         Ok(())
@@ -119,7 +120,8 @@ impl ServerMessagesRepository {
                 .select(ServerMessageRow::as_select())
                 .load(&mut conn)?;
             Ok::<Vec<ServerMessageRow>, anyhow::Error>(rows)
-        }).await??;
+        })
+        .await??;
 
         Ok(rows.into_iter().map(ServerMessage::from).collect())
     }
@@ -138,7 +140,8 @@ impl ServerMessagesRepository {
                 .select(ServerMessageRow::as_select())
                 .load(&mut conn)?;
             Ok::<Vec<ServerMessageRow>, anyhow::Error>(rows)
-        }).await??;
+        })
+        .await??;
 
         Ok(rows.into_iter().map(ServerMessage::from).collect())
     }
@@ -157,7 +160,8 @@ impl ServerMessagesRepository {
                 .count()
                 .get_result(&mut conn)?;
             Ok::<i64, anyhow::Error>(count)
-        }).await??;
+        })
+        .await??;
 
         Ok(count)
     }

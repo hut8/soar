@@ -33,6 +33,10 @@ impl PacketHandler for ArchiveMessageProcessor {
             archive.log_message(raw_message);
         }
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }
 
 pub struct NoOpPacketProcessor;
@@ -44,6 +48,10 @@ impl PacketHandler for NoOpPacketProcessor {
 
     fn process_raw_message(&self, _raw_message: &str) {
         // No-op implementation
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 

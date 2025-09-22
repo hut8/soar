@@ -3,7 +3,7 @@ use clap::{Parser, Subcommand};
 use diesel::r2d2::{ConnectionManager, Pool};
 use diesel::{PgConnection, QueryableByName, RunQueryDsl};
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
-use soar::{pull, AprsProcessors};
+use soar::{AprsProcessors, pull};
 use std::env;
 use std::fs;
 use std::path::Path;
@@ -321,8 +321,7 @@ async fn handle_run(
     );
 
     // Create database fix processor to save all valid fixes to the database
-    let fix_processor: Arc<dyn FixHandler> =
-        Arc::new(FixProcessor::new(diesel_pool.clone()));
+    let fix_processor: Arc<dyn FixHandler> = Arc::new(FixProcessor::new(diesel_pool.clone()));
 
     let processors = AprsProcessors {
         fix_processor: Some(fix_processor.clone()),
@@ -332,8 +331,7 @@ async fn handle_run(
     };
 
     // Create and start APRS client with both message and fix processors
-    let mut client =
-        AprsClient::new_with_processors(config, &processors);
+    let mut client = AprsClient::new_with_processors(config, &processors);
 
     info!("Starting APRS client...");
     client.start().await?;

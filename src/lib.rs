@@ -12,12 +12,12 @@ pub mod aprs_client;
 pub mod auth;
 pub mod clubs;
 pub mod clubs_repo;
-pub mod fix_processor;
 pub mod device_repo;
 pub mod devices;
 pub mod email;
 pub mod faa;
 pub mod fetch_receivers;
+pub mod fix_processor;
 pub mod fixes;
 pub mod fixes_repo;
 pub mod flight_detection_processor;
@@ -50,7 +50,7 @@ pub mod web;
 pub use aprs_client::{
     AircraftPositionProcessor, AprsClient, AprsClientConfig, AprsClientConfigBuilder,
     AprsProcessors, FixHandler, PacketHandler, PacketRouter, PositionPacketProcessor,
-    PositionProcessor, ReceiverStatusProcessor, StatusProcessor,
+    PositionProcessor, ReceiverStatusProcessor, ServerStatusProcessor, StatusProcessor,
 };
 pub use nats_publisher::NatsFixPublisher;
 pub use position::Fix;

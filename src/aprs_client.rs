@@ -1,7 +1,10 @@
 use crate::Fix;
 use crate::receiver_status_repo::ReceiverStatusRepository;
 use crate::receiver_statuses::NewReceiverStatus;
+use crate::server_messages::ServerMessage;
+use crate::server_messages_repo::ServerMessagesRepository;
 use anyhow::Result;
+use chrono::{DateTime, NaiveDateTime, Utc};
 
 /// Result type for connection attempts
 enum ConnectionResult {
@@ -25,7 +28,7 @@ use tracing::{debug, error, info, warn};
 
 /// Trait for processing APRS packets
 /// Implementors can define custom logic for handling received APRS packets
-pub trait PacketHandler: Send + Sync {
+pub trait PacketHandler: Send + Sync + std::any::Any {
     /// Process a received APRS packet
     ///
     /// # Arguments
@@ -41,6 +44,9 @@ pub trait PacketHandler: Send + Sync {
     fn process_raw_message(&self, _raw_message: &str) {
         // Default implementation does nothing
     }
+
+    /// Support for downcasting to concrete types
+    fn as_any(&self) -> &dyn std::any::Any;
 }
 
 /// Trait for processing position fixes extracted from APRS messages
@@ -235,10 +241,7 @@ impl AprsClient {
     }
 
     /// Create a new APRS client with position and status processors (backward compatibility)
-    pub fn new_with_processors(
-        config: AprsClientConfig,
-        processors: &AprsProcessors,
-    ) -> Self {
+    pub fn new_with_processors(config: AprsClientConfig, processors: &AprsProcessors) -> Self {
         Self {
             config,
             processors: processors.clone(),
@@ -370,11 +373,11 @@ impl AprsClient {
                         } else {
                             trace!("Received: {}", trimmed_line);
                         }
-                        // Skip server messages (lines starting with #)
+                        // Route server messages (lines starting with #) and regular APRS messages differently
                         if !trimmed_line.starts_with('#') {
                             Self::process_message(trimmed_line, &processors, config).await;
                         } else {
-                            info!("Server message: {}", trimmed_line);
+                            Self::process_server_message(trimmed_line, &processors).await;
                         }
                     }
                 }
@@ -409,6 +412,24 @@ impl AprsClient {
 
         login_cmd.push_str("\r\n");
         login_cmd
+    }
+
+    /// Process a server message (line starting with #)
+    async fn process_server_message(message: &str, processors: &AprsProcessors) {
+        // First log the server message for backward compatibility
+        info!("Server message: {}", message);
+
+        // Try to process with PacketRouter if available
+        // We need to use Any to check if it's a PacketRouter since we only have dyn PacketHandler
+        if let Some(router) = processors
+            .packet_processor
+            .as_any()
+            .downcast_ref::<PacketRouter>()
+        {
+            router.process_server_message(message).await;
+        } else {
+            trace!("Packet processor is not a PacketRouter, server message only logged");
+        }
     }
 
     /// Process a received APRS message
@@ -626,6 +647,8 @@ pub struct PacketRouter {
     position_processor: Option<PositionPacketProcessor>,
     /// Receiver status processor for handling status data from receivers
     receiver_status_processor: Option<ReceiverStatusProcessor>,
+    /// Server status processor for handling server comment messages
+    server_status_processor: Option<ServerStatusProcessor>,
 }
 
 impl PacketRouter {
@@ -635,6 +658,7 @@ impl PacketRouter {
             archive_base_dir,
             position_processor: None,
             receiver_status_processor: None,
+            server_status_processor: None,
         }
     }
 
@@ -649,6 +673,26 @@ impl PacketRouter {
         self.receiver_status_processor = Some(processor);
         self
     }
+
+    /// Add a server status processor to the router
+    pub fn with_server_status_processor(mut self, processor: ServerStatusProcessor) -> Self {
+        self.server_status_processor = Some(processor);
+        self
+    }
+}
+
+impl PacketRouter {
+    /// Process a server message (line starting with #)
+    pub async fn process_server_message(&self, raw_message: &str) {
+        if let Some(server_proc) = &self.server_status_processor {
+            server_proc.process_server_message(raw_message).await;
+        } else {
+            trace!(
+                "No server status processor configured, logging server message: {}",
+                raw_message
+            );
+        }
+    }
 }
 
 impl PacketHandler for PacketRouter {
@@ -659,6 +703,10 @@ impl PacketHandler for PacketRouter {
             // For now, just trace log it
             trace!("Would archive to {}: {}", base_dir, raw_message);
         }
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
     fn process_packet(&self, packet: AprsPacket) {
@@ -723,10 +771,22 @@ impl PositionPacketProcessor {
                     trace!("No aircraft processor configured, skipping aircraft position");
                 }
             }
+            PositionSourceType::Receiver => {
+                trace!(
+                    "Position from receiver {} - logging and ignoring",
+                    packet.from
+                );
+            }
+            PositionSourceType::WeatherStation => {
+                trace!(
+                    "Position from weather station {} - logging and ignoring",
+                    packet.from
+                );
+            }
             source_type => {
                 trace!(
-                    "Position from non-aircraft source {:?} - not implemented yet",
-                    source_type
+                    "Position from unknown source type {:?} from {} - ignoring",
+                    source_type, packet.from
                 );
             }
         }
@@ -861,6 +921,87 @@ impl ReceiverStatusProcessor {
     }
 }
 
+/// Processor for handling APRS server comment/status messages
+pub struct ServerStatusProcessor {
+    /// Repository for storing server messages
+    server_messages_repo: ServerMessagesRepository,
+}
+
+impl ServerStatusProcessor {
+    /// Create a new ServerStatusProcessor
+    pub fn new(server_messages_repo: ServerMessagesRepository) -> Self {
+        Self {
+            server_messages_repo,
+        }
+    }
+
+    /// Process a server status message (line starting with #)
+    pub async fn process_server_message(&self, raw_message: &str) {
+        let received_at = Utc::now();
+
+        // Parse server message format: # aprsc 2.1.15-gc67551b 22 Sep 2025 21:51:55 GMT GLIDERN1 51.178.19.212:10152
+        if let Some(parsed) = self.parse_server_message(raw_message, received_at) {
+            if let Err(e) = self.server_messages_repo.insert(&parsed).await {
+                debug!("Failed to insert server message: {}", e);
+            } else {
+                trace!(
+                    "Successfully stored server message from {}",
+                    parsed.server_name
+                );
+            }
+        } else {
+            debug!("Failed to parse server message: {}", raw_message);
+        }
+    }
+
+    /// Parse server message string into ServerMessage
+    /// Expected format: # aprsc 2.1.15-gc67551b 22 Sep 2025 21:51:55 GMT GLIDERN1 51.178.19.212:10152
+    fn parse_server_message(
+        &self,
+        raw_message: &str,
+        received_at: DateTime<Utc>,
+    ) -> Option<ServerMessage> {
+        let trimmed = raw_message.trim_start_matches('#').trim();
+        let parts: Vec<&str> = trimmed.split_whitespace().collect();
+
+        // Need at least: software version, date (3 parts), time, GMT, server_name, endpoint
+        if parts.len() < 8 {
+            return None;
+        }
+
+        // Extract software (first two parts: "aprsc 2.1.15-gc67551b")
+        let software = format!("{} {}", parts[0], parts[1]);
+
+        // Extract timestamp parts: "22 Sep 2025 21:51:55 GMT"
+        let date_time_str = format!(
+            "{} {} {} {} {}",
+            parts[2], parts[3], parts[4], parts[5], parts[6]
+        );
+
+        // Parse timestamp
+        let server_timestamp =
+            match NaiveDateTime::parse_from_str(&date_time_str, "%d %b %Y %H:%M:%S GMT") {
+                Ok(naive_dt) => naive_dt.and_utc(),
+                Err(_) => {
+                    debug!("Failed to parse timestamp: {}", date_time_str);
+                    return None;
+                }
+            };
+
+        // Extract server name and endpoint
+        let server_name = parts[7].to_string();
+        let server_endpoint = parts[8].to_string();
+
+        Some(ServerMessage::new(
+            software,
+            server_timestamp,
+            received_at,
+            server_name,
+            server_endpoint,
+        ))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -936,6 +1077,10 @@ mod tests {
     impl PacketHandler for TestPacketProcessor {
         fn process_packet(&self, _packet: AprsPacket) {
             self.counter.fetch_add(1, Ordering::SeqCst);
+        }
+
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
         }
     }
 
