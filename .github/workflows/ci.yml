@@ -257,7 +257,7 @@ jobs:
             set -e
 
             echo "Stopping SOAR services..."
-            sudo systemctl stop soar || echo "SOAR services were not running"
+            sudo systemctl stop soar-run soar-web || echo "SOAR services were not running"
 
             echo "Backing up current binary..."
             if [ -f /usr/local/bin/soar ]; then
@@ -270,11 +270,11 @@ jobs:
             sudo chown root:root /usr/local/bin/soar
 
             echo "Starting SOAR services..."
-            sudo systemctl start soar
+            sudo systemctl start soar-run soar-web
 
             echo "Checking service status..."
             sleep 5
-            sudo systemctl status soar --no-pager || true
+            sudo systemctl status soar-run soar-web --no-pager || true
 
             echo "Cleaning up old backups (keeping last 5)..."
             ls -t /home/soar/soar.backup.* 2>/dev/null | tail -n +6 | xargs rm -f || true
@@ -291,11 +291,11 @@ jobs:
 
             echo ""
             echo "Service status:"
-            sudo systemctl is-active soar || echo "Service is not active"
+            sudo systemctl is-active soar-run soar-web || echo "Services are not active"
 
             echo ""
             echo "Recent logs:"
-            sudo journalctl -u soar --no-pager --lines=10 || echo "Could not retrieve logs"
+            sudo journalctl -u soar-run --no-pager --lines=5 && sudo journalctl -u soar-web --no-pager --lines=5 || echo "Could not retrieve logs"
           EOF
 
       - name: Cleanup SSH
