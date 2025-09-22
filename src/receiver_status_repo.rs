@@ -266,8 +266,8 @@ mod tests {
         use std::env;
 
         // Only run if DATABASE_URL is set (for CI environments)
-        if env::var("DATABASE_URL").is_ok() {
-            let manager = ConnectionManager::<PgConnection>::new("postgres://localhost/test");
+        if let Ok(url) = env::var("DATABASE_URL") {
+            let manager = ConnectionManager::<PgConnection>::new(url);
             let pool = Pool::builder().build(manager).unwrap();
             let _repo = ReceiverStatusRepository::new(pool);
         }
