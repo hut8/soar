@@ -19,7 +19,7 @@ use crate::devices::AddressType;
 #[db_enum(existing_type_path = "crate::schema::sql_types::AircraftType")]
 pub enum AircraftType {
     Reserved0,
-    GliderMotorGlider,
+    Glider,
     TowTug,
     HelicopterGyro,
     SkydiverParachute,
@@ -63,7 +63,7 @@ impl From<ForeignAircraftType> for AircraftType {
     fn from(foreign_type: ForeignAircraftType) -> Self {
         match foreign_type {
             ForeignAircraftType::Reserved0 => AircraftType::Reserved0,
-            ForeignAircraftType::GliderMotorGlider => AircraftType::GliderMotorGlider,
+            ForeignAircraftType::Glider => AircraftType::Glider,
             ForeignAircraftType::TowTug => AircraftType::TowTug,
             ForeignAircraftType::HelicopterGyro => AircraftType::HelicopterGyro,
             ForeignAircraftType::SkydiverParachute => AircraftType::SkydiverParachute,
@@ -86,7 +86,7 @@ impl From<AircraftType> for ForeignAircraftType {
     fn from(wrapper_type: AircraftType) -> Self {
         match wrapper_type {
             AircraftType::Reserved0 => ForeignAircraftType::Reserved0,
-            AircraftType::GliderMotorGlider => ForeignAircraftType::GliderMotorGlider,
+            AircraftType::Glider => ForeignAircraftType::Glider,
             AircraftType::TowTug => ForeignAircraftType::TowTug,
             AircraftType::HelicopterGyro => ForeignAircraftType::HelicopterGyro,
             AircraftType::SkydiverParachute => ForeignAircraftType::SkydiverParachute,
@@ -258,7 +258,7 @@ impl From<FixRow> for Fix {
         fn parse_aircraft_type(s: Option<String>) -> Option<ForeignAircraftType> {
             s.and_then(|s| match s.as_str() {
                 "Reserved0" => Some(ForeignAircraftType::Reserved0),
-                "GliderMotorGlider" => Some(ForeignAircraftType::GliderMotorGlider),
+                "Glider" => Some(ForeignAircraftType::Glider),
                 "TowTug" => Some(ForeignAircraftType::TowTug),
                 "HelicopterGyro" => Some(ForeignAircraftType::HelicopterGyro),
                 "SkydiverParachute" => Some(ForeignAircraftType::SkydiverParachute),

@@ -14,7 +14,7 @@ pub enum AddressType {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AircraftType {
     Reserved0,
-    GliderMotorGlider,
+    Glider,
     TowTug,
     HelicopterGyro,
     SkydiverParachute,
@@ -35,7 +35,7 @@ impl From<u8> for AircraftType {
     fn from(v: u8) -> Self {
         match v & 0x0F {
             0x0 => AircraftType::Reserved0,
-            0x1 => AircraftType::GliderMotorGlider,
+            0x1 => AircraftType::Glider,
             0x2 => AircraftType::TowTug,
             0x3 => AircraftType::HelicopterGyro,
             0x4 => AircraftType::SkydiverParachute,
