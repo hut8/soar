@@ -13,6 +13,24 @@ SOAR is an application under active development that will automate many duty-man
 - **Configurable Filters**: Support for APRS-IS filters to limit received messages
 - **Retry Logic**: Built-in connection retry with configurable parameters
 
+## APRS Packet Routing
+
+* In `aprs_client::AprsClient`, an APRS sentence is received and parsed into an `AprsPacket` via `ogn_parser` (my fork of that crate)
+* The packet is then dispatched via a PacketRouter:
+  * APRS Status -> routed to ReceiverStatusProcessor
+  * APRS Position -> determine the position source type (defined in `ogn_parser::PositionSourceType`)
+    * Aircraft -> routed to AircraftPositionProcessor, which will:
+      * parse the AprsPacket
+      * create a Fix, if the device is present in the DDB
+      * use the FlightDetectionProcessor to associate the fix with a flight, if applicable
+      * insert it into the database
+      * send it to NATS so that web clients will see it if they are subscribed
+    * Receiver -> log via `trace!()` then ignore
+    * Weather Station -> log via `trace!()` then ignore
+  * APRS Server Comment -> routed to ServerStatusProcessor, which will:
+    * Parse out useful fields (timestamp, from which lag is computed; server name; endpoint; software version)
+    * Insert these into the database
+
 ## Provisioning
 
 ### Database
