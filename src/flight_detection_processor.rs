@@ -2,10 +2,10 @@ use chrono::{DateTime, Duration, Utc};
 use std::collections::HashMap;
 use tracing::{debug, error, info, warn};
 
-use crate::database_fix_processor::DatabaseFixProcessor;
+use crate::fix_processor::FixProcessor;
 use crate::flights::Flight;
 use crate::flights_repo::FlightsRepository;
-use crate::{Fix, FixProcessor};
+use crate::{Fix, FixHandler};
 use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
 
@@ -71,7 +71,7 @@ impl AircraftTracker {
 
 /// Flight detection processor that extends the database fix processor with flight tracking
 pub struct FlightDetectionProcessor {
-    db_processor: DatabaseFixProcessor,
+    db_processor: FixProcessor,
     flights_repo: FlightsRepository,
     aircraft_trackers: HashMap<String, AircraftTracker>,
     diesel_pool: Pool<ConnectionManager<PgConnection>>,
@@ -87,7 +87,7 @@ pub struct FlightDetectionProcessor {
 impl FlightDetectionProcessor {
     pub fn new(diesel_pool: Pool<ConnectionManager<PgConnection>>) -> Self {
         Self {
-            db_processor: DatabaseFixProcessor::new(diesel_pool.clone()),
+            db_processor: FixProcessor::new(diesel_pool.clone()),
             flights_repo: FlightsRepository::new(diesel_pool.clone()),
             aircraft_trackers: HashMap::new(),
             diesel_pool,
@@ -372,7 +372,7 @@ impl FlightDetectionProcessor {
     }
 }
 
-impl FixProcessor for FlightDetectionProcessor {
+impl FixHandler for FlightDetectionProcessor {
     fn process_fix(&self, fix: Fix, raw_message: &str) {
         // First, delegate to the database processor
         self.db_processor.process_fix(fix.clone(), raw_message);
@@ -428,7 +428,7 @@ impl FixProcessor for FlightDetectionProcessor {
 impl Clone for FlightDetectionProcessor {
     fn clone(&self) -> Self {
         Self {
-            db_processor: DatabaseFixProcessor::new(self.diesel_pool.clone()),
+            db_processor: FixProcessor::new(self.diesel_pool.clone()),
             flights_repo: FlightsRepository::new(self.diesel_pool.clone()),
             aircraft_trackers: self.aircraft_trackers.clone(),
             diesel_pool: self.diesel_pool.clone(),

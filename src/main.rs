@@ -3,15 +3,15 @@ use clap::{Parser, Subcommand};
 use diesel::r2d2::{ConnectionManager, Pool};
 use diesel::{PgConnection, QueryableByName, RunQueryDsl};
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
-use soar::pull;
+use soar::{pull, AprsProcessors};
 use std::env;
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 use tracing::{info, warn};
 
-use soar::aprs_client::{AprsClient, AprsClientConfigBuilder, FixProcessor, PacketProcessor};
-use soar::database_fix_processor::DatabaseFixProcessor;
+use soar::aprs_client::{AprsClient, AprsClientConfigBuilder, FixHandler, PacketHandler};
+use soar::fix_processor::FixProcessor;
 use soar::live_fixes::LiveFixService;
 
 // Embed migrations at compile time
@@ -316,17 +316,24 @@ async fn handle_run(
         "Setting up message processors - writing to directory: {:?}, NATS URL: {}",
         archive_dir, nats_url
     );
-    let archive_processor: Arc<dyn PacketProcessor> = Arc::new(
+    let archive_processor: Arc<dyn PacketHandler> = Arc::new(
         soar::message_processors::ArchiveMessageProcessor::new(archive_dir),
     );
 
     // Create database fix processor to save all valid fixes to the database
-    let db_fix_processor: Arc<dyn FixProcessor> =
-        Arc::new(DatabaseFixProcessor::new(diesel_pool.clone()));
+    let fix_processor: Arc<dyn FixHandler> =
+        Arc::new(FixProcessor::new(diesel_pool.clone()));
+
+    let processors = AprsProcessors {
+        fix_processor: Some(fix_processor.clone()),
+        packet_processor: archive_processor,
+        position_processor: None,
+        status_processor: None,
+    };
 
     // Create and start APRS client with both message and fix processors
     let mut client =
-        AprsClient::new_with_fix_processor(config, archive_processor, db_fix_processor);
+        AprsClient::new_with_processors(config, &processors);
 
     info!("Starting APRS client...");
     client.start().await?;

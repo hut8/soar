@@ -3,17 +3,17 @@ use tracing::{error, trace};
 use crate::device_repo::DeviceRepository;
 use crate::fixes;
 use crate::fixes_repo::FixesRepository;
-use crate::{Fix, FixProcessor};
+use crate::{Fix, FixHandler};
 use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
 
-/// Database fix processor that saves valid fixes to the database
-pub struct DatabaseFixProcessor {
+/// Database fix processor that saves valid fixes to the database and performs flight tracking
+pub struct FixProcessor {
     fixes_repo: FixesRepository,
     device_repo: DeviceRepository,
 }
 
-impl DatabaseFixProcessor {
+impl FixProcessor {
     pub fn new(diesel_pool: Pool<ConnectionManager<PgConnection>>) -> Self {
         Self {
             fixes_repo: FixesRepository::new(diesel_pool.clone()),
@@ -22,7 +22,7 @@ impl DatabaseFixProcessor {
     }
 }
 
-impl FixProcessor for DatabaseFixProcessor {
+impl FixHandler for FixProcessor {
     fn process_fix(&self, fix: Fix, raw_message: &str) {
         // Check device_address against devices table first - if not found, skip processing
         if let (Some(device_address), Some(address_type)) = (fix.device_address, fix.address_type) {

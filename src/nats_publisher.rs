@@ -5,7 +5,7 @@ use std::sync::Arc;
 use tracing::{debug, error, info};
 
 use crate::Fix;
-use crate::aprs_client::FixProcessor;
+use crate::aprs_client::FixHandler;
 use crate::device_repo::DeviceRepository;
 use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
@@ -84,7 +84,7 @@ impl NatsFixPublisher {
     }
 }
 
-impl FixProcessor for NatsFixPublisher {
+impl FixHandler for NatsFixPublisher {
     fn process_fix(&self, fix: Fix, _raw_message: &str) {
         // Clone the client and device repo for the async task
         let nats_client = Arc::clone(&self.nats_client);

@@ -414,6 +414,20 @@ diesel::table! {
 }
 
 diesel::table! {
+    server_messages (id) {
+        id -> Uuid,
+        software -> Text,
+        server_timestamp -> Timestamptz,
+        received_at -> Timestamptz,
+        server_name -> Text,
+        server_endpoint -> Text,
+        lag -> Nullable<Int4>,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
     spatial_ref_sys (srid) {
         srid -> Int4,
         #[max_length = 256]
@@ -527,6 +541,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     receivers_photos,
     regions,
     runways,
+    server_messages,
     spatial_ref_sys,
     states,
     status_codes,
