@@ -1,4 +1,5 @@
 use crate::Fix;
+use crate::flight_detection_processor::FlightDetectionProcessor;
 use crate::receiver_status_repo::ReceiverStatusRepository;
 use crate::receiver_statuses::NewReceiverStatus;
 use crate::server_messages::ServerMessage;
@@ -817,7 +818,7 @@ pub struct AircraftPositionProcessor {
     /// Fix processor for database storage
     fix_processor: Option<Arc<dyn FixHandler>>,
     /// Flight detection processor for flight tracking
-    flight_detection_enabled: bool,
+    flight_detection_processor: Option<Arc<FlightDetectionProcessor>>,
 }
 
 impl Default for AircraftPositionProcessor {
@@ -831,7 +832,7 @@ impl AircraftPositionProcessor {
     pub fn new() -> Self {
         Self {
             fix_processor: None,
-            flight_detection_enabled: false,
+            flight_detection_processor: None,
         }
     }
 
@@ -841,9 +842,12 @@ impl AircraftPositionProcessor {
         self
     }
 
-    /// Enable flight detection processing
-    pub fn with_flight_detection(mut self) -> Self {
-        self.flight_detection_enabled = true;
+    /// Add a flight detection processor for flight tracking
+    pub fn with_flight_detection_processor(
+        mut self,
+        processor: Arc<FlightDetectionProcessor>,
+    ) -> Self {
+        self.flight_detection_processor = Some(processor);
         self
     }
 
@@ -867,9 +871,24 @@ impl AircraftPositionProcessor {
             }
         }
 
-        // TODO: Invoke flight detection processor if enabled
-        if self.flight_detection_enabled {
-            trace!("Flight detection processing not yet implemented");
+        // Process with flight detection processor if available
+        if let Some(flight_proc) = &self.flight_detection_processor {
+            let received_at = chrono::Utc::now();
+            match Fix::from_aprs_packet(packet.clone(), received_at) {
+                Ok(Some(fix)) => {
+                    let raw_message = format!("{:?}", packet); // Placeholder for raw message
+                    flight_proc.process_fix(fix, &raw_message);
+                }
+                Ok(None) => {
+                    trace!("No position fix extracted from aircraft packet for flight detection");
+                }
+                Err(e) => {
+                    debug!(
+                        "Failed to extract fix from aircraft packet for flight detection: {}",
+                        e
+                    );
+                }
+            }
         }
     }
 }
