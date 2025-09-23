@@ -15,6 +15,7 @@ use soar::aprs_client::{
     PositionPacketProcessor, ServerStatusProcessor,
 };
 use soar::fix_processor::FixProcessor;
+use soar::flight_detection_processor::FlightDetectionProcessor;
 use soar::live_fixes::LiveFixService;
 use soar::server_messages_repo::ServerMessagesRepository;
 
@@ -318,6 +319,9 @@ async fn handle_run(
     // Create database fix processor to save all valid fixes to the database
     let fix_processor: Arc<dyn FixHandler> = Arc::new(FixProcessor::new(diesel_pool.clone()));
 
+    // Create flight detection processor for tracking flight states
+    let flight_detection_processor = Arc::new(FlightDetectionProcessor::new(diesel_pool.clone()));
+
     // Create server status processor for server messages
     let server_messages_repo = ServerMessagesRepository::new(diesel_pool.clone());
     let server_status_processor = ServerStatusProcessor::new(server_messages_repo);
@@ -325,7 +329,7 @@ async fn handle_run(
     // Create aircraft position processor
     let aircraft_position_processor = AircraftPositionProcessor::new()
         .with_fix_processor(fix_processor.clone())
-        .with_flight_detection();
+        .with_flight_detection_processor(flight_detection_processor);
 
     // Create position packet processor
     let position_processor =

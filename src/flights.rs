@@ -1,3 +1,4 @@
+use anyhow::Result;
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -72,6 +73,173 @@ impl Flight {
     /// Check if this flight used a tow plane
     pub fn has_tow(&self) -> bool {
         self.tow_aircraft_id.is_some()
+    }
+
+    /// Generate a Google Earth compatible KML file for this flight
+    /// Returns KML as a string containing the flight track with fixes
+    pub async fn make_kml(
+        &self,
+        fixes_repo: &crate::fixes_repo::FixesRepository,
+    ) -> Result<String> {
+        // Get all fixes for this flight based on aircraft ID and time range
+        let start_time = self.takeoff_time;
+        let end_time = self.landing_time.unwrap_or_else(Utc::now);
+
+        let fixes = fixes_repo
+            .get_fixes_for_aircraft_with_time_range(&self.aircraft_id, start_time, end_time, None)
+            .await?;
+
+        if fixes.is_empty() {
+            return Ok(self.generate_empty_kml());
+        }
+
+        let mut kml = String::new();
+
+        // KML header
+        kml.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+        kml.push_str("<kml xmlns=\"http://www.opengis.net/kml/2.2\">\n");
+        kml.push_str("  <Document>\n");
+
+        // Flight name and description
+        let flight_name = format!("Flight {}", self.aircraft_id);
+        let aircraft_reg = fixes
+            .first()
+            .and_then(|f| f.registration.as_ref())
+            .unwrap_or(&self.aircraft_id);
+
+        kml.push_str(&format!("    <name>{}</name>\n", flight_name));
+        kml.push_str(&format!(
+            "    <description>Flight track for aircraft {} from {} to {}</description>\n",
+            aircraft_reg,
+            start_time.format("%Y-%m-%d %H:%M:%S UTC"),
+            end_time.format("%Y-%m-%d %H:%M:%S UTC")
+        ));
+
+        // Style for flight track line
+        kml.push_str("    <Style id=\"flightTrackStyle\">\n");
+        kml.push_str("      <LineStyle>\n");
+        kml.push_str("        <color>ff0000ff</color>\n"); // Red line
+        kml.push_str("        <width>3</width>\n");
+        kml.push_str("      </LineStyle>\n");
+        kml.push_str("    </Style>\n");
+
+        // Style for takeoff point
+        kml.push_str("    <Style id=\"takeoffStyle\">\n");
+        kml.push_str("      <IconStyle>\n");
+        kml.push_str("        <color>ff00ff00</color>\n"); // Green
+        kml.push_str("        <scale>1.2</scale>\n");
+        kml.push_str("      </IconStyle>\n");
+        kml.push_str("    </Style>\n");
+
+        // Style for landing point
+        kml.push_str("    <Style id=\"landingStyle\">\n");
+        kml.push_str("      <IconStyle>\n");
+        kml.push_str("        <color>ff0000ff</color>\n"); // Red
+        kml.push_str("        <scale>1.2</scale>\n");
+        kml.push_str("      </IconStyle>\n");
+        kml.push_str("    </Style>\n");
+
+        // Flight track as LineString
+        kml.push_str("    <Placemark>\n");
+        kml.push_str(&format!(
+            "      <name>Flight Track - {}</name>\n",
+            aircraft_reg
+        ));
+        kml.push_str("      <styleUrl>#flightTrackStyle</styleUrl>\n");
+        kml.push_str("      <LineString>\n");
+        kml.push_str("        <extrude>1</extrude>\n");
+        kml.push_str("        <tessellate>1</tessellate>\n");
+        kml.push_str("        <altitudeMode>absolute</altitudeMode>\n");
+        kml.push_str("        <coordinates>\n");
+
+        // Add coordinates for flight track (longitude,latitude,altitude_meters)
+        for fix in &fixes {
+            let altitude_meters = fix
+                .altitude_feet
+                .map(|alt| alt as f64 * 0.3048)
+                .unwrap_or(0.0);
+            kml.push_str(&format!(
+                "          {},{},{}\n",
+                fix.longitude, fix.latitude, altitude_meters
+            ));
+        }
+
+        kml.push_str("        </coordinates>\n");
+        kml.push_str("      </LineString>\n");
+        kml.push_str("    </Placemark>\n");
+
+        // Takeoff point
+        if let Some(first_fix) = fixes.first() {
+            kml.push_str("    <Placemark>\n");
+            kml.push_str("      <name>Takeoff</name>\n");
+            kml.push_str(&format!(
+                "      <description>Takeoff at {} UTC</description>\n",
+                start_time.format("%Y-%m-%d %H:%M:%S")
+            ));
+            kml.push_str("      <styleUrl>#takeoffStyle</styleUrl>\n");
+            kml.push_str("      <Point>\n");
+            kml.push_str("        <altitudeMode>absolute</altitudeMode>\n");
+            let altitude_meters = first_fix
+                .altitude_feet
+                .map(|alt| alt as f64 * 0.3048)
+                .unwrap_or(0.0);
+            kml.push_str(&format!(
+                "        <coordinates>{},{},{}</coordinates>\n",
+                first_fix.longitude, first_fix.latitude, altitude_meters
+            ));
+            kml.push_str("      </Point>\n");
+            kml.push_str("    </Placemark>\n");
+        }
+
+        // Landing point (if flight is complete)
+        if self.landing_time.is_some()
+            && let Some(last_fix) = fixes.last()
+        {
+            kml.push_str("    <Placemark>\n");
+            kml.push_str("      <name>Landing</name>\n");
+            kml.push_str(&format!(
+                "      <description>Landing at {} UTC</description>\n",
+                end_time.format("%Y-%m-%d %H:%M:%S")
+            ));
+            kml.push_str("      <styleUrl>#landingStyle</styleUrl>\n");
+            kml.push_str("      <Point>\n");
+            kml.push_str("        <altitudeMode>absolute</altitudeMode>\n");
+            let altitude_meters = last_fix
+                .altitude_feet
+                .map(|alt| alt as f64 * 0.3048)
+                .unwrap_or(0.0);
+            kml.push_str(&format!(
+                "        <coordinates>{},{},{}</coordinates>\n",
+                last_fix.longitude, last_fix.latitude, altitude_meters
+            ));
+            kml.push_str("      </Point>\n");
+            kml.push_str("    </Placemark>\n");
+        }
+
+        // KML footer
+        kml.push_str("  </Document>\n");
+        kml.push_str("</kml>\n");
+
+        Ok(kml)
+    }
+
+    /// Generate an empty KML file when no fixes are available
+    fn generate_empty_kml(&self) -> String {
+        let mut kml = String::new();
+        kml.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+        kml.push_str("<kml xmlns=\"http://www.opengis.net/kml/2.2\">\n");
+        kml.push_str("  <Document>\n");
+        kml.push_str(&format!(
+            "    <name>Flight {} (No Track Data)</name>\n",
+            self.aircraft_id
+        ));
+        kml.push_str(&format!(
+            "    <description>No position data available for flight {}</description>\n",
+            self.aircraft_id
+        ));
+        kml.push_str("  </Document>\n");
+        kml.push_str("</kml>\n");
+        kml
     }
 }
 
