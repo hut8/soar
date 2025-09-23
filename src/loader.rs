@@ -646,7 +646,7 @@ async fn link_aircraft_to_devices(
     let result: diesel::QueryResult<usize> = sql_query(
         r#"
         UPDATE aircraft_registrations
-        SET device_id = devices.device_id
+        SET device_id = devices.id
         FROM devices
         WHERE aircraft_registrations.registration_number = devices.registration
         AND aircraft_registrations.device_id IS NULL
