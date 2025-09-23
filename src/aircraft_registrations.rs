@@ -664,10 +664,16 @@ impl Aircraft {
             ));
         }
 
-        let n_number = to_string_trim(fw(line, 1, 5));
-        if n_number.is_empty() {
+        let n_number_raw = to_string_trim(fw(line, 1, 5));
+        if n_number_raw.is_empty() {
             return Err(anyhow!("Missing N-number at positions 1–5"));
         }
+
+        let n_number = if n_number_raw.starts_with('N') {
+            n_number_raw
+        } else {
+            format!("N{}", n_number_raw)
+        };
 
         let serial_number = to_string_trim(fw(line, 7, 36));
 
