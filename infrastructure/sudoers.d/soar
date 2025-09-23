@@ -17,6 +17,7 @@ soar ALL=(root) NOPASSWD: /usr/bin/systemctl start soar
 soar ALL=(root) NOPASSWD: /usr/bin/systemctl restart soar
 soar ALL=(root) NOPASSWD: /usr/bin/systemctl status soar
 soar ALL=(root) NOPASSWD: /usr/bin/systemctl is-active soar
+soar ALL=(root) NOPASSWD: /usr/bin/systemctl is-active soar-run soar-web
 
 # Allow soar user to manage individual SOAR services
 soar ALL=(root) NOPASSWD: /usr/bin/systemctl stop soar-run.service
