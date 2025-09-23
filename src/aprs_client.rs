@@ -22,7 +22,7 @@ use tokio::fs::OpenOptions;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
-use tokio::time::sleep;
+use tokio::time::{Instant, sleep, timeout};
 use tracing::trace;
 use tracing::{debug, error, info, warn};
 
@@ -354,35 +354,52 @@ impl AprsClient {
         }
         info!("Login command sent successfully");
 
-        // Read and process messages
+        // Read and process messages with timeout detection
         let mut line = String::new();
         let mut first_message = true;
+        let message_timeout = Duration::from_secs(60); // 1 minute timeout
+
         loop {
             line.clear();
-            match buf_reader.read_line(&mut line).await {
-                Ok(0) => {
-                    warn!("Connection closed by server");
-                    break;
-                }
-                Ok(_) => {
-                    let trimmed_line = line.trim();
-                    if !trimmed_line.is_empty() {
-                        if first_message {
-                            info!("First message from server: {}", trimmed_line);
-                            first_message = false;
-                        } else {
-                            trace!("Received: {}", trimmed_line);
+
+            // Use timeout to detect if no message received within 1 minute
+            match timeout(message_timeout, buf_reader.read_line(&mut line)).await {
+                Ok(read_result) => {
+                    match read_result {
+                        Ok(0) => {
+                            warn!("Connection closed by server");
+                            break;
                         }
-                        // Route server messages (lines starting with #) and regular APRS messages differently
-                        if !trimmed_line.starts_with('#') {
-                            Self::process_message(trimmed_line, &processors, config).await;
-                        } else {
-                            Self::process_server_message(trimmed_line, &processors).await;
+                        Ok(_) => {
+                            let trimmed_line = line.trim();
+                            if !trimmed_line.is_empty() {
+                                if first_message {
+                                    info!("First message from server: {}", trimmed_line);
+                                    first_message = false;
+                                } else {
+                                    trace!("Received: {}", trimmed_line);
+                                }
+                                // Route server messages (lines starting with #) and regular APRS messages differently
+                                if !trimmed_line.starts_with('#') {
+                                    Self::process_message(trimmed_line, &processors, config).await;
+                                } else {
+                                    Self::process_server_message(trimmed_line, &processors).await;
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            return ConnectionResult::OperationFailed(e.into());
                         }
                     }
                 }
-                Err(e) => {
-                    return ConnectionResult::OperationFailed(e.into());
+                Err(_) => {
+                    // Timeout occurred - no message received for 1 minute
+                    error!(
+                        "No message received from APRS server for 1 minute, disconnecting and reconnecting"
+                    );
+                    return ConnectionResult::OperationFailed(anyhow::anyhow!(
+                        "Message timeout - no data received for 1 minute"
+                    ));
                 }
             }
         }
