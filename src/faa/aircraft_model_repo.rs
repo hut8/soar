@@ -222,7 +222,8 @@ impl AircraftModelRepository {
                                 .eq(excluded(aircraft_models::number_of_engines)),
                             aircraft_models::number_of_seats
                                 .eq(excluded(aircraft_models::number_of_seats)),
-                            aircraft_models::weight_class.eq(excluded(aircraft_models::weight_class)),
+                            aircraft_models::weight_class
+                                .eq(excluded(aircraft_models::weight_class)),
                             aircraft_models::cruising_speed
                                 .eq(excluded(aircraft_models::cruising_speed)),
                             aircraft_models::type_certificate_data_sheet
@@ -261,7 +262,9 @@ impl AircraftModelRepository {
         let pool = self.pool.clone();
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            let count = aircraft_models::table.count().get_result::<i64>(&mut conn)?;
+            let count = aircraft_models::table
+                .count()
+                .get_result::<i64>(&mut conn)?;
             Ok::<i64, anyhow::Error>(count)
         })
         .await?

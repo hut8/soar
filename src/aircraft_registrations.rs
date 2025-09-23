@@ -339,7 +339,8 @@ pub struct AircraftRegistrationModel {
     pub manufacturer_code: Option<String>,
     pub model_code: Option<String>,
     pub series_code: Option<String>,
-    pub eng_mfr_mdl_code: Option<String>,
+    pub engine_manufacturer_code: Option<String>,
+    pub engine_model_code: Option<String>,
     pub year_mfr: Option<i32>,
     pub type_registration_code: Option<String>,
     pub registrant_name: Option<String>,
@@ -401,7 +402,8 @@ pub struct NewAircraftRegistration {
     pub manufacturer_code: Option<String>,
     pub model_code: Option<String>,
     pub series_code: Option<String>,
-    pub eng_mfr_mdl_code: Option<String>,
+    pub engine_manufacturer_code: Option<String>,
+    pub engine_model_code: Option<String>,
     pub year_mfr: Option<i32>,
     pub type_registration_code: Option<String>,
     pub registrant_name: Option<String>,
@@ -456,13 +458,14 @@ pub struct NewAircraftRegistration {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Aircraft {
-    pub n_number: String,                    // 1–5
-    pub serial_number: String,               // 7–36
-    pub manufacturer_code: Option<String>,   // 38–40
-    pub model_code: Option<String>,          // 41–42
-    pub series_code: Option<String>,         // 43–44
-    pub eng_mfr_mdl_code: Option<String>,    // 46–50
-    pub year_mfr: Option<u16>,               // 52–55
+    pub n_number: String,                         // 1–5
+    pub serial_number: String,                    // 7–36
+    pub manufacturer_code: Option<String>,        // 38–40
+    pub model_code: Option<String>,               // 41–42
+    pub series_code: Option<String>,              // 43–44
+    pub engine_manufacturer_code: Option<String>, // 46–48
+    pub engine_model_code: Option<String>,        // 49–50
+    pub year_mfr: Option<u16>,                    // 52–55
 
     // Registrant / address
     pub type_registration_code: Option<String>, // 57
@@ -671,7 +674,8 @@ impl Aircraft {
         let manufacturer_code = to_opt_string(fw(line, 38, 40));
         let model_code = to_opt_string(fw(line, 41, 42));
         let series_code = to_opt_string(fw(line, 43, 44));
-        let eng_mfr_mdl_code = to_opt_string(fw(line, 46, 50));
+        let engine_manufacturer_code = to_opt_string(fw(line, 46, 48));
+        let engine_model_code = to_opt_string(fw(line, 49, 50));
         let year_mfr = to_opt_u32_nonzero(fw(line, 52, 55)).map(|v| v as u16);
 
         let type_registration_code = to_opt_string(fw(line, 57, 57));
@@ -732,7 +736,8 @@ impl Aircraft {
             manufacturer_code,
             model_code,
             series_code,
-            eng_mfr_mdl_code,
+            engine_manufacturer_code,
+            engine_model_code,
             year_mfr,
 
             type_registration_code,
@@ -875,7 +880,23 @@ impl Aircraft {
             (None, None, None)
         };
 
-        let eng_mfr_mdl_code = to_opt_string(fields[3]);
+        let (engine_manufacturer_code, engine_model_code) =
+            if let Some(engine_code) = to_opt_string(fields[3]) {
+                let code_chars: Vec<char> = engine_code.chars().collect();
+                let engine_manufacturer_code = if code_chars.len() >= 3 {
+                    Some(code_chars.iter().take(3).collect::<String>())
+                } else {
+                    None
+                };
+                let engine_model_code = if code_chars.len() >= 5 {
+                    Some(code_chars.iter().skip(3).take(2).collect::<String>())
+                } else {
+                    None
+                };
+                (engine_manufacturer_code, engine_model_code)
+            } else {
+                (None, None)
+            };
         let year_mfr = to_opt_u32_nonzero(fields[4]).map(|v| v as u16);
 
         let type_registration_code = to_opt_string(fields[5]);
@@ -926,7 +947,8 @@ impl Aircraft {
             manufacturer_code,
             model_code,
             series_code,
-            eng_mfr_mdl_code,
+            engine_manufacturer_code,
+            engine_model_code,
             year_mfr,
 
             type_registration_code,
@@ -1065,7 +1087,8 @@ impl From<Aircraft> for NewAircraftRegistration {
             manufacturer_code: aircraft.manufacturer_code,
             model_code: aircraft.model_code,
             series_code: aircraft.series_code,
-            eng_mfr_mdl_code: aircraft.eng_mfr_mdl_code,
+            engine_manufacturer_code: aircraft.engine_manufacturer_code,
+            engine_model_code: aircraft.engine_model_code,
             year_mfr: aircraft.year_mfr.map(|y| y as i32),
             type_registration_code: aircraft.type_registration_code,
             registrant_name: aircraft.registrant_name,
@@ -1164,7 +1187,8 @@ impl From<AircraftRegistrationModel> for Aircraft {
             manufacturer_code: model.manufacturer_code,
             model_code: model.model_code,
             series_code: model.series_code,
-            eng_mfr_mdl_code: model.eng_mfr_mdl_code,
+            engine_manufacturer_code: model.engine_manufacturer_code,
+            engine_model_code: model.engine_model_code,
             year_mfr: model.year_mfr.map(|y| y as u16),
             type_registration_code: model.type_registration_code,
             registrant_name: model.registrant_name,
@@ -1427,7 +1451,8 @@ mod tests {
             manufacturer_code: None,
             model_code: None,
             series_code: None,
-            eng_mfr_mdl_code: None,
+            engine_manufacturer_code: None,
+            engine_model_code: None,
             year_mfr: None,
             street1: None,
             street2: None,

@@ -10,10 +10,13 @@ use std::path::Path;
 use std::sync::Arc;
 use tracing::{info, warn};
 
-use soar::aprs_client::{AprsClient, AprsClientConfigBuilder, FixHandler, PacketRouter, PositionPacketProcessor, AircraftPositionProcessor, ServerStatusProcessor};
+use soar::aprs_client::{
+    AircraftPositionProcessor, AprsClient, AprsClientConfigBuilder, FixHandler, PacketRouter,
+    PositionPacketProcessor, ServerStatusProcessor,
+};
 use soar::fix_processor::FixProcessor;
-use soar::server_messages_repo::ServerMessagesRepository;
 use soar::live_fixes::LiveFixService;
+use soar::server_messages_repo::ServerMessagesRepository;
 
 // Embed migrations at compile time
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/");
@@ -325,8 +328,8 @@ async fn handle_run(
         .with_flight_detection();
 
     // Create position packet processor
-    let position_processor = PositionPacketProcessor::new()
-        .with_aircraft_processor(aircraft_position_processor);
+    let position_processor =
+        PositionPacketProcessor::new().with_aircraft_processor(aircraft_position_processor);
 
     // Create PacketRouter with all processors
     let packet_router = PacketRouter::new(archive_dir.clone())

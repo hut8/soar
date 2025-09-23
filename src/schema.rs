@@ -67,8 +67,6 @@ diesel::table! {
         registration_number -> Varchar,
         #[max_length = 30]
         serial_number -> Varchar,
-        #[max_length = 5]
-        eng_mfr_mdl_code -> Nullable<Varchar>,
         year_mfr -> Nullable<Int4>,
         #[max_length = 1]
         type_registration_code -> Nullable<Bpchar>,
@@ -134,6 +132,10 @@ diesel::table! {
         model_code -> Nullable<Varchar>,
         #[max_length = 2]
         series_code -> Nullable<Varchar>,
+        #[max_length = 3]
+        engine_manufacturer_code -> Nullable<Varchar>,
+        #[max_length = 2]
+        engine_model_code -> Nullable<Varchar>,
     }
 }
 

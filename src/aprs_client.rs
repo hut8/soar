@@ -970,7 +970,11 @@ impl ServerStatusProcessor {
 
         // Need at least: software version, date (3 parts), time, GMT, server_name, endpoint
         if parts.len() < 8 {
-            debug!("Server message has {} parts, need at least 8: {}", parts.len(), raw_message);
+            debug!(
+                "Server message has {} parts, need at least 8: {}",
+                parts.len(),
+                raw_message
+            );
             return None;
         }
 
@@ -1036,7 +1040,8 @@ mod tests {
     #[test]
     fn test_server_message_parsing_logic() {
         // Test just the parsing logic by testing it directly
-        let raw_message = "# aprsc 2.1.19-g730c5c0 22 Sep 2025 23:10:51 GMT GLIDERN3 85.188.1.173:10152";
+        let raw_message =
+            "# aprsc 2.1.19-g730c5c0 22 Sep 2025 23:10:51 GMT GLIDERN3 85.188.1.173:10152";
         let trimmed = raw_message.trim_start_matches('#').trim();
         let parts: Vec<&str> = trimmed.split_whitespace().collect();
 
@@ -1048,10 +1053,14 @@ mod tests {
         assert_eq!(software, "aprsc 2.1.19-g730c5c0");
 
         // Test timestamp parsing
-        let date_time_str = format!("{} {} {} {} {}", parts[2], parts[3], parts[4], parts[5], parts[6]);
+        let date_time_str = format!(
+            "{} {} {} {} {}",
+            parts[2], parts[3], parts[4], parts[5], parts[6]
+        );
         assert_eq!(date_time_str, "22 Sep 2025 23:10:51 GMT");
 
-        let server_timestamp = NaiveDateTime::parse_from_str(&date_time_str, "%d %b %Y %H:%M:%S GMT");
+        let server_timestamp =
+            NaiveDateTime::parse_from_str(&date_time_str, "%d %b %Y %H:%M:%S GMT");
         assert!(server_timestamp.is_ok(), "Should parse timestamp correctly");
 
         // Test server name and endpoint extraction

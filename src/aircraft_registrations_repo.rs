@@ -132,8 +132,10 @@ impl AircraftRegistrationsRepository {
                         .eq(excluded(aircraft_registrations::model_code)),
                     aircraft_registrations::series_code
                         .eq(excluded(aircraft_registrations::series_code)),
-                    aircraft_registrations::eng_mfr_mdl_code
-                        .eq(excluded(aircraft_registrations::eng_mfr_mdl_code)),
+                    aircraft_registrations::engine_manufacturer_code
+                        .eq(excluded(aircraft_registrations::engine_manufacturer_code)),
+                    aircraft_registrations::engine_model_code
+                        .eq(excluded(aircraft_registrations::engine_model_code)),
                     aircraft_registrations::year_mfr.eq(excluded(aircraft_registrations::year_mfr)),
                     aircraft_registrations::type_registration_code
                         .eq(excluded(aircraft_registrations::type_registration_code)),
