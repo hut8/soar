@@ -77,10 +77,10 @@ pub fn elevation_egm2008(lat: f64, lon: f64) -> Result<Option<f64>> {
     )?;
 
     // Handle NoData (Copernicus uses -32767 for nodata)
-    if let Some(nd) = band.no_data_value() {
-        if out[(0, 0)] == nd {
-            return Ok(None);
-        }
+    if let Some(nd) = band.no_data_value()
+        && out[(0, 0)] == nd
+    {
+        return Ok(None);
     }
     Ok(Some(out[(0, 0)]))
 }
