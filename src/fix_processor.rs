@@ -1,8 +1,13 @@
-use tracing::{error, trace};
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+use tracing::{debug, error, trace};
+use uuid::Uuid;
 
+use crate::aircraft_registrations_repo::AircraftRegistrationsRepository;
 use crate::device_repo::DeviceRepository;
 use crate::fixes;
-use crate::fixes_repo::FixesRepository;
+use crate::fixes_repo::{FixesRepository, AircraftType};
 use crate::{Fix, FixHandler};
 use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
@@ -11,15 +16,73 @@ use diesel::r2d2::{ConnectionManager, Pool};
 pub struct FixProcessor {
     fixes_repo: FixesRepository,
     device_repo: DeviceRepository,
+    aircraft_registrations_repo: AircraftRegistrationsRepository,
+    /// Cache to track tow plane status updates to avoid unnecessary database calls
+    /// Maps device_id -> (aircraft_type, is_tow_plane_in_db)
+    tow_plane_cache: Arc<RwLock<HashMap<Uuid, (AircraftType, bool)>>>,
 }
 
 impl FixProcessor {
     pub fn new(diesel_pool: Pool<ConnectionManager<PgConnection>>) -> Self {
         Self {
             fixes_repo: FixesRepository::new(diesel_pool.clone()),
-            device_repo: DeviceRepository::new(diesel_pool),
+            device_repo: DeviceRepository::new(diesel_pool.clone()),
+            aircraft_registrations_repo: AircraftRegistrationsRepository::new(diesel_pool),
+            tow_plane_cache: Arc::new(RwLock::new(HashMap::new())),
         }
     }
+
+    /// Update tow plane status based on aircraft type from fix (static version for use in async spawned task)
+    async fn update_tow_plane_status_static(
+        aircraft_registrations_repo: AircraftRegistrationsRepository,
+        tow_plane_cache: Arc<RwLock<HashMap<Uuid, (AircraftType, bool)>>>,
+        device_id: Uuid,
+        aircraft_type: AircraftType,
+    ) {
+        let should_be_tow_plane = aircraft_type == AircraftType::TowTug;
+
+        // Check cache first
+        {
+            let cache = tow_plane_cache.read().await;
+            if let Some(&(cached_type, cached_is_tow_plane)) = cache.get(&device_id) {
+                // If the aircraft type hasn't changed and we know the current DB state, skip
+                if cached_type == aircraft_type && cached_is_tow_plane == should_be_tow_plane {
+                    return;
+                }
+            }
+        }
+
+        // Update the database
+        match aircraft_registrations_repo
+            .update_tow_plane_status_by_device_id(device_id, should_be_tow_plane)
+            .await
+        {
+            Ok(was_updated) => {
+                if was_updated {
+                    debug!(
+                        "Updated tow plane status for device {} to {} (aircraft type: {:?})",
+                        device_id, should_be_tow_plane, aircraft_type
+                    );
+                } else {
+                    trace!(
+                        "Tow plane status already correct for device {} (aircraft type: {:?})",
+                        device_id, aircraft_type
+                    );
+                }
+
+                // Update cache with the new state
+                let mut cache = tow_plane_cache.write().await;
+                cache.insert(device_id, (aircraft_type, should_be_tow_plane));
+            }
+            Err(e) => {
+                error!(
+                    "Failed to update tow plane status for device {}: {}",
+                    device_id, e
+                );
+            }
+        }
+    }
+
 }
 
 impl FixHandler for FixProcessor {
@@ -28,15 +91,17 @@ impl FixHandler for FixProcessor {
         if let (Some(device_address), Some(address_type)) = (fix.device_address, fix.address_type) {
             let device_repo = self.device_repo.clone();
             let fixes_repo = self.fixes_repo.clone();
+            let aircraft_registrations_repo = self.aircraft_registrations_repo.clone();
+            let tow_plane_cache = self.tow_plane_cache.clone();
             let raw_message = raw_message.to_string();
             let fix_clone = fix.clone();
             tokio::spawn(async move {
                 // Check if device exists in database
                 match device_repo
-                    .get_device_by_address(device_address, address_type)
+                    .get_device_model_by_address(device_address, address_type)
                     .await
                 {
-                    Ok(Some(_device)) => {
+                    Ok(Some(device_model)) => {
                         // Device exists, proceed with processing
                         // Convert the position::Fix to a database Fix struct
                         let db_fix =
@@ -56,6 +121,19 @@ impl FixHandler for FixProcessor {
                                     db_fix, e
                                 );
                             }
+                        }
+
+                        // Update tow plane status based on aircraft type from fix
+                        if let Some(foreign_aircraft_type) = fix_clone.aircraft_type {
+                            let aircraft_type = AircraftType::from(foreign_aircraft_type);
+                            let device_id = device_model.id;
+
+                            Self::update_tow_plane_status_static(
+                                aircraft_registrations_repo,
+                                tow_plane_cache,
+                                device_id,
+                                aircraft_type,
+                            ).await;
                         }
                     }
                     Ok(None) => {

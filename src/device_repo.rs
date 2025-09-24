@@ -93,6 +93,21 @@ impl DeviceRepository {
         Ok(device_model.map(|model| model.into()))
     }
 
+    /// Get a device model (with UUID) by address and address type
+    pub async fn get_device_model_by_address(
+        &self,
+        address: u32,
+        address_type: AddressType,
+    ) -> Result<Option<DeviceModel>> {
+        let mut conn = self.get_connection()?;
+        let device_model = devices::table
+            .filter(devices::address.eq(address as i32))
+            .filter(devices::address_type.eq(address_type))
+            .first::<DeviceModel>(&mut conn)
+            .optional()?;
+        Ok(device_model)
+    }
+
     /// Get a device by its UUID
     pub async fn get_device_by_uuid(&self, device_uuid: Uuid) -> Result<Option<Device>> {
         let mut conn = self.get_connection()?;

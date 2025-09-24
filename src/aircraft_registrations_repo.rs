@@ -7,12 +7,14 @@ use uuid::Uuid;
 
 use crate::aircraft_registrations::{Aircraft, AircraftRegistrationModel, NewAircraftRegistration};
 use crate::clubs_repo::{ClubsRepository, LocationParams};
+use crate::faa::aircraft_model_repo::AircraftModelRecord;
 use crate::locations_repo::LocationsRepository;
-use crate::schema::aircraft_registrations;
+use crate::schema::{aircraft_models, aircraft_registrations};
 
 pub type DieselPgPool = Pool<ConnectionManager<PgConnection>>;
 pub type DieselPgPooledConnection = PooledConnection<ConnectionManager<PgConnection>>;
 
+#[derive(Clone)]
 pub struct AircraftRegistrationsRepository {
     pool: DieselPgPool,
     clubs_repo: ClubsRepository,
@@ -355,5 +357,52 @@ impl AircraftRegistrationsRepository {
             .into_iter()
             .map(|model| model.into())
             .collect())
+    }
+
+    /// Get aircraft models (make/model/series) for a specific club
+    pub async fn get_aircraft_models_by_club_id(&self, club_id: Uuid) -> Result<Vec<AircraftModelRecord>> {
+        let mut conn = self.get_connection()?;
+
+        let models = aircraft_registrations::table
+            .inner_join(aircraft_models::table.on(
+                aircraft_registrations::manufacturer_code.eq(aircraft_models::manufacturer_code)
+                .and(aircraft_registrations::model_code.eq(aircraft_models::model_code))
+                .and(aircraft_registrations::series_code.eq(aircraft_models::series_code))
+            ))
+            .filter(aircraft_registrations::club_id.eq(club_id))
+            .select(AircraftModelRecord::as_select())
+            .distinct()
+            .load::<AircraftModelRecord>(&mut conn)?;
+
+        Ok(models)
+    }
+
+    /// Update is_tow_plane field for an aircraft based on device_id
+    /// Only updates if the current value is different to avoid updating the updated_at column unnecessarily
+    pub async fn update_tow_plane_status_by_device_id(&self, device_id: Uuid, is_tow_plane: bool) -> Result<bool> {
+        let mut conn = self.get_connection()?;
+
+        // First check current value to avoid unnecessary updates
+        let current_value = aircraft_registrations::table
+            .filter(aircraft_registrations::device_id.eq(device_id))
+            .select(aircraft_registrations::is_tow_plane)
+            .first::<Option<bool>>(&mut conn)
+            .optional()?;
+
+        match current_value {
+            Some(Some(current)) if current == is_tow_plane => {
+                // Value is already correct, no update needed
+                Ok(false)
+            }
+            Some(_) | None => {
+                // Value is different or row doesn't exist, perform update
+                let updated_count = diesel::update(aircraft_registrations::table)
+                    .filter(aircraft_registrations::device_id.eq(device_id))
+                    .set(aircraft_registrations::is_tow_plane.eq(Some(is_tow_plane)))
+                    .execute(&mut conn)?;
+
+                Ok(updated_count > 0)
+            }
+        }
     }
 }
