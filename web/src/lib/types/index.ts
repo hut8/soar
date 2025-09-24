@@ -41,3 +41,51 @@ export interface ComboboxData {
 	value: string;
 	club: ClubWithSoaring;
 }
+
+export interface Runway {
+	id: number;
+	length_ft: number | null;
+	width_ft: number | null;
+	surface: string | null;
+	lighted: boolean;
+	closed: boolean;
+
+	// Low-numbered end
+	le_ident: string | null;
+	le_latitude_deg: number | null;
+	le_longitude_deg: number | null;
+	le_elevation_ft: number | null;
+	le_heading_degt: number | null;
+	le_displaced_threshold_ft: number | null;
+
+	// High-numbered end
+	he_ident: string | null;
+	he_latitude_deg: number | null;
+	he_longitude_deg: number | null;
+	he_elevation_ft: number | null;
+	he_heading_degt: number | null;
+	he_displaced_threshold_ft: number | null;
+}
+
+export interface Airport {
+	id: number;
+	ident: string;
+	airport_type: string;
+	name: string;
+	latitude_deg: string | null;  // BigDecimal serialized as string
+	longitude_deg: string | null; // BigDecimal serialized as string
+	elevation_ft: number | null;
+	continent: string | null;
+	iso_country: string | null;
+	iso_region: string | null;
+	municipality: string | null;
+	scheduled_service: boolean;
+	icao_code: string | null;
+	iata_code: string | null;
+	gps_code: string | null;
+	local_code: string | null;
+	home_link: string | null;
+	wikipedia_link: string | null;
+	keywords: string | null;
+	runways: Runway[];
+}

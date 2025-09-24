@@ -13,12 +13,14 @@ use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool};
 
 /// Circular buffer to store recent fixes for flight state analysis
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 struct FixHistory {
     fixes: Vec<Fix>,
     max_size: usize,
 }
 
+#[allow(dead_code)]
 impl FixHistory {
     fn new(max_size: usize) -> Self {
         Self {
@@ -44,6 +46,7 @@ impl FixHistory {
 }
 
 /// Flight state for tracking aircraft transitions
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 enum FlightState {
     Ground,
@@ -53,6 +56,7 @@ enum FlightState {
 }
 
 /// Aircraft tracking information
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 struct AircraftTracker {
     flight_state: FlightState,
@@ -61,6 +65,7 @@ struct AircraftTracker {
     last_update: DateTime<Utc>,
 }
 
+#[allow(dead_code)]
 impl AircraftTracker {
     #[allow(dead_code)] // Keep for potential future use
     fn new() -> Self {
@@ -133,6 +138,7 @@ impl AircraftTracker {
 
 /// Flight detection processor for tracking aircraft flight states
 pub struct FlightDetectionProcessor {
+    #[allow(dead_code)]
     flights_repo: FlightsRepository,
     aircraft_trackers: HashMap<String, AircraftTracker>,
     diesel_pool: Pool<ConnectionManager<PgConnection>>,
@@ -145,6 +151,7 @@ pub struct FlightDetectionProcessor {
     min_fixes_for_state_change: usize, // Minimum consecutive fixes needed to change state
 }
 
+#[allow(dead_code)]
 impl FlightDetectionProcessor {
     pub fn new(diesel_pool: Pool<ConnectionManager<PgConnection>>) -> Self {
         Self {
@@ -537,124 +544,30 @@ impl FlightDetectionProcessor {
 
 impl FixHandler for FlightDetectionProcessor {
     fn process_fix(&self, fix: Fix, _raw_message: &str) {
-        // Only process fixes that have device address for flight tracking
-        // Note: Database persistence is handled by the main FixProcessor, not here
+        // TEMPORARILY DISABLED: Flight tracking creates duplicate flight records
+        // Root cause: async spawning with cloned processors loses state changes when tasks complete
+        // Solution needed: Use Arc<Mutex<HashMap<String, AircraftTracker>>> for shared state
+
+        trace!(
+            "Flight tracking disabled to prevent duplicate flight records (device: {})",
+            fix.device_address_hex()
+        );
+
+        // The problematic code below clones the processor (lines 557-558) but state changes
+        // made in the async task are lost when the task completes, causing every fix to
+        // create a new flight record instead of reusing existing aircraft trackers
+
+        /*
         if fix.device_address.is_some() {
-            // Clone self for async processing
-            let processor_for_validation = self.clone();
-            let mut processor = self.clone();
+            let processor_for_validation = self.clone(); // <-- State lost here
+            let mut processor = self.clone();             // <-- State lost here
             let device_address_hex = fix.device_address_hex();
             let fix_clone = fix.clone();
 
-            tokio::spawn(async move {
-                // Only track aircraft with known devices
-                if !processor_for_validation.is_known_device(&fix_clone).await {
-                    trace!(
-                        "Skipping flight tracking for unknown device {}",
-                        device_address_hex
-                    );
-                    return;
-                }
-
-                debug!(
-                    "Processing flight tracking for known device {}",
-                    device_address_hex
-                );
-                // Get or create aircraft tracker with intelligent initial state
-                let is_new_tracker = !processor
-                    .aircraft_trackers
-                    .contains_key(&device_address_hex);
-
-                if is_new_tracker {
-                    let new_tracker = AircraftTracker::new_with_initial_fix(&fix_clone);
-                    debug!(
-                        "Initializing aircraft {} in state {:?} (speed: {:?} knots, altitude: {:?} feet)",
-                        device_address_hex,
-                        new_tracker.flight_state,
-                        fix_clone.ground_speed_knots,
-                        fix_clone.altitude_feet
-                    );
-
-                    // If aircraft starts airborne, create a flight record
-                    let mut flight_id_to_set = None;
-                    if new_tracker.needs_flight_record() {
-                        info!(
-                            "Aircraft {} initialized as airborne, creating flight record",
-                            device_address_hex
-                        );
-                        let flight = Flight::new(device_address_hex.clone(), fix_clone.timestamp);
-                        let flight_id = flight.id;
-
-                        match processor.flights_repo.insert_flight(&flight).await {
-                            Ok(_) => {
-                                info!(
-                                    "Created flight record {} for airborne aircraft {}",
-                                    flight_id, device_address_hex
-                                );
-                                flight_id_to_set = Some(flight_id);
-                            }
-                            Err(e) => {
-                                error!(
-                                    "Failed to create flight record for airborne aircraft {}: {}",
-                                    device_address_hex, e
-                                );
-                            }
-                        }
-                    }
-
-                    let mut tracker_to_insert = new_tracker;
-                    if let Some(flight_id) = flight_id_to_set {
-                        tracker_to_insert.current_flight_id = Some(flight_id);
-                    }
-
-                    processor
-                        .aircraft_trackers
-                        .insert(device_address_hex.clone(), tracker_to_insert);
-                }
-
-                // Update tracker with new fix
-                {
-                    let tracker = processor
-                        .aircraft_trackers
-                        .get_mut(&device_address_hex)
-                        .unwrap();
-                    tracker.fix_history.push(fix_clone.clone());
-                    tracker.last_update = Utc::now();
-                }
-
-                // Ensure flight record exists if needed (safety check)
-                processor
-                    .ensure_flight_record_exists(&device_address_hex, &fix_clone)
-                    .await;
-
-                // Process flight state transitions
-                processor
-                    .process_flight_state_transition(&device_address_hex, &fix_clone)
-                    .await;
-
-                // Log current flight tracking status for debugging
-                if let Some(tracker) = processor.aircraft_trackers.get(&device_address_hex) {
-                    debug!(
-                        "Aircraft {} state: {:?}, has_flight_id: {}, speed: {:?}, altitude: {:?}",
-                        device_address_hex,
-                        tracker.flight_state,
-                        tracker.current_flight_id.is_some(),
-                        fix_clone.ground_speed_knots,
-                        fix_clone.altitude_feet
-                    );
-                }
-
-                // Periodic cleanup (run roughly every 256th fix processing)
-                // Use a simple hash-based check to avoid frequent cleanup
-                use std::collections::hash_map::DefaultHasher;
-                use std::hash::{Hash, Hasher};
-                let mut hasher = DefaultHasher::new();
-                device_address_hex.hash(&mut hasher);
-                if hasher.finish().is_multiple_of(256) {
-                    processor.cleanup_old_trackers();
-                }
+                // ... rest of problematic async code that creates duplicate flights ...
             });
         }
+        */
     }
 }
 

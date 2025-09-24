@@ -637,6 +637,84 @@ impl AirportsRepository {
 
         Ok(result)
     }
+
+    /// Get airports within a bounding box (rectangle defined by northwest and southeast corners)
+    /// Returns airports within the specified bounding box with their runway information
+    pub async fn get_airports_in_bounding_box(
+        &self,
+        northwest_lat: f64,
+        northwest_lng: f64,
+        southeast_lat: f64,
+        southeast_lng: f64,
+        limit: Option<i64>,
+    ) -> Result<Vec<Airport>> {
+        let search_limit = limit.unwrap_or(100);
+
+        // Validate bounding box coordinates
+        if northwest_lat <= southeast_lat {
+            return Err(anyhow::anyhow!(
+                "Northwest latitude must be greater than southeast latitude"
+            ));
+        }
+
+        if northwest_lng >= southeast_lng {
+            return Err(anyhow::anyhow!(
+                "Northwest longitude must be less than southeast longitude"
+            ));
+        }
+
+        // Validate latitude range
+        if !(-90.0..=90.0).contains(&northwest_lat) || !(-90.0..=90.0).contains(&southeast_lat) {
+            return Err(anyhow::anyhow!(
+                "Latitude values must be between -90 and 90 degrees"
+            ));
+        }
+
+        // Validate longitude range
+        if !(-180.0..=180.0).contains(&northwest_lng) || !(-180.0..=180.0).contains(&southeast_lng)
+        {
+            return Err(anyhow::anyhow!(
+                "Longitude values must be between -180 and 180 degrees"
+            ));
+        }
+
+        let pool = self.pool.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            // Query airports within the bounding box using latitude/longitude comparisons
+            let sql = r#"
+                SELECT id, ident, type as airport_type, name, latitude_deg, longitude_deg, elevation_ft,
+                       continent, iso_country, iso_region, municipality, scheduled_service,
+                       icao_code, iata_code, gps_code, local_code, home_link, wikipedia_link, keywords,
+                       NULL::float8 as distance_meters
+                FROM airports
+                WHERE latitude_deg IS NOT NULL
+                  AND longitude_deg IS NOT NULL
+                  AND latitude_deg <= $1
+                  AND latitude_deg >= $2
+                  AND longitude_deg >= $3
+                  AND longitude_deg <= $4
+                ORDER BY name, ident
+                LIMIT $5
+            "#;
+
+            let results: Vec<AirportWithDistance> = diesel::sql_query(sql)
+                .bind::<diesel::sql_types::Double, _>(northwest_lat)
+                .bind::<diesel::sql_types::Double, _>(southeast_lat)
+                .bind::<diesel::sql_types::Double, _>(northwest_lng)
+                .bind::<diesel::sql_types::Double, _>(southeast_lng)
+                .bind::<diesel::sql_types::BigInt, _>(search_limit)
+                .load::<AirportWithDistance>(&mut conn)?;
+
+            let airports: Vec<Airport> = results.into_iter().map(|awd| awd.into()).collect();
+
+            Ok::<Vec<Airport>, anyhow::Error>(airports)
+        })
+        .await??;
+
+        Ok(result)
+    }
 }
 
 #[cfg(test)]
