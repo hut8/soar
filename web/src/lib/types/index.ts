@@ -72,7 +72,7 @@ export interface Airport {
 	ident: string;
 	airport_type: string;
 	name: string;
-	latitude_deg: string | null;  // BigDecimal serialized as string
+	latitude_deg: string | null; // BigDecimal serialized as string
 	longitude_deg: string | null; // BigDecimal serialized as string
 	elevation_ft: number | null;
 	continent: string | null;
