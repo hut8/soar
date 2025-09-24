@@ -360,15 +360,19 @@ impl AircraftRegistrationsRepository {
     }
 
     /// Get aircraft models (make/model/series) for a specific club
-    pub async fn get_aircraft_models_by_club_id(&self, club_id: Uuid) -> Result<Vec<AircraftModelRecord>> {
+    pub async fn get_aircraft_models_by_club_id(
+        &self,
+        club_id: Uuid,
+    ) -> Result<Vec<AircraftModelRecord>> {
         let mut conn = self.get_connection()?;
 
         let models = aircraft_registrations::table
-            .inner_join(aircraft_models::table.on(
-                aircraft_registrations::manufacturer_code.eq(aircraft_models::manufacturer_code)
-                .and(aircraft_registrations::model_code.eq(aircraft_models::model_code))
-                .and(aircraft_registrations::series_code.eq(aircraft_models::series_code))
-            ))
+            .inner_join(
+                aircraft_models::table.on(aircraft_registrations::manufacturer_code
+                    .eq(aircraft_models::manufacturer_code)
+                    .and(aircraft_registrations::model_code.eq(aircraft_models::model_code))
+                    .and(aircraft_registrations::series_code.eq(aircraft_models::series_code))),
+            )
             .filter(aircraft_registrations::club_id.eq(club_id))
             .select(AircraftModelRecord::as_select())
             .distinct()
@@ -379,7 +383,11 @@ impl AircraftRegistrationsRepository {
 
     /// Update is_tow_plane field for an aircraft based on device_id
     /// Only updates if the current value is different to avoid updating the updated_at column unnecessarily
-    pub async fn update_tow_plane_status_by_device_id(&self, device_id: Uuid, is_tow_plane: bool) -> Result<bool> {
+    pub async fn update_tow_plane_status_by_device_id(
+        &self,
+        device_id: Uuid,
+        is_tow_plane: bool,
+    ) -> Result<bool> {
         let mut conn = self.get_connection()?;
 
         // First check current value to avoid unnecessary updates

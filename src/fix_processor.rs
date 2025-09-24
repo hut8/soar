@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::aircraft_registrations_repo::AircraftRegistrationsRepository;
 use crate::device_repo::DeviceRepository;
 use crate::fixes;
-use crate::fixes_repo::{FixesRepository, AircraftType};
+use crate::fixes_repo::{AircraftType, FixesRepository};
 use crate::{Fix, FixHandler};
 use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
@@ -82,7 +82,6 @@ impl FixProcessor {
             }
         }
     }
-
 }
 
 impl FixHandler for FixProcessor {
@@ -133,7 +132,8 @@ impl FixHandler for FixProcessor {
                                 tow_plane_cache,
                                 device_id,
                                 aircraft_type,
-                            ).await;
+                            )
+                            .await;
                         }
                     }
                     Ok(None) => {

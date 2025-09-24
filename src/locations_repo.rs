@@ -32,6 +32,7 @@ struct LocationForGeocoding {
     updated_at: chrono::DateTime<chrono::Utc>,
 }
 
+#[derive(Clone)]
 pub struct LocationsRepository {
     pool: PgPool,
 }

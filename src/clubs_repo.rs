@@ -257,6 +257,7 @@ pub struct LocationParams {
     pub country_mail_code: Option<String>,
 }
 
+#[derive(Clone)]
 pub struct ClubsRepository {
     pool: PgPool,
     locations_repo: LocationsRepository,

@@ -7,6 +7,7 @@ use uuid::Uuid;
 use crate::{
     clubs::Club,
     clubs_repo::{ClubWithLocationAndDistance, ClubWithLocationAndSimilarity},
+    faa::aircraft_model_repo::AircraftModelRecord,
     locations::{Location, Point},
 };
 
@@ -54,6 +55,51 @@ fn create_location_from_fields(
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AircraftModelView {
+    pub manufacturer_code: String,
+    pub model_code: String,
+    pub series_code: String,
+    pub manufacturer_name: String,
+    pub model_name: String,
+    pub aircraft_type: Option<String>,
+    pub engine_type: Option<String>,
+    pub aircraft_category: Option<String>,
+    pub builder_certification: Option<String>,
+    pub number_of_engines: Option<i16>,
+    pub number_of_seats: Option<i16>,
+    pub weight_class: Option<String>,
+    pub cruising_speed: Option<i16>,
+    pub type_certificate_data_sheet: Option<String>,
+    pub type_certificate_data_holder: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+impl From<AircraftModelRecord> for AircraftModelView {
+    fn from(model: AircraftModelRecord) -> Self {
+        Self {
+            manufacturer_code: model.manufacturer_code,
+            model_code: model.model_code,
+            series_code: model.series_code,
+            manufacturer_name: model.manufacturer_name,
+            model_name: model.model_name,
+            aircraft_type: model.aircraft_type,
+            engine_type: model.engine_type,
+            aircraft_category: model.aircraft_category,
+            builder_certification: model.builder_certification,
+            number_of_engines: model.number_of_engines,
+            number_of_seats: model.number_of_seats,
+            weight_class: model.weight_class,
+            cruising_speed: model.cruising_speed,
+            type_certificate_data_sheet: model.type_certificate_data_sheet,
+            type_certificate_data_holder: model.type_certificate_data_holder,
+            created_at: model.created_at,
+            updated_at: model.updated_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClubView {
     pub id: Uuid,
     pub name: String,
@@ -66,6 +112,8 @@ pub struct ClubView {
     pub similarity_score: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub distance_meters: Option<f64>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub models: Vec<AircraftModelView>,
 }
 
 impl From<Club> for ClubView {
@@ -95,6 +143,7 @@ impl From<Club> for ClubView {
             updated_at: club.updated_at,
             similarity_score: None,
             distance_meters: None,
+            models: Vec::new(),
         }
     }
 }
@@ -126,6 +175,7 @@ impl From<ClubWithLocationAndDistance> for ClubView {
             updated_at: club.updated_at,
             similarity_score: None,
             distance_meters: club.distance_meters,
+            models: Vec::new(),
         }
     }
 }
@@ -157,6 +207,7 @@ impl From<ClubWithLocationAndSimilarity> for ClubView {
             updated_at: club.updated_at,
             similarity_score: club.similarity_score.map(|s| s as f64),
             distance_meters: None,
+            models: Vec::new(),
         }
     }
 }
