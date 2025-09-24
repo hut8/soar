@@ -6,6 +6,7 @@ use uuid::Uuid;
 use crate::flights::{Flight, FlightModel};
 use crate::web::PgPool;
 
+#[derive(Clone)]
 pub struct FlightsRepository {
     pool: PgPool,
 }
@@ -13,6 +14,11 @@ pub struct FlightsRepository {
 impl FlightsRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
+    }
+
+    /// Create a new flight and insert it into the database
+    pub async fn create_flight(&self, flight: Flight) -> Result<()> {
+        self.insert_flight(&flight).await
     }
 
     /// Insert a new flight into the database
@@ -61,6 +67,35 @@ impl FlightsRepository {
         .await??;
 
         Ok(rows_affected > 0)
+    }
+
+    /// Update flight with landing information
+    pub async fn update_flight_landing(
+        &self,
+        flight_id: Uuid,
+        landing_time_param: DateTime<Utc>,
+        arrival_airport_param: Option<String>,
+    ) -> Result<()> {
+        use crate::schema::flights::dsl::*;
+
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            diesel::update(flights.filter(id.eq(flight_id)))
+                .set((
+                    landing_time.eq(&Some(landing_time_param)),
+                    arrival_airport.eq(&arrival_airport_param),
+                    updated_at.eq(Utc::now()),
+                ))
+                .execute(&mut conn)?;
+
+            Ok::<(), anyhow::Error>(())
+        })
+        .await??;
+
+        Ok(())
     }
 
     /// Get a flight by its ID

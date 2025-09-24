@@ -320,7 +320,7 @@ async fn handle_run(
     let fix_processor: Arc<dyn FixHandler> = Arc::new(FixProcessor::new(diesel_pool.clone()));
 
     // Create flight detection processor for tracking flight states
-    let flight_detection_processor = Arc::new(FlightDetectionProcessor::new(diesel_pool.clone()));
+    let flight_detection_processor = Arc::new(FlightDetectionProcessor::new(&diesel_pool));
 
     // Create server status processor for server messages
     let server_messages_repo = ServerMessagesRepository::new(diesel_pool.clone());

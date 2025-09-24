@@ -78,6 +78,7 @@ impl From<AirportWithDistance> for Airport {
     }
 }
 
+#[derive(Clone)]
 pub struct AirportsRepository {
     pool: PgPool,
 }
