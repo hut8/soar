@@ -2,7 +2,7 @@ use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::aircraft_registrations::{Aircraft, AirworthinessClass};
+use crate::aircraft_registrations::{Aircraft, AirworthinessClass, RegistrantType};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AircraftView {
@@ -14,7 +14,7 @@ pub struct AircraftView {
     pub engine_manufacturer_code: Option<String>,
     pub engine_model_code: Option<String>,
     pub year_manufactured: Option<u16>,
-    pub registrant_type: Option<String>,
+    pub registrant_type: Option<RegistrantType>,
     pub registrant_name: Option<String>,
     pub aircraft_type: Option<String>,
     pub engine_type: Option<i16>,

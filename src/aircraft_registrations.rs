@@ -87,7 +87,8 @@ impl std::fmt::Display for AirworthinessClass {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum)]
+#[db_enum(existing_type_path = "crate::schema::sql_types::RegistrantType")]
 pub enum RegistrantType {
     Individual,
     Partnership,
@@ -342,7 +343,7 @@ pub struct AircraftRegistrationModel {
     pub engine_manufacturer_code: Option<String>,
     pub engine_model_code: Option<String>,
     pub year_mfr: Option<i32>,
-    pub type_registration_code: Option<String>,
+    pub type_registration_code: Option<RegistrantType>,
     pub registrant_name: Option<String>,
     pub location_id: Option<Uuid>,
     pub last_action_date: Option<NaiveDate>,
@@ -405,7 +406,7 @@ pub struct NewAircraftRegistration {
     pub engine_manufacturer_code: Option<String>,
     pub engine_model_code: Option<String>,
     pub year_mfr: Option<i32>,
-    pub type_registration_code: Option<String>,
+    pub type_registration_code: Option<RegistrantType>,
     pub registrant_name: Option<String>,
     pub location_id: Option<Uuid>,
     pub last_action_date: Option<NaiveDate>,
@@ -468,8 +469,8 @@ pub struct Aircraft {
     pub year_mfr: Option<u16>,                    // 52–55
 
     // Registrant / address
-    pub type_registration_code: Option<String>, // 57
-    pub registrant_name: Option<String>,        // 59–108
+    pub type_registration_code: Option<RegistrantType>, // 57
+    pub registrant_name: Option<String>,                // 59–108
     #[serde(skip_serializing)]
     pub street1: Option<String>, // 110–142 (legacy, kept for parsing)
     #[serde(skip_serializing)]
@@ -534,7 +535,8 @@ pub struct Aircraft {
 impl Aircraft {
     /// Returns the registrant type based on the type_registration_code
     pub fn registrant_type(&self) -> RegistrantType {
-        RegistrantType::from(self.type_registration_code.clone())
+        self.type_registration_code
+            .unwrap_or(RegistrantType::Unknown)
     }
 
     /// Get a complete address string for geocoding
@@ -684,7 +686,8 @@ impl Aircraft {
         let engine_model_code = to_opt_string(fw(line, 49, 50));
         let year_mfr = to_opt_u32_nonzero(fw(line, 52, 55)).map(|v| v as u16);
 
-        let type_registration_code = to_opt_string(fw(line, 57, 57));
+        let type_registration_code =
+            to_opt_string(fw(line, 57, 57)).map(|code| RegistrantType::from(code.as_str()));
         let registrant_name = to_opt_string(fw(line, 59, 108));
         let street1 = to_opt_string(fw(line, 110, 142));
         let street2 = to_opt_string(fw(line, 144, 176));
@@ -905,7 +908,8 @@ impl Aircraft {
             };
         let year_mfr = to_opt_u32_nonzero(fields[4]).map(|v| v as u16);
 
-        let type_registration_code = to_opt_string(fields[5]);
+        let type_registration_code =
+            to_opt_string(fields[5]).map(|code| RegistrantType::from(code.as_str()));
         let registrant_name = to_opt_string(fields[6]);
         let street1 = to_opt_string(fields[7]);
         let street2 = to_opt_string(fields[8]);
@@ -1250,7 +1254,10 @@ mod tests {
         assert_eq!(first.model_code, Some("02".to_string()));
         assert_eq!(first.series_code, Some("25".to_string()));
         assert_eq!(first.year_mfr, Some(1980));
-        assert_eq!(first.type_registration_code, Some("3".to_string()));
+        assert_eq!(
+            first.type_registration_code,
+            Some(RegistrantType::Corporation)
+        );
         assert_eq!(
             first.registrant_name,
             Some("ADIRONDACK SOARING ASSOCIATION INC".to_string())
@@ -1425,7 +1432,10 @@ mod tests {
         assert_eq!(first.registrant_type(), RegistrantType::Corporation);
 
         // Test that the method works with the actual data
-        assert_eq!(first.type_registration_code, Some("3".to_string()));
+        assert_eq!(
+            first.type_registration_code,
+            Some(RegistrantType::Corporation)
+        );
     }
 
     #[test]
@@ -1452,7 +1462,7 @@ mod tests {
         let mut test_aircraft = Aircraft {
             n_number: "TEST1".to_string(),
             serial_number: "12345".to_string(),
-            type_registration_code: Some("3".to_string()), // Corporation
+            type_registration_code: Some(RegistrantType::Corporation),
             registrant_name: Some("MOUNTAIN SOARING CLUB INC".to_string()),
             manufacturer_code: None,
             model_code: None,
@@ -1518,21 +1528,21 @@ mod tests {
         );
 
         // Test with Individual registrant type (should return None)
-        test_aircraft.type_registration_code = Some("1".to_string()); // Individual
+        test_aircraft.type_registration_code = Some(RegistrantType::Individual); // Individual
         test_aircraft.registrant_name = Some("JOHN DOE SOARING CLUB".to_string());
         assert_eq!(test_aircraft.club_name(), None);
 
         // Test with Government registrant type (should return None)
-        test_aircraft.type_registration_code = Some("5".to_string()); // Government
+        test_aircraft.type_registration_code = Some(RegistrantType::Government); // Government
         assert_eq!(test_aircraft.club_name(), None);
 
         // Test with eligible type but no "SOAR" or "CLUB" in name
-        test_aircraft.type_registration_code = Some("3".to_string()); // Corporation
+        test_aircraft.type_registration_code = Some(RegistrantType::Corporation); // Corporation
         test_aircraft.registrant_name = Some("AVIATION SERVICES INC".to_string());
         assert_eq!(test_aircraft.club_name(), None);
 
         // Test with LLC registrant type
-        test_aircraft.type_registration_code = Some("7".to_string()); // LLC
+        test_aircraft.type_registration_code = Some(RegistrantType::Llc); // LLC
         test_aircraft.registrant_name = Some("DESERT SOARING LLC".to_string());
         assert_eq!(
             test_aircraft.club_name(),
@@ -1540,12 +1550,12 @@ mod tests {
         );
 
         // Test with Partnership registrant type
-        test_aircraft.type_registration_code = Some("2".to_string()); // Partnership
+        test_aircraft.type_registration_code = Some(RegistrantType::Partnership); // Partnership
         test_aircraft.registrant_name = Some("COASTAL CLUB PARTNERSHIP".to_string());
         assert_eq!(test_aircraft.club_name(), Some("COASTAL CLUB".to_string()));
 
         // Test with CoOwned registrant type
-        test_aircraft.type_registration_code = Some("4".to_string()); // CoOwned
+        test_aircraft.type_registration_code = Some(RegistrantType::CoOwned); // CoOwned
         test_aircraft.registrant_name = Some("ALPINE SOARING CO-OWNED".to_string());
         assert_eq!(
             test_aircraft.club_name(),
@@ -1553,7 +1563,7 @@ mod tests {
         );
 
         // Test with Unknown registrant type
-        test_aircraft.type_registration_code = Some("X".to_string()); // Unknown
+        test_aircraft.type_registration_code = Some(RegistrantType::Unknown); // Unknown
         test_aircraft.registrant_name = Some("MYSTERY SOARING CLUB".to_string());
         assert_eq!(
             test_aircraft.club_name(),
@@ -1561,7 +1571,7 @@ mod tests {
         );
 
         // Test with no registrant name
-        test_aircraft.type_registration_code = Some("3".to_string()); // Corporation
+        test_aircraft.type_registration_code = Some(RegistrantType::Corporation); // Corporation
         test_aircraft.registrant_name = None;
         assert_eq!(test_aircraft.club_name(), None);
 

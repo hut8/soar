@@ -24,6 +24,10 @@ pub mod sql_types {
     #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "point", schema = "pg_catalog"))]
     pub struct Point;
+
+    #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
+    #[diesel(postgres_type(name = "registrant_type"))]
+    pub struct RegistrantType;
 }
 
 diesel::table! {
@@ -61,6 +65,7 @@ diesel::table! {
 diesel::table! {
     use diesel::sql_types::*;
     use super::sql_types::AirworthinessClass;
+    use super::sql_types::RegistrantType;
 
     aircraft_registrations (registration_number) {
         #[max_length = 6]
@@ -68,8 +73,6 @@ diesel::table! {
         #[max_length = 30]
         serial_number -> Varchar,
         year_mfr -> Nullable<Int4>,
-        #[max_length = 1]
-        type_registration_code -> Nullable<Bpchar>,
         #[max_length = 50]
         registrant_name -> Nullable<Varchar>,
         last_action_date -> Nullable<Date>,
@@ -136,6 +139,7 @@ diesel::table! {
         engine_manufacturer_code -> Nullable<Varchar>,
         #[max_length = 2]
         engine_model_code -> Nullable<Varchar>,
+        type_registration_code -> Nullable<RegistrantType>,
     }
 }
 
@@ -521,7 +525,6 @@ diesel::joinable!(aircraft_registrations -> locations (location_id));
 diesel::joinable!(aircraft_registrations -> status_codes (status_code));
 diesel::joinable!(aircraft_registrations -> type_aircraft (type_aircraft_code));
 diesel::joinable!(aircraft_registrations -> type_engines (type_engine_code));
-diesel::joinable!(aircraft_registrations -> type_registrations (type_registration_code));
 diesel::joinable!(clubs -> airports (home_base_airport_id));
 diesel::joinable!(clubs -> locations (location_id));
 diesel::joinable!(fixes -> clubs (club_id));
