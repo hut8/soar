@@ -3,6 +3,7 @@ use chrono::NaiveDate;
 use diesel::prelude::*;
 use diesel_derive_enum::DbEnum;
 use serde::{Deserialize, Serialize};
+use tracing::warn;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
@@ -286,47 +287,119 @@ fn parse_approved_ops(airworthiness_class_code: &str, raw_239_247: &str) -> Appr
     let mut ops = ApprovedOps::default();
     let raw = raw_239_247.trim();
 
-    // If Experimental (code '4'), interpret common digits:
-    // 1=show compliance, 2=R&D, 3=amateur built, 4=exhibition, 5=racing,
-    // 6=crew training, 7=market survey, 8=kit-built (legacy), 9=UAS bucket (sub-letters A..E)
-    if airworthiness_class_code == "4" {
-        for ch in raw.chars() {
-            match ch {
-                '1' => ops.exp_show_compliance = true,
-                '2' => ops.exp_research_development = true,
-                '3' => ops.exp_amateur_built = true,
-                '4' => ops.exp_exhibition = true,
-                '5' => ops.exp_racing = true,
-                '6' => ops.exp_crew_training = true,
-                '7' => ops.exp_market_survey = true,
-                '8' => ops.exp_operating_kit_built = true, // generic legacy bucket
-                '9' => {
-                    // UAS sub-bucket; the actual sub-letter may be in the same field in some vintages.
-                    // If your source emits '9A'...'9E' explicitly, extend parsing here.
+    match airworthiness_class_code {
+        // Restricted (code '3') - Multiple restrictions can be present
+        "3" => {
+            for ch in raw.chars() {
+                match ch {
+                    '0' => ops.restricted_other = true,
+                    '1' => ops.restricted_ag_pest_control = true,
+                    '2' => ops.restricted_aerial_surveying = true,
+                    '3' => ops.restricted_aerial_advertising = true,
+                    '4' => ops.restricted_forest = true,
+                    '5' => ops.restricted_patrolling = true,
+                    '6' => ops.restricted_weather_control = true,
+                    '7' => ops.restricted_carriage_of_cargo = true,
+                    _ => {}
                 }
-                // Occasionally letters present for subcategories (8A/8B/8C, 9A..9E)
-                'A' => {
-                    ops.exp_lsa_reg_prior_2008 = true;
-                    ops.exp_uas_research_development = true;
-                }
-                'B' => {
-                    ops.exp_lsa_operating_kit_built = true;
-                    ops.exp_uas_market_survey = true;
-                }
-                'C' => {
-                    ops.exp_lsa_prev_21_190 = true;
-                    ops.exp_uas_crew_training = true;
-                }
-                'D' => ops.exp_uas_exhibition = true,
-                'E' => ops.exp_uas_compliance_with_cfr = true,
-                _ => {}
             }
+        }
+
+        // Experimental (code '4') - Only one can be present, exact matching
+        "4" => match raw {
+            "0" => ops.exp_show_compliance = true,
+            "1" => ops.exp_research_development = true,
+            "2" => ops.exp_amateur_built = true,
+            "3" => ops.exp_exhibition = true,
+            "4" => ops.exp_racing = true,
+            "5" => ops.exp_crew_training = true,
+            "6" => ops.exp_market_survey = true,
+            "7" => ops.exp_operating_kit_built = true,
+            "8A" => ops.exp_lsa_reg_prior_2008 = true,
+            "8B" => ops.exp_lsa_operating_kit_built = true,
+            "8C" => ops.exp_lsa_prev_21_190 = true,
+            "9A" => ops.exp_uas_research_development = true,
+            "9B" => ops.exp_uas_market_survey = true,
+            "9C" => ops.exp_uas_crew_training = true,
+            "9D" => ops.exp_uas_exhibition = true,
+            "9E" => ops.exp_uas_compliance_with_cfr = true,
+            _ => {}
+        },
+
+        // Provisional (code '5') - Only one can be present
+        "5" => {
+            // Note: Provisional Class I/II operations are not currently tracked in the database
+            // but could be added if needed
+        }
+
+        // Multiple (code '6') - Complex parsing
+        "6" => {
+            let chars: Vec<char> = raw.chars().collect();
+
+            // Positions 239-240 (first two chars) can contain standard/limited/restricted
+            if chars.len() >= 2 {
+                let first_two = &chars[0..2.min(chars.len())];
+                for &ch in first_two {
+                    match ch {
+                        '1' => {} // Standard - not tracked in current schema
+                        '2' => {} // Limited - not tracked in current schema
+                        '3' => {} // Restricted - would need additional fields
+                        _ => {}
+                    }
+                }
+            }
+
+            // Positions 241-247 (remaining chars) can contain restricted operation types
+            if chars.len() > 2 {
+                let remaining = &chars[2..];
+                for &ch in remaining {
+                    match ch {
+                        '0' => ops.restricted_other = true,
+                        '1' => ops.restricted_ag_pest_control = true,
+                        '2' => ops.restricted_aerial_surveying = true,
+                        '3' => ops.restricted_aerial_advertising = true,
+                        '4' => ops.restricted_forest = true,
+                        '5' => ops.restricted_patrolling = true,
+                        '6' => ops.restricted_weather_control = true,
+                        '7' => ops.restricted_carriage_of_cargo = true,
+                        _ => {}
+                    }
+                }
+            }
+        }
+
+        // Primary (code '7') - Never has anything in 239-247
+        "7" => {
+            // No operations to parse
+        }
+
+        // Special Flight Permit (code '8') - Multiple permits can be present
+        "8" => {
+            for ch in raw.chars() {
+                match ch {
+                    '1' => ops.sfp_ferry_for_repairs_alterations_storage = true,
+                    '2' => ops.sfp_evacuate_impending_danger = true,
+                    '3' => ops.sfp_excess_of_max_certificated = true,
+                    '4' => ops.sfp_delivery_or_export = true,
+                    '5' => ops.sfp_production_flight_testing = true,
+                    '6' => ops.sfp_customer_demo = true,
+                    _ => {}
+                }
+            }
+        }
+
+        // Light Sport (code '9') - One letter in position 239, or blank
+        "9" => {
+            // Note: Light Sport aircraft types (A/G/L/P/W) are not currently tracked
+            // in the database but could be added if needed
+        }
+
+        unknown => {
+            // Unknown airworthiness class, no operations to parse
+            warn!("Unknown airworthiness class code '{}', cannot parse approved operations '{}'", unknown, raw);
         }
     }
 
-    // If Restricted (code '3'), you may map by position index (239..247).
-    // Leave default false unless you have an authoritative slot meaning table.
-    // If Special Flight Permit (code '8'), similarly map as needed.
     ops
 }
 
@@ -1581,5 +1654,66 @@ mod tests {
             test_aircraft.club_name(),
             Some("PEAK SOARING CORPORATION".to_string())
         );
+    }
+
+    #[test]
+    fn test_approved_operations_parsing() {
+        // Test Restricted (code '3') - Multiple restrictions can be present
+        let ops = parse_approved_ops("3", "123");
+        assert_eq!(ops.restricted_ag_pest_control, true);
+        assert_eq!(ops.restricted_aerial_surveying, true);
+        assert_eq!(ops.restricted_aerial_advertising, true);
+        assert_eq!(ops.restricted_other, false);
+
+        let ops = parse_approved_ops("3", "047");
+        assert_eq!(ops.restricted_other, true);
+        assert_eq!(ops.restricted_forest, true);
+        assert_eq!(ops.restricted_carriage_of_cargo, true);
+        assert_eq!(ops.restricted_ag_pest_control, false);
+
+        // Test Experimental (code '4') - Only one can be present, exact matching
+        let ops = parse_approved_ops("4", "2");
+        assert_eq!(ops.exp_amateur_built, true);
+        assert_eq!(ops.exp_research_development, false);
+
+        let ops = parse_approved_ops("4", "8A");
+        assert_eq!(ops.exp_lsa_reg_prior_2008, true);
+        assert_eq!(ops.exp_operating_kit_built, false);
+
+        let ops = parse_approved_ops("4", "9C");
+        assert_eq!(ops.exp_uas_crew_training, true);
+        assert_eq!(ops.exp_uas_research_development, false);
+
+        // Test that experimental doesn't incorrectly parse character iteration
+        let ops = parse_approved_ops("4", "89"); // This should NOT set both 8 and 9 flags
+        assert_eq!(ops.exp_operating_kit_built, false);
+        assert_eq!(ops.exp_uas_research_development, false);
+
+        // Test Special Flight Permit (code '8') - Multiple permits can be present
+        let ops = parse_approved_ops("8", "135");
+        assert_eq!(ops.sfp_ferry_for_repairs_alterations_storage, true);
+        assert_eq!(ops.sfp_excess_of_max_certificated, true);
+        assert_eq!(ops.sfp_production_flight_testing, true);
+        assert_eq!(ops.sfp_evacuate_impending_danger, false);
+
+        // Test Multiple (code '6') - Complex parsing
+        let ops = parse_approved_ops("6", "1301"); // Standard + Restricted + Other + Ag
+        assert_eq!(ops.restricted_other, true);
+        assert_eq!(ops.restricted_ag_pest_control, true);
+
+        // Test Primary (code '7') - Should not set any flags
+        let ops = parse_approved_ops("7", "123");
+        assert_eq!(ops.restricted_ag_pest_control, false);
+        assert_eq!(ops.exp_amateur_built, false);
+        assert_eq!(ops.sfp_ferry_for_repairs_alterations_storage, false);
+
+        // Test Light Sport (code '9') - Currently not tracked but should not crash
+        let _ops = parse_approved_ops("9", "A");
+        // Light sport aircraft types are not currently tracked, so no assertions needed
+
+        // Test unknown airworthiness class
+        let ops = parse_approved_ops("X", "123");
+        assert!(!ops.restricted_ag_pest_control);
+        assert!(!ops.exp_amateur_built);
     }
 }
