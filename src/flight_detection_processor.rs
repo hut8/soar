@@ -7,6 +7,7 @@ use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
 use crate::airports_repo::AirportsRepository;
+use crate::devices::AddressType;
 use crate::flights::Flight;
 use crate::flights_repo::FlightsRepository;
 use crate::{Fix, FixHandler};
@@ -132,6 +133,7 @@ impl FlightDetectionProcessor {
         let departure_airport = self.find_nearby_airport(fix.latitude, fix.longitude).await;
 
         let mut flight = Flight::new(device_address.to_string(), fix.timestamp);
+        flight.device_address_type = fix.address_type.unwrap_or(AddressType::Unknown);
         flight.departure_airport = departure_airport.clone();
 
         let flight_id = flight.id;
@@ -251,10 +253,10 @@ impl FlightDetectionProcessor {
                 (AircraftState::Active, AircraftState::Idle) => {
                     // Landing detected
                     debug!("Landing detected for aircraft {}", device_address);
-                    if let Some(flight_id) = current_flight_id {
-                        if let Err(e) = self.complete_flight(flight_id, fix).await {
-                            warn!("Failed to complete flight for landing: {}", e);
-                        }
+                    if let Some(flight_id) = current_flight_id
+                        && let Err(e) = self.complete_flight(flight_id, fix).await
+                    {
+                        warn!("Failed to complete flight for landing: {}", e);
                     }
 
                     let mut trackers = self.aircraft_trackers.write().await;

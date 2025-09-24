@@ -4,14 +4,19 @@ use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::devices::AddressType;
+
 /// A flight representing a complete takeoff to landing sequence
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Flight {
     /// Unique identifier for this flight
     pub id: Uuid,
 
-    /// Aircraft identifier (hex ID like "39D304")
-    pub aircraft_id: String,
+    /// Device address (hex ID like "39D304")
+    pub device_address: String,
+
+    /// Device address type (ICAO, FLARM, OGN, etc.)
+    pub device_address_type: AddressType,
 
     /// Takeoff time (required)
     pub takeoff_time: DateTime<Utc>,
@@ -42,11 +47,12 @@ pub struct Flight {
 
 impl Flight {
     /// Create a new flight with takeoff time
-    pub fn new(aircraft_id: String, takeoff_time: DateTime<Utc>) -> Self {
+    pub fn new(device_address: String, takeoff_time: DateTime<Utc>) -> Self {
         let now = Utc::now();
         Self {
             id: Uuid::new_v4(),
-            aircraft_id,
+            device_address,
+            device_address_type: AddressType::Unknown,
             takeoff_time,
             landing_time: None,
             departure_airport: None,
@@ -86,7 +92,12 @@ impl Flight {
         let end_time = self.landing_time.unwrap_or_else(Utc::now);
 
         let fixes = fixes_repo
-            .get_fixes_for_aircraft_with_time_range(&self.aircraft_id, start_time, end_time, None)
+            .get_fixes_for_aircraft_with_time_range(
+                &self.device_address,
+                start_time,
+                end_time,
+                None,
+            )
             .await?;
 
         if fixes.is_empty() {
@@ -101,11 +112,11 @@ impl Flight {
         kml.push_str("  <Document>\n");
 
         // Flight name and description
-        let flight_name = format!("Flight {}", self.aircraft_id);
+        let flight_name = format!("Flight {}", self.device_address);
         let aircraft_reg = fixes
             .first()
             .and_then(|f| f.registration.as_ref())
-            .unwrap_or(&self.aircraft_id);
+            .unwrap_or(&self.device_address);
 
         kml.push_str(&format!("    <name>{}</name>\n", flight_name));
         kml.push_str(&format!(
@@ -231,11 +242,11 @@ impl Flight {
         kml.push_str("  <Document>\n");
         kml.push_str(&format!(
             "    <name>Flight {} (No Track Data)</name>\n",
-            self.aircraft_id
+            self.device_address
         ));
         kml.push_str(&format!(
             "    <description>No position data available for flight {}</description>\n",
-            self.aircraft_id
+            self.device_address
         ));
         kml.push_str("  </Document>\n");
         kml.push_str("</kml>\n");
@@ -248,7 +259,7 @@ impl Flight {
 #[diesel(table_name = crate::schema::flights)]
 pub struct FlightModel {
     pub id: Uuid,
-    pub aircraft_id: String,
+    pub device_address: String,
     pub takeoff_time: DateTime<Utc>,
     pub landing_time: Option<DateTime<Utc>>,
     pub departure_airport: Option<String>,
@@ -258,6 +269,7 @@ pub struct FlightModel {
     pub club_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub device_address_type: AddressType,
 }
 
 /// Insert model for new flights
@@ -265,7 +277,7 @@ pub struct FlightModel {
 #[diesel(table_name = crate::schema::flights)]
 pub struct NewFlightModel {
     pub id: Uuid,
-    pub aircraft_id: String,
+    pub device_address: String,
     pub takeoff_time: DateTime<Utc>,
     pub landing_time: Option<DateTime<Utc>>,
     pub departure_airport: Option<String>,
@@ -273,6 +285,7 @@ pub struct NewFlightModel {
     pub tow_aircraft_id: Option<String>,
     pub tow_release_height_msl: Option<i32>,
     pub club_id: Option<Uuid>,
+    pub device_address_type: AddressType,
 }
 
 /// Conversion from Flight (API model) to FlightModel (database model)
@@ -280,7 +293,8 @@ impl From<Flight> for FlightModel {
     fn from(flight: Flight) -> Self {
         Self {
             id: flight.id,
-            aircraft_id: flight.aircraft_id,
+            device_address: flight.device_address,
+            device_address_type: flight.device_address_type,
             takeoff_time: flight.takeoff_time,
             landing_time: flight.landing_time,
             departure_airport: flight.departure_airport,
@@ -299,7 +313,8 @@ impl From<Flight> for NewFlightModel {
     fn from(flight: Flight) -> Self {
         Self {
             id: flight.id,
-            aircraft_id: flight.aircraft_id,
+            device_address: flight.device_address,
+            device_address_type: flight.device_address_type,
             takeoff_time: flight.takeoff_time,
             landing_time: flight.landing_time,
             departure_airport: flight.departure_airport,
@@ -316,7 +331,8 @@ impl From<FlightModel> for Flight {
     fn from(model: FlightModel) -> Self {
         Self {
             id: model.id,
-            aircraft_id: model.aircraft_id,
+            device_address: model.device_address,
+            device_address_type: model.device_address_type,
             takeoff_time: model.takeoff_time,
             landing_time: model.landing_time,
             departure_airport: model.departure_airport,

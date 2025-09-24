@@ -285,7 +285,7 @@ pub async fn search_flights(
 
     if let Some(device_id) = params.device_id {
         match flights_repo
-            .get_flights_for_aircraft(&device_id.to_string())
+            .get_flights_for_device(&device_id.to_string())
             .await
         {
             Ok(flights) => Json(flights).into_response(),

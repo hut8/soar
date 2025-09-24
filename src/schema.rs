@@ -270,10 +270,13 @@ diesel::table! {
 }
 
 diesel::table! {
+    use diesel::sql_types::*;
+    use super::sql_types::AddressType;
+
     flights (id) {
         id -> Uuid,
-        #[max_length = 10]
-        aircraft_id -> Varchar,
+        #[max_length = 20]
+        device_address -> Varchar,
         takeoff_time -> Timestamptz,
         landing_time -> Nullable<Timestamptz>,
         #[max_length = 10]
@@ -286,6 +289,7 @@ diesel::table! {
         club_id -> Nullable<Uuid>,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
+        device_address_type -> AddressType,
     }
 }
 

@@ -119,18 +119,18 @@ impl FlightsRepository {
         Ok(result.map(|model| model.into()))
     }
 
-    /// Get all flights for a specific aircraft, ordered by takeoff time descending
-    pub async fn get_flights_for_aircraft(&self, aircraft_id_param: &str) -> Result<Vec<Flight>> {
+    /// Get all flights for a specific device, ordered by takeoff time descending
+    pub async fn get_flights_for_device(&self, device_address_param: &str) -> Result<Vec<Flight>> {
         use crate::schema::flights::dsl::*;
 
         let pool = self.pool.clone();
-        let aircraft_id_val = aircraft_id_param.to_string();
+        let device_address_val = device_address_param.to_string();
 
         let results = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
             let flight_models: Vec<FlightModel> = flights
-                .filter(aircraft_id.eq(&aircraft_id_val))
+                .filter(device_address.eq(&device_address_val))
                 .order(takeoff_time.desc())
                 .load::<FlightModel>(&mut conn)?;
 
@@ -162,15 +162,15 @@ impl FlightsRepository {
         Ok(results.into_iter().map(|model| model.into()).collect())
     }
 
-    /// Get flights within a time range, optionally filtered by aircraft
+    /// Get flights within a time range, optionally filtered by device
     pub async fn get_flights_in_time_range(
         &self,
         start_time: DateTime<Utc>,
         end_time: DateTime<Utc>,
-        aircraft_id: Option<&str>,
+        device_address: Option<&str>,
     ) -> Result<Vec<Flight>> {
-        if let Some(aircraft_id) = aircraft_id {
-            self.get_flights_in_time_range_for_aircraft(start_time, end_time, aircraft_id)
+        if let Some(device_address) = device_address {
+            self.get_flights_in_time_range_for_device(start_time, end_time, device_address)
                 .await
         } else {
             self.get_flights_in_time_range_all(start_time, end_time)
@@ -178,23 +178,23 @@ impl FlightsRepository {
         }
     }
 
-    /// Get flights within a time range for a specific aircraft
-    async fn get_flights_in_time_range_for_aircraft(
+    /// Get flights within a time range for a specific device
+    async fn get_flights_in_time_range_for_device(
         &self,
         start_time: DateTime<Utc>,
         end_time: DateTime<Utc>,
-        aircraft_id_param: &str,
+        device_address_param: &str,
     ) -> Result<Vec<Flight>> {
         use crate::schema::flights::dsl::*;
 
         let pool = self.pool.clone();
-        let aircraft_id_val = aircraft_id_param.to_string();
+        let device_address_val = device_address_param.to_string();
 
         let results = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
             let flight_models: Vec<FlightModel> = flights
-                .filter(aircraft_id.eq(&aircraft_id_val))
+                .filter(device_address.eq(&device_address_val))
                 .filter(takeoff_time.ge(&start_time))
                 .filter(takeoff_time.le(&end_time))
                 .order(takeoff_time.desc())
@@ -370,7 +370,7 @@ mod tests {
     #[test]
     fn test_flight_creation() {
         let flight = create_test_flight();
-        assert_eq!(flight.aircraft_id, "39D304");
+        assert_eq!(flight.device_address, "39D304");
         assert!(flight.is_in_progress());
         assert!(flight.duration().num_seconds() >= 0);
     }
