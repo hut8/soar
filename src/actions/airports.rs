@@ -14,10 +14,10 @@ use super::{json_error, views::AirportView};
 
 #[derive(Debug, Deserialize)]
 pub struct AirportBoundingBoxParams {
-    pub nw_lat: f64,    // Northwest corner latitude
-    pub nw_lng: f64,    // Northwest corner longitude
-    pub se_lat: f64,    // Southeast corner latitude
-    pub se_lng: f64,    // Southeast corner longitude
+    pub nw_lat: f64, // Northwest corner latitude
+    pub nw_lng: f64, // Northwest corner longitude
+    pub se_lat: f64, // Southeast corner latitude
+    pub se_lng: f64, // Southeast corner longitude
     pub limit: Option<i64>,
 }
 
