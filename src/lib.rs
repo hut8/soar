@@ -14,6 +14,7 @@ pub mod clubs;
 pub mod clubs_repo;
 pub mod device_repo;
 pub mod devices;
+pub mod elevation;
 pub mod email;
 pub mod faa;
 pub mod fetch_receivers;
