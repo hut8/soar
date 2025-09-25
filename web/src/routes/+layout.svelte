@@ -2,9 +2,10 @@
 	import '../app.css';
 	import { AppBar, Avatar } from '@skeletonlabs/skeleton-svelte';
 	import favicon from '$lib/assets/favicon.svg';
-	import { resolve } from '$app/paths';
-	import { auth } from '$lib/stores/auth';
-	import { onMount } from 'svelte';
+import { resolve } from '$app/paths';
+import { page } from '$app/stores';
+import { auth } from '$lib/stores/auth';
+import { onMount } from 'svelte';
 	import { Radar, Users, PlaneTakeoff, UserPlus, UserCheck, Radio } from '@lucide/svelte';
 
 	const base = resolve('/');
@@ -121,7 +122,9 @@
 		{@render children?.()}
 	</main>
 
-	<footer class="bg-surface-100-800-token p-4 text-center text-sm">
-		<p>&copy; 2025 Liam Bowen</p>
-	</footer>
+	{#if !$page.route.id?.includes('operations')}
+		<footer class="bg-surface-100-800-token p-4 text-center text-sm">
+			<p>&copy; 2025 Liam Bowen</p>
+		</footer>
+	{/if}
 </div>
