@@ -43,27 +43,27 @@ enum Commands {
     ///
     /// Aircraft registrations and models should come from the "releasable aircraft" FAA database.
     /// Airports and runways should come from "our airports" database.
-    /// Receivers JSON file can be created from https://github.com/hut8/ogn-rdb
+    /// Receivers JSON file can be created from <https://github.com/hut8/ogn-rdb>
     LoadData {
         /// Path to the aircraft model data file (from ACFTREF.txt in the "releasable aircraft" FAA database
-        /// https://www.faa.gov/licenses_certificates/aircraft_certification/aircraft_registry/releasable_aircraft_download)
-        /// https://registry.faa.gov/database/ReleasableAircraft.zip
+        /// <https://www.faa.gov/licenses_certificates/aircraft_certification/aircraft_registry/releasable_aircraft_download>)
+        /// <https://registry.faa.gov/database/ReleasableAircraft.zip>
         #[arg(long)]
         aircraft_models: Option<String>,
         /// Path to the aircraft registrations data file (from MASTER.txt in the "releasable aircraft" FAA database)
-        /// https://www.faa.gov/licenses_certificates/aircraft_certification/aircraft_registry/releasable_aircraft_download
-        /// https://registry.faa.gov/database/ReleasableAircraft.zip
+        /// <https://www.faa.gov/licenses_certificates/aircraft_certification/aircraft_registry/releasable_aircraft_download>
+        /// <https://registry.faa.gov/database/ReleasableAircraft.zip>
         #[arg(long)]
         aircraft_registrations: Option<String>,
         /// Path to the airports CSV file (from "our airports" database)
-        /// https://davidmegginson.github.io/ourairports-data/airports.csv
+        /// <https://davidmegginson.github.io/ourairports-data/airports.csv>
         #[arg(long)]
         airports: Option<String>,
         /// Path to the runways CSV file (from "our airports" database)
-        /// https://davidmegginson.github.io/ourairports-data/runways.csv
+        /// <https://davidmegginson.github.io/ourairports-data/runways.csv>
         #[arg(long)]
         runways: Option<String>,
-        /// Path to the receivers JSON file (can be created from https://github.com/hut8/ogn-rdb)
+        /// Path to the receivers JSON file (can be created from <https://github.com/hut8/ogn-rdb>)
         #[arg(long)]
         receivers: Option<String>,
         /// Also pull devices from DDB (Device Database) and upsert them into the database
@@ -147,7 +147,7 @@ async fn setup_diesel_database() -> Result<Pool<ConnectionManager<PgConnection>>
     let manager = ConnectionManager::<PgConnection>::new(database_url);
     let pool = Pool::builder()
         .build(manager)
-        .map_err(|e| anyhow::anyhow!("Failed to create Diesel connection pool: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Failed to create Diesel connection pool: {e}"))?;
 
     info!("Successfully created Diesel connection pool");
 
@@ -155,7 +155,7 @@ async fn setup_diesel_database() -> Result<Pool<ConnectionManager<PgConnection>>
     info!("Running database migrations...");
     let mut connection = pool
         .get()
-        .map_err(|e| anyhow::anyhow!("Failed to get database connection for migrations: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Failed to get database connection for migrations: {e}"))?;
 
     // Use a fixed, unique lock ID for migrations (arbitrary but consistent)
     // This ensures only one process can run migrations at a time
@@ -171,11 +171,10 @@ async fn setup_diesel_database() -> Result<Pool<ConnectionManager<PgConnection>>
 
     while attempts < max_attempts && !lock_acquired {
         let lock_result = diesel::sql_query(format!(
-            "SELECT pg_try_advisory_lock({})",
-            migration_lock_id
+            "SELECT pg_try_advisory_lock({migration_lock_id})"
         ))
         .get_result::<LockResult>(&mut connection)
-        .map_err(|e| anyhow::anyhow!("Failed to attempt migration lock acquisition: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Failed to attempt migration lock acquisition: {e}"))?;
 
         let result = lock_result.pg_try_advisory_lock;
 
@@ -196,8 +195,7 @@ async fn setup_diesel_database() -> Result<Pool<ConnectionManager<PgConnection>>
 
     if !lock_acquired {
         return Err(anyhow::anyhow!(
-            "Failed to acquire migration lock after {} attempts. Another migration process may be running.",
-            max_attempts
+            "Failed to acquire migration lock after {max_attempts} attempts. Another migration process may be running."
         ));
     }
 
@@ -208,12 +206,11 @@ async fn setup_diesel_database() -> Result<Pool<ConnectionManager<PgConnection>>
         Ok(_) => {
             info!("Database migrations completed successfully");
             // Release the advisory lock after successful migrations
-            diesel::sql_query(format!("SELECT pg_advisory_unlock({})", migration_lock_id))
+            diesel::sql_query(format!("SELECT pg_advisory_unlock({migration_lock_id})"))
                 .execute(&mut connection)
                 .map_err(|e| {
                     anyhow::anyhow!(
-                        "Failed to release migration lock after successful migrations: {}",
-                        e
+                        "Failed to release migration lock after successful migrations: {e}"
                     )
                 })?;
             info!("Migration lock released");
@@ -221,7 +218,7 @@ async fn setup_diesel_database() -> Result<Pool<ConnectionManager<PgConnection>>
         Err(migration_error) => {
             // Release the advisory lock even if migrations failed
             let unlock_result =
-                diesel::sql_query(format!("SELECT pg_advisory_unlock({})", migration_lock_id))
+                diesel::sql_query(format!("SELECT pg_advisory_unlock({migration_lock_id})"))
                     .execute(&mut connection);
             info!("Migration lock released after failure");
 
@@ -231,8 +228,7 @@ async fn setup_diesel_database() -> Result<Pool<ConnectionManager<PgConnection>>
             }
 
             return Err(anyhow::anyhow!(
-                "Failed to run migrations: {}",
-                migration_error
+                "Failed to run migrations: {migration_error}"
             ));
         }
     }
@@ -249,7 +245,7 @@ fn determine_archive_dir() -> Result<String> {
         // Test if we can write to it by trying to create a temporary file
         let test_file = format!("{}/test_write_{}", var_soar_archive, std::process::id());
         match fs::write(&test_file, b"test") {
-            Ok(_) => {
+            Ok(()) => {
                 // Clean up test file
                 let _ = fs::remove_file(&test_file);
                 info!("Using archive directory: {}", var_soar_archive);
@@ -266,11 +262,11 @@ fn determine_archive_dir() -> Result<String> {
     // Fallback to $HOME/soar-archive/
     let home_dir =
         env::var("HOME").map_err(|_| anyhow::anyhow!("HOME environment variable not set"))?;
-    let home_archive = format!("{}/soar-archive", home_dir);
+    let home_archive = format!("{home_dir}/soar-archive");
 
     // Create the directory if it doesn't exist
     fs::create_dir_all(&home_archive).map_err(|e| {
-        anyhow::anyhow!("Failed to create archive directory {}: {}", home_archive, e)
+        anyhow::anyhow!("Failed to create archive directory {home_archive}: {e}")
     })?;
 
     info!("Using archive directory: {}", home_archive);
@@ -412,7 +408,7 @@ async fn main() -> Result<()> {
         // Set up panic hook to capture panics in Sentry
         std::panic::set_hook(Box::new(|panic_info| {
             let panic_msg = if let Some(s) = panic_info.payload().downcast_ref::<&str>() {
-                s.to_string()
+                (*s).to_string()
             } else if let Some(s) = panic_info.payload().downcast_ref::<String>() {
                 s.clone()
             } else {
@@ -434,7 +430,7 @@ async fn main() -> Result<()> {
                 scope.set_tag("panic.location", location);
             });
 
-            sentry::capture_message(&format!("Panic: {}", panic_msg), sentry::Level::Fatal);
+            sentry::capture_message(&format!("Panic: {panic_msg}"), sentry::Level::Fatal);
 
             // Flush Sentry before the process exits
             if let Some(client) = sentry::Hub::current().client() {
