@@ -20,7 +20,7 @@ use ogn_parser::{AprsData, AprsPacket, PositionSourceType};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::fs::OpenOptions;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
 use tokio::time::{sleep, timeout};
@@ -356,15 +356,15 @@ impl AprsClient {
         info!("Login command sent successfully");
 
         // Read and process messages with timeout detection
-        let mut line = String::new();
+        let mut line_buffer = Vec::new();
         let mut first_message = true;
         let message_timeout = Duration::from_secs(60); // 1 minute timeout
 
         loop {
-            line.clear();
+            line_buffer.clear();
 
             // Use timeout to detect if no message received within 1 minute
-            match timeout(message_timeout, buf_reader.read_line(&mut line)).await {
+            match timeout(message_timeout, Self::read_line_with_invalid_utf8_handling(&mut buf_reader, &mut line_buffer)).await {
                 Ok(read_result) => {
                     match read_result {
                         Ok(0) => {
@@ -372,6 +372,16 @@ impl AprsClient {
                             break;
                         }
                         Ok(_) => {
+                            // Convert buffer to string, handling invalid UTF-8
+                            let line = match String::from_utf8(line_buffer.clone()) {
+                                Ok(valid_line) => valid_line,
+                                Err(_) => {
+                                    // Invalid UTF-8 encountered - print hex dump and continue
+                                    warn!("Invalid UTF-8 in stream, hex dump: {}", Self::format_hex_dump(&line_buffer));
+                                    continue;
+                                }
+                            };
+
                             let trimmed_line = line.trim();
                             if !trimmed_line.is_empty() {
                                 if first_message {
@@ -406,6 +416,71 @@ impl AprsClient {
         }
 
         ConnectionResult::Success
+    }
+
+    /// Read a line from the buffered reader, handling invalid UTF-8 bytes
+    /// Reads bytes until a newline character is found, including invalid UTF-8 sequences
+    async fn read_line_with_invalid_utf8_handling(
+        reader: &mut BufReader<tokio::net::tcp::OwnedReadHalf>,
+        buffer: &mut Vec<u8>,
+    ) -> Result<usize> {
+        let mut byte = [0u8; 1];
+        let mut total_bytes_read = 0;
+
+        loop {
+            match reader.read(&mut byte).await {
+                Ok(0) => {
+                    // End of stream
+                    if total_bytes_read == 0 {
+                        return Ok(0); // No bytes read, stream closed
+                    } else {
+                        break; // Some bytes read before EOF
+                    }
+                }
+                Ok(1) => {
+                    total_bytes_read += 1;
+                    buffer.push(byte[0]);
+
+                    // Stop at newline character
+                    if byte[0] == b'\n' {
+                        break;
+                    }
+                }
+                Ok(_) => {
+                    // This shouldn't happen with a 1-byte buffer, but handle it just in case
+                    continue;
+                }
+                Err(e) => {
+                    return Err(e.into());
+                }
+            }
+        }
+
+        Ok(total_bytes_read)
+    }
+
+    /// Format a byte buffer as a hex dump for logging invalid UTF-8 sequences
+    fn format_hex_dump(buffer: &[u8]) -> String {
+        let mut result = String::new();
+
+        for (i, byte) in buffer.iter().enumerate() {
+            if i > 0 {
+                result.push(' ');
+            }
+            result.push_str(&format!("{:02x}", byte));
+        }
+
+        // Also include ASCII representation where possible
+        result.push_str(" | ");
+        for &byte in buffer {
+            if byte.is_ascii_graphic() || byte == b' ' {
+                result.push(byte as char);
+            } else {
+                result.push('.');
+            }
+        }
+
+        result
     }
 
     /// Build the login command for APRS-IS authentication
