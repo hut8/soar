@@ -9,7 +9,7 @@ use crate::aircraft_registrations::{Aircraft, AircraftRegistrationModel, NewAirc
 use crate::clubs_repo::{ClubsRepository, LocationParams};
 use crate::faa::aircraft_model_repo::AircraftModelRecord;
 use crate::locations_repo::LocationsRepository;
-use crate::schema::{aircraft_models, aircraft_registrations};
+use crate::schema::{aircraft_models, aircraft_registrations, aircraft_other_names};
 
 pub type DieselPgPool = Pool<ConnectionManager<PgConnection>>;
 pub type DieselPgPooledConnection = PooledConnection<ConnectionManager<PgConnection>>;
@@ -118,7 +118,7 @@ impl AircraftRegistrationsRepository {
             };
 
             // Create NewAircraftRegistration with club_id and location_id
-            let mut new_aircraft_reg: NewAircraftRegistration = aircraft_reg.into();
+            let mut new_aircraft_reg: NewAircraftRegistration = aircraft_reg.clone().into();
             new_aircraft_reg.club_id = club_id;
             new_aircraft_reg.location_id = Some(location.id);
             let result = diesel::insert_into(aircraft_registrations::table)
@@ -272,6 +272,35 @@ impl AircraftRegistrationsRepository {
 
             match result {
                 Ok(_) => {
+                    // Now insert the other names into the aircraft_other_names table
+                    if !aircraft_reg.other_names.is_empty() {
+                        // First delete existing other names for this registration
+                        let delete_result = diesel::delete(aircraft_other_names::table)
+                            .filter(aircraft_other_names::registration_number.eq(&aircraft_reg.n_number))
+                            .execute(&mut conn);
+
+                        if let Err(e) = delete_result {
+                            warn!("Failed to delete existing other names for {}: {}", aircraft_reg.n_number, e);
+                        }
+
+                        // Insert new other names
+                        for (seq, other_name) in aircraft_reg.other_names.iter().enumerate() {
+                            let new_other_name = (
+                                aircraft_other_names::registration_number.eq(&aircraft_reg.n_number),
+                                aircraft_other_names::seq.eq((seq + 1) as i16), // 1-based sequence
+                                aircraft_other_names::other_name.eq(other_name),
+                            );
+
+                            let insert_result = diesel::insert_into(aircraft_other_names::table)
+                                .values(&new_other_name)
+                                .execute(&mut conn);
+
+                            if let Err(e) = insert_result {
+                                warn!("Failed to insert other name '{}' for {}: {}", other_name, aircraft_reg.n_number, e);
+                            }
+                        }
+                    }
+
                     upserted_count += 1;
                 }
                 Err(e) => {
@@ -301,6 +330,25 @@ impl AircraftRegistrationsRepository {
     }
 
     /// Get an aircraft registration by its registration number (N-number)
+    /// Helper method to fetch other names for an aircraft registration
+    async fn get_other_names(&self, registration_number: &str) -> Result<Vec<String>> {
+        let mut conn = self.get_connection()?;
+        let other_names = aircraft_other_names::table
+            .filter(aircraft_other_names::registration_number.eq(registration_number))
+            .order_by(aircraft_other_names::seq)
+            .select(aircraft_other_names::other_name)
+            .load::<String>(&mut conn)?;
+        Ok(other_names)
+    }
+
+    /// Convert an AircraftRegistrationModel to Aircraft, including other_names
+    async fn model_to_aircraft(&self, model: AircraftRegistrationModel) -> Result<Aircraft> {
+        let other_names = self.get_other_names(&model.registration_number).await?;
+        let mut aircraft: Aircraft = model.into();
+        aircraft.other_names = other_names;
+        Ok(aircraft)
+    }
+
     pub async fn get_aircraft_registration_by_n_number(
         &self,
         registration_number: &str,
@@ -312,7 +360,13 @@ impl AircraftRegistrationsRepository {
             .first::<AircraftRegistrationModel>(&mut conn)
             .optional()?;
 
-        Ok(aircraft_model.map(|model| model.into()))
+        match aircraft_model {
+            Some(model) => {
+                let aircraft = self.model_to_aircraft(model).await?;
+                Ok(Some(aircraft))
+            }
+            None => Ok(None),
+        }
     }
 
     /// Search aircraft registrations by registrant name
@@ -324,10 +378,13 @@ impl AircraftRegistrationsRepository {
             .select(AircraftRegistrationModel::as_select())
             .load::<AircraftRegistrationModel>(&mut conn)?;
 
-        Ok(aircraft_models
-            .into_iter()
-            .map(|model| model.into())
-            .collect())
+        let mut aircraft_list = Vec::new();
+        for model in aircraft_models {
+            let aircraft = self.model_to_aircraft(model).await?;
+            aircraft_list.push(aircraft);
+        }
+
+        Ok(aircraft_list)
     }
 
     /// Search aircraft registrations by transponder code
@@ -339,10 +396,13 @@ impl AircraftRegistrationsRepository {
             .select(AircraftRegistrationModel::as_select())
             .load::<AircraftRegistrationModel>(&mut conn)?;
 
-        Ok(aircraft_models
-            .into_iter()
-            .map(|model| model.into())
-            .collect())
+        let mut aircraft_list = Vec::new();
+        for model in aircraft_models {
+            let aircraft = self.model_to_aircraft(model).await?;
+            aircraft_list.push(aircraft);
+        }
+
+        Ok(aircraft_list)
     }
 
     /// Get aircraft registrations by club ID
@@ -353,10 +413,13 @@ impl AircraftRegistrationsRepository {
             .select(AircraftRegistrationModel::as_select())
             .load::<AircraftRegistrationModel>(&mut conn)?;
 
-        Ok(aircraft_models
-            .into_iter()
-            .map(|model| model.into())
-            .collect())
+        let mut aircraft_list = Vec::new();
+        for model in aircraft_models {
+            let aircraft = self.model_to_aircraft(model).await?;
+            aircraft_list.push(aircraft);
+        }
+
+        Ok(aircraft_list)
     }
 
     /// Get aircraft models (make/model/series) for a specific club
@@ -379,6 +442,41 @@ impl AircraftRegistrationsRepository {
             .load::<AircraftModelRecord>(&mut conn)?;
 
         Ok(models)
+    }
+
+    /// Get aircraft with their models for a specific club
+    pub async fn get_aircraft_with_models_by_club_id(
+        &self,
+        club_id: Uuid,
+    ) -> Result<Vec<(Aircraft, Option<AircraftModelRecord>)>> {
+        let mut conn = self.get_connection()?;
+
+        // Get aircraft for the club
+        let aircraft_list = aircraft_registrations::table
+            .filter(aircraft_registrations::club_id.eq(club_id))
+            .select(AircraftRegistrationModel::as_select())
+            .load::<AircraftRegistrationModel>(&mut conn)?;
+
+        let mut result = Vec::new();
+
+        // For each aircraft, try to find its model
+        for aircraft_model in aircraft_list {
+            let model = aircraft_models::table
+                .filter(
+                    aircraft_models::manufacturer_code
+                        .eq(&aircraft_model.manufacturer_code)
+                        .and(aircraft_models::model_code.eq(&aircraft_model.model_code))
+                        .and(aircraft_models::series_code.eq(&aircraft_model.series_code))
+                )
+                .select(AircraftModelRecord::as_select())
+                .first::<AircraftModelRecord>(&mut conn)
+                .optional()?;
+
+            let aircraft = self.model_to_aircraft(aircraft_model).await?;
+            result.push((aircraft, model));
+        }
+
+        Ok(result)
     }
 
     /// Update is_tow_plane field for an aircraft based on device_id
