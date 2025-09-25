@@ -490,7 +490,8 @@ impl ClubsRepository {
                 SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, c.location_id,
                        l.street1, l.street2, l.city, l.state, l.zip_code, l.region_code,
                        l.county_mail_code, l.country_mail_code,
-                       NULL::float8 as longitude, NULL::float8 as latitude,
+                       ST_X(l.geolocation)::float8 as longitude,
+                       ST_Y(l.geolocation)::float8 as latitude,
                        c.created_at, c.updated_at
                 FROM clubs c
                 LEFT JOIN locations l ON c.location_id = l.id
