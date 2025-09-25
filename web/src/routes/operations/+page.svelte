@@ -448,15 +448,4 @@
 	.compass-rose {
 		transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 	}
-
-	.compass-text {
-		font-family:
-			system-ui,
-			-apple-system,
-			sans-serif;
-		font-size: 12px;
-		font-weight: 600;
-		user-select: none;
-		pointer-events: none;
-	}
 </style>

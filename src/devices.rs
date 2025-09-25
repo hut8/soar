@@ -127,7 +127,7 @@ pub struct Device {
     pub address: u32,
     pub aircraft_model: String,
     pub registration: String,
-    #[serde(rename = "cn")]
+    #[serde(rename(deserialize = "cn"))]
     pub competition_number: String,
     #[serde(deserialize_with = "string_to_bool", serialize_with = "bool_to_string")]
     pub tracked: bool,
@@ -366,6 +366,32 @@ impl DeviceFetcher {
             ));
         }
 
+        let reg_parser = flydent::Parser::new();
+
+        let device_normalizer = |mut d: Device| {
+            let reg = reg_parser.parse(&d.registration, false, false);
+            match reg {
+                Some(r) => {
+                    d.registration = r.canonical_callsign().to_string();
+                    d
+                }
+                None => {
+                    d.registration = "".into();
+                    d
+                }
+            }
+        };
+
+        // Canonicalize registrations using "flydent" crate
+        let flarmnet_devices: Vec<Device> = flarmnet_devices
+            .into_iter()
+            .map(device_normalizer)
+            .collect();
+        let glidernet_devices: Vec<Device> = glidernet_devices
+            .into_iter()
+            .map(device_normalizer)
+            .collect();
+
         // Create a map of device_id -> Device for conflict resolution
         let mut device_map: HashMap<u32, DeviceWithSource> = HashMap::new();
 
@@ -382,26 +408,78 @@ impl DeviceFetcher {
 
         // Add Glidernet devices (higher priority - will overwrite conflicts)
         let mut conflicts = 0;
-        for device in glidernet_devices {
-            if let Some(existing) = device_map.get(&device.address)
-                && existing.source == DeviceSource::Flarmnet
+        for glidernet_device in glidernet_devices {
+            if let Some(flarmnet_device_src) = device_map.get(&glidernet_device.address)
+                && flarmnet_device_src.source == DeviceSource::Flarmnet
             {
+                let flarmnet_device = flarmnet_device_src.device.clone();
                 // Only log a warning if the devices actually have different data
-                if device != existing.device {
+                if glidernet_device != flarmnet_device {
+                    let (registration, source) = match (
+                        glidernet_device.registration.is_empty(),
+                        flarmnet_device.registration.is_empty(),
+                    ) {
+                        (true, true) => ("".to_string(), DeviceSource::Glidernet),
+                        (true, false) => {
+                            (flarmnet_device.registration.clone(), DeviceSource::Flarmnet)
+                        }
+                        (false, _) => (
+                            glidernet_device.registration.clone(),
+                            DeviceSource::Glidernet,
+                        ),
+                    };
+
                     conflicts += 1;
+                    let better_label = match source {
+                        DeviceSource::Glidernet => "OGN",
+                        DeviceSource::Flarmnet => "FLARM",
+                    };
                     warn!(
-                        "Device conflict for ID {}: using Glidernet data over Flarmnet data (registration: {} vs {})",
-                        device.address, device.registration, existing.device.registration
+                        "Device conflict for ID {}: using {} data: {} (over {})",
+                        glidernet_device.address,
+                        better_label,
+                        registration,
+                        if source == DeviceSource::Glidernet {
+                            &flarmnet_device.registration
+                        } else {
+                            &glidernet_device.registration
+                        }
+                    );
+                    let merged_device = Device {
+                        address_type: glidernet_device.address_type,
+                        address: glidernet_device.address,
+                        aircraft_model: if !glidernet_device.aircraft_model.is_empty() {
+                            glidernet_device.aircraft_model.clone()
+                        } else {
+                            flarmnet_device.aircraft_model.clone()
+                        },
+                        registration,
+                        competition_number: if !glidernet_device.competition_number.is_empty() {
+                            glidernet_device.competition_number.clone()
+                        } else {
+                            flarmnet_device.competition_number.clone()
+                        },
+                        tracked: glidernet_device.tracked || flarmnet_device.tracked,
+                        identified: glidernet_device.identified || flarmnet_device.identified,
+                    };
+                    device_map.insert(
+                        glidernet_device.address,
+                        DeviceWithSource {
+                            device: merged_device,
+                            source: DeviceSource::Glidernet, // TODO: Really this is both
+                        },
                     );
                 }
+                // If there's no difference, we keep the Flarmnet device
+            } else {
+                device_map.insert(
+                    glidernet_device.address,
+                    DeviceWithSource {
+                        device: glidernet_device,
+                        source: DeviceSource::Glidernet,
+                    },
+                );
             }
-            device_map.insert(
-                device.address,
-                DeviceWithSource {
-                    device,
-                    source: DeviceSource::Glidernet,
-                },
-            );
         }
 
         let total_devices = device_map.len();
