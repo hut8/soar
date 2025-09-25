@@ -2,8 +2,8 @@ use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::aircraft_registrations::{Aircraft, AirworthinessClass, RegistrantType};
 use super::club::AircraftModelView;
+use crate::aircraft_registrations::{Aircraft, AirworthinessClass, RegistrantType};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AircraftView {

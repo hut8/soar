@@ -170,11 +170,12 @@ async fn setup_diesel_database() -> Result<Pool<ConnectionManager<PgConnection>>
     let mut lock_acquired = false;
 
     while attempts < max_attempts && !lock_acquired {
-        let lock_result = diesel::sql_query(format!(
-            "SELECT pg_try_advisory_lock({migration_lock_id})"
-        ))
-        .get_result::<LockResult>(&mut connection)
-        .map_err(|e| anyhow::anyhow!("Failed to attempt migration lock acquisition: {e}"))?;
+        let lock_result =
+            diesel::sql_query(format!("SELECT pg_try_advisory_lock({migration_lock_id})"))
+                .get_result::<LockResult>(&mut connection)
+                .map_err(|e| {
+                    anyhow::anyhow!("Failed to attempt migration lock acquisition: {e}")
+                })?;
 
         let result = lock_result.pg_try_advisory_lock;
 
@@ -265,9 +266,8 @@ fn determine_archive_dir() -> Result<String> {
     let home_archive = format!("{home_dir}/soar-archive");
 
     // Create the directory if it doesn't exist
-    fs::create_dir_all(&home_archive).map_err(|e| {
-        anyhow::anyhow!("Failed to create archive directory {home_archive}: {e}")
-    })?;
+    fs::create_dir_all(&home_archive)
+        .map_err(|e| anyhow::anyhow!("Failed to create archive directory {home_archive}: {e}"))?;
 
     info!("Using archive directory: {}", home_archive);
     Ok(home_archive)

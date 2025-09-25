@@ -537,18 +537,21 @@ pub async fn handle_load_data(
                                         suitable_airports.first()
                                     {
                                         // Create Google Maps link showing the direct line between club and airport
-                                        let maps_link = if let (Some(airport_lat), Some(airport_lng)) =
-                                            (&nearest_airport.latitude_deg, &nearest_airport.longitude_deg) {
-                                            format!(
-                                                "https://www.google.com/maps/dir/{},{}/{},{}",
-                                                location.latitude,
-                                                location.longitude,
-                                                airport_lat,
-                                                airport_lng
-                                            )
-                                        } else {
-                                            "No coordinates available".to_string()
-                                        };
+                                        let maps_link =
+                                            if let (Some(airport_lat), Some(airport_lng)) = (
+                                                &nearest_airport.latitude_deg,
+                                                &nearest_airport.longitude_deg,
+                                            ) {
+                                                format!(
+                                                    "https://www.google.com/maps/dir/{},{}/{},{}",
+                                                    location.latitude,
+                                                    location.longitude,
+                                                    airport_lat,
+                                                    airport_lng
+                                                )
+                                            } else {
+                                                "No coordinates available".to_string()
+                                            };
 
                                         info!(
                                             "Found suitable airport: {} ({}) at {:.2} miles from {} - Map: {}",

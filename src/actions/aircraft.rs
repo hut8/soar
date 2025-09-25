@@ -17,7 +17,10 @@ pub async fn get_aircraft_by_club(
 ) -> impl IntoResponse {
     let aircraft_repo = AircraftRegistrationsRepository::new(state.pool);
 
-    match aircraft_repo.get_aircraft_with_models_by_club_id(club_id).await {
+    match aircraft_repo
+        .get_aircraft_with_models_by_club_id(club_id)
+        .await
+    {
         Ok(aircraft_with_models) => {
             let aircraft_views: Vec<AircraftView> = aircraft_with_models
                 .into_iter()

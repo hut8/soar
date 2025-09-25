@@ -3,10 +3,10 @@ use chrono::NaiveDate;
 use diesel::prelude::*;
 use diesel_derive_enum::DbEnum;
 use serde::{Deserialize, Serialize};
-use tracing::warn;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
+use tracing::warn;
 use uuid::Uuid;
 
 // Import Point from clubs module
@@ -445,7 +445,10 @@ fn parse_approved_ops(airworthiness_class_code: &str, raw_239_247: &str) -> Appr
 
         unknown => {
             // Unknown airworthiness class, no operations to parse
-            warn!("Unknown airworthiness class code '{}', cannot parse approved operations '{}'", unknown, raw);
+            warn!(
+                "Unknown airworthiness class code '{}', cannot parse approved operations '{}'",
+                unknown, raw
+            );
         }
     }
 
@@ -1104,7 +1107,6 @@ impl Aircraft {
             engine_manufacturer_code,
             engine_model_code,
             year_mfr,
-
             type_registration_code,
             registrant_name,
             street1,
@@ -1115,29 +1117,20 @@ impl Aircraft {
             region_code,
             county_mail_code,
             country_mail_code,
-
             last_action_date,
             certificate_issue_date,
-
             airworthiness_class,
             approved_operations_raw,
             approved_ops,
-
             type_aircraft_code,
             type_engine_code,
             status_code,
-
             transponder_code,
-
             fractional_owner,
             airworthiness_date,
-
             other_names,
-
             expiration_date,
-
             unique_id,
-
             kit_mfr_name,
             kit_model_name,
 
@@ -1750,52 +1743,52 @@ mod tests {
 
         // Test Restricted (code '3') - Multiple restrictions can be present
         let ops = parse_approved_ops("3", "123");
-        assert_eq!(ops.restricted_ag_pest_control, true);
-        assert_eq!(ops.restricted_aerial_surveying, true);
-        assert_eq!(ops.restricted_aerial_advertising, true);
-        assert_eq!(ops.restricted_other, false);
+        assert!(ops.restricted_ag_pest_control);
+        assert!(ops.restricted_aerial_surveying);
+        assert!(ops.restricted_aerial_advertising);
+        assert!(!ops.restricted_other);
 
         let ops = parse_approved_ops("3", "047");
-        assert_eq!(ops.restricted_other, true);
-        assert_eq!(ops.restricted_forest, true);
-        assert_eq!(ops.restricted_carriage_of_cargo, true);
-        assert_eq!(ops.restricted_ag_pest_control, false);
+        assert!(ops.restricted_other);
+        assert!(ops.restricted_forest);
+        assert!(ops.restricted_carriage_of_cargo);
+        assert!(!ops.restricted_ag_pest_control);
 
         // Test Experimental (code '4') - Only one can be present, exact matching
         let ops = parse_approved_ops("4", "2");
-        assert_eq!(ops.exp_amateur_built, true);
-        assert_eq!(ops.exp_research_development, false);
+        assert!(ops.exp_amateur_built);
+        assert!(!ops.exp_research_development);
 
         let ops = parse_approved_ops("4", "8A");
-        assert_eq!(ops.exp_lsa_reg_prior_2008, true);
-        assert_eq!(ops.exp_operating_kit_built, false);
+        assert!(ops.exp_lsa_reg_prior_2008);
+        assert!(!ops.exp_operating_kit_built);
 
         let ops = parse_approved_ops("4", "9C");
-        assert_eq!(ops.exp_uas_crew_training, true);
-        assert_eq!(ops.exp_uas_research_development, false);
+        assert!(ops.exp_uas_crew_training);
+        assert!(!ops.exp_uas_research_development);
 
         // Test that experimental doesn't incorrectly parse character iteration
         let ops = parse_approved_ops("4", "89"); // This should NOT set both 8 and 9 flags
-        assert_eq!(ops.exp_operating_kit_built, false);
-        assert_eq!(ops.exp_uas_research_development, false);
+        assert!(!ops.exp_operating_kit_built);
+        assert!(!ops.exp_uas_research_development);
 
         // Test Special Flight Permit (code '8') - Multiple permits can be present
         let ops = parse_approved_ops("8", "135");
-        assert_eq!(ops.sfp_ferry_for_repairs_alterations_storage, true);
-        assert_eq!(ops.sfp_excess_of_max_certificated, true);
-        assert_eq!(ops.sfp_production_flight_testing, true);
-        assert_eq!(ops.sfp_evacuate_impending_danger, false);
+        assert!(ops.sfp_ferry_for_repairs_alterations_storage);
+        assert!(ops.sfp_excess_of_max_certificated);
+        assert!(ops.sfp_production_flight_testing);
+        assert!(!ops.sfp_evacuate_impending_danger);
 
         // Test Multiple (code '6') - Complex parsing
         let ops = parse_approved_ops("6", "1301"); // Standard + Restricted + Other + Ag
-        assert_eq!(ops.restricted_other, true);
-        assert_eq!(ops.restricted_ag_pest_control, true);
+        assert!(ops.restricted_other);
+        assert!(ops.restricted_ag_pest_control);
 
         // Test Primary (code '7') - Should not set any flags
         let ops = parse_approved_ops("7", "123");
-        assert_eq!(ops.restricted_ag_pest_control, false);
-        assert_eq!(ops.exp_amateur_built, false);
-        assert_eq!(ops.sfp_ferry_for_repairs_alterations_storage, false);
+        assert!(!ops.restricted_ag_pest_control);
+        assert!(!ops.exp_amateur_built);
+        assert!(!ops.sfp_ferry_for_repairs_alterations_storage);
 
         // Test Light Sport (code '9') - Currently not tracked but should not crash
         let _ops = parse_approved_ops("9", "A");
@@ -1814,7 +1807,10 @@ mod tests {
         assert_eq!(LightSportType::from("G"), LightSportType::Glider);
         assert_eq!(LightSportType::from("L"), LightSportType::LighterThanAir);
         assert_eq!(LightSportType::from("P"), LightSportType::PowerParachute);
-        assert_eq!(LightSportType::from("W"), LightSportType::WeightShiftControl);
+        assert_eq!(
+            LightSportType::from("W"),
+            LightSportType::WeightShiftControl
+        );
         assert_eq!(LightSportType::from("X"), LightSportType::Airplane); // Invalid code defaults to Airplane
 
         // Test conversion from Option<String>

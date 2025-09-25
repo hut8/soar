@@ -8,9 +8,9 @@ use uuid::Uuid;
 
 use crate::airports_repo::AirportsRepository;
 use crate::devices::AddressType;
+use crate::fixes_repo::FixesRepository;
 use crate::flights::Flight;
 use crate::flights_repo::FlightsRepository;
-use crate::fixes_repo::FixesRepository;
 use crate::{Fix, FixHandler};
 use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
@@ -160,7 +160,8 @@ impl FlightDetectionProcessor {
                 // Update existing fixes for this device to associate them with the new flight
                 // Use a time range from 10 minutes ago to now to catch recent fixes
                 let lookback_time = fix.timestamp - chrono::Duration::minutes(10);
-                if let Err(e) = self.fixes_repo
+                if let Err(e) = self
+                    .fixes_repo
                     .update_flight_id_by_device_and_time(
                         device_address,
                         flight_id,

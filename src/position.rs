@@ -164,7 +164,7 @@ impl Fix {
                     bit_errors_corrected,
                     freq_offset_khz,
                     club_name: None, // To be implemented later
-                    club_id: None, // To be set by processors
+                    club_id: None,   // To be set by processors
                     unparsed_data: pos_packet.comment.unparsed.clone(),
                 }))
             }

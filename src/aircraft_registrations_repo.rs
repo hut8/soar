@@ -9,7 +9,7 @@ use crate::aircraft_registrations::{Aircraft, AircraftRegistrationModel, NewAirc
 use crate::clubs_repo::{ClubsRepository, LocationParams};
 use crate::faa::aircraft_model_repo::AircraftModelRecord;
 use crate::locations_repo::LocationsRepository;
-use crate::schema::{aircraft_models, aircraft_registrations, aircraft_other_names};
+use crate::schema::{aircraft_models, aircraft_other_names, aircraft_registrations};
 
 pub type DieselPgPool = Pool<ConnectionManager<PgConnection>>;
 pub type DieselPgPooledConnection = PooledConnection<ConnectionManager<PgConnection>>;
@@ -276,17 +276,24 @@ impl AircraftRegistrationsRepository {
                     if !aircraft_reg.other_names.is_empty() {
                         // First delete existing other names for this registration
                         let delete_result = diesel::delete(aircraft_other_names::table)
-                            .filter(aircraft_other_names::registration_number.eq(&aircraft_reg.n_number))
+                            .filter(
+                                aircraft_other_names::registration_number
+                                    .eq(&aircraft_reg.n_number),
+                            )
                             .execute(&mut conn);
 
                         if let Err(e) = delete_result {
-                            warn!("Failed to delete existing other names for {}: {}", aircraft_reg.n_number, e);
+                            warn!(
+                                "Failed to delete existing other names for {}: {}",
+                                aircraft_reg.n_number, e
+                            );
                         }
 
                         // Insert new other names
                         for (seq, other_name) in aircraft_reg.other_names.iter().enumerate() {
                             let new_other_name = (
-                                aircraft_other_names::registration_number.eq(&aircraft_reg.n_number),
+                                aircraft_other_names::registration_number
+                                    .eq(&aircraft_reg.n_number),
                                 aircraft_other_names::seq.eq((seq + 1) as i16), // 1-based sequence
                                 aircraft_other_names::other_name.eq(other_name),
                             );
@@ -296,7 +303,10 @@ impl AircraftRegistrationsRepository {
                                 .execute(&mut conn);
 
                             if let Err(e) = insert_result {
-                                warn!("Failed to insert other name '{}' for {}: {}", other_name, aircraft_reg.n_number, e);
+                                warn!(
+                                    "Failed to insert other name '{}' for {}: {}",
+                                    other_name, aircraft_reg.n_number, e
+                                );
                             }
                         }
                     }
@@ -466,7 +476,7 @@ impl AircraftRegistrationsRepository {
                     aircraft_models::manufacturer_code
                         .eq(&aircraft_model.manufacturer_code)
                         .and(aircraft_models::model_code.eq(&aircraft_model.model_code))
-                        .and(aircraft_models::series_code.eq(&aircraft_model.series_code))
+                        .and(aircraft_models::series_code.eq(&aircraft_model.series_code)),
                 )
                 .select(AircraftModelRecord::as_select())
                 .first::<AircraftModelRecord>(&mut conn)
