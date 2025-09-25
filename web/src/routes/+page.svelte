@@ -19,30 +19,22 @@
 </svelte:head>
 
 <!-- Background Video -->
-<video
-	class="fixed top-0 left-0 w-full h-full object-cover z-[-1]"
-	autoplay
-	muted
-	loop
-	playsinline
->
-	<source src="/glider.mp4" type="video/mp4">
+<video class="fixed top-0 left-0 z-[-1] h-full w-full object-cover" autoplay muted loop playsinline>
+	<source src="/glider.mp4" type="video/mp4" />
 </video>
 
 <!-- Video Overlay for Text Legibility -->
-<div class="fixed top-0 left-0 w-full h-full bg-black/40 z-[-1]"></div>
+<div class="fixed top-0 left-0 z-[-1] h-full w-full bg-black/40"></div>
 
-<div class="relative z-10 min-h-screen flex flex-col justify-center space-y-12">
+<div class="relative z-10 flex min-h-screen flex-col justify-center space-y-12">
 	<!-- Hero Section -->
 	<section class="space-y-8 text-center">
 		<!-- Hero Content -->
 		<div class="space-y-6">
-			<h1
-				class="text-white text-4xl font-bold md:text-6xl drop-shadow-lg"
-			>
+			<h1 class="text-4xl font-bold text-white drop-shadow-lg md:text-6xl">
 				Welcome to Glider.flights
 			</h1>
-			<p class="text-white/90 mx-auto max-w-3xl text-xl md:text-2xl drop-shadow-lg">
+			<p class="mx-auto max-w-3xl text-xl text-white/90 drop-shadow-lg md:text-2xl">
 				Discover soaring clubs, track glider operations, and connect with the soaring community
 			</p>
 		</div>
@@ -54,7 +46,7 @@
 			<!-- Clubs Button -->
 			<a
 				href={clubsPath}
-				class="group block p-8 transition-all duration-200 hover:scale-105 hover:shadow-xl bg-white/20 backdrop-blur-md border border-white/30 rounded-lg hover:bg-white/30"
+				class="group block rounded-lg border border-white/30 bg-white/20 p-8 backdrop-blur-md transition-all duration-200 hover:scale-105 hover:bg-white/30 hover:shadow-xl"
 			>
 				<div class="space-y-6 text-center">
 					<div class="flex justify-center">
@@ -73,7 +65,7 @@
 			<!-- Operations Button -->
 			<a
 				href={operationsPath}
-				class="group block p-8 transition-all duration-200 hover:scale-105 hover:shadow-xl bg-white/20 backdrop-blur-md border border-white/30 rounded-lg hover:bg-white/30"
+				class="group block rounded-lg border border-white/30 bg-white/20 p-8 backdrop-blur-md transition-all duration-200 hover:scale-105 hover:bg-white/30 hover:shadow-xl"
 			>
 				<div class="space-y-6 text-center">
 					<div class="flex justify-center">
