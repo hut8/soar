@@ -386,11 +386,14 @@ impl DeviceFetcher {
             if let Some(existing) = device_map.get(&device.address)
                 && existing.source == DeviceSource::Flarmnet
             {
-                conflicts += 1;
-                warn!(
-                    "Device conflict for ID {}: using Glidernet data over Flarmnet data (registration: {} vs {})",
-                    device.address, device.registration, existing.device.registration
-                );
+                // Only log a warning if the devices actually have different data
+                if device != existing.device {
+                    conflicts += 1;
+                    warn!(
+                        "Device conflict for ID {}: using Glidernet data over Flarmnet data (registration: {} vs {})",
+                        device.address, device.registration, existing.device.registration
+                    );
+                }
             }
             device_map.insert(
                 device.address,
