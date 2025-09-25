@@ -58,11 +58,10 @@ diesel::table! {
 
 diesel::table! {
     aircraft_other_names (registration_number, seq) {
-        #[max_length = 5]
+        #[max_length = 7]
         registration_number -> Varchar,
         seq -> Int2,
-        #[max_length = 50]
-        other_name -> Varchar,
+        other_name -> Text,
     }
 }
 
