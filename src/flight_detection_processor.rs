@@ -30,6 +30,7 @@ struct AircraftTracker {
     last_update: DateTime<Utc>,
     last_position: Option<(f64, f64)>, // (lat, lon) for calculating speed
     last_position_time: Option<DateTime<Utc>>,
+    last_fix_timestamp: Option<DateTime<Utc>>, // Track last processed fix to avoid duplicates
 }
 
 impl AircraftTracker {
@@ -40,6 +41,7 @@ impl AircraftTracker {
             last_update: Utc::now(),
             last_position: None,
             last_position_time: None,
+            last_fix_timestamp: None,
         }
     }
 
@@ -72,7 +74,18 @@ impl AircraftTracker {
     fn update_position(&mut self, fix: &Fix) {
         self.last_position = Some((fix.latitude, fix.longitude));
         self.last_position_time = Some(fix.timestamp);
+        self.last_fix_timestamp = Some(fix.timestamp);
         self.last_update = Utc::now();
+    }
+
+    /// Check if this fix is a duplicate (within 1 second of the last processed fix)
+    fn is_duplicate_fix(&self, fix: &Fix) -> bool {
+        if let Some(last_timestamp) = self.last_fix_timestamp {
+            let time_diff = fix.timestamp.signed_duration_since(last_timestamp);
+            time_diff.num_seconds().abs() < 1
+        } else {
+            false
+        }
     }
 }
 
@@ -300,24 +313,16 @@ impl FlightDetectionProcessor {
                 }
             }
         } else {
-            // New aircraft
+            // New aircraft - only create a flight if we detect a true takeoff (idle→active)
+            // For aircraft first seen in Active state, just track them without creating a flight
+            // A flight will be created later when they transition from active→idle→active (true takeoff)
             let mut new_tracker = AircraftTracker::new(new_state.clone());
             new_tracker.update_position(fix);
 
-            // If aircraft is initially active (in-flight), create flight with no departure details
             if new_state == AircraftState::Active {
                 debug!("New in-flight aircraft detected: {}", device_address);
-                match self.create_flight(device_address, fix).await {
-                    Ok(flight_id) => {
-                        new_tracker.current_flight_id = Some(flight_id);
-                    }
-                    Err(e) => {
-                        warn!(
-                            "Failed to create in-flight tracking for aircraft {}: {}",
-                            device_address, e
-                        );
-                    }
-                }
+                // Do NOT create a flight - we're catching an aircraft already in flight
+                // A flight will be created later when it lands and takes off again
             }
 
             let mut trackers = self.aircraft_trackers.write().await;
@@ -356,6 +361,29 @@ impl FlightDetectionProcessor {
 impl FixHandler for FlightDetectionProcessor {
     fn process_fix(&self, fix: Fix, _raw_message: &str) {
         let device_address = fix.device_address_hex();
+
+        // Check for duplicate fixes first (within 1 second)
+        let is_duplicate = {
+            let trackers_read = self.aircraft_trackers.try_read();
+            match trackers_read {
+                Ok(trackers) => {
+                    if let Some(tracker) = trackers.get(&device_address) {
+                        tracker.is_duplicate_fix(&fix)
+                    } else {
+                        false // New aircraft, not a duplicate
+                    }
+                }
+                Err(_) => false, // Could not get read lock, process anyway
+            }
+        };
+
+        if is_duplicate {
+            trace!(
+                "Discarding duplicate fix for aircraft {} (less than 1 second from previous)",
+                device_address
+            );
+            return;
+        }
 
         trace!(
             "Processing fix for aircraft {} at {:.6}, {:.6} (speed: {:?} knots)",
