@@ -388,7 +388,7 @@
 			</div>
 
 			<!-- Map Section -->
-			{#if club.location?.geolocation}
+			{#if club.location}
 				<div class="card p-6">
 					<h2 class="h2 mb-4 flex items-center gap-2">
 						<Navigation class="h-6 w-6" />
@@ -397,9 +397,9 @@
 					<div class="border-surface-300-600-token overflow-hidden rounded-lg border">
 						<!-- Embedded Google Map -->
 						<iframe
-							src={`https://www.google.com/maps/embed?pb=!1m14!1m12!1m3!1d3000!2d${club.location.geolocation.longitude}!3d${club.location.geolocation.latitude}!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!5e0!3m2!1sen!2sus!4v1693234567890!5m2!1sen!2sus`}
+							src={`https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3000!2d0!3d0!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!5e0!3m2!1sen!2sus!4v1693234567890!5m2!1sen!2sus&q=${encodeURIComponent([club.location.street1, club.location.street2, club.location.city, club.location.state, club.location.zip_code].filter(Boolean).join(', '))}`}
 							width="100%"
-							height="300"
+							height="500"
 							style="border:0;"
 							allowfullscreen
 							loading="lazy"
@@ -417,15 +417,17 @@
 							<ExternalLink class="mr-2 h-4 w-4" />
 							View Larger Map
 						</a>
-						<a
-							href={`https://www.google.com/maps/dir/?api=1&destination=${club.location.geolocation.latitude},${club.location.geolocation.longitude}`}
-							target="_blank"
-							rel="noopener noreferrer"
-							class="variant-ghost-secondary btn btn-sm"
-						>
-							<Navigation class="mr-2 h-4 w-4" />
-							Get Directions
-						</a>
+						{#if club.location?.geolocation}
+							<a
+								href={`https://www.google.com/maps/dir/?api=1&destination=${club.location.geolocation.latitude},${club.location.geolocation.longitude}`}
+								target="_blank"
+								rel="noopener noreferrer"
+								class="variant-ghost-secondary btn btn-sm"
+							>
+								<Navigation class="mr-2 h-4 w-4" />
+								Get Directions
+							</a>
+						{/if}
 					</div>
 				</div>
 			{/if}
