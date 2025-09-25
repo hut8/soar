@@ -364,7 +364,12 @@ impl AprsClient {
             line_buffer.clear();
 
             // Use timeout to detect if no message received within 1 minute
-            match timeout(message_timeout, Self::read_line_with_invalid_utf8_handling(&mut buf_reader, &mut line_buffer)).await {
+            match timeout(
+                message_timeout,
+                Self::read_line_with_invalid_utf8_handling(&mut buf_reader, &mut line_buffer),
+            )
+            .await
+            {
                 Ok(read_result) => {
                     match read_result {
                         Ok(0) => {
@@ -377,7 +382,10 @@ impl AprsClient {
                                 Ok(valid_line) => valid_line,
                                 Err(_) => {
                                     // Invalid UTF-8 encountered - print hex dump and continue
-                                    warn!("Invalid UTF-8 in stream, hex dump: {}", Self::format_hex_dump(&line_buffer));
+                                    warn!(
+                                        "Invalid UTF-8 in stream, hex dump: {}",
+                                        Self::format_hex_dump(&line_buffer)
+                                    );
                                     continue;
                                 }
                             };
@@ -399,7 +407,7 @@ impl AprsClient {
                             }
                         }
                         Err(e) => {
-                            return ConnectionResult::OperationFailed(e.into());
+                            return ConnectionResult::OperationFailed(e);
                         }
                     }
                 }
