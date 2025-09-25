@@ -112,8 +112,6 @@ pub struct ClubView {
     pub similarity_score: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub distance_meters: Option<f64>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub models: Vec<AircraftModelView>,
 }
 
 impl From<Club> for ClubView {
@@ -143,7 +141,6 @@ impl From<Club> for ClubView {
             updated_at: club.updated_at,
             similarity_score: None,
             distance_meters: None,
-            models: Vec::new(),
         }
     }
 }
@@ -175,7 +172,6 @@ impl From<ClubWithLocationAndDistance> for ClubView {
             updated_at: club.updated_at,
             similarity_score: None,
             distance_meters: club.distance_meters,
-            models: Vec::new(),
         }
     }
 }
@@ -207,7 +203,6 @@ impl From<ClubWithLocationAndSimilarity> for ClubView {
             updated_at: club.updated_at,
             similarity_score: club.similarity_score.map(|s| s as f64),
             distance_meters: None,
-            models: Vec::new(),
         }
     }
 }

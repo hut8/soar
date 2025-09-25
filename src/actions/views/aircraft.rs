@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::aircraft_registrations::{Aircraft, AirworthinessClass, RegistrantType};
+use super::club::AircraftModelView;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AircraftView {
@@ -29,6 +30,8 @@ pub struct AircraftView {
     pub kit_manufacturer_name: Option<String>,
     pub kit_model_name: Option<String>,
     pub other_names: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<AircraftModelView>,
 }
 
 impl From<Aircraft> for AircraftView {
@@ -57,6 +60,7 @@ impl From<Aircraft> for AircraftView {
             kit_manufacturer_name: aircraft.kit_mfr_name,
             kit_model_name: aircraft.kit_model_name,
             other_names: aircraft.other_names,
+            model: None, // Will be set when fetching with model data
         }
     }
 }
