@@ -135,6 +135,7 @@ struct NewFix {
     bit_errors_corrected: Option<i32>,
     freq_offset_khz: Option<f32>,
     club_id: Option<Uuid>,
+    flight_id: Option<Uuid>,
     unparsed_data: Option<String>,
 }
 
@@ -169,6 +170,7 @@ impl From<&Fix> for NewFix {
             bit_errors_corrected: fix.bit_errors_corrected.map(|b| b as i32),
             freq_offset_khz: fix.freq_offset_khz,
             club_id: fix.club_id,
+            flight_id: fix.flight_id,
             unparsed_data: fix.unparsed_data.clone(),
         }
     }
@@ -231,6 +233,8 @@ struct FixRow {
     freq_offset_khz: Option<f32>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
     club_id: Option<Uuid>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
+    flight_id: Option<Uuid>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
     unparsed_data: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
@@ -316,6 +320,7 @@ impl From<FixRow> for Fix {
             device_address_hex: row.device_address,
             address_type: parse_address_type(row.address_type),
             aircraft_type: parse_aircraft_type(row.aircraft_type),
+            flight_id: row.flight_id,
             flight_number: row.flight_number,
             emitter_category: parse_emitter_category(row.emitter_category),
             registration: row.registration,
@@ -787,5 +792,51 @@ impl FixesRepository {
         .await??;
 
         Ok(result.into_iter().map(Fix::from).collect())
+    }
+
+    /// Update flight_id for fixes by device_address within a time range
+    /// This is used by flight detection processor to link fixes to flights after they're created
+    pub async fn update_flight_id_by_device_and_time(
+        &self,
+        device_address: &str,
+        flight_id: Uuid,
+        start_time: DateTime<Utc>,
+        end_time: Option<DateTime<Utc>>,
+    ) -> Result<usize, anyhow::Error> {
+        let pool = self.pool.clone();
+        let device_address = device_address.to_string();
+        let flight_id_param = flight_id;
+
+        let result = tokio::task::spawn_blocking(move || {
+            use crate::schema::fixes::dsl::*;
+            let mut conn = pool.get()?;
+
+            let updated_count = if let Some(end_time) = end_time {
+                diesel::update(fixes)
+                    .filter(device_address.eq(&device_address))
+                    .filter(timestamp.ge(start_time))
+                    .filter(timestamp.le(end_time))
+                    .filter(flight_id.is_null())
+                    .set(flight_id.eq(flight_id_param))
+                    .execute(&mut conn)?
+            } else {
+                diesel::update(fixes)
+                    .filter(device_address.eq(&device_address))
+                    .filter(timestamp.ge(start_time))
+                    .filter(flight_id.is_null())
+                    .set(flight_id.eq(flight_id_param))
+                    .execute(&mut conn)?
+            };
+
+            Ok::<usize, anyhow::Error>(updated_count)
+        })
+        .await??;
+
+        debug!(
+            "Updated {} fixes with flight_id {} for device {}",
+            result, flight_id_param, device_address
+        );
+
+        Ok(result)
     }
 }

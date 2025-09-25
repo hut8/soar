@@ -10,6 +10,7 @@ use crate::airports_repo::AirportsRepository;
 use crate::devices::AddressType;
 use crate::flights::Flight;
 use crate::flights_repo::FlightsRepository;
+use crate::fixes_repo::FixesRepository;
 use crate::{Fix, FixHandler};
 use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
@@ -94,6 +95,7 @@ fn haversine_distance(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
 pub struct FlightDetectionProcessor {
     flights_repo: FlightsRepository,
     airports_repo: AirportsRepository,
+    fixes_repo: FixesRepository,
     aircraft_trackers: Arc<RwLock<HashMap<String, AircraftTracker>>>,
 }
 
@@ -102,6 +104,7 @@ impl Clone for FlightDetectionProcessor {
         Self {
             flights_repo: self.flights_repo.clone(),
             airports_repo: self.airports_repo.clone(),
+            fixes_repo: self.fixes_repo.clone(),
             aircraft_trackers: Arc::clone(&self.aircraft_trackers),
         }
     }
@@ -112,6 +115,7 @@ impl FlightDetectionProcessor {
         Self {
             flights_repo: FlightsRepository::new(pool.clone()),
             airports_repo: AirportsRepository::new(pool.clone()),
+            fixes_repo: FixesRepository::new(pool.clone()),
             aircraft_trackers: Arc::new(RwLock::new(HashMap::new())),
         }
     }
@@ -152,6 +156,25 @@ impl FlightDetectionProcessor {
                         String::new()
                     }
                 );
+
+                // Update existing fixes for this device to associate them with the new flight
+                // Use a time range from 10 minutes ago to now to catch recent fixes
+                let lookback_time = fix.timestamp - chrono::Duration::minutes(10);
+                if let Err(e) = self.fixes_repo
+                    .update_flight_id_by_device_and_time(
+                        device_address,
+                        flight_id,
+                        lookback_time,
+                        None, // No end time - update all fixes from lookback_time onward
+                    )
+                    .await
+                {
+                    warn!(
+                        "Failed to update existing fixes with flight_id {} for aircraft {}: {}",
+                        flight_id, device_address, e
+                    );
+                }
+
                 Ok(flight_id)
             }
             Err(e) => {
@@ -390,6 +413,8 @@ mod tests {
 
         // Create a fix with high ground speed
         let mut fix = Fix {
+            id: uuid::Uuid::new_v4(),
+            raw_packet: "TEST-1>APRS,TCPXX*:!4000.00N/07400.00W>000/000/A=001000".to_string(),
             source: "TEST".to_string(),
             destination: "APRS".to_string(),
             via: vec![],
@@ -400,8 +425,10 @@ mod tests {
             longitude: -74.0,
             altitude_feet: Some(1000),
             device_address: Some(0x123456),
+            device_address_hex: Some("123456".to_string()),
             address_type: Some(AddressType::Icao),
             aircraft_type: None,
+            flight_id: None,
             flight_number: None,
             emitter_category: None,
             registration: None,
@@ -415,6 +442,7 @@ mod tests {
             bit_errors_corrected: None,
             freq_offset_khz: None,
             club_name: None,
+            club_id: None,
             unparsed_data: None,
         };
 

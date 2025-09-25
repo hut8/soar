@@ -40,6 +40,7 @@ pub struct Fix {
     pub aircraft_type: Option<AircraftType>,
 
     /// Flight information
+    pub flight_id: Option<Uuid>,
     pub flight_number: Option<String>,
     pub emitter_category: Option<AdsbEmitterCategory>,
     pub registration: Option<String>,
@@ -87,6 +88,7 @@ impl Fix {
                 .map(|addr| format!("{:06X}", addr)),
             address_type: position_fix.address_type,
             aircraft_type: position_fix.aircraft_type,
+            flight_id: position_fix.flight_id, // Copy flight_id from position fix
             flight_number: position_fix.flight_number.clone(),
             emitter_category: position_fix.emitter_category,
             registration: position_fix.registration.clone(),

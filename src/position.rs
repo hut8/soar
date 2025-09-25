@@ -11,6 +11,10 @@ use crate::ogn_aprs_aircraft::{AdsbEmitterCategory, AircraftType};
 /// This is the main domain entity for position updates, agnostic to source (APRS) and destination (database, NATS)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Fix {
+    /// Unique identifier for this fix
+    pub id: uuid::Uuid,
+    /// Raw APRS packet content
+    pub raw_packet: String,
     /// Source callsign (from APRS packet header)
     pub source: String,
     /// Destination (from APRS packet header)
@@ -34,10 +38,12 @@ pub struct Fix {
 
     /// Aircraft identification from OGN parameters
     pub device_address: Option<u32>, // Raw device address from OGN parameters (numeric)
+    pub device_address_hex: Option<String>, // Hex string representation of device address
     pub address_type: Option<AddressType>,
     pub aircraft_type: Option<AircraftType>,
 
     /// Flight information
+    pub flight_id: Option<uuid::Uuid>,
     pub flight_number: Option<String>,
     pub emitter_category: Option<AdsbEmitterCategory>,
     pub registration: Option<String>,
@@ -57,6 +63,7 @@ pub struct Fix {
 
     /// Club association (to be implemented later)
     pub club_name: Option<String>,
+    pub club_id: Option<uuid::Uuid>,
 
     /// Unparsed portion of the packet (if any)
     pub unparsed_data: Option<String>,
@@ -84,6 +91,7 @@ impl Fix {
         let via = packet.via.iter().map(|v| v.to_string()).collect();
 
         // Only process position packets
+        let raw_packet_debug = format!("{:?}", packet);
         match packet.data {
             ogn_parser::AprsData::Position(pos_packet) => {
                 let latitude = pos_packet.latitude.as_();
@@ -127,6 +135,8 @@ impl Fix {
                 }
 
                 Ok(Some(Fix {
+                    id: uuid::Uuid::new_v4(),
+                    raw_packet: raw_packet_debug, // TODO: Get actual raw packet string
                     source,
                     destination,
                     via,
@@ -137,8 +147,10 @@ impl Fix {
                     longitude,
                     altitude_feet,
                     device_address,
+                    device_address_hex: device_address.map(|addr| format!("{:06X}", addr)),
                     address_type,
                     aircraft_type,
+                    flight_id: None, // Will be set by flight detection processor
                     flight_number,
                     emitter_category,
                     registration,
@@ -152,6 +164,7 @@ impl Fix {
                     bit_errors_corrected,
                     freq_offset_khz,
                     club_name: None, // To be implemented later
+                    club_id: None, // To be set by processors
                     unparsed_data: pos_packet.comment.unparsed.clone(),
                 }))
             }
