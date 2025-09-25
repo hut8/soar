@@ -1250,6 +1250,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "flydent"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e2e18a567c090c27b2ff765945a58860f5eadfcf352bcbde8b2035ee8a70e566"
+dependencies = [
+ "once_cell",
+ "regex",
+ "serde_json",
+]
+
+[[package]]
 name = "fnv"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3606,6 +3617,7 @@ dependencies = [
  "diesel_migrations",
  "directories",
  "dotenvy",
+ "flydent",
  "futures-util",
  "gdal",
  "google_maps",

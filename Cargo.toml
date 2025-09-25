@@ -64,6 +64,7 @@ rust_decimal = "1.38"
 zip = "5"
 directories = "6.0.0"
 gdal = "0.18.0"
+flydent = "0.3.0"
 
 [profile.release]
 debug = true
