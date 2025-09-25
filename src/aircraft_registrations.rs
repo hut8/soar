@@ -323,6 +323,20 @@ fn parse_approved_ops(airworthiness_class_code: &str, raw_239_247: &str) -> Appr
     let raw = raw_239_247.trim();
 
     match airworthiness_class_code {
+        // Standard (code '1') - Categories: Normal, Utility, Acrobatic, Transport, Glider, Balloon, Commuter, Other
+        "1" => {
+            // Note: Standard aircraft operations are not currently stored in the database
+            // Valid codes: Blank, N (Normal), U (Utility), A (Acrobatic), T (Transport),
+            // G (Glider), B (Balloon), C (Commuter), O (Other)
+            // We acknowledge these are valid but don't set any flags since there are no DB fields
+        }
+
+        // Limited (code '2') - Should have blank approved operations (239-247 should be empty)
+        "2" => {
+            // Limited aircraft should not have approved operations codes in 239-247
+            // These positions should be blank for Limited class aircraft
+        }
+
         // Restricted (code '3') - Multiple restrictions can be present
         "3" => {
             for ch in raw.chars() {
@@ -1719,6 +1733,21 @@ mod tests {
 
     #[test]
     fn test_approved_operations_parsing() {
+        // Test Standard (code '1') - Should not produce warnings or errors
+        let _ops = parse_approved_ops("1", "N"); // Normal operation
+        // Standard operations are not stored in database, so no assertions for flags
+        // But this should not produce any warnings
+
+        let _ops = parse_approved_ops("1", "U"); // Utility operation
+        // Should handle without warnings
+
+        let _ops = parse_approved_ops("1", ""); // Blank operation
+        // Should handle without warnings
+
+        // Test Limited (code '2') - Should have blank operations (239-247 should be empty)
+        let _ops = parse_approved_ops("2", ""); // Limited aircraft should have blank operations
+        // Limited operations should be blank, no codes expected in 239-247
+
         // Test Restricted (code '3') - Multiple restrictions can be present
         let ops = parse_approved_ops("3", "123");
         assert_eq!(ops.restricted_ag_pest_control, true);
