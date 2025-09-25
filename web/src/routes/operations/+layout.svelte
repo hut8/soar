@@ -10,6 +10,6 @@
 </svelte:head>
 
 <!-- Full screen layout without navigation for operations -->
-<div class="h-screen w-full overflow-hidden">
+<div class="h-full w-full overflow-hidden">
 	{@render children?.()}
 </div>

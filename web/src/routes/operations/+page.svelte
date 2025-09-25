@@ -11,6 +11,15 @@
 	let isLocating = false;
 	let userMarker: google.maps.marker.AdvancedMarkerElement | null = null;
 
+	// Compass rose variables
+	let deviceHeading: number = 0;
+	let compassHeading: number = 0;
+	let isCompassActive: boolean = false;
+	let displayHeading: number = 0;
+
+	// Screen orientation lock
+	let screenOrientation: 'portrait-primary' | 'landscape-primary' | 'portrait-secondary' | 'landscape-secondary' | null = null;
+
 	// Center of continental US
 	const CONUS_CENTER = {
 		lat: 39.8283,
@@ -21,6 +30,7 @@
 		if (browser) {
 			await loadGoogleMapsScript();
 			initializeMap();
+			initializeCompass();
 		}
 	});
 
@@ -54,19 +64,12 @@
 			center: CONUS_CENTER,
 			zoom: 4, // Shows continental US
 			mapTypeId: window.google.maps.MapTypeId.TERRAIN,
-			// restriction: {
-			// 	latLngBounds: CONUS_BOUNDS,
-			// 	strictBounds: false
-			// },
 			mapTypeControl: true,
 			mapTypeControlOptions: {
 				style: window.google.maps.MapTypeControlStyle.HORIZONTAL_BAR,
-				position: window.google.maps.ControlPosition.TOP_CENTER
+				position: window.google.maps.ControlPosition.LEFT_BOTTOM
 			},
-			zoomControl: true,
-			zoomControlOptions: {
-				position: window.google.maps.ControlPosition.RIGHT_CENTER
-			},
+			zoomControl: false,
 			scaleControl: true,
 			streetViewControl: true,
 			streetViewControlOptions: {
@@ -182,44 +185,207 @@
 			});
 		});
 	}
+
+	async function initializeCompass(): Promise<void> {
+		// Check if we need to request permission (for iOS 13+)
+		if (
+			'requestPermission' in DeviceOrientationEvent &&
+			typeof DeviceOrientationEvent.requestPermission === 'function'
+		) {
+			try {
+				const permission = await DeviceOrientationEvent.requestPermission();
+				if (permission !== 'granted') {
+					console.log('Device orientation permission denied');
+					return;
+				}
+			} catch (error) {
+				console.log('Error requesting device orientation permission:', error);
+				return;
+			}
+		}
+
+		// Try to lock screen orientation
+		if ('screen' in window && 'orientation' in window.screen) {
+			try {
+				// Use type assertion to handle potential undefined
+				const orientation = window.screen.orientation as any;
+				if (orientation && typeof orientation.lock === 'function') {
+					await orientation.lock('portrait-primary');
+					screenOrientation = 'portrait-primary';
+					console.log('Screen orientation locked to portrait');
+				}
+			} catch (error) {
+				console.log('Could not lock screen orientation:', error);
+			}
+		}
+
+		window.addEventListener('deviceorientation', handleOrientationChange);
+	}
+
+	function handleOrientationChange(event: DeviceOrientationEvent): void {
+		if (event.alpha !== null) {
+			isCompassActive = true;
+			// Normalize the heading to ensure it's always between 0 and 360
+			deviceHeading = event.alpha;
+			displayHeading = Math.round(deviceHeading);
+
+			// Adjust compass rotation to keep red arrow pointing north
+			// Use absolute value to ensure consistent rotation
+			compassHeading = -deviceHeading;
+
+			// Ensure compassHeading is between 0 and 360
+			compassHeading = ((compassHeading % 360) + 360) % 360;
+		}
+	}
 </script>
 
 <svelte:head>
 	<title>Operations - Glider Flights</title>
 </svelte:head>
 
-<div class="relative h-screen w-full">
+<div class="relative h-[calc(100vh-64px)] w-full">
 	<!-- Google Maps Container -->
 	<div bind:this={mapContainer} class="h-full w-full"></div>
 
-	<!-- Control Panel -->
-	<div class="absolute top-4 left-4 z-10 rounded-lg bg-white p-4 shadow-lg">
-		<h2 class="mb-3 text-lg font-semibold">Operations Center</h2>
-
-		<div class="flex flex-col space-y-2">
-			<button
-				bind:this={userLocationButton}
-				class="variant-filled-primary btn"
-				class:opacity-50={isLocating}
-				disabled={isLocating}
-				on:click={locateUser}
-			>
-				{#if isLocating}
-					<div class="flex items-center space-x-2">
-						<div
-							class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
-						></div>
-						<span>Locating...</span>
-					</div>
-				{:else}
-					<div class="flex items-center space-x-2">
-						<span>📍</span>
-						<span>Find My Location</span>
-					</div>
-				{/if}
-			</button>
-		</div>
+	<!-- Location Button -->
+	<div class="absolute left-4 top-4 z-10">
+		<button
+			bind:this={userLocationButton}
+			class="location-btn"
+			class:opacity-50={isLocating}
+			disabled={isLocating}
+			on:click={locateUser}
+			title={isLocating ? 'Locating...' : 'Find My Location'}
+		>
+			{#if isLocating}
+				<div
+					class="h-5 w-5 animate-spin rounded-full border-2 border-blue-600 border-t-transparent"
+				></div>
+			{:else}
+				<span class="text-xl">📍</span>
+			{/if}
+		</button>
 	</div>
+
+	<!-- Compass Rose -->
+	{#if isCompassActive}
+		<div class="compass-container absolute top-8 left-1/2 z-10 -translate-x-1/2 transform">
+			<div class="compass-rose" style="transform: rotate({compassHeading}deg)">
+				<svg width="80" height="80" viewBox="0 0 80 80">
+					<!-- Outer circle -->
+					<circle
+						cx="40"
+						cy="40"
+						r="38"
+						fill="rgba(255, 255, 255, 0.9)"
+						stroke="rgba(0, 0, 0, 0.3)"
+						stroke-width="2"
+					/>
+
+					<!-- Cardinal direction markers -->
+					<!-- North -->
+					<line
+						x1="40"
+						y1="4"
+						x2="40"
+						y2="16"
+						stroke="#dc2626"
+						stroke-width="3"
+						stroke-linecap="round"
+					/>
+
+					<!-- South -->
+					<line
+						x1="40"
+						y1="64"
+						x2="40"
+						y2="76"
+						stroke="#374151"
+						stroke-width="2"
+						stroke-linecap="round"
+					/>
+
+					<!-- East -->
+					<line
+						x1="64"
+						y1="40"
+						x2="76"
+						y2="40"
+						stroke="#374151"
+						stroke-width="2"
+						stroke-linecap="round"
+					/>
+
+					<!-- West -->
+					<line
+						x1="4"
+						y1="40"
+						x2="16"
+						y2="40"
+						stroke="#374151"
+						stroke-width="2"
+						stroke-linecap="round"
+					/>
+
+					<!-- Intercardinal directions -->
+					<!-- Northeast -->
+					<line
+						x1="56.57"
+						y1="23.43"
+						x2="64.85"
+						y2="15.15"
+						stroke="#6b7280"
+						stroke-width="1.5"
+						stroke-linecap="round"
+					/>
+
+					<!-- Southeast -->
+					<line
+						x1="56.57"
+						y1="56.57"
+						x2="64.85"
+						y2="64.85"
+						stroke="#6b7280"
+						stroke-width="1.5"
+						stroke-linecap="round"
+					/>
+
+					<!-- Southwest -->
+					<line
+						x1="23.43"
+						y1="56.57"
+						x2="15.15"
+						y2="64.85"
+						stroke="#6b7280"
+						stroke-width="1.5"
+						stroke-linecap="round"
+					/>
+
+					<!-- Northwest -->
+					<line
+						x1="23.43"
+						y1="23.43"
+						x2="15.15"
+						y2="15.15"
+						stroke="#6b7280"
+						stroke-width="1.5"
+						stroke-linecap="round"
+					/>
+
+					<!-- North arrow (pointing up) -->
+					<polygon
+						points="40,8 44,18 40,16 36,18"
+						fill="#dc2626"
+						stroke="#dc2626"
+						stroke-width="1"
+					/>
+				</svg>
+			</div>
+			<div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[24px] font-bold text-gray-700">
+				{displayHeading}°
+			</div>
+		</div>
+	{/if}
 </div>
 
 <style>
@@ -231,33 +397,36 @@
 		width: 100%;
 	}
 
-	/* Custom button styling for location button */
-	.btn {
-		padding: 1rem 1.5rem;
-		border-radius: 0.375rem;
-		font-weight: 500;
-		transition: all 200ms;
+	/* Location button styling */
+	.location-btn {
+		background: white;
 		border: none;
+		border-radius: 0.375rem;
+		padding: 0.75rem;
 		cursor: pointer;
+		transition: all 200ms;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+		display: flex;
+		align-items: center;
+		justify-content: center;
 	}
 
-	.btn.variant-filled-primary {
-		background-color: #2563eb;
-		color: white;
+	.location-btn:hover {
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+		transform: translateY(-1px);
 	}
 
-	.btn.variant-filled-primary:hover {
-		background-color: #1d4ed8;
-	}
-
-	.btn.variant-filled-primary:focus {
-		box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
+	.location-btn:focus {
 		outline: none;
+		box-shadow:
+			0 0 0 2px rgba(59, 130, 246, 0.5),
+			0 2px 8px rgba(0, 0, 0, 0.15);
 	}
 
-	.btn:disabled {
+	.location-btn:disabled {
 		cursor: not-allowed;
 		opacity: 0.5;
+		transform: none;
 	}
 
 	/* Loading spinner animation */
@@ -269,5 +438,25 @@
 
 	.animate-spin {
 		animation: spin 1s linear infinite;
+	}
+
+	/* Compass rose styling */
+	.compass-container {
+		filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.3));
+	}
+
+	.compass-rose {
+		transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+	}
+
+	.compass-text {
+		font-family:
+			system-ui,
+			-apple-system,
+			sans-serif;
+		font-size: 12px;
+		font-weight: 600;
+		user-select: none;
+		pointer-events: none;
 	}
 </style>
