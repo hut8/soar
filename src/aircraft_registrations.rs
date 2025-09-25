@@ -89,6 +89,19 @@ impl std::fmt::Display for AirworthinessClass {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum)]
+#[db_enum(existing_type_path = "crate::schema::sql_types::LightSportType")]
+pub enum LightSportType {
+    Airplane,
+    Glider,
+    #[serde(rename = "Lighter than Air")]
+    LighterThanAir,
+    #[serde(rename = "Power Parachute")]
+    PowerParachute,
+    #[serde(rename = "Weight-Shift-Control")]
+    WeightShiftControl,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum)]
 #[db_enum(existing_type_path = "crate::schema::sql_types::RegistrantType")]
 pub enum RegistrantType {
     Individual,
@@ -123,6 +136,28 @@ impl From<Option<String>> for RegistrantType {
         match code {
             Some(ref s) => RegistrantType::from(s.as_str()),
             None => RegistrantType::Unknown,
+        }
+    }
+}
+
+impl From<&str> for LightSportType {
+    fn from(code: &str) -> Self {
+        match code {
+            "A" => LightSportType::Airplane,
+            "G" => LightSportType::Glider,
+            "L" => LightSportType::LighterThanAir,
+            "P" => LightSportType::PowerParachute,
+            "W" => LightSportType::WeightShiftControl,
+            _ => LightSportType::Airplane, // Default fallback
+        }
+    }
+}
+
+impl From<Option<String>> for LightSportType {
+    fn from(code: Option<String>) -> Self {
+        match code {
+            Some(ref s) => LightSportType::from(s.as_str()),
+            None => LightSportType::Airplane,
         }
     }
 }
@@ -465,6 +500,7 @@ pub struct AircraftRegistrationModel {
     pub kit_model_name: Option<String>,
     pub club_id: Option<Uuid>,
     pub device_id: Option<Uuid>,
+    pub light_sport_type: Option<LightSportType>,
 }
 
 // Insertable model for new aircraft registrations (without generated fields)
@@ -528,6 +564,7 @@ pub struct NewAircraftRegistration {
     pub kit_model_name: Option<String>,
     pub club_id: Option<Uuid>,
     pub device_id: Option<Uuid>,
+    pub light_sport_type: Option<LightSportType>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -603,6 +640,9 @@ pub struct Aircraft {
 
     // Device relationship
     pub device_id: Option<Uuid>, // Foreign key to devices table
+
+    // Light sport aircraft type (only for light sport airworthiness class)
+    pub light_sport_type: Option<LightSportType>,
 }
 
 impl Aircraft {
@@ -788,6 +828,19 @@ impl Aircraft {
             ApprovedOps::default()
         };
 
+        // Parse light sport type for light sport aircraft (airworthiness class '9')
+        let light_sport_type = if let (Some(class_code), Some(raw)) =
+            (&airworthiness_class_code, &approved_operations_raw)
+        {
+            if class_code == "9" && !raw.trim().is_empty() {
+                Some(LightSportType::from(raw.trim()))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         let type_aircraft_code = to_opt_string(fw(line, 249, 249));
         let type_engine_code = to_opt_string(fw(line, 251, 252)).and_then(|s| s.parse().ok());
         let status_code = to_opt_string(fw(line, 254, 255));
@@ -863,6 +916,7 @@ impl Aircraft {
             location_id: None,
             registered_location: None,
             device_id: None,
+            light_sport_type,
         })
     }
 }
@@ -1024,6 +1078,9 @@ impl Aircraft {
         let approved_operations_raw = None;
         let approved_ops = ApprovedOps::default();
 
+        // CSV doesn't provide light sport type details
+        let light_sport_type = None;
+
         Ok(Aircraft {
             n_number,
             serial_number,
@@ -1075,6 +1132,7 @@ impl Aircraft {
             location_id: None,
             registered_location: None,
             device_id: None,
+            light_sport_type,
         })
     }
 }
@@ -1223,6 +1281,7 @@ impl From<Aircraft> for NewAircraftRegistration {
             kit_model_name: aircraft.kit_model_name,
             club_id: None, // Will be set by repository logic
             device_id: aircraft.device_id,
+            light_sport_type: aircraft.light_sport_type,
         }
     }
 }
@@ -1304,6 +1363,7 @@ impl From<AircraftRegistrationModel> for Aircraft {
             home_base_airport_id: None, // Would need to derive from location or separate field
             registered_location: None,  // Legacy field, now in locations table
             device_id: model.device_id,
+            light_sport_type: model.light_sport_type,
         }
     }
 }
@@ -1571,6 +1631,7 @@ mod tests {
             registered_location: None,
             location_id: None,
             device_id: None,
+            light_sport_type: None,
         };
 
         // Test club with "SOAR" in name
@@ -1715,5 +1776,23 @@ mod tests {
         let ops = parse_approved_ops("X", "123");
         assert!(!ops.restricted_ag_pest_control);
         assert!(!ops.exp_amateur_built);
+    }
+
+    #[test]
+    fn test_light_sport_type_parsing() {
+        // Test LightSportType enum conversion from string codes
+        assert_eq!(LightSportType::from("A"), LightSportType::Airplane);
+        assert_eq!(LightSportType::from("G"), LightSportType::Glider);
+        assert_eq!(LightSportType::from("L"), LightSportType::LighterThanAir);
+        assert_eq!(LightSportType::from("P"), LightSportType::PowerParachute);
+        assert_eq!(LightSportType::from("W"), LightSportType::WeightShiftControl);
+        assert_eq!(LightSportType::from("X"), LightSportType::Airplane); // Invalid code defaults to Airplane
+
+        // Test conversion from Option<String>
+        assert_eq!(
+            LightSportType::from(Some("G".to_string())),
+            LightSportType::Glider
+        );
+        assert_eq!(LightSportType::from(None), LightSportType::Airplane);
     }
 }

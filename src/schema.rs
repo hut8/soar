@@ -22,6 +22,10 @@ pub mod sql_types {
     pub struct Geography;
 
     #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
+    #[diesel(postgres_type(name = "light_sport_type"))]
+    pub struct LightSportType;
+
+    #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "point", schema = "pg_catalog"))]
     pub struct Point;
 
@@ -66,6 +70,7 @@ diesel::table! {
     use diesel::sql_types::*;
     use super::sql_types::AirworthinessClass;
     use super::sql_types::RegistrantType;
+    use super::sql_types::LightSportType;
 
     aircraft_registrations (registration_number) {
         #[max_length = 6]
@@ -140,6 +145,7 @@ diesel::table! {
         #[max_length = 2]
         engine_model_code -> Nullable<Varchar>,
         type_registration_code -> Nullable<RegistrantType>,
+        light_sport_type -> Nullable<LightSportType>,
     }
 }
 
