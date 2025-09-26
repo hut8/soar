@@ -46,7 +46,7 @@ impl From<Aircraft> for AircraftView {
             engine_manufacturer_code: aircraft.engine_manufacturer_code,
             engine_model_code: aircraft.engine_model_code,
             year_manufactured: aircraft.year_mfr,
-            registrant_type: aircraft.type_registration_code,
+            registrant_type: aircraft.registrant_type_code,
             registrant_name: aircraft.registrant_name,
             aircraft_type: aircraft.aircraft_type.map(|at| at.to_string()),
             engine_type: aircraft.type_engine_code,

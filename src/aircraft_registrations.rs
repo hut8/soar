@@ -470,7 +470,7 @@ pub struct AircraftRegistrationModel {
     pub engine_manufacturer_code: Option<String>,
     pub engine_model_code: Option<String>,
     pub year_mfr: Option<i32>,
-    pub type_registration_code: Option<RegistrantType>,
+    pub registrant_type_code: Option<RegistrantType>,
     pub registrant_name: Option<String>,
     pub location_id: Option<Uuid>,
     pub last_action_date: Option<NaiveDate>,
@@ -534,7 +534,7 @@ pub struct NewAircraftRegistration {
     pub engine_manufacturer_code: Option<String>,
     pub engine_model_code: Option<String>,
     pub year_mfr: Option<i32>,
-    pub type_registration_code: Option<RegistrantType>,
+    pub registrant_type_code: Option<RegistrantType>,
     pub registrant_name: Option<String>,
     pub location_id: Option<Uuid>,
     pub last_action_date: Option<NaiveDate>,
@@ -598,7 +598,7 @@ pub struct Aircraft {
     pub year_mfr: Option<u16>,                    // 52–55
 
     // Registrant / address
-    pub type_registration_code: Option<RegistrantType>, // 57
+    pub registrant_type_code: Option<RegistrantType>, // 57
     pub registrant_name: Option<String>,                // 59–108
     #[serde(skip_serializing)]
     pub street1: Option<String>, // 110–142 (legacy, kept for parsing)
@@ -665,9 +665,9 @@ pub struct Aircraft {
 }
 
 impl Aircraft {
-    /// Returns the registrant type based on the type_registration_code
+    /// Returns the registrant type based on the registrant_type_code
     pub fn registrant_type(&self) -> RegistrantType {
-        self.type_registration_code
+        self.registrant_type_code
             .unwrap_or(RegistrantType::Unknown)
     }
 
@@ -818,7 +818,7 @@ impl Aircraft {
         let engine_model_code = to_opt_string(fw(line, 49, 50));
         let year_mfr = to_opt_u32_nonzero(fw(line, 52, 55)).map(|v| v as u16);
 
-        let type_registration_code =
+        let registrant_type_code =
             to_opt_string(fw(line, 57, 57)).map(|code| RegistrantType::from(code.as_str()));
         let registrant_name = to_opt_string(fw(line, 59, 108));
         let street1 = to_opt_string(fw(line, 110, 142));
@@ -895,7 +895,7 @@ impl Aircraft {
             engine_model_code,
             year_mfr,
 
-            type_registration_code,
+            registrant_type_code,
             registrant_name,
             street1,
             street2,
@@ -1055,7 +1055,7 @@ impl Aircraft {
             };
         let year_mfr = to_opt_u32_nonzero(fields[4]).map(|v| v as u16);
 
-        let type_registration_code =
+        let registrant_type_code =
             to_opt_string(fields[5]).map(|code| RegistrantType::from(code.as_str()));
         let registrant_name = to_opt_string(fields[6]);
         let street1 = to_opt_string(fields[7]);
@@ -1111,7 +1111,7 @@ impl Aircraft {
             engine_manufacturer_code,
             engine_model_code,
             year_mfr,
-            type_registration_code,
+            registrant_type_code,
             registrant_name,
             street1,
             street2,
@@ -1242,7 +1242,7 @@ impl From<Aircraft> for NewAircraftRegistration {
             engine_manufacturer_code: aircraft.engine_manufacturer_code,
             engine_model_code: aircraft.engine_model_code,
             year_mfr: aircraft.year_mfr.map(|y| y as i32),
-            type_registration_code: aircraft.type_registration_code,
+            registrant_type_code: aircraft.registrant_type_code,
             registrant_name: aircraft.registrant_name,
             location_id: aircraft.location_id,
             last_action_date: aircraft.last_action_date,
@@ -1343,7 +1343,7 @@ impl From<AircraftRegistrationModel> for Aircraft {
             engine_manufacturer_code: model.engine_manufacturer_code,
             engine_model_code: model.engine_model_code,
             year_mfr: model.year_mfr.map(|y| y as u16),
-            type_registration_code: model.type_registration_code,
+            registrant_type_code: model.registrant_type_code,
             registrant_name: model.registrant_name,
             // Legacy fields (not stored in database anymore, set to None)
             street1: None,
@@ -1399,7 +1399,7 @@ mod tests {
         assert_eq!(first.series_code, Some("25".to_string()));
         assert_eq!(first.year_mfr, Some(1980));
         assert_eq!(
-            first.type_registration_code,
+            first.registrant_type_code,
             Some(RegistrantType::Corporation)
         );
         assert_eq!(
@@ -1577,7 +1577,7 @@ mod tests {
 
         // Test that the method works with the actual data
         assert_eq!(
-            first.type_registration_code,
+            first.registrant_type_code,
             Some(RegistrantType::Corporation)
         );
     }
@@ -1606,7 +1606,7 @@ mod tests {
         let mut test_aircraft = Aircraft {
             n_number: "TEST1".to_string(),
             serial_number: "12345".to_string(),
-            type_registration_code: Some(RegistrantType::Corporation),
+            registrant_type_code: Some(RegistrantType::Corporation),
             registrant_name: Some("MOUNTAIN SOARING CLUB INC".to_string()),
             manufacturer_code: None,
             model_code: None,
@@ -1673,21 +1673,21 @@ mod tests {
         );
 
         // Test with Individual registrant type (should return None)
-        test_aircraft.type_registration_code = Some(RegistrantType::Individual); // Individual
+        test_aircraft.registrant_type_code = Some(RegistrantType::Individual); // Individual
         test_aircraft.registrant_name = Some("JOHN DOE SOARING CLUB".to_string());
         assert_eq!(test_aircraft.club_name(), None);
 
         // Test with Government registrant type (should return None)
-        test_aircraft.type_registration_code = Some(RegistrantType::Government); // Government
+        test_aircraft.registrant_type_code = Some(RegistrantType::Government); // Government
         assert_eq!(test_aircraft.club_name(), None);
 
         // Test with eligible type but no "SOAR" or "CLUB" in name
-        test_aircraft.type_registration_code = Some(RegistrantType::Corporation); // Corporation
+        test_aircraft.registrant_type_code = Some(RegistrantType::Corporation); // Corporation
         test_aircraft.registrant_name = Some("AVIATION SERVICES INC".to_string());
         assert_eq!(test_aircraft.club_name(), None);
 
         // Test with LLC registrant type
-        test_aircraft.type_registration_code = Some(RegistrantType::Llc); // LLC
+        test_aircraft.registrant_type_code = Some(RegistrantType::Llc); // LLC
         test_aircraft.registrant_name = Some("DESERT SOARING LLC".to_string());
         assert_eq!(
             test_aircraft.club_name(),
@@ -1695,12 +1695,12 @@ mod tests {
         );
 
         // Test with Partnership registrant type
-        test_aircraft.type_registration_code = Some(RegistrantType::Partnership); // Partnership
+        test_aircraft.registrant_type_code = Some(RegistrantType::Partnership); // Partnership
         test_aircraft.registrant_name = Some("COASTAL CLUB PARTNERSHIP".to_string());
         assert_eq!(test_aircraft.club_name(), Some("COASTAL CLUB".to_string()));
 
         // Test with CoOwned registrant type
-        test_aircraft.type_registration_code = Some(RegistrantType::CoOwned); // CoOwned
+        test_aircraft.registrant_type_code = Some(RegistrantType::CoOwned); // CoOwned
         test_aircraft.registrant_name = Some("ALPINE SOARING CO-OWNED".to_string());
         assert_eq!(
             test_aircraft.club_name(),
@@ -1708,7 +1708,7 @@ mod tests {
         );
 
         // Test with Unknown registrant type
-        test_aircraft.type_registration_code = Some(RegistrantType::Unknown); // Unknown
+        test_aircraft.registrant_type_code = Some(RegistrantType::Unknown); // Unknown
         test_aircraft.registrant_name = Some("MYSTERY SOARING CLUB".to_string());
         assert_eq!(
             test_aircraft.club_name(),
@@ -1716,7 +1716,7 @@ mod tests {
         );
 
         // Test with no registrant name
-        test_aircraft.type_registration_code = Some(RegistrantType::Corporation); // Corporation
+        test_aircraft.registrant_type_code = Some(RegistrantType::Corporation); // Corporation
         test_aircraft.registrant_name = None;
         assert_eq!(test_aircraft.club_name(), None);
 

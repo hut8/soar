@@ -146,7 +146,7 @@ diesel::table! {
         engine_manufacturer_code -> Nullable<Varchar>,
         #[max_length = 2]
         engine_model_code -> Nullable<Varchar>,
-        type_registration_code -> Nullable<RegistrantType>,
+        registrant_type_code -> Nullable<RegistrantType>,
         light_sport_type -> Nullable<LightSportType>,
         aircraft_type -> Nullable<AircraftType>,
     }

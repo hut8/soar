@@ -40,6 +40,10 @@
 		kit_manufacturer_name?: string;
 		kit_model_name?: string;
 		other_names: string[];
+		light_sport_type?: string;
+		model?: {
+			number_of_engines?: number;
+		};
 	}
 
 	interface Runway {
@@ -578,6 +582,30 @@
 														</td>
 														<td class="py-2 text-left text-sm">
 															{plane.airworthiness_class}
+														</td>
+													</tr>
+												{/if}
+												{#if plane.light_sport_type}
+													<tr class="border-surface-200-700-token border-b">
+														<td
+															class="text-surface-600-300-token py-2 pr-4 text-right text-sm font-medium"
+														>
+															Light Sport Type:
+														</td>
+														<td class="py-2 text-left text-sm">
+															{plane.light_sport_type}
+														</td>
+													</tr>
+												{/if}
+												{#if plane.model?.number_of_engines}
+													<tr class="border-surface-200-700-token border-b">
+														<td
+															class="text-surface-600-300-token py-2 pr-4 text-right text-sm font-medium"
+														>
+															Number of Engines:
+														</td>
+														<td class="py-2 text-left text-sm">
+															{plane.model.number_of_engines}
 														</td>
 													</tr>
 												{/if}

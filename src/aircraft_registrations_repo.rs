@@ -139,8 +139,8 @@ impl AircraftRegistrationsRepository {
                     aircraft_registrations::engine_model_code
                         .eq(excluded(aircraft_registrations::engine_model_code)),
                     aircraft_registrations::year_mfr.eq(excluded(aircraft_registrations::year_mfr)),
-                    aircraft_registrations::type_registration_code
-                        .eq(excluded(aircraft_registrations::type_registration_code)),
+                    aircraft_registrations::registrant_type_code
+                        .eq(excluded(aircraft_registrations::registrant_type_code)),
                     aircraft_registrations::registrant_name
                         .eq(excluded(aircraft_registrations::registrant_name)),
                     aircraft_registrations::location_id
