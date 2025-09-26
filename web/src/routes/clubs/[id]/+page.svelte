@@ -569,6 +569,18 @@
 														</td>
 													</tr>
 												{/if}
+												{#if plane.airworthiness_class}
+													<tr class="border-surface-200-700-token border-b">
+														<td
+															class="text-surface-600-300-token py-2 pr-4 text-right text-sm font-medium"
+														>
+															Airworthiness Class:
+														</td>
+														<td class="py-2 text-left text-sm">
+															{plane.airworthiness_class}
+														</td>
+													</tr>
+												{/if}
 											</tbody>
 										</table>
 									</div>
