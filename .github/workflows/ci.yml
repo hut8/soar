@@ -89,10 +89,10 @@ jobs:
         with:
           components: clippy, rustfmt
 
-      - name: Install PostgreSQL client and PostGIS
+      - name: Install PostgreSQL client, PostGIS, and GDAL development libraries
         run: |
           sudo apt-get update
-          sudo apt-get install -y postgresql-client curl
+          sudo apt-get install -y postgresql-client curl libgdal-dev
 
       - name: Install PostGIS in PostgreSQL container
         run: |
@@ -165,6 +165,11 @@ jobs:
       - name: Install Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
 
+      - name: Install GDAL development libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgdal-dev
+
       - name: Build release binary
         run: cargo build --release --verbose
 
@@ -203,6 +208,11 @@ jobs:
 
       - name: Install Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Install GDAL development libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgdal-dev
 
       - name: Install cargo-audit
         run: cargo install cargo-audit
