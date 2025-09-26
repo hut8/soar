@@ -85,10 +85,10 @@ impl AircraftRegistrationsRepository {
                     aircraft_reg.n_number, club_name
                 );
 
-                // Find or create the club with location data from aircraft registration
+                // Find or create the club with generalized location data (no street address)
                 let location_params = LocationParams {
-                    street1: aircraft_reg.street1.clone(),
-                    street2: aircraft_reg.street2.clone(),
+                    street1: None, // Exclude street address for generalized location
+                    street2: None, // Exclude street address for generalized location
                     city: aircraft_reg.city.clone(),
                     state: aircraft_reg.state.clone(),
                     zip_code: aircraft_reg.zip_code.clone(),
