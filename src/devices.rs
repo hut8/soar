@@ -127,7 +127,7 @@ pub struct Device {
     pub address: u32,
     pub aircraft_model: String,
     pub registration: String,
-    #[serde(rename(deserialize = "cn"))]
+    #[serde(rename(deserialize = "cn", serialize = "cn"))]
     pub competition_number: String,
     #[serde(deserialize_with = "string_to_bool", serialize_with = "bool_to_string")]
     pub tracked: bool,
@@ -305,6 +305,12 @@ impl Device {
             upper_c.is_ascii_alphabetic() && upper_c != 'I' && upper_c != 'O'
         })
     }
+}
+
+#[derive(Debug, Clone)]
+pub enum DeviceSearchCriteria {
+    Registration(String),
+    Address { address: u32, address_type: AddressType },
 }
 
 impl DeviceFetcher {
@@ -543,6 +549,9 @@ mod tests {
         let json = serde_json::to_string(&device).unwrap();
         let deserialized: Device = serde_json::from_str(&json).unwrap();
         assert_eq!(device, deserialized);
+
+        // Also test that it includes the competition_number field (cn)
+        assert!(json.contains("\"cn\":\"J\""));
     }
 
     #[test]

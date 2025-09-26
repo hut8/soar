@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::actions::json_error;
 use crate::device_repo::DeviceRepository;
-use crate::devices::Device;
+use crate::devices::{AddressType, Device};
 use crate::fixes::Fix;
 use crate::fixes_repo::FixesRepository;
 use crate::web::AppState;
@@ -20,9 +20,25 @@ pub struct FixesQuery {
     pub after: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct DeviceSearchQuery {
+    /// Aircraft registration number (e.g., N8437D)
+    pub registration: Option<String>,
+    /// Device address in hex format (e.g., ABCDEF)
+    pub address: Option<String>,
+    /// Address type: I (ICAO), O (OGN), F (FLARM)
+    #[serde(rename = "address-type")]
+    pub address_type: Option<String>,
+}
+
 #[derive(Debug, Serialize)]
 pub struct DeviceResponse {
     pub device: Device,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DeviceSearchResponse {
+    pub devices: Vec<Device>,
 }
 
 #[derive(Debug, Serialize)]
@@ -99,6 +115,70 @@ pub async fn get_device_fixes(
         Err(e) => {
             tracing::error!("Failed to verify device exists {}: {}", id, e);
             json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to verify device").into_response()
+        }
+    }
+}
+
+/// Search devices by registration or address+type
+pub async fn search_devices(
+    Query(query): Query<DeviceSearchQuery>,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let device_repo = DeviceRepository::new(state.pool);
+
+    // Validate query parameters - must have either registration OR (address + address-type)
+    match (&query.registration, &query.address, &query.address_type) {
+        (Some(registration), None, None) => {
+            // Search by registration
+            match device_repo.search_by_registration(registration).await {
+                Ok(devices) => Json(DeviceSearchResponse { devices }).into_response(),
+                Err(e) => {
+                    tracing::error!("Failed to search devices by registration {}: {}", registration, e);
+                    json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to search devices").into_response()
+                }
+            }
+        }
+        (None, Some(address_str), Some(address_type_str)) => {
+            // Parse address from hex string
+            let address = match u32::from_str_radix(address_str, 16) {
+                Ok(addr) => addr,
+                Err(_) => {
+                    return json_error(
+                        StatusCode::BAD_REQUEST,
+                        "Invalid address format. Expected hexadecimal string",
+                    ).into_response();
+                }
+            };
+
+            // Parse address type
+            let address_type = match address_type_str.to_uppercase().as_str() {
+                "I" => AddressType::Icao,
+                "O" => AddressType::Ogn,
+                "F" => AddressType::Flarm,
+                _ => {
+                    return json_error(
+                        StatusCode::BAD_REQUEST,
+                        "Invalid address-type. Must be I (ICAO), O (OGN), or F (FLARM)",
+                    ).into_response();
+                }
+            };
+
+            // Search by address and type
+            match device_repo.search_by_address_and_type(address, address_type).await {
+                Ok(Some(device)) => Json(DeviceSearchResponse { devices: vec![device] }).into_response(),
+                Ok(None) => Json(DeviceSearchResponse { devices: vec![] }).into_response(),
+                Err(e) => {
+                    tracing::error!("Failed to search devices by address {} and type {}: {}", address, address_type_str, e);
+                    json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to search devices").into_response()
+                }
+            }
+        }
+        _ => {
+            // Invalid parameter combination
+            json_error(
+                StatusCode::BAD_REQUEST,
+                "Must provide either 'registration' OR both 'address' and 'address-type' parameters",
+            ).into_response()
         }
     }
 }

@@ -4,6 +4,8 @@
 	import { browser } from '$app/environment';
 	import { serverCall } from '$lib/api/server';
 	import { Loader } from '@googlemaps/js-api-loader';
+	import { Switch, Slider } from '@skeletonlabs/skeleton-svelte';
+	import { Settings, Plus, X } from '@lucide/svelte';
 
 	// TypeScript interfaces for airport data
 	interface RunwayView {
@@ -69,14 +71,145 @@
 	let airportMarkers: google.maps.marker.AdvancedMarkerElement[] = [];
 	let shouldShowAirports: boolean = false;
 
+	// Settings modal state
+	let showSettingsModal = $state(false);
+
+	// Settings with localStorage persistence
+	interface WatchlistEntry {
+		id: string;
+		type: 'registration' | 'device';
+		registration?: string;
+		deviceAddressType?: string;
+		deviceAddress?: string;
+		active: boolean;
+	}
+
+	let showCompassRose = $state(true);
+	let showAirportMarkers = $state(true);
+	let showRunwayOverlays = $state(false);
+	let trailLength = $state([0]); // Hours - logarithmic scale
+	let trailLengthSlider = $state([0]); // Linear slider position (0-100)
+	let watchlist: WatchlistEntry[] = $state([]);
+	let newWatchlistEntry = $state({
+		type: 'registration',
+		registration: '',
+		deviceAddressType: '',
+		deviceAddress: ''
+	});
+
 	// Center of continental US
 	const CONUS_CENTER = {
 		lat: 39.8283,
 		lng: -98.5795
 	};
 
+	// Logarithmic trail length conversion
+	// 0 = 0 hours, 50 = ~5 hours, 100 = 24 hours
+	function sliderToHours(sliderValue: number): number {
+		if (sliderValue === 0) return 0;
+		// Logarithmic scale: slider 50 = 5 hours, slider 100 = 24 hours
+		const exponent = (sliderValue / 100) * Math.log(24);
+		return Math.exp(exponent) * (5 / Math.exp(Math.log(24) * 0.5));
+	}
+
+	function hoursToSlider(hours: number): number {
+		if (hours === 0) return 0;
+		// Reverse of the logarithmic conversion
+		const normalized = hours / (5 / Math.exp(Math.log(24) * 0.5));
+		return (Math.log(normalized) / Math.log(24)) * 100;
+	}
+
+	// Settings persistence functions
+	function loadSettings() {
+		if (!browser) return;
+
+		const saved = localStorage.getItem('operationsSettings');
+		if (saved) {
+			try {
+				const settings = JSON.parse(saved);
+				showCompassRose = settings.showCompassRose ?? true;
+				showAirportMarkers = settings.showAirportMarkers ?? true;
+				showRunwayOverlays = settings.showRunwayOverlays ?? false;
+				trailLength = settings.trailLength ?? [0];
+				trailLengthSlider = [hoursToSlider(trailLength[0])];
+				watchlist = settings.watchlist ?? [];
+			} catch (e) {
+				console.warn('Failed to load settings from localStorage:', e);
+				trailLengthSlider = [0];
+			}
+		} else {
+			trailLengthSlider = [0];
+		}
+	}
+
+	function saveSettings() {
+		if (!browser) return;
+
+		const settings = {
+			showCompassRose,
+			showAirportMarkers,
+			showRunwayOverlays,
+			trailLength,
+			watchlist
+		};
+		localStorage.setItem('operationsSettings', JSON.stringify(settings));
+	}
+
+	// Watchlist management
+	function addWatchlistEntry() {
+		const entry: WatchlistEntry = {
+			id: Date.now().toString(),
+			type: newWatchlistEntry.type as 'registration' | 'device',
+			active: true,
+			...(newWatchlistEntry.type === 'registration'
+				? { registration: newWatchlistEntry.registration.trim().toUpperCase() }
+				: {
+						deviceAddressType: newWatchlistEntry.deviceAddressType.trim(),
+						deviceAddress: newWatchlistEntry.deviceAddress.trim().toUpperCase()
+					})
+		};
+
+		if (newWatchlistEntry.type === 'registration' && !entry.registration) return;
+		if (newWatchlistEntry.type === 'device' && (!entry.deviceAddressType || !entry.deviceAddress))
+			return;
+
+		watchlist = [...watchlist, entry];
+		newWatchlistEntry = {
+			type: 'registration',
+			registration: '',
+			deviceAddressType: '',
+			deviceAddress: ''
+		};
+		saveSettings();
+	}
+
+	function removeWatchlistEntry(id: string) {
+		watchlist = watchlist.filter((entry) => entry.id !== id);
+		saveSettings();
+	}
+
+	function toggleWatchlistEntry(id: string) {
+		watchlist = watchlist.map((entry) =>
+			entry.id === id ? { ...entry, active: !entry.active } : entry
+		);
+		saveSettings();
+	}
+
+	// Reactive effects for settings changes
+	$effect(() => {
+		if (!showAirportMarkers && shouldShowAirports) {
+			clearAirportMarkers();
+			airports = [];
+			shouldShowAirports = false;
+		} else if (showAirportMarkers && map) {
+			// Re-check if we should show airports
+			checkAndUpdateAirports();
+		}
+	});
+
 	onMount(async () => {
 		if (browser) {
+			loadSettings();
 			await loadGoogleMapsScript();
 			initializeMap();
 			initializeCompass();
@@ -295,7 +428,7 @@
 
 		// Convert square meters to square miles (1 square mile = 2,589,988 square meters)
 		const areaSquareMiles = areaSquareMeters / 2589988;
-        console.log(`Viewport area: ${areaSquareMiles.toFixed(2)} square miles`);
+		console.log(`Viewport area: ${areaSquareMiles.toFixed(2)} square miles`);
 		return areaSquareMiles;
 	}
 
@@ -317,7 +450,7 @@
 				limit: '100' // Limit to avoid too many markers
 			});
 
-            const data = await serverCall(`/airports?${params}`);
+			const data = await serverCall(`/airports?${params}`);
 			// Type guard to ensure we have the correct data structure
 			if (!Array.isArray(data)) {
 				throw new Error('Invalid response format: expected array');
@@ -393,7 +526,7 @@
 
 	function checkAndUpdateAirports(): void {
 		const area = calculateViewportArea();
-		const shouldShow = area < 10000;
+		const shouldShow = area < 10000 && showAirportMarkers;
 
 		if (shouldShow !== shouldShowAirports) {
 			shouldShowAirports = shouldShow;
@@ -435,14 +568,15 @@
 	<!-- Google Maps Container -->
 	<div bind:this={mapContainer} class="h-full w-full"></div>
 
-	<!-- Location Button -->
-	<div class="absolute top-4 left-4 z-10">
+	<!-- Control Buttons -->
+	<div class="absolute top-4 left-4 z-10 flex gap-2">
+		<!-- Location Button -->
 		<button
 			bind:this={userLocationButton}
 			class="location-btn"
 			class:opacity-50={isLocating}
 			disabled={isLocating}
-			on:click={locateUser}
+			onclick={locateUser}
 			title={isLocating ? 'Locating...' : 'Find My Location'}
 		>
 			{#if isLocating}
@@ -453,10 +587,15 @@
 				<span class="text-xl">📍</span>
 			{/if}
 		</button>
+
+		<!-- Settings Button -->
+		<button class="location-btn" onclick={() => (showSettingsModal = true)} title="Settings">
+			<Settings size={20} />
+		</button>
 	</div>
 
 	<!-- Compass Rose -->
-	{#if isCompassActive}
+	{#if isCompassActive && showCompassRose}
 		<div class="compass-container absolute top-8 left-1/2 z-10 -translate-x-1/2 transform">
 			<div class="compass-rose" style="transform: rotate({compassHeading}deg)">
 				<svg width="80" height="80" viewBox="0 0 80 80">
@@ -577,6 +716,196 @@
 		</div>
 	{/if}
 </div>
+
+<!-- Settings Modal -->
+{#if showSettingsModal}
+	<div
+		class="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-black"
+		onclick={() => (showSettingsModal = false)}
+	>
+		<div
+			class="max-h-[80vh] w-full max-w-lg overflow-y-auto card bg-white p-4 text-gray-900 shadow-xl"
+			onclick={(e) => e.stopPropagation()}
+		>
+			<div class="mb-4 flex items-center justify-between">
+				<h2 class="text-xl font-bold">Map Settings</h2>
+				<button
+					class="variant-ghost-surface btn btn-sm"
+					onclick={() => (showSettingsModal = false)}
+				>
+					<X size={20} />
+				</button>
+			</div>
+
+			<div class="space-y-6">
+				<!-- Display Options -->
+				<section>
+					<h3 class="mb-3 text-lg font-semibold">Display Options</h3>
+					<div class="space-y-3">
+						<div class="flex items-center justify-between">
+							<label for="compass-toggle" class="text-sm font-medium">Show Compass Rose</label>
+							<Switch
+								name="compass-toggle"
+								checked={showCompassRose}
+								onCheckedChange={(e) => {
+									showCompassRose = e.checked;
+									saveSettings();
+								}}
+							/>
+						</div>
+						<div class="flex items-center justify-between">
+							<label for="airports-toggle" class="text-sm font-medium">Show Airport Markers</label>
+							<Switch
+								name="airports-toggle"
+								checked={showAirportMarkers}
+								onCheckedChange={(e) => {
+									showAirportMarkers = e.checked;
+									saveSettings();
+								}}
+							/>
+						</div>
+						<div class="flex items-center justify-between">
+							<label for="runways-toggle" class="text-sm font-medium">Show Runway Overlays</label>
+							<Switch
+								name="runways-toggle"
+								checked={showRunwayOverlays}
+								onCheckedChange={(e) => {
+									showRunwayOverlays = e.checked;
+									saveSettings();
+								}}
+							/>
+						</div>
+					</div>
+				</section>
+
+				<!-- Trail Length -->
+				<section>
+					<h3 class="mb-3 text-lg font-semibold">Trail Length</h3>
+					<div class="space-y-4">
+						<div class="text-sm font-medium">
+							Duration: {trailLength[0] === 0
+								? 'None'
+								: trailLength[0] < 1
+									? `${Math.round(trailLength[0] * 60)} minutes`
+									: `${Math.round(trailLength[0] * 10) / 10} hours`}
+						</div>
+						<Slider
+							value={trailLengthSlider}
+							onValueChange={(e) => {
+								trailLengthSlider = e.value;
+								trailLength = [sliderToHours(e.value[0])];
+								saveSettings();
+							}}
+							min={0}
+							max={100}
+							step={1}
+						/>
+						<div class="flex justify-between text-xs text-gray-500">
+							<span>None</span>
+							<span>~5h</span>
+							<span>24h</span>
+						</div>
+					</div>
+				</section>
+
+				<!-- Watchlist -->
+				<section>
+					<h3 class="mb-3 text-lg font-semibold">Watchlist</h3>
+
+					<!-- Add new entry -->
+					<div class="mb-3 space-y-3 rounded-lg border p-3">
+						<div class="flex gap-2">
+							<button
+								class="btn btn-sm {newWatchlistEntry.type === 'registration'
+									? 'variant-filled-primary'
+									: 'variant-ghost-surface'}"
+								onclick={() => (newWatchlistEntry.type = 'registration')}
+							>
+								Registration
+							</button>
+							<button
+								class="btn btn-sm {newWatchlistEntry.type === 'device'
+									? 'variant-filled-primary'
+									: 'variant-ghost-surface'}"
+								onclick={() => (newWatchlistEntry.type = 'device')}
+							>
+								Device
+							</button>
+						</div>
+
+						{#if newWatchlistEntry.type === 'registration'}
+							<input
+								class="input"
+								placeholder="Aircraft registration (e.g., N12345)"
+								bind:value={newWatchlistEntry.registration}
+								onkeydown={(e) => e.key === 'Enter' && addWatchlistEntry()}
+							/>
+						{:else}
+							<div class="grid grid-cols-2 gap-2">
+								<select
+									class="select"
+									placeholder="Address type (e.g., ICAO)"
+									bind:value={newWatchlistEntry.deviceAddressType}
+								>
+									<option value="I">ICAO</option>
+									<option value="O">OGN</option>
+									<option value="F">FLARM</option>
+								</select>
+								<input
+									class="input"
+									placeholder="Device address"
+									bind:value={newWatchlistEntry.deviceAddress}
+									onkeydown={(e) => e.key === 'Enter' && addWatchlistEntry()}
+								/>
+							</div>
+						{/if}
+
+						<button class="variant-filled-primary btn btn-sm" onclick={addWatchlistEntry}>
+							<Plus size={16} />
+							Add to Watchlist
+						</button>
+					</div>
+
+					<!-- Watchlist entries -->
+					{#if watchlist.length > 0}
+						<div class="max-h-48 space-y-2 overflow-y-auto">
+							{#each watchlist as entry (entry.id)}
+								<div class="flex items-center justify-between rounded border p-2">
+									<div class="flex-1">
+										{#if entry.type === 'registration'}
+											<span class="font-medium">{entry.registration}</span>
+											<span class="ml-2 text-xs text-gray-500">Registration</span>
+										{:else}
+											<span class="font-medium"
+												>{entry.deviceAddressType}: {entry.deviceAddress}</span
+											>
+											<span class="ml-2 text-xs text-gray-500">Device</span>
+										{/if}
+									</div>
+									<div class="flex items-center gap-2">
+										<Switch
+											name="watchlist-{entry.id}"
+											checked={entry.active}
+											onCheckedChange={() => toggleWatchlistEntry(entry.id)}
+										/>
+										<button
+											class="variant-ghost-error btn btn-sm"
+											onclick={() => removeWatchlistEntry(entry.id)}
+										>
+											<X size={16} />
+										</button>
+									</div>
+								</div>
+							{/each}
+						</div>
+					{:else}
+						<p class="py-4 text-center text-sm text-gray-500">No aircraft in watchlist</p>
+					{/if}
+				</section>
+			</div>
+		</div>
+	</div>
+{/if}
 
 <style>
 	/* Location button styling */
