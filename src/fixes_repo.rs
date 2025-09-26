@@ -16,8 +16,8 @@ use crate::web::PgPool;
 use crate::devices::AddressType;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, DbEnum)]
-#[db_enum(existing_type_path = "crate::schema::sql_types::AircraftType")]
-pub enum AircraftType {
+#[db_enum(existing_type_path = "crate::schema::sql_types::AircraftTypeOgn")]
+pub enum AircraftTypeOgn {
     Reserved,
     Glider,
     TowTug,
@@ -58,46 +58,46 @@ impl From<AddressType> for ForeignAddressType {
     }
 }
 
-impl From<ForeignAircraftType> for AircraftType {
+impl From<ForeignAircraftType> for AircraftTypeOgn {
     fn from(foreign_type: ForeignAircraftType) -> Self {
         match foreign_type {
-            ForeignAircraftType::Reserved => AircraftType::Reserved,
-            ForeignAircraftType::Glider => AircraftType::Glider,
-            ForeignAircraftType::TowTug => AircraftType::TowTug,
-            ForeignAircraftType::HelicopterGyro => AircraftType::HelicopterGyro,
-            ForeignAircraftType::SkydiverParachute => AircraftType::SkydiverParachute,
-            ForeignAircraftType::DropPlane => AircraftType::DropPlane,
-            ForeignAircraftType::HangGlider => AircraftType::HangGlider,
-            ForeignAircraftType::Paraglider => AircraftType::Paraglider,
-            ForeignAircraftType::RecipEngine => AircraftType::RecipEngine,
-            ForeignAircraftType::JetTurboprop => AircraftType::JetTurboprop,
-            ForeignAircraftType::Unknown => AircraftType::Unknown,
-            ForeignAircraftType::Balloon => AircraftType::Balloon,
-            ForeignAircraftType::Airship => AircraftType::Airship,
-            ForeignAircraftType::Uav => AircraftType::Uav,
-            ForeignAircraftType::StaticObstacle => AircraftType::StaticObstacle,
+            ForeignAircraftType::Reserved => AircraftTypeOgn::Reserved,
+            ForeignAircraftType::Glider => AircraftTypeOgn::Glider,
+            ForeignAircraftType::TowTug => AircraftTypeOgn::TowTug,
+            ForeignAircraftType::HelicopterGyro => AircraftTypeOgn::HelicopterGyro,
+            ForeignAircraftType::SkydiverParachute => AircraftTypeOgn::SkydiverParachute,
+            ForeignAircraftType::DropPlane => AircraftTypeOgn::DropPlane,
+            ForeignAircraftType::HangGlider => AircraftTypeOgn::HangGlider,
+            ForeignAircraftType::Paraglider => AircraftTypeOgn::Paraglider,
+            ForeignAircraftType::RecipEngine => AircraftTypeOgn::RecipEngine,
+            ForeignAircraftType::JetTurboprop => AircraftTypeOgn::JetTurboprop,
+            ForeignAircraftType::Unknown => AircraftTypeOgn::Unknown,
+            ForeignAircraftType::Balloon => AircraftTypeOgn::Balloon,
+            ForeignAircraftType::Airship => AircraftTypeOgn::Airship,
+            ForeignAircraftType::Uav => AircraftTypeOgn::Uav,
+            ForeignAircraftType::StaticObstacle => AircraftTypeOgn::StaticObstacle,
         }
     }
 }
 
-impl From<AircraftType> for ForeignAircraftType {
-    fn from(wrapper_type: AircraftType) -> Self {
+impl From<AircraftTypeOgn> for ForeignAircraftType {
+    fn from(wrapper_type: AircraftTypeOgn) -> Self {
         match wrapper_type {
-            AircraftType::Reserved => ForeignAircraftType::Reserved,
-            AircraftType::Glider => ForeignAircraftType::Glider,
-            AircraftType::TowTug => ForeignAircraftType::TowTug,
-            AircraftType::HelicopterGyro => ForeignAircraftType::HelicopterGyro,
-            AircraftType::SkydiverParachute => ForeignAircraftType::SkydiverParachute,
-            AircraftType::DropPlane => ForeignAircraftType::DropPlane,
-            AircraftType::HangGlider => ForeignAircraftType::HangGlider,
-            AircraftType::Paraglider => ForeignAircraftType::Paraglider,
-            AircraftType::RecipEngine => ForeignAircraftType::RecipEngine,
-            AircraftType::JetTurboprop => ForeignAircraftType::JetTurboprop,
-            AircraftType::Unknown => ForeignAircraftType::Unknown,
-            AircraftType::Balloon => ForeignAircraftType::Balloon,
-            AircraftType::Airship => ForeignAircraftType::Airship,
-            AircraftType::Uav => ForeignAircraftType::Uav,
-            AircraftType::StaticObstacle => ForeignAircraftType::StaticObstacle,
+            AircraftTypeOgn::Reserved => ForeignAircraftType::Reserved,
+            AircraftTypeOgn::Glider => ForeignAircraftType::Glider,
+            AircraftTypeOgn::TowTug => ForeignAircraftType::TowTug,
+            AircraftTypeOgn::HelicopterGyro => ForeignAircraftType::HelicopterGyro,
+            AircraftTypeOgn::SkydiverParachute => ForeignAircraftType::SkydiverParachute,
+            AircraftTypeOgn::DropPlane => ForeignAircraftType::DropPlane,
+            AircraftTypeOgn::HangGlider => ForeignAircraftType::HangGlider,
+            AircraftTypeOgn::Paraglider => ForeignAircraftType::Paraglider,
+            AircraftTypeOgn::RecipEngine => ForeignAircraftType::RecipEngine,
+            AircraftTypeOgn::JetTurboprop => ForeignAircraftType::JetTurboprop,
+            AircraftTypeOgn::Unknown => ForeignAircraftType::Unknown,
+            AircraftTypeOgn::Balloon => ForeignAircraftType::Balloon,
+            AircraftTypeOgn::Airship => ForeignAircraftType::Airship,
+            AircraftTypeOgn::Uav => ForeignAircraftType::Uav,
+            AircraftTypeOgn::StaticObstacle => ForeignAircraftType::StaticObstacle,
         }
     }
 }
@@ -121,7 +121,7 @@ struct NewFix {
     device_address: Option<String>,
     device_id: Option<Uuid>,
     address_type: Option<AddressType>,
-    aircraft_type: Option<AircraftType>,
+    aircraft_type_ogn: Option<AircraftTypeOgn>,
     flight_number: Option<String>,
     emitter_category: Option<AdsbEmitterCategory>,
     registration: Option<String>,
@@ -156,7 +156,7 @@ impl From<&Fix> for NewFix {
             device_address: fix.device_address_hex.clone(),
             device_id: None, // Will be resolved during insertion based on raw device_id and address_type
             address_type: fix.address_type,
-            aircraft_type: fix.aircraft_type.map(AircraftType::from),
+            aircraft_type_ogn: fix.aircraft_type.map(AircraftTypeOgn::from),
             flight_number: fix.flight_number.clone(),
             emitter_category: fix.emitter_category,
             registration: fix.registration.clone(),

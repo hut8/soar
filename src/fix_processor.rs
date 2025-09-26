@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::aircraft_registrations_repo::AircraftRegistrationsRepository;
 use crate::device_repo::DeviceRepository;
 use crate::fixes;
-use crate::fixes_repo::{AircraftType, FixesRepository};
+use crate::fixes_repo::{AircraftTypeOgn, FixesRepository};
 use crate::{Fix, FixHandler};
 use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
@@ -19,7 +19,7 @@ pub struct FixProcessor {
     aircraft_registrations_repo: AircraftRegistrationsRepository,
     /// Cache to track tow plane status updates to avoid unnecessary database calls
     /// Maps device_id -> (aircraft_type, is_tow_plane_in_db)
-    tow_plane_cache: Arc<RwLock<HashMap<Uuid, (AircraftType, bool)>>>,
+    tow_plane_cache: Arc<RwLock<HashMap<Uuid, (AircraftTypeOgn, bool)>>>,
 }
 
 impl FixProcessor {
@@ -35,11 +35,11 @@ impl FixProcessor {
     /// Update tow plane status based on aircraft type from fix (static version for use in async spawned task)
     async fn update_tow_plane_status_static(
         aircraft_registrations_repo: AircraftRegistrationsRepository,
-        tow_plane_cache: Arc<RwLock<HashMap<Uuid, (AircraftType, bool)>>>,
+        tow_plane_cache: Arc<RwLock<HashMap<Uuid, (AircraftTypeOgn, bool)>>>,
         device_id: Uuid,
-        aircraft_type: AircraftType,
+        aircraft_type: AircraftTypeOgn,
     ) {
-        let should_be_tow_plane = aircraft_type == AircraftType::TowTug;
+        let should_be_tow_plane = aircraft_type == AircraftTypeOgn::TowTug;
 
         // Check cache first
         {
@@ -124,7 +124,7 @@ impl FixHandler for FixProcessor {
 
                         // Update tow plane status based on aircraft type from fix
                         if let Some(foreign_aircraft_type) = fix_clone.aircraft_type {
-                            let aircraft_type = AircraftType::from(foreign_aircraft_type);
+                            let aircraft_type = AircraftTypeOgn::from(foreign_aircraft_type);
                             let device_id = device_model.id;
 
                             Self::update_tow_plane_status_static(

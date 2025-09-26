@@ -6,6 +6,7 @@
 pub mod actions;
 pub mod aircraft_registrations;
 pub mod aircraft_registrations_repo;
+pub mod aircraft_types;
 pub mod airports;
 pub mod airports_repo;
 pub mod aprs_client;

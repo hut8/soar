@@ -6,11 +6,13 @@ use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
+use std::str::FromStr;
 use tracing::warn;
 use uuid::Uuid;
 
 // Import Point from clubs module
 use crate::locations::Point;
+use crate::aircraft_types::AircraftType;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum)]
 #[db_enum(existing_type_path = "crate::schema::sql_types::AirworthinessClass")]
@@ -505,7 +507,7 @@ pub struct AircraftRegistrationModel {
     pub op_sfp_delivery_or_export: bool,
     pub op_sfp_production_flight_testing: bool,
     pub op_sfp_customer_demo: bool,
-    pub type_aircraft_code: Option<String>,
+    pub aircraft_type: Option<AircraftType>,
     pub type_engine_code: Option<i16>,
     pub status_code: Option<String>,
     pub transponder_code: Option<i64>,
@@ -569,7 +571,7 @@ pub struct NewAircraftRegistration {
     pub op_sfp_delivery_or_export: bool,
     pub op_sfp_production_flight_testing: bool,
     pub op_sfp_customer_demo: bool,
-    pub type_aircraft_code: Option<String>,
+    pub aircraft_type: Option<AircraftType>,
     pub type_engine_code: Option<i16>,
     pub status_code: Option<String>,
     pub transponder_code: Option<i64>,
@@ -627,7 +629,7 @@ pub struct Aircraft {
     pub approved_operations_raw: Option<String>,         // 239–247
     pub approved_ops: ApprovedOps,                       // mapped flags (best effort)
 
-    pub type_aircraft_code: Option<String>, // 249
+    pub aircraft_type: Option<AircraftType>, // 249
     pub type_engine_code: Option<i16>,      // 251–252
     pub status_code: Option<String>,        // 254–255
 
@@ -858,7 +860,8 @@ impl Aircraft {
             None
         };
 
-        let type_aircraft_code = to_opt_string(fw(line, 249, 249));
+        let aircraft_type = to_opt_string(fw(line, 249, 249))
+            .and_then(|code| AircraftType::from_str(&code).ok());
         let type_engine_code = to_opt_string(fw(line, 251, 252)).and_then(|s| s.parse().ok());
         let status_code = to_opt_string(fw(line, 254, 255));
 
@@ -910,7 +913,7 @@ impl Aircraft {
             approved_operations_raw,
             approved_ops,
 
-            type_aircraft_code,
+            aircraft_type,
             type_engine_code,
             status_code,
 
@@ -1071,7 +1074,8 @@ impl Aircraft {
         let airworthiness_class = airworthiness_class_code
             .as_ref()
             .map(|code| AirworthinessClass::from(code.as_str()));
-        let type_aircraft_code = to_opt_string(fields[18]);
+        let aircraft_type = to_opt_string(fields[18])
+            .and_then(|code| AircraftType::from_str(&code).ok());
         let type_engine_code = to_opt_string(fields[19]).and_then(|s| s.parse().ok());
         let status_code = to_opt_string(fields[20]);
 
@@ -1122,7 +1126,7 @@ impl Aircraft {
             airworthiness_class,
             approved_operations_raw,
             approved_ops,
-            type_aircraft_code,
+            aircraft_type,
             type_engine_code,
             status_code,
             transponder_code,
@@ -1276,7 +1280,7 @@ impl From<Aircraft> for NewAircraftRegistration {
             op_sfp_delivery_or_export: ops.sfp_delivery_or_export,
             op_sfp_production_flight_testing: ops.sfp_production_flight_testing,
             op_sfp_customer_demo: ops.sfp_customer_demo,
-            type_aircraft_code: aircraft.type_aircraft_code,
+            aircraft_type: aircraft.aircraft_type,
             type_engine_code: aircraft.type_engine_code,
             status_code: aircraft.status_code,
             transponder_code: aircraft.transponder_code.map(|t| t as i64),
@@ -1356,7 +1360,7 @@ impl From<AircraftRegistrationModel> for Aircraft {
             airworthiness_class: model.airworthiness_class,
             approved_operations_raw: model.approved_operations_raw,
             approved_ops,
-            type_aircraft_code: model.type_aircraft_code,
+            aircraft_type: model.aircraft_type,
             type_engine_code: model.type_engine_code,
             status_code: model.status_code,
             transponder_code: model.transponder_code.map(|t| t as u32),
@@ -1623,7 +1627,7 @@ mod tests {
             airworthiness_class: None,
             approved_operations_raw: None,
             approved_ops: ApprovedOps::default(),
-            type_aircraft_code: None,
+            aircraft_type: None,
             type_engine_code: None,
             status_code: None,
             transponder_code: None,

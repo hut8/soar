@@ -244,8 +244,8 @@ impl AircraftRegistrationsRepository {
                     aircraft_registrations::op_sfp_customer_demo
                         .eq(excluded(aircraft_registrations::op_sfp_customer_demo)),
                     // Other fields
-                    aircraft_registrations::type_aircraft_code
-                        .eq(excluded(aircraft_registrations::type_aircraft_code)),
+                    aircraft_registrations::aircraft_type
+                        .eq(excluded(aircraft_registrations::aircraft_type)),
                     aircraft_registrations::type_engine_code
                         .eq(excluded(aircraft_registrations::type_engine_code)),
                     aircraft_registrations::status_code

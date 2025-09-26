@@ -14,6 +14,10 @@ pub mod sql_types {
     pub struct AircraftType;
 
     #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
+    #[diesel(postgres_type(name = "aircraft_type_ogn"))]
+    pub struct AircraftTypeOgn;
+
+    #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "airworthiness_class"))]
     pub struct AirworthinessClass;
 
@@ -70,6 +74,7 @@ diesel::table! {
     use super::sql_types::AirworthinessClass;
     use super::sql_types::RegistrantType;
     use super::sql_types::LightSportType;
+    use super::sql_types::AircraftType;
 
     aircraft_registrations (registration_number) {
         #[max_length = 6]
@@ -111,8 +116,6 @@ diesel::table! {
         op_sfp_delivery_or_export -> Bool,
         op_sfp_production_flight_testing -> Bool,
         op_sfp_customer_demo -> Bool,
-        #[max_length = 1]
-        type_aircraft_code -> Nullable<Bpchar>,
         type_engine_code -> Nullable<Int2>,
         status_code -> Nullable<Text>,
         transponder_code -> Nullable<Int8>,
@@ -145,6 +148,7 @@ diesel::table! {
         engine_model_code -> Nullable<Varchar>,
         type_registration_code -> Nullable<RegistrantType>,
         light_sport_type -> Nullable<LightSportType>,
+        aircraft_type -> Nullable<AircraftType>,
     }
 }
 
@@ -233,7 +237,7 @@ diesel::table! {
     use diesel::sql_types::*;
     use super::sql_types::Geography;
     use super::sql_types::AddressType;
-    use super::sql_types::AircraftType;
+    use super::sql_types::AircraftTypeOgn;
     use super::sql_types::AdsbEmitterCategory;
 
     fixes (id) {
@@ -252,7 +256,7 @@ diesel::table! {
         #[max_length = 10]
         device_address -> Nullable<Varchar>,
         address_type -> Nullable<AddressType>,
-        aircraft_type -> Nullable<AircraftType>,
+        aircraft_type_ogn -> Nullable<AircraftTypeOgn>,
         #[max_length = 20]
         flight_number -> Nullable<Varchar>,
         emitter_category -> Nullable<AdsbEmitterCategory>,
@@ -528,7 +532,6 @@ diesel::joinable!(aircraft_registrations -> clubs (club_id));
 diesel::joinable!(aircraft_registrations -> devices (device_id));
 diesel::joinable!(aircraft_registrations -> locations (location_id));
 diesel::joinable!(aircraft_registrations -> status_codes (status_code));
-diesel::joinable!(aircraft_registrations -> type_aircraft (type_aircraft_code));
 diesel::joinable!(aircraft_registrations -> type_engines (type_engine_code));
 diesel::joinable!(clubs -> airports (home_base_airport_id));
 diesel::joinable!(clubs -> locations (location_id));
