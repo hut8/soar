@@ -407,7 +407,7 @@ impl FixHandler for FlightDetectionProcessor {
         });
 
         // Periodically clean up old trackers (roughly every 1000 fixes)
-        if rand::random::<u16>() % 1000 == 0 {
+        if rand::random::<u16>().is_multiple_of(1000) {
             let processor = self.clone();
             tokio::spawn(async move {
                 processor.cleanup_old_trackers().await;
