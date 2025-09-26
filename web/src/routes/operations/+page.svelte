@@ -2,6 +2,7 @@
 	/// <reference types="@types/google.maps" />
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
+	import { serverCall } from '$lib/api/server';
 
 	// TypeScript interfaces for airport data
 	interface RunwayView {
@@ -302,6 +303,7 @@
 
 		// Convert square meters to square miles (1 square mile = 2,589,988 square meters)
 		const areaSquareMiles = areaSquareMeters / 2589988;
+        console.log(`Viewport area: ${areaSquareMiles.toFixed(2)} square miles`);
 		return areaSquareMiles;
 	}
 
@@ -323,13 +325,7 @@
 				limit: '100' // Limit to avoid too many markers
 			});
 
-			const response = await fetch(`/data/airports/bounding-box?${params}`);
-			if (!response.ok) {
-				throw new Error(`Failed to fetch airports: ${response.statusText}`);
-			}
-
-			const data = await response.json();
-
+            const data = await serverCall(`/airports?${params}`);
 			// Type guard to ensure we have the correct data structure
 			if (!Array.isArray(data)) {
 				throw new Error('Invalid response format: expected array');
@@ -405,7 +401,7 @@
 
 	function checkAndUpdateAirports(): void {
 		const area = calculateViewportArea();
-		const shouldShow = area < 1000;
+		const shouldShow = area < 10000;
 
 		if (shouldShow !== shouldShowAirports) {
 			shouldShowAirports = shouldShow;
