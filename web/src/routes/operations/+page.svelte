@@ -17,14 +17,6 @@
 	let isCompassActive: boolean = false;
 	let displayHeading: number = 0;
 
-	// Screen orientation lock
-	let screenOrientation:
-		| 'portrait-primary'
-		| 'landscape-primary'
-		| 'portrait-secondary'
-		| 'landscape-secondary'
-		| null = null;
-
 	// Center of continental US
 	const CONUS_CENTER = {
 		lat: 39.8283,
@@ -212,11 +204,12 @@
 		// Try to lock screen orientation
 		if ('screen' in window && 'orientation' in window.screen) {
 			try {
-				// Use type assertion to handle potential undefined
-				const orientation = window.screen.orientation as any;
+				// Type assertion for screen orientation API
+				const orientation = window.screen.orientation as ScreenOrientation & {
+					lock?: (orientation: string) => Promise<void>;
+				};
 				if (orientation && typeof orientation.lock === 'function') {
 					await orientation.lock('portrait-primary');
-					screenOrientation = 'portrait-primary';
 					console.log('Screen orientation locked to portrait');
 				}
 			} catch (error) {
