@@ -2,10 +2,10 @@
 	import '../app.css';
 	import { AppBar, Avatar } from '@skeletonlabs/skeleton-svelte';
 	import favicon from '$lib/assets/favicon.svg';
-import { resolve } from '$app/paths';
-import { page } from '$app/stores';
-import { auth } from '$lib/stores/auth';
-import { onMount } from 'svelte';
+	import { resolve } from '$app/paths';
+	import { page } from '$app/stores';
+	import { auth } from '$lib/stores/auth';
+	import { onMount } from 'svelte';
 	import { Radar, Users, PlaneTakeoff, UserPlus, UserCheck, Radio } from '@lucide/svelte';
 
 	const base = resolve('/');
@@ -83,7 +83,6 @@ import { onMount } from 'svelte';
 							initials={[0, 1]}
 							background="bg-primary-500"
 							name="{$auth.user.first_name} {$auth.user.last_name}"
-							size="sm"
 						/>
 						<span class="hidden sm:inline">{$auth.user.first_name}</span>
 					</button>

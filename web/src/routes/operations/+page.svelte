@@ -18,7 +18,12 @@
 	let displayHeading: number = 0;
 
 	// Screen orientation lock
-	let screenOrientation: 'portrait-primary' | 'landscape-primary' | 'portrait-secondary' | 'landscape-secondary' | null = null;
+	let screenOrientation:
+		| 'portrait-primary'
+		| 'landscape-primary'
+		| 'portrait-secondary'
+		| 'landscape-secondary'
+		| null = null;
 
 	// Center of continental US
 	const CONUS_CENTER = {
@@ -243,12 +248,12 @@
 	<title>Operations - Glider Flights</title>
 </svelte:head>
 
-<div class="relative h-[calc(100vh-64px)] w-full">
+<div class="fixed inset-0 top-16 w-full">
 	<!-- Google Maps Container -->
 	<div bind:this={mapContainer} class="h-full w-full"></div>
 
 	<!-- Location Button -->
-	<div class="absolute left-4 top-4 z-10">
+	<div class="absolute top-4 left-4 z-10">
 		<button
 			bind:this={userLocationButton}
 			class="location-btn"
@@ -381,7 +386,9 @@
 					/>
 				</svg>
 			</div>
-			<div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[24px] font-bold text-gray-700">
+			<div
+				class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[24px] font-bold text-gray-700"
+			>
 				{displayHeading}°
 			</div>
 		</div>
@@ -389,14 +396,6 @@
 </div>
 
 <style>
-	/* Override container class to make operations page full-screen */
-	:global(main.container) {
-		max-width: none;
-		padding: 0;
-		margin: 0;
-		width: 100%;
-	}
-
 	/* Location button styling */
 	.location-btn {
 		background: white;
