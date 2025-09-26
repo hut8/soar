@@ -2,6 +2,51 @@
 	/// <reference types="@types/google.maps" />
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
+
+	// TypeScript interfaces for airport data
+	interface RunwayView {
+		id: number;
+		length_ft: number | null;
+		width_ft: number | null;
+		surface: string | null;
+		lighted: boolean;
+		closed: boolean;
+		le_ident: string | null;
+		le_latitude_deg: number | null;
+		le_longitude_deg: number | null;
+		le_elevation_ft: number | null;
+		le_heading_degt: number | null;
+		le_displaced_threshold_ft: number | null;
+		he_ident: string | null;
+		he_latitude_deg: number | null;
+		he_longitude_deg: number | null;
+		he_elevation_ft: number | null;
+		he_heading_degt: number | null;
+		he_displaced_threshold_ft: number | null;
+	}
+
+	interface AirportView {
+		id: number;
+		ident: string;
+		airport_type: string;
+		name: string;
+		latitude_deg: string | null; // BigDecimal comes as string from API
+		longitude_deg: string | null; // BigDecimal comes as string from API
+		elevation_ft: number | null;
+		continent: string | null;
+		iso_country: string | null;
+		iso_region: string | null;
+		municipality: string | null;
+		scheduled_service: boolean;
+		icao_code: string | null;
+		iata_code: string | null;
+		gps_code: string | null;
+		local_code: string | null;
+		home_link: string | null;
+		wikipedia_link: string | null;
+		keywords: string | null;
+		runways: RunwayView[];
+	}
 	// Placeholder for Google Maps API key - to be added later
 	const GOOGLE_MAPS_API_KEY = 'AIzaSyBaK8UU0l4z-k6b-UPlLzw3wv_Ti71XNy8';
 
@@ -16,6 +61,11 @@
 	let compassHeading: number = 0;
 	let isCompassActive: boolean = false;
 	let displayHeading: number = 0;
+
+	// Airport display variables
+	let airports: AirportView[] = [];
+	let airportMarkers: google.maps.marker.AdvancedMarkerElement[] = [];
+	let shouldShowAirports: boolean = false;
 
 	// Center of continental US
 	const CONUS_CENTER = {
@@ -77,6 +127,18 @@
 				position: window.google.maps.ControlPosition.RIGHT_TOP
 			}
 		});
+
+		// Add event listeners for viewport changes
+		map.addListener('zoom_changed', () => {
+			setTimeout(checkAndUpdateAirports, 100); // Small delay to ensure bounds are updated
+		});
+
+		map.addListener('dragend', () => {
+			checkAndUpdateAirports();
+		});
+
+		// Initial check for airports
+		setTimeout(checkAndUpdateAirports, 1000); // Give map time to fully initialize
 
 		console.log('Google Maps initialized for operations view');
 	}
@@ -218,6 +280,146 @@
 		}
 
 		window.addEventListener('deviceorientation', handleOrientationChange);
+	}
+
+	function calculateViewportArea(): number {
+		if (!map) return 0;
+
+		const bounds = map.getBounds();
+		if (!bounds) return 0;
+
+		const ne = bounds.getNorthEast();
+		const sw = bounds.getSouthWest();
+
+		// Calculate area using spherical geometry
+		// This gives us area in square meters, convert to square miles
+		const areaSquareMeters = google.maps.geometry.spherical.computeArea([
+			new google.maps.LatLng(sw.lat(), sw.lng()),
+			new google.maps.LatLng(ne.lat(), sw.lng()),
+			new google.maps.LatLng(ne.lat(), ne.lng()),
+			new google.maps.LatLng(sw.lat(), ne.lng())
+		]);
+
+		// Convert square meters to square miles (1 square mile = 2,589,988 square meters)
+		const areaSquareMiles = areaSquareMeters / 2589988;
+		return areaSquareMiles;
+	}
+
+	async function fetchAirportsInViewport(): Promise<void> {
+		if (!map) return;
+
+		const bounds = map.getBounds();
+		if (!bounds) return;
+
+		const ne = bounds.getNorthEast();
+		const sw = bounds.getSouthWest();
+
+		try {
+			const params = new URLSearchParams({
+				nw_lat: ne.lat().toString(),
+				nw_lng: sw.lng().toString(),
+				se_lat: sw.lat().toString(),
+				se_lng: ne.lng().toString(),
+				limit: '100' // Limit to avoid too many markers
+			});
+
+			const response = await fetch(`/data/airports/bounding-box?${params}`);
+			if (!response.ok) {
+				throw new Error(`Failed to fetch airports: ${response.statusText}`);
+			}
+
+			const data = await response.json();
+
+			// Type guard to ensure we have the correct data structure
+			if (!Array.isArray(data)) {
+				throw new Error('Invalid response format: expected array');
+			}
+
+			airports = data.filter((airport: unknown): airport is AirportView => {
+				return (
+					typeof airport === 'object' &&
+					airport !== null &&
+					'id' in airport &&
+					'ident' in airport &&
+					'name' in airport &&
+					'latitude_deg' in airport &&
+					'longitude_deg' in airport
+				);
+			});
+
+			displayAirportsOnMap();
+		} catch (error) {
+			console.error('Error fetching airports:', error);
+		}
+	}
+
+	function displayAirportsOnMap(): void {
+		// Clear existing airport markers
+		clearAirportMarkers();
+
+		airports.forEach((airport) => {
+			if (!airport.latitude_deg || !airport.longitude_deg) return;
+
+			// Convert BigDecimal strings to numbers with validation
+			const lat = parseFloat(airport.latitude_deg);
+			const lng = parseFloat(airport.longitude_deg);
+
+			// Validate coordinates are valid numbers and within expected ranges
+			if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+				console.warn(`Invalid coordinates for airport ${airport.ident}: ${lat}, ${lng}`);
+				return;
+			}
+
+			// Create marker content with proper escaping
+			const markerContent = document.createElement('div');
+			markerContent.className = 'airport-marker';
+
+			const iconDiv = document.createElement('div');
+			iconDiv.className = 'airport-icon';
+			iconDiv.textContent = '✈';
+
+			const labelDiv = document.createElement('div');
+			labelDiv.className = 'airport-label';
+			labelDiv.textContent = airport.ident;
+
+			markerContent.appendChild(iconDiv);
+			markerContent.appendChild(labelDiv);
+
+			const marker = new google.maps.marker.AdvancedMarkerElement({
+				position: { lat, lng },
+				map: map,
+				title: `${airport.name} (${airport.ident})`,
+				content: markerContent
+			});
+
+			airportMarkers.push(marker);
+		});
+	}
+
+	function clearAirportMarkers(): void {
+		airportMarkers.forEach((marker) => {
+			marker.map = null;
+		});
+		airportMarkers = [];
+	}
+
+	function checkAndUpdateAirports(): void {
+		const area = calculateViewportArea();
+		const shouldShow = area < 1000;
+
+		if (shouldShow !== shouldShowAirports) {
+			shouldShowAirports = shouldShow;
+
+			if (shouldShowAirports) {
+				fetchAirportsInViewport();
+			} else {
+				clearAirportMarkers();
+				airports = [];
+			}
+		} else if (shouldShowAirports) {
+			// Still showing airports, update them for the new viewport
+			fetchAirportsInViewport();
+		}
 	}
 
 	function handleOrientationChange(event: DeviceOrientationEvent): void {
@@ -439,5 +641,40 @@
 
 	.compass-rose {
 		transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+	}
+
+	/* Airport marker styling */
+	:global(.airport-marker) {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		pointer-events: auto;
+		cursor: pointer;
+	}
+
+	:global(.airport-icon) {
+		background: white;
+		border: 2px solid #374151;
+		border-radius: 50%;
+		width: 24px;
+		height: 24px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 12px;
+		box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+	}
+
+	:global(.airport-label) {
+		background: rgba(255, 255, 255, 0.9);
+		border: 1px solid #d1d5db;
+		border-radius: 4px;
+		padding: 2px 6px;
+		font-size: 11px;
+		font-weight: 600;
+		color: #374151;
+		margin-top: 2px;
+		white-space: nowrap;
+		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 	}
 </style>
