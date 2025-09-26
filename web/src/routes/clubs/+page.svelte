@@ -57,6 +57,7 @@
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			error = `Failed to search clubs: ${errorMessage}`;
+			clubs = []; // Clear any previous results on error
 			console.error('Error searching clubs:', err);
 		} finally {
 			loading = false;

@@ -11,7 +11,8 @@
 		Navigation,
 		Info,
 		UserCheck,
-		ExternalLink
+		ExternalLink,
+		Image
 	} from '@lucide/svelte';
 	import { ProgressRing } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall } from '$lib/api/server';
@@ -41,12 +42,46 @@
 		other_names: string[];
 	}
 
+	interface Runway {
+		id: number;
+		length_ft: number | null;
+		width_ft: number | null;
+		surface: string | null;
+		lighted: boolean;
+		closed: boolean;
+		le_ident: string | null;
+		he_ident: string | null;
+	}
+
+	interface Airport {
+		id: number;
+		ident: string;
+		airport_type: string;
+		name: string;
+		latitude_deg: string | null;
+		longitude_deg: string | null;
+		elevation_ft: number | null;
+		continent: string | null;
+		iso_country: string | null;
+		iso_region: string | null;
+		municipality: string | null;
+		scheduled_service: boolean;
+		icao_code: string | null;
+		iata_code: string | null;
+		gps_code: string | null;
+		local_code: string | null;
+		runways: Runway[];
+	}
+
 	let club: ClubWithSoaring | null = null;
 	let aircraft: Aircraft[] = [];
+	let airport: Airport | null = null;
 	let loading = true;
 	let loadingAircraft = false;
+	let loadingAirport = false;
 	let error = '';
 	let aircraftError = '';
+	let airportError = '';
 	let clubId = '';
 	let settingClub = false;
 
@@ -59,6 +94,10 @@
 			await loadAircraft();
 		}
 	});
+
+	$: if (club?.home_base_airport_id) {
+		loadAirport(club.home_base_airport_id);
+	}
 
 	async function loadClub() {
 		loading = true;
@@ -118,6 +157,21 @@
 
 	function goBack() {
 		goto(resolve('/clubs'));
+	}
+
+	async function loadAirport(airportId: number) {
+		loadingAirport = true;
+		airportError = '';
+
+		try {
+			airport = await serverCall<Airport>(`/airports/${airportId}`);
+		} catch (err) {
+			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+			airportError = `Failed to load airport: ${errorMessage}`;
+			console.error('Error loading airport:', err);
+		} finally {
+			loadingAirport = false;
+		}
 	}
 
 	async function setAsMyClub() {
@@ -300,9 +354,71 @@
 						{#if club.home_base_airport_id}
 							<div class="flex items-start gap-3">
 								<Plane class="mt-1 h-4 w-4 text-surface-500" />
-								<div>
-									<p class="text-surface-600-300-token mb-1 text-sm">Home Base Airport</p>
-									<p>Airport ID: {club.home_base_airport_id}</p>
+								<div class="flex-1">
+									<p class="text-surface-600-300-token mb-2 text-sm">Home Base Airport</p>
+									{#if loadingAirport}
+										<div class="flex items-center gap-2">
+											<ProgressRing size="w-4 h-4" />
+											<span class="text-sm">Loading airport...</span>
+										</div>
+									{:else if airportError}
+										<div class="text-sm text-error-500">
+											{airportError}
+										</div>
+									{:else if airport}
+										<div class="space-y-2">
+											<div>
+												<p class="font-semibold">{airport.name} ({airport.ident})</p>
+												{#if airport.municipality}
+													<p class="text-surface-600-300-token text-sm">
+														{airport.municipality}{airport.iso_region
+															? `, ${airport.iso_region}`
+															: ''}
+													</p>
+												{/if}
+											</div>
+
+											{#if airport.elevation_ft}
+												<p class="text-sm">
+													<span class="text-surface-600-300-token">Elevation:</span>
+													{airport.elevation_ft} ft
+												</p>
+											{/if}
+
+											{#if airport.runways.length > 0}
+												<div>
+													<p class="text-surface-600-300-token mb-1 text-sm">Runways:</p>
+													<div class="space-y-1">
+														{#each airport.runways as runway (runway.id)}
+															<div class="bg-surface-50-900-token rounded p-2 text-sm">
+																<div class="flex items-center justify-between">
+																	<span class="font-medium">
+																		{runway.le_ident || 'N/A'}/{runway.he_ident || 'N/A'}
+																	</span>
+																	{#if runway.length_ft}
+																		<span class="text-surface-600-300-token">
+																			{runway.length_ft}' × {runway.width_ft || 0}'
+																		</span>
+																	{/if}
+																</div>
+																{#if runway.surface}
+																	<p class="text-surface-600-300-token text-xs">
+																		{runway.surface}{runway.lighted
+																			? ' • Lighted'
+																			: ''}{runway.closed ? ' • Closed' : ''}
+																	</p>
+																{/if}
+															</div>
+														{/each}
+													</div>
+												</div>
+											{/if}
+										</div>
+									{:else}
+										<p class="text-surface-600-300-token text-sm">
+											Airport ID: {club.home_base_airport_id}
+										</p>
+									{/if}
 								</div>
 							</div>
 						{/if}
@@ -337,48 +453,124 @@
 							<p>No aircraft registered to this club</p>
 						</div>
 					{:else}
-						<div class="space-y-3">
+						<div class="space-y-4">
 							{#each aircraft as plane (plane.registration_number)}
 								<div class="bg-surface-100-800-token rounded-lg p-4">
-									<div class="flex items-start justify-between">
-										<div class="flex-1">
-											<div class="mb-2 flex items-center gap-2">
-												<h3 class="h3 font-semibold">{plane.registration_number}</h3>
-											</div>
+									<div class="mb-3 flex items-center gap-3">
+										<h3 class="h3 font-semibold">{plane.registration_number}</h3>
+										<a
+											href={`https://www.flightaware.com/photos/aircraft/${plane.registration_number}`}
+											target="_blank"
+											rel="noopener noreferrer"
+											class="variant-soft-primary btn btn-sm"
+											title="View photos on FlightAware"
+										>
+											<Image class="h-4 w-4" />
+											Photos
+										</a>
+									</div>
 
-											<div class="space-y-1 text-sm">
+									<div class="overflow-x-auto">
+										<table class="w-full">
+											<tbody class="space-y-1">
 												{#if plane.transponder_code}
-													<p>
-														<span class="text-surface-600-300-token">ICAO Code:</span>
-														{plane.transponder_code.toString(16).toUpperCase().padStart(4, '0')}
-													</p>
+													<tr class="border-surface-200-700-token border-b">
+														<td
+															class="text-surface-600-300-token py-2 pr-4 text-right text-sm font-medium"
+														>
+															ICAO Code:
+														</td>
+														<td class="py-2 text-left text-sm">
+															{plane.transponder_code.toString(16).toUpperCase().padStart(4, '0')}
+														</td>
+													</tr>
 												{/if}
 												{#if plane.manufacturer_model_code}
-													<p>
-														<span class="text-surface-600-300-token">Model:</span>
-														{plane.manufacturer_model_code}
-													</p>
+													<tr class="border-surface-200-700-token border-b">
+														<td
+															class="text-surface-600-300-token py-2 pr-4 text-right text-sm font-medium"
+														>
+															Model:
+														</td>
+														<td class="py-2 text-left text-sm">
+															{plane.manufacturer_model_code}
+														</td>
+													</tr>
 												{/if}
 												{#if plane.year_manufactured}
-													<p>
-														<span class="text-surface-600-300-token">Year:</span>
-														{plane.year_manufactured}
-													</p>
+													<tr class="border-surface-200-700-token border-b">
+														<td
+															class="text-surface-600-300-token py-2 pr-4 text-right text-sm font-medium"
+														>
+															Year:
+														</td>
+														<td class="py-2 text-left text-sm">
+															{plane.year_manufactured}
+														</td>
+													</tr>
 												{/if}
 												{#if plane.serial_number}
-													<p>
-														<span class="text-surface-600-300-token">Serial:</span>
-														{plane.serial_number}
-													</p>
+													<tr class="border-surface-200-700-token border-b">
+														<td
+															class="text-surface-600-300-token py-2 pr-4 text-right text-sm font-medium"
+														>
+															Serial:
+														</td>
+														<td class="py-2 text-left text-sm">
+															{plane.serial_number}
+														</td>
+													</tr>
 												{/if}
 												{#if plane.registrant_name}
-													<p>
-														<span class="text-surface-600-300-token">Owner:</span>
-														{plane.registrant_name}
-													</p>
+													<tr class="border-surface-200-700-token border-b">
+														<td
+															class="text-surface-600-300-token py-2 pr-4 text-right text-sm font-medium"
+														>
+															Owner:
+														</td>
+														<td class="py-2 text-left text-sm">
+															{plane.registrant_name}
+														</td>
+													</tr>
 												{/if}
-											</div>
-										</div>
+												{#if plane.aircraft_type}
+													<tr class="border-surface-200-700-token border-b">
+														<td
+															class="text-surface-600-300-token py-2 pr-4 text-right text-sm font-medium"
+														>
+															Type:
+														</td>
+														<td class="py-2 text-left text-sm">
+															{plane.aircraft_type}
+														</td>
+													</tr>
+												{/if}
+												{#if plane.engine_manufacturer_model_code}
+													<tr class="border-surface-200-700-token border-b">
+														<td
+															class="text-surface-600-300-token py-2 pr-4 text-right text-sm font-medium"
+														>
+															Engine:
+														</td>
+														<td class="py-2 text-left text-sm">
+															{plane.engine_manufacturer_model_code}
+														</td>
+													</tr>
+												{/if}
+												{#if plane.status_code}
+													<tr class="border-surface-200-700-token border-b">
+														<td
+															class="text-surface-600-300-token py-2 pr-4 text-right text-sm font-medium"
+														>
+															Status:
+														</td>
+														<td class="py-2 text-left text-sm">
+															{plane.status_code}
+														</td>
+													</tr>
+												{/if}
+											</tbody>
+										</table>
 									</div>
 								</div>
 							{/each}
