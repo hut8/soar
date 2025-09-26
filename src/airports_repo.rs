@@ -415,6 +415,7 @@ impl AirportsRepository {
                 FROM airports
                 WHERE location IS NOT NULL
                   AND ST_DWithin(location, ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography, $3)
+                  AND type IN ('small_airport', 'medium_airport', 'large_airport', 'seaplane_base')
                 ORDER BY location <-> ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography
                 LIMIT $4
             "#;
@@ -511,6 +512,7 @@ impl AirportsRepository {
                     COALESCE(SIMILARITY(UPPER(iata_code), $1), 0) > 0.05 OR
                     SIMILARITY(UPPER(ident), $1) > 0.05
                 )
+                AND type IN ('small_airport', 'medium_airport', 'large_airport', 'seaplane_base')
                 ORDER BY similarity_score DESC, name
                 LIMIT $2
             "#;
@@ -696,6 +698,7 @@ impl AirportsRepository {
                   AND latitude_deg >= $2
                   AND longitude_deg >= $3
                   AND longitude_deg <= $4
+                  AND type IN ('small_airport', 'medium_airport', 'large_airport', 'seaplane_base')
                 ORDER BY name, ident
                 LIMIT $5
             "#;

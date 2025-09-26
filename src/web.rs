@@ -201,10 +201,6 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         // Search and data routes
         .route("/airports", get(actions::search_airports))
         .route("/airports/{id}", get(actions::get_airport_by_id))
-        .route(
-            "/airports/bounding-box",
-            get(actions::get_airports_in_bounding_box),
-        )
         .route("/clubs", get(actions::search_clubs))
         .route("/clubs/{id}", get(actions::get_club_by_id))
         .route("/fixes", get(actions::search_fixes))

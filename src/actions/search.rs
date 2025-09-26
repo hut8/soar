@@ -10,9 +10,10 @@ use crate::airports_repo::AirportsRepository;
 use crate::clubs_repo::ClubsRepository;
 use crate::fixes_repo::FixesRepository;
 use crate::flights_repo::FlightsRepository;
+use crate::runways_repo::RunwaysRepository;
 use crate::web::AppState;
 
-use super::{json_error, views::ClubView};
+use super::{json_error, views::{AirportView, ClubView}};
 
 #[derive(Debug, Deserialize)]
 pub struct SearchQueryParams {
@@ -21,6 +22,11 @@ pub struct SearchQueryParams {
     pub latitude: Option<f64>,
     pub longitude: Option<f64>,
     pub radius: Option<f64>,
+    // Bounding box parameters
+    pub nw_lat: Option<f64>, // Northwest corner latitude
+    pub nw_lng: Option<f64>, // Northwest corner longitude
+    pub se_lat: Option<f64>, // Southeast corner latitude
+    pub se_lng: Option<f64>, // Southeast corner longitude
 }
 
 #[derive(Debug, Deserialize)]
@@ -41,10 +47,67 @@ pub async fn search_airports(
     State(state): State<AppState>,
     Query(params): Query<SearchQueryParams>,
 ) -> impl IntoResponse {
-    let airports_repo = AirportsRepository::new(state.pool);
+    let airports_repo = AirportsRepository::new(state.pool.clone());
 
+    // Check if bounding box parameters are provided
+    if let (Some(nw_lat), Some(nw_lng), Some(se_lat), Some(se_lng)) =
+        (params.nw_lat, params.nw_lng, params.se_lat, params.se_lng)
+    {
+        // Validate bounding box coordinates
+        if !(-90.0..=90.0).contains(&nw_lat) || !(-90.0..=90.0).contains(&se_lat) {
+            return json_error(
+                StatusCode::BAD_REQUEST,
+                "Latitude must be between -90 and 90 degrees",
+            )
+            .into_response();
+        }
+
+        if !(-180.0..=180.0).contains(&nw_lng) || !(-180.0..=180.0).contains(&se_lng) {
+            return json_error(
+                StatusCode::BAD_REQUEST,
+                "Longitude must be between -180 and 180 degrees",
+            )
+            .into_response();
+        }
+
+        // Get airports within the bounding box
+        let runways_repo = RunwaysRepository::new(state.pool);
+        match airports_repo
+            .get_airports_in_bounding_box(nw_lat, nw_lng, se_lat, se_lng, params.limit)
+            .await
+        {
+            Ok(airports) => {
+                // For each airport, get its runways and create the view
+                let mut airport_views = Vec::new();
+
+                for airport in airports {
+                    // Get runways for this airport
+                    let runways = match runways_repo.get_runways_by_airport_id(airport.id).await {
+                        Ok(runways) => runways,
+                        Err(e) => {
+                            error!("Failed to get runways for airport {}: {}", airport.id, e);
+                            // Continue processing other airports even if runways fail
+                            Vec::new()
+                        }
+                    };
+
+                    airport_views.push(AirportView::with_runways(airport, runways));
+                }
+
+                Json(airport_views).into_response()
+            }
+            Err(e) => {
+                error!("Failed to get airports in bounding box: {}", e);
+                json_error(
+                    StatusCode::BAD_REQUEST,
+                    &format!("Failed to get airports in bounding box: {}", e),
+                )
+                .into_response()
+            }
+        }
+    }
     // Check if geographic search parameters are provided
-    if let (Some(lat), Some(lng), Some(radius)) = (params.latitude, params.longitude, params.radius)
+    else if let (Some(lat), Some(lng), Some(radius)) = (params.latitude, params.longitude, params.radius)
     {
         // Validate radius
         if radius <= 0.0 || radius > 1000.0 {
@@ -119,7 +182,7 @@ pub async fn search_airports(
         // No search parameters provided
         json_error(
             StatusCode::BAD_REQUEST,
-            "Either 'q' for text search or 'latitude', 'longitude', and 'radius' for geographic search must be provided",
+            "Either 'q' for text search, 'latitude', 'longitude', and 'radius' for geographic search, or 'nw_lat', 'nw_lng', 'se_lat', and 'se_lng' for bounding box search must be provided",
         ).into_response()
     }
 }
