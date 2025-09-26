@@ -3,6 +3,7 @@
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
 	import { serverCall } from '$lib/api/server';
+	import { Loader } from '@googlemaps/js-api-loader';
 
 	// TypeScript interfaces for airport data
 	interface RunwayView {
@@ -83,24 +84,15 @@
 	});
 
 	async function loadGoogleMapsScript(): Promise<void> {
-		return new Promise((resolve, reject) => {
-			// Check if Google Maps is already loaded
-			if (window.google && window.google.maps) {
-				resolve();
-				return;
-			}
-
-			// Create script element
-			const script = document.createElement('script');
-			script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=geometry,marker`;
-			script.async = true;
-			script.defer = true;
-
-			script.onload = () => resolve();
-			script.onerror = () => reject(new Error('Failed to load Google Maps API'));
-
-			document.head.appendChild(script);
+		const loader = new Loader({
+			apiKey: GOOGLE_MAPS_API_KEY,
+			version: 'weekly'
 		});
+
+		// Import the required libraries
+		await loader.importLibrary('maps');
+		await loader.importLibrary('geometry');
+		await loader.importLibrary('marker');
 	}
 
 	function initializeMap(): void {
