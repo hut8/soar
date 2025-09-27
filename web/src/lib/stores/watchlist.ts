@@ -52,11 +52,18 @@ function createWatchlistStore() {
 		subscribe,
 
 		// Add device to watchlist
-		add: (device: Device) => {
+		add: (deviceId: string) => {
 			update((state) => {
+				// Check if device is already in watchlist
+				const existingEntry = state.entries.find(entry => entry.deviceId === deviceId);
+				if (existingEntry) {
+					console.log('Device already in watchlist:', deviceId);
+					return state;
+				}
+
 				const newEntry: WatchlistEntry = {
 					id: Date.now().toString(),
-					device,
+					deviceId,
 					active: true
 				};
 				const newEntries = [...state.entries, newEntry];
@@ -95,9 +102,29 @@ function createWatchlistStore() {
 			const saved = localStorage.getItem('watchlist');
 			if (saved) {
 				try {
-					const entries = (JSON.parse(saved) as WatchlistEntry[]).filter(
-						(entry) => entry.device?.id && entry.id
-					);
+					const rawEntries = JSON.parse(saved);
+					const entries: WatchlistEntry[] = [];
+
+					// Handle both old format (with device objects) and new format (with deviceId)
+					for (const entry of rawEntries) {
+						if (entry.deviceId && entry.id) {
+							// New format - just validate and use
+							entries.push({
+								id: entry.id,
+								deviceId: entry.deviceId,
+								active: entry.active
+							});
+						} else if (entry.device?.id && entry.id) {
+							// Old format - convert to new format
+							entries.push({
+								id: entry.id,
+								deviceId: entry.device.id,
+								active: entry.active
+							});
+						}
+					}
+
+					console.log(`Loaded ${entries.length} valid watchlist entries from storage`);
 					set({ entries });
 					handleWatchlistChange(entries);
 				} catch (e) {
@@ -127,10 +154,14 @@ function createDeviceRegistryStore() {
 		addFixes: (newFixes: Fix[]) => {
 			update((state) => {
 				// Log each fix to console
-				newFixes.forEach((fix) => {
+				newFixes.forEach(async (fix) => {
 					console.log('Received fix:', fix);
 					// Add fix to the device registry
-					state.registry.addFixToDevice(fix);
+					try {
+						await state.registry.addFixToDevice(fix);
+					} catch (error) {
+						console.warn('Failed to add fix to device registry:', error);
+					}
 				});
 
 				// Update timestamp to trigger reactivity
@@ -250,27 +281,27 @@ function connectWebSocket() {
 					currentState.entries.forEach((entry) => {
 						if (
 							entry.active &&
-							entry.device.id &&
-							!currentlySubscribedDevices.has(entry.device.id)
+							entry.deviceId &&
+							!currentlySubscribedDevices.has(entry.deviceId)
 						) {
-							console.log('Subscribing to device after connection:', entry.device.id);
+							console.log('Subscribing to device after connection:', entry.deviceId);
 							websocket?.send(
 								JSON.stringify({
 									action: 'subscribe',
-									device_id: entry.device.id
+									device_id: entry.deviceId
 								})
 							);
-							currentlySubscribedDevices.add(entry.device.id);
+							currentlySubscribedDevices.add(entry.deviceId);
 						}
 					});
 				}
 			}, 50); // Small delay to ensure WebSocket is fully ready
 		};
 
-		websocket.onmessage = (event) => {
+		websocket.onmessage = async (event) => {
 			try {
 				const fix = JSON.parse(event.data) as Fix;
-				deviceRegistry.addFixes([fix]);
+				await DeviceRegistry.getInstance().addFixToDevice(fix);
 			} catch (e) {
 				console.warn('Failed to parse WebSocket message:', e);
 			}
@@ -382,7 +413,14 @@ async function subscribeToDevice(deviceId: string) {
 				`/fixes?device_id=${deviceId}&limit=100`
 			);
 			if (fixesResponse.fixes) {
-				deviceRegistry.addFixes(fixesResponse.fixes);
+				// Add fixes one by one asynchronously
+				for (const fix of fixesResponse.fixes) {
+					try {
+						await DeviceRegistry.getInstance().addFixToDevice(fix);
+					} catch (error) {
+						console.warn('Failed to add historical fix:', error);
+					}
+				}
 			}
 		} catch (error) {
 			console.warn(`Failed to fetch data for device ${deviceId}:`, error);
@@ -413,7 +451,7 @@ async function handleWatchlistChange(entries: WatchlistEntry[]) {
 	if (!browser) return;
 
 	const desiredActiveDevices = new Set(
-		entries.filter((entry) => entry.active && entry.device.id).map((entry) => entry.device.id!)
+		entries.filter((entry) => entry.active && entry.deviceId).map((entry) => entry.deviceId)
 	);
 
 	// Find devices to unsubscribe from (currently subscribed but not in desired set)

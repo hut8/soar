@@ -66,6 +66,20 @@ export class DeviceRegistry {
 		return null;
 	}
 
+	// Get a device by ID with automatic API fallback
+	public async getDeviceWithFallback(deviceId: string): Promise<Device | null> {
+		// Try to get from cache first
+		let device = this.getDevice(deviceId);
+
+		// If not found in cache, fetch from API
+		if (!device) {
+			console.log(`[REGISTRY] Device ${deviceId} not found in cache, fetching from API`);
+			device = await this.updateDeviceFromAPI(deviceId);
+		}
+
+		return device;
+	}
+
 	// Add or update a device
 	public setDevice(device: Device): void {
 		this.devices.set(device.id, device);
@@ -135,7 +149,7 @@ export class DeviceRegistry {
 	}
 
 	// Add a fix to the appropriate device
-	public addFixToDevice(fix: Fix): Device | null {
+	public async addFixToDevice(fix: Fix): Promise<Device | null> {
 		console.log('[REGISTRY] Adding fix to device:', {
 			deviceId: fix.device_id,
 			deviceAddressHex: fix.device_address_hex,
@@ -151,18 +165,29 @@ export class DeviceRegistry {
 
 		let device = this.getDevice(deviceId);
 		if (!device) {
-			console.log('[REGISTRY] Creating new device for fix:', deviceId);
-			// Create a minimal device if we don't have one
-			device = new Device({
-				id: deviceId,
-				address_type: '',
-				address: fix.device_address_hex || '',
-				aircraft_model: fix.model || '',
-				registration: fix.registration || '',
-				cn: '',
-				tracked: false,
-				identified: false
-			});
+			console.log('[REGISTRY] Device not found in cache for fix:', deviceId, 'attempting to fetch from API');
+
+			// Try to fetch full device info from API first
+			try {
+				device = await this.updateDeviceFromAPI(deviceId);
+			} catch (error) {
+				console.warn('[REGISTRY] Failed to fetch device from API for:', deviceId, error);
+			}
+
+			// If still no device, create a minimal one
+			if (!device) {
+				console.log('[REGISTRY] Creating minimal device for fix:', deviceId);
+				device = new Device({
+					id: deviceId,
+					address_type: '',
+					address: fix.device_address_hex || '',
+					aircraft_model: fix.model || '',
+					registration: fix.registration || '',
+					cn: '',
+					tracked: false,
+					identified: false
+				});
+			}
 		} else {
 			console.log('[REGISTRY] Using existing device:', {
 				deviceId,
@@ -253,6 +278,14 @@ export class DeviceRegistry {
 		if (stored) {
 			try {
 				const data = JSON.parse(stored);
+
+				// Validate the data structure
+				if (!Device.isValidDeviceData(data)) {
+					console.warn(`Invalid device data structure for ${deviceId}, removing and will re-fetch`);
+					localStorage.removeItem(key);
+					return null;
+				}
+
 				return Device.fromJSON(data);
 			} catch (e) {
 				console.warn(`Failed to parse stored device ${deviceId}:`, e);
@@ -272,7 +305,9 @@ export class DeviceRegistry {
 			);
 			if (response.fixes) {
 				// Add fixes to device
-				response.fixes.forEach((fix) => this.addFixToDevice(fix));
+				for (const fix of response.fixes) {
+					await this.addFixToDevice(fix);
+				}
 				return response.fixes;
 			}
 			return [];

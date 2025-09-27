@@ -4,6 +4,7 @@
 	import { browser } from '$app/environment';
 	import { serverCall } from '$lib/api/server';
 	import { watchlist } from '$lib/stores/watchlist';
+	import { DeviceRegistry } from '$lib/services/DeviceRegistry';
 	import type { Device } from '$lib/types';
 	let { showModal = $bindable() } = $props();
 
@@ -77,8 +78,10 @@
 		}
 
 		// Only add to watchlist if device was found
-		if (device) {
-			watchlist.add(device);
+		if (device && device.id) {
+			// Add the device to the registry and watchlist
+			DeviceRegistry.getInstance().setDevice(device);
+			watchlist.add(device.id);
 			// Clear the search inputs on success
 			newWatchlistEntry = {
 				type: 'registration',
@@ -104,6 +107,25 @@
 		if (browser) {
 			watchlist.loadFromStorage();
 		}
+	});
+
+	// Get devices from registry for watchlist entries
+	$: deviceRegistry = DeviceRegistry.getInstance();
+	$: entriesWithDevices = $watchlist.entries.map(entry => {
+		const device = deviceRegistry.getDevice(entry.deviceId);
+		return {
+			...entry,
+			device: device || {
+				id: entry.deviceId,
+				registration: 'Unknown',
+				aircraft_model: 'Unknown',
+				address_type: 'Unknown',
+				address: 'Unknown',
+				cn: '',
+				tracked: false,
+				identified: false
+			}
+		};
 	});
 </script>
 
@@ -230,12 +252,12 @@
 					<h3
 						class="mb-3 flex flex-shrink-0 flex-row items-center align-middle text-lg font-semibold"
 					>
-						<Eye size={16} /> Watched Aircraft ({$watchlist.entries.length})
+						<Eye size={16} /> Watched Aircraft ({entriesWithDevices.length})
 					</h3>
-					{#if $watchlist.entries.length > 0}
+					{#if entriesWithDevices.length > 0}
 						<div class="flex-1 overflow-y-auto">
 							<div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-								{#each $watchlist.entries as entry (entry.id)}
+								{#each entriesWithDevices as entry (entry.id)}
 									<div
 										class="rounded border p-3 {entry.active
 											? 'bg-gray-50'

@@ -111,7 +111,9 @@ export class FixFeed {
 					console.log('Received fix:', fix);
 
 					// Add fix to device registry
-					this.deviceRegistry.addFixToDevice(fix);
+					this.deviceRegistry.addFixToDevice(fix).catch(error => {
+						console.warn('Failed to add fix to device registry:', error);
+					});
 
 					// Notify subscribers
 					this.notifySubscribers({
