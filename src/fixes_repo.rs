@@ -502,63 +502,6 @@ impl FixesRepository {
         Ok(())
     }
 
-    /// Insert multiple fixes in a batch transaction
-    pub async fn insert_batch(&self, fix_list: &[Fix]) -> Result<usize> {
-        if fix_list.is_empty() {
-            return Ok(0);
-        }
-
-        use crate::schema::fixes::dsl::*;
-
-        let pool = self.pool.clone();
-        let fixes_data: Vec<(Fix, NewFix)> = fix_list
-            .iter()
-            .map(|fix| (fix.clone(), NewFix::from(fix)))
-            .collect();
-        let fixes_count = fixes_data.len();
-
-        let result = tokio::task::spawn_blocking(move || {
-            let mut conn = pool.get()?;
-            let mut inserted_count = 0;
-
-            // Use a transaction for batch processing
-            conn.transaction(|conn| {
-                for (original_fix, mut fix_data) in fixes_data {
-                    // Look up device UUID if we have raw device info
-                    if let (Some(dev_address), Some(address_type_ref)) = (
-                        original_fix.device_address_hex.as_ref(),
-                        original_fix.address_type.as_ref(),
-                    ) {
-                        let address_type_enum = *address_type_ref;
-                        if let Ok(Some(device_uuid)) = Self::lookup_device_uuid_by_address(
-                            conn,
-                            dev_address,
-                            address_type_enum,
-                        ) {
-                            fix_data.device_id = Some(device_uuid);
-                        }
-                    }
-
-                    match diesel::insert_into(fixes).values(&fix_data).execute(conn) {
-                        Ok(_) => inserted_count += 1,
-                        Err(e) => {
-                            warn!("Failed to insert fix with ID {:?}: {}", fix_data.id, e);
-                            // Continue with other fixes rather than failing the entire batch
-                        }
-                    }
-                }
-
-                Ok::<(), diesel::result::Error>(())
-            })?;
-
-            Ok::<usize, anyhow::Error>(inserted_count)
-        })
-        .await??;
-
-        debug!("Inserted {} out of {} fixes in batch", result, fixes_count);
-        Ok(result)
-    }
-
     /// Get fixes for a specific aircraft ID within a time range (original method)
     pub async fn get_fixes_for_aircraft_with_time_range(
         &self,
