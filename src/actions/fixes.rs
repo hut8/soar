@@ -16,7 +16,7 @@ use crate::web::AppState;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubscriptionMessage {
-    pub action: String, // "subscribe" or "unsubscribe"
+    pub action: String,    // "subscribe" or "unsubscribe"
     pub device_id: String, // Single device ID to match frontend expectations
 }
 
@@ -81,19 +81,17 @@ async fn handle_websocket_read(
 ) {
     while let Some(msg) = receiver.next().await {
         match msg {
-            Ok(Message::Text(text)) => {
-                match serde_json::from_str::<SubscriptionMessage>(&text) {
-                    Ok(sub_msg) => {
-                        if subscription_tx.send(sub_msg).is_err() {
-                            error!("Failed to send subscription message to handler");
-                            break;
-                        }
-                    }
-                    Err(e) => {
-                        error!("Failed to parse subscription message: {}", e);
+            Ok(Message::Text(text)) => match serde_json::from_str::<SubscriptionMessage>(&text) {
+                Ok(sub_msg) => {
+                    if subscription_tx.send(sub_msg).is_err() {
+                        error!("Failed to send subscription message to handler");
+                        break;
                     }
                 }
-            }
+                Err(e) => {
+                    error!("Failed to parse subscription message: {}", e);
+                }
+            },
             Ok(Message::Close(_)) => {
                 info!("WebSocket connection closed by client");
                 break;
@@ -226,12 +224,11 @@ async fn handle_subscriptions(
                     }
                 }
             } => {
-                if let Some(live_fix) = fix_result {
-                    if fix_tx.send(live_fix).is_err() {
+                if let Some(live_fix) = fix_result
+                    && fix_tx.send(live_fix).is_err() {
                         error!("Failed to send live fix to WebSocket writer");
                         return;
                     }
-                }
             }
         }
     }
@@ -239,7 +236,10 @@ async fn handle_subscriptions(
     // Cleanup subscriptions when connection closes
     for aircraft_id in &subscribed_aircraft {
         if let Err(e) = live_fix_service.unsubscribe_from_device(aircraft_id).await {
-            error!("Failed to cleanup subscription for device {}: {}", aircraft_id, e);
+            error!(
+                "Failed to cleanup subscription for device {}: {}",
+                aircraft_id, e
+            );
         } else {
             info!("Cleaned up subscription for device: {}", aircraft_id);
         }

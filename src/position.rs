@@ -58,7 +58,7 @@ pub struct Fix {
 
     /// Signal quality
     pub snr_db: Option<f32>,
-    pub bit_errors_corrected: Option<u32>,
+    pub bit_errors_corrected: Option<i32>,
     pub freq_offset_khz: Option<f32>,
 
     /// Club association (to be implemented later)
