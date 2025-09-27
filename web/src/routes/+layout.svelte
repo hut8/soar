@@ -6,7 +6,7 @@
 	import { page } from '$app/state';
 	import { auth } from '$lib/stores/auth';
 	import { onMount } from 'svelte';
-	import { Radar, Users, PlaneTakeoff, UserPlus, UserCheck, Radio } from '@lucide/svelte';
+	import { Radar, Users, Plane, UserPlus, UserCheck, Radio } from '@lucide/svelte';
 
 	const base = resolve('/');
 	const clubsPath = resolve('/clubs');
@@ -51,24 +51,24 @@
 </svelte:head>
 
 <div class="flex min-h-screen flex-col">
-	<AppBar>
+	<AppBar classes="preset-glass-neutral" >
 		{#snippet lead()}
 			<a href={base} class="flex items-center space-x-2">
-				<div class="text-xl font-bold text-primary-500">
-					<PlaneTakeoff />
+				<div class="text-xl font-bold text-primary-500 flex items-center gap-3">
+					<Plane />
 					Glider.flights
 				</div>
 			</a>
 		{/snippet}
 		{#snippet trail()}
 			<nav class="hidden space-x-4 md:flex">
-				<a href={clubsPath} class="variant-ghost-surface btn btn-sm">
+				<a href={clubsPath} class="preset-filled-primary-500 btn btn-sm">
 					<Users /> Clubs
 				</a>
-				<a href={operationsPath} class="variant-ghost-surface btn btn-sm">
+				<a href={operationsPath} class="preset-filled-primary-500 btn btn-sm">
 					<Radar /> Operations
 				</a>
-				<a href={devicesPath} class="variant-ghost-surface btn btn-sm">
+				<a href={devicesPath} class="preset-filled-primary-500 btn btn-sm">
 					<Radio /> Devices
 				</a>
 			</nav>
@@ -88,18 +88,18 @@
 					</button>
 
 					{#if showUserMenu}
-						<div class="absolute top-12 right-0 z-10 w-48 card preset-filled-primary-500 p-2">
+						<div class="absolute top-12 right-0 z-10 w-48 card preset-filled-primary-50-950 p-2">
 							<div class="space-y-1">
 								<div class="px-3 py-2 text-sm">
 									<div class="font-medium">{$auth.user.first_name} {$auth.user.last_name}</div>
 									<div class="text-surface-600-300-token">{$auth.user.email}</div>
 								</div>
 								<hr class="!my-2" />
-								<a href={profilePath} class="variant-ghost-surface btn w-full justify-start btn-sm">
+								<a href={profilePath} class="preset-filled-primary-500 btn w-full justify-start btn-sm">
 									👤 Profile
 								</a>
 								<button
-									class="variant-ghost-error btn w-full justify-start btn-sm"
+									class="preset-filled-primary-500 btn w-full justify-start btn-sm"
 									onclick={handleLogout}
 								>
 									Sign out
@@ -110,8 +110,8 @@
 				</div>
 			{:else}
 				<div class="flex space-x-2">
-					<a href={loginPath} class="variant-ghost-surface btn btn-sm"><UserCheck /> Login</a>
-					<a href={registerPath} class="variant-filled-primary btn btn-sm"><UserPlus /> Sign Up</a>
+					<a href={loginPath} class="preset-filled-primary-500 btn btn-sm"><UserCheck /> Login</a>
+					<a href={registerPath} class="preset-filled-primary-500 btn btn-sm"><UserPlus /> Sign Up</a>
 				</div>
 			{/if}
 		{/snippet}
