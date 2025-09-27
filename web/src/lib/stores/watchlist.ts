@@ -25,6 +25,20 @@ const initialFixesState: FixesStore = {
 let websocket: WebSocket | null = null;
 let websocketUrl = '';
 const currentlySubscribedDevices = new Set<string>();
+let reconnectAttempts = 0;
+const maxReconnectAttempts = 5;
+const reconnectDelay = 1000; // Start with 1 second
+
+// WebSocket status store
+export const websocketStatus = writable<{
+	connected: boolean;
+	reconnecting: boolean;
+	error: string | null;
+}>({
+	connected: false,
+	reconnecting: false,
+	error: null
+});
 
 // Create watchlist store
 function createWatchlistStore() {
@@ -147,11 +161,27 @@ function initializeWebSocket() {
 function connectWebSocket() {
 	if (!browser || websocket?.readyState === WebSocket.OPEN) return;
 
+	// Update status to show connection attempt
+	websocketStatus.update((status) => ({
+		...status,
+		reconnecting: reconnectAttempts > 0,
+		error: null
+	}));
+
 	try {
 		websocket = new WebSocket(websocketUrl);
 
 		websocket.onopen = () => {
 			console.log('WebSocket connected to live fixes feed');
+
+			// Reset reconnection state
+			reconnectAttempts = 0;
+			websocketStatus.update((status) => ({
+				connected: true,
+				reconnecting: false,
+				error: null
+			}));
+
             // Subscribe to all devices in the watchlist after a small delay to ensure connection is fully ready
             setTimeout(() => {
                 if (websocket?.readyState === WebSocket.OPEN) {
@@ -182,28 +212,88 @@ function connectWebSocket() {
 			}
 		};
 
-		websocket.onclose = () => {
-			console.log('WebSocket disconnected');
+		websocket.onclose = (event) => {
+			console.log('WebSocket disconnected', event.code, event.reason);
 			websocket = null;
+
+			// Update status
+			websocketStatus.update((status) => ({
+				connected: false,
+				reconnecting: false,
+				error: event.code !== 1000 ? `Connection lost (${event.code})` : null
+			}));
+
 			// Clear subscription tracking when connection is lost
 			currentlySubscribedDevices.clear();
+
+			// Attempt to reconnect if it wasn't a clean close
+			if (event.code !== 1000 && reconnectAttempts < maxReconnectAttempts) {
+				attemptReconnect();
+			}
 		};
 
 		websocket.onerror = (error) => {
 			console.error('WebSocket error:', error);
+			websocketStatus.update((status) => ({
+				...status,
+				error: 'Connection failed'
+			}));
 		};
 	} catch (e) {
 		console.error('Failed to create WebSocket connection:', e);
+		websocketStatus.update((status) => ({
+			...status,
+			error: 'Failed to create connection'
+		}));
 	}
+}
+
+function attemptReconnect() {
+	if (reconnectAttempts >= maxReconnectAttempts) {
+		console.log('Max reconnection attempts reached');
+		websocketStatus.update((status) => ({
+			...status,
+			reconnecting: false,
+			error: 'Max reconnection attempts reached'
+		}));
+		return;
+	}
+
+	reconnectAttempts++;
+	const delay = reconnectDelay * Math.pow(2, reconnectAttempts - 1); // Exponential backoff
+
+	console.log(`Attempting to reconnect in ${delay}ms (attempt ${reconnectAttempts}/${maxReconnectAttempts})`);
+
+	websocketStatus.update((status) => ({
+		...status,
+		reconnecting: true,
+		error: `Reconnecting... (${reconnectAttempts}/${maxReconnectAttempts})`
+	}));
+
+	setTimeout(() => {
+		if (!websocket || websocket.readyState === WebSocket.CLOSED) {
+			connectWebSocket();
+		}
+	}, delay);
 }
 
 function disconnectWebSocket() {
 	if (websocket) {
-		websocket.close();
+		websocket.close(1000, 'User requested disconnection'); // Clean close
 		websocket = null;
 	}
 	// Clear subscription tracking when disconnecting
 	currentlySubscribedDevices.clear();
+
+	// Reset reconnection attempts
+	reconnectAttempts = 0;
+
+	// Update status
+	websocketStatus.update(() => ({
+		connected: false,
+		reconnecting: false,
+		error: null
+	}));
 }
 
 async function subscribeToDevice(deviceId: string) {

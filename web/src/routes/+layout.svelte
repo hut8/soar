@@ -5,8 +5,9 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { auth } from '$lib/stores/auth';
+	import { websocketStatus } from '$lib/stores/watchlist';
 	import { onMount } from 'svelte';
-	import { Radar, Users, Plane, UserPlus, UserCheck, Radio } from '@lucide/svelte';
+	import { Radar, Users, Plane, UserPlus, UserCheck, Radio, Wifi, WifiOff, RotateCcw, AlertCircle } from '@lucide/svelte';
 
 	const base = resolve('/');
 	const clubsPath = resolve('/clubs');
@@ -72,6 +73,31 @@
 					<Radio /> Devices
 				</a>
 			</nav>
+
+			<!-- WebSocket Status Indicator for larger screens -->
+			<div class="hidden lg:flex items-center">
+				{#if $websocketStatus.connected}
+					<div class="flex items-center space-x-1 px-2 py-1 rounded bg-success-500/20 text-success-600 dark:text-success-400">
+						<Wifi size={16} />
+						<span class="text-xs font-medium">Live</span>
+					</div>
+				{:else if $websocketStatus.reconnecting}
+					<div class="flex items-center space-x-1 px-2 py-1 rounded bg-warning-500/20 text-warning-600 dark:text-warning-400">
+						<RotateCcw size={16} class="animate-spin" />
+						<span class="text-xs font-medium">Reconnecting</span>
+					</div>
+				{:else if $websocketStatus.error}
+					<div class="flex items-center space-x-1 px-2 py-1 rounded bg-error-500/20 text-error-600 dark:text-error-400" title={$websocketStatus.error}>
+						<AlertCircle size={16} />
+						<span class="text-xs font-medium">Offline</span>
+					</div>
+				{:else}
+					<div class="flex items-center space-x-1 px-2 py-1 rounded bg-surface-400/20 text-surface-600 dark:text-surface-400">
+						<WifiOff size={16} />
+						<span class="text-xs font-medium">Disconnected</span>
+					</div>
+				{/if}
+			</div>
 
 			{#if $auth.isAuthenticated && $auth.user}
 				<div class="user-menu relative">
