@@ -111,6 +111,8 @@ pub enum RegistrationCountry {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Device {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<uuid::Uuid>,
     #[serde(
         alias = "device_type",
         rename(serialize = "address_type"),
@@ -191,6 +193,7 @@ impl From<Device> for NewDevice {
 impl From<DeviceModel> for Device {
     fn from(model: DeviceModel) -> Self {
         Self {
+            id: Some(model.id),
             address_type: model.address_type,
             address: model.address as u32,
             aircraft_model: model.aircraft_model,
@@ -452,6 +455,7 @@ impl DeviceFetcher {
                         }
                     );
                     let merged_device = Device {
+                        id: None, // Merged devices from external sources don't have our database ID
                         address_type: glidernet_device.address_type,
                         address: glidernet_device.address,
                         aircraft_model: if !glidernet_device.aircraft_model.is_empty() {
@@ -536,6 +540,7 @@ mod tests {
     #[test]
     fn test_device_serialization_with_booleans() {
         let device = Device {
+            id: None, // Test device without database ID
             address_type: AddressType::Flarm,
             address: 0x000000,
             aircraft_model: "SZD-41 Jantar Std".to_string(),
@@ -805,6 +810,7 @@ mod tests {
     // Helper function to create a test device with a specific registration
     fn create_test_device(registration: &str) -> Device {
         Device {
+            id: None, // Test devices don't have database IDs
             address_type: AddressType::Flarm,
             address: 0x123456,
             aircraft_model: "Test Aircraft".to_string(),
