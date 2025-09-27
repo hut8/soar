@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::actions::json_error;
+use crate::aircraft_registrations::AircraftRegistrationModel;
+use crate::aircraft_registrations_repo::AircraftRegistrationsRepository;
 use crate::device_repo::DeviceRepository;
 use crate::devices::{AddressType, Device};
 use crate::fixes::Fix;
@@ -45,6 +47,11 @@ pub struct DeviceSearchResponse {
 pub struct DeviceFixesResponse {
     pub fixes: Vec<Fix>,
     pub count: usize,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DeviceAircraftRegistrationResponse {
+    pub aircraft_registration: Option<AircraftRegistrationModel>,
 }
 
 /// Get a device by its UUID
@@ -179,6 +186,28 @@ pub async fn search_devices(
                 StatusCode::BAD_REQUEST,
                 "Must provide either 'registration' OR both 'address' and 'address-type' parameters",
             ).into_response()
+        }
+    }
+}
+
+/// Get aircraft registration for a device by device ID
+pub async fn get_device_aircraft_registration(
+    Path(id): Path<Uuid>,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let aircraft_repo = AircraftRegistrationsRepository::new(state.pool.clone());
+
+    // Query aircraft_registrations table for a record with the given device_id
+    match aircraft_repo.get_aircraft_registration_by_device_id(id).await {
+        Ok(Some(aircraft_registration)) => Json(DeviceAircraftRegistrationResponse {
+            aircraft_registration: Some(aircraft_registration),
+        }).into_response(),
+        Ok(None) => Json(DeviceAircraftRegistrationResponse {
+            aircraft_registration: None,
+        }).into_response(),
+        Err(e) => {
+            tracing::error!("Failed to get aircraft registration for device {}: {}", id, e);
+            json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get aircraft registration").into_response()
         }
     }
 }

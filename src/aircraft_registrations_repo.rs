@@ -521,4 +521,19 @@ impl AircraftRegistrationsRepository {
             }
         }
     }
+
+    /// Get aircraft registration by device ID
+    pub async fn get_aircraft_registration_by_device_id(
+        &self,
+        device_id: Uuid,
+    ) -> Result<Option<AircraftRegistrationModel>> {
+        let mut conn = self.get_connection()?;
+        let aircraft_model = aircraft_registrations::table
+            .filter(aircraft_registrations::device_id.eq(device_id))
+            .select(AircraftRegistrationModel::as_select())
+            .first::<AircraftRegistrationModel>(&mut conn)
+            .optional()?;
+
+        Ok(aircraft_model)
+    }
 }
