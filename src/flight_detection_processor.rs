@@ -145,11 +145,60 @@ impl FlightDetectionProcessor {
         }
     }
 
+    /// Create a new flight for aircraft already airborne (no takeoff data)
+    async fn create_airborne_flight(&self, device_address: &str, fix: &Fix) -> Result<Uuid> {
+        let mut flight = Flight::new_airborne(device_address.to_string());
+        flight.device_address_type = fix.address_type.unwrap_or(AddressType::Unknown);
+        // No departure airport since we don't know where they took off from
+
+        let flight_id = flight.id;
+
+        match self.flights_repo.create_flight(flight).await {
+            Ok(_) => {
+                info!(
+                    "Created airborne flight {} for aircraft {} (first seen at {:.6}, {:.6})",
+                    flight_id,
+                    device_address,
+                    fix.latitude,
+                    fix.longitude
+                );
+
+                // Update existing fixes for this device to associate them with the new flight
+                // Use a time range from 10 minutes ago to now to catch recent fixes
+                let lookback_time = fix.timestamp - chrono::Duration::minutes(10);
+                if let Err(e) = self
+                    .fixes_repo
+                    .update_flight_id_by_device_and_time(
+                        device_address,
+                        flight_id,
+                        lookback_time,
+                        None, // No end time - update all fixes from lookback_time onward
+                    )
+                    .await
+                {
+                    warn!(
+                        "Failed to update existing fixes with flight_id {} for aircraft {}: {}",
+                        flight_id, device_address, e
+                    );
+                }
+
+                Ok(flight_id)
+            }
+            Err(e) => {
+                error!(
+                    "Failed to create airborne flight for aircraft {}: {}",
+                    device_address, e
+                );
+                Err(e)
+            }
+        }
+    }
+
     /// Create a new flight for takeoff
     async fn create_flight(&self, device_address: &str, fix: &Fix) -> Result<Uuid> {
         let departure_airport = self.find_nearby_airport(fix.latitude, fix.longitude).await;
 
-        let mut flight = Flight::new(device_address.to_string(), fix.timestamp);
+        let mut flight = Flight::new_with_takeoff(device_address.to_string(), fix.timestamp);
         flight.device_address_type = fix.address_type.unwrap_or(AddressType::Unknown);
         flight.departure_airport = departure_airport.clone();
 
@@ -321,8 +370,19 @@ impl FlightDetectionProcessor {
 
             if new_state == AircraftState::Active {
                 debug!("New in-flight aircraft detected: {}", device_address);
-                // Do NOT create a flight - we're catching an aircraft already in flight
-                // A flight will be created later when it lands and takes off again
+                // Create a flight for aircraft already airborne, but without takeoff data
+                match self.create_airborne_flight(device_address, fix).await {
+                    Ok(flight_id) => {
+                        new_tracker.current_flight_id = Some(flight_id);
+                        info!(
+                            "Created airborne flight {} for aircraft {} (no takeoff data)",
+                            flight_id, device_address
+                        );
+                    }
+                    Err(e) => {
+                        warn!("Failed to create airborne flight for {}: {}", device_address, e);
+                    }
+                }
             }
 
             let mut trackers = self.aircraft_trackers.write().await;

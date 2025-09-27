@@ -8,6 +8,7 @@ use crate::aircraft_registrations_repo::AircraftRegistrationsRepository;
 use crate::device_repo::DeviceRepository;
 use crate::fixes;
 use crate::fixes_repo::{AircraftTypeOgn, FixesRepository};
+use crate::nats_publisher::NatsFixPublisher;
 use crate::{Fix, FixHandler};
 use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
@@ -17,6 +18,7 @@ pub struct FixProcessor {
     fixes_repo: FixesRepository,
     device_repo: DeviceRepository,
     aircraft_registrations_repo: AircraftRegistrationsRepository,
+    nats_publisher: Option<NatsFixPublisher>,
     /// Cache to track tow plane status updates to avoid unnecessary database calls
     /// Maps device_id -> (aircraft_type, is_tow_plane_in_db)
     tow_plane_cache: Arc<RwLock<HashMap<Uuid, (AircraftTypeOgn, bool)>>>,
@@ -28,8 +30,25 @@ impl FixProcessor {
             fixes_repo: FixesRepository::new(diesel_pool.clone()),
             device_repo: DeviceRepository::new(diesel_pool.clone()),
             aircraft_registrations_repo: AircraftRegistrationsRepository::new(diesel_pool),
+            nats_publisher: None,
             tow_plane_cache: Arc::new(RwLock::new(HashMap::new())),
         }
+    }
+
+    /// Create a new FixProcessor with NATS publisher
+    pub async fn new_with_nats(
+        diesel_pool: Pool<ConnectionManager<PgConnection>>,
+        nats_url: &str,
+    ) -> anyhow::Result<Self> {
+        let nats_publisher = NatsFixPublisher::new(nats_url, diesel_pool.clone()).await?;
+
+        Ok(Self {
+            fixes_repo: FixesRepository::new(diesel_pool.clone()),
+            device_repo: DeviceRepository::new(diesel_pool.clone()),
+            aircraft_registrations_repo: AircraftRegistrationsRepository::new(diesel_pool),
+            nats_publisher: Some(nats_publisher),
+            tow_plane_cache: Arc::new(RwLock::new(HashMap::new())),
+        })
     }
 
     /// Update tow plane status based on aircraft type from fix (static version for use in async spawned task)
@@ -91,6 +110,7 @@ impl FixHandler for FixProcessor {
             let device_repo = self.device_repo.clone();
             let fixes_repo = self.fixes_repo.clone();
             let aircraft_registrations_repo = self.aircraft_registrations_repo.clone();
+            let nats_publisher = self.nats_publisher.clone();
             let tow_plane_cache = self.tow_plane_cache.clone();
             let raw_message = raw_message.to_string();
             let fix_clone = fix.clone();
@@ -113,6 +133,11 @@ impl FixHandler for FixProcessor {
                                     "Successfully saved fix to database for aircraft {}",
                                     fix_clone.device_address_hex()
                                 );
+
+                                // Publish to NATS if publisher is available
+                                if let Some(nats_publisher) = nats_publisher.as_ref() {
+                                    nats_publisher.process_fix(fix_clone.clone(), &raw_message);
+                                }
                             }
                             Err(e) => {
                                 error!(

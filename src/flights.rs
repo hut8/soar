@@ -12,14 +12,17 @@ pub struct Flight {
     /// Unique identifier for this flight
     pub id: Uuid,
 
-    /// Device address (hex ID like "39D304")
+    /// Device UUID (foreign key to devices table)
+    pub device_id: Option<Uuid>,
+
+    /// Device address (hex ID like "39D304") - kept for compatibility
     pub device_address: String,
 
-    /// Device address type (ICAO, FLARM, OGN, etc.)
+    /// Device address type (ICAO, FLARM, OGN, etc.) - kept for compatibility
     pub device_address_type: AddressType,
 
-    /// Takeoff time (required)
-    pub takeoff_time: DateTime<Utc>,
+    /// Takeoff time (optional - null for flights first seen airborne)
+    pub takeoff_time: Option<DateTime<Utc>>,
 
     /// Landing time (optional - null for flights in progress)
     pub landing_time: Option<DateTime<Utc>>,
@@ -47,10 +50,11 @@ pub struct Flight {
 
 impl Flight {
     /// Create a new flight with takeoff time
-    pub fn new(device_address: String, takeoff_time: DateTime<Utc>) -> Self {
+    pub fn new(device_address: String, takeoff_time: Option<DateTime<Utc>>) -> Self {
         let now = Utc::now();
         Self {
             id: Uuid::new_v4(),
+            device_id: None,
             device_address,
             device_address_type: AddressType::Unknown,
             takeoff_time,
@@ -65,15 +69,30 @@ impl Flight {
         }
     }
 
+    /// Create a new flight for device already airborne (no takeoff time)
+    pub fn new_airborne(device_address: String) -> Self {
+        Self::new(device_address, None)
+    }
+
+    /// Create a new flight with known takeoff time
+    pub fn new_with_takeoff(device_address: String, takeoff_time: DateTime<Utc>) -> Self {
+        Self::new(device_address, Some(takeoff_time))
+    }
+
     /// Check if the flight is still in progress (no landing time)
     pub fn is_in_progress(&self) -> bool {
         self.landing_time.is_none()
     }
 
     /// Get flight duration if landed, otherwise duration from takeoff to now
-    pub fn duration(&self) -> chrono::Duration {
-        let end_time = self.landing_time.unwrap_or_else(Utc::now);
-        end_time - self.takeoff_time
+    /// Returns None if no takeoff time is known
+    pub fn duration(&self) -> Option<chrono::Duration> {
+        if let Some(takeoff_time) = self.takeoff_time {
+            let end_time = self.landing_time.unwrap_or_else(Utc::now);
+            Some(end_time - takeoff_time)
+        } else {
+            None
+        }
     }
 
     /// Check if this flight used a tow plane
@@ -88,7 +107,7 @@ impl Flight {
         fixes_repo: &crate::fixes_repo::FixesRepository,
     ) -> Result<String> {
         // Get all fixes for this flight based on aircraft ID and time range
-        let start_time = self.takeoff_time;
+        let start_time = self.takeoff_time.unwrap_or(self.created_at);
         let end_time = self.landing_time.unwrap_or_else(Utc::now);
 
         let fixes = fixes_repo
@@ -260,7 +279,7 @@ impl Flight {
 pub struct FlightModel {
     pub id: Uuid,
     pub device_address: String,
-    pub takeoff_time: DateTime<Utc>,
+    pub takeoff_time: Option<DateTime<Utc>>,
     pub landing_time: Option<DateTime<Utc>>,
     pub departure_airport: Option<String>,
     pub arrival_airport: Option<String>,
@@ -270,6 +289,7 @@ pub struct FlightModel {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub device_address_type: AddressType,
+    pub device_id: Option<Uuid>,
 }
 
 /// Insert model for new flights
@@ -278,7 +298,7 @@ pub struct FlightModel {
 pub struct NewFlightModel {
     pub id: Uuid,
     pub device_address: String,
-    pub takeoff_time: DateTime<Utc>,
+    pub takeoff_time: Option<DateTime<Utc>>,
     pub landing_time: Option<DateTime<Utc>>,
     pub departure_airport: Option<String>,
     pub arrival_airport: Option<String>,
@@ -286,6 +306,7 @@ pub struct NewFlightModel {
     pub tow_release_height_msl: Option<i32>,
     pub club_id: Option<Uuid>,
     pub device_address_type: AddressType,
+    pub device_id: Option<Uuid>,
 }
 
 /// Conversion from Flight (API model) to FlightModel (database model)
@@ -304,6 +325,7 @@ impl From<Flight> for FlightModel {
             club_id: flight.club_id,
             created_at: flight.created_at,
             updated_at: flight.updated_at,
+            device_id: flight.device_id,
         }
     }
 }
@@ -322,6 +344,7 @@ impl From<Flight> for NewFlightModel {
             tow_aircraft_id: flight.tow_aircraft_id,
             tow_release_height_msl: flight.tow_release_height_msl,
             club_id: flight.club_id,
+            device_id: flight.device_id,
         }
     }
 }
@@ -331,6 +354,7 @@ impl From<FlightModel> for Flight {
     fn from(model: FlightModel) -> Self {
         Self {
             id: model.id,
+            device_id: model.device_id,
             device_address: model.device_address,
             device_address_type: model.device_address_type,
             takeoff_time: model.takeoff_time,

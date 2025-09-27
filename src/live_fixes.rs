@@ -30,7 +30,10 @@ pub struct LiveFixService {
 
 impl LiveFixService {
     pub async fn new(nats_url: &str) -> Result<Self> {
-        let nats_client = async_nats::connect(nats_url).await?;
+        let nats_client = async_nats::ConnectOptions::new()
+            .name("soar-web")
+            .connect(nats_url)
+            .await?;
         let broadcasters = Arc::new(RwLock::new(HashMap::new()));
 
         Ok(Self {

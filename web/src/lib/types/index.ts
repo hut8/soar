@@ -114,6 +114,22 @@ export interface Fix {
 	flight_id?: string;
 }
 
+export interface Flight {
+	id: string;
+	device_id?: string; // UUID foreign key to devices table
+	device_address: string; // Hex format like "39D304" - kept for compatibility
+	device_address_type: string; // F, O, I, or empty string - kept for compatibility
+	takeoff_time?: string; // ISO datetime string - null for flights first seen airborne
+	landing_time?: string; // ISO datetime string - null for flights in progress
+	departure_airport?: string; // Airport identifier
+	arrival_airport?: string; // Airport identifier
+	tow_aircraft_id?: string; // Registration number of tow aircraft
+	tow_release_height_msl?: number; // Tow release height in meters MSL
+	club_id?: string; // UUID of club that owns the aircraft
+	created_at: string; // ISO datetime string
+	updated_at: string; // ISO datetime string
+}
+
 export interface WatchlistEntry {
 	id: string;
 	device: Device;

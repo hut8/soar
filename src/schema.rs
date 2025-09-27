@@ -290,7 +290,7 @@ diesel::table! {
         id -> Uuid,
         #[max_length = 20]
         device_address -> Varchar,
-        takeoff_time -> Timestamptz,
+        takeoff_time -> Nullable<Timestamptz>,
         landing_time -> Nullable<Timestamptz>,
         #[max_length = 10]
         departure_airport -> Nullable<Varchar>,
@@ -303,6 +303,7 @@ diesel::table! {
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
         device_address_type -> AddressType,
+        device_id -> Nullable<Uuid>,
     }
 }
 
@@ -540,6 +541,7 @@ diesel::joinable!(fixes -> devices (device_id));
 diesel::joinable!(fixes -> flights (flight_id));
 diesel::joinable!(flights -> aircraft_registrations (tow_aircraft_id));
 diesel::joinable!(flights -> clubs (club_id));
+diesel::joinable!(flights -> devices (device_id));
 diesel::joinable!(receiver_statuses -> receivers (receiver_id));
 diesel::joinable!(receivers_links -> receivers (receiver_id));
 diesel::joinable!(receivers_photos -> receivers (receiver_id));
