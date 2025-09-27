@@ -11,7 +11,8 @@ pub enum AddressType {
     OgnTracker,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, DbEnum, Serialize, Deserialize)]
+#[db_enum(existing_type_path = "crate::schema::sql_types::AircraftTypeOgn")]
 pub enum AircraftType {
     Reserved,
     Glider,

@@ -43,7 +43,7 @@ impl LiveFixService {
     }
 
     pub async fn start_listening(&self) -> Result<()> {
-        let mut subscriber = self.nats_client.subscribe("fixes.live.*").await?;
+        let mut subscriber = self.nats_client.subscribe("aircraft.fix.*").await?;
         let broadcasters = self.broadcasters.clone();
 
         tokio::spawn(async move {
@@ -59,23 +59,41 @@ impl LiveFixService {
     }
 
     async fn handle_nats_message(msg: Message, broadcasters: &FixBroadcaster) -> Result<()> {
-        // Extract device ID from subject (e.g., "fixes.live.39D304")
+        // Extract device ID from subject (e.g., "aircraft.fix.uuid")
         let subject_parts: Vec<&str> = msg.subject.split('.').collect();
-        if subject_parts.len() != 3 || subject_parts[0] != "fixes" || subject_parts[1] != "live" {
+        if subject_parts.len() != 3 || subject_parts[0] != "aircraft" || subject_parts[1] != "fix" {
             warn!("Invalid subject format: {}", msg.subject);
             return Ok(());
         }
 
         let device_id = subject_parts[2].to_string();
 
-        // Parse the fix data
-        let live_fix: LiveFix = match serde_json::from_slice(&msg.payload) {
+        // Parse the full Fix data from NATS
+        let fix: crate::Fix = match serde_json::from_slice(&msg.payload) {
             Ok(fix) => fix,
             Err(e) => {
-                error!("Failed to parse live fix JSON: {}", e);
+                error!("Failed to parse fix JSON from NATS: {}", e);
                 return Ok(());
             }
         };
+
+        // Convert Fix to LiveFix for WebSocket clients
+        let live_fix = LiveFix {
+            id: fix.id.to_string(),
+            device_id: device_id.clone(),
+            timestamp: fix.timestamp.to_rfc3339(),
+            latitude: fix.latitude,
+            longitude: fix.longitude,
+            altitude: fix.altitude_feet.unwrap_or(0) as f64,
+            track: fix.track_degrees.unwrap_or(0.0) as f64,
+            ground_speed: fix.ground_speed_knots.unwrap_or(0.0) as f64,
+            climb_rate: fix.climb_fpm.unwrap_or(0) as f64,
+        };
+
+        info!(
+            "Processing live fix for device {} at ({}, {}) alt={}ft",
+            device_id, live_fix.latitude, live_fix.longitude, live_fix.altitude
+        );
 
         // Get or create broadcaster for this device
         let broadcaster = {
@@ -90,13 +108,16 @@ impl LiveFixService {
         };
 
         // Broadcast the fix to all subscribers
-        if let Err(e) = broadcaster.send(live_fix) {
-            // This error occurs when there are no receivers, which is normal
-            if !matches!(e, broadcast::error::SendError(_)) {
-                error!(
-                    "Failed to broadcast live fix for device {}: {}",
-                    device_id, e
+        match broadcaster.send(live_fix) {
+            Ok(receiver_count) => {
+                info!(
+                    "Broadcasted live fix for device {} to {} receivers",
+                    device_id, receiver_count
                 );
+            }
+            Err(broadcast::error::SendError(_)) => {
+                // This error occurs when there are no receivers, which is normal
+                info!("No active receivers for device {}, fix dropped", device_id);
             }
         }
 

@@ -176,6 +176,78 @@ impl From<&Fix> for NewFix {
     }
 }
 
+// Queryable struct for Diesel DSL queries (excluding geography column)
+#[derive(Queryable, Debug)]
+struct FixDslRow {
+    id: Uuid,
+    source: String,
+    destination: String,
+    via: Option<Vec<Option<String>>>,
+    raw_packet: String,
+    timestamp: DateTime<Utc>,
+    latitude: f64,
+    longitude: f64,
+    altitude_feet: Option<i32>,
+    device_address: Option<String>,
+    address_type: Option<AddressType>,
+    aircraft_type_ogn: Option<AircraftTypeOgn>,
+    flight_number: Option<String>,
+    emitter_category: Option<AdsbEmitterCategory>,
+    registration: Option<String>,
+    model: Option<String>,
+    squawk: Option<String>,
+    ground_speed_knots: Option<f32>,
+    track_degrees: Option<f32>,
+    climb_fpm: Option<i32>,
+    turn_rate_rot: Option<f32>,
+    snr_db: Option<f32>,
+    bit_errors_corrected: Option<i32>,
+    freq_offset_khz: Option<f32>,
+    club_id: Option<Uuid>,
+    flight_id: Option<Uuid>,
+    unparsed_data: Option<String>,
+    device_id: Option<Uuid>,
+    received_at: DateTime<Utc>,
+    lag: Option<i32>,
+}
+
+impl From<FixDslRow> for Fix {
+    fn from(row: FixDslRow) -> Self {
+        Self {
+            id: row.id,
+            source: row.source,
+            destination: row.destination,
+            via: row.via.unwrap_or_default().into_iter().flatten().collect(),
+            raw_packet: row.raw_packet,
+            timestamp: row.timestamp,
+            received_at: row.received_at,
+            lag: row.lag,
+            latitude: row.latitude,
+            longitude: row.longitude,
+            altitude_feet: row.altitude_feet,
+            device_address_hex: row.device_address,
+            address_type: row.address_type,
+            aircraft_type: row.aircraft_type_ogn.map(|t| t.into()),
+            flight_id: row.flight_id,
+            flight_number: row.flight_number,
+            emitter_category: row.emitter_category,
+            registration: row.registration,
+            model: row.model,
+            squawk: row.squawk,
+            ground_speed_knots: row.ground_speed_knots,
+            track_degrees: row.track_degrees,
+            climb_fpm: row.climb_fpm,
+            turn_rate_rot: row.turn_rate_rot,
+            snr_db: row.snr_db,
+            bit_errors_corrected: row.bit_errors_corrected.map(|b| b as u32),
+            freq_offset_khz: row.freq_offset_khz,
+            club_id: row.club_id,
+            unparsed_data: row.unparsed_data,
+            device_id: row.device_id,
+        }
+    }
+}
+
 // QueryableByName for complex queries with raw SQL
 #[derive(QueryableByName, Debug)]
 struct FixRow {
@@ -593,36 +665,56 @@ impl FixesRepository {
     /// Get recent fixes for an aircraft (without time range)
     pub async fn get_fixes_for_device(
         &self,
-        device_id: uuid::Uuid,
+        device_uuid: uuid::Uuid,
         limit: Option<i64>,
     ) -> Result<Vec<Fix>> {
-        let limit = limit.unwrap_or(100);
+        use crate::schema::fixes::dsl::*;
 
+        let limit = limit.unwrap_or(100);
         let pool = self.pool.clone();
+
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            let sql = r#"
-                SELECT
-                    id, source, destination, via, raw_packet, timestamp, received_at, lag,
-                    latitude, longitude, altitude_feet,
-                    device_address, device_id, address_type, aircraft_type,
-                    flight_number, emitter_category, registration, model, squawk,
-                    ground_speed_knots, track_degrees, climb_fpm, turn_rate_rot,
-                    snr_db, bit_errors_corrected, freq_offset_khz,
-                    club_id
-                FROM fixes
-                WHERE device_id = $1
-                ORDER BY timestamp DESC
-                LIMIT $2
-            "#;
+            let results = fixes
+                .filter(device_id.eq(device_uuid))
+                .order(timestamp.desc())
+                .limit(limit)
+                .select((
+                    id,
+                    source,
+                    destination,
+                    via,
+                    raw_packet,
+                    timestamp,
+                    latitude,
+                    longitude,
+                    altitude_feet,
+                    device_address,
+                    address_type,
+                    aircraft_type_ogn,
+                    flight_number,
+                    emitter_category,
+                    registration,
+                    model,
+                    squawk,
+                    ground_speed_knots,
+                    track_degrees,
+                    climb_fpm,
+                    turn_rate_rot,
+                    snr_db,
+                    bit_errors_corrected,
+                    freq_offset_khz,
+                    club_id,
+                    flight_id,
+                    unparsed_data,
+                    device_id,
+                    received_at,
+                    lag,
+                ))
+                .load::<FixDslRow>(&mut conn)?;
 
-            let results: Vec<FixRow> = sql_query(sql)
-                .bind::<diesel::sql_types::Uuid, _>(&device_id)
-                .bind::<diesel::sql_types::BigInt, _>(limit)
-                .load::<FixRow>(&mut conn)?;
-
-            Ok::<Vec<FixRow>, anyhow::Error>(results)
+            Ok::<Vec<FixDslRow>, anyhow::Error>(results)
         })
         .await??;
 
