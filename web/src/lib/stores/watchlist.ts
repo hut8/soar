@@ -26,7 +26,6 @@ let websocket: WebSocket | null = null;
 let websocketUrl = '';
 const currentlySubscribedDevices = new Set<string>();
 let reconnectAttempts = 0;
-const maxReconnectAttempts = 5;
 const reconnectDelay = 1000; // Start with 1 second
 let operationsPageActive = false; // Track if operations page is using live fixes
 
@@ -239,7 +238,7 @@ function connectWebSocket() {
 			currentlySubscribedDevices.clear();
 
 			// Attempt to reconnect if it wasn't a clean close
-			if (event.code !== 1000 && reconnectAttempts < maxReconnectAttempts) {
+			if (event.code !== 1000) {
 				attemptReconnect();
 			}
 		};
@@ -261,25 +260,15 @@ function connectWebSocket() {
 }
 
 function attemptReconnect() {
-	if (reconnectAttempts >= maxReconnectAttempts) {
-		console.log('Max reconnection attempts reached');
-		websocketStatus.update((status) => ({
-			...status,
-			reconnecting: false,
-			error: 'Max reconnection attempts reached'
-		}));
-		return;
-	}
-
 	reconnectAttempts++;
 	const delay = reconnectDelay * Math.pow(2, reconnectAttempts - 1); // Exponential backoff
 
-	console.log(`Attempting to reconnect in ${delay}ms (attempt ${reconnectAttempts}/${maxReconnectAttempts})`);
+	console.log(`Attempting to reconnect in ${delay}ms (attempt ${reconnectAttempts})`);
 
 	websocketStatus.update((status) => ({
 		...status,
 		reconnecting: true,
-		error: `Reconnecting... (${reconnectAttempts}/${maxReconnectAttempts})`
+		error: `Reconnecting... (${reconnectAttempts})`
 	}));
 
 	setTimeout(() => {
