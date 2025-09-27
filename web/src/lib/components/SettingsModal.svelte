@@ -2,6 +2,7 @@
 	import { Switch, Slider } from '@skeletonlabs/skeleton-svelte';
 	import { X } from '@lucide/svelte';
 	import { browser } from '$app/environment';
+	import { onMount } from 'svelte';
 
 	// Props
 	let { showModal = $bindable(), onSettingsChange } = $props();
@@ -73,8 +74,7 @@
 		}
 	}
 
-	// Load settings on mount
-	$effect(() => {
+	onMount(() => {
 		if (browser) {
 			loadSettings();
 			// Notify parent of initial settings
@@ -93,14 +93,14 @@
 <!-- Settings Modal -->
 {#if showModal}
 	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-surface-950-50/50"
+		class="bg-surface-950-50/50 fixed inset-0 z-50 flex items-center justify-center"
 		onclick={() => (showModal = false)}
 		onkeydown={(e) => e.key === 'Escape' && (showModal = false)}
 		tabindex="-1"
 		role="dialog"
 	>
 		<div
-			class="max-h-[80vh] w-full max-w-lg overflow-y-auto card bg-white p-4 text-gray-900 shadow-xl"
+			class="card max-h-[80vh] w-full max-w-lg overflow-y-auto bg-white p-4 text-gray-900 shadow-xl"
 			onclick={(e) => e.stopPropagation()}
 			onkeydown={(e) => e.key === 'Escape' && (showModal = false)}
 			role="dialog"
