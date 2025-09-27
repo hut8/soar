@@ -112,7 +112,7 @@ impl Flight {
 
         let fixes = fixes_repo
             .get_fixes_for_aircraft_with_time_range(
-                &self.device_address,
+                &self.device_id.unwrap_or(Uuid::nil()),
                 start_time,
                 end_time,
                 None,

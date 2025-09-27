@@ -11,7 +11,7 @@ use crate::ogn_aprs_aircraft::{AdsbEmitterCategory, AircraftType};
 
 /// A position fix representing an aircraft's location and associated data
 /// This is the unified domain entity for position updates and database storage
-#[derive(Debug, Clone, Serialize, Deserialize, Queryable, Selectable)]
+#[derive(Debug, Clone, Serialize, Deserialize, Queryable, Selectable, Insertable)]
 #[diesel(table_name = crate::schema::fixes)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct Fix {
@@ -36,8 +36,8 @@ pub struct Fix {
     pub altitude_feet: Option<i32>,
 
     /// Aircraft identification - canonically a 24-bit unsigned integer stored as i32 in DB
-    pub device_address: String, // NOT NULL in DB - hex string representation
-    pub address_type: AddressType, // NOT NULL in DB
+    pub device_address: i32,
+    pub address_type: AddressType,
     pub aircraft_type_ogn: Option<AircraftType>,
 
     /// Flight information
@@ -105,7 +105,7 @@ impl Fix {
                     .map(|c| c as f32);
 
                 // Initialize OGN-related fields
-                let mut device_address = "000000".to_string();
+                let mut device_address = 0i32;
                 let mut address_type = AddressType::Unknown;
                 let mut aircraft_type_ogn = None;
                 let flight_number = None;
@@ -122,7 +122,7 @@ impl Fix {
                 // Try to parse OGN parameters from comment
                 if let Some(ref id) = pos_packet.comment.id {
                     // Use pre-parsed ID information
-                    device_address = format!("{:06X}", id.address);
+                    device_address = id.address.as_();
                     address_type = match id.address_type {
                         0 => AddressType::Unknown,
                         1 => AddressType::Icao,
@@ -176,13 +176,8 @@ impl Fix {
 
     /// Convert device address string to canonical 6-character uppercase hex format
     /// The device address is canonically a 24-bit unsigned integer, but stored as hex string
-    pub fn device_address_hex(&self) -> &str {
-        &self.device_address
-    }
-
-    /// Parse device address hex string to integer (for compatibility)
-    pub fn device_address_as_u32(&self) -> Option<u32> {
-        u32::from_str_radix(&self.device_address, 16).ok()
+    pub fn device_address_hex(&self) -> String {
+        format!("{:06X}", self.device_address)
     }
 
     /// Get a human-readable aircraft identifier

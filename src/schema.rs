@@ -253,8 +253,6 @@ diesel::table! {
         longitude -> Float8,
         location -> Nullable<Geography>,
         altitude_feet -> Nullable<Int4>,
-        #[max_length = 10]
-        device_address -> Varchar,
         address_type -> AddressType,
         aircraft_type_ogn -> Nullable<AircraftTypeOgn>,
         #[max_length = 20]
@@ -279,6 +277,7 @@ diesel::table! {
         device_id -> Uuid,
         received_at -> Timestamptz,
         lag -> Nullable<Int4>,
+        device_address -> Int4,
     }
 }
 

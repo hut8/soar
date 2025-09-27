@@ -111,7 +111,7 @@ pub async fn get_flight_fixes(
 
     match fixes_repo
         .get_fixes_for_aircraft_with_time_range(
-            &flight.device_address,
+            &flight.device_id.unwrap_or(Uuid::nil()),
             start_time,
             end_time,
             None, // No limit

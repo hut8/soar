@@ -941,7 +941,7 @@ impl AircraftPositionProcessor {
             let received_at = chrono::Utc::now();
             match Fix::from_aprs_packet(packet.clone(), received_at) {
                 Ok(Some(fix)) => {
-                    fix_proc.process_fix(fix, packet.raw.unwrap_or_default().as_str());
+                    fix_proc.process_fix(fix, &packet.raw.clone().unwrap_or_default());
                 }
                 Ok(None) => {
                     trace!("No position fix extracted from aircraft packet");
@@ -957,8 +957,7 @@ impl AircraftPositionProcessor {
             let received_at = chrono::Utc::now();
             match Fix::from_aprs_packet(packet.clone(), received_at) {
                 Ok(Some(fix)) => {
-                    let raw_message = format!("{:?}", packet); // Placeholder for raw message
-                    flight_proc.process_fix(fix, &packet.raw.unwrap_or_default().as_str());
+                    flight_proc.process_fix(fix, &packet.raw.clone().unwrap_or_default());
                 }
                 Ok(None) => {
                     trace!("No position fix extracted from aircraft packet for flight detection");
