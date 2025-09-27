@@ -76,9 +76,11 @@ impl Fix {
     /// Returns Ok(None) if the packet doesn't represent a position fix
     /// Returns Ok(Some(fix)) for valid position fixes
     /// Returns Err for parsing failures
+    /// Note: device_id must be provided as it should be looked up from device_address/address_type
     pub fn from_aprs_packet(
         packet: AprsPacket,
         received_at: DateTime<Utc>,
+        device_id: Uuid,
     ) -> Result<Option<Self>> {
         // For now, use received_at as the packet timestamp
         let timestamp = received_at;
@@ -162,7 +164,7 @@ impl Fix {
                     club_id: None,   // To be set by processors
                     flight_id: None, // Will be set by flight detection processor
                     unparsed_data: pos_packet.comment.unparsed.clone(),
-                    device_id: Uuid::new_v4(), // Temporary - will be set by repository based on device address
+                    device_id,
                     received_at,
                     lag,
                 }))

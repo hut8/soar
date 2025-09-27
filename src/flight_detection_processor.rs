@@ -11,7 +11,7 @@ use crate::devices::AddressType;
 use crate::fixes_repo::FixesRepository;
 use crate::flights::Flight;
 use crate::flights_repo::FlightsRepository;
-use crate::{Fix, FixHandler};
+use crate::Fix;
 use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
 
@@ -156,8 +156,9 @@ impl FlightDetectionProcessor {
     }
 
     /// Create a new flight for aircraft already airborne (no takeoff data)
-    async fn create_airborne_flight(&self, device_id: &uuid::Uuid, fix: &Fix) -> Result<Uuid> {
-        let mut flight = Flight::new_airborne(device_id.to_string());
+    async fn create_airborne_flight(&self, fix: &Fix) -> Result<Uuid> {
+        info!("Creating airborne flight from fix: {:?}", fix);
+        let mut flight = Flight::new_airborne_from_fix(fix);
         flight.device_address_type = fix.address_type;
         // No departure airport since we don't know where they took off from
 
@@ -205,10 +206,10 @@ impl FlightDetectionProcessor {
     }
 
     /// Create a new flight for takeoff
-    async fn create_flight(&self, device_id: &uuid::Uuid, fix: &Fix) -> Result<Uuid> {
+    async fn create_flight(&self, fix: &Fix) -> Result<Uuid> {
         let departure_airport = self.find_nearby_airport(fix.latitude, fix.longitude).await;
 
-        let mut flight = Flight::new_with_takeoff(device_id.to_string(), fix.timestamp);
+        let mut flight = Flight::new_with_takeoff_from_fix(fix, fix.timestamp);
         flight.device_address_type = fix.address_type;
         flight.departure_airport = departure_airport.clone();
 
@@ -235,7 +236,7 @@ impl FlightDetectionProcessor {
                 if let Err(e) = self
                     .fixes_repo
                     .update_flight_id_by_device_and_time(
-                        *device_id,
+                        fix.device_id,
                         flight_id,
                         lookback_time,
                         None, // No end time - update all fixes from lookback_time onward
@@ -290,13 +291,13 @@ impl FlightDetectionProcessor {
         }
     }
 
-    /// Process state transition for an aircraft
-    async fn process_state_transition(&self, device_id: &uuid::Uuid, fix: &Fix) -> Result<()> {
+    /// Process state transition for an aircraft and return updated fix with flight_id
+    async fn process_state_transition(&self, mut fix: Fix) -> Result<Fix> {
         // Determine the new state first
         let should_be_active = {
             let trackers = self.aircraft_trackers.read().await;
-            match trackers.get(device_id) {
-                Some(tracker) => tracker.should_be_active(fix),
+            match trackers.get(&fix.device_id) {
+                Some(tracker) => tracker.should_be_active(&fix),
                 None => {
                     // New aircraft - determine initial state
                     let ground_speed = fix.ground_speed_knots.unwrap_or(0.0);
@@ -314,7 +315,7 @@ impl FlightDetectionProcessor {
         // Check if this is an existing aircraft and get the old state
         let (is_existing, old_state, current_flight_id) = {
             let trackers = self.aircraft_trackers.read().await;
-            match trackers.get(device_id) {
+            match trackers.get(&fix.device_id) {
                 Some(tracker) => (true, tracker.state.clone(), tracker.current_flight_id),
                 None => (false, AircraftState::Idle, None), // Default values for new aircraft
             }
@@ -326,11 +327,12 @@ impl FlightDetectionProcessor {
                 (AircraftState::Idle, AircraftState::Active) => {
                     // Takeoff detected
                     debug!("Takeoff detected for aircraft {}", format_device_address_with_type(fix.device_address_hex().as_ref(), fix.address_type));
-                    match self.create_flight(device_id, fix).await {
+                    match self.create_flight(&fix).await {
                         Ok(flight_id) => {
+                            fix.flight_id = Some(flight_id);
                             let mut trackers = self.aircraft_trackers.write().await;
-                            if let Some(tracker) = trackers.get_mut(device_id) {
-                                tracker.update_position(fix);
+                            if let Some(tracker) = trackers.get_mut(&fix.device_id) {
+                                tracker.update_position(&fix);
                                 tracker.current_flight_id = Some(flight_id);
                                 tracker.state = new_state;
                             }
@@ -339,8 +341,8 @@ impl FlightDetectionProcessor {
                             warn!("Failed to create flight for takeoff: {}", e);
                             // Still update position and state even if flight creation failed
                             let mut trackers = self.aircraft_trackers.write().await;
-                            if let Some(tracker) = trackers.get_mut(device_id) {
-                                tracker.update_position(fix);
+                            if let Some(tracker) = trackers.get_mut(&fix.device_id) {
+                                tracker.update_position(&fix);
                                 tracker.state = new_state;
                             }
                         }
@@ -349,24 +351,30 @@ impl FlightDetectionProcessor {
                 (AircraftState::Active, AircraftState::Idle) => {
                     // Landing detected
                     debug!("Landing detected for aircraft {}", format_device_address_with_type(fix.device_address_hex().as_ref(), fix.address_type));
-                    if let Some(flight_id) = current_flight_id
-                        && let Err(e) = self.complete_flight(flight_id, fix).await
-                    {
-                        warn!("Failed to complete flight for landing: {}", e);
+                    if let Some(flight_id) = current_flight_id {
+                        // Keep the flight_id on the fix since it was part of this flight
+                        fix.flight_id = Some(flight_id);
+                        if let Err(e) = self.complete_flight(flight_id, &fix).await {
+                            warn!("Failed to complete flight for landing: {}", e);
+                        }
                     }
 
                     let mut trackers = self.aircraft_trackers.write().await;
                     if let Some(tracker) = trackers.get_mut(&fix.device_id) {
-                        tracker.update_position(fix);
+                        tracker.update_position(&fix);
                         tracker.current_flight_id = None;
                         tracker.state = new_state;
                     }
                 }
                 _ => {
                     // No state change, just update position
+                    // If there's an ongoing flight, keep its flight_id
+                    if let Some(flight_id) = current_flight_id {
+                        fix.flight_id = Some(flight_id);
+                    }
                     let mut trackers = self.aircraft_trackers.write().await;
                     if let Some(tracker) = trackers.get_mut(&fix.device_id) {
-                        tracker.update_position(fix);
+                        tracker.update_position(&fix);
                         tracker.state = new_state;
                     }
                 }
@@ -376,13 +384,14 @@ impl FlightDetectionProcessor {
             // For aircraft first seen in Active state, just track them without creating a flight
             // A flight will be created later when they transition from active→idle→active (true takeoff)
             let mut new_tracker = AircraftTracker::new(new_state.clone());
-            new_tracker.update_position(fix);
+            new_tracker.update_position(&fix);
 
             if new_state == AircraftState::Active {
                 debug!("New in-flight aircraft detected: {}", format_device_address_with_type(fix.device_address_hex().as_ref(), fix.address_type));
                 // Create a flight for aircraft already airborne, but without takeoff data
-                match self.create_airborne_flight(&fix.device_id, fix).await {
+                match self.create_airborne_flight(&fix).await {
                     Ok(flight_id) => {
+                        fix.flight_id = Some(flight_id);
                         new_tracker.current_flight_id = Some(flight_id);
                         info!(
                             "Created airborne flight {} for aircraft {} (no takeoff data)",
@@ -390,7 +399,7 @@ impl FlightDetectionProcessor {
                         );
                     }
                     Err(e) => {
-                        warn!("Failed to create airborne flight for {}: {}", format_device_address_with_type(fix.device_address_hex().as_ref(), fix.address_type), e);
+                        warn!("Failed to create airborne flight for {}: {}", fix.device_id, e);
                     }
                 }
             }
@@ -403,7 +412,7 @@ impl FlightDetectionProcessor {
             );
         }
 
-        Ok(())
+        Ok(fix)
     }
 
     /// Clean up old trackers for aircraft that haven't been seen recently
@@ -428,8 +437,10 @@ impl FlightDetectionProcessor {
     }
 }
 
-impl FixHandler for FlightDetectionProcessor {
-    fn process_fix(&self, fix: Fix, _raw_message: &str) {
+impl FlightDetectionProcessor {
+    /// Process a fix and return it with updated flight_id
+    /// This replaces the old FixHandler::process_fix method
+    pub async fn process_fix(&self, fix: Fix) -> Option<Fix> {
         // Check for duplicate fixes first (within 1 second)
         let is_duplicate = {
             let trackers_read = self.aircraft_trackers.try_read();
@@ -450,7 +461,7 @@ impl FixHandler for FlightDetectionProcessor {
                 "Discarding duplicate fix for aircraft {} (less than 1 second from previous)",
                 fix.device_id
             );
-            return;
+            return None;
         }
 
         trace!(
@@ -458,27 +469,26 @@ impl FixHandler for FlightDetectionProcessor {
             fix.device_id, fix.latitude, fix.longitude, fix.ground_speed_knots
         );
 
-        // Clone self for async processing
-        let processor = self.clone();
-
-        tokio::spawn(async move {
-            if let Err(e) = processor
-                .process_state_transition(&fix.device_id, &fix)
-                .await
-            {
+        // Process state transition and return updated fix
+        let fix_device_address = fix.device_address; // Store for error logging
+        match self.process_state_transition(fix).await {
+            Ok(updated_fix) => {
+                // Periodically clean up old trackers (roughly every 1000 fixes)
+                if rand::random::<u16>().is_multiple_of(1000) {
+                    let processor = self.clone();
+                    tokio::spawn(async move {
+                        processor.cleanup_old_trackers().await;
+                    });
+                }
+                Some(updated_fix)
+            }
+            Err(e) => {
                 error!(
                     "Failed to process state transition for aircraft {}: {}",
-                    fix.device_address, e
+                    fix_device_address, e
                 );
+                None
             }
-        });
-
-        // Periodically clean up old trackers (roughly every 1000 fixes)
-        if rand::random::<u16>().is_multiple_of(1000) {
-            let processor = self.clone();
-            tokio::spawn(async move {
-                processor.cleanup_old_trackers().await;
-            });
         }
     }
 }

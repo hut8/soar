@@ -1,4 +1,4 @@
-use crate::Fix;
+use crate::fix_processor::FixProcessor;
 use crate::flight_detection_processor::FlightDetectionProcessor;
 use crate::receiver_status_repo::ReceiverStatusRepository;
 use crate::receiver_statuses::NewReceiverStatus;
@@ -50,15 +50,6 @@ pub trait PacketHandler: Send + Sync + std::any::Any {
     fn as_any(&self) -> &dyn std::any::Any;
 }
 
-/// Trait for processing position fixes extracted from APRS messages
-pub trait FixHandler: Send + Sync {
-    /// Process a position fix
-    ///
-    /// # Arguments
-    /// * `fix` - The position fix extracted from an APRS packet
-    /// * `raw_message` - The raw APRS message that generated this fix
-    fn process_fix(&self, fix: Fix, raw_message: &str);
-}
 
 /// Trait for processing APRS position messages
 pub trait PositionProcessor: Send + Sync {
@@ -87,7 +78,7 @@ pub struct AprsProcessors {
     /// Processor for general APRS packets and raw message handling
     pub packet_processor: Arc<dyn PacketHandler>,
     /// Optional processor for position fixes (backward compatibility)
-    pub fix_processor: Option<Arc<dyn FixHandler>>,
+    pub fix_processor: Option<FixProcessor>,
     /// Optional processor for position messages
     pub position_processor: Option<Arc<dyn PositionProcessor>>,
     /// Optional processor for status messages
@@ -114,7 +105,7 @@ impl AprsProcessors {
     /// Create a new AprsProcessors with packet and fix processors
     pub fn with_fix_processor(
         packet_processor: Arc<dyn PacketHandler>,
-        fix_processor: Arc<dyn FixHandler>,
+        fix_processor: FixProcessor,
     ) -> Self {
         Self {
             packet_processor,
@@ -141,7 +132,7 @@ impl AprsProcessors {
     /// Create a new AprsProcessors with all processor types
     pub fn with_all_processors(
         packet_processor: Arc<dyn PacketHandler>,
-        fix_processor: Option<Arc<dyn FixHandler>>,
+        fix_processor: Option<FixProcessor>,
         position_processor: Option<Arc<dyn PositionProcessor>>,
         status_processor: Option<Arc<dyn StatusProcessor>>,
     ) -> Self {
@@ -154,7 +145,7 @@ impl AprsProcessors {
     }
 
     /// Add a fix processor to existing processors
-    pub fn add_fix_processor(mut self, fix_processor: Arc<dyn FixHandler>) -> Self {
+    pub fn add_fix_processor(mut self, fix_processor: FixProcessor) -> Self {
         self.fix_processor = Some(fix_processor);
         self
     }
@@ -609,20 +600,9 @@ impl AprsClient {
 
                 // Process with fix processor if available (backward compatibility)
                 // Only process aircraft position sources for fixes
-                if let Some(fix_proc) = &processors.fix_processor {
+                if let Some(ref fix_proc) = processors.fix_processor {
                     if packet.position_source_type() == PositionSourceType::Aircraft {
-                        let received_at = chrono::Utc::now();
-                        match Fix::from_aprs_packet(packet.clone(), received_at) {
-                            Ok(Some(fix)) => {
-                                fix_proc.process_fix(fix, message);
-                            }
-                            Ok(None) => {
-                                trace!("No position fix in APRS position packet");
-                            }
-                            Err(e) => {
-                                debug!("Failed to extract fix from APRS position packet: {}", e);
-                            }
-                        }
+                        fix_proc.process_aprs_packet(packet.clone(), message);
                     } else {
                         trace!(
                             "Skipping fix processing for non-aircraft position source: {:?}",
@@ -899,7 +879,7 @@ impl PositionPacketProcessor {
 /// Processor for handling aircraft position packets
 pub struct AircraftPositionProcessor {
     /// Fix processor for database storage
-    fix_processor: Option<Arc<dyn FixHandler>>,
+    fix_processor: Option<FixProcessor>,
     /// Flight detection processor for flight tracking
     flight_detection_processor: Option<Arc<FlightDetectionProcessor>>,
 }
@@ -920,7 +900,7 @@ impl AircraftPositionProcessor {
     }
 
     /// Add a fix processor for database storage
-    pub fn with_fix_processor(mut self, processor: Arc<dyn FixHandler>) -> Self {
+    pub fn with_fix_processor(mut self, processor: FixProcessor) -> Self {
         self.fix_processor = Some(processor);
         self
     }
@@ -936,40 +916,15 @@ impl AircraftPositionProcessor {
 
     /// Process an aircraft position packet
     pub fn process_aircraft_position(&self, packet: &AprsPacket) {
+        let raw_message = packet.raw.clone().unwrap_or_default();
+
         // Convert to Fix and process with fix processor if available
-        if let Some(fix_proc) = &self.fix_processor {
-            let received_at = chrono::Utc::now();
-            match Fix::from_aprs_packet(packet.clone(), received_at) {
-                Ok(Some(fix)) => {
-                    fix_proc.process_fix(fix, &packet.raw.clone().unwrap_or_default());
-                }
-                Ok(None) => {
-                    trace!("No position fix extracted from aircraft packet");
-                }
-                Err(e) => {
-                    debug!("Failed to extract fix from aircraft packet: {}", e);
-                }
-            }
+        if let Some(ref fix_proc) = self.fix_processor {
+            fix_proc.process_aprs_packet(packet.clone(), &raw_message);
         }
 
-        // Process with flight detection processor if available
-        if let Some(flight_proc) = &self.flight_detection_processor {
-            let received_at = chrono::Utc::now();
-            match Fix::from_aprs_packet(packet.clone(), received_at) {
-                Ok(Some(fix)) => {
-                    flight_proc.process_fix(fix, &packet.raw.clone().unwrap_or_default());
-                }
-                Ok(None) => {
-                    trace!("No position fix extracted from aircraft packet for flight detection");
-                }
-                Err(e) => {
-                    debug!(
-                        "Failed to extract fix from aircraft packet for flight detection: {}",
-                        e
-                    );
-                }
-            }
-        }
+        // Note: The flight detection processor is now handled inside FixProcessor
+        // so we don't need to call it separately here anymore
     }
 }
 

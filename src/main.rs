@@ -7,15 +7,13 @@ use soar::pull;
 use std::env;
 use std::fs;
 use std::path::Path;
-use std::sync::Arc;
 use tracing::{info, warn};
 
 use soar::aprs_client::{
-    AircraftPositionProcessor, AprsClient, AprsClientConfigBuilder, FixHandler, PacketRouter,
+    AircraftPositionProcessor, AprsClient, AprsClientConfigBuilder, PacketRouter,
     PositionPacketProcessor, ServerStatusProcessor,
 };
 use soar::fix_processor::FixProcessor;
-use soar::flight_detection_processor::FlightDetectionProcessor;
 use soar::live_fixes::LiveFixService;
 use soar::server_messages_repo::ServerMessagesRepository;
 
@@ -314,28 +312,25 @@ async fn handle_run(
 
     // Create database fix processor to save all valid fixes to the database
     // Try to create with NATS first, fall back to without NATS if connection fails
-    let fix_processor: Arc<dyn FixHandler> = match FixProcessor::new_with_nats(diesel_pool.clone(), &nats_url).await {
+    let fix_processor = match FixProcessor::new_with_nats(diesel_pool.clone(), &nats_url).await {
         Ok(processor_with_nats) => {
             info!("Created FixProcessor with NATS publisher");
-            Arc::new(processor_with_nats)
+            processor_with_nats
         },
         Err(e) => {
             warn!("Failed to create FixProcessor with NATS ({}), falling back to processor without NATS", e);
-            Arc::new(FixProcessor::new(diesel_pool.clone()))
+            FixProcessor::new(diesel_pool.clone())
         }
     };
-
-    // Create flight detection processor for tracking flight states
-    let flight_detection_processor = Arc::new(FlightDetectionProcessor::new(&diesel_pool));
 
     // Create server status processor for server messages
     let server_messages_repo = ServerMessagesRepository::new(diesel_pool.clone());
     let server_status_processor = ServerStatusProcessor::new(server_messages_repo);
 
     // Create aircraft position processor
+    // Note: FlightDetectionProcessor is now handled inside FixProcessor
     let aircraft_position_processor = AircraftPositionProcessor::new()
-        .with_fix_processor(fix_processor.clone())
-        .with_flight_detection_processor(flight_detection_processor);
+        .with_fix_processor(fix_processor.clone());
 
     // Create position packet processor
     let position_processor =

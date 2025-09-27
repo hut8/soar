@@ -50,7 +50,7 @@ pub mod web;
 
 pub use aprs_client::{
     AircraftPositionProcessor, AprsClient, AprsClientConfig, AprsClientConfigBuilder,
-    AprsProcessors, FixHandler, PacketHandler, PacketRouter, PositionPacketProcessor,
+    AprsProcessors, PacketHandler, PacketRouter, PositionPacketProcessor,
     PositionProcessor, ReceiverStatusProcessor, ServerStatusProcessor, StatusProcessor,
 };
 pub use nats_publisher::NatsFixPublisher;
