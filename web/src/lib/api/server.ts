@@ -16,35 +16,35 @@ export class ServerError extends Error {
 type FromJSON<T> = { fromJSON(data: unknown): T };
 
 export async function serverCall<T>(
-  endpoint: string,
-  options: RequestInit = {},
-  cls?: FromJSON<T>
+	endpoint: string,
+	options: RequestInit = {},
+	cls?: FromJSON<T>
 ): Promise<T> {
-  const response = await fetch(`${API_BASE}${endpoint}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  });
+	const response = await fetch(`${API_BASE}${endpoint}`, {
+		...options,
+		headers: {
+			'Content-Type': 'application/json',
+			...options.headers
+		}
+	});
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new ServerError(errorText || 'Request failed', response.status);
-  }
+	if (!response.ok) {
+		const errorText = await response.text();
+		throw new ServerError(errorText || 'Request failed', response.status);
+	}
 
-  if (response.status === 204) {
-    return {} as T;
-  }
+	if (response.status === 204) {
+		return {} as T;
+	}
 
-  const data = await response.json();
+	const data = await response.json();
 
-  if (!cls) return data as T;
+	if (!cls) return data as T;
 
-  // handle arrays or single objects
-  if (Array.isArray(data)) {
-    return data.map(item => cls.fromJSON(item)) as T;
-  }
+	// handle arrays or single objects
+	if (Array.isArray(data)) {
+		return data.map((item) => cls.fromJSON(item)) as T;
+	}
 
-  return cls.fromJSON(data);
+	return cls.fromJSON(data);
 }
