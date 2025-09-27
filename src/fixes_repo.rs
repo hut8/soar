@@ -327,11 +327,6 @@ impl From<FixRow> for Fix {
                 "icao_address" => Some(AddressType::Icao),
                 "flarm_id" => Some(AddressType::Flarm),
                 "ogn_tracker" => Some(AddressType::Ogn),
-                // Support legacy CamelCase values for backward compatibility during migration
-                "Unknown" => Some(AddressType::Unknown),
-                "Icao" => Some(AddressType::Icao),
-                "Flarm" => Some(AddressType::Flarm),
-                "OgnTracker" => Some(AddressType::Ogn),
                 _ => None,
             })
         }
@@ -339,36 +334,20 @@ impl From<FixRow> for Fix {
         fn parse_aircraft_type(s: Option<String>) -> Option<ForeignAircraftType> {
             s.and_then(|s| match s.as_str() {
                 "reserved" => Some(ForeignAircraftType::Reserved),
-                "Reserved0" => Some(ForeignAircraftType::Reserved), // Legacy compatibility
-                "ReservedE" => Some(ForeignAircraftType::Reserved), // Legacy compatibility
                 "glider" => Some(ForeignAircraftType::Glider),
-                "Glider" => Some(ForeignAircraftType::Glider), // Legacy compatibility
                 "tow_tug" => Some(ForeignAircraftType::TowTug),
-                "TowTug" => Some(ForeignAircraftType::TowTug), // Legacy compatibility
                 "helicopter_gyro" => Some(ForeignAircraftType::HelicopterGyro),
-                "HelicopterGyro" => Some(ForeignAircraftType::HelicopterGyro), // Legacy compatibility
                 "skydiver_parachute" => Some(ForeignAircraftType::SkydiverParachute),
-                "SkydiverParachute" => Some(ForeignAircraftType::SkydiverParachute), // Legacy compatibility
                 "drop_plane" => Some(ForeignAircraftType::DropPlane),
-                "DropPlane" => Some(ForeignAircraftType::DropPlane), // Legacy compatibility
                 "hang_glider" => Some(ForeignAircraftType::HangGlider),
-                "HangGlider" => Some(ForeignAircraftType::HangGlider), // Legacy compatibility
                 "paraglider" => Some(ForeignAircraftType::Paraglider),
-                "Paraglider" => Some(ForeignAircraftType::Paraglider), // Legacy compatibility
                 "recip_engine" => Some(ForeignAircraftType::RecipEngine),
-                "RecipEngine" => Some(ForeignAircraftType::RecipEngine), // Legacy compatibility
                 "jet_turboprop" => Some(ForeignAircraftType::JetTurboprop),
-                "JetTurboprop" => Some(ForeignAircraftType::JetTurboprop), // Legacy compatibility
                 "unknown" => Some(ForeignAircraftType::Unknown),
-                "Unknown" => Some(ForeignAircraftType::Unknown), // Legacy compatibility
                 "balloon" => Some(ForeignAircraftType::Balloon),
-                "Balloon" => Some(ForeignAircraftType::Balloon), // Legacy compatibility
                 "airship" => Some(ForeignAircraftType::Airship),
-                "Airship" => Some(ForeignAircraftType::Airship), // Legacy compatibility
                 "uav" => Some(ForeignAircraftType::Uav),
-                "Uav" => Some(ForeignAircraftType::Uav), // Legacy compatibility
                 "static_obstacle" => Some(ForeignAircraftType::StaticObstacle),
-                "StaticObstacle" => Some(ForeignAircraftType::StaticObstacle), // Legacy compatibility
                 _ => None,
             })
         }
