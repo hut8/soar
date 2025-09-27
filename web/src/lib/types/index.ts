@@ -91,6 +91,7 @@ export interface Airport {
 }
 
 export interface Device {
+	id?: string; // UUID from backend (optional for devices from external sources)
 	address_type: string; // F, O, I, or empty string
 	address: string; // Hex format like "ABCDEF"
 	aircraft_model: string;
@@ -98,4 +99,23 @@ export interface Device {
 	cn: string; // Competition number
 	tracked: boolean;
 	identified: boolean;
+}
+
+export interface Fix {
+	id: string;
+	device_id: string;
+	timestamp: string;
+	latitude: number;
+	longitude: number;
+	altitude: number;
+	track: number;
+	ground_speed: number;
+	climb_rate: number;
+	flight_id?: string;
+}
+
+export interface WatchlistEntry {
+	id: string;
+	device: Device;
+	active: boolean;
 }

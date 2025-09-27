@@ -3,22 +3,11 @@
 	import { Plus, X, Plane, Antenna, Eye } from '@lucide/svelte';
 	import { browser } from '$app/environment';
 	import { serverCall } from '$lib/api/server';
+	import { watchlist } from '$lib/stores/watchlist';
 	import type { Device } from '$lib/types';
 	let { showModal = $bindable() } = $props();
 
-	// Enhanced WatchlistEntry with full device data
-	interface WatchlistEntry {
-		id: string;
-		type: 'registration' | 'device';
-		registration?: string;
-		deviceAddressType?: string;
-		deviceAddress?: string;
-		device?: Device; // Full device data from API
-		active: boolean;
-	}
-
 	// State
-	let watchlist: WatchlistEntry[] = $state([]);
 	let newWatchlistEntry = $state({
 		type: 'registration',
 		registration: '',
@@ -27,27 +16,6 @@
 	});
 	let searchInProgress = $state(false);
 	let errorMessage = $state('');
-
-	// Load watchlist from localStorage
-	function loadWatchlist() {
-		if (!browser) return;
-
-		const saved = localStorage.getItem('watchlist');
-		if (saved) {
-			try {
-				watchlist = JSON.parse(saved);
-			} catch (e) {
-				console.warn('Failed to load watchlist from localStorage:', e);
-				watchlist = [];
-			}
-		}
-	}
-
-	// Save watchlist to localStorage
-	function saveWatchlist() {
-		if (!browser) return;
-		localStorage.setItem('watchlist', JSON.stringify(watchlist));
-	}
 
 	// Clear error message when user interacts with form
 	function clearError() {
@@ -61,19 +29,11 @@
 		// Clear any previous error messages
 		clearError();
 
-		const entry: WatchlistEntry = {
-			id: Date.now().toString(),
-			type: newWatchlistEntry.type as 'registration' | 'device',
-			active: true
-		};
-
-		let deviceFound = false;
+		let device: Device | null = null;
 
 		if (newWatchlistEntry.type === 'registration') {
 			const registration = newWatchlistEntry.registration.trim().toUpperCase();
 			if (!registration) return;
-
-			entry.registration = registration;
 
 			// Search for device by registration
 			searchInProgress = true;
@@ -82,8 +42,7 @@
 					`/devices?registration=${encodeURIComponent(registration)}`
 				);
 				if (response.devices && response.devices.length > 0) {
-					entry.device = response.devices[0];
-					deviceFound = true;
+					device = response.devices[0];
 				} else {
 					errorMessage = `Aircraft with registration "${registration}" not found`;
 				}
@@ -98,9 +57,6 @@
 			const address = newWatchlistEntry.deviceAddress.trim().toUpperCase();
 			if (!addressType || !address) return;
 
-			entry.deviceAddressType = addressType;
-			entry.deviceAddress = address;
-
 			// Search for device by address and type
 			searchInProgress = true;
 			try {
@@ -108,8 +64,7 @@
 					`/devices?address=${encodeURIComponent(address)}&address-type=${encodeURIComponent(addressType)}`
 				);
 				if (response.devices && response.devices.length > 0) {
-					entry.device = response.devices[0];
-					deviceFound = true;
+					device = response.devices[0];
 				} else {
 					errorMessage = `Device with address "${address}" (${addressType}) not found`;
 				}
@@ -122,8 +77,8 @@
 		}
 
 		// Only add to watchlist if device was found
-		if (deviceFound) {
-			watchlist = [...watchlist, entry];
+		if (device) {
+			watchlist.add(device);
 			// Clear the search inputs on success
 			newWatchlistEntry = {
 				type: 'registration',
@@ -131,28 +86,23 @@
 				deviceAddressType: 'I',
 				deviceAddress: ''
 			};
-			saveWatchlist();
 		}
 	}
 
 	// Remove entry from watchlist
 	function removeWatchlistEntry(id: string) {
-		watchlist = watchlist.filter((entry) => entry.id !== id);
-		saveWatchlist();
+		watchlist.remove(id);
 	}
 
 	// Toggle entry active state
 	function toggleWatchlistEntry(id: string) {
-		watchlist = watchlist.map((entry) =>
-			entry.id === id ? { ...entry, active: !entry.active } : entry
-		);
-		saveWatchlist();
+		watchlist.toggleActive(id);
 	}
 
 	// Load watchlist on mount
 	$effect(() => {
 		if (browser) {
-			loadWatchlist();
+			watchlist.loadFromStorage();
 		}
 	});
 </script>
@@ -274,11 +224,11 @@
 				<!-- Watchlist entries -->
 				<section>
 					<h3 class="mb-3 flex flex-row items-center align-middle text-lg font-semibold">
-						<Eye size={16} /> Watched Aircraft ({watchlist.length})
+						<Eye size={16} /> Watched Aircraft ({$watchlist.entries.length})
 					</h3>
-					{#if watchlist.length > 0}
+					{#if $watchlist.entries.length > 0}
 						<div class="max-h-48 space-y-2 overflow-y-auto">
-							{#each watchlist as entry (entry.id)}
+							{#each $watchlist.entries as entry (entry.id)}
 								<div
 									class="rounded border p-3 {entry.active
 										? 'bg-gray-50'
@@ -286,48 +236,31 @@
 								>
 									<div class="flex items-start justify-between">
 										<div class="flex-1">
-											{#if entry.device}
-												<!-- Show full device data -->
-												<div class="space-y-1">
-													<div class="flex items-center gap-2">
-														<span class="text-lg font-medium"
-															>{entry.device.registration || 'Unknown Registration'}</span
+											<div class="space-y-1">
+												<div class="flex items-center gap-2">
+													<span class="text-lg font-medium"
+														>{entry.device.registration || 'Unknown Registration'}</span
+													>
+													{#if entry.device.cn}
+														<span
+															class="rounded bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800"
+															>{entry.device.cn}</span
 														>
-														{#if entry.device.cn}
-															<span
-																class="rounded bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800"
-																>{entry.device.cn}</span
-															>
-														{/if}
-													</div>
-													<div class="text-sm text-gray-600">
-														{entry.device.aircraft_model || 'Unknown Aircraft Model'}
-													</div>
-													<div class="text-xs text-gray-500">
-														{entry.device.address_type}: {entry.device.address}
-														{#if entry.device.tracked}
-															<span class="ml-2 text-green-600">• Tracked</span>
-														{/if}
-														{#if entry.device.identified}
-															<span class="ml-2 text-blue-600">• Identified</span>
-														{/if}
-													</div>
-												</div>
-											{:else}
-												<!-- Show basic info when no device data available -->
-												<div class="space-y-1">
-													{#if entry.type === 'registration'}
-														<span class="font-medium">{entry.registration}</span>
-														<div class="text-xs text-gray-500">Registration</div>
-													{:else}
-														<span class="font-medium"
-															>{entry.deviceAddressType}: {entry.deviceAddress}</span
-														>
-														<div class="text-xs text-gray-500">Device</div>
 													{/if}
-													<div class="text-xs text-orange-600">• Device not found</div>
 												</div>
-											{/if}
+												<div class="text-sm text-gray-600">
+													{entry.device.aircraft_model || 'Unknown Aircraft Model'}
+												</div>
+												<div class="text-xs text-gray-500">
+													{entry.device.address_type}: {entry.device.address}
+													{#if entry.device.tracked}
+														<span class="ml-2 text-green-600">• Tracked</span>
+													{/if}
+													{#if entry.device.identified}
+														<span class="ml-2 text-blue-600">• Identified</span>
+													{/if}
+												</div>
+											</div>
 										</div>
 										<div class="ml-3 flex items-center gap-2">
 											<Switch

@@ -3,7 +3,7 @@
 	import { AppBar, Avatar } from '@skeletonlabs/skeleton-svelte';
 	import favicon from '$lib/assets/favicon.svg';
 	import { resolve } from '$app/paths';
-	import { page } from '$app/stores';
+	import { page } from '$app/state';
 	import { auth } from '$lib/stores/auth';
 	import { onMount } from 'svelte';
 	import { Radar, Users, PlaneTakeoff, UserPlus, UserCheck, Radio } from '@lucide/svelte';
@@ -88,7 +88,7 @@
 					</button>
 
 					{#if showUserMenu}
-						<div class="absolute top-12 right-0 z-10 w-48 card p-2">
+						<div class="absolute top-12 right-0 z-10 w-48 card preset-filled-primary-500 p-2">
 							<div class="space-y-1">
 								<div class="px-3 py-2 text-sm">
 									<div class="font-medium">{$auth.user.first_name} {$auth.user.last_name}</div>
@@ -121,7 +121,7 @@
 		{@render children?.()}
 	</main>
 
-	{#if !$page.route.id?.includes('operations')}
+	{#if !page.route.id?.includes('operations')}
 		<footer class="bg-surface-100-800-token p-4 text-center text-sm">
 			<p>&copy; 2025 Liam Bowen</p>
 		</footer>
