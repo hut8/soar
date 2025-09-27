@@ -3,6 +3,7 @@ use async_nats::Client;
 use serde_json;
 use std::sync::Arc;
 use tracing::{debug, error, info};
+use uuid;
 
 use crate::Fix;
 use crate::aprs_client::FixHandler;
@@ -10,23 +11,23 @@ use crate::device_repo::DeviceRepository;
 use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
 
-/// Get registration number for a given device address and type
-/// This maps OGN/FLARM device addresses to aircraft registration numbers
-async fn get_registration_for_device(
+/// Get device UUID for a given device address and type
+/// This maps OGN/FLARM device addresses to device UUIDs for NATS subjects
+async fn get_device_uuid_by_address(
     device_repo: &DeviceRepository,
     device_address: u32,
     address_type: crate::devices::AddressType,
-) -> Option<String> {
+) -> Option<uuid::Uuid> {
     match device_repo
         .get_device_by_address(device_address, address_type)
         .await
     {
         Ok(Some(device)) => {
-            if !device.registration.is_empty() {
-                Some(device.registration)
+            if let Some(device_id) = device.id {
+                Some(device_id)
             } else {
                 debug!(
-                    "Device {:06X} ({:?}) found but has no registration",
+                    "Device {:06X} ({:?}) found but has no UUID",
                     device_address, address_type
                 );
                 None
@@ -50,14 +51,14 @@ async fn get_registration_for_device(
 }
 
 /// Publish Fix to NATS
-async fn publish_to_nats(nats_client: &Client, aircraft_id: &str, fix: &Fix) -> Result<()> {
-    let subject = format!("aircraft.fix.{}", aircraft_id);
+async fn publish_to_nats(nats_client: &Client, device_id: &str, fix: &Fix) -> Result<()> {
+    let subject = format!("aircraft.fix.{}", device_id);
 
     // Serialize the Fix to JSON
     let payload = serde_json::to_vec(fix)?;
 
     nats_client.publish(subject, payload.into()).await?;
-    debug!("Published fix for {} to NATS", aircraft_id);
+    debug!("Published fix for {} to NATS", device_id);
 
     Ok(())
 }
@@ -92,37 +93,35 @@ impl FixHandler for NatsFixPublisher {
 
         tokio::spawn(async move {
             // Extract values we need to avoid partial moves
-            let registration = fix.registration.clone();
             let device_address = fix.device_address;
             let address_type = fix.address_type;
             let source = fix.source.clone();
 
-            // Get aircraft identifier from the fix
-            let aircraft_id = if let Some(registration) = registration {
-                // Use registration if available
-                registration
-            } else if let (Some(device_address), Some(address_type)) =
+            // Get device UUID for NATS subject
+            let device_uuid = if let (Some(device_address), Some(address_type)) =
                 (device_address, address_type)
             {
-                // Try to look up registration from device database
-                if let Some(registration) =
-                    get_registration_for_device(&device_repo, device_address, address_type).await
-                {
-                    registration
-                } else {
-                    // Use aircraft ID with type prefix if no registration found
-                    fix.get_aircraft_identifier()
-                        .unwrap_or_else(|| format!("UNKNOWN-{}", source))
-                }
+                // Look up device UUID from device database
+                get_device_uuid_by_address(&device_repo, device_address, address_type).await
             } else {
-                // Fallback to source callsign
-                source
+                None
             };
 
-            if let Err(e) = publish_to_nats(&nats_client, &aircraft_id, &fix).await {
-                error!("Failed to publish fix for {}: {}", aircraft_id, e);
+            if let Some(device_uuid) = device_uuid {
+                // Use device UUID as the device_id in NATS subject
+                let device_id = device_uuid.to_string();
+
+                if let Err(e) = publish_to_nats(&nats_client, &device_id, &fix).await {
+                    error!("Failed to publish fix for device {}: {}", device_id, e);
+                } else {
+                    info!("Published fix for device {}", device_id);
+                }
             } else {
-                info!("Published fix for aircraft {}", aircraft_id);
+                // No device UUID found - log warning and skip publishing
+                debug!(
+                    "Skipping NATS publish for fix from {} - no device UUID found (address: {:?}, type: {:?})",
+                    source, device_address, address_type
+                );
             }
         });
     }
