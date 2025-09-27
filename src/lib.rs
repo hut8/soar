@@ -34,7 +34,6 @@ pub mod locations_repo;
 pub mod message_processors;
 pub mod nats_publisher;
 pub mod ogn_aprs_aircraft;
-pub mod position;
 pub mod pull;
 pub mod receiver_repo;
 pub mod receiver_status_repo;
@@ -55,4 +54,4 @@ pub use aprs_client::{
     PositionProcessor, ReceiverStatusProcessor, ServerStatusProcessor, StatusProcessor,
 };
 pub use nats_publisher::NatsFixPublisher;
-pub use position::Fix;
+pub use fixes::Fix;
