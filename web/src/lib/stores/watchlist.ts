@@ -1,15 +1,18 @@
 import { writable } from 'svelte/store';
 import { browser, dev } from '$app/environment';
 import { serverCall } from '$lib/api/server';
-import type { WatchlistEntry, Fix, Device } from '$lib/types';
+import { Device } from '$lib/types';
+import type { WatchlistEntry, Fix } from '$lib/types';
+import { DeviceRegistry } from '$lib/services/DeviceRegistry';
 
 // Store interfaces
 export interface WatchlistStore {
 	entries: WatchlistEntry[];
 }
 
-export interface FixesStore {
-	fixes: Fix[];
+export interface DeviceRegistryStore {
+	registry: DeviceRegistry;
+	lastUpdate: number; // Timestamp of last update for reactivity
 }
 
 // Initial states
@@ -17,8 +20,9 @@ const initialWatchlistState: WatchlistStore = {
 	entries: []
 };
 
-const initialFixesState: FixesStore = {
-	fixes: []
+const initialDeviceRegistryState: DeviceRegistryStore = {
+	registry: DeviceRegistry.getInstance(),
+	lastUpdate: Date.now()
 };
 
 // WebSocket connection state
@@ -112,38 +116,83 @@ function createWatchlistStore() {
 	};
 }
 
-// Create fixes store
-function createFixesStore() {
-	const { subscribe, set, update } = writable<FixesStore>(initialFixesState);
+// Create device registry store
+function createDeviceRegistryStore() {
+	const { subscribe, set, update } = writable<DeviceRegistryStore>(initialDeviceRegistryState);
 
 	return {
 		subscribe,
 
-		// Add fixes to store
+		// Add fixes to appropriate devices
 		addFixes: (newFixes: Fix[]) => {
 			update((state) => {
 				// Log each fix to console
 				newFixes.forEach((fix) => {
 					console.log('Received fix:', fix);
+					// Add fix to the device registry
+					state.registry.addFixToDevice(fix);
 				});
 
-				// Add to existing fixes (you might want to implement deduplication here)
-				return { fixes: [...state.fixes, ...newFixes] };
+				// Update timestamp to trigger reactivity
+				return {
+					registry: state.registry,
+					lastUpdate: Date.now()
+				};
 			});
 		},
 
-		// Clear all fixes
-		clear: () => {
-			set(initialFixesState);
+		// Update device information from API
+		updateDeviceFromAPI: async (deviceId: string) => {
+			update((state) => {
+				state.registry.updateDeviceFromAPI(deviceId);
+				return {
+					registry: state.registry,
+					lastUpdate: Date.now()
+				};
+			});
+		},
+
+		// Get a specific device
+		getDevice: (deviceId: string): Device | null => {
+			let currentDevice: Device | null = null;
+			subscribe((state) => {
+				currentDevice = state.registry.getDevice(deviceId);
+			})();
+			return currentDevice;
+		},
+
+		// Get all devices with recent fixes
+		getActiveDevices: (): Device[] => {
+			let devices: Device[] = [];
+			subscribe((state) => {
+				devices = state.registry.getAllDevices().filter((device) => {
+					const latestFix = device.getLatestFix();
+					if (!latestFix) return false;
+					// Consider active if last fix was within the last hour
+					const oneHourAgo = Date.now() - 60 * 60 * 1000;
+					return new Date(latestFix.timestamp).getTime() > oneHourAgo;
+				});
+			})();
+			return devices;
 		},
 
 		// Get fixes for a specific device
-		getFixesForDevice: (deviceId: string) => {
-			let currentFixes: Fix[] = [];
+		getFixesForDevice: (deviceId: string): Fix[] => {
+			let deviceFixes: Fix[] = [];
 			subscribe((state) => {
-				currentFixes = state.fixes.filter((fix) => fix.device_id === deviceId);
+				const device = state.registry.getDevice(deviceId);
+				deviceFixes = device ? device.fixes : [];
 			})();
-			return currentFixes;
+			return deviceFixes;
+		},
+
+		// Clear all devices
+		clear: () => {
+			DeviceRegistry.getInstance().clear();
+			set({
+				registry: DeviceRegistry.getInstance(),
+				lastUpdate: Date.now()
+			});
 		}
 	};
 }
@@ -188,36 +237,40 @@ function connectWebSocket() {
 				error: null
 			}));
 
-            // Subscribe to all active devices in the watchlist after connection is ready
-            setTimeout(() => {
-                if (websocket?.readyState === WebSocket.OPEN) {
-                    // Get current watchlist state without creating a subscription
-                    let currentState: WatchlistStore = { entries: [] };
-                    const unsubscribe = watchlist.subscribe(state => {
-                        currentState = state;
-                    });
-                    unsubscribe(); // Immediately unsubscribe to avoid creating permanent subscription
+			// Subscribe to all active devices in the watchlist after connection is ready
+			setTimeout(() => {
+				if (websocket?.readyState === WebSocket.OPEN) {
+					// Get current watchlist state without creating a subscription
+					let currentState: WatchlistStore = { entries: [] };
+					const unsubscribe = watchlist.subscribe((state) => {
+						currentState = state;
+					});
+					unsubscribe(); // Immediately unsubscribe to avoid creating permanent subscription
 
-                    currentState.entries.forEach((entry) => {
-                        if (entry.active && entry.device.id && !currentlySubscribedDevices.has(entry.device.id)) {
-                            console.log('Subscribing to device after connection:', entry.device.id);
-                            websocket?.send(
-                                JSON.stringify({
-                                    action: 'subscribe',
-                                    device_id: entry.device.id
-                                })
-                            );
-                            currentlySubscribedDevices.add(entry.device.id);
-                        }
-                    });
-                }
-            }, 50); // Small delay to ensure WebSocket is fully ready
+					currentState.entries.forEach((entry) => {
+						if (
+							entry.active &&
+							entry.device.id &&
+							!currentlySubscribedDevices.has(entry.device.id)
+						) {
+							console.log('Subscribing to device after connection:', entry.device.id);
+							websocket?.send(
+								JSON.stringify({
+									action: 'subscribe',
+									device_id: entry.device.id
+								})
+							);
+							currentlySubscribedDevices.add(entry.device.id);
+						}
+					});
+				}
+			}, 50); // Small delay to ensure WebSocket is fully ready
 		};
 
 		websocket.onmessage = (event) => {
 			try {
 				const fix = JSON.parse(event.data) as Fix;
-				fixes.addFixes([fix]);
+				deviceRegistry.addFixes([fix]);
 			} catch (e) {
 				console.warn('Failed to parse WebSocket message:', e);
 			}
@@ -319,14 +372,20 @@ async function subscribeToDevice(deviceId: string) {
 		// Track that we're now subscribed to this device
 		currentlySubscribedDevices.add(deviceId);
 
-		// Also fetch recent fixes from REST endpoint
+		// Fetch device information and recent fixes from REST endpoints
 		try {
-			const response = await serverCall<{ fixes: Fix[] }>(`/fixes?device_id=${deviceId}&limit=100`);
-			if (response.fixes) {
-				fixes.addFixes(response.fixes);
+			// Fetch device information
+			await deviceRegistry.updateDeviceFromAPI(deviceId);
+
+			// Fetch recent fixes
+			const fixesResponse = await serverCall<{ fixes: Fix[] }>(
+				`/fixes?device_id=${deviceId}&limit=100`
+			);
+			if (fixesResponse.fixes) {
+				deviceRegistry.addFixes(fixesResponse.fixes);
 			}
 		} catch (error) {
-			console.warn(`Failed to fetch fixes for device ${deviceId}:`, error);
+			console.warn(`Failed to fetch data for device ${deviceId}:`, error);
 		}
 	}
 }
@@ -406,7 +465,6 @@ export function startLiveFixesFeed() {
 	connectWebSocket();
 }
 
-
 // Function to stop live fixes feed
 export function stopLiveFixesFeed() {
 	if (!browser) return;
@@ -423,7 +481,26 @@ export function stopLiveFixesFeed() {
 
 // Create store instances
 export const watchlist = createWatchlistStore();
-export const fixes = createFixesStore();
+export const deviceRegistry = createDeviceRegistryStore();
+
+// Backward compatibility - provide a way to get all recent fixes
+export const fixes = {
+	subscribe: deviceRegistry.subscribe,
+	addFixes: deviceRegistry.addFixes,
+	clear: deviceRegistry.clear,
+	// Get all recent fixes from all devices
+	getAllRecentFixes: (): Fix[] => {
+		const devices = deviceRegistry.getActiveDevices();
+		const allFixes: Fix[] = [];
+		devices.forEach((device) => {
+			allFixes.push(...device.fixes);
+		});
+		// Sort by timestamp, most recent first
+		return allFixes.sort(
+			(a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+		);
+	}
+};
 
 // Initialize WebSocket URL when module loads
 if (browser) {

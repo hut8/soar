@@ -1,14 +1,19 @@
 <script lang="ts">
 	/// <reference types="@types/google.maps" />
 	import { onMount } from 'svelte';
+	import { SvelteMap } from 'svelte/reactivity';
 	import { browser } from '$app/environment';
 	import { serverCall } from '$lib/api/server';
 	import { Loader } from '@googlemaps/js-api-loader';
 	import { Settings, ListChecks } from '@lucide/svelte';
 	import WatchlistModal from '$lib/components/WatchlistModal.svelte';
 	import SettingsModal from '$lib/components/SettingsModal.svelte';
-	import { fixes, startLiveFixesFeed, stopLiveFixesFeed } from '$lib/stores/watchlist';
+	import { DeviceRegistry } from '$lib/services/DeviceRegistry';
+	import { FixFeed } from '$lib/services/FixFeed';
+	import { Device } from '$lib/types';
 	import type { Fix } from '$lib/types';
+	import type { DeviceRegistryEvent } from '$lib/services/DeviceRegistry';
+	import type { FixFeedEvent } from '$lib/services/FixFeed';
 
 	// TypeScript interfaces for airport data
 	interface RunwayView {
@@ -75,8 +80,8 @@
 	let shouldShowAirports: boolean = false;
 
 	// Aircraft display variables
-	let aircraftMarkers: Map<string, google.maps.marker.AdvancedMarkerElement> = new Map();
-	let latestFixes: Map<string, Fix> = new Map();
+	let aircraftMarkers = new SvelteMap<string, google.maps.marker.AdvancedMarkerElement>();
+	let latestFixes = new SvelteMap<string, Fix>();
 
 	// Settings modal state
 	let showSettingsModal = $state(false);
@@ -118,24 +123,51 @@
 		}
 	});
 
-	// Subscribe to fixes store and update aircraft markers
-	let currentFixes: Fix[] = $state([]);
+	// Get singleton instances
+	const deviceRegistry = DeviceRegistry.getInstance();
+	const fixFeed = FixFeed.getInstance();
+
+	// Subscribe to device registry and update aircraft markers
+	let activeDevices: Device[] = $state([]);
 
 	$effect(() => {
-		const unsubscribe = fixes.subscribe((fixesStore) => {
-			currentFixes = fixesStore.fixes;
+		const unsubscribeRegistry = deviceRegistry.subscribe((event: DeviceRegistryEvent) => {
+			if (event.type === 'devices_changed') {
+				activeDevices = event.devices;
+			}
 		});
 
-		return () => unsubscribe();
+		const unsubscribeFeed = fixFeed.subscribe((event: FixFeedEvent) => {
+			if (event.type === 'connection_opened') {
+				connectionStatus = { connected: true, reconnecting: false };
+			} else if (event.type === 'connection_closed') {
+				connectionStatus = { connected: false, reconnecting: false };
+			} else if (event.type === 'reconnecting') {
+				connectionStatus = { connected: false, reconnecting: true };
+			} else if (event.type === 'fix_received') {
+				console.log('Received fix:', event.fix);
+			}
+		});
+
+		// Initialize active devices
+		activeDevices = deviceRegistry.getAllDevices();
+
+		return () => {
+			unsubscribeRegistry();
+			unsubscribeFeed();
+		};
 	});
 
-	// Reactive effect for handling fix updates
+	// Reactive effect for handling device updates
 	$effect(() => {
-		if (!map || currentFixes.length === 0) return;
+		if (!map || activeDevices.length === 0) return;
 
-		// Process new fixes to update aircraft markers
-		currentFixes.forEach((fix) => {
-			updateAircraftMarker(fix);
+		// Process devices with recent fixes to update aircraft markers
+		activeDevices.forEach((device) => {
+			const latestFix = device.getLatestFix();
+			if (latestFix) {
+				updateAircraftMarkerFromDevice(device, latestFix);
+			}
 		});
 	});
 
@@ -145,13 +177,13 @@
 			initializeMap();
 			initializeCompass();
 			// Start live fixes feed for operations page
-			startLiveFixesFeed();
+			fixFeed.startLiveFixesFeed();
 		}
 
 		// Cleanup function
 		return () => {
 			if (browser) {
-				stopLiveFixesFeed();
+				fixFeed.stopLiveFixesFeed();
 				clearAircraftMarkers();
 			}
 		};
@@ -500,35 +532,32 @@
 		}
 	}
 
-	function updateAircraftMarker(fix: Fix): void {
-		if (!map || !fix.device_id && !fix.device_address_hex) return;
+	function updateAircraftMarkerFromDevice(device: Device, latestFix: Fix): void {
+		if (!map) return;
 
-		// Use device_id if available, otherwise fall back to device_address_hex
-		const deviceKey = fix.device_id || fix.device_address_hex || '';
+		const deviceKey = device.id;
 		if (!deviceKey) return;
 
 		// Update latest fix for this device
-		latestFixes.set(deviceKey, fix);
+		latestFixes.set(deviceKey, latestFix);
 
 		// Get or create marker for this aircraft
 		let marker = aircraftMarkers.get(deviceKey);
 
 		if (!marker) {
-			// Create new aircraft marker
-			marker = createAircraftMarker(fix);
+			// Create new aircraft marker with device info
+			marker = createAircraftMarkerFromDevice(device, latestFix);
 			aircraftMarkers.set(deviceKey, marker);
 		} else {
 			// Update existing marker position and info
-			updateAircraftMarkerPosition(marker, fix);
+			updateAircraftMarkerPositionFromDevice(marker, device, latestFix);
 		}
 	}
 
-	function createAircraftMarker(fix: Fix): google.maps.marker.AdvancedMarkerElement {
-        console.log(`Creating marker for aircraft: ${fix.registration || fix.device_address_hex}`);
-        // TODO: Add aircraft photos to markers using registration or hex code
-        // https://api.planespotters.net/pub/photos/reg/D-ABCD
-        // https://api.planespotters.net/pub/photos/hex/ABC123
-
+	function createAircraftMarkerFromDevice(
+		device: Device,
+		fix: Fix
+	): google.maps.marker.AdvancedMarkerElement {
 		// Create aircraft icon with rotation based on track
 		const markerContent = document.createElement('div');
 		markerContent.className = 'aircraft-marker';
@@ -548,16 +577,15 @@
 		const track = fix.track_degrees || 0;
 		aircraftIcon.style.transform = `rotate(${track}deg)`;
 
-		// Info label below the icon - prioritize tail number and altitude
+		// Info label below the icon - show proper aircraft information
 		const infoLabel = document.createElement('div');
 		infoLabel.className = 'aircraft-label';
 
-		// Get aircraft identifier (registration or hex ID)
-		const tailNumber = fix.registration ||
-			(fix.device_address_hex ? `${fix.device_address_hex}` : 'Unknown');
+		// Use proper device registration, fallback to address
+		const tailNumber = device.registration || device.address || 'Unknown';
 		const altitudeFt = fix.altitude_feet ? `${fix.altitude_feet}ft` : '---ft';
 
-		// Create two-line label: tail number on top, altitude on bottom
+		// Create two-line label: registration on top, altitude on bottom
 		const tailDiv = document.createElement('div');
 		tailDiv.className = 'aircraft-tail';
 		tailDiv.textContent = tailNumber;
@@ -572,18 +600,26 @@
 		markerContent.appendChild(aircraftIcon);
 		markerContent.appendChild(infoLabel);
 
-		// Create the marker
+		// Create the marker with proper title including aircraft model
+		const title = device.aircraft_model
+			? `${tailNumber} (${device.aircraft_model}) - Altitude: ${altitudeFt}`
+			: `${tailNumber} - Altitude: ${altitudeFt}`;
+
 		const marker = new google.maps.marker.AdvancedMarkerElement({
 			position: { lat: fix.latitude, lng: fix.longitude },
 			map: map,
-			title: `${tailNumber} - Altitude: ${altitudeFt}`,
+			title: title,
 			content: markerContent
 		});
 
 		return marker;
 	}
 
-	function updateAircraftMarkerPosition(marker: google.maps.marker.AdvancedMarkerElement, fix: Fix): void {
+	function updateAircraftMarkerPositionFromDevice(
+		marker: google.maps.marker.AdvancedMarkerElement,
+		device: Device,
+		fix: Fix
+	): void {
 		// Update position
 		marker.position = { lat: fix.latitude, lng: fix.longitude };
 
@@ -600,14 +636,21 @@
 			}
 
 			if (tailDiv && altDiv) {
-				const tailNumber = fix.registration ||
-					(fix.device_address_hex ? `${fix.device_address_hex}` : 'Unknown');
+				// Use proper device registration, fallback to address
+				const tailNumber = device.registration || device.address || 'Unknown';
 				const altitudeFt = fix.altitude_feet ? `${fix.altitude_feet}ft` : '---ft';
 
 				tailDiv.textContent = tailNumber;
 				altDiv.textContent = altitudeFt;
 			}
 		}
+
+		// Update the marker title
+		const title = device.aircraft_model
+			? `${device.registration || device.address} (${device.aircraft_model}) - Altitude: ${fix.altitude_feet ? fix.altitude_feet + 'ft' : '---ft'}`
+			: `${device.registration || device.address} - Altitude: ${fix.altitude_feet ? fix.altitude_feet + 'ft' : '---ft'}`;
+
+		marker.title = title;
 	}
 
 	function clearAircraftMarkers(): void {
