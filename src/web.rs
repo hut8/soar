@@ -135,24 +135,55 @@ async fn handle_static_file(uri: Uri, request: Request<Body>) -> impl IntoRespon
     (StatusCode::NOT_FOUND, "Not Found").into_response()
 }
 
+// Helper function to format query parameters for logging
+fn format_query_params(query_string: &str) -> String {
+    if query_string.is_empty() {
+        return String::new();
+    }
+
+    let query_params: Vec<String> = query_string
+        .split('&')
+        .map(|param| {
+            if let Some(eq_pos) = param.find('=') {
+                let (key, value) = param.split_at(eq_pos);
+                format!("{}={}", key, &value[1..]) // Skip the '=' character
+            } else {
+                param.to_string()
+            }
+        })
+        .collect();
+
+    let formatted_params = query_params.join(" ");
+    if formatted_params.is_empty() {
+        String::new()
+    } else {
+        format!(" {}", formatted_params)
+    }
+}
+
 // Middleware for request logging with correlation ID
 async fn request_logging_middleware(request: Request<Body>, next: Next) -> Response {
     let method = request.method().clone();
     let path = request.uri().path().to_string();
+    let query_string = request.uri().query().unwrap_or("");
     let request_id = Uuid::new_v4().to_string()[..8].to_string();
     let start_time = Instant::now();
 
-    info!("Started {} {} [{}]", method, path, request_id);
+    // Format query parameters for logging
+    let query_params_formatted = format_query_params(query_string);
+
+    info!("Started {} {} [{}{}]", method, path, request_id, query_params_formatted);
 
     let response = next.run(request).await;
     let duration = start_time.elapsed();
     let status = response.status();
 
     info!(
-        "Completed {} {} [{}] {} in {:.2}ms",
+        "Completed {} {} [{}{}] {} in {:.2}ms",
         method,
         path,
         request_id,
+        query_params_formatted,
         status.as_u16(),
         duration.as_secs_f64() * 1000.0
     );
