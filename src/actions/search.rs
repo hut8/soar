@@ -31,14 +31,14 @@ pub struct SearchQueryParams {
 
 #[derive(Debug, Deserialize)]
 pub struct FixesQueryParams {
-    pub device_id: Option<u32>,
+    pub device_id: Option<uuid::Uuid>,
     pub flight_id: Option<uuid::Uuid>,
     pub limit: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct FlightsQueryParams {
-    pub device_id: Option<u32>,
+    pub device_id: Option<uuid::Uuid>,
     pub club_id: Option<uuid::Uuid>,
     pub limit: Option<i64>,
 }
@@ -292,7 +292,7 @@ pub async fn search_fixes(
 
     if let Some(device_id) = params.device_id {
         match fixes_repo
-            .get_fixes_for_aircraft(&device_id.to_string(), Some(params.limit.unwrap_or(1000)))
+            .get_fixes_for_device(device_id, Some(params.limit.unwrap_or(1000)))
             .await
         {
             Ok(fixes) => Json(fixes).into_response(),
@@ -305,11 +305,10 @@ pub async fn search_fixes(
                 .into_response()
             }
         }
-    } else if let Some(_flight_id) = params.flight_id {
-        // Flight-based fix search would require looking up the flight first
-        // For now, just return recent fixes
+    } else if let Some(flight_id) = params.flight_id {
+        // Get fixes for the specific flight
         match fixes_repo
-            .get_recent_fixes(params.limit.unwrap_or(1000))
+            .get_fixes_for_flight(flight_id, params.limit)
             .await
         {
             Ok(fixes) => Json(fixes).into_response(),
@@ -348,7 +347,7 @@ pub async fn search_flights(
 
     if let Some(device_id) = params.device_id {
         match flights_repo
-            .get_flights_for_device(&device_id.to_string())
+            .get_flights_for_device(&device_id)
             .await
         {
             Ok(flights) => Json(flights).into_response(),

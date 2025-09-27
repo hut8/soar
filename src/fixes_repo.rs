@@ -591,13 +591,12 @@ impl FixesRepository {
     }
 
     /// Get recent fixes for an aircraft (without time range)
-    pub async fn get_fixes_for_aircraft(
+    pub async fn get_fixes_for_device(
         &self,
-        device_address: &str,
+        device_id: uuid::Uuid,
         limit: Option<i64>,
     ) -> Result<Vec<Fix>> {
         let limit = limit.unwrap_or(100);
-        let device_address = device_address.to_string();
 
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
@@ -613,13 +612,13 @@ impl FixesRepository {
                     snr_db, bit_errors_corrected, freq_offset_khz,
                     club_id
                 FROM fixes
-                WHERE device_address = $1
+                WHERE device_id = $1
                 ORDER BY timestamp DESC
                 LIMIT $2
             "#;
 
             let results: Vec<FixRow> = sql_query(sql)
-                .bind::<diesel::sql_types::Varchar, _>(&device_address)
+                .bind::<diesel::sql_types::Uuid, _>(&device_id)
                 .bind::<diesel::sql_types::BigInt, _>(limit)
                 .load::<FixRow>(&mut conn)?;
 
@@ -838,5 +837,44 @@ impl FixesRepository {
         );
 
         Ok(result)
+    }
+
+    /// Get fixes for a specific flight ID
+    pub async fn get_fixes_for_flight(
+        &self,
+        flight_id: Uuid,
+        limit: Option<i64>,
+    ) -> Result<Vec<Fix>> {
+        let limit = limit.unwrap_or(1000);
+
+        let pool = self.pool.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            let sql = r#"
+                SELECT
+                    id, source, destination, via, raw_packet, timestamp, received_at, lag,
+                    latitude, longitude, altitude_feet,
+                    device_address, device_id, address_type, aircraft_type,
+                    flight_number, emitter_category, registration, model, squawk,
+                    ground_speed_knots, track_degrees, climb_fpm, turn_rate_rot,
+                    snr_db, bit_errors_corrected, freq_offset_khz,
+                    club_id, flight_id, unparsed_data
+                FROM fixes
+                WHERE flight_id = $1
+                ORDER BY timestamp ASC
+                LIMIT $2
+            "#;
+
+            let results: Vec<FixRow> = sql_query(sql)
+                .bind::<diesel::sql_types::Uuid, _>(&flight_id)
+                .bind::<diesel::sql_types::BigInt, _>(limit)
+                .load::<FixRow>(&mut conn)?;
+
+            Ok::<Vec<FixRow>, anyhow::Error>(results)
+        })
+        .await??;
+
+        Ok(result.into_iter().map(Fix::from).collect())
     }
 }

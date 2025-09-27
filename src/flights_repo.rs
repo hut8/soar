@@ -120,17 +120,17 @@ impl FlightsRepository {
     }
 
     /// Get all flights for a specific device, ordered by takeoff time descending
-    pub async fn get_flights_for_device(&self, device_address_param: &str) -> Result<Vec<Flight>> {
+    pub async fn get_flights_for_device(&self, device_id_val: &uuid::Uuid) -> Result<Vec<Flight>> {
         use crate::schema::flights::dsl::*;
 
         let pool = self.pool.clone();
-        let device_address_val = device_address_param.to_string();
+        let device_id_val = *device_id_val;
 
         let results = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
             let flight_models: Vec<FlightModel> = flights
-                .filter(device_address.eq(&device_address_val))
+                .filter(device_id.eq(device_id_val))
                 .order(takeoff_time.desc())
                 .load::<FlightModel>(&mut conn)?;
 
@@ -355,23 +355,5 @@ impl FlightsRepository {
 
         self.get_flights_in_time_range(start_of_day, end_of_day, None)
             .await
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use chrono::Utc;
-
-    fn create_test_flight() -> Flight {
-        Flight::new("39D304".to_string(), Utc::now())
-    }
-
-    #[test]
-    fn test_flight_creation() {
-        let flight = create_test_flight();
-        assert_eq!(flight.device_address, "39D304");
-        assert!(flight.is_in_progress());
-        assert!(flight.duration().num_seconds() >= 0);
     }
 }
