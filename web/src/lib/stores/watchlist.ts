@@ -77,7 +77,9 @@ function createWatchlistStore() {
 			const saved = localStorage.getItem('watchlist');
 			if (saved) {
 				try {
-					const entries = JSON.parse(saved) as WatchlistEntry[];
+					const entries = (JSON.parse(saved) as WatchlistEntry[]).filter(
+                        (entry) => entry.device?.id && entry.id
+                    );
 					set({ entries });
 					handleWatchlistChange(entries);
 				} catch (e) {

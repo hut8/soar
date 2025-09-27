@@ -1,7 +1,6 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { Search, Radio, Plane, User } from '@lucide/svelte';
-	import { ProgressRing } from '@skeletonlabs/skeleton-svelte';
+	import { Search, Radio, Plane, User, Antenna } from '@lucide/svelte';
+	import { ProgressRing, Segment } from '@skeletonlabs/skeleton-svelte';
 	import { resolve } from '$app/paths';
 	import { serverCall } from '$lib/api/server';
 
@@ -22,25 +21,17 @@
 	let loading = false;
 	let error = '';
 	let searchQuery = '';
-	let searchType: 'device_id' | 'registration' = 'device_id';
+	let searchType: 'registration' | 'device' = 'registration';
+	let deviceAddressType = 'I'; // ICAO, OGN, FLARM
 
 	function formatDeviceId(deviceId: number): string {
 		// Convert integer device_id to 6-digit hex string
 		return deviceId.toString(16).toUpperCase().padStart(6, '0');
 	}
 
-	function parseDeviceId(hexString: string): number | null {
-		// Convert 6-digit hex string to integer
-		const cleaned = hexString.replace(/[^a-fA-F0-9]/g, '');
-		if (cleaned.length !== 6) return null;
-
-		const parsed = parseInt(cleaned, 16);
-		return isNaN(parsed) ? null : parsed;
-	}
-
 	async function searchDevices() {
 		if (!searchQuery.trim()) {
-			devices = [];
+			error = 'Please enter a search query';
 			return;
 		}
 
@@ -50,20 +41,16 @@
 		try {
 			let endpoint = '/devices?';
 
-			if (searchType === 'device_id') {
-				const deviceId = parseDeviceId(searchQuery.trim());
-				if (deviceId === null) {
-					error = 'Invalid device ID format. Please enter a 6-digit hex code (e.g., AABBCC)';
-					devices = [];
-					loading = false;
-					return;
-				}
-				endpoint += `device_id=${deviceId}`;
-			} else {
+			if (searchType === 'registration') {
 				endpoint += `registration=${encodeURIComponent(searchQuery.trim())}`;
+			} else {
+				// Device address search
+				const address = searchQuery.trim().toUpperCase();
+				endpoint += `address=${encodeURIComponent(address)}&address-type=${encodeURIComponent(deviceAddressType)}`;
 			}
 
-			devices = await serverCall<Device[]>(endpoint);
+			const response = await serverCall<{ devices: Device[] }>(endpoint);
+			devices = response.devices || [];
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			error = `Failed to search devices: ${errorMessage}`;
@@ -103,9 +90,7 @@
 		});
 	}
 
-	onMount(() => {
-		loadAllDevices();
-	});
+	// Don't load devices automatically on mount - wait for user search
 </script>
 
 <svelte:head>
@@ -124,70 +109,99 @@
 
 	<!-- Search Section -->
 	<section class="space-y-4 card p-6">
-		<div class="flex flex-col gap-4 md:flex-row">
-			<!-- Search Type Toggle -->
-			<div class="flex gap-2">
-				<button
-					class="btn btn-sm {searchType === 'device_id' ? 'variant-filled' : 'variant-soft'}"
-					on:click={() => (searchType = 'device_id')}
-				>
-					<Radio class="mr-2 h-4 w-4" />
-					Device ID
-				</button>
-				<button
-					class="btn btn-sm {searchType === 'registration' ? 'variant-filled' : 'variant-soft'}"
-					on:click={() => (searchType = 'registration')}
-				>
-					<Plane class="mr-2 h-4 w-4" />
-					Registration
-				</button>
-			</div>
+		<h3 class="mb-3 text-lg font-semibold">Search Aircraft Devices</h3>
+		<div class="space-y-3 rounded-lg border p-3">
+			<!-- Search type selector -->
+			<Segment
+				name="search-type"
+				value={searchType}
+				onValueChange={(e) => {
+					if (e.value && (e.value === 'registration' || e.value === 'device')) {
+						searchType = e.value;
+						error = '';
+					}
+				}}
+			>
+				<Segment.Item value="registration">
+					<div class="flex flex-row items-center">
+						<Plane size={16} />
+						<span class="ml-1">Registration</span>
+					</div>
+				</Segment.Item>
+				<Segment.Item value="device">
+					<div class="flex flex-row items-center">
+						<Antenna size={16} />
+						<span class="ml-1">Device Address</span>
+					</div>
+				</Segment.Item>
+			</Segment>
 
-			<!-- Search Input -->
-			<div class="flex flex-1 gap-2">
+			{#if searchType === 'registration'}
 				<input
+					class="input"
+					placeholder="Aircraft registration (e.g., N12345)"
 					bind:value={searchQuery}
-					on:keydown={handleKeydown}
-					class="input flex-1"
-					type="text"
-					placeholder={searchType === 'device_id'
-						? 'Enter device ID (e.g., AABBCC)'
-						: 'Enter registration number (e.g., N123AB)'}
+					onkeydown={handleKeydown}
+					oninput={() => (error = '')}
 				/>
-				<button class="variant-filled btn" on:click={searchDevices}>
+			{:else}
+				<div class="grid grid-cols-2 gap-2">
+					<Segment
+						name="address-type"
+						value={deviceAddressType}
+						onValueChange={(e) => {
+							if (e.value) {
+								deviceAddressType = e.value;
+								error = '';
+							}
+						}}
+					>
+						<Segment.Item value="I">ICAO</Segment.Item>
+						<Segment.Item value="O">OGN</Segment.Item>
+						<Segment.Item value="F">FLARM</Segment.Item>
+					</Segment>
+					<input
+						class="input"
+						placeholder="Device address"
+						bind:value={searchQuery}
+						onkeydown={handleKeydown}
+						oninput={() => (error = '')}
+					/>
+				</div>
+			{/if}
+
+			<button
+				class="variant-filled-primary btn w-full"
+				onclick={searchDevices}
+				disabled={loading}
+			>
+				{#if loading}
+					<div
+						class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
+					></div>
+					Searching...
+				{:else}
 					<Search class="mr-2 h-4 w-4" />
-					Search
-				</button>
-			</div>
+					Search Devices
+				{/if}
+			</button>
+
+			<!-- Error message display -->
+			{#if error}
+				<div class="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-600">
+					{error}
+				</div>
+			{/if}
 		</div>
 
 		<div class="flex justify-center">
-			<button class="variant-soft btn" on:click={loadAllDevices}> Show Recent Devices </button>
+			<button class="variant-soft btn" onclick={loadAllDevices}> Show Recent Devices </button>
 		</div>
 	</section>
 
-	<!-- Loading State -->
-	{#if loading}
-		<div class="card p-8">
-			<div class="flex items-center justify-center space-x-4">
-				<ProgressRing size="w-8 h-8" />
-				<span class="text-lg">Searching devices...</span>
-			</div>
-		</div>
-	{/if}
-
-	<!-- Error State -->
-	{#if error}
-		<div class="alert variant-filled-error">
-			<div class="alert-message">
-				<h3 class="h3">Search Error</h3>
-				<p>{error}</p>
-			</div>
-		</div>
-	{/if}
 
 	<!-- Results Table -->
-	{#if !loading && !error && devices.length > 0}
+	{#if !loading && devices.length > 0}
 		<section class="card">
 			<header class="card-header">
 				<h2 class="h2">Search Results</h2>
@@ -264,13 +278,23 @@
 				</table>
 			</div>
 		</section>
-	{:else if !loading && !error && devices.length === 0 && searchQuery}
+	{:else if !loading && devices.length === 0 && searchQuery}
 		<div class="space-y-4 card p-12 text-center">
 			<Search class="mx-auto mb-4 h-16 w-16 text-surface-400" />
 			<div class="space-y-2">
 				<h3 class="h3">No devices found</h3>
 				<p class="text-surface-500-400-token">
 					Try adjusting your search criteria or search for a different device.
+				</p>
+			</div>
+		</div>
+	{:else if !loading && devices.length === 0 && !searchQuery}
+		<div class="space-y-4 card p-12 text-center">
+			<Search class="mx-auto mb-4 h-16 w-16 text-surface-400" />
+			<div class="space-y-2">
+				<h3 class="h3">Search for aircraft devices</h3>
+				<p class="text-surface-500-400-token">
+					Enter a registration number or device address to search for aircraft tracking devices.
 				</p>
 			</div>
 		</div>
