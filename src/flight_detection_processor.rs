@@ -15,6 +15,16 @@ use crate::{Fix, FixHandler};
 use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
 
+/// Helper function to format device address with type for logging
+fn format_device_address_with_type(device_address: &str, address_type: Option<AddressType>) -> String {
+    match address_type {
+        Some(AddressType::Flarm) => format!("FLARM-{}", device_address),
+        Some(AddressType::Ogn) => format!("OGN-{}", device_address),
+        Some(AddressType::Icao) => format!("ICAO-{}", device_address),
+        Some(AddressType::Unknown) | None => device_address.to_string(),
+    }
+}
+
 /// Simplified aircraft state - either idle or active
 #[derive(Debug, Clone, PartialEq)]
 pub enum AircraftState {
@@ -158,7 +168,7 @@ impl FlightDetectionProcessor {
                 info!(
                     "Created airborne flight {} for aircraft {} (first seen at {:.6}, {:.6})",
                     flight_id,
-                    device_address,
+                    format_device_address_with_type(device_address, fix.address_type),
                     fix.latitude,
                     fix.longitude
                 );
@@ -315,7 +325,7 @@ impl FlightDetectionProcessor {
             match (old_state, &new_state) {
                 (AircraftState::Idle, AircraftState::Active) => {
                     // Takeoff detected
-                    debug!("Takeoff detected for aircraft {}", device_address);
+                    debug!("Takeoff detected for aircraft {}", format_device_address_with_type(device_address, fix.address_type));
                     match self.create_flight(device_address, fix).await {
                         Ok(flight_id) => {
                             let mut trackers = self.aircraft_trackers.write().await;
@@ -338,7 +348,7 @@ impl FlightDetectionProcessor {
                 }
                 (AircraftState::Active, AircraftState::Idle) => {
                     // Landing detected
-                    debug!("Landing detected for aircraft {}", device_address);
+                    debug!("Landing detected for aircraft {}", format_device_address_with_type(device_address, fix.address_type));
                     if let Some(flight_id) = current_flight_id
                         && let Err(e) = self.complete_flight(flight_id, fix).await
                     {
@@ -369,18 +379,18 @@ impl FlightDetectionProcessor {
             new_tracker.update_position(fix);
 
             if new_state == AircraftState::Active {
-                debug!("New in-flight aircraft detected: {}", device_address);
+                debug!("New in-flight aircraft detected: {}", format_device_address_with_type(device_address, fix.address_type));
                 // Create a flight for aircraft already airborne, but without takeoff data
                 match self.create_airborne_flight(device_address, fix).await {
                     Ok(flight_id) => {
                         new_tracker.current_flight_id = Some(flight_id);
                         info!(
                             "Created airborne flight {} for aircraft {} (no takeoff data)",
-                            flight_id, device_address
+                            flight_id, format_device_address_with_type(device_address, fix.address_type)
                         );
                     }
                     Err(e) => {
-                        warn!("Failed to create airborne flight for {}: {}", device_address, e);
+                        warn!("Failed to create airborne flight for {}: {}", format_device_address_with_type(device_address, fix.address_type), e);
                     }
                 }
             }
