@@ -558,8 +558,7 @@ async fn main() -> Result<()> {
             // Start live fixes service if NATS URL is configured
             if let Ok(nats_url) = env::var("NATS_URL") {
                 info!("Starting live fixes service with NATS URL: {}", nats_url);
-                let live_fix_service = LiveFixService::new(&nats_url).await?;
-                live_fix_service.start_listening().await?;
+                let _live_fix_service = LiveFixService::new(&nats_url).await?;
             } else {
                 warn!("NATS_URL not configured, live fixes will not be available");
             }

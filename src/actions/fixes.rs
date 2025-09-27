@@ -148,17 +148,30 @@ async fn handle_subscriptions(
                                 info!("Client subscribing to device: {}", sub_msg.device_id);
                                 let device_id = sub_msg.device_id;
                                 if !subscribed_aircraft.contains(&device_id) {
-                                    subscribed_aircraft.push(device_id.clone());
-                                    let receiver = live_fix_service.get_receiver(&device_id).await;
-                                    receivers.insert(device_id.clone(), receiver);
+                                    match live_fix_service.subscribe_to_device(&device_id).await {
+                                        Ok(receiver) => {
+                                            subscribed_aircraft.push(device_id.clone());
+                                            receivers.insert(device_id.clone(), receiver);
+                                            info!("Successfully subscribed to device: {}", device_id);
+                                        }
+                                        Err(e) => {
+                                            error!("Failed to subscribe to device {}: {}", device_id, e);
+                                        }
+                                    }
                                 }
                             }
                             "unsubscribe" => {
                                 info!("Client unsubscribing from device: {}", sub_msg.device_id);
                                 let device_id = &sub_msg.device_id;
-                                subscribed_aircraft.retain(|id| id != device_id);
-                                receivers.remove(device_id);
-                                live_fix_service.cleanup_aircraft(device_id).await;
+                                if subscribed_aircraft.contains(device_id) {
+                                    subscribed_aircraft.retain(|id| id != device_id);
+                                    receivers.remove(device_id);
+                                    if let Err(e) = live_fix_service.unsubscribe_from_device(device_id).await {
+                                        error!("Failed to unsubscribe from device {}: {}", device_id, e);
+                                    } else {
+                                        info!("Successfully unsubscribed from device: {}", device_id);
+                                    }
+                                }
                             }
                             _ => {
                                 warn!("Unknown subscription action: {}", sub_msg.action);
@@ -173,39 +186,62 @@ async fn handle_subscriptions(
             }
 
             // Handle incoming fixes from NATS for any subscribed device
-            _ = async {
-                if !receivers.is_empty() {
-                    // Wait for message from the first receiver (simple approach for now)
-                    if let Some((device_id, receiver)) = receivers.iter_mut().next() {
-                        match receiver.recv().await {
+            fix_result = async {
+                if receivers.is_empty() {
+                    // No active subscriptions, wait indefinitely
+                    std::future::pending::<Option<LiveFix>>().await
+                } else {
+                    // Use futures::select_all to wait for any receiver to have a message
+                    use futures_util::future::select_all;
+
+                    // Create a vec of futures for all receivers
+                    let mut futures = Vec::new();
+                    let mut device_ids = Vec::new();
+
+                    for (device_id, receiver) in receivers.iter_mut() {
+                        futures.push(Box::pin(receiver.recv()));
+                        device_ids.push(device_id.clone());
+                    }
+
+                    if !futures.is_empty() {
+                        let (result, index, _) = select_all(futures).await;
+                        let device_id = &device_ids[index];
+
+                        match result {
                             Ok(live_fix) => {
                                 info!("Received live fix for device: {}", device_id);
-                                if fix_tx.send(live_fix).is_err() {
-                                    error!("Failed to send live fix to WebSocket writer");
-                                    return;
-                                }
+                                Some(live_fix)
                             }
                             Err(broadcast::error::RecvError::Closed) => {
                                 error!("Receiver closed for device: {}", device_id);
-                                return;
+                                None
                             }
                             Err(broadcast::error::RecvError::Lagged(n)) => {
                                 warn!("Receiver lagged {} messages for device: {}", n, device_id);
+                                None
                             }
                         }
+                    } else {
+                        std::future::pending::<Option<LiveFix>>().await
                     }
-                } else {
-                    // No active subscriptions, wait indefinitely
-                    std::future::pending::<()>().await;
                 }
             } => {
-                // Processing is done in the async block above
+                if let Some(live_fix) = fix_result {
+                    if fix_tx.send(live_fix).is_err() {
+                        error!("Failed to send live fix to WebSocket writer");
+                        return;
+                    }
+                }
             }
         }
     }
 
     // Cleanup subscriptions when connection closes
     for aircraft_id in &subscribed_aircraft {
-        live_fix_service.cleanup_aircraft(aircraft_id).await;
+        if let Err(e) = live_fix_service.unsubscribe_from_device(aircraft_id).await {
+            error!("Failed to cleanup subscription for device {}: {}", aircraft_id, e);
+        } else {
+            info!("Cleaned up subscription for device: {}", aircraft_id);
+        }
     }
 }

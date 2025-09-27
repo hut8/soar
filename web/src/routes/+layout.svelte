@@ -133,7 +133,7 @@
 			{/if}
 		{/snippet}
 		<!-- WebSocket Status Indicator for larger screens -->
-		<div class="hidden items-center w-full lg:flex">
+		<div class="hidden w-full items-center justify-center lg:flex">
 			{#if $websocketStatus.connected}
 				<div
 					class="bg-success-500/20 text-success-600 dark:text-success-400 flex items-center space-x-1 rounded px-2 py-1"
@@ -164,7 +164,7 @@
 					<span class="text-xs font-medium">Disconnected</span>
 				</div>
 			{/if}
-            </div>
+		</div>
 	</AppBar>
 
 	<main class="container mx-auto flex-1 space-y-4 p-4">

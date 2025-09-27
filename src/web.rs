@@ -230,13 +230,8 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
             info!("NATS_URL found, initializing live fix service");
             match LiveFixService::new(&nats_url).await {
                 Ok(service) => {
-                    if let Err(e) = service.start_listening().await {
-                        error!("Failed to start live fix service listener: {}", e);
-                        None
-                    } else {
-                        info!("Live fix service initialized successfully");
-                        Some(service)
-                    }
+                    info!("Live fix service initialized successfully with on-demand subscriptions");
+                    Some(service)
                 }
                 Err(e) => {
                     error!("Failed to create live fix service: {}", e);

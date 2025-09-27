@@ -502,7 +502,16 @@ impl FixesRepository {
             .await??;
         }
 
-        debug!("Inserted fix for aircraft: {:?}", aircraft_identifier);
+        debug!(
+            "Inserted fix for aircraft: {} | Device ID: {:?} | Position: {:.6}, {:.6} | Altitude: {}ft | Map: https://maps.google.com/maps?q={:.6},{:.6}",
+            aircraft_identifier.unwrap_or_else(|| "Unknown".to_string()),
+            fix.device_id,
+            fix.latitude,
+            fix.longitude,
+            fix.altitude_feet.map_or("Unknown".to_string(), |a| a.to_string()),
+            fix.latitude,
+            fix.longitude
+        );
         Ok(())
     }
 

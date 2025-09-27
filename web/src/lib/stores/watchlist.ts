@@ -28,6 +28,7 @@ const currentlySubscribedDevices = new Set<string>();
 let reconnectAttempts = 0;
 const maxReconnectAttempts = 5;
 const reconnectDelay = 1000; // Start with 1 second
+let operationsPageActive = false; // Track if operations page is using live fixes
 
 // WebSocket status store
 export const websocketStatus = writable<{
@@ -159,7 +160,13 @@ function initializeWebSocket() {
 }
 
 function connectWebSocket() {
-	if (!browser || websocket?.readyState === WebSocket.OPEN) return;
+	if (!browser) return;
+
+	// Prevent multiple connections
+	if (websocket?.readyState === WebSocket.OPEN || websocket?.readyState === WebSocket.CONNECTING) {
+		console.log('WebSocket already connected or connecting, skipping connection attempt');
+		return;
+	}
 
 	// Update status to show connection attempt
 	websocketStatus.update((status) => ({
@@ -176,29 +183,34 @@ function connectWebSocket() {
 
 			// Reset reconnection state
 			reconnectAttempts = 0;
-			websocketStatus.update((status) => ({
+			websocketStatus.update(() => ({
 				connected: true,
 				reconnecting: false,
 				error: null
 			}));
 
-            // Subscribe to all devices in the watchlist after a small delay to ensure connection is fully ready
+            // Subscribe to all active devices in the watchlist after connection is ready
             setTimeout(() => {
                 if (websocket?.readyState === WebSocket.OPEN) {
-                    watchlist.subscribe((state) => {
-                        state.entries.forEach((entry) => {
-                            if (entry.active && entry.device.id) {
-                                console.log('Subscribing to device after connection:', entry.device.id);
-                                websocket?.send(
-                                    JSON.stringify({
-                                        action: 'subscribe',
-                                        device_id: entry.device.id
-                                    })
-                                );
-                                currentlySubscribedDevices.add(entry.device.id);
-                            }
-                        });
-                    })();
+                    // Get current watchlist state without creating a subscription
+                    let currentState: WatchlistStore = { entries: [] };
+                    const unsubscribe = watchlist.subscribe(state => {
+                        currentState = state;
+                    });
+                    unsubscribe(); // Immediately unsubscribe to avoid creating permanent subscription
+
+                    currentState.entries.forEach((entry) => {
+                        if (entry.active && entry.device.id && !currentlySubscribedDevices.has(entry.device.id)) {
+                            console.log('Subscribing to device after connection:', entry.device.id);
+                            websocket?.send(
+                                JSON.stringify({
+                                    action: 'subscribe',
+                                    device_id: entry.device.id
+                                })
+                            );
+                            currentlySubscribedDevices.add(entry.device.id);
+                        }
+                    });
                 }
             }, 50); // Small delay to ensure WebSocket is fully ready
 		};
@@ -217,7 +229,7 @@ function connectWebSocket() {
 			websocket = null;
 
 			// Update status
-			websocketStatus.update((status) => ({
+			websocketStatus.update(() => ({
 				connected: false,
 				reconnecting: false,
 				error: event.code !== 1000 ? `Connection lost (${event.code})` : null
@@ -382,8 +394,8 @@ async function handleWatchlistChange(entries: WatchlistEntry[]) {
 		}
 	}
 
-	// If no devices are active, disconnect WebSocket
-	if (desiredActiveDevices.size === 0) {
+	// Only disconnect WebSocket if no devices are active AND operations page is not active
+	if (desiredActiveDevices.size === 0 && !operationsPageActive) {
 		disconnectWebSocket();
 		currentlySubscribedDevices.clear();
 	}
@@ -393,6 +405,31 @@ async function handleWatchlistChange(entries: WatchlistEntry[]) {
 function saveWatchlistToStorage(entries: WatchlistEntry[]) {
 	if (!browser) return;
 	localStorage.setItem('watchlist', JSON.stringify(entries));
+}
+
+// Function to connect and listen for all live fixes (for operations page)
+export function startLiveFixesFeed() {
+	if (!browser) return;
+
+	console.log('Starting live fixes feed for operations page');
+	operationsPageActive = true;
+	initializeWebSocket();
+	connectWebSocket();
+}
+
+
+// Function to stop live fixes feed
+export function stopLiveFixesFeed() {
+	if (!browser) return;
+
+	console.log('Stopping live fixes feed for operations page');
+	operationsPageActive = false;
+
+	// Only disconnect if there are no active watchlist devices
+	const hasActiveDevices = currentlySubscribedDevices.size > 0;
+	if (!hasActiveDevices) {
+		disconnectWebSocket();
+	}
 }
 
 // Create store instances

@@ -7,7 +7,7 @@
 	import { Settings, ListChecks } from '@lucide/svelte';
 	import WatchlistModal from '$lib/components/WatchlistModal.svelte';
 	import SettingsModal from '$lib/components/SettingsModal.svelte';
-	import { fixes } from '$lib/stores/watchlist';
+	import { fixes, startLiveFixesFeed, stopLiveFixesFeed } from '$lib/stores/watchlist';
 	import type { Fix } from '$lib/types';
 
 	// TypeScript interfaces for airport data
@@ -144,7 +144,17 @@
 			await loadGoogleMapsScript();
 			initializeMap();
 			initializeCompass();
+			// Start live fixes feed for operations page
+			startLiveFixesFeed();
 		}
+
+		// Cleanup function
+		return () => {
+			if (browser) {
+				stopLiveFixesFeed();
+				clearAircraftMarkers();
+			}
+		};
 	});
 
 	async function loadGoogleMapsScript(): Promise<void> {
