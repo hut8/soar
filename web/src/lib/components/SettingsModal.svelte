@@ -93,14 +93,14 @@
 <!-- Settings Modal -->
 {#if showModal}
 	<div
-		class="bg-surface-950-50/50 fixed inset-0 z-50 flex items-center justify-center"
+		class="fixed inset-0 z-50 flex items-center justify-center bg-surface-950-50/50"
 		onclick={() => (showModal = false)}
 		onkeydown={(e) => e.key === 'Escape' && (showModal = false)}
 		tabindex="-1"
 		role="dialog"
 	>
 		<div
-			class="card max-h-[80vh] w-full max-w-lg overflow-y-auto bg-white p-4 text-gray-900 shadow-xl"
+			class="max-h-[80vh] w-full max-w-lg overflow-y-auto card bg-white p-4 text-gray-900 shadow-xl"
 			onclick={(e) => e.stopPropagation()}
 			onkeydown={(e) => e.key === 'Escape' && (showModal = false)}
 			role="dialog"

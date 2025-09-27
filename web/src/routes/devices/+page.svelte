@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Search, Radio, Plane, User, Antenna } from '@lucide/svelte';
-	import { ProgressRing, Segment } from '@skeletonlabs/skeleton-svelte';
+	import { Segment } from '@skeletonlabs/skeleton-svelte';
 	import { resolve } from '$app/paths';
 	import { serverCall } from '$lib/api/server';
 
@@ -170,11 +170,7 @@
 				</div>
 			{/if}
 
-			<button
-				class="variant-filled-primary btn w-full"
-				onclick={searchDevices}
-				disabled={loading}
-			>
+			<button class="variant-filled-primary btn w-full" onclick={searchDevices} disabled={loading}>
 				{#if loading}
 					<div
 						class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
@@ -198,7 +194,6 @@
 			<button class="variant-soft btn" onclick={loadAllDevices}> Show Recent Devices </button>
 		</div>
 	</section>
-
 
 	<!-- Results Table -->
 	{#if !loading && devices.length > 0}

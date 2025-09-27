@@ -117,14 +117,14 @@
 		tabindex="-1"
 	>
 		<div
-			class="h-full max-h-9/10 w-full max-w-9/10 card bg-white text-gray-900 shadow-xl flex flex-col"
+			class="flex h-full max-h-9/10 w-full max-w-9/10 flex-col card bg-white text-gray-900 shadow-xl"
 			onclick={(e) => e.stopPropagation()}
 			onkeydown={(e) => e.key === 'Escape' && (showModal = false)}
 			role="dialog"
 			tabindex="0"
 		>
 			<!-- Header -->
-			<div class="p-4 pb-0 flex-shrink-0">
+			<div class="flex-shrink-0 p-4 pb-0">
 				<div class="mb-4 flex items-center justify-between">
 					<h2 class="text-xl font-bold">Watchlist</h2>
 					<button class="variant-ghost-surface btn btn-sm" onclick={() => (showModal = false)}>
@@ -134,7 +134,7 @@
 			</div>
 
 			<!-- Content area with flex layout -->
-			<div class="flex flex-col flex-1 min-h-0 p-4 pt-0 space-y-6">
+			<div class="flex min-h-0 flex-1 flex-col space-y-6 p-4 pt-0">
 				<!-- Add new entry -->
 				<section class="flex-shrink-0">
 					<h3 class="mb-3 text-lg font-semibold">Add Aircraft</h3>
@@ -226,8 +226,10 @@
 				</section>
 
 				<!-- Watchlist entries - takes remaining space -->
-				<section class="flex flex-col flex-1 min-h-0">
-					<h3 class="mb-3 flex flex-row items-center align-middle text-lg font-semibold flex-shrink-0">
+				<section class="flex min-h-0 flex-1 flex-col">
+					<h3
+						class="mb-3 flex flex-shrink-0 flex-row items-center align-middle text-lg font-semibold"
+					>
 						<Eye size={16} /> Watched Aircraft ({$watchlist.entries.length})
 					</h3>
 					{#if $watchlist.entries.length > 0}
@@ -241,27 +243,27 @@
 									>
 										<div class="flex flex-col space-y-2">
 											<div class="flex items-start justify-between">
-												<div class="flex-1 min-w-0">
+												<div class="min-w-0 flex-1">
 													<div class="space-y-1">
 														<div class="flex items-center gap-2">
-															<span class="text-lg font-medium truncate"
+															<span class="truncate text-lg font-medium"
 																>{entry.device.registration || 'Unknown Registration'}</span
 															>
 															{#if entry.device.cn}
 																<span
-																	class="rounded bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800 flex-shrink-0"
+																	class="flex-shrink-0 rounded bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800"
 																	>{entry.device.cn}</span
 																>
 															{/if}
 														</div>
-														<div class="text-sm text-gray-600 truncate">
+														<div class="truncate text-sm text-gray-600">
 															{entry.device.aircraft_model || 'Unknown Aircraft Model'}
 														</div>
 														<div class="text-xs text-gray-500">
 															<div class="truncate">
 																{entry.device.address_type}: {entry.device.address}
 															</div>
-															<div class="flex flex-wrap gap-1 mt-1">
+															<div class="mt-1 flex flex-wrap gap-1">
 																{#if entry.device.tracked}
 																	<span class="text-green-600">• Tracked</span>
 																{/if}
@@ -292,7 +294,7 @@
 							</div>
 						</div>
 					{:else}
-						<div class="flex-1 flex items-center justify-center">
+						<div class="flex flex-1 items-center justify-center">
 							<p class="text-center text-sm text-gray-500">No aircraft in watchlist</p>
 						</div>
 					{/if}
