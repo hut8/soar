@@ -1,5 +1,5 @@
 import { writable } from 'svelte/store';
-import { browser } from '$app/environment';
+import { browser, dev } from '$app/environment';
 import { serverCall } from '$lib/api/server';
 import type { WatchlistEntry, Fix, Device } from '$lib/types';
 
@@ -78,8 +78,8 @@ function createWatchlistStore() {
 			if (saved) {
 				try {
 					const entries = (JSON.parse(saved) as WatchlistEntry[]).filter(
-                        (entry) => entry.device?.id && entry.id
-                    );
+						(entry) => entry.device?.id && entry.id
+					);
 					set({ entries });
 					handleWatchlistChange(entries);
 				} catch (e) {
@@ -140,8 +140,8 @@ function initializeWebSocket() {
 
 	// Determine WebSocket URL based on current environment
 	const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-	const host = window.location.host;
-	websocketUrl = `${protocol}//${host}/fixes/live`;
+	const host = dev ? 'localhost:1337' : window.location.host;
+	websocketUrl = `${protocol}//${host}/data/fixes/live`;
 }
 
 function connectWebSocket() {
@@ -151,7 +151,22 @@ function connectWebSocket() {
 		websocket = new WebSocket(websocketUrl);
 
 		websocket.onopen = () => {
-			console.log('WebSocket connected to /fixes/live');
+			console.log('WebSocket connected to live fixes feed');
+            // Subscribe to all devices in the watchlist
+            watchlist.subscribe((state) => {
+                state.entries.forEach((entry) => {
+                    if (entry.active && entry.device.id) {
+                        console.log('Subscribing to device after connection:', entry.device.id);
+                        websocket?.send(
+                            JSON.stringify({
+                                action: 'subscribe',
+                                device_id: entry.device.id
+                            })
+                        );
+                        currentlySubscribedDevices.add(entry.device.id);
+                    }
+                });
+            })();
 		};
 
 		websocket.onmessage = (event) => {
