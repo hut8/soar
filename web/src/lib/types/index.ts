@@ -125,11 +125,20 @@ export class Device {
 
 	// Add a new fix, maintaining the most-recent-first order
 	addFix(fix: Fix): void {
+		console.log('[DEVICE] Adding fix to device:', {
+			deviceId: this.id,
+			registration: this.registration,
+			fixTimestamp: fix.timestamp,
+			currentFixCount: this.fixes.length
+		});
+
 		// Add fix to the beginning of the array (most recent first)
 		this.fixes.unshift(fix);
 
 		// Remove fixes older than 24 hours
 		this.cleanupOldFixes();
+
+		console.log('[DEVICE] Fix added. New fix count:', this.fixes.length);
 	}
 
 	// Get the most recent fix

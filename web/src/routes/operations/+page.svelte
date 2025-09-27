@@ -129,11 +129,18 @@
 
 	// Subscribe to device registry and update aircraft markers
 	let activeDevices: Device[] = $state([]);
+	let connectionStatus = $state({ connected: false, reconnecting: false });
 
 	$effect(() => {
 		const unsubscribeRegistry = deviceRegistry.subscribe((event: DeviceRegistryEvent) => {
 			if (event.type === 'devices_changed') {
 				activeDevices = event.devices;
+			} else if (event.type === 'fix_added') {
+				console.log('Fix added to device:', event.device.id, event.fix);
+				// Update the aircraft marker immediately when a new fix is added
+				if (map && event.fix) {
+					updateAircraftMarkerFromDevice(event.device, event.fix);
+				}
 			}
 		});
 
@@ -146,6 +153,8 @@
 				connectionStatus = { connected: false, reconnecting: true };
 			} else if (event.type === 'fix_received') {
 				console.log('Received fix:', event.fix);
+				// The fix will be automatically added to the device by FixFeed.addFixToDevice()
+				// This will trigger a device registry event which will update our activeDevices
 			}
 		});
 
@@ -160,13 +169,35 @@
 
 	// Reactive effect for handling device updates
 	$effect(() => {
-		if (!map || activeDevices.length === 0) return;
+		console.log('[EFFECT] Device update effect triggered:', {
+			mapExists: !!map,
+			activeDevicesCount: activeDevices.length,
+			activeDevices: activeDevices.map(d => ({ id: d.id, registration: d.registration, fixCount: d.fixes.length }))
+		});
+
+		if (!map) {
+			console.log('[EFFECT] No map available, skipping marker updates');
+			return;
+		}
+
+		if (activeDevices.length === 0) {
+			console.log('[EFFECT] No active devices, skipping marker updates');
+			return;
+		}
 
 		// Process devices with recent fixes to update aircraft markers
 		activeDevices.forEach((device) => {
 			const latestFix = device.getLatestFix();
+			console.log('[EFFECT] Processing device:', {
+				deviceId: device.id,
+				hasLatestFix: !!latestFix,
+				fixCount: device.fixes.length
+			});
+
 			if (latestFix) {
 				updateAircraftMarkerFromDevice(device, latestFix);
+			} else {
+				console.log('[EFFECT] No latest fix for device:', device.id);
 			}
 		});
 	});
@@ -202,7 +233,15 @@
 	}
 
 	function initializeMap(): void {
-		if (!mapContainer || !window.google) return;
+		console.log('[MAP] Initializing Google Maps:', {
+			hasContainer: !!mapContainer,
+			hasGoogle: !!window.google
+		});
+
+		if (!mapContainer || !window.google) {
+			console.error('[MAP] Missing requirements for map initialization');
+			return;
+		}
 
 		// Initialize map centered on continental US
 		map = new google.maps.Map(mapContainer, {
@@ -239,7 +278,7 @@
 		// Initial check for airports
 		setTimeout(checkAndUpdateAirports, 1000); // Give map time to fully initialize
 
-		console.log('Google Maps initialized for operations view');
+		console.log('[MAP] Google Maps initialized for operations view. Map ready for markers.');
 	}
 
 	async function locateUser(): Promise<void> {
@@ -533,22 +572,44 @@
 	}
 
 	function updateAircraftMarkerFromDevice(device: Device, latestFix: Fix): void {
-		if (!map) return;
+		console.log('[MARKER] updateAircraftMarkerFromDevice called:', {
+			deviceId: device.id,
+			registration: device.registration,
+			latestFix: {
+				lat: latestFix.latitude,
+				lng: latestFix.longitude,
+				alt: latestFix.altitude_feet,
+				timestamp: latestFix.timestamp
+			},
+			mapExists: !!map
+		});
+
+		if (!map) {
+			console.warn('[MARKER] No map available for marker update');
+			return;
+		}
 
 		const deviceKey = device.id;
-		if (!deviceKey) return;
+		if (!deviceKey) {
+			console.warn('[MARKER] No device ID available');
+			return;
+		}
 
 		// Update latest fix for this device
 		latestFixes.set(deviceKey, latestFix);
+		console.log('[MARKER] Updated latest fix for device:', deviceKey);
 
 		// Get or create marker for this aircraft
 		let marker = aircraftMarkers.get(deviceKey);
 
 		if (!marker) {
+			console.log('[MARKER] Creating new marker for device:', deviceKey);
 			// Create new aircraft marker with device info
 			marker = createAircraftMarkerFromDevice(device, latestFix);
 			aircraftMarkers.set(deviceKey, marker);
+			console.log('[MARKER] New marker created and stored. Total markers:', aircraftMarkers.size);
 		} else {
+			console.log('[MARKER] Updating existing marker for device:', deviceKey);
 			// Update existing marker position and info
 			updateAircraftMarkerPositionFromDevice(marker, device, latestFix);
 		}
@@ -558,6 +619,14 @@
 		device: Device,
 		fix: Fix
 	): google.maps.marker.AdvancedMarkerElement {
+		console.log('[MARKER] Creating marker for device:', {
+			deviceId: device.id,
+			registration: device.registration,
+			address: device.address,
+			position: { lat: fix.latitude, lng: fix.longitude },
+			track: fix.track_degrees
+		});
+
 		// Create aircraft icon with rotation based on track
 		const markerContent = document.createElement('div');
 		markerContent.className = 'aircraft-marker';
@@ -576,6 +645,7 @@
 		// Rotate icon based on track degrees (default to 0 if not available)
 		const track = fix.track_degrees || 0;
 		aircraftIcon.style.transform = `rotate(${track}deg)`;
+		console.log('[MARKER] Set icon rotation to:', track, 'degrees');
 
 		// Info label below the icon - show proper aircraft information
 		const infoLabel = document.createElement('div');
@@ -584,6 +654,12 @@
 		// Use proper device registration, fallback to address
 		const tailNumber = device.registration || device.address || 'Unknown';
 		const altitudeFt = fix.altitude_feet ? `${fix.altitude_feet}ft` : '---ft';
+
+		console.log('[MARKER] Aircraft info:', {
+			tailNumber,
+			altitude: altitudeFt,
+			model: device.aircraft_model
+		});
 
 		// Create two-line label: registration on top, altitude on bottom
 		const tailDiv = document.createElement('div');
@@ -605,6 +681,12 @@
 			? `${tailNumber} (${device.aircraft_model}) - Altitude: ${altitudeFt}`
 			: `${tailNumber} - Altitude: ${altitudeFt}`;
 
+		console.log('[MARKER] Creating AdvancedMarkerElement with:', {
+			position: { lat: fix.latitude, lng: fix.longitude },
+			title,
+			hasContent: !!markerContent
+		});
+
 		const marker = new google.maps.marker.AdvancedMarkerElement({
 			position: { lat: fix.latitude, lng: fix.longitude },
 			map: map,
@@ -612,6 +694,7 @@
 			content: markerContent
 		});
 
+		console.log('[MARKER] AdvancedMarkerElement created successfully');
 		return marker;
 	}
 
@@ -620,6 +703,12 @@
 		device: Device,
 		fix: Fix
 	): void {
+		console.log('[MARKER] Updating existing marker position:', {
+			deviceId: device.id,
+			oldPosition: marker.position,
+			newPosition: { lat: fix.latitude, lng: fix.longitude }
+		});
+
 		// Update position
 		marker.position = { lat: fix.latitude, lng: fix.longitude };
 
@@ -633,6 +722,7 @@
 			if (aircraftIcon) {
 				const track = fix.track_degrees || 0;
 				aircraftIcon.style.transform = `rotate(${track}deg)`;
+				console.log('[MARKER] Updated icon rotation to:', track, 'degrees');
 			}
 
 			if (tailDiv && altDiv) {
@@ -642,7 +732,10 @@
 
 				tailDiv.textContent = tailNumber;
 				altDiv.textContent = altitudeFt;
+				console.log('[MARKER] Updated label info:', { tailNumber, altitudeFt });
 			}
+		} else {
+			console.warn('[MARKER] No marker content found for position update');
 		}
 
 		// Update the marker title
@@ -651,14 +744,17 @@
 			: `${device.registration || device.address} - Altitude: ${fix.altitude_feet ? fix.altitude_feet + 'ft' : '---ft'}`;
 
 		marker.title = title;
+		console.log('[MARKER] Updated marker title:', title);
 	}
 
 	function clearAircraftMarkers(): void {
+		console.log('[MARKER] Clearing all aircraft markers. Count:', aircraftMarkers.size);
 		aircraftMarkers.forEach((marker) => {
 			marker.map = null;
 		});
 		aircraftMarkers.clear();
 		latestFixes.clear();
+		console.log('[MARKER] All aircraft markers cleared');
 	}
 </script>
 

@@ -136,11 +136,22 @@ export class DeviceRegistry {
 
 	// Add a fix to the appropriate device
 	public addFixToDevice(fix: Fix): Device | null {
+		console.log('[REGISTRY] Adding fix to device:', {
+			deviceId: fix.device_id,
+			deviceAddressHex: fix.device_address_hex,
+			timestamp: fix.timestamp,
+			position: { lat: fix.latitude, lng: fix.longitude }
+		});
+
 		const deviceId = fix.device_id;
-		if (!deviceId) return null;
+		if (!deviceId) {
+			console.warn('[REGISTRY] No device_id in fix, cannot add');
+			return null;
+		}
 
 		let device = this.getDevice(deviceId);
 		if (!device) {
+			console.log('[REGISTRY] Creating new device for fix:', deviceId);
 			// Create a minimal device if we don't have one
 			device = new Device({
 				id: deviceId,
@@ -152,10 +163,18 @@ export class DeviceRegistry {
 				tracked: false,
 				identified: false
 			});
+		} else {
+			console.log('[REGISTRY] Using existing device:', {
+				deviceId,
+				registration: device.registration,
+				existingFixCount: device.fixes.length
+			});
 		}
 
 		device.addFix(fix);
 		this.setDevice(device);
+
+		console.log('[REGISTRY] Fix added to device. New fix count:', device.fixes.length);
 
 		// Notify subscribers about the fix
 		this.notifySubscribers({
@@ -163,6 +182,8 @@ export class DeviceRegistry {
 			device,
 			fix
 		});
+
+		console.log('[REGISTRY] Notified subscribers about fix_added');
 
 		return device;
 	}
