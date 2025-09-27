@@ -514,6 +514,7 @@
 	}
 
 	function createAircraftMarker(fix: Fix): google.maps.marker.AdvancedMarkerElement {
+        console.log(`Creating marker for aircraft: ${fix.registration || fix.device_address_hex}`);
         // TODO: Add aircraft photos to markers using registration or hex code
         // https://api.planespotters.net/pub/photos/reg/D-ABCD
         // https://api.planespotters.net/pub/photos/hex/ABC123
@@ -522,30 +523,41 @@
 		const markerContent = document.createElement('div');
 		markerContent.className = 'aircraft-marker';
 
-		// Aircraft icon (rotated based on track)
+		// Aircraft icon (rotated based on track) - using a more visible SVG plane
 		const aircraftIcon = document.createElement('div');
 		aircraftIcon.className = 'aircraft-icon';
-		aircraftIcon.innerHTML = '✈';
+
+		// Create SVG airplane icon that's more visible and oriented correctly
+		aircraftIcon.innerHTML = `
+			<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+				<path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
+			</svg>
+		`;
 
 		// Rotate icon based on track degrees (default to 0 if not available)
 		const track = fix.track_degrees || 0;
 		aircraftIcon.style.transform = `rotate(${track}deg)`;
 
-		// Info label below the icon
+		// Info label below the icon - prioritize tail number and altitude
 		const infoLabel = document.createElement('div');
 		infoLabel.className = 'aircraft-label';
 
-		// Display registration, model, and altitude
-		const registration = fix.registration || 'Unknown';
-		const model = fix.model || '';
-		const altitudeFt = fix.altitude_feet ? `${fix.altitude_feet}ft` : '';
+		// Get aircraft identifier (registration or hex ID)
+		const tailNumber = fix.registration ||
+			(fix.device_address_hex ? `${fix.device_address_hex}` : 'Unknown');
+		const altitudeFt = fix.altitude_feet ? `${fix.altitude_feet}ft` : '---ft';
 
-		// Format label with registration, model (if available), and altitude
-		let labelText = registration;
-		if (model) labelText += ` ${model}`;
-		if (altitudeFt) labelText += ` ${altitudeFt}`;
+		// Create two-line label: tail number on top, altitude on bottom
+		const tailDiv = document.createElement('div');
+		tailDiv.className = 'aircraft-tail';
+		tailDiv.textContent = tailNumber;
 
-		infoLabel.textContent = labelText;
+		const altDiv = document.createElement('div');
+		altDiv.className = 'aircraft-altitude';
+		altDiv.textContent = altitudeFt;
+
+		infoLabel.appendChild(tailDiv);
+		infoLabel.appendChild(altDiv);
 
 		markerContent.appendChild(aircraftIcon);
 		markerContent.appendChild(infoLabel);
@@ -554,7 +566,7 @@
 		const marker = new google.maps.marker.AdvancedMarkerElement({
 			position: { lat: fix.latitude, lng: fix.longitude },
 			map: map,
-			title: `${registration} - ${model || 'Aircraft'}`,
+			title: `${tailNumber} - Altitude: ${altitudeFt}`,
 			content: markerContent
 		});
 
@@ -569,23 +581,21 @@
 		const markerContent = marker.content as HTMLElement;
 		if (markerContent) {
 			const aircraftIcon = markerContent.querySelector('.aircraft-icon') as HTMLElement;
-			const infoLabel = markerContent.querySelector('.aircraft-label') as HTMLElement;
+			const tailDiv = markerContent.querySelector('.aircraft-tail') as HTMLElement;
+			const altDiv = markerContent.querySelector('.aircraft-altitude') as HTMLElement;
 
 			if (aircraftIcon) {
 				const track = fix.track_degrees || 0;
 				aircraftIcon.style.transform = `rotate(${track}deg)`;
 			}
 
-			if (infoLabel) {
-				const registration = fix.registration || 'Unknown';
-				const model = fix.model || '';
-				const altitudeFt = fix.altitude_feet ? `${fix.altitude_feet}ft` : '';
+			if (tailDiv && altDiv) {
+				const tailNumber = fix.registration ||
+					(fix.device_address_hex ? `${fix.device_address_hex}` : 'Unknown');
+				const altitudeFt = fix.altitude_feet ? `${fix.altitude_feet}ft` : '---ft';
 
-				let labelText = registration;
-				if (model) labelText += ` ${model}`;
-				if (altitudeFt) labelText += ` ${altitudeFt}`;
-
-				infoLabel.textContent = labelText;
+				tailDiv.textContent = tailNumber;
+				altDiv.textContent = altitudeFt;
 			}
 		}
 	}
@@ -865,33 +875,51 @@
 	}
 
 	:global(.aircraft-icon) {
-		background: #3b82f6;
-		border: 2px solid #ffffff;
+		background: #ef4444;
+		border: 3px solid #ffffff;
 		border-radius: 50%;
-		width: 28px;
-		height: 28px;
+		width: 36px;
+		height: 36px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		font-size: 14px;
 		color: white;
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+		box-shadow: 0 3px 12px rgba(0, 0, 0, 0.5);
 		transition: transform 0.3s ease;
+		position: relative;
+	}
+
+	:global(.aircraft-icon svg) {
+		width: 20px;
+		height: 20px;
+		filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
 	}
 
 	:global(.aircraft-label) {
-		background: rgba(59, 130, 246, 0.95);
-		border: 1px solid #2563eb;
-		border-radius: 4px;
-		padding: 3px 8px;
+		background: rgba(239, 68, 68, 0.95);
+		border: 2px solid #dc2626;
+		border-radius: 6px;
+		padding: 4px 8px;
+		margin-top: 6px;
+		box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
+		min-width: 60px;
+		text-align: center;
+	}
+
+	:global(.aircraft-tail) {
+		font-size: 12px;
+		font-weight: 700;
+		color: white;
+		line-height: 1.2;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+	}
+
+	:global(.aircraft-altitude) {
 		font-size: 10px;
 		font-weight: 600;
-		color: white;
-		margin-top: 4px;
-		white-space: nowrap;
-		box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
-		max-width: 120px;
-		overflow: hidden;
-		text-overflow: ellipsis;
+		color: rgba(255, 255, 255, 0.9);
+		line-height: 1.1;
+		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+		margin-top: 1px;
 	}
 </style>
