@@ -103,14 +103,17 @@ export interface Device {
 
 export interface Fix {
 	id: string;
-	device_id: string;
+	device_id?: string;
+	device_address_hex?: string;
 	timestamp: string;
 	latitude: number;
 	longitude: number;
-	altitude: number;
-	track: number;
-	ground_speed: number;
-	climb_rate: number;
+	altitude_feet?: number;
+	track_degrees?: number;
+	ground_speed_knots?: number;
+	climb_fpm?: number;
+	registration?: string;
+	model?: string;
 	flight_id?: string;
 }
 

@@ -7,6 +7,8 @@
 	import { Settings, ListChecks } from '@lucide/svelte';
 	import WatchlistModal from '$lib/components/WatchlistModal.svelte';
 	import SettingsModal from '$lib/components/SettingsModal.svelte';
+	import { fixes } from '$lib/stores/watchlist';
+	import type { Fix } from '$lib/types';
 
 	// TypeScript interfaces for airport data
 	interface RunwayView {
@@ -72,6 +74,10 @@
 	let airportMarkers: google.maps.marker.AdvancedMarkerElement[] = [];
 	let shouldShowAirports: boolean = false;
 
+	// Aircraft display variables
+	let aircraftMarkers: Map<string, google.maps.marker.AdvancedMarkerElement> = new Map();
+	let latestFixes: Map<string, Fix> = new Map();
+
 	// Settings modal state
 	let showSettingsModal = $state(false);
 	let showWatchlistModal = $state(false);
@@ -110,6 +116,27 @@
 			// Re-check if we should show airports
 			checkAndUpdateAirports();
 		}
+	});
+
+	// Subscribe to fixes store and update aircraft markers
+	let currentFixes: Fix[] = $state([]);
+
+	$effect(() => {
+		const unsubscribe = fixes.subscribe((fixesStore) => {
+			currentFixes = fixesStore.fixes;
+		});
+
+		return () => unsubscribe();
+	});
+
+	// Reactive effect for handling fix updates
+	$effect(() => {
+		if (!map || currentFixes.length === 0) return;
+
+		// Process new fixes to update aircraft markers
+		currentFixes.forEach((fix) => {
+			updateAircraftMarker(fix);
+		});
 	});
 
 	onMount(async () => {
@@ -462,6 +489,114 @@
 			compassHeading = ((compassHeading % 360) + 360) % 360;
 		}
 	}
+
+	function updateAircraftMarker(fix: Fix): void {
+		if (!map || !fix.device_id && !fix.device_address_hex) return;
+
+		// Use device_id if available, otherwise fall back to device_address_hex
+		const deviceKey = fix.device_id || fix.device_address_hex || '';
+		if (!deviceKey) return;
+
+		// Update latest fix for this device
+		latestFixes.set(deviceKey, fix);
+
+		// Get or create marker for this aircraft
+		let marker = aircraftMarkers.get(deviceKey);
+
+		if (!marker) {
+			// Create new aircraft marker
+			marker = createAircraftMarker(fix);
+			aircraftMarkers.set(deviceKey, marker);
+		} else {
+			// Update existing marker position and info
+			updateAircraftMarkerPosition(marker, fix);
+		}
+	}
+
+	function createAircraftMarker(fix: Fix): google.maps.marker.AdvancedMarkerElement {
+        // TODO: Add aircraft photos to markers using registration or hex code
+        // https://api.planespotters.net/pub/photos/reg/D-ABCD
+        // https://api.planespotters.net/pub/photos/hex/ABC123
+
+		// Create aircraft icon with rotation based on track
+		const markerContent = document.createElement('div');
+		markerContent.className = 'aircraft-marker';
+
+		// Aircraft icon (rotated based on track)
+		const aircraftIcon = document.createElement('div');
+		aircraftIcon.className = 'aircraft-icon';
+		aircraftIcon.innerHTML = '✈';
+
+		// Rotate icon based on track degrees (default to 0 if not available)
+		const track = fix.track_degrees || 0;
+		aircraftIcon.style.transform = `rotate(${track}deg)`;
+
+		// Info label below the icon
+		const infoLabel = document.createElement('div');
+		infoLabel.className = 'aircraft-label';
+
+		// Display registration, model, and altitude
+		const registration = fix.registration || 'Unknown';
+		const model = fix.model || '';
+		const altitudeFt = fix.altitude_feet ? `${fix.altitude_feet}ft` : '';
+
+		// Format label with registration, model (if available), and altitude
+		let labelText = registration;
+		if (model) labelText += ` ${model}`;
+		if (altitudeFt) labelText += ` ${altitudeFt}`;
+
+		infoLabel.textContent = labelText;
+
+		markerContent.appendChild(aircraftIcon);
+		markerContent.appendChild(infoLabel);
+
+		// Create the marker
+		const marker = new google.maps.marker.AdvancedMarkerElement({
+			position: { lat: fix.latitude, lng: fix.longitude },
+			map: map,
+			title: `${registration} - ${model || 'Aircraft'}`,
+			content: markerContent
+		});
+
+		return marker;
+	}
+
+	function updateAircraftMarkerPosition(marker: google.maps.marker.AdvancedMarkerElement, fix: Fix): void {
+		// Update position
+		marker.position = { lat: fix.latitude, lng: fix.longitude };
+
+		// Update icon rotation and label
+		const markerContent = marker.content as HTMLElement;
+		if (markerContent) {
+			const aircraftIcon = markerContent.querySelector('.aircraft-icon') as HTMLElement;
+			const infoLabel = markerContent.querySelector('.aircraft-label') as HTMLElement;
+
+			if (aircraftIcon) {
+				const track = fix.track_degrees || 0;
+				aircraftIcon.style.transform = `rotate(${track}deg)`;
+			}
+
+			if (infoLabel) {
+				const registration = fix.registration || 'Unknown';
+				const model = fix.model || '';
+				const altitudeFt = fix.altitude_feet ? `${fix.altitude_feet}ft` : '';
+
+				let labelText = registration;
+				if (model) labelText += ` ${model}`;
+				if (altitudeFt) labelText += ` ${altitudeFt}`;
+
+				infoLabel.textContent = labelText;
+			}
+		}
+	}
+
+	function clearAircraftMarkers(): void {
+		aircraftMarkers.forEach((marker) => {
+			marker.map = null;
+		});
+		aircraftMarkers.clear();
+		latestFixes.clear();
+	}
 </script>
 
 <svelte:head>
@@ -718,5 +853,45 @@
 		margin-top: 2px;
 		white-space: nowrap;
 		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+	}
+
+	/* Aircraft marker styling */
+	:global(.aircraft-marker) {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		pointer-events: auto;
+		cursor: pointer;
+	}
+
+	:global(.aircraft-icon) {
+		background: #3b82f6;
+		border: 2px solid #ffffff;
+		border-radius: 50%;
+		width: 28px;
+		height: 28px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 14px;
+		color: white;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+		transition: transform 0.3s ease;
+	}
+
+	:global(.aircraft-label) {
+		background: rgba(59, 130, 246, 0.95);
+		border: 1px solid #2563eb;
+		border-radius: 4px;
+		padding: 3px 8px;
+		font-size: 10px;
+		font-weight: 600;
+		color: white;
+		margin-top: 4px;
+		white-space: nowrap;
+		box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+		max-width: 120px;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 </style>
