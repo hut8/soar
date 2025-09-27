@@ -486,6 +486,19 @@ impl FixesRepository {
                     .values(&new_fix)
                     .execute(&mut conn)?;
 
+                debug!(
+                    "Inserted fix for aircraft: {} | Device ID: {:?} ({:?}-{:?}) | Position: {:.6}, {:.6} | Altitude: {}ft | Map: https://maps.google.com/maps?q={:.6},{:.6}",
+                    aircraft_identifier.unwrap_or_else(|| "Unknown".to_string()),
+                    new_fix.device_id,
+                    new_fix.address_type,
+                    new_fix.device_address,
+                    new_fix.latitude,
+                    new_fix.longitude,
+                    new_fix.altitude_feet.map_or("Unknown".to_string(), |a| a.to_string()),
+                    new_fix.latitude,
+                    new_fix.longitude
+                );
+
                 Ok::<(), anyhow::Error>(())
             })
             .await??;
@@ -497,21 +510,16 @@ impl FixesRepository {
                     .values(&new_fix)
                     .execute(&mut conn)?;
 
+                warn!(
+                    "Inserted fix without device ID for device address: {:?} | Address Type: {:?}",
+                    new_fix.device_address, new_fix.address_type
+                );
+
                 Ok::<(), anyhow::Error>(())
             })
             .await??;
         }
 
-        debug!(
-            "Inserted fix for aircraft: {} | Device ID: {:?} | Position: {:.6}, {:.6} | Altitude: {}ft | Map: https://maps.google.com/maps?q={:.6},{:.6}",
-            aircraft_identifier.unwrap_or_else(|| "Unknown".to_string()),
-            fix.device_id,
-            fix.latitude,
-            fix.longitude,
-            fix.altitude_feet.map_or("Unknown".to_string(), |a| a.to_string()),
-            fix.latitude,
-            fix.longitude
-        );
         Ok(())
     }
 
