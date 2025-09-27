@@ -7,7 +7,18 @@
 	import { auth } from '$lib/stores/auth';
 	import { websocketStatus } from '$lib/stores/watchlist';
 	import { onMount } from 'svelte';
-	import { Radar, Users, Plane, UserPlus, UserCheck, Radio, Wifi, WifiOff, RotateCcw, AlertCircle } from '@lucide/svelte';
+	import {
+		Radar,
+		Users,
+		Plane,
+		UserPlus,
+		UserCheck,
+		Radio,
+		Wifi,
+		WifiOff,
+		RotateCcw,
+		AlertCircle
+	} from '@lucide/svelte';
 
 	const base = resolve('/');
 	const clubsPath = resolve('/clubs');
@@ -52,10 +63,10 @@
 </svelte:head>
 
 <div class="flex min-h-screen flex-col">
-	<AppBar classes="preset-glass-neutral" >
+	<AppBar classes="preset-glass-neutral">
 		{#snippet lead()}
 			<a href={base} class="flex items-center space-x-2">
-				<div class="text-xl font-bold text-primary-500 flex items-center gap-3">
+				<div class="text-primary-500 flex items-center gap-3 text-xl font-bold">
 					<Plane />
 					Glider.flights
 				</div>
@@ -74,35 +85,10 @@
 				</a>
 			</nav>
 
-			<!-- WebSocket Status Indicator for larger screens -->
-			<div class="hidden lg:flex items-center">
-				{#if $websocketStatus.connected}
-					<div class="flex items-center space-x-1 px-2 py-1 rounded bg-success-500/20 text-success-600 dark:text-success-400">
-						<Wifi size={16} />
-						<span class="text-xs font-medium">Live</span>
-					</div>
-				{:else if $websocketStatus.reconnecting}
-					<div class="flex items-center space-x-1 px-2 py-1 rounded bg-warning-500/20 text-warning-600 dark:text-warning-400">
-						<RotateCcw size={16} class="animate-spin" />
-						<span class="text-xs font-medium">Reconnecting</span>
-					</div>
-				{:else if $websocketStatus.error}
-					<div class="flex items-center space-x-1 px-2 py-1 rounded bg-error-500/20 text-error-600 dark:text-error-400" title={$websocketStatus.error}>
-						<AlertCircle size={16} />
-						<span class="text-xs font-medium">Offline</span>
-					</div>
-				{:else}
-					<div class="flex items-center space-x-1 px-2 py-1 rounded bg-surface-400/20 text-surface-600 dark:text-surface-400">
-						<WifiOff size={16} />
-						<span class="text-xs font-medium">Disconnected</span>
-					</div>
-				{/if}
-			</div>
-
 			{#if $auth.isAuthenticated && $auth.user}
 				<div class="user-menu relative">
 					<button
-						class="variant-ghost-surface btn flex items-center space-x-2 btn-sm"
+						class="variant-ghost-surface btn btn-sm flex items-center space-x-2"
 						onclick={() => (showUserMenu = !showUserMenu)}
 					>
 						<Avatar
@@ -114,18 +100,21 @@
 					</button>
 
 					{#if showUserMenu}
-						<div class="absolute top-12 right-0 z-10 w-48 card preset-filled-primary-50-950 p-2">
+						<div class="card preset-filled-primary-50-950 absolute right-0 top-12 z-10 w-48 p-2">
 							<div class="space-y-1">
 								<div class="px-3 py-2 text-sm">
 									<div class="font-medium">{$auth.user.first_name} {$auth.user.last_name}</div>
 									<div class="text-surface-600-300-token">{$auth.user.email}</div>
 								</div>
 								<hr class="!my-2" />
-								<a href={profilePath} class="preset-filled-primary-500 btn w-full justify-start btn-sm">
+								<a
+									href={profilePath}
+									class="preset-filled-primary-500 btn btn-sm w-full justify-start"
+								>
 									👤 Profile
 								</a>
 								<button
-									class="preset-filled-primary-500 btn w-full justify-start btn-sm"
+									class="preset-filled-primary-500 btn btn-sm w-full justify-start"
 									onclick={handleLogout}
 								>
 									Sign out
@@ -137,10 +126,45 @@
 			{:else}
 				<div class="flex space-x-2">
 					<a href={loginPath} class="preset-filled-primary-500 btn btn-sm"><UserCheck /> Login</a>
-					<a href={registerPath} class="preset-filled-primary-500 btn btn-sm"><UserPlus /> Sign Up</a>
+					<a href={registerPath} class="preset-filled-primary-500 btn btn-sm"
+						><UserPlus /> Sign Up</a
+					>
 				</div>
 			{/if}
 		{/snippet}
+		<!-- WebSocket Status Indicator for larger screens -->
+		<div class="hidden items-center w-full lg:flex">
+			{#if $websocketStatus.connected}
+				<div
+					class="bg-success-500/20 text-success-600 dark:text-success-400 flex items-center space-x-1 rounded px-2 py-1"
+				>
+					<Wifi size={16} />
+					<span class="text-xs font-medium">Live</span>
+				</div>
+			{:else if $websocketStatus.reconnecting}
+				<div
+					class="bg-warning-500/20 text-warning-600 dark:text-warning-400 flex items-center space-x-1 rounded px-2 py-1"
+				>
+					<RotateCcw size={16} class="animate-spin" />
+					<span class="text-xs font-medium">Reconnecting</span>
+				</div>
+			{:else if $websocketStatus.error}
+				<div
+					class="bg-error-500/20 text-error-600 dark:text-error-400 flex items-center space-x-1 rounded px-2 py-1"
+					title={$websocketStatus.error}
+				>
+					<AlertCircle size={16} />
+					<span class="text-xs font-medium">Offline</span>
+				</div>
+			{:else}
+				<div
+					class="bg-surface-400/20 text-surface-600 dark:text-surface-400 flex items-center space-x-1 rounded px-2 py-1"
+				>
+					<WifiOff size={16} />
+					<span class="text-xs font-medium">Disconnected</span>
+				</div>
+			{/if}
+            </div>
 	</AppBar>
 
 	<main class="container mx-auto flex-1 space-y-4 p-4">
