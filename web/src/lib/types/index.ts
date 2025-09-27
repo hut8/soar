@@ -89,3 +89,13 @@ export interface Airport {
 	keywords: string | null;
 	runways: Runway[];
 }
+
+export interface Device {
+	address_type: string; // F, O, I, or empty string
+	address: string; // Hex format like "ABCDEF"
+	aircraft_model: string;
+	registration: string;
+	cn: string; // Competition number
+	tracked: boolean;
+	identified: boolean;
+}

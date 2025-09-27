@@ -5,7 +5,8 @@
 	import { serverCall } from '$lib/api/server';
 	import { Loader } from '@googlemaps/js-api-loader';
 	import { Switch, Slider } from '@skeletonlabs/skeleton-svelte';
-	import { Settings, Plus, X } from '@lucide/svelte';
+	import { Settings, X, ListChecks } from '@lucide/svelte';
+	import WatchlistModal from '$lib/components/WatchlistModal.svelte';
 
 	// TypeScript interfaces for airport data
 	interface RunwayView {
@@ -57,14 +58,14 @@
 	let mapContainer: HTMLElement;
 	let map: google.maps.Map;
 	let userLocationButton: HTMLButtonElement;
-	let isLocating = false;
+	let isLocating = $state(false);
 	let userMarker: google.maps.marker.AdvancedMarkerElement | null = null;
 
 	// Compass rose variables
 	let deviceHeading: number = 0;
-	let compassHeading: number = 0;
-	let isCompassActive: boolean = false;
-	let displayHeading: number = 0;
+	let compassHeading: number = $state(0);
+	let isCompassActive: boolean = $state(false);
+	let displayHeading: number = $state(0);
 
 	// Airport display variables
 	let airports: AirportView[] = [];
@@ -73,29 +74,15 @@
 
 	// Settings modal state
 	let showSettingsModal = $state(false);
+	let showWatchlistModal = $state(false);
 
 	// Settings with localStorage persistence
-	interface WatchlistEntry {
-		id: string;
-		type: 'registration' | 'device';
-		registration?: string;
-		deviceAddressType?: string;
-		deviceAddress?: string;
-		active: boolean;
-	}
 
 	let showCompassRose = $state(true);
 	let showAirportMarkers = $state(true);
 	let showRunwayOverlays = $state(false);
 	let trailLength = $state([0]); // Hours - logarithmic scale
 	let trailLengthSlider = $state([0]); // Linear slider position (0-100)
-	let watchlist: WatchlistEntry[] = $state([]);
-	let newWatchlistEntry = $state({
-		type: 'registration',
-		registration: '',
-		deviceAddressType: '',
-		deviceAddress: ''
-	});
 
 	// Center of continental US
 	const CONUS_CENTER = {
@@ -132,7 +119,6 @@
 				showRunwayOverlays = settings.showRunwayOverlays ?? false;
 				trailLength = settings.trailLength ?? [0];
 				trailLengthSlider = [hoursToSlider(trailLength[0])];
-				watchlist = settings.watchlist ?? [];
 			} catch (e) {
 				console.warn('Failed to load settings from localStorage:', e);
 				trailLengthSlider = [0];
@@ -149,50 +135,9 @@
 			showCompassRose,
 			showAirportMarkers,
 			showRunwayOverlays,
-			trailLength,
-			watchlist
+			trailLength
 		};
 		localStorage.setItem('operationsSettings', JSON.stringify(settings));
-	}
-
-	// Watchlist management
-	function addWatchlistEntry() {
-		const entry: WatchlistEntry = {
-			id: Date.now().toString(),
-			type: newWatchlistEntry.type as 'registration' | 'device',
-			active: true,
-			...(newWatchlistEntry.type === 'registration'
-				? { registration: newWatchlistEntry.registration.trim().toUpperCase() }
-				: {
-						deviceAddressType: newWatchlistEntry.deviceAddressType.trim(),
-						deviceAddress: newWatchlistEntry.deviceAddress.trim().toUpperCase()
-					})
-		};
-
-		if (newWatchlistEntry.type === 'registration' && !entry.registration) return;
-		if (newWatchlistEntry.type === 'device' && (!entry.deviceAddressType || !entry.deviceAddress))
-			return;
-
-		watchlist = [...watchlist, entry];
-		newWatchlistEntry = {
-			type: 'registration',
-			registration: '',
-			deviceAddressType: '',
-			deviceAddress: ''
-		};
-		saveSettings();
-	}
-
-	function removeWatchlistEntry(id: string) {
-		watchlist = watchlist.filter((entry) => entry.id !== id);
-		saveSettings();
-	}
-
-	function toggleWatchlistEntry(id: string) {
-		watchlist = watchlist.map((entry) =>
-			entry.id === id ? { ...entry, active: !entry.active } : entry
-		);
-		saveSettings();
 	}
 
 	// Reactive effects for settings changes
@@ -588,6 +533,11 @@
 			{/if}
 		</button>
 
+		<!-- Watchlist Button -->
+		<button class="location-btn" onclick={() => (showWatchlistModal = true)} title="Watchlist">
+			<ListChecks size={20} />
+		</button>
+
 		<!-- Settings Button -->
 		<button class="location-btn" onclick={() => (showSettingsModal = true)} title="Settings">
 			<Settings size={20} />
@@ -720,12 +670,18 @@
 <!-- Settings Modal -->
 {#if showSettingsModal}
 	<div
-		class="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-black"
+		class="fixed inset-0 z-50 flex items-center justify-center bg-surface-950-50/50"
 		onclick={() => (showSettingsModal = false)}
+		onkeydown={(e) => e.key === 'Escape' && (showSettingsModal = false)}
+        tabindex="-1"
+        role="dialog"
 	>
 		<div
 			class="max-h-[80vh] w-full max-w-lg overflow-y-auto card bg-white p-4 text-gray-900 shadow-xl"
 			onclick={(e) => e.stopPropagation()}
+            onkeydown={(e) => e.key === 'Escape' && (showSettingsModal = false)}
+            role="dialog"
+            tabindex="0"
 		>
 			<div class="mb-4 flex items-center justify-between">
 				<h2 class="text-xl font-bold">Map Settings</h2>
@@ -807,105 +763,13 @@
 						</div>
 					</div>
 				</section>
-
-				<!-- Watchlist -->
-				<section>
-					<h3 class="mb-3 text-lg font-semibold">Watchlist</h3>
-
-					<!-- Add new entry -->
-					<div class="mb-3 space-y-3 rounded-lg border p-3">
-						<div class="flex gap-2">
-							<button
-								class="btn btn-sm {newWatchlistEntry.type === 'registration'
-									? 'variant-filled-primary'
-									: 'variant-ghost-surface'}"
-								onclick={() => (newWatchlistEntry.type = 'registration')}
-							>
-								Registration
-							</button>
-							<button
-								class="btn btn-sm {newWatchlistEntry.type === 'device'
-									? 'variant-filled-primary'
-									: 'variant-ghost-surface'}"
-								onclick={() => (newWatchlistEntry.type = 'device')}
-							>
-								Device
-							</button>
-						</div>
-
-						{#if newWatchlistEntry.type === 'registration'}
-							<input
-								class="input"
-								placeholder="Aircraft registration (e.g., N12345)"
-								bind:value={newWatchlistEntry.registration}
-								onkeydown={(e) => e.key === 'Enter' && addWatchlistEntry()}
-							/>
-						{:else}
-							<div class="grid grid-cols-2 gap-2">
-								<select
-									class="select"
-									placeholder="Address type (e.g., ICAO)"
-									bind:value={newWatchlistEntry.deviceAddressType}
-								>
-									<option value="I">ICAO</option>
-									<option value="O">OGN</option>
-									<option value="F">FLARM</option>
-								</select>
-								<input
-									class="input"
-									placeholder="Device address"
-									bind:value={newWatchlistEntry.deviceAddress}
-									onkeydown={(e) => e.key === 'Enter' && addWatchlistEntry()}
-								/>
-							</div>
-						{/if}
-
-						<button class="variant-filled-primary btn btn-sm" onclick={addWatchlistEntry}>
-							<Plus size={16} />
-							Add to Watchlist
-						</button>
-					</div>
-
-					<!-- Watchlist entries -->
-					{#if watchlist.length > 0}
-						<div class="max-h-48 space-y-2 overflow-y-auto">
-							{#each watchlist as entry (entry.id)}
-								<div class="flex items-center justify-between rounded border p-2">
-									<div class="flex-1">
-										{#if entry.type === 'registration'}
-											<span class="font-medium">{entry.registration}</span>
-											<span class="ml-2 text-xs text-gray-500">Registration</span>
-										{:else}
-											<span class="font-medium"
-												>{entry.deviceAddressType}: {entry.deviceAddress}</span
-											>
-											<span class="ml-2 text-xs text-gray-500">Device</span>
-										{/if}
-									</div>
-									<div class="flex items-center gap-2">
-										<Switch
-											name="watchlist-{entry.id}"
-											checked={entry.active}
-											onCheckedChange={() => toggleWatchlistEntry(entry.id)}
-										/>
-										<button
-											class="variant-ghost-error btn btn-sm"
-											onclick={() => removeWatchlistEntry(entry.id)}
-										>
-											<X size={16} />
-										</button>
-									</div>
-								</div>
-							{/each}
-						</div>
-					{:else}
-						<p class="py-4 text-center text-sm text-gray-500">No aircraft in watchlist</p>
-					{/if}
-				</section>
 			</div>
 		</div>
 	</div>
 {/if}
+
+<!-- Watchlist Modal -->
+<WatchlistModal bind:showModal={showWatchlistModal} />
 
 <style>
 	/* Location button styling */
