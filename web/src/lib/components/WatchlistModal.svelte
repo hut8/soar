@@ -26,6 +26,7 @@
 		deviceAddress: ''
 	});
 	let searchInProgress = $state(false);
+	let errorMessage = $state('');
 
 	// Load watchlist from localStorage
 	function loadWatchlist() {
@@ -48,15 +49,25 @@
 		localStorage.setItem('watchlist', JSON.stringify(watchlist));
 	}
 
+	// Clear error message when user interacts with form
+	function clearError() {
+		errorMessage = '';
+	}
+
 	// Add entry to watchlist
 	async function addWatchlistEntry() {
 		if (searchInProgress) return;
+
+		// Clear any previous error messages
+		clearError();
 
 		const entry: WatchlistEntry = {
 			id: Date.now().toString(),
 			type: newWatchlistEntry.type as 'registration' | 'device',
 			active: true
 		};
+
+		let deviceFound = false;
 
 		if (newWatchlistEntry.type === 'registration') {
 			const registration = newWatchlistEntry.registration.trim().toUpperCase();
@@ -72,9 +83,13 @@
 				);
 				if (response.devices && response.devices.length > 0) {
 					entry.device = response.devices[0];
+					deviceFound = true;
+				} else {
+					errorMessage = `Aircraft with registration "${registration}" not found`;
 				}
 			} catch (error) {
 				console.warn(`Failed to fetch device for registration ${registration}:`, error);
+				errorMessage = 'Failed to search for device. Please try again.';
 			} finally {
 				searchInProgress = false;
 			}
@@ -94,22 +109,30 @@
 				);
 				if (response.devices && response.devices.length > 0) {
 					entry.device = response.devices[0];
+					deviceFound = true;
+				} else {
+					errorMessage = `Device with address "${address}" (${addressType}) not found`;
 				}
 			} catch (error) {
 				console.warn(`Failed to fetch device for address ${address} (${addressType}):`, error);
+				errorMessage = 'Failed to search for device. Please try again.';
 			} finally {
 				searchInProgress = false;
 			}
 		}
 
-		watchlist = [...watchlist, entry];
-		newWatchlistEntry = {
-			type: 'registration',
-			registration: '',
-			deviceAddressType: 'I',
-			deviceAddress: ''
-		};
-		saveWatchlist();
+		// Only add to watchlist if device was found
+		if (deviceFound) {
+			watchlist = [...watchlist, entry];
+			// Clear the search inputs on success
+			newWatchlistEntry = {
+				type: 'registration',
+				registration: '',
+				deviceAddressType: 'I',
+				deviceAddress: ''
+			};
+			saveWatchlist();
+		}
 	}
 
 	// Remove entry from watchlist
@@ -138,17 +161,17 @@
 {#if showModal}
 	<div
 		class="fixed inset-0 z-50 flex items-center justify-center bg-surface-950-50/50"
-        role="dialog"
+		role="dialog"
 		onclick={() => (showModal = false)}
-        onkeydown={(e) => e.key === 'Escape' && (showModal = false)}
-        tabindex="-1"
+		onkeydown={(e) => e.key === 'Escape' && (showModal = false)}
+		tabindex="-1"
 	>
 		<div
 			class="h-full max-h-9/10 w-full max-w-9/10 overflow-y-auto card bg-white p-4 text-gray-900 shadow-xl"
 			onclick={(e) => e.stopPropagation()}
-            onkeydown={(e) => e.key === 'Escape' && (showModal = false)}
-            role="dialog"
-            tabindex="0"
+			onkeydown={(e) => e.key === 'Escape' && (showModal = false)}
+			role="dialog"
+			tabindex="0"
 		>
 			<div class="mb-4 flex items-center justify-between">
 				<h2 class="text-xl font-bold">Watchlist</h2>
@@ -166,13 +189,18 @@
 						<Segment
 							name="watchlist-type"
 							value={newWatchlistEntry.type}
-							onValueChange={(e) => e.value && (newWatchlistEntry.type = e.value)}
+							onValueChange={(e) => {
+								if (e.value) {
+									newWatchlistEntry.type = e.value;
+									clearError();
+								}
+							}}
 						>
 							<Segment.Item value="registration">
-                                <div class="flex flex-row items-center">
-								<Plane size={16} />
-								<span class="ml-1">Registration</span>
-                                </div>
+								<div class="flex flex-row items-center">
+									<Plane size={16} />
+									<span class="ml-1">Registration</span>
+								</div>
 							</Segment.Item>
 							<Segment.Item value="device">
 								<div class="flex flex-row items-center">
@@ -188,6 +216,7 @@
 								placeholder="Aircraft registration (e.g., N12345)"
 								bind:value={newWatchlistEntry.registration}
 								onkeydown={(e) => e.key === 'Enter' && addWatchlistEntry()}
+								oninput={() => clearError()}
 								disabled={searchInProgress}
 							/>
 						{:else}
@@ -195,7 +224,12 @@
 								<Segment
 									name="address-type"
 									value={newWatchlistEntry.deviceAddressType}
-									onValueChange={(e) => e.value && (newWatchlistEntry.deviceAddressType = e.value)}
+									onValueChange={(e) => {
+										if (e.value) {
+											newWatchlistEntry.deviceAddressType = e.value;
+											clearError();
+										}
+									}}
 								>
 									<Segment.Item value="I">ICAO</Segment.Item>
 									<Segment.Item value="O">OGN</Segment.Item>
@@ -206,13 +240,14 @@
 									placeholder="Device address"
 									bind:value={newWatchlistEntry.deviceAddress}
 									onkeydown={(e) => e.key === 'Enter' && addWatchlistEntry()}
+									oninput={() => clearError()}
 									disabled={searchInProgress}
 								/>
 							</div>
 						{/if}
 
 						<button
-							class="variant-filled-primary btn btn-sm w-full"
+							class="variant-filled-primary btn w-full btn-sm"
 							onclick={addWatchlistEntry}
 							disabled={searchInProgress}
 						>
@@ -226,12 +261,21 @@
 								Add to Watchlist
 							{/if}
 						</button>
+
+						<!-- Error message display -->
+						{#if errorMessage}
+							<div class="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-600">
+								{errorMessage}
+							</div>
+						{/if}
 					</div>
 				</section>
 
 				<!-- Watchlist entries -->
 				<section>
-					<h3 class="mb-3 text-lg font-semibold align-middle flex flex-row items-center"><Eye size={16} /> Watched Aircraft ({watchlist.length})</h3>
+					<h3 class="mb-3 flex flex-row items-center align-middle text-lg font-semibold">
+						<Eye size={16} /> Watched Aircraft ({watchlist.length})
+					</h3>
 					{#if watchlist.length > 0}
 						<div class="max-h-48 space-y-2 overflow-y-auto">
 							{#each watchlist as entry (entry.id)}
