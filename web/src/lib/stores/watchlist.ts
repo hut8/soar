@@ -152,21 +152,25 @@ function connectWebSocket() {
 
 		websocket.onopen = () => {
 			console.log('WebSocket connected to live fixes feed');
-            // Subscribe to all devices in the watchlist
-            watchlist.subscribe((state) => {
-                state.entries.forEach((entry) => {
-                    if (entry.active && entry.device.id) {
-                        console.log('Subscribing to device after connection:', entry.device.id);
-                        websocket?.send(
-                            JSON.stringify({
-                                action: 'subscribe',
-                                device_id: entry.device.id
-                            })
-                        );
-                        currentlySubscribedDevices.add(entry.device.id);
-                    }
-                });
-            })();
+            // Subscribe to all devices in the watchlist after a small delay to ensure connection is fully ready
+            setTimeout(() => {
+                if (websocket?.readyState === WebSocket.OPEN) {
+                    watchlist.subscribe((state) => {
+                        state.entries.forEach((entry) => {
+                            if (entry.active && entry.device.id) {
+                                console.log('Subscribing to device after connection:', entry.device.id);
+                                websocket?.send(
+                                    JSON.stringify({
+                                        action: 'subscribe',
+                                        device_id: entry.device.id
+                                    })
+                                );
+                                currentlySubscribedDevices.add(entry.device.id);
+                            }
+                        });
+                    })();
+                }
+            }, 50); // Small delay to ensure WebSocket is fully ready
 		};
 
 		websocket.onmessage = (event) => {
