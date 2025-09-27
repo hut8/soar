@@ -79,7 +79,6 @@ impl Fix {
         received_at: DateTime<Utc>,
     ) -> Result<Option<Self>> {
         // For now, use received_at as the packet timestamp
-        // TODO: In the future, try to extract actual timestamp from packet if available
         let timestamp = received_at;
 
         // Calculate lag (difference between received_at and timestamp in milliseconds)
@@ -91,7 +90,6 @@ impl Fix {
         let via = packet.via.iter().map(|v| v.to_string()).collect();
 
         // Only process position packets
-        let raw_packet_debug = format!("{:?}", packet);
         match packet.data {
             ogn_parser::AprsData::Position(pos_packet) => {
                 let latitude = pos_packet.latitude.as_();
@@ -136,7 +134,7 @@ impl Fix {
 
                 Ok(Some(Fix {
                     id: uuid::Uuid::new_v4(),
-                    raw_packet: raw_packet_debug, // TODO: Get actual raw packet string
+                    raw_packet: packet.raw.unwrap_or_default(),
                     source,
                     destination,
                     via,
