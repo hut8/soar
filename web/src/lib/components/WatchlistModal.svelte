@@ -117,22 +117,26 @@
 		tabindex="-1"
 	>
 		<div
-			class="h-full max-h-9/10 w-full max-w-9/10 overflow-y-auto card bg-white p-4 text-gray-900 shadow-xl"
+			class="h-full max-h-9/10 w-full max-w-9/10 card bg-white text-gray-900 shadow-xl flex flex-col"
 			onclick={(e) => e.stopPropagation()}
 			onkeydown={(e) => e.key === 'Escape' && (showModal = false)}
 			role="dialog"
 			tabindex="0"
 		>
-			<div class="mb-4 flex items-center justify-between">
-				<h2 class="text-xl font-bold">Watchlist</h2>
-				<button class="variant-ghost-surface btn btn-sm" onclick={() => (showModal = false)}>
-					<X size={20} />
-				</button>
+			<!-- Header -->
+			<div class="p-4 pb-0 flex-shrink-0">
+				<div class="mb-4 flex items-center justify-between">
+					<h2 class="text-xl font-bold">Watchlist</h2>
+					<button class="variant-ghost-surface btn btn-sm" onclick={() => (showModal = false)}>
+						<X size={20} />
+					</button>
+				</div>
 			</div>
 
-			<div class="space-y-6">
+			<!-- Content area with flex layout -->
+			<div class="flex flex-col flex-1 min-h-0 p-4 pt-0 space-y-6">
 				<!-- Add new entry -->
-				<section>
+				<section class="flex-shrink-0">
 					<h3 class="mb-3 text-lg font-semibold">Add Aircraft</h3>
 					<div class="mb-3 space-y-3 rounded-lg border p-3">
 						<!-- Segment selector for type -->
@@ -221,66 +225,76 @@
 					</div>
 				</section>
 
-				<!-- Watchlist entries -->
-				<section>
-					<h3 class="mb-3 flex flex-row items-center align-middle text-lg font-semibold">
+				<!-- Watchlist entries - takes remaining space -->
+				<section class="flex flex-col flex-1 min-h-0">
+					<h3 class="mb-3 flex flex-row items-center align-middle text-lg font-semibold flex-shrink-0">
 						<Eye size={16} /> Watched Aircraft ({$watchlist.entries.length})
 					</h3>
 					{#if $watchlist.entries.length > 0}
-						<div class="max-h-48 space-y-2 overflow-y-auto">
-							{#each $watchlist.entries as entry (entry.id)}
-								<div
-									class="rounded border p-3 {entry.active
-										? 'bg-gray-50'
-										: 'bg-gray-100 opacity-75'}"
-								>
-									<div class="flex items-start justify-between">
-										<div class="flex-1">
-											<div class="space-y-1">
-												<div class="flex items-center gap-2">
-													<span class="text-lg font-medium"
-														>{entry.device.registration || 'Unknown Registration'}</span
-													>
-													{#if entry.device.cn}
-														<span
-															class="rounded bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800"
-															>{entry.device.cn}</span
-														>
-													{/if}
-												</div>
-												<div class="text-sm text-gray-600">
-													{entry.device.aircraft_model || 'Unknown Aircraft Model'}
-												</div>
-												<div class="text-xs text-gray-500">
-													{entry.device.address_type}: {entry.device.address}
-													{#if entry.device.tracked}
-														<span class="ml-2 text-green-600">• Tracked</span>
-													{/if}
-													{#if entry.device.identified}
-														<span class="ml-2 text-blue-600">• Identified</span>
-													{/if}
+						<div class="flex-1 overflow-y-auto">
+							<div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+								{#each $watchlist.entries as entry (entry.id)}
+									<div
+										class="rounded border p-3 {entry.active
+											? 'bg-gray-50'
+											: 'bg-gray-100 opacity-75'}"
+									>
+										<div class="flex flex-col space-y-2">
+											<div class="flex items-start justify-between">
+												<div class="flex-1 min-w-0">
+													<div class="space-y-1">
+														<div class="flex items-center gap-2">
+															<span class="text-lg font-medium truncate"
+																>{entry.device.registration || 'Unknown Registration'}</span
+															>
+															{#if entry.device.cn}
+																<span
+																	class="rounded bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800 flex-shrink-0"
+																	>{entry.device.cn}</span
+																>
+															{/if}
+														</div>
+														<div class="text-sm text-gray-600 truncate">
+															{entry.device.aircraft_model || 'Unknown Aircraft Model'}
+														</div>
+														<div class="text-xs text-gray-500">
+															<div class="truncate">
+																{entry.device.address_type}: {entry.device.address}
+															</div>
+															<div class="flex flex-wrap gap-1 mt-1">
+																{#if entry.device.tracked}
+																	<span class="text-green-600">• Tracked</span>
+																{/if}
+																{#if entry.device.identified}
+																	<span class="text-blue-600">• Identified</span>
+																{/if}
+															</div>
+														</div>
+													</div>
 												</div>
 											</div>
-										</div>
-										<div class="ml-3 flex items-center gap-2">
-											<Switch
-												name="watchlist-{entry.id}"
-												checked={entry.active}
-												onCheckedChange={() => toggleWatchlistEntry(entry.id)}
-											/>
-											<button
-												class="variant-ghost-error btn btn-sm"
-												onclick={() => removeWatchlistEntry(entry.id)}
-											>
-												<X size={16} />
-											</button>
+											<div class="flex items-center justify-between pt-1">
+												<Switch
+													name="watchlist-{entry.id}"
+													checked={entry.active}
+													onCheckedChange={() => toggleWatchlistEntry(entry.id)}
+												/>
+												<button
+													class="variant-ghost-error btn btn-sm"
+													onclick={() => removeWatchlistEntry(entry.id)}
+												>
+													<X size={16} />
+												</button>
+											</div>
 										</div>
 									</div>
-								</div>
-							{/each}
+								{/each}
+							</div>
 						</div>
 					{:else}
-						<p class="py-4 text-center text-sm text-gray-500">No aircraft in watchlist</p>
+						<div class="flex-1 flex items-center justify-center">
+							<p class="text-center text-sm text-gray-500">No aircraft in watchlist</p>
+						</div>
 					{/if}
 				</section>
 			</div>
