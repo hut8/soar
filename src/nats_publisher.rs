@@ -64,6 +64,7 @@ async fn publish_to_nats(nats_client: &Client, device_id: &str, fix: &Fix) -> Re
 }
 
 /// NATS publisher for aircraft position fixes
+#[derive(Clone)]
 pub struct NatsFixPublisher {
     nats_client: Arc<Client>,
     device_repo: DeviceRepository,
@@ -76,7 +77,10 @@ impl NatsFixPublisher {
         diesel_pool: Pool<ConnectionManager<PgConnection>>,
     ) -> Result<Self> {
         info!("Connecting to NATS server at {}", nats_url);
-        let nats_client = async_nats::connect(nats_url).await?;
+        let nats_client = async_nats::ConnectOptions::new()
+            .name("soar-run")
+            .connect(nats_url)
+            .await?;
 
         Ok(Self {
             nats_client: Arc::new(nats_client),
