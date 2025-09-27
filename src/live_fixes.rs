@@ -9,17 +9,20 @@ use tracing::{error, info, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LiveFix {
-    pub aircraft_id: String,
-    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub id: String,
+    pub device_id: String,
+    pub timestamp: String, // ISO 8601 string format for frontend compatibility
     pub latitude: f64,
     pub longitude: f64,
-    pub altitude: Option<i32>,
-    pub ground_speed: Option<f32>,
-    pub track: Option<f32>,
+    pub altitude: f64,
+    pub track: f64,
+    pub ground_speed: f64,
+    pub climb_rate: f64,
 }
 
 pub type FixBroadcaster = Arc<RwLock<HashMap<String, broadcast::Sender<LiveFix>>>>;
 
+#[derive(Clone)]
 pub struct LiveFixService {
     nats_client: Client,
     broadcasters: FixBroadcaster,
@@ -53,14 +56,14 @@ impl LiveFixService {
     }
 
     async fn handle_nats_message(msg: Message, broadcasters: &FixBroadcaster) -> Result<()> {
-        // Extract aircraft ID from subject (e.g., "fixes.live.39D304")
+        // Extract device ID from subject (e.g., "fixes.live.39D304")
         let subject_parts: Vec<&str> = msg.subject.split('.').collect();
         if subject_parts.len() != 3 || subject_parts[0] != "fixes" || subject_parts[1] != "live" {
             warn!("Invalid subject format: {}", msg.subject);
             return Ok(());
         }
 
-        let aircraft_id = subject_parts[2].to_string();
+        let device_id = subject_parts[2].to_string();
 
         // Parse the fix data
         let live_fix: LiveFix = match serde_json::from_slice(&msg.payload) {
@@ -71,11 +74,11 @@ impl LiveFixService {
             }
         };
 
-        // Get or create broadcaster for this aircraft
+        // Get or create broadcaster for this device
         let broadcaster = {
             let mut broadcasters_write = broadcasters.write().await;
             broadcasters_write
-                .entry(aircraft_id.clone())
+                .entry(device_id.clone())
                 .or_insert_with(|| {
                     let (tx, _) = broadcast::channel(100);
                     tx
@@ -88,8 +91,8 @@ impl LiveFixService {
             // This error occurs when there are no receivers, which is normal
             if !matches!(e, broadcast::error::SendError(_)) {
                 error!(
-                    "Failed to broadcast live fix for aircraft {}: {}",
-                    aircraft_id, e
+                    "Failed to broadcast live fix for device {}: {}",
+                    device_id, e
                 );
             }
         }
@@ -97,10 +100,10 @@ impl LiveFixService {
         Ok(())
     }
 
-    pub async fn get_receiver(&self, aircraft_id: &str) -> broadcast::Receiver<LiveFix> {
+    pub async fn get_receiver(&self, device_id: &str) -> broadcast::Receiver<LiveFix> {
         let mut broadcasters_write = self.broadcasters.write().await;
         let broadcaster = broadcasters_write
-            .entry(aircraft_id.to_string())
+            .entry(device_id.to_string())
             .or_insert_with(|| {
                 let (tx, _) = broadcast::channel(100);
                 tx
@@ -108,13 +111,13 @@ impl LiveFixService {
         broadcaster.subscribe()
     }
 
-    pub async fn cleanup_aircraft(&self, aircraft_id: &str) {
+    pub async fn cleanup_aircraft(&self, device_id: &str) {
         let mut broadcasters_write = self.broadcasters.write().await;
-        if let Some(broadcaster) = broadcasters_write.get(aircraft_id)
+        if let Some(broadcaster) = broadcasters_write.get(device_id)
             && broadcaster.receiver_count() == 0
         {
-            broadcasters_write.remove(aircraft_id);
-            info!("Cleaned up broadcaster for aircraft: {}", aircraft_id);
+            broadcasters_write.remove(device_id);
+            info!("Cleaned up broadcaster for device: {}", device_id);
         }
     }
 }

@@ -15,9 +15,10 @@ use std::time::Instant;
 use uuid::Uuid;
 
 use tower_http::cors::CorsLayer;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use crate::actions;
+use crate::live_fixes::LiveFixService;
 
 // Embed web assets into the binary
 static ASSETS: Dir<'_> = include_dir!("web/build");
@@ -48,10 +49,11 @@ fn get_compilation_timestamp() -> String {
 
 pub type PgPool = Pool<ConnectionManager<PgConnection>>;
 
-// App state for sharing database pool
+// App state for sharing database pool and services
 #[derive(Clone)]
 pub struct AppState {
-    pub pool: PgPool, // Diesel pool for all operations
+    pub pool: PgPool,                             // Diesel pool for all operations
+    pub live_fix_service: Option<LiveFixService>, // Live fix service for WebSocket subscriptions
 }
 
 async fn handle_static_file(uri: Uri, request: Request<Body>) -> impl IntoResponse {
@@ -191,7 +193,36 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
     });
     info!("Starting web server on {}:{}", interface, port);
 
-    let app_state = AppState { pool };
+    // Initialize live fix service if NATS_URL is configured
+    let live_fix_service = match std::env::var("NATS_URL") {
+        Ok(nats_url) => {
+            info!("NATS_URL found, initializing live fix service");
+            match LiveFixService::new(&nats_url).await {
+                Ok(service) => {
+                    if let Err(e) = service.start_listening().await {
+                        error!("Failed to start live fix service listener: {}", e);
+                        None
+                    } else {
+                        info!("Live fix service initialized successfully");
+                        Some(service)
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to create live fix service: {}", e);
+                    None
+                }
+            }
+        }
+        Err(_) => {
+            warn!("NATS_URL not configured, live fixes will not be available");
+            None
+        }
+    };
+
+    let app_state = AppState {
+        pool,
+        live_fix_service,
+    };
 
     // Create CORS layer that allows all origins and methods
     let cors_layer = CorsLayer::permissive();

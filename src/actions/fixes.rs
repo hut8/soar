@@ -10,44 +10,30 @@ use std::collections::HashMap;
 use tokio::sync::broadcast;
 use tracing::{error, info, warn};
 
-use crate::live_fixes::{LiveFix, LiveFixService};
+use crate::live_fixes::LiveFix;
 use crate::web::AppState;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubscriptionMessage {
     pub action: String, // "subscribe" or "unsubscribe"
-    pub aircraft_ids: Vec<String>,
+    pub device_id: String, // Single device ID to match frontend expectations
 }
 
 pub async fn fixes_live_websocket(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
     ws.on_upgrade(move |socket| handle_websocket(socket, state))
 }
 
-async fn handle_websocket(mut socket: WebSocket, _state: AppState) {
+async fn handle_websocket(mut socket: WebSocket, state: AppState) {
     info!("New WebSocket connection established for live fixes");
 
-    // Get live fix service - for now we'll simulate it since we need to pass it through app state
-    // In a real implementation, you would get this from app state
-    let live_fix_service = match std::env::var("NATS_URL") {
-        Ok(nats_url) => match LiveFixService::new(&nats_url).await {
-            Ok(service) => Some(service),
-            Err(e) => {
-                error!("Failed to create live fix service: {}", e);
-                let _ = socket
-                    .send(Message::Text(
-                        serde_json::json!({"error": "Live fixes service not available"})
-                            .to_string()
-                            .into(),
-                    ))
-                    .await;
-                return;
-            }
-        },
-        Err(_) => {
-            warn!("NATS_URL not configured, live fixes not available");
+    // Get live fix service from app state
+    let live_fix_service = match &state.live_fix_service {
+        Some(service) => service.clone(),
+        None => {
+            warn!("Live fix service not available");
             let _ = socket
                 .send(Message::Text(
-                    serde_json::json!({"error": "Live fixes service not configured"})
+                    serde_json::json!({"error": "Live fixes service not available"})
                         .to_string()
                         .into(),
                 ))
@@ -69,26 +55,20 @@ async fn handle_websocket(mut socket: WebSocket, _state: AppState) {
                             Ok(sub_msg) => {
                                 match sub_msg.action.as_str() {
                                     "subscribe" => {
-                                        info!("Client subscribing to aircraft: {:?}", sub_msg.aircraft_ids);
-                                        for aircraft_id in sub_msg.aircraft_ids {
-                                            if !subscribed_aircraft.contains(&aircraft_id) {
-                                                subscribed_aircraft.push(aircraft_id.clone());
-                                                if let Some(ref service) = live_fix_service {
-                                                    let receiver = service.get_receiver(&aircraft_id).await;
-                                                    receivers.insert(aircraft_id.clone(), receiver);
-                                                }
-                                            }
+                                        info!("Client subscribing to device: {}", sub_msg.device_id);
+                                        let device_id = sub_msg.device_id;
+                                        if !subscribed_aircraft.contains(&device_id) {
+                                            subscribed_aircraft.push(device_id.clone());
+                                            let receiver = live_fix_service.get_receiver(&device_id).await;
+                                            receivers.insert(device_id.clone(), receiver);
                                         }
                                     }
                                     "unsubscribe" => {
-                                        info!("Client unsubscribing from aircraft: {:?}", sub_msg.aircraft_ids);
-                                        for aircraft_id in &sub_msg.aircraft_ids {
-                                            subscribed_aircraft.retain(|id| id != aircraft_id);
-                                            receivers.remove(aircraft_id);
-                                            if let Some(ref service) = live_fix_service {
-                                                service.cleanup_aircraft(aircraft_id).await;
-                                            }
-                                        }
+                                        info!("Client unsubscribing from device: {}", sub_msg.device_id);
+                                        let device_id = &sub_msg.device_id;
+                                        subscribed_aircraft.retain(|id| id != device_id);
+                                        receivers.remove(device_id);
+                                        live_fix_service.cleanup_aircraft(device_id).await;
                                     }
                                     _ => {
                                         warn!("Unknown subscription action: {}", sub_msg.action);
@@ -175,10 +155,8 @@ async fn handle_websocket(mut socket: WebSocket, _state: AppState) {
     }
 
     // Cleanup subscriptions when connection closes
-    if let Some(ref service) = live_fix_service {
-        for aircraft_id in &subscribed_aircraft {
-            service.cleanup_aircraft(aircraft_id).await;
-        }
+    for aircraft_id in &subscribed_aircraft {
+        live_fix_service.cleanup_aircraft(aircraft_id).await;
     }
 
     info!("WebSocket connection terminated");
