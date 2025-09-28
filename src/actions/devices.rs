@@ -11,6 +11,7 @@ use crate::actions::json_error;
 use crate::aircraft_registrations_repo::AircraftRegistrationsRepository;
 use crate::device_repo::DeviceRepository;
 use crate::devices::{AddressType, Device};
+use crate::faa::aircraft_model_repo::AircraftModelRepository;
 use crate::fixes::Fix;
 use crate::fixes_repo::FixesRepository;
 use crate::web::AppState;
@@ -199,6 +200,49 @@ pub async fn get_device_aircraft_registration(
     }
 }
 
+/// Get aircraft model for a device by device ID
+/// This joins aircraft_registrations to aircraft_models using manufacturer_code, model_code, and series_code
+pub async fn get_device_aircraft_model(
+    Path(id): Path<Uuid>,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let aircraft_repo = AircraftRegistrationsRepository::new(state.pool.clone());
+    let aircraft_model_repo = AircraftModelRepository::new(state.pool.clone());
+
+    // First get the aircraft registration for this device
+    let aircraft_registration = match aircraft_repo.get_aircraft_registration_by_device_id(id).await {
+        Ok(Some(registration)) => registration,
+        Ok(None) => {
+            return (StatusCode::NOT_FOUND).into_response();
+        }
+        Err(e) => {
+            tracing::error!("Failed to get aircraft registration for device {}: {}", id, e);
+            return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get aircraft registration").into_response();
+        }
+    };
+
+    // Now get the aircraft model using the codes from the registration
+    match aircraft_model_repo.get_aircraft_model_by_key(
+        &aircraft_registration.manufacturer_code,
+        &aircraft_registration.model_code,
+        &aircraft_registration.series_code,
+    ).await {
+        Ok(Some(aircraft_model)) => Json(aircraft_model).into_response(),
+        Ok(None) => (StatusCode::NOT_FOUND).into_response(),
+        Err(e) => {
+            tracing::error!(
+                "Failed to get aircraft model for device {} with codes {}-{}-{}: {}",
+                id,
+                aircraft_registration.manufacturer_code,
+                aircraft_registration.model_code,
+                aircraft_registration.series_code,
+                e
+            );
+            json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get aircraft model").into_response()
+        }
+    }
+}
+
 /// Parse YYYYMMDDHHMMSS format to DateTime<Utc>
 fn parse_datetime_string(datetime_str: &str) -> Result<DateTime<Utc>, &'static str> {
     if datetime_str.len() != 14 {
@@ -208,6 +252,26 @@ fn parse_datetime_string(datetime_str: &str) -> Result<DateTime<Utc>, &'static s
     let naive_datetime = NaiveDateTime::parse_from_str(datetime_str, "%Y%m%d%H%M%S")
         .map_err(|_| "Invalid datetime format")?;
     Ok(DateTime::from_naive_utc_and_offset(naive_datetime, Utc))
+}
+
+/// Get all devices for a club by club ID
+pub async fn get_devices_by_club(
+    Path(club_id): Path<Uuid>,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let device_repo = DeviceRepository::new(state.pool);
+
+    match device_repo.get_devices_by_club_id(club_id).await {
+        Ok(devices) => Json(DeviceSearchResponse { devices }).into_response(),
+        Err(e) => {
+            tracing::error!("Failed to get devices for club {}: {}", club_id, e);
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to get devices for club",
+            )
+            .into_response()
+        }
+    }
 }
 
 #[cfg(test)]

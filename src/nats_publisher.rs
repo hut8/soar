@@ -6,17 +6,39 @@ use tracing::{debug, error, info};
 
 use crate::Fix;
 
-/// Publish Fix to NATS
-async fn publish_to_nats(nats_client: &Client, device_id: &str, fix: &Fix) -> Result<()> {
-    let subject = format!("aircraft.fix.{}", device_id);
+/// Get the topic prefix based on the environment
+fn get_topic_prefix() -> &'static str {
+    match std::env::var("SOAR_ENV") {
+        Ok(env) if env == "production" => "aircraft",
+        _ => "staging.aircraft"
+    }
+}
 
-    // Serialize the Fix to JSON
+/// Publish Fix to NATS (both device and area topics)
+async fn publish_to_nats(nats_client: &Client, device_id: &str, fix: &Fix) -> Result<()> {
+    let topic_prefix = get_topic_prefix();
+
+    // Serialize the Fix to JSON once
     let payload = serde_json::to_vec(fix)?;
 
-    nats_client.publish(subject, payload.into()).await?;
-    debug!("Published fix for {} to NATS", device_id);
+    // 1. Publish by device ID (existing functionality)
+    let device_subject = format!("{}.fix.{}", topic_prefix, device_id);
+    nats_client.publish(device_subject.clone(), payload.clone().into()).await?;
+    debug!("Published fix for {} to NATS device subject: {}", device_id, device_subject);
+
+    // 2. Publish by area (new functionality)
+    let area_subject = get_area_subject(topic_prefix, fix.latitude, fix.longitude);
+    nats_client.publish(area_subject.clone(), payload.into()).await?;
+    debug!("Published fix for {} to NATS area subject: {}", device_id, area_subject);
 
     Ok(())
+}
+
+/// Get the area subject for a given latitude and longitude
+fn get_area_subject(topic_prefix: &str, latitude: f64, longitude: f64) -> String {
+    let lat_floor = latitude.floor() as i32;
+    let lon_floor = longitude.floor() as i32;
+    format!("{}.area.{}.{}", topic_prefix, lat_floor, lon_floor)
 }
 
 /// NATS publisher for aircraft position fixes

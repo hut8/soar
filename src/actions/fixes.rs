@@ -15,9 +15,19 @@ use crate::live_fixes::LiveFix;
 use crate::web::AppState;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SubscriptionMessage {
-    pub action: String,    // "subscribe" or "unsubscribe"
-    pub device_id: String, // Single device ID to match frontend expectations
+#[serde(tag = "type")]
+pub enum SubscriptionMessage {
+    #[serde(rename = "device")]
+    Device {
+        action: String, // "subscribe" or "unsubscribe"
+        id: String,     // Device UUID
+    },
+    #[serde(rename = "area")]
+    Area {
+        action: String, // "subscribe" or "unsubscribe"
+        latitude: i32,  // Integer latitude
+        longitude: i32, // Integer longitude
+    },
 }
 
 pub async fn fixes_live_websocket(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
@@ -141,38 +151,76 @@ async fn handle_subscriptions(
             sub_msg = subscription_rx.recv() => {
                 match sub_msg {
                     Some(sub_msg) => {
-                        match sub_msg.action.as_str() {
-                            "subscribe" => {
-                                info!("Client subscribing to device: {}", sub_msg.device_id);
-                                let device_id = sub_msg.device_id;
-                                if !subscribed_aircraft.contains(&device_id) {
-                                    match live_fix_service.subscribe_to_device(&device_id).await {
-                                        Ok(receiver) => {
-                                            subscribed_aircraft.push(device_id.clone());
-                                            receivers.insert(device_id.clone(), receiver);
-                                            info!("Successfully subscribed to device: {}", device_id);
+                        match sub_msg {
+                            SubscriptionMessage::Device { action, id } => {
+                                match action.as_str() {
+                                    "subscribe" => {
+                                        info!("Client subscribing to device: {}", id);
+                                        if !subscribed_aircraft.contains(&id) {
+                                            match live_fix_service.subscribe_to_device(&id).await {
+                                                Ok(receiver) => {
+                                                    subscribed_aircraft.push(id.clone());
+                                                    receivers.insert(id.clone(), receiver);
+                                                    info!("Successfully subscribed to device: {}", id);
+                                                }
+                                                Err(e) => {
+                                                    error!("Failed to subscribe to device {}: {}", id, e);
+                                                }
+                                            }
                                         }
-                                        Err(e) => {
-                                            error!("Failed to subscribe to device {}: {}", device_id, e);
+                                    }
+                                    "unsubscribe" => {
+                                        info!("Client unsubscribing from device: {}", id);
+                                        if subscribed_aircraft.contains(&id) {
+                                            subscribed_aircraft.retain(|device_id| device_id != &id);
+                                            receivers.remove(&id);
+                                            if let Err(e) = live_fix_service.unsubscribe_from_device(&id).await {
+                                                error!("Failed to unsubscribe from device {}: {}", id, e);
+                                            } else {
+                                                info!("Successfully unsubscribed from device: {}", id);
+                                            }
                                         }
+                                    }
+                                    _ => {
+                                        warn!("Unknown device subscription action: {}", action);
                                     }
                                 }
                             }
-                            "unsubscribe" => {
-                                info!("Client unsubscribing from device: {}", sub_msg.device_id);
-                                let device_id = &sub_msg.device_id;
-                                if subscribed_aircraft.contains(device_id) {
-                                    subscribed_aircraft.retain(|id| id != device_id);
-                                    receivers.remove(device_id);
-                                    if let Err(e) = live_fix_service.unsubscribe_from_device(device_id).await {
-                                        error!("Failed to unsubscribe from device {}: {}", device_id, e);
-                                    } else {
-                                        info!("Successfully unsubscribed from device: {}", device_id);
+                            SubscriptionMessage::Area { action, latitude, longitude } => {
+                                match action.as_str() {
+                                    "subscribe" => {
+                                        info!("Client subscribing to area: lat={}, lon={}", latitude, longitude);
+                                        let area_key = format!("area.{}.{}", latitude, longitude);
+                                        if !subscribed_aircraft.contains(&area_key) {
+                                            match live_fix_service.subscribe_to_area(latitude, longitude).await {
+                                                Ok(receiver) => {
+                                                    subscribed_aircraft.push(area_key.clone());
+                                                    receivers.insert(area_key, receiver);
+                                                    info!("Successfully subscribed to area: lat={}, lon={}", latitude, longitude);
+                                                }
+                                                Err(e) => {
+                                                    error!("Failed to subscribe to area lat={}, lon={}: {}", latitude, longitude, e);
+                                                }
+                                            }
+                                        }
+                                    }
+                                    "unsubscribe" => {
+                                        info!("Client unsubscribing from area: lat={}, lon={}", latitude, longitude);
+                                        let area_key = format!("area.{}.{}", latitude, longitude);
+                                        if subscribed_aircraft.contains(&area_key) {
+                                            subscribed_aircraft.retain(|key| key != &area_key);
+                                            receivers.remove(&area_key);
+                                            if let Err(e) = live_fix_service.unsubscribe_from_area(latitude, longitude).await {
+                                                error!("Failed to unsubscribe from area lat={}, lon={}: {}", latitude, longitude, e);
+                                            } else {
+                                                info!("Successfully unsubscribed from area: lat={}, lon={}", latitude, longitude);
+                                            }
+                                        }
+                                    }
+                                    _ => {
+                                        warn!("Unknown area subscription action: {}", action);
                                     }
                                 }
-                            }
-                            _ => {
-                                warn!("Unknown subscription action: {}", sub_msg.action);
                             }
                         }
                     }
@@ -234,14 +282,30 @@ async fn handle_subscriptions(
     }
 
     // Cleanup subscriptions when connection closes
-    for aircraft_id in &subscribed_aircraft {
-        if let Err(e) = live_fix_service.unsubscribe_from_device(aircraft_id).await {
-            error!(
-                "Failed to cleanup subscription for device {}: {}",
-                aircraft_id, e
-            );
+    for subscription_key in &subscribed_aircraft {
+        if subscription_key.starts_with("area.") {
+            // Parse area subscription key: "area.lat.lon"
+            let parts: Vec<&str> = subscription_key.split('.').collect();
+            if parts.len() == 3 {
+                if let (Ok(lat), Ok(lon)) = (parts[1].parse::<i32>(), parts[2].parse::<i32>()) {
+                    if let Err(e) = live_fix_service.unsubscribe_from_area(lat, lon).await {
+                        error!("Failed to cleanup area subscription {}: {}", subscription_key, e);
+                    } else {
+                        info!("Cleaned up area subscription: {}", subscription_key);
+                    }
+                } else {
+                    error!("Invalid area subscription key format: {}", subscription_key);
+                }
+            } else {
+                error!("Invalid area subscription key format: {}", subscription_key);
+            }
         } else {
-            info!("Cleaned up subscription for device: {}", aircraft_id);
+            // Device subscription
+            if let Err(e) = live_fix_service.unsubscribe_from_device(subscription_key).await {
+                error!("Failed to cleanup device subscription {}: {}", subscription_key, e);
+            } else {
+                info!("Cleaned up device subscription: {}", subscription_key);
+            }
         }
     }
 }

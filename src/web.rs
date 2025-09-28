@@ -268,11 +268,13 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         .route("/flights/{id}/fixes", get(actions::get_flight_fixes))
         // Aircraft routes
         .route("/clubs/{id}/aircraft", get(actions::get_aircraft_by_club))
+        .route("/clubs/{id}/devices", get(actions::get_devices_by_club))
         // Device routes
         .route("/devices", get(actions::search_devices))
         .route("/devices/{id}", get(actions::get_device_by_id))
         .route("/devices/{id}/fixes", get(actions::get_device_fixes))
         .route("/devices/{id}/aircraft-registration", get(actions::get_device_aircraft_registration))
+        .route("/devices/{id}/aircraft/model", get(actions::get_device_aircraft_model))
         // Authentication routes
         .route("/auth/register", post(actions::register_user))
         .route("/auth/login", post(actions::login_user))

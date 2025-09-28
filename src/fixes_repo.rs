@@ -219,7 +219,6 @@ impl FixesRepository {
 
         let mut new_fix = fix.clone();
         let pool = self.pool.clone();
-        let aircraft_identifier = fix.get_aircraft_identifier();
 
         // Look up device UUID if we have device address and address type
         let dev_address = fix.device_address_hex();
@@ -241,8 +240,7 @@ impl FixesRepository {
                 .execute(&mut conn)?;
 
             debug!(
-                "Inserted fix for aircraft: {} | Device ID: {:?} ({:?}-{:?}) | Position: {:.6}, {:.6} | Altitude: {}ft | Map: https://maps.google.com/maps?q={:.6},{:.6}",
-                aircraft_identifier.unwrap_or_else(|| "Unknown".to_string()),
+                "Inserted fix for aircraft | Device ID: {:?} ({:?}-{:?}) | Position: {:.6},{:.6} @ {}ft | Map: https://maps.google.com/maps?q={:.6},{:.6}",
                 new_fix.device_id,
                 new_fix.address_type,
                 new_fix.device_address,

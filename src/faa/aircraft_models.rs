@@ -38,7 +38,7 @@ fn to_opt_u16(s: &str) -> Option<u16> {
 }
 
 /// Type of Aircraft (position 61)
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub enum AircraftType {
     Glider,
     Balloon,
@@ -94,7 +94,7 @@ impl fmt::Display for AircraftType {
 }
 
 /// Type of Engine (positions 63–64)
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub enum EngineType {
     None,
     Reciprocating,
@@ -158,7 +158,7 @@ impl fmt::Display for EngineType {
 }
 
 /// Aircraft Category Code (position 66)
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub enum AircraftCategory {
     Land,
     Sea,
@@ -190,7 +190,7 @@ impl fmt::Display for AircraftCategory {
 }
 
 /// Builder Certification Code (position 68)
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub enum BuilderCertification {
     TypeCertificated,
     NotTypeCertificated,
@@ -222,7 +222,7 @@ impl fmt::Display for BuilderCertification {
 }
 
 /// Aircraft Weight Class (positions 77–83)
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub enum WeightClass {
     UpTo12499,
     From12500To19999,
@@ -260,7 +260,7 @@ impl fmt::Display for WeightClass {
 }
 
 /// Aircraft Model record from FAA Aircraft Reference File
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct AircraftModel {
     pub manufacturer_code: String,                   // positions 1–3
     pub model_code: String,                          // positions 4–5
