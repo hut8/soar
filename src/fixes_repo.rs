@@ -240,7 +240,7 @@ impl FixesRepository {
                 .execute(&mut conn)?;
 
             debug!(
-                "Inserted fix for aircraft | Device ID: {:?} ({:?}-{:?}) | Position: {:.6},{:.6} @ {}ft | Map: https://maps.google.com/maps?q={:.6},{:.6}",
+                "Inserted fix | Device: {:?} ({:?}-{:?}) | {:.6},{:.6} @ {}ft | https://maps.google.com/maps?q={:.6},{:.6}",
                 new_fix.device_id,
                 new_fix.address_type,
                 new_fix.device_address,
