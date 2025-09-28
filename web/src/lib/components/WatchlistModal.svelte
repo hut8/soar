@@ -110,8 +110,8 @@
 	});
 
 	// Get devices from registry for watchlist entries
-	$: deviceRegistry = DeviceRegistry.getInstance();
-	$: entriesWithDevices = $watchlist.entries.map(entry => {
+	const deviceRegistry = $derived(DeviceRegistry.getInstance());
+	const entriesWithDevices = $derived($watchlist.entries.map(entry => {
 		const device = deviceRegistry.getDevice(entry.deviceId);
 		return {
 			...entry,
@@ -126,7 +126,7 @@
 				identified: false
 			}
 		};
-	});
+	}));
 </script>
 
 <!-- Watchlist Modal -->

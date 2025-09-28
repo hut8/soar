@@ -108,8 +108,8 @@ export class DeviceRegistry {
 				aircraft_model: string;
 				registration: string;
 				cn: string;
-				tracked: boolean;
-				identified: boolean;
+				tracked: string; // API returns "Y" for true, "" for false
+				identified: string; // API returns "Y" for true, "" for false
 			};
 
 			const apiDevice = await serverCall<APIDevice>(`/devices/${deviceId}`);
@@ -124,8 +124,8 @@ export class DeviceRegistry {
 				cachedDevice.aircraft_model = apiDevice.aircraft_model;
 				cachedDevice.registration = apiDevice.registration;
 				cachedDevice.cn = apiDevice.cn;
-				cachedDevice.tracked = apiDevice.tracked;
-				cachedDevice.identified = apiDevice.identified;
+				cachedDevice.tracked = apiDevice.tracked.toUpperCase() === 'Y';
+				cachedDevice.identified = apiDevice.identified.toUpperCase() === 'Y';
 			} else {
 				// Create new device
 				cachedDevice = Device.fromJSON({
@@ -135,8 +135,8 @@ export class DeviceRegistry {
 					aircraft_model: apiDevice.aircraft_model,
 					registration: apiDevice.registration,
 					cn: apiDevice.cn,
-					tracked: apiDevice.tracked,
-					identified: apiDevice.identified
+					tracked: apiDevice.tracked.toUpperCase() === 'Y',
+					identified: apiDevice.identified.toUpperCase() === 'Y'
 				});
 			}
 

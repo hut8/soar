@@ -107,8 +107,25 @@ export class FixFeed {
 
 			this.websocket.onmessage = (event) => {
 				try {
-					const fix = JSON.parse(event.data) as Fix;
-					console.log('Received fix:', fix);
+					const rawFix = JSON.parse(event.data);
+					console.log('Received fix:', rawFix);
+
+					// Transform WebSocket fix data to match Fix interface
+					const fix: Fix = {
+						id: rawFix.id,
+						device_id: rawFix.device_id,
+						device_address_hex: rawFix.device_address_hex,
+						timestamp: rawFix.timestamp,
+						latitude: rawFix.latitude,
+						longitude: rawFix.longitude,
+						altitude_feet: rawFix.altitude,
+						track_degrees: rawFix.track,
+						ground_speed_knots: rawFix.ground_speed,
+						climb_fpm: rawFix.climb_rate,
+						registration: rawFix.registration,
+						model: rawFix.model,
+						flight_id: rawFix.flight_id
+					};
 
 					// Add fix to device registry
 					this.deviceRegistry.addFixToDevice(fix).catch(error => {

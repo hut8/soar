@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::actions::json_error;
-use crate::aircraft_registrations::AircraftRegistrationModel;
 use crate::aircraft_registrations_repo::AircraftRegistrationsRepository;
 use crate::device_repo::DeviceRepository;
 use crate::devices::{AddressType, Device};
@@ -33,10 +32,6 @@ pub struct DeviceSearchQuery {
     pub address_type: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
-pub struct DeviceResponse {
-    pub device: Device,
-}
 
 #[derive(Debug, Serialize)]
 pub struct DeviceSearchResponse {
@@ -49,10 +44,6 @@ pub struct DeviceFixesResponse {
     pub count: usize,
 }
 
-#[derive(Debug, Serialize)]
-pub struct DeviceAircraftRegistrationResponse {
-    pub aircraft_registration: Option<AircraftRegistrationModel>,
-}
 
 /// Get a device by its UUID
 pub async fn get_device_by_id(
@@ -63,7 +54,7 @@ pub async fn get_device_by_id(
 
     // First try to find the device by UUID in the devices table
     match device_repo.get_device_by_uuid(id).await {
-        Ok(Some(device)) => Json(DeviceResponse { device }).into_response(),
+        Ok(Some(device)) => Json(device).into_response(),
         Ok(None) => json_error(StatusCode::NOT_FOUND, "Device not found").into_response(),
         Err(e) => {
             tracing::error!("Failed to get device by ID {}: {}", id, e);
@@ -199,12 +190,8 @@ pub async fn get_device_aircraft_registration(
 
     // Query aircraft_registrations table for a record with the given device_id
     match aircraft_repo.get_aircraft_registration_by_device_id(id).await {
-        Ok(Some(aircraft_registration)) => Json(DeviceAircraftRegistrationResponse {
-            aircraft_registration: Some(aircraft_registration),
-        }).into_response(),
-        Ok(None) => Json(DeviceAircraftRegistrationResponse {
-            aircraft_registration: None,
-        }).into_response(),
+        Ok(Some(aircraft_registration)) => Json(aircraft_registration).into_response(),
+        Ok(None) => (StatusCode::NOT_FOUND).into_response(),
         Err(e) => {
             tracing::error!("Failed to get aircraft registration for device {}: {}", id, e);
             json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get aircraft registration").into_response()
