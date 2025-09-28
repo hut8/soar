@@ -14,10 +14,20 @@ export type FixFeedEvent =
 
 export type FixFeedSubscriber = (event: FixFeedEvent) => void;
 
-export interface SubscriptionMessage {
+export interface DeviceSubscriptionMessage {
 	action: string; // "subscribe" or "unsubscribe"
-	device_id: string;
+	type: "device";
+	id: string;
 }
+
+export interface AreaSubscriptionMessage {
+	action: string; // "subscribe" or "unsubscribe"
+	type: "area";
+	latitude: number;
+	longitude: number;
+}
+
+export type SubscriptionMessage = DeviceSubscriptionMessage | AreaSubscriptionMessage;
 
 export class FixFeed {
 	private static instance: FixFeed | null = null;
@@ -263,10 +273,18 @@ export class FixFeed {
 	// Send subscription message to server
 	private sendSubscriptionMessage(action: string, deviceId: string): void {
 		if (this.websocket?.readyState === WebSocket.OPEN) {
-			const message: SubscriptionMessage = {
+			const message: DeviceSubscriptionMessage = {
 				action,
-				device_id: deviceId
+				type: "device",
+				id: deviceId
 			};
+			this.websocket.send(JSON.stringify(message));
+		}
+	}
+
+	// Send any subscription message to server (for area subscriptions)
+	public sendWebSocketMessage(message: SubscriptionMessage): void {
+		if (this.websocket?.readyState === WebSocket.OPEN) {
 			this.websocket.send(JSON.stringify(message));
 		}
 	}

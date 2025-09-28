@@ -5,7 +5,7 @@
 	import { browser } from '$app/environment';
 	import { serverCall } from '$lib/api/server';
 	import { Loader } from '@googlemaps/js-api-loader';
-	import { Settings, ListChecks } from '@lucide/svelte';
+	import { Settings, ListChecks, MapPlus, MapMinus } from '@lucide/svelte';
 	import WatchlistModal from '$lib/components/WatchlistModal.svelte';
 	import SettingsModal from '$lib/components/SettingsModal.svelte';
 	import { DeviceRegistry } from '$lib/services/DeviceRegistry';
@@ -130,6 +130,11 @@
 	// Subscribe to device registry and update aircraft markers
 	let activeDevices: Device[] = $state([]);
 	let connectionStatus = $state({ connected: false, reconnecting: false });
+
+	// Area tracker state
+	let areaTrackerActive = $state(false);
+	let areaTrackerAvailable = $state(true); // Whether area tracker can be enabled (based on map area)
+	let currentAreaSubscriptions = $state<Set<string>>(new Set()); // Track subscribed areas
 
 	$effect(() => {
 		const unsubscribeRegistry = deviceRegistry.subscribe((event: DeviceRegistryEvent) => {
@@ -273,14 +278,26 @@
 			setTimeout(checkAndUpdateAirports, 100); // Small delay to ensure bounds are updated
 			// Update aircraft marker scaling on zoom change
 			updateAllAircraftMarkersScale();
+			// Update area tracker availability and subscriptions
+			updateAreaTrackerAvailability();
+			if (areaTrackerActive) {
+				setTimeout(updateAreaSubscriptions, 100); // Small delay for bounds to update
+			}
 		});
 
 		map.addListener('dragend', () => {
 			checkAndUpdateAirports();
+			// Update area subscriptions after panning
+			if (areaTrackerActive) {
+				updateAreaSubscriptions();
+			}
 		});
 
 		// Initial check for airports
 		setTimeout(checkAndUpdateAirports, 1000); // Give map time to fully initialize
+
+		// Initial area tracker availability check
+		setTimeout(updateAreaTrackerAvailability, 1000);
 
 		console.log('[MAP] Google Maps initialized for operations view. Map ready for markers.');
 	}
@@ -812,6 +829,146 @@
 		latestFixes.clear();
 		console.log('[MARKER] All aircraft markers cleared');
 	}
+
+	// Area tracker functions
+	function toggleAreaTracker(): void {
+		if (!areaTrackerAvailable) return;
+
+		areaTrackerActive = !areaTrackerActive;
+		console.log('[AREA TRACKER] Area tracker toggled:', areaTrackerActive);
+
+		if (areaTrackerActive) {
+			updateAreaSubscriptions();
+		} else {
+			clearAreaSubscriptions();
+		}
+	}
+
+	function updateAreaTrackerAvailability(): void {
+		if (!map) return;
+
+		const area = calculateViewportArea();
+		const wasAvailable = areaTrackerAvailable;
+		areaTrackerAvailable = area <= 100000; // 100,000 square miles limit
+
+		console.log(`[AREA TRACKER] Map area: ${area.toFixed(2)} sq miles, Available: ${areaTrackerAvailable}`);
+
+		// If area tracker becomes unavailable while active, deactivate it
+		if (!areaTrackerAvailable && areaTrackerActive) {
+			areaTrackerActive = false;
+			clearAreaSubscriptions();
+		}
+
+		// If availability changed, log it
+		if (wasAvailable !== areaTrackerAvailable) {
+			console.log(`[AREA TRACKER] Availability changed: ${wasAvailable} -> ${areaTrackerAvailable}`);
+		}
+	}
+
+	function getVisibleLatLonSquares(): Array<{lat: number, lon: number}> {
+		if (!map) return [];
+
+		const bounds = map.getBounds();
+		if (!bounds) return [];
+
+		const ne = bounds.getNorthEast();
+		const sw = bounds.getSouthWest();
+
+		// Get integer degree boundaries
+		const latMin = Math.floor(sw.lat());
+		const latMax = Math.floor(ne.lat());
+		const lonMin = Math.floor(sw.lng());
+		const lonMax = Math.floor(ne.lng());
+
+		const squares: Array<{lat: number, lon: number}> = [];
+
+		// Include all squares that intersect with the visible area
+		for (let lat = latMin; lat <= latMax + 1; lat++) {
+			for (let lon = lonMin; lon <= lonMax + 1; lon++) {
+				squares.push({ lat, lon });
+			}
+		}
+
+		console.log(`[AREA TRACKER] Visible squares: lat ${latMin}-${latMax+1}, lon ${lonMin}-${lonMax+1} (${squares.length} total)`);
+		return squares;
+	}
+
+	function updateAreaSubscriptions(): void {
+		if (!areaTrackerActive || !areaTrackerAvailable) return;
+
+		const visibleSquares = getVisibleLatLonSquares();
+		const newSubscriptions = new Set<string>();
+
+		// Create subscription keys for visible squares
+		visibleSquares.forEach(square => {
+			const key = `area.${square.lat}.${square.lon}`;
+			newSubscriptions.add(key);
+		});
+
+		// Find squares to unsubscribe from (no longer visible)
+		const toUnsubscribe = new Set<string>();
+		currentAreaSubscriptions.forEach(key => {
+			if (!newSubscriptions.has(key)) {
+				toUnsubscribe.add(key);
+			}
+		});
+
+		// Find squares to subscribe to (newly visible)
+		const toSubscribe = new Set<string>();
+		newSubscriptions.forEach(key => {
+			if (!currentAreaSubscriptions.has(key)) {
+				toSubscribe.add(key);
+			}
+		});
+
+		// Unsubscribe from areas no longer visible
+		toUnsubscribe.forEach(key => {
+			const [, lat, lon] = key.split('.');
+			unsubscribeFromArea(parseInt(lat), parseInt(lon));
+		});
+
+		// Subscribe to newly visible areas
+		toSubscribe.forEach(key => {
+			const [, lat, lon] = key.split('.');
+			subscribeToArea(parseInt(lat), parseInt(lon));
+		});
+
+		// Update current subscriptions
+		currentAreaSubscriptions = newSubscriptions;
+
+		console.log(`[AREA TRACKER] Updated subscriptions: ${toSubscribe.size} new, ${toUnsubscribe.size} removed, ${currentAreaSubscriptions.size} total`);
+	}
+
+	function clearAreaSubscriptions(): void {
+		currentAreaSubscriptions.forEach(key => {
+			const [, lat, lon] = key.split('.');
+			unsubscribeFromArea(parseInt(lat), parseInt(lon));
+		});
+		currentAreaSubscriptions.clear();
+		console.log('[AREA TRACKER] Cleared all area subscriptions');
+	}
+
+	function subscribeToArea(latitude: number, longitude: number): void {
+		const message = {
+			action: 'subscribe',
+			type: 'area' as const,
+			latitude,
+			longitude
+		};
+		console.log('[AREA TRACKER] Subscribe to area:', message);
+		fixFeed.sendWebSocketMessage(message);
+	}
+
+	function unsubscribeFromArea(latitude: number, longitude: number): void {
+		const message = {
+			action: 'unsubscribe',
+			type: 'area' as const,
+			latitude,
+			longitude
+		};
+		console.log('[AREA TRACKER] Unsubscribe from area:', message);
+		fixFeed.sendWebSocketMessage(message);
+	}
 </script>
 
 <svelte:head>
@@ -845,6 +1002,25 @@
 		<!-- Watchlist Button -->
 		<button class="location-btn" onclick={() => (showWatchlistModal = true)} title="Watchlist">
 			<ListChecks size={20} />
+		</button>
+
+		<!-- Area Tracker Button -->
+		<button
+			class="location-btn"
+			class:area-tracker-active={areaTrackerActive}
+			class:area-tracker-unavailable={!areaTrackerAvailable}
+			onclick={toggleAreaTracker}
+			title={areaTrackerAvailable ?
+				(areaTrackerActive ? "Disable Area Tracker" : "Enable Area Tracker") :
+				"Area Tracker unavailable (map too zoomed out)"
+			}
+			disabled={!areaTrackerAvailable}
+		>
+			{#if areaTrackerActive}
+				<MapPlus size={20} />
+			{:else}
+				<MapMinus size={20} />
+			{/if}
 		</button>
 
 		<!-- Settings Button -->
@@ -1013,6 +1189,25 @@
 		cursor: not-allowed;
 		opacity: 0.5;
 		transform: none;
+	}
+
+	/* Area tracker button states */
+	.area-tracker-active {
+		background: #10b981; /* Green background when active */
+		color: white;
+	}
+
+	.area-tracker-active:hover {
+		background: #059669; /* Darker green on hover */
+	}
+
+	.area-tracker-unavailable {
+		background: #ef4444; /* Red background when unavailable */
+		color: white;
+	}
+
+	.area-tracker-unavailable:hover {
+		background: #dc2626; /* Darker red on hover */
 	}
 
 	/* Loading spinner animation */

@@ -5,3 +5,14 @@
 @import '@skeletonlabs/skeleton/themes/cerberus';
 
 @source '../node_modules/@skeletonlabs/skeleton-svelte/dist';
+
+/* Ensure full height layout */
+html, body {
+	height: 100%;
+}
+
+#svelte {
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+}

@@ -159,6 +159,7 @@
 			<Segment
 				name="search-type"
 				value={searchType}
+				class="flex flex-col sm:flex-row"
 				onValueChange={(e) => {
 					if (e.value && (e.value === 'registration' || e.value === 'device' || e.value === 'club')) {
 						searchType = e.value;

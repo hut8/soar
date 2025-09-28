@@ -62,7 +62,7 @@
 	<link rel="icon" href={favicon} />
 </svelte:head>
 
-<div class="flex min-h-screen flex-col">
+<div class="flex h-full min-h-screen flex-col">
 	<AppBar classes="preset-glass-neutral">
 		{#snippet lead()}
 			<a href={base} class="flex items-center space-x-2">
@@ -167,7 +167,7 @@
 		</div>
 	</AppBar>
 
-	<main class="container mx-auto flex-1 space-y-4 p-4">
+	<main class="container mx-auto flex-1 space-y-4">
 		{@render children?.()}
 	</main>
 
