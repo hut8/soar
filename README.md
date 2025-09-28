@@ -69,10 +69,73 @@ Deployment is accomplished via the `deploy` script in the root of the project. T
 
 ## Development
 
-This is necessary to run migrations the first time (sqlx requires a correct schema in order to build).
+### Quick Start for New Developers
 
+1. **Install prerequisites**:
+   ```bash
+   # Install Rust (if not already installed)
+   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+   # Install Node.js 20+ from https://nodejs.org/
+   # Install PostgreSQL with PostGIS extension
+   ```
+
+2. **Clone and set up the project**:
+   ```bash
+   git clone <repository-url>
+   cd soar
+
+   # Install all development tools (Diesel CLI, cargo-audit, etc.)
+   ./scripts/install-dev-tools.sh
+
+   # Set up pre-commit hooks (matches CI pipeline exactly)
+   ./scripts/setup-precommit.sh
+   ```
+
+3. **Configure environment**:
+   ```bash
+   cp .env.example .env
+   # Edit .env with your database credentials and other settings
+
+   # Set up test database
+   createdb soar_test
+   psql -d soar_test -c "CREATE EXTENSION IF NOT EXISTS postgis;"
+
+   # Run migrations
+   export DATABASE_URL="postgres://user:password@localhost:5432/soar_test"
+   diesel migration run
+   ```
+
+4. **Verify setup**:
+   ```bash
+   # Test Rust build
+   cargo build
+
+   # Test web build
+   cd web && npm run build && cd ..
+
+   # Run pre-commit on all files to ensure everything works
+   pre-commit run --all-files
+   ```
+
+### Development Tools
+
+This project uses **pre-commit hooks** that run the same checks as our CI pipeline:
+
+- **Rust**: `cargo fmt --check`, `cargo clippy`, `cargo test`, `cargo audit`
+- **Web**: `npm run lint`, `npm run check`, `npm test`, `npm run build`
+- **General**: trailing whitespace, file endings, YAML/JSON validation
+
+The hooks run automatically on every commit. To run manually:
 ```bash
-cargo install sqlx-cli --no-default-features --features rustls,postgres
+pre-commit run --all-files
+```
+
+### Database Migrations
+
+Install Diesel CLI (done automatically by `install-dev-tools.sh`):
+```bash
+cargo install diesel_cli --no-default-features --features postgres
 ```
 
 ## Data

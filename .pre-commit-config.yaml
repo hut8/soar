@@ -1,0 +1,115 @@
+repos:
+  # Frontend/SvelteKit checks (matching CI test-sveltekit job)
+  - repo: local
+    hooks:
+      - id: web-install-deps
+        name: Install web dependencies
+        entry: bash -c 'cd web && npm ci'
+        language: system
+        files: ^web/(package\.json|package-lock\.json)$
+        pass_filenames: false
+
+      - id: web-lint
+        name: Run web linter (ESLint + Prettier)
+        entry: bash -c 'cd web && npm run lint'
+        language: system
+        files: ^web/.*\.(js|ts|svelte)$
+        pass_filenames: false
+
+      - id: web-type-check
+        name: Run web type checking
+        entry: bash -c 'cd web && npm run check'
+        language: system
+        files: ^web/.*\.(js|ts|svelte)$
+        pass_filenames: false
+
+      - id: web-test
+        name: Run web tests (Playwright E2E)
+        entry: bash -c 'cd web && npm test'
+        language: system
+        files: ^web/.*\.(js|ts|svelte)$
+        pass_filenames: false
+
+      - id: web-build
+        name: Build web project
+        entry: bash -c 'cd web && npm run build'
+        language: system
+        files: ^web/.*\.(js|ts|svelte)$
+        pass_filenames: false
+
+  # Rust formatting (matching CI check)
+  - repo: local
+    hooks:
+      - id: rust-fmt
+        name: Check Rust formatting
+        entry: cargo fmt --check
+        language: system
+        files: \.rs$
+        pass_filenames: false
+
+  # Rust linting (matching CI clippy check)
+  - repo: local
+    hooks:
+      - id: rust-clippy
+        name: Run Clippy
+        entry: bash -c 'export DATABASE_URL="${DATABASE_URL:-postgres://postgres:postgres@localhost:5432/soar_test}" && cargo clippy --all-targets --all-features -- -D warnings'
+        language: system
+        files: \.rs$
+        pass_filenames: false
+
+  # Rust tests (matching CI test run)
+  - repo: local
+    hooks:
+      - id: rust-test
+        name: Run Rust tests
+        entry: bash -c 'export DATABASE_URL="${DATABASE_URL:-postgres://postgres:postgres@localhost:5432/soar_test}" && cargo test --verbose'
+        language: system
+        files: \.rs$
+        pass_filenames: false
+
+  # Security audit (matching CI security-audit job)
+  - repo: local
+    hooks:
+      - id: cargo-audit
+        name: Run security audit
+        entry: cargo audit
+        language: system
+        files: ^(Cargo\.toml|Cargo\.lock)$
+        pass_filenames: false
+
+      - id: cargo-outdated
+        name: Check for outdated dependencies
+        entry: bash -c 'cargo outdated --exit-code 1 || echo "Some dependencies are outdated (non-critical)"'
+        language: system
+        files: ^(Cargo\.toml|Cargo\.lock)$
+        pass_filenames: false
+
+  # General file checks
+  - repo: pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+
+# Performance optimizations
+default_stages: [commit]
+fail_fast: false
+
+# CI configuration
+ci:
+  autofix_commit_msg: |
+    [pre-commit.ci] auto fixes from pre-commit.com hooks
+
+    for more information, see https://pre-commit.ci
+  autofix_prs: true
+  autoupdate_branch: ''
+  autoupdate_commit_msg: '[pre-commit.ci] pre-commit autoupdate'
+  autoupdate_schedule: weekly
+  skip: []
+  submodules: false
