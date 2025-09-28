@@ -98,7 +98,7 @@ repos:
         args: ['--maxkb=1000']
 
 # Performance optimizations
-default_stages: [commit]
+default_stages: [pre-commit]
 fail_fast: false
 
 # CI configuration
