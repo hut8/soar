@@ -113,8 +113,8 @@
 		{required}
 	>
 		{#snippet item(item)}
-			<div class="flex w-full items-center justify-between space-x-2">
-				<span class="flex-1">{item.label}</span>
+			<div class="flex w-full items-center space-x-2">
+				<span class="flex-1 text-left">{item.label}</span>
 				{#if item.club.is_soaring}
 					<span class="rounded-full bg-primary-500 px-2 py-1 text-xs text-white">Soaring</span>
 				{/if}
