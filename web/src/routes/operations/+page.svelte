@@ -172,7 +172,11 @@
 		console.log('[EFFECT] Device update effect triggered:', {
 			mapExists: !!map,
 			activeDevicesCount: activeDevices.length,
-			activeDevices: activeDevices.map(d => ({ id: d.id, registration: d.registration, fixCount: d.fixes.length }))
+			activeDevices: activeDevices.map((d) => ({
+				id: d.id,
+				registration: d.registration,
+				fixCount: d.fixes.length
+			}))
 		});
 
 		if (!map) {
@@ -202,21 +206,19 @@
 		});
 	});
 
-	onMount(async () => {
-		if (browser) {
+	onMount(() => {
+		(async () => {
 			await loadGoogleMapsScript();
 			initializeMap();
 			initializeCompass();
 			// Start live fixes feed for operations page
 			fixFeed.startLiveFixesFeed();
-		}
+		})();
 
 		// Cleanup function
 		return () => {
-			if (browser) {
-				fixFeed.stopLiveFixesFeed();
-				clearAircraftMarkers();
-			}
+			fixFeed.stopLiveFixesFeed();
+			clearAircraftMarkers();
 		};
 	});
 
@@ -269,6 +271,8 @@
 		// Add event listeners for viewport changes
 		map.addListener('zoom_changed', () => {
 			setTimeout(checkAndUpdateAirports, 100); // Small delay to ensure bounds are updated
+			// Update aircraft marker scaling on zoom change
+			updateAllAircraftMarkersScale();
 		});
 
 		map.addListener('dragend', () => {
@@ -522,7 +526,8 @@
 				position: { lat, lng },
 				map: map,
 				title: `${airport.name} (${airport.ident})`,
-				content: markerContent
+				content: markerContent,
+				zIndex: 100 // Lower z-index for airports so aircraft appear on top
 			});
 
 			airportMarkers.push(marker);
@@ -569,6 +574,45 @@
 			// Ensure compassHeading is between 0 and 360
 			compassHeading = ((compassHeading % 360) + 360) % 360;
 		}
+	}
+
+	function updateMarkerScale(markerContent: HTMLElement, zoom: number): void {
+		if (!markerContent) return;
+
+		// Calculate scale based on zoom level
+		// Zoom levels typically range from 1 (world) to 20+ (street level)
+		// We want markers to be very small at low zoom and normal size at high zoom
+		let scale: number;
+
+		if (zoom <= 4) {
+			// Very zoomed out (world/continental view) - minimum size
+			scale = 0.3;
+		} else if (zoom <= 8) {
+			// Country/state level - small size
+			scale = 0.4 + (zoom - 4) * 0.15; // 0.4 to 1.0
+		} else if (zoom <= 12) {
+			// Regional level - medium size
+			scale = 1.0 + (zoom - 8) * 0.1; // 1.0 to 1.4
+		} else {
+			// City/street level - full size
+			scale = 1.4 + Math.min(zoom - 12, 6) * 0.05; // 1.4 to 1.7 max
+		}
+
+		// Apply transform to the entire marker content
+		markerContent.style.transform = `scale(${scale})`;
+		markerContent.style.transformOrigin = 'center bottom'; // Anchor at bottom center
+	}
+
+	function updateAllAircraftMarkersScale(): void {
+		if (!map) return;
+
+		const currentZoom = map.getZoom() || 4;
+		aircraftMarkers.forEach((marker) => {
+			const markerContent = marker.content as HTMLElement;
+			if (markerContent) {
+				updateMarkerScale(markerContent, currentZoom);
+			}
+		});
 	}
 
 	function updateAircraftMarkerFromDevice(device: Device, latestFix: Fix): void {
@@ -654,17 +698,19 @@
 		// Use proper device registration, fallback to address
 		const tailNumber = device.registration || device.address || 'Unknown';
 		const altitudeFt = fix.altitude_feet ? `${fix.altitude_feet}ft` : '---ft';
+		const aircraftModel = device.aircraft_model;
 
 		console.log('[MARKER] Aircraft info:', {
 			tailNumber,
 			altitude: altitudeFt,
-			model: device.aircraft_model
+			model: aircraftModel
 		});
 
-		// Create two-line label: registration on top, altitude on bottom
+		// Create label with tail number + model (if available) on top, altitude on bottom
 		const tailDiv = document.createElement('div');
 		tailDiv.className = 'aircraft-tail';
-		tailDiv.textContent = tailNumber;
+		// Include aircraft model after tail number if available
+		tailDiv.textContent = aircraftModel ? `${tailNumber} (${aircraftModel})` : tailNumber;
 
 		const altDiv = document.createElement('div');
 		altDiv.className = 'aircraft-altitude';
@@ -691,8 +737,12 @@
 			position: { lat: fix.latitude, lng: fix.longitude },
 			map: map,
 			title: title,
-			content: markerContent
+			content: markerContent,
+			zIndex: 1000 // Higher z-index for aircraft to appear on top of airports
 		});
+
+		// Apply initial zoom-based scaling
+		updateMarkerScale(markerContent, map.getZoom() || 4);
 
 		console.log('[MARKER] AdvancedMarkerElement created successfully');
 		return marker;
@@ -729,14 +779,20 @@
 				// Use proper device registration, fallback to address
 				const tailNumber = device.registration || device.address || 'Unknown';
 				const altitudeFt = fix.altitude_feet ? `${fix.altitude_feet}ft` : '---ft';
+				const aircraftModel = device.aircraft_model;
 
-				tailDiv.textContent = tailNumber;
+				// Include aircraft model after tail number if available
+				tailDiv.textContent = aircraftModel ? `${tailNumber} (${aircraftModel})` : tailNumber;
 				altDiv.textContent = altitudeFt;
-				console.log('[MARKER] Updated label info:', { tailNumber, altitudeFt });
+				console.log('[MARKER] Updated label info:', { tailNumber, altitudeFt, aircraftModel });
 			}
 		} else {
 			console.warn('[MARKER] No marker content found for position update');
 		}
+
+		// Update scaling for the current zoom level
+		const currentZoom = map.getZoom() || 4;
+		updateMarkerScale(markerContent, currentZoom);
 
 		// Update the marker title
 		const title = device.aircraft_model
@@ -767,7 +823,7 @@
 	<div bind:this={mapContainer} class="h-full w-full"></div>
 
 	<!-- Control Buttons -->
-	<div class="absolute top-4 left-4 z-10 flex gap-2">
+	<div class="absolute left-4 top-4 z-10 flex gap-2">
 		<!-- Location Button -->
 		<button
 			bind:this={userLocationButton}
@@ -799,7 +855,7 @@
 
 	<!-- Compass Rose -->
 	{#if isCompassActive && currentSettings.showCompassRose}
-		<div class="compass-container absolute top-8 left-1/2 z-10 -translate-x-1/2 transform">
+		<div class="compass-container absolute left-1/2 top-8 z-10 -translate-x-1/2 transform">
 			<div class="compass-rose" style="transform: rotate({compassHeading}deg)">
 				<svg width="80" height="80" viewBox="0 0 80 80">
 					<!-- Outer circle -->
@@ -912,7 +968,7 @@
 				</svg>
 			</div>
 			<div
-				class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[24px] font-bold text-gray-700"
+				class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-[24px] font-bold text-gray-700"
 			>
 				{displayHeading}°
 			</div>
@@ -1021,6 +1077,7 @@
 		align-items: center;
 		pointer-events: auto;
 		cursor: pointer;
+		transform-origin: center center; /* Center the marker on the aircraft position */
 	}
 
 	:global(.aircraft-icon) {
@@ -1045,7 +1102,7 @@
 	}
 
 	:global(.aircraft-label) {
-		background: rgba(239, 68, 68, 0.95);
+		background: rgba(239, 68, 68, 0.75); /* Changed to 75% opacity */
 		border: 2px solid #dc2626;
 		border-radius: 6px;
 		padding: 4px 8px;

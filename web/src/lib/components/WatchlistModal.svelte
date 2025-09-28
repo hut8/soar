@@ -1,10 +1,11 @@
 <script lang="ts">
 	import { Switch, Segment } from '@skeletonlabs/skeleton-svelte';
-	import { Plus, X, Plane, Antenna, Eye } from '@lucide/svelte';
+	import { Plus, X, Plane, Antenna, Eye, Building2 } from '@lucide/svelte';
 	import { browser } from '$app/environment';
 	import { serverCall } from '$lib/api/server';
 	import { watchlist } from '$lib/stores/watchlist';
 	import { DeviceRegistry } from '$lib/services/DeviceRegistry';
+	import ClubSelector from '$lib/components/ClubSelector.svelte';
 	import type { Device } from '$lib/types';
 	let { showModal = $bindable() } = $props();
 
@@ -18,9 +19,20 @@
 	let searchInProgress = $state(false);
 	let errorMessage = $state('');
 
+	// Club tab state
+	let selectedClub = $state<string[]>([]);
+	let clubDevices = $state<Device[]>([]);
+	let clubSearchInProgress = $state(false);
+	let clubErrorMessage = $state('');
+
 	// Clear error message when user interacts with form
 	function clearError() {
 		errorMessage = '';
+	}
+
+	// Clear club error message
+	function clearClubError() {
+		clubErrorMessage = '';
 	}
 
 	// Add entry to watchlist
@@ -79,6 +91,13 @@
 
 		// Only add to watchlist if device was found
 		if (device && device.id) {
+			// Check for duplicates
+			const existingEntry = $watchlist.entries.find(entry => entry.deviceId === device.id);
+			if (existingEntry) {
+				errorMessage = 'This aircraft is already in your watchlist';
+				return;
+			}
+
 			// Add the device to the registry and watchlist
 			DeviceRegistry.getInstance().setDevice(device);
 			watchlist.add(device.id);
@@ -100,6 +119,72 @@
 	// Toggle entry active state
 	function toggleWatchlistEntry(id: string) {
 		watchlist.toggleActive(id);
+	}
+
+	// Load devices for selected club
+	async function loadClubDevices() {
+		if (!selectedClub.length || clubSearchInProgress) return;
+
+		const clubId = selectedClub[0];
+		if (!clubId) return;
+
+		clubSearchInProgress = true;
+		clubErrorMessage = '';
+
+		try {
+			const response = await serverCall<{ devices: Device[] }>(`/clubs/${clubId}/devices`);
+			// Only update if we're still looking at the same club
+			if (selectedClub.length > 0 && selectedClub[0] === clubId) {
+				clubDevices = response.devices || [];
+			}
+		} catch (error) {
+			console.warn(`Failed to fetch devices for club:`, error);
+			// Only show error if we're still looking at the same club
+			if (selectedClub.length > 0 && selectedClub[0] === clubId) {
+				clubErrorMessage = 'Failed to load club devices. Please try again.';
+				clubDevices = [];
+			}
+		} finally {
+			clubSearchInProgress = false;
+		}
+	}
+
+	// Add individual device to watchlist
+	function addDeviceToWatchlist(device: Device) {
+		// Check for duplicates
+		const existingEntry = $watchlist.entries.find(entry => entry.deviceId === device.id);
+		if (existingEntry) {
+			return; // Already in watchlist
+		}
+
+		DeviceRegistry.getInstance().setDevice(device);
+		watchlist.add(device.id);
+	}
+
+	// Add all club devices to watchlist
+	function addAllClubDevices() {
+		if (!clubDevices.length) return;
+
+		clubDevices.forEach(device => {
+			addDeviceToWatchlist(device);
+		});
+	}
+
+	// Check if device is already in watchlist
+	function isDeviceInWatchlist(deviceId: string): boolean {
+		return $watchlist.entries.some(entry => entry.deviceId === deviceId);
+	}
+
+	// Handle club selection change
+	function handleClubChange(e: { value: string[] }) {
+		selectedClub = e.value;
+		clearClubError();
+
+		if (selectedClub.length > 0) {
+			loadClubDevices();
+		} else {
+			clubDevices = [];
+		}
 	}
 
 	// Load watchlist on mount
@@ -169,6 +254,7 @@
 								if (e.value) {
 									newWatchlistEntry.type = e.value;
 									clearError();
+									clearClubError();
 								}
 							}}
 						>
@@ -184,6 +270,12 @@
 									<span class="ml-1">Device</span>
 								</div>
 							</Segment.Item>
+							<Segment.Item value="club">
+								<div class="flex flex-row items-center">
+									<Building2 size={16} />
+									<span class="ml-1">Club</span>
+								</div>
+							</Segment.Item>
 						</Segment>
 
 						{#if newWatchlistEntry.type === 'registration'}
@@ -195,7 +287,7 @@
 								oninput={() => clearError()}
 								disabled={searchInProgress}
 							/>
-						{:else}
+						{:else if newWatchlistEntry.type === 'device'}
 							<div class="grid grid-cols-2 gap-2">
 								<Segment
 									name="address-type"
@@ -220,23 +312,97 @@
 									disabled={searchInProgress}
 								/>
 							</div>
+						{:else if newWatchlistEntry.type === 'club'}
+							<div class="space-y-3">
+								<ClubSelector
+									bind:value={selectedClub}
+									placeholder="Select a club..."
+									onValueChange={handleClubChange}
+								/>
+
+								{#if clubDevices.length > 0}
+									<div class="space-y-2">
+										<div class="flex items-center justify-between">
+											<span class="text-sm font-medium text-gray-700">
+												Club Aircraft ({clubDevices.length})
+											</span>
+											<button
+												class="variant-filled-primary btn btn-sm"
+												onclick={addAllClubDevices}
+												disabled={clubSearchInProgress}
+											>
+												<Plus size={16} />
+												Add All
+											</button>
+										</div>
+
+										<div class="max-h-48 overflow-y-auto rounded border bg-gray-50 p-2">
+											<div class="grid gap-2">
+												{#each clubDevices as device (device.id)}
+													<div class="flex items-center justify-between rounded bg-white p-2 shadow-sm">
+														<div class="flex-1 min-w-0">
+															<div class="text-sm font-medium truncate">
+																{device.registration || 'Unknown Registration'}
+															</div>
+															<div class="text-xs text-gray-500 truncate">
+																{device.aircraft_model || 'Unknown Model'}
+															</div>
+														</div>
+														{#if isDeviceInWatchlist(device.id)}
+															<span class="rounded bg-green-100 px-2 py-1 text-xs font-medium text-green-800">
+																Watched
+															</span>
+														{:else}
+															<button
+																class="variant-filled-primary btn btn-sm"
+																onclick={() => addDeviceToWatchlist(device)}
+															>
+																<Plus size={14} />
+																Watch
+															</button>
+														{/if}
+													</div>
+												{/each}
+											</div>
+										</div>
+									</div>
+								{:else if clubSearchInProgress}
+									<div class="text-center text-sm text-gray-500 py-4">
+										<div class="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600 mx-auto mb-2"></div>
+										Loading club aircraft...
+									</div>
+								{:else if selectedClub.length > 0}
+									<div class="text-center text-sm text-gray-500 py-4">
+										No aircraft found for this club.
+									</div>
+								{/if}
+
+								<!-- Club error message display -->
+								{#if clubErrorMessage}
+									<div class="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-600">
+										{clubErrorMessage}
+									</div>
+								{/if}
+							</div>
 						{/if}
 
-						<button
-							class="variant-filled-primary btn w-full btn-sm"
-							onclick={addWatchlistEntry}
-							disabled={searchInProgress}
-						>
-							{#if searchInProgress}
-								<div
-									class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
-								></div>
-								Searching...
-							{:else}
-								<Plus size={16} />
-								Add to Watchlist
-							{/if}
-						</button>
+						{#if newWatchlistEntry.type !== 'club'}
+							<button
+								class="variant-filled-primary btn w-full btn-sm"
+								onclick={addWatchlistEntry}
+								disabled={searchInProgress}
+							>
+								{#if searchInProgress}
+									<div
+										class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
+									></div>
+									Searching...
+								{:else}
+									<Plus size={16} />
+									Add to Watchlist
+								{/if}
+							</button>
+						{/if}
 
 						<!-- Error message display -->
 						{#if errorMessage}
