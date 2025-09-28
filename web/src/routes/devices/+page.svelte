@@ -91,8 +91,8 @@
 				// Set the main devices list to show club devices
 				devices = clubDevices;
 			}
-		} catch (error) {
-			console.warn(`Failed to fetch devices for club:`, error);
+		} catch (err) {
+			console.warn(`Failed to fetch devices for club:`, err);
 			// Only show error if we're still looking at the same club
 			if (selectedClub.length > 0 && selectedClub[0] === clubId) {
 				clubErrorMessage = 'Failed to load club devices. Please try again.';
@@ -105,8 +105,8 @@
 	}
 
 	// Handle club selection change
-	function handleClubChange(e: { value: string[] }) {
-		selectedClub = e.value;
+	function handleClubChange(event: { value: string[] }) {
+		selectedClub = event.value;
 		clearClubError();
 
 		if (selectedClub.length > 0) {
@@ -116,7 +116,6 @@
 			devices = [];
 		}
 	}
-
 
 	function handleKeydown(event: KeyboardEvent) {
 		if (event.key === 'Enter') {
@@ -150,7 +149,7 @@
 
 	<!-- Search Section -->
 	<section class="space-y-4 card p-6">
-		<h3 class="mb-3 text-lg font-semibold flex items-center gap-2">
+		<h3 class="mb-3 flex items-center gap-2 text-lg font-semibold">
 			<Search class="h-5 w-5" />
 			Search Aircraft Devices
 		</h3>
@@ -159,10 +158,14 @@
 			<Segment
 				name="search-type"
 				value={searchType}
-				class="flex flex-col sm:flex-row"
-				onValueChange={(e) => {
-					if (e.value && (e.value === 'registration' || e.value === 'device' || e.value === 'club')) {
-						searchType = e.value;
+				onValueChange={(event: { value: string | null }) => {
+					if (
+						event.value &&
+						(event.value === 'registration' ||
+							event.value === 'device' ||
+							event.value === 'club')
+					) {
+						searchType = event.value;
 						error = '';
 						clubErrorMessage = '';
 					}
@@ -201,9 +204,9 @@
 					<Segment
 						name="address-type"
 						value={deviceAddressType}
-						onValueChange={(e) => {
-							if (e.value) {
-								deviceAddressType = e.value;
+						onValueChange={(event: { value: string | null }) => {
+							if (event.value) {
+								deviceAddressType = event.value;
 								error = '';
 							}
 						}}
@@ -238,7 +241,11 @@
 			{/if}
 
 			{#if searchType !== 'club'}
-				<button class="variant-filled-primary btn w-full" onclick={searchDevices} disabled={loading}>
+				<button
+					class="btn w-full variant-filled-primary"
+					onclick={searchDevices}
+					disabled={loading}
+				>
 					{#if loading}
 						<div
 							class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
@@ -298,7 +305,7 @@
 								<td class="font-semibold">{device.registration}</td>
 								<td>{device.aircraft_model}</td>
 								<td>
-									<span class="variant-soft badge">
+									<span class="badge variant-soft">
 										{device.device_type}
 									</span>
 								</td>
@@ -353,9 +360,7 @@
 			<Search class="mx-auto mb-4 h-16 w-16 text-surface-400" />
 			<div class="space-y-2">
 				<h3 class="h3">No devices found</h3>
-				<p class="text-surface-500-400-token">
-					No aircraft found for the selected club.
-				</p>
+				<p class="text-surface-500-400-token">No aircraft found for the selected club.</p>
 			</div>
 		</div>
 	{/if}

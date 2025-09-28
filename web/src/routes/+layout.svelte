@@ -17,7 +17,11 @@
 		Wifi,
 		WifiOff,
 		RotateCcw,
-		AlertCircle
+		AlertCircle,
+		Menu,
+		X,
+		LogIn,
+		UserPlus as SignUp
 	} from '@lucide/svelte';
 
 	const base = resolve('/');
@@ -30,6 +34,7 @@
 
 	let { children } = $props();
 	let showUserMenu = $state(false);
+	let showMobileMenu = $state(false);
 
 	// Initialize auth from localStorage on mount
 	onMount(() => {
@@ -47,11 +52,14 @@
 		showUserMenu = false;
 	}
 
-	// Close user menu when clicking outside
+	// Close menus when clicking outside
 	function handleClickOutside(event: MouseEvent) {
 		const target = event.target as HTMLElement;
 		if (!target.closest('.user-menu')) {
 			showUserMenu = false;
+		}
+		if (!target.closest('.mobile-menu') && !target.closest('.mobile-menu-button')) {
+			showMobileMenu = false;
 		}
 	}
 </script>
@@ -73,6 +81,7 @@
 			</a>
 		{/snippet}
 		{#snippet trail()}
+			<!-- Desktop Navigation -->
 			<nav class="hidden space-x-4 md:flex">
 				<a href={clubsPath} class="btn preset-filled-primary-500 btn-sm">
 					<Users /> Clubs
@@ -85,52 +94,67 @@
 				</a>
 			</nav>
 
-			{#if $auth.isAuthenticated && $auth.user}
-				<div class="user-menu relative">
-					<button
-						class="variant-ghost-surface btn flex items-center space-x-2 btn-sm"
-						onclick={() => (showUserMenu = !showUserMenu)}
-					>
-						<Avatar
-							initials={[0, 1]}
-							background="bg-primary-500"
-							name="{$auth.user.first_name} {$auth.user.last_name}"
-						/>
-						<span class="hidden sm:inline">{$auth.user.first_name}</span>
-					</button>
+			<!-- Desktop Auth -->
+			<div class="hidden md:flex">
+				{#if $auth.isAuthenticated && $auth.user}
+					<div class="user-menu relative">
+						<button
+							class="variant-ghost-surface btn flex items-center space-x-2 btn-sm"
+							onclick={() => (showUserMenu = !showUserMenu)}
+						>
+							<Avatar
+								initials={[0, 1]}
+								background="bg-primary-500"
+								name="{$auth.user.first_name} {$auth.user.last_name}"
+							/>
+							<span class="hidden sm:inline">{$auth.user.first_name}</span>
+						</button>
 
-					{#if showUserMenu}
-						<div class="absolute top-12 right-0 z-10 w-48 card preset-filled-primary-50-950 p-2">
-							<div class="space-y-1">
-								<div class="px-3 py-2 text-sm">
-									<div class="font-medium">{$auth.user.first_name} {$auth.user.last_name}</div>
-									<div class="text-surface-600-300-token">{$auth.user.email}</div>
+						{#if showUserMenu}
+							<div class="absolute top-12 right-0 z-10 w-48 card preset-filled-primary-50-950 p-2">
+								<div class="space-y-1">
+									<div class="px-3 py-2 text-sm">
+										<div class="font-medium">{$auth.user.first_name} {$auth.user.last_name}</div>
+										<div class="text-surface-600-300-token">{$auth.user.email}</div>
+									</div>
+									<hr class="!my-2" />
+									<a
+										href={profilePath}
+										class="btn w-full justify-start preset-filled-primary-500 btn-sm"
+									>
+										👤 Profile
+									</a>
+									<button
+										class="btn w-full justify-start preset-filled-primary-500 btn-sm"
+										onclick={handleLogout}
+									>
+										Sign out
+									</button>
 								</div>
-								<hr class="!my-2" />
-								<a
-									href={profilePath}
-									class="btn w-full justify-start preset-filled-primary-500 btn-sm"
-								>
-									👤 Profile
-								</a>
-								<button
-									class="btn w-full justify-start preset-filled-primary-500 btn-sm"
-									onclick={handleLogout}
-								>
-									Sign out
-								</button>
 							</div>
-						</div>
+						{/if}
+					</div>
+				{:else}
+					<div class="flex space-x-2">
+						<a href={loginPath} class="btn preset-filled-primary-500 btn-sm"><LogIn /> Login</a>
+						<a href={registerPath} class="btn preset-filled-primary-500 btn-sm"><SignUp /> Sign Up</a>
+					</div>
+				{/if}
+			</div>
+
+			<!-- Mobile Hamburger Menu -->
+			<div class="md:hidden">
+				<button
+					class="mobile-menu-button variant-ghost-surface btn btn-sm p-2"
+					onclick={() => (showMobileMenu = !showMobileMenu)}
+				>
+					{#if showMobileMenu}
+						<X size={20} />
+					{:else}
+						<Menu size={20} />
 					{/if}
-				</div>
-			{:else}
-				<div class="flex space-x-2">
-					<a href={loginPath} class="btn preset-filled-primary-500 btn-sm"><UserCheck /> Login</a>
-					<a href={registerPath} class="btn preset-filled-primary-500 btn-sm"
-						><UserPlus /> Sign Up</a
-					>
-				</div>
-			{/if}
+				</button>
+			</div>
 		{/snippet}
 		<!-- WebSocket Status Indicator for larger screens -->
 		<div class="hidden w-full items-center justify-center lg:flex">
@@ -166,6 +190,66 @@
 			{/if}
 		</div>
 	</AppBar>
+
+	<!-- Mobile Menu Overlay -->
+	{#if showMobileMenu}
+		<div class="mobile-menu fixed inset-x-0 top-0 z-50 bg-surface-50-900-token pt-16 shadow-lg md:hidden">
+			<nav class="flex flex-col space-y-2 p-4">
+				<a href={clubsPath} class="btn preset-filled-primary-500 justify-start" onclick={() => (showMobileMenu = false)}>
+					<Users /> Clubs
+				</a>
+				<a href={operationsPath} class="btn preset-filled-primary-500 justify-start" onclick={() => (showMobileMenu = false)}>
+					<Radar /> Operations
+				</a>
+				<a href={devicesPath} class="btn preset-filled-primary-500 justify-start" onclick={() => (showMobileMenu = false)}>
+					<Radio /> Devices
+				</a>
+
+				<hr class="!my-4" />
+
+				{#if $auth.isAuthenticated && $auth.user}
+					<div class="space-y-2">
+						<div class="flex items-center space-x-3 rounded p-3 bg-surface-100-800-token">
+							<Avatar
+								initials={[0, 1]}
+								background="bg-primary-500"
+								name="{$auth.user.first_name} {$auth.user.last_name}"
+							/>
+							<div>
+								<div class="font-medium">{$auth.user.first_name} {$auth.user.last_name}</div>
+								<div class="text-surface-600-300-token text-sm">{$auth.user.email}</div>
+							</div>
+						</div>
+						<a
+							href={profilePath}
+							class="btn preset-filled-primary-500 justify-start w-full"
+							onclick={() => (showMobileMenu = false)}
+						>
+							👤 Profile
+						</a>
+						<button
+							class="btn preset-filled-primary-500 justify-start w-full"
+							onclick={() => {
+								handleLogout();
+								showMobileMenu = false;
+							}}
+						>
+							Sign out
+						</button>
+					</div>
+				{:else}
+					<div class="space-y-2">
+						<a href={loginPath} class="btn preset-filled-primary-500 justify-start w-full" onclick={() => (showMobileMenu = false)}>
+							<LogIn /> Login
+						</a>
+						<a href={registerPath} class="btn preset-filled-primary-500 justify-start w-full" onclick={() => (showMobileMenu = false)}>
+							<SignUp /> Sign Up
+						</a>
+					</div>
+				{/if}
+			</nav>
+		</div>
+	{/if}
 
 	<main class="container mx-auto flex-1 space-y-4">
 		{@render children?.()}
