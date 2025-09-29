@@ -1,14 +1,18 @@
 <script lang="ts">
 	/// <reference types="@types/google.maps" />
 	import { onMount } from 'svelte';
-	import { browser } from '$app/environment';
+	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { serverCall } from '$lib/api/server';
 	import { Loader } from '@googlemaps/js-api-loader';
-	import { Settings, ListChecks } from '@lucide/svelte';
+	import { Settings, ListChecks, MapPlus, MapMinus } from '@lucide/svelte';
 	import WatchlistModal from '$lib/components/WatchlistModal.svelte';
 	import SettingsModal from '$lib/components/SettingsModal.svelte';
-	import { fixes, startLiveFixesFeed, stopLiveFixesFeed } from '$lib/stores/watchlist';
+	import { DeviceRegistry } from '$lib/services/DeviceRegistry';
+	import { FixFeed } from '$lib/services/FixFeed';
+	import { Device } from '$lib/types';
 	import type { Fix } from '$lib/types';
+	import type { DeviceRegistryEvent } from '$lib/services/DeviceRegistry';
+	import type { FixFeedEvent } from '$lib/services/FixFeed';
 
 	// TypeScript interfaces for airport data
 	interface RunwayView {
@@ -73,10 +77,11 @@
 	let airports: AirportView[] = [];
 	let airportMarkers: google.maps.marker.AdvancedMarkerElement[] = [];
 	let shouldShowAirports: boolean = false;
+	let airportUpdateDebounceTimer: number | null = null;
 
 	// Aircraft display variables
-	let aircraftMarkers: Map<string, google.maps.marker.AdvancedMarkerElement> = new Map();
-	let latestFixes: Map<string, Fix> = new Map();
+	let aircraftMarkers = new SvelteMap<string, google.maps.marker.AdvancedMarkerElement>();
+	let latestFixes = new SvelteMap<string, Fix>();
 
 	// Settings modal state
 	let showSettingsModal = $state(false);
@@ -118,42 +123,100 @@
 		}
 	});
 
-	// Subscribe to fixes store and update aircraft markers
-	let currentFixes: Fix[] = $state([]);
+	// Get singleton instances
+	const deviceRegistry = DeviceRegistry.getInstance();
+	const fixFeed = FixFeed.getInstance();
+
+	// Subscribe to device registry and update aircraft markers
+	let activeDevices: Device[] = $state([]);
+
+	// Area tracker state
+	let areaTrackerActive = $state(false);
+	let areaTrackerAvailable = $state(true); // Whether area tracker can be enabled (based on map area)
+	let currentAreaSubscriptions = new SvelteSet<string>(); // Track subscribed areas
 
 	$effect(() => {
-		const unsubscribe = fixes.subscribe((fixesStore) => {
-			currentFixes = fixesStore.fixes;
+		const unsubscribeRegistry = deviceRegistry.subscribe((event: DeviceRegistryEvent) => {
+			if (event.type === 'devices_changed') {
+				activeDevices = event.devices;
+			} else if (event.type === 'fix_added') {
+				console.log('Fix added to device:', event.device.id, event.fix);
+				// Update the aircraft marker immediately when a new fix is added
+				if (map && event.fix) {
+					updateAircraftMarkerFromDevice(event.device, event.fix);
+				}
+			}
 		});
 
-		return () => unsubscribe();
+		const unsubscribeFeed = fixFeed.subscribe((event: FixFeedEvent) => {
+			if (event.type === 'fix_received') {
+				console.log('Received fix:', event.fix);
+				// The fix will be automatically added to the device by FixFeed.addFixToDevice()
+				// This will trigger a device registry event which will update our activeDevices
+			}
+		});
+
+		// Initialize active devices
+		activeDevices = deviceRegistry.getAllDevices();
+
+		return () => {
+			unsubscribeRegistry();
+			unsubscribeFeed();
+		};
 	});
 
-	// Reactive effect for handling fix updates
+	// Reactive effect for handling device updates
 	$effect(() => {
-		if (!map || currentFixes.length === 0) return;
+		console.log('[EFFECT] Device update effect triggered:', {
+			mapExists: !!map,
+			activeDevicesCount: activeDevices.length,
+			activeDevices: activeDevices.map((d) => ({
+				id: d.id,
+				registration: d.registration,
+				fixCount: d.fixes.length
+			}))
+		});
 
-		// Process new fixes to update aircraft markers
-		currentFixes.forEach((fix) => {
-			updateAircraftMarker(fix);
+		if (!map) {
+			console.log('[EFFECT] No map available, skipping marker updates');
+			return;
+		}
+
+		if (activeDevices.length === 0) {
+			console.log('[EFFECT] No active devices, skipping marker updates');
+			return;
+		}
+
+		// Process devices with recent fixes to update aircraft markers
+		activeDevices.forEach((device) => {
+			const latestFix = device.getLatestFix();
+			console.log('[EFFECT] Processing device:', {
+				deviceId: device.id,
+				hasLatestFix: !!latestFix,
+				fixCount: device.fixes.length
+			});
+
+			if (latestFix) {
+				updateAircraftMarkerFromDevice(device, latestFix);
+			} else {
+				console.log('[EFFECT] No latest fix for device:', device.id);
+			}
 		});
 	});
 
-	onMount(async () => {
-		if (browser) {
+	onMount(() => {
+		(async () => {
 			await loadGoogleMapsScript();
 			initializeMap();
 			initializeCompass();
 			// Start live fixes feed for operations page
-			startLiveFixesFeed();
-		}
+			fixFeed.startLiveFixesFeed();
+		})();
 
 		// Cleanup function
 		return () => {
-			if (browser) {
-				stopLiveFixesFeed();
-				clearAircraftMarkers();
-			}
+			fixFeed.stopLiveFixesFeed();
+			clearAircraftMarkers();
 		};
 	});
 
@@ -170,7 +233,15 @@
 	}
 
 	function initializeMap(): void {
-		if (!mapContainer || !window.google) return;
+		console.log('[MAP] Initializing Google Maps:', {
+			hasContainer: !!mapContainer,
+			hasGoogle: !!window.google
+		});
+
+		if (!mapContainer || !window.google) {
+			console.error('[MAP] Missing requirements for map initialization');
+			return;
+		}
 
 		// Initialize map centered on continental US
 		map = new google.maps.Map(mapContainer, {
@@ -198,16 +269,30 @@
 		// Add event listeners for viewport changes
 		map.addListener('zoom_changed', () => {
 			setTimeout(checkAndUpdateAirports, 100); // Small delay to ensure bounds are updated
+			// Update aircraft marker scaling on zoom change
+			updateAllAircraftMarkersScale();
+			// Update area tracker availability and subscriptions
+			updateAreaTrackerAvailability();
+			if (areaTrackerActive) {
+				setTimeout(updateAreaSubscriptions, 100); // Small delay for bounds to update
+			}
 		});
 
 		map.addListener('dragend', () => {
 			checkAndUpdateAirports();
+			// Update area subscriptions after panning
+			if (areaTrackerActive) {
+				updateAreaSubscriptions();
+			}
 		});
 
 		// Initial check for airports
 		setTimeout(checkAndUpdateAirports, 1000); // Give map time to fully initialize
 
-		console.log('Google Maps initialized for operations view');
+		// Initial area tracker availability check
+		setTimeout(updateAreaTrackerAvailability, 1000);
+
+		console.log('[MAP] Google Maps initialized for operations view. Map ready for markers.');
 	}
 
 	async function locateUser(): Promise<void> {
@@ -382,12 +467,38 @@
 		const ne = bounds.getNorthEast();
 		const sw = bounds.getSouthWest();
 
+		// Validate bounding box coordinates
+		const nwLat = ne.lat();
+		const nwLng = sw.lng();
+		const seLat = sw.lat();
+		const seLng = ne.lng();
+
+		// Ensure northwest latitude is greater than southeast latitude
+		if (nwLat <= seLat) {
+			console.warn(
+				'Invalid bounding box: northwest latitude must be greater than southeast latitude'
+			);
+			return;
+		}
+
+		// Validate latitude bounds
+		if (nwLat > 90 || nwLat < -90 || seLat > 90 || seLat < -90) {
+			console.warn('Invalid latitude values in bounding box');
+			return;
+		}
+
+		// Validate longitude bounds (allow wrapping around international date line)
+		if (nwLng < -180 || nwLng > 180 || seLng < -180 || seLng > 180) {
+			console.warn('Invalid longitude values in bounding box');
+			return;
+		}
+
 		try {
 			const params = new URLSearchParams({
-				nw_lat: ne.lat().toString(),
-				nw_lng: sw.lng().toString(),
-				se_lat: sw.lat().toString(),
-				se_lng: ne.lng().toString(),
+				nw_lat: nwLat.toString(),
+				nw_lng: nwLng.toString(),
+				se_lat: seLat.toString(),
+				se_lng: seLng.toString(),
 				limit: '100' // Limit to avoid too many markers
 			});
 
@@ -451,7 +562,8 @@
 				position: { lat, lng },
 				map: map,
 				title: `${airport.name} (${airport.ident})`,
-				content: markerContent
+				content: markerContent,
+				zIndex: 100 // Lower z-index for airports so aircraft appear on top
 			});
 
 			airportMarkers.push(marker);
@@ -466,22 +578,32 @@
 	}
 
 	function checkAndUpdateAirports(): void {
-		const area = calculateViewportArea();
-		const shouldShow = area < 10000 && currentSettings.showAirportMarkers;
-
-		if (shouldShow !== shouldShowAirports) {
-			shouldShowAirports = shouldShow;
-
-			if (shouldShowAirports) {
-				fetchAirportsInViewport();
-			} else {
-				clearAirportMarkers();
-				airports = [];
-			}
-		} else if (shouldShowAirports) {
-			// Still showing airports, update them for the new viewport
-			fetchAirportsInViewport();
+		// Clear any existing debounce timer
+		if (airportUpdateDebounceTimer !== null) {
+			clearTimeout(airportUpdateDebounceTimer);
 		}
+
+		// Debounce airport updates by 100ms to prevent excessive API calls
+		airportUpdateDebounceTimer = setTimeout(() => {
+			const area = calculateViewportArea();
+			const shouldShow = area < 10000 && currentSettings.showAirportMarkers;
+
+			if (shouldShow !== shouldShowAirports) {
+				shouldShowAirports = shouldShow;
+
+				if (shouldShowAirports) {
+					fetchAirportsInViewport();
+				} else {
+					clearAirportMarkers();
+					airports = [];
+				}
+			} else if (shouldShowAirports) {
+				// Still showing airports, update them for the new viewport
+				fetchAirportsInViewport();
+			}
+
+			airportUpdateDebounceTimer = null;
+		}, 100);
 	}
 
 	function handleOrientationChange(event: DeviceOrientationEvent): void {
@@ -500,34 +622,100 @@
 		}
 	}
 
-	function updateAircraftMarker(fix: Fix): void {
-		if (!map || !fix.device_id && !fix.device_address_hex) return;
+	function updateMarkerScale(markerContent: HTMLElement, zoom: number): void {
+		if (!markerContent) return;
 
-		// Use device_id if available, otherwise fall back to device_address_hex
-		const deviceKey = fix.device_id || fix.device_address_hex || '';
-		if (!deviceKey) return;
+		// Calculate scale based on zoom level
+		// Zoom levels typically range from 1 (world) to 20+ (street level)
+		// We want markers to be very small at low zoom and normal size at high zoom
+		let scale: number;
+
+		if (zoom <= 4) {
+			// Very zoomed out (world/continental view) - minimum size
+			scale = 0.3;
+		} else if (zoom <= 8) {
+			// Country/state level - small size
+			scale = 0.4 + (zoom - 4) * 0.15; // 0.4 to 1.0
+		} else if (zoom <= 12) {
+			// Regional level - medium size
+			scale = 1.0 + (zoom - 8) * 0.1; // 1.0 to 1.4
+		} else {
+			// City/street level - full size
+			scale = 1.4 + Math.min(zoom - 12, 6) * 0.05; // 1.4 to 1.7 max
+		}
+
+		// Apply transform to the entire marker content
+		markerContent.style.transform = `scale(${scale})`;
+		markerContent.style.transformOrigin = 'center bottom'; // Anchor at bottom center
+	}
+
+	function updateAllAircraftMarkersScale(): void {
+		if (!map) return;
+
+		const currentZoom = map.getZoom() || 4;
+		aircraftMarkers.forEach((marker) => {
+			const markerContent = marker.content as HTMLElement;
+			if (markerContent) {
+				updateMarkerScale(markerContent, currentZoom);
+			}
+		});
+	}
+
+	function updateAircraftMarkerFromDevice(device: Device, latestFix: Fix): void {
+		console.log('[MARKER] updateAircraftMarkerFromDevice called:', {
+			deviceId: device.id,
+			registration: device.registration,
+			latestFix: {
+				lat: latestFix.latitude,
+				lng: latestFix.longitude,
+				alt: latestFix.altitude_feet,
+				timestamp: latestFix.timestamp
+			},
+			mapExists: !!map
+		});
+
+		if (!map) {
+			console.warn('[MARKER] No map available for marker update');
+			return;
+		}
+
+		const deviceKey = device.id;
+		if (!deviceKey) {
+			console.warn('[MARKER] No device ID available');
+			return;
+		}
 
 		// Update latest fix for this device
-		latestFixes.set(deviceKey, fix);
+		latestFixes.set(deviceKey, latestFix);
+		console.log('[MARKER] Updated latest fix for device:', deviceKey);
 
 		// Get or create marker for this aircraft
 		let marker = aircraftMarkers.get(deviceKey);
 
 		if (!marker) {
-			// Create new aircraft marker
-			marker = createAircraftMarker(fix);
+			console.log('[MARKER] Creating new marker for device:', deviceKey);
+			// Create new aircraft marker with device info
+			marker = createAircraftMarkerFromDevice(device, latestFix);
 			aircraftMarkers.set(deviceKey, marker);
+			console.log('[MARKER] New marker created and stored. Total markers:', aircraftMarkers.size);
 		} else {
+			console.log('[MARKER] Updating existing marker for device:', deviceKey);
 			// Update existing marker position and info
-			updateAircraftMarkerPosition(marker, fix);
+			updateAircraftMarkerPositionFromDevice(marker, device, latestFix);
 		}
 	}
 
-	function createAircraftMarker(fix: Fix): google.maps.marker.AdvancedMarkerElement {
-        console.log(`Creating marker for aircraft: ${fix.registration || fix.device_address_hex}`);
-        // TODO: Add aircraft photos to markers using registration or hex code
-        // https://api.planespotters.net/pub/photos/reg/D-ABCD
-        // https://api.planespotters.net/pub/photos/hex/ABC123
+	function createAircraftMarkerFromDevice(
+		device: Device,
+		fix: Fix
+	): google.maps.marker.AdvancedMarkerElement {
+		console.log('[MARKER] Creating marker for device:', {
+			deviceId: device.id,
+			registration: device.registration,
+			address: device.address,
+			position: { lat: fix.latitude, lng: fix.longitude },
+			track: fix.track_degrees
+		});
 
 		// Create aircraft icon with rotation based on track
 		const markerContent = document.createElement('div');
@@ -547,20 +735,28 @@
 		// Rotate icon based on track degrees (default to 0 if not available)
 		const track = fix.track_degrees || 0;
 		aircraftIcon.style.transform = `rotate(${track}deg)`;
+		console.log('[MARKER] Set icon rotation to:', track, 'degrees');
 
-		// Info label below the icon - prioritize tail number and altitude
+		// Info label below the icon - show proper aircraft information
 		const infoLabel = document.createElement('div');
 		infoLabel.className = 'aircraft-label';
 
-		// Get aircraft identifier (registration or hex ID)
-		const tailNumber = fix.registration ||
-			(fix.device_address_hex ? `${fix.device_address_hex}` : 'Unknown');
+		// Use proper device registration, fallback to address
+		const tailNumber = device.registration || device.address || 'Unknown';
 		const altitudeFt = fix.altitude_feet ? `${fix.altitude_feet}ft` : '---ft';
+		const aircraftModel = device.aircraft_model;
 
-		// Create two-line label: tail number on top, altitude on bottom
+		console.log('[MARKER] Aircraft info:', {
+			tailNumber,
+			altitude: altitudeFt,
+			model: aircraftModel
+		});
+
+		// Create label with tail number + model (if available) on top, altitude on bottom
 		const tailDiv = document.createElement('div');
 		tailDiv.className = 'aircraft-tail';
-		tailDiv.textContent = tailNumber;
+		// Include aircraft model after tail number if available
+		tailDiv.textContent = aircraftModel ? `${tailNumber} (${aircraftModel})` : tailNumber;
 
 		const altDiv = document.createElement('div');
 		altDiv.className = 'aircraft-altitude';
@@ -572,18 +768,43 @@
 		markerContent.appendChild(aircraftIcon);
 		markerContent.appendChild(infoLabel);
 
-		// Create the marker
+		// Create the marker with proper title including aircraft model
+		const title = device.aircraft_model
+			? `${tailNumber} (${device.aircraft_model}) - Altitude: ${altitudeFt}`
+			: `${tailNumber} - Altitude: ${altitudeFt}`;
+
+		console.log('[MARKER] Creating AdvancedMarkerElement with:', {
+			position: { lat: fix.latitude, lng: fix.longitude },
+			title,
+			hasContent: !!markerContent
+		});
+
 		const marker = new google.maps.marker.AdvancedMarkerElement({
 			position: { lat: fix.latitude, lng: fix.longitude },
 			map: map,
-			title: `${tailNumber} - Altitude: ${altitudeFt}`,
-			content: markerContent
+			title: title,
+			content: markerContent,
+			zIndex: 1000 // Higher z-index for aircraft to appear on top of airports
 		});
 
+		// Apply initial zoom-based scaling
+		updateMarkerScale(markerContent, map.getZoom() || 4);
+
+		console.log('[MARKER] AdvancedMarkerElement created successfully');
 		return marker;
 	}
 
-	function updateAircraftMarkerPosition(marker: google.maps.marker.AdvancedMarkerElement, fix: Fix): void {
+	function updateAircraftMarkerPositionFromDevice(
+		marker: google.maps.marker.AdvancedMarkerElement,
+		device: Device,
+		fix: Fix
+	): void {
+		console.log('[MARKER] Updating existing marker position:', {
+			deviceId: device.id,
+			oldPosition: marker.position,
+			newPosition: { lat: fix.latitude, lng: fix.longitude }
+		});
+
 		// Update position
 		marker.position = { lat: fix.latitude, lng: fix.longitude };
 
@@ -597,25 +818,193 @@
 			if (aircraftIcon) {
 				const track = fix.track_degrees || 0;
 				aircraftIcon.style.transform = `rotate(${track}deg)`;
+				console.log('[MARKER] Updated icon rotation to:', track, 'degrees');
 			}
 
 			if (tailDiv && altDiv) {
-				const tailNumber = fix.registration ||
-					(fix.device_address_hex ? `${fix.device_address_hex}` : 'Unknown');
+				// Use proper device registration, fallback to address
+				const tailNumber = device.registration || device.address || 'Unknown';
 				const altitudeFt = fix.altitude_feet ? `${fix.altitude_feet}ft` : '---ft';
+				const aircraftModel = device.aircraft_model;
 
-				tailDiv.textContent = tailNumber;
+				// Include aircraft model after tail number if available
+				tailDiv.textContent = aircraftModel ? `${tailNumber} (${aircraftModel})` : tailNumber;
 				altDiv.textContent = altitudeFt;
+				console.log('[MARKER] Updated label info:', { tailNumber, altitudeFt, aircraftModel });
 			}
+		} else {
+			console.warn('[MARKER] No marker content found for position update');
 		}
+
+		// Update scaling for the current zoom level
+		const currentZoom = map.getZoom() || 4;
+		updateMarkerScale(markerContent, currentZoom);
+
+		// Update the marker title
+		const title = device.aircraft_model
+			? `${device.registration || device.address} (${device.aircraft_model}) - Altitude: ${fix.altitude_feet ? fix.altitude_feet + 'ft' : '---ft'}`
+			: `${device.registration || device.address} - Altitude: ${fix.altitude_feet ? fix.altitude_feet + 'ft' : '---ft'}`;
+
+		marker.title = title;
+		console.log('[MARKER] Updated marker title:', title);
 	}
 
 	function clearAircraftMarkers(): void {
+		console.log('[MARKER] Clearing all aircraft markers. Count:', aircraftMarkers.size);
 		aircraftMarkers.forEach((marker) => {
 			marker.map = null;
 		});
 		aircraftMarkers.clear();
 		latestFixes.clear();
+		console.log('[MARKER] All aircraft markers cleared');
+	}
+
+	// Area tracker functions
+	function toggleAreaTracker(): void {
+		if (!areaTrackerAvailable) return;
+
+		areaTrackerActive = !areaTrackerActive;
+		console.log('[AREA TRACKER] Area tracker toggled:', areaTrackerActive);
+
+		if (areaTrackerActive) {
+			updateAreaSubscriptions();
+		} else {
+			clearAreaSubscriptions();
+		}
+	}
+
+	function updateAreaTrackerAvailability(): void {
+		if (!map) return;
+
+		const area = calculateViewportArea();
+		const wasAvailable = areaTrackerAvailable;
+		areaTrackerAvailable = area <= 100000; // 100,000 square miles limit
+
+		console.log(
+			`[AREA TRACKER] Map area: ${area.toFixed(2)} sq miles, Available: ${areaTrackerAvailable}`
+		);
+
+		// If area tracker becomes unavailable while active, deactivate it
+		if (!areaTrackerAvailable && areaTrackerActive) {
+			areaTrackerActive = false;
+			clearAreaSubscriptions();
+		}
+
+		// If availability changed, log it
+		if (wasAvailable !== areaTrackerAvailable) {
+			console.log(
+				`[AREA TRACKER] Availability changed: ${wasAvailable} -> ${areaTrackerAvailable}`
+			);
+		}
+	}
+
+	function getVisibleLatLonSquares(): Array<{ lat: number; lon: number }> {
+		if (!map) return [];
+
+		const bounds = map.getBounds();
+		if (!bounds) return [];
+
+		const ne = bounds.getNorthEast();
+		const sw = bounds.getSouthWest();
+
+		// Get integer degree boundaries
+		const latMin = Math.floor(sw.lat());
+		const latMax = Math.floor(ne.lat());
+		const lonMin = Math.floor(sw.lng());
+		const lonMax = Math.floor(ne.lng());
+
+		const squares: Array<{ lat: number; lon: number }> = [];
+
+		// Include all squares that intersect with the visible area
+		for (let lat = latMin; lat <= latMax + 1; lat++) {
+			for (let lon = lonMin; lon <= lonMax + 1; lon++) {
+				squares.push({ lat, lon });
+			}
+		}
+
+		console.log(
+			`[AREA TRACKER] Visible squares: lat ${latMin}-${latMax + 1}, lon ${lonMin}-${lonMax + 1} (${squares.length} total)`
+		);
+		return squares;
+	}
+
+	function updateAreaSubscriptions(): void {
+		if (!areaTrackerActive || !areaTrackerAvailable) return;
+
+		const visibleSquares = getVisibleLatLonSquares();
+		const newSubscriptions = new SvelteSet<string>();
+
+		// Create subscription keys for visible squares
+		visibleSquares.forEach((square) => {
+			const key = `area.${square.lat}.${square.lon}`;
+			newSubscriptions.add(key);
+		});
+
+		// Find squares to unsubscribe from (no longer visible)
+		const toUnsubscribe = new SvelteSet<string>();
+		currentAreaSubscriptions.forEach((key) => {
+			if (!newSubscriptions.has(key)) {
+				toUnsubscribe.add(key);
+			}
+		});
+
+		// Find squares to subscribe to (newly visible)
+		const toSubscribe = new SvelteSet<string>();
+		newSubscriptions.forEach((key) => {
+			if (!currentAreaSubscriptions.has(key)) {
+				toSubscribe.add(key);
+			}
+		});
+
+		// Unsubscribe from areas no longer visible
+		toUnsubscribe.forEach((key) => {
+			const [, lat, lon] = key.split('.');
+			unsubscribeFromArea(parseInt(lat), parseInt(lon));
+		});
+
+		// Subscribe to newly visible areas
+		toSubscribe.forEach((key) => {
+			const [, lat, lon] = key.split('.');
+			subscribeToArea(parseInt(lat), parseInt(lon));
+		});
+
+		// Update current subscriptions
+		currentAreaSubscriptions = newSubscriptions;
+
+		console.log(
+			`[AREA TRACKER] Updated subscriptions: ${toSubscribe.size} new, ${toUnsubscribe.size} removed, ${currentAreaSubscriptions.size} total`
+		);
+	}
+
+	function clearAreaSubscriptions(): void {
+		currentAreaSubscriptions.forEach((key) => {
+			const [, lat, lon] = key.split('.');
+			unsubscribeFromArea(parseInt(lat), parseInt(lon));
+		});
+		currentAreaSubscriptions.clear();
+		console.log('[AREA TRACKER] Cleared all area subscriptions');
+	}
+
+	function subscribeToArea(latitude: number, longitude: number): void {
+		const message = {
+			action: 'subscribe',
+			type: 'area' as const,
+			latitude,
+			longitude
+		};
+		console.log('[AREA TRACKER] Subscribe to area:', message);
+		fixFeed.sendWebSocketMessage(message);
+	}
+
+	function unsubscribeFromArea(latitude: number, longitude: number): void {
+		const message = {
+			action: 'unsubscribe',
+			type: 'area' as const,
+			latitude,
+			longitude
+		};
+		console.log('[AREA TRACKER] Unsubscribe from area:', message);
+		fixFeed.sendWebSocketMessage(message);
 	}
 </script>
 
@@ -623,7 +1012,7 @@
 	<title>Operations - Glider Flights</title>
 </svelte:head>
 
-<div class="fixed inset-0 w-full" style="top: 88px;">
+<div class="fixed inset-0 w-full" style="top: 64px;">
 	<!-- Google Maps Container -->
 	<div bind:this={mapContainer} class="h-full w-full"></div>
 
@@ -650,6 +1039,26 @@
 		<!-- Watchlist Button -->
 		<button class="location-btn" onclick={() => (showWatchlistModal = true)} title="Watchlist">
 			<ListChecks size={20} />
+		</button>
+
+		<!-- Area Tracker Button -->
+		<button
+			class="location-btn"
+			class:area-tracker-active={areaTrackerActive}
+			class:area-tracker-unavailable={!areaTrackerAvailable}
+			onclick={toggleAreaTracker}
+			title={areaTrackerAvailable
+				? areaTrackerActive
+					? 'Disable Area Tracker'
+					: 'Enable Area Tracker'
+				: 'Area Tracker unavailable (map too zoomed out)'}
+			disabled={!areaTrackerAvailable}
+		>
+			{#if areaTrackerActive}
+				<MapPlus size={20} />
+			{:else}
+				<MapMinus size={20} />
+			{/if}
 		</button>
 
 		<!-- Settings Button -->
@@ -820,6 +1229,25 @@
 		transform: none;
 	}
 
+	/* Area tracker button states */
+	.area-tracker-active {
+		background: #10b981; /* Green background when active */
+		color: white;
+	}
+
+	.area-tracker-active:hover {
+		background: #059669; /* Darker green on hover */
+	}
+
+	.area-tracker-unavailable {
+		background: #ef4444; /* Red background when unavailable */
+		color: white;
+	}
+
+	.area-tracker-unavailable:hover {
+		background: #dc2626; /* Darker red on hover */
+	}
+
 	/* Loading spinner animation */
 	@keyframes spin {
 		to {
@@ -882,6 +1310,7 @@
 		align-items: center;
 		pointer-events: auto;
 		cursor: pointer;
+		transform-origin: center center; /* Center the marker on the aircraft position */
 	}
 
 	:global(.aircraft-icon) {
@@ -906,7 +1335,7 @@
 	}
 
 	:global(.aircraft-label) {
-		background: rgba(239, 68, 68, 0.95);
+		background: rgba(239, 68, 68, 0.75); /* Changed to 75% opacity */
 		border: 2px solid #dc2626;
 		border-radius: 6px;
 		padding: 4px 8px;

@@ -246,16 +246,14 @@ diesel::table! {
         source -> Varchar,
         #[max_length = 9]
         destination -> Varchar,
-        via -> Nullable<Array<Nullable<Text>>>,
+        via -> Array<Nullable<Text>>,
         raw_packet -> Text,
         timestamp -> Timestamptz,
         latitude -> Float8,
         longitude -> Float8,
         location -> Nullable<Geography>,
         altitude_feet -> Nullable<Int4>,
-        #[max_length = 10]
-        device_address -> Nullable<Varchar>,
-        address_type -> Nullable<AddressType>,
+        address_type -> AddressType,
         aircraft_type_ogn -> Nullable<AircraftTypeOgn>,
         #[max_length = 20]
         flight_number -> Nullable<Varchar>,
@@ -276,9 +274,10 @@ diesel::table! {
         club_id -> Nullable<Uuid>,
         flight_id -> Nullable<Uuid>,
         unparsed_data -> Nullable<Varchar>,
-        device_id -> Nullable<Uuid>,
+        device_id -> Uuid,
         received_at -> Timestamptz,
         lag -> Nullable<Int4>,
+        device_address -> Int4,
     }
 }
 

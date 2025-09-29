@@ -1,0 +1,5 @@
+-- Revert NOT NULL constraints on fixes table
+ALTER TABLE fixes ALTER COLUMN via DROP NOT NULL;
+ALTER TABLE fixes ALTER COLUMN device_address DROP NOT NULL;
+ALTER TABLE fixes ALTER COLUMN address_type DROP NOT NULL;
+ALTER TABLE fixes ALTER COLUMN device_id DROP NOT NULL;

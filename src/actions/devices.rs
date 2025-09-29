@@ -8,10 +8,10 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::actions::json_error;
-use crate::aircraft_registrations::AircraftRegistrationModel;
 use crate::aircraft_registrations_repo::AircraftRegistrationsRepository;
 use crate::device_repo::DeviceRepository;
 use crate::devices::{AddressType, Device};
+use crate::faa::aircraft_model_repo::AircraftModelRepository;
 use crate::fixes::Fix;
 use crate::fixes_repo::FixesRepository;
 use crate::web::AppState;
@@ -34,11 +34,6 @@ pub struct DeviceSearchQuery {
 }
 
 #[derive(Debug, Serialize)]
-pub struct DeviceResponse {
-    pub device: Device,
-}
-
-#[derive(Debug, Serialize)]
 pub struct DeviceSearchResponse {
     pub devices: Vec<Device>,
 }
@@ -47,11 +42,6 @@ pub struct DeviceSearchResponse {
 pub struct DeviceFixesResponse {
     pub fixes: Vec<Fix>,
     pub count: usize,
-}
-
-#[derive(Debug, Serialize)]
-pub struct DeviceAircraftRegistrationResponse {
-    pub aircraft_registration: Option<AircraftRegistrationModel>,
 }
 
 /// Get a device by its UUID
@@ -63,7 +53,7 @@ pub async fn get_device_by_id(
 
     // First try to find the device by UUID in the devices table
     match device_repo.get_device_by_uuid(id).await {
-        Ok(Some(device)) => Json(DeviceResponse { device }).into_response(),
+        Ok(Some(device)) => Json(device).into_response(),
         Ok(None) => json_error(StatusCode::NOT_FOUND, "Device not found").into_response(),
         Err(e) => {
             tracing::error!("Failed to get device by ID {}: {}", id, e);
@@ -140,8 +130,16 @@ pub async fn search_devices(
             match device_repo.search_by_registration(registration).await {
                 Ok(devices) => Json(DeviceSearchResponse { devices }).into_response(),
                 Err(e) => {
-                    tracing::error!("Failed to search devices by registration {}: {}", registration, e);
-                    json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to search devices").into_response()
+                    tracing::error!(
+                        "Failed to search devices by registration {}: {}",
+                        registration,
+                        e
+                    );
+                    json_error(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Failed to search devices",
+                    )
+                    .into_response()
                 }
             }
         }
@@ -153,7 +151,8 @@ pub async fn search_devices(
                     return json_error(
                         StatusCode::BAD_REQUEST,
                         "Invalid address format. Expected hexadecimal string",
-                    ).into_response();
+                    )
+                    .into_response();
                 }
             };
 
@@ -166,17 +165,33 @@ pub async fn search_devices(
                     return json_error(
                         StatusCode::BAD_REQUEST,
                         "Invalid address-type. Must be I (ICAO), O (OGN), or F (FLARM)",
-                    ).into_response();
+                    )
+                    .into_response();
                 }
             };
 
             // Search by address and type
-            match device_repo.search_by_address_and_type(address, address_type).await {
-                Ok(Some(device)) => Json(DeviceSearchResponse { devices: vec![device] }).into_response(),
+            match device_repo
+                .search_by_address_and_type(address, address_type)
+                .await
+            {
+                Ok(Some(device)) => Json(DeviceSearchResponse {
+                    devices: vec![device],
+                })
+                .into_response(),
                 Ok(None) => Json(DeviceSearchResponse { devices: vec![] }).into_response(),
                 Err(e) => {
-                    tracing::error!("Failed to search devices by address {} and type {}: {}", address, address_type_str, e);
-                    json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to search devices").into_response()
+                    tracing::error!(
+                        "Failed to search devices by address {} and type {}: {}",
+                        address,
+                        address_type_str,
+                        e
+                    );
+                    json_error(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Failed to search devices",
+                    )
+                    .into_response()
                 }
             }
         }
@@ -198,16 +213,84 @@ pub async fn get_device_aircraft_registration(
     let aircraft_repo = AircraftRegistrationsRepository::new(state.pool.clone());
 
     // Query aircraft_registrations table for a record with the given device_id
-    match aircraft_repo.get_aircraft_registration_by_device_id(id).await {
-        Ok(Some(aircraft_registration)) => Json(DeviceAircraftRegistrationResponse {
-            aircraft_registration: Some(aircraft_registration),
-        }).into_response(),
-        Ok(None) => Json(DeviceAircraftRegistrationResponse {
-            aircraft_registration: None,
-        }).into_response(),
+    match aircraft_repo
+        .get_aircraft_registration_by_device_id(id)
+        .await
+    {
+        Ok(Some(aircraft_registration)) => Json(aircraft_registration).into_response(),
+        Ok(None) => (StatusCode::NOT_FOUND).into_response(),
         Err(e) => {
-            tracing::error!("Failed to get aircraft registration for device {}: {}", id, e);
-            json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get aircraft registration").into_response()
+            tracing::error!(
+                "Failed to get aircraft registration for device {}: {}",
+                id,
+                e
+            );
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to get aircraft registration",
+            )
+            .into_response()
+        }
+    }
+}
+
+/// Get aircraft model for a device by device ID
+/// This joins aircraft_registrations to aircraft_models using manufacturer_code, model_code, and series_code
+pub async fn get_device_aircraft_model(
+    Path(id): Path<Uuid>,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let aircraft_repo = AircraftRegistrationsRepository::new(state.pool.clone());
+    let aircraft_model_repo = AircraftModelRepository::new(state.pool.clone());
+
+    // First get the aircraft registration for this device
+    let aircraft_registration = match aircraft_repo
+        .get_aircraft_registration_by_device_id(id)
+        .await
+    {
+        Ok(Some(registration)) => registration,
+        Ok(None) => {
+            return (StatusCode::NOT_FOUND).into_response();
+        }
+        Err(e) => {
+            tracing::error!(
+                "Failed to get aircraft registration for device {}: {}",
+                id,
+                e
+            );
+            return json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to get aircraft registration",
+            )
+            .into_response();
+        }
+    };
+
+    // Now get the aircraft model using the codes from the registration
+    match aircraft_model_repo
+        .get_aircraft_model_by_key(
+            &aircraft_registration.manufacturer_code,
+            &aircraft_registration.model_code,
+            &aircraft_registration.series_code,
+        )
+        .await
+    {
+        Ok(Some(aircraft_model)) => Json(aircraft_model).into_response(),
+        Ok(None) => (StatusCode::NOT_FOUND).into_response(),
+        Err(e) => {
+            tracing::error!(
+                "Failed to get aircraft model for device {} with codes {}-{}-{}: {}",
+                id,
+                aircraft_registration.manufacturer_code,
+                aircraft_registration.model_code,
+                aircraft_registration.series_code,
+                e
+            );
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to get aircraft model",
+            )
+            .into_response()
         }
     }
 }
@@ -221,6 +304,26 @@ fn parse_datetime_string(datetime_str: &str) -> Result<DateTime<Utc>, &'static s
     let naive_datetime = NaiveDateTime::parse_from_str(datetime_str, "%Y%m%d%H%M%S")
         .map_err(|_| "Invalid datetime format")?;
     Ok(DateTime::from_naive_utc_and_offset(naive_datetime, Utc))
+}
+
+/// Get all devices for a club by club ID
+pub async fn get_devices_by_club(
+    Path(club_id): Path<Uuid>,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let device_repo = DeviceRepository::new(state.pool);
+
+    match device_repo.get_devices_by_club_id(club_id).await {
+        Ok(devices) => Json(DeviceSearchResponse { devices }).into_response(),
+        Err(e) => {
+            tracing::error!("Failed to get devices for club {}: {}", club_id, e);
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to get devices for club",
+            )
+            .into_response()
+        }
+    }
 }
 
 #[cfg(test)]

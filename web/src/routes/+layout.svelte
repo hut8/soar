@@ -11,13 +11,16 @@
 		Radar,
 		Users,
 		Plane,
-		UserPlus,
-		UserCheck,
 		Radio,
 		Wifi,
 		WifiOff,
 		RotateCcw,
-		AlertCircle
+		AlertCircle,
+		Menu,
+		X,
+		LogIn,
+		UserPlus as SignUp,
+		User
 	} from '@lucide/svelte';
 
 	const base = resolve('/');
@@ -30,6 +33,7 @@
 
 	let { children } = $props();
 	let showUserMenu = $state(false);
+	let showMobileMenu = $state(false);
 
 	// Initialize auth from localStorage on mount
 	onMount(() => {
@@ -47,11 +51,14 @@
 		showUserMenu = false;
 	}
 
-	// Close user menu when clicking outside
+	// Close menus when clicking outside
 	function handleClickOutside(event: MouseEvent) {
 		const target = event.target as HTMLElement;
 		if (!target.closest('.user-menu')) {
 			showUserMenu = false;
+		}
+		if (!target.closest('.mobile-menu') && !target.closest('.mobile-menu-button')) {
+			showMobileMenu = false;
 		}
 	}
 </script>
@@ -62,95 +69,116 @@
 	<link rel="icon" href={favicon} />
 </svelte:head>
 
-<div class="flex min-h-screen flex-col">
-	<AppBar classes="preset-glass-neutral">
+<div class="flex h-full min-h-screen flex-col">
+	<AppBar classes="preset-glass-neutral relative z-[70]">
 		{#snippet lead()}
 			<a href={base} class="flex items-center space-x-2">
-				<div class="text-primary-500 flex items-center gap-3 text-xl font-bold">
+				<div class="flex items-center gap-3 text-xl font-bold text-primary-500">
 					<Plane />
 					Glider.flights
 				</div>
 			</a>
 		{/snippet}
 		{#snippet trail()}
+			<!-- Desktop Navigation -->
 			<nav class="hidden space-x-4 md:flex">
-				<a href={clubsPath} class="preset-filled-primary-500 btn btn-sm">
+				<a href={clubsPath} class="btn preset-filled-primary-500 btn-sm">
 					<Users /> Clubs
 				</a>
-				<a href={operationsPath} class="preset-filled-primary-500 btn btn-sm">
+				<a href={operationsPath} class="btn preset-filled-primary-500 btn-sm">
 					<Radar /> Operations
 				</a>
-				<a href={devicesPath} class="preset-filled-primary-500 btn btn-sm">
+				<a href={devicesPath} class="btn preset-filled-primary-500 btn-sm">
 					<Radio /> Devices
 				</a>
 			</nav>
 
-			{#if $auth.isAuthenticated && $auth.user}
-				<div class="user-menu relative">
-					<button
-						class="variant-ghost-surface btn btn-sm flex items-center space-x-2"
-						onclick={() => (showUserMenu = !showUserMenu)}
-					>
-						<Avatar
-							initials={[0, 1]}
-							background="bg-primary-500"
-							name="{$auth.user.first_name} {$auth.user.last_name}"
-						/>
-						<span class="hidden sm:inline">{$auth.user.first_name}</span>
-					</button>
+			<!-- Desktop Auth -->
+			<div class="hidden md:flex">
+				{#if $auth.isAuthenticated && $auth.user}
+					<div class="user-menu relative">
+						<button
+							class="variant-ghost-surface btn flex items-center space-x-2 btn-sm"
+							onclick={() => (showUserMenu = !showUserMenu)}
+						>
+							<Avatar
+								initials={[0, 1]}
+								background="bg-primary-500"
+								name="{$auth.user.first_name} {$auth.user.last_name}"
+							/>
+							<span class="hidden sm:inline">{$auth.user.first_name}</span>
+						</button>
 
-					{#if showUserMenu}
-						<div class="card preset-filled-primary-50-950 absolute right-0 top-12 z-10 w-48 p-2">
-							<div class="space-y-1">
-								<div class="px-3 py-2 text-sm">
-									<div class="font-medium">{$auth.user.first_name} {$auth.user.last_name}</div>
-									<div class="text-surface-600-300-token">{$auth.user.email}</div>
+						{#if showUserMenu}
+							<div class="absolute top-12 right-0 z-10 w-48 card preset-filled-primary-50-950 p-2">
+								<div class="space-y-1">
+									<div class="px-3 py-2 text-sm">
+										<div class="font-medium">{$auth.user.first_name} {$auth.user.last_name}</div>
+										<div class="text-surface-600-300-token">{$auth.user.email}</div>
+									</div>
+									<hr class="!my-2" />
+									<a
+										href={profilePath}
+										class="btn w-full justify-start preset-filled-primary-500 btn-sm"
+									>
+										<User size={16} /> Profile
+									</a>
+									<button
+										class="btn w-full justify-start preset-filled-primary-500 btn-sm"
+										onclick={handleLogout}
+									>
+										Sign out
+									</button>
 								</div>
-								<hr class="!my-2" />
-								<a
-									href={profilePath}
-									class="preset-filled-primary-500 btn btn-sm w-full justify-start"
-								>
-									👤 Profile
-								</a>
-								<button
-									class="preset-filled-primary-500 btn btn-sm w-full justify-start"
-									onclick={handleLogout}
-								>
-									Sign out
-								</button>
 							</div>
-						</div>
+						{/if}
+					</div>
+				{:else}
+					<div class="flex space-x-2">
+						<a href={loginPath} class="btn preset-filled-primary-500 btn-sm"><LogIn /> Login</a>
+						<a href={registerPath} class="btn preset-filled-primary-500 btn-sm"
+							><SignUp /> Sign Up</a
+						>
+					</div>
+				{/if}
+			</div>
+
+			<!-- Mobile Hamburger Menu -->
+			<div class="md:hidden">
+				<button
+					class="mobile-menu-button variant-ghost-surface btn p-2 btn-sm"
+					onclick={(e) => {
+						e.stopPropagation();
+						showMobileMenu = !showMobileMenu;
+					}}
+				>
+					{#if showMobileMenu}
+						<X size={20} />
+					{:else}
+						<Menu size={20} />
 					{/if}
-				</div>
-			{:else}
-				<div class="flex space-x-2">
-					<a href={loginPath} class="preset-filled-primary-500 btn btn-sm"><UserCheck /> Login</a>
-					<a href={registerPath} class="preset-filled-primary-500 btn btn-sm"
-						><UserPlus /> Sign Up</a
-					>
-				</div>
-			{/if}
+				</button>
+			</div>
 		{/snippet}
 		<!-- WebSocket Status Indicator for larger screens -->
 		<div class="hidden w-full items-center justify-center lg:flex">
 			{#if $websocketStatus.connected}
 				<div
-					class="bg-success-500/20 text-success-600 dark:text-success-400 flex items-center space-x-1 rounded px-2 py-1"
+					class="flex items-center space-x-1 rounded bg-success-500/20 px-2 py-1 text-success-600 dark:text-success-400"
 				>
 					<Wifi size={16} />
 					<span class="text-xs font-medium">Live</span>
 				</div>
 			{:else if $websocketStatus.reconnecting}
 				<div
-					class="bg-warning-500/20 text-warning-600 dark:text-warning-400 flex items-center space-x-1 rounded px-2 py-1"
+					class="flex items-center space-x-1 rounded bg-warning-500/20 px-2 py-1 text-warning-600 dark:text-warning-400"
 				>
 					<RotateCcw size={16} class="animate-spin" />
 					<span class="text-xs font-medium">Reconnecting</span>
 				</div>
 			{:else if $websocketStatus.error}
 				<div
-					class="bg-error-500/20 text-error-600 dark:text-error-400 flex items-center space-x-1 rounded px-2 py-1"
+					class="flex items-center space-x-1 rounded bg-error-500/20 px-2 py-1 text-error-600 dark:text-error-400"
 					title={$websocketStatus.error}
 				>
 					<AlertCircle size={16} />
@@ -158,7 +186,7 @@
 				</div>
 			{:else}
 				<div
-					class="bg-surface-400/20 text-surface-600 dark:text-surface-400 flex items-center space-x-1 rounded px-2 py-1"
+					class="flex items-center space-x-1 rounded bg-surface-400/20 px-2 py-1 text-surface-600 dark:text-surface-400"
 				>
 					<WifiOff size={16} />
 					<span class="text-xs font-medium">Disconnected</span>
@@ -167,7 +195,89 @@
 		</div>
 	</AppBar>
 
-	<main class="container mx-auto flex-1 space-y-4 p-4">
+	<!-- Mobile Menu Overlay -->
+	{#if showMobileMenu}
+		<div
+			class="mobile-menu bg-surface-50-900-token border-surface-200-700-token bg-opacity-95 dark:bg-opacity-95 fixed inset-x-0 top-0 z-[60] min-h-screen border-b pt-16 shadow-lg backdrop-blur-sm md:hidden"
+		>
+			<nav class="flex flex-col space-y-4 p-6">
+				<a
+					href={clubsPath}
+					class="btn w-full justify-start preset-filled-primary-500"
+					onclick={() => (showMobileMenu = false)}
+				>
+					<Users size={16} /> Clubs
+				</a>
+				<a
+					href={operationsPath}
+					class="btn w-full justify-start preset-filled-primary-500"
+					onclick={() => (showMobileMenu = false)}
+				>
+					<Radar size={16} /> Operations
+				</a>
+				<a
+					href={devicesPath}
+					class="btn w-full justify-start preset-filled-primary-500"
+					onclick={() => (showMobileMenu = false)}
+				>
+					<Radio size={16} /> Devices
+				</a>
+
+				<hr class="!my-6" />
+
+				{#if $auth.isAuthenticated && $auth.user}
+					<div class="space-y-4">
+						<div class="bg-surface-100-800-token flex items-center space-x-3 rounded p-3">
+							<Avatar
+								initials={[0, 1]}
+								background="bg-primary-500"
+								name="{$auth.user.first_name} {$auth.user.last_name}"
+							/>
+							<div>
+								<div class="font-medium">{$auth.user.first_name} {$auth.user.last_name}</div>
+								<div class="text-surface-600-300-token text-sm">{$auth.user.email}</div>
+							</div>
+						</div>
+						<a
+							href={profilePath}
+							class="btn w-full justify-start preset-filled-primary-500"
+							onclick={() => (showMobileMenu = false)}
+						>
+							<User size={16} /> Profile
+						</a>
+						<button
+							class="btn w-full justify-start preset-filled-primary-500"
+							onclick={() => {
+								handleLogout();
+								showMobileMenu = false;
+							}}
+						>
+							Sign out
+						</button>
+					</div>
+				{:else}
+					<div class="space-y-4">
+						<a
+							href={loginPath}
+							class="btn w-full justify-start preset-filled-primary-500"
+							onclick={() => (showMobileMenu = false)}
+						>
+							<LogIn size={16} /> Login
+						</a>
+						<a
+							href={registerPath}
+							class="btn w-full justify-start preset-filled-primary-500"
+							onclick={() => (showMobileMenu = false)}
+						>
+							<SignUp size={16} /> Sign Up
+						</a>
+					</div>
+				{/if}
+			</nav>
+		</div>
+	{/if}
+
+	<main class="container mx-auto flex-1 space-y-4">
 		{@render children?.()}
 	</main>
 

@@ -13,7 +13,13 @@ export class ServerError extends Error {
 	}
 }
 
-export async function serverCall<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+type FromJSON<T> = { fromJSON(data: unknown): T };
+
+export async function serverCall<T>(
+	endpoint: string,
+	options: RequestInit = {},
+	cls?: FromJSON<T>
+): Promise<T> {
 	const response = await fetch(`${API_BASE}${endpoint}`, {
 		...options,
 		headers: {
@@ -31,5 +37,14 @@ export async function serverCall<T>(endpoint: string, options: RequestInit = {})
 		return {} as T;
 	}
 
-	return await response.json();
+	const data = await response.json();
+
+	if (!cls) return data as T;
+
+	// handle arrays or single objects
+	if (Array.isArray(data)) {
+		return data.map((item) => cls.fromJSON(item)) as T;
+	}
+
+	return cls.fromJSON(data);
 }

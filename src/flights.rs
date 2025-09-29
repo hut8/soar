@@ -2,8 +2,10 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
+use tracing::info;
 use uuid::Uuid;
 
+use crate::Fix;
 use crate::devices::AddressType;
 
 /// A flight representing a complete takeoff to landing sequence
@@ -69,14 +71,33 @@ impl Flight {
         }
     }
 
+    pub fn new_from_fix(fix: &Fix, takeoff_time: Option<DateTime<Utc>>) -> Self {
+        let now = Utc::now();
+        info!("Creating flight from fix: {:?}", fix);
+        Self {
+            id: Uuid::new_v4(),
+            device_id: fix.device_id.into(),
+            device_address: fix.device_address_hex(),
+            device_address_type: fix.address_type,
+            takeoff_time,
+            landing_time: None,
+            departure_airport: None,
+            arrival_airport: None,
+            tow_aircraft_id: None,
+            tow_release_height_msl: None,
+            club_id: fix.club_id,
+            created_at: now,
+            updated_at: now,
+        }
+    }
     /// Create a new flight for device already airborne (no takeoff time)
-    pub fn new_airborne(device_address: String) -> Self {
-        Self::new(device_address, None)
+    pub fn new_airborne_from_fix(fix: &Fix) -> Self {
+        Self::new_from_fix(fix, None)
     }
 
     /// Create a new flight with known takeoff time
-    pub fn new_with_takeoff(device_address: String, takeoff_time: DateTime<Utc>) -> Self {
-        Self::new(device_address, Some(takeoff_time))
+    pub fn new_with_takeoff_from_fix(fix: &Fix, takeoff_time: DateTime<Utc>) -> Self {
+        Self::new_from_fix(fix, Some(takeoff_time))
     }
 
     /// Check if the flight is still in progress (no landing time)
@@ -112,7 +133,7 @@ impl Flight {
 
         let fixes = fixes_repo
             .get_fixes_for_aircraft_with_time_range(
-                &self.device_address,
+                &self.device_id.unwrap_or(Uuid::nil()),
                 start_time,
                 end_time,
                 None,

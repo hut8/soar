@@ -17,7 +17,6 @@
 	// Internal state
 	let clubs: ClubWithSoaring[] = [];
 	let comboboxData: ComboboxData[] = [];
-	let loading = true;
 	let error = '';
 
 	// Convert clubs to combobox data format
@@ -32,7 +31,6 @@
 	// Load clubs from API
 	async function loadClubs(query?: string) {
 		try {
-			loading = true;
 			error = '';
 
 			let endpoint = '/clubs?limit=100';
@@ -48,7 +46,7 @@
 			clubs = [];
 			comboboxData = [];
 		} finally {
-			loading = false;
+			// Loading complete
 		}
 	}
 
@@ -113,18 +111,14 @@
 		{required}
 	>
 		{#snippet item(item)}
-			<div class="flex w-full items-center justify-between space-x-2">
-				<span class="flex-1">{item.label}</span>
+			<div class="flex w-full items-center space-x-2">
+				<span class="flex-1 text-left">{item.label}</span>
 				{#if item.club.is_soaring}
 					<span class="rounded-full bg-primary-500 px-2 py-1 text-xs text-white">Soaring</span>
 				{/if}
 			</div>
 		{/snippet}
 	</Combobox>
-
-	{#if loading}
-		<div class="text-surface-600-300-token mt-1 text-xs">Loading clubs...</div>
-	{/if}
 </div>
 
 <style>

@@ -90,15 +90,235 @@ export interface Airport {
 	runways: Runway[];
 }
 
-export interface Device {
-	id?: string; // UUID from backend (optional for devices from external sources)
-	address_type: string; // F, O, I, or empty string
-	address: string; // Hex format like "ABCDEF"
-	aircraft_model: string;
-	registration: string;
-	cn: string; // Competition number
-	tracked: boolean;
-	identified: boolean;
+// Aircraft registration information
+export interface AircraftRegistration {
+	n_number: string;
+	serial_number: string;
+	mfr_mdl_code: string;
+	eng_mfr_mdl: string;
+	year_mfr: number;
+	type_registrant: number;
+	name: string;
+	street: string;
+	street2: string;
+	city: string;
+	state: string;
+	zip_code: string;
+	region: string;
+	county: string;
+	country: string;
+	last_action_date: string;
+	cert_issue_date: string;
+	certification: string;
+	type_aircraft: number;
+	type_engine: number;
+	status_code: string;
+	mode_s_code: string;
+	fract_owner: string;
+	air_worth_date: string;
+	other_names_1: string;
+	other_names_2: string;
+	other_names_3: string;
+	other_names_4: string;
+	other_names_5: string;
+	expiration_date: string;
+	unique_id: string;
+	kit_mfr: string;
+	kit_model: string;
+	mode_s_code_hex: string;
+	created_at: string;
+	updated_at: string;
+}
+
+// Device class with integrated caching functionality
+export class Device {
+	public id: string;
+	public address_type: string; // F, O, I, or empty string
+	public address: string; // Hex format like "ABCDEF"
+	public aircraft_model: string;
+	public registration: string;
+	public cn: string; // Competition number
+	public tracked: boolean;
+	public identified: boolean;
+	public aircraft: AircraftRegistration | null = null; // Lazy-loaded aircraft registration data
+	public fixes: Fix[] = []; // Array with most recent fix first (index 0)
+	private readonly maxFixAge = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+
+	constructor(data: {
+		id?: string;
+		address_type: string;
+		address: string;
+		aircraft_model: string;
+		registration: string;
+		cn: string;
+		tracked: boolean;
+		identified: boolean;
+		aircraft?: AircraftRegistration | null;
+	}) {
+		this.id = data.id || '';
+		this.address_type = data.address_type;
+		this.address = data.address;
+		this.aircraft_model = data.aircraft_model;
+		this.registration = data.registration;
+		this.cn = data.cn;
+		this.tracked = data.tracked;
+		this.identified = data.identified;
+		this.aircraft = data.aircraft || null;
+	}
+
+	// Add a new fix, maintaining the most-recent-first order
+	addFix(fix: Fix): void {
+		console.log('[DEVICE] Adding fix to device:', {
+			deviceId: this.id,
+			registration: this.registration,
+			fixTimestamp: fix.timestamp,
+			currentFixCount: this.fixes.length
+		});
+
+		// Add fix to the beginning of the array (most recent first)
+		this.fixes.unshift(fix);
+
+		// Remove fixes older than 24 hours
+		this.cleanupOldFixes();
+
+		console.log('[DEVICE] Fix added. New fix count:', this.fixes.length);
+	}
+
+	// Get the most recent fix
+	getLatestFix(): Fix | null {
+		return this.fixes.length > 0 ? this.fixes[0] : null;
+	}
+
+	// Get all fixes within the last N hours
+	getRecentFixes(hours: number = 24): Fix[] {
+		const cutoffTime = Date.now() - hours * 60 * 60 * 1000;
+		return this.fixes.filter((fix) => {
+			const fixTime = new Date(fix.timestamp).getTime();
+			return fixTime > cutoffTime;
+		});
+	}
+
+	// Lazy-load aircraft registration data
+	async getAircraftRegistration(): Promise<AircraftRegistration | null> {
+		// Return cached data if available
+		if (this.aircraft) {
+			console.log('[DEVICE] Returning cached aircraft registration for:', this.id);
+			return this.aircraft;
+		}
+
+		// Fetch from API if not cached
+		try {
+			console.log('[DEVICE] Fetching aircraft registration for device:', this.id);
+			const { serverCall } = await import('$lib/api/server');
+			const aircraft = await serverCall<AircraftRegistration>(
+				`/devices/${this.id}/aircraft-registration`
+			);
+
+			if (aircraft) {
+				console.log('[DEVICE] Fetched aircraft registration:', aircraft.n_number);
+				this.aircraft = aircraft;
+
+				// Save updated device to localStorage via DeviceRegistry
+				const { DeviceRegistry } = await import('$lib/services/DeviceRegistry');
+				DeviceRegistry.getInstance().setDevice(this);
+			} else {
+				console.log('[DEVICE] No aircraft registration found for device:', this.id);
+			}
+
+			return aircraft;
+		} catch (error) {
+			console.warn('[DEVICE] Failed to fetch aircraft registration:', error);
+			return null;
+		}
+	}
+
+	// Remove fixes older than 24 hours
+	private cleanupOldFixes(): void {
+		const cutoffTime = Date.now() - this.maxFixAge;
+		this.fixes = this.fixes.filter((fix) => {
+			const fixTime = new Date(fix.timestamp).getTime();
+			return fixTime > cutoffTime;
+		});
+	}
+
+	// Convert to plain object for localStorage serialization
+	toJSON(): {
+		id: string;
+		address_type: string;
+		address: string;
+		aircraft_model: string;
+		registration: string;
+		cn: string;
+		tracked: boolean;
+		identified: boolean;
+		aircraft: AircraftRegistration | null;
+	} {
+		return {
+			id: this.id,
+			address_type: this.address_type,
+			address: this.address,
+			aircraft_model: this.aircraft_model,
+			registration: this.registration,
+			cn: this.cn,
+			tracked: this.tracked,
+			identified: this.identified,
+			aircraft: this.aircraft
+		};
+	}
+
+	// Validate device data structure
+	static isValidDeviceData(data: unknown): data is {
+		id?: string;
+		address_type: string;
+		address: string;
+		aircraft_model: string;
+		registration: string;
+		cn: string;
+		tracked: boolean;
+		identified: boolean;
+		aircraft?: AircraftRegistration | null;
+	} {
+		if (!data || typeof data !== 'object') {
+			return false;
+		}
+
+		const obj = data as Record<string, unknown>;
+		return (
+			typeof obj.address_type === 'string' &&
+			typeof obj.address === 'string' &&
+			typeof obj.aircraft_model === 'string' &&
+			typeof obj.registration === 'string' &&
+			typeof obj.cn === 'string' &&
+			typeof obj.tracked === 'boolean' &&
+			typeof obj.identified === 'boolean' &&
+			(obj.aircraft === null || obj.aircraft === undefined || typeof obj.aircraft === 'object')
+		);
+	}
+
+	// Create from plain object (localStorage deserialization or API response)
+	static fromJSON(data: {
+		id?: string;
+		address_type: string;
+		address: string;
+		aircraft_model: string;
+		registration: string;
+		cn: string;
+		tracked: boolean;
+		identified: boolean;
+		aircraft?: AircraftRegistration | null;
+	}): Device {
+		return new Device({
+			id: data.id,
+			address_type: data.address_type,
+			address: data.address,
+			aircraft_model: data.aircraft_model,
+			registration: data.registration,
+			cn: data.cn,
+			tracked: data.tracked,
+			identified: data.identified,
+			aircraft: data.aircraft || null
+		});
+	}
 }
 
 export interface Fix {
@@ -135,6 +355,6 @@ export interface Flight {
 
 export interface WatchlistEntry {
 	id: string;
-	device: Device;
+	deviceId: string; // Only store device ID, not full device object
 	active: boolean;
 }

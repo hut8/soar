@@ -1,8 +1,9 @@
 <script lang="ts">
-	import { Search, Radio, Plane, User, Antenna } from '@lucide/svelte';
-	import { ProgressRing, Segment } from '@skeletonlabs/skeleton-svelte';
+	import { Search, Radio, Plane, User, Antenna, Building2 } from '@lucide/svelte';
+	import { Segment } from '@skeletonlabs/skeleton-svelte';
 	import { resolve } from '$app/paths';
 	import { serverCall } from '$lib/api/server';
+	import ClubSelector from '$lib/components/ClubSelector.svelte';
 
 	interface Device {
 		device_id: number;
@@ -21,8 +22,14 @@
 	let loading = false;
 	let error = '';
 	let searchQuery = '';
-	let searchType: 'registration' | 'device' = 'registration';
+	let searchType: 'registration' | 'device' | 'club' = 'registration';
 	let deviceAddressType = 'I'; // ICAO, OGN, FLARM
+
+	// Club search state
+	let selectedClub: string[] = [];
+	let clubDevices: Device[] = [];
+	let clubSearchInProgress = false;
+	let clubErrorMessage = '';
 
 	function formatDeviceId(deviceId: number): string {
 		// Convert integer device_id to 6-digit hex string
@@ -61,18 +68,52 @@
 		}
 	}
 
-	async function loadAllDevices() {
-		loading = true;
-		error = '';
+	// Clear club error message
+	function clearClubError() {
+		clubErrorMessage = '';
+	}
+
+	// Load devices for selected club
+	async function loadClubDevices() {
+		if (!selectedClub.length || clubSearchInProgress) return;
+
+		const clubId = selectedClub[0];
+		if (!clubId) return;
+
+		clubSearchInProgress = true;
+		clubErrorMessage = '';
 
 		try {
-			devices = await serverCall<Device[]>('/devices?limit=50');
+			const response = await serverCall<{ devices: Device[] }>(`/clubs/${clubId}/devices`);
+			// Only update if we're still looking at the same club
+			if (selectedClub.length > 0 && selectedClub[0] === clubId) {
+				clubDevices = response.devices || [];
+				// Set the main devices list to show club devices
+				devices = clubDevices;
+			}
 		} catch (err) {
-			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-			error = `Failed to load devices: ${errorMessage}`;
-			console.error('Error loading devices:', err);
+			console.warn(`Failed to fetch devices for club:`, err);
+			// Only show error if we're still looking at the same club
+			if (selectedClub.length > 0 && selectedClub[0] === clubId) {
+				clubErrorMessage = 'Failed to load club devices. Please try again.';
+				clubDevices = [];
+				devices = [];
+			}
 		} finally {
-			loading = false;
+			clubSearchInProgress = false;
+		}
+	}
+
+	// Handle club selection change
+	function handleClubChange(event: { value: string[] }) {
+		selectedClub = event.value;
+		clearClubError();
+
+		if (selectedClub.length > 0) {
+			loadClubDevices();
+		} else {
+			clubDevices = [];
+			devices = [];
 		}
 	}
 
@@ -104,87 +145,217 @@
 			<Radio class="h-8 w-8" />
 			Aircraft Devices
 		</h1>
-		<p class="text-surface-600-300-token">Search and manage aircraft tracking devices</p>
 	</header>
 
 	<!-- Search Section -->
 	<section class="space-y-4 card p-6">
-		<h3 class="mb-3 text-lg font-semibold">Search Aircraft Devices</h3>
+		<h3 class="mb-3 flex items-center gap-2 text-lg font-semibold">
+			<Search class="h-5 w-5" />
+			Search Aircraft Devices
+		</h3>
 		<div class="space-y-3 rounded-lg border p-3">
-			<!-- Search type selector -->
-			<Segment
-				name="search-type"
-				value={searchType}
-				onValueChange={(e) => {
-					if (e.value && (e.value === 'registration' || e.value === 'device')) {
-						searchType = e.value;
-						error = '';
-					}
-				}}
-			>
-				<Segment.Item value="registration">
-					<div class="flex flex-row items-center">
-						<Plane size={16} />
-						<span class="ml-1">Registration</span>
-					</div>
-				</Segment.Item>
-				<Segment.Item value="device">
-					<div class="flex flex-row items-center">
-						<Antenna size={16} />
-						<span class="ml-1">Device Address</span>
-					</div>
-				</Segment.Item>
-			</Segment>
+			<!-- Mobile: Vertical layout (segment above inputs) -->
+			<div class="space-y-3 md:hidden">
+				<!-- Search type selector -->
+				<Segment
+					name="search-type"
+					value={searchType}
+					orientation="vertical"
+					onValueChange={(event: { value: string | null }) => {
+						if (
+							event.value &&
+							(event.value === 'registration' || event.value === 'device' || event.value === 'club')
+						) {
+							searchType = event.value;
+							error = '';
+							clubErrorMessage = '';
+						}
+					}}
+				>
+					<Segment.Item value="registration">
+						<div class="flex flex-row items-center">
+							<Plane size={16} />
+							<span class="ml-1">Registration</span>
+						</div>
+					</Segment.Item>
+					<Segment.Item value="device">
+						<div class="flex flex-row items-center">
+							<Antenna size={16} />
+							<span class="ml-1">Device Address</span>
+						</div>
+					</Segment.Item>
+					<Segment.Item value="club">
+						<div class="flex flex-row items-center">
+							<Building2 size={16} />
+							<span class="ml-1">Club</span>
+						</div>
+					</Segment.Item>
+				</Segment>
 
-			{#if searchType === 'registration'}
-				<input
-					class="input"
-					placeholder="Aircraft registration (e.g., N12345)"
-					bind:value={searchQuery}
-					onkeydown={handleKeydown}
-					oninput={() => (error = '')}
-				/>
-			{:else}
-				<div class="grid grid-cols-2 gap-2">
-					<Segment
-						name="address-type"
-						value={deviceAddressType}
-						onValueChange={(e) => {
-							if (e.value) {
-								deviceAddressType = e.value;
-								error = '';
-							}
-						}}
-					>
-						<Segment.Item value="I">ICAO</Segment.Item>
-						<Segment.Item value="O">OGN</Segment.Item>
-						<Segment.Item value="F">FLARM</Segment.Item>
-					</Segment>
+				{#if searchType === 'registration'}
 					<input
 						class="input"
-						placeholder="Device address"
+						placeholder="Aircraft registration (e.g., N12345)"
 						bind:value={searchQuery}
 						onkeydown={handleKeydown}
 						oninput={() => (error = '')}
 					/>
-				</div>
-			{/if}
+				{:else if searchType === 'device'}
+					<div class="space-y-3">
+						<Segment
+							name="address-type"
+							value={deviceAddressType}
+							orientation="vertical"
+							onValueChange={(event: { value: string | null }) => {
+								if (event.value) {
+									deviceAddressType = event.value;
+									error = '';
+								}
+							}}
+						>
+							<Segment.Item value="I">ICAO</Segment.Item>
+							<Segment.Item value="O">OGN</Segment.Item>
+							<Segment.Item value="F">FLARM</Segment.Item>
+						</Segment>
+						<input
+							class="input"
+							placeholder="Device address"
+							bind:value={searchQuery}
+							onkeydown={handleKeydown}
+							oninput={() => (error = '')}
+						/>
+					</div>
+				{:else if searchType === 'club'}
+					<div class="space-y-3">
+						<ClubSelector
+							bind:value={selectedClub}
+							placeholder="Select a club..."
+							onValueChange={handleClubChange}
+						/>
 
-			<button
-				class="variant-filled-primary btn w-full"
-				onclick={searchDevices}
-				disabled={loading}
-			>
-				{#if loading}
-					<div
-						class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
-					></div>
-					Searching...
-				{:else}
-					<Search class="mr-2 h-4 w-4" />
-					Search Devices
+						<!-- Club error message display -->
+						{#if clubErrorMessage}
+							<div class="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-600">
+								{clubErrorMessage}
+							</div>
+						{/if}
+					</div>
 				{/if}
-			</button>
+			</div>
+
+			<!-- Desktop: Horizontal layout (segment to the left of inputs) -->
+			<div class="hidden md:block">
+				<div class="grid grid-cols-[200px_1fr] items-start gap-4">
+					<!-- Search type selector -->
+					<Segment
+						name="search-type-desktop"
+						value={searchType}
+						orientation="vertical"
+						onValueChange={(event: { value: string | null }) => {
+							if (
+								event.value &&
+								(event.value === 'registration' ||
+									event.value === 'device' ||
+									event.value === 'club')
+							) {
+								searchType = event.value;
+								error = '';
+								clubErrorMessage = '';
+							}
+						}}
+					>
+						<Segment.Item value="registration">
+							<div class="flex flex-row items-center">
+								<Plane size={16} />
+								<span class="ml-1">Registration</span>
+							</div>
+						</Segment.Item>
+						<Segment.Item value="device">
+							<div class="flex flex-row items-center">
+								<Antenna size={16} />
+								<span class="ml-1">Device Address</span>
+							</div>
+						</Segment.Item>
+						<Segment.Item value="club">
+							<div class="flex flex-row items-center">
+								<Building2 size={16} />
+								<span class="ml-1">Club</span>
+							</div>
+						</Segment.Item>
+					</Segment>
+
+					<!-- Input area -->
+					<div>
+						{#if searchType === 'registration'}
+							<input
+								class="input"
+								placeholder="Aircraft registration (e.g., N12345)"
+								bind:value={searchQuery}
+								onkeydown={handleKeydown}
+								oninput={() => (error = '')}
+							/>
+						{:else if searchType === 'device'}
+							<div class="space-y-3">
+								<Segment
+									name="address-type-desktop"
+									value={deviceAddressType}
+									orientation="vertical"
+									onValueChange={(event: { value: string | null }) => {
+										if (event.value) {
+											deviceAddressType = event.value;
+											error = '';
+										}
+									}}
+								>
+									<Segment.Item value="I">ICAO</Segment.Item>
+									<Segment.Item value="O">OGN</Segment.Item>
+									<Segment.Item value="F">FLARM</Segment.Item>
+								</Segment>
+								<input
+									class="input"
+									placeholder="Device address"
+									bind:value={searchQuery}
+									onkeydown={handleKeydown}
+									oninput={() => (error = '')}
+								/>
+							</div>
+						{:else if searchType === 'club'}
+							<div class="space-y-3">
+								<ClubSelector
+									bind:value={selectedClub}
+									placeholder="Select a club..."
+									onValueChange={handleClubChange}
+								/>
+
+								<!-- Club error message display -->
+								{#if clubErrorMessage}
+									<div class="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-600">
+										{clubErrorMessage}
+									</div>
+								{/if}
+							</div>
+						{/if}
+					</div>
+				</div>
+			</div>
+
+			{#if searchType !== 'club'}
+				<button
+					class="btn w-full preset-filled-primary-500"
+					onclick={searchDevices}
+					disabled={loading}
+				>
+					{#if loading}
+						<div
+							class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
+						></div>
+						Searching...
+					{:else}
+						<Search class="mr-2 h-4 w-4" />
+						Search Devices
+					{/if}
+				</button>
+			{/if}
 
 			<!-- Error message display -->
 			{#if error}
@@ -193,12 +364,7 @@
 				</div>
 			{/if}
 		</div>
-
-		<div class="flex justify-center">
-			<button class="variant-soft btn" onclick={loadAllDevices}> Show Recent Devices </button>
-		</div>
 	</section>
-
 
 	<!-- Results Table -->
 	{#if !loading && devices.length > 0}
@@ -288,14 +454,12 @@
 				</p>
 			</div>
 		</div>
-	{:else if !loading && devices.length === 0 && !searchQuery}
+	{:else if !loading && devices.length === 0 && searchType === 'club' && selectedClub.length > 0}
 		<div class="space-y-4 card p-12 text-center">
 			<Search class="mx-auto mb-4 h-16 w-16 text-surface-400" />
 			<div class="space-y-2">
-				<h3 class="h3">Search for aircraft devices</h3>
-				<p class="text-surface-500-400-token">
-					Enter a registration number or device address to search for aircraft tracking devices.
-				</p>
+				<h3 class="h3">No devices found</h3>
+				<p class="text-surface-500-400-token">No aircraft found for the selected club.</p>
 			</div>
 		</div>
 	{/if}

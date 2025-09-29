@@ -1,23 +1,27 @@
+use num_traits::AsPrimitive;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, error, trace};
 use uuid::Uuid;
 
+use crate::Fix;
 use crate::aircraft_registrations_repo::AircraftRegistrationsRepository;
 use crate::device_repo::DeviceRepository;
-use crate::fixes;
 use crate::fixes_repo::{AircraftTypeOgn, FixesRepository};
+use crate::flight_detection_processor::FlightDetectionProcessor;
 use crate::nats_publisher::NatsFixPublisher;
-use crate::{Fix, FixHandler};
 use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
+use ogn_parser::AprsPacket;
 
 /// Database fix processor that saves valid fixes to the database and performs flight tracking
+#[derive(Clone)]
 pub struct FixProcessor {
     fixes_repo: FixesRepository,
     device_repo: DeviceRepository,
     aircraft_registrations_repo: AircraftRegistrationsRepository,
+    flight_detection_processor: FlightDetectionProcessor,
     nats_publisher: Option<NatsFixPublisher>,
     /// Cache to track tow plane status updates to avoid unnecessary database calls
     /// Maps device_id -> (aircraft_type, is_tow_plane_in_db)
@@ -29,7 +33,8 @@ impl FixProcessor {
         Self {
             fixes_repo: FixesRepository::new(diesel_pool.clone()),
             device_repo: DeviceRepository::new(diesel_pool.clone()),
-            aircraft_registrations_repo: AircraftRegistrationsRepository::new(diesel_pool),
+            aircraft_registrations_repo: AircraftRegistrationsRepository::new(diesel_pool.clone()),
+            flight_detection_processor: FlightDetectionProcessor::new(&diesel_pool),
             nats_publisher: None,
             tow_plane_cache: Arc::new(RwLock::new(HashMap::new())),
         }
@@ -40,12 +45,13 @@ impl FixProcessor {
         diesel_pool: Pool<ConnectionManager<PgConnection>>,
         nats_url: &str,
     ) -> anyhow::Result<Self> {
-        let nats_publisher = NatsFixPublisher::new(nats_url, diesel_pool.clone()).await?;
+        let nats_publisher = NatsFixPublisher::new(nats_url).await?;
 
         Ok(Self {
             fixes_repo: FixesRepository::new(diesel_pool.clone()),
             device_repo: DeviceRepository::new(diesel_pool.clone()),
-            aircraft_registrations_repo: AircraftRegistrationsRepository::new(diesel_pool),
+            aircraft_registrations_repo: AircraftRegistrationsRepository::new(diesel_pool.clone()),
+            flight_detection_processor: FlightDetectionProcessor::new(&diesel_pool),
             nats_publisher: Some(nats_publisher),
             tow_plane_cache: Arc::new(RwLock::new(HashMap::new())),
         })
@@ -103,86 +109,124 @@ impl FixProcessor {
     }
 }
 
-impl FixHandler for FixProcessor {
-    fn process_fix(&self, fix: Fix, raw_message: &str) {
-        // Check device_address against devices table first - if not found, skip processing
-        if let (Some(device_address), Some(address_type)) = (fix.device_address, fix.address_type) {
-            let device_repo = self.device_repo.clone();
-            let fixes_repo = self.fixes_repo.clone();
-            let aircraft_registrations_repo = self.aircraft_registrations_repo.clone();
-            let nats_publisher = self.nats_publisher.clone();
-            let tow_plane_cache = self.tow_plane_cache.clone();
-            let raw_message = raw_message.to_string();
-            let fix_clone = fix.clone();
-            tokio::spawn(async move {
-                // Check if device exists in database
-                match device_repo
-                    .get_device_model_by_address(device_address, address_type)
-                    .await
-                {
-                    Ok(Some(device_model)) => {
-                        // Device exists, proceed with processing
-                        // Convert the position::Fix to a database Fix struct
-                        let db_fix =
-                            fixes::Fix::from_position_fix(&fix_clone, raw_message.to_string());
+impl FixProcessor {
+    /// Process an APRS packet by looking up device and creating a Fix
+    /// This is the main entry point that orchestrates the entire pipeline
+    pub fn process_aprs_packet(&self, packet: AprsPacket, raw_message: &str) {
+        let device_repo = self.device_repo.clone();
+        let self_clone = self.clone();
+        let raw_message = raw_message.to_string();
 
-                        // Save to database
-                        match fixes_repo.insert(&db_fix).await {
-                            Ok(_) => {
-                                trace!(
-                                    "Successfully saved fix to database for aircraft {}",
-                                    fix_clone.device_address_hex()
-                                );
+        tokio::spawn(async move {
+            let received_at = chrono::Utc::now();
 
-                                // Publish to NATS if publisher is available
-                                if let Some(nats_publisher) = nats_publisher.as_ref() {
-                                    nats_publisher.process_fix(fix_clone.clone(), &raw_message);
+            // Try to create a fix from the packet
+            match packet.data {
+                ogn_parser::AprsData::Position(ref pos_packet) => {
+                    let mut device_address = 0i32;
+                    let mut address_type = crate::devices::AddressType::Unknown;
+
+                    // Extract device info from OGN parameters
+                    if let Some(ref id) = pos_packet.comment.id {
+                        device_address = id.address.as_();
+                        address_type = match id.address_type {
+                            0 => crate::devices::AddressType::Unknown,
+                            1 => crate::devices::AddressType::Icao,
+                            2 => crate::devices::AddressType::Flarm,
+                            3 => crate::devices::AddressType::Ogn,
+                            _ => crate::devices::AddressType::Unknown,
+                        };
+                    }
+
+                    // Look up device_id based on device_address and address_type
+                    match device_repo
+                        .get_device_model_by_address(device_address, address_type)
+                        .await
+                    {
+                        Ok(Some(device_model)) => {
+                            // Device exists, create fix with proper device_id
+                            match Fix::from_aprs_packet(packet, received_at, device_model.id) {
+                                Ok(Some(fix)) => {
+                                    self_clone.process_fix_internal(fix, &raw_message).await;
+                                }
+                                Ok(None) => {
+                                    trace!("No position fix in APRS position packet");
+                                }
+                                Err(e) => {
+                                    debug!(
+                                        "Failed to extract fix from APRS position packet: {}",
+                                        e
+                                    );
                                 }
                             }
-                            Err(e) => {
-                                error!(
-                                    "Failed to save fix to database for fix: {:?}\ncause:{:?}",
-                                    db_fix, e
-                                );
-                            }
                         }
-
-                        // Update tow plane status based on aircraft type from fix
-                        if let Some(foreign_aircraft_type) = fix_clone.aircraft_type {
-                            let aircraft_type = AircraftTypeOgn::from(foreign_aircraft_type);
-                            let device_id = device_model.id;
-
-                            Self::update_tow_plane_status_static(
-                                aircraft_registrations_repo,
-                                tow_plane_cache,
-                                device_id,
-                                aircraft_type,
-                            )
-                            .await;
+                        Ok(None) => {
+                            trace!(
+                                "Device address {:06X} ({:?}) not found in devices table, skipping fix processing",
+                                device_address, address_type
+                            );
                         }
-                    }
-                    Ok(None) => {
-                        trace!(
-                            "Device address {} ({:?}) not found in devices table, skipping fix processing",
-                            fix_clone.device_address_hex(),
-                            address_type
-                        );
-                    }
-                    Err(e) => {
-                        error!(
-                            "Failed to lookup device address {} ({:?}): {}, skipping fix processing",
-                            fix_clone.device_address_hex(),
-                            address_type,
-                            e
-                        );
+                        Err(e) => {
+                            error!(
+                                "Failed to lookup device address {:06X} ({:?}): {}, skipping fix processing",
+                                device_address, address_type, e
+                            );
+                        }
                     }
                 }
-            });
-        } else {
-            trace!(
-                "Fix has no device_address or address_type, skipping processing: {:?}",
-                fix
-            );
+                _ => {
+                    // Non-position packets return without processing
+                    trace!("Non-position packet, no fix to process");
+                }
+            }
+        });
+    }
+
+    /// Internal method to process a fix through the complete pipeline
+    async fn process_fix_internal(&self, fix: Fix, raw_message: &str) {
+        // Step 1: Process through flight detection (adds flight_id)
+        let updated_fix = match self.flight_detection_processor.process_fix(fix).await {
+            Some(fix) => fix,
+            None => return, // Fix was discarded (duplicate, etc.)
+        };
+
+        // Step 2: Save to database
+        match self.fixes_repo.insert(&updated_fix).await {
+            Ok(_) => {
+                trace!(
+                    "Successfully saved fix to database for aircraft {}",
+                    updated_fix.device_address_hex()
+                );
+            }
+            Err(e) => {
+                error!(
+                    "Failed to save fix to database for fix: {:?}\ncause:{:?}",
+                    updated_fix, e
+                );
+                return; // Don't continue if we can't save
+            }
+        }
+
+        // Step 3: Publish to NATS with updated fix (including flight_id)
+        if let Some(nats_publisher) = self.nats_publisher.as_ref() {
+            nats_publisher.process_fix(updated_fix.clone(), raw_message);
+        }
+
+        // Step 4: Update tow plane status based on aircraft type from fix
+        if let Some(foreign_aircraft_type) = updated_fix.aircraft_type_ogn {
+            let aircraft_type = AircraftTypeOgn::from(foreign_aircraft_type);
+            let device_id = updated_fix.device_id;
+
+            let aircraft_registrations_repo = self.aircraft_registrations_repo.clone();
+            let tow_plane_cache = self.tow_plane_cache.clone();
+
+            Self::update_tow_plane_status_static(
+                aircraft_registrations_repo,
+                tow_plane_cache,
+                device_id,
+                aircraft_type,
+            )
+            .await;
         }
     }
 }
