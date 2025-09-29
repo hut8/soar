@@ -5,7 +5,7 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { auth } from '$lib/stores/auth';
-	import { websocketStatus } from '$lib/stores/watchlist';
+	import { websocketStatus, debugStatus } from '$lib/stores/watchlist';
 	import { onMount } from 'svelte';
 	import {
 		Radar,
@@ -165,9 +165,17 @@
 			{#if $websocketStatus.connected}
 				<div
 					class="flex items-center space-x-1 rounded bg-success-500/20 px-2 py-1 text-success-600 dark:text-success-400"
+					title="Connected - Tracking {$debugStatus.activeWatchlistEntries
+						.length} from watchlist, {$debugStatus.subscribedDevices
+						.length} device subscriptions, {$debugStatus.activeAreaSubscriptions} area subscriptions{$debugStatus.operationsPageActive
+						? ', Operations page active'
+						: ''}"
 				>
 					<Wifi size={16} />
 					<span class="text-xs font-medium">Live</span>
+					{#if $debugStatus.activeWatchlistEntries.length > 0}
+						<span class="text-xs font-medium">({$debugStatus.activeWatchlistEntries.length})</span>
+					{/if}
 				</div>
 			{:else if $websocketStatus.reconnecting}
 				<div

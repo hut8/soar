@@ -10,6 +10,7 @@
 	import { DeviceRegistry } from '$lib/services/DeviceRegistry';
 	import { FixFeed } from '$lib/services/FixFeed';
 	import { Device } from '$lib/types';
+	import { debugStatus } from '$lib/stores/watchlist';
 	import type { Fix } from '$lib/types';
 	import type { DeviceRegistryEvent } from '$lib/services/DeviceRegistry';
 	import type { FixFeedEvent } from '$lib/services/FixFeed';
@@ -134,6 +135,14 @@
 	let areaTrackerActive = $state(false);
 	let areaTrackerAvailable = $state(true); // Whether area tracker can be enabled (based on map area)
 	let currentAreaSubscriptions = new SvelteSet<string>(); // Track subscribed areas
+
+	// Update debug status when area subscriptions change
+	$effect(() => {
+		debugStatus.update((current) => ({
+			...current,
+			activeAreaSubscriptions: currentAreaSubscriptions.size
+		}));
+	});
 
 	$effect(() => {
 		const unsubscribeRegistry = deviceRegistry.subscribe((event: DeviceRegistryEvent) => {
@@ -878,7 +887,7 @@
 
 		const area = calculateViewportArea();
 		const wasAvailable = areaTrackerAvailable;
-		areaTrackerAvailable = area <= 100000; // 100,000 square miles limit
+		areaTrackerAvailable = area <= 4000000; // 4,000,000 square miles limit (fits continental US)
 
 		console.log(
 			`[AREA TRACKER] Map area: ${area.toFixed(2)} sq miles, Available: ${areaTrackerAvailable}`

@@ -39,12 +39,26 @@ export const websocketStatus = writable<{
 	error: null
 });
 
+// Debug status store to help diagnose subscription issues
+export const debugStatus = writable<{
+	subscribedDevices: string[];
+	operationsPageActive: boolean;
+	activeWatchlistEntries: string[];
+	activeAreaSubscriptions: number;
+}>({
+	subscribedDevices: [],
+	operationsPageActive: false,
+	activeWatchlistEntries: [],
+	activeAreaSubscriptions: 0
+});
+
 // Subscribe to FixFeed events to update websocket status
 if (browser) {
 	fixFeed.subscribe((event) => {
 		switch (event.type) {
 			case 'connection_opened':
 				websocketStatus.set({ connected: true, reconnecting: false, error: null });
+				updateDebugStatus();
 				break;
 			case 'connection_closed':
 				websocketStatus.set({
@@ -52,9 +66,11 @@ if (browser) {
 					reconnecting: false,
 					error: event.code !== 1000 ? `Connection lost (${event.code})` : null
 				});
+				updateDebugStatus();
 				break;
 			case 'connection_error':
 				websocketStatus.update((status) => ({ ...status, error: 'Connection failed' }));
+				updateDebugStatus();
 				break;
 			case 'reconnecting':
 				websocketStatus.update((status) => ({
@@ -62,6 +78,11 @@ if (browser) {
 					reconnecting: true,
 					error: `Reconnecting... (${event.attempt})`
 				}));
+				updateDebugStatus();
+				break;
+			case 'subscription_added':
+			case 'subscription_removed':
+				updateDebugStatus();
 				break;
 		}
 	});
@@ -274,6 +295,18 @@ function createDeviceRegistryStore() {
 	};
 }
 
+// Update debug status with current FixFeed state
+function updateDebugStatus() {
+	if (!browser) return;
+
+	const connectionStatus = fixFeed.getConnectionStatus();
+	debugStatus.update((current) => ({
+		...current,
+		subscribedDevices: connectionStatus.subscribedDevices,
+		operationsPageActive: connectionStatus.operationsPageActive
+	}));
+}
+
 // Notify FixFeed about watchlist changes
 function notifyWatchlistChange(entries: WatchlistEntry[]) {
 	if (!browser) return;
@@ -282,8 +315,17 @@ function notifyWatchlistChange(entries: WatchlistEntry[]) {
 		.filter((entry) => entry.active && entry.deviceId)
 		.map((entry) => entry.deviceId);
 
+	// Update debug status with active watchlist entries
+	debugStatus.update((current) => ({
+		...current,
+		activeWatchlistEntries: activeDeviceIds
+	}));
+
 	// Update FixFeed subscriptions based on watchlist
 	fixFeed.subscribeToWatchlist(activeDeviceIds);
+
+	// Update debug status after subscription change
+	setTimeout(updateDebugStatus, 10); // Small delay to let subscription complete
 }
 
 // Save watchlist to localStorage
