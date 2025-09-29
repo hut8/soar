@@ -1,0 +1,41 @@
+# SOAR Sitemap Generation Timer
+#
+# This systemd timer automatically runs the `soar sitemap` command once daily at 4:00 AM,
+# after the pull-data service completes (which runs at 3:00 AM).
+# It generates XML sitemap files for Google and Bing SEO optimization.
+#
+# Installation:
+#   sudo cp soar-sitemap.service soar-sitemap.timer /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable soar-sitemap.timer
+#   sudo systemctl start soar-sitemap.timer
+#
+# Check status:
+#   sudo systemctl status soar-sitemap.timer
+#   sudo systemctl list-timers soar-sitemap.timer
+#
+# Manual execution:
+#   sudo systemctl start soar-sitemap.service
+#
+# View logs:
+#   sudo journalctl -u soar-sitemap.service -f
+
+[Unit]
+Description=SOAR Sitemap Generation Timer - Run Daily After Data Import
+Requires=soar-sitemap.service
+
+[Timer]
+# Run daily at 4:00 AM local time (1 hour after pull-data completes)
+OnCalendar=*-*-* 04:00:00
+
+# If the system was down when the timer should have triggered, run it as soon as possible
+Persistent=yes
+
+# Add some randomization to avoid server load spikes
+RandomizedDelaySec=180
+
+# Ensure the service isn't triggered more than once per day even if the system time changes
+AccuracySec=30min
+
+[Install]
+WantedBy=timers.target soar.target

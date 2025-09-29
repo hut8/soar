@@ -9,6 +9,8 @@ RUN_SERVICE_NAME="soar-run"
 WEB_SERVICE_NAME="soar-web"
 PULL_DATA_SERVICE_NAME="soar-pull-data"
 PULL_DATA_TIMER_NAME="soar-pull-data"
+SITEMAP_SERVICE_NAME="soar-sitemap"
+SITEMAP_TIMER_NAME="soar-sitemap"
 BINARY_PATH="/usr/local/bin"
 DEPLOY_PATH="/var/lib/soar"
 ARCHIVE_PATH="/var/soar/archive"
@@ -70,6 +72,7 @@ log_info "Stopping SOAR services..."
 sudo systemctl stop ${RUN_SERVICE_NAME} 2>/dev/null || true
 sudo systemctl stop ${WEB_SERVICE_NAME} 2>/dev/null || true
 sudo systemctl stop ${PULL_DATA_TIMER_NAME}.timer 2>/dev/null || true
+sudo systemctl stop ${SITEMAP_TIMER_NAME}.timer 2>/dev/null || true
 
 # Create service user if it doesn't exist
 if ! id "${SERVICE_USER}" &>/dev/null; then
@@ -83,6 +86,7 @@ fi
 log_info "Creating deployment and archive directories..."
 sudo mkdir -p ${DEPLOY_PATH}/logs
 sudo mkdir -p ${ARCHIVE_PATH}
+sudo mkdir -p /var/soar/sitemap
 
 # Ensure /etc/soar directory exists and has correct permissions
 log_info "Ensuring /etc/soar directory has correct permissions..."
@@ -107,6 +111,7 @@ sudo cp target/release/${BINARY_NAME} ${BINARY_PATH}/
 log_info "Setting ownership and permissions..."
 sudo chown -R ${SERVICE_USER}:${SERVICE_GROUP} ${DEPLOY_PATH}
 sudo chown -R ${SERVICE_USER}:${SERVICE_GROUP} ${ARCHIVE_PATH}
+sudo chown -R ${SERVICE_USER}:${SERVICE_GROUP} /var/soar
 sudo chmod +x ${BINARY_PATH}/${BINARY_NAME}
 
 # Install systemd services
@@ -115,6 +120,8 @@ sudo cp ${RUN_SERVICE_NAME}.service /etc/systemd/system/
 sudo cp ${WEB_SERVICE_NAME}.service /etc/systemd/system/
 sudo cp ${PULL_DATA_SERVICE_NAME}.service /etc/systemd/system/
 sudo cp ${PULL_DATA_TIMER_NAME}.timer /etc/systemd/system/
+sudo cp ${SITEMAP_SERVICE_NAME}.service /etc/systemd/system/
+sudo cp ${SITEMAP_TIMER_NAME}.timer /etc/systemd/system/
 
 # Reload systemd
 log_info "Reloading systemd daemon..."
@@ -125,18 +132,21 @@ log_info "Enabling SOAR services..."
 sudo systemctl enable ${RUN_SERVICE_NAME}
 sudo systemctl enable ${WEB_SERVICE_NAME}
 sudo systemctl enable ${PULL_DATA_TIMER_NAME}.timer
+sudo systemctl enable ${SITEMAP_TIMER_NAME}.timer
 
 # Start services
 log_info "Starting SOAR services..."
 sudo systemctl restart ${RUN_SERVICE_NAME}
 sudo systemctl restart ${WEB_SERVICE_NAME}
 sudo systemctl restart ${PULL_DATA_TIMER_NAME}.timer
+sudo systemctl restart ${SITEMAP_TIMER_NAME}.timer
 
 # Check service status
 sleep 3
 run_status=""
 web_status=""
 timer_status=""
+sitemap_timer_status=""
 
 if sudo systemctl is-active --quiet ${RUN_SERVICE_NAME}; then
     run_status="✅ RUNNING"
@@ -156,13 +166,20 @@ else
     timer_status="❌ INACTIVE"
 fi
 
+if sudo systemctl is-active --quiet ${SITEMAP_TIMER_NAME}.timer; then
+    sitemap_timer_status="✅ ACTIVE"
+else
+    sitemap_timer_status="❌ INACTIVE"
+fi
+
 log_info "Service Status:"
 log_info "  ${RUN_SERVICE_NAME}: ${run_status}"
 log_info "  ${WEB_SERVICE_NAME}: ${web_status}"
 log_info "  ${PULL_DATA_TIMER_NAME}.timer: ${timer_status}"
+log_info "  ${SITEMAP_TIMER_NAME}.timer: ${sitemap_timer_status}"
 
 # Show detailed status if any service failed
-if [[ "$run_status" == *"FAILED"* ]] || [[ "$web_status" == *"FAILED"* ]] || [[ "$timer_status" == *"INACTIVE"* ]]; then
+if [[ "$run_status" == *"FAILED"* ]] || [[ "$web_status" == *"FAILED"* ]] || [[ "$timer_status" == *"INACTIVE"* ]] || [[ "$sitemap_timer_status" == *"INACTIVE"* ]]; then
     log_error "One or more services failed to start"
 
     if [[ "$run_status" == *"FAILED"* ]]; then
@@ -178,6 +195,11 @@ if [[ "$run_status" == *"FAILED"* ]] || [[ "$web_status" == *"FAILED"* ]] || [[ 
     if [[ "$timer_status" == *"INACTIVE"* ]]; then
         log_info "Checking ${PULL_DATA_TIMER_NAME} timer status:"
         sudo systemctl status ${PULL_DATA_TIMER_NAME}.timer --no-pager -l
+    fi
+
+    if [[ "$sitemap_timer_status" == *"INACTIVE"* ]]; then
+        log_info "Checking ${SITEMAP_TIMER_NAME} timer status:"
+        sudo systemctl status ${SITEMAP_TIMER_NAME}.timer --no-pager -l
     fi
 
     exit 1
@@ -217,13 +239,17 @@ log_info "  For development, unset SOAR_ENV to use port 1337"
 log_info ""
 log_info "Commands:"
 log_info "  Status: sudo systemctl status ${RUN_SERVICE_NAME} ${WEB_SERVICE_NAME}"
-log_info "  Timer Status: sudo systemctl list-timers ${PULL_DATA_TIMER_NAME}.timer"
+log_info "  Timer Status: sudo systemctl list-timers ${PULL_DATA_TIMER_NAME}.timer ${SITEMAP_TIMER_NAME}.timer"
 log_info "  Logs: sudo journalctl -u ${RUN_SERVICE_NAME} -f"
 log_info "  Web logs: sudo journalctl -u ${WEB_SERVICE_NAME} -f"
 log_info "  Pull-data logs: sudo journalctl -u ${PULL_DATA_SERVICE_NAME} -f"
+log_info "  Sitemap logs: sudo journalctl -u ${SITEMAP_SERVICE_NAME} -f"
 log_info "  Manual data pull: sudo systemctl start ${PULL_DATA_SERVICE_NAME}"
+log_info "  Manual sitemap: sudo systemctl start ${SITEMAP_SERVICE_NAME}"
 log_info "  Web interface: http://localhost:61225 (production)"
 log_info ""
-log_info "Data Import:"
+log_info "Data Import & SEO:"
 log_info "  The pull-data timer runs daily at 3:00 AM"
 log_info "  It automatically downloads airports, runways, and aircraft data"
+log_info "  The sitemap timer runs daily at 4:00 AM (after data import)"
+log_info "  It generates XML sitemaps for Google/Bing SEO optimization"

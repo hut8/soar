@@ -37,6 +37,12 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Generate sitemap files for the website
+    Sitemap {
+        /// Static root directory where sitemap files will be stored (defaults to SITEMAP_ROOT env var)
+        #[arg(long)]
+        static_root: Option<String>,
+    },
     /// Load aircraft model and registration data, receivers, and optionally pull devices from DDB
     ///
     /// Aircraft registrations and models should come from the "releasable aircraft" FAA database.
@@ -480,6 +486,12 @@ async fn main() -> Result<()> {
     let diesel_pool = setup_diesel_database().await?;
 
     match cli.command {
+        Commands::Sitemap { static_root } => {
+            let sitemap_path = static_root.unwrap_or_else(|| {
+                env::var("SITEMAP_ROOT").unwrap_or_else(|_| "/var/soar/sitemap".to_string())
+            });
+            soar::sitemap::handle_sitemap_generation(diesel_pool, sitemap_path).await
+        }
         Commands::LoadData {
             aircraft_models,
             aircraft_registrations,

@@ -2,6 +2,7 @@ use anyhow::Result;
 use axum::{
     Router,
     body::Body,
+    extract::Path,
     http::{HeaderMap, Request, StatusCode, Uri},
     middleware::{self, Next},
     response::{IntoResponse, Response},
@@ -22,6 +23,9 @@ use crate::live_fixes::LiveFixService;
 
 // Embed web assets into the binary
 static ASSETS: Dir<'_> = include_dir!("web/build");
+
+// Embed robots.txt into the binary
+static ROBOTS_TXT: &str = include_str!("../static/robots.txt");
 
 // Helper function to format compilation timestamp for HTTP headers
 fn get_compilation_timestamp() -> String {
@@ -221,6 +225,59 @@ async fn sentry_error_middleware(request: Request<Body>, next: Next) -> Response
     response
 }
 
+// Handler for robots.txt - serves embedded content
+async fn robots_txt() -> impl IntoResponse {
+    let mut headers = HeaderMap::new();
+    headers.insert("content-type", "text/plain".parse().unwrap());
+    // Cache robots.txt for 24 hours
+    headers.insert("cache-control", "public, max-age=86400".parse().unwrap());
+
+    (StatusCode::OK, headers, ROBOTS_TXT)
+}
+
+// Handler for sitemap files - serves files from disk
+async fn sitemap_file(Path(filename): Path<String>) -> impl IntoResponse {
+    // Get sitemap root from environment variable
+    let sitemap_root =
+        std::env::var("SITEMAP_ROOT").unwrap_or_else(|_| "/var/soar/sitemap".to_string());
+
+    // Validate filename to prevent directory traversal
+    if filename.contains("..") || filename.contains('/') || filename.contains('\\') {
+        return (
+            StatusCode::BAD_REQUEST,
+            HeaderMap::new(),
+            "Invalid filename",
+        )
+            .into_response();
+    }
+
+    // Only allow XML files
+    if !filename.ends_with(".xml") {
+        return (StatusCode::NOT_FOUND, HeaderMap::new(), "Not found").into_response();
+    }
+
+    // Build full path
+    let file_path = std::path::Path::new(&sitemap_root).join(&filename);
+
+    // Try to read the file
+    match tokio::fs::read_to_string(&file_path).await {
+        Ok(content) => {
+            let mut headers = HeaderMap::new();
+            headers.insert("content-type", "application/xml".parse().unwrap());
+            // Cache sitemaps for 6 hours
+            headers.insert("cache-control", "public, max-age=21600".parse().unwrap());
+
+            (StatusCode::OK, headers, content).into_response()
+        }
+        Err(_) => (
+            StatusCode::NOT_FOUND,
+            HeaderMap::new(),
+            "Sitemap file not found",
+        )
+            .into_response(),
+    }
+}
+
 pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Result<()> {
     sentry::configure_scope(|scope| {
         scope.set_tag("operation", "web-server");
@@ -309,6 +366,12 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
     // Build the main Axum application
     let app = Router::new()
         .nest("/data", api_router)
+        .route("/robots.txt", get(robots_txt))
+        .route(
+            "/sitemap.xml",
+            get(|| sitemap_file(Path("sitemap.xml".to_string()))),
+        )
+        .route("/sitemap-:number.xml", get(sitemap_file))
         .fallback(handle_static_file)
         .with_state(app_state.clone())
         .layer(middleware::from_fn(request_logging_middleware))
