@@ -380,24 +380,4 @@ impl LiveFixService {
 
         Ok(())
     }
-
-    // Get a receiver for an existing subscription (deprecated - use subscribe_to_device)
-    pub async fn get_receiver(&self, device_id: &str) -> broadcast::Receiver<LiveFix> {
-        match self.subscribe_to_device(device_id).await {
-            Ok(receiver) => receiver,
-            Err(e) => {
-                error!("Failed to subscribe to device {}: {}", device_id, e);
-                // Return a dummy receiver that will never get messages
-                let (_tx, rx) = broadcast::channel(1);
-                rx
-            }
-        }
-    }
-
-    // Cleanup method (deprecated - use unsubscribe_from_device)
-    pub async fn cleanup_aircraft(&self, device_id: &str) {
-        if let Err(e) = self.unsubscribe_from_device(device_id).await {
-            error!("Failed to unsubscribe from device {}: {}", device_id, e);
-        }
-    }
 }

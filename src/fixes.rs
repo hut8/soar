@@ -194,7 +194,7 @@ impl Fix {
                 AddressType::Ogn => "OGN",
                 AddressType::Unknown => "Unknown",
             };
-            Some(format!("{}-{}", type_prefix, self.device_address))
+            Some(format!("{}-{:06X}", type_prefix, self.device_address))
         }
     }
 }
