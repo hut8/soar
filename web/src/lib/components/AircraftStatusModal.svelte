@@ -118,6 +118,14 @@
 
 		return typeMap[typeAircraft] || `Type ${typeAircraft}`;
 	}
+
+	function formatAddress(addressType: string, address: string): string {
+		if (!address) return 'Unknown';
+
+		// Format as ICAO-XXYYZZ where XXYYZZ is the hex address
+		const hexAddress = address.toUpperCase();
+		return `ICAO-${hexAddress}`;
+	}
 </script>
 
 <!-- Aircraft Status Modal -->
@@ -147,7 +155,8 @@
 					<div>
 						<h2 class="text-xl font-bold">Aircraft Status</h2>
 						<p class="text-sm text-gray-600">
-							{selectedDevice.registration || selectedDevice.address}
+							{selectedDevice.registration ||
+								formatAddress(selectedDevice.address_type, selectedDevice.address)}
 							{#if selectedDevice.aircraft_model}
 								• {selectedDevice.aircraft_model}
 							{/if}
@@ -179,7 +188,7 @@
 								<div>
 									<dt class="text-sm font-medium text-gray-600">Address</dt>
 									<dd class="font-mono text-sm">
-										{selectedDevice.address}
+										{formatAddress(selectedDevice.address_type, selectedDevice.address)}
 										{#if selectedDevice.address_type}
 											({selectedDevice.address_type})
 										{/if}

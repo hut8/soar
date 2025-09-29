@@ -174,8 +174,13 @@
 				>
 					<Wifi size={16} />
 					<span class="text-xs font-medium">Live</span>
-					{#if $debugStatus.activeWatchlistEntries.length > 0}
-						<span class="text-xs font-medium">({$debugStatus.activeWatchlistEntries.length})</span>
+					{#if $debugStatus.activeWatchlistEntries.length > 0 || $debugStatus.activeAreaSubscriptions > 0}
+						<span class="text-xs font-medium">
+							({#if $debugStatus.activeWatchlistEntries.length > 0}{$debugStatus
+									.activeWatchlistEntries
+									.length}{/if}{#if $debugStatus.activeWatchlistEntries.length > 0 && $debugStatus.activeAreaSubscriptions > 0}+{/if}{#if $debugStatus.activeAreaSubscriptions > 0}{$debugStatus.activeAreaSubscriptions}
+								area{/if})
+						</span>
 					{/if}
 				</div>
 			{:else if $websocketStatus.reconnecting}

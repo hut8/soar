@@ -2,12 +2,52 @@ import { browser, dev } from '$app/environment';
 import type { Fix } from '$lib/types';
 import { DeviceRegistry } from './DeviceRegistry';
 
+// DeviceWithFixes type to match the backend structure
+export interface DeviceWithFixes {
+	device: {
+		id: string;
+		registration: string;
+		device_address_hex: string;
+		created_at: string;
+		updated_at: string;
+	};
+	aircraft_registration?: {
+		id: string;
+		device_id: string;
+		tail_number: string;
+		manufacturer_code: string;
+		model_code: string;
+		series_code: string;
+		created_at: string;
+		updated_at: string;
+	};
+	aircraft_model?: {
+		manufacturer_code: string;
+		model_code: string;
+		series_code: string;
+		manufacturer_name: string;
+		model_name: string;
+		aircraft_type?: string;
+		engine_type?: string;
+		aircraft_category?: string;
+		builder_certification?: string;
+		number_of_engines?: number;
+		number_of_seats?: number;
+		weight_class?: string;
+		cruising_speed?: number;
+		type_certificate_data_sheet?: string;
+		type_certificate_data_holder?: string;
+	};
+	recent_fixes: Fix[];
+}
+
 // Event types for subscribers
 export type FixFeedEvent =
 	| { type: 'connection_opened' }
 	| { type: 'connection_closed'; code: number; reason: string }
 	| { type: 'connection_error'; error: Event }
 	| { type: 'fix_received'; fix: Fix }
+	| { type: 'device_received'; device: DeviceWithFixes }
 	| { type: 'subscription_added'; deviceId: string }
 	| { type: 'subscription_removed'; deviceId: string }
 	| { type: 'reconnecting'; attempt: number; maxAttempts: number };
@@ -117,36 +157,73 @@ export class FixFeed {
 
 			this.websocket.onmessage = (event) => {
 				try {
-					const rawFix = JSON.parse(event.data);
-					console.log('Received fix:', rawFix);
+					const rawMessage = JSON.parse(event.data);
+					console.log('Received WebSocket message:', rawMessage);
 
-					// Transform WebSocket fix data to match Fix interface
-					const fix: Fix = {
-						id: rawFix.id,
-						device_id: rawFix.device_id,
-						device_address_hex: rawFix.device_address_hex,
-						timestamp: rawFix.timestamp,
-						latitude: rawFix.latitude,
-						longitude: rawFix.longitude,
-						altitude_feet: rawFix.altitude,
-						track_degrees: rawFix.track,
-						ground_speed_knots: rawFix.ground_speed,
-						climb_fpm: rawFix.climb_rate,
-						registration: rawFix.registration,
-						model: rawFix.model,
-						flight_id: rawFix.flight_id
-					};
+					// Handle different message types based on the "type" field
+					if (rawMessage.type === 'fix') {
+						// Transform WebSocket fix data to match Fix interface
+						const fix: Fix = {
+							id: rawMessage.id,
+							device_id: rawMessage.device_id,
+							device_address_hex: rawMessage.device_address_hex,
+							timestamp: rawMessage.timestamp,
+							latitude: rawMessage.latitude,
+							longitude: rawMessage.longitude,
+							altitude_feet: rawMessage.altitude,
+							track_degrees: rawMessage.track,
+							ground_speed_knots: rawMessage.ground_speed,
+							climb_fpm: rawMessage.climb_rate,
+							registration: rawMessage.registration,
+							model: rawMessage.model,
+							flight_id: rawMessage.flight_id
+						};
 
-					// Add fix to device registry
-					this.deviceRegistry.addFixToDevice(fix).catch((error) => {
-						console.warn('Failed to add fix to device registry:', error);
-					});
+						// Add fix to device registry
+						// For fixes from WebSocket, assume device data is provided via device messages
+						// so don't attempt API fallback to avoid N+1 calls
+						this.deviceRegistry.addFixToDevice(fix, false).catch((error) => {
+							console.warn('Failed to add fix to device registry:', error);
+						});
 
-					// Notify subscribers
-					this.notifySubscribers({
-						type: 'fix_received',
-						fix
-					});
+						// Notify subscribers
+						this.notifySubscribers({
+							type: 'fix_received',
+							fix
+						});
+					} else if (rawMessage.type === 'device') {
+						// Handle DeviceWithFixes message
+						const deviceWithFixes: DeviceWithFixes = rawMessage;
+
+						// Add all recent fixes to device registry
+						if (deviceWithFixes.recent_fixes?.length > 0) {
+							for (const fix of deviceWithFixes.recent_fixes) {
+								this.deviceRegistry.addFixToDevice(fix, false).catch((error) => {
+									console.warn('Failed to add device fix to registry:', error);
+								});
+							}
+						}
+
+						// Update device registry with complete device info
+						this.deviceRegistry
+							.updateDeviceInfo(
+								deviceWithFixes.device.id,
+								deviceWithFixes.device,
+								deviceWithFixes.aircraft_registration,
+								deviceWithFixes.aircraft_model
+							)
+							.catch((error) => {
+								console.warn('Failed to update device info in registry:', error);
+							});
+
+						// Notify subscribers
+						this.notifySubscribers({
+							type: 'device_received',
+							device: deviceWithFixes
+						});
+					} else {
+						console.warn('Unknown WebSocket message type:', rawMessage.type);
+					}
 				} catch (e) {
 					console.warn('Failed to parse WebSocket message:', e);
 				}

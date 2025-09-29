@@ -11,6 +11,7 @@
 	let showCompassRose = $state(true);
 	let showAirportMarkers = $state(true);
 	let showRunwayOverlays = $state(false);
+	let showCoordinateData = $state(false);
 	let trailLength = $state([0]); // Hours - logarithmic scale
 	let trailLengthSlider = $state([0]); // Linear slider position (0-100)
 
@@ -41,6 +42,7 @@
 				showCompassRose = settings.showCompassRose ?? true;
 				showAirportMarkers = settings.showAirportMarkers ?? true;
 				showRunwayOverlays = settings.showRunwayOverlays ?? false;
+				showCoordinateData = settings.showCoordinateData ?? false;
 				trailLength = settings.trailLength ?? [0];
 				trailLengthSlider = [hoursToSlider(trailLength[0])];
 			} catch (e) {
@@ -59,6 +61,7 @@
 			showCompassRose,
 			showAirportMarkers,
 			showRunwayOverlays,
+			showCoordinateData,
 			trailLength
 		};
 		localStorage.setItem('operationsSettings', JSON.stringify(settings));
@@ -69,6 +72,7 @@
 				showCompassRose,
 				showAirportMarkers,
 				showRunwayOverlays,
+				showCoordinateData,
 				trailLength: trailLength[0]
 			});
 		}
@@ -83,6 +87,7 @@
 					showCompassRose,
 					showAirportMarkers,
 					showRunwayOverlays,
+					showCoordinateData,
 					trailLength: trailLength[0]
 				});
 			}
@@ -147,6 +152,19 @@
 								checked={showRunwayOverlays}
 								onCheckedChange={(e) => {
 									showRunwayOverlays = e.checked;
+									saveSettings();
+								}}
+							/>
+						</div>
+						<div class="flex items-center justify-between">
+							<label for="coordinates-toggle" class="text-sm font-medium"
+								>Show Coordinate Data</label
+							>
+							<Switch
+								name="coordinates-toggle"
+								checked={showCoordinateData}
+								onCheckedChange={(e) => {
+									showCoordinateData = e.checked;
 									saveSettings();
 								}}
 							/>

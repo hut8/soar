@@ -105,6 +105,7 @@
 		showCompassRose: true,
 		showAirportMarkers: true,
 		showRunwayOverlays: false,
+		showCoordinateData: false,
 		trailLength: 0
 	});
 
@@ -113,6 +114,7 @@
 		showCompassRose: boolean;
 		showAirportMarkers: boolean;
 		showRunwayOverlays: boolean;
+		showCoordinateData: boolean;
 		trailLength: number;
 	}) {
 		currentSettings = newSettings;
@@ -214,6 +216,21 @@
 		}
 	});
 
+	// Reactive effect for coordinate data settings
+	$effect(() => {
+		if (map) {
+			if (currentSettings.showCoordinateData) {
+				updateCoordinateDisplay();
+				drawCoordinateGrid();
+			} else {
+				if (coordinateDisplayElement) {
+					coordinateDisplayElement.style.display = 'none';
+				}
+				clearCoordinateGrid();
+			}
+		}
+	});
+
 	// Get singleton instances
 	const deviceRegistry = DeviceRegistry.getInstance();
 	const fixFeed = FixFeed.getInstance();
@@ -225,6 +242,10 @@
 	let areaTrackerActive = $state(false);
 	let areaTrackerAvailable = $state(true); // Whether area tracker can be enabled (based on map area)
 	let currentAreaSubscriptions = new SvelteSet<string>(); // Track subscribed areas
+
+	// Coordinate data state
+	let coordinateDisplayElement: HTMLElement | null = null;
+	let coordinateGridLines: google.maps.Polyline[] = [];
 
 	// Update debug status when area subscriptions change
 	$effect(() => {
@@ -252,6 +273,11 @@
 				console.log('Received fix:', event.fix);
 				// The fix will be automatically added to the device by FixFeed.addFixToDevice()
 				// This will trigger a device registry event which will update our activeDevices
+			} else if (event.type === 'device_received') {
+				console.log('Received complete device data:', event.device);
+				// Complete device data with recent fixes was received, likely from area subscription
+				// The device info and fixes are automatically processed by FixFeed
+				// This eliminates the need for individual device API calls
 			}
 		});
 
@@ -375,6 +401,9 @@
 			updateAllAircraftMarkersScale();
 			// Update area tracker availability and subscriptions
 			updateAreaTrackerAvailability();
+			// Update coordinate display and grid
+			updateCoordinateDisplay();
+			drawCoordinateGrid();
 			if (areaTrackerActive) {
 				setTimeout(updateAreaSubscriptions, 100); // Small delay for bounds to update
 			}
@@ -384,6 +413,9 @@
 
 		map.addListener('dragend', () => {
 			checkAndUpdateAirports();
+			// Update coordinate display and grid
+			updateCoordinateDisplay();
+			drawCoordinateGrid();
 			// Update area subscriptions after panning
 			if (areaTrackerActive) {
 				updateAreaSubscriptions();
@@ -710,6 +742,117 @@
 
 			airportUpdateDebounceTimer = null;
 		}, 100);
+	}
+
+	// Coordinate data functions
+	function updateCoordinateDisplay(): void {
+		if (!map || !currentSettings.showCoordinateData) {
+			if (coordinateDisplayElement) {
+				coordinateDisplayElement.style.display = 'none';
+			}
+			return;
+		}
+
+		const bounds = map.getBounds();
+		if (!bounds) return;
+
+		const ne = bounds.getNorthEast();
+		const sw = bounds.getSouthWest();
+
+		// Format coordinate range
+		const latRange = `${sw.lat().toFixed(4)}° to ${ne.lat().toFixed(4)}°`;
+		const lngRange = `${sw.lng().toFixed(4)}° to ${ne.lng().toFixed(4)}°`;
+		const coordText = `Lat: ${latRange}, Lng: ${lngRange}`;
+
+		// Create or update coordinate display element
+		if (!coordinateDisplayElement) {
+			coordinateDisplayElement = document.createElement('div');
+			coordinateDisplayElement.className = 'coordinate-display';
+			coordinateDisplayElement.style.cssText = `
+				position: absolute;
+				top: 80px;
+				left: 50%;
+				transform: translateX(-50%);
+				background: white;
+				padding: 8px 12px;
+				border-radius: 4px;
+				box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+				font-family: monospace;
+				font-size: 12px;
+				z-index: 10;
+				pointer-events: none;
+				border: 1px solid #ccc;
+			`;
+			// eslint-disable-next-line svelte/no-dom-manipulating
+			mapContainer.appendChild(coordinateDisplayElement);
+		}
+
+		coordinateDisplayElement.textContent = coordText;
+		coordinateDisplayElement.style.display = 'block';
+	}
+
+	function drawCoordinateGrid(): void {
+		// Clear existing grid lines
+		clearCoordinateGrid();
+
+		if (!map || !currentSettings.showCoordinateData) {
+			return;
+		}
+
+		const bounds = map.getBounds();
+		if (!bounds) return;
+
+		const ne = bounds.getNorthEast();
+		const sw = bounds.getSouthWest();
+
+		// Draw latitude lines at integer degrees
+		const latMin = Math.floor(sw.lat());
+		const latMax = Math.ceil(ne.lat());
+
+		for (let lat = latMin; lat <= latMax; lat++) {
+			if (lat >= sw.lat() && lat <= ne.lat()) {
+				const line = new google.maps.Polyline({
+					path: [
+						{ lat: lat, lng: sw.lng() },
+						{ lat: lat, lng: ne.lng() }
+					],
+					geodesic: false,
+					strokeColor: '#666666',
+					strokeOpacity: 0.5,
+					strokeWeight: 1,
+					map: map
+				});
+				coordinateGridLines.push(line);
+			}
+		}
+
+		// Draw longitude lines at integer degrees
+		const lngMin = Math.floor(sw.lng());
+		const lngMax = Math.ceil(ne.lng());
+
+		for (let lng = lngMin; lng <= lngMax; lng++) {
+			if (lng >= sw.lng() && lng <= ne.lng()) {
+				const line = new google.maps.Polyline({
+					path: [
+						{ lat: sw.lat(), lng: lng },
+						{ lat: ne.lat(), lng: lng }
+					],
+					geodesic: false,
+					strokeColor: '#666666',
+					strokeOpacity: 0.5,
+					strokeWeight: 1,
+					map: map
+				});
+				coordinateGridLines.push(line);
+			}
+		}
+	}
+
+	function clearCoordinateGrid(): void {
+		coordinateGridLines.forEach((line) => {
+			line.setMap(null);
+		});
+		coordinateGridLines = [];
 	}
 
 	function handleOrientationChange(event: DeviceOrientationEvent): void {
@@ -1119,6 +1262,12 @@
 		console.log(
 			`[AREA TRACKER] Updated subscriptions: ${toSubscribe.size} new, ${toUnsubscribe.size} removed, ${currentAreaSubscriptions.size} total`
 		);
+
+		// Explicitly update debug status to ensure WebSocket status panel shows area subscriptions
+		debugStatus.update((current) => ({
+			...current,
+			activeAreaSubscriptions: currentAreaSubscriptions.size
+		}));
 	}
 
 	function clearAreaSubscriptions(): void {
@@ -1128,6 +1277,12 @@
 		});
 		currentAreaSubscriptions.clear();
 		console.log('[AREA TRACKER] Cleared all area subscriptions');
+
+		// Explicitly update debug status to ensure WebSocket status panel updates
+		debugStatus.update((current) => ({
+			...current,
+			activeAreaSubscriptions: 0
+		}));
 	}
 
 	function subscribeToArea(latitude: number, longitude: number): void {

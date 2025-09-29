@@ -149,7 +149,7 @@ export class DeviceRegistry {
 	}
 
 	// Add a fix to the appropriate device
-	public async addFixToDevice(fix: Fix): Promise<Device | null> {
+	public async addFixToDevice(fix: Fix, allowApiFallback: boolean = true): Promise<Device | null> {
 		console.log('[REGISTRY] Adding fix to device:', {
 			deviceId: fix.device_id,
 			deviceAddressHex: fix.device_address_hex,
@@ -168,14 +168,16 @@ export class DeviceRegistry {
 			console.log(
 				'[REGISTRY] Device not found in cache for fix:',
 				deviceId,
-				'attempting to fetch from API'
+				allowApiFallback ? 'attempting to fetch from API' : 'creating minimal device'
 			);
 
-			// Try to fetch full device info from API first
-			try {
-				device = await this.updateDeviceFromAPI(deviceId);
-			} catch (error) {
-				console.warn('[REGISTRY] Failed to fetch device from API for:', deviceId, error);
+			// Only try to fetch from API if allowed (for individual subscriptions)
+			if (allowApiFallback) {
+				try {
+					device = await this.updateDeviceFromAPI(deviceId);
+				} catch (error) {
+					console.warn('[REGISTRY] Failed to fetch device from API for:', deviceId, error);
+				}
 			}
 
 			// If still no device, create a minimal one
@@ -318,6 +320,73 @@ export class DeviceRegistry {
 		} catch (error) {
 			console.warn(`Failed to load recent fixes for device ${deviceId}:`, error);
 			return [];
+		}
+	}
+
+	// Update device info from complete DeviceWithFixes data
+	public async updateDeviceInfo(
+		deviceId: string,
+		deviceData: {
+			id: string;
+			registration: string;
+			device_address_hex: string;
+			created_at: string;
+			updated_at: string;
+		},
+		aircraftRegistration?: {
+			id: string;
+			device_id: string;
+			tail_number: string;
+			manufacturer_code: string;
+			model_code: string;
+			series_code: string;
+			created_at: string;
+			updated_at: string;
+		},
+		aircraftModel?: {
+			manufacturer_code: string;
+			model_code: string;
+			series_code: string;
+			manufacturer_name: string;
+			model_name: string;
+			aircraft_type?: string;
+			engine_type?: string;
+			aircraft_category?: string;
+			builder_certification?: string;
+			number_of_engines?: number;
+			number_of_seats?: number;
+			weight_class?: string;
+			cruising_speed?: number;
+			type_certificate_data_sheet?: string;
+			type_certificate_data_holder?: string;
+		}
+	): Promise<Device | null> {
+		try {
+			let device = this.getDevice(deviceId);
+
+			if (device) {
+				// Update existing device
+				device.registration = deviceData.registration || device.registration;
+				// We could update other fields if the backend DeviceModel had more fields
+			} else {
+				// Create new device from the complete data
+				device = Device.fromJSON({
+					id: deviceId,
+					address_type: '', // Not in DeviceModel from backend, would need to be added
+					address: deviceData.device_address_hex || '',
+					aircraft_model: aircraftModel?.model_name || '',
+					registration: deviceData.registration || '',
+					cn: '', // Not in DeviceModel from backend
+					tracked: true, // Assume tracked if we received it
+					identified: !!aircraftRegistration // Identified if we have registration
+				});
+			}
+
+			this.setDevice(device);
+			return device;
+		} catch (error) {
+			console.warn(`Failed to update device info for ${deviceId}:`, error);
+			return null;
 		}
 	}
 }
