@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use diesel_derive_enum::DbEnum;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -9,17 +9,17 @@ use std::str::FromStr;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum)]
 #[db_enum(existing_type_path = "crate::schema::sql_types::AircraftType")]
 pub enum AircraftType {
-    Glider,                    // Code: 1
-    Balloon,                   // Code: 2
-    BlimpDirigible,           // Code: 3
-    FixedWingSingleEngine,    // Code: 4
-    FixedWingMultiEngine,     // Code: 5
-    Rotorcraft,               // Code: 6
-    WeightShiftControl,       // Code: 7
-    PoweredParachute,         // Code: 8
-    Gyroplane,                // Code: 9
-    HybridLift,               // Code: H
-    Other,                    // Code: O
+    Glider,                // Code: 1
+    Balloon,               // Code: 2
+    BlimpDirigible,        // Code: 3
+    FixedWingSingleEngine, // Code: 4
+    FixedWingMultiEngine,  // Code: 5
+    Rotorcraft,            // Code: 6
+    WeightShiftControl,    // Code: 7
+    PoweredParachute,      // Code: 8
+    Gyroplane,             // Code: 9
+    HybridLift,            // Code: H
+    Other,                 // Code: O
 }
 
 impl FromStr for AircraftType {

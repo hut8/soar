@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 use uuid::Uuid;
 
-use crate::devices::AddressType;
 use crate::Fix;
+use crate::devices::AddressType;
 
 /// A flight representing a complete takeoff to landing sequence
 #[derive(Debug, Clone, Serialize, Deserialize)]

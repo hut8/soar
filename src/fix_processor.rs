@@ -5,15 +5,15 @@ use tokio::sync::RwLock;
 use tracing::{debug, error, trace};
 use uuid::Uuid;
 
+use crate::Fix;
 use crate::aircraft_registrations_repo::AircraftRegistrationsRepository;
 use crate::device_repo::DeviceRepository;
 use crate::fixes_repo::{AircraftTypeOgn, FixesRepository};
 use crate::flight_detection_processor::FlightDetectionProcessor;
 use crate::nats_publisher::NatsFixPublisher;
-use crate::Fix;
-use ogn_parser::AprsPacket;
 use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
+use ogn_parser::AprsPacket;
 
 /// Database fix processor that saves valid fixes to the database and performs flight tracking
 #[derive(Clone)]
@@ -153,23 +153,23 @@ impl FixProcessor {
                                     trace!("No position fix in APRS position packet");
                                 }
                                 Err(e) => {
-                                    debug!("Failed to extract fix from APRS position packet: {}", e);
+                                    debug!(
+                                        "Failed to extract fix from APRS position packet: {}",
+                                        e
+                                    );
                                 }
                             }
                         }
                         Ok(None) => {
                             trace!(
                                 "Device address {:06X} ({:?}) not found in devices table, skipping fix processing",
-                                device_address,
-                                address_type
+                                device_address, address_type
                             );
                         }
                         Err(e) => {
                             error!(
                                 "Failed to lookup device address {:06X} ({:?}): {}, skipping fix processing",
-                                device_address,
-                                address_type,
-                                e
+                                device_address, address_type, e
                             );
                         }
                     }

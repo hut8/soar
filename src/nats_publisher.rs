@@ -10,7 +10,7 @@ use crate::Fix;
 fn get_topic_prefix() -> &'static str {
     match std::env::var("SOAR_ENV") {
         Ok(env) if env == "production" => "aircraft",
-        _ => "staging.aircraft"
+        _ => "staging.aircraft",
     }
 }
 
@@ -23,13 +23,23 @@ async fn publish_to_nats(nats_client: &Client, device_id: &str, fix: &Fix) -> Re
 
     // 1. Publish by device ID (existing functionality)
     let device_subject = format!("{}.fix.{}", topic_prefix, device_id);
-    nats_client.publish(device_subject.clone(), payload.clone().into()).await?;
-    debug!("Published fix for {} to NATS device subject: {}", device_id, device_subject);
+    nats_client
+        .publish(device_subject.clone(), payload.clone().into())
+        .await?;
+    debug!(
+        "Published fix for {} to NATS device subject: {}",
+        device_id, device_subject
+    );
 
     // 2. Publish by area (new functionality)
     let area_subject = get_area_subject(topic_prefix, fix.latitude, fix.longitude);
-    nats_client.publish(area_subject.clone(), payload.into()).await?;
-    debug!("Published fix for {} to NATS area subject: {}", device_id, area_subject);
+    nats_client
+        .publish(area_subject.clone(), payload.into())
+        .await?;
+    debug!(
+        "Published fix for {} to NATS area subject: {}",
+        device_id, area_subject
+    );
 
     Ok(())
 }
@@ -49,9 +59,7 @@ pub struct NatsFixPublisher {
 
 impl NatsFixPublisher {
     /// Create a new NATS publisher for position fixes
-    pub async fn new(
-        nats_url: &str,
-    ) -> Result<Self> {
+    pub async fn new(nats_url: &str) -> Result<Self> {
         info!("Connecting to NATS server at {}", nats_url);
         let nats_client = async_nats::ConnectOptions::new()
             .name("soar-run")

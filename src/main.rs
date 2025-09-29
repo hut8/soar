@@ -37,6 +37,12 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Generate sitemap files for the website
+    Sitemap {
+        /// Static root directory where sitemap files will be stored (defaults to SITEMAP_ROOT env var)
+        #[arg(long)]
+        static_root: Option<String>,
+    },
     /// Load aircraft model and registration data, receivers, and optionally pull devices from DDB
     ///
     /// Aircraft registrations and models should come from the "releasable aircraft" FAA database.
@@ -316,9 +322,12 @@ async fn handle_run(
         Ok(processor_with_nats) => {
             info!("Created FixProcessor with NATS publisher");
             processor_with_nats
-        },
+        }
         Err(e) => {
-            warn!("Failed to create FixProcessor with NATS ({}), falling back to processor without NATS", e);
+            warn!(
+                "Failed to create FixProcessor with NATS ({}), falling back to processor without NATS",
+                e
+            );
             FixProcessor::new(diesel_pool.clone())
         }
     };
@@ -329,8 +338,8 @@ async fn handle_run(
 
     // Create aircraft position processor
     // Note: FlightDetectionProcessor is now handled inside FixProcessor
-    let aircraft_position_processor = AircraftPositionProcessor::new()
-        .with_fix_processor(fix_processor.clone());
+    let aircraft_position_processor =
+        AircraftPositionProcessor::new().with_fix_processor(fix_processor.clone());
 
     // Create position packet processor
     let position_processor =
@@ -477,6 +486,12 @@ async fn main() -> Result<()> {
     let diesel_pool = setup_diesel_database().await?;
 
     match cli.command {
+        Commands::Sitemap { static_root } => {
+            let sitemap_path = static_root.unwrap_or_else(|| {
+                env::var("SITEMAP_ROOT").unwrap_or_else(|_| "/tmp/soar/sitemap".to_string())
+            });
+            soar::sitemap::handle_sitemap_generation(diesel_pool, sitemap_path).await
+        }
         Commands::LoadData {
             aircraft_models,
             aircraft_registrations,

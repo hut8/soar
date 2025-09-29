@@ -6,12 +6,12 @@ use tokio::sync::RwLock;
 use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
+use crate::Fix;
 use crate::airports_repo::AirportsRepository;
 use crate::devices::AddressType;
 use crate::fixes_repo::FixesRepository;
 use crate::flights::Flight;
 use crate::flights_repo::FlightsRepository;
-use crate::Fix;
 use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
 
@@ -169,7 +169,10 @@ impl FlightDetectionProcessor {
                 info!(
                     "Created airborne flight {} for aircraft {} (first seen at {:.6}, {:.6})",
                     flight_id,
-                    format_device_address_with_type(fix.device_address_hex().as_ref(), fix.address_type),
+                    format_device_address_with_type(
+                        fix.device_address_hex().as_ref(),
+                        fix.address_type
+                    ),
                     fix.latitude,
                     fix.longitude
                 );
@@ -326,7 +329,13 @@ impl FlightDetectionProcessor {
             match (old_state, &new_state) {
                 (AircraftState::Idle, AircraftState::Active) => {
                     // Takeoff detected
-                    debug!("Takeoff detected for aircraft {}", format_device_address_with_type(fix.device_address_hex().as_ref(), fix.address_type));
+                    debug!(
+                        "Takeoff detected for aircraft {}",
+                        format_device_address_with_type(
+                            fix.device_address_hex().as_ref(),
+                            fix.address_type
+                        )
+                    );
                     match self.create_flight(&fix).await {
                         Ok(flight_id) => {
                             fix.flight_id = Some(flight_id);
@@ -350,7 +359,13 @@ impl FlightDetectionProcessor {
                 }
                 (AircraftState::Active, AircraftState::Idle) => {
                     // Landing detected
-                    debug!("Landing detected for aircraft {}", format_device_address_with_type(fix.device_address_hex().as_ref(), fix.address_type));
+                    debug!(
+                        "Landing detected for aircraft {}",
+                        format_device_address_with_type(
+                            fix.device_address_hex().as_ref(),
+                            fix.address_type
+                        )
+                    );
                     if let Some(flight_id) = current_flight_id {
                         // Keep the flight_id on the fix since it was part of this flight
                         fix.flight_id = Some(flight_id);
@@ -387,7 +402,13 @@ impl FlightDetectionProcessor {
             new_tracker.update_position(&fix);
 
             if new_state == AircraftState::Active {
-                debug!("New in-flight aircraft detected: {}", format_device_address_with_type(fix.device_address_hex().as_ref(), fix.address_type));
+                debug!(
+                    "New in-flight aircraft detected: {}",
+                    format_device_address_with_type(
+                        fix.device_address_hex().as_ref(),
+                        fix.address_type
+                    )
+                );
                 // Create a flight for aircraft already airborne, but without takeoff data
                 match self.create_airborne_flight(&fix).await {
                     Ok(flight_id) => {
@@ -395,11 +416,18 @@ impl FlightDetectionProcessor {
                         new_tracker.current_flight_id = Some(flight_id);
                         info!(
                             "Created airborne flight {} for aircraft {} (no takeoff data)",
-                            flight_id, format_device_address_with_type(fix.device_address_hex().as_ref(), fix.address_type)
+                            flight_id,
+                            format_device_address_with_type(
+                                fix.device_address_hex().as_ref(),
+                                fix.address_type
+                            )
                         );
                     }
                     Err(e) => {
-                        warn!("Failed to create airborne flight for {}: {}", fix.device_id, e);
+                        warn!(
+                            "Failed to create airborne flight for {}: {}",
+                            fix.device_id, e
+                        );
                     }
                 }
             }

@@ -289,7 +289,10 @@ async fn handle_subscriptions(
             if parts.len() == 3 {
                 if let (Ok(lat), Ok(lon)) = (parts[1].parse::<i32>(), parts[2].parse::<i32>()) {
                     if let Err(e) = live_fix_service.unsubscribe_from_area(lat, lon).await {
-                        error!("Failed to cleanup area subscription {}: {}", subscription_key, e);
+                        error!(
+                            "Failed to cleanup area subscription {}: {}",
+                            subscription_key, e
+                        );
                     } else {
                         info!("Cleaned up area subscription: {}", subscription_key);
                     }
@@ -301,8 +304,14 @@ async fn handle_subscriptions(
             }
         } else {
             // Device subscription
-            if let Err(e) = live_fix_service.unsubscribe_from_device(subscription_key).await {
-                error!("Failed to cleanup device subscription {}: {}", subscription_key, e);
+            if let Err(e) = live_fix_service
+                .unsubscribe_from_device(subscription_key)
+                .await
+            {
+                error!(
+                    "Failed to cleanup device subscription {}: {}",
+                    subscription_key, e
+                );
             } else {
                 info!("Cleaned up device subscription: {}", subscription_key);
             }
