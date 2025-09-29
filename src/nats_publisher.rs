@@ -59,12 +59,15 @@ pub struct NatsFixPublisher {
 
 impl NatsFixPublisher {
     /// Create a new NATS publisher for position fixes
-    pub async fn new(
-        nats_url: &str,
-    ) -> Result<Self> {
+    pub async fn new(nats_url: &str) -> Result<Self> {
         info!("Connecting to NATS server at {}", nats_url);
+        let nats_client_name = if std::env::var("SOAR_ENV") == Ok("production".into()) {
+            "soar-run"
+        } else {
+            "soar-run-dev"
+        };
         let nats_client = async_nats::ConnectOptions::new()
-            .name("soar-run")
+            .name(nats_client_name)
             .connect(nats_url)
             .await?;
 

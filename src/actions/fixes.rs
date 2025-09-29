@@ -99,14 +99,18 @@ async fn handle_websocket_read(
                     }
                 }
                 Err(e) => {
-                    error!("Failed to parse subscription message: {}", e);
+                    error!("Failed to parse subscription message [{text}]: {e}");
                 }
             },
             Ok(Message::Close(_)) => {
                 info!("WebSocket connection closed by client");
                 break;
             }
-            Ok(_) => {
+            Ok(msg) => {
+                warn!(
+                    "Received unhandled WebSocket message: {}",
+                    msg.to_text().unwrap_or("<binary>")
+                );
                 // Ignore other message types (binary, ping, pong)
             }
             Err(e) => {

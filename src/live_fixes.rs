@@ -44,8 +44,14 @@ pub struct LiveFixService {
 
 impl LiveFixService {
     pub async fn new(nats_url: &str) -> Result<Self> {
+        // nats client name: soar-web (production) or soar-web-dev (development)
+        let nats_client_name = if std::env::var("SOAR_ENV") == Ok("production".into()) {
+            "soar-web"
+        } else {
+            "soar-web-dev"
+        };
         let nats_client = async_nats::ConnectOptions::new()
-            .name("soar-web")
+            .name(nats_client_name)
             .connect(nats_url)
             .await?;
 
