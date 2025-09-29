@@ -5,12 +5,15 @@ use axum::{
     },
     response::Response,
 };
+use chrono::{Duration, Utc};
 use futures_util::{sink::SinkExt, stream::StreamExt};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tokio::sync::{broadcast, mpsc};
 use tracing::{error, info, warn};
+use uuid::Uuid;
 
+use crate::fixes_repo::FixesRepository;
 use crate::live_fixes::LiveFix;
 use crate::web::AppState;
 
@@ -28,6 +31,157 @@ pub enum SubscriptionMessage {
         latitude: i32,  // Integer latitude
         longitude: i32, // Integer longitude
     },
+}
+
+// Helper function to send recent fixes for a device immediately upon subscription
+async fn send_recent_device_fix(
+    device_id_str: &str,
+    fix_tx: &mpsc::UnboundedSender<LiveFix>,
+    pool: &crate::web::PgPool,
+) {
+    // Parse device ID as UUID
+    let device_uuid = match Uuid::parse_str(device_id_str) {
+        Ok(uuid) => uuid,
+        Err(e) => {
+            error!("Invalid device ID format {}: {}", device_id_str, e);
+            return;
+        }
+    };
+
+    let fixes_repo = FixesRepository::new(pool.clone());
+
+    // Get the most recent fix within last 24 hours
+    match fixes_repo.get_fixes_for_device(device_uuid, Some(1)).await {
+        Ok(fixes) => {
+            if let Some(fix) = fixes.first() {
+                // Check if fix is within last 24 hours
+                let now = Utc::now();
+                let twenty_four_hours_ago = now - Duration::hours(24);
+
+                if fix.timestamp >= twenty_four_hours_ago {
+                    // Convert Fix to LiveFix
+                    let live_fix = LiveFix {
+                        id: fix.id.to_string(),
+                        device_id: device_id_str.to_string(),
+                        timestamp: fix.timestamp.to_rfc3339(),
+                        latitude: fix.latitude,
+                        longitude: fix.longitude,
+                        altitude: fix.altitude_feet.unwrap_or(0) as f64,
+                        track: fix.track_degrees.unwrap_or(0.0) as f64,
+                        ground_speed: fix.ground_speed_knots.unwrap_or(0.0) as f64,
+                        climb_rate: fix.climb_fpm.unwrap_or(0) as f64,
+                    };
+
+                    if let Err(e) = fix_tx.send(live_fix) {
+                        error!(
+                            "Failed to send recent fix for device {}: {}",
+                            device_id_str, e
+                        );
+                    } else {
+                        info!(
+                            "Sent recent fix for device {} immediately upon subscription",
+                            device_id_str
+                        );
+                    }
+                } else {
+                    info!(
+                        "Most recent fix for device {} is older than 24 hours, not sending",
+                        device_id_str
+                    );
+                }
+            } else {
+                info!("No recent fixes found for device {}", device_id_str);
+            }
+        }
+        Err(e) => {
+            error!(
+                "Failed to fetch recent fixes for device {}: {}",
+                device_id_str, e
+            );
+        }
+    }
+}
+
+// Helper function to send recent fixes for devices in an area
+async fn send_recent_area_fixes(
+    latitude: i32,
+    longitude: i32,
+    fix_tx: &mpsc::UnboundedSender<LiveFix>,
+    pool: &crate::web::PgPool,
+) {
+    let fixes_repo = FixesRepository::new(pool.clone());
+
+    // Calculate time range (last 24 hours)
+    let now = Utc::now();
+    let twenty_four_hours_ago = now - Duration::hours(24);
+
+    // For now, let's get recent fixes and filter by area
+    // This is not optimal but will work for the immediate requirement
+    match fixes_repo.get_recent_fixes(1000).await {
+        Ok(fixes) => {
+            let mut sent_count = 0;
+            let mut device_latest_fixes: HashMap<String, &crate::Fix> = HashMap::new();
+
+            // Group fixes by device and keep only the most recent one per device
+            for fix in &fixes {
+                if fix.timestamp < twenty_four_hours_ago {
+                    continue; // Skip fixes older than 24 hours
+                }
+
+                // Check if fix is in the approximate area (integer lat/lon matching)
+                let fix_lat = fix.latitude as i32;
+                let fix_lon = fix.longitude as i32;
+
+                if fix_lat == latitude && fix_lon == longitude {
+                    let device_id_str = fix.device_id.to_string();
+
+                    // Keep only the most recent fix per device
+                    if let Some(existing_fix) = device_latest_fixes.get(&device_id_str) {
+                        if fix.timestamp > existing_fix.timestamp {
+                            device_latest_fixes.insert(device_id_str, fix);
+                        }
+                    } else {
+                        device_latest_fixes.insert(device_id_str, fix);
+                    }
+                }
+            }
+
+            // Send the most recent fix for each device in the area
+            for (device_id_str, fix) in device_latest_fixes {
+                let live_fix = LiveFix {
+                    id: fix.id.to_string(),
+                    device_id: device_id_str.clone(),
+                    timestamp: fix.timestamp.to_rfc3339(),
+                    latitude: fix.latitude,
+                    longitude: fix.longitude,
+                    altitude: fix.altitude_feet.unwrap_or(0) as f64,
+                    track: fix.track_degrees.unwrap_or(0.0) as f64,
+                    ground_speed: fix.ground_speed_knots.unwrap_or(0.0) as f64,
+                    climb_rate: fix.climb_fpm.unwrap_or(0) as f64,
+                };
+
+                if let Err(e) = fix_tx.send(live_fix) {
+                    error!(
+                        "Failed to send recent area fix for device {}: {}",
+                        device_id_str, e
+                    );
+                } else {
+                    sent_count += 1;
+                }
+            }
+
+            info!(
+                "Sent {} recent fixes for area {},{} immediately upon subscription",
+                sent_count, latitude, longitude
+            );
+        }
+        Err(e) => {
+            error!(
+                "Failed to fetch recent fixes for area {},{}: {}",
+                latitude, longitude, e
+            );
+        }
+    }
 }
 
 pub async fn fixes_live_websocket(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
@@ -66,7 +220,13 @@ async fn handle_websocket(socket: WebSocket, state: AppState) {
 
     // Main task to handle subscriptions and NATS messages
     let subscription_task = tokio::spawn(async move {
-        handle_subscriptions(live_fix_service, subscription_rx, fix_tx).await;
+        handle_subscriptions(
+            live_fix_service,
+            subscription_rx,
+            fix_tx,
+            state.pool.clone(),
+        )
+        .await;
     });
 
     // Wait for any task to complete (usually means connection closed)
@@ -145,6 +305,7 @@ async fn handle_subscriptions(
     live_fix_service: crate::live_fixes::LiveFixService,
     mut subscription_rx: mpsc::UnboundedReceiver<SubscriptionMessage>,
     fix_tx: mpsc::UnboundedSender<LiveFix>,
+    pool: crate::web::PgPool,
 ) {
     let mut subscribed_aircraft: Vec<String> = Vec::new();
     let mut receivers: HashMap<String, broadcast::Receiver<LiveFix>> = HashMap::new();
@@ -166,6 +327,9 @@ async fn handle_subscriptions(
                                                     subscribed_aircraft.push(id.clone());
                                                     receivers.insert(id.clone(), receiver);
                                                     info!("Successfully subscribed to device: {}", id);
+
+                                                    // Send recent fix immediately upon subscription
+                                                    send_recent_device_fix(&id, &fix_tx, &pool).await;
                                                 }
                                                 Err(e) => {
                                                     error!("Failed to subscribe to device {}: {}", id, e);
@@ -201,6 +365,9 @@ async fn handle_subscriptions(
                                                     subscribed_aircraft.push(area_key.clone());
                                                     receivers.insert(area_key, receiver);
                                                     info!("Successfully subscribed to area: lat={}, lon={}", latitude, longitude);
+
+                                                    // Send recent fixes for devices in this area immediately upon subscription
+                                                    send_recent_area_fixes(latitude, longitude, &fix_tx, &pool).await;
                                                 }
                                                 Err(e) => {
                                                     error!("Failed to subscribe to area lat={}, lon={}: {}", latitude, longitude, e);
