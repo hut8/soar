@@ -10,6 +10,7 @@
 	import { DeviceRegistry } from '$lib/services/DeviceRegistry';
 	import { FixFeed } from '$lib/services/FixFeed';
 	import { Device } from '$lib/types';
+	import { toaster } from '$lib/toaster';
 	import { debugStatus } from '$lib/stores/watchlist';
 	import type { Fix } from '$lib/types';
 	import type { DeviceRegistryEvent } from '$lib/services/DeviceRegistry';
@@ -870,7 +871,12 @@
 
 	// Area tracker functions
 	function toggleAreaTracker(): void {
-		if (!areaTrackerAvailable) return;
+		if (!areaTrackerAvailable) {
+			toaster.info({
+				title: 'Please zoom in to use the area tracker feature. The current view area is too large.'
+			});
+			return;
+		}
 
 		areaTrackerActive = !areaTrackerActive;
 		console.log('[AREA TRACKER] Area tracker toggled:', areaTrackerActive);
@@ -1061,7 +1067,6 @@
 					? 'Disable Area Tracker'
 					: 'Enable Area Tracker'
 				: 'Area Tracker unavailable (map too zoomed out)'}
-			disabled={!areaTrackerAvailable}
 		>
 			{#if areaTrackerActive}
 				<MapPlus size={20} />

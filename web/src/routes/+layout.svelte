@@ -1,6 +1,7 @@
 <script lang="ts">
 	import '../app.css';
-	import { AppBar, Avatar } from '@skeletonlabs/skeleton-svelte';
+	import { AppBar, Avatar, Toaster } from '@skeletonlabs/skeleton-svelte';
+	import { toaster } from '$lib/toaster';
 	import favicon from '$lib/assets/favicon.svg';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
@@ -295,3 +296,5 @@
 		</footer>
 	{/if}
 </div>
+
+<Toaster {toaster}></Toaster>
