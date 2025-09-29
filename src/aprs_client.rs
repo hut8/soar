@@ -561,22 +561,20 @@ impl AprsClient {
             match &packet.data {
                 AprsData::Position(pos) => {
                     if let Some(unparsed) = &pos.comment.unparsed {
-                        error!("Unparsed position fragment: {unparsed} from message: {message}");
-                        if let Err(e) =
-                            Self::log_unparsed_to_csv(log_path, "position", unparsed, message).await
-                        {
-                            warn!("Failed to write to unparsed log: {}", e);
-                        }
+                        Self::log_unparsed_to_csv(log_path, "position", unparsed, message)
+                            .await
+                            .unwrap_or_else(|e| {
+                                warn!("Failed to write to unparsed log: {}", e);
+                            });
                     }
                 }
                 AprsData::Status(status) => {
                     if let Some(unparsed) = &status.comment.unparsed {
-                        error!("Unparsed status fragment: {unparsed} from message: {message}");
-                        if let Err(e) =
-                            Self::log_unparsed_to_csv(log_path, "status", unparsed, message).await
-                        {
-                            warn!("Failed to write to unparsed log: {}", e);
-                        }
+                        Self::log_unparsed_to_csv(log_path, "status", unparsed, message)
+                            .await
+                            .unwrap_or_else(|e| {
+                                warn!("Failed to write to unparsed log: {}", e);
+                            })
                     }
                 }
                 _ => {}

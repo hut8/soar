@@ -2,7 +2,7 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use diesel_derive_enum::DbEnum;
-use tracing::debug;
+use tracing::{debug, info, instrument};
 use uuid::Uuid;
 
 use crate::fixes::Fix;
@@ -364,6 +364,7 @@ impl FixesRepository {
 
     /// Get devices with their recent fixes in a bounding box for efficient area subscriptions
     /// This replaces the inefficient global fetch + filter approach
+    #[instrument(skip(self), fields(fixes_per_device = fixes_per_device.unwrap_or(5)))]
     pub async fn get_devices_with_fixes_in_bounding_box(
         &self,
         nw_lat: f64,
@@ -373,11 +374,14 @@ impl FixesRepository {
         cutoff_time: DateTime<Utc>,
         fixes_per_device: Option<i64>,
     ) -> Result<Vec<(crate::devices::DeviceModel, Vec<Fix>)>> {
+        info!("Starting bounding box query");
         let pool = self.pool.clone();
         let fixes_per_device = fixes_per_device.unwrap_or(5);
 
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
+
+            info!("Got database connection, executing first query for devices");
 
             // First query: Get devices with fixes in the bounding box
             let devices_sql = r#"
@@ -426,9 +430,14 @@ impl FixesRepository {
                 .bind::<diesel::sql_types::Timestamptz, _>(cutoff_time)
                 .load(&mut conn)?;
 
+            info!("First query returned {} device rows", device_rows.len());
+
             if device_rows.is_empty() {
                 return Ok(Vec::new());
             }
+
+            // Extract device IDs for the second query
+            let device_ids: Vec<uuid::Uuid> = device_rows.iter().map(|row| row.id).collect();
 
             // Convert rows to DeviceModel
             let device_models: Vec<crate::devices::DeviceModel> = device_rows
@@ -448,23 +457,16 @@ impl FixesRepository {
                 })
                 .collect();
 
-            // Second query: Get recent fixes for all devices
+            info!("Executing second query for fixes with {} device IDs", device_ids.len());
+
+            // Second query: Get recent fixes for the devices using the device_id index
+            // This is much faster than repeating the spatial query
             let fixes_sql = r#"
-                WITH bbox AS (
-                    SELECT ST_MakeEnvelope($1, $2, $3, $4, 4326)::geography AS g
-                ),
-                target_devices AS (
-                    SELECT DISTINCT f.device_id
-                    FROM fixes f
-                    CROSS JOIN bbox
-                    WHERE f.received_at >= $5
-                      AND ST_Intersects(f.location, bbox.g)
-                ),
-                ranked AS (
+                WITH ranked AS (
                     SELECT f.*,
                            ROW_NUMBER() OVER (PARTITION BY f.device_id ORDER BY f.received_at DESC) AS rn
                     FROM fixes f
-                    JOIN target_devices t ON t.device_id = f.device_id
+                    WHERE f.device_id = ANY($1)
                 )
                 SELECT id, source, destination, via, raw_packet, timestamp, latitude, longitude,
                        altitude_feet, device_address, address_type, aircraft_type_ogn, flight_number,
@@ -472,7 +474,7 @@ impl FixesRepository {
                        climb_fpm, turn_rate_rot, snr_db, bit_errors_corrected, freq_offset_khz,
                        club_id, flight_id, unparsed_data, device_id, received_at, lag
                 FROM ranked
-                WHERE rn <= $6
+                WHERE rn <= $2
                 ORDER BY device_id, received_at DESC
             "#;
 
@@ -542,13 +544,11 @@ impl FixesRepository {
             }
 
             let fix_rows: Vec<FixRow> = diesel::sql_query(fixes_sql)
-                .bind::<diesel::sql_types::Double, _>(nw_lng)  // min_lon
-                .bind::<diesel::sql_types::Double, _>(se_lat)  // min_lat
-                .bind::<diesel::sql_types::Double, _>(se_lng)  // max_lon
-                .bind::<diesel::sql_types::Double, _>(nw_lat)  // max_lat
-                .bind::<diesel::sql_types::Timestamptz, _>(cutoff_time)
+                .bind::<diesel::sql_types::Array<diesel::sql_types::Uuid>, _>(&device_ids)
                 .bind::<diesel::sql_types::BigInt, _>(fixes_per_device)
                 .load(&mut conn)?;
+
+            info!("Second query returned {} fix rows", fix_rows.len());
 
             // Group fixes by device_id
             let mut fixes_by_device: std::collections::HashMap<uuid::Uuid, Vec<Fix>> =

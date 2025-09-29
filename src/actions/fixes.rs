@@ -11,7 +11,7 @@ use futures_util::{sink::SinkExt, stream::StreamExt};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tokio::sync::{broadcast, mpsc};
-use tracing::{error, info, warn};
+use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
 
 use crate::fixes_repo::FixesRepository;
@@ -218,6 +218,7 @@ async fn send_recent_area_devices_and_fixes(
 
 /// Helper function to enrich devices with aircraft registration and model data
 /// Optimized with batch queries to avoid N+1 query problem
+#[instrument(skip(pool, devices_with_fixes), fields(device_count = devices_with_fixes.len()))]
 async fn enrich_devices_with_aircraft_data(
     devices_with_fixes: Vec<(crate::devices::DeviceModel, Vec<crate::fixes::Fix>)>,
     pool: crate::web::PgPool,
@@ -239,10 +240,15 @@ async fn enrich_devices_with_aircraft_data(
         .collect();
 
     // Step 2: Batch fetch all aircraft registrations
+    info!(
+        "Fetching aircraft registrations for {} devices",
+        device_ids.len()
+    );
     let registrations = aircraft_registrations_repo
         .get_aircraft_registrations_by_device_ids(&device_ids)
         .await
         .unwrap_or_default();
+    info!("Fetched {} aircraft registrations", registrations.len());
 
     // Step 3: Build HashMap for O(1) lookup: device_id -> registration
     // Filter out registrations without device_id
@@ -267,10 +273,12 @@ async fn enrich_devices_with_aircraft_data(
         .collect();
 
     // Step 5: Batch fetch all aircraft models
+    info!("Fetching aircraft models for {} keys", model_keys.len());
     let models = aircraft_model_repo
         .get_aircraft_models_by_keys(&model_keys)
         .await
         .unwrap_or_default();
+    info!("Fetched {} aircraft models", models.len());
 
     // Step 6: Build HashMap for O(1) lookup: (manufacturer, model, series) -> aircraft_model
     let model_map: HashMap<(String, String, String), crate::faa::aircraft_models::AircraftModel> =
@@ -289,6 +297,7 @@ async fn enrich_devices_with_aircraft_data(
             .collect();
 
     // Step 7: Build enriched results
+    info!("Building enriched results");
     let mut enriched = Vec::new();
     for (device_model, device_fixes) in devices_with_fixes {
         let aircraft_registration = registration_map.get(&device_model.id).cloned();
@@ -620,10 +629,16 @@ async fn handle_subscriptions(
     }
 }
 
+#[instrument(skip(state), fields(
+    has_bbox = params.latitude_max.is_some(),
+    has_device = params.device_id.is_some(),
+    has_flight = params.flight_id.is_some()
+))]
 pub async fn search_fixes(
     State(state): State<AppState>,
     Query(params): Query<FixesQueryParams>,
 ) -> impl IntoResponse {
+    info!("Starting search_fixes request");
     let fixes_repo = FixesRepository::new(state.pool.clone());
 
     // Check if bounding box parameters are provided
@@ -697,6 +712,8 @@ pub async fn search_fixes(
                 // Set default cutoff time to 24 hours ago if not provided
                 let cutoff_time = params.after.unwrap_or_else(|| Utc::now() - Duration::hours(24));
 
+                info!("Performing bounding box search with cutoff_time: {}", cutoff_time);
+
                 // Perform bounding box search
                 match fixes_repo
                     .get_devices_with_fixes_in_bounding_box(
@@ -705,12 +722,16 @@ pub async fn search_fixes(
                     .await
                 {
                     Ok(devices_with_fixes) => {
+                        info!("Found {} devices in bounding box", devices_with_fixes.len());
+
                         // Enrich with aircraft registration and model data
                         let enriched = enrich_devices_with_aircraft_data(
                             devices_with_fixes,
                             state.pool.clone(),
                         )
                         .await;
+
+                        info!("Enriched {} devices, returning response", enriched.len());
                         Json(enriched).into_response()
                     }
                     Err(e) => {

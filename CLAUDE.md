@@ -389,3 +389,4 @@ test('device search functionality', async ({ page }) => {
 
 **Remember**: This project maintains high code quality standards. All changes must pass pre-commit hooks and CI/CD pipeline. When in doubt, check existing patterns and follow established conventions.
 - The rust backend for this project is in src/ and the frontend is a Svelte 5 project in web/
+- You should absolutely never use --no-verify

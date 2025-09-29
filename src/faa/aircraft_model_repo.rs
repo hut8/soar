@@ -4,7 +4,7 @@ use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
 use diesel::upsert::excluded;
 use serde::{Deserialize, Serialize};
-use tracing::{info, warn};
+use tracing::{info, instrument, warn};
 
 use crate::faa::aircraft_models::{
     AircraftCategory, AircraftModel, AircraftType, BuilderCertification, EngineType, WeightClass,
@@ -316,6 +316,7 @@ impl AircraftModelRepository {
     }
 
     /// Get aircraft models by multiple composite keys (batch query)
+    #[instrument(skip(self, keys), fields(key_count = keys.len()))]
     pub async fn get_aircraft_models_by_keys(
         &self,
         keys: &[(String, String, String)], // (manufacturer_code, model_code, series_code)
@@ -324,11 +325,15 @@ impl AircraftModelRepository {
             return Ok(Vec::new());
         }
 
+        info!("Fetching aircraft models for {} keys", keys.len());
+
         let pool = self.pool.clone();
         let keys = keys.to_vec();
 
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
+
+            info!("Got database connection, building SQL query");
 
             // Build SQL query with tuple IN clause using OR conditions
             // This is more verbose but works with Diesel's type system
@@ -347,7 +352,10 @@ impl AircraftModelRepository {
                 or_conditions.join(" OR ")
             );
 
+            info!("Executing aircraft models query");
             let records = diesel::sql_query(sql_str).load::<AircraftModelRecord>(&mut conn)?;
+
+            info!("Query returned {} aircraft model records", records.len());
 
             let models: Result<Vec<AircraftModel>> =
                 records.into_iter().map(AircraftModel::try_from).collect();

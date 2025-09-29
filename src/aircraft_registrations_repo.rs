@@ -538,6 +538,7 @@ impl AircraftRegistrationsRepository {
     }
 
     /// Get aircraft registrations for multiple device IDs (batch query)
+    #[tracing::instrument(skip(self, device_ids), fields(device_count = device_ids.len()))]
     pub async fn get_aircraft_registrations_by_device_ids(
         &self,
         device_ids: &[Uuid],
@@ -546,12 +547,17 @@ impl AircraftRegistrationsRepository {
             return Ok(Vec::new());
         }
 
+        tracing::info!(
+            "Querying aircraft registrations for {} devices",
+            device_ids.len()
+        );
         let mut conn = self.get_connection()?;
         let registrations = aircraft_registrations::table
             .filter(aircraft_registrations::device_id.eq_any(device_ids))
             .select(AircraftRegistrationModel::as_select())
             .load::<AircraftRegistrationModel>(&mut conn)?;
 
+        tracing::info!("Found {} aircraft registrations", registrations.len());
         Ok(registrations)
     }
 }
