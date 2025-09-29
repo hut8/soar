@@ -154,95 +154,194 @@
 			Search Aircraft Devices
 		</h3>
 		<div class="space-y-3 rounded-lg border p-3">
-			<!-- Search type selector -->
-			<Segment
-				name="search-type"
-				value={searchType}
-				onValueChange={(event: { value: string | null }) => {
-					if (
-						event.value &&
-						(event.value === 'registration' ||
-							event.value === 'device' ||
-							event.value === 'club')
-					) {
-						searchType = event.value;
-						error = '';
-						clubErrorMessage = '';
-					}
-				}}
-			>
-				<Segment.Item value="registration">
-					<div class="flex flex-row items-center">
-						<Plane size={16} />
-						<span class="ml-1">Registration</span>
-					</div>
-				</Segment.Item>
-				<Segment.Item value="device">
-					<div class="flex flex-row items-center">
-						<Antenna size={16} />
-						<span class="ml-1">Device Address</span>
-					</div>
-				</Segment.Item>
-				<Segment.Item value="club">
-					<div class="flex flex-row items-center">
-						<Building2 size={16} />
-						<span class="ml-1">Club</span>
-					</div>
-				</Segment.Item>
-			</Segment>
+			<!-- Mobile: Vertical layout (segment above inputs) -->
+			<div class="space-y-3 md:hidden">
+				<!-- Search type selector -->
+				<Segment
+					name="search-type"
+					value={searchType}
+					orientation="vertical"
+					onValueChange={(event: { value: string | null }) => {
+						if (
+							event.value &&
+							(event.value === 'registration' || event.value === 'device' || event.value === 'club')
+						) {
+							searchType = event.value;
+							error = '';
+							clubErrorMessage = '';
+						}
+					}}
+				>
+					<Segment.Item value="registration">
+						<div class="flex flex-row items-center">
+							<Plane size={16} />
+							<span class="ml-1">Registration</span>
+						</div>
+					</Segment.Item>
+					<Segment.Item value="device">
+						<div class="flex flex-row items-center">
+							<Antenna size={16} />
+							<span class="ml-1">Device Address</span>
+						</div>
+					</Segment.Item>
+					<Segment.Item value="club">
+						<div class="flex flex-row items-center">
+							<Building2 size={16} />
+							<span class="ml-1">Club</span>
+						</div>
+					</Segment.Item>
+				</Segment>
 
-			{#if searchType === 'registration'}
-				<input
-					class="input"
-					placeholder="Aircraft registration (e.g., N12345)"
-					bind:value={searchQuery}
-					onkeydown={handleKeydown}
-					oninput={() => (error = '')}
-				/>
-			{:else if searchType === 'device'}
-				<div class="grid grid-cols-2 gap-2">
-					<Segment
-						name="address-type"
-						value={deviceAddressType}
-						onValueChange={(event: { value: string | null }) => {
-							if (event.value) {
-								deviceAddressType = event.value;
-								error = '';
-							}
-						}}
-					>
-						<Segment.Item value="I">ICAO</Segment.Item>
-						<Segment.Item value="O">OGN</Segment.Item>
-						<Segment.Item value="F">FLARM</Segment.Item>
-					</Segment>
+				{#if searchType === 'registration'}
 					<input
 						class="input"
-						placeholder="Device address"
+						placeholder="Aircraft registration (e.g., N12345)"
 						bind:value={searchQuery}
 						onkeydown={handleKeydown}
 						oninput={() => (error = '')}
 					/>
-				</div>
-			{:else if searchType === 'club'}
-				<div class="space-y-3">
-					<ClubSelector
-						bind:value={selectedClub}
-						placeholder="Select a club..."
-						onValueChange={handleClubChange}
-					/>
+				{:else if searchType === 'device'}
+					<div class="space-y-3">
+						<Segment
+							name="address-type"
+							value={deviceAddressType}
+							orientation="vertical"
+							onValueChange={(event: { value: string | null }) => {
+								if (event.value) {
+									deviceAddressType = event.value;
+									error = '';
+								}
+							}}
+						>
+							<Segment.Item value="I">ICAO</Segment.Item>
+							<Segment.Item value="O">OGN</Segment.Item>
+							<Segment.Item value="F">FLARM</Segment.Item>
+						</Segment>
+						<input
+							class="input"
+							placeholder="Device address"
+							bind:value={searchQuery}
+							onkeydown={handleKeydown}
+							oninput={() => (error = '')}
+						/>
+					</div>
+				{:else if searchType === 'club'}
+					<div class="space-y-3">
+						<ClubSelector
+							bind:value={selectedClub}
+							placeholder="Select a club..."
+							onValueChange={handleClubChange}
+						/>
 
-					<!-- Club error message display -->
-					{#if clubErrorMessage}
-						<div class="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-600">
-							{clubErrorMessage}
-						</div>
-					{/if}
+						<!-- Club error message display -->
+						{#if clubErrorMessage}
+							<div class="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-600">
+								{clubErrorMessage}
+							</div>
+						{/if}
+					</div>
+				{/if}
+			</div>
+
+			<!-- Desktop: Horizontal layout (segment to the left of inputs) -->
+			<div class="hidden md:block">
+				<div class="grid grid-cols-[200px_1fr] items-start gap-4">
+					<!-- Search type selector -->
+					<Segment
+						name="search-type-desktop"
+						value={searchType}
+						orientation="vertical"
+						onValueChange={(event: { value: string | null }) => {
+							if (
+								event.value &&
+								(event.value === 'registration' ||
+									event.value === 'device' ||
+									event.value === 'club')
+							) {
+								searchType = event.value;
+								error = '';
+								clubErrorMessage = '';
+							}
+						}}
+					>
+						<Segment.Item value="registration">
+							<div class="flex flex-row items-center">
+								<Plane size={16} />
+								<span class="ml-1">Registration</span>
+							</div>
+						</Segment.Item>
+						<Segment.Item value="device">
+							<div class="flex flex-row items-center">
+								<Antenna size={16} />
+								<span class="ml-1">Device Address</span>
+							</div>
+						</Segment.Item>
+						<Segment.Item value="club">
+							<div class="flex flex-row items-center">
+								<Building2 size={16} />
+								<span class="ml-1">Club</span>
+							</div>
+						</Segment.Item>
+					</Segment>
+
+					<!-- Input area -->
+					<div>
+						{#if searchType === 'registration'}
+							<input
+								class="input"
+								placeholder="Aircraft registration (e.g., N12345)"
+								bind:value={searchQuery}
+								onkeydown={handleKeydown}
+								oninput={() => (error = '')}
+							/>
+						{:else if searchType === 'device'}
+							<div class="space-y-3">
+								<Segment
+									name="address-type-desktop"
+									value={deviceAddressType}
+									orientation="vertical"
+									onValueChange={(event: { value: string | null }) => {
+										if (event.value) {
+											deviceAddressType = event.value;
+											error = '';
+										}
+									}}
+								>
+									<Segment.Item value="I">ICAO</Segment.Item>
+									<Segment.Item value="O">OGN</Segment.Item>
+									<Segment.Item value="F">FLARM</Segment.Item>
+								</Segment>
+								<input
+									class="input"
+									placeholder="Device address"
+									bind:value={searchQuery}
+									onkeydown={handleKeydown}
+									oninput={() => (error = '')}
+								/>
+							</div>
+						{:else if searchType === 'club'}
+							<div class="space-y-3">
+								<ClubSelector
+									bind:value={selectedClub}
+									placeholder="Select a club..."
+									onValueChange={handleClubChange}
+								/>
+
+								<!-- Club error message display -->
+								{#if clubErrorMessage}
+									<div class="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-600">
+										{clubErrorMessage}
+									</div>
+								{/if}
+							</div>
+						{/if}
+					</div>
 				</div>
-			{/if}
+			</div>
 
 			{#if searchType !== 'club'}
 				<button
-					class="btn w-full variant-filled-primary"
+					class="btn w-full preset-filled-primary-500"
 					onclick={searchDevices}
 					disabled={loading}
 				>
@@ -305,7 +404,7 @@
 								<td class="font-semibold">{device.registration}</td>
 								<td>{device.aircraft_model}</td>
 								<td>
-									<span class="badge variant-soft">
+									<span class="variant-soft badge">
 										{device.device_type}
 									</span>
 								</td>

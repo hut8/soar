@@ -11,8 +11,6 @@
 		Radar,
 		Users,
 		Plane,
-		UserPlus,
-		UserCheck,
 		Radio,
 		Wifi,
 		WifiOff,
@@ -21,7 +19,8 @@
 		Menu,
 		X,
 		LogIn,
-		UserPlus as SignUp
+		UserPlus as SignUp,
+		User
 	} from '@lucide/svelte';
 
 	const base = resolve('/');
@@ -71,7 +70,7 @@
 </svelte:head>
 
 <div class="flex h-full min-h-screen flex-col">
-	<AppBar classes="preset-glass-neutral">
+	<AppBar classes="preset-glass-neutral relative z-[70]">
 		{#snippet lead()}
 			<a href={base} class="flex items-center space-x-2">
 				<div class="flex items-center gap-3 text-xl font-bold text-primary-500">
@@ -122,7 +121,7 @@
 										href={profilePath}
 										class="btn w-full justify-start preset-filled-primary-500 btn-sm"
 									>
-										👤 Profile
+										<User size={16} /> Profile
 									</a>
 									<button
 										class="btn w-full justify-start preset-filled-primary-500 btn-sm"
@@ -137,7 +136,9 @@
 				{:else}
 					<div class="flex space-x-2">
 						<a href={loginPath} class="btn preset-filled-primary-500 btn-sm"><LogIn /> Login</a>
-						<a href={registerPath} class="btn preset-filled-primary-500 btn-sm"><SignUp /> Sign Up</a>
+						<a href={registerPath} class="btn preset-filled-primary-500 btn-sm"
+							><SignUp /> Sign Up</a
+						>
 					</div>
 				{/if}
 			</div>
@@ -145,8 +146,11 @@
 			<!-- Mobile Hamburger Menu -->
 			<div class="md:hidden">
 				<button
-					class="mobile-menu-button variant-ghost-surface btn btn-sm p-2"
-					onclick={() => (showMobileMenu = !showMobileMenu)}
+					class="mobile-menu-button variant-ghost-surface btn p-2 btn-sm"
+					onclick={(e) => {
+						e.stopPropagation();
+						showMobileMenu = !showMobileMenu;
+					}}
 				>
 					{#if showMobileMenu}
 						<X size={20} />
@@ -193,23 +197,37 @@
 
 	<!-- Mobile Menu Overlay -->
 	{#if showMobileMenu}
-		<div class="mobile-menu fixed inset-x-0 top-0 z-50 bg-surface-50-900-token pt-16 shadow-lg md:hidden">
-			<nav class="flex flex-col space-y-2 p-4">
-				<a href={clubsPath} class="btn preset-filled-primary-500 justify-start" onclick={() => (showMobileMenu = false)}>
-					<Users /> Clubs
+		<div
+			class="mobile-menu bg-surface-50-900-token border-surface-200-700-token bg-opacity-95 dark:bg-opacity-95 fixed inset-x-0 top-0 z-[60] min-h-screen border-b pt-16 shadow-lg backdrop-blur-sm md:hidden"
+		>
+			<nav class="flex flex-col space-y-4 p-6">
+				<a
+					href={clubsPath}
+					class="btn w-full justify-start preset-filled-primary-500"
+					onclick={() => (showMobileMenu = false)}
+				>
+					<Users size={16} /> Clubs
 				</a>
-				<a href={operationsPath} class="btn preset-filled-primary-500 justify-start" onclick={() => (showMobileMenu = false)}>
-					<Radar /> Operations
+				<a
+					href={operationsPath}
+					class="btn w-full justify-start preset-filled-primary-500"
+					onclick={() => (showMobileMenu = false)}
+				>
+					<Radar size={16} /> Operations
 				</a>
-				<a href={devicesPath} class="btn preset-filled-primary-500 justify-start" onclick={() => (showMobileMenu = false)}>
-					<Radio /> Devices
+				<a
+					href={devicesPath}
+					class="btn w-full justify-start preset-filled-primary-500"
+					onclick={() => (showMobileMenu = false)}
+				>
+					<Radio size={16} /> Devices
 				</a>
 
-				<hr class="!my-4" />
+				<hr class="!my-6" />
 
 				{#if $auth.isAuthenticated && $auth.user}
-					<div class="space-y-2">
-						<div class="flex items-center space-x-3 rounded p-3 bg-surface-100-800-token">
+					<div class="space-y-4">
+						<div class="bg-surface-100-800-token flex items-center space-x-3 rounded p-3">
 							<Avatar
 								initials={[0, 1]}
 								background="bg-primary-500"
@@ -222,13 +240,13 @@
 						</div>
 						<a
 							href={profilePath}
-							class="btn preset-filled-primary-500 justify-start w-full"
+							class="btn w-full justify-start preset-filled-primary-500"
 							onclick={() => (showMobileMenu = false)}
 						>
-							👤 Profile
+							<User size={16} /> Profile
 						</a>
 						<button
-							class="btn preset-filled-primary-500 justify-start w-full"
+							class="btn w-full justify-start preset-filled-primary-500"
 							onclick={() => {
 								handleLogout();
 								showMobileMenu = false;
@@ -238,12 +256,20 @@
 						</button>
 					</div>
 				{:else}
-					<div class="space-y-2">
-						<a href={loginPath} class="btn preset-filled-primary-500 justify-start w-full" onclick={() => (showMobileMenu = false)}>
-							<LogIn /> Login
+					<div class="space-y-4">
+						<a
+							href={loginPath}
+							class="btn w-full justify-start preset-filled-primary-500"
+							onclick={() => (showMobileMenu = false)}
+						>
+							<LogIn size={16} /> Login
 						</a>
-						<a href={registerPath} class="btn preset-filled-primary-500 justify-start w-full" onclick={() => (showMobileMenu = false)}>
-							<SignUp /> Sign Up
+						<a
+							href={registerPath}
+							class="btn w-full justify-start preset-filled-primary-500"
+							onclick={() => (showMobileMenu = false)}
+						>
+							<SignUp size={16} /> Sign Up
 						</a>
 					</div>
 				{/if}

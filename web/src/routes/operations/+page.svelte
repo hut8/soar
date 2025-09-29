@@ -1,8 +1,7 @@
 <script lang="ts">
 	/// <reference types="@types/google.maps" />
 	import { onMount } from 'svelte';
-	import { SvelteMap } from 'svelte/reactivity';
-	import { browser } from '$app/environment';
+	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { serverCall } from '$lib/api/server';
 	import { Loader } from '@googlemaps/js-api-loader';
 	import { Settings, ListChecks, MapPlus, MapMinus } from '@lucide/svelte';
@@ -129,12 +128,11 @@
 
 	// Subscribe to device registry and update aircraft markers
 	let activeDevices: Device[] = $state([]);
-	let connectionStatus = $state({ connected: false, reconnecting: false });
 
 	// Area tracker state
 	let areaTrackerActive = $state(false);
 	let areaTrackerAvailable = $state(true); // Whether area tracker can be enabled (based on map area)
-	let currentAreaSubscriptions = $state<Set<string>>(new Set()); // Track subscribed areas
+	let currentAreaSubscriptions = new SvelteSet<string>(); // Track subscribed areas
 
 	$effect(() => {
 		const unsubscribeRegistry = deviceRegistry.subscribe((event: DeviceRegistryEvent) => {
@@ -150,13 +148,7 @@
 		});
 
 		const unsubscribeFeed = fixFeed.subscribe((event: FixFeedEvent) => {
-			if (event.type === 'connection_opened') {
-				connectionStatus = { connected: true, reconnecting: false };
-			} else if (event.type === 'connection_closed') {
-				connectionStatus = { connected: false, reconnecting: false };
-			} else if (event.type === 'reconnecting') {
-				connectionStatus = { connected: false, reconnecting: true };
-			} else if (event.type === 'fix_received') {
+			if (event.type === 'fix_received') {
 				console.log('Received fix:', event.fix);
 				// The fix will be automatically added to the device by FixFeed.addFixToDevice()
 				// This will trigger a device registry event which will update our activeDevices
@@ -851,7 +843,9 @@
 		const wasAvailable = areaTrackerAvailable;
 		areaTrackerAvailable = area <= 100000; // 100,000 square miles limit
 
-		console.log(`[AREA TRACKER] Map area: ${area.toFixed(2)} sq miles, Available: ${areaTrackerAvailable}`);
+		console.log(
+			`[AREA TRACKER] Map area: ${area.toFixed(2)} sq miles, Available: ${areaTrackerAvailable}`
+		);
 
 		// If area tracker becomes unavailable while active, deactivate it
 		if (!areaTrackerAvailable && areaTrackerActive) {
@@ -861,11 +855,13 @@
 
 		// If availability changed, log it
 		if (wasAvailable !== areaTrackerAvailable) {
-			console.log(`[AREA TRACKER] Availability changed: ${wasAvailable} -> ${areaTrackerAvailable}`);
+			console.log(
+				`[AREA TRACKER] Availability changed: ${wasAvailable} -> ${areaTrackerAvailable}`
+			);
 		}
 	}
 
-	function getVisibleLatLonSquares(): Array<{lat: number, lon: number}> {
+	function getVisibleLatLonSquares(): Array<{ lat: number; lon: number }> {
 		if (!map) return [];
 
 		const bounds = map.getBounds();
@@ -880,7 +876,7 @@
 		const lonMin = Math.floor(sw.lng());
 		const lonMax = Math.floor(ne.lng());
 
-		const squares: Array<{lat: number, lon: number}> = [];
+		const squares: Array<{ lat: number; lon: number }> = [];
 
 		// Include all squares that intersect with the visible area
 		for (let lat = latMin; lat <= latMax + 1; lat++) {
@@ -889,7 +885,9 @@
 			}
 		}
 
-		console.log(`[AREA TRACKER] Visible squares: lat ${latMin}-${latMax+1}, lon ${lonMin}-${lonMax+1} (${squares.length} total)`);
+		console.log(
+			`[AREA TRACKER] Visible squares: lat ${latMin}-${latMax + 1}, lon ${lonMin}-${lonMax + 1} (${squares.length} total)`
+		);
 		return squares;
 	}
 
@@ -897,38 +895,38 @@
 		if (!areaTrackerActive || !areaTrackerAvailable) return;
 
 		const visibleSquares = getVisibleLatLonSquares();
-		const newSubscriptions = new Set<string>();
+		const newSubscriptions = new SvelteSet<string>();
 
 		// Create subscription keys for visible squares
-		visibleSquares.forEach(square => {
+		visibleSquares.forEach((square) => {
 			const key = `area.${square.lat}.${square.lon}`;
 			newSubscriptions.add(key);
 		});
 
 		// Find squares to unsubscribe from (no longer visible)
-		const toUnsubscribe = new Set<string>();
-		currentAreaSubscriptions.forEach(key => {
+		const toUnsubscribe = new SvelteSet<string>();
+		currentAreaSubscriptions.forEach((key) => {
 			if (!newSubscriptions.has(key)) {
 				toUnsubscribe.add(key);
 			}
 		});
 
 		// Find squares to subscribe to (newly visible)
-		const toSubscribe = new Set<string>();
-		newSubscriptions.forEach(key => {
+		const toSubscribe = new SvelteSet<string>();
+		newSubscriptions.forEach((key) => {
 			if (!currentAreaSubscriptions.has(key)) {
 				toSubscribe.add(key);
 			}
 		});
 
 		// Unsubscribe from areas no longer visible
-		toUnsubscribe.forEach(key => {
+		toUnsubscribe.forEach((key) => {
 			const [, lat, lon] = key.split('.');
 			unsubscribeFromArea(parseInt(lat), parseInt(lon));
 		});
 
 		// Subscribe to newly visible areas
-		toSubscribe.forEach(key => {
+		toSubscribe.forEach((key) => {
 			const [, lat, lon] = key.split('.');
 			subscribeToArea(parseInt(lat), parseInt(lon));
 		});
@@ -936,11 +934,13 @@
 		// Update current subscriptions
 		currentAreaSubscriptions = newSubscriptions;
 
-		console.log(`[AREA TRACKER] Updated subscriptions: ${toSubscribe.size} new, ${toUnsubscribe.size} removed, ${currentAreaSubscriptions.size} total`);
+		console.log(
+			`[AREA TRACKER] Updated subscriptions: ${toSubscribe.size} new, ${toUnsubscribe.size} removed, ${currentAreaSubscriptions.size} total`
+		);
 	}
 
 	function clearAreaSubscriptions(): void {
-		currentAreaSubscriptions.forEach(key => {
+		currentAreaSubscriptions.forEach((key) => {
 			const [, lat, lon] = key.split('.');
 			unsubscribeFromArea(parseInt(lat), parseInt(lon));
 		});
@@ -980,7 +980,7 @@
 	<div bind:this={mapContainer} class="h-full w-full"></div>
 
 	<!-- Control Buttons -->
-	<div class="absolute left-4 top-4 z-10 flex gap-2">
+	<div class="absolute top-4 left-4 z-10 flex gap-2">
 		<!-- Location Button -->
 		<button
 			bind:this={userLocationButton}
@@ -1010,10 +1010,11 @@
 			class:area-tracker-active={areaTrackerActive}
 			class:area-tracker-unavailable={!areaTrackerAvailable}
 			onclick={toggleAreaTracker}
-			title={areaTrackerAvailable ?
-				(areaTrackerActive ? "Disable Area Tracker" : "Enable Area Tracker") :
-				"Area Tracker unavailable (map too zoomed out)"
-			}
+			title={areaTrackerAvailable
+				? areaTrackerActive
+					? 'Disable Area Tracker'
+					: 'Enable Area Tracker'
+				: 'Area Tracker unavailable (map too zoomed out)'}
 			disabled={!areaTrackerAvailable}
 		>
 			{#if areaTrackerActive}
@@ -1031,7 +1032,7 @@
 
 	<!-- Compass Rose -->
 	{#if isCompassActive && currentSettings.showCompassRose}
-		<div class="compass-container absolute left-1/2 top-8 z-10 -translate-x-1/2 transform">
+		<div class="compass-container absolute top-8 left-1/2 z-10 -translate-x-1/2 transform">
 			<div class="compass-rose" style="transform: rotate({compassHeading}deg)">
 				<svg width="80" height="80" viewBox="0 0 80 80">
 					<!-- Outer circle -->
@@ -1144,7 +1145,7 @@
 				</svg>
 			</div>
 			<div
-				class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-[24px] font-bold text-gray-700"
+				class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[24px] font-bold text-gray-700"
 			>
 				{displayHeading}°
 			</div>

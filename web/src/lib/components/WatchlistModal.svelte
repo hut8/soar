@@ -92,7 +92,7 @@
 		// Only add to watchlist if device was found
 		if (device && device.id) {
 			// Check for duplicates
-			const existingEntry = $watchlist.entries.find(entry => entry.deviceId === device.id);
+			const existingEntry = $watchlist.entries.find((entry) => entry.deviceId === device.id);
 			if (existingEntry) {
 				errorMessage = 'This aircraft is already in your watchlist';
 				return;
@@ -152,7 +152,7 @@
 	// Add individual device to watchlist
 	function addDeviceToWatchlist(device: Device) {
 		// Check for duplicates
-		const existingEntry = $watchlist.entries.find(entry => entry.deviceId === device.id);
+		const existingEntry = $watchlist.entries.find((entry) => entry.deviceId === device.id);
 		if (existingEntry) {
 			return; // Already in watchlist
 		}
@@ -165,14 +165,14 @@
 	function addAllClubDevices() {
 		if (!clubDevices.length) return;
 
-		clubDevices.forEach(device => {
+		clubDevices.forEach((device) => {
 			addDeviceToWatchlist(device);
 		});
 	}
 
 	// Check if device is already in watchlist
 	function isDeviceInWatchlist(deviceId: string): boolean {
-		return $watchlist.entries.some(entry => entry.deviceId === deviceId);
+		return $watchlist.entries.some((entry) => entry.deviceId === deviceId);
 	}
 
 	// Handle club selection change
@@ -196,22 +196,24 @@
 
 	// Get devices from registry for watchlist entries
 	const deviceRegistry = $derived(DeviceRegistry.getInstance());
-	const entriesWithDevices = $derived($watchlist.entries.map(entry => {
-		const device = deviceRegistry.getDevice(entry.deviceId);
-		return {
-			...entry,
-			device: device || {
-				id: entry.deviceId,
-				registration: 'Unknown',
-				aircraft_model: 'Unknown',
-				address_type: 'Unknown',
-				address: 'Unknown',
-				cn: '',
-				tracked: false,
-				identified: false
-			}
-		};
-	}));
+	const entriesWithDevices = $derived(
+		$watchlist.entries.map((entry) => {
+			const device = deviceRegistry.getDevice(entry.deviceId);
+			return {
+				...entry,
+				device: device || {
+					id: entry.deviceId,
+					registration: 'Unknown',
+					aircraft_model: 'Unknown',
+					address_type: 'Unknown',
+					address: 'Unknown',
+					cn: '',
+					tracked: false,
+					identified: false
+				}
+			};
+		})
+	);
 </script>
 
 <!-- Watchlist Modal -->
@@ -339,17 +341,21 @@
 										<div class="max-h-48 overflow-y-auto rounded border bg-gray-50 p-2">
 											<div class="grid gap-2">
 												{#each clubDevices as device (device.id)}
-													<div class="flex items-center justify-between rounded bg-white p-2 shadow-sm">
-														<div class="flex-1 min-w-0">
-															<div class="text-sm font-medium truncate">
+													<div
+														class="flex items-center justify-between rounded bg-white p-2 shadow-sm"
+													>
+														<div class="min-w-0 flex-1">
+															<div class="truncate text-sm font-medium">
 																{device.registration || 'Unknown Registration'}
 															</div>
-															<div class="text-xs text-gray-500 truncate">
+															<div class="truncate text-xs text-gray-500">
 																{device.aircraft_model || 'Unknown Model'}
 															</div>
 														</div>
 														{#if isDeviceInWatchlist(device.id)}
-															<span class="rounded bg-green-100 px-2 py-1 text-xs font-medium text-green-800">
+															<span
+																class="rounded bg-green-100 px-2 py-1 text-xs font-medium text-green-800"
+															>
 																Watched
 															</span>
 														{:else}
@@ -367,12 +373,14 @@
 										</div>
 									</div>
 								{:else if clubSearchInProgress}
-									<div class="text-center text-sm text-gray-500 py-4">
-										<div class="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600 mx-auto mb-2"></div>
+									<div class="py-4 text-center text-sm text-gray-500">
+										<div
+											class="mx-auto mb-2 h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"
+										></div>
 										Loading club aircraft...
 									</div>
 								{:else if selectedClub.length > 0}
-									<div class="text-center text-sm text-gray-500 py-4">
+									<div class="py-4 text-center text-sm text-gray-500">
 										No aircraft found for this club.
 									</div>
 								{/if}

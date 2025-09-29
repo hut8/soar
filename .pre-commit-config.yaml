@@ -9,8 +9,15 @@ repos:
         files: ^web/(package\.json|package-lock\.json)$
         pass_filenames: false
 
+      - id: web-format
+        name: Auto-fix web formatting (Prettier)
+        entry: bash -c 'cd web && npm run format'
+        language: system
+        files: ^web/.*\.(js|ts|svelte)$
+        pass_filenames: false
+
       - id: web-lint
-        name: Run web linter (ESLint + Prettier)
+        name: Run web linter (ESLint + Prettier check)
         entry: bash -c 'cd web && npm run lint'
         language: system
         files: ^web/.*\.(js|ts|svelte)$
@@ -41,8 +48,8 @@ repos:
   - repo: local
     hooks:
       - id: rust-fmt
-        name: Check Rust formatting
-        entry: cargo fmt --check
+        name: Auto-fix Rust formatting
+        entry: cargo fmt
         language: system
         files: \.rs$
         pass_filenames: false
@@ -85,7 +92,7 @@ repos:
         pass_filenames: false
 
   # General file checks
-  - repo: pre-commit/pre-commit-hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.4.0
     hooks:
       - id: trailing-whitespace
@@ -95,7 +102,7 @@ repos:
       - id: check-json
       - id: check-merge-conflict
       - id: check-added-large-files
-        args: ['--maxkb=1000']
+        args: ["--maxkb=1000"]
 
 # Performance optimizations
 default_stages: [pre-commit]
@@ -108,8 +115,8 @@ ci:
 
     for more information, see https://pre-commit.ci
   autofix_prs: true
-  autoupdate_branch: ''
-  autoupdate_commit_msg: '[pre-commit.ci] pre-commit autoupdate'
+  autoupdate_branch: ""
+  autoupdate_commit_msg: "[pre-commit.ci] pre-commit autoupdate"
   autoupdate_schedule: weekly
   skip: []
   submodules: false

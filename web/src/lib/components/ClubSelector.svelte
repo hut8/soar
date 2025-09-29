@@ -17,7 +17,6 @@
 	// Internal state
 	let clubs: ClubWithSoaring[] = [];
 	let comboboxData: ComboboxData[] = [];
-	let loading = true;
 	let error = '';
 
 	// Convert clubs to combobox data format
@@ -32,7 +31,6 @@
 	// Load clubs from API
 	async function loadClubs(query?: string) {
 		try {
-			loading = true;
 			error = '';
 
 			let endpoint = '/clubs?limit=100';
@@ -48,7 +46,7 @@
 			clubs = [];
 			comboboxData = [];
 		} finally {
-			loading = false;
+			// Loading complete
 		}
 	}
 
@@ -121,10 +119,6 @@
 			</div>
 		{/snippet}
 	</Combobox>
-
-	{#if loading}
-		<div class="text-surface-600-300-token mt-1 text-xs">Loading clubs...</div>
-	{/if}
 </div>
 
 <style>

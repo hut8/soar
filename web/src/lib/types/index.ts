@@ -210,7 +210,9 @@ export class Device {
 		try {
 			console.log('[DEVICE] Fetching aircraft registration for device:', this.id);
 			const { serverCall } = await import('$lib/api/server');
-			const aircraft = await serverCall<AircraftRegistration>(`/devices/${this.id}/aircraft-registration`);
+			const aircraft = await serverCall<AircraftRegistration>(
+				`/devices/${this.id}/aircraft-registration`
+			);
 
 			if (aircraft) {
 				console.log('[DEVICE] Fetched aircraft registration:', aircraft.n_number);
@@ -265,7 +267,7 @@ export class Device {
 	}
 
 	// Validate device data structure
-	static isValidDeviceData(data: any): data is {
+	static isValidDeviceData(data: unknown): data is {
 		id?: string;
 		address_type: string;
 		address: string;
@@ -276,17 +278,20 @@ export class Device {
 		identified: boolean;
 		aircraft?: AircraftRegistration | null;
 	} {
+		if (!data || typeof data !== 'object') {
+			return false;
+		}
+
+		const obj = data as Record<string, unknown>;
 		return (
-			data &&
-			typeof data === 'object' &&
-			typeof data.address_type === 'string' &&
-			typeof data.address === 'string' &&
-			typeof data.aircraft_model === 'string' &&
-			typeof data.registration === 'string' &&
-			typeof data.cn === 'string' &&
-			typeof data.tracked === 'boolean' &&
-			typeof data.identified === 'boolean' &&
-			(data.aircraft === null || data.aircraft === undefined || typeof data.aircraft === 'object')
+			typeof obj.address_type === 'string' &&
+			typeof obj.address === 'string' &&
+			typeof obj.aircraft_model === 'string' &&
+			typeof obj.registration === 'string' &&
+			typeof obj.cn === 'string' &&
+			typeof obj.tracked === 'boolean' &&
+			typeof obj.identified === 'boolean' &&
+			(obj.aircraft === null || obj.aircraft === undefined || typeof obj.aircraft === 'object')
 		);
 	}
 

@@ -165,7 +165,11 @@ export class DeviceRegistry {
 
 		let device = this.getDevice(deviceId);
 		if (!device) {
-			console.log('[REGISTRY] Device not found in cache for fix:', deviceId, 'attempting to fetch from API');
+			console.log(
+				'[REGISTRY] Device not found in cache for fix:',
+				deviceId,
+				'attempting to fetch from API'
+			);
 
 			// Try to fetch full device info from API first
 			try {

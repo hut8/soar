@@ -55,7 +55,7 @@ function createWatchlistStore() {
 		add: (deviceId: string) => {
 			update((state) => {
 				// Check if device is already in watchlist
-				const existingEntry = state.entries.find(entry => entry.deviceId === deviceId);
+				const existingEntry = state.entries.find((entry) => entry.deviceId === deviceId);
 				if (existingEntry) {
 					console.log('Device already in watchlist:', deviceId);
 					return state;
@@ -279,11 +279,7 @@ function connectWebSocket() {
 					unsubscribe(); // Immediately unsubscribe to avoid creating permanent subscription
 
 					currentState.entries.forEach((entry) => {
-						if (
-							entry.active &&
-							entry.deviceId &&
-							!currentlySubscribedDevices.has(entry.deviceId)
-						) {
+						if (entry.active && entry.deviceId && !currentlySubscribedDevices.has(entry.deviceId)) {
 							console.log('Subscribing to device after connection:', entry.deviceId);
 							websocket?.send(
 								JSON.stringify({

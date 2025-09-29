@@ -16,13 +16,13 @@ export type FixFeedSubscriber = (event: FixFeedEvent) => void;
 
 export interface DeviceSubscriptionMessage {
 	action: string; // "subscribe" or "unsubscribe"
-	type: "device";
+	type: 'device';
 	id: string;
 }
 
 export interface AreaSubscriptionMessage {
 	action: string; // "subscribe" or "unsubscribe"
-	type: "area";
+	type: 'area';
 	latitude: number;
 	longitude: number;
 }
@@ -138,7 +138,7 @@ export class FixFeed {
 					};
 
 					// Add fix to device registry
-					this.deviceRegistry.addFixToDevice(fix).catch(error => {
+					this.deviceRegistry.addFixToDevice(fix).catch((error) => {
 						console.warn('Failed to add fix to device registry:', error);
 					});
 
@@ -275,7 +275,7 @@ export class FixFeed {
 		if (this.websocket?.readyState === WebSocket.OPEN) {
 			const message: DeviceSubscriptionMessage = {
 				action,
-				type: "device",
+				type: 'device',
 				id: deviceId
 			};
 			this.websocket.send(JSON.stringify(message));
