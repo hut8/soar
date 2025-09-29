@@ -21,6 +21,11 @@ SOAR is a comprehensive aircraft tracking and club management system built with:
 - **AVOID duplicate code** - Check for existing implementations before writing new code
 - Pre-commit hooks run: `cargo fmt`, `cargo clippy`, `cargo test`, `npm lint`, `npm check`, `npm test`
 
+### COMMIT AND DATABASE RULES
+- **NEVER add Co-Authored-By lines** - Do not include Claude Code attribution in commits
+- **AVOID raw SQL in Diesel** - Only use raw SQL if absolutely necessary, and ask first before using it
+- Always prefer Diesel's query builder and type-safe methods over raw SQL
+
 ### Frontend Development Standards
 
 #### Svelte 5 Syntax (REQUIRED)
