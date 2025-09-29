@@ -28,9 +28,29 @@ pub struct LiveFix {
     pub climb_rate: f64,
 }
 
+// Enhanced WebSocket message system with typed messages
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum WebSocketMessage {
+    #[serde(rename = "fix")]
+    Fix(LiveFix),
+
+    #[serde(rename = "device")]
+    Device(Box<DeviceWithFixes>),
+}
+
+// Complete device information with recent fixes for initial area subscription
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeviceWithFixes {
+    pub device: crate::devices::DeviceModel,
+    pub aircraft_registration: Option<crate::aircraft_registrations::AircraftRegistrationModel>,
+    pub aircraft_model: Option<crate::faa::aircraft_models::AircraftModel>,
+    pub recent_fixes: Vec<crate::fixes::Fix>,
+}
+
 // Subscription management structure (used for both device and area subscriptions)
 struct Subscription {
-    broadcaster: broadcast::Sender<LiveFix>,
+    broadcaster: broadcast::Sender<WebSocketMessage>,
     subscriber_count: usize,
     task_handle: tokio::task::JoinHandle<()>,
 }
@@ -65,7 +85,7 @@ impl LiveFixService {
     pub async fn subscribe_to_device(
         &self,
         device_id: &str,
-    ) -> Result<broadcast::Receiver<LiveFix>> {
+    ) -> Result<broadcast::Receiver<WebSocketMessage>> {
         let mut subscriptions = self.subscriptions.lock().await;
 
         // If we already have a subscription for this device, just create a new receiver
@@ -114,7 +134,7 @@ impl LiveFixService {
         &self,
         latitude: i32,
         longitude: i32,
-    ) -> Result<broadcast::Receiver<LiveFix>> {
+    ) -> Result<broadcast::Receiver<WebSocketMessage>> {
         let area_key = format!("area.{}.{}", latitude, longitude);
         let mut subscriptions = self.subscriptions.lock().await;
 
@@ -163,7 +183,7 @@ impl LiveFixService {
     async fn handle_device_messages(
         mut subscriber: Subscriber,
         device_id: String,
-        broadcaster: broadcast::Sender<LiveFix>,
+        broadcaster: broadcast::Sender<WebSocketMessage>,
     ) {
         info!("Started message handler for device: {}", device_id);
         let mut consecutive_no_receivers = 0;
@@ -172,7 +192,8 @@ impl LiveFixService {
         while let Some(msg) = subscriber.next().await {
             match Self::process_fix_message(msg, &device_id).await {
                 Ok(live_fix) => {
-                    match broadcaster.send(live_fix) {
+                    let websocket_message = WebSocketMessage::Fix(live_fix);
+                    match broadcaster.send(websocket_message) {
                         Ok(receiver_count) => {
                             consecutive_no_receivers = 0; // Reset counter on successful send
                             info!(
@@ -214,7 +235,7 @@ impl LiveFixService {
     async fn handle_area_messages(
         mut subscriber: Subscriber,
         area_key: String,
-        broadcaster: broadcast::Sender<LiveFix>,
+        broadcaster: broadcast::Sender<WebSocketMessage>,
     ) {
         info!("Started message handler for area: {}", area_key);
         let mut consecutive_no_receivers = 0;
@@ -222,31 +243,34 @@ impl LiveFixService {
 
         while let Some(msg) = subscriber.next().await {
             match Self::process_area_fix_message(msg, &area_key).await {
-                Ok(live_fix) => match broadcaster.send(live_fix) {
-                    Ok(receiver_count) => {
-                        consecutive_no_receivers = 0; // Reset counter on successful send
-                        info!(
-                            "Broadcasted live fix for area {} to {} receivers",
-                            area_key, receiver_count
-                        );
-                    }
-                    Err(broadcast::error::SendError(_)) => {
-                        consecutive_no_receivers += 1;
-                        info!(
-                            "No active receivers for area {}, fix dropped ({}/{} consecutive failures)",
-                            area_key, consecutive_no_receivers, MAX_NO_RECEIVER_ATTEMPTS
-                        );
-
-                        // Stop processing if consistently no receivers
-                        if consecutive_no_receivers >= MAX_NO_RECEIVER_ATTEMPTS {
-                            warn!(
-                                "Area {} has no active receivers after {} consecutive messages, stopping message handler",
-                                area_key, MAX_NO_RECEIVER_ATTEMPTS
+                Ok(live_fix) => {
+                    let websocket_message = WebSocketMessage::Fix(live_fix);
+                    match broadcaster.send(websocket_message) {
+                        Ok(receiver_count) => {
+                            consecutive_no_receivers = 0; // Reset counter on successful send
+                            info!(
+                                "Broadcasted live fix for area {} to {} receivers",
+                                area_key, receiver_count
                             );
-                            break;
+                        }
+                        Err(broadcast::error::SendError(_)) => {
+                            consecutive_no_receivers += 1;
+                            info!(
+                                "No active receivers for area {}, fix dropped ({}/{} consecutive failures)",
+                                area_key, consecutive_no_receivers, MAX_NO_RECEIVER_ATTEMPTS
+                            );
+
+                            // Stop processing if consistently no receivers
+                            if consecutive_no_receivers >= MAX_NO_RECEIVER_ATTEMPTS {
+                                warn!(
+                                    "Area {} has no active receivers after {} consecutive messages, stopping message handler",
+                                    area_key, MAX_NO_RECEIVER_ATTEMPTS
+                                );
+                                break;
+                            }
                         }
                     }
-                },
+                }
                 Err(e) => {
                     error!("Failed to process fix message for area {}: {}", area_key, e);
                 }

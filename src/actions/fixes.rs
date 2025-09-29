@@ -14,7 +14,7 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use crate::fixes_repo::FixesRepository;
-use crate::live_fixes::LiveFix;
+use crate::live_fixes::{LiveFix, WebSocketMessage};
 use crate::web::AppState;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -36,7 +36,7 @@ pub enum SubscriptionMessage {
 // Helper function to send recent fixes for a device immediately upon subscription
 async fn send_recent_device_fix(
     device_id_str: &str,
-    fix_tx: &mpsc::UnboundedSender<LiveFix>,
+    fix_tx: &mpsc::UnboundedSender<WebSocketMessage>,
     pool: &crate::web::PgPool,
 ) {
     // Parse device ID as UUID
@@ -72,7 +72,8 @@ async fn send_recent_device_fix(
                         climb_rate: fix.climb_fpm.unwrap_or(0) as f64,
                     };
 
-                    if let Err(e) = fix_tx.send(live_fix) {
+                    let websocket_message = WebSocketMessage::Fix(live_fix);
+                    if let Err(e) = fix_tx.send(websocket_message) {
                         error!(
                             "Failed to send recent fix for device {}: {}",
                             device_id_str, e
@@ -102,82 +103,90 @@ async fn send_recent_device_fix(
     }
 }
 
-// Helper function to send recent fixes for devices in an area
-async fn send_recent_area_fixes(
+// Enhanced helper function to send device data and recent fixes for devices in an area
+// This replaces the inefficient global fetch + filter approach with proper spatial queries
+async fn send_recent_area_devices_and_fixes(
     latitude: i32,
     longitude: i32,
-    fix_tx: &mpsc::UnboundedSender<LiveFix>,
+    fix_tx: &mpsc::UnboundedSender<WebSocketMessage>,
     pool: &crate::web::PgPool,
 ) {
     let fixes_repo = FixesRepository::new(pool.clone());
+    let aircraft_registrations_repo =
+        crate::aircraft_registrations_repo::AircraftRegistrationsRepository::new(pool.clone());
+    let aircraft_model_repo =
+        crate::faa::aircraft_model_repo::AircraftModelRepository::new(pool.clone());
 
-    // Calculate time range (last 24 hours)
-    let now = Utc::now();
-    let twenty_four_hours_ago = now - Duration::hours(24);
+    // Convert integer lat/lng to proper bounding box (±0.5 degrees for better coverage)
+    let center_lat = latitude as f64;
+    let center_lng = longitude as f64;
+    let radius = 0.5; // 0.5 degree radius
 
-    // For now, let's get recent fixes and filter by area
-    // This is not optimal but will work for the immediate requirement
-    match fixes_repo.get_recent_fixes(1000).await {
-        Ok(fixes) => {
-            let mut sent_count = 0;
-            let mut device_latest_fixes: HashMap<String, &crate::Fix> = HashMap::new();
+    let nw_lat = center_lat + radius;
+    let nw_lng = center_lng - radius;
+    let se_lat = center_lat - radius;
+    let se_lng = center_lng + radius;
 
-            // Group fixes by device and keep only the most recent one per device
-            for fix in &fixes {
-                if fix.timestamp < twenty_four_hours_ago {
-                    continue; // Skip fixes older than 24 hours
-                }
+    // Use the new efficient spatial query
+    match fixes_repo
+        .get_devices_with_fixes_in_bounding_box(nw_lat, nw_lng, se_lat, se_lng, 24, 50)
+        .await
+    {
+        Ok(devices_with_fixes) => {
+            let mut sent_device_count = 0;
 
-                // Check if fix is in the approximate area (integer lat/lon matching)
-                let fix_lat = fix.latitude as i32;
-                let fix_lon = fix.longitude as i32;
+            // Send DeviceWithFixes messages for each device found in the area
+            for (device_model, device_fixes) in devices_with_fixes {
+                // Fetch aircraft registration data
+                let aircraft_registration = aircraft_registrations_repo
+                    .get_aircraft_registration_by_device_id(device_model.id)
+                    .await
+                    .ok()
+                    .flatten();
 
-                if fix_lat == latitude && fix_lon == longitude {
-                    let device_id_str = fix.device_id.to_string();
-
-                    // Keep only the most recent fix per device
-                    if let Some(existing_fix) = device_latest_fixes.get(&device_id_str) {
-                        if fix.timestamp > existing_fix.timestamp {
-                            device_latest_fixes.insert(device_id_str, fix);
-                        }
-                    } else {
-                        device_latest_fixes.insert(device_id_str, fix);
-                    }
-                }
-            }
-
-            // Send the most recent fix for each device in the area
-            for (device_id_str, fix) in device_latest_fixes {
-                let live_fix = LiveFix {
-                    id: fix.id.to_string(),
-                    device_id: device_id_str.clone(),
-                    timestamp: fix.timestamp.to_rfc3339(),
-                    latitude: fix.latitude,
-                    longitude: fix.longitude,
-                    altitude: fix.altitude_feet.unwrap_or(0) as f64,
-                    track: fix.track_degrees.unwrap_or(0.0) as f64,
-                    ground_speed: fix.ground_speed_knots.unwrap_or(0.0) as f64,
-                    climb_rate: fix.climb_fpm.unwrap_or(0) as f64,
+                // Fetch aircraft model data if we have registration
+                let aircraft_model = if let Some(ref reg) = aircraft_registration {
+                    aircraft_model_repo
+                        .get_aircraft_model_by_key(
+                            &reg.manufacturer_code,
+                            &reg.model_code,
+                            &reg.series_code,
+                        )
+                        .await
+                        .ok()
+                        .flatten()
+                } else {
+                    None
                 };
 
-                if let Err(e) = fix_tx.send(live_fix) {
+                // Create DeviceWithFixes message
+                let device_with_fixes = crate::live_fixes::DeviceWithFixes {
+                    device: device_model.clone(),
+                    aircraft_registration,
+                    aircraft_model,
+                    recent_fixes: device_fixes,
+                };
+
+                let websocket_message =
+                    crate::live_fixes::WebSocketMessage::Device(Box::new(device_with_fixes));
+                if let Err(e) = fix_tx.send(websocket_message) {
                     error!(
-                        "Failed to send recent area fix for device {}: {}",
-                        device_id_str, e
+                        "Failed to send device data for device {}: {}",
+                        device_model.registration, e
                     );
                 } else {
-                    sent_count += 1;
+                    sent_device_count += 1;
                 }
             }
 
             info!(
-                "Sent {} recent fixes for area {},{} immediately upon subscription",
-                sent_count, latitude, longitude
+                "Sent complete data for {} devices in area {},{} immediately upon subscription",
+                sent_device_count, latitude, longitude
             );
         }
         Err(e) => {
             error!(
-                "Failed to fetch recent fixes for area {},{}: {}",
+                "Failed to fetch devices with fixes for area {},{}: {}",
                 latitude, longitude, e
             );
         }
@@ -205,7 +214,7 @@ async fn handle_websocket(socket: WebSocket, state: AppState) {
 
     // Create channels for communication between tasks
     let (subscription_tx, subscription_rx) = mpsc::unbounded_channel::<SubscriptionMessage>();
-    let (fix_tx, fix_rx) = mpsc::unbounded_channel::<LiveFix>();
+    let (fix_tx, fix_rx) = mpsc::unbounded_channel::<WebSocketMessage>();
 
     // Spawn task to handle incoming WebSocket messages (subscriptions)
     let subscription_tx_clone = subscription_tx.clone();
@@ -283,19 +292,19 @@ async fn handle_websocket_read(
 
 async fn handle_websocket_write(
     mut sender: futures_util::stream::SplitSink<WebSocket, Message>,
-    mut fix_rx: mpsc::UnboundedReceiver<LiveFix>,
+    mut fix_rx: mpsc::UnboundedReceiver<WebSocketMessage>,
 ) {
-    while let Some(live_fix) = fix_rx.recv().await {
-        let fix_json = match serde_json::to_string(&live_fix) {
+    while let Some(websocket_message) = fix_rx.recv().await {
+        let fix_json = match serde_json::to_string(&websocket_message) {
             Ok(json) => json,
             Err(e) => {
-                error!("Failed to serialize live fix: {}", e);
+                error!("Failed to serialize WebSocket message: {}", e);
                 continue;
             }
         };
 
         if let Err(e) = sender.send(Message::Text(fix_json.into())).await {
-            error!("Failed to send fix to WebSocket client: {}", e);
+            error!("Failed to send WebSocket message to client: {}", e);
             break;
         }
     }
@@ -304,11 +313,11 @@ async fn handle_websocket_write(
 async fn handle_subscriptions(
     live_fix_service: crate::live_fixes::LiveFixService,
     mut subscription_rx: mpsc::UnboundedReceiver<SubscriptionMessage>,
-    fix_tx: mpsc::UnboundedSender<LiveFix>,
+    fix_tx: mpsc::UnboundedSender<WebSocketMessage>,
     pool: crate::web::PgPool,
 ) {
     let mut subscribed_aircraft: Vec<String> = Vec::new();
-    let mut receivers: HashMap<String, broadcast::Receiver<LiveFix>> = HashMap::new();
+    let mut receivers: HashMap<String, broadcast::Receiver<WebSocketMessage>> = HashMap::new();
 
     loop {
         tokio::select! {
@@ -367,7 +376,7 @@ async fn handle_subscriptions(
                                                     info!("Successfully subscribed to area: lat={}, lon={}", latitude, longitude);
 
                                                     // Send recent fixes for devices in this area immediately upon subscription
-                                                    send_recent_area_fixes(latitude, longitude, &fix_tx, &pool).await;
+                                                    send_recent_area_devices_and_fixes(latitude, longitude, &fix_tx, &pool).await;
                                                 }
                                                 Err(e) => {
                                                     error!("Failed to subscribe to area lat={}, lon={}: {}", latitude, longitude, e);
@@ -406,7 +415,7 @@ async fn handle_subscriptions(
             fix_result = async {
                 if receivers.is_empty() {
                     // No active subscriptions, wait indefinitely
-                    std::future::pending::<Option<LiveFix>>().await
+                    std::future::pending::<Option<WebSocketMessage>>().await
                 } else {
                     // Use futures::select_all to wait for any receiver to have a message
                     use futures_util::future::select_all;
@@ -425,9 +434,9 @@ async fn handle_subscriptions(
                         let device_id = &device_ids[index];
 
                         match result {
-                            Ok(live_fix) => {
-                                info!("Received live fix for device: {}", device_id);
-                                Some(live_fix)
+                            Ok(websocket_message) => {
+                                info!("Received WebSocket message for device: {}", device_id);
+                                Some(websocket_message)
                             }
                             Err(broadcast::error::RecvError::Closed) => {
                                 error!("Receiver closed for device: {}", device_id);
@@ -439,13 +448,13 @@ async fn handle_subscriptions(
                             }
                         }
                     } else {
-                        std::future::pending::<Option<LiveFix>>().await
+                        std::future::pending::<Option<WebSocketMessage>>().await
                     }
                 }
             } => {
-                if let Some(live_fix) = fix_result
-                    && fix_tx.send(live_fix).is_err() {
-                        error!("Failed to send live fix to WebSocket writer");
+                if let Some(websocket_message) = fix_result
+                    && fix_tx.send(websocket_message).is_err() {
+                        error!("Failed to send WebSocket message to writer");
                         return;
                     }
             }

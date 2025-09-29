@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
 use diesel::upsert::excluded;
+use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
 use crate::faa::aircraft_models::{
@@ -14,7 +15,7 @@ pub type DieselPgPool = Pool<ConnectionManager<PgConnection>>;
 pub type DieselPgPooledConnection = PooledConnection<ConnectionManager<PgConnection>>;
 
 /// Diesel model for the aircraft_model table - used for database operations
-#[derive(Debug, Clone, Queryable, Selectable, Insertable, AsChangeset)]
+#[derive(Debug, Clone, Queryable, Selectable, Insertable, AsChangeset, Serialize, Deserialize)]
 #[diesel(table_name = aircraft_models)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct AircraftModelRecord {

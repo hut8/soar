@@ -362,6 +362,84 @@ impl FixesRepository {
         Ok(result)
     }
 
+    /// Get devices with their recent fixes in a bounding box for efficient area subscriptions
+    /// This replaces the inefficient global fetch + filter approach
+    pub async fn get_devices_with_fixes_in_bounding_box(
+        &self,
+        nw_lat: f64,
+        nw_lng: f64,
+        se_lat: f64,
+        se_lng: f64,
+        hours_back: i64,
+        max_devices: i64,
+    ) -> Result<Vec<(crate::devices::DeviceModel, Vec<Fix>)>> {
+        let pool = self.pool.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            use crate::schema::{devices, fixes};
+            let mut conn = pool.get()?;
+
+            // Calculate time cutoff
+            let cutoff_time = Utc::now() - chrono::Duration::hours(hours_back);
+
+            // First, get device IDs that have fixes in the bounding box within the time window
+            // Use PostGIS spatial query with proper bounding box
+            let sql = r#"
+                SELECT DISTINCT f.device_id
+                FROM fixes f
+                WHERE f.location IS NOT NULL
+                  AND ST_Contains(ST_MakeEnvelope($1, $2, $3, $4, 4326)::geometry, f.location::geometry)
+                  AND f.timestamp > $5
+                LIMIT $6
+            "#;
+
+            #[derive(QueryableByName)]
+            struct DeviceIdRow {
+                #[diesel(sql_type = diesel::sql_types::Uuid)]
+                device_id: uuid::Uuid,
+            }
+
+            let device_rows: Vec<DeviceIdRow> = diesel::sql_query(sql)
+                .bind::<diesel::sql_types::Double, _>(nw_lng)  // west longitude
+                .bind::<diesel::sql_types::Double, _>(nw_lat)  // north latitude
+                .bind::<diesel::sql_types::Double, _>(se_lng)  // east longitude
+                .bind::<diesel::sql_types::Double, _>(se_lat)  // south latitude
+                .bind::<diesel::sql_types::Timestamptz, _>(cutoff_time)
+                .bind::<diesel::sql_types::BigInt, _>(max_devices)
+                .load(&mut conn)?;
+
+            let device_ids: Vec<uuid::Uuid> = device_rows.into_iter().map(|row| row.device_id).collect();
+
+            if device_ids.is_empty() {
+                return Ok(Vec::new());
+            }
+
+            // Get device models for the found device IDs
+            let device_models: Vec<crate::devices::DeviceModel> = devices::table
+                .filter(devices::id.eq_any(&device_ids))
+                .select(crate::devices::DeviceModel::as_select())
+                .load(&mut conn)?;
+
+            // For each device, get its recent fixes
+            let mut results = Vec::new();
+            for device_model in device_models {
+                let device_fixes: Vec<Fix> = fixes::table
+                    .filter(fixes::device_id.eq(device_model.id))
+                    .filter(fixes::timestamp.gt(cutoff_time))
+                    .order(fixes::timestamp.desc())
+                    .limit(5)  // Get up to 5 recent fixes per device
+                    .select(Fix::as_select())
+                    .load(&mut conn)?;
+
+                results.push((device_model, device_fixes));
+            }
+
+            Ok::<Vec<(crate::devices::DeviceModel, Vec<Fix>)>, anyhow::Error>(results)
+        })
+        .await??;
+
+        Ok(result)
+    }
+
     /// Update flight_id for fixes by device_address within a time range
     /// This is used by flight detection processor to link fixes to flights after they're created
     pub async fn update_flight_id_by_device_and_time(
