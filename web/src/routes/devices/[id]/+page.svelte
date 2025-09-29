@@ -15,100 +15,123 @@
 	} from '@lucide/svelte';
 	import { ProgressRing } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall } from '$lib/api/server';
+	import {
+		Device,
+		type AircraftRegistration,
+		type AircraftModel,
+		type Fix,
+		type Flight
+	} from '$lib/types';
 
-	interface Device {
-		device_id: number;
-		device_type: string;
-		aircraft_model: string;
-		registration: string;
-		competition_number: string;
-		tracked: boolean;
-		identified: boolean;
-		user_id?: string;
-		created_at: string;
-		updated_at: string;
+	interface FixesResponse {
+		fixes: Fix[];
+		total: number;
+		page: number;
+		per_page: number;
+		total_pages: number;
 	}
 
-	interface Aircraft {
-		registration_number: string;
-		serial_number: string;
-		manufacturer_model_code?: string;
-		engine_manufacturer_model_code?: string;
-		year_manufactured?: number;
-		registrant_type?: string;
-		registrant_name?: string;
-		aircraft_type?: string;
-		engine_type?: number;
-		status_code?: string;
-		transponder_code?: number;
-		airworthiness_class?: string;
-		airworthiness_date?: string;
-		certificate_issue_date?: string;
-		expiration_date?: string;
-		club_id?: string;
-		home_base_airport_id?: string;
-		kit_manufacturer_name?: string;
-		kit_model_name?: string;
-		other_names: string[];
+	interface FlightsResponse {
+		flights: Flight[];
+		total: number;
+		page: number;
+		per_page: number;
+		total_pages: number;
 	}
 
 	let device: Device | null = null;
-	let linkedAircraft: Aircraft | null = null;
+	let aircraftRegistration: AircraftRegistration | null = null;
+	let aircraftModel: AircraftModel | null = null;
+	let fixes: Fix[] = [];
+	let flights: Flight[] = [];
 	let loading = true;
+	let loadingFixes = false;
+	let loadingFlights = false;
 	let error = '';
-	let deviceHexId = '';
+	let deviceId = '';
+	let fixesPage = 1;
+	let flightsPage = 1;
+	let fixesTotalPages = 1;
+	let flightsTotalPages = 1;
 
-	$: deviceHexId = $page.params.id || '';
-
-	function parseDeviceId(hexString: string): number | null {
-		const cleaned = hexString.replace(/[^a-fA-F0-9]/g, '');
-		if (cleaned.length !== 6) return null;
-
-		const parsed = parseInt(cleaned, 16);
-		return isNaN(parsed) ? null : parsed;
-	}
-
-	function formatDeviceId(deviceId: number): string {
-		return deviceId.toString(16).toUpperCase().padStart(6, '0');
-	}
+	$: deviceId = $page.params.id || '';
 
 	onMount(async () => {
-		if (deviceHexId) {
+		if (deviceId) {
 			await loadDevice();
+			await loadFixes();
+			await loadFlights();
 		}
 	});
 
 	async function loadDevice() {
-		const deviceId = parseDeviceId(deviceHexId);
-		if (deviceId === null) {
-			error = 'Invalid device ID format';
-			loading = false;
-			return;
-		}
-
 		loading = true;
 		error = '';
 
 		try {
-			device = await serverCall<Device>(`/devices/${deviceId}`);
+			// Load device data
+			const deviceData = await serverCall<{
+				id?: string;
+				address_type: string;
+				address: string;
+				aircraft_model: string;
+				registration: string;
+				cn: string;
+				tracked: boolean;
+				identified: boolean;
+				aircraft?: AircraftRegistration | null;
+				aircraftModel?: AircraftModel | null;
+			}>(`/devices/${deviceId}`);
+			device = Device.fromJSON(deviceData);
 
-			// Try to load linked aircraft information
-			if (device.registration) {
-				try {
-					linkedAircraft = await serverCall<Aircraft>(
-						`/aircraft/registration/${device.registration}`
-					);
-				} catch {
-					// Aircraft not found is okay, don't show error for this
-					console.log('No aircraft found for registration:', device.registration);
-				}
-			}
+			// Load aircraft registration and model data in parallel
+			const [registration, model] = await Promise.all([
+				serverCall<AircraftRegistration>(`/devices/${deviceId}/aircraft-registration`).catch(
+					() => null
+				),
+				serverCall<AircraftModel>(`/devices/${deviceId}/aircraft/model`).catch(() => null)
+			]);
+
+			aircraftRegistration = registration;
+			aircraftModel = model;
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			error = `Failed to load device: ${errorMessage}`;
 			console.error('Error loading device:', err);
 		} finally {
 			loading = false;
+		}
+	}
+
+	async function loadFixes(page: number = 1) {
+		loadingFixes = true;
+		try {
+			const response = await serverCall<FixesResponse>(
+				`/devices/${deviceId}/fixes?page=${page}&per_page=100`
+			);
+			fixes = response.fixes;
+			fixesPage = response.page;
+			fixesTotalPages = response.total_pages;
+		} catch (err) {
+			console.error('Failed to load fixes:', err);
+		} finally {
+			loadingFixes = false;
+		}
+	}
+
+	async function loadFlights(page: number = 1) {
+		loadingFlights = true;
+		try {
+			const response = await serverCall<FlightsResponse>(
+				`/devices/${deviceId}/flights?page=${page}&per_page=100`
+			);
+			flights = response.flights;
+			flightsPage = response.page;
+			flightsTotalPages = response.total_pages;
+		} catch (err) {
+			console.error('Failed to load flights:', err);
+		} finally {
+			loadingFlights = false;
 		}
 	}
 
@@ -122,19 +145,40 @@
 		});
 	}
 
+	function formatAltitude(altitude_feet: number | undefined): string {
+		if (altitude_feet === undefined || altitude_feet === null) return 'Unknown';
+		return `${altitude_feet.toLocaleString()} ft`;
+	}
+
+	function formatSpeed(speed_knots: number | undefined): string {
+		if (speed_knots === undefined || speed_knots === null) return 'Unknown';
+		return `${Math.round(speed_knots)} kts`;
+	}
+
+	function formatTrack(track_degrees: number | undefined): string {
+		if (track_degrees === undefined || track_degrees === null) return 'Unknown';
+		return `${Math.round(track_degrees)}°`;
+	}
+
+	function formatCoordinates(lat: number, lng: number): string {
+		const latDir = lat >= 0 ? 'N' : 'S';
+		const lngDir = lng >= 0 ? 'E' : 'W';
+		return `${Math.abs(lat).toFixed(4)}°${latDir}, ${Math.abs(lng).toFixed(4)}°${lngDir}`;
+	}
+
 	function goBack() {
 		goto(resolve('/devices'));
 	}
 </script>
 
 <svelte:head>
-	<title>{device?.registration || 'Device'} ({deviceHexId}) - Device Details</title>
+	<title>{device?.registration || 'Device'} ({deviceId}) - Device Details</title>
 </svelte:head>
 
 <div class="container mx-auto max-w-6xl space-y-6 p-4">
 	<!-- Back Button -->
 	<div class="flex items-center gap-4">
-		<button class="variant-soft btn btn-sm" on:click={goBack}>
+		<button class="variant-soft btn btn-sm" onclick={goBack}>
 			<ArrowLeft class="mr-2 h-4 w-4" />
 			Back to Devices
 		</button>
@@ -157,7 +201,7 @@
 				<h3 class="h3">Error Loading Device</h3>
 				<p>{error}</p>
 				<div class="alert-actions">
-					<button class="variant-filled btn" on:click={loadDevice}> Try Again </button>
+					<button class="variant-filled btn" onclick={loadDevice}> Try Again </button>
 				</div>
 			</div>
 		</div>
@@ -175,7 +219,10 @@
 							<div>
 								<h1 class="h1">{device.registration}</h1>
 								<p class="text-surface-600-300-token font-mono text-sm">
-									Device ID: {formatDeviceId(device.device_id)}
+									Device ID: {device.id}
+								</p>
+								<p class="text-surface-600-300-token font-mono text-sm">
+									Address: {device.address} ({device.address_type})
 								</p>
 							</div>
 						</div>
@@ -194,7 +241,7 @@
 								{device.identified ? 'Identified' : 'Unidentified'}
 							</span>
 							<span class="variant-soft badge">
-								{device.device_type}
+								{device.address_type}
 							</span>
 						</div>
 					</div>
@@ -214,8 +261,16 @@
 						<div class="flex items-start gap-3">
 							<Info class="mt-1 h-4 w-4 text-surface-500" />
 							<div>
-								<p class="text-surface-600-300-token mb-1 text-sm">Device Type</p>
-								<p>{device.device_type}</p>
+								<p class="text-surface-600-300-token mb-1 text-sm">Address Type</p>
+								<p>{device.address_type}</p>
+							</div>
+						</div>
+
+						<div class="flex items-start gap-3">
+							<Radio class="mt-1 h-4 w-4 text-surface-500" />
+							<div>
+								<p class="text-surface-600-300-token mb-1 text-sm">Device Address</p>
+								<p class="font-mono">{device.address}</p>
 							</div>
 						</div>
 
@@ -227,84 +282,74 @@
 							</div>
 						</div>
 
-						{#if device.competition_number}
+						{#if device.cn}
 							<div class="flex items-start gap-3">
 								<Activity class="mt-1 h-4 w-4 text-surface-500" />
 								<div>
 									<p class="text-surface-600-300-token mb-1 text-sm">Competition Number</p>
-									<p class="font-mono">{device.competition_number}</p>
+									<p class="font-mono">{device.cn}</p>
 								</div>
 							</div>
 						{/if}
-
-						<div class="flex items-start gap-3">
-							<User class="mt-1 h-4 w-4 text-surface-500" />
-							<div>
-								<p class="text-surface-600-300-token mb-1 text-sm">Owner</p>
-								<p>{device.user_id ? 'Assigned to user' : 'Unassigned'}</p>
-							</div>
-						</div>
 					</div>
 				</div>
 
-				<!-- Linked Aircraft Information -->
+				<!-- Aircraft Registration -->
 				<div class="space-y-4 card p-6">
 					<h2 class="flex items-center gap-2 h2">
 						<Plane class="h-6 w-6" />
 						Aircraft Registration
 					</h2>
 
-					{#if linkedAircraft}
+					{#if aircraftRegistration}
 						<div class="space-y-3">
 							<div class="flex items-start gap-3">
 								<Info class="mt-1 h-4 w-4 text-surface-500" />
 								<div>
 									<p class="text-surface-600-300-token mb-1 text-sm">Registration Number</p>
-									<p class="font-mono font-semibold">{linkedAircraft.registration_number}</p>
+									<p class="font-mono font-semibold">{aircraftRegistration.n_number}</p>
 								</div>
 							</div>
 
-							{#if linkedAircraft.manufacturer_model_code}
-								<div class="flex items-start gap-3">
-									<Plane class="mt-1 h-4 w-4 text-surface-500" />
-									<div>
-										<p class="text-surface-600-300-token mb-1 text-sm">Manufacturer Model</p>
-										<p>{linkedAircraft.manufacturer_model_code}</p>
-									</div>
+							<div class="flex items-start gap-3">
+								<Plane class="mt-1 h-4 w-4 text-surface-500" />
+								<div>
+									<p class="text-surface-600-300-token mb-1 text-sm">Manufacturer Model</p>
+									<p>{aircraftRegistration.mfr_mdl_code}</p>
 								</div>
-							{/if}
+							</div>
 
-							{#if linkedAircraft.year_manufactured}
-								<div class="flex items-start gap-3">
-									<Calendar class="mt-1 h-4 w-4 text-surface-500" />
-									<div>
-										<p class="text-surface-600-300-token mb-1 text-sm">Year Manufactured</p>
-										<p>{linkedAircraft.year_manufactured}</p>
-									</div>
+							<div class="flex items-start gap-3">
+								<Calendar class="mt-1 h-4 w-4 text-surface-500" />
+								<div>
+									<p class="text-surface-600-300-token mb-1 text-sm">Year Manufactured</p>
+									<p>{aircraftRegistration.year_mfr}</p>
 								</div>
-							{/if}
+							</div>
 
-							{#if linkedAircraft.registrant_name}
-								<div class="flex items-start gap-3">
-									<User class="mt-1 h-4 w-4 text-surface-500" />
-									<div>
-										<p class="text-surface-600-300-token mb-1 text-sm">Owner</p>
-										<p>{linkedAircraft.registrant_name}</p>
-									</div>
+							<div class="flex items-start gap-3">
+								<User class="mt-1 h-4 w-4 text-surface-500" />
+								<div>
+									<p class="text-surface-600-300-token mb-1 text-sm">Owner</p>
+									<p>{aircraftRegistration.registrant_name}</p>
 								</div>
-							{/if}
+							</div>
 
-							{#if linkedAircraft.transponder_code}
-								<div class="flex items-start gap-3">
-									<Radio class="mt-1 h-4 w-4 text-surface-500" />
-									<div>
-										<p class="text-surface-600-300-token mb-1 text-sm">Transponder Code</p>
-										<p class="font-mono">
-											{linkedAircraft.transponder_code.toString(16).toUpperCase()}
-										</p>
-									</div>
+							<div class="flex items-start gap-3">
+								<Info class="mt-1 h-4 w-4 text-surface-500" />
+								<div>
+									<p class="text-surface-600-300-token mb-1 text-sm">Serial Number</p>
+									<p class="font-mono">{aircraftRegistration.serial_number}</p>
 								</div>
-							{/if}
+							</div>
+
+							<div class="flex items-start gap-3">
+								<Info class="mt-1 h-4 w-4 text-surface-500" />
+								<div>
+									<p class="text-surface-600-300-token mb-1 text-sm">Status</p>
+									<p class="font-mono">{aircraftRegistration.status_code}</p>
+								</div>
+							</div>
 						</div>
 					{:else}
 						<div class="text-surface-600-300-token py-8 text-center">
@@ -317,31 +362,219 @@
 					{/if}
 				</div>
 
-				<!-- Timestamps -->
-				<div class="space-y-4 card p-6">
-					<h2 class="flex items-center gap-2 h2">
-						<Calendar class="h-6 w-6" />
-						Record Information
-					</h2>
+				<!-- Aircraft Model Details -->
+				{#if aircraftModel}
+					<div class="space-y-4 card p-6">
+						<h2 class="flex items-center gap-2 h2">
+							<Plane class="h-6 w-6" />
+							Aircraft Model Details
+						</h2>
 
-					<div class="space-y-3">
-						<div class="flex items-start gap-3">
-							<Calendar class="mt-1 h-4 w-4 text-surface-500" />
-							<div>
-								<p class="text-surface-600-300-token mb-1 text-sm">Created</p>
-								<p>{formatDate(device.created_at)}</p>
+						<div class="space-y-3">
+							<div class="flex items-start gap-3">
+								<Plane class="mt-1 h-4 w-4 text-surface-500" />
+								<div>
+									<p class="text-surface-600-300-token mb-1 text-sm">Manufacturer</p>
+									<p>{aircraftModel.manufacturer}</p>
+								</div>
 							</div>
-						</div>
 
-						<div class="flex items-start gap-3">
-							<Calendar class="mt-1 h-4 w-4 text-surface-500" />
-							<div>
-								<p class="text-surface-600-300-token mb-1 text-sm">Last Updated</p>
-								<p>{formatDate(device.updated_at)}</p>
+							<div class="flex items-start gap-3">
+								<Plane class="mt-1 h-4 w-4 text-surface-500" />
+								<div>
+									<p class="text-surface-600-300-token mb-1 text-sm">Model</p>
+									<p>{aircraftModel.model}</p>
+								</div>
 							</div>
+
+							{#if aircraftModel.type_certificate}
+								<div class="flex items-start gap-3">
+									<Info class="mt-1 h-4 w-4 text-surface-500" />
+									<div>
+										<p class="text-surface-600-300-token mb-1 text-sm">Type Certificate</p>
+										<p class="font-mono">{aircraftModel.type_certificate}</p>
+									</div>
+								</div>
+							{/if}
+
+							{#if aircraftModel.seats}
+								<div class="flex items-start gap-3">
+									<User class="mt-1 h-4 w-4 text-surface-500" />
+									<div>
+										<p class="text-surface-600-300-token mb-1 text-sm">Seats</p>
+										<p>{aircraftModel.seats}</p>
+									</div>
+								</div>
+							{/if}
+
+							{#if aircraftModel.engines}
+								<div class="flex items-start gap-3">
+									<Settings class="mt-1 h-4 w-4 text-surface-500" />
+									<div>
+										<p class="text-surface-600-300-token mb-1 text-sm">Engines</p>
+										<p>{aircraftModel.engines}</p>
+									</div>
+								</div>
+							{/if}
+
+							{#if aircraftModel.speed}
+								<div class="flex items-start gap-3">
+									<Activity class="mt-1 h-4 w-4 text-surface-500" />
+									<div>
+										<p class="text-surface-600-300-token mb-1 text-sm">Max Speed</p>
+										<p>{aircraftModel.speed} kts</p>
+									</div>
+								</div>
+							{/if}
 						</div>
 					</div>
-				</div>
+				{/if}
+			</div>
+
+			<!-- Position Fixes Section -->
+			<div class="space-y-4 card p-6">
+				<h2 class="flex items-center gap-2 h2">
+					<Activity class="h-6 w-6" />
+					Recent Position Fixes (Last 24 Hours)
+				</h2>
+
+				{#if loadingFixes}
+					<div class="flex items-center justify-center py-8">
+						<ProgressRing size="w-6 h-6" />
+						<span class="ml-2">Loading position fixes...</span>
+					</div>
+				{:else if fixes.length === 0}
+					<div class="text-surface-600-300-token py-8 text-center">
+						<Activity class="mx-auto mb-4 h-12 w-12 text-surface-400" />
+						<p>No position fixes found in the last 24 hours</p>
+					</div>
+				{:else}
+					<div class="overflow-x-auto">
+						<table class="w-full table-auto">
+							<thead class="border-surface-300-600-token border-b">
+								<tr>
+									<th class="px-3 py-2 text-left text-sm font-medium">Time</th>
+									<th class="px-3 py-2 text-left text-sm font-medium">Coordinates</th>
+									<th class="px-3 py-2 text-left text-sm font-medium">Altitude</th>
+									<th class="px-3 py-2 text-left text-sm font-medium">Speed</th>
+									<th class="px-3 py-2 text-left text-sm font-medium">Track</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each fixes as fix (fix.id)}
+									<tr class="border-surface-200-700-token hover:bg-surface-100-800-token border-b">
+										<td class="px-3 py-2 text-sm">{formatDate(fix.timestamp)}</td>
+										<td class="px-3 py-2 font-mono text-sm"
+											>{formatCoordinates(fix.latitude, fix.longitude)}</td
+										>
+										<td class="px-3 py-2 text-sm">{formatAltitude(fix.altitude_feet)}</td>
+										<td class="px-3 py-2 text-sm">{formatSpeed(fix.ground_speed_knots)}</td>
+										<td class="px-3 py-2 text-sm">{formatTrack(fix.track_degrees)}</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+
+					<!-- Pagination for fixes -->
+					{#if fixesTotalPages > 1}
+						<div class="flex items-center justify-between pt-4">
+							<p class="text-surface-600-300-token text-sm">
+								Page {fixesPage} of {fixesTotalPages}
+							</p>
+							<div class="flex gap-2">
+								<button
+									class="variant-soft btn btn-sm"
+									disabled={fixesPage <= 1}
+									onclick={() => loadFixes(fixesPage - 1)}
+								>
+									Previous
+								</button>
+								<button
+									class="variant-soft btn btn-sm"
+									disabled={fixesPage >= fixesTotalPages}
+									onclick={() => loadFixes(fixesPage + 1)}
+								>
+									Next
+								</button>
+							</div>
+						</div>
+					{/if}
+				{/if}
+			</div>
+
+			<!-- Flights Section -->
+			<div class="space-y-4 card p-6">
+				<h2 class="flex items-center gap-2 h2">
+					<Plane class="h-6 w-6" />
+					Flight History
+				</h2>
+
+				{#if loadingFlights}
+					<div class="flex items-center justify-center py-8">
+						<ProgressRing size="w-6 h-6" />
+						<span class="ml-2">Loading flight history...</span>
+					</div>
+				{:else if flights.length === 0}
+					<div class="text-surface-600-300-token py-8 text-center">
+						<Plane class="mx-auto mb-4 h-12 w-12 text-surface-400" />
+						<p>No flights found for this aircraft</p>
+					</div>
+				{:else}
+					<div class="overflow-x-auto">
+						<table class="w-full table-auto">
+							<thead class="border-surface-300-600-token border-b">
+								<tr>
+									<th class="px-3 py-2 text-left text-sm font-medium">Flight ID</th>
+									<th class="px-3 py-2 text-left text-sm font-medium">Takeoff</th>
+									<th class="px-3 py-2 text-left text-sm font-medium">Landing</th>
+									<th class="px-3 py-2 text-left text-sm font-medium">Departure</th>
+									<th class="px-3 py-2 text-left text-sm font-medium">Arrival</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each flights as flight (flight.id)}
+									<tr class="border-surface-200-700-token hover:bg-surface-100-800-token border-b">
+										<td class="px-3 py-2 font-mono text-sm">{flight.id}</td>
+										<td class="px-3 py-2 text-sm">
+											{flight.takeoff_time ? formatDate(flight.takeoff_time) : 'Unknown'}
+										</td>
+										<td class="px-3 py-2 text-sm">
+											{flight.landing_time ? formatDate(flight.landing_time) : 'In Progress'}
+										</td>
+										<td class="px-3 py-2 text-sm">{flight.departure_airport || 'Unknown'}</td>
+										<td class="px-3 py-2 text-sm">{flight.arrival_airport || 'Unknown'}</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+
+					<!-- Pagination for flights -->
+					{#if flightsTotalPages > 1}
+						<div class="flex items-center justify-between pt-4">
+							<p class="text-surface-600-300-token text-sm">
+								Page {flightsPage} of {flightsTotalPages}
+							</p>
+							<div class="flex gap-2">
+								<button
+									class="variant-soft btn btn-sm"
+									disabled={flightsPage <= 1}
+									onclick={() => loadFlights(flightsPage - 1)}
+								>
+									Previous
+								</button>
+								<button
+									class="variant-soft btn btn-sm"
+									disabled={flightsPage >= flightsTotalPages}
+									onclick={() => loadFlights(flightsPage + 1)}
+								>
+									Next
+								</button>
+							</div>
+						</div>
+					{/if}
+				{/if}
 			</div>
 		</div>
 	{/if}
