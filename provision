@@ -44,6 +44,8 @@ sudo cp soar-run.service /etc/systemd/system/
 sudo cp soar-web.service /etc/systemd/system/
 sudo cp soar-pull-data.service /etc/systemd/system/
 sudo cp soar-pull-data.timer /etc/systemd/system/
+sudo cp soar-sitemap.service /etc/systemd/system/
+sudo cp soar-sitemap.timer /etc/systemd/system/
 
 # Reload systemd daemon
 echo "Reloading systemd daemon..."

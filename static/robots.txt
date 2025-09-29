@@ -1,0 +1,21 @@
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://glider.flights/sitemap.xml
+
+# Block access to admin areas and sensitive pages
+Disallow: /admin/
+Disallow: /api/
+Disallow: /profile/
+Disallow: /login/
+Disallow: /register/
+Disallow: /forgot-password/
+Disallow: /reset-password/
+Disallow: /verify-email/
+
+# Allow specific static assets
+Allow: /css/
+Allow: /js/
+Allow: /images/
+Allow: /favicon.ico

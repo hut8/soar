@@ -1,0 +1,32 @@
+[Unit]
+Description=SOAR Sitemap Generation - Generate XML Sitemaps for SEO
+Documentation=https://github.com/your-repo/soar
+After=network-online.target postgresql.service soar-pull-data.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+Type=oneshot
+User=soar
+Group=soar
+WorkingDirectory=/var/lib/soar
+ExecStart=/usr/local/bin/soar sitemap
+
+# Environment variables
+EnvironmentFile=/etc/soar/env
+
+# Security settings
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/soar/logs /var/soar/sitemap /tmp
+
+# Process limits
+LimitNOFILE=65536
+
+# Timeout (allow up to 10 minutes for sitemap generation)
+TimeoutStartSec=600
+
+[Install]
+WantedBy=multi-user.target soar.target
