@@ -405,19 +405,25 @@
 			updateCoordinateDisplay();
 			drawCoordinateGrid();
 			if (areaTrackerActive) {
-				setTimeout(updateAreaSubscriptions, 100); // Small delay for bounds to update
+				// Hybrid approach: Fetch immediate snapshot then update WebSocket subscriptions
+				setTimeout(async () => {
+					await fetchAndDisplayDevicesInViewport();
+					updateAreaSubscriptions();
+				}, 100);
 			}
 			// Save map state after zoom changes
 			saveMapState();
 		});
 
-		map.addListener('dragend', () => {
+		map.addListener('dragend', async () => {
 			checkAndUpdateAirports();
 			// Update coordinate display and grid
 			updateCoordinateDisplay();
 			drawCoordinateGrid();
 			// Update area subscriptions after panning
 			if (areaTrackerActive) {
+				// Hybrid approach: Fetch immediate snapshot then update WebSocket subscriptions
+				await fetchAndDisplayDevicesInViewport();
 				updateAreaSubscriptions();
 			}
 			// Save map state after panning
@@ -1143,7 +1149,7 @@
 	}
 
 	// Area tracker functions
-	function toggleAreaTracker(): void {
+	async function toggleAreaTracker(): Promise<void> {
 		if (!areaTrackerAvailable) {
 			toaster.info({
 				title: 'Please zoom in to use the area tracker feature. The current view area is too large.'
@@ -1155,6 +1161,8 @@
 		console.log('[AREA TRACKER] Area tracker toggled:', areaTrackerActive);
 
 		if (areaTrackerActive) {
+			// Hybrid approach: Fetch immediate snapshot then update WebSocket subscriptions
+			await fetchAndDisplayDevicesInViewport();
 			updateAreaSubscriptions();
 		} else {
 			clearAreaSubscriptions();
@@ -1305,6 +1313,50 @@
 		};
 		console.log('[AREA TRACKER] Unsubscribe from area:', message);
 		fixFeed.sendWebSocketMessage(message);
+	}
+
+	async function fetchAndDisplayDevicesInViewport(): Promise<void> {
+		if (!map) return;
+
+		const bounds = map.getBounds();
+		if (!bounds) return;
+
+		const ne = bounds.getNorthEast();
+		const sw = bounds.getSouthWest();
+
+		try {
+			console.log('[REST] Fetching devices in viewport...');
+
+			// Fetch from REST endpoint
+			const devicesWithFixes = await fixFeed.fetchDevicesInBoundingBox(
+				sw.lat(), // latMin
+				ne.lat(), // latMax
+				sw.lng(), // lonMin
+				ne.lng() // lonMax
+			);
+
+			console.log(`[REST] Received ${devicesWithFixes.length} devices`);
+
+			// Process each device and add to registry
+			for (const deviceData of devicesWithFixes) {
+				// Add fixes to device registry
+				for (const fix of deviceData.recent_fixes) {
+					await deviceRegistry.addFixToDevice(fix, false);
+				}
+
+				// Update device info with aircraft data
+				await deviceRegistry.updateDeviceInfo(
+					deviceData.device.id,
+					deviceData.device,
+					deviceData.aircraft_registration,
+					deviceData.aircraft_model
+				);
+			}
+
+			console.log('[REST] Devices loaded, WebSocket subscriptions will provide live updates');
+		} catch (error) {
+			console.error('[REST] Failed to fetch devices in viewport:', error);
+		}
 	}
 </script>
 

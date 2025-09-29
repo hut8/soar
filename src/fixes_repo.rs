@@ -370,68 +370,238 @@ impl FixesRepository {
         nw_lng: f64,
         se_lat: f64,
         se_lng: f64,
-        hours_back: i64,
-        max_devices: i64,
+        cutoff_time: DateTime<Utc>,
+        fixes_per_device: Option<i64>,
     ) -> Result<Vec<(crate::devices::DeviceModel, Vec<Fix>)>> {
         let pool = self.pool.clone();
+        let fixes_per_device = fixes_per_device.unwrap_or(5);
+
         let result = tokio::task::spawn_blocking(move || {
-            use crate::schema::{devices, fixes};
             let mut conn = pool.get()?;
 
-            // Calculate time cutoff
-            let cutoff_time = Utc::now() - chrono::Duration::hours(hours_back);
-
-            // First, get device IDs that have fixes in the bounding box within the time window
-            // Use PostGIS spatial query with proper bounding box
-            let sql = r#"
-                SELECT DISTINCT f.device_id
+            // First query: Get devices with fixes in the bounding box
+            let devices_sql = r#"
+                WITH bbox AS (
+                    SELECT ST_MakeEnvelope($1, $2, $3, $4, 4326)::geography AS g
+                )
+                SELECT DISTINCT d.*
                 FROM fixes f
-                WHERE f.location IS NOT NULL
-                  AND ST_Contains(ST_MakeEnvelope($1, $2, $3, $4, 4326)::geometry, f.location::geometry)
-                  AND f.timestamp > $5
-                LIMIT $6
+                JOIN devices d ON d.id = f.device_id
+                CROSS JOIN bbox
+                WHERE f.received_at >= $5
+                  AND ST_Intersects(f.location, bbox.g)
             "#;
 
             #[derive(QueryableByName)]
-            struct DeviceIdRow {
+            struct DeviceRow {
                 #[diesel(sql_type = diesel::sql_types::Uuid)]
-                device_id: uuid::Uuid,
+                id: uuid::Uuid,
+                #[diesel(sql_type = diesel::sql_types::Text)]
+                registration: String,
+                #[diesel(sql_type = diesel::sql_types::Int4)]
+                address: i32,
+                #[diesel(sql_type = crate::schema::sql_types::AddressType)]
+                address_type: crate::devices::AddressType,
+                #[diesel(sql_type = diesel::sql_types::Text)]
+                aircraft_model: String,
+                #[diesel(sql_type = diesel::sql_types::Text)]
+                competition_number: String,
+                #[diesel(sql_type = diesel::sql_types::Bool)]
+                tracked: bool,
+                #[diesel(sql_type = diesel::sql_types::Bool)]
+                identified: bool,
+                #[diesel(sql_type = diesel::sql_types::Timestamptz)]
+                created_at: DateTime<Utc>,
+                #[diesel(sql_type = diesel::sql_types::Timestamptz)]
+                updated_at: DateTime<Utc>,
+                #[diesel(sql_type = diesel::sql_types::Bool)]
+                from_ddb: bool,
             }
 
-            let device_rows: Vec<DeviceIdRow> = diesel::sql_query(sql)
-                .bind::<diesel::sql_types::Double, _>(nw_lng)  // west longitude
-                .bind::<diesel::sql_types::Double, _>(nw_lat)  // north latitude
-                .bind::<diesel::sql_types::Double, _>(se_lng)  // east longitude
-                .bind::<diesel::sql_types::Double, _>(se_lat)  // south latitude
+            let device_rows: Vec<DeviceRow> = diesel::sql_query(devices_sql)
+                .bind::<diesel::sql_types::Double, _>(nw_lng)  // min_lon
+                .bind::<diesel::sql_types::Double, _>(se_lat)  // min_lat
+                .bind::<diesel::sql_types::Double, _>(se_lng)  // max_lon
+                .bind::<diesel::sql_types::Double, _>(nw_lat)  // max_lat
                 .bind::<diesel::sql_types::Timestamptz, _>(cutoff_time)
-                .bind::<diesel::sql_types::BigInt, _>(max_devices)
                 .load(&mut conn)?;
 
-            let device_ids: Vec<uuid::Uuid> = device_rows.into_iter().map(|row| row.device_id).collect();
-
-            if device_ids.is_empty() {
+            if device_rows.is_empty() {
                 return Ok(Vec::new());
             }
 
-            // Get device models for the found device IDs
-            let device_models: Vec<crate::devices::DeviceModel> = devices::table
-                .filter(devices::id.eq_any(&device_ids))
-                .select(crate::devices::DeviceModel::as_select())
+            // Convert rows to DeviceModel
+            let device_models: Vec<crate::devices::DeviceModel> = device_rows
+                .into_iter()
+                .map(|row| crate::devices::DeviceModel {
+                    id: row.id,
+                    registration: row.registration,
+                    address: row.address,
+                    address_type: row.address_type,
+                    aircraft_model: row.aircraft_model,
+                    competition_number: row.competition_number,
+                    tracked: row.tracked,
+                    identified: row.identified,
+                    created_at: row.created_at,
+                    updated_at: row.updated_at,
+                    from_ddb: row.from_ddb,
+                })
+                .collect();
+
+            // Second query: Get recent fixes for all devices
+            let fixes_sql = r#"
+                WITH bbox AS (
+                    SELECT ST_MakeEnvelope($1, $2, $3, $4, 4326)::geography AS g
+                ),
+                target_devices AS (
+                    SELECT DISTINCT f.device_id
+                    FROM fixes f
+                    CROSS JOIN bbox
+                    WHERE f.received_at >= $5
+                      AND ST_Intersects(f.location, bbox.g)
+                ),
+                ranked AS (
+                    SELECT f.*,
+                           ROW_NUMBER() OVER (PARTITION BY f.device_id ORDER BY f.received_at DESC) AS rn
+                    FROM fixes f
+                    JOIN target_devices t ON t.device_id = f.device_id
+                )
+                SELECT id, source, destination, via, raw_packet, timestamp, latitude, longitude,
+                       altitude_feet, device_address, address_type, aircraft_type_ogn, flight_number,
+                       emitter_category, registration, model, squawk, ground_speed_knots, track_degrees,
+                       climb_fpm, turn_rate_rot, snr_db, bit_errors_corrected, freq_offset_khz,
+                       club_id, flight_id, unparsed_data, device_id, received_at, lag
+                FROM ranked
+                WHERE rn <= $6
+                ORDER BY device_id, received_at DESC
+            "#;
+
+            // QueryableByName version of FixDslRow for raw SQL query
+            #[derive(QueryableByName)]
+            struct FixRow {
+                #[diesel(sql_type = diesel::sql_types::Uuid)]
+                id: uuid::Uuid,
+                #[diesel(sql_type = diesel::sql_types::Text)]
+                source: String,
+                #[diesel(sql_type = diesel::sql_types::Text)]
+                destination: String,
+                #[diesel(sql_type = diesel::sql_types::Array<diesel::sql_types::Nullable<diesel::sql_types::Text>>)]
+                via: Vec<Option<String>>,
+                #[diesel(sql_type = diesel::sql_types::Text)]
+                raw_packet: String,
+                #[diesel(sql_type = diesel::sql_types::Timestamptz)]
+                timestamp: DateTime<Utc>,
+                #[diesel(sql_type = diesel::sql_types::Double)]
+                latitude: f64,
+                #[diesel(sql_type = diesel::sql_types::Double)]
+                longitude: f64,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Int4>)]
+                altitude_feet: Option<i32>,
+                #[diesel(sql_type = diesel::sql_types::Int4)]
+                device_address: i32,
+                #[diesel(sql_type = crate::schema::sql_types::AddressType)]
+                address_type: AddressType,
+                #[diesel(sql_type = diesel::sql_types::Nullable<crate::schema::sql_types::AircraftTypeOgn>)]
+                aircraft_type_ogn: Option<AircraftTypeOgn>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+                flight_number: Option<String>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<crate::schema::sql_types::AdsbEmitterCategory>)]
+                emitter_category: Option<AdsbEmitterCategory>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+                registration: Option<String>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+                model: Option<String>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+                squawk: Option<String>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float4>)]
+                ground_speed_knots: Option<f32>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float4>)]
+                track_degrees: Option<f32>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Int4>)]
+                climb_fpm: Option<i32>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float4>)]
+                turn_rate_rot: Option<f32>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float4>)]
+                snr_db: Option<f32>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Int4>)]
+                bit_errors_corrected: Option<i32>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float4>)]
+                freq_offset_khz: Option<f32>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
+                club_id: Option<uuid::Uuid>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
+                flight_id: Option<uuid::Uuid>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+                unparsed_data: Option<String>,
+                #[diesel(sql_type = diesel::sql_types::Uuid)]
+                device_id: uuid::Uuid,
+                #[diesel(sql_type = diesel::sql_types::Timestamptz)]
+                received_at: DateTime<Utc>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Int4>)]
+                lag: Option<i32>,
+            }
+
+            let fix_rows: Vec<FixRow> = diesel::sql_query(fixes_sql)
+                .bind::<diesel::sql_types::Double, _>(nw_lng)  // min_lon
+                .bind::<diesel::sql_types::Double, _>(se_lat)  // min_lat
+                .bind::<diesel::sql_types::Double, _>(se_lng)  // max_lon
+                .bind::<diesel::sql_types::Double, _>(nw_lat)  // max_lat
+                .bind::<diesel::sql_types::Timestamptz, _>(cutoff_time)
+                .bind::<diesel::sql_types::BigInt, _>(fixes_per_device)
                 .load(&mut conn)?;
 
-            // For each device, get its recent fixes
-            let mut results = Vec::new();
-            for device_model in device_models {
-                let device_fixes: Vec<Fix> = fixes::table
-                    .filter(fixes::device_id.eq(device_model.id))
-                    .filter(fixes::timestamp.gt(cutoff_time))
-                    .order(fixes::timestamp.desc())
-                    .limit(5)  // Get up to 5 recent fixes per device
-                    .select(Fix::as_select())
-                    .load(&mut conn)?;
-
-                results.push((device_model, device_fixes));
+            // Group fixes by device_id
+            let mut fixes_by_device: std::collections::HashMap<uuid::Uuid, Vec<Fix>> =
+                std::collections::HashMap::new();
+            for fix_row in fix_rows {
+                let device_id = fix_row.device_id;
+                // Convert FixRow to Fix
+                let fix = Fix {
+                    id: fix_row.id,
+                    source: fix_row.source,
+                    destination: fix_row.destination,
+                    via: fix_row.via,
+                    raw_packet: fix_row.raw_packet,
+                    timestamp: fix_row.timestamp,
+                    received_at: fix_row.received_at,
+                    lag: fix_row.lag,
+                    latitude: fix_row.latitude,
+                    longitude: fix_row.longitude,
+                    altitude_feet: fix_row.altitude_feet,
+                    device_address: fix_row.device_address,
+                    address_type: fix_row.address_type,
+                    aircraft_type_ogn: fix_row.aircraft_type_ogn.map(|t| t.into()),
+                    flight_id: fix_row.flight_id,
+                    flight_number: fix_row.flight_number,
+                    emitter_category: fix_row.emitter_category,
+                    registration: fix_row.registration,
+                    model: fix_row.model,
+                    squawk: fix_row.squawk,
+                    ground_speed_knots: fix_row.ground_speed_knots,
+                    track_degrees: fix_row.track_degrees,
+                    climb_fpm: fix_row.climb_fpm,
+                    turn_rate_rot: fix_row.turn_rate_rot,
+                    snr_db: fix_row.snr_db,
+                    bit_errors_corrected: fix_row.bit_errors_corrected,
+                    freq_offset_khz: fix_row.freq_offset_khz,
+                    club_id: fix_row.club_id,
+                    unparsed_data: fix_row.unparsed_data,
+                    device_id: fix_row.device_id,
+                };
+                fixes_by_device
+                    .entry(device_id)
+                    .or_default()
+                    .push(fix);
             }
+
+            // Combine devices with their fixes
+            let results: Vec<(crate::devices::DeviceModel, Vec<Fix>)> = device_models
+                .into_iter()
+                .map(|device| {
+                    let fixes = fixes_by_device.remove(&device.id).unwrap_or_default();
+                    (device, fixes)
+                })
+                .collect();
 
             Ok::<Vec<(crate::devices::DeviceModel, Vec<Fix>)>, anyhow::Error>(results)
         })

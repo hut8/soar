@@ -8,7 +8,6 @@ use tracing::error;
 
 use crate::airports_repo::AirportsRepository;
 use crate::clubs_repo::ClubsRepository;
-use crate::fixes_repo::FixesRepository;
 use crate::flights_repo::FlightsRepository;
 use crate::runways_repo::RunwaysRepository;
 use crate::web::AppState;
@@ -30,13 +29,6 @@ pub struct SearchQueryParams {
     pub nw_lng: Option<f64>, // Northwest corner longitude
     pub se_lat: Option<f64>, // Southeast corner latitude
     pub se_lng: Option<f64>, // Southeast corner longitude
-}
-
-#[derive(Debug, Deserialize)]
-pub struct FixesQueryParams {
-    pub device_id: Option<uuid::Uuid>,
-    pub flight_id: Option<uuid::Uuid>,
-    pub limit: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -283,61 +275,6 @@ pub async fn search_clubs(
             Err(e) => {
                 error!("Failed to get clubs: {}", e);
                 json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get clubs").into_response()
-            }
-        }
-    }
-}
-
-pub async fn search_fixes(
-    State(state): State<AppState>,
-    Query(params): Query<FixesQueryParams>,
-) -> impl IntoResponse {
-    let fixes_repo = FixesRepository::new(state.pool);
-
-    if let Some(device_id) = params.device_id {
-        match fixes_repo
-            .get_fixes_for_device(device_id, Some(params.limit.unwrap_or(1000)))
-            .await
-        {
-            Ok(fixes) => Json(fixes).into_response(),
-            Err(e) => {
-                error!("Failed to get fixes by device ID: {}", e);
-                json_error(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "Failed to get fixes by device ID",
-                )
-                .into_response()
-            }
-        }
-    } else if let Some(flight_id) = params.flight_id {
-        // Get fixes for the specific flight
-        match fixes_repo
-            .get_fixes_for_flight(flight_id, params.limit)
-            .await
-        {
-            Ok(fixes) => Json(fixes).into_response(),
-            Err(e) => {
-                error!("Failed to get fixes by flight ID: {}", e);
-                json_error(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "Failed to get fixes by flight ID",
-                )
-                .into_response()
-            }
-        }
-    } else {
-        match fixes_repo
-            .get_recent_fixes(params.limit.unwrap_or(100))
-            .await
-        {
-            Ok(fixes) => Json(fixes).into_response(),
-            Err(e) => {
-                error!("Failed to get recent fixes: {}", e);
-                json_error(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "Failed to get recent fixes",
-                )
-                .into_response()
             }
         }
     }

@@ -1,9 +1,10 @@
 use axum::{
     extract::{
-        State,
+        Query, State,
         ws::{Message, WebSocket, WebSocketUpgrade},
     },
-    response::Response,
+    http::StatusCode,
+    response::{IntoResponse, Json, Response},
 };
 use chrono::{Duration, Utc};
 use futures_util::{sink::SinkExt, stream::StreamExt};
@@ -16,6 +17,20 @@ use uuid::Uuid;
 use crate::fixes_repo::FixesRepository;
 use crate::live_fixes::{LiveFix, WebSocketMessage};
 use crate::web::AppState;
+
+use super::json_error;
+
+#[derive(Debug, Deserialize)]
+pub struct FixesQueryParams {
+    pub device_id: Option<uuid::Uuid>,
+    pub flight_id: Option<uuid::Uuid>,
+    pub limit: Option<i64>,
+    pub latitude_max: Option<f64>,
+    pub latitude_min: Option<f64>,
+    pub longitude_max: Option<f64>,
+    pub longitude_min: Option<f64>,
+    pub after: Option<chrono::DateTime<Utc>>,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
@@ -128,8 +143,16 @@ async fn send_recent_area_devices_and_fixes(
     let se_lng = center_lng + radius;
 
     // Use the new efficient spatial query
+    let cutoff_time = Utc::now() - Duration::hours(24);
     match fixes_repo
-        .get_devices_with_fixes_in_bounding_box(nw_lat, nw_lng, se_lat, se_lng, 24, 50)
+        .get_devices_with_fixes_in_bounding_box(
+            nw_lat,
+            nw_lng,
+            se_lat,
+            se_lng,
+            cutoff_time,
+            Some(5),
+        )
         .await
     {
         Ok(devices_with_fixes) => {
@@ -191,6 +214,104 @@ async fn send_recent_area_devices_and_fixes(
             );
         }
     }
+}
+
+/// Helper function to enrich devices with aircraft registration and model data
+/// Optimized with batch queries to avoid N+1 query problem
+async fn enrich_devices_with_aircraft_data(
+    devices_with_fixes: Vec<(crate::devices::DeviceModel, Vec<crate::fixes::Fix>)>,
+    pool: crate::web::PgPool,
+) -> Vec<crate::live_fixes::DeviceWithFixes> {
+    use std::collections::HashMap;
+
+    if devices_with_fixes.is_empty() {
+        return Vec::new();
+    }
+
+    let aircraft_registrations_repo =
+        crate::aircraft_registrations_repo::AircraftRegistrationsRepository::new(pool.clone());
+    let aircraft_model_repo = crate::faa::aircraft_model_repo::AircraftModelRepository::new(pool);
+
+    // Step 1: Collect all device IDs
+    let device_ids: Vec<uuid::Uuid> = devices_with_fixes
+        .iter()
+        .map(|(device, _)| device.id)
+        .collect();
+
+    // Step 2: Batch fetch all aircraft registrations
+    let registrations = aircraft_registrations_repo
+        .get_aircraft_registrations_by_device_ids(&device_ids)
+        .await
+        .unwrap_or_default();
+
+    // Step 3: Build HashMap for O(1) lookup: device_id -> registration
+    // Filter out registrations without device_id
+    let registration_map: HashMap<
+        uuid::Uuid,
+        crate::aircraft_registrations::AircraftRegistrationModel,
+    > = registrations
+        .into_iter()
+        .filter_map(|reg| reg.device_id.map(|id| (id, reg)))
+        .collect();
+
+    // Step 4: Collect all unique (manufacturer, model, series) keys
+    let model_keys: Vec<(String, String, String)> = registration_map
+        .values()
+        .map(|reg| {
+            (
+                reg.manufacturer_code.clone(),
+                reg.model_code.clone(),
+                reg.series_code.clone(),
+            )
+        })
+        .collect();
+
+    // Step 5: Batch fetch all aircraft models
+    let models = aircraft_model_repo
+        .get_aircraft_models_by_keys(&model_keys)
+        .await
+        .unwrap_or_default();
+
+    // Step 6: Build HashMap for O(1) lookup: (manufacturer, model, series) -> aircraft_model
+    let model_map: HashMap<(String, String, String), crate::faa::aircraft_models::AircraftModel> =
+        models
+            .into_iter()
+            .map(|model| {
+                (
+                    (
+                        model.manufacturer_code.clone(),
+                        model.model_code.clone(),
+                        model.series_code.clone(),
+                    ),
+                    model,
+                )
+            })
+            .collect();
+
+    // Step 7: Build enriched results
+    let mut enriched = Vec::new();
+    for (device_model, device_fixes) in devices_with_fixes {
+        let aircraft_registration = registration_map.get(&device_model.id).cloned();
+
+        let aircraft_model = aircraft_registration.as_ref().and_then(|reg| {
+            model_map
+                .get(&(
+                    reg.manufacturer_code.clone(),
+                    reg.model_code.clone(),
+                    reg.series_code.clone(),
+                ))
+                .cloned()
+        });
+
+        enriched.push(crate::live_fixes::DeviceWithFixes {
+            device: device_model,
+            aircraft_registration,
+            aircraft_model,
+            recent_fixes: device_fixes,
+        });
+    }
+
+    enriched
 }
 
 pub async fn fixes_live_websocket(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
@@ -494,6 +615,164 @@ async fn handle_subscriptions(
                 );
             } else {
                 info!("Cleaned up device subscription: {}", subscription_key);
+            }
+        }
+    }
+}
+
+pub async fn search_fixes(
+    State(state): State<AppState>,
+    Query(params): Query<FixesQueryParams>,
+) -> impl IntoResponse {
+    let fixes_repo = FixesRepository::new(state.pool.clone());
+
+    // Check if bounding box parameters are provided
+    let has_bounding_box = params.latitude_max.is_some()
+        || params.latitude_min.is_some()
+        || params.longitude_max.is_some()
+        || params.longitude_min.is_some();
+
+    // Check if device or flight parameters are provided
+    let has_device_or_flight = params.device_id.is_some() || params.flight_id.is_some();
+
+    // Validate mutual exclusivity
+    if has_bounding_box && has_device_or_flight {
+        return json_error(
+            StatusCode::BAD_REQUEST,
+            "Bounding box search is mutually exclusive with device_id and flight_id parameters",
+        )
+        .into_response();
+    }
+
+    if has_bounding_box && params.limit.is_some() {
+        return json_error(
+            StatusCode::BAD_REQUEST,
+            "Bounding box search is mutually exclusive with limit parameter",
+        )
+        .into_response();
+    }
+
+    // If any bounding box parameter is provided, all four must be provided
+    if has_bounding_box {
+        match (
+            params.latitude_max,
+            params.latitude_min,
+            params.longitude_max,
+            params.longitude_min,
+        ) {
+            (Some(lat_max), Some(lat_min), Some(lon_max), Some(lon_min)) => {
+                // Validate coordinates
+                if !(-90.0..=90.0).contains(&lat_max) || !(-90.0..=90.0).contains(&lat_min) {
+                    return json_error(
+                        StatusCode::BAD_REQUEST,
+                        "Latitude must be between -90 and 90 degrees",
+                    )
+                    .into_response();
+                }
+
+                if !(-180.0..=180.0).contains(&lon_max) || !(-180.0..=180.0).contains(&lon_min) {
+                    return json_error(
+                        StatusCode::BAD_REQUEST,
+                        "Longitude must be between -180 and 180 degrees",
+                    )
+                    .into_response();
+                }
+
+                if lat_min >= lat_max {
+                    return json_error(
+                        StatusCode::BAD_REQUEST,
+                        "latitude_min must be less than latitude_max",
+                    )
+                    .into_response();
+                }
+
+                if lon_min >= lon_max {
+                    return json_error(
+                        StatusCode::BAD_REQUEST,
+                        "longitude_min must be less than longitude_max",
+                    )
+                    .into_response();
+                }
+
+                // Set default cutoff time to 24 hours ago if not provided
+                let cutoff_time = params.after.unwrap_or_else(|| Utc::now() - Duration::hours(24));
+
+                // Perform bounding box search
+                match fixes_repo
+                    .get_devices_with_fixes_in_bounding_box(
+                        lat_max, lon_min, lat_min, lon_max, cutoff_time, None,
+                    )
+                    .await
+                {
+                    Ok(devices_with_fixes) => {
+                        // Enrich with aircraft registration and model data
+                        let enriched = enrich_devices_with_aircraft_data(
+                            devices_with_fixes,
+                            state.pool.clone(),
+                        )
+                        .await;
+                        Json(enriched).into_response()
+                    }
+                    Err(e) => {
+                        error!("Failed to get devices with fixes in bounding box: {}", e);
+                        json_error(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "Failed to get devices with fixes in bounding box",
+                        )
+                        .into_response()
+                    }
+                }
+            }
+            _ => json_error(
+                StatusCode::BAD_REQUEST,
+                "When using bounding box search, all four parameters must be provided: latitude_max, latitude_min, longitude_max, longitude_min",
+            )
+            .into_response(),
+        }
+    } else if let Some(device_id) = params.device_id {
+        match fixes_repo
+            .get_fixes_for_device(device_id, Some(params.limit.unwrap_or(1000)))
+            .await
+        {
+            Ok(fixes) => Json(fixes).into_response(),
+            Err(e) => {
+                error!("Failed to get fixes by device ID: {}", e);
+                json_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to get fixes by device ID",
+                )
+                .into_response()
+            }
+        }
+    } else if let Some(flight_id) = params.flight_id {
+        // Get fixes for the specific flight
+        match fixes_repo
+            .get_fixes_for_flight(flight_id, params.limit)
+            .await
+        {
+            Ok(fixes) => Json(fixes).into_response(),
+            Err(e) => {
+                error!("Failed to get fixes by flight ID: {}", e);
+                json_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to get fixes by flight ID",
+                )
+                .into_response()
+            }
+        }
+    } else {
+        match fixes_repo
+            .get_recent_fixes(params.limit.unwrap_or(100))
+            .await
+        {
+            Ok(fixes) => Json(fixes).into_response(),
+            Err(e) => {
+                error!("Failed to get recent fixes: {}", e);
+                json_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to get recent fixes",
+                )
+                .into_response()
             }
         }
     }

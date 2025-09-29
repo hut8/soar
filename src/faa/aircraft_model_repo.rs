@@ -15,7 +15,17 @@ pub type DieselPgPool = Pool<ConnectionManager<PgConnection>>;
 pub type DieselPgPooledConnection = PooledConnection<ConnectionManager<PgConnection>>;
 
 /// Diesel model for the aircraft_model table - used for database operations
-#[derive(Debug, Clone, Queryable, Selectable, Insertable, AsChangeset, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Queryable,
+    QueryableByName,
+    Selectable,
+    Insertable,
+    AsChangeset,
+    Serialize,
+    Deserialize,
+)]
 #[diesel(table_name = aircraft_models)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct AircraftModelRecord {
@@ -301,6 +311,48 @@ impl AircraftModelRepository {
                 }
                 None => Ok(None),
             }
+        })
+        .await?
+    }
+
+    /// Get aircraft models by multiple composite keys (batch query)
+    pub async fn get_aircraft_models_by_keys(
+        &self,
+        keys: &[(String, String, String)], // (manufacturer_code, model_code, series_code)
+    ) -> Result<Vec<AircraftModel>> {
+        if keys.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let pool = self.pool.clone();
+        let keys = keys.to_vec();
+
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            // Build SQL query with tuple IN clause using OR conditions
+            // This is more verbose but works with Diesel's type system
+            let mut or_conditions = Vec::new();
+            for (mfg, model, series) in &keys {
+                or_conditions.push(format!(
+                    "(manufacturer_code = '{}' AND model_code = '{}' AND series_code = '{}')",
+                    mfg.replace("'", "''"),
+                    model.replace("'", "''"),
+                    series.replace("'", "''")
+                ));
+            }
+
+            let sql_str = format!(
+                "SELECT * FROM aircraft_models WHERE {}",
+                or_conditions.join(" OR ")
+            );
+
+            let records = diesel::sql_query(sql_str).load::<AircraftModelRecord>(&mut conn)?;
+
+            let models: Result<Vec<AircraftModel>> =
+                records.into_iter().map(AircraftModel::try_from).collect();
+
+            models
         })
         .await?
     }

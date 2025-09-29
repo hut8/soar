@@ -536,4 +536,22 @@ impl AircraftRegistrationsRepository {
 
         Ok(aircraft_model)
     }
+
+    /// Get aircraft registrations for multiple device IDs (batch query)
+    pub async fn get_aircraft_registrations_by_device_ids(
+        &self,
+        device_ids: &[Uuid],
+    ) -> Result<Vec<AircraftRegistrationModel>> {
+        if device_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut conn = self.get_connection()?;
+        let registrations = aircraft_registrations::table
+            .filter(aircraft_registrations::device_id.eq_any(device_ids))
+            .select(AircraftRegistrationModel::as_select())
+            .load::<AircraftRegistrationModel>(&mut conn)?;
+
+        Ok(registrations)
+    }
 }

@@ -423,4 +423,35 @@ export class FixFeed {
 			await this.subscribeToDevice(deviceId);
 		}
 	}
+
+	// Fetch devices in bounding box via REST API
+	public async fetchDevicesInBoundingBox(
+		latMin: number,
+		latMax: number,
+		lonMin: number,
+		lonMax: number,
+		after?: Date
+	): Promise<DeviceWithFixes[]> {
+		if (!browser) return [];
+
+		const params = new URLSearchParams({
+			latitude_min: latMin.toString(),
+			latitude_max: latMax.toString(),
+			longitude_min: lonMin.toString(),
+			longitude_max: lonMax.toString()
+		});
+
+		if (after) {
+			params.set('after', after.toISOString());
+		}
+
+		try {
+			const { serverCall } = await import('$lib/api/server');
+			const response = await serverCall(`/fixes?${params}`);
+			return response as DeviceWithFixes[];
+		} catch (error) {
+			console.error('Failed to fetch devices in bounding box:', error);
+			return [];
+		}
+	}
 }
