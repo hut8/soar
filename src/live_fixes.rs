@@ -166,20 +166,35 @@ impl LiveFixService {
         broadcaster: broadcast::Sender<LiveFix>,
     ) {
         info!("Started message handler for device: {}", device_id);
+        let mut consecutive_no_receivers = 0;
+        const MAX_NO_RECEIVER_ATTEMPTS: usize = 3;
 
         while let Some(msg) = subscriber.next().await {
             match Self::process_fix_message(msg, &device_id).await {
                 Ok(live_fix) => {
                     match broadcaster.send(live_fix) {
                         Ok(receiver_count) => {
+                            consecutive_no_receivers = 0; // Reset counter on successful send
                             info!(
                                 "Broadcasted live fix for device {} to {} receivers",
                                 device_id, receiver_count
                             );
                         }
                         Err(broadcast::error::SendError(_)) => {
-                            info!("No active receivers for device {}, fix dropped", device_id);
-                            // Could consider breaking here if no receivers for a while
+                            consecutive_no_receivers += 1;
+                            info!(
+                                "No active receivers for device {}, fix dropped ({}/{} consecutive failures)",
+                                device_id, consecutive_no_receivers, MAX_NO_RECEIVER_ATTEMPTS
+                            );
+
+                            // Stop processing if consistently no receivers
+                            if consecutive_no_receivers >= MAX_NO_RECEIVER_ATTEMPTS {
+                                warn!(
+                                    "Device {} has no active receivers after {} consecutive messages, stopping message handler",
+                                    device_id, MAX_NO_RECEIVER_ATTEMPTS
+                                );
+                                break;
+                            }
                         }
                     }
                 }
@@ -202,18 +217,34 @@ impl LiveFixService {
         broadcaster: broadcast::Sender<LiveFix>,
     ) {
         info!("Started message handler for area: {}", area_key);
+        let mut consecutive_no_receivers = 0;
+        const MAX_NO_RECEIVER_ATTEMPTS: usize = 3;
 
         while let Some(msg) = subscriber.next().await {
             match Self::process_area_fix_message(msg, &area_key).await {
                 Ok(live_fix) => match broadcaster.send(live_fix) {
                     Ok(receiver_count) => {
+                        consecutive_no_receivers = 0; // Reset counter on successful send
                         info!(
                             "Broadcasted live fix for area {} to {} receivers",
                             area_key, receiver_count
                         );
                     }
                     Err(broadcast::error::SendError(_)) => {
-                        info!("No active receivers for area {}, fix dropped", area_key);
+                        consecutive_no_receivers += 1;
+                        info!(
+                            "No active receivers for area {}, fix dropped ({}/{} consecutive failures)",
+                            area_key, consecutive_no_receivers, MAX_NO_RECEIVER_ATTEMPTS
+                        );
+
+                        // Stop processing if consistently no receivers
+                        if consecutive_no_receivers >= MAX_NO_RECEIVER_ATTEMPTS {
+                            warn!(
+                                "Area {} has no active receivers after {} consecutive messages, stopping message handler",
+                                area_key, MAX_NO_RECEIVER_ATTEMPTS
+                            );
+                            break;
+                        }
                     }
                 },
                 Err(e) => {
