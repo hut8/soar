@@ -20,7 +20,7 @@ NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
 ProtectHome=yes
-ReadWritePaths=/var/lib/soar/logs /tmp/soar/sitemap /tmp
+ReadWritePaths=/var/lib/soar/logs /var/soar/sitemap /tmp
 
 # Process limits
 LimitNOFILE=65536

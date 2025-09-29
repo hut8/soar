@@ -239,7 +239,7 @@ async fn robots_txt() -> impl IntoResponse {
 async fn sitemap_file(Path(filename): Path<String>) -> impl IntoResponse {
     // Get sitemap root from environment variable
     let sitemap_root =
-        std::env::var("SITEMAP_ROOT").unwrap_or_else(|_| "/tmp/soar/sitemap".to_string());
+        std::env::var("SITEMAP_ROOT").unwrap_or_else(|_| "/var/soar/sitemap".to_string());
 
     // Validate filename to prevent directory traversal
     if filename.contains("..") || filename.contains('/') || filename.contains('\\') {

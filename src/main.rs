@@ -488,7 +488,7 @@ async fn main() -> Result<()> {
     match cli.command {
         Commands::Sitemap { static_root } => {
             let sitemap_path = static_root.unwrap_or_else(|| {
-                env::var("SITEMAP_ROOT").unwrap_or_else(|_| "/tmp/soar/sitemap".to_string())
+                env::var("SITEMAP_ROOT").unwrap_or_else(|_| "/var/soar/sitemap".to_string())
             });
             soar::sitemap::handle_sitemap_generation(diesel_pool, sitemap_path).await
         }

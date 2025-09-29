@@ -86,7 +86,7 @@ fi
 log_info "Creating deployment and archive directories..."
 sudo mkdir -p ${DEPLOY_PATH}/logs
 sudo mkdir -p ${ARCHIVE_PATH}
-sudo mkdir -p /tmp/soar/sitemap
+sudo mkdir -p /var/soar/sitemap
 
 # Ensure /etc/soar directory exists and has correct permissions
 log_info "Ensuring /etc/soar directory has correct permissions..."
@@ -111,7 +111,7 @@ sudo cp target/release/${BINARY_NAME} ${BINARY_PATH}/
 log_info "Setting ownership and permissions..."
 sudo chown -R ${SERVICE_USER}:${SERVICE_GROUP} ${DEPLOY_PATH}
 sudo chown -R ${SERVICE_USER}:${SERVICE_GROUP} ${ARCHIVE_PATH}
-sudo chown -R ${SERVICE_USER}:${SERVICE_GROUP} /tmp/soar
+sudo chown -R ${SERVICE_USER}:${SERVICE_GROUP} /var/soar
 sudo chmod +x ${BINARY_PATH}/${BINARY_NAME}
 
 # Install systemd services
