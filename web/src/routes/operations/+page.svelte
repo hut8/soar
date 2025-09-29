@@ -13,9 +13,14 @@
 	import { toaster } from '$lib/toaster';
 	import { debugStatus } from '$lib/stores/watchlist';
 	import { browser } from '$app/environment';
+	import dayjs from 'dayjs';
+	import relativeTime from 'dayjs/plugin/relativeTime';
 	import type { Fix } from '$lib/types';
 	import type { DeviceRegistryEvent } from '$lib/services/DeviceRegistry';
 	import type { FixFeedEvent } from '$lib/services/FixFeed';
+
+	// Extend dayjs with relative time plugin
+	dayjs.extend(relativeTime);
 
 	// TypeScript interfaces for airport data
 	interface RunwayView {
@@ -121,6 +126,27 @@
 	interface MapState {
 		center: google.maps.LatLngLiteral;
 		zoom: number;
+	}
+
+	// Helper function to format altitude with relative time and check if fix is old
+	function formatAltitudeWithTime(
+		altitude_feet: number | null | undefined,
+		timestamp: string
+	): {
+		altitudeText: string;
+		isOld: boolean;
+	} {
+		const altitudeFt = altitude_feet ? `${altitude_feet}ft` : '---ft';
+		const relativeTimeText = dayjs().to(dayjs(timestamp));
+		const altitudeText = `${altitudeFt} ${relativeTimeText}`;
+
+		// Check if fix is more than 5 minutes old
+		const fixTime = dayjs(timestamp);
+		const now = dayjs();
+		const diffMinutes = now.diff(fixTime, 'minute');
+		const isOld = diffMinutes > 5;
+
+		return { altitudeText, isOld };
 	}
 
 	// Save current map state to localStorage
@@ -811,13 +837,14 @@
 
 		// Use proper device registration, fallback to address
 		const tailNumber = device.registration || device.address || 'Unknown';
-		const altitudeFt = fix.altitude_feet ? `${fix.altitude_feet}ft` : '---ft';
+		const { altitudeText, isOld } = formatAltitudeWithTime(fix.altitude_feet, fix.timestamp);
 		const aircraftModel = device.aircraft_model;
 
 		console.log('[MARKER] Aircraft info:', {
 			tailNumber,
-			altitude: altitudeFt,
-			model: aircraftModel
+			altitude: altitudeText,
+			model: aircraftModel,
+			isOld
 		});
 
 		// Create label with tail number + model (if available) on top, altitude on bottom
@@ -828,7 +855,14 @@
 
 		const altDiv = document.createElement('div');
 		altDiv.className = 'aircraft-altitude';
-		altDiv.textContent = altitudeFt;
+		altDiv.textContent = altitudeText;
+
+		// Apply transparency if fix is old (>5 minutes)
+		if (isOld) {
+			aircraftIcon.style.opacity = '0.5';
+			tailDiv.style.opacity = '0.5';
+			altDiv.style.opacity = '0.5';
+		}
 
 		infoLabel.appendChild(tailDiv);
 		infoLabel.appendChild(altDiv);
@@ -836,10 +870,11 @@
 		markerContent.appendChild(aircraftIcon);
 		markerContent.appendChild(infoLabel);
 
-		// Create the marker with proper title including aircraft model
+		// Create the marker with proper title including aircraft model and full timestamp
+		const fullTimestamp = dayjs(fix.timestamp).format('YYYY-MM-DD HH:mm:ss UTC');
 		const title = device.aircraft_model
-			? `${tailNumber} (${device.aircraft_model}) - Altitude: ${altitudeFt}`
-			: `${tailNumber} - Altitude: ${altitudeFt}`;
+			? `${tailNumber} (${device.aircraft_model}) - ${altitudeText} - Last seen: ${fullTimestamp}`
+			: `${tailNumber} - ${altitudeText} - Last seen: ${fullTimestamp}`;
 
 		console.log('[MARKER] Creating AdvancedMarkerElement with:', {
 			position: { lat: fix.latitude, lng: fix.longitude },
@@ -892,13 +927,31 @@
 			if (tailDiv && altDiv) {
 				// Use proper device registration, fallback to address
 				const tailNumber = device.registration || device.address || 'Unknown';
-				const altitudeFt = fix.altitude_feet ? `${fix.altitude_feet}ft` : '---ft';
+				const { altitudeText, isOld } = formatAltitudeWithTime(fix.altitude_feet, fix.timestamp);
 				const aircraftModel = device.aircraft_model;
 
 				// Include aircraft model after tail number if available
 				tailDiv.textContent = aircraftModel ? `${tailNumber} (${aircraftModel})` : tailNumber;
-				altDiv.textContent = altitudeFt;
-				console.log('[MARKER] Updated label info:', { tailNumber, altitudeFt, aircraftModel });
+				altDiv.textContent = altitudeText;
+
+				// Apply transparency if fix is old (>5 minutes)
+				if (isOld) {
+					aircraftIcon.style.opacity = '0.5';
+					tailDiv.style.opacity = '0.5';
+					altDiv.style.opacity = '0.5';
+				} else {
+					// Reset opacity for fresh fixes
+					aircraftIcon.style.opacity = '1';
+					tailDiv.style.opacity = '1';
+					altDiv.style.opacity = '1';
+				}
+
+				console.log('[MARKER] Updated label info:', {
+					tailNumber,
+					altitudeText,
+					aircraftModel,
+					isOld
+				});
 			}
 		} else {
 			console.warn('[MARKER] No marker content found for position update');
@@ -908,10 +961,12 @@
 		const currentZoom = map.getZoom() || 4;
 		updateMarkerScale(markerContent, currentZoom);
 
-		// Update the marker title
+		// Update the marker title with full timestamp
+		const { altitudeText } = formatAltitudeWithTime(fix.altitude_feet, fix.timestamp);
+		const fullTimestamp = dayjs(fix.timestamp).format('YYYY-MM-DD HH:mm:ss UTC');
 		const title = device.aircraft_model
-			? `${device.registration || device.address} (${device.aircraft_model}) - Altitude: ${fix.altitude_feet ? fix.altitude_feet + 'ft' : '---ft'}`
-			: `${device.registration || device.address} - Altitude: ${fix.altitude_feet ? fix.altitude_feet + 'ft' : '---ft'}`;
+			? `${device.registration || device.address} (${device.aircraft_model}) - ${altitudeText} - Last seen: ${fullTimestamp}`
+			: `${device.registration || device.address} - ${altitudeText} - Last seen: ${fullTimestamp}`;
 
 		marker.title = title;
 		console.log('[MARKER] Updated marker title:', title);
