@@ -54,6 +54,12 @@ import { Search, User, Settings, ChevronDown } from '@lucide/svelte';
 
 ### Backend Development Standards
 
+#### Rust Code Quality (REQUIRED)
+- **ALWAYS run `cargo fmt`** after editing Rust files to ensure consistent formatting
+- **Pre-commit hooks automatically run `cargo fmt`** - but format manually for immediate feedback
+- **Use `cargo clippy`** to catch common issues and improve code quality
+- All Rust code must pass formatting, clippy, and tests before commit
+
 #### Rust Patterns
 ```rust
 //  Use anyhow::Result for error handling
