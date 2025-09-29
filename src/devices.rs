@@ -313,7 +313,10 @@ impl Device {
 #[derive(Debug, Clone)]
 pub enum DeviceSearchCriteria {
     Registration(String),
-    Address { address: u32, address_type: AddressType },
+    Address {
+        address: u32,
+        address_type: AddressType,
+    },
 }
 
 impl DeviceFetcher {

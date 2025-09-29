@@ -4,14 +4,14 @@ use futures_util::stream::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{broadcast, Mutex};
+use tokio::sync::{Mutex, broadcast};
 use tracing::{error, info, warn};
 
 /// Get the topic prefix based on the environment
 fn get_topic_prefix() -> &'static str {
     match std::env::var("SOAR_ENV") {
         Ok(env) if env == "production" => "aircraft",
-        _ => "staging.aircraft"
+        _ => "staging.aircraft",
     }
 }
 
@@ -56,13 +56,19 @@ impl LiveFixService {
     }
 
     // Subscribe to a specific device - creates NATS subscription on-demand
-    pub async fn subscribe_to_device(&self, device_id: &str) -> Result<broadcast::Receiver<LiveFix>> {
+    pub async fn subscribe_to_device(
+        &self,
+        device_id: &str,
+    ) -> Result<broadcast::Receiver<LiveFix>> {
         let mut subscriptions = self.subscriptions.lock().await;
 
         // If we already have a subscription for this device, just create a new receiver
         if let Some(subscription) = subscriptions.get_mut(device_id) {
             subscription.subscriber_count += 1;
-            info!("Added subscriber for device {} (total: {})", device_id, subscription.subscriber_count);
+            info!(
+                "Added subscriber for device {} (total: {})",
+                device_id, subscription.subscriber_count
+            );
             return Ok(subscription.broadcaster.subscribe());
         }
 
@@ -72,7 +78,10 @@ impl LiveFixService {
         let subscriber = self.nats_client.subscribe(subject.clone()).await?;
         let (broadcaster, receiver) = broadcast::channel(100);
 
-        info!("Creating new NATS subscription for device: {} on subject: {}", device_id, subject);
+        info!(
+            "Creating new NATS subscription for device: {} on subject: {}",
+            device_id, subject
+        );
 
         // Spawn task to handle messages for this device
         let device_id_clone = device_id.to_string();
@@ -95,14 +104,21 @@ impl LiveFixService {
     }
 
     // Subscribe to a specific area - creates NATS subscription on-demand
-    pub async fn subscribe_to_area(&self, latitude: i32, longitude: i32) -> Result<broadcast::Receiver<LiveFix>> {
+    pub async fn subscribe_to_area(
+        &self,
+        latitude: i32,
+        longitude: i32,
+    ) -> Result<broadcast::Receiver<LiveFix>> {
         let area_key = format!("area.{}.{}", latitude, longitude);
         let mut subscriptions = self.subscriptions.lock().await;
 
         // If we already have a subscription for this area, just create a new receiver
         if let Some(subscription) = subscriptions.get_mut(&area_key) {
             subscription.subscriber_count += 1;
-            info!("Added subscriber for area {}.{} (total: {})", latitude, longitude, subscription.subscriber_count);
+            info!(
+                "Added subscriber for area {}.{} (total: {})",
+                latitude, longitude, subscription.subscriber_count
+            );
             return Ok(subscription.broadcaster.subscribe());
         }
 
@@ -112,7 +128,10 @@ impl LiveFixService {
         let subscriber = self.nats_client.subscribe(subject.clone()).await?;
         let (broadcaster, receiver) = broadcast::channel(100);
 
-        info!("Creating new NATS subscription for area {}.{} on subject: {}", latitude, longitude, subject);
+        info!(
+            "Creating new NATS subscription for area {}.{} on subject: {}",
+            latitude, longitude, subject
+        );
 
         // Spawn task to handle messages for this area
         let area_key_clone = area_key.clone();
@@ -138,7 +157,7 @@ impl LiveFixService {
     async fn handle_device_messages(
         mut subscriber: Subscriber,
         device_id: String,
-        broadcaster: broadcast::Sender<LiveFix>
+        broadcaster: broadcast::Sender<LiveFix>,
     ) {
         info!("Started message handler for device: {}", device_id);
 
@@ -147,7 +166,10 @@ impl LiveFixService {
                 Ok(live_fix) => {
                     match broadcaster.send(live_fix) {
                         Ok(receiver_count) => {
-                            info!("Broadcasted live fix for device {} to {} receivers", device_id, receiver_count);
+                            info!(
+                                "Broadcasted live fix for device {} to {} receivers",
+                                device_id, receiver_count
+                            );
                         }
                         Err(broadcast::error::SendError(_)) => {
                             info!("No active receivers for device {}, fix dropped", device_id);
@@ -156,7 +178,10 @@ impl LiveFixService {
                     }
                 }
                 Err(e) => {
-                    error!("Failed to process fix message for device {}: {}", device_id, e);
+                    error!(
+                        "Failed to process fix message for device {}: {}",
+                        device_id, e
+                    );
                 }
             }
         }
@@ -168,22 +193,23 @@ impl LiveFixService {
     async fn handle_area_messages(
         mut subscriber: Subscriber,
         area_key: String,
-        broadcaster: broadcast::Sender<LiveFix>
+        broadcaster: broadcast::Sender<LiveFix>,
     ) {
         info!("Started message handler for area: {}", area_key);
 
         while let Some(msg) = subscriber.next().await {
             match Self::process_area_fix_message(msg, &area_key).await {
-                Ok(live_fix) => {
-                    match broadcaster.send(live_fix) {
-                        Ok(receiver_count) => {
-                            info!("Broadcasted live fix for area {} to {} receivers", area_key, receiver_count);
-                        }
-                        Err(broadcast::error::SendError(_)) => {
-                            info!("No active receivers for area {}, fix dropped", area_key);
-                        }
+                Ok(live_fix) => match broadcaster.send(live_fix) {
+                    Ok(receiver_count) => {
+                        info!(
+                            "Broadcasted live fix for area {} to {} receivers",
+                            area_key, receiver_count
+                        );
                     }
-                }
+                    Err(broadcast::error::SendError(_)) => {
+                        info!("No active receivers for area {}, fix dropped", area_key);
+                    }
+                },
                 Err(e) => {
                     error!("Failed to process fix message for area {}: {}", area_key, e);
                 }
@@ -194,7 +220,10 @@ impl LiveFixService {
     }
 
     // Process a single fix message
-    async fn process_fix_message(msg: async_nats::Message, expected_device_id: &str) -> Result<LiveFix> {
+    async fn process_fix_message(
+        msg: async_nats::Message,
+        expected_device_id: &str,
+    ) -> Result<LiveFix> {
         // Parse the full Fix data from NATS
         let fix: crate::Fix = serde_json::from_slice(&msg.payload)?;
 
@@ -252,11 +281,17 @@ impl LiveFixService {
 
         if let Some(subscription) = subscriptions.get_mut(device_id) {
             subscription.subscriber_count -= 1;
-            info!("Removed subscriber for device {} (remaining: {})", device_id, subscription.subscriber_count);
+            info!(
+                "Removed subscriber for device {} (remaining: {})",
+                device_id, subscription.subscriber_count
+            );
 
             // If no more subscribers, clean up the subscription
             if subscription.subscriber_count == 0 {
-                info!("No more subscribers for device {}, cleaning up NATS subscription", device_id);
+                info!(
+                    "No more subscribers for device {}, cleaning up NATS subscription",
+                    device_id
+                );
 
                 // Cancel the message handler task
                 subscription.task_handle.abort();
@@ -265,7 +300,10 @@ impl LiveFixService {
                 subscriptions.remove(device_id);
             }
         } else {
-            warn!("Attempted to unsubscribe from device {} but no subscription found", device_id);
+            warn!(
+                "Attempted to unsubscribe from device {} but no subscription found",
+                device_id
+            );
         }
 
         Ok(())
@@ -278,11 +316,17 @@ impl LiveFixService {
 
         if let Some(subscription) = subscriptions.get_mut(&area_key) {
             subscription.subscriber_count -= 1;
-            info!("Removed subscriber for area {}.{} (remaining: {})", latitude, longitude, subscription.subscriber_count);
+            info!(
+                "Removed subscriber for area {}.{} (remaining: {})",
+                latitude, longitude, subscription.subscriber_count
+            );
 
             // If no more subscribers, clean up the subscription
             if subscription.subscriber_count == 0 {
-                info!("No more subscribers for area {}.{}, cleaning up NATS subscription", latitude, longitude);
+                info!(
+                    "No more subscribers for area {}.{}, cleaning up NATS subscription",
+                    latitude, longitude
+                );
 
                 // Cancel the message handler task
                 subscription.task_handle.abort();
@@ -291,7 +335,10 @@ impl LiveFixService {
                 subscriptions.remove(&area_key);
             }
         } else {
-            warn!("Attempted to unsubscribe from area {}.{} but no subscription found", latitude, longitude);
+            warn!(
+                "Attempted to unsubscribe from area {}.{} but no subscription found",
+                latitude, longitude
+            );
         }
 
         Ok(())

@@ -13,7 +13,10 @@ use crate::flights_repo::FlightsRepository;
 use crate::runways_repo::RunwaysRepository;
 use crate::web::AppState;
 
-use super::{json_error, views::{AirportView, ClubView}};
+use super::{
+    json_error,
+    views::{AirportView, ClubView},
+};
 
 #[derive(Debug, Deserialize)]
 pub struct SearchQueryParams {
@@ -107,7 +110,8 @@ pub async fn search_airports(
         }
     }
     // Check if geographic search parameters are provided
-    else if let (Some(lat), Some(lng), Some(radius)) = (params.latitude, params.longitude, params.radius)
+    else if let (Some(lat), Some(lng), Some(radius)) =
+        (params.latitude, params.longitude, params.radius)
     {
         // Validate radius
         if radius <= 0.0 || radius > 1000.0 {
@@ -346,10 +350,7 @@ pub async fn search_flights(
     let flights_repo = FlightsRepository::new(state.pool);
 
     if let Some(device_id) = params.device_id {
-        match flights_repo
-            .get_flights_for_device(&device_id)
-            .await
-        {
+        match flights_repo.get_flights_for_device(&device_id).await {
             Ok(flights) => Json(flights).into_response(),
             Err(e) => {
                 error!("Failed to get flights by device ID: {}", e);

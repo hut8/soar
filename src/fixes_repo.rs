@@ -272,7 +272,6 @@ impl FixesRepository {
             use crate::schema::fixes::dsl::*;
             let mut conn = pool.get()?;
 
-
             let results = fixes
                 .filter(device_id.eq(device_id_param))
                 .filter(timestamp.between(start_time, end_time))
@@ -323,7 +322,6 @@ impl FixesRepository {
             use crate::schema::fixes::dsl::*;
             let mut conn = pool.get()?;
 
-
             let results = fixes
                 .order(timestamp.desc())
                 .limit(limit)
@@ -348,9 +346,7 @@ impl FixesRepository {
         let result = tokio::task::spawn_blocking(move || {
             use crate::schema::fixes::dsl::*;
             let mut conn = pool.get()?;
-            let mut query = fixes
-                .filter(device_id.eq(device_uuid))
-                .into_boxed();
+            let mut query = fixes.filter(device_id.eq(device_uuid)).into_boxed();
             if let Some(after_timestamp) = after {
                 query = query.filter(timestamp.gt(after_timestamp));
             }
@@ -431,7 +427,6 @@ impl FixesRepository {
                 .limit(limit)
                 .select(Fix::as_select())
                 .load::<Fix>(&mut conn)?;
-
 
             Ok::<Vec<Fix>, anyhow::Error>(results)
         })

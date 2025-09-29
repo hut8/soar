@@ -11,8 +11,8 @@ use tracing::warn;
 use uuid::Uuid;
 
 // Import Point from clubs module
-use crate::locations::Point;
 use crate::aircraft_types::AircraftType;
+use crate::locations::Point;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum)]
 #[db_enum(existing_type_path = "crate::schema::sql_types::AirworthinessClass")]
@@ -599,7 +599,7 @@ pub struct Aircraft {
 
     // Registrant / address
     pub registrant_type_code: Option<RegistrantType>, // 57
-    pub registrant_name: Option<String>,                // 59–108
+    pub registrant_name: Option<String>,              // 59–108
     #[serde(skip_serializing)]
     pub street1: Option<String>, // 110–142 (legacy, kept for parsing)
     #[serde(skip_serializing)]
@@ -630,8 +630,8 @@ pub struct Aircraft {
     pub approved_ops: ApprovedOps,                       // mapped flags (best effort)
 
     pub aircraft_type: Option<AircraftType>, // 249
-    pub type_engine_code: Option<i16>,      // 251–252
-    pub status_code: Option<String>,        // 254–255
+    pub type_engine_code: Option<i16>,       // 251–252
+    pub status_code: Option<String>,         // 254–255
 
     // Mode S transponder as a single number
     pub transponder_code: Option<u32>, // from 602–611 (hex) or 257–264 (octal)
@@ -667,8 +667,7 @@ pub struct Aircraft {
 impl Aircraft {
     /// Returns the registrant type based on the registrant_type_code
     pub fn registrant_type(&self) -> RegistrantType {
-        self.registrant_type_code
-            .unwrap_or(RegistrantType::Unknown)
+        self.registrant_type_code.unwrap_or(RegistrantType::Unknown)
     }
 
     /// Get a complete address string for geocoding
@@ -860,8 +859,8 @@ impl Aircraft {
             None
         };
 
-        let aircraft_type = to_opt_string(fw(line, 249, 249))
-            .and_then(|code| AircraftType::from_str(&code).ok());
+        let aircraft_type =
+            to_opt_string(fw(line, 249, 249)).and_then(|code| AircraftType::from_str(&code).ok());
         let type_engine_code = to_opt_string(fw(line, 251, 252)).and_then(|s| s.parse().ok());
         let status_code = to_opt_string(fw(line, 254, 255));
 
@@ -1074,8 +1073,8 @@ impl Aircraft {
         let airworthiness_class = airworthiness_class_code
             .as_ref()
             .map(|code| AirworthinessClass::from(code.as_str()));
-        let aircraft_type = to_opt_string(fields[18])
-            .and_then(|code| AircraftType::from_str(&code).ok());
+        let aircraft_type =
+            to_opt_string(fields[18]).and_then(|code| AircraftType::from_str(&code).ok());
         let type_engine_code = to_opt_string(fields[19]).and_then(|s| s.parse().ok());
         let status_code = to_opt_string(fields[20]);
 

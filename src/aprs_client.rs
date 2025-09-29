@@ -50,7 +50,6 @@ pub trait PacketHandler: Send + Sync + std::any::Any {
     fn as_any(&self) -> &dyn std::any::Any;
 }
 
-
 /// Trait for processing APRS position messages
 pub trait PositionProcessor: Send + Sync {
     /// Process an APRS position message

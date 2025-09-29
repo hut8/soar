@@ -52,9 +52,7 @@ pub async fn get_flight_kml(
     // First get the flight
     let flight = match flights_repo.get_flight_by_id(id).await {
         Ok(Some(flight)) => flight,
-        Ok(None) => {
-            return json_error(StatusCode::NOT_FOUND, "Flight not found").into_response()
-        }
+        Ok(None) => return json_error(StatusCode::NOT_FOUND, "Flight not found").into_response(),
         Err(e) => {
             tracing::error!("Failed to get flight by ID {}: {}", id, e);
             return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get flight")
@@ -66,13 +64,18 @@ pub async fn get_flight_kml(
     match flight.make_kml(&fixes_repo).await {
         Ok(kml_content) => {
             let mut headers = HeaderMap::new();
-            headers.insert("content-type", "application/vnd.google-earth.kml+xml".parse().unwrap());
+            headers.insert(
+                "content-type",
+                "application/vnd.google-earth.kml+xml".parse().unwrap(),
+            );
 
             // Generate filename based on flight info
             let filename = generate_kml_filename(&flight);
             headers.insert(
                 "content-disposition",
-                format!("attachment; filename=\"{}\"", filename).parse().unwrap(),
+                format!("attachment; filename=\"{}\"", filename)
+                    .parse()
+                    .unwrap(),
             );
 
             (StatusCode::OK, headers, kml_content).into_response()
@@ -95,9 +98,7 @@ pub async fn get_flight_fixes(
     // First verify the flight exists
     let flight = match flights_repo.get_flight_by_id(id).await {
         Ok(Some(flight)) => flight,
-        Ok(None) => {
-            return json_error(StatusCode::NOT_FOUND, "Flight not found").into_response()
-        }
+        Ok(None) => return json_error(StatusCode::NOT_FOUND, "Flight not found").into_response(),
         Err(e) => {
             tracing::error!("Failed to get flight by ID {}: {}", id, e);
             return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get flight")
@@ -124,8 +125,11 @@ pub async fn get_flight_fixes(
         }
         Err(e) => {
             tracing::error!("Failed to get fixes for flight {}: {}", id, e);
-            json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get flight fixes")
-                .into_response()
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to get flight fixes",
+            )
+            .into_response()
         }
     }
 }

@@ -33,7 +33,6 @@ pub struct DeviceSearchQuery {
     pub address_type: Option<String>,
 }
 
-
 #[derive(Debug, Serialize)]
 pub struct DeviceSearchResponse {
     pub devices: Vec<Device>,
@@ -44,7 +43,6 @@ pub struct DeviceFixesResponse {
     pub fixes: Vec<Fix>,
     pub count: usize,
 }
-
 
 /// Get a device by its UUID
 pub async fn get_device_by_id(
@@ -132,8 +130,16 @@ pub async fn search_devices(
             match device_repo.search_by_registration(registration).await {
                 Ok(devices) => Json(DeviceSearchResponse { devices }).into_response(),
                 Err(e) => {
-                    tracing::error!("Failed to search devices by registration {}: {}", registration, e);
-                    json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to search devices").into_response()
+                    tracing::error!(
+                        "Failed to search devices by registration {}: {}",
+                        registration,
+                        e
+                    );
+                    json_error(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Failed to search devices",
+                    )
+                    .into_response()
                 }
             }
         }
@@ -145,7 +151,8 @@ pub async fn search_devices(
                     return json_error(
                         StatusCode::BAD_REQUEST,
                         "Invalid address format. Expected hexadecimal string",
-                    ).into_response();
+                    )
+                    .into_response();
                 }
             };
 
@@ -158,17 +165,33 @@ pub async fn search_devices(
                     return json_error(
                         StatusCode::BAD_REQUEST,
                         "Invalid address-type. Must be I (ICAO), O (OGN), or F (FLARM)",
-                    ).into_response();
+                    )
+                    .into_response();
                 }
             };
 
             // Search by address and type
-            match device_repo.search_by_address_and_type(address, address_type).await {
-                Ok(Some(device)) => Json(DeviceSearchResponse { devices: vec![device] }).into_response(),
+            match device_repo
+                .search_by_address_and_type(address, address_type)
+                .await
+            {
+                Ok(Some(device)) => Json(DeviceSearchResponse {
+                    devices: vec![device],
+                })
+                .into_response(),
                 Ok(None) => Json(DeviceSearchResponse { devices: vec![] }).into_response(),
                 Err(e) => {
-                    tracing::error!("Failed to search devices by address {} and type {}: {}", address, address_type_str, e);
-                    json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to search devices").into_response()
+                    tracing::error!(
+                        "Failed to search devices by address {} and type {}: {}",
+                        address,
+                        address_type_str,
+                        e
+                    );
+                    json_error(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Failed to search devices",
+                    )
+                    .into_response()
                 }
             }
         }
@@ -190,12 +213,23 @@ pub async fn get_device_aircraft_registration(
     let aircraft_repo = AircraftRegistrationsRepository::new(state.pool.clone());
 
     // Query aircraft_registrations table for a record with the given device_id
-    match aircraft_repo.get_aircraft_registration_by_device_id(id).await {
+    match aircraft_repo
+        .get_aircraft_registration_by_device_id(id)
+        .await
+    {
         Ok(Some(aircraft_registration)) => Json(aircraft_registration).into_response(),
         Ok(None) => (StatusCode::NOT_FOUND).into_response(),
         Err(e) => {
-            tracing::error!("Failed to get aircraft registration for device {}: {}", id, e);
-            json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get aircraft registration").into_response()
+            tracing::error!(
+                "Failed to get aircraft registration for device {}: {}",
+                id,
+                e
+            );
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to get aircraft registration",
+            )
+            .into_response()
         }
     }
 }
@@ -210,23 +244,37 @@ pub async fn get_device_aircraft_model(
     let aircraft_model_repo = AircraftModelRepository::new(state.pool.clone());
 
     // First get the aircraft registration for this device
-    let aircraft_registration = match aircraft_repo.get_aircraft_registration_by_device_id(id).await {
+    let aircraft_registration = match aircraft_repo
+        .get_aircraft_registration_by_device_id(id)
+        .await
+    {
         Ok(Some(registration)) => registration,
         Ok(None) => {
             return (StatusCode::NOT_FOUND).into_response();
         }
         Err(e) => {
-            tracing::error!("Failed to get aircraft registration for device {}: {}", id, e);
-            return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get aircraft registration").into_response();
+            tracing::error!(
+                "Failed to get aircraft registration for device {}: {}",
+                id,
+                e
+            );
+            return json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to get aircraft registration",
+            )
+            .into_response();
         }
     };
 
     // Now get the aircraft model using the codes from the registration
-    match aircraft_model_repo.get_aircraft_model_by_key(
-        &aircraft_registration.manufacturer_code,
-        &aircraft_registration.model_code,
-        &aircraft_registration.series_code,
-    ).await {
+    match aircraft_model_repo
+        .get_aircraft_model_by_key(
+            &aircraft_registration.manufacturer_code,
+            &aircraft_registration.model_code,
+            &aircraft_registration.series_code,
+        )
+        .await
+    {
         Ok(Some(aircraft_model)) => Json(aircraft_model).into_response(),
         Ok(None) => (StatusCode::NOT_FOUND).into_response(),
         Err(e) => {
@@ -238,7 +286,11 @@ pub async fn get_device_aircraft_model(
                 aircraft_registration.series_code,
                 e
             );
-            json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get aircraft model").into_response()
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to get aircraft model",
+            )
+            .into_response()
         }
     }
 }

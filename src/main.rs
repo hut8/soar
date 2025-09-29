@@ -316,9 +316,12 @@ async fn handle_run(
         Ok(processor_with_nats) => {
             info!("Created FixProcessor with NATS publisher");
             processor_with_nats
-        },
+        }
         Err(e) => {
-            warn!("Failed to create FixProcessor with NATS ({}), falling back to processor without NATS", e);
+            warn!(
+                "Failed to create FixProcessor with NATS ({}), falling back to processor without NATS",
+                e
+            );
             FixProcessor::new(diesel_pool.clone())
         }
     };
@@ -329,8 +332,8 @@ async fn handle_run(
 
     // Create aircraft position processor
     // Note: FlightDetectionProcessor is now handled inside FixProcessor
-    let aircraft_position_processor = AircraftPositionProcessor::new()
-        .with_fix_processor(fix_processor.clone());
+    let aircraft_position_processor =
+        AircraftPositionProcessor::new().with_fix_processor(fix_processor.clone());
 
     // Create position packet processor
     let position_processor =

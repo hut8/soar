@@ -11,7 +11,6 @@ use crate::web::AppState;
 
 use super::{json_error, views::AirportView};
 
-
 pub async fn get_airport_by_id(
     State(state): State<AppState>,
     axum::extract::Path(airport_id): axum::extract::Path<i32>,
