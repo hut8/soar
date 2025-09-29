@@ -10,6 +10,8 @@ use diesel::prelude::*;
 use diesel_derive_enum::DbEnum;
 
 const DDB_URL_GLIDERNET: &str = "http://ddb.glidernet.org/download/?j=1";
+const DDB_URL_GLIDERNET_WORKERS: &str =
+    "https://ddb-glidernet-download.davis-chappins.workers.dev/ddb.json";
 const DDB_URL_FLARMNET: &str = "https://www.flarmnet.org/files/ddb.json";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -327,13 +329,62 @@ impl DeviceFetcher {
     /// Fetch devices from Glidernet DDB
     async fn fetch_glidernet(&self) -> Result<Vec<Device>> {
         info!("Fetching devices from Glidernet DDB...");
-        let response = reqwest::get(DDB_URL_GLIDERNET).await?;
-        let device_response: DeviceResponse = response.json().await?;
-        info!(
-            "Successfully fetched {} devices from Glidernet",
-            device_response.devices.len()
-        );
-        Ok(device_response.devices)
+
+        // Try primary URL first
+        match reqwest::get(DDB_URL_GLIDERNET).await {
+            Ok(response) if response.status().is_success() => {
+                match response.json::<DeviceResponse>().await {
+                    Ok(device_response) => {
+                        info!(
+                            "Successfully fetched {} devices from Glidernet (primary)",
+                            device_response.devices.len()
+                        );
+                        return Ok(device_response.devices);
+                    }
+                    Err(e) => {
+                        warn!("Primary Glidernet URL returned invalid JSON: {}", e);
+                    }
+                }
+            }
+            Ok(response) => {
+                warn!(
+                    "Primary Glidernet URL returned HTTP {}: {}",
+                    response.status(),
+                    response
+                        .status()
+                        .canonical_reason()
+                        .unwrap_or("Unknown error")
+                );
+            }
+            Err(e) => {
+                warn!("Failed to connect to primary Glidernet URL: {}", e);
+            }
+        }
+
+        // If primary failed, try the backup URL
+        info!("Trying backup Glidernet URL...");
+        match reqwest::get(DDB_URL_GLIDERNET_WORKERS).await {
+            Ok(response) if response.status().is_success() => {
+                let device_response: DeviceResponse = response.json().await?;
+                info!(
+                    "Successfully fetched {} devices from Glidernet (backup)",
+                    device_response.devices.len()
+                );
+                Ok(device_response.devices)
+            }
+            Ok(response) => Err(anyhow::anyhow!(
+                "Backup Glidernet URL returned HTTP {}: {}",
+                response.status(),
+                response
+                    .status()
+                    .canonical_reason()
+                    .unwrap_or("Unknown error")
+            )),
+            Err(e) => Err(anyhow::anyhow!(
+                "Failed to fetch from both primary and backup Glidernet URLs. Last error: {}",
+                e
+            )),
+        }
     }
 
     /// Fetch devices from Flarmnet DDB
