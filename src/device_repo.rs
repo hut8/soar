@@ -50,6 +50,7 @@ impl DeviceRepository {
                     devices::competition_number.eq(excluded(devices::competition_number)),
                     devices::tracked.eq(excluded(devices::tracked)),
                     devices::identified.eq(excluded(devices::identified)),
+                    devices::from_ddb.eq(excluded(devices::from_ddb)),
                     devices::updated_at.eq(diesel::dsl::now),
                 ))
                 .execute(&mut conn);

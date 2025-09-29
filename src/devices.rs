@@ -163,6 +163,7 @@ pub struct DeviceModel {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub id: uuid::Uuid,
+    pub from_ddb: bool,
 }
 
 // For inserting new devices (without timestamps which are set by DB)
@@ -176,6 +177,7 @@ pub struct NewDevice {
     pub competition_number: String,
     pub tracked: bool,
     pub identified: bool,
+    pub from_ddb: bool,
 }
 
 impl From<Device> for NewDevice {
@@ -188,6 +190,7 @@ impl From<Device> for NewDevice {
             competition_number: device.competition_number,
             tracked: device.tracked,
             identified: device.identified,
+            from_ddb: true,
         }
     }
 }

@@ -230,6 +230,7 @@ diesel::table! {
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
         id -> Uuid,
+        from_ddb -> Bool,
     }
 }
 
