@@ -99,6 +99,7 @@ export interface AircraftRegistration {
 	year_mfr: number;
 	type_registrant: number;
 	name: string;
+	registrant_name: string;
 	street: string;
 	street2: string;
 	city: string;
@@ -130,6 +131,22 @@ export interface AircraftRegistration {
 	updated_at: string;
 }
 
+// Aircraft model information
+export interface AircraftModel {
+	manufacturer: string;
+	model: string;
+	type_certificate: string | null;
+	type_aircraft: number;
+	type_engine: number;
+	ac_weight: string | null;
+	speed: number | null;
+	engines: number | null;
+	seats: number | null;
+	weight: number | null;
+	created_at: string;
+	updated_at: string;
+}
+
 // Device class with integrated caching functionality
 export class Device {
 	public id: string;
@@ -141,6 +158,7 @@ export class Device {
 	public tracked: boolean;
 	public identified: boolean;
 	public aircraft: AircraftRegistration | null = null; // Lazy-loaded aircraft registration data
+	public aircraftModel: AircraftModel | null = null; // Lazy-loaded aircraft model data
 	public fixes: Fix[] = []; // Array with most recent fix first (index 0)
 	private readonly maxFixAge = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 
@@ -154,6 +172,7 @@ export class Device {
 		tracked: boolean;
 		identified: boolean;
 		aircraft?: AircraftRegistration | null;
+		aircraftModel?: AircraftModel | null;
 	}) {
 		this.id = data.id || '';
 		this.address_type = data.address_type;
@@ -164,6 +183,7 @@ export class Device {
 		this.tracked = data.tracked;
 		this.identified = data.identified;
 		this.aircraft = data.aircraft || null;
+		this.aircraftModel = data.aircraftModel || null;
 	}
 
 	// Add a new fix, maintaining the most-recent-first order
@@ -232,6 +252,42 @@ export class Device {
 		}
 	}
 
+	// Lazy-load aircraft model data
+	async getAircraftModel(): Promise<AircraftModel | null> {
+		// Return cached data if available
+		if (this.aircraftModel) {
+			console.log('[DEVICE] Returning cached aircraft model for:', this.id);
+			return this.aircraftModel;
+		}
+
+		// Fetch from API if not cached
+		try {
+			console.log('[DEVICE] Fetching aircraft model for device:', this.id);
+			const { serverCall } = await import('$lib/api/server');
+			const aircraftModel = await serverCall<AircraftModel>(`/devices/${this.id}/aircraft/model`);
+
+			if (aircraftModel) {
+				console.log(
+					'[DEVICE] Fetched aircraft model:',
+					aircraftModel.manufacturer,
+					aircraftModel.model
+				);
+				this.aircraftModel = aircraftModel;
+
+				// Save updated device to localStorage via DeviceRegistry
+				const { DeviceRegistry } = await import('$lib/services/DeviceRegistry');
+				DeviceRegistry.getInstance().setDevice(this);
+			} else {
+				console.log('[DEVICE] No aircraft model found for device:', this.id);
+			}
+
+			return aircraftModel;
+		} catch (error) {
+			console.warn('[DEVICE] Failed to fetch aircraft model:', error);
+			return null;
+		}
+	}
+
 	// Remove fixes older than 24 hours
 	private cleanupOldFixes(): void {
 		const cutoffTime = Date.now() - this.maxFixAge;
@@ -252,6 +308,7 @@ export class Device {
 		tracked: boolean;
 		identified: boolean;
 		aircraft: AircraftRegistration | null;
+		aircraftModel: AircraftModel | null;
 	} {
 		return {
 			id: this.id,
@@ -262,7 +319,8 @@ export class Device {
 			cn: this.cn,
 			tracked: this.tracked,
 			identified: this.identified,
-			aircraft: this.aircraft
+			aircraft: this.aircraft,
+			aircraftModel: this.aircraftModel
 		};
 	}
 
@@ -277,6 +335,7 @@ export class Device {
 		tracked: boolean;
 		identified: boolean;
 		aircraft?: AircraftRegistration | null;
+		aircraftModel?: AircraftModel | null;
 	} {
 		if (!data || typeof data !== 'object') {
 			return false;
@@ -291,7 +350,10 @@ export class Device {
 			typeof obj.cn === 'string' &&
 			typeof obj.tracked === 'boolean' &&
 			typeof obj.identified === 'boolean' &&
-			(obj.aircraft === null || obj.aircraft === undefined || typeof obj.aircraft === 'object')
+			(obj.aircraft === null || obj.aircraft === undefined || typeof obj.aircraft === 'object') &&
+			(obj.aircraftModel === null ||
+				obj.aircraftModel === undefined ||
+				typeof obj.aircraftModel === 'object')
 		);
 	}
 
@@ -306,6 +368,7 @@ export class Device {
 		tracked: boolean;
 		identified: boolean;
 		aircraft?: AircraftRegistration | null;
+		aircraftModel?: AircraftModel | null;
 	}): Device {
 		return new Device({
 			id: data.id,
@@ -316,7 +379,8 @@ export class Device {
 			cn: data.cn,
 			tracked: data.tracked,
 			identified: data.identified,
-			aircraft: data.aircraft || null
+			aircraft: data.aircraft || null,
+			aircraftModel: data.aircraftModel || null
 		});
 	}
 }

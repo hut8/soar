@@ -7,6 +7,7 @@
 	import { Settings, ListChecks, MapPlus, MapMinus } from '@lucide/svelte';
 	import WatchlistModal from '$lib/components/WatchlistModal.svelte';
 	import SettingsModal from '$lib/components/SettingsModal.svelte';
+	import AircraftStatusModal from '$lib/components/AircraftStatusModal.svelte';
 	import { DeviceRegistry } from '$lib/services/DeviceRegistry';
 	import { FixFeed } from '$lib/services/FixFeed';
 	import { Device } from '$lib/types';
@@ -95,6 +96,10 @@
 	let showSettingsModal = $state(false);
 	let showWatchlistModal = $state(false);
 
+	// Aircraft status modal state
+	let showAircraftStatusModal = $state(false);
+	let selectedAircraft: Device | null = $state(null);
+
 	// Settings state - these will be updated by the SettingsModal
 	let currentSettings = $state({
 		showCompassRose: true,
@@ -111,6 +116,13 @@
 		trailLength: number;
 	}) {
 		currentSettings = newSettings;
+	}
+
+	// Handle aircraft marker click
+	function handleAircraftClick(device: Device) {
+		console.log('[AIRCRAFT CLICK] Aircraft clicked:', device.registration || device.address);
+		selectedAircraft = device;
+		showAircraftStatusModal = true;
 	}
 
 	// Center of continental US
@@ -890,6 +902,11 @@
 			zIndex: 1000 // Higher z-index for aircraft to appear on top of airports
 		});
 
+		// Add click event listener to open aircraft status modal
+		marker.addListener('click', () => {
+			handleAircraftClick(device);
+		});
+
 		// Apply initial zoom-based scaling
 		updateMarkerScale(markerContent, map.getZoom() || 4);
 
@@ -1322,6 +1339,12 @@
 
 <!-- Watchlist Modal -->
 <WatchlistModal bind:showModal={showWatchlistModal} />
+
+<!-- Aircraft Status Modal -->
+<AircraftStatusModal
+	bind:showModal={showAircraftStatusModal}
+	bind:selectedDevice={selectedAircraft}
+/>
 
 <style>
 	/* Location button styling */
