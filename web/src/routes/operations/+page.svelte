@@ -12,6 +12,7 @@
 	import { Device } from '$lib/types';
 	import { toaster } from '$lib/toaster';
 	import { debugStatus } from '$lib/stores/watchlist';
+	import { browser } from '$app/environment';
 	import type { Fix } from '$lib/types';
 	import type { DeviceRegistryEvent } from '$lib/services/DeviceRegistry';
 	import type { FixFeedEvent } from '$lib/services/FixFeed';
@@ -112,6 +113,56 @@
 		lat: 39.8283,
 		lng: -98.5795
 	};
+
+	// Map persistence key for localStorage
+	const MAP_STATE_KEY = 'operations-map-state';
+
+	// Interface for stored map state
+	interface MapState {
+		center: google.maps.LatLngLiteral;
+		zoom: number;
+	}
+
+	// Save current map state to localStorage
+	function saveMapState(): void {
+		if (!map || !browser) return;
+
+		const state: MapState = {
+			center: {
+				lat: map.getCenter()?.lat() || CONUS_CENTER.lat,
+				lng: map.getCenter()?.lng() || CONUS_CENTER.lng
+			},
+			zoom: map.getZoom() || 4
+		};
+
+		try {
+			localStorage.setItem(MAP_STATE_KEY, JSON.stringify(state));
+			console.log('[MAP] Saved map state:', state);
+		} catch (e) {
+			console.warn('[MAP] Failed to save map state to localStorage:', e);
+		}
+	}
+
+	// Load map state from localStorage, fallback to CONUS center
+	function loadMapState(): MapState {
+		if (!browser) {
+			return { center: CONUS_CENTER, zoom: 4 };
+		}
+
+		try {
+			const saved = localStorage.getItem(MAP_STATE_KEY);
+			if (saved) {
+				const state: MapState = JSON.parse(saved);
+				console.log('[MAP] Loaded saved map state:', state);
+				return state;
+			}
+		} catch (e) {
+			console.warn('[MAP] Failed to load map state from localStorage:', e);
+		}
+
+		console.log('[MAP] Using default CONUS center');
+		return { center: CONUS_CENTER, zoom: 4 };
+	}
 
 	// Reactive effects for settings changes
 	$effect(() => {
@@ -253,11 +304,14 @@
 			return;
 		}
 
-		// Initialize map centered on continental US
+		// Load saved map state or use continental US as fallback
+		const mapState = loadMapState();
+
+		// Initialize map with saved or default state
 		map = new google.maps.Map(mapContainer, {
 			mapId: 'SOAR_MAP', // Required for AdvancedMarkerElement
-			center: CONUS_CENTER,
-			zoom: 4, // Shows continental US
+			center: mapState.center,
+			zoom: mapState.zoom,
 			mapTypeId: window.google.maps.MapTypeId.TERRAIN,
 			mapTypeControl: true,
 			mapTypeControlOptions: {
@@ -286,6 +340,8 @@
 			if (areaTrackerActive) {
 				setTimeout(updateAreaSubscriptions, 100); // Small delay for bounds to update
 			}
+			// Save map state after zoom changes
+			saveMapState();
 		});
 
 		map.addListener('dragend', () => {
@@ -294,6 +350,8 @@
 			if (areaTrackerActive) {
 				updateAreaSubscriptions();
 			}
+			// Save map state after panning
+			saveMapState();
 		});
 
 		// Initial check for airports
