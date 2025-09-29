@@ -77,6 +77,7 @@
 	let airports: AirportView[] = [];
 	let airportMarkers: google.maps.marker.AdvancedMarkerElement[] = [];
 	let shouldShowAirports: boolean = false;
+	let airportUpdateDebounceTimer: number | null = null;
 
 	// Aircraft display variables
 	let aircraftMarkers = new SvelteMap<string, google.maps.marker.AdvancedMarkerElement>();
@@ -466,12 +467,38 @@
 		const ne = bounds.getNorthEast();
 		const sw = bounds.getSouthWest();
 
+		// Validate bounding box coordinates
+		const nwLat = ne.lat();
+		const nwLng = sw.lng();
+		const seLat = sw.lat();
+		const seLng = ne.lng();
+
+		// Ensure northwest latitude is greater than southeast latitude
+		if (nwLat <= seLat) {
+			console.warn(
+				'Invalid bounding box: northwest latitude must be greater than southeast latitude'
+			);
+			return;
+		}
+
+		// Validate latitude bounds
+		if (nwLat > 90 || nwLat < -90 || seLat > 90 || seLat < -90) {
+			console.warn('Invalid latitude values in bounding box');
+			return;
+		}
+
+		// Validate longitude bounds (allow wrapping around international date line)
+		if (nwLng < -180 || nwLng > 180 || seLng < -180 || seLng > 180) {
+			console.warn('Invalid longitude values in bounding box');
+			return;
+		}
+
 		try {
 			const params = new URLSearchParams({
-				nw_lat: ne.lat().toString(),
-				nw_lng: sw.lng().toString(),
-				se_lat: sw.lat().toString(),
-				se_lng: ne.lng().toString(),
+				nw_lat: nwLat.toString(),
+				nw_lng: nwLng.toString(),
+				se_lat: seLat.toString(),
+				se_lng: seLng.toString(),
 				limit: '100' // Limit to avoid too many markers
 			});
 
@@ -551,22 +578,32 @@
 	}
 
 	function checkAndUpdateAirports(): void {
-		const area = calculateViewportArea();
-		const shouldShow = area < 10000 && currentSettings.showAirportMarkers;
-
-		if (shouldShow !== shouldShowAirports) {
-			shouldShowAirports = shouldShow;
-
-			if (shouldShowAirports) {
-				fetchAirportsInViewport();
-			} else {
-				clearAirportMarkers();
-				airports = [];
-			}
-		} else if (shouldShowAirports) {
-			// Still showing airports, update them for the new viewport
-			fetchAirportsInViewport();
+		// Clear any existing debounce timer
+		if (airportUpdateDebounceTimer !== null) {
+			clearTimeout(airportUpdateDebounceTimer);
 		}
+
+		// Debounce airport updates by 100ms to prevent excessive API calls
+		airportUpdateDebounceTimer = setTimeout(() => {
+			const area = calculateViewportArea();
+			const shouldShow = area < 10000 && currentSettings.showAirportMarkers;
+
+			if (shouldShow !== shouldShowAirports) {
+				shouldShowAirports = shouldShow;
+
+				if (shouldShowAirports) {
+					fetchAirportsInViewport();
+				} else {
+					clearAirportMarkers();
+					airports = [];
+				}
+			} else if (shouldShowAirports) {
+				// Still showing airports, update them for the new viewport
+				fetchAirportsInViewport();
+			}
+
+			airportUpdateDebounceTimer = null;
+		}, 100);
 	}
 
 	function handleOrientationChange(event: DeviceOrientationEvent): void {
@@ -975,7 +1012,7 @@
 	<title>Operations - Glider Flights</title>
 </svelte:head>
 
-<div class="fixed inset-0 w-full" style="top: 88px;">
+<div class="fixed inset-0 w-full" style="top: 64px;">
 	<!-- Google Maps Container -->
 	<div bind:this={mapContainer} class="h-full w-full"></div>
 
