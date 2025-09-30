@@ -64,17 +64,20 @@
 			showCoordinateData,
 			trailLength
 		};
+		console.log('[SETTINGS] Saving settings:', settings);
 		localStorage.setItem('operationsSettings', JSON.stringify(settings));
 
 		// Notify parent component of settings changes
 		if (onSettingsChange) {
-			onSettingsChange({
+			const newSettings = {
 				showCompassRose,
 				showAirportMarkers,
 				showRunwayOverlays,
 				showCoordinateData,
 				trailLength: trailLength[0]
-			});
+			};
+			console.log('[SETTINGS] Notifying parent with:', newSettings);
+			onSettingsChange(newSettings);
 		}
 	}
 
@@ -164,7 +167,9 @@
 								name="coordinates-toggle"
 								checked={showCoordinateData}
 								onCheckedChange={(e) => {
+									console.log('[SWITCH] Coordinate data switch changed to:', e.checked);
 									showCoordinateData = e.checked;
+									console.log('[SWITCH] showCoordinateData is now:', showCoordinateData);
 									saveSettings();
 								}}
 							/>
