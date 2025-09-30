@@ -6,7 +6,7 @@ use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::devices::{AddressType, Device, DeviceModel, NewDevice};
-use crate::schema::devices;
+use crate::schema::{aircraft_registrations, devices};
 
 pub type PgPool = Pool<ConnectionManager<PgConnection>>;
 pub type PgPooledConnection = PooledConnection<ConnectionManager<PgConnection>>;
@@ -120,24 +120,19 @@ impl DeviceRepository {
         Ok(device_model.map(|model| model.into()))
     }
 
-    /// Get all devices (aircraft) assigned to a specific club
-    pub async fn get_devices_by_club_id(&self, club_id: Uuid) -> Result<Vec<Device>> {
+    /// Search for all devices (aircraft) assigned to a specific club
+    pub async fn search_by_club_id(&self, club_id: Uuid) -> Result<Vec<Device>> {
         let mut conn = self.get_connection()?;
 
-        // This query requires joining with aircraft_registrations table
-        // We'll use raw SQL for now since it involves a join with another table
-        let sql = r#"
-            SELECT d.address, d.address_type, d.aircraft_model, d.registration,
-                   d.competition_number, d.tracked, d.identified, d.created_at, d.updated_at, d.id
-            FROM devices d
-            INNER JOIN aircraft_registrations ar ON d.registration = ar.registration_number
-            WHERE ar.club_id = $1
-            ORDER BY d.registration
-        "#;
-
-        let device_models: Vec<DeviceModel> = diesel::sql_query(sql)
-            .bind::<diesel::sql_types::Uuid, _>(club_id)
-            .load(&mut conn)?;
+        let device_models = devices::table
+            .inner_join(
+                aircraft_registrations::table
+                    .on(aircraft_registrations::registration_number.eq(devices::registration)),
+            )
+            .filter(aircraft_registrations::club_id.eq(club_id))
+            .order_by(devices::registration)
+            .select(devices::all_columns)
+            .load::<DeviceModel>(&mut conn)?;
 
         Ok(device_models
             .into_iter()

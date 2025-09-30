@@ -313,7 +313,7 @@ pub async fn get_devices_by_club(
 ) -> impl IntoResponse {
     let device_repo = DeviceRepository::new(state.pool);
 
-    match device_repo.get_devices_by_club_id(club_id).await {
+    match device_repo.search_by_club_id(club_id).await {
         Ok(devices) => Json(DeviceSearchResponse { devices }).into_response(),
         Err(e) => {
             tracing::error!("Failed to get devices for club {}: {}", club_id, e);
