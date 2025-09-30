@@ -92,6 +92,13 @@
 	let aircraftMarkers = new SvelteMap<string, google.maps.marker.AdvancedMarkerElement>();
 	let latestFixes = new SvelteMap<string, Fix>();
 
+	// Aircraft trail variables
+	interface TrailData {
+		polylines: google.maps.Polyline[];
+		dots: google.maps.Circle[];
+	}
+	let aircraftTrails = new SvelteMap<string, TrailData>();
+
 	// Settings modal state
 	let showSettingsModal = $state(false);
 	let showWatchlistModal = $state(false);
@@ -229,6 +236,17 @@
 				}
 				clearCoordinateGrid();
 			}
+		}
+	});
+
+	// Reactive effect for trail length settings
+	$effect(() => {
+		// Access trailLength to make this effect reactive to changes
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		const _trailLength = currentSettings.trailLength;
+		if (map) {
+			// Update all aircraft trails when trail length changes
+			updateAllAircraftTrails();
 		}
 	});
 
@@ -956,6 +974,9 @@
 			// Update existing marker position and info
 			updateAircraftMarkerPositionFromDevice(marker, device, latestFix);
 		}
+
+		// Update trail for this aircraft
+		updateAircraftTrail(device);
 	}
 
 	function createAircraftMarkerFromDevice(
@@ -1152,7 +1173,99 @@
 		});
 		aircraftMarkers.clear();
 		latestFixes.clear();
-		console.log('[MARKER] All aircraft markers cleared');
+		clearAllTrails();
+		console.log('[MARKER] All aircraft markers and trails cleared');
+	}
+
+	// Aircraft trail functions
+	function updateAircraftTrail(device: Device): void {
+		if (!map || currentSettings.trailLength === 0) {
+			// Remove trail if disabled
+			clearTrailForDevice(device.id);
+			return;
+		}
+
+		const fixes = device.getRecentFixes(24); // Get last 24 hours of fixes
+		const trailFixCount = Math.min(fixes.length, currentSettings.trailLength);
+
+		if (trailFixCount < 2) {
+			// Need at least 2 points to draw a trail
+			clearTrailForDevice(device.id);
+			return;
+		}
+
+		// Get the fixes to display (most recent N fixes)
+		const trailFixes = fixes.slice(0, trailFixCount);
+
+		// Clear existing trail
+		clearTrailForDevice(device.id);
+
+		// Create polyline segments with progressive transparency
+		const polylines: google.maps.Polyline[] = [];
+		for (let i = 0; i < trailFixes.length - 1; i++) {
+			// Calculate opacity: newest segment (i=0) = 0.7, oldest = 0.2
+			const segmentOpacity = 0.7 - (i / (trailFixes.length - 2)) * 0.5;
+
+			const segment = new google.maps.Polyline({
+				path: [
+					{ lat: trailFixes[i].latitude, lng: trailFixes[i].longitude },
+					{ lat: trailFixes[i + 1].latitude, lng: trailFixes[i + 1].longitude }
+				],
+				geodesic: true,
+				strokeColor: '#ef4444', // Red color matching aircraft marker
+				strokeOpacity: segmentOpacity,
+				strokeWeight: 2,
+				map: map
+			});
+
+			polylines.push(segment);
+		}
+
+		// Create dots at each fix position
+		const dots: google.maps.Circle[] = [];
+		trailFixes.forEach((fix, index) => {
+			// Calculate opacity: newest (index 0) = 0.7, oldest = 0.2
+			const opacity = 0.7 - (index / (trailFixCount - 1)) * 0.5;
+
+			const dot = new google.maps.Circle({
+				center: { lat: fix.latitude, lng: fix.longitude },
+				radius: 10, // 10 meters radius
+				strokeColor: '#ef4444',
+				strokeOpacity: opacity,
+				strokeWeight: 1,
+				fillColor: '#ef4444',
+				fillOpacity: opacity * 0.5,
+				map: map
+			});
+
+			dots.push(dot);
+		});
+
+		// Store trail data
+		aircraftTrails.set(device.id, { polylines, dots });
+	}
+
+	function clearTrailForDevice(deviceId: string): void {
+		const trail = aircraftTrails.get(deviceId);
+		if (trail) {
+			trail.polylines.forEach((polyline) => polyline.setMap(null));
+			trail.dots.forEach((dot) => dot.setMap(null));
+			aircraftTrails.delete(deviceId);
+		}
+	}
+
+	function clearAllTrails(): void {
+		aircraftTrails.forEach((trail) => {
+			trail.polylines.forEach((polyline) => polyline.setMap(null));
+			trail.dots.forEach((dot) => dot.setMap(null));
+		});
+		aircraftTrails.clear();
+	}
+
+	function updateAllAircraftTrails(): void {
+		activeDevices.forEach((device) => {
+			updateAircraftTrail(device);
+		});
 	}
 
 	// Area tracker functions
