@@ -577,6 +577,7 @@ mod tests {
             club_id: None,
             unparsed_data: None,
             device_id: uuid::Uuid::new_v4(),
+            is_active: true, // 50 knots is active
         };
 
         assert!(tracker.should_be_active(&fix));

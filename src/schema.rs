@@ -279,6 +279,7 @@ diesel::table! {
         received_at -> Timestamptz,
         lag -> Nullable<Int4>,
         device_address -> Int4,
+        is_active -> Bool,
     }
 }
 

@@ -134,6 +134,7 @@ struct FixDslRow {
     device_id: Uuid,
     received_at: DateTime<Utc>,
     lag: Option<i32>,
+    is_active: bool,
 }
 
 impl From<FixDslRow> for Fix {
@@ -169,6 +170,7 @@ impl From<FixDslRow> for Fix {
             club_id: row.club_id,
             unparsed_data: row.unparsed_data,
             device_id: row.device_id, // Now directly a Uuid
+            is_active: row.is_active,
         }
     }
 }
@@ -472,7 +474,7 @@ impl FixesRepository {
                        altitude_feet, device_address, address_type, aircraft_type_ogn, flight_number,
                        emitter_category, registration, model, squawk, ground_speed_knots, track_degrees,
                        climb_fpm, turn_rate_rot, snr_db, bit_errors_corrected, freq_offset_khz,
-                       club_id, flight_id, unparsed_data, device_id, received_at, lag
+                       club_id, flight_id, unparsed_data, device_id, received_at, lag, is_active
                 FROM ranked
                 WHERE rn <= $2
                 ORDER BY device_id, received_at DESC
@@ -541,6 +543,8 @@ impl FixesRepository {
                 received_at: DateTime<Utc>,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Int4>)]
                 lag: Option<i32>,
+                #[diesel(sql_type = diesel::sql_types::Bool)]
+                is_active: bool,
             }
 
             let fix_rows: Vec<FixRow> = diesel::sql_query(fixes_sql)
@@ -587,6 +591,7 @@ impl FixesRepository {
                     club_id: fix_row.club_id,
                     unparsed_data: fix_row.unparsed_data,
                     device_id: fix_row.device_id,
+                    is_active: fix_row.is_active,
                 };
                 fixes_by_device
                     .entry(device_id)
