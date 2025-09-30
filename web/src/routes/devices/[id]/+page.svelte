@@ -107,7 +107,7 @@
 		loadingFixes = true;
 		try {
 			const response = await serverCall<FixesResponse>(
-				`/devices/${deviceId}/fixes?page=${page}&per_page=100`
+				`/devices/${deviceId}/fixes?page=${page}&per_page=50`
 			);
 			fixes = response.fixes;
 			fixesPage = response.page;
@@ -166,6 +166,21 @@
 		return `${Math.abs(lat).toFixed(4)}°${latDir}, ${Math.abs(lng).toFixed(4)}°${lngDir}`;
 	}
 
+	function formatAddressType(addressType: string): string {
+		switch (addressType.toLowerCase()) {
+			case 'icao':
+				return 'ICAO';
+			case 'flarm':
+				return 'FLARM';
+			case 'ogn':
+				return 'OGN';
+			case 'unknown':
+				return 'Unknown';
+			default:
+				return addressType;
+		}
+	}
+
 	function goBack() {
 		goto(resolve('/devices'));
 	}
@@ -222,7 +237,7 @@
 									Device ID: {device.id}
 								</p>
 								<p class="text-surface-600-300-token font-mono text-sm">
-									Address: {device.address} ({device.address_type})
+									Address: {formatAddressType(device.address_type)}: {device.address}
 								</p>
 							</div>
 						</div>
@@ -259,18 +274,12 @@
 
 					<div class="space-y-3">
 						<div class="flex items-start gap-3">
-							<Info class="mt-1 h-4 w-4 text-surface-500" />
-							<div>
-								<p class="text-surface-600-300-token mb-1 text-sm">Address Type</p>
-								<p>{device.address_type}</p>
-							</div>
-						</div>
-
-						<div class="flex items-start gap-3">
 							<Radio class="mt-1 h-4 w-4 text-surface-500" />
 							<div>
 								<p class="text-surface-600-300-token mb-1 text-sm">Device Address</p>
-								<p class="font-mono">{device.address}</p>
+								<p class="font-mono">
+									{formatAddressType(device.address_type)}: {device.address}
+								</p>
 							</div>
 						</div>
 
