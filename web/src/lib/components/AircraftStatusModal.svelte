@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { X, Plane, MapPin, Clock, RotateCcw } from '@lucide/svelte';
+	import { X, Plane, MapPin, Clock, RotateCcw, ExternalLink } from '@lucide/svelte';
 	import { Device, type Fix, type AircraftRegistration, type AircraftModel } from '$lib/types';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
@@ -163,9 +163,19 @@
 						</p>
 					</div>
 				</div>
-				<button class="variant-ghost-surface btn btn-sm" onclick={closeModal}>
-					<X size={20} />
-				</button>
+				<div class="flex items-center gap-2">
+					<a
+						href="/devices/{selectedDevice.id}"
+						class="variant-filled-primary btn btn-sm"
+						title="View detailed device page"
+					>
+						<ExternalLink size={16} />
+						View Details
+					</a>
+					<button class="variant-ghost-surface btn btn-sm" onclick={closeModal}>
+						<X size={20} />
+					</button>
+				</div>
 			</div>
 
 			<div class="p-6">

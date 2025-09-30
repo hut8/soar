@@ -431,7 +431,7 @@
 					{#if entriesWithDevices.length > 0}
 						<div class="flex-1 overflow-y-auto">
 							<div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-								{#each entriesWithDevices as entry (entry.id)}
+								{#each entriesWithDevices as entry (entry.deviceId)}
 									<div
 										class="rounded border p-3 {entry.active
 											? 'bg-gray-50'
