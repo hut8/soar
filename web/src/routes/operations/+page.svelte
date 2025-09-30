@@ -18,7 +18,6 @@
 	import relativeTime from 'dayjs/plugin/relativeTime';
 	import type { Fix } from '$lib/types';
 	import type { DeviceRegistryEvent } from '$lib/services/DeviceRegistry';
-	import type { FixFeedEvent } from '$lib/services/FixFeed';
 
 	// Extend dayjs with relative time plugin
 	dayjs.extend(relativeTime);
@@ -238,24 +237,25 @@
 
 	// Subscribe to device registry and update aircraft markers
 	let activeDevices: Device[] = $state([]);
+	let initialMarkersRendered = false;
 
 	// Area tracker state
 	let areaTrackerActive = $state(false);
 	let areaTrackerAvailable = $state(true); // Whether area tracker can be enabled (based on map area)
 	let currentAreaSubscriptions = new SvelteSet<string>(); // Track subscribed areas
 
-	// Update debug status when area subscriptions change
-	$effect(() => {
-		debugStatus.update((current) => ({
-			...current,
-			activeAreaSubscriptions: currentAreaSubscriptions.size
-		}));
-	});
-
 	$effect(() => {
 		const unsubscribeRegistry = deviceRegistry.subscribe((event: DeviceRegistryEvent) => {
 			if (event.type === 'devices_changed') {
 				activeDevices = event.devices;
+			} else if (event.type === 'device_updated') {
+				// When a device is updated, create or update its marker if we have a map
+				if (map) {
+					const latestFix = event.device.getLatestFix();
+					if (latestFix) {
+						updateAircraftMarkerFromDevice(event.device, latestFix);
+					}
+				}
 			} else if (event.type === 'fix_added') {
 				console.log('Fix added to device:', event.device.id, event.fix);
 				// Update the aircraft marker immediately when a new fix is added
@@ -265,65 +265,32 @@
 			}
 		});
 
-		const unsubscribeFeed = fixFeed.subscribe((event: FixFeedEvent) => {
-			if (event.type === 'fix_received') {
-				console.log('Received fix:', event.fix);
-				// The fix will be automatically added to the device by FixFeed.addFixToDevice()
-				// This will trigger a device registry event which will update our activeDevices
-			} else if (event.type === 'device_received') {
-				console.log('Received complete device data:', event.device);
-				// Complete device data with recent fixes was received, likely from area subscription
-				// The device info and fixes are automatically processed by FixFeed
-				// This eliminates the need for individual device API calls
-			}
-		});
-
 		// Initialize active devices
 		activeDevices = deviceRegistry.getAllDevices();
 
 		return () => {
 			unsubscribeRegistry();
-			unsubscribeFeed();
 		};
 	});
 
-	// Reactive effect for handling device updates
+	// Effect to initialize aircraft markers when map becomes available (runs once)
 	$effect(() => {
-		console.log('[EFFECT] Device update effect triggered:', {
-			mapExists: !!map,
-			activeDevicesCount: activeDevices.length,
-			activeDevices: activeDevices.map((d) => ({
-				id: d.id,
-				registration: d.registration,
-				fixCount: d.fixes.length
-			}))
-		});
+		if (!map || initialMarkersRendered) return;
 
-		if (!map) {
-			console.log('[EFFECT] No map available, skipping marker updates');
-			return;
-		}
-
-		if (activeDevices.length === 0) {
-			console.log('[EFFECT] No active devices, skipping marker updates');
-			return;
-		}
-
-		// Process devices with recent fixes to update aircraft markers
+		// When map first becomes available, render markers for all active devices
+		console.log(
+			'[EFFECT] Map available, initializing markers for',
+			activeDevices.length,
+			'devices'
+		);
 		activeDevices.forEach((device) => {
 			const latestFix = device.getLatestFix();
-			console.log('[EFFECT] Processing device:', {
-				deviceId: device.id,
-				hasLatestFix: !!latestFix,
-				fixCount: device.fixes.length
-			});
-
 			if (latestFix) {
 				updateAircraftMarkerFromDevice(device, latestFix);
-			} else {
-				console.log('[EFFECT] No latest fix for device:', device.id);
 			}
 		});
+
+		initialMarkersRendered = true;
 	});
 
 	onMount(() => {
