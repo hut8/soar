@@ -117,11 +117,8 @@
 		showCoordinateData: boolean;
 		trailLength: number;
 	}) {
-		currentSettings.showCompassRose = newSettings.showCompassRose;
-		currentSettings.showAirportMarkers = newSettings.showAirportMarkers;
-		currentSettings.showRunwayOverlays = newSettings.showRunwayOverlays;
-		currentSettings.showCoordinateData = newSettings.showCoordinateData;
-		currentSettings.trailLength = newSettings.trailLength;
+		// Replace entire object to ensure Svelte 5 reactivity triggers
+		currentSettings = { ...newSettings };
 	}
 
 	// Handle aircraft marker click
@@ -405,9 +402,11 @@
 			updateAllAircraftMarkersScale();
 			// Update area tracker availability and subscriptions
 			updateAreaTrackerAvailability();
-			// Update coordinate display and grid
-			updateCoordinateDisplay();
-			drawCoordinateGrid();
+			// Update coordinate display and grid if enabled
+			if (currentSettings.showCoordinateData) {
+				updateCoordinateDisplay();
+				drawCoordinateGrid();
+			}
 			if (areaTrackerActive) {
 				// Hybrid approach: Fetch immediate snapshot then update WebSocket subscriptions
 				setTimeout(async () => {
@@ -421,9 +420,11 @@
 
 		map.addListener('dragend', async () => {
 			checkAndUpdateAirports();
-			// Update coordinate display and grid
-			updateCoordinateDisplay();
-			drawCoordinateGrid();
+			// Update coordinate display and grid if enabled
+			if (currentSettings.showCoordinateData) {
+				updateCoordinateDisplay();
+				drawCoordinateGrid();
+			}
 			// Update area subscriptions after panning
 			if (areaTrackerActive) {
 				// Hybrid approach: Fetch immediate snapshot then update WebSocket subscriptions
@@ -756,12 +757,7 @@
 
 	// Coordinate data functions
 	function updateCoordinateDisplay(): void {
-		if (!map || !currentSettings.showCoordinateData) {
-			if (coordinateDisplayElement) {
-				coordinateDisplayElement.style.display = 'none';
-			}
-			return;
-		}
+		if (!map) return;
 
 		const bounds = map.getBounds();
 		if (!bounds) return;
@@ -805,9 +801,7 @@
 		// Clear existing grid lines
 		clearCoordinateGrid();
 
-		if (!map || !currentSettings.showCoordinateData) {
-			return;
-		}
+		if (!map) return;
 
 		const bounds = map.getBounds();
 		if (!bounds) return;
