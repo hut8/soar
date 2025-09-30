@@ -62,15 +62,22 @@ pub fn elevation_egm2008(lat: f64, lon: f64) -> Result<Option<f64>> {
 
     let ds = Dataset::open(&path)?;
     let band = ds.rasterband(1)?;
+    let (raster_width, raster_height) = band.size();
 
     // GeoTransform: [origin_x, pixel_w, 0, origin_y, 0, pixel_h(negative)]
     let gt = ds.geo_transform()?;
     let px = (lon - gt[0]) / gt[1];
     let py = (lat - gt[3]) / gt[5]; // gt[5] is negative, so this works
 
-    // Bilinear resample from a 1x1 window into a single value
+    // Clamp pixel coordinates to ensure we can read a 2x2 window for bilinear interpolation
+    // For a raster of size (width, height), valid starting positions for a 2x2 window
+    // are (0 to width-2, 0 to height-2) to avoid reading out of bounds
+    let px_clamped = px.floor().max(0.0).min((raster_width - 2) as f64) as isize;
+    let py_clamped = py.floor().max(0.0).min((raster_height - 2) as f64) as isize;
+
+    // Bilinear resample from a 2x2 window into a single value
     let out = band.read_as::<f64>(
-        (px.floor() as isize, py.floor() as isize),
+        (px_clamped, py_clamped),
         (2, 2),
         (1, 1),
         Some(ResampleAlg::Bilinear),

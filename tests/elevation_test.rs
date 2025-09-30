@@ -204,10 +204,8 @@ fn test_elevation_southern_hemisphere() {
 }
 
 /// Test elevation for boundary coordinates (near tile edges)
-/// Note: There's currently a bug in the elevation code when coordinates are
-/// exactly at tile boundaries (integer lat/lon), causing GDAL "out of range" errors.
+/// This tests coordinates exactly at tile boundaries (integer lat/lon)
 #[test]
-#[ignore] // Ignore until boundary bug is fixed
 fn test_elevation_tile_boundary() {
     // Test at exactly 45°N, 0°E (boundary between tiles)
     let lat = 45.0;
@@ -216,11 +214,12 @@ fn test_elevation_tile_boundary() {
     let result = elevation_egm2008(lat, lon);
     assert!(
         result.is_ok(),
-        "Elevation lookup at tile boundary should succeed"
+        "Elevation lookup at tile boundary should succeed: {:?}",
+        result.err()
     );
 
     let elevation = result.unwrap();
-    // Should have some elevation data for this land location
+    // Should have some elevation data for this land location (southern France)
     assert!(
         elevation.is_some(),
         "Should have elevation data at boundary"
