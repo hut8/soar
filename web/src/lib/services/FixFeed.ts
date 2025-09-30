@@ -296,6 +296,26 @@ export class FixFeed {
 		}, delay);
 	}
 
+	// Wait for WebSocket connection to be open
+	private async waitForConnection(timeoutMs = 2000): Promise<boolean> {
+		if (this.websocket?.readyState === WebSocket.OPEN) {
+			return true;
+		}
+
+		return new Promise((resolve) => {
+			const startTime = Date.now();
+			const checkInterval = setInterval(() => {
+				if (this.websocket?.readyState === WebSocket.OPEN) {
+					clearInterval(checkInterval);
+					resolve(true);
+				} else if (Date.now() - startTime > timeoutMs) {
+					clearInterval(checkInterval);
+					resolve(false);
+				}
+			}, 50);
+		});
+	}
+
 	// Subscribe to a specific device
 	public async subscribeToDevice(deviceId: string): Promise<void> {
 		if (this.subscribedDevices.has(deviceId)) {
@@ -303,13 +323,14 @@ export class FixFeed {
 		}
 
 		// Connect if not already connected
-		if (!this.websocket || this.websocket.readyState !== WebSocket.OPEN) {
+		if (!this.websocket || this.websocket.readyState === WebSocket.CLOSED) {
 			this.connect();
-			// Wait a bit for connection to establish
-			await new Promise((resolve) => setTimeout(resolve, 100));
 		}
 
-		if (this.websocket?.readyState === WebSocket.OPEN) {
+		// Wait for connection to be established
+		const isConnected = await this.waitForConnection();
+
+		if (isConnected && this.websocket?.readyState === WebSocket.OPEN) {
 			this.sendSubscriptionMessage('subscribe', deviceId);
 			this.subscribedDevices.add(deviceId);
 
@@ -321,6 +342,8 @@ export class FixFeed {
 			// Fetch device info and recent fixes from API
 			await this.deviceRegistry.updateDeviceFromAPI(deviceId);
 			await this.deviceRegistry.loadRecentFixesFromAPI(deviceId);
+		} else {
+			console.error(`Failed to subscribe to device ${deviceId}: WebSocket not connected`);
 		}
 	}
 
