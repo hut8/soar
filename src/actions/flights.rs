@@ -1,9 +1,9 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Json},
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::actions::json_error;
@@ -12,6 +12,13 @@ use crate::fixes_repo::FixesRepository;
 use crate::flights::Flight;
 use crate::flights_repo::FlightsRepository;
 use crate::web::AppState;
+
+#[derive(Debug, Deserialize)]
+pub struct FlightsQueryParams {
+    pub device_id: Option<Uuid>,
+    pub club_id: Option<Uuid>,
+    pub limit: Option<i64>,
+}
 
 #[derive(Debug, Serialize)]
 pub struct FlightResponse {
@@ -147,4 +154,52 @@ fn generate_kml_filename(flight: &Flight) -> String {
     };
 
     format!("{}.kml", base_name)
+}
+
+/// Search flights by device ID, club ID, or return recent flights
+pub async fn search_flights(
+    State(state): State<AppState>,
+    Query(params): Query<FlightsQueryParams>,
+) -> impl IntoResponse {
+    let flights_repo = FlightsRepository::new(state.pool);
+
+    if let Some(device_id) = params.device_id {
+        match flights_repo.get_flights_for_device(&device_id).await {
+            Ok(flights) => Json(flights).into_response(),
+            Err(e) => {
+                tracing::error!("Failed to get flights by device ID: {}", e);
+                json_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to get flights by device ID",
+                )
+                .into_response()
+            }
+        }
+    } else if let Some(_club_id) = params.club_id {
+        // Club-based flight search would require joining with aircraft_registrations
+        // For now, just return flights in progress
+        match flights_repo.get_flights_in_progress().await {
+            Ok(flights) => Json(flights).into_response(),
+            Err(e) => {
+                tracing::error!("Failed to get flights by club ID: {}", e);
+                json_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to get flights by club ID",
+                )
+                .into_response()
+            }
+        }
+    } else {
+        match flights_repo.get_flights_in_progress().await {
+            Ok(flights) => Json(flights).into_response(),
+            Err(e) => {
+                tracing::error!("Failed to get recent flights: {}", e);
+                json_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to get recent flights",
+                )
+                .into_response()
+            }
+        }
+    }
 }

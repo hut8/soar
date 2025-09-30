@@ -5,7 +5,6 @@ pub mod clubs;
 pub mod devices;
 pub mod fixes;
 pub mod flights;
-pub mod search;
 pub mod users;
 pub mod views;
 
@@ -16,7 +15,6 @@ pub use clubs::*;
 pub use devices::*;
 pub use fixes::*;
 pub use flights::*;
-pub use search::*;
 pub use users::*;
 
 use axum::{
