@@ -1056,6 +1056,15 @@
 			handleAircraftClick(device);
 		});
 
+		// Add hover listeners to bring marker to front when overlapping with other aircraft
+		markerContent.addEventListener('mouseenter', () => {
+			marker.zIndex = 10000; // Bring to front on hover
+		});
+
+		markerContent.addEventListener('mouseleave', () => {
+			marker.zIndex = 1000; // Return to normal z-index
+		});
+
 		// Apply initial zoom-based scaling
 		updateMarkerScale(markerContent, map.getZoom() || 4);
 
@@ -1668,6 +1677,11 @@
 		pointer-events: auto;
 		cursor: pointer;
 		transform-origin: center center; /* Center the marker on the aircraft position */
+		transition: all 0.2s ease;
+	}
+
+	:global(.aircraft-marker:hover) {
+		transform: scale(1.15);
 	}
 
 	:global(.aircraft-icon) {
@@ -1681,8 +1695,13 @@
 		justify-content: center;
 		color: white;
 		box-shadow: 0 3px 12px rgba(0, 0, 0, 0.5);
-		transition: transform 0.3s ease;
+		transition: all 0.2s ease;
 		position: relative;
+	}
+
+	:global(.aircraft-marker:hover .aircraft-icon) {
+		box-shadow: 0 6px 20px rgba(0, 0, 0, 0.7);
+		border-width: 4px;
 	}
 
 	:global(.aircraft-icon svg) {
@@ -1700,6 +1719,12 @@
 		box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
 		min-width: 60px;
 		text-align: center;
+		transition: all 0.2s ease;
+	}
+
+	:global(.aircraft-marker:hover .aircraft-label) {
+		background: rgba(239, 68, 68, 0.95);
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
 	}
 
 	:global(.aircraft-tail) {
