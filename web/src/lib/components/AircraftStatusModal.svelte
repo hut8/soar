@@ -131,14 +131,14 @@
 <!-- Aircraft Status Modal -->
 {#if showModal && selectedDevice}
 	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-surface-950-50/50"
+		class="fixed inset-0 z-50 flex items-start justify-center bg-surface-950-50/50 pt-20"
 		onclick={closeModal}
 		onkeydown={(e) => e.key === 'Escape' && closeModal()}
 		tabindex="-1"
 		role="dialog"
 	>
 		<div
-			class="max-h-[90vh] w-full max-w-4xl overflow-y-auto card bg-white text-gray-900 shadow-xl"
+			class="max-h-[calc(90vh-5rem)] w-full max-w-4xl overflow-y-auto card bg-white text-gray-900 shadow-xl"
 			onclick={(e) => e.stopPropagation()}
 			onkeydown={(e) => e.key === 'Escape' && closeModal()}
 			role="dialog"

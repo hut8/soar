@@ -117,7 +117,11 @@
 		showCoordinateData: boolean;
 		trailLength: number;
 	}) {
-		currentSettings = newSettings;
+		currentSettings.showCompassRose = newSettings.showCompassRose;
+		currentSettings.showAirportMarkers = newSettings.showAirportMarkers;
+		currentSettings.showRunwayOverlays = newSettings.showRunwayOverlays;
+		currentSettings.showCoordinateData = newSettings.showCoordinateData;
+		currentSettings.trailLength = newSettings.trailLength;
 	}
 
 	// Handle aircraft marker click
@@ -1723,7 +1727,7 @@
 	}
 
 	:global(.aircraft-marker:hover .aircraft-label) {
-		background: rgba(239, 68, 68, 0.95);
+		background: rgba(239, 68, 68, 1); /* Fully opaque on hover */
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
 	}
 

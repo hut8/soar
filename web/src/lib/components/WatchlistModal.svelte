@@ -219,14 +219,14 @@
 <!-- Watchlist Modal -->
 {#if showModal}
 	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-surface-950-50/50"
+		class="fixed inset-0 z-50 flex items-start justify-center bg-surface-950-50/50 pt-20"
 		role="dialog"
 		onclick={() => (showModal = false)}
 		onkeydown={(e) => e.key === 'Escape' && (showModal = false)}
 		tabindex="-1"
 	>
 		<div
-			class="flex h-full max-h-9/10 w-full max-w-9/10 flex-col card bg-white text-gray-900 shadow-xl"
+			class="flex h-full max-h-[calc(90vh-5rem)] w-full max-w-9/10 flex-col card bg-white text-gray-900 shadow-xl"
 			onclick={(e) => e.stopPropagation()}
 			onkeydown={(e) => e.key === 'Escape' && (showModal = false)}
 			role="dialog"
