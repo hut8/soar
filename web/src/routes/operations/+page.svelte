@@ -117,14 +117,11 @@
 		showCoordinateData: boolean;
 		trailLength: number;
 	}) {
-		console.log('[OPERATIONS] Received settings change:', newSettings);
-		console.log('[OPERATIONS] Current settings before:', currentSettings);
 		currentSettings.showCompassRose = newSettings.showCompassRose;
 		currentSettings.showAirportMarkers = newSettings.showAirportMarkers;
 		currentSettings.showRunwayOverlays = newSettings.showRunwayOverlays;
 		currentSettings.showCoordinateData = newSettings.showCoordinateData;
 		currentSettings.trailLength = newSettings.trailLength;
-		console.log('[OPERATIONS] Current settings after:', currentSettings);
 	}
 
 	// Handle aircraft marker click
@@ -225,19 +222,11 @@
 
 	// Reactive effect for coordinate data settings
 	$effect(() => {
-		console.log(
-			'[EFFECT] Coordinate data effect triggered. showCoordinateData:',
-			currentSettings.showCoordinateData,
-			'map:',
-			!!map
-		);
 		if (map) {
 			if (currentSettings.showCoordinateData) {
-				console.log('[EFFECT] Showing coordinate data');
 				updateCoordinateDisplay();
 				drawCoordinateGrid();
 			} else {
-				console.log('[EFFECT] Hiding coordinate data');
 				if (coordinateDisplayElement) {
 					coordinateDisplayElement.style.display = 'none';
 				}

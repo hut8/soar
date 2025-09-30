@@ -375,7 +375,7 @@
 								<Plane class="mt-1 h-4 w-4 text-surface-500" />
 								<div>
 									<p class="text-surface-600-300-token mb-1 text-sm">Manufacturer</p>
-									<p>{aircraftModel.manufacturer}</p>
+									<p>{aircraftModel.manufacturer_name}</p>
 								</div>
 							</div>
 
@@ -383,46 +383,46 @@
 								<Plane class="mt-1 h-4 w-4 text-surface-500" />
 								<div>
 									<p class="text-surface-600-300-token mb-1 text-sm">Model</p>
-									<p>{aircraftModel.model}</p>
+									<p>{aircraftModel.model_name}</p>
 								</div>
 							</div>
 
-							{#if aircraftModel.type_certificate}
+							{#if aircraftModel.aircraft_type}
 								<div class="flex items-start gap-3">
 									<Info class="mt-1 h-4 w-4 text-surface-500" />
 									<div>
-										<p class="text-surface-600-300-token mb-1 text-sm">Type Certificate</p>
-										<p class="font-mono">{aircraftModel.type_certificate}</p>
+										<p class="text-surface-600-300-token mb-1 text-sm">Aircraft Type</p>
+										<p>{aircraftModel.aircraft_type}</p>
 									</div>
 								</div>
 							{/if}
 
-							{#if aircraftModel.seats}
+							{#if aircraftModel.number_of_seats}
 								<div class="flex items-start gap-3">
 									<User class="mt-1 h-4 w-4 text-surface-500" />
 									<div>
 										<p class="text-surface-600-300-token mb-1 text-sm">Seats</p>
-										<p>{aircraftModel.seats}</p>
+										<p>{aircraftModel.number_of_seats}</p>
 									</div>
 								</div>
 							{/if}
 
-							{#if aircraftModel.engines}
+							{#if aircraftModel.number_of_engines !== null && aircraftModel.number_of_engines !== undefined}
 								<div class="flex items-start gap-3">
 									<Settings class="mt-1 h-4 w-4 text-surface-500" />
 									<div>
 										<p class="text-surface-600-300-token mb-1 text-sm">Engines</p>
-										<p>{aircraftModel.engines}</p>
+										<p>{aircraftModel.number_of_engines}</p>
 									</div>
 								</div>
 							{/if}
 
-							{#if aircraftModel.speed}
+							{#if aircraftModel.cruising_speed && aircraftModel.cruising_speed > 0}
 								<div class="flex items-start gap-3">
 									<Activity class="mt-1 h-4 w-4 text-surface-500" />
 									<div>
-										<p class="text-surface-600-300-token mb-1 text-sm">Max Speed</p>
-										<p>{aircraftModel.speed} kts</p>
+										<p class="text-surface-600-300-token mb-1 text-sm">Cruising Speed</p>
+										<p>{aircraftModel.cruising_speed} kts</p>
 									</div>
 								</div>
 							{/if}

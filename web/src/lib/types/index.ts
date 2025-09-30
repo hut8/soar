@@ -133,18 +133,21 @@ export interface AircraftRegistration {
 
 // Aircraft model information
 export interface AircraftModel {
-	manufacturer: string;
-	model: string;
-	type_certificate: string | null;
-	type_aircraft: number;
-	type_engine: number;
-	ac_weight: string | null;
-	speed: number | null;
-	engines: number | null;
-	seats: number | null;
-	weight: number | null;
-	created_at: string;
-	updated_at: string;
+	manufacturer_code: string;
+	model_code: string;
+	series_code: string;
+	manufacturer_name: string;
+	model_name: string;
+	aircraft_type: string | null;
+	engine_type: string | null;
+	aircraft_category: string | null;
+	builder_certification: string | null;
+	number_of_engines: number | null;
+	number_of_seats: number | null;
+	weight_class: string | null;
+	cruising_speed: number | null;
+	type_certificate_data_sheet: string | null;
+	type_certificate_data_holder: string | null;
 }
 
 // Device class with integrated caching functionality
@@ -269,8 +272,8 @@ export class Device {
 			if (aircraftModel) {
 				console.log(
 					'[DEVICE] Fetched aircraft model:',
-					aircraftModel.manufacturer,
-					aircraftModel.model
+					aircraftModel.manufacturer_name,
+					aircraftModel.model_name
 				);
 				this.aircraftModel = aircraftModel;
 

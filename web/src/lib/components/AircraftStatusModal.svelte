@@ -287,35 +287,47 @@
 								<dl class="grid grid-cols-2 gap-4 text-sm">
 									<div>
 										<dt class="font-medium text-gray-600">Manufacturer</dt>
-										<dd>{aircraftModel.manufacturer}</dd>
+										<dd>{aircraftModel.manufacturer_name || 'Unknown'}</dd>
 									</div>
 									<div>
 										<dt class="font-medium text-gray-600">Model</dt>
-										<dd>{aircraftModel.model}</dd>
+										<dd>{aircraftModel.model_name || 'Unknown'}</dd>
 									</div>
 									<div>
-										<dt class="font-medium text-gray-600">Type Certificate</dt>
-										<dd class="font-mono">{aircraftModel.type_certificate || 'N/A'}</dd>
+										<dt class="font-medium text-gray-600">Aircraft Type</dt>
+										<dd>{aircraftModel.aircraft_type || 'Unknown'}</dd>
+									</div>
+									<div>
+										<dt class="font-medium text-gray-600">Engine Type</dt>
+										<dd>{aircraftModel.engine_type || 'Unknown'}</dd>
+									</div>
+									<div>
+										<dt class="font-medium text-gray-600">Category</dt>
+										<dd>{aircraftModel.aircraft_category || 'Unknown'}</dd>
+									</div>
+									<div>
+										<dt class="font-medium text-gray-600">Certification</dt>
+										<dd>{aircraftModel.builder_certification || 'Unknown'}</dd>
 									</div>
 									<div>
 										<dt class="font-medium text-gray-600">Seats</dt>
-										<dd>{aircraftModel.seats || 'Unknown'}</dd>
+										<dd>{aircraftModel.number_of_seats ?? 'Unknown'}</dd>
 									</div>
 									<div>
 										<dt class="font-medium text-gray-600">Engines</dt>
-										<dd>{aircraftModel.engines || 'Unknown'}</dd>
+										<dd>{aircraftModel.number_of_engines ?? 'Unknown'}</dd>
 									</div>
 									<div>
-										<dt class="font-medium text-gray-600">Weight</dt>
-										<dd>{aircraftModel.weight ? `${aircraftModel.weight} lbs` : 'Unknown'}</dd>
-									</div>
-									<div>
-										<dt class="font-medium text-gray-600">Max Speed</dt>
-										<dd>{aircraftModel.speed ? `${aircraftModel.speed} kts` : 'Unknown'}</dd>
+										<dt class="font-medium text-gray-600">Cruising Speed</dt>
+										<dd>
+											{aircraftModel.cruising_speed && aircraftModel.cruising_speed > 0
+												? `${aircraftModel.cruising_speed} kts`
+												: 'Unknown'}
+										</dd>
 									</div>
 									<div>
 										<dt class="font-medium text-gray-600">Weight Class</dt>
-										<dd>{aircraftModel.ac_weight || 'Unknown'}</dd>
+										<dd>{aircraftModel.weight_class || 'Unknown'}</dd>
 									</div>
 								</dl>
 							</div>
