@@ -229,7 +229,7 @@ export class Device {
 			console.log('[DEVICE] Fetching aircraft registration for device:', this.id);
 			const { serverCall } = await import('$lib/api/server');
 			const aircraft = await serverCall<AircraftRegistration>(
-				`/devices/${this.id}/aircraft-registration`
+				`/devices/${this.id}/aircraft/registration`
 			);
 
 			if (aircraft) {

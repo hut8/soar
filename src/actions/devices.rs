@@ -14,6 +14,7 @@ use crate::devices::{AddressType, Device};
 use crate::faa::aircraft_model_repo::AircraftModelRepository;
 use crate::fixes::Fix;
 use crate::fixes_repo::FixesRepository;
+use crate::flights_repo::FlightsRepository;
 use crate::web::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -320,6 +321,26 @@ pub async fn get_devices_by_club(
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to get devices for club",
+            )
+            .into_response()
+        }
+    }
+}
+
+/// Get all flights for a device by device ID
+pub async fn get_device_flights(
+    Path(id): Path<Uuid>,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let flights_repo = FlightsRepository::new(state.pool);
+
+    match flights_repo.get_flights_for_device(&id).await {
+        Ok(flights) => Json(flights).into_response(),
+        Err(e) => {
+            tracing::error!("Failed to get flights for device {}: {}", id, e);
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to get flights for device",
             )
             .into_response()
         }

@@ -86,7 +86,7 @@
 
 			// Load aircraft registration and model data in parallel
 			const [registration, model] = await Promise.all([
-				serverCall<AircraftRegistration>(`/devices/${deviceId}/aircraft-registration`).catch(
+				serverCall<AircraftRegistration>(`/devices/${deviceId}/aircraft/registration`).catch(
 					() => null
 				),
 				serverCall<AircraftModel>(`/devices/${deviceId}/aircraft/model`).catch(() => null)

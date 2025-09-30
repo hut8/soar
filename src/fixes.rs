@@ -62,7 +62,7 @@ pub struct Fix {
     pub club_id: Option<Uuid>,
     pub flight_id: Option<Uuid>,
     pub unparsed_data: Option<String>,
-    pub device_id: Uuid, // NOT NULL in DB
+    pub device_id: Uuid,
 
     /// Timestamp when we received/processed the packet
     pub received_at: DateTime<Utc>,
