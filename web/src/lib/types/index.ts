@@ -42,6 +42,15 @@ export interface ComboboxData {
 	club: ClubWithSoaring;
 }
 
+export interface RunwayEnd {
+	ident: string | null;
+	latitude_deg: number | null;
+	longitude_deg: number | null;
+	elevation_ft: number | null;
+	heading_degt: number | null;
+	displaced_threshold_ft: number | null;
+}
+
 export interface Runway {
 	id: number;
 	length_ft: number | null;
@@ -49,22 +58,8 @@ export interface Runway {
 	surface: string | null;
 	lighted: boolean;
 	closed: boolean;
-
-	// Low-numbered end
-	le_ident: string | null;
-	le_latitude_deg: number | null;
-	le_longitude_deg: number | null;
-	le_elevation_ft: number | null;
-	le_heading_degt: number | null;
-	le_displaced_threshold_ft: number | null;
-
-	// High-numbered end
-	he_ident: string | null;
-	he_latitude_deg: number | null;
-	he_longitude_deg: number | null;
-	he_elevation_ft: number | null;
-	he_heading_degt: number | null;
-	he_displaced_threshold_ft: number | null;
+	low: RunwayEnd;
+	high: RunwayEnd;
 }
 
 export interface Airport {

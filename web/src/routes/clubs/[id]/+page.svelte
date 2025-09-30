@@ -46,6 +46,15 @@
 		};
 	}
 
+	interface RunwayEnd {
+		ident: string | null;
+		latitude_deg: number | null;
+		longitude_deg: number | null;
+		elevation_ft: number | null;
+		heading_degt: number | null;
+		displaced_threshold_ft: number | null;
+	}
+
 	interface Runway {
 		id: number;
 		length_ft: number | null;
@@ -53,8 +62,8 @@
 		surface: string | null;
 		lighted: boolean;
 		closed: boolean;
-		le_ident: string | null;
-		he_ident: string | null;
+		low: RunwayEnd;
+		high: RunwayEnd;
 	}
 
 	interface Airport {
@@ -397,7 +406,7 @@
 															<div class="bg-surface-50-900-token rounded p-2 text-sm">
 																<div class="flex items-center justify-between">
 																	<span class="font-medium">
-																		{runway.le_ident || 'N/A'}/{runway.he_ident || 'N/A'}
+																		{runway.low.ident || 'N/A'}/{runway.high.ident || 'N/A'}
 																	</span>
 																	{#if runway.length_ft}
 																		<span class="text-surface-600-300-token">

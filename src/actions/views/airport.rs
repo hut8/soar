@@ -5,6 +5,16 @@ use crate::airports::Airport;
 use crate::runways::Runway;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RunwayEnd {
+    pub ident: Option<String>,
+    pub latitude_deg: Option<f64>,
+    pub longitude_deg: Option<f64>,
+    pub elevation_ft: Option<i32>,
+    pub heading_degt: Option<f64>,
+    pub displaced_threshold_ft: Option<i32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunwayView {
     pub id: i32,
     pub length_ft: Option<i32>,
@@ -12,22 +22,8 @@ pub struct RunwayView {
     pub surface: Option<String>,
     pub lighted: bool,
     pub closed: bool,
-
-    // Low-numbered end
-    pub le_ident: Option<String>,
-    pub le_latitude_deg: Option<f64>,
-    pub le_longitude_deg: Option<f64>,
-    pub le_elevation_ft: Option<i32>,
-    pub le_heading_degt: Option<f64>,
-    pub le_displaced_threshold_ft: Option<i32>,
-
-    // High-numbered end
-    pub he_ident: Option<String>,
-    pub he_latitude_deg: Option<f64>,
-    pub he_longitude_deg: Option<f64>,
-    pub he_elevation_ft: Option<i32>,
-    pub he_heading_degt: Option<f64>,
-    pub he_displaced_threshold_ft: Option<i32>,
+    pub low: RunwayEnd,
+    pub high: RunwayEnd,
 }
 
 impl From<Runway> for RunwayView {
@@ -39,18 +35,22 @@ impl From<Runway> for RunwayView {
             surface: runway.surface,
             lighted: runway.lighted,
             closed: runway.closed,
-            le_ident: runway.le_ident,
-            le_latitude_deg: runway.le_latitude_deg,
-            le_longitude_deg: runway.le_longitude_deg,
-            le_elevation_ft: runway.le_elevation_ft,
-            le_heading_degt: runway.le_heading_degt,
-            le_displaced_threshold_ft: runway.le_displaced_threshold_ft,
-            he_ident: runway.he_ident,
-            he_latitude_deg: runway.he_latitude_deg,
-            he_longitude_deg: runway.he_longitude_deg,
-            he_elevation_ft: runway.he_elevation_ft,
-            he_heading_degt: runway.he_heading_degt,
-            he_displaced_threshold_ft: runway.he_displaced_threshold_ft,
+            low: RunwayEnd {
+                ident: runway.le_ident,
+                latitude_deg: runway.le_latitude_deg,
+                longitude_deg: runway.le_longitude_deg,
+                elevation_ft: runway.le_elevation_ft,
+                heading_degt: runway.le_heading_degt,
+                displaced_threshold_ft: runway.le_displaced_threshold_ft,
+            },
+            high: RunwayEnd {
+                ident: runway.he_ident,
+                latitude_deg: runway.he_latitude_deg,
+                longitude_deg: runway.he_longitude_deg,
+                elevation_ft: runway.he_elevation_ft,
+                heading_degt: runway.he_heading_degt,
+                displaced_threshold_ft: runway.he_displaced_threshold_ft,
+            },
         }
     }
 }

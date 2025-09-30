@@ -24,6 +24,15 @@
 	dayjs.extend(relativeTime);
 
 	// TypeScript interfaces for airport data
+	interface RunwayEndView {
+		ident: string | null;
+		latitude_deg: number | null;
+		longitude_deg: number | null;
+		elevation_ft: number | null;
+		heading_degt: number | null;
+		displaced_threshold_ft: number | null;
+	}
+
 	interface RunwayView {
 		id: number;
 		length_ft: number | null;
@@ -31,18 +40,8 @@
 		surface: string | null;
 		lighted: boolean;
 		closed: boolean;
-		le_ident: string | null;
-		le_latitude_deg: number | null;
-		le_longitude_deg: number | null;
-		le_elevation_ft: number | null;
-		le_heading_degt: number | null;
-		le_displaced_threshold_ft: number | null;
-		he_ident: string | null;
-		he_latitude_deg: number | null;
-		he_longitude_deg: number | null;
-		he_elevation_ft: number | null;
-		he_heading_degt: number | null;
-		he_displaced_threshold_ft: number | null;
+		low: RunwayEndView;
+		high: RunwayEndView;
 	}
 
 	interface AirportView {
@@ -112,7 +111,6 @@
 		showCompassRose: true,
 		showAirportMarkers: true,
 		showRunwayOverlays: false,
-		showCoordinateData: false,
 		trailLength: 0
 	});
 
@@ -121,7 +119,6 @@
 		showCompassRose: boolean;
 		showAirportMarkers: boolean;
 		showRunwayOverlays: boolean;
-		showCoordinateData: boolean;
 		trailLength: number;
 	}) {
 		// Replace entire object to ensure Svelte 5 reactivity triggers
@@ -224,21 +221,6 @@
 		}
 	});
 
-	// Reactive effect for coordinate data settings
-	$effect(() => {
-		if (map) {
-			if (currentSettings.showCoordinateData) {
-				updateCoordinateDisplay();
-				drawCoordinateGrid();
-			} else {
-				if (coordinateDisplayElement) {
-					coordinateDisplayElement.style.display = 'none';
-				}
-				clearCoordinateGrid();
-			}
-		}
-	});
-
 	// Reactive effect for trail length settings
 	$effect(() => {
 		// Access trailLength to make this effect reactive to changes
@@ -261,10 +243,6 @@
 	let areaTrackerActive = $state(false);
 	let areaTrackerAvailable = $state(true); // Whether area tracker can be enabled (based on map area)
 	let currentAreaSubscriptions = new SvelteSet<string>(); // Track subscribed areas
-
-	// Coordinate data state
-	let coordinateDisplayElement: HTMLElement | null = null;
-	let coordinateGridLines: google.maps.Polyline[] = [];
 
 	// Update debug status when area subscriptions change
 	$effect(() => {
@@ -420,11 +398,6 @@
 			updateAllAircraftMarkersScale();
 			// Update area tracker availability and subscriptions
 			updateAreaTrackerAvailability();
-			// Update coordinate display and grid if enabled
-			if (currentSettings.showCoordinateData) {
-				updateCoordinateDisplay();
-				drawCoordinateGrid();
-			}
 			if (areaTrackerActive) {
 				// Hybrid approach: Fetch immediate snapshot then update WebSocket subscriptions
 				setTimeout(async () => {
@@ -438,11 +411,6 @@
 
 		map.addListener('dragend', async () => {
 			checkAndUpdateAirports();
-			// Update coordinate display and grid if enabled
-			if (currentSettings.showCoordinateData) {
-				updateCoordinateDisplay();
-				drawCoordinateGrid();
-			}
 			// Update area subscriptions after panning
 			if (areaTrackerActive) {
 				// Hybrid approach: Fetch immediate snapshot then update WebSocket subscriptions
@@ -771,110 +739,6 @@
 
 			airportUpdateDebounceTimer = null;
 		}, 100);
-	}
-
-	// Coordinate data functions
-	function updateCoordinateDisplay(): void {
-		if (!map) return;
-
-		const bounds = map.getBounds();
-		if (!bounds) return;
-
-		const ne = bounds.getNorthEast();
-		const sw = bounds.getSouthWest();
-
-		// Format coordinate range
-		const latRange = `${sw.lat().toFixed(4)}° to ${ne.lat().toFixed(4)}°`;
-		const lngRange = `${sw.lng().toFixed(4)}° to ${ne.lng().toFixed(4)}°`;
-		const coordText = `Lat: ${latRange}, Lng: ${lngRange}`;
-
-		// Create or update coordinate display element
-		if (!coordinateDisplayElement) {
-			coordinateDisplayElement = document.createElement('div');
-			coordinateDisplayElement.className = 'coordinate-display';
-			coordinateDisplayElement.style.cssText = `
-				position: absolute;
-				top: 80px;
-				left: 50%;
-				transform: translateX(-50%);
-				background: white;
-				padding: 8px 12px;
-				border-radius: 4px;
-				box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-				font-family: monospace;
-				font-size: 12px;
-				z-index: 10;
-				pointer-events: none;
-				border: 1px solid #ccc;
-			`;
-			// eslint-disable-next-line svelte/no-dom-manipulating
-			mapContainer.appendChild(coordinateDisplayElement);
-		}
-
-		coordinateDisplayElement.textContent = coordText;
-		coordinateDisplayElement.style.display = 'block';
-	}
-
-	function drawCoordinateGrid(): void {
-		// Clear existing grid lines
-		clearCoordinateGrid();
-
-		if (!map) return;
-
-		const bounds = map.getBounds();
-		if (!bounds) return;
-
-		const ne = bounds.getNorthEast();
-		const sw = bounds.getSouthWest();
-
-		// Draw latitude lines at integer degrees
-		const latMin = Math.floor(sw.lat());
-		const latMax = Math.ceil(ne.lat());
-
-		for (let lat = latMin; lat <= latMax; lat++) {
-			if (lat >= sw.lat() && lat <= ne.lat()) {
-				const line = new google.maps.Polyline({
-					path: [
-						{ lat: lat, lng: sw.lng() },
-						{ lat: lat, lng: ne.lng() }
-					],
-					geodesic: false,
-					strokeColor: '#666666',
-					strokeOpacity: 0.5,
-					strokeWeight: 1,
-					map: map
-				});
-				coordinateGridLines.push(line);
-			}
-		}
-
-		// Draw longitude lines at integer degrees
-		const lngMin = Math.floor(sw.lng());
-		const lngMax = Math.ceil(ne.lng());
-
-		for (let lng = lngMin; lng <= lngMax; lng++) {
-			if (lng >= sw.lng() && lng <= ne.lng()) {
-				const line = new google.maps.Polyline({
-					path: [
-						{ lat: sw.lat(), lng: lng },
-						{ lat: ne.lat(), lng: lng }
-					],
-					geodesic: false,
-					strokeColor: '#666666',
-					strokeOpacity: 0.5,
-					strokeWeight: 1,
-					map: map
-				});
-				coordinateGridLines.push(line);
-			}
-		}
-	}
-
-	function clearCoordinateGrid(): void {
-		coordinateGridLines.forEach((line) => {
-			line.setMap(null);
-		});
-		coordinateGridLines = [];
 	}
 
 	function handleOrientationChange(event: DeviceOrientationEvent): void {
