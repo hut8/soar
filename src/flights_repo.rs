@@ -167,6 +167,29 @@ impl FlightsRepository {
         Ok(results.into_iter().map(|model| model.into()).collect())
     }
 
+    /// Get recent completed flights (with landing time) ordered by landing time descending
+    pub async fn get_completed_flights(&self, limit: i64) -> Result<Vec<Flight>> {
+        use crate::schema::flights::dsl::*;
+
+        let pool = self.pool.clone();
+
+        let results = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            let flight_models: Vec<FlightModel> = flights
+                .filter(landing_time.is_not_null())
+                .order(landing_time.desc())
+                .limit(limit)
+                .select(FlightModel::as_select())
+                .load(&mut conn)?;
+
+            Ok::<Vec<FlightModel>, anyhow::Error>(flight_models)
+        })
+        .await??;
+
+        Ok(results.into_iter().map(|model| model.into()).collect())
+    }
+
     /// Get flights within a time range, optionally filtered by device
     pub async fn get_flights_in_time_range(
         &self,

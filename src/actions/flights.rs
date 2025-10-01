@@ -190,3 +190,24 @@ pub async fn search_flights(
         }
     }
 }
+
+/// Get recent completed flights
+pub async fn get_completed_flights(
+    State(state): State<AppState>,
+    Query(params): Query<FlightsQueryParams>,
+) -> impl IntoResponse {
+    let flights_repo = FlightsRepository::new(state.pool);
+    let limit = params.limit.unwrap_or(100);
+
+    match flights_repo.get_completed_flights(limit).await {
+        Ok(flights) => Json(flights).into_response(),
+        Err(e) => {
+            tracing::error!("Failed to get completed flights: {}", e);
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to get completed flights",
+            )
+            .into_response()
+        }
+    }
+}
