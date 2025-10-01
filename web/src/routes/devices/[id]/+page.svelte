@@ -187,7 +187,7 @@
 </script>
 
 <svelte:head>
-	<title>{device?.registration || 'Device'} ({deviceId}) - Device Details</title>
+	<title>{device?.registration || 'Device'} - Device Details</title>
 </svelte:head>
 
 <div class="container mx-auto max-w-6xl space-y-6 p-4">
@@ -233,9 +233,6 @@
 							<Radio class="h-8 w-8 text-primary-500" />
 							<div>
 								<h1 class="h1">{device.registration}</h1>
-								<p class="text-surface-600-300-token font-mono text-sm">
-									Device ID: {device.id}
-								</p>
 								<p class="text-surface-600-300-token font-mono text-sm">
 									Address: {formatAddressType(device.address_type)}: {device.address}
 								</p>
