@@ -247,3 +247,107 @@ fn test_elevation_near_tile_boundary() {
         "Should have elevation data near boundary"
     );
 }
+
+/// Test elevation for Death Valley (below sea level)
+/// Expected elevation: ~-86m (-282 ft) at Badwater Basin
+#[test]
+fn test_elevation_death_valley() {
+    // Death Valley, California (Badwater Basin - lowest point in North America)
+    let lat = 36.2295;
+    let lon = -116.8295;
+
+    let result = elevation_egm2008(lat, lon);
+    assert!(result.is_ok(), "Elevation lookup should succeed");
+
+    let elevation = result.unwrap();
+    assert!(
+        elevation.is_some(),
+        "Elevation should be available for Death Valley"
+    );
+
+    let elev_m = elevation.unwrap();
+    // Death Valley is below sea level, around -86m
+    assert!(
+        elev_m > -150.0 && elev_m < 0.0,
+        "Elevation {} meters is outside expected range for Death Valley (below sea level)",
+        elev_m
+    );
+}
+
+/// Test elevation for Grand Canyon
+/// Expected elevation: ~2,100m (6,900 ft) at South Rim
+#[test]
+fn test_elevation_grand_canyon() {
+    // Grand Canyon South Rim, Arizona
+    let lat = 36.0544;
+    let lon = -112.1401;
+
+    let result = elevation_egm2008(lat, lon);
+    assert!(result.is_ok(), "Elevation lookup should succeed");
+
+    let elevation = result.unwrap();
+    assert!(
+        elevation.is_some(),
+        "Elevation should be available for Grand Canyon"
+    );
+
+    let elev_m = elevation.unwrap();
+    // Grand Canyon South Rim is around 2,100m elevation
+    assert!(
+        elev_m > 1900.0 && elev_m < 2300.0,
+        "Elevation {} meters is outside expected range for Grand Canyon South Rim (~2,100m)",
+        elev_m
+    );
+}
+
+/// Test elevation for Mexico City (high elevation city)
+/// Expected elevation: ~2,240m (7,350 ft)
+#[test]
+fn test_elevation_mexico_city() {
+    // Mexico City, Mexico (Zócalo square)
+    let lat = 19.4326;
+    let lon = -99.1332;
+
+    let result = elevation_egm2008(lat, lon);
+    assert!(result.is_ok(), "Elevation lookup should succeed");
+
+    let elevation = result.unwrap();
+    assert!(
+        elevation.is_some(),
+        "Elevation should be available for Mexico City"
+    );
+
+    let elev_m = elevation.unwrap();
+    // Mexico City elevation varies widely across the city, from ~2,200m to ~2,600m
+    assert!(
+        elev_m > 1800.0 && elev_m < 2700.0,
+        "Elevation {} meters is outside expected range for Mexico City (~2,240m average)",
+        elev_m
+    );
+}
+
+/// Test elevation for Tokyo (sea level, different hemisphere from NYC)
+/// Expected elevation: close to 0m
+#[test]
+fn test_elevation_tokyo() {
+    // Tokyo, Japan (Tokyo Tower area)
+    let lat = 35.6586;
+    let lon = 139.7454;
+
+    let result = elevation_egm2008(lat, lon);
+    assert!(result.is_ok(), "Elevation lookup should succeed");
+
+    let elevation = result.unwrap();
+    assert!(
+        elevation.is_some(),
+        "Elevation should be available for Tokyo"
+    );
+
+    let elev_m = elevation.unwrap();
+    // Tokyo is near sea level
+    assert!(
+        elev_m > -10.0 && elev_m < 100.0,
+        "Elevation {} meters is outside expected range for Tokyo (near sea level)",
+        elev_m
+    );
+}

@@ -75,6 +75,7 @@ impl FlightsRepository {
         flight_id: Uuid,
         landing_time_param: DateTime<Utc>,
         arrival_airport_param: Option<String>,
+        landing_altitude_offset_ft_param: Option<i32>,
     ) -> Result<()> {
         use crate::schema::flights::dsl::*;
 
@@ -87,6 +88,7 @@ impl FlightsRepository {
                 .set((
                     landing_time.eq(&Some(landing_time_param)),
                     arrival_airport.eq(&arrival_airport_param),
+                    landing_altitude_offset_ft.eq(&landing_altitude_offset_ft_param),
                     updated_at.eq(Utc::now()),
                 ))
                 .execute(&mut conn)?;
