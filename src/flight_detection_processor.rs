@@ -138,6 +138,12 @@ async fn calculate_altitude_offset_ft(fix: &Fix) -> Option<i32> {
             let elevation_ft = elevation_m * 3.28084;
             // Calculate offset
             let offset = reported_altitude_ft as f64 - elevation_ft;
+
+            info!(
+                "Altitude offset calculation: indicated={} ft, known_elevation={:.1} ft, offset={:.0} ft at ({:.6}, {:.6})",
+                reported_altitude_ft, elevation_ft, offset, lat, lon
+            );
+
             Some(offset.round() as i32)
         }
         Ok(None) => {
