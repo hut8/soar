@@ -31,6 +31,7 @@ pub struct AircraftView {
     pub kit_model_name: Option<String>,
     pub other_names: Vec<String>,
     pub light_sport_type: Option<LightSportType>,
+    pub device_id: Option<Uuid>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<AircraftModelView>,
 }
@@ -62,6 +63,7 @@ impl From<Aircraft> for AircraftView {
             kit_model_name: aircraft.kit_model_name,
             other_names: aircraft.other_names,
             light_sport_type: aircraft.light_sport_type,
+            device_id: aircraft.device_id,
             model: None, // Will be set when fetching with model data
         }
     }

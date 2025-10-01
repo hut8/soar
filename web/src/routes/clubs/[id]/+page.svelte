@@ -41,6 +41,7 @@
 		kit_model_name?: string;
 		other_names: string[];
 		light_sport_type?: string;
+		device_id?: string;
 		model?: {
 			number_of_engines?: number;
 		};
@@ -218,7 +219,7 @@
 <div class="max-w-8xl container mx-auto space-y-6 p-4">
 	<!-- Back Button -->
 	<div class="flex items-center gap-4">
-		<button class="variant-soft btn btn-sm" on:click={goBack}>
+		<button class="variant-soft btn btn-sm" onclick={goBack}>
 			<ArrowLeft class="mr-2 h-4 w-4" />
 			Back to Clubs
 		</button>
@@ -241,7 +242,7 @@
 				<h3 class="h3">Error Loading Club</h3>
 				<p>{error}</p>
 				<div class="alert-actions">
-					<button class="variant-filled btn" on:click={loadClub}> Try Again </button>
+					<button class="variant-filled btn" onclick={loadClub}> Try Again </button>
 				</div>
 			</div>
 		</div>
@@ -273,7 +274,7 @@
 						<div class="flex-shrink-0">
 							<button
 								class="variant-filled-primary btn"
-								on:click={setAsMyClub}
+								onclick={setAsMyClub}
 								disabled={settingClub}
 							>
 								{#if settingClub}
@@ -456,7 +457,7 @@
 							<div class="alert-message">
 								<p>{aircraftError}</p>
 								<div class="alert-actions">
-									<button class="variant-filled btn" on:click={loadAircraft}> Try Again </button>
+									<button class="variant-filled btn" onclick={loadAircraft}> Try Again </button>
 								</div>
 							</div>
 						</div>
@@ -469,8 +470,20 @@
 						<div class="space-y-4">
 							{#each aircraft as plane (plane.registration_number)}
 								<div class="bg-surface-100-800-token rounded-lg p-4">
-									<div class="mb-3 flex items-center gap-3">
+									<div class="mb-3 flex flex-wrap items-center gap-3">
 										<h3 class="h3 font-semibold">{plane.registration_number}</h3>
+										{#if plane.device_id}
+											<a
+												href={`/devices/${plane.device_id}`}
+												target="_blank"
+												rel="noopener noreferrer"
+												class="variant-soft-primary btn btn-sm"
+												title="View device details"
+											>
+												<Plane class="h-4 w-4" />
+												Device
+											</a>
+										{/if}
 										<a
 											href={`https://www.flightaware.com/photos/aircraft/${plane.registration_number}`}
 											target="_blank"
