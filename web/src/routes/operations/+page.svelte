@@ -1586,7 +1586,7 @@
 	}
 
 	:global(.airport-icon) {
-		background: white;
+		background: transparent;
 		border: 2px solid #374151;
 		border-radius: 50%;
 		width: 24px;
@@ -1609,6 +1609,10 @@
 		margin-top: 2px;
 		white-space: nowrap;
 		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+		opacity: 0.5;
+		text-rendering: optimizeLegibility;
+		-webkit-font-smoothing: antialiased;
+		-moz-osx-font-smoothing: grayscale;
 	}
 
 	/* Aircraft marker styling */
