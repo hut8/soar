@@ -119,12 +119,20 @@ fn haversine_distance(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
 /// Calculate altitude offset in feet between reported altitude and true MSL elevation
 /// Returns the difference (reported_altitude_ft - true_elevation_ft)
 /// Returns None if elevation lookup fails or fix has no altitude
-fn calculate_altitude_offset_ft(fix: &Fix) -> Option<i32> {
+async fn calculate_altitude_offset_ft(fix: &Fix) -> Option<i32> {
     // Get reported altitude from fix (in feet)
     let reported_altitude_ft = fix.altitude_feet?;
 
+    let lat = fix.latitude;
+    let lon = fix.longitude;
+
+    // Run blocking elevation lookup in a separate thread
+    let elevation_result = tokio::task::spawn_blocking(move || elevation_egm2008(lat, lon))
+        .await
+        .ok()?;
+
     // Get true elevation at this location (in meters)
-    match elevation_egm2008(fix.latitude, fix.longitude) {
+    match elevation_result {
         Ok(Some(elevation_m)) => {
             // Convert elevation from meters to feet (1 meter = 3.28084 feet)
             let elevation_ft = elevation_m * 3.28084;
@@ -253,7 +261,7 @@ impl FlightDetectionProcessor {
         flight.departure_airport = departure_airport.clone();
 
         // Calculate takeoff altitude offset (difference between reported altitude and true elevation)
-        flight.takeoff_altitude_offset_ft = calculate_altitude_offset_ft(fix);
+        flight.takeoff_altitude_offset_ft = calculate_altitude_offset_ft(fix).await;
 
         let flight_id = flight.id;
 
@@ -308,7 +316,7 @@ impl FlightDetectionProcessor {
         let arrival_airport = self.find_nearby_airport(fix.latitude, fix.longitude).await;
 
         // Calculate landing altitude offset (difference between reported altitude and true elevation)
-        let landing_altitude_offset_ft = calculate_altitude_offset_ft(fix);
+        let landing_altitude_offset_ft = calculate_altitude_offset_ft(fix).await;
 
         match self
             .flights_repo
