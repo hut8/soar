@@ -1,36 +1,9 @@
 use anyhow::Result;
 use diesel::prelude::*;
-use diesel::sql_types::*;
 use uuid::Uuid;
 
 use crate::locations::{Location, LocationModel, NewLocationModel, Point};
 use crate::web::PgPool;
-
-#[derive(QueryableByName, Debug)]
-struct LocationForGeocoding {
-    #[diesel(sql_type = diesel::sql_types::Uuid)]
-    id: Uuid,
-    #[diesel(sql_type = Nullable<Varchar>)]
-    street1: Option<String>,
-    #[diesel(sql_type = Nullable<Varchar>)]
-    street2: Option<String>,
-    #[diesel(sql_type = Nullable<Varchar>)]
-    city: Option<String>,
-    #[diesel(sql_type = Nullable<Varchar>)]
-    state: Option<String>,
-    #[diesel(sql_type = Nullable<Varchar>)]
-    zip_code: Option<String>,
-    #[diesel(sql_type = Nullable<Varchar>)]
-    region_code: Option<String>,
-    #[diesel(sql_type = Nullable<Varchar>)]
-    county_mail_code: Option<String>,
-    #[diesel(sql_type = Nullable<Varchar>)]
-    country_mail_code: Option<String>,
-    #[diesel(sql_type = Timestamptz)]
-    created_at: chrono::DateTime<chrono::Utc>,
-    #[diesel(sql_type = Timestamptz)]
-    updated_at: chrono::DateTime<chrono::Utc>,
-}
 
 #[derive(Clone)]
 pub struct LocationsRepository {
@@ -155,54 +128,42 @@ impl LocationsRepository {
 
     /// Get locations that need geocoding (have address but no geolocation)
     pub async fn get_locations_for_geocoding(&self, limit: Option<i64>) -> Result<Vec<Location>> {
+        use crate::schema::clubs::dsl as clubs_dsl;
+        use crate::schema::locations::dsl::*;
+        use diesel::dsl::exists;
+
         let pool = self.pool.clone();
         let query_limit = limit.unwrap_or(100);
 
         let results = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            let raw_query = format!(
-                "SELECT id, street1, street2, city, state, zip_code, region_code,
-                        county_mail_code, country_mail_code, created_at, updated_at
-                 FROM locations
-                 WHERE geolocation IS NULL
-                   AND (street1 IS NOT NULL OR city IS NOT NULL OR state IS NOT NULL)
-                   AND EXISTS (
-                       SELECT 1 FROM clubs c
-                       WHERE c.location_id = locations.id
-                       AND c.is_soaring = TRUE
-                   )
-                 ORDER BY created_at ASC
-                 LIMIT {}",
-                query_limit
-            );
+            // Build the EXISTS subquery
+            // Note: location_id in clubs is Nullable<Uuid>, so we need to match it with id.nullable()
+            let soaring_club_exists = clubs_dsl::clubs
+                .filter(clubs_dsl::location_id.eq(id.nullable()))
+                .filter(clubs_dsl::is_soaring.eq(true));
 
-            let location_results: Vec<LocationForGeocoding> =
-                diesel::sql_query(&raw_query).load::<LocationForGeocoding>(&mut conn)?;
+            // Build the main query using Diesel's query builder
+            let location_models: Vec<LocationModel> = locations
+                .filter(geolocation.is_null())
+                .filter(
+                    street1
+                        .is_not_null()
+                        .or(city.is_not_null())
+                        .or(state.is_not_null()),
+                )
+                .filter(exists(soaring_club_exists))
+                .order(created_at.asc())
+                .limit(query_limit)
+                .select(LocationModel::as_select())
+                .load(&mut conn)?;
 
-            Ok::<Vec<LocationForGeocoding>, anyhow::Error>(location_results)
+            Ok::<Vec<LocationModel>, anyhow::Error>(location_models)
         })
         .await??;
 
-        let mut locations = Vec::new();
-        for row in results {
-            locations.push(Location {
-                id: row.id,
-                street1: row.street1,
-                street2: row.street2,
-                city: row.city,
-                state: row.state,
-                zip_code: row.zip_code,
-                region_code: row.region_code,
-                county_mail_code: row.county_mail_code,
-                country_mail_code: row.country_mail_code,
-                geolocation: None, // These locations need geocoding, so no geolocation
-                created_at: row.created_at,
-                updated_at: row.updated_at,
-            });
-        }
-
-        Ok(locations)
+        Ok(results.into_iter().map(|model| model.into()).collect())
     }
 
     /// Find or create a location by address (atomic operation)
