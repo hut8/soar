@@ -221,6 +221,9 @@ impl LocationsRepository {
 
             // Now select the location (either the one we just created or the existing one)
             // We need to match the exact COALESCE logic from the unique constraint
+            use crate::schema::locations::dsl::*;
+            use diesel::dsl::sql;
+
             let search_street1 = param_street1.as_deref().unwrap_or("");
             let search_street2 = param_street2.as_deref().unwrap_or("");
             let search_city = param_city.as_deref().unwrap_or("");
@@ -228,24 +231,34 @@ impl LocationsRepository {
             let search_zip_code = param_zip_code.as_deref().unwrap_or("");
             let search_country = param_country_mail_code.as_deref().unwrap_or("US");
 
-            // Use SQL to match the exact same COALESCE logic as the unique constraint
-            let location_model = diesel::sql_query(
-                "SELECT id, street1, street2, city, state, zip_code, region_code, county_mail_code, country_mail_code, geolocation, created_at, updated_at
-                 FROM locations
-                 WHERE COALESCE(street1, '') = $1
-                   AND COALESCE(street2, '') = $2
-                   AND COALESCE(city, '') = $3
-                   AND COALESCE(state, '') = $4
-                   AND COALESCE(zip_code, '') = $5
-                   AND COALESCE(country_mail_code, 'US') = $6"
-            )
-            .bind::<diesel::sql_types::Text, _>(search_street1)
-            .bind::<diesel::sql_types::Text, _>(search_street2)
-            .bind::<diesel::sql_types::Text, _>(search_city)
-            .bind::<diesel::sql_types::Text, _>(search_state)
-            .bind::<diesel::sql_types::Text, _>(search_zip_code)
-            .bind::<diesel::sql_types::Text, _>(search_country)
-            .get_result::<LocationModel>(&mut conn)?;
+            // Use Diesel's sql function to match the exact same COALESCE logic as the unique constraint
+            let location_model = locations
+                .filter(
+                    sql::<diesel::sql_types::Bool>("COALESCE(street1, '') = ")
+                        .bind::<diesel::sql_types::Text, _>(search_street1),
+                )
+                .filter(
+                    sql::<diesel::sql_types::Bool>("COALESCE(street2, '') = ")
+                        .bind::<diesel::sql_types::Text, _>(search_street2),
+                )
+                .filter(
+                    sql::<diesel::sql_types::Bool>("COALESCE(city, '') = ")
+                        .bind::<diesel::sql_types::Text, _>(search_city),
+                )
+                .filter(
+                    sql::<diesel::sql_types::Bool>("COALESCE(state, '') = ")
+                        .bind::<diesel::sql_types::Text, _>(search_state),
+                )
+                .filter(
+                    sql::<diesel::sql_types::Bool>("COALESCE(zip_code, '') = ")
+                        .bind::<diesel::sql_types::Text, _>(search_zip_code),
+                )
+                .filter(
+                    sql::<diesel::sql_types::Bool>("COALESCE(country_mail_code, 'US') = ")
+                        .bind::<diesel::sql_types::Text, _>(search_country),
+                )
+                .select(LocationModel::as_select())
+                .first::<LocationModel>(&mut conn)?;
 
             Ok::<Location, anyhow::Error>(location_model.into())
         })

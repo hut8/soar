@@ -331,29 +331,41 @@ impl AircraftModelRepository {
         let keys = keys.to_vec();
 
         tokio::task::spawn_blocking(move || {
+            use crate::schema::aircraft_models::dsl::*;
+            use diesel::BoolExpressionMethods;
+
             let mut conn = pool.get()?;
 
-            info!("Got database connection, building SQL query");
+            info!("Got database connection, building query");
 
-            // Build SQL query with tuple IN clause using OR conditions
-            // This is more verbose but works with Diesel's type system
-            let mut or_conditions = Vec::new();
+            // Build query with OR conditions for composite keys using Diesel's query builder
+            let mut query = aircraft_models.into_boxed();
+
+            // Start with a filter that matches nothing, then add OR conditions
+            let mut first = true;
             for (mfg, model, series) in &keys {
-                or_conditions.push(format!(
-                    "(manufacturer_code = '{}' AND model_code = '{}' AND series_code = '{}')",
-                    mfg.replace("'", "''"),
-                    model.replace("'", "''"),
-                    series.replace("'", "''")
-                ));
+                if first {
+                    query = query.filter(
+                        manufacturer_code
+                            .eq(mfg)
+                            .and(model_code.eq(model))
+                            .and(series_code.eq(series)),
+                    );
+                    first = false;
+                } else {
+                    query = query.or_filter(
+                        manufacturer_code
+                            .eq(mfg)
+                            .and(model_code.eq(model))
+                            .and(series_code.eq(series)),
+                    );
+                }
             }
 
-            let sql_str = format!(
-                "SELECT * FROM aircraft_models WHERE {}",
-                or_conditions.join(" OR ")
-            );
-
             info!("Executing aircraft models query");
-            let records = diesel::sql_query(sql_str).load::<AircraftModelRecord>(&mut conn)?;
+            let records = query
+                .select(AircraftModelRecord::as_select())
+                .load::<AircraftModelRecord>(&mut conn)?;
 
             info!("Query returned {} aircraft model records", records.len());
 

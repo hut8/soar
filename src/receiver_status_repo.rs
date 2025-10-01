@@ -127,20 +127,14 @@ impl ReceiverStatusRepository {
     pub async fn get_latest_for_all_receivers(&self) -> Result<Vec<ReceiverStatus>> {
         let mut conn = self.get_connection()?;
 
-        // Use a window function to get the latest status for each receiver
-        let sql = r#"
-            SELECT DISTINCT ON (receiver_id)
-                   id, receiver_id, received_at, version, platform, cpu_load, ram_free, ram_total,
-                   ntp_offset, ntp_correction, voltage, amperage, cpu_temperature, visible_senders,
-                   latency, senders, rf_correction_manual, rf_correction_automatic, noise,
-                   senders_signal_quality, senders_messages, good_senders_signal_quality,
-                   good_senders, good_and_bad_senders, geoid_offset, name, demodulation_snr_db,
-                   ognr_pilotaware_version, unparsed_data, lag, created_at, updated_at
-            FROM receiver_statuses
-            ORDER BY receiver_id, received_at DESC
-        "#;
+        // Use DISTINCT ON to get the latest status for each receiver
+        use crate::schema::receiver_statuses::dsl::*;
 
-        let statuses = diesel::sql_query(sql).load::<ReceiverStatus>(&mut conn)?;
+        let statuses = receiver_statuses
+            .order((receiver_id, received_at.desc()))
+            .distinct_on(receiver_id)
+            .select(ReceiverStatus::as_select())
+            .load::<ReceiverStatus>(&mut conn)?;
 
         Ok(statuses)
     }
@@ -184,6 +178,7 @@ impl ReceiverStatusRepository {
     }
 
     /// Get average statistics for a receiver over a time period
+    /// Note: Uses raw SQL because Diesel's tuple size limit (12) is exceeded by the 13 aggregate fields
     pub async fn get_receiver_averages(
         &self,
         receiver_id: i32,

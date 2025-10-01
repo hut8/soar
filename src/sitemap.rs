@@ -16,12 +16,6 @@ const MAX_URLS_PER_SITEMAP: usize = 50000;
 /// Base URL for the website
 const BASE_URL: &str = "https://glider.flights";
 
-#[derive(QueryableByName, Debug)]
-struct ClubId {
-    #[diesel(sql_type = diesel::sql_types::Uuid)]
-    id: Uuid,
-}
-
 /// Generate sitemap and robots.txt files
 pub async fn handle_sitemap_generation(pool: PgPool, static_root: String) -> Result<()> {
     info!("Starting sitemap generation");
@@ -116,18 +110,17 @@ fn generate_club_urls(club_ids: &[Uuid]) -> Result<Vec<Url>> {
 /// Get all club IDs from the database
 async fn get_all_club_ids(pool: PgPool) -> Result<Vec<Uuid>> {
     let result = tokio::task::spawn_blocking(move || {
+        use crate::schema::clubs::dsl::*;
+
         let mut conn = pool.get()?;
 
-        let sql = r#"
-            SELECT id
-            FROM clubs
-            WHERE is_soaring = true
-            ORDER BY id
-        "#;
+        let club_ids: Vec<Uuid> = clubs
+            .filter(is_soaring.eq(true))
+            .order(id.asc())
+            .select(id)
+            .load::<Uuid>(&mut conn)?;
 
-        let club_ids: Vec<ClubId> = diesel::sql_query(sql).load::<ClubId>(&mut conn)?;
-
-        Ok::<Vec<Uuid>, anyhow::Error>(club_ids.into_iter().map(|c| c.id).collect())
+        Ok::<Vec<Uuid>, anyhow::Error>(club_ids)
     })
     .await??;
 
