@@ -88,7 +88,7 @@ impl NatsFixPublisher {
             if let Err(e) = publish_to_nats(&nats_client, &fix.device_id.to_string(), &fix).await {
                 error!("Failed to publish fix for device {}: {}", fix.device_id, e);
             } else {
-                info!("Published fix for device {}", fix.device_id);
+                debug!("Published fix for device {}", fix.device_id);
             }
         });
     }
