@@ -305,6 +305,8 @@ diesel::table! {
         updated_at -> Timestamptz,
         device_address_type -> AddressType,
         device_id -> Nullable<Uuid>,
+        takeoff_altitude_offset_ft -> Nullable<Int4>,
+        landing_altitude_offset_ft -> Nullable<Int4>,
     }
 }
 

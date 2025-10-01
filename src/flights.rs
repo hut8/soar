@@ -45,6 +45,12 @@ pub struct Flight {
     /// Club that owns the aircraft for this flight
     pub club_id: Option<Uuid>,
 
+    /// Altitude offset at takeoff (difference between fix altitude and true MSL altitude in feet)
+    pub takeoff_altitude_offset_ft: Option<i32>,
+
+    /// Altitude offset at landing (difference between fix altitude and true MSL altitude in feet)
+    pub landing_altitude_offset_ft: Option<i32>,
+
     /// Database timestamps
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -66,6 +72,8 @@ impl Flight {
             tow_aircraft_id: None,
             tow_release_height_msl: None,
             club_id: None,
+            takeoff_altitude_offset_ft: None,
+            landing_altitude_offset_ft: None,
             created_at: now,
             updated_at: now,
         }
@@ -86,6 +94,8 @@ impl Flight {
             tow_aircraft_id: None,
             tow_release_height_msl: None,
             club_id: fix.club_id,
+            takeoff_altitude_offset_ft: None,
+            landing_altitude_offset_ft: None,
             created_at: now,
             updated_at: now,
         }
@@ -311,6 +321,8 @@ pub struct FlightModel {
     pub updated_at: DateTime<Utc>,
     pub device_address_type: AddressType,
     pub device_id: Option<Uuid>,
+    pub takeoff_altitude_offset_ft: Option<i32>,
+    pub landing_altitude_offset_ft: Option<i32>,
 }
 
 /// Insert model for new flights
@@ -328,6 +340,8 @@ pub struct NewFlightModel {
     pub club_id: Option<Uuid>,
     pub device_address_type: AddressType,
     pub device_id: Option<Uuid>,
+    pub takeoff_altitude_offset_ft: Option<i32>,
+    pub landing_altitude_offset_ft: Option<i32>,
 }
 
 /// Conversion from Flight (API model) to FlightModel (database model)
@@ -347,6 +361,8 @@ impl From<Flight> for FlightModel {
             created_at: flight.created_at,
             updated_at: flight.updated_at,
             device_id: flight.device_id,
+            takeoff_altitude_offset_ft: flight.takeoff_altitude_offset_ft,
+            landing_altitude_offset_ft: flight.landing_altitude_offset_ft,
         }
     }
 }
@@ -366,6 +382,8 @@ impl From<Flight> for NewFlightModel {
             tow_release_height_msl: flight.tow_release_height_msl,
             club_id: flight.club_id,
             device_id: flight.device_id,
+            takeoff_altitude_offset_ft: flight.takeoff_altitude_offset_ft,
+            landing_altitude_offset_ft: flight.landing_altitude_offset_ft,
         }
     }
 }
@@ -385,6 +403,8 @@ impl From<FlightModel> for Flight {
             tow_aircraft_id: model.tow_aircraft_id,
             tow_release_height_msl: model.tow_release_height_msl,
             club_id: model.club_id,
+            takeoff_altitude_offset_ft: model.takeoff_altitude_offset_ft,
+            landing_altitude_offset_ft: model.landing_altitude_offset_ft,
             created_at: model.created_at,
             updated_at: model.updated_at,
         }

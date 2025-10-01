@@ -109,7 +109,8 @@ impl FlightsRepository {
 
             let flight_model: Option<FlightModel> = flights
                 .filter(id.eq(flight_id))
-                .first::<FlightModel>(&mut conn)
+                .select(FlightModel::as_select())
+                .first(&mut conn)
                 .optional()?;
 
             Ok::<Option<FlightModel>, anyhow::Error>(flight_model)
@@ -132,7 +133,8 @@ impl FlightsRepository {
             let flight_models: Vec<FlightModel> = flights
                 .filter(device_id.eq(device_id_val))
                 .order(takeoff_time.desc())
-                .load::<FlightModel>(&mut conn)?;
+                .select(FlightModel::as_select())
+                .load(&mut conn)?;
 
             Ok::<Vec<FlightModel>, anyhow::Error>(flight_models)
         })
@@ -153,7 +155,8 @@ impl FlightsRepository {
             let flight_models: Vec<FlightModel> = flights
                 .filter(landing_time.is_null())
                 .order(takeoff_time.desc())
-                .load::<FlightModel>(&mut conn)?;
+                .select(FlightModel::as_select())
+                .load(&mut conn)?;
 
             Ok::<Vec<FlightModel>, anyhow::Error>(flight_models)
         })
@@ -198,7 +201,8 @@ impl FlightsRepository {
                 .filter(takeoff_time.ge(&start_time))
                 .filter(takeoff_time.le(&end_time))
                 .order(takeoff_time.desc())
-                .load::<FlightModel>(&mut conn)?;
+                .select(FlightModel::as_select())
+                .load(&mut conn)?;
 
             Ok::<Vec<FlightModel>, anyhow::Error>(flight_models)
         })
@@ -224,7 +228,8 @@ impl FlightsRepository {
                 .filter(takeoff_time.ge(&start_time))
                 .filter(takeoff_time.le(&end_time))
                 .order(takeoff_time.desc())
-                .load::<FlightModel>(&mut conn)?;
+                .select(FlightModel::as_select())
+                .load(&mut conn)?;
 
             Ok::<Vec<FlightModel>, anyhow::Error>(flight_models)
         })
@@ -249,7 +254,8 @@ impl FlightsRepository {
             let flight_models: Vec<FlightModel> = flights
                 .filter(tow_aircraft_id.eq(&Some(tow_aircraft_id_val)))
                 .order(takeoff_time.desc())
-                .load::<FlightModel>(&mut conn)?;
+                .select(FlightModel::as_select())
+                .load(&mut conn)?;
 
             Ok::<Vec<FlightModel>, anyhow::Error>(flight_models)
         })
