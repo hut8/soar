@@ -8,6 +8,7 @@
 	import WatchlistModal from '$lib/components/WatchlistModal.svelte';
 	import SettingsModal from '$lib/components/SettingsModal.svelte';
 	import AircraftStatusModal from '$lib/components/AircraftStatusModal.svelte';
+	import AirportModal from '$lib/components/AirportModal.svelte';
 	import { DeviceRegistry } from '$lib/services/DeviceRegistry';
 	import { FixFeed } from '$lib/services/FixFeed';
 	import { Device } from '$lib/types';
@@ -104,6 +105,10 @@
 	// Aircraft status modal state
 	let showAircraftStatusModal = $state(false);
 	let selectedAircraft: Device | null = $state(null);
+
+	// Airport modal state
+	let showAirportModal = $state(false);
+	let selectedAirport: AirportView | null = $state(null);
 
 	// Settings state - these will be updated by the SettingsModal
 	let currentSettings = $state({
@@ -666,6 +671,12 @@
 				title: `${airport.name} (${airport.ident})`,
 				content: markerContent,
 				zIndex: 100 // Lower z-index for airports so aircraft appear on top
+			});
+
+			// Add click listener to open airport modal
+			marker.addListener('click', () => {
+				selectedAirport = airport;
+				showAirportModal = true;
 			});
 
 			airportMarkers.push(marker);
@@ -1371,7 +1382,7 @@
 
 	<!-- Compass Rose -->
 	{#if isCompassActive && currentSettings.showCompassRose}
-		<div class="compass-container absolute top-8 left-1/2 z-10 -translate-x-1/2 transform">
+		<div class="compass-container absolute bottom-8 left-1/2 z-10 -translate-x-1/2 transform">
 			<div class="compass-rose" style="transform: rotate({compassHeading}deg)">
 				<svg width="80" height="80" viewBox="0 0 80 80">
 					<!-- Outer circle -->
@@ -1504,6 +1515,9 @@
 	bind:selectedDevice={selectedAircraft}
 />
 
+<!-- Airport Modal -->
+<AirportModal bind:showModal={showAirportModal} bind:selectedAirport />
+
 <style>
 	/* Location button styling */
 	.location-btn {
@@ -1599,7 +1613,7 @@
 	}
 
 	:global(.airport-label) {
-		background: rgba(255, 255, 255, 0.9);
+		background: rgba(255, 255, 255, 0.5);
 		border: 1px solid #d1d5db;
 		border-radius: 4px;
 		padding: 2px 6px;
@@ -1609,7 +1623,6 @@
 		margin-top: 2px;
 		white-space: nowrap;
 		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-		opacity: 0.5;
 		text-rendering: optimizeLegibility;
 		-webkit-font-smoothing: antialiased;
 		-moz-osx-font-smoothing: grayscale;

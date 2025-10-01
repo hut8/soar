@@ -3,6 +3,7 @@
 	import { Device, type Fix, type AircraftRegistration, type AircraftModel } from '$lib/types';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
+	import { onMount } from 'svelte';
 
 	// Extend dayjs with relative time plugin
 	dayjs.extend(relativeTime);
@@ -19,6 +20,12 @@
 	let loadingRegistration = $state(false);
 	let loadingModel = $state(false);
 	let recentFixes: Fix[] = $state([]);
+
+	// Direction arrow variables
+	let userLocation: { lat: number; lng: number } | null = $state(null);
+	let deviceHeading: number = $state(0);
+	let isCompassActive: boolean = $state(false);
+	let directionToAircraft: number = $state(0);
 
 	// Update data when device changes
 	$effect(() => {
@@ -126,6 +133,122 @@
 		const hexAddress = address.toUpperCase();
 		return `ICAO-${hexAddress}`;
 	}
+
+	// Calculate bearing from user to aircraft
+	function calculateBearing(lat1: number, lng1: number, lat2: number, lng2: number): number {
+		const toRadians = (deg: number) => (deg * Math.PI) / 180;
+		const toDegrees = (rad: number) => (rad * 180) / Math.PI;
+
+		const dLng = toRadians(lng2 - lng1);
+		const lat1Rad = toRadians(lat1);
+		const lat2Rad = toRadians(lat2);
+
+		const y = Math.sin(dLng) * Math.cos(lat2Rad);
+		const x =
+			Math.cos(lat1Rad) * Math.sin(lat2Rad) -
+			Math.sin(lat1Rad) * Math.cos(lat2Rad) * Math.cos(dLng);
+
+		let bearing = toDegrees(Math.atan2(y, x));
+		bearing = (bearing + 360) % 360; // Normalize to 0-360
+
+		return bearing;
+	}
+
+	// Update direction to aircraft
+	function updateDirectionToAircraft() {
+		if (!userLocation || !selectedDevice) {
+			return;
+		}
+
+		const latestFix = selectedDevice.getLatestFix();
+		if (!latestFix) {
+			return;
+		}
+
+		// Calculate bearing from user to aircraft
+		const bearing = calculateBearing(
+			userLocation.lat,
+			userLocation.lng,
+			latestFix.latitude,
+			latestFix.longitude
+		);
+
+		// Calculate direction to point phone: bearing - device heading
+		// This tells the user which direction to rotate their phone
+		directionToAircraft = (bearing - deviceHeading + 360) % 360;
+	}
+
+	// Handle device orientation changes
+	function handleOrientationChange(event: DeviceOrientationEvent) {
+		if (event.alpha !== null) {
+			isCompassActive = true;
+			deviceHeading = event.alpha;
+			updateDirectionToAircraft();
+		}
+	}
+
+	// Get user location
+	async function getUserLocation() {
+		if (!navigator.geolocation) {
+			return;
+		}
+
+		try {
+			const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+				navigator.geolocation.getCurrentPosition(resolve, reject, {
+					enableHighAccuracy: true,
+					timeout: 10000,
+					maximumAge: 300000 // 5 minutes
+				});
+			});
+
+			userLocation = {
+				lat: position.coords.latitude,
+				lng: position.coords.longitude
+			};
+
+			updateDirectionToAircraft();
+		} catch (error) {
+			console.warn('Failed to get user location:', error);
+		}
+	}
+
+	// Initialize compass on mount
+	onMount(() => {
+		// Request device orientation permission for iOS 13+
+		if (
+			'requestPermission' in DeviceOrientationEvent &&
+			typeof DeviceOrientationEvent.requestPermission === 'function'
+		) {
+			DeviceOrientationEvent.requestPermission()
+				.then((permission: PermissionState) => {
+					if (permission === 'granted') {
+						window.addEventListener('deviceorientation', handleOrientationChange);
+					}
+				})
+				.catch((error: unknown) => {
+					console.warn('Device orientation permission denied:', error);
+				});
+		} else {
+			// Add listener for other browsers
+			window.addEventListener('deviceorientation', handleOrientationChange);
+		}
+
+		// Get user location
+		getUserLocation();
+
+		// Cleanup
+		return () => {
+			window.removeEventListener('deviceorientation', handleOrientationChange);
+		};
+	});
+
+	// Update direction when device changes
+	$effect(() => {
+		if (selectedDevice) {
+			updateDirectionToAircraft();
+		}
+	});
 </script>
 
 <!-- Aircraft Status Modal -->
@@ -138,12 +261,36 @@
 		role="dialog"
 	>
 		<div
-			class="max-h-[calc(90vh-5rem)] w-full max-w-4xl overflow-y-auto card bg-white text-gray-900 shadow-xl"
+			class="relative max-h-[calc(90vh-5rem)] w-full max-w-4xl overflow-y-auto card bg-white text-gray-900 shadow-xl"
 			onclick={(e) => e.stopPropagation()}
 			onkeydown={(e) => e.key === 'Escape' && closeModal()}
 			role="dialog"
 			tabindex="0"
 		>
+			<!-- Direction Arrow -->
+			{#if isCompassActive && userLocation}
+				<div class="absolute top-0 left-1/2 z-10 -translate-x-1/2 transform pt-4">
+					<div
+						class="direction-arrow"
+						style="transform: rotate({directionToAircraft}deg)"
+						title="Point your phone in this direction to face the aircraft"
+					>
+						<svg width="60" height="60" viewBox="0 0 60 60">
+							<!-- Red arrow pointing up (north) -->
+							<path
+								d="M 30 10 L 40 30 L 32 30 L 32 50 L 28 50 L 28 30 L 20 30 Z"
+								fill="#dc2626"
+								stroke="#991b1b"
+								stroke-width="1.5"
+							/>
+						</svg>
+					</div>
+					<div class="mt-1 text-center text-xs font-semibold text-gray-700">
+						{Math.round(directionToAircraft)}°
+					</div>
+				</div>
+			{/if}
+
 			<!-- Header -->
 			<div class="flex items-center justify-between border-b border-gray-200 p-6">
 				<div class="flex items-center gap-3">
@@ -443,3 +590,10 @@
 		</div>
 	</div>
 {/if}
+
+<style>
+	.direction-arrow {
+		transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+		filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.3));
+	}
+</style>
