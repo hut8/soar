@@ -304,10 +304,6 @@ jobs:
       - name: Execute deployment
         run: |
           DEPLOY_DIR="/tmp/soar/deploy/${{ env.DEPLOY_TIMESTAMP }}"
-
-          echo "Updating server-side deployment script..."
-          ssh soar@${{ secrets.DEPLOY_SERVER }} "sudo cp $DEPLOY_DIR/soar-deploy /usr/local/bin/soar-deploy && sudo chmod +x /usr/local/bin/soar-deploy"
-
           echo "Executing deployment script..."
           ssh soar@${{ secrets.DEPLOY_SERVER }} "sudo /usr/local/bin/soar-deploy $DEPLOY_DIR"
 
