@@ -3635,6 +3635,7 @@ dependencies = [
  "include_dir",
  "jsonwebtoken",
  "lettre",
+ "libc",
  "mime_guess",
  "num-traits",
  "ogn-parser",
