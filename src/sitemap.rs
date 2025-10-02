@@ -81,6 +81,9 @@ fn generate_static_pages() -> Result<Vec<Url>> {
         Url::builder(format!("{}/clubs", BASE_URL))
             .priority(0.8)
             .build()?,
+        Url::builder(format!("{}/airports", BASE_URL))
+            .priority(0.8)
+            .build()?,
         Url::builder(format!("{}/operations", BASE_URL))
             .priority(0.7)
             .build()?,
