@@ -364,6 +364,45 @@ impl FixesRepository {
         Ok(result)
     }
 
+    pub async fn get_fixes_by_device_paginated(
+        &self,
+        device_uuid: Uuid,
+        after: Option<DateTime<Utc>>,
+        page: i64,
+        per_page: i64,
+    ) -> Result<(Vec<Fix>, i64)> {
+        let pool = self.pool.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            use crate::schema::fixes::dsl::*;
+            let mut conn = pool.get()?;
+
+            // Build base query for count
+            let mut count_query = fixes.filter(device_id.eq(device_uuid)).into_boxed();
+            if let Some(after_timestamp) = after {
+                count_query = count_query.filter(timestamp.gt(after_timestamp));
+            }
+            let total_count = count_query.count().get_result::<i64>(&mut conn)?;
+
+            // Build query for paginated results
+            let mut query = fixes.filter(device_id.eq(device_uuid)).into_boxed();
+            if let Some(after_timestamp) = after {
+                query = query.filter(timestamp.gt(after_timestamp));
+            }
+            let offset = (page - 1) * per_page;
+            let results = query
+                .order(timestamp.desc())
+                .limit(per_page)
+                .offset(offset)
+                .select(Fix::as_select())
+                .load::<Fix>(&mut conn)?;
+
+            Ok::<(Vec<Fix>, i64), anyhow::Error>((results, total_count))
+        })
+        .await??;
+
+        Ok(result)
+    }
+
     /// Get devices with their recent fixes in a bounding box for efficient area subscriptions
     /// This replaces the inefficient global fetch + filter approach
     #[instrument(skip(self), fields(fixes_per_device = fixes_per_device.unwrap_or(5)))]

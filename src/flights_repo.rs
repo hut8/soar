@@ -145,6 +145,50 @@ impl FlightsRepository {
         Ok(results.into_iter().map(|model| model.into()).collect())
     }
 
+    pub async fn get_flights_for_device_paginated(
+        &self,
+        device_id_val: &uuid::Uuid,
+        page: i64,
+        per_page: i64,
+    ) -> Result<(Vec<Flight>, i64)> {
+        use crate::schema::flights::dsl::*;
+
+        let pool = self.pool.clone();
+        let device_id_val = *device_id_val;
+
+        let results = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            // Get total count
+            let total_count = flights
+                .filter(device_id.eq(device_id_val))
+                .count()
+                .get_result::<i64>(&mut conn)?;
+
+            // Get paginated results
+            let offset = (page - 1) * per_page;
+            let flight_models: Vec<FlightModel> = flights
+                .filter(device_id.eq(device_id_val))
+                .order(takeoff_time.desc())
+                .limit(per_page)
+                .offset(offset)
+                .select(FlightModel::as_select())
+                .load(&mut conn)?;
+
+            Ok::<(Vec<FlightModel>, i64), anyhow::Error>((flight_models, total_count))
+        })
+        .await??;
+
+        let (flight_models, total_count) = results;
+        Ok((
+            flight_models
+                .into_iter()
+                .map(|model| model.into())
+                .collect(),
+            total_count,
+        ))
+    }
+
     /// Get all flights in progress (no landing time) ordered by takeoff time descending
     pub async fn get_flights_in_progress(&self) -> Result<Vec<Flight>> {
         use crate::schema::flights::dsl::*;

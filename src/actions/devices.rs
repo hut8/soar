@@ -22,6 +22,32 @@ use crate::web::AppState;
 pub struct FixesQuery {
     /// YYYYMMDDHHMMSS UTC format
     pub after: Option<String>,
+    /// Page number (1-indexed)
+    pub page: Option<i64>,
+    /// Results per page
+    pub per_page: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct FlightsQuery {
+    /// Page number (1-indexed)
+    pub page: Option<i64>,
+    /// Results per page
+    pub per_page: Option<i64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PaginatedFixesResponse {
+    pub fixes: Vec<Fix>,
+    pub page: i64,
+    pub total_pages: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PaginatedFlightsResponse {
+    pub flights: Vec<FlightView>,
+    pub page: i64,
+    pub total_pages: i64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -95,13 +121,21 @@ pub async fn get_device_fixes(
                 None
             };
 
+            let page = query.page.unwrap_or(1).max(1);
+            let per_page = query.per_page.unwrap_or(50).clamp(1, 100);
+
             match fixes_repo
-                .get_fixes_by_device(id, after_datetime, 1000)
+                .get_fixes_by_device_paginated(id, after_datetime, page, per_page)
                 .await
             {
-                Ok(fixes) => {
-                    let count = fixes.len();
-                    Json(DeviceFixesResponse { fixes, count }).into_response()
+                Ok((fixes, total_count)) => {
+                    let total_pages = ((total_count as f64) / (per_page as f64)).ceil() as i64;
+                    Json(PaginatedFixesResponse {
+                        fixes,
+                        page,
+                        total_pages,
+                    })
+                    .into_response()
                 }
                 Err(e) => {
                     tracing::error!("Failed to get fixes for device {}: {}", id, e);
@@ -423,17 +457,30 @@ pub async fn get_devices_by_club(
     }
 }
 
-/// Get all flights for a device by device ID
+/// Get all flights for a device by device ID with pagination
 pub async fn get_device_flights(
     Path(id): Path<Uuid>,
+    Query(query): Query<FlightsQuery>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
     let flights_repo = FlightsRepository::new(state.pool);
 
-    match flights_repo.get_flights_for_device(&id).await {
-        Ok(flights) => {
+    let page = query.page.unwrap_or(1).max(1);
+    let per_page = query.per_page.unwrap_or(100).clamp(1, 100);
+
+    match flights_repo
+        .get_flights_for_device_paginated(&id, page, per_page)
+        .await
+    {
+        Ok((flights, total_count)) => {
             let flight_views: Vec<FlightView> = flights.into_iter().map(|f| f.into()).collect();
-            Json(flight_views).into_response()
+            let total_pages = ((total_count as f64) / (per_page as f64)).ceil() as i64;
+            Json(PaginatedFlightsResponse {
+                flights: flight_views,
+                page,
+                total_pages,
+            })
+            .into_response()
         }
         Err(e) => {
             tracing::error!("Failed to get flights for device {}: {}", id, e);
