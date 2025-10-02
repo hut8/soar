@@ -443,19 +443,29 @@ impl FlightTracker {
                             fix.address_type
                         )
                     );
-                    if let Some(flight_id) = current_flight_id {
-                        // Keep the flight_id on the fix since it was part of this flight
-                        fix.flight_id = Some(flight_id);
-                        if let Err(e) = self.complete_flight(flight_id, &fix).await {
-                            warn!("Failed to complete flight for landing: {}", e);
-                        }
-                    }
 
+                    // Update tracker state FIRST to prevent race condition
                     let mut trackers = self.aircraft_trackers.write().await;
                     if let Some(tracker) = trackers.get_mut(&fix.device_id) {
                         tracker.update_position(&fix);
                         tracker.current_flight_id = None;
                         tracker.state = new_state;
+                    }
+                    drop(trackers); // Release lock immediately
+
+                    // Complete flight in background if there was an active flight
+                    if let Some(flight_id) = current_flight_id {
+                        // Keep the flight_id on the fix since it was part of this flight
+                        fix.flight_id = Some(flight_id);
+
+                        // Spawn background task to complete flight (don't await)
+                        let tracker = self.clone();
+                        let landing_fix = fix.clone();
+                        tokio::spawn(async move {
+                            if let Err(e) = tracker.complete_flight(flight_id, &landing_fix).await {
+                                warn!("Failed to complete flight for landing: {}", e);
+                            }
+                        });
                     }
                 }
                 _ => {
