@@ -34,6 +34,7 @@ pub struct Fix {
     pub longitude: f64,
     // Note: location field is skipped as it's computed from lat/lng
     pub altitude_feet: Option<i32>,
+    pub altitude_agl: Option<i32>,
 
     /// Aircraft identification - canonically a 24-bit unsigned integer stored as i32 in DB
     pub device_address: i32,
@@ -152,6 +153,7 @@ impl Fix {
                     latitude,
                     longitude,
                     altitude_feet,
+                    altitude_agl: None, // Will be calculated by processors
                     device_address,
                     address_type,
                     aircraft_type_ogn,

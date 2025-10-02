@@ -280,6 +280,7 @@ diesel::table! {
         lag -> Nullable<Int4>,
         device_address -> Int4,
         is_active -> Bool,
+        altitude_agl -> Nullable<Int4>,
     }
 }
 

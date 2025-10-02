@@ -1,13 +1,17 @@
 use anyhow::{Context, Result, bail};
+use dashmap::DashMap;
 use directories::BaseDirs;
 use gdal::{Dataset, raster::ResampleAlg};
-use std::{env, fs, path::PathBuf};
+use std::{env, fs, path::PathBuf, sync::Arc};
+use tokio::sync::Mutex;
 use tracing::debug;
 
 /// Database for elevation data using Copernicus DEM tiles
 #[derive(Clone)]
 pub struct ElevationDB {
     storage_path: PathBuf,
+    /// Per-tile download locks to prevent concurrent downloads of the same tile
+    download_locks: Arc<DashMap<String, Arc<Mutex<()>>>>,
 }
 
 impl ElevationDB {
@@ -30,7 +34,10 @@ impl ElevationDB {
             )
         })?;
 
-        Ok(Self { storage_path })
+        Ok(Self {
+            storage_path,
+            download_locks: Arc::new(DashMap::new()),
+        })
     }
 
     /// Create a new ElevationDB with an explicit storage path
@@ -41,7 +48,10 @@ impl ElevationDB {
                 storage_path
             )
         })?;
-        Ok(Self { storage_path })
+        Ok(Self {
+            storage_path,
+            download_locks: Arc::new(DashMap::new()),
+        })
     }
 
     /// Get the storage path for this ElevationDB
@@ -55,20 +65,42 @@ impl ElevationDB {
     }
 
     /// Ensure a tile is cached locally, downloading if necessary
+    /// Uses per-tile locking to prevent concurrent downloads of the same tile
     async fn ensure_tile_cached(&self, name: &str) -> Result<PathBuf> {
         let path = self.cache_path(name);
-        if !path.exists() {
-            let url = tile_url_glo30(name);
-            debug!("downloading elevation tile from {url}");
-            let bytes = reqwest::get(&url)
-                .await
-                .and_then(|r| r.error_for_status())
-                .with_context(|| format!("GET {url}"))?
-                .bytes()
-                .await
-                .with_context(|| format!("read body {url}"))?;
-            fs::write(&path, &bytes).with_context(|| format!("write {:?}", path))?;
+
+        // Fast path: check if already cached
+        if path.exists() {
+            return Ok(path);
         }
+
+        // Get or create tile-specific lock
+        let lock = self
+            .download_locks
+            .entry(name.to_string())
+            .or_insert_with(|| Arc::new(Mutex::new(())))
+            .clone();
+
+        // Acquire tile-specific lock (other tasks requesting same tile will wait here)
+        let _guard = lock.lock().await;
+
+        // Double-check after acquiring lock (another task may have downloaded it)
+        if path.exists() {
+            return Ok(path);
+        }
+
+        // Download the tile
+        let url = tile_url_glo30(name);
+        debug!("downloading elevation tile from {url}");
+        let bytes = reqwest::get(&url)
+            .await
+            .and_then(|r| r.error_for_status())
+            .with_context(|| format!("GET {url}"))?
+            .bytes()
+            .await
+            .with_context(|| format!("read body {url}"))?;
+        fs::write(&path, &bytes).with_context(|| format!("write {:?}", path))?;
+
         Ok(path)
     }
 

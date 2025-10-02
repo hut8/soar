@@ -245,6 +245,18 @@ impl FixProcessor {
             }
         }
 
+        // Step 2.5: Calculate and update altitude_agl asynchronously (non-blocking)
+        let flight_tracker = self.flight_detection_processor.clone();
+        let fixes_repo = self.fixes_repo.clone();
+        let fix_id = updated_fix.id;
+        let fix_for_agl = updated_fix.clone();
+
+        tokio::spawn(async move {
+            flight_tracker
+                .calculate_and_update_agl_async(fix_id, &fix_for_agl, fixes_repo)
+                .await;
+        });
+
         // Step 3: Publish to NATS with updated fix (including flight_id)
         if let Some(nats_publisher) = self.nats_publisher.as_ref() {
             nats_publisher.process_fix(updated_fix.clone(), raw_message);

@@ -113,6 +113,7 @@ struct FixDslRow {
     latitude: f64,
     longitude: f64,
     altitude_feet: Option<i32>,
+    altitude_agl: Option<i32>,
     device_address: i32,
     address_type: AddressType,
     aircraft_type_ogn: Option<AircraftTypeOgn>,
@@ -151,6 +152,7 @@ impl From<FixDslRow> for Fix {
             latitude: row.latitude,
             longitude: row.longitude,
             altitude_feet: row.altitude_feet,
+            altitude_agl: row.altitude_agl,
             device_address: row.device_address,
             address_type: row.address_type,
             aircraft_type_ogn: row.aircraft_type_ogn.map(|t| t.into()),
@@ -256,6 +258,21 @@ impl FixesRepository {
                 Ok::<(), anyhow::Error>(())
             })
             .await?
+    }
+
+    /// Update the altitude_agl field for a specific fix
+    pub async fn update_altitude_agl(&self, fix_id: Uuid, altitude_agl_value: i32) -> Result<()> {
+        use crate::schema::fixes::dsl::*;
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+            diesel::update(fixes.filter(id.eq(fix_id)))
+                .set(altitude_agl.eq(Some(altitude_agl_value)))
+                .execute(&mut conn)?;
+            Ok::<(), anyhow::Error>(())
+        })
+        .await?
     }
 
     /// Get fixes for a specific aircraft ID within a time range (original method)
@@ -540,6 +557,8 @@ impl FixesRepository {
                 longitude: f64,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Int4>)]
                 altitude_feet: Option<i32>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Int4>)]
+                altitude_agl: Option<i32>,
                 #[diesel(sql_type = diesel::sql_types::Int4)]
                 device_address: i32,
                 #[diesel(sql_type = crate::schema::sql_types::AddressType)]
@@ -611,6 +630,7 @@ impl FixesRepository {
                     latitude: fix_row.latitude,
                     longitude: fix_row.longitude,
                     altitude_feet: fix_row.altitude_feet,
+                    altitude_agl: fix_row.altitude_agl,
                     device_address: fix_row.device_address,
                     address_type: fix_row.address_type,
                     aircraft_type_ogn: fix_row.aircraft_type_ogn.map(|t| t.into()),

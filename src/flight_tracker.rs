@@ -164,6 +164,56 @@ impl FlightTracker {
             }
         }
     }
+
+    async fn calculate_altitude_agl(&self, fix: &Fix) -> Option<i32> {
+        // Get reported altitude from fix (in feet)
+        let reported_altitude_ft = fix.altitude_feet?;
+
+        let lat = fix.latitude;
+        let lon = fix.longitude;
+
+        // Run blocking elevation lookup in a separate thread
+        let elevation_result = self.elevation_db.elevation_egm2008(lat, lon).await.ok()?;
+
+        // Get true elevation at this location (in meters)
+        match elevation_result {
+            Some(elevation_m) => {
+                // Convert elevation from meters to feet (1 meter = 3.28084 feet)
+                let elevation_ft = elevation_m * 3.28084;
+                // Calculate AGL (Above Ground Level)
+                let agl = reported_altitude_ft as f64 - elevation_ft;
+
+                Some(agl.round() as i32)
+            }
+            None => {
+                // No elevation data available (e.g., ocean)
+                None
+            }
+        }
+    }
+
+    /// Calculate altitude AGL and update the fix in the database asynchronously
+    /// This method is designed to be called in a background task after the fix is inserted
+    pub async fn calculate_and_update_agl_async(
+        &self,
+        fix_id: uuid::Uuid,
+        fix: &Fix,
+        fixes_repo: crate::fixes_repo::FixesRepository,
+    ) {
+        match self.calculate_altitude_agl(fix).await {
+            Some(agl) => {
+                if let Err(e) = fixes_repo.update_altitude_agl(fix_id, agl).await {
+                    debug!("Failed to update altitude_agl for fix {}: {}", fix_id, e);
+                }
+            }
+            None => {
+                trace!(
+                    "No altitude or elevation data for fix {}, altitude_agl remains NULL",
+                    fix_id
+                );
+            }
+        }
+    }
 }
 
 pub struct FlightTracker {
@@ -738,6 +788,7 @@ mod tests {
             latitude: 40.0,
             longitude: -74.0,
             altitude_feet: Some(1000),
+            altitude_agl: None,
             device_address: 0x123456,
             address_type: AddressType::Icao,
             aircraft_type_ogn: None,
