@@ -253,13 +253,13 @@ jobs:
           echo "DEPLOY_TIMESTAMP=$TIMESTAMP" >> $GITHUB_ENV
 
           # Create local deployment directory
-          mkdir -p deploy
-          cp soar deploy/
-          cp *.service deploy/ || echo "No service files found in root"
-          cp *.timer deploy/ || echo "No timer files found in root"
+          mkdir -p deploy-pkg
+          cp soar deploy-pkg/
+          cp *.service deploy-pkg/ || echo "No service files found in root"
+          cp *.timer deploy-pkg/ || echo "No timer files found in root"
 
           echo "Deployment package prepared for timestamp: $TIMESTAMP"
-          ls -lh deploy/
+          ls -lh deploy-pkg/
 
       - name: Upload deployment package
         run: |
@@ -269,7 +269,7 @@ jobs:
           ssh soar@${{ secrets.DEPLOY_SERVER }} "mkdir -p $DEPLOY_DIR"
 
           echo "Uploading deployment package..."
-          scp -r deploy/* soar@${{ secrets.DEPLOY_SERVER }}:$DEPLOY_DIR/
+          scp -r deploy-pkg/* soar@${{ secrets.DEPLOY_SERVER }}:$DEPLOY_DIR/
 
           echo "Deployment package uploaded successfully"
 
