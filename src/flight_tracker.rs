@@ -1,5 +1,6 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -27,14 +28,14 @@ fn format_device_address_with_type(device_address: &str, address_type: AddressTy
 }
 
 /// Simplified aircraft state - either idle or active
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum AircraftState {
     Idle,   // Stationary or moving slowly (< 10 knots)
     Active, // Moving fast (>= 10 knots) on ground or airborne
 }
 
 /// Aircraft tracker with simplified state management
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct AircraftTracker {
     state: AircraftState,
     current_flight_id: Option<Uuid>,
@@ -160,6 +161,7 @@ pub struct FlightTracker {
     airports_repo: AirportsRepository,
     fixes_repo: FixesRepository,
     aircraft_trackers: Arc<RwLock<HashMap<uuid::Uuid, AircraftTracker>>>,
+    state_file_path: Option<std::path::PathBuf>,
 }
 
 impl Clone for FlightTracker {
@@ -169,6 +171,7 @@ impl Clone for FlightTracker {
             airports_repo: self.airports_repo.clone(),
             fixes_repo: self.fixes_repo.clone(),
             aircraft_trackers: Arc::clone(&self.aircraft_trackers),
+            state_file_path: self.state_file_path.clone(),
         }
     }
 }
@@ -180,6 +183,21 @@ impl FlightTracker {
             airports_repo: AirportsRepository::new(pool.clone()),
             fixes_repo: FixesRepository::new(pool.clone()),
             aircraft_trackers: Arc::new(RwLock::new(HashMap::new())),
+            state_file_path: None,
+        }
+    }
+
+    /// Create a new FlightTracker with state persistence enabled
+    pub fn with_state_persistence(
+        pool: &Pool<ConnectionManager<PgConnection>>,
+        state_path: std::path::PathBuf,
+    ) -> Self {
+        Self {
+            flights_repo: FlightsRepository::new(pool.clone()),
+            airports_repo: AirportsRepository::new(pool.clone()),
+            fixes_repo: FixesRepository::new(pool.clone()),
+            aircraft_trackers: Arc::new(RwLock::new(HashMap::new())),
+            state_file_path: Some(state_path),
         }
     }
 
@@ -512,6 +530,82 @@ impl FlightTracker {
         let removed_count = old_count - trackers.len();
         if removed_count > 0 {
             info!("Cleaned up {} stale aircraft trackers", removed_count);
+        }
+    }
+
+    /// Save the current state to disk atomically
+    pub async fn save_state(&self) -> Result<()> {
+        if let Some(state_path) = &self.state_file_path {
+            // Get a read lock on the trackers
+            let trackers = self.aircraft_trackers.read().await;
+
+            // Serialize to JSON
+            let json = serde_json::to_string_pretty(&*trackers)?;
+
+            // Write atomically by writing to a temporary file first, then renaming
+            let temp_path = state_path.with_extension("tmp");
+            tokio::fs::write(&temp_path, json).await?;
+            tokio::fs::rename(&temp_path, state_path).await?;
+
+            debug!("Saved flight tracker state to {:?}", state_path);
+        }
+        Ok(())
+    }
+
+    /// Load state from disk if it exists and is less than 24 hours old
+    pub async fn load_state(&self) -> Result<()> {
+        if let Some(state_path) = &self.state_file_path
+            && state_path.exists()
+        {
+            // Check if the file is older than 24 hours
+            let metadata = tokio::fs::metadata(state_path).await?;
+            if let Ok(modified) = metadata.modified() {
+                let age = std::time::SystemTime::now()
+                    .duration_since(modified)
+                    .unwrap_or(std::time::Duration::from_secs(0));
+
+                if age > std::time::Duration::from_secs(24 * 60 * 60) {
+                    info!("Flight state file is older than 24 hours, deleting it");
+                    tokio::fs::remove_file(state_path).await?;
+                    return Ok(());
+                }
+            }
+
+            // Load and deserialize the state
+            let json = tokio::fs::read_to_string(state_path).await?;
+            let trackers: HashMap<Uuid, AircraftTracker> = serde_json::from_str(&json)?;
+
+            // Replace the current trackers with the loaded state
+            let mut current_trackers = self.aircraft_trackers.write().await;
+            *current_trackers = trackers;
+
+            info!(
+                "Loaded flight tracker state from {:?} ({} aircraft)",
+                state_path,
+                current_trackers.len()
+            );
+        }
+        Ok(())
+    }
+
+    /// Start a background task to periodically save state
+    pub fn start_periodic_state_saving(&self, interval_secs: u64) {
+        if self.state_file_path.is_some() {
+            let tracker = self.clone();
+            tokio::spawn(async move {
+                let mut interval =
+                    tokio::time::interval(std::time::Duration::from_secs(interval_secs));
+                loop {
+                    interval.tick().await;
+                    if let Err(e) = tracker.save_state().await {
+                        warn!("Failed to save flight tracker state: {}", e);
+                    }
+                }
+            });
+            info!(
+                "Started periodic state saving (every {} seconds)",
+                interval_secs
+            );
         }
     }
 }

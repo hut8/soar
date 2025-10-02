@@ -14,6 +14,8 @@ use soar::aprs_client::{
     PositionPacketProcessor, ServerStatusProcessor,
 };
 use soar::fix_processor::FixProcessor;
+use soar::flight_tracker::FlightTracker;
+use soar::instance_lock::InstanceLock;
 use soar::live_fixes::LiveFixService;
 use soar::server_messages_repo::ServerMessagesRepository;
 
@@ -294,8 +296,54 @@ async fn handle_run(
     });
     info!("Starting APRS client with server: {}:{}", server, port);
 
+    // Acquire instance lock to prevent multiple instances from running
+    let is_production = env::var("SOAR_ENV")
+        .map(|env| env == "production")
+        .unwrap_or(false);
+    let lock_name = if is_production {
+        "soar-run-production"
+    } else {
+        "soar-run-dev"
+    };
+    let _instance_lock = InstanceLock::new(lock_name)?;
+    info!(
+        "Acquired instance lock: {}",
+        _instance_lock.path().display()
+    );
+
     // Set up database connection
     let diesel_pool = setup_diesel_database().await?;
+
+    // Determine flight tracker state file path
+    let state_file_path = match env::var("FLIGHT_STATE_PATH") {
+        Ok(path) => std::path::PathBuf::from(path),
+        Err(_) => {
+            // Use XDG state directory or fallback to ~/.local/state
+            let state_dir = if let Ok(xdg_state_home) = env::var("XDG_STATE_HOME") {
+                std::path::PathBuf::from(xdg_state_home)
+            } else if let Ok(home) = env::var("HOME") {
+                std::path::PathBuf::from(home).join(".local/state")
+            } else {
+                std::path::PathBuf::from("/tmp")
+            };
+
+            let env_suffix = if is_production { "production" } else { "dev" };
+
+            state_dir
+                .join("soar")
+                .join(format!("flight-tracker-state-{}.json", env_suffix))
+        }
+    };
+
+    // Ensure parent directory exists
+    if let Some(parent) = state_file_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+
+    info!(
+        "Flight tracker state will be saved to: {}",
+        state_file_path.display()
+    );
 
     // Use port 10152 (full feed) if no filter is specified, otherwise use specified port
     let actual_port = if filter.is_none() {
@@ -316,11 +364,28 @@ async fn handle_run(
         .unparsed_log_path(unparsed_log)
         .build();
 
+    // Create FlightTracker with state persistence
+    let flight_tracker = FlightTracker::with_state_persistence(&diesel_pool, state_file_path);
+
+    // Load saved state (if exists and < 24 hours old)
+    if let Err(e) = flight_tracker.load_state().await {
+        warn!("Failed to load flight tracker state: {}", e);
+    }
+
+    // Start periodic state saving (every 5 seconds)
+    flight_tracker.start_periodic_state_saving(5);
+
     // Create database fix processor to save all valid fixes to the database
     // Try to create with NATS first, fall back to without NATS if connection fails
-    let fix_processor = match FixProcessor::new_with_nats(diesel_pool.clone(), &nats_url).await {
+    let fix_processor = match FixProcessor::with_flight_tracker_and_nats(
+        diesel_pool.clone(),
+        flight_tracker.clone(),
+        &nats_url,
+    )
+    .await
+    {
         Ok(processor_with_nats) => {
-            info!("Created FixProcessor with NATS publisher");
+            info!("Created FixProcessor with NATS publisher and state persistence");
             processor_with_nats
         }
         Err(e) => {
@@ -328,9 +393,28 @@ async fn handle_run(
                 "Failed to create FixProcessor with NATS ({}), falling back to processor without NATS",
                 e
             );
-            FixProcessor::new(diesel_pool.clone())
+            FixProcessor::with_flight_tracker(diesel_pool.clone(), flight_tracker.clone())
         }
     };
+
+    // Set up shutdown handler to save state on exit
+    let shutdown_flight_tracker = fix_processor.flight_tracker().clone();
+    tokio::spawn(async move {
+        match tokio::signal::ctrl_c().await {
+            Ok(()) => {
+                info!("Received Ctrl+C, saving flight tracker state before exit...");
+                if let Err(e) = shutdown_flight_tracker.save_state().await {
+                    warn!("Failed to save flight tracker state on shutdown: {}", e);
+                } else {
+                    info!("Flight tracker state saved successfully");
+                }
+                std::process::exit(0);
+            }
+            Err(err) => {
+                eprintln!("Unable to listen for shutdown signal: {}", err);
+            }
+        }
+    });
 
     // Create server status processor for server messages
     let server_messages_repo = ServerMessagesRepository::new(diesel_pool.clone());

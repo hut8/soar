@@ -57,6 +57,44 @@ impl FixProcessor {
         })
     }
 
+    /// Create a new FixProcessor with a custom FlightTracker (for state persistence)
+    pub fn with_flight_tracker(
+        diesel_pool: Pool<ConnectionManager<PgConnection>>,
+        flight_tracker: FlightTracker,
+    ) -> Self {
+        Self {
+            fixes_repo: FixesRepository::new(diesel_pool.clone()),
+            device_repo: DeviceRepository::new(diesel_pool.clone()),
+            aircraft_registrations_repo: AircraftRegistrationsRepository::new(diesel_pool),
+            flight_detection_processor: flight_tracker,
+            nats_publisher: None,
+            tow_plane_cache: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    /// Create a new FixProcessor with custom FlightTracker and NATS publisher
+    pub async fn with_flight_tracker_and_nats(
+        diesel_pool: Pool<ConnectionManager<PgConnection>>,
+        flight_tracker: FlightTracker,
+        nats_url: &str,
+    ) -> anyhow::Result<Self> {
+        let nats_publisher = NatsFixPublisher::new(nats_url).await?;
+
+        Ok(Self {
+            fixes_repo: FixesRepository::new(diesel_pool.clone()),
+            device_repo: DeviceRepository::new(diesel_pool.clone()),
+            aircraft_registrations_repo: AircraftRegistrationsRepository::new(diesel_pool),
+            flight_detection_processor: flight_tracker,
+            nats_publisher: Some(nats_publisher),
+            tow_plane_cache: Arc::new(RwLock::new(HashMap::new())),
+        })
+    }
+
+    /// Get a reference to the flight tracker for state management
+    pub fn flight_tracker(&self) -> &FlightTracker {
+        &self.flight_detection_processor
+    }
+
     /// Update tow plane status based on aircraft type from fix (static version for use in async spawned task)
     async fn update_tow_plane_status_static(
         aircraft_registrations_repo: AircraftRegistrationsRepository,
