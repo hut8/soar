@@ -200,8 +200,6 @@ systemctl start ${WEB_SERVICE}.service || log_warn "Failed to start ${WEB_SERVIC
 log_info "Disabling timer-controlled services..."
 systemctl disable ${PULL_DATA_SERVICE}.service 2>/dev/null || true
 systemctl disable ${SITEMAP_SERVICE}.service 2>/dev/null || true
-systemctl stop ${PULL_DATA_SERVICE}.service 2>/dev/null || true
-systemctl stop ${SITEMAP_SERVICE}.service 2>/dev/null || true
 
 # Enable and start timers
 log_info "Enabling and starting SOAR timers..."
