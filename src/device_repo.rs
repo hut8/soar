@@ -131,7 +131,7 @@ impl DeviceRepository {
             )
             .filter(aircraft_registrations::club_id.eq(club_id))
             .order_by(devices::registration)
-            .select(devices::all_columns)
+            .select(DeviceModel::as_select())
             .load::<DeviceModel>(&mut conn)?;
 
         Ok(device_models

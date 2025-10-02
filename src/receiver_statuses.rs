@@ -19,6 +19,7 @@ use uuid::Uuid;
     Deserialize,
 )]
 #[diesel(table_name = crate::schema::receiver_statuses)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct ReceiverStatus {
     pub id: Uuid,
     pub receiver_id: i32,

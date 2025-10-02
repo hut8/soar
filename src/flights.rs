@@ -307,6 +307,7 @@ impl Flight {
 /// Diesel model for the flights table - used for database operations
 #[derive(Debug, Clone, Queryable, Selectable, Insertable, AsChangeset, Serialize, Deserialize)]
 #[diesel(table_name = crate::schema::flights)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct FlightModel {
     pub id: Uuid,
     pub device_address: String,

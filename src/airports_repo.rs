@@ -188,29 +188,7 @@ impl AirportsRepository {
             let mut conn = pool.get()?;
             let airport_model: Option<AirportModel> = airports
                 .filter(id.eq(airport_id))
-                .select((
-                    id,
-                    ident,
-                    type_,
-                    name,
-                    latitude_deg,
-                    longitude_deg,
-                    elevation_ft,
-                    continent,
-                    iso_country,
-                    iso_region,
-                    municipality,
-                    scheduled_service,
-                    gps_code,
-                    icao_code,
-                    iata_code,
-                    local_code,
-                    home_link,
-                    wikipedia_link,
-                    keywords,
-                    created_at,
-                    updated_at,
-                ))
+                .select(AirportModel::as_select())
                 .first(&mut conn)
                 .optional()?;
 
@@ -231,29 +209,7 @@ impl AirportsRepository {
             let mut conn = pool.get()?;
             let airport_model: Option<AirportModel> = airports
                 .filter(ident.eq(&airport_ident))
-                .select((
-                    id,
-                    ident,
-                    type_,
-                    name,
-                    latitude_deg,
-                    longitude_deg,
-                    elevation_ft,
-                    continent,
-                    iso_country,
-                    iso_region,
-                    municipality,
-                    scheduled_service,
-                    gps_code,
-                    icao_code,
-                    iata_code,
-                    local_code,
-                    home_link,
-                    wikipedia_link,
-                    keywords,
-                    created_at,
-                    updated_at,
-                ))
+                .select(AirportModel::as_select())
                 .first(&mut conn)
                 .optional()?;
 
@@ -275,29 +231,7 @@ impl AirportsRepository {
             let airport_models: Vec<AirportModel> = airports
                 .filter(name.ilike(&search_pattern))
                 .order((name, ident))
-                .select((
-                    id,
-                    ident,
-                    type_,
-                    name,
-                    latitude_deg,
-                    longitude_deg,
-                    elevation_ft,
-                    continent,
-                    iso_country,
-                    iso_region,
-                    municipality,
-                    scheduled_service,
-                    gps_code,
-                    icao_code,
-                    iata_code,
-                    local_code,
-                    home_link,
-                    wikipedia_link,
-                    keywords,
-                    created_at,
-                    updated_at,
-                ))
+                .select(AirportModel::as_select())
                 .load(&mut conn)?;
 
             Ok::<Vec<AirportModel>, anyhow::Error>(airport_models)
@@ -318,29 +252,7 @@ impl AirportsRepository {
             let airport_models: Vec<AirportModel> = airports
                 .filter(iso_country.eq(&country_code))
                 .order((name, ident))
-                .select((
-                    id,
-                    ident,
-                    type_,
-                    name,
-                    latitude_deg,
-                    longitude_deg,
-                    elevation_ft,
-                    continent,
-                    iso_country,
-                    iso_region,
-                    municipality,
-                    scheduled_service,
-                    gps_code,
-                    icao_code,
-                    iata_code,
-                    local_code,
-                    home_link,
-                    wikipedia_link,
-                    keywords,
-                    created_at,
-                    updated_at,
-                ))
+                .select(AirportModel::as_select())
                 .load(&mut conn)?;
 
             Ok::<Vec<AirportModel>, anyhow::Error>(airport_models)
@@ -361,29 +273,7 @@ impl AirportsRepository {
             let airport_models: Vec<AirportModel> = airports
                 .filter(type_.eq(&type_filter))
                 .order((name, ident))
-                .select((
-                    id,
-                    ident,
-                    type_,
-                    name,
-                    latitude_deg,
-                    longitude_deg,
-                    elevation_ft,
-                    continent,
-                    iso_country,
-                    iso_region,
-                    municipality,
-                    scheduled_service,
-                    gps_code,
-                    icao_code,
-                    iata_code,
-                    local_code,
-                    home_link,
-                    wikipedia_link,
-                    keywords,
-                    created_at,
-                    updated_at,
-                ))
+                .select(AirportModel::as_select())
                 .load(&mut conn)?;
 
             Ok::<Vec<AirportModel>, anyhow::Error>(airport_models)
@@ -452,29 +342,7 @@ impl AirportsRepository {
             let airport_models: Vec<AirportModel> = airports
                 .filter(scheduled_service.eq(true))
                 .order((name, ident))
-                .select((
-                    id,
-                    ident,
-                    type_,
-                    name,
-                    latitude_deg,
-                    longitude_deg,
-                    elevation_ft,
-                    continent,
-                    iso_country,
-                    iso_region,
-                    municipality,
-                    scheduled_service,
-                    gps_code,
-                    icao_code,
-                    iata_code,
-                    local_code,
-                    home_link,
-                    wikipedia_link,
-                    keywords,
-                    created_at,
-                    updated_at,
-                ))
+                .select(AirportModel::as_select())
                 .load(&mut conn)?;
 
             Ok::<Vec<AirportModel>, anyhow::Error>(airport_models)

@@ -152,6 +152,7 @@ pub struct Device {
     Deserialize,
 )]
 #[diesel(table_name = crate::schema::devices)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct DeviceModel {
     pub address: i32,
     pub address_type: AddressType,
