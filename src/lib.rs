@@ -10,6 +10,7 @@ pub mod aircraft_types;
 pub mod airports;
 pub mod airports_repo;
 pub mod aprs_client;
+pub mod aprs_filters;
 pub mod auth;
 pub mod clubs;
 pub mod clubs_repo;
