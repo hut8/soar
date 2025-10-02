@@ -157,9 +157,9 @@ chown root:root "${BINARY_PATH}/${BINARY_NAME}"
 log_info "Binary installed successfully"
 
 # Install service files if they exist
-if ls ${DEPLOY_DIR}/*.service &> /dev/null; then
+if ls "${DEPLOY_DIR}"/*.service &> /dev/null; then
     log_info "Installing service files..."
-    for service in ${DEPLOY_DIR}/*.service; do
+    for service in "${DEPLOY_DIR}"/*.service; do
         service_name=$(basename "$service")
         log_info "Installing ${service_name}..."
         cp "$service" /etc/systemd/system/
@@ -167,9 +167,9 @@ if ls ${DEPLOY_DIR}/*.service &> /dev/null; then
 fi
 
 # Install timer files if they exist
-if ls ${DEPLOY_DIR}/*.timer &> /dev/null; then
+if ls "${DEPLOY_DIR}"/*.timer &> /dev/null; then
     log_info "Installing timer files..."
-    for timer in ${DEPLOY_DIR}/*.timer; do
+    for timer in "${DEPLOY_DIR}"/*.timer; do
         timer_name=$(basename "$timer")
         log_info "Installing ${timer_name}..."
         cp "$timer" /etc/systemd/system/
@@ -228,13 +228,13 @@ log_info "Checking service status..."
 
 check_service() {
     local service=$1
-    if systemctl is-active --quiet $service; then
+    if systemctl is-active --quiet "$service"; then
         log_info "$service: ACTIVE"
         return 0
     else
         log_error "$service: FAILED"
         log_info "Recent logs for $service:"
-        journalctl -u $service --no-pager -n 10
+        journalctl -u "$service" --no-pager -n 10
         return 1
     fi
 }

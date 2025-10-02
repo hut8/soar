@@ -18,10 +18,6 @@ EnvironmentFile=/etc/soar/env
 
 # Security settings
 NoNewPrivileges=yes
-PrivateTmp=yes
-ProtectSystem=strict
-ProtectHome=yes
-ReadWritePaths=-/var/soar/logs
 
 # Restart configuration
 Restart=on-failure

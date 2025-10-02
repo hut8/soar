@@ -17,16 +17,12 @@ EnvironmentFile=/etc/soar/env
 
 # Security settings
 NoNewPrivileges=yes
-PrivateTmp=yes
-ProtectSystem=strict
-ProtectHome=yes
-ReadWritePaths=-/var/soar/logs /tmp
 
 # Process limits
 LimitNOFILE=65536
 
-# Timeout (allow up to 30 minutes for data download and processing)
-TimeoutStartSec=1800
+# Timeout (allow up to 60 minutes for data download and processing)
+TimeoutStartSec=3600
 
 [Install]
 WantedBy=multi-user.target soar.target

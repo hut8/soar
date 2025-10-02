@@ -17,10 +17,6 @@ EnvironmentFile=/etc/soar/env
 
 # Security settings
 NoNewPrivileges=yes
-PrivateTmp=yes
-ProtectSystem=strict
-ProtectHome=yes
-ReadWritePaths=-/var/soar/logs -/var/soar/sitemap /tmp
 
 # Process limits
 LimitNOFILE=65536
