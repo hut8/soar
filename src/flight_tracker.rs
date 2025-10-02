@@ -413,7 +413,7 @@ impl FlightTracker {
             // Handle existing aircraft
             match (old_state, &new_state) {
                 (AircraftState::Idle, AircraftState::Active) => {
-                    // Takeoff detected
+                    // Takeoff detected - update state FIRST to prevent race condition
                     debug!(
                         "Takeoff detected for aircraft {}",
                         format_device_address_with_type(
@@ -421,26 +421,35 @@ impl FlightTracker {
                             fix.address_type
                         )
                     );
-                    match self.create_flight(&fix).await {
-                        Ok(flight_id) => {
-                            fix.flight_id = Some(flight_id);
-                            let mut trackers = self.aircraft_trackers.write().await;
-                            if let Some(tracker) = trackers.get_mut(&fix.device_id) {
-                                tracker.update_position(&fix);
-                                tracker.current_flight_id = Some(flight_id);
-                                tracker.state = new_state;
-                            }
-                        }
-                        Err(e) => {
-                            warn!("Failed to create flight for takeoff: {}", e);
-                            // Still update position and state even if flight creation failed
-                            let mut trackers = self.aircraft_trackers.write().await;
-                            if let Some(tracker) = trackers.get_mut(&fix.device_id) {
-                                tracker.update_position(&fix);
-                                tracker.state = new_state;
-                            }
-                        }
+
+                    // Update tracker state immediately to prevent duplicate flight creation
+                    let mut trackers = self.aircraft_trackers.write().await;
+                    if let Some(tracker) = trackers.get_mut(&fix.device_id) {
+                        tracker.update_position(&fix);
+                        tracker.state = new_state.clone();
                     }
+                    drop(trackers); // Release lock immediately
+
+                    // Create flight in background (similar to landing)
+                    let tracker_clone = self.clone();
+                    let takeoff_fix = fix.clone();
+                    tokio::spawn(async move {
+                        match tracker_clone.create_flight(&takeoff_fix).await {
+                            Ok(flight_id) => {
+                                // Update tracker with the flight_id
+                                let mut trackers = tracker_clone.aircraft_trackers.write().await;
+                                if let Some(tracker) = trackers.get_mut(&takeoff_fix.device_id) {
+                                    tracker.current_flight_id = Some(flight_id);
+                                }
+                            }
+                            Err(e) => {
+                                warn!("Failed to create flight for takeoff: {}", e);
+                            }
+                        }
+                    });
+
+                    // Set flight_id on the fix (it will be set later by the background task)
+                    // For now, we don't have it yet, so leave it as None
                 }
                 (AircraftState::Active, AircraftState::Idle) => {
                     // Landing detected
