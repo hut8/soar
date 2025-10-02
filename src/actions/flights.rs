@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::actions::json_error;
+use crate::actions::views::FlightView;
 use crate::fixes::Fix;
 use crate::fixes_repo::FixesRepository;
 use crate::flights::Flight;
@@ -21,7 +22,7 @@ pub struct FlightsQueryParams {
 
 #[derive(Debug, Serialize)]
 pub struct FlightResponse {
-    pub flight: Flight,
+    pub flight: FlightView,
 }
 
 #[derive(Debug, Serialize)]
@@ -38,7 +39,13 @@ pub async fn get_flight_by_id(
     let flights_repo = FlightsRepository::new(state.pool);
 
     match flights_repo.get_flight_by_id(id).await {
-        Ok(Some(flight)) => Json(FlightResponse { flight }).into_response(),
+        Ok(Some(flight)) => {
+            let flight_view: FlightView = flight.into();
+            Json(FlightResponse {
+                flight: flight_view,
+            })
+            .into_response()
+        }
         Ok(None) => json_error(StatusCode::NOT_FOUND, "Flight not found").into_response(),
         Err(e) => {
             tracing::error!("Failed to get flight by ID {}: {}", id, e);
@@ -166,7 +173,10 @@ pub async fn search_flights(
         // Club-based flight search would require joining with aircraft_registrations
         // For now, just return flights in progress
         match flights_repo.get_flights_in_progress().await {
-            Ok(flights) => Json(flights).into_response(),
+            Ok(flights) => {
+                let flight_views: Vec<FlightView> = flights.into_iter().map(|f| f.into()).collect();
+                Json(flight_views).into_response()
+            }
             Err(e) => {
                 tracing::error!("Failed to get flights by club ID: {}", e);
                 json_error(
@@ -178,7 +188,10 @@ pub async fn search_flights(
         }
     } else {
         match flights_repo.get_flights_in_progress().await {
-            Ok(flights) => Json(flights).into_response(),
+            Ok(flights) => {
+                let flight_views: Vec<FlightView> = flights.into_iter().map(|f| f.into()).collect();
+                Json(flight_views).into_response()
+            }
             Err(e) => {
                 tracing::error!("Failed to get recent flights: {}", e);
                 json_error(
@@ -200,7 +213,10 @@ pub async fn get_completed_flights(
     let limit = params.limit.unwrap_or(100);
 
     match flights_repo.get_completed_flights(limit).await {
-        Ok(flights) => Json(flights).into_response(),
+        Ok(flights) => {
+            let flight_views: Vec<FlightView> = flights.into_iter().map(|f| f.into()).collect();
+            Json(flight_views).into_response()
+        }
         Err(e) => {
             tracing::error!("Failed to get completed flights: {}", e);
             json_error(

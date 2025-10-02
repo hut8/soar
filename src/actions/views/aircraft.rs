@@ -78,9 +78,16 @@ pub struct AircraftWithDeviceView {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeviceView {
-    pub device_type: String,
-    pub device_id: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<uuid::Uuid>,
+
+    /// Formatted device address with prefix (e.g., "OGN-8B570F", "FLARM-123456", "ICAO-ABCDEF")
+    pub device_address: String,
+
+    pub address_type: String,
+    pub address: String,
     pub aircraft_model: String,
+    pub registration: String,
     pub competition_number: String,
     pub tracked: bool,
     pub identified: bool,
@@ -88,13 +95,45 @@ pub struct DeviceView {
 
 impl DeviceView {
     pub fn from_device(device: crate::devices::Device) -> Self {
+        // Format address as 6-digit hex
+        let address_hex = format!("{:06X}", device.address);
+
+        // Create prefix based on address type
+        let prefix = match device.address_type {
+            crate::devices::AddressType::Ogn => "OGN",
+            crate::devices::AddressType::Flarm => "FLARM",
+            crate::devices::AddressType::Icao => "ICAO",
+            crate::devices::AddressType::Unknown => "UNKNOWN",
+        };
+
+        // Combine prefix and address
+        let device_address = format!("{}-{}", prefix, address_hex);
+
+        // Address type as single character for backward compatibility
+        let address_type = match device.address_type {
+            crate::devices::AddressType::Ogn => "O",
+            crate::devices::AddressType::Flarm => "F",
+            crate::devices::AddressType::Icao => "I",
+            crate::devices::AddressType::Unknown => "",
+        }
+        .to_string();
+
         Self {
-            device_type: device.address_type.to_string(),
-            device_id: device.address,
+            id: device.id,
+            device_address,
+            address_type,
+            address: address_hex,
             aircraft_model: device.aircraft_model,
+            registration: device.registration,
             competition_number: device.competition_number,
             tracked: device.tracked,
             identified: device.identified,
         }
+    }
+}
+
+impl From<crate::devices::Device> for DeviceView {
+    fn from(device: crate::devices::Device) -> Self {
+        Self::from_device(device)
     }
 }

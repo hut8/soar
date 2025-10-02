@@ -537,6 +537,22 @@ impl AircraftRegistrationsRepository {
         Ok(aircraft_model)
     }
 
+    /// Get aircraft registration model by registration number (N-number)
+    /// Returns the model directly without other_names
+    pub async fn get_aircraft_registration_model_by_n_number(
+        &self,
+        registration_number: &str,
+    ) -> Result<Option<AircraftRegistrationModel>> {
+        let mut conn = self.get_connection()?;
+        let aircraft_model = aircraft_registrations::table
+            .filter(aircraft_registrations::registration_number.eq(registration_number))
+            .select(AircraftRegistrationModel::as_select())
+            .first::<AircraftRegistrationModel>(&mut conn)
+            .optional()?;
+
+        Ok(aircraft_model)
+    }
+
     /// Get aircraft registrations for multiple device IDs (batch query)
     #[tracing::instrument(skip(self, device_ids), fields(device_count = device_ids.len()))]
     pub async fn get_aircraft_registrations_by_device_ids(

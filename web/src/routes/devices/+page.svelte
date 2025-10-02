@@ -1,21 +1,22 @@
 <script lang="ts">
-	import { Search, Radio, Plane, User, Antenna, Building2 } from '@lucide/svelte';
+	import { Search, Radio, Plane, Antenna, Building2 } from '@lucide/svelte';
 	import { Segment } from '@skeletonlabs/skeleton-svelte';
 	import { resolve } from '$app/paths';
 	import { serverCall } from '$lib/api/server';
 	import ClubSelector from '$lib/components/ClubSelector.svelte';
 
 	interface Device {
-		device_id: number;
-		device_type: string;
+		id?: string;
+		device_address: string;
+		address_type: string;
+		address: string;
 		aircraft_model: string;
 		registration: string;
 		competition_number: string;
 		tracked: boolean;
 		identified: boolean;
-		user_id?: string;
-		created_at: string;
-		updated_at: string;
+		created_at?: string;
+		updated_at?: string;
 	}
 
 	let devices: Device[] = [];
@@ -25,16 +26,17 @@
 	let searchType: 'registration' | 'device' | 'club' = 'registration';
 	let deviceAddressType = 'I'; // ICAO, OGN, FLARM
 
+	// Pagination state
+	let currentPage = 0;
+	let pageSize = 50;
+	$: totalPages = Math.ceil(devices.length / pageSize);
+	$: paginatedDevices = devices.slice(currentPage * pageSize, (currentPage + 1) * pageSize);
+
 	// Club search state
 	let selectedClub: string[] = [];
 	let clubDevices: Device[] = [];
 	let clubSearchInProgress = false;
 	let clubErrorMessage = '';
-
-	function formatDeviceId(deviceId: number): string {
-		// Convert integer device_id to 6-digit hex string
-		return deviceId.toString(16).toUpperCase().padStart(6, '0');
-	}
 
 	async function searchDevices() {
 		if (!searchQuery.trim()) {
@@ -44,6 +46,7 @@
 
 		loading = true;
 		error = '';
+		currentPage = 0; // Reset to first page on new search
 
 		try {
 			let endpoint = '/devices?';
@@ -82,6 +85,7 @@
 
 		clubSearchInProgress = true;
 		clubErrorMessage = '';
+		currentPage = 0; // Reset to first page on new search
 
 		try {
 			const response = await serverCall<{ devices: Device[] }>(`/clubs/${clubId}/devices`);
@@ -123,12 +127,19 @@
 		}
 	}
 
-	function formatDate(dateString: string): string {
+	function formatDate(dateString: string | undefined): string {
+		if (!dateString) return '—';
 		return new Date(dateString).toLocaleDateString('en-US', {
 			year: 'numeric',
 			month: 'short',
 			day: 'numeric'
 		});
+	}
+
+	function goToPage(page: number) {
+		if (page >= 0 && page < totalPages) {
+			currentPage = page;
+		}
 	}
 
 	// Don't load devices automatically on mount - wait for user search
@@ -373,6 +384,12 @@
 				<h2 class="h2">Search Results</h2>
 				<p class="text-surface-500-400-token">
 					{devices.length} device{devices.length === 1 ? '' : 's'} found
+					{#if totalPages > 1}
+						(showing {currentPage * pageSize + 1}-{Math.min(
+							(currentPage + 1) * pageSize,
+							devices.length
+						)})
+					{/if}
 				</p>
 			</header>
 
@@ -380,34 +397,27 @@
 				<table class="table-hover table">
 					<thead>
 						<tr>
-							<th>Device ID</th>
+							<th>Device Address</th>
 							<th>Registration</th>
 							<th>Aircraft Model</th>
-							<th>Type</th>
 							<th>Competition #</th>
 							<th>Status</th>
-							<th>Owner</th>
 							<th>Updated</th>
 						</tr>
 					</thead>
 					<tbody>
-						{#each devices as device (device.device_id)}
+						{#each paginatedDevices as device (device.id || device.address)}
 							<tr>
 								<td>
 									<a
-										href={resolve(`/devices/${formatDeviceId(device.device_id)}`)}
+										href={resolve(`/devices/${device.address}`)}
 										class="anchor font-mono text-primary-500 hover:text-primary-600"
 									>
-										{formatDeviceId(device.device_id)}
+										{device.device_address}
 									</a>
 								</td>
 								<td class="font-semibold">{device.registration}</td>
 								<td>{device.aircraft_model}</td>
-								<td>
-									<span class="variant-soft badge">
-										{device.device_type}
-									</span>
-								</td>
 								<td>{device.competition_number || '—'}</td>
 								<td>
 									<div class="flex flex-col gap-1">
@@ -427,14 +437,6 @@
 										</span>
 									</div>
 								</td>
-								<td>
-									{#if device.user_id}
-										<User class="mr-1 inline h-4 w-4" />
-										<span class="text-xs">Assigned</span>
-									{:else}
-										<span class="text-xs text-surface-500">Unassigned</span>
-									{/if}
-								</td>
 								<td class="text-surface-600-300-token text-sm">
 									{formatDate(device.updated_at)}
 								</td>
@@ -443,6 +445,45 @@
 					</tbody>
 				</table>
 			</div>
+
+			<!-- Pagination Controls -->
+			{#if totalPages > 1}
+				<footer class="card-footer flex items-center justify-between">
+					<div class="text-surface-500-400-token text-sm">
+						Page {currentPage + 1} of {totalPages}
+					</div>
+					<div class="flex gap-2">
+						<button
+							class="btn preset-filled-surface-500 btn-sm"
+							onclick={() => goToPage(0)}
+							disabled={currentPage === 0}
+						>
+							First
+						</button>
+						<button
+							class="btn preset-filled-surface-500 btn-sm"
+							onclick={() => goToPage(currentPage - 1)}
+							disabled={currentPage === 0}
+						>
+							Previous
+						</button>
+						<button
+							class="btn preset-filled-surface-500 btn-sm"
+							onclick={() => goToPage(currentPage + 1)}
+							disabled={currentPage >= totalPages - 1}
+						>
+							Next
+						</button>
+						<button
+							class="btn preset-filled-surface-500 btn-sm"
+							onclick={() => goToPage(totalPages - 1)}
+							disabled={currentPage >= totalPages - 1}
+						>
+							Last
+						</button>
+					</div>
+				</footer>
+			{/if}
 		</section>
 	{:else if !loading && devices.length === 0 && searchQuery}
 		<div class="space-y-4 card p-12 text-center">
