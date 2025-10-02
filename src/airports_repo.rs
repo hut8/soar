@@ -427,9 +427,9 @@ impl AirportsRepository {
                 wikipedia_link: Option<String>,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
                 keywords: Option<String>,
-                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float8>)]
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float4>)]
                 #[allow(dead_code)]
-                similarity_score: Option<f64>,
+                similarity_score: Option<f32>,
             }
 
             let results: Vec<AirportWithSimilarity> = diesel::sql_query(sql)

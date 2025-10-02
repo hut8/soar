@@ -125,11 +125,12 @@
 			const response = await serverCall<FlightsResponse>(
 				`/devices/${deviceId}/flights?page=${page}&per_page=100`
 			);
-			flights = response.flights;
-			flightsPage = response.page;
-			flightsTotalPages = response.total_pages;
+			flights = response.flights || [];
+			flightsPage = response.page || 1;
+			flightsTotalPages = response.total_pages || 1;
 		} catch (err) {
 			console.error('Failed to load flights:', err);
+			flights = [];
 		} finally {
 			loadingFlights = false;
 		}
