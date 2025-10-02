@@ -21,7 +21,7 @@ NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
 ProtectHome=yes
-ReadWritePaths=/var/lib/soar/logs
+ReadWritePaths=-/var/lib/soar/logs
 
 # Restart configuration
 Restart=on-failure

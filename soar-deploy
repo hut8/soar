@@ -126,6 +126,7 @@ fi
 log_info "Creating required directories..."
 mkdir -p ${DEPLOY_BASE}
 mkdir -p ${LOGS_DIR}
+mkdir -p /var/soar
 mkdir -p ${ARCHIVE_DIR}
 mkdir -p ${SITEMAP_DIR}
 mkdir -p /etc/soar

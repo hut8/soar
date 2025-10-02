@@ -21,7 +21,7 @@ NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
 ProtectHome=yes
-ReadWritePaths=/var/soar
+ReadWritePaths=-/var/soar
 
 # Restart configuration
 Restart=on-failure
