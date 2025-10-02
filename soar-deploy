@@ -196,17 +196,8 @@ systemctl enable ${WEB_SERVICE}.service
 log_info "Starting ${WEB_SERVICE}.service..."
 systemctl start ${WEB_SERVICE}.service || log_warn "Failed to start ${WEB_SERVICE}.service"
 
-# soar-pull-data (service - won't be started, controlled by timer)
-log_info "Enabling ${PULL_DATA_SERVICE}.service..."
-systemctl enable ${PULL_DATA_SERVICE}.service
-log_info "Starting ${PULL_DATA_SERVICE}.service..."
-systemctl start ${PULL_DATA_SERVICE}.service || log_warn "Failed to start ${PULL_DATA_SERVICE}.service"
-
-# soar-sitemap (service - won't be started, controlled by timer)
-log_info "Enabling ${SITEMAP_SERVICE}.service..."
-systemctl enable ${SITEMAP_SERVICE}.service
-log_info "Starting ${SITEMAP_SERVICE}.service..."
-systemctl start ${SITEMAP_SERVICE}.service || log_warn "Failed to start ${SITEMAP_SERVICE}.service"
+# Note: soar-pull-data and soar-sitemap services are controlled by timers
+# They should not be enabled or started directly
 
 # Enable and start timers
 log_info "Enabling and starting SOAR timers..."
