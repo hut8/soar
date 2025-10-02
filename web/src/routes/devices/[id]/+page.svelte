@@ -137,13 +137,14 @@
 	}
 
 	function formatDate(dateString: string): string {
-		return new Date(dateString).toLocaleDateString('en-US', {
-			year: 'numeric',
-			month: 'long',
-			day: 'numeric',
-			hour: '2-digit',
-			minute: '2-digit'
-		});
+		const date = new Date(dateString);
+		const year = date.getFullYear();
+		const month = String(date.getMonth() + 1).padStart(2, '0');
+		const day = String(date.getDate()).padStart(2, '0');
+		const hours = String(date.getHours()).padStart(2, '0');
+		const minutes = String(date.getMinutes()).padStart(2, '0');
+		const seconds = String(date.getSeconds()).padStart(2, '0');
+		return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 	}
 
 	function formatAltitude(altitude_feet: number | undefined): string {
@@ -165,6 +166,10 @@
 		const latDir = lat >= 0 ? 'N' : 'S';
 		const lngDir = lng >= 0 ? 'E' : 'W';
 		return `${Math.abs(lat).toFixed(4)}°${latDir}, ${Math.abs(lng).toFixed(4)}°${lngDir}`;
+	}
+
+	function getGoogleMapsUrl(lat: number, lng: number): string {
+		return `https://www.google.com/maps?q=${lat},${lng}`;
 	}
 
 	function formatAddressType(addressType: string): string {
@@ -471,9 +476,16 @@
 								{#each fixes as fix (fix.id)}
 									<tr class="border-surface-200-700-token hover:bg-surface-100-800-token border-b">
 										<td class="px-3 py-2 text-sm">{formatDate(fix.timestamp)}</td>
-										<td class="px-3 py-2 font-mono text-sm"
-											>{formatCoordinates(fix.latitude, fix.longitude)}</td
-										>
+										<td class="px-3 py-2 font-mono text-sm">
+											<a
+												href={getGoogleMapsUrl(fix.latitude, fix.longitude)}
+												target="_blank"
+												rel="noopener noreferrer"
+												class="text-primary-500 hover:text-primary-600 hover:underline"
+											>
+												{formatCoordinates(fix.latitude, fix.longitude)}
+											</a>
+										</td>
 										<td class="px-3 py-2 text-sm">{formatAltitude(fix.altitude_feet)}</td>
 										<td class="px-3 py-2 text-sm">{formatSpeed(fix.ground_speed_knots)}</td>
 										<td class="px-3 py-2 text-sm">{formatTrack(fix.track_degrees)}</td>
