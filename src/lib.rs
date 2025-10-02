@@ -27,6 +27,7 @@ pub mod flights;
 pub mod flights_repo;
 pub mod geocoding;
 pub mod icao;
+pub mod instance_lock;
 pub mod live_fixes;
 pub mod loader;
 pub mod locations;

@@ -346,9 +346,16 @@ async fn handle_run(
         PositionPacketProcessor::new().with_aircraft_processor(aircraft_position_processor);
 
     // Create PacketRouter with all processors
-    let packet_router = PacketRouter::new(archive_dir.clone())
-        .with_position_processor(position_processor)
-        .with_server_status_processor(server_status_processor);
+    let packet_router = if let Some(archive_path) = archive_dir.clone() {
+        PacketRouter::with_archive(archive_path)
+            .await?
+            .with_position_processor(position_processor)
+            .with_server_status_processor(server_status_processor)
+    } else {
+        PacketRouter::new()
+            .with_position_processor(position_processor)
+            .with_server_status_processor(server_status_processor)
+    };
 
     info!(
         "Setting up APRS client with PacketRouter - archive directory: {:?}, NATS URL: {}",

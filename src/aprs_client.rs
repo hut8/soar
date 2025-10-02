@@ -717,11 +717,149 @@ impl Default for AprsClientConfigBuilder {
     }
 }
 
+/// Archive service for managing daily log files and compression
+#[derive(Clone)]
+pub struct ArchiveService {
+    sender: mpsc::UnboundedSender<String>,
+}
+
+impl ArchiveService {
+    /// Create a new archive service and start the background archival task
+    pub async fn new(base_dir: String) -> Result<Self> {
+        use chrono::Local;
+        use std::fs;
+        use std::io::Write;
+        use std::path::PathBuf;
+
+        // Create base directory if it doesn't exist
+        fs::create_dir_all(&base_dir)?;
+
+        // Check for yesterday's uncompressed file and compress it
+        let yesterday = Local::now().date_naive() - chrono::Duration::days(1);
+        let yesterday_file = PathBuf::from(&base_dir).join(format!("{}.log", yesterday));
+        if yesterday_file.exists() {
+            info!(
+                "Found uncompressed file from yesterday: {:?}, compressing...",
+                yesterday_file
+            );
+            if let Err(e) = Self::compress_file(&yesterday_file).await {
+                warn!("Failed to compress yesterday's file: {}", e);
+            }
+        }
+
+        let (sender, mut receiver) = mpsc::unbounded_channel::<String>();
+
+        // Spawn background task for file writing and management
+        tokio::spawn(async move {
+            let mut current_file: Option<std::fs::File> = None;
+            let mut current_date: Option<chrono::NaiveDate> = None;
+
+            while let Some(message) = receiver.recv().await {
+                let now = Local::now();
+                let today = now.date_naive();
+
+                // Check if we need to rotate to a new file
+                if current_date != Some(today) {
+                    // Close current file if exists
+                    if let Some(mut file) = current_file.take() {
+                        if let Err(e) = file.flush() {
+                            warn!("Failed to flush archive file: {}", e);
+                        }
+                        drop(file);
+
+                        // Compress the previous day's file
+                        if let Some(prev_date) = current_date {
+                            let prev_file =
+                                PathBuf::from(&base_dir).join(format!("{}.log", prev_date));
+                            tokio::spawn(async move {
+                                if let Err(e) = Self::compress_file(&prev_file).await {
+                                    warn!("Failed to compress archive file: {}", e);
+                                }
+                            });
+                        }
+                    }
+
+                    // Open new file for today
+                    let log_path = PathBuf::from(&base_dir).join(format!("{}.log", today));
+                    match std::fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(&log_path)
+                    {
+                        Ok(file) => {
+                            info!("Opened new archive file: {:?}", log_path);
+                            current_file = Some(file);
+                            current_date = Some(today);
+                        }
+                        Err(e) => {
+                            error!("Failed to open archive file {:?}: {}", log_path, e);
+                            continue;
+                        }
+                    }
+                }
+
+                // Write message to current file
+                if let Some(file) = &mut current_file
+                    && let Err(e) = writeln!(file, "{}", message)
+                {
+                    warn!("Failed to write to archive file: {}", e);
+                }
+            }
+
+            // Flush final file on shutdown
+            if let Some(mut file) = current_file {
+                let _ = file.flush();
+            }
+        });
+
+        Ok(Self { sender })
+    }
+
+    /// Compress a log file using zstd
+    async fn compress_file(file_path: &std::path::PathBuf) -> Result<()> {
+        use std::fs::File;
+        use std::io::{BufReader, BufWriter};
+
+        let compressed_path = file_path.with_extension("log.zst");
+
+        // Read the original file
+        let input_file = File::open(file_path)?;
+        let reader = BufReader::new(input_file);
+
+        // Create the compressed file
+        let output_file = File::create(&compressed_path)?;
+        let writer = BufWriter::new(output_file);
+
+        // Compress with zstd (compression level 3 is a good balance)
+        let mut encoder = zstd::Encoder::new(writer, 3)?;
+        std::io::copy(&mut BufReader::new(reader), &mut encoder)?;
+        encoder.finish()?;
+
+        // Delete the original file after successful compression
+        std::fs::remove_file(file_path)?;
+
+        info!(
+            "Compressed {:?} to {:?} and deleted original",
+            file_path, compressed_path
+        );
+
+        Ok(())
+    }
+
+    /// Archive a message
+    pub fn archive(&self, message: &str) {
+        // Send to background task (non-blocking)
+        if let Err(e) = self.sender.send(message.to_string()) {
+            warn!("Failed to send message to archive service: {}", e);
+        }
+    }
+}
+
 /// PacketRouter implements PacketProcessor and routes packets to appropriate specialized processors
 /// This is the main router that the AprsClient should use
 pub struct PacketRouter {
-    /// Optional base directory for message archival
-    archive_base_dir: Option<String>,
+    /// Optional archive service for message archival
+    archive_service: Option<ArchiveService>,
     /// Position packet processor for handling position data
     position_processor: Option<PositionPacketProcessor>,
     /// Receiver status processor for handling status data from receivers
@@ -730,15 +868,32 @@ pub struct PacketRouter {
     server_status_processor: Option<ServerStatusProcessor>,
 }
 
+impl Default for PacketRouter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PacketRouter {
-    /// Create a new PacketRouter with optional archival
-    pub fn new(archive_base_dir: Option<String>) -> Self {
+    /// Create a new PacketRouter without archival
+    pub fn new() -> Self {
         Self {
-            archive_base_dir,
+            archive_service: None,
             position_processor: None,
             receiver_status_processor: None,
             server_status_processor: None,
         }
+    }
+
+    /// Create a new PacketRouter with archival enabled
+    pub async fn with_archive(base_dir: String) -> Result<Self> {
+        let archive_service = ArchiveService::new(base_dir).await?;
+        Ok(Self {
+            archive_service: Some(archive_service),
+            position_processor: None,
+            receiver_status_processor: None,
+            server_status_processor: None,
+        })
     }
 
     /// Add a position processor to the router
@@ -778,10 +933,8 @@ impl PacketRouter {
 impl PacketHandler for PacketRouter {
     fn process_raw_message(&self, raw_message: &str) {
         // Handle archival if configured
-        if let Some(base_dir) = &self.archive_base_dir {
-            // TODO: Implement daily log file archival
-            // For now, just trace log it
-            trace!("Would archive to {}: {}", base_dir, raw_message);
+        if let Some(archive) = &self.archive_service {
+            archive.archive(raw_message);
         }
     }
 
