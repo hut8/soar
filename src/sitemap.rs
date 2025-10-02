@@ -31,15 +31,26 @@ pub async fn handle_sitemap_generation(pool: PgPool, static_root: String) -> Res
     let static_urls = generate_static_pages()?;
 
     // Get all club IDs from database
-    let club_ids = get_all_club_ids(pool).await?;
+    let club_ids = get_all_club_ids(pool.clone()).await?;
     info!("Found {} clubs for sitemap generation", club_ids.len());
 
     // Generate club URLs
     let club_urls = generate_club_urls(&club_ids)?;
 
+    // Get all device addresses from database
+    let device_addresses = get_all_device_addresses(pool).await?;
+    info!(
+        "Found {} devices for sitemap generation",
+        device_addresses.len()
+    );
+
+    // Generate device URLs
+    let device_urls = generate_device_urls(&device_addresses)?;
+
     // Combine all URLs
     let mut all_urls = static_urls;
     all_urls.extend(club_urls);
+    all_urls.extend(device_urls);
 
     let total_urls = all_urls.len();
     info!("Total URLs to generate: {}", total_urls);
@@ -121,6 +132,54 @@ async fn get_all_club_ids(pool: PgPool) -> Result<Vec<Uuid>> {
             .load::<Uuid>(&mut conn)?;
 
         Ok::<Vec<Uuid>, anyhow::Error>(club_ids)
+    })
+    .await??;
+
+    Ok(result)
+}
+
+/// Generate device page URLs
+fn generate_device_urls(device_addresses: &[String]) -> Result<Vec<Url>> {
+    let mut urls = Vec::new();
+
+    for address in device_addresses {
+        let device_url = format!("{}/devices/{}", BASE_URL, address);
+        let url = Url::builder(device_url).priority(0.5).build()?;
+        urls.push(url);
+    }
+
+    Ok(urls)
+}
+
+/// Get all device addresses from the database
+async fn get_all_device_addresses(pool: PgPool) -> Result<Vec<String>> {
+    let result = tokio::task::spawn_blocking(move || {
+        use crate::devices::AddressType;
+        use crate::schema::devices::dsl::*;
+
+        let mut conn = pool.get()?;
+
+        // Get all devices with their address_type and address
+        let device_data: Vec<(AddressType, i32)> = devices
+            .order((address_type.asc(), address.asc()))
+            .select((address_type, address))
+            .load::<(AddressType, i32)>(&mut conn)?;
+
+        // Format as "TYPE:ADDRESS" strings (e.g., "I:DD1234", "O:123456")
+        let device_addresses: Vec<String> = device_data
+            .into_iter()
+            .map(|(addr_type_enum, addr)| {
+                // Convert address to hex for ICAO (I) and FLARM (F) types
+                match addr_type_enum {
+                    AddressType::Icao | AddressType::Flarm => {
+                        format!("{}:{:06X}", addr_type_enum, addr as u32)
+                    }
+                    _ => format!("{}:{}", addr_type_enum, addr),
+                }
+            })
+            .collect();
+
+        Ok::<Vec<String>, anyhow::Error>(device_addresses)
     })
     .await??;
 
