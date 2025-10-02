@@ -1,0 +1,214 @@
+#!/bin/bash
+#
+# SOAR Deployment Script
+#
+# This script is executed with sudo privileges to deploy SOAR updates.
+# It must be installed at /usr/local/bin/soar-deploy with permissions 755.
+#
+# Usage: sudo /usr/local/bin/soar-deploy /tmp/soar/deploy/YYYYMMDDHHMMSS
+#
+# The deployment directory should contain:
+#   - soar (the binary)
+#   - *.service files
+#   - *.timer files
+#
+
+set -e
+set -u
+set -o pipefail
+
+# Color codes for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+log_info() {
+    echo -e "${GREEN}[INFO]${NC} $1"
+}
+
+log_warn() {
+    echo -e "${YELLOW}[WARN]${NC} $1"
+}
+
+log_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# Check if deployment directory is provided
+if [ $# -ne 1 ]; then
+    log_error "Usage: $0 /tmp/soar/deploy/YYYYMMDDHHMMSS"
+    exit 1
+fi
+
+DEPLOY_DIR="$1"
+
+# Verify deployment directory exists
+if [ ! -d "$DEPLOY_DIR" ]; then
+    log_error "Deployment directory does not exist: $DEPLOY_DIR"
+    exit 1
+fi
+
+log_info "Starting SOAR deployment from: $DEPLOY_DIR"
+
+# Verify binary exists
+if [ ! -f "$DEPLOY_DIR/soar" ]; then
+    log_error "Binary not found in deployment directory: $DEPLOY_DIR/soar"
+    exit 1
+fi
+
+# Define services and timers
+SERVICES=(
+    "soar-run.service"
+    "soar-web.service"
+    "soar-pull-data.service"
+    "soar-sitemap.service"
+)
+
+TIMERS=(
+    "soar-pull-data.timer"
+    "soar-sitemap.timer"
+)
+
+# Stop all services before deployment
+log_info "Stopping SOAR services..."
+for service in "${SERVICES[@]}"; do
+    if systemctl is-active --quiet "$service"; then
+        log_info "Stopping $service..."
+        systemctl stop "$service" || log_warn "Failed to stop $service"
+    else
+        log_info "$service is not running"
+    fi
+done
+
+# Stop all timers
+log_info "Stopping SOAR timers..."
+for timer in "${TIMERS[@]}"; do
+    if systemctl is-active --quiet "$timer"; then
+        log_info "Stopping $timer..."
+        systemctl stop "$timer" || log_warn "Failed to stop $timer"
+    else
+        log_info "$timer is not running"
+    fi
+done
+
+# Backup current binary
+if [ -f /usr/local/bin/soar ]; then
+    BACKUP_FILE="/home/soar/soar.backup.$(date +%s)"
+    log_info "Backing up current binary to $BACKUP_FILE..."
+    cp /usr/local/bin/soar "$BACKUP_FILE"
+    chown soar:soar "$BACKUP_FILE"
+else
+    log_warn "No existing binary to backup"
+fi
+
+# Install new binary
+log_info "Installing new binary..."
+cp "$DEPLOY_DIR/soar" /usr/local/bin/soar
+chmod +x /usr/local/bin/soar
+chown root:root /usr/local/bin/soar
+log_info "Binary installed successfully"
+
+# Install service files
+log_info "Installing service files..."
+for service in "${SERVICES[@]}"; do
+    if [ -f "$DEPLOY_DIR/$service" ]; then
+        log_info "Installing $service..."
+        cp "$DEPLOY_DIR/$service" /etc/systemd/system/
+        chmod 644 "/etc/systemd/system/$service"
+    else
+        log_warn "$service not found in deployment directory, skipping"
+    fi
+done
+
+# Install timer files
+log_info "Installing timer files..."
+for timer in "${TIMERS[@]}"; do
+    if [ -f "$DEPLOY_DIR/$timer" ]; then
+        log_info "Installing $timer..."
+        cp "$DEPLOY_DIR/$timer" /etc/systemd/system/
+        chmod 644 "/etc/systemd/system/$timer"
+    else
+        log_warn "$timer not found in deployment directory, skipping"
+    fi
+done
+
+# Reload systemd daemon
+log_info "Reloading systemd daemon..."
+systemctl daemon-reload
+
+# Enable and start services
+log_info "Enabling and starting SOAR services..."
+for service in "${SERVICES[@]}"; do
+    if [ -f "/etc/systemd/system/$service" ]; then
+        log_info "Enabling $service..."
+        systemctl enable "$service" || log_warn "Failed to enable $service"
+
+        log_info "Starting $service..."
+        systemctl start "$service" || log_warn "Failed to start $service"
+    fi
+done
+
+# Enable and start timers
+log_info "Enabling and starting SOAR timers..."
+for timer in "${TIMERS[@]}"; do
+    if [ -f "/etc/systemd/system/$timer" ]; then
+        log_info "Enabling $timer..."
+        systemctl enable "$timer" || log_warn "Failed to enable $timer"
+
+        log_info "Starting $timer..."
+        systemctl start "$timer" || log_warn "Failed to start $timer"
+    fi
+done
+
+# Wait for services to start
+log_info "Waiting for services to initialize..."
+sleep 5
+
+# Check service status
+log_info "Checking service status..."
+ALL_HEALTHY=true
+
+for service in "${SERVICES[@]}"; do
+    if systemctl is-active --quiet "$service"; then
+        log_info "$service: ${GREEN}ACTIVE${NC}"
+    else
+        log_error "$service: ${RED}FAILED${NC}"
+        ALL_HEALTHY=false
+
+        # Show recent logs for failed service
+        log_info "Recent logs for $service:"
+        journalctl -u "$service" --no-pager --lines=10 || true
+    fi
+done
+
+for timer in "${TIMERS[@]}"; do
+    if systemctl is-active --quiet "$timer"; then
+        log_info "$timer: ${GREEN}ACTIVE${NC}"
+    else
+        log_warn "$timer: ${YELLOW}INACTIVE${NC}"
+    fi
+done
+
+# Show recent logs from all services
+log_info "Recent logs from soar-run:"
+journalctl -u soar-run.service --no-pager --lines=5 || true
+
+log_info "Recent logs from soar-web:"
+journalctl -u soar-web.service --no-pager --lines=5 || true
+
+# Clean up old backups (keep last 5)
+log_info "Cleaning up old backups (keeping last 5)..."
+ls -t /home/soar/soar.backup.* 2>/dev/null | tail -n +6 | xargs rm -f || true
+
+# Clean up old deployment directories (keep last 3)
+log_info "Cleaning up old deployment directories (keeping last 3)..."
+ls -td /tmp/soar/deploy/* 2>/dev/null | tail -n +4 | xargs rm -rf || true
+
+if [ "$ALL_HEALTHY" = true ]; then
+    log_info "${GREEN}Deployment completed successfully!${NC}"
+    exit 0
+else
+    log_error "${RED}Deployment completed with errors. Some services failed to start.${NC}"
+    exit 1
+fi
