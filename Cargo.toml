@@ -6,10 +6,10 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0"
 argon2 = "0.5"
-async-nats = "0.42"
+async-nats = "0.43"
 bigdecimal = { version = "0.4", features = ["serde"] }
 async-trait = "0.1"
-axum = { version = "0.8.4", features = ["macros", "ws"] }
+axum = { version = "0.8.5", features = ["macros", "ws"] }
 axum-extra = { version = "0.10.1", features = ["typed-header"] }
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.5", features = ["derive"] }
