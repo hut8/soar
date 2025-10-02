@@ -299,6 +299,7 @@ jobs:
           # Create local deployment directory
           mkdir -p deploy-pkg
           cp soar deploy-pkg/
+          cp soar-deploy deploy-pkg/
           cp *.service deploy-pkg/ || echo "No service files found in root"
           cp *.timer deploy-pkg/ || echo "No timer files found in root"
 
@@ -320,6 +321,9 @@ jobs:
       - name: Execute deployment
         run: |
           DEPLOY_DIR="/tmp/soar/deploy/${{ env.DEPLOY_TIMESTAMP }}"
+
+          echo "Updating server-side deployment script..."
+          ssh soar@${{ secrets.DEPLOY_SERVER }} "sudo cp $DEPLOY_DIR/soar-deploy /usr/local/bin/soar-deploy && sudo chmod +x /usr/local/bin/soar-deploy"
 
           echo "Executing deployment script..."
           ssh soar@${{ secrets.DEPLOY_SERVER }} "sudo /usr/local/bin/soar-deploy $DEPLOY_DIR"
