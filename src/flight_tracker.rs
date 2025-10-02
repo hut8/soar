@@ -10,7 +10,7 @@ use uuid::Uuid;
 use crate::Fix;
 use crate::airports_repo::AirportsRepository;
 use crate::devices::AddressType;
-use crate::elevation::elevation_egm2008;
+use crate::elevation::ElevationDB;
 use crate::fixes_repo::FixesRepository;
 use crate::flights::Flight;
 use crate::flights_repo::FlightsRepository;
@@ -117,41 +117,43 @@ fn haversine_distance(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
     EARTH_RADIUS_M * c
 }
 
-/// Calculate altitude offset in feet between reported altitude and true MSL elevation
-/// Returns the difference (reported_altitude_ft - true_elevation_ft)
-/// Returns None if elevation lookup fails or fix has no altitude
-async fn calculate_altitude_offset_ft(fix: &Fix) -> Option<i32> {
-    // Get reported altitude from fix (in feet)
-    let reported_altitude_ft = fix.altitude_feet?;
+impl FlightTracker {
+    /// Calculate altitude offset in feet between reported altitude and true MSL elevation
+    /// Returns the difference (reported_altitude_ft - true_elevation_ft)
+    /// Returns None if elevation lookup fails or fix has no altitude
+    async fn calculate_altitude_offset_ft(&self, fix: &Fix) -> Option<i32> {
+        // Get reported altitude from fix (in feet)
+        let reported_altitude_ft = fix.altitude_feet?;
 
-    let lat = fix.latitude;
-    let lon = fix.longitude;
+        let lat = fix.latitude;
+        let lon = fix.longitude;
 
-    // Run blocking elevation lookup in a separate thread
-    let elevation_result = elevation_egm2008(lat, lon).await.ok()?;
+        // Run blocking elevation lookup in a separate thread
+        let elevation_result = self.elevation_db.elevation_egm2008(lat, lon).await.ok()?;
 
-    // Get true elevation at this location (in meters)
-    match elevation_result {
-        Some(elevation_m) => {
-            // Convert elevation from meters to feet (1 meter = 3.28084 feet)
-            let elevation_ft = elevation_m * 3.28084;
-            // Calculate offset
-            let offset = reported_altitude_ft as f64 - elevation_ft;
+        // Get true elevation at this location (in meters)
+        match elevation_result {
+            Some(elevation_m) => {
+                // Convert elevation from meters to feet (1 meter = 3.28084 feet)
+                let elevation_ft = elevation_m * 3.28084;
+                // Calculate offset
+                let offset = reported_altitude_ft as f64 - elevation_ft;
 
-            info!(
-                "Altitude offset calculation: indicated={} ft, known_elevation={:.1} ft, offset={:.0} ft at ({:.6}, {:.6})",
-                reported_altitude_ft, elevation_ft, offset, lat, lon
-            );
+                info!(
+                    "Altitude offset calculation: indicated={} ft, known_elevation={:.1} ft, offset={:.0} ft at ({:.6}, {:.6})",
+                    reported_altitude_ft, elevation_ft, offset, lat, lon
+                );
 
-            Some(offset.round() as i32)
-        }
-        None => {
-            // No elevation data available (e.g., ocean)
-            debug!(
-                "No elevation data available for location ({}, {})",
-                fix.latitude, fix.longitude
-            );
-            None
+                Some(offset.round() as i32)
+            }
+            None => {
+                // No elevation data available (e.g., ocean)
+                debug!(
+                    "No elevation data available for location ({}, {})",
+                    fix.latitude, fix.longitude
+                );
+                None
+            }
         }
     }
 }
@@ -160,6 +162,7 @@ pub struct FlightTracker {
     flights_repo: FlightsRepository,
     airports_repo: AirportsRepository,
     fixes_repo: FixesRepository,
+    elevation_db: ElevationDB,
     aircraft_trackers: Arc<RwLock<HashMap<uuid::Uuid, AircraftTracker>>>,
     state_file_path: Option<std::path::PathBuf>,
 }
@@ -170,6 +173,7 @@ impl Clone for FlightTracker {
             flights_repo: self.flights_repo.clone(),
             airports_repo: self.airports_repo.clone(),
             fixes_repo: self.fixes_repo.clone(),
+            elevation_db: self.elevation_db.clone(),
             aircraft_trackers: Arc::clone(&self.aircraft_trackers),
             state_file_path: self.state_file_path.clone(),
         }
@@ -178,10 +182,12 @@ impl Clone for FlightTracker {
 
 impl FlightTracker {
     pub fn new(pool: &Pool<ConnectionManager<PgConnection>>) -> Self {
+        let elevation_db = ElevationDB::new().expect("Failed to initialize ElevationDB");
         Self {
             flights_repo: FlightsRepository::new(pool.clone()),
             airports_repo: AirportsRepository::new(pool.clone()),
             fixes_repo: FixesRepository::new(pool.clone()),
+            elevation_db,
             aircraft_trackers: Arc::new(RwLock::new(HashMap::new())),
             state_file_path: None,
         }
@@ -192,10 +198,12 @@ impl FlightTracker {
         pool: &Pool<ConnectionManager<PgConnection>>,
         state_path: std::path::PathBuf,
     ) -> Self {
+        let elevation_db = ElevationDB::new().expect("Failed to initialize ElevationDB");
         Self {
             flights_repo: FlightsRepository::new(pool.clone()),
             airports_repo: AirportsRepository::new(pool.clone()),
             fixes_repo: FixesRepository::new(pool.clone()),
+            elevation_db,
             aircraft_trackers: Arc::new(RwLock::new(HashMap::new())),
             state_file_path: Some(state_path),
         }
@@ -275,7 +283,7 @@ impl FlightTracker {
         flight.departure_airport = departure_airport.clone();
 
         // Calculate takeoff altitude offset (difference between reported altitude and true elevation)
-        flight.takeoff_altitude_offset_ft = calculate_altitude_offset_ft(fix).await;
+        flight.takeoff_altitude_offset_ft = self.calculate_altitude_offset_ft(fix).await;
 
         let flight_id = flight.id;
 
@@ -330,7 +338,7 @@ impl FlightTracker {
         let arrival_airport = self.find_nearby_airport(fix.latitude, fix.longitude).await;
 
         // Calculate landing altitude offset (difference between reported altitude and true elevation)
-        let landing_altitude_offset_ft = calculate_altitude_offset_ft(fix).await;
+        let landing_altitude_offset_ft = self.calculate_altitude_offset_ft(fix).await;
 
         match self
             .flights_repo
