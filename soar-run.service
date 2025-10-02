@@ -9,8 +9,8 @@ Requires=postgresql.service nats-server.service
 Type=simple
 User=soar
 Group=soar
-WorkingDirectory=/var/lib/soar
-ExecStart=/usr/local/bin/soar run --archive --unparsed-log /var/lib/soar/logs/unparsed.csv
+WorkingDirectory=/var/soar
+ExecStart=/usr/local/bin/soar run --archive --unparsed-log /var/soar/logs/unparsed.csv
 ExecReload=/bin/kill -s HUP $MAINPID
 
 # Environment variables
@@ -21,8 +21,7 @@ NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
 ProtectHome=yes
-ReadWritePaths=/var/lib/soar/logs
-ReadWritePaths=/var/soar/archive
+ReadWritePaths=/var/soar
 
 # Restart configuration
 Restart=on-failure
