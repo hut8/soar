@@ -18,7 +18,12 @@ pub enum FilterKind {
     Range { lat: f64, lon: f64, km: f64 },
 
     /// a/<lat1>/<lon1>/<lat2>/<lon2>
-    Area  { lat1: f64, lon1: f64, lat2: f64, lon2: f64 },
+    Area {
+        lat1: f64,
+        lon1: f64,
+        lat2: f64,
+        lon2: f64,
+    },
 
     /// b/<call1>/<call2>/... (accepts wildcards like FLR* or OGN*)
     Buddies(Vec<String>),
@@ -81,10 +86,15 @@ impl FromStr for FilterExpr {
                 (false, raw.as_str())
             };
 
-            let item = parse_single_token(token)
-                .unwrap_or_else(|e| FilterKind::Invalid { original: token.to_string(), reason: e });
+            let item = parse_single_token(token).unwrap_or_else(|e| FilterKind::Invalid {
+                original: token.to_string(),
+                reason: e,
+            });
 
-            terms.push(FilterItem { negated, kind: item });
+            terms.push(FilterItem {
+                negated,
+                kind: item,
+            });
         }
 
         Ok(FilterExpr { terms })
@@ -97,8 +107,24 @@ impl Display for FilterExpr {
         let mut parts = Vec::with_capacity(self.terms.len());
         for t in &self.terms {
             let s = match &t.kind {
-                FilterKind::Range { lat, lon, km } => format!("r/{}/{}/{}", fmt_float(*lat), fmt_float(*lon), fmt_float(*km)),
-                FilterKind::Area { lat1, lon1, lat2, lon2 } => format!("a/{}/{}/{}/{}", fmt_float(*lat1), fmt_float(*lon1), fmt_float(*lat2), fmt_float(*lon2)),
+                FilterKind::Range { lat, lon, km } => format!(
+                    "r/{}/{}/{}",
+                    fmt_float(*lat),
+                    fmt_float(*lon),
+                    fmt_float(*km)
+                ),
+                FilterKind::Area {
+                    lat1,
+                    lon1,
+                    lat2,
+                    lon2,
+                } => format!(
+                    "a/{}/{}/{}/{}",
+                    fmt_float(*lat1),
+                    fmt_float(*lon1),
+                    fmt_float(*lat2),
+                    fmt_float(*lon2)
+                ),
                 FilterKind::Buddies(list) => format!("b/{}", list.join("/")),
                 FilterKind::Group(g) => format!("g/{}", g),
                 FilterKind::TypeSet(syms) => format!("t/{}", syms),
@@ -157,7 +183,7 @@ fn parse_r(rest: &str) -> Result<FilterKind, String> {
     }
     let lat = parse_f64(&v[0]).map_err(|e| format!("r/lat: {}", e))?;
     let lon = parse_f64(&v[1]).map_err(|e| format!("r/lon: {}", e))?;
-    let km  = parse_f64(&v[2]).map_err(|e| format!("r/km: {}", e))?;
+    let km = parse_f64(&v[2]).map_err(|e| format!("r/km: {}", e))?;
     validate_lat_lon(lat, lon)?;
     if !km.is_finite() || km < 0.0 {
         return Err("r/km must be finite, >= 0".to_string());
@@ -169,7 +195,10 @@ fn parse_a(rest: &str) -> Result<FilterKind, String> {
     // Expect: lat1/lon1/lat2/lon2 (rectangle corners)
     let v = split_allow_empty(rest);
     if v.len() != 4 {
-        return Err(format!("bad a/<lat1>/<lon1>/<lat2>/<lon2>: got {} parts", v.len()));
+        return Err(format!(
+            "bad a/<lat1>/<lon1>/<lat2>/<lon2>: got {} parts",
+            v.len()
+        ));
     }
     let lat1 = parse_f64(&v[0]).map_err(|e| format!("a/lat1: {}", e))?;
     let lon1 = parse_f64(&v[1]).map_err(|e| format!("a/lon1: {}", e))?;
@@ -177,7 +206,12 @@ fn parse_a(rest: &str) -> Result<FilterKind, String> {
     let lon2 = parse_f64(&v[3]).map_err(|e| format!("a/lon2: {}", e))?;
     validate_lat_lon(lat1, lon1)?;
     validate_lat_lon(lat2, lon2)?;
-    Ok(FilterKind::Area { lat1, lon1, lat2, lon2 })
+    Ok(FilterKind::Area {
+        lat1,
+        lon1,
+        lat2,
+        lon2,
+    })
 }
 
 fn parse_s(rest: &str) -> Result<FilterKind, String> {
@@ -215,7 +249,7 @@ fn validate_lat_lon(lat: f64, lon: f64) -> Result<(), String> {
     if !lat.is_finite() || !lon.is_finite() {
         return Err("lat/lon must be finite".to_string());
     }
-    if !( -90.0..= 90.0).contains(&lat) {
+    if !(-90.0..=90.0).contains(&lat) {
         return Err(format!("lat out of range [-90,90]: {}", lat));
     }
     if !(-180.0..=180.0).contains(&lon) {
@@ -251,13 +285,25 @@ mod tests {
 
         // spot-check a few
         assert!(matches!(expr.terms[0].kind, FilterKind::Group(ref g) if g == "ALL"));
-        assert!(matches!(expr.terms[1].kind, FilterKind::Range{..}));
-        assert!(matches!(expr.terms[4].kind, FilterKind::Area{..}));
+        assert!(matches!(expr.terms[1].kind, FilterKind::Range { .. }));
+        assert!(matches!(expr.terms[4].kind, FilterKind::Area { .. }));
         // negated t/n
-        assert!(expr.terms.iter().any(|t| t.negated && matches!(t.kind, FilterKind::TypeSet(ref x) if x=="n")));
+        assert!(
+            expr.terms
+                .iter()
+                .any(|t| t.negated && matches!(t.kind, FilterKind::TypeSet(ref x) if x=="n"))
+        );
         // unknown and invalid preserved
-        assert!(expr.terms.iter().any(|t| matches!(t.kind, FilterKind::Unknown(ref x) if x=="lzma")));
-        assert!(expr.terms.iter().any(|t| matches!(t.kind, FilterKind::Invalid{ref original, ..} if original=="r///")));
+        assert!(
+            expr.terms
+                .iter()
+                .any(|t| matches!(t.kind, FilterKind::Unknown(ref x) if x=="lzma"))
+        );
+        assert!(
+            expr.terms.iter().any(
+                |t| matches!(t.kind, FilterKind::Invalid{ref original, ..} if original=="r///")
+            )
+        );
     }
 
     #[test]
