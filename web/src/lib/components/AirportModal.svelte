@@ -86,16 +86,10 @@
 	}
 
 	function getAirportTypeDisplay(type: string): string {
-		const typeMap: Record<string, string> = {
-			large_airport: 'Large Airport',
-			medium_airport: 'Medium Airport',
-			small_airport: 'Small Airport',
-			seaplane_base: 'Seaplane Base',
-			heliport: 'Heliport',
-			balloonport: 'Balloonport',
-			closed: 'Closed'
-		};
-		return typeMap[type] || type;
+		return type
+			.split('_')
+			.map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+			.join(' ');
 	}
 
 	function formatRunwayEnds(low: RunwayEndView, high: RunwayEndView): string {
@@ -130,7 +124,19 @@
 						<Plane size={24} />
 					</div>
 					<div>
-						<h2 class="text-xl font-bold">{selectedAirport.name}</h2>
+						<div class="flex items-center gap-2">
+							<h2 class="text-xl font-bold">{selectedAirport.name}</h2>
+							<a
+								href={`/airports/${selectedAirport.id}`}
+								target="_blank"
+								rel="noopener noreferrer"
+								class="variant-soft-primary btn btn-sm"
+								title="View full airport details"
+							>
+								<ExternalLink class="h-4 w-4" />
+								Details
+							</a>
+						</div>
 						<p class="text-sm text-gray-600">
 							{selectedAirport.ident}
 							{#if selectedAirport.municipality}
@@ -269,75 +275,119 @@
 						{:else}
 							<div class="space-y-3">
 								{#each selectedAirport.runways as runway (runway.id)}
-									<div
-										class="rounded-lg border border-gray-200 bg-gray-50 p-4"
-										class:opacity-50={runway.closed}
-									>
-										<div class="mb-2 flex items-center justify-between">
+									<div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+										<div class="mb-3 flex items-center justify-between">
 											<h4 class="font-mono font-semibold">
 												{formatRunwayEnds(runway.low, runway.high)}
 											</h4>
 											<div class="flex gap-2">
 												{#if runway.lighted}
-													<span class="variant-filled-success badge text-xs">Lighted</span>
+													<span class="variant-filled-success badge">
+														<svg class="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+															<path
+																d="M11 3a1 1 0 10-2 0v1a1 1 0 102 0V3zM15.657 5.757a1 1 0 00-1.414-1.414l-.707.707a1 1 0 001.414 1.414l.707-.707zM18 10a1 1 0 01-1 1h-1a1 1 0 110-2h1a1 1 0 011 1zM5.05 6.464A1 1 0 106.464 5.05l-.707-.707a1 1 0 00-1.414 1.414l.707.707zM5 10a1 1 0 01-1 1H3a1 1 0 110-2h1a1 1 0 011 1zM8 16v-1h4v1a2 2 0 11-4 0zM12 14c.015-.34.208-.646.477-.859a4 4 0 10-4.954 0c.27.213.462.519.476.859h4.002z"
+															/>
+														</svg>
+														Lighted
+													</span>
 												{/if}
 												{#if runway.closed}
-													<span class="variant-filled-error badge text-xs">Closed</span>
+													<span class="variant-filled-error badge">
+														<svg class="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+															<path
+																fill-rule="evenodd"
+																d="M13.477 14.89A6 6 0 015.11 6.524l8.367 8.368zm1.414-1.414L6.524 5.11a6 6 0 018.367 8.367zM18 10a8 8 0 11-16 0 8 8 0 0116 0z"
+																clip-rule="evenodd"
+															/>
+														</svg>
+														Closed
+													</span>
 												{/if}
 											</div>
 										</div>
 
-										<dl class="grid grid-cols-2 gap-3 text-sm">
-											<div>
-												<dt class="font-medium text-gray-600">Length</dt>
-												<dd>{formatRunwayLength(runway.length_ft)}</dd>
-											</div>
-											<div>
-												<dt class="font-medium text-gray-600">Width</dt>
-												<dd>{formatRunwayWidth(runway.width_ft)}</dd>
-											</div>
-											<div class="col-span-2">
-												<dt class="font-medium text-gray-600">Surface</dt>
-												<dd>{runway.surface || 'Unknown'}</dd>
-											</div>
+										<!-- Runway Details Table -->
+										<div class="table-container mb-3">
+											<table class="table-compact table-hover table">
+												<tbody>
+													<tr>
+														<td class="w-1/3 font-medium text-gray-600">Length</td>
+														<td>{formatRunwayLength(runway.length_ft)}</td>
+													</tr>
+													<tr>
+														<td class="w-1/3 font-medium text-gray-600">Width</td>
+														<td>{formatRunwayWidth(runway.width_ft)}</td>
+													</tr>
+													<tr>
+														<td class="w-1/3 font-medium text-gray-600">Surface</td>
+														<td>{runway.surface || 'Unknown'}</td>
+													</tr>
+												</tbody>
+											</table>
+										</div>
 
-											<!-- Runway End Details -->
-											{#if runway.low.heading_degt !== null || runway.high.heading_degt !== null}
-												<div class="col-span-2 border-t border-gray-200 pt-2">
-													<dt class="mb-1 font-medium text-gray-600">Headings</dt>
-													<dd class="grid grid-cols-2 gap-2 text-xs">
-														<div>
-															<span class="font-medium">{runway.low.ident || '?'}:</span>
-															{formatHeading(runway.low.heading_degt)}
-														</div>
-														<div>
-															<span class="font-medium">{runway.high.ident || '?'}:</span>
-															{formatHeading(runway.high.heading_degt)}
-														</div>
-													</dd>
+										<!-- Runway End Details -->
+										{#if runway.low.heading_degt !== null || runway.high.heading_degt !== null || runway.low.displaced_threshold_ft || runway.high.displaced_threshold_ft}
+											<div class="grid grid-cols-2 gap-3">
+												<!-- Low End -->
+												<div>
+													<h5 class="mb-1 text-xs font-semibold text-blue-600">
+														{runway.low.ident || 'Low'}
+													</h5>
+													<div class="table-container">
+														<table class="table-compact table">
+															<tbody>
+																{#if runway.low.heading_degt !== null}
+																	<tr>
+																		<td class="text-xs text-gray-600">True Hdg</td>
+																		<td class="text-xs font-medium"
+																			>{formatHeading(runway.low.heading_degt)}</td
+																		>
+																	</tr>
+																{/if}
+																{#if runway.low.displaced_threshold_ft}
+																	<tr>
+																		<td class="text-xs text-gray-600">Displaced</td>
+																		<td class="text-xs font-medium"
+																			>{runway.low.displaced_threshold_ft} ft</td
+																		>
+																	</tr>
+																{/if}
+															</tbody>
+														</table>
+													</div>
 												</div>
-											{/if}
 
-											{#if runway.low.displaced_threshold_ft || runway.high.displaced_threshold_ft}
-												<div class="col-span-2">
-													<dt class="mb-1 font-medium text-gray-600">Displaced Threshold</dt>
-													<dd class="grid grid-cols-2 gap-2 text-xs">
-														{#if runway.low.displaced_threshold_ft}
-															<div>
-																<span class="font-medium">{runway.low.ident || '?'}:</span>
-																{runway.low.displaced_threshold_ft} ft
-															</div>
-														{/if}
-														{#if runway.high.displaced_threshold_ft}
-															<div>
-																<span class="font-medium">{runway.high.ident || '?'}:</span>
-																{runway.high.displaced_threshold_ft} ft
-															</div>
-														{/if}
-													</dd>
+												<!-- High End -->
+												<div>
+													<h5 class="mb-1 text-xs font-semibold text-blue-600">
+														{runway.high.ident || 'High'}
+													</h5>
+													<div class="table-container">
+														<table class="table-compact table">
+															<tbody>
+																{#if runway.high.heading_degt !== null}
+																	<tr>
+																		<td class="text-xs text-gray-600">True Hdg</td>
+																		<td class="text-xs font-medium"
+																			>{formatHeading(runway.high.heading_degt)}</td
+																		>
+																	</tr>
+																{/if}
+																{#if runway.high.displaced_threshold_ft}
+																	<tr>
+																		<td class="text-xs text-gray-600">Displaced</td>
+																		<td class="text-xs font-medium"
+																			>{runway.high.displaced_threshold_ft} ft</td
+																		>
+																	</tr>
+																{/if}
+															</tbody>
+														</table>
+													</div>
 												</div>
-											{/if}
-										</dl>
+											</div>
+										{/if}
 									</div>
 								{/each}
 							</div>
