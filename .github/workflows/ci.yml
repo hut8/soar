@@ -56,7 +56,7 @@ jobs:
 
   test-rust:
     name: Test Rust Project
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     services:
       postgres:
@@ -141,7 +141,7 @@ jobs:
 
   build-release:
     name: Build Release Binary
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs: test-sveltekit
 
     steps:
@@ -216,7 +216,7 @@ jobs:
 
   security-audit:
     name: Security Audit
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout code

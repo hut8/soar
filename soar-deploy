@@ -78,23 +78,25 @@ if ! ldd "$DEPLOY_DIR/soar" | grep -q "libgdal"; then
 else
     GDAL_MISSING=$(ldd "$DEPLOY_DIR/soar" | grep "not found" || true)
     if [ -n "$GDAL_MISSING" ]; then
-        log_error "Missing GDAL library:"
+        log_error "Missing or incompatible GDAL library:"
         echo "$GDAL_MISSING"
-        log_info "Installing GDAL library..."
+        log_info "Upgrading GDAL library..."
 
-        # Try to install GDAL
+        # Try to upgrade GDAL
         if command -v apt-get &> /dev/null; then
             apt-get update -qq
-            apt-get install -y libgdal-dev gdal-bin || {
-                log_error "Failed to install GDAL. Please install manually:"
+            # Install/upgrade to latest GDAL version available in repos
+            apt-get install -y --reinstall libgdal-dev gdal-bin libgdal30 || \
+            apt-get install -y --reinstall libgdal-dev gdal-bin || {
+                log_error "Failed to upgrade GDAL. Please upgrade manually:"
                 log_error "  sudo apt-get update"
-                log_error "  sudo apt-get install -y libgdal-dev gdal-bin"
+                log_error "  sudo apt-get install -y --reinstall libgdal-dev gdal-bin"
                 exit 1
             }
-            log_info "GDAL installed successfully"
+            log_info "GDAL upgraded successfully"
         else
-            log_error "Cannot auto-install GDAL (apt-get not found)"
-            log_error "Please install GDAL manually before deploying"
+            log_error "Cannot auto-upgrade GDAL (apt-get not found)"
+            log_error "Please upgrade GDAL manually before deploying"
             exit 1
         fi
     else
