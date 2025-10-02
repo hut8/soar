@@ -60,7 +60,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:15
+        image: postgis/postgis:15-3.4
         env:
           POSTGRES_PASSWORD: postgres
           POSTGRES_USER: postgres
@@ -82,41 +82,52 @@ jobs:
         with:
           components: clippy, rustfmt
 
-      - name: Install PostgreSQL client, PostGIS, and GDAL development libraries
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Install PostgreSQL client and GDAL development libraries
         run: |
           sudo apt-get update
-          sudo apt-get install -y postgresql-client curl libgdal-dev
-
-      - name: Install PostGIS in PostgreSQL container
-        run: |
-          # Install PostGIS in the running PostgreSQL container
-          docker exec $(docker ps -q --filter ancestor=postgres:15) sh -c "
-            apt-get update &&
-            apt-get install -y postgresql-15-postgis-3 &&
-            echo 'PostGIS installed successfully'
-          "
+          sudo apt-get install -y postgresql-client libgdal-dev
 
       - name: Setup test database
         env:
           PGPASSWORD: postgres
         run: |
-          # Create PostGIS extension
+          # Create PostGIS extension (already available in postgis/postgis image)
           psql -h localhost -U postgres -d soar_test -c "CREATE EXTENSION IF NOT EXISTS postgis;"
 
       - name: Check Rust formatting
         run: cargo fmt --check
 
+      - name: Cache Diesel CLI
+        id: cache-diesel
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/diesel
+          key: ${{ runner.os }}-diesel-cli-2.2.0
+
       - name: Install Diesel CLI
-        run: cargo install diesel_cli --no-default-features --features postgres
+        if: steps.cache-diesel.outputs.cache-hit != 'true'
+        run: cargo install diesel_cli --no-default-features --features postgres --version 2.2.0
 
       - name: Run migrations
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/soar_test
         run: diesel migration run
 
-      - name: Install JS dependencies for build during Rust tests
-        run: |
-          cd web && npm ci
+      - name: Cache cargo-nextest
+        id: cache-nextest
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-nextest
+          key: ${{ runner.os }}-cargo-nextest-0.9.68
+
+      - name: Install cargo-nextest
+        if: steps.cache-nextest.outputs.cache-hit != 'true'
+        run: cargo install cargo-nextest --version 0.9.68 --locked
 
       - name: Run Clippy
         env:
@@ -126,7 +137,7 @@ jobs:
       - name: Run Rust tests
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/soar_test
-        run: cargo test --verbose
+        run: cargo nextest run
 
   build-release:
     name: Build Release Binary
@@ -158,13 +169,24 @@ jobs:
       - name: Install Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
 
-      - name: Install GDAL development libraries
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Install GDAL and mold linker
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgdal-dev
+          sudo apt-get install -y libgdal-dev mold
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.4
 
       - name: Build release binary
-        run: cargo build --release --verbose
+        env:
+          RUSTC_WRAPPER: sccache
+          SCCACHE_GHA_ENABLED: "true"
+        run: cargo build --release
 
       - name: Create binary archive
         run: |
@@ -202,21 +224,43 @@ jobs:
       - name: Install Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
 
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
       - name: Install GDAL development libraries
         run: |
           sudo apt-get update
           sudo apt-get install -y libgdal-dev
 
+      - name: Cache cargo-audit
+        id: cache-cargo-audit
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-audit
+          key: ${{ runner.os }}-cargo-audit-0.18.3
+
       - name: Install cargo-audit
-        run: cargo install cargo-audit
+        if: steps.cache-cargo-audit.outputs.cache-hit != 'true'
+        run: cargo install cargo-audit --version 0.18.3 --locked
 
       - name: Run security audit
         run: cargo audit
 
+      - name: Cache cargo-outdated
+        id: cache-cargo-outdated
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-outdated
+          key: ${{ runner.os }}-cargo-outdated-0.14.0
+
+      - name: Install cargo-outdated
+        if: steps.cache-cargo-outdated.outputs.cache-hit != 'true'
+        run: cargo install cargo-outdated --version 0.14.0 --locked
+
       - name: Check for outdated dependencies
-        run: |
-          cargo install cargo-outdated
-          cargo outdated --exit-code 1 || echo "Some dependencies are outdated (non-critical)"
+        run: cargo outdated --exit-code 1 || echo "Some dependencies are outdated (non-critical)"
 
   deploy:
     name: Deploy to Server
