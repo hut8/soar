@@ -1,5 +1,5 @@
 use crate::fix_processor::FixProcessor;
-use crate::flight_detection_processor::FlightDetectionProcessor;
+use crate::flight_tracker::FlightTracker;
 use crate::receiver_status_repo::ReceiverStatusRepository;
 use crate::receiver_statuses::NewReceiverStatus;
 use crate::server_messages::ServerMessage;
@@ -878,7 +878,7 @@ pub struct AircraftPositionProcessor {
     /// Fix processor for database storage
     fix_processor: Option<FixProcessor>,
     /// Flight detection processor for flight tracking
-    flight_detection_processor: Option<Arc<FlightDetectionProcessor>>,
+    flight_detection_processor: Option<Arc<FlightTracker>>,
 }
 
 impl Default for AircraftPositionProcessor {
@@ -903,10 +903,7 @@ impl AircraftPositionProcessor {
     }
 
     /// Add a flight detection processor for flight tracking
-    pub fn with_flight_detection_processor(
-        mut self,
-        processor: Arc<FlightDetectionProcessor>,
-    ) -> Self {
+    pub fn with_flight_detection_processor(mut self, processor: Arc<FlightTracker>) -> Self {
         self.flight_detection_processor = Some(processor);
         self
     }

@@ -32,28 +32,31 @@ fn cache_path(name: &str) -> Result<PathBuf> {
     Ok(dir.join(format!("{name}.tif")))
 }
 
-fn ensure_tile_cached(name: &str) -> Result<PathBuf> {
+async fn ensure_tile_cached(name: &str) -> Result<PathBuf> {
     let path = cache_path(name)?;
     if !path.exists() {
         let url = tile_url_glo30(name);
-        let bytes = reqwest::blocking::get(&url)
+        let bytes = reqwest::get(&url)
+            .await
             .and_then(|r| r.error_for_status())
             .with_context(|| format!("GET {url}"))?
-            .bytes()?;
+            .bytes()
+            .await
+            .with_context(|| format!("read body {url}"))?;
         fs::write(&path, &bytes).with_context(|| format!("write {:?}", path))?;
     }
     Ok(path)
 }
 
 /// Returns elevation in meters relative to EGM2008 (orthometric).
-pub fn elevation_egm2008(lat: f64, lon: f64) -> Result<Option<f64>> {
+pub async fn elevation_egm2008(lat: f64, lon: f64) -> Result<Option<f64>> {
     // Ocean tiles don't exist. You can choose to return 0.0 or None there.
     if !lat.is_finite() || !lon.is_finite() {
         bail!("bad coord");
     }
 
     let name = tile_name(lat, lon);
-    let path = match ensure_tile_cached(&name) {
+    let path = match ensure_tile_cached(&name).await {
         Ok(p) => p,
         // If a 30m tile is not public (rare), you could fall back to 90m here by
         // building the 90m URL (resolution "30" in the name) and retrying.

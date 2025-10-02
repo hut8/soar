@@ -9,7 +9,7 @@ use crate::Fix;
 use crate::aircraft_registrations_repo::AircraftRegistrationsRepository;
 use crate::device_repo::DeviceRepository;
 use crate::fixes_repo::{AircraftTypeOgn, FixesRepository};
-use crate::flight_detection_processor::FlightDetectionProcessor;
+use crate::flight_tracker::FlightTracker;
 use crate::nats_publisher::NatsFixPublisher;
 use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
@@ -21,7 +21,7 @@ pub struct FixProcessor {
     fixes_repo: FixesRepository,
     device_repo: DeviceRepository,
     aircraft_registrations_repo: AircraftRegistrationsRepository,
-    flight_detection_processor: FlightDetectionProcessor,
+    flight_detection_processor: FlightTracker,
     nats_publisher: Option<NatsFixPublisher>,
     /// Cache to track tow plane status updates to avoid unnecessary database calls
     /// Maps device_id -> (aircraft_type, is_tow_plane_in_db)
@@ -34,7 +34,7 @@ impl FixProcessor {
             fixes_repo: FixesRepository::new(diesel_pool.clone()),
             device_repo: DeviceRepository::new(diesel_pool.clone()),
             aircraft_registrations_repo: AircraftRegistrationsRepository::new(diesel_pool.clone()),
-            flight_detection_processor: FlightDetectionProcessor::new(&diesel_pool),
+            flight_detection_processor: FlightTracker::new(&diesel_pool),
             nats_publisher: None,
             tow_plane_cache: Arc::new(RwLock::new(HashMap::new())),
         }
@@ -51,7 +51,7 @@ impl FixProcessor {
             fixes_repo: FixesRepository::new(diesel_pool.clone()),
             device_repo: DeviceRepository::new(diesel_pool.clone()),
             aircraft_registrations_repo: AircraftRegistrationsRepository::new(diesel_pool.clone()),
-            flight_detection_processor: FlightDetectionProcessor::new(&diesel_pool),
+            flight_detection_processor: FlightTracker::new(&diesel_pool),
             nats_publisher: Some(nats_publisher),
             tow_plane_cache: Arc::new(RwLock::new(HashMap::new())),
         })

@@ -127,13 +127,11 @@ async fn calculate_altitude_offset_ft(fix: &Fix) -> Option<i32> {
     let lon = fix.longitude;
 
     // Run blocking elevation lookup in a separate thread
-    let elevation_result = tokio::task::spawn_blocking(move || elevation_egm2008(lat, lon))
-        .await
-        .ok()?;
+    let elevation_result = elevation_egm2008(lat, lon).await.ok()?;
 
     // Get true elevation at this location (in meters)
     match elevation_result {
-        Ok(Some(elevation_m)) => {
+        Some(elevation_m) => {
             // Convert elevation from meters to feet (1 meter = 3.28084 feet)
             let elevation_ft = elevation_m * 3.28084;
             // Calculate offset
@@ -146,7 +144,7 @@ async fn calculate_altitude_offset_ft(fix: &Fix) -> Option<i32> {
 
             Some(offset.round() as i32)
         }
-        Ok(None) => {
+        None => {
             // No elevation data available (e.g., ocean)
             debug!(
                 "No elevation data available for location ({}, {})",
@@ -154,25 +152,17 @@ async fn calculate_altitude_offset_ft(fix: &Fix) -> Option<i32> {
             );
             None
         }
-        Err(e) => {
-            // Error getting elevation
-            warn!(
-                "Failed to get elevation for location ({}, {}): {}",
-                fix.latitude, fix.longitude, e
-            );
-            None
-        }
     }
 }
 
-pub struct FlightDetectionProcessor {
+pub struct FlightTracker {
     flights_repo: FlightsRepository,
     airports_repo: AirportsRepository,
     fixes_repo: FixesRepository,
     aircraft_trackers: Arc<RwLock<HashMap<uuid::Uuid, AircraftTracker>>>,
 }
 
-impl Clone for FlightDetectionProcessor {
+impl Clone for FlightTracker {
     fn clone(&self) -> Self {
         Self {
             flights_repo: self.flights_repo.clone(),
@@ -183,7 +173,7 @@ impl Clone for FlightDetectionProcessor {
     }
 }
 
-impl FlightDetectionProcessor {
+impl FlightTracker {
     pub fn new(pool: &Pool<ConnectionManager<PgConnection>>) -> Self {
         Self {
             flights_repo: FlightsRepository::new(pool.clone()),
@@ -526,7 +516,7 @@ impl FlightDetectionProcessor {
     }
 }
 
-impl FlightDetectionProcessor {
+impl FlightTracker {
     /// Process a fix and return it with updated flight_id
     /// This replaces the old FixHandler::process_fix method
     pub async fn process_fix(&self, fix: Fix) -> Option<Fix> {

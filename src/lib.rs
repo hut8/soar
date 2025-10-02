@@ -22,7 +22,7 @@ pub mod fetch_receivers;
 pub mod fix_processor;
 pub mod fixes;
 pub mod fixes_repo;
-pub mod flight_detection_processor;
+pub mod flight_tracker;
 pub mod flights;
 pub mod flights_repo;
 pub mod geocoding;
