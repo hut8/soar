@@ -151,6 +151,7 @@ fi
 
 # Install new binary
 log_info "Installing new binary..."
+rm -f "${BINARY_PATH}/${BINARY_NAME}" || true
 cp "${DEPLOY_DIR}/soar" "${BINARY_PATH}/${BINARY_NAME}"
 chmod +x "${BINARY_PATH}/${BINARY_NAME}"
 chown root:root "${BINARY_PATH}/${BINARY_NAME}"
