@@ -9,7 +9,7 @@ Requires=postgresql.service
 Type=oneshot
 User=soar
 Group=soar
-WorkingDirectory=/var/lib/soar
+WorkingDirectory=/var/soar
 ExecStart=/usr/local/bin/soar sitemap
 
 # Environment variables
@@ -20,7 +20,7 @@ NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
 ProtectHome=yes
-ReadWritePaths=-/var/lib/soar/logs -/var/soar/sitemap /tmp
+ReadWritePaths=-/var/soar/logs -/var/soar/sitemap /tmp
 
 # Process limits
 LimitNOFILE=65536

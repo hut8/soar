@@ -60,14 +60,14 @@ sudo systemctl enable soar-pull-data.timer
 
 # Create necessary directories
 echo -e "${BLUE}Creating directories...${NC}"
-sudo mkdir -p /var/lib/soar/logs
+sudo mkdir -p /var/soar/logs
 sudo mkdir -p /var/soar/archive
 sudo mkdir -p /etc/soar
 
 # Set ownership for soar user
 if id "soar" &>/dev/null; then
     echo "Setting ownership for soar user..."
-    sudo chown -R soar:soar /var/lib/soar
+    sudo chown -R soar:soar /var/soar
     sudo chown -R soar:soar /var/soar/archive
 
     # Ensure soar user has a home directory for backups

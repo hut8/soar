@@ -9,7 +9,7 @@ Requires=postgresql.service nats-server.service
 Type=simple
 User=soar
 Group=soar
-WorkingDirectory=/var/lib/soar
+WorkingDirectory=/var/soar
 ExecStart=/usr/local/bin/soar web --interface 127.0.0.1 --port 61225
 ExecReload=/bin/kill -s HUP $MAINPID
 
@@ -21,7 +21,7 @@ NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
 ProtectHome=yes
-ReadWritePaths=-/var/lib/soar/logs
+ReadWritePaths=-/var/soar/logs
 
 # Restart configuration
 Restart=on-failure
