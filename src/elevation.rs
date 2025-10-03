@@ -1,17 +1,16 @@
 use anyhow::{Context, Result, bail};
-use dashmap::DashMap;
 use directories::BaseDirs;
 use gdal::{Dataset, raster::ResampleAlg};
-use std::{env, fs, path::PathBuf, sync::Arc};
-use tokio::sync::Mutex;
-use tracing::debug;
+use std::{env, path::PathBuf};
+
+use crate::tile_downloader::TileDownloader;
 
 /// Database for elevation data using Copernicus DEM tiles
 #[derive(Clone)]
 pub struct ElevationDB {
     storage_path: PathBuf,
-    /// Per-tile download locks to prevent concurrent downloads of the same tile
-    download_locks: Arc<DashMap<String, Arc<Mutex<()>>>>,
+    /// Manages tile downloads with deduplication
+    tile_downloader: TileDownloader,
 }
 
 impl ElevationDB {
@@ -27,7 +26,7 @@ impl ElevationDB {
             }
         };
 
-        fs::create_dir_all(&storage_path).with_context(|| {
+        std::fs::create_dir_all(&storage_path).with_context(|| {
             format!(
                 "Failed to create elevation storage directory: {:?}",
                 storage_path
@@ -35,22 +34,22 @@ impl ElevationDB {
         })?;
 
         Ok(Self {
+            tile_downloader: TileDownloader::new(storage_path.clone()),
             storage_path,
-            download_locks: Arc::new(DashMap::new()),
         })
     }
 
     /// Create a new ElevationDB with an explicit storage path
     pub fn with_path(storage_path: PathBuf) -> Result<Self> {
-        fs::create_dir_all(&storage_path).with_context(|| {
+        std::fs::create_dir_all(&storage_path).with_context(|| {
             format!(
                 "Failed to create elevation storage directory: {:?}",
                 storage_path
             )
         })?;
         Ok(Self {
+            tile_downloader: TileDownloader::new(storage_path.clone()),
             storage_path,
-            download_locks: Arc::new(DashMap::new()),
         })
     }
 
@@ -59,49 +58,10 @@ impl ElevationDB {
         &self.storage_path
     }
 
-    /// Get the cache path for a specific tile
-    fn cache_path(&self, name: &str) -> PathBuf {
-        self.storage_path.join(format!("{name}.tif"))
-    }
-
     /// Ensure a tile is cached locally, downloading if necessary
-    /// Uses per-tile locking to prevent concurrent downloads of the same tile
+    /// Delegates to TileDownloader which handles deduplication
     async fn ensure_tile_cached(&self, name: &str) -> Result<PathBuf> {
-        let path = self.cache_path(name);
-
-        // Fast path: check if already cached
-        if path.exists() {
-            return Ok(path);
-        }
-
-        // Get or create tile-specific lock
-        let lock = self
-            .download_locks
-            .entry(name.to_string())
-            .or_insert_with(|| Arc::new(Mutex::new(())))
-            .clone();
-
-        // Acquire tile-specific lock (other tasks requesting same tile will wait here)
-        let _guard = lock.lock().await;
-
-        // Double-check after acquiring lock (another task may have downloaded it)
-        if path.exists() {
-            return Ok(path);
-        }
-
-        // Download the tile
-        let url = tile_url_glo30(name);
-        debug!("downloading elevation tile from {url}");
-        let bytes = reqwest::get(&url)
-            .await
-            .and_then(|r| r.error_for_status())
-            .with_context(|| format!("GET {url}"))?
-            .bytes()
-            .await
-            .with_context(|| format!("read body {url}"))?;
-        fs::write(&path, &bytes).with_context(|| format!("write {:?}", path))?;
-
-        Ok(path)
+        self.tile_downloader.ensure_cached(name).await
     }
 
     /// Returns elevation in meters relative to EGM2008 (orthometric).
@@ -161,12 +121,5 @@ fn tile_name(lat: f64, lon: f64) -> String {
     format!(
         "Copernicus_DSM_COG_10_{}{:02}_00_{}{:03}_00_DEM",
         ns, latd, ew, lond
-    )
-}
-
-fn tile_url_glo30(name: &str) -> String {
-    format!(
-        "https://copernicus-dem-30m.s3.amazonaws.com/{0}/{0}.tif",
-        name
     )
 }
