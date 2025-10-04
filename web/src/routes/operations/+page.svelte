@@ -1522,6 +1522,7 @@
 	/* Location button styling */
 	.location-btn {
 		background: white;
+		color: #374151; /* Gray-700 for good contrast against white */
 		border: none;
 		border-radius: 0.375rem;
 		padding: 0.75rem;
