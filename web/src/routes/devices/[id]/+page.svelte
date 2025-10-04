@@ -22,6 +22,11 @@
 		type Fix,
 		type Flight
 	} from '$lib/types';
+	import dayjs from 'dayjs';
+	import relativeTime from 'dayjs/plugin/relativeTime';
+
+	// Extend dayjs with relative time plugin
+	dayjs.extend(relativeTime);
 
 	interface FixesResponse {
 		fixes: Fix[];
@@ -145,6 +150,10 @@
 		const minutes = String(date.getMinutes()).padStart(2, '0');
 		const seconds = String(date.getSeconds()).padStart(2, '0');
 		return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+	}
+
+	function formatRelativeTime(dateString: string): string {
+		return dayjs(dateString).fromNow();
 	}
 
 	function formatAltitude(altitude_feet: number | undefined): string {
@@ -475,7 +484,9 @@
 							<tbody>
 								{#each fixes as fix (fix.id)}
 									<tr class="border-surface-200-700-token hover:bg-surface-100-800-token border-b">
-										<td class="px-3 py-2 text-sm">{formatDate(fix.timestamp)}</td>
+										<td class="px-3 py-2 text-sm" title={formatDate(fix.timestamp)}>
+											{formatRelativeTime(fix.timestamp)}
+										</td>
 										<td class="px-3 py-2 font-mono text-sm">
 											<a
 												href={getGoogleMapsUrl(fix.latitude, fix.longitude)}
