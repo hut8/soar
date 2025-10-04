@@ -78,6 +78,7 @@
 	// Compass rose variables
 	let deviceHeading: number = 0;
 	let compassHeading: number = $state(0);
+	let previousCompassHeading: number = 0;
 	let isCompassActive: boolean = $state(false);
 	let displayHeading: number = $state(0);
 
@@ -726,12 +727,32 @@
 			deviceHeading = event.alpha;
 			displayHeading = Math.round(deviceHeading);
 
-			// Adjust compass rotation to keep red arrow pointing north
-			// Use absolute value to ensure consistent rotation
-			compassHeading = -deviceHeading;
+			// Calculate the new compass heading (inverted to keep north arrow pointing north)
+			let newHeading = -deviceHeading;
 
-			// Ensure compassHeading is between 0 and 360
-			compassHeading = ((compassHeading % 360) + 360) % 360;
+			// Normalize to 0-360 range
+			newHeading = ((newHeading % 360) + 360) % 360;
+
+			// Calculate the shortest rotation path
+			// If the difference is greater than 180°, we should wrap around
+			let delta = newHeading - previousCompassHeading;
+
+			// Adjust for boundary crossing to take the shortest path
+			if (delta > 180) {
+				// Crossed from high to low (e.g., 350° to 10°)
+				// Add a full rotation to previousCompassHeading conceptually
+				compassHeading = newHeading - 360;
+			} else if (delta < -180) {
+				// Crossed from low to high (e.g., 10° to 350°)
+				// Add a full rotation to newHeading
+				compassHeading = newHeading + 360;
+			} else {
+				// Normal case, no boundary crossing
+				compassHeading = newHeading;
+			}
+
+			// Update previous heading for next comparison (using normalized value)
+			previousCompassHeading = newHeading;
 		}
 	}
 
