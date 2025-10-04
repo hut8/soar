@@ -328,7 +328,9 @@
 								<Info class="mt-1 h-4 w-4 text-surface-500" />
 								<div>
 									<p class="text-surface-600-300-token mb-1 text-sm">Registration Number</p>
-									<p class="font-mono font-semibold">{aircraftRegistration.n_number}</p>
+									<p class="font-mono font-semibold">
+										{device.registration || aircraftRegistration.n_number}
+									</p>
 								</div>
 							</div>
 
