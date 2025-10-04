@@ -248,151 +248,314 @@
 				<section class="flex-shrink-0">
 					<h3 class="mb-3 text-lg font-semibold">Add Aircraft</h3>
 					<div class="mb-3 space-y-3 rounded-lg border p-3">
-						<!-- Segment selector for type -->
-						<Segment
-							name="watchlist-type"
-							value={newWatchlistEntry.type}
-							onValueChange={(e) => {
-								if (e.value) {
-									newWatchlistEntry.type = e.value;
-									clearError();
-									clearClubError();
-								}
-							}}
-						>
-							<Segment.Item value="registration">
-								<div class="flex flex-row items-center">
-									<Plane size={16} />
-									<span class="ml-1">Registration</span>
-								</div>
-							</Segment.Item>
-							<Segment.Item value="device">
-								<div class="flex flex-row items-center">
-									<Antenna size={16} />
-									<span class="ml-1">Device</span>
-								</div>
-							</Segment.Item>
-							<Segment.Item value="club">
-								<div class="flex flex-row items-center">
-									<Building2 size={16} />
-									<span class="ml-1">Club</span>
-								</div>
-							</Segment.Item>
-						</Segment>
+						<!-- Mobile: Vertical layout (segment above inputs) -->
+						<div class="space-y-3 md:hidden">
+							<!-- Search type selector -->
+							<Segment
+								name="watchlist-type-mobile"
+								value={newWatchlistEntry.type}
+								orientation="vertical"
+								onValueChange={(e) => {
+									if (e.value) {
+										newWatchlistEntry.type = e.value;
+										clearError();
+										clearClubError();
+									}
+								}}
+							>
+								<Segment.Item value="registration">
+									<div class="flex flex-row items-center">
+										<Plane size={16} />
+										<span class="ml-1">Registration</span>
+									</div>
+								</Segment.Item>
+								<Segment.Item value="device">
+									<div class="flex flex-row items-center">
+										<Antenna size={16} />
+										<span class="ml-1">Device</span>
+									</div>
+								</Segment.Item>
+								<Segment.Item value="club">
+									<div class="flex flex-row items-center">
+										<Building2 size={16} />
+										<span class="ml-1">Club</span>
+									</div>
+								</Segment.Item>
+							</Segment>
 
-						{#if newWatchlistEntry.type === 'registration'}
-							<input
-								class="input"
-								placeholder="Aircraft registration (e.g., N12345)"
-								bind:value={newWatchlistEntry.registration}
-								onkeydown={(e) => e.key === 'Enter' && addWatchlistEntry()}
-								oninput={() => clearError()}
-								disabled={searchInProgress}
-							/>
-						{:else if newWatchlistEntry.type === 'device'}
-							<div class="grid grid-cols-2 gap-2">
-								<Segment
-									name="address-type"
-									value={newWatchlistEntry.deviceAddressType}
-									onValueChange={(e) => {
-										if (e.value) {
-											newWatchlistEntry.deviceAddressType = e.value;
-											clearError();
-										}
-									}}
-								>
-									<Segment.Item value="I">ICAO</Segment.Item>
-									<Segment.Item value="O">OGN</Segment.Item>
-									<Segment.Item value="F">FLARM</Segment.Item>
-								</Segment>
+							{#if newWatchlistEntry.type === 'registration'}
 								<input
 									class="input"
-									placeholder="Device address"
-									bind:value={newWatchlistEntry.deviceAddress}
+									placeholder="Aircraft registration (e.g., N12345)"
+									bind:value={newWatchlistEntry.registration}
 									onkeydown={(e) => e.key === 'Enter' && addWatchlistEntry()}
 									oninput={() => clearError()}
 									disabled={searchInProgress}
 								/>
-							</div>
-						{:else if newWatchlistEntry.type === 'club'}
-							<div class="space-y-3">
-								<ClubSelector
-									bind:value={selectedClub}
-									placeholder="Select a club..."
-									onValueChange={handleClubChange}
-								/>
+							{:else if newWatchlistEntry.type === 'device'}
+								<div class="space-y-3">
+									<Segment
+										name="address-type-mobile"
+										value={newWatchlistEntry.deviceAddressType}
+										orientation="vertical"
+										onValueChange={(e) => {
+											if (e.value) {
+												newWatchlistEntry.deviceAddressType = e.value;
+												clearError();
+											}
+										}}
+									>
+										<Segment.Item value="I">ICAO</Segment.Item>
+										<Segment.Item value="O">OGN</Segment.Item>
+										<Segment.Item value="F">FLARM</Segment.Item>
+									</Segment>
+									<input
+										class="input"
+										placeholder="Device address"
+										bind:value={newWatchlistEntry.deviceAddress}
+										onkeydown={(e) => e.key === 'Enter' && addWatchlistEntry()}
+										oninput={() => clearError()}
+										disabled={searchInProgress}
+									/>
+								</div>
+							{:else if newWatchlistEntry.type === 'club'}
+								<div class="space-y-3">
+									<ClubSelector
+										bind:value={selectedClub}
+										placeholder="Select a club..."
+										onValueChange={handleClubChange}
+									/>
 
-								{#if clubDevices.length > 0}
-									<div class="space-y-2">
-										<div class="flex items-center justify-between">
-											<span class="text-sm font-medium text-gray-700">
-												Club Aircraft ({clubDevices.length})
-											</span>
-											<button
-												class="variant-filled-primary btn btn-sm"
-												onclick={addAllClubDevices}
-												disabled={clubSearchInProgress}
-											>
-												<Plus size={16} />
-												Add All
-											</button>
-										</div>
+									{#if clubDevices.length > 0}
+										<div class="space-y-2">
+											<div class="flex items-center justify-between">
+												<span class="text-sm font-medium text-gray-700">
+													Club Aircraft ({clubDevices.length})
+												</span>
+												<button
+													class="variant-filled-primary btn btn-sm"
+													onclick={addAllClubDevices}
+													disabled={clubSearchInProgress}
+												>
+													<Plus size={16} />
+													Add All
+												</button>
+											</div>
 
-										<div class="max-h-48 overflow-y-auto rounded border bg-gray-50 p-2">
-											<div class="grid gap-2">
-												{#each clubDevices as device (device.id)}
-													<div
-														class="flex items-center justify-between rounded bg-white p-2 shadow-sm"
-													>
-														<div class="min-w-0 flex-1">
-															<div class="truncate text-sm font-medium">
-																{device.registration || 'Unknown Registration'}
+											<div class="max-h-48 overflow-y-auto rounded border bg-gray-50 p-2">
+												<div class="grid gap-2">
+													{#each clubDevices as device (device.id)}
+														<div
+															class="flex items-center justify-between rounded bg-white p-2 shadow-sm"
+														>
+															<div class="min-w-0 flex-1">
+																<div class="truncate text-sm font-medium">
+																	{device.registration || 'Unknown Registration'}
+																</div>
+																<div class="truncate text-xs text-gray-500">
+																	{device.aircraft_model || 'Unknown Model'}
+																</div>
 															</div>
-															<div class="truncate text-xs text-gray-500">
-																{device.aircraft_model || 'Unknown Model'}
-															</div>
+															{#if isDeviceInWatchlist(device.id)}
+																<span
+																	class="rounded bg-green-100 px-2 py-1 text-xs font-medium text-green-800"
+																>
+																	Watched
+																</span>
+															{:else}
+																<button
+																	class="variant-filled-primary btn btn-sm"
+																	onclick={() => addDeviceToWatchlist(device)}
+																>
+																	<Plus size={14} />
+																	Watch
+																</button>
+															{/if}
 														</div>
-														{#if isDeviceInWatchlist(device.id)}
-															<span
-																class="rounded bg-green-100 px-2 py-1 text-xs font-medium text-green-800"
-															>
-																Watched
-															</span>
-														{:else}
-															<button
-																class="variant-filled-primary btn btn-sm"
-																onclick={() => addDeviceToWatchlist(device)}
-															>
-																<Plus size={14} />
-																Watch
-															</button>
-														{/if}
-													</div>
-												{/each}
+													{/each}
+												</div>
 											</div>
 										</div>
-									</div>
-								{:else if clubSearchInProgress}
-									<div class="py-4 text-center text-sm text-gray-500">
-										<div
-											class="mx-auto mb-2 h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"
-										></div>
-										Loading club aircraft...
-									</div>
-								{:else if selectedClub.length > 0}
-									<div class="py-4 text-center text-sm text-gray-500">
-										No aircraft found for this club.
-									</div>
-								{/if}
+									{:else if clubSearchInProgress}
+										<div class="py-4 text-center text-sm text-gray-500">
+											<div
+												class="mx-auto mb-2 h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"
+											></div>
+											Loading club aircraft...
+										</div>
+									{:else if selectedClub.length > 0}
+										<div class="py-4 text-center text-sm text-gray-500">
+											No aircraft found for this club.
+										</div>
+									{/if}
 
-								<!-- Club error message display -->
-								{#if clubErrorMessage}
-									<div class="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-600">
-										{clubErrorMessage}
-									</div>
-								{/if}
+									<!-- Club error message display -->
+									{#if clubErrorMessage}
+										<div class="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-600">
+											{clubErrorMessage}
+										</div>
+									{/if}
+								</div>
+							{/if}
+						</div>
+
+						<!-- Desktop: Horizontal layout (segment to the left of inputs) -->
+						<div class="hidden md:block">
+							<div class="grid grid-cols-[200px_1fr] items-start gap-4">
+								<!-- Search type selector -->
+								<Segment
+									name="watchlist-type-desktop"
+									value={newWatchlistEntry.type}
+									orientation="vertical"
+									onValueChange={(e) => {
+										if (e.value) {
+											newWatchlistEntry.type = e.value;
+											clearError();
+											clearClubError();
+										}
+									}}
+								>
+									<Segment.Item value="registration">
+										<div class="flex flex-row items-center">
+											<Plane size={16} />
+											<span class="ml-1">Registration</span>
+										</div>
+									</Segment.Item>
+									<Segment.Item value="device">
+										<div class="flex flex-row items-center">
+											<Antenna size={16} />
+											<span class="ml-1">Device</span>
+										</div>
+									</Segment.Item>
+									<Segment.Item value="club">
+										<div class="flex flex-row items-center">
+											<Building2 size={16} />
+											<span class="ml-1">Club</span>
+										</div>
+									</Segment.Item>
+								</Segment>
+
+								<!-- Input area -->
+								<div>
+									{#if newWatchlistEntry.type === 'registration'}
+										<input
+											class="input"
+											placeholder="Aircraft registration (e.g., N12345)"
+											bind:value={newWatchlistEntry.registration}
+											onkeydown={(e) => e.key === 'Enter' && addWatchlistEntry()}
+											oninput={() => clearError()}
+											disabled={searchInProgress}
+										/>
+									{:else if newWatchlistEntry.type === 'device'}
+										<div class="space-y-3">
+											<Segment
+												name="address-type-desktop"
+												value={newWatchlistEntry.deviceAddressType}
+												orientation="vertical"
+												onValueChange={(e) => {
+													if (e.value) {
+														newWatchlistEntry.deviceAddressType = e.value;
+														clearError();
+													}
+												}}
+											>
+												<Segment.Item value="I">ICAO</Segment.Item>
+												<Segment.Item value="O">OGN</Segment.Item>
+												<Segment.Item value="F">FLARM</Segment.Item>
+											</Segment>
+											<input
+												class="input"
+												placeholder="Device address"
+												bind:value={newWatchlistEntry.deviceAddress}
+												onkeydown={(e) => e.key === 'Enter' && addWatchlistEntry()}
+												oninput={() => clearError()}
+												disabled={searchInProgress}
+											/>
+										</div>
+									{:else if newWatchlistEntry.type === 'club'}
+										<div class="space-y-3">
+											<ClubSelector
+												bind:value={selectedClub}
+												placeholder="Select a club..."
+												onValueChange={handleClubChange}
+											/>
+
+											{#if clubDevices.length > 0}
+												<div class="space-y-2">
+													<div class="flex items-center justify-between">
+														<span class="text-sm font-medium text-gray-700">
+															Club Aircraft ({clubDevices.length})
+														</span>
+														<button
+															class="variant-filled-primary btn btn-sm"
+															onclick={addAllClubDevices}
+															disabled={clubSearchInProgress}
+														>
+															<Plus size={16} />
+															Add All
+														</button>
+													</div>
+
+													<div class="max-h-48 overflow-y-auto rounded border bg-gray-50 p-2">
+														<div class="grid gap-2">
+															{#each clubDevices as device (device.id)}
+																<div
+																	class="flex items-center justify-between rounded bg-white p-2 shadow-sm"
+																>
+																	<div class="min-w-0 flex-1">
+																		<div class="truncate text-sm font-medium">
+																			{device.registration || 'Unknown Registration'}
+																		</div>
+																		<div class="truncate text-xs text-gray-500">
+																			{device.aircraft_model || 'Unknown Model'}
+																		</div>
+																	</div>
+																	{#if isDeviceInWatchlist(device.id)}
+																		<span
+																			class="rounded bg-green-100 px-2 py-1 text-xs font-medium text-green-800"
+																		>
+																			Watched
+																		</span>
+																	{:else}
+																		<button
+																			class="variant-filled-primary btn btn-sm"
+																			onclick={() => addDeviceToWatchlist(device)}
+																		>
+																			<Plus size={14} />
+																			Watch
+																		</button>
+																	{/if}
+																</div>
+															{/each}
+														</div>
+													</div>
+												</div>
+											{:else if clubSearchInProgress}
+												<div class="py-4 text-center text-sm text-gray-500">
+													<div
+														class="mx-auto mb-2 h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"
+													></div>
+													Loading club aircraft...
+												</div>
+											{:else if selectedClub.length > 0}
+												<div class="py-4 text-center text-sm text-gray-500">
+													No aircraft found for this club.
+												</div>
+											{/if}
+
+											<!-- Club error message display -->
+											{#if clubErrorMessage}
+												<div
+													class="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-600"
+												>
+													{clubErrorMessage}
+												</div>
+											{/if}
+										</div>
+									{/if}
+								</div>
 							</div>
-						{/if}
+						</div>
 
 						{#if newWatchlistEntry.type !== 'club'}
 							<button
