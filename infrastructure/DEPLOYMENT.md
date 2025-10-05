@@ -141,6 +141,83 @@ sudo systemctl list-timers soar-*
 sudo journalctl -u soar-pull-data.timer -f
 ```
 
+### Prometheus Metrics
+
+SOAR exposes Prometheus-compatible metrics at `/data/metrics` on the web server. These metrics provide visibility into application performance and behavior.
+
+#### Available Metrics
+
+- **elevation_lookup_duration_seconds** (histogram): Time taken to perform elevation lookups, including tile download, GDAL operations, and bilinear interpolation
+- Standard Go/process metrics (if enabled)
+
+#### Setting Up Prometheus
+
+1. **Install Prometheus** on your monitoring server:
+   ```bash
+   # On Ubuntu/Debian
+   sudo apt-get update
+   sudo apt-get install prometheus
+
+   # Or download directly from https://prometheus.io/download/
+   ```
+
+2. **Configure Prometheus** to scrape SOAR metrics:
+   ```bash
+   # Copy the SOAR Prometheus configuration
+   sudo cp infrastructure/prometheus.yml /etc/prometheus/prometheus.yml
+
+   # Or append to existing configuration
+   sudo nano /etc/prometheus/prometheus.yml
+   ```
+
+3. **Restart Prometheus**:
+   ```bash
+   sudo systemctl restart prometheus
+   sudo systemctl status prometheus
+   ```
+
+4. **Verify metrics are being collected**:
+   - Open Prometheus UI: `http://your-prometheus-server:9090`
+   - Navigate to Status → Targets
+   - Verify `soar-web` target is "UP"
+   - Query metrics: `elevation_lookup_duration_seconds`
+
+#### Accessing Metrics Directly
+
+You can view raw metrics output by accessing the endpoint directly:
+
+```bash
+# Production
+curl http://localhost:61225/data/metrics
+
+# Development
+curl http://localhost:1337/data/metrics
+```
+
+#### Example Prometheus Queries
+
+Once metrics are being scraped, you can use these example queries:
+
+```promql
+# Average elevation lookup time over 5 minutes
+rate(elevation_lookup_duration_seconds_sum[5m]) / rate(elevation_lookup_duration_seconds_count[5m])
+
+# 95th percentile elevation lookup time
+histogram_quantile(0.95, rate(elevation_lookup_duration_seconds_bucket[5m]))
+
+# Total number of elevation lookups
+sum(rate(elevation_lookup_duration_seconds_count[5m]))
+```
+
+#### Grafana Dashboard (Optional)
+
+For visualization, you can connect Grafana to Prometheus:
+
+1. Install Grafana: `sudo apt-get install grafana`
+2. Add Prometheus as a data source
+3. Create dashboards using the queries above
+4. Set up alerts for performance degradation
+
 ## Rollback
 
 If a deployment fails, you can rollback to a previous version:
