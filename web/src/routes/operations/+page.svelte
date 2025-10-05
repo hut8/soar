@@ -812,8 +812,9 @@
 				compassHeading = newHeading;
 			}
 
-			// Update previous heading for next comparison (using normalized value)
-			previousCompassHeading = newHeading;
+			// Update previous heading to track actual compassHeading (not normalized)
+			// This maintains continuity across boundary crossings
+			previousCompassHeading = compassHeading;
 		}
 	}
 
