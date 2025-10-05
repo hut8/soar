@@ -58,12 +58,6 @@ impl ElevationDB {
         &self.storage_path
     }
 
-    /// Ensure a tile is cached locally, downloading if necessary
-    /// Delegates to TileDownloader which handles deduplication
-    async fn ensure_tile_cached(&self, name: &str) -> Result<PathBuf> {
-        self.tile_downloader.ensure_cached(name).await
-    }
-
     /// Returns elevation in meters relative to EGM2008 (orthometric).
     pub async fn elevation_egm2008(&self, lat: f64, lon: f64) -> Result<Option<f64>> {
         // Ocean tiles don't exist. You can choose to return 0.0 or None there.
@@ -71,13 +65,11 @@ impl ElevationDB {
             bail!("bad coord");
         }
 
-        let name = tile_name(lat, lon);
-        let path = match self.ensure_tile_cached(&name).await {
-            Ok(p) => p,
-            // If a 30m tile is not public (rare), you could fall back to 90m here by
-            // building the 90m URL (resolution "30" in the name) and retrying.
-            Err(e) => bail!("missing GLO-30 tile (consider fallback to GLO-90/NASADEM): {e}"),
-        };
+        // Try GLO-30 first, automatically fall back to GLO-90 if unavailable
+        let path = self
+            .tile_downloader
+            .ensure_cached_with_fallback(lat, lon)
+            .await?;
 
         let ds = Dataset::open(&path)?;
         let band = ds.rasterband(1)?;
@@ -110,16 +102,4 @@ impl ElevationDB {
         }
         Ok(Some(out[(0, 0)]))
     }
-}
-
-fn tile_name(lat: f64, lon: f64) -> String {
-    let ns = if lat >= 0.0 { 'N' } else { 'S' };
-    let ew = if lon >= 0.0 { 'E' } else { 'W' };
-    let latd = lat.floor().abs() as i32;
-    let lond = lon.floor().abs() as i32;
-    // Copernicus naming uses 2-digit lat, 3-digit lon, and "_00" minutes.
-    format!(
-        "Copernicus_DSM_COG_10_{}{:02}_00_{}{:03}_00_DEM",
-        ns, latd, ew, lond
-    )
 }
