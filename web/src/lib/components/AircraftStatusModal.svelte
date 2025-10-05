@@ -313,6 +313,8 @@
 				<div class="flex items-center gap-2">
 					<a
 						href="/devices/{selectedDevice.id}"
+						target="_blank"
+						rel="noopener noreferrer"
 						class="variant-filled-primary btn btn-sm"
 						title="View detailed device page"
 					>

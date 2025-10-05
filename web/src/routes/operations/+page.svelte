@@ -162,12 +162,23 @@
 		isOld: boolean;
 	} {
 		const altitudeFt = altitude_feet ? `${altitude_feet}ft` : '---ft';
-		const relativeTimeText = dayjs().to(dayjs(timestamp));
+
+		// Calculate relative time, handling edge cases
+		const fixTime = dayjs(timestamp);
+		const now = dayjs();
+		const diffSeconds = now.diff(fixTime, 'second');
+
+		// If timestamp is in the future or within 10 seconds, show "just now"
+		let relativeTimeText: string;
+		if (diffSeconds >= -10 && diffSeconds <= 10) {
+			relativeTimeText = 'just now';
+		} else {
+			relativeTimeText = fixTime.fromNow();
+		}
+
 		const altitudeText = `${altitudeFt} ${relativeTimeText}`;
 
 		// Check if fix is more than 5 minutes old
-		const fixTime = dayjs(timestamp);
-		const now = dayjs();
 		const diffMinutes = now.diff(fixTime, 'minute');
 		const isOld = diffMinutes > 5;
 
