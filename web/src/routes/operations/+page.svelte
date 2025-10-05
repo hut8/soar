@@ -145,6 +145,7 @@
 
 	// Map persistence key for localStorage
 	const MAP_STATE_KEY = 'operations-map-state';
+	const AREA_TRACKER_KEY = 'operations-area-tracker';
 
 	// Interface for stored map state
 	interface MapState {
@@ -212,6 +213,37 @@
 
 		console.log('[MAP] Using default CONUS center');
 		return { center: CONUS_CENTER, zoom: 4 };
+	}
+
+	// Save area tracker state to localStorage
+	function saveAreaTrackerState(): void {
+		if (!browser) return;
+
+		try {
+			localStorage.setItem(AREA_TRACKER_KEY, JSON.stringify(areaTrackerActive));
+			console.log('[AREA TRACKER] Saved state:', areaTrackerActive);
+		} catch (e) {
+			console.warn('[AREA TRACKER] Failed to save state to localStorage:', e);
+		}
+	}
+
+	// Load area tracker state from localStorage
+	function loadAreaTrackerState(): boolean {
+		if (!browser) return false;
+
+		try {
+			const saved = localStorage.getItem(AREA_TRACKER_KEY);
+			if (saved !== null) {
+				const state = JSON.parse(saved);
+				console.log('[AREA TRACKER] Loaded saved state:', state);
+				return state;
+			}
+		} catch (e) {
+			console.warn('[AREA TRACKER] Failed to load state from localStorage:', e);
+		}
+
+		console.log('[AREA TRACKER] Using default state: false');
+		return false;
 	}
 
 	// Reactive effects for settings changes
@@ -306,6 +338,24 @@
 			initializeCompass();
 			// Start live fixes feed for operations page
 			fixFeed.startLiveFixesFeed();
+
+			// Load area tracker state and apply it after map is initialized
+			const savedAreaTrackerState = loadAreaTrackerState();
+			if (savedAreaTrackerState && areaTrackerAvailable) {
+				// Defer activation until map is fully initialized
+				setTimeout(() => {
+					if (areaTrackerAvailable) {
+						areaTrackerActive = savedAreaTrackerState;
+						if (areaTrackerActive) {
+							// Activate area tracker with saved state
+							(async () => {
+								await fetchAndDisplayDevicesInViewport();
+								updateAreaSubscriptions();
+							})();
+						}
+					}
+				}, 1500);
+			}
 		})();
 
 		// Cleanup function
@@ -1142,6 +1192,7 @@
 
 		areaTrackerActive = !areaTrackerActive;
 		console.log('[AREA TRACKER] Area tracker toggled:', areaTrackerActive);
+		saveAreaTrackerState();
 
 		if (areaTrackerActive) {
 			// Hybrid approach: Fetch immediate snapshot then update WebSocket subscriptions
