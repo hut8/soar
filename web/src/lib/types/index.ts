@@ -391,6 +391,7 @@ export interface Fix {
 	latitude: number;
 	longitude: number;
 	altitude_feet?: number;
+	altitude_agl_feet?: number;
 	track_degrees?: number;
 	ground_speed_knots?: number;
 	climb_fpm?: number;

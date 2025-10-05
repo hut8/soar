@@ -474,18 +474,25 @@
 				{:else}
 					<div class="overflow-x-auto">
 						<table class="w-full table-auto">
-							<thead class="border-surface-300-600-token border-b">
+							<thead class="bg-surface-100-800-token border-surface-300-600-token border-b">
 								<tr>
 									<th class="px-3 py-2 text-left text-sm font-medium">Time</th>
 									<th class="px-3 py-2 text-left text-sm font-medium">Coordinates</th>
-									<th class="px-3 py-2 text-left text-sm font-medium">Altitude</th>
+									<th class="px-3 py-2 text-left text-sm font-medium">Altitude MSL</th>
+									<th class="px-3 py-2 text-left text-sm font-medium">Altitude AGL</th>
 									<th class="px-3 py-2 text-left text-sm font-medium">Speed</th>
 									<th class="px-3 py-2 text-left text-sm font-medium">Track</th>
 								</tr>
 							</thead>
 							<tbody>
-								{#each fixes as fix (fix.id)}
-									<tr class="border-surface-200-700-token hover:bg-surface-100-800-token border-b">
+								{#each fixes as fix, index (fix.id)}
+									<tr
+										class="border-surface-200-700-token hover:bg-surface-100-800-token border-b {index %
+											2 ===
+										0
+											? 'bg-surface-50-900-token'
+											: ''}"
+									>
 										<td class="px-3 py-2 text-sm" title={formatDate(fix.timestamp)}>
 											{formatRelativeTime(fix.timestamp)}
 										</td>
@@ -500,6 +507,7 @@
 											</a>
 										</td>
 										<td class="px-3 py-2 text-sm">{formatAltitude(fix.altitude_feet)}</td>
+										<td class="px-3 py-2 text-sm">{formatAltitude(fix.altitude_agl_feet)}</td>
 										<td class="px-3 py-2 text-sm">{formatSpeed(fix.ground_speed_knots)}</td>
 										<td class="px-3 py-2 text-sm">{formatTrack(fix.track_degrees)}</td>
 									</tr>
@@ -555,7 +563,7 @@
 				{:else}
 					<div class="overflow-x-auto">
 						<table class="w-full table-auto">
-							<thead class="border-surface-300-600-token border-b">
+							<thead class="bg-surface-100-800-token border-surface-300-600-token border-b">
 								<tr>
 									<th class="px-3 py-2 text-left text-sm font-medium">Flight ID</th>
 									<th class="px-3 py-2 text-left text-sm font-medium">Takeoff</th>
@@ -565,8 +573,14 @@
 								</tr>
 							</thead>
 							<tbody>
-								{#each flights as flight (flight.id)}
-									<tr class="border-surface-200-700-token hover:bg-surface-100-800-token border-b">
+								{#each flights as flight, index (flight.id)}
+									<tr
+										class="border-surface-200-700-token hover:bg-surface-100-800-token border-b {index %
+											2 ===
+										0
+											? 'bg-surface-50-900-token'
+											: ''}"
+									>
 										<td class="px-3 py-2 font-mono text-sm">{flight.id}</td>
 										<td class="px-3 py-2 text-sm">
 											{flight.takeoff_time ? formatDate(flight.takeoff_time) : 'Unknown'}
