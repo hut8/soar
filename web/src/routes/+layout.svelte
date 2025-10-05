@@ -8,6 +8,7 @@
 	import { auth } from '$lib/stores/auth';
 	import { websocketStatus, debugStatus } from '$lib/stores/watchlist';
 	import { onMount } from 'svelte';
+	import LoadingBar from '$lib/components/LoadingBar.svelte';
 	import {
 		Radar,
 		Users,
@@ -207,6 +208,7 @@
 				</div>
 			{/if}
 		</div>
+		<LoadingBar />
 	</AppBar>
 
 	<!-- Mobile Menu Overlay -->
