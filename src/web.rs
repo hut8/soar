@@ -11,7 +11,9 @@ use axum::{
 use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
 use include_dir::{Dir, include_dir};
+use metrics_exporter_prometheus::PrometheusHandle;
 use mime_guess::from_path;
+use std::sync::OnceLock;
 use std::time::Instant;
 use uuid::Uuid;
 
@@ -20,12 +22,16 @@ use tracing::{error, info, warn};
 
 use crate::actions;
 use crate::live_fixes::LiveFixService;
+use crate::metrics;
 
 // Embed web assets into the binary
 static ASSETS: Dir<'_> = include_dir!("web/build");
 
 // Embed robots.txt into the binary
 static ROBOTS_TXT: &str = include_str!("../static/robots.txt");
+
+// Global Prometheus metrics handle
+static METRICS_HANDLE: OnceLock<PrometheusHandle> = OnceLock::new();
 
 // Helper function to format compilation timestamp for HTTP headers
 fn get_compilation_timestamp() -> String {
@@ -235,6 +241,18 @@ async fn robots_txt() -> impl IntoResponse {
     (StatusCode::OK, headers, ROBOTS_TXT)
 }
 
+// Handler for Prometheus metrics endpoint
+async fn metrics_handler() -> impl IntoResponse {
+    let handle = METRICS_HANDLE
+        .get()
+        .expect("Metrics handle not initialized");
+
+    let mut headers = HeaderMap::new();
+    headers.insert("content-type", "text/plain; version=0.0.4".parse().unwrap());
+
+    (StatusCode::OK, headers, handle.render())
+}
+
 // Handler for sitemap files - serves files from disk
 async fn sitemap_file(Path(filename): Path<String>) -> impl IntoResponse {
     // Get sitemap root from environment variable
@@ -282,6 +300,14 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
     sentry::configure_scope(|scope| {
         scope.set_tag("operation", "web-server");
     });
+
+    // Initialize Prometheus metrics exporter
+    let metrics_handle = metrics::init_metrics();
+    METRICS_HANDLE
+        .set(metrics_handle)
+        .expect("Metrics handle already initialized");
+    info!("Prometheus metrics exporter initialized");
+
     info!("Starting web server on {}:{}", interface, port);
 
     // Initialize live fix service if NATS_URL is configured
@@ -315,6 +341,8 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
 
     // Create API sub-router rooted at "/data"
     let api_router = Router::new()
+        // Metrics endpoint
+        .route("/metrics", get(metrics_handler))
         // Search and data routes
         .route("/airports", get(actions::search_airports))
         .route("/airports/{id}", get(actions::get_airport_by_id))

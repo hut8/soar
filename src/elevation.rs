@@ -1,7 +1,8 @@
 use anyhow::{Context, Result, bail};
 use directories::BaseDirs;
 use gdal::{Dataset, raster::ResampleAlg};
-use std::{env, path::PathBuf};
+use metrics::histogram;
+use std::{env, path::PathBuf, time::Instant};
 
 use crate::tile_downloader::TileDownloader;
 
@@ -60,6 +61,8 @@ impl ElevationDB {
 
     /// Returns elevation in meters relative to EGM2008 (orthometric).
     pub async fn elevation_egm2008(&self, lat: f64, lon: f64) -> Result<Option<f64>> {
+        let start = Instant::now();
+
         // Ocean tiles don't exist. You can choose to return 0.0 or None there.
         if !lat.is_finite() || !lon.is_finite() {
             bail!("bad coord");
@@ -95,11 +98,17 @@ impl ElevationDB {
         )?;
 
         // Handle NoData (Copernicus uses -32767 for nodata)
-        if let Some(nd) = band.no_data_value()
+        let result = if let Some(nd) = band.no_data_value()
             && out[(0, 0)] == nd
         {
-            return Ok(None);
-        }
-        Ok(Some(out[(0, 0)]))
+            Ok(None)
+        } else {
+            Ok(Some(out[(0, 0)]))
+        };
+
+        // Record metric for elevation lookup duration
+        histogram!("elevation_lookup_duration_seconds").record(start.elapsed().as_secs_f64());
+
+        result
     }
 }

@@ -34,6 +34,7 @@ pub mod loader;
 pub mod locations;
 pub mod locations_repo;
 pub mod message_processors;
+pub mod metrics;
 pub mod nats_publisher;
 pub mod ogn_aprs_aircraft;
 pub mod pull;
