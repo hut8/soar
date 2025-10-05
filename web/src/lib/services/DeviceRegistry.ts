@@ -82,6 +82,14 @@ export class DeviceRegistry {
 
 	// Add or update a device
 	public setDevice(device: Device): void {
+		// Validate device has required fields before saving
+		if (!device.registration || device.registration.trim() === '') {
+			throw new Error(
+				`[REGISTRY] Cannot save device ${device.id} - missing registration number. ` +
+					`Devices without registration must not be persisted.`
+			);
+		}
+
 		this.devices.set(device.id, device);
 		this.saveDeviceToStorage(device);
 
@@ -168,12 +176,20 @@ export class DeviceRegistry {
 			console.log(
 				'[REGISTRY] Device not found in cache for fix:',
 				deviceId,
-				allowApiFallback ? 'attempting to fetch from API' : 'creating minimal device'
+				allowApiFallback ? 'attempting to fetch from API' : 'will check if API fetch needed'
 			);
 
-			// Only try to fetch from API if allowed (for individual subscriptions)
-			if (allowApiFallback) {
+			// Check if the fix has a registration number
+			const hasRegistration = fix.registration && fix.registration.trim() !== '';
+
+			// Always try to fetch from API if:
+			// 1. allowApiFallback is true, OR
+			// 2. The fix doesn't have a registration (incomplete device would be created)
+			if (allowApiFallback || !hasRegistration) {
 				try {
+					console.log(
+						`[REGISTRY] Fetching device from API (allowApiFallback: ${allowApiFallback}, hasRegistration: ${hasRegistration})`
+					);
 					device = await this.updateDeviceFromAPI(deviceId);
 				} catch (error) {
 					console.warn('[REGISTRY] Failed to fetch device from API for:', deviceId, error);
@@ -203,7 +219,28 @@ export class DeviceRegistry {
 		}
 
 		device.addFix(fix);
-		this.setDevice(device);
+
+		// Only persist device if it has a registration number
+		if (device.registration && device.registration.trim() !== '') {
+			this.setDevice(device);
+		} else {
+			console.warn(
+				`[REGISTRY] Device ${device.id} has no registration, keeping in memory only (not persisting)`
+			);
+			// Still update in-memory map but don't persist to localStorage
+			this.devices.set(device.id, device);
+
+			// Notify subscribers even for non-persisted devices
+			this.notifySubscribers({
+				type: 'device_updated',
+				device
+			});
+
+			this.notifySubscribers({
+				type: 'devices_changed',
+				devices: this.getAllDevices()
+			});
+		}
 
 		console.log('[REGISTRY] Fix added to device. New fix count:', device.fixes.length);
 
@@ -267,6 +304,14 @@ export class DeviceRegistry {
 	private saveDeviceToStorage(device: Device): void {
 		if (!browser) return;
 
+		// Double-check validation (should be prevented by setDevice already)
+		if (!device.registration || device.registration.trim() === '') {
+			throw new Error(
+				`[REGISTRY] Attempted to save device ${device.id} without registration to localStorage. ` +
+					`This should have been prevented by setDevice validation.`
+			);
+		}
+
 		try {
 			const key = this.storageKeyPrefix + device.id;
 			localStorage.setItem(key, JSON.stringify(device.toJSON()));
@@ -288,6 +333,13 @@ export class DeviceRegistry {
 				// Validate the data structure
 				if (!Device.isValidDeviceData(data)) {
 					console.warn(`Invalid device data structure for ${deviceId}, removing and will re-fetch`);
+					localStorage.removeItem(key);
+					return null;
+				}
+
+				// Validate device has required fields (registration number)
+				if (!data.registration || data.registration.trim() === '') {
+					console.warn(`Device ${deviceId} has no registration number, removing from localStorage`);
 					localStorage.removeItem(key);
 					return null;
 				}
