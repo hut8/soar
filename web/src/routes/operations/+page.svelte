@@ -153,6 +153,25 @@
 		zoom: number;
 	}
 
+	// Helper function to calculate color based on altitude (red at 0 ft, blue at 18000+ ft)
+	function getAltitudeColor(altitude_feet: number | null | undefined): string {
+		const altitude = altitude_feet || 0;
+
+		// Clamp altitude to 0-18000 range for color calculation
+		const clampedAltitude = Math.max(0, Math.min(18000, altitude));
+
+		// Calculate interpolation factor (0 to 1)
+		const factor = clampedAltitude / 18000;
+
+		// Red: rgb(239, 68, 68) or #ef4444
+		// Blue: rgb(59, 130, 246) or #3b82f6
+		const r = Math.round(239 - (239 - 59) * factor);
+		const g = Math.round(68 + (130 - 68) * factor);
+		const b = Math.round(68 + (246 - 68) * factor);
+
+		return `rgb(${r}, ${g}, ${b})`;
+	}
+
 	// Helper function to format altitude with relative time and check if fix is old
 	function formatAltitudeWithTime(
 		altitude_feet: number | null | undefined,
@@ -924,6 +943,10 @@
 		const aircraftIcon = document.createElement('div');
 		aircraftIcon.className = 'aircraft-icon';
 
+		// Calculate color based on altitude
+		const altitudeColor = getAltitudeColor(fix.altitude_feet);
+		aircraftIcon.style.background = altitudeColor;
+
 		// Create SVG airplane icon that's more visible and oriented correctly
 		aircraftIcon.innerHTML = `
 			<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
@@ -939,6 +962,8 @@
 		// Info label below the icon - show proper aircraft information
 		const infoLabel = document.createElement('div');
 		infoLabel.className = 'aircraft-label';
+		infoLabel.style.background = altitudeColor.replace('rgb', 'rgba').replace(')', ', 0.75)'); // 75% opacity
+		infoLabel.style.borderColor = altitudeColor;
 
 		// Use proper device registration, fallback to address
 		const tailNumber = device.registration || device.address || 'Unknown';
@@ -1034,13 +1059,23 @@
 		const markerContent = marker.content as HTMLElement;
 		if (markerContent) {
 			const aircraftIcon = markerContent.querySelector('.aircraft-icon') as HTMLElement;
+			const infoLabel = markerContent.querySelector('.aircraft-label') as HTMLElement;
 			const tailDiv = markerContent.querySelector('.aircraft-tail') as HTMLElement;
 			const altDiv = markerContent.querySelector('.aircraft-altitude') as HTMLElement;
+
+			// Calculate color based on altitude
+			const altitudeColor = getAltitudeColor(fix.altitude_feet);
 
 			if (aircraftIcon) {
 				const track = fix.track_degrees || 0;
 				aircraftIcon.style.transform = `rotate(${track}deg)`;
+				aircraftIcon.style.background = altitudeColor;
 				console.log('[MARKER] Updated icon rotation to:', track, 'degrees');
+			}
+
+			if (infoLabel) {
+				infoLabel.style.background = altitudeColor.replace('rgb', 'rgba').replace(')', ', 0.75)');
+				infoLabel.style.borderColor = altitudeColor;
 			}
 
 			if (tailDiv && altDiv) {
@@ -1131,13 +1166,16 @@
 			// Calculate opacity: newest segment (i=0) = 0.7, oldest = 0.2
 			const segmentOpacity = 0.7 - (i / (trailFixes.length - 2)) * 0.5;
 
+			// Use altitude-based color from the newer fix in the segment
+			const segmentColor = getAltitudeColor(trailFixes[i].altitude_feet);
+
 			const segment = new google.maps.Polyline({
 				path: [
 					{ lat: trailFixes[i].latitude, lng: trailFixes[i].longitude },
 					{ lat: trailFixes[i + 1].latitude, lng: trailFixes[i + 1].longitude }
 				],
 				geodesic: true,
-				strokeColor: '#ef4444', // Red color matching aircraft marker
+				strokeColor: segmentColor,
 				strokeOpacity: segmentOpacity,
 				strokeWeight: 2,
 				map: map
@@ -1152,13 +1190,16 @@
 			// Calculate opacity: newest (index 0) = 0.7, oldest = 0.2
 			const opacity = 0.7 - (index / (trailFixCount - 1)) * 0.5;
 
+			// Use altitude-based color for each dot
+			const dotColor = getAltitudeColor(fix.altitude_feet);
+
 			const dot = new google.maps.Circle({
 				center: { lat: fix.latitude, lng: fix.longitude },
 				radius: 10, // 10 meters radius
-				strokeColor: '#ef4444',
+				strokeColor: dotColor,
 				strokeOpacity: opacity,
 				strokeWeight: 1,
-				fillColor: '#ef4444',
+				fillColor: dotColor,
 				fillOpacity: opacity * 0.5,
 				map: map
 			});
