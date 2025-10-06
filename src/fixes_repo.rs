@@ -2,7 +2,7 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use diesel_derive_enum::DbEnum;
-use tracing::{debug, info, instrument};
+use tracing::{debug, info, instrument, trace};
 use uuid::Uuid;
 
 use crate::fixes::Fix;
@@ -281,7 +281,7 @@ impl FixesRepository {
                 .values(&new_fix)
                 .execute(&mut conn)?;
 
-            debug!(
+            trace!(
                 "Inserted fix | Device: {:?} ({:?}-{:?}) | {:.6},{:.6} @ {}ft | https://maps.google.com/maps?q={:.6},{:.6}",
                 new_fix.device_id,
                 new_fix.address_type,
