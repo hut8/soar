@@ -72,13 +72,16 @@ impl Receiver {
         let photos = self.photos.clone().unwrap_or_default();
         let links = self.links.clone().unwrap_or_default();
 
+        // Filter out "ZZ" country codes (unknown/invalid)
+        let country = self.country.clone().filter(|c| c != "ZZ");
+
         let receiver_record = ReceiverRecord {
             id: uuid::Uuid::new_v4(), // Generate a new UUID
             callsign: self.callsign.clone().unwrap_or_default(),
             description: self.description.clone(),
             contact: self.contact.clone(),
             email: self.email.clone(),
-            country: self.country.clone(),
+            country,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
             latitude: None,
@@ -191,13 +194,16 @@ impl From<ReceiverRecord> for ReceiverModel {
 /// Conversion from ReceiverModel (database model) to ReceiverRecord (API model)
 impl From<ReceiverModel> for ReceiverRecord {
     fn from(model: ReceiverModel) -> Self {
+        // Filter out "ZZ" country codes (unknown/invalid)
+        let country = model.country.filter(|c| c != "ZZ");
+
         Self {
             id: model.id,
             callsign: model.callsign,
             description: model.description,
             contact: model.contact,
             email: model.email,
-            country: model.country,
+            country,
             created_at: model.created_at,
             updated_at: model.updated_at,
             latitude: model.latitude,
