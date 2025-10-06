@@ -373,8 +373,7 @@
 					<thead>
 						<tr>
 							<th>Time</th>
-							<th>Latitude</th>
-							<th>Longitude</th>
+							<th>Location</th>
 							<th>Altitude</th>
 							<th>AGL</th>
 							<th>Speed</th>
@@ -386,8 +385,16 @@
 						{#each paginatedFixes as fix (fix.id)}
 							<tr>
 								<td>{new Date(fix.timestamp).toLocaleTimeString()}</td>
-								<td>{fix.latitude.toFixed(6)}</td>
-								<td>{fix.longitude.toFixed(6)}</td>
+								<td>
+									<a
+										href="https://www.google.com/maps?q={fix.latitude},{fix.longitude}"
+										target="_blank"
+										rel="noopener noreferrer"
+										class="anchor text-primary-500 hover:text-primary-600"
+									>
+										{fix.latitude.toFixed(6)}, {fix.longitude.toFixed(6)}
+									</a>
+								</td>
 								<td>{formatAltitude(fix.altitude_feet)}</td>
 								<td>{formatAltitude(fix.altitude_agl_feet)}</td>
 								<td>{fix.ground_speed_knots ? `${fix.ground_speed_knots.toFixed(1)} kt` : 'N/A'}</td

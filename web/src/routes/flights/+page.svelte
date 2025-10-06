@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Plane, Calendar, MapPin, Clock } from '@lucide/svelte';
+	import { Plane, Calendar, MapPin, Clock, ExternalLink } from '@lucide/svelte';
 	import { serverCall } from '$lib/api/server';
 	import { onMount } from 'svelte';
 	import dayjs from 'dayjs';
@@ -140,18 +140,25 @@
 							<th>Route</th>
 							<th>Tow</th>
 							<th>Date</th>
+							<th>Actions</th>
 						</tr>
 					</thead>
 					<tbody>
 						{#each flights as flight (flight.id)}
 							<tr>
 								<td>
-									<a
-										href={`/flights/${flight.id}`}
-										class="anchor font-mono text-primary-500 hover:text-primary-600"
-									>
-										{formatDeviceAddress(flight.device_address, flight.device_address_type)}
-									</a>
+									{#if flight.device_id}
+										<a
+											href={`/devices/${flight.device_id}`}
+											class="anchor font-mono text-primary-500 hover:text-primary-600"
+										>
+											{formatDeviceAddress(flight.device_address, flight.device_address_type)}
+										</a>
+									{:else}
+										<span class="font-mono">
+											{formatDeviceAddress(flight.device_address, flight.device_address_type)}
+										</span>
+									{/if}
 								</td>
 								<td>
 									<div class="flex items-center gap-1 text-sm">
@@ -212,6 +219,17 @@
 										<Calendar class="h-3 w-3" />
 										{formatDate(flight.landing_time)}
 									</div>
+								</td>
+								<td>
+									<a
+										href={`/flights/${flight.id}`}
+										target="_blank"
+										rel="noopener noreferrer"
+										class="variant-ghost-surface btn flex items-center gap-1 btn-sm"
+									>
+										<ExternalLink class="h-3 w-3" />
+										Open
+									</a>
 								</td>
 							</tr>
 						{/each}
