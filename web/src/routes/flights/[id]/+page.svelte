@@ -10,7 +10,8 @@
 		Gauge,
 		TrendingUp,
 		Route,
-		MoveUpRight
+		MoveUpRight,
+		AlertTriangle
 	} from '@lucide/svelte';
 	import type { PageData } from './$types';
 
@@ -43,6 +44,13 @@
 		const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
 		return `${hours}h ${minutes}m`;
 	});
+
+	// Check if this is an outlanding (flight complete but no arrival airport)
+	const isOutlanding = $derived(
+		data.flight.landing_time !== null &&
+			data.flight.landing_time !== undefined &&
+			!data.flight.arrival_airport
+	);
 
 	// Format date/time
 	function formatDateTime(dateString: string | undefined): string {
@@ -183,10 +191,18 @@
 	<!-- Flight Header -->
 	<div class="card p-6">
 		<div class="mb-4 flex items-center justify-between">
-			<h1 class="flex items-center gap-2 h1">
-				<Plane class="h-8 w-8" />
-				Flight {data.flight.device_address}
-			</h1>
+			<div class="flex items-center gap-4">
+				<h1 class="flex items-center gap-2 h1">
+					<Plane class="h-8 w-8" />
+					Flight {data.flight.device_address}
+				</h1>
+				{#if isOutlanding}
+					<span class="variant-filled-warning chip flex items-center gap-2 text-base font-semibold">
+						<AlertTriangle class="h-5 w-5" />
+						Outlanding
+					</span>
+				{/if}
+			</div>
 			<button
 				onclick={downloadKML}
 				class="variant-filled-primary btn flex items-center gap-2"
@@ -202,13 +218,8 @@
 			<div class="flex items-start gap-3">
 				<Clock class="mt-1 h-5 w-5 text-primary-500" />
 				<div>
-					<div class="text-surface-600-300-token text-sm">Takeoff</div>
+					<div class="text-surface-600-300-token text-sm">Takeoff Time</div>
 					<div class="font-semibold">{formatDateTime(data.flight.takeoff_time)}</div>
-					{#if data.flight.takeoff_runway_ident}
-						<div class="text-surface-600-300-token text-sm">
-							Runway {data.flight.takeoff_runway_ident}
-						</div>
-					{/if}
 				</div>
 			</div>
 
@@ -216,15 +227,10 @@
 			<div class="flex items-start gap-3">
 				<Clock class="mt-1 h-5 w-5 text-primary-500" />
 				<div>
-					<div class="text-surface-600-300-token text-sm">Landing</div>
+					<div class="text-surface-600-300-token text-sm">Landing Time</div>
 					<div class="font-semibold">
 						{data.flight.landing_time ? formatDateTime(data.flight.landing_time) : 'In Progress'}
 					</div>
-					{#if data.flight.landing_runway_ident}
-						<div class="text-surface-600-300-token text-sm">
-							Runway {data.flight.landing_runway_ident}
-						</div>
-					{/if}
 				</div>
 			</div>
 
@@ -267,26 +273,46 @@
 			{/if}
 
 			<!-- Departure Airport -->
-			{#if data.flight.departure_airport}
-				<div class="flex items-start gap-3">
-					<MapPin class="mt-1 h-5 w-5 text-primary-500" />
-					<div>
-						<div class="text-surface-600-300-token text-sm">Departure</div>
-						<div class="font-semibold">{data.flight.departure_airport}</div>
+			<div class="flex items-start gap-3">
+				<MapPin class="mt-1 h-5 w-5 text-primary-500" />
+				<div>
+					<div class="text-surface-600-300-token text-sm">Departure</div>
+					<div class="font-semibold">
+						{data.flight.departure_airport || 'Unknown'}
 					</div>
+					{#if data.flight.takeoff_runway_ident}
+						<div class="text-surface-600-300-token text-sm">
+							Runway {data.flight.takeoff_runway_ident}
+						</div>
+					{:else if data.flight.departure_airport}
+						<div class="text-surface-600-300-token text-sm">Runway Unknown</div>
+					{/if}
 				</div>
-			{/if}
+			</div>
 
 			<!-- Arrival Airport -->
-			{#if data.flight.arrival_airport}
-				<div class="flex items-start gap-3">
-					<MapPin class="mt-1 h-5 w-5 text-primary-500" />
-					<div>
-						<div class="text-surface-600-300-token text-sm">Arrival</div>
-						<div class="font-semibold">{data.flight.arrival_airport}</div>
+			<div class="flex items-start gap-3">
+				<MapPin class="mt-1 h-5 w-5 text-primary-500" />
+				<div>
+					<div class="text-surface-600-300-token text-sm">Arrival</div>
+					<div class="font-semibold">
+						{#if data.flight.landing_time}
+							{data.flight.arrival_airport || 'Unknown'}
+						{:else}
+							In Progress
+						{/if}
 					</div>
+					{#if data.flight.landing_time && data.flight.arrival_airport}
+						{#if data.flight.landing_runway_ident}
+							<div class="text-surface-600-300-token text-sm">
+								Runway {data.flight.landing_runway_ident}
+							</div>
+						{:else}
+							<div class="text-surface-600-300-token text-sm">Runway Unknown</div>
+						{/if}
+					{/if}
 				</div>
-			{/if}
+			</div>
 
 			<!-- Tow Aircraft -->
 			{#if data.flight.tow_aircraft_id}
