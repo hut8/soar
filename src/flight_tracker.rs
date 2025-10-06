@@ -1,8 +1,10 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
+use metrics::histogram;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
@@ -620,6 +622,8 @@ impl FlightTracker {
 
     /// Save the current state to disk atomically
     pub async fn save_state(&self) -> Result<()> {
+        let start = Instant::now();
+
         if let Some(state_path) = &self.state_file_path {
             // Get a read lock on the trackers
             let trackers = self.aircraft_trackers.read().await;
@@ -633,6 +637,10 @@ impl FlightTracker {
             tokio::fs::rename(&temp_path, state_path).await?;
 
             debug!("Saved flight tracker state to {:?}", state_path);
+
+            // Record metric for state persistence duration
+            histogram!("flight_tracker_save_duration_seconds")
+                .record(start.elapsed().as_secs_f64());
         }
         Ok(())
     }

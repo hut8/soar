@@ -147,8 +147,16 @@ SOAR exposes Prometheus-compatible metrics at `/data/metrics` on the web server.
 
 #### Available Metrics
 
+**Web Server Metrics** (`localhost:61225/data/metrics`):
+- **http_request_duration_seconds** (histogram): Duration of HTTP requests to API endpoints
+- **http_requests_total** (counter): Total number of HTTP requests
 - **elevation_lookup_duration_seconds** (histogram): Time taken to perform elevation lookups, including tile download, GDAL operations, and bilinear interpolation
-- Standard Go/process metrics (if enabled)
+
+**APRS Client Metrics** (`localhost:9090/metrics`):
+- **elevation_lookup_duration_seconds** (histogram): Time taken to perform elevation lookups during fix processing
+- **flight_tracker_save_duration_seconds** (histogram): Time taken to persist flight tracker state to disk
+
+All metrics are aggregated by endpoint pattern (e.g., `/data/devices/{id}` rather than specific IDs), making them suitable for dashboards and alerting.
 
 #### Setting Up Prometheus
 
@@ -184,20 +192,24 @@ SOAR exposes Prometheus-compatible metrics at `/data/metrics` on the web server.
 
 #### Accessing Metrics Directly
 
-You can view raw metrics output by accessing the endpoint directly:
+You can view raw metrics output by accessing the endpoints directly:
 
 ```bash
-# Production
+# Web server metrics (production)
 curl http://localhost:61225/data/metrics
 
-# Development
+# Web server metrics (development)
 curl http://localhost:1337/data/metrics
+
+# APRS client metrics (run subcommand)
+curl http://localhost:9090/metrics
 ```
 
 #### Example Prometheus Queries
 
 Once metrics are being scraped, you can use these example queries:
 
+**Elevation Lookup Performance:**
 ```promql
 # Average elevation lookup time over 5 minutes
 rate(elevation_lookup_duration_seconds_sum[5m]) / rate(elevation_lookup_duration_seconds_count[5m])
@@ -205,8 +217,32 @@ rate(elevation_lookup_duration_seconds_sum[5m]) / rate(elevation_lookup_duration
 # 95th percentile elevation lookup time
 histogram_quantile(0.95, rate(elevation_lookup_duration_seconds_bucket[5m]))
 
-# Total number of elevation lookups
+# Total number of elevation lookups per second
 sum(rate(elevation_lookup_duration_seconds_count[5m]))
+```
+
+**HTTP API Performance:**
+```promql
+# Average HTTP request duration
+rate(http_request_duration_seconds_sum[5m]) / rate(http_request_duration_seconds_count[5m])
+
+# 95th percentile HTTP request duration
+histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))
+
+# Requests per second
+sum(rate(http_requests_total[5m]))
+```
+
+**Flight Tracker Performance:**
+```promql
+# Average flight tracker save time
+rate(flight_tracker_save_duration_seconds_sum[5m]) / rate(flight_tracker_save_duration_seconds_count[5m])
+
+# 95th percentile save time
+histogram_quantile(0.95, rate(flight_tracker_save_duration_seconds_bucket[5m]))
+
+# Save operations per second
+sum(rate(flight_tracker_save_duration_seconds_count[5m]))
 ```
 
 #### Grafana Dashboard (Optional)

@@ -2,7 +2,7 @@ use anyhow::Result;
 use axum::{
     Router,
     body::Body,
-    extract::Path,
+    extract::{MatchedPath, Path},
     http::{HeaderMap, Request, StatusCode, Uri},
     middleware::{self, Next},
     response::{IntoResponse, Response},
@@ -22,7 +22,6 @@ use tracing::{error, info, warn};
 
 use crate::actions;
 use crate::live_fixes::LiveFixService;
-use crate::metrics;
 
 // Embed web assets into the binary
 static ASSETS: Dir<'_> = include_dir!("web/build");
@@ -231,6 +230,32 @@ async fn sentry_error_middleware(request: Request<Body>, next: Next) -> Response
     response
 }
 
+// Middleware to record metrics for API endpoints
+async fn metrics_middleware(request: Request<Body>, next: Next) -> Response {
+    let start = Instant::now();
+    let _method = request.method().clone();
+
+    // Extract the matched route pattern (e.g., "/data/devices/{id}" instead of "/data/devices/123")
+    let _path = request
+        .extensions()
+        .get::<MatchedPath>()
+        .map(|matched_path| matched_path.as_str().to_string())
+        .unwrap_or_else(|| request.uri().path().to_string());
+
+    let response = next.run(request).await;
+    let _status = response.status();
+    let duration = start.elapsed();
+
+    // Record request duration histogram with labels
+    // TODO: Add labels for method, path, and status when needed
+    metrics::histogram!("http_request_duration_seconds").record(duration.as_secs_f64());
+
+    // Record request count by endpoint, method, and status
+    metrics::counter!("http_requests_total").increment(1);
+
+    response
+}
+
 // Handler for robots.txt - serves embedded content
 async fn robots_txt() -> impl IntoResponse {
     let mut headers = HeaderMap::new();
@@ -302,7 +327,7 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
     });
 
     // Initialize Prometheus metrics exporter
-    let metrics_handle = metrics::init_metrics();
+    let metrics_handle = crate::metrics::init_metrics();
     METRICS_HANDLE
         .set(metrics_handle)
         .expect("Metrics handle already initialized");
@@ -404,6 +429,7 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         .route("/sitemap-:number.xml", get(sitemap_file))
         .fallback(handle_static_file)
         .with_state(app_state.clone())
+        .layer(middleware::from_fn(metrics_middleware))
         .layer(middleware::from_fn(request_logging_middleware))
         .layer(middleware::from_fn(sentry_error_middleware))
         .layer(cors_layer);
