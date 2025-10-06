@@ -18,6 +18,7 @@ enum ConnectionResult {
     /// Connection was established but failed during operation
     OperationFailed(anyhow::Error),
 }
+use metrics::counter;
 use ogn_parser::{AprsData, AprsPacket, PositionSourceType};
 use std::sync::Arc;
 use std::time::Duration;
@@ -1197,8 +1198,14 @@ impl ReceiverStatusProcessor {
                         tokio::spawn({
                             let repo = self.status_repo.clone();
                             async move {
-                                if let Err(e) = repo.insert(&new_status).await {
-                                    error!("Failed to insert receiver status: {}", e);
+                                match repo.insert(&new_status).await {
+                                    Ok(_) => {
+                                        // Track receiver status update metric
+                                        counter!("receiver_status_updates_total").increment(1);
+                                    }
+                                    Err(e) => {
+                                        error!("Failed to insert receiver status: {}", e);
+                                    }
                                 }
                             }
                         });
