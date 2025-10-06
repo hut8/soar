@@ -135,9 +135,29 @@
 		await loader.importLibrary('places');
 	}
 
+	async function loadRecentReceivers() {
+		loading = true;
+		error = '';
+
+		try {
+			// Call API without any query parameters to get recently updated receivers
+			const response = await serverCall<ReceiverSearchResponse>('/receivers');
+			receivers = response.receivers || [];
+		} catch (err) {
+			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+			error = `Failed to load receivers: ${errorMessage}`;
+			console.error('Error loading recent receivers:', err);
+			receivers = [];
+		} finally {
+			loading = false;
+		}
+	}
+
 	onMount(() => {
 		// Load Google Maps script when component mounts
 		loadGoogleMapsScript();
+		// Load recently updated receivers
+		loadRecentReceivers();
 	});
 
 	$effect(() => {
@@ -254,7 +274,12 @@
 	{#if receivers.length > 0}
 		<section class="space-y-4">
 			<h2 class="h3">
-				Results <span class="text-surface-500-400-token">({receivers.length})</span>
+				{#if !searchQuery && selectedLatitude === null}
+					Recently Updated Receivers
+				{:else}
+					Results
+				{/if}
+				<span class="text-surface-500-400-token">({receivers.length})</span>
 			</h2>
 
 			<div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">

@@ -319,6 +319,27 @@ impl ReceiverRepository {
         .await?
     }
 
+    /// Get recently updated receivers
+    /// Returns the most recently updated receivers, ordered by updated_at descending
+    pub async fn get_recently_updated_receivers(&self, limit: i64) -> Result<Vec<ReceiverRecord>> {
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || -> Result<Vec<ReceiverRecord>> {
+            let mut conn = pool.get()?;
+            let receiver_models = receivers::table
+                .order(receivers::updated_at.desc())
+                .limit(limit)
+                .select(ReceiverModel::as_select())
+                .load::<ReceiverModel>(&mut conn)?;
+
+            Ok(receiver_models
+                .into_iter()
+                .map(ReceiverRecord::from)
+                .collect())
+        })
+        .await?
+    }
+
     /// Delete a receiver and all associated photos and links
     pub async fn delete_receiver(&self, callsign: &str) -> Result<bool> {
         let pool = self.pool.clone();

@@ -231,11 +231,24 @@ pub async fn search_receivers(
             }
         }
     } else {
-        json_error(
-            StatusCode::BAD_REQUEST,
-            "Must provide one of: 'query', 'latitude'+'longitude' (with optional 'radius_miles'), 'callsign', or bounding box parameters (latitude_max, latitude_min, longitude_max, longitude_min)",
-        )
-        .into_response()
+        // No search parameters provided - return recently updated receivers
+        info!("No search parameters provided, returning recently updated receivers");
+        match receiver_repo.get_recently_updated_receivers(10).await {
+            Ok(receivers) => {
+                info!("Returning {} recently updated receivers", receivers.len());
+                let receiver_models: Vec<ReceiverModel> =
+                    receivers.into_iter().map(|r| r.into()).collect();
+                Json(ReceiverSearchResponse {
+                    receivers: receiver_models,
+                })
+                .into_response()
+            }
+            Err(e) => {
+                tracing::error!("Failed to get recently updated receivers: {}", e);
+                json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get receivers")
+                    .into_response()
+            }
+        }
     }
 }
 
