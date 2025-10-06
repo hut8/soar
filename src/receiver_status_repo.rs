@@ -215,6 +215,33 @@ impl ReceiverStatusRepository {
 
         Ok(result)
     }
+
+    /// Get statuses for a receiver with pagination
+    pub async fn get_statuses_by_receiver_paginated(
+        &self,
+        receiver_id: i32,
+        page: i64,
+        per_page: i64,
+    ) -> Result<(Vec<ReceiverStatus>, i64)> {
+        let mut conn = self.get_connection()?;
+
+        // Get total count
+        let total_count: i64 = receiver_statuses::table
+            .filter(receiver_statuses::receiver_id.eq(receiver_id))
+            .count()
+            .get_result(&mut conn)?;
+
+        // Get paginated results
+        let offset = (page - 1) * per_page;
+        let statuses = receiver_statuses::table
+            .filter(receiver_statuses::receiver_id.eq(receiver_id))
+            .order(receiver_statuses::received_at.desc())
+            .limit(per_page)
+            .offset(offset)
+            .load::<ReceiverStatus>(&mut conn)?;
+
+        Ok((statuses, total_count))
+    }
 }
 
 /// Statistics summary for a receiver over a time period

@@ -420,6 +420,43 @@ impl FixesRepository {
         Ok(result)
     }
 
+    /// Get fixes by source (receiver callsign) with pagination
+    pub async fn get_fixes_by_source_paginated(
+        &self,
+        source_callsign: &str,
+        page: i64,
+        per_page: i64,
+    ) -> Result<(Vec<Fix>, i64)> {
+        let pool = self.pool.clone();
+        let source_callsign = source_callsign.to_string();
+
+        let result = tokio::task::spawn_blocking(move || {
+            use crate::schema::fixes::dsl::*;
+            let mut conn = pool.get()?;
+
+            // Get total count
+            let total_count = fixes
+                .filter(source.eq(&source_callsign))
+                .count()
+                .get_result::<i64>(&mut conn)?;
+
+            // Get paginated results (most recent first)
+            let offset = (page - 1) * per_page;
+            let results = fixes
+                .filter(source.eq(&source_callsign))
+                .order(timestamp.desc())
+                .limit(per_page)
+                .offset(offset)
+                .select(Fix::as_select())
+                .load::<Fix>(&mut conn)?;
+
+            Ok::<(Vec<Fix>, i64), anyhow::Error>((results, total_count))
+        })
+        .await??;
+
+        Ok(result)
+    }
+
     /// Get devices with their recent fixes in a bounding box for efficient area subscriptions
     /// This replaces the inefficient global fetch + filter approach
     #[instrument(skip(self), fields(fixes_per_device = fixes_per_device.unwrap_or(5)))]

@@ -483,6 +483,110 @@ impl ReceiverRepository {
         })
         .await?
     }
+
+    /// Search receivers by text query (searches across callsign, description, country, contact, email)
+    pub async fn search_by_query(&self, query_param: &str) -> Result<Vec<ReceiverModel>> {
+        let pool = self.pool.clone();
+        let search_pattern = format!("%{}%", query_param);
+
+        tokio::task::spawn_blocking(move || -> Result<Vec<ReceiverModel>> {
+            let mut conn = pool.get()?;
+            let receiver_models = receivers::table
+                .filter(
+                    receivers::callsign
+                        .ilike(&search_pattern)
+                        .or(receivers::description.ilike(&search_pattern))
+                        .or(receivers::country.ilike(&search_pattern))
+                        .or(receivers::contact.ilike(&search_pattern))
+                        .or(receivers::email.ilike(&search_pattern)),
+                )
+                .order(receivers::callsign.asc())
+                .select(ReceiverModel::as_select())
+                .load::<ReceiverModel>(&mut conn)?;
+
+            Ok(receiver_models)
+        })
+        .await?
+    }
+
+    /// Get receivers within a radius (in miles) from a point
+    pub async fn get_receivers_within_radius(
+        &self,
+        latitude: f64,
+        longitude: f64,
+        radius_miles: f64,
+    ) -> Result<Vec<ReceiverModel>> {
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || -> Result<Vec<ReceiverModel>> {
+            let mut conn = pool.get()?;
+
+            // Convert miles to meters (PostGIS uses meters)
+            let radius_meters = radius_miles * 1609.34;
+
+            // Build the radius query using ST_DWithin
+            let radius_sql = r#"
+                SELECT r.*
+                FROM receivers r
+                WHERE r.location IS NOT NULL
+                  AND ST_DWithin(
+                      r.location,
+                      ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
+                      $3
+                  )
+                ORDER BY r.callsign
+            "#;
+
+            #[derive(QueryableByName)]
+            struct ReceiverRow {
+                #[diesel(sql_type = diesel::sql_types::Int4)]
+                id: i32,
+                #[diesel(sql_type = diesel::sql_types::Text)]
+                callsign: String,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+                description: Option<String>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+                contact: Option<String>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+                email: Option<String>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+                country: Option<String>,
+                #[diesel(sql_type = diesel::sql_types::Timestamptz)]
+                created_at: chrono::DateTime<chrono::Utc>,
+                #[diesel(sql_type = diesel::sql_types::Timestamptz)]
+                updated_at: chrono::DateTime<chrono::Utc>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float8>)]
+                latitude: Option<f64>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float8>)]
+                longitude: Option<f64>,
+            }
+
+            let receiver_rows: Vec<ReceiverRow> = diesel::sql_query(radius_sql)
+                .bind::<diesel::sql_types::Double, _>(longitude)
+                .bind::<diesel::sql_types::Double, _>(latitude)
+                .bind::<diesel::sql_types::Double, _>(radius_meters)
+                .load(&mut conn)?;
+
+            let receivers: Vec<ReceiverModel> = receiver_rows
+                .into_iter()
+                .map(|row| ReceiverModel {
+                    id: row.id,
+                    callsign: row.callsign,
+                    description: row.description,
+                    contact: row.contact,
+                    email: row.email,
+                    country: row.country,
+                    created_at: row.created_at,
+                    updated_at: row.updated_at,
+                    latitude: row.latitude,
+                    longitude: row.longitude,
+                })
+                .collect();
+
+            Ok(receivers)
+        })
+        .await?
+    }
 }
 
 #[cfg(test)]
