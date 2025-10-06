@@ -71,7 +71,7 @@ impl ReceiverStatusRepository {
     /// Get recent statuses for a specific receiver
     pub async fn get_recent_for_receiver(
         &self,
-        receiver_id: i32,
+        receiver_id: Uuid,
         limit: Option<i64>,
     ) -> Result<Vec<ReceiverStatus>> {
         let limit = limit.unwrap_or(100);
@@ -89,7 +89,7 @@ impl ReceiverStatusRepository {
     /// Get statuses for a receiver within a time range
     pub async fn get_for_receiver_in_time_range(
         &self,
-        receiver_id: i32,
+        receiver_id: Uuid,
         start_time: DateTime<Utc>,
         end_time: DateTime<Utc>,
         limit: Option<i64>,
@@ -167,7 +167,7 @@ impl ReceiverStatusRepository {
     }
 
     /// Get count of receiver statuses for a specific receiver
-    pub async fn count_for_receiver(&self, receiver_id: i32) -> Result<i64> {
+    pub async fn count_for_receiver(&self, receiver_id: Uuid) -> Result<i64> {
         let mut conn = self.get_connection()?;
         let count = receiver_statuses::table
             .filter(receiver_statuses::receiver_id.eq(receiver_id))
@@ -181,7 +181,7 @@ impl ReceiverStatusRepository {
     /// Note: Uses raw SQL because Diesel's tuple size limit (12) is exceeded by the 13 aggregate fields
     pub async fn get_receiver_averages(
         &self,
-        receiver_id: i32,
+        receiver_id: Uuid,
         start_time: DateTime<Utc>,
         end_time: DateTime<Utc>,
     ) -> Result<Option<ReceiverAverages>> {
@@ -207,7 +207,7 @@ impl ReceiverStatusRepository {
         "#;
 
         let result = diesel::sql_query(sql)
-            .bind::<diesel::sql_types::Integer, _>(receiver_id)
+            .bind::<diesel::sql_types::Uuid, _>(receiver_id)
             .bind::<diesel::sql_types::Timestamptz, _>(start_time)
             .bind::<diesel::sql_types::Timestamptz, _>(end_time)
             .get_result::<ReceiverAverages>(&mut conn)
@@ -219,7 +219,7 @@ impl ReceiverStatusRepository {
     /// Get statuses for a receiver with pagination
     pub async fn get_statuses_by_receiver_paginated(
         &self,
-        receiver_id: i32,
+        receiver_id: Uuid,
         page: i64,
         per_page: i64,
     ) -> Result<(Vec<ReceiverStatus>, i64)> {

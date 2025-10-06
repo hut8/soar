@@ -284,6 +284,7 @@ diesel::table! {
         device_address -> Int4,
         is_active -> Bool,
         altitude_agl -> Nullable<Int4>,
+        receiver_id -> Nullable<Uuid>,
     }
 }
 
@@ -339,7 +340,6 @@ diesel::table! {
 diesel::table! {
     receiver_statuses (id) {
         id -> Uuid,
-        receiver_id -> Int4,
         received_at -> Timestamptz,
         version -> Nullable<Text>,
         platform -> Nullable<Text>,
@@ -370,6 +370,7 @@ diesel::table! {
         lag -> Nullable<Int4>,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
+        receiver_id -> Uuid,
     }
 }
 
@@ -378,7 +379,6 @@ diesel::table! {
     use super::sql_types::Geography;
 
     receivers (id) {
-        id -> Int4,
         callsign -> Text,
         description -> Nullable<Text>,
         contact -> Nullable<Text>,
@@ -389,25 +389,26 @@ diesel::table! {
         latitude -> Nullable<Float8>,
         longitude -> Nullable<Float8>,
         location -> Nullable<Geography>,
+        id -> Uuid,
     }
 }
 
 diesel::table! {
     receivers_links (id) {
         id -> Int4,
-        receiver_id -> Int4,
         rel -> Nullable<Text>,
         href -> Text,
         created_at -> Timestamptz,
+        receiver_id -> Uuid,
     }
 }
 
 diesel::table! {
     receivers_photos (id) {
         id -> Int4,
-        receiver_id -> Int4,
         photo_url -> Text,
         created_at -> Timestamptz,
+        receiver_id -> Uuid,
     }
 }
 
@@ -554,6 +555,7 @@ diesel::joinable!(clubs -> locations (location_id));
 diesel::joinable!(fixes -> clubs (club_id));
 diesel::joinable!(fixes -> devices (device_id));
 diesel::joinable!(fixes -> flights (flight_id));
+diesel::joinable!(fixes -> receivers (receiver_id));
 diesel::joinable!(flights -> aircraft_registrations (tow_aircraft_id));
 diesel::joinable!(flights -> clubs (club_id));
 diesel::joinable!(flights -> devices (device_id));

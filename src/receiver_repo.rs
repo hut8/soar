@@ -3,6 +3,7 @@ use chrono::Utc;
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool};
 use tracing::{info, warn};
+use uuid::Uuid;
 
 use crate::receivers::{
     NewReceiverLinkModel, NewReceiverModel, NewReceiverPhotoModel, Receiver, ReceiverLinkModel,
@@ -78,7 +79,7 @@ impl ReceiverRepository {
                             receivers::updated_at.eq(Utc::now()),
                         ))
                         .returning(receivers::id)
-                        .get_result::<i32>(conn);
+                        .get_result::<Uuid>(conn);
 
                     let receiver_id = match receiver_result {
                         Ok(id) => id,
@@ -192,7 +193,7 @@ impl ReceiverRepository {
     }
 
     /// Get all photos for a receiver
-    pub async fn get_receiver_photos(&self, receiver_id: i32) -> Result<Vec<ReceiverPhotoRecord>> {
+    pub async fn get_receiver_photos(&self, receiver_id: Uuid) -> Result<Vec<ReceiverPhotoRecord>> {
         let pool = self.pool.clone();
         tokio::task::spawn_blocking(move || -> Result<Vec<ReceiverPhotoRecord>> {
             let mut conn = pool.get()?;
@@ -211,7 +212,7 @@ impl ReceiverRepository {
     }
 
     /// Get all links for a receiver
-    pub async fn get_receiver_links(&self, receiver_id: i32) -> Result<Vec<ReceiverLinkRecord>> {
+    pub async fn get_receiver_links(&self, receiver_id: Uuid) -> Result<Vec<ReceiverLinkRecord>> {
         let pool = self.pool.clone();
         tokio::task::spawn_blocking(move || -> Result<Vec<ReceiverLinkRecord>> {
             let mut conn = pool.get()?;
@@ -331,7 +332,7 @@ impl ReceiverRepository {
                 let receiver_id_result = receivers::table
                     .filter(receivers::callsign.eq(&callsign))
                     .select(receivers::id)
-                    .first::<i32>(conn)
+                    .first::<Uuid>(conn)
                     .optional()?;
 
                 let receiver_id = match receiver_id_result {
@@ -391,7 +392,7 @@ impl ReceiverRepository {
     }
 
     /// Get a receiver by ID
-    pub async fn get_receiver_by_id(&self, id: i32) -> Result<Option<ReceiverModel>> {
+    pub async fn get_receiver_by_id(&self, id: Uuid) -> Result<Option<ReceiverModel>> {
         let pool = self.pool.clone();
 
         tokio::task::spawn_blocking(move || -> Result<Option<ReceiverModel>> {
@@ -434,8 +435,8 @@ impl ReceiverRepository {
 
             #[derive(QueryableByName)]
             struct ReceiverRow {
-                #[diesel(sql_type = diesel::sql_types::Int4)]
-                id: i32,
+                #[diesel(sql_type = diesel::sql_types::Uuid)]
+                id: Uuid,
                 #[diesel(sql_type = diesel::sql_types::Text)]
                 callsign: String,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
@@ -539,8 +540,8 @@ impl ReceiverRepository {
 
             #[derive(QueryableByName)]
             struct ReceiverRow {
-                #[diesel(sql_type = diesel::sql_types::Int4)]
-                id: i32,
+                #[diesel(sql_type = diesel::sql_types::Uuid)]
+                id: Uuid,
                 #[diesel(sql_type = diesel::sql_types::Text)]
                 callsign: String,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]

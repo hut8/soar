@@ -22,7 +22,6 @@ use uuid::Uuid;
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct ReceiverStatus {
     pub id: Uuid,
-    pub receiver_id: i32,
     pub received_at: DateTime<Utc>,
 
     // Status fields from StatusComment
@@ -58,13 +57,14 @@ pub struct ReceiverStatus {
 
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub receiver_id: Uuid,
 }
 
 /// For inserting new receiver statuses (without auto-generated fields)
 #[derive(Debug, Insertable, AsChangeset)]
 #[diesel(table_name = crate::schema::receiver_statuses)]
 pub struct NewReceiverStatus {
-    pub receiver_id: i32,
+    pub receiver_id: Uuid,
     pub received_at: DateTime<Utc>,
 
     // Status fields from StatusComment
@@ -103,7 +103,7 @@ impl NewReceiverStatus {
     /// Create a new receiver status from an OGN StatusComment
     /// The lag will be computed based on packet_timestamp vs received_at
     pub fn from_status_comment(
-        receiver_id: i32,
+        receiver_id: Uuid,
         status_comment: &StatusComment,
         packet_timestamp: DateTime<Utc>,
         received_at: DateTime<Utc>,
@@ -197,14 +197,15 @@ mod tests {
         let packet_time = Utc.with_ymd_and_hms(2024, 1, 1, 12, 0, 0).unwrap();
         let received_time = Utc.with_ymd_and_hms(2024, 1, 1, 12, 0, 1).unwrap(); // 1 second later
 
+        let test_receiver_id = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
         let new_status = NewReceiverStatus::from_status_comment(
-            123,
+            test_receiver_id,
             &status_comment,
             packet_time,
             received_time,
         );
 
-        assert_eq!(new_status.receiver_id, 123);
+        assert_eq!(new_status.receiver_id, test_receiver_id);
         assert_eq!(new_status.received_at, received_time);
         assert_eq!(new_status.version, Some("1.0.0".to_string()));
         assert_eq!(new_status.platform, Some("Linux".to_string()));

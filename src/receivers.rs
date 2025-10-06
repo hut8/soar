@@ -35,7 +35,7 @@ pub struct ReceiversData {
 /// Database representation of a receiver
 #[derive(Debug, Clone)]
 pub struct ReceiverRecord {
-    pub id: i32,
+    pub id: uuid::Uuid,
     pub callsign: String,
     pub description: Option<String>,
     pub contact: Option<String>,
@@ -51,7 +51,7 @@ pub struct ReceiverRecord {
 #[derive(Debug, Clone)]
 pub struct ReceiverPhotoRecord {
     pub id: i32,
-    pub receiver_id: i32,
+    pub receiver_id: uuid::Uuid,
     pub photo_url: String,
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
@@ -60,7 +60,7 @@ pub struct ReceiverPhotoRecord {
 #[derive(Debug, Clone)]
 pub struct ReceiverLinkRecord {
     pub id: i32,
-    pub receiver_id: i32,
+    pub receiver_id: uuid::Uuid,
     pub rel: Option<String>,
     pub href: String,
     pub created_at: chrono::DateTime<chrono::Utc>,
@@ -73,7 +73,7 @@ impl Receiver {
         let links = self.links.clone().unwrap_or_default();
 
         let receiver_record = ReceiverRecord {
-            id: 0, // Will be set by database
+            id: uuid::Uuid::new_v4(), // Generate a new UUID
             callsign: self.callsign.clone().unwrap_or_default(),
             description: self.description.clone(),
             contact: self.contact.clone(),
@@ -93,7 +93,6 @@ impl Receiver {
 #[derive(Debug, Clone, Queryable, Selectable, Serialize, Deserialize)]
 #[diesel(table_name = crate::schema::receivers)]
 pub struct ReceiverModel {
-    pub id: i32,
     pub callsign: String,
     pub description: Option<String>,
     pub contact: Option<String>,
@@ -104,6 +103,7 @@ pub struct ReceiverModel {
     pub latitude: Option<f64>,
     pub longitude: Option<f64>,
     // location is a generated column, so it's only in Queryable/Selectable
+    pub id: uuid::Uuid,
 }
 
 /// Insert model for new receivers
@@ -136,7 +136,7 @@ pub struct UpdateReceiverModel {
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct ReceiverPhotoModel {
     pub id: i32,
-    pub receiver_id: i32,
+    pub receiver_id: uuid::Uuid,
     pub photo_url: String,
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
@@ -145,7 +145,7 @@ pub struct ReceiverPhotoModel {
 #[derive(Debug, Clone, Insertable, Serialize, Deserialize)]
 #[diesel(table_name = crate::schema::receivers_photos)]
 pub struct NewReceiverPhotoModel {
-    pub receiver_id: i32,
+    pub receiver_id: uuid::Uuid,
     pub photo_url: String,
 }
 
@@ -154,7 +154,7 @@ pub struct NewReceiverPhotoModel {
 #[diesel(table_name = crate::schema::receivers_links)]
 pub struct ReceiverLinkModel {
     pub id: i32,
-    pub receiver_id: i32,
+    pub receiver_id: uuid::Uuid,
     pub rel: Option<String>,
     pub href: String,
     pub created_at: chrono::DateTime<chrono::Utc>,
@@ -165,7 +165,7 @@ pub struct ReceiverLinkModel {
 #[diesel(table_name = crate::schema::receivers_links)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct NewReceiverLinkModel {
-    pub receiver_id: i32,
+    pub receiver_id: uuid::Uuid,
     pub rel: Option<String>,
     pub href: String,
 }

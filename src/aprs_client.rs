@@ -1220,7 +1220,7 @@ impl ReceiverStatusProcessor {
 
     /// Extract receiver ID from callsign
     /// TODO: Implement proper lookup from receivers table
-    fn extract_receiver_id(&self, callsign: &str) -> Option<i32> {
+    fn extract_receiver_id(&self, callsign: &str) -> Option<uuid::Uuid> {
         // Placeholder implementation - in real code, this should query the receivers table
         trace!("Would look up receiver ID for callsign: {}", callsign);
         None // For now, return None

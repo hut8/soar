@@ -5,6 +5,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use tracing::{info, instrument};
+use uuid::Uuid;
 
 use crate::actions::json_error;
 use crate::receiver_repo::ReceiverRepository;
@@ -36,7 +37,7 @@ pub struct ReceiverSearchResponse {
 
 /// Get a receiver by its ID
 pub async fn get_receiver_by_id(
-    Path(id): Path<i32>,
+    Path(id): Path<Uuid>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
     let receiver_repo = ReceiverRepository::new(state.pool);
@@ -240,7 +241,7 @@ pub async fn search_receivers(
 
 /// Get fixes received by a specific receiver
 pub async fn get_receiver_fixes(
-    Path(id): Path<i32>,
+    Path(id): Path<Uuid>,
     Query(params): Query<ReceiverFixesQuery>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
@@ -290,7 +291,7 @@ pub async fn get_receiver_fixes(
 
 /// Get statuses for a specific receiver
 pub async fn get_receiver_statuses(
-    Path(id): Path<i32>,
+    Path(id): Path<Uuid>,
     Query(params): Query<ReceiverStatusesQuery>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {

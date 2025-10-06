@@ -75,6 +75,9 @@ pub struct Fix {
     /// Whether the aircraft is considered active (ground_speed >= 15 knots)
     #[serde(rename = "active")]
     pub is_active: bool,
+
+    /// Receiver that reported this fix (from via array)
+    pub receiver_id: Option<Uuid>,
 }
 
 impl Fix {
@@ -178,6 +181,7 @@ impl Fix {
                     received_at,
                     lag,
                     is_active,
+                    receiver_id: None, // Will be set during fix insertion
                 }))
             }
             _ => {

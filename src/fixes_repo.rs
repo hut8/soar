@@ -136,6 +136,7 @@ struct FixDslRow {
     received_at: DateTime<Utc>,
     lag: Option<i32>,
     is_active: bool,
+    receiver_id: Option<Uuid>,
 }
 
 impl From<FixDslRow> for Fix {
@@ -173,6 +174,7 @@ impl From<FixDslRow> for Fix {
             unparsed_data: row.unparsed_data,
             device_id: row.device_id, // Now directly a Uuid
             is_active: row.is_active,
+            receiver_id: row.receiver_id,
         }
     }
 }
@@ -217,6 +219,23 @@ impl FixesRepository {
         Ok(device_uuid)
     }
 
+    /// Look up receiver UUID by callsign
+    fn lookup_receiver_uuid_by_callsign(
+        conn: &mut diesel::PgConnection,
+        receiver_callsign: &str,
+    ) -> Result<Uuid> {
+        use crate::schema::receivers::dsl::*;
+
+        let receiver_uuid = receivers
+            .filter(callsign.eq(receiver_callsign))
+            .select(id)
+            .first::<Uuid>(conn)
+            .optional()?
+            .ok_or_else(|| anyhow::anyhow!("Receiver not found: {}", receiver_callsign))?;
+
+        Ok(receiver_uuid)
+    }
+
     /// Insert a new fix into the database
     pub async fn insert(&self, fix: &Fix) -> Result<()> {
         use crate::schema::fixes::dsl::*;
@@ -229,6 +248,13 @@ impl FixesRepository {
         let address_type_enum = fix.address_type;
         let dev_address_owned = dev_address.to_string();
 
+        // Get the receiver callsign from the via array (last entry)
+        let receiver_callsign = fix
+            .via
+            .last()
+            .and_then(|opt| opt.as_ref())
+            .map(|s| s.to_string());
+
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
@@ -238,6 +264,14 @@ impl FixesRepository {
                     &dev_address_owned,
                     address_type_enum,
                 )?;
+
+            // Look up the receiver UUID using receiver callsign
+            if let Some(ref callsign) = receiver_callsign {
+                new_fix.receiver_id = Self::lookup_receiver_uuid_by_callsign(
+                    &mut conn,
+                    callsign,
+                ).ok(); // Use ok() to convert Result to Option, ignoring errors
+            }
 
             diesel::insert_into(fixes)
                 .values(&new_fix)
@@ -645,6 +679,8 @@ impl FixesRepository {
                 lag: Option<i32>,
                 #[diesel(sql_type = diesel::sql_types::Bool)]
                 is_active: bool,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
+                receiver_id: Option<uuid::Uuid>,
             }
 
             let fix_rows: Vec<FixRow> = diesel::sql_query(fixes_sql)
@@ -693,6 +729,7 @@ impl FixesRepository {
                     unparsed_data: fix_row.unparsed_data,
                     device_id: fix_row.device_id,
                     is_active: fix_row.is_active,
+                    receiver_id: fix_row.receiver_id,
                 };
                 fixes_by_device
                     .entry(device_id)
