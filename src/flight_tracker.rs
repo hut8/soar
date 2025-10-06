@@ -718,7 +718,7 @@ impl FlightTracker {
                     if let Some(sats_used) = fix.satellites_used
                         && sats_used < 4
                     {
-                        warn!(
+                        debug!(
                             "Ignoring takeoff for aircraft {} - insufficient GPS quality ({} satellites used, need >= 4)",
                             fix.device_id, sats_used
                         );
