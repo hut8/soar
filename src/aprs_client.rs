@@ -815,10 +815,18 @@ impl PacketHandler for PacketRouter {
                 }
             }
             AprsData::Status(_) => {
+                debug!(
+                    "Received status packet from {} (source type: {:?})",
+                    packet.from,
+                    packet.position_source_type()
+                );
                 if let Some(status_proc) = &self.receiver_status_processor {
                     status_proc.process_status_packet(&packet);
                 } else {
-                    trace!("No receiver status processor configured, skipping status packet");
+                    warn!(
+                        "No receiver status processor configured, skipping status packet from {}",
+                        packet.from
+                    );
                 }
             }
             _ => {
@@ -1031,68 +1039,76 @@ impl ReceiverStatusProcessor {
 
     /// Process a status packet from a receiver
     pub fn process_status_packet(&self, packet: &AprsPacket) {
-        // Ensure this is from a receiver
-        match packet.position_source_type() {
-            PositionSourceType::Receiver => {
-                if let AprsData::Status(status) = &packet.data {
-                    let callsign = packet.from.to_string();
-                    let status_comment = status.comment.clone();
-                    let received_at = chrono::Utc::now();
+        let source_type = packet.position_source_type();
+        let callsign = packet.from.to_string();
 
-                    // Look up receiver ID asynchronously
-                    tokio::spawn({
-                        let receiver_repo = self.receiver_repo.clone();
-                        let status_repo = self.status_repo.clone();
+        debug!(
+            "ReceiverStatusProcessor: Processing status packet from {} (source_type: {:?})",
+            callsign, source_type
+        );
 
-                        async move {
-                            // Look up receiver by callsign
-                            match receiver_repo.get_receiver_by_callsign(&callsign).await {
-                                Ok(Some(receiver)) => {
-                                    // Create NewReceiverStatus from status comment
-                                    let new_status = NewReceiverStatus::from_status_comment(
-                                        receiver.id,
-                                        &status_comment,
-                                        received_at, // packet timestamp
-                                        received_at, // received_at
-                                    );
+        // Process all status packets, not just those identified as receivers
+        // The receiver lookup will determine if it's actually a receiver
+        if let AprsData::Status(status) = &packet.data {
+            let status_comment = status.comment.clone();
+            let received_at = chrono::Utc::now();
 
-                                    // Insert receiver status
-                                    match status_repo.insert(&new_status).await {
-                                        Ok(_) => {
-                                            debug!("Inserted receiver status for {}", callsign);
-                                            // Track receiver status update metric
-                                            counter!("receiver_status_updates_total").increment(1);
-                                        }
-                                        Err(e) => {
-                                            error!(
-                                                "Failed to insert receiver status for {}: {}",
-                                                callsign, e
-                                            );
-                                        }
-                                    }
-                                }
-                                Ok(None) => {
-                                    debug!("Receiver not found for callsign: {}", callsign);
+            debug!("Status comment from {}: {:?}", callsign, status_comment);
+
+            // Look up receiver ID asynchronously
+            tokio::spawn({
+                let receiver_repo = self.receiver_repo.clone();
+                let status_repo = self.status_repo.clone();
+
+                async move {
+                    // Look up receiver by callsign
+                    match receiver_repo.get_receiver_by_callsign(&callsign).await {
+                        Ok(Some(receiver)) => {
+                            info!(
+                                "Found receiver {} (id: {}) for status update",
+                                callsign, receiver.id
+                            );
+
+                            // Create NewReceiverStatus from status comment
+                            let new_status = NewReceiverStatus::from_status_comment(
+                                receiver.id,
+                                &status_comment,
+                                received_at, // packet timestamp
+                                received_at, // received_at
+                            );
+
+                            // Insert receiver status
+                            match status_repo.insert(&new_status).await {
+                                Ok(_) => {
+                                    info!("Inserted receiver status for {}", callsign);
+                                    // Track receiver status update metric
+                                    counter!("receiver_status_updates_total").increment(1);
                                 }
                                 Err(e) => {
                                     error!(
-                                        "Failed to look up receiver by callsign {}: {}",
+                                        "Failed to insert receiver status for {}: {}",
                                         callsign, e
                                     );
                                 }
                             }
                         }
-                    });
-                } else {
-                    warn!("Expected status packet but got different packet type");
+                        Ok(None) => {
+                            debug!(
+                                "Status packet from {} is not a known receiver, skipping",
+                                callsign
+                            );
+                        }
+                        Err(e) => {
+                            error!("Failed to look up receiver by callsign {}: {}", callsign, e);
+                        }
+                    }
                 }
-            }
-            source_type => {
-                trace!(
-                    "Status packet from non-receiver source {:?} - ignoring",
-                    source_type
-                );
-            }
+            });
+        } else {
+            warn!(
+                "Expected status packet but got different packet type from {}",
+                callsign
+            );
         }
     }
 }
