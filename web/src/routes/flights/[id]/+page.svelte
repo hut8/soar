@@ -163,7 +163,7 @@
 
 	// KML download
 	function downloadKML() {
-		window.open(`/api/flights/${data.flight.id}/kml`, '_blank');
+		window.open(`/data/flights/${data.flight.id}/kml`, '_blank');
 	}
 
 	function goToPage(page: number) {

@@ -6,7 +6,7 @@ Sitemap: https://glider.flights/sitemap.xml
 
 # Block access to admin areas and sensitive pages
 Disallow: /admin/
-Disallow: /api/
+Disallow: /data/
 Disallow: /profile/
 Disallow: /login/
 Disallow: /register/
