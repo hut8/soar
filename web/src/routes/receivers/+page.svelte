@@ -2,10 +2,14 @@
 	import { Search, MapPin, Radio } from '@lucide/svelte';
 	import { resolve } from '$app/paths';
 	import { serverCall } from '$lib/api/server';
+	import { Loader } from '@googlemaps/js-api-loader';
+	import { onMount } from 'svelte';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
 
 	dayjs.extend(relativeTime);
+
+	const GOOGLE_MAPS_API_KEY = 'AIzaSyBaK8UU0l4z-k6b-UPlLzw3wv_Ti71XNy8';
 
 	interface Receiver {
 		id: number;
@@ -120,6 +124,21 @@
 	function getLastHeard(updatedAt: string): string {
 		return dayjs(updatedAt).fromNow();
 	}
+
+	async function loadGoogleMapsScript(): Promise<void> {
+		const loader = new Loader({
+			apiKey: GOOGLE_MAPS_API_KEY,
+			version: 'weekly'
+		});
+
+		// Import the places library for autocomplete
+		await loader.importLibrary('places');
+	}
+
+	onMount(() => {
+		// Load Google Maps script when component mounts
+		loadGoogleMapsScript();
+	});
 
 	$effect(() => {
 		if (searchMode === 'location' && locationInput) {
