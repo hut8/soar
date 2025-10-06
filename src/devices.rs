@@ -1,4 +1,5 @@
 use anyhow::Result;
+use bigdecimal::BigDecimal;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -13,6 +14,7 @@ const DDB_URL_GLIDERNET: &str = "http://ddb.glidernet.org/download/?j=1";
 const DDB_URL_GLIDERNET_WORKERS: &str =
     "https://ddb-glidernet-download.davis-chappins.workers.dev/ddb.json";
 const DDB_URL_FLARMNET: &str = "https://www.flarmnet.org/files/ddb.json";
+const DDB_URL_UNIFIED_FLARMNET: &str = "https://turbo87.github.io/united-flarmnet/united.fln";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DeviceSource {
@@ -137,6 +139,12 @@ pub struct Device {
     pub tracked: bool,
     #[serde(deserialize_with = "string_to_bool", serialize_with = "bool_to_string")]
     pub identified: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub frequency_mhz: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pilot_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub home_base_airport_ident: Option<String>,
 }
 
 // Diesel database model for devices table
@@ -165,6 +173,9 @@ pub struct DeviceModel {
     pub updated_at: DateTime<Utc>,
     pub id: uuid::Uuid,
     pub from_ddb: bool,
+    pub frequency_mhz: Option<BigDecimal>,
+    pub pilot_name: Option<String>,
+    pub home_base_airport_ident: Option<String>,
 }
 
 // For inserting new devices (without timestamps which are set by DB)
@@ -179,6 +190,9 @@ pub struct NewDevice {
     pub tracked: bool,
     pub identified: bool,
     pub from_ddb: bool,
+    pub frequency_mhz: Option<BigDecimal>,
+    pub pilot_name: Option<String>,
+    pub home_base_airport_ident: Option<String>,
 }
 
 impl From<Device> for NewDevice {
@@ -192,6 +206,11 @@ impl From<Device> for NewDevice {
             tracked: device.tracked,
             identified: device.identified,
             from_ddb: true,
+            frequency_mhz: device
+                .frequency_mhz
+                .and_then(|f| f.to_string().parse().ok()),
+            pilot_name: device.pilot_name,
+            home_base_airport_ident: device.home_base_airport_ident,
         }
     }
 }
@@ -207,6 +226,11 @@ impl From<DeviceModel> for Device {
             competition_number: model.competition_number,
             tracked: model.tracked,
             identified: model.identified,
+            frequency_mhz: model
+                .frequency_mhz
+                .and_then(|bd| bd.to_string().parse().ok()),
+            pilot_name: model.pilot_name,
+            home_base_airport_ident: model.home_base_airport_ident,
         }
     }
 }
@@ -403,6 +427,40 @@ impl DeviceFetcher {
         Ok(device_response.devices)
     }
 
+    /// Fetch and decode unified FlarmNet file from XCSoar format
+    /// This will replace the existing Flarmnet source in the future
+    pub async fn fetch_unified_flarmnet(&self) -> Result<()> {
+        info!("Fetching unified FlarmNet from XCSoar...");
+
+        let response = reqwest::get(DDB_URL_UNIFIED_FLARMNET).await?;
+
+        if !response.status().is_success() {
+            warn!(
+                "Unified FlarmNet returned non-success status: {}",
+                response.status()
+            );
+            return Err(anyhow::anyhow!("HTTP error: {}", response.status()));
+        }
+
+        let content = response.text().await?;
+        info!("Downloaded unified FlarmNet file, attempting to decode...");
+
+        match flarmnet::xcsoar::decode_file(&content) {
+            Ok(decoded) => {
+                info!(
+                    "Successfully decoded unified FlarmNet file with {} records",
+                    decoded.records.len()
+                );
+                // TODO: Process records in the future
+                Ok(())
+            }
+            Err(e) => {
+                warn!("Failed to decode unified FlarmNet file: {}", e);
+                Err(anyhow::anyhow!("FlarmNet decode error: {}", e))
+            }
+        }
+    }
+
     /// Fetch all devices from both DDB sources and merge them
     /// In case of conflicts (same device_id), Glidernet takes precedence
     pub async fn fetch_all(&self) -> Result<Vec<Device>> {
@@ -529,6 +587,9 @@ impl DeviceFetcher {
                         },
                         tracked: glidernet_device.tracked || flarmnet_device.tracked,
                         identified: glidernet_device.identified || flarmnet_device.identified,
+                        frequency_mhz: None,
+                        pilot_name: None,
+                        home_base_airport_ident: None,
                     };
                     device_map.insert(
                         glidernet_device.address,
@@ -606,6 +667,9 @@ mod tests {
             competition_number: "J".to_string(),
             tracked: true,
             identified: false,
+            frequency_mhz: None,
+            pilot_name: None,
+            home_base_airport_ident: None,
         };
 
         // Test that the device can be serialized/deserialized
@@ -876,6 +940,9 @@ mod tests {
             competition_number: "T".to_string(),
             tracked: true,
             identified: true,
+            frequency_mhz: None,
+            pilot_name: None,
+            home_base_airport_ident: None,
         }
     }
 }

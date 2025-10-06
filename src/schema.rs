@@ -231,6 +231,9 @@ diesel::table! {
         updated_at -> Timestamptz,
         id -> Uuid,
         from_ddb -> Bool,
+        frequency_mhz -> Nullable<Numeric>,
+        pilot_name -> Nullable<Text>,
+        home_base_airport_ident -> Nullable<Text>,
     }
 }
 

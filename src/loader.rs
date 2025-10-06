@@ -286,6 +286,15 @@ pub async fn handle_load_data(
         // Create device fetcher and fetch devices
         let device_fetcher = DeviceFetcher::new();
 
+        // Fetch unified FlarmNet in parallel (just for testing/logging for now)
+        // This will be used to replace the existing FlarmNet source in the future
+        tokio::spawn(async move {
+            let fetcher = DeviceFetcher::new();
+            if let Err(e) = fetcher.fetch_unified_flarmnet().await {
+                warn!("Unified FlarmNet fetch/decode failed: {}", e);
+            }
+        });
+
         match device_fetcher.fetch_all().await {
             Ok(devices) => {
                 let device_count = devices.len();

@@ -515,6 +515,12 @@ impl FixesRepository {
                 updated_at: DateTime<Utc>,
                 #[diesel(sql_type = diesel::sql_types::Bool)]
                 from_ddb: bool,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Numeric>)]
+                frequency_mhz: Option<bigdecimal::BigDecimal>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+                pilot_name: Option<String>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+                home_base_airport_ident: Option<String>,
             }
 
             let device_rows: Vec<DeviceRow> = diesel::sql_query(devices_sql)
@@ -549,6 +555,9 @@ impl FixesRepository {
                     created_at: row.created_at,
                     updated_at: row.updated_at,
                     from_ddb: row.from_ddb,
+                    frequency_mhz: row.frequency_mhz,
+                    pilot_name: row.pilot_name,
+                    home_base_airport_ident: row.home_base_airport_ident,
                 })
                 .collect();
 
