@@ -69,6 +69,7 @@ flydent = ">= 0.4"
 sitemap-rs = "0.4.0"
 metrics = "0.24"
 metrics-exporter-prometheus = "0.17"
+flarmnet = "0.5.0"
 
 [profile.release]
 debug = true

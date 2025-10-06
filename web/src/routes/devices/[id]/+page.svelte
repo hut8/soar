@@ -22,6 +22,7 @@
 		type Fix,
 		type Flight
 	} from '$lib/types';
+	import { formatTitleCase, formatDeviceAddress, getStatusCodeDescription } from '$lib/formatters';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
 
@@ -181,21 +182,6 @@
 		return `https://www.google.com/maps?q=${lat},${lng}`;
 	}
 
-	function formatAddressType(addressType: string): string {
-		switch (addressType.toLowerCase()) {
-			case 'icao':
-				return 'ICAO';
-			case 'flarm':
-				return 'FLARM';
-			case 'ogn':
-				return 'OGN';
-			case 'unknown':
-				return 'Unknown';
-			default:
-				return addressType;
-		}
-	}
-
 	function goBack() {
 		goto(resolve('/devices'));
 	}
@@ -249,7 +235,7 @@
 							<div>
 								<h1 class="h1">{device.registration}</h1>
 								<p class="text-surface-600-300-token font-mono text-sm">
-									Address: {formatAddressType(device.address_type)}: {device.address}
+									Address: {formatDeviceAddress(device.address_type, device.address)}
 								</p>
 							</div>
 						</div>
@@ -290,7 +276,7 @@
 							<div>
 								<p class="text-surface-600-300-token mb-1 text-sm">Device Address</p>
 								<p class="font-mono">
-									{formatAddressType(device.address_type)}: {device.address}
+									{formatDeviceAddress(device.address_type, device.address)}
 								</p>
 							</div>
 						</div>
@@ -335,10 +321,10 @@
 							</div>
 
 							<div class="flex items-start gap-3">
-								<Plane class="mt-1 h-4 w-4 text-surface-500" />
+								<Info class="mt-1 h-4 w-4 text-surface-500" />
 								<div>
-									<p class="text-surface-600-300-token mb-1 text-sm">Manufacturer Model</p>
-									<p>{aircraftRegistration.mfr_mdl_code}</p>
+									<p class="text-surface-600-300-token mb-1 text-sm">Transponder Code</p>
+									<p class="font-mono">{aircraftRegistration.mode_s_code_hex || 'N/A'}</p>
 								</div>
 							</div>
 
@@ -370,7 +356,12 @@
 								<Info class="mt-1 h-4 w-4 text-surface-500" />
 								<div>
 									<p class="text-surface-600-300-token mb-1 text-sm">Status</p>
-									<p class="font-mono">{aircraftRegistration.status_code}</p>
+									<p>
+										{getStatusCodeDescription(aircraftRegistration.status_code)}
+										<span class="ml-1 text-xs text-surface-500"
+											>({aircraftRegistration.status_code})</span
+										>
+									</p>
 								</div>
 							</div>
 						</div>
@@ -415,7 +406,37 @@
 									<Info class="mt-1 h-4 w-4 text-surface-500" />
 									<div>
 										<p class="text-surface-600-300-token mb-1 text-sm">Aircraft Type</p>
-										<p>{aircraftModel.aircraft_type}</p>
+										<p>{formatTitleCase(aircraftModel.aircraft_type)}</p>
+									</div>
+								</div>
+							{/if}
+
+							{#if aircraftModel.engine_type}
+								<div class="flex items-start gap-3">
+									<Settings class="mt-1 h-4 w-4 text-surface-500" />
+									<div>
+										<p class="text-surface-600-300-token mb-1 text-sm">Engine Type</p>
+										<p>{formatTitleCase(aircraftModel.engine_type)}</p>
+									</div>
+								</div>
+							{/if}
+
+							{#if aircraftModel.aircraft_category}
+								<div class="flex items-start gap-3">
+									<Info class="mt-1 h-4 w-4 text-surface-500" />
+									<div>
+										<p class="text-surface-600-300-token mb-1 text-sm">Category</p>
+										<p>{formatTitleCase(aircraftModel.aircraft_category)}</p>
+									</div>
+								</div>
+							{/if}
+
+							{#if aircraftModel.builder_certification}
+								<div class="flex items-start gap-3">
+									<Info class="mt-1 h-4 w-4 text-surface-500" />
+									<div>
+										<p class="text-surface-600-300-token mb-1 text-sm">Builder Certification</p>
+										<p>{formatTitleCase(aircraftModel.builder_certification)}</p>
 									</div>
 								</div>
 							{/if}
@@ -436,6 +457,16 @@
 									<div>
 										<p class="text-surface-600-300-token mb-1 text-sm">Engines</p>
 										<p>{aircraftModel.number_of_engines}</p>
+									</div>
+								</div>
+							{/if}
+
+							{#if aircraftModel.weight_class}
+								<div class="flex items-start gap-3">
+									<Info class="mt-1 h-4 w-4 text-surface-500" />
+									<div>
+										<p class="text-surface-600-300-token mb-1 text-sm">Weight Class</p>
+										<p>{formatTitleCase(aircraftModel.weight_class)}</p>
 									</div>
 								</div>
 							{/if}

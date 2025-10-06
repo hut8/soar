@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { X, Plane, MapPin, Clock, RotateCcw, ExternalLink } from '@lucide/svelte';
 	import { Device, type Fix, type AircraftRegistration, type AircraftModel } from '$lib/types';
+	import { formatTitleCase, formatDeviceAddress, getStatusCodeDescription } from '$lib/formatters';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
 	import { onMount } from 'svelte';
@@ -124,14 +125,6 @@
 		};
 
 		return typeMap[typeAircraft] || `Type ${typeAircraft}`;
-	}
-
-	function formatAddress(addressType: string, address: string): string {
-		if (!address) return 'Unknown';
-
-		// Format as ICAO-XXYYZZ where XXYYZZ is the hex address
-		const hexAddress = address.toUpperCase();
-		return `ICAO-${hexAddress}`;
 	}
 
 	// Calculate bearing from user to aircraft
@@ -303,7 +296,7 @@
 						<h2 class="text-xl font-bold">Aircraft Status</h2>
 						<p class="text-sm text-gray-600">
 							{selectedDevice.registration ||
-								formatAddress(selectedDevice.address_type, selectedDevice.address)}
+								formatDeviceAddress(selectedDevice.address_type, selectedDevice.address)}
 							{#if selectedDevice.aircraft_model}
 								• {selectedDevice.aircraft_model}
 							{/if}
@@ -347,10 +340,7 @@
 								<div>
 									<dt class="text-sm font-medium text-gray-600">Address</dt>
 									<dd class="font-mono text-sm">
-										{formatAddress(selectedDevice.address_type, selectedDevice.address)}
-										{#if selectedDevice.address_type}
-											({selectedDevice.address_type})
-										{/if}
+										{formatDeviceAddress(selectedDevice.address_type, selectedDevice.address)}
 									</dd>
 								</div>
 							</div>
@@ -415,8 +405,8 @@
 										<dd class="font-mono">{aircraftRegistration.serial_number}</dd>
 									</div>
 									<div>
-										<dt class="font-medium text-gray-600">Manufacturer</dt>
-										<dd>{aircraftRegistration.mfr_mdl_code}</dd>
+										<dt class="font-medium text-gray-600">Transponder Code</dt>
+										<dd class="font-mono">{aircraftRegistration.mode_s_code_hex || 'N/A'}</dd>
 									</div>
 									<div>
 										<dt class="font-medium text-gray-600">Year</dt>
@@ -428,7 +418,12 @@
 									</div>
 									<div>
 										<dt class="font-medium text-gray-600">Status</dt>
-										<dd class="font-mono">{aircraftRegistration.status_code}</dd>
+										<dd>
+											{getStatusCodeDescription(aircraftRegistration.status_code)}
+											<span class="ml-1 text-xs text-gray-500"
+												>({aircraftRegistration.status_code})</span
+											>
+										</dd>
 									</div>
 								</dl>
 							</div>
@@ -454,19 +449,19 @@
 									</div>
 									<div>
 										<dt class="font-medium text-gray-600">Aircraft Type</dt>
-										<dd>{aircraftModel.aircraft_type || 'Unknown'}</dd>
+										<dd>{formatTitleCase(aircraftModel.aircraft_type)}</dd>
 									</div>
 									<div>
 										<dt class="font-medium text-gray-600">Engine Type</dt>
-										<dd>{aircraftModel.engine_type || 'Unknown'}</dd>
+										<dd>{formatTitleCase(aircraftModel.engine_type)}</dd>
 									</div>
 									<div>
 										<dt class="font-medium text-gray-600">Category</dt>
-										<dd>{aircraftModel.aircraft_category || 'Unknown'}</dd>
+										<dd>{formatTitleCase(aircraftModel.aircraft_category)}</dd>
 									</div>
 									<div>
-										<dt class="font-medium text-gray-600">Certification</dt>
-										<dd>{aircraftModel.builder_certification || 'Unknown'}</dd>
+										<dt class="font-medium text-gray-600">Builder Certification</dt>
+										<dd>{formatTitleCase(aircraftModel.builder_certification)}</dd>
 									</div>
 									<div>
 										<dt class="font-medium text-gray-600">Seats</dt>
@@ -486,7 +481,7 @@
 									</div>
 									<div>
 										<dt class="font-medium text-gray-600">Weight Class</dt>
-										<dd>{aircraftModel.weight_class || 'Unknown'}</dd>
+										<dd>{formatTitleCase(aircraftModel.weight_class)}</dd>
 									</div>
 								</dl>
 							</div>

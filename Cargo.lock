@@ -1333,6 +1333,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "flarmnet"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "808d02a44b1124b8c35dad3e12f9f584914f0d8aea3d1d0c523d1bbecbc1fab1"
+dependencies = [
+ "encoding_rs",
+ "minidom",
+ "quick-xml 0.30.0",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "flat_projection"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2442,6 +2454,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "minidom"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fe549115a674f5ec64c754d85e37d6f42664bd0ef4ffb62b619489ad99c6cb1a"
+dependencies = [
+ "quick-xml 0.17.2",
+]
+
+[[package]]
 name = "minimal-lexical"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2835,7 +2856,7 @@ checksum = "740ebea15c5d1428f910cd1a5f52cebf8d25006245ed8ade92702f4943d91e07"
 dependencies = [
  "base64 0.22.1",
  "indexmap",
- "quick-xml",
+ "quick-xml 0.38.3",
  "serde",
  "time",
 ]
@@ -2967,6 +2988,24 @@ dependencies = [
  "wasi 0.11.1+wasi-snapshot-preview1",
  "web-sys",
  "winapi",
+]
+
+[[package]]
+name = "quick-xml"
+version = "0.17.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fe1e430bdcf30c9fdc25053b9c459bb1a4672af4617b6c783d7d91dc17c6bbb0"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
+name = "quick-xml"
+version = "0.30.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eff6510e86862b57b210fd8cbe8ed3f0d7d600b9c2863cd4549a2e033c66e956"
+dependencies = [
+ "memchr",
 ]
 
 [[package]]
@@ -3910,6 +3949,7 @@ dependencies = [
  "diesel_migrations",
  "directories",
  "dotenvy",
+ "flarmnet",
  "flydent",
  "futures-util",
  "gdal",
