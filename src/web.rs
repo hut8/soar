@@ -233,25 +233,42 @@ async fn sentry_error_middleware(request: Request<Body>, next: Next) -> Response
 // Middleware to record metrics for API endpoints
 async fn metrics_middleware(request: Request<Body>, next: Next) -> Response {
     let start = Instant::now();
-    let _method = request.method().clone();
+    let method = request.method().clone();
 
     // Extract the matched route pattern (e.g., "/data/devices/{id}" instead of "/data/devices/123")
-    let _path = request
+    let path = request
         .extensions()
         .get::<MatchedPath>()
         .map(|matched_path| matched_path.as_str().to_string())
         .unwrap_or_else(|| request.uri().path().to_string());
 
     let response = next.run(request).await;
-    let _status = response.status();
+    let status = response.status();
     let duration = start.elapsed();
 
-    // Record request duration histogram with labels
-    // TODO: Add labels for method, path, and status when needed
-    metrics::histogram!("http_request_duration_seconds").record(duration.as_secs_f64());
+    // Exclude the metrics endpoint itself from being recorded
+    if path != "/data/metrics" {
+        let method_str = method.to_string();
+        let status_str = status.as_u16().to_string();
 
-    // Record request count by endpoint, method, and status
-    metrics::counter!("http_requests_total").increment(1);
+        // Record request duration histogram with labels for endpoint, method, and status
+        metrics::histogram!(
+            "http_request_duration_seconds",
+            "method" => method_str.clone(),
+            "endpoint" => path.clone(),
+            "status" => status_str.clone()
+        )
+        .record(duration.as_secs_f64());
+
+        // Record request count by endpoint, method, and status
+        metrics::counter!(
+            "http_requests_total",
+            "method" => method_str,
+            "endpoint" => path,
+            "status" => status_str
+        )
+        .increment(1);
+    }
 
     response
 }
