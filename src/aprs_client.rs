@@ -548,7 +548,17 @@ impl AprsClient {
                 Self::handle_backward_compatibility(&parsed, message, processors).await;
             }
             Err(e) => {
-                error!("Failed to parse APRS message '{message}': {e}");
+                // For OGNFNT sources with invalid lat/lon, log as trace instead of error
+                // These are common and expected issues with this data source
+                let error_str = e.to_string();
+                if message.contains("OGNFNT")
+                    && (error_str.contains("Invalid Latitude")
+                        || error_str.contains("Invalid Longitude"))
+                {
+                    trace!("Failed to parse APRS message '{message}': {e}");
+                } else {
+                    error!("Failed to parse APRS message '{message}': {e}");
+                }
             }
         }
     }
