@@ -60,7 +60,7 @@ zstd = "0.13"
 axum-tungstenite = "0.3.0"
 futures-util = "0.3.31"
 sentry = { version = "0.43.0", features = ["tracing", "logs"] }
-postgis_diesel = { version = "3.0.1", features = ["serde", "serde_geojson"] }
+postgis_diesel = { version = "3.0.2", features = ["serde", "serde_geojson"] }
 rust_decimal = "1.38"
 zip = "5"
 directories = "6.0.0"
