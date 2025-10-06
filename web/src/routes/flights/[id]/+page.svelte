@@ -11,9 +11,13 @@
 		TrendingUp,
 		Route,
 		MoveUpRight,
-		AlertTriangle
+		MapPinMinus
 	} from '@lucide/svelte';
 	import type { PageData } from './$types';
+	import dayjs from 'dayjs';
+	import relativeTime from 'dayjs/plugin/relativeTime';
+
+	dayjs.extend(relativeTime);
 
 	let { data }: { data: PageData } = $props();
 
@@ -52,17 +56,19 @@
 			!data.flight.arrival_airport
 	);
 
-	// Format date/time
+	// Format date/time with relative time and full datetime
 	function formatDateTime(dateString: string | undefined): string {
 		if (!dateString) return 'N/A';
-		const date = new Date(dateString);
-		return date.toLocaleString('en-US', {
-			year: 'numeric',
-			month: 'short',
-			day: 'numeric',
-			hour: '2-digit',
-			minute: '2-digit'
-		});
+		const date = dayjs(dateString);
+		const relative = date.fromNow();
+		const fullDate = date.format('MMM D, YYYY h:mm A');
+		return `${relative} (${fullDate})`;
+	}
+
+	// Format date/time - mobile only shows relative
+	function formatDateTimeMobile(dateString: string | undefined): string {
+		if (!dateString) return 'N/A';
+		return dayjs(dateString).fromNow();
 	}
 
 	// Format altitude
@@ -198,7 +204,7 @@
 				</h1>
 				{#if isOutlanding}
 					<span class="variant-filled-warning chip flex items-center gap-2 text-base font-semibold">
-						<AlertTriangle class="h-5 w-5" />
+						<MapPinMinus class="h-5 w-5" />
 						Outlanding
 					</span>
 				{/if}
@@ -219,7 +225,12 @@
 				<Clock class="mt-1 h-5 w-5 text-primary-500" />
 				<div>
 					<div class="text-surface-600-300-token text-sm">Takeoff Time</div>
-					<div class="font-semibold">{formatDateTime(data.flight.takeoff_time)}</div>
+					<div class="font-semibold">
+						<!-- Mobile: relative time only -->
+						<span class="md:hidden">{formatDateTimeMobile(data.flight.takeoff_time)}</span>
+						<!-- Desktop: relative time with full datetime -->
+						<span class="hidden md:inline">{formatDateTime(data.flight.takeoff_time)}</span>
+					</div>
 				</div>
 			</div>
 
@@ -229,7 +240,14 @@
 				<div>
 					<div class="text-surface-600-300-token text-sm">Landing Time</div>
 					<div class="font-semibold">
-						{data.flight.landing_time ? formatDateTime(data.flight.landing_time) : 'In Progress'}
+						{#if data.flight.landing_time}
+							<!-- Mobile: relative time only -->
+							<span class="md:hidden">{formatDateTimeMobile(data.flight.landing_time)}</span>
+							<!-- Desktop: relative time with full datetime -->
+							<span class="hidden md:inline">{formatDateTime(data.flight.landing_time)}</span>
+						{:else}
+							In Progress
+						{/if}
 					</div>
 				</div>
 			</div>
