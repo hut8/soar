@@ -526,11 +526,7 @@ impl FixesRepository {
                     FROM fixes f
                     WHERE f.device_id = ANY($1)
                 )
-                SELECT id, source, destination, via, raw_packet, timestamp, latitude, longitude,
-                       altitude_feet, device_address, address_type, aircraft_type_ogn, flight_number,
-                       emitter_category, registration, model, squawk, ground_speed_knots, track_degrees,
-                       climb_fpm, turn_rate_rot, snr_db, bit_errors_corrected, freq_offset_khz,
-                       club_id, flight_id, unparsed_data, device_id, received_at, lag, is_active
+                SELECT *
                 FROM ranked
                 WHERE rn <= $2
                 ORDER BY device_id, received_at DESC
