@@ -60,6 +60,10 @@ pub struct Fix {
     pub bit_errors_corrected: Option<i32>,
     pub freq_offset_khz: Option<f32>,
 
+    /// GPS satellite information
+    pub satellites_used: Option<i16>,
+    pub satellites_visible: Option<i16>,
+
     /// Associations
     pub club_id: Option<Uuid>,
     pub flight_id: Option<Uuid>,
@@ -174,8 +178,10 @@ impl Fix {
                     snr_db,
                     bit_errors_corrected,
                     freq_offset_khz,
-                    club_id: None,   // To be set by processors
-                    flight_id: None, // Will be set by flight detection processor
+                    satellites_used: None, // Not currently parsed from APRS packets
+                    satellites_visible: None, // Not currently parsed from APRS packets
+                    club_id: None,         // To be set by processors
+                    flight_id: None,       // Will be set by flight detection processor
                     unparsed_data: pos_packet.comment.unparsed.clone(),
                     device_id,
                     received_at,

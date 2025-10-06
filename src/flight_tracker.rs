@@ -1043,6 +1043,8 @@ mod tests {
             snr_db: None,
             bit_errors_corrected: None,
             freq_offset_khz: None,
+            satellites_used: None,
+            satellites_visible: None,
             club_id: None,
             unparsed_data: None,
             device_id: uuid::Uuid::new_v4(),

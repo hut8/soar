@@ -129,6 +129,8 @@ struct FixDslRow {
     snr_db: Option<f32>,
     bit_errors_corrected: Option<i32>,
     freq_offset_khz: Option<f32>,
+    satellites_used: Option<i16>,
+    satellites_visible: Option<i16>,
     club_id: Option<Uuid>,
     flight_id: Option<Uuid>,
     unparsed_data: Option<String>,
@@ -170,6 +172,8 @@ impl From<FixDslRow> for Fix {
             snr_db: row.snr_db,
             bit_errors_corrected: row.bit_errors_corrected,
             freq_offset_khz: row.freq_offset_khz,
+            satellites_used: row.satellites_used,
+            satellites_visible: row.satellites_visible,
             club_id: row.club_id,
             unparsed_data: row.unparsed_data,
             device_id: row.device_id, // Now directly a Uuid
@@ -665,6 +669,10 @@ impl FixesRepository {
                 bit_errors_corrected: Option<i32>,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float4>)]
                 freq_offset_khz: Option<f32>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Int2>)]
+                satellites_used: Option<i16>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Int2>)]
+                satellites_visible: Option<i16>,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
                 club_id: Option<uuid::Uuid>,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
@@ -725,6 +733,8 @@ impl FixesRepository {
                     snr_db: fix_row.snr_db,
                     bit_errors_corrected: fix_row.bit_errors_corrected,
                     freq_offset_khz: fix_row.freq_offset_khz,
+                    satellites_used: fix_row.satellites_used,
+                    satellites_visible: fix_row.satellites_visible,
                     club_id: fix_row.club_id,
                     unparsed_data: fix_row.unparsed_data,
                     device_id: fix_row.device_id,
