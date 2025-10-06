@@ -139,6 +139,21 @@ enum Commands {
         #[arg(long, default_value = "localhost")]
         interface: String,
     },
+    /// Archive old fixes data to compressed CSV files and delete from database
+    ///
+    /// Archives fixes data one day at a time, starting from the oldest day in the database
+    /// and working forward until the specified 'before' date (exclusive).
+    /// Each day's data is written to a file named YYYYMMDD-fixes.csv.zst
+    Archive {
+        /// Archive fixes before this date (YYYY-MM-DD format, exclusive, UTC)
+        /// Cannot be a future date. If today's date is used, archives all data up to (but not including) today.
+        #[arg(value_name = "BEFORE_DATE")]
+        before: String,
+
+        /// Directory where archive files will be stored
+        #[arg(long)]
+        archive_path: String,
+    },
 }
 
 async fn setup_diesel_database() -> Result<Pool<ConnectionManager<PgConnection>>> {
@@ -692,5 +707,9 @@ async fn main() -> Result<()> {
 
             soar::web::start_web_server(interface, final_port, diesel_pool).await
         }
+        Commands::Archive {
+            before,
+            archive_path,
+        } => soar::archive::handle_archive(diesel_pool, before, archive_path).await,
     }
 }
