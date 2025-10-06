@@ -24,6 +24,8 @@ export const load: PageLoad = async ({ params }) => {
 					landing_altitude_offset_ft?: number;
 					takeoff_runway_ident?: string;
 					landing_runway_ident?: string;
+					total_distance_meters?: number;
+					maximum_displacement_meters?: number;
 					created_at: string;
 					updated_at: string;
 				};

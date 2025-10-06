@@ -314,6 +314,8 @@ diesel::table! {
         landing_altitude_offset_ft -> Nullable<Int4>,
         takeoff_runway_ident -> Nullable<Text>,
         landing_runway_ident -> Nullable<Text>,
+        total_distance_meters -> Nullable<Float8>,
+        maximum_displacement_meters -> Nullable<Float8>,
     }
 }
 

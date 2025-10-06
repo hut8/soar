@@ -70,6 +70,7 @@ impl FlightsRepository {
     }
 
     /// Update flight with landing information
+    #[allow(clippy::too_many_arguments)]
     pub async fn update_flight_landing(
         &self,
         flight_id: Uuid,
@@ -77,6 +78,8 @@ impl FlightsRepository {
         arrival_airport_param: Option<String>,
         landing_altitude_offset_ft_param: Option<i32>,
         landing_runway_ident_param: Option<String>,
+        total_distance_meters_param: Option<f64>,
+        maximum_displacement_meters_param: Option<f64>,
     ) -> Result<()> {
         use crate::schema::flights::dsl::*;
 
@@ -91,6 +94,8 @@ impl FlightsRepository {
                     arrival_airport.eq(&arrival_airport_param),
                     landing_altitude_offset_ft.eq(&landing_altitude_offset_ft_param),
                     landing_runway_ident.eq(&landing_runway_ident_param),
+                    total_distance_meters.eq(&total_distance_meters_param),
+                    maximum_displacement_meters.eq(&maximum_displacement_meters_param),
                     updated_at.eq(Utc::now()),
                 ))
                 .execute(&mut conn)?;

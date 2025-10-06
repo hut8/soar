@@ -526,6 +526,42 @@ impl FlightTracker {
         // Calculate landing altitude offset (difference between reported altitude and true elevation)
         let landing_altitude_offset_ft = self.calculate_altitude_offset_ft(fix).await;
 
+        // Fetch the flight to compute distance metrics
+        let flight = match self.flights_repo.get_flight_by_id(flight_id).await? {
+            Some(f) => f,
+            None => {
+                error!("Flight {} not found when completing", flight_id);
+                return Err(anyhow::anyhow!("Flight not found"));
+            }
+        };
+
+        // Calculate total distance flown
+        let total_distance_meters = match flight.total_distance(&self.fixes_repo).await {
+            Ok(dist) => dist,
+            Err(e) => {
+                warn!(
+                    "Failed to calculate total distance for flight {}: {}",
+                    flight_id, e
+                );
+                None
+            }
+        };
+
+        // Calculate maximum displacement (only for local flights)
+        let maximum_displacement_meters = match flight
+            .maximum_displacement(&self.fixes_repo, &self.airports_repo)
+            .await
+        {
+            Ok(disp) => disp,
+            Err(e) => {
+                warn!(
+                    "Failed to calculate maximum displacement for flight {}: {}",
+                    flight_id, e
+                );
+                None
+            }
+        };
+
         match self
             .flights_repo
             .update_flight_landing(
@@ -534,6 +570,8 @@ impl FlightTracker {
                 arrival_airport.clone(),
                 landing_altitude_offset_ft,
                 landing_runway.clone(),
+                total_distance_meters,
+                maximum_displacement_meters,
             )
             .await
         {

@@ -74,6 +74,14 @@ pub struct Flight {
     /// Runway identifier used for landing (e.g., "09L", "27R")
     pub landing_runway_ident: Option<String>,
 
+    /// Total distance flown during the flight in meters
+    /// Computed upon landing from consecutive fixes
+    pub total_distance_meters: Option<f64>,
+
+    /// Maximum displacement from departure airport in meters
+    /// Only computed for local flights where departure == arrival
+    pub maximum_displacement_meters: Option<f64>,
+
     /// Database timestamps
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -99,6 +107,8 @@ impl Flight {
             landing_altitude_offset_ft: None,
             takeoff_runway_ident: None,
             landing_runway_ident: None,
+            total_distance_meters: None,
+            maximum_displacement_meters: None,
             created_at: now,
             updated_at: now,
         }
@@ -123,6 +133,8 @@ impl Flight {
             landing_altitude_offset_ft: None,
             takeoff_runway_ident: None,
             landing_runway_ident: None,
+            total_distance_meters: None,
+            maximum_displacement_meters: None,
             created_at: now,
             updated_at: now,
         }
@@ -442,6 +454,8 @@ pub struct FlightModel {
     pub landing_altitude_offset_ft: Option<i32>,
     pub takeoff_runway_ident: Option<String>,
     pub landing_runway_ident: Option<String>,
+    pub total_distance_meters: Option<f64>,
+    pub maximum_displacement_meters: Option<f64>,
 }
 
 /// Insert model for new flights
@@ -463,6 +477,8 @@ pub struct NewFlightModel {
     pub landing_altitude_offset_ft: Option<i32>,
     pub takeoff_runway_ident: Option<String>,
     pub landing_runway_ident: Option<String>,
+    pub total_distance_meters: Option<f64>,
+    pub maximum_displacement_meters: Option<f64>,
 }
 
 /// Conversion from Flight (API model) to FlightModel (database model)
@@ -486,6 +502,8 @@ impl From<Flight> for FlightModel {
             landing_altitude_offset_ft: flight.landing_altitude_offset_ft,
             takeoff_runway_ident: flight.takeoff_runway_ident,
             landing_runway_ident: flight.landing_runway_ident,
+            total_distance_meters: flight.total_distance_meters,
+            maximum_displacement_meters: flight.maximum_displacement_meters,
         }
     }
 }
@@ -509,6 +527,8 @@ impl From<Flight> for NewFlightModel {
             landing_altitude_offset_ft: flight.landing_altitude_offset_ft,
             takeoff_runway_ident: flight.takeoff_runway_ident,
             landing_runway_ident: flight.landing_runway_ident,
+            total_distance_meters: flight.total_distance_meters,
+            maximum_displacement_meters: flight.maximum_displacement_meters,
         }
     }
 }
@@ -532,6 +552,8 @@ impl From<FlightModel> for Flight {
             landing_altitude_offset_ft: model.landing_altitude_offset_ft,
             takeoff_runway_ident: model.takeoff_runway_ident,
             landing_runway_ident: model.landing_runway_ident,
+            total_distance_meters: model.total_distance_meters,
+            maximum_displacement_meters: model.maximum_displacement_meters,
             created_at: model.created_at,
             updated_at: model.updated_at,
         }

@@ -2,7 +2,16 @@
 	/// <reference types="@types/google.maps" />
 	import { onMount } from 'svelte';
 	import { Loader } from '@googlemaps/js-api-loader';
-	import { Download, Plane, MapPin, Clock, Gauge, TrendingUp } from '@lucide/svelte';
+	import {
+		Download,
+		Plane,
+		MapPin,
+		Clock,
+		Gauge,
+		TrendingUp,
+		Route,
+		MoveUpRight
+	} from '@lucide/svelte';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -52,6 +61,21 @@
 	function formatAltitude(feet: number | undefined): string {
 		if (feet === undefined || feet === null) return 'N/A';
 		return `${feet.toLocaleString()} ft`;
+	}
+
+	// Format distance in meters to nautical miles and kilometers
+	function formatDistance(meters: number | undefined): string {
+		if (meters === undefined || meters === null) return 'N/A';
+		// Convert meters to nautical miles (1 nm = 1852 meters)
+		const nm = meters / 1852;
+		// Convert meters to kilometers
+		const km = meters / 1000;
+
+		if (nm >= 1) {
+			return `${nm.toFixed(2)} nm (${km.toFixed(2)} km)`;
+		} else {
+			return `${km.toFixed(2)} km`;
+		}
 	}
 
 	// Initialize map
@@ -211,6 +235,33 @@
 					<div>
 						<div class="text-surface-600-300-token text-sm">Duration</div>
 						<div class="font-semibold">{duration()}</div>
+					</div>
+				</div>
+			{/if}
+
+			<!-- Total Distance -->
+			{#if data.flight.total_distance_meters}
+				<div class="flex items-start gap-3">
+					<Route class="mt-1 h-5 w-5 text-primary-500" />
+					<div>
+						<div class="text-surface-600-300-token text-sm">Total Distance</div>
+						<div class="font-semibold">{formatDistance(data.flight.total_distance_meters)}</div>
+					</div>
+				</div>
+			{/if}
+
+			<!-- Maximum Displacement -->
+			{#if data.flight.maximum_displacement_meters}
+				<div class="flex items-start gap-3">
+					<MoveUpRight class="mt-1 h-5 w-5 text-primary-500" />
+					<div>
+						<div class="text-surface-600-300-token text-sm">Max Displacement</div>
+						<div class="font-semibold">
+							{formatDistance(data.flight.maximum_displacement_meters)}
+						</div>
+						<div class="text-surface-600-300-token text-sm">
+							from {data.flight.departure_airport}
+						</div>
 					</div>
 				</div>
 			{/if}
