@@ -73,6 +73,7 @@ pub struct Fix {
     pub lag: Option<i32>,
 
     /// Whether the aircraft is considered active (ground_speed >= 15 knots)
+    #[serde(rename = "active")]
     pub is_active: bool,
 }
 

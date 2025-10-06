@@ -59,8 +59,10 @@
 	let flightsPage = 1;
 	let fixesTotalPages = 1;
 	let flightsTotalPages = 1;
+	let hideInactiveFixes = false;
 
 	$: deviceId = $page.params.id || '';
+	$: filteredFixes = hideInactiveFixes ? fixes.filter((fix) => fix.active) : fixes;
 
 	onMount(async () => {
 		if (deviceId) {
@@ -487,10 +489,18 @@
 
 			<!-- Position Fixes Section -->
 			<div class="space-y-4 card p-6">
-				<h2 class="flex items-center gap-2 h2">
-					<Activity class="h-6 w-6" />
-					Recent Position Fixes (Last 24 Hours)
-				</h2>
+				<div class="flex items-center justify-between">
+					<h2 class="flex items-center gap-2 h2">
+						<Activity class="h-6 w-6" />
+						Recent Position Fixes (Last 24 Hours)
+					</h2>
+					{#if fixes.length > 0}
+						<label class="flex items-center gap-2 text-sm">
+							<input type="checkbox" class="checkbox" bind:checked={hideInactiveFixes} />
+							<span>Hide inactive fixes</span>
+						</label>
+					{/if}
+				</div>
 
 				{#if loadingFixes}
 					<div class="flex items-center justify-center py-8">
@@ -501,6 +511,11 @@
 					<div class="text-surface-600-300-token py-8 text-center">
 						<Activity class="mx-auto mb-4 h-12 w-12 text-surface-400" />
 						<p>No position fixes found in the last 24 hours</p>
+					</div>
+				{:else if filteredFixes.length === 0}
+					<div class="text-surface-600-300-token py-8 text-center">
+						<Activity class="mx-auto mb-4 h-12 w-12 text-surface-400" />
+						<p>No active fixes found. Uncheck "Hide inactive fixes" to see all fixes.</p>
 					</div>
 				{:else}
 					<div class="overflow-x-auto">
@@ -516,13 +531,13 @@
 								</tr>
 							</thead>
 							<tbody>
-								{#each fixes as fix, index (fix.id)}
+								{#each filteredFixes as fix, index (fix.id)}
 									<tr
 										class="border-surface-200-700-token hover:bg-surface-100-800-token border-b {index %
 											2 ===
 										0
 											? 'bg-surface-50-900-token'
-											: ''}"
+											: ''} {!fix.active ? 'opacity-50' : ''}"
 									>
 										<td class="px-3 py-2 text-sm" title={formatDate(fix.timestamp)}>
 											{formatRelativeTime(fix.timestamp)}

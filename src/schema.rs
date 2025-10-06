@@ -308,6 +308,8 @@ diesel::table! {
         device_id -> Nullable<Uuid>,
         takeoff_altitude_offset_ft -> Nullable<Int4>,
         landing_altitude_offset_ft -> Nullable<Int4>,
+        takeoff_runway_ident -> Nullable<Text>,
+        landing_runway_ident -> Nullable<Text>,
     }
 }
 

@@ -398,6 +398,7 @@ export interface Fix {
 	registration?: string;
 	model?: string;
 	flight_id?: string;
+	active: boolean;
 }
 
 export interface Flight {

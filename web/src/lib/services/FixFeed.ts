@@ -176,7 +176,8 @@ export class FixFeed {
 							climb_fpm: rawMessage.climb_rate,
 							registration: rawMessage.registration,
 							model: rawMessage.model,
-							flight_id: rawMessage.flight_id
+							flight_id: rawMessage.flight_id,
+							active: rawMessage.active
 						};
 
 						// Add fix to device registry

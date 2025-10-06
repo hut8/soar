@@ -51,6 +51,12 @@ pub struct Flight {
     /// Altitude offset at landing (difference between fix altitude and true MSL altitude in feet)
     pub landing_altitude_offset_ft: Option<i32>,
 
+    /// Runway identifier used for takeoff (e.g., "09L", "27R")
+    pub takeoff_runway_ident: Option<String>,
+
+    /// Runway identifier used for landing (e.g., "09L", "27R")
+    pub landing_runway_ident: Option<String>,
+
     /// Database timestamps
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -74,6 +80,8 @@ impl Flight {
             club_id: None,
             takeoff_altitude_offset_ft: None,
             landing_altitude_offset_ft: None,
+            takeoff_runway_ident: None,
+            landing_runway_ident: None,
             created_at: now,
             updated_at: now,
         }
@@ -96,6 +104,8 @@ impl Flight {
             club_id: fix.club_id,
             takeoff_altitude_offset_ft: None,
             landing_altitude_offset_ft: None,
+            takeoff_runway_ident: None,
+            landing_runway_ident: None,
             created_at: now,
             updated_at: now,
         }
@@ -324,6 +334,8 @@ pub struct FlightModel {
     pub device_id: Option<Uuid>,
     pub takeoff_altitude_offset_ft: Option<i32>,
     pub landing_altitude_offset_ft: Option<i32>,
+    pub takeoff_runway_ident: Option<String>,
+    pub landing_runway_ident: Option<String>,
 }
 
 /// Insert model for new flights
@@ -343,6 +355,8 @@ pub struct NewFlightModel {
     pub device_id: Option<Uuid>,
     pub takeoff_altitude_offset_ft: Option<i32>,
     pub landing_altitude_offset_ft: Option<i32>,
+    pub takeoff_runway_ident: Option<String>,
+    pub landing_runway_ident: Option<String>,
 }
 
 /// Conversion from Flight (API model) to FlightModel (database model)
@@ -364,6 +378,8 @@ impl From<Flight> for FlightModel {
             device_id: flight.device_id,
             takeoff_altitude_offset_ft: flight.takeoff_altitude_offset_ft,
             landing_altitude_offset_ft: flight.landing_altitude_offset_ft,
+            takeoff_runway_ident: flight.takeoff_runway_ident,
+            landing_runway_ident: flight.landing_runway_ident,
         }
     }
 }
@@ -385,6 +401,8 @@ impl From<Flight> for NewFlightModel {
             device_id: flight.device_id,
             takeoff_altitude_offset_ft: flight.takeoff_altitude_offset_ft,
             landing_altitude_offset_ft: flight.landing_altitude_offset_ft,
+            takeoff_runway_ident: flight.takeoff_runway_ident,
+            landing_runway_ident: flight.landing_runway_ident,
         }
     }
 }
@@ -406,6 +424,8 @@ impl From<FlightModel> for Flight {
             club_id: model.club_id,
             takeoff_altitude_offset_ft: model.takeoff_altitude_offset_ft,
             landing_altitude_offset_ft: model.landing_altitude_offset_ft,
+            takeoff_runway_ident: model.takeoff_runway_ident,
+            landing_runway_ident: model.landing_runway_ident,
             created_at: model.created_at,
             updated_at: model.updated_at,
         }
