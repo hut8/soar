@@ -50,7 +50,7 @@ pub enum SubscriptionMessage {
 /// Helper function to enrich devices with aircraft registration and model data
 /// Optimized with batch queries to avoid N+1 query problem
 #[instrument(skip(pool, devices_with_fixes), fields(device_count = devices_with_fixes.len()))]
-async fn enrich_devices_with_aircraft_data(
+pub async fn enrich_devices_with_aircraft_data(
     devices_with_fixes: Vec<(crate::devices::DeviceModel, Vec<crate::fixes::Fix>)>,
     pool: crate::web::PgPool,
 ) -> Vec<crate::live_fixes::DeviceWithFixes> {

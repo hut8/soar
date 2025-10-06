@@ -470,7 +470,7 @@ export class FixFeed {
 
 		try {
 			const { serverCall } = await import('$lib/api/server');
-			const response = await serverCall(`/fixes?${params}`);
+			const response = await serverCall(`/devices?${params}`);
 			return response as DeviceWithFixes[];
 		} catch (error) {
 			console.error('Failed to fetch devices in bounding box:', error);

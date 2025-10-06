@@ -3,10 +3,12 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Json},
 };
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, Duration, NaiveDateTime, Utc};
 use serde::{Deserialize, Serialize};
+use tracing::{info, instrument};
 use uuid::Uuid;
 
+use crate::actions::fixes::enrich_devices_with_aircraft_data;
 use crate::actions::json_error;
 use crate::actions::views::{DeviceView, FlightView};
 use crate::aircraft_registrations_repo::AircraftRegistrationsRepository;
@@ -59,6 +61,13 @@ pub struct DeviceSearchQuery {
     /// Address type: I (ICAO), O (OGN), F (FLARM)
     #[serde(rename = "address-type")]
     pub address_type: Option<String>,
+    /// Bounding box search parameters
+    pub latitude_min: Option<f64>,
+    pub latitude_max: Option<f64>,
+    pub longitude_min: Option<f64>,
+    pub longitude_max: Option<f64>,
+    /// Optional cutoff time for fixes (ISO 8601 format)
+    pub after: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -155,101 +164,201 @@ pub async fn get_device_fixes(
     }
 }
 
-/// Search devices by registration or address+type
+/// Search devices by registration, address+type, or bounding box
+#[instrument(skip(state), fields(
+    has_bbox = query.latitude_max.is_some(),
+    has_registration = query.registration.is_some(),
+    has_address = query.address.is_some()
+))]
 pub async fn search_devices(
     Query(query): Query<DeviceSearchQuery>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    let device_repo = DeviceRepository::new(state.pool);
+    // Check if bounding box parameters are provided
+    let has_bounding_box = query.latitude_max.is_some()
+        || query.latitude_min.is_some()
+        || query.longitude_max.is_some()
+        || query.longitude_min.is_some();
 
-    // Validate query parameters - must have either registration OR (address + address-type)
-    match (&query.registration, &query.address, &query.address_type) {
-        (Some(registration), None, None) => {
-            // Search by registration
-            match device_repo.search_by_registration(registration).await {
-                Ok(devices) => {
-                    let device_views: Vec<DeviceView> =
-                        devices.into_iter().map(|d| d.into()).collect();
-                    Json(DeviceSearchResponse {
-                        devices: device_views,
-                    })
-                    .into_response()
-                }
-                Err(e) => {
-                    tracing::error!(
-                        "Failed to search devices by registration {}: {}",
-                        registration,
-                        e
-                    );
-                    json_error(
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "Failed to search devices",
-                    )
-                    .into_response()
-                }
-            }
-        }
-        (None, Some(address_str), Some(address_type_str)) => {
-            // Parse address from hex string
-            let address = match u32::from_str_radix(address_str, 16) {
-                Ok(addr) => addr,
-                Err(_) => {
+    // Handle bounding box search
+    if has_bounding_box {
+        // If any bounding box parameter is provided, all four must be provided
+        match (
+            query.latitude_max,
+            query.latitude_min,
+            query.longitude_max,
+            query.longitude_min,
+        ) {
+            (Some(lat_max), Some(lat_min), Some(lon_max), Some(lon_min)) => {
+                // Validate coordinates
+                if !(-90.0..=90.0).contains(&lat_max) || !(-90.0..=90.0).contains(&lat_min) {
                     return json_error(
                         StatusCode::BAD_REQUEST,
-                        "Invalid address format. Expected hexadecimal string",
+                        "Latitude must be between -90 and 90 degrees",
                     )
                     .into_response();
                 }
-            };
 
-            // Parse address type
-            let address_type = match address_type_str.to_uppercase().as_str() {
-                "I" => AddressType::Icao,
-                "O" => AddressType::Ogn,
-                "F" => AddressType::Flarm,
-                _ => {
+                if !(-180.0..=180.0).contains(&lon_max) || !(-180.0..=180.0).contains(&lon_min) {
                     return json_error(
                         StatusCode::BAD_REQUEST,
-                        "Invalid address-type. Must be I (ICAO), O (OGN), or F (FLARM)",
+                        "Longitude must be between -180 and 180 degrees",
                     )
                     .into_response();
                 }
-            };
 
-            // Search by address and type
-            match device_repo
-                .search_by_address_and_type(address, address_type)
-                .await
-            {
-                Ok(Some(device)) => {
-                    let device_view: DeviceView = device.into();
-                    Json(DeviceSearchResponse {
-                        devices: vec![device_view],
-                    })
-                    .into_response()
-                }
-                Ok(None) => Json(DeviceSearchResponse { devices: vec![] }).into_response(),
-                Err(e) => {
-                    tracing::error!(
-                        "Failed to search devices by address {} and type {}: {}",
-                        address,
-                        address_type_str,
-                        e
-                    );
-                    json_error(
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "Failed to search devices",
+                if lat_min >= lat_max {
+                    return json_error(
+                        StatusCode::BAD_REQUEST,
+                        "latitude_min must be less than latitude_max",
                     )
-                    .into_response()
+                    .into_response();
+                }
+
+                if lon_min >= lon_max {
+                    return json_error(
+                        StatusCode::BAD_REQUEST,
+                        "longitude_min must be less than longitude_max",
+                    )
+                    .into_response();
+                }
+
+                // Set default cutoff time to 24 hours ago if not provided
+                let cutoff_time = query.after.unwrap_or_else(|| Utc::now() - Duration::hours(24));
+
+                info!("Performing bounding box search with cutoff_time: {}", cutoff_time);
+
+                let fixes_repo = FixesRepository::new(state.pool.clone());
+
+                // Perform bounding box search
+                match fixes_repo
+                    .get_devices_with_fixes_in_bounding_box(
+                        lat_max, lon_min, lat_min, lon_max, cutoff_time, None,
+                    )
+                    .await
+                {
+                    Ok(devices_with_fixes) => {
+                        info!("Found {} devices in bounding box", devices_with_fixes.len());
+
+                        // Enrich with aircraft registration and model data
+                        let enriched = enrich_devices_with_aircraft_data(
+                            devices_with_fixes,
+                            state.pool.clone(),
+                        )
+                        .await;
+
+                        info!("Enriched {} devices, returning response", enriched.len());
+                        Json(enriched).into_response()
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to get devices with fixes in bounding box: {}", e);
+                        json_error(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "Failed to get devices with fixes in bounding box",
+                        )
+                        .into_response()
+                    }
                 }
             }
-        }
-        _ => {
-            // Invalid parameter combination
-            json_error(
+            _ => json_error(
                 StatusCode::BAD_REQUEST,
-                "Must provide either 'registration' OR both 'address' and 'address-type' parameters",
-            ).into_response()
+                "When using bounding box search, all four parameters must be provided: latitude_max, latitude_min, longitude_max, longitude_min",
+            )
+            .into_response(),
+        }
+    } else {
+        // Original search logic (by registration or address+type)
+        let device_repo = DeviceRepository::new(state.pool);
+
+        // Validate query parameters - must have either registration OR (address + address-type)
+        match (&query.registration, &query.address, &query.address_type) {
+            (Some(registration), None, None) => {
+                // Search by registration
+                match device_repo.search_by_registration(registration).await {
+                    Ok(devices) => {
+                        let device_views: Vec<DeviceView> =
+                            devices.into_iter().map(|d| d.into()).collect();
+                        Json(DeviceSearchResponse {
+                            devices: device_views,
+                        })
+                        .into_response()
+                    }
+                    Err(e) => {
+                        tracing::error!(
+                            "Failed to search devices by registration {}: {}",
+                            registration,
+                            e
+                        );
+                        json_error(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "Failed to search devices",
+                        )
+                        .into_response()
+                    }
+                }
+            }
+            (None, Some(address_str), Some(address_type_str)) => {
+                // Parse address from hex string
+                let address = match u32::from_str_radix(address_str, 16) {
+                    Ok(addr) => addr,
+                    Err(_) => {
+                        return json_error(
+                            StatusCode::BAD_REQUEST,
+                            "Invalid address format. Expected hexadecimal string",
+                        )
+                        .into_response();
+                    }
+                };
+
+                // Parse address type
+                let address_type = match address_type_str.to_uppercase().as_str() {
+                    "I" => AddressType::Icao,
+                    "O" => AddressType::Ogn,
+                    "F" => AddressType::Flarm,
+                    _ => {
+                        return json_error(
+                            StatusCode::BAD_REQUEST,
+                            "Invalid address-type. Must be I (ICAO), O (OGN), or F (FLARM)",
+                        )
+                        .into_response();
+                    }
+                };
+
+                // Search by address and type
+                match device_repo
+                    .search_by_address_and_type(address, address_type)
+                    .await
+                {
+                    Ok(Some(device)) => {
+                        let device_view: DeviceView = device.into();
+                        Json(DeviceSearchResponse {
+                            devices: vec![device_view],
+                        })
+                        .into_response()
+                    }
+                    Ok(None) => Json(DeviceSearchResponse { devices: vec![] }).into_response(),
+                    Err(e) => {
+                        tracing::error!(
+                            "Failed to search devices by address {} and type {}: {}",
+                            address,
+                            address_type_str,
+                            e
+                        );
+                        json_error(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "Failed to search devices",
+                        )
+                        .into_response()
+                    }
+                }
+            }
+            _ => {
+                // Invalid parameter combination
+                json_error(
+                    StatusCode::BAD_REQUEST,
+                    "Must provide either 'registration' OR both 'address' and 'address-type' parameters",
+                ).into_response()
+            }
         }
     }
 }

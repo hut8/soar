@@ -296,6 +296,11 @@ async fn handle_run(
     });
     info!("Starting APRS client with server: {}:{}", server, port);
 
+    // Acquire instance lock to prevent multiple instances from running
+    let is_production = env::var("SOAR_ENV")
+        .map(|env| env == "production")
+        .unwrap_or(false);
+
     // Start metrics server in the background
     if is_production {
         info!("Starting metrics server on port 9091");
@@ -303,11 +308,6 @@ async fn handle_run(
             soar::metrics::start_metrics_server(9091).await;
         });
     }
-
-    // Acquire instance lock to prevent multiple instances from running
-    let is_production = env::var("SOAR_ENV")
-        .map(|env| env == "production")
-        .unwrap_or(false);
     let lock_name = if is_production {
         "soar-run-production"
     } else {
