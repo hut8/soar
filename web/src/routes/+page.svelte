@@ -2,12 +2,13 @@
 	import { resolve } from '$app/paths';
 	import { goto } from '$app/navigation';
 	import { auth } from '$lib/stores/auth';
-	import { Users, Radar, Radio, Antenna } from '@lucide/svelte';
+	import { Users, Radar, Radio, Antenna, MapPin } from '@lucide/svelte';
 
 	const clubsPath = resolve('/clubs');
 	const operationsPath = resolve('/operations');
 	const devicesPath = resolve('/devices');
 	const receiversPath = resolve('/receivers');
+	const airportsPath = resolve('/airports');
 
 	// Watch for auth changes and redirect when user becomes authenticated
 	$: if ($auth.isAuthenticated && $auth.user) {
@@ -43,8 +44,8 @@
 	</section>
 
 	<!-- Main Navigation -->
-	<section class="mx-auto max-w-4xl">
-		<div class="grid grid-cols-1 gap-8 md:grid-cols-2">
+	<section class="mx-auto max-w-6xl">
+		<div class="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
 			<!-- Clubs Button -->
 			<a
 				href={clubsPath}
@@ -117,6 +118,25 @@
 					</div>
 					<div class="space-y-2">
 						<h2 class="text-2xl font-bold text-white drop-shadow-lg">Receivers</h2>
+					</div>
+				</div>
+			</a>
+
+			<!-- Airports Button -->
+			<a
+				href={airportsPath}
+				class="group block rounded-lg border border-white/30 bg-white/20 p-8 backdrop-blur-md transition-all duration-200 hover:scale-105 hover:bg-white/30 hover:shadow-xl"
+			>
+				<div class="space-y-6 text-center">
+					<div class="flex justify-center">
+						<div
+							class="rounded-full bg-warning-500/20 p-4 transition-colors group-hover:bg-warning-500/30"
+						>
+							<MapPin size={48} class="text-white drop-shadow-lg" />
+						</div>
+					</div>
+					<div class="space-y-2">
+						<h2 class="text-2xl font-bold text-white drop-shadow-lg">Airports</h2>
 					</div>
 				</div>
 			</a>

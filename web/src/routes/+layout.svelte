@@ -15,6 +15,7 @@
 		Plane,
 		Radio,
 		Antenna,
+		MapPin,
 		Wifi,
 		WifiOff,
 		RotateCcw,
@@ -31,6 +32,7 @@
 	const operationsPath = resolve('/operations');
 	const devicesPath = resolve('/devices');
 	const receiversPath = resolve('/receivers');
+	const airportsPath = resolve('/airports');
 	const loginPath = resolve('/login');
 	const registerPath = resolve('/register');
 	const profilePath = resolve('/profile');
@@ -97,6 +99,9 @@
 				</a>
 				<a href={receiversPath} class="btn preset-filled-primary-500 btn-sm">
 					<Antenna /> Receivers
+				</a>
+				<a href={airportsPath} class="btn preset-filled-primary-500 btn-sm">
+					<MapPin /> Airports
 				</a>
 			</nav>
 
@@ -249,6 +254,13 @@
 					onclick={() => (showMobileMenu = false)}
 				>
 					<Antenna size={16} /> Receivers
+				</a>
+				<a
+					href={airportsPath}
+					class="btn w-full justify-start preset-filled-primary-500"
+					onclick={() => (showMobileMenu = false)}
+				>
+					<MapPin size={16} /> Airports
 				</a>
 
 				<hr class="!my-6" />
