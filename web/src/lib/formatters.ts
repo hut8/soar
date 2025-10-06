@@ -35,6 +35,18 @@ export function formatDeviceAddress(addressType: string, address: string): strin
 }
 
 /**
+ * Convert snake_case strings to Title Case
+ * Example: "fixed_wing_single_engine" -> "Fixed Wing Single Engine"
+ */
+export function formatSnakeCase(value: string | null | undefined): string {
+	if (!value) return 'Unknown';
+	return value
+		.split('_')
+		.map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+		.join(' ');
+}
+
+/**
  * Get human-readable description for FAA aircraft registration status codes
  */
 export function getStatusCodeDescription(statusCode: string | undefined): string {

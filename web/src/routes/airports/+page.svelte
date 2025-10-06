@@ -2,6 +2,7 @@
 	import { Search, Plane, MapPin } from '@lucide/svelte';
 	import { resolve } from '$app/paths';
 	import { serverCall } from '$lib/api/server';
+	import { formatSnakeCase } from '$lib/formatters';
 
 	interface Airport {
 		id: number;
@@ -26,10 +27,11 @@
 	let loading = false;
 	let error = '';
 	let searchQuery = '';
+	let searchTimeout: ReturnType<typeof setTimeout> | null = null;
 
 	async function searchAirports() {
 		if (!searchQuery.trim()) {
-			error = 'Please enter a search query';
+			airports = [];
 			return;
 		}
 
@@ -49,15 +51,50 @@
 		}
 	}
 
-	function handleKeydown(event: KeyboardEvent) {
-		if (event.key === 'Enter') {
-			searchAirports();
+	function handleInput() {
+		// Clear existing timeout
+		if (searchTimeout) {
+			clearTimeout(searchTimeout);
 		}
+
+		// Set new timeout for search (300ms delay)
+		searchTimeout = setTimeout(() => {
+			searchAirports();
+		}, 300);
 	}
 
 	function formatCoordinates(lat: string | null, lng: string | null): string {
 		if (!lat || !lng) return '—';
-		return `${parseFloat(lat).toFixed(4)}, ${parseFloat(lng).toFixed(4)}`;
+		const latNum = parseFloat(lat);
+		const lngNum = parseFloat(lng);
+		const latDir = latNum >= 0 ? 'N' : 'S';
+		const lngDir = lngNum >= 0 ? 'E' : 'W';
+		return `${Math.abs(latNum).toFixed(4)}°${latDir}, ${Math.abs(lngNum).toFixed(4)}°${lngDir}`;
+	}
+
+	function getGoogleMapsUrl(lat: string | null, lng: string | null): string {
+		if (!lat || !lng) return '#';
+		return `https://www.google.com/maps?q=${lat},${lng}`;
+	}
+
+	function formatLocation(airport: Airport): string {
+		const parts: string[] = [];
+
+		if (airport.municipality) {
+			parts.push(airport.municipality);
+		}
+
+		if (airport.iso_region) {
+			// Extract state/province from iso_region (format: US-CA -> CA)
+			const region = airport.iso_region.split('-').pop() || airport.iso_region;
+			parts.push(region);
+		}
+
+		if (airport.iso_country) {
+			parts.push(airport.iso_country);
+		}
+
+		return parts.length > 0 ? parts.join(', ') : '—';
 	}
 
 	function getAirportCode(airport: Airport): string {
@@ -85,29 +122,19 @@
 			Search Airports
 		</h3>
 		<div class="space-y-3 rounded-lg border p-3">
-			<input
-				class="input"
-				placeholder="Search by name, city, or code (e.g., KJFK, New York)"
-				bind:value={searchQuery}
-				onkeydown={handleKeydown}
-				oninput={() => (error = '')}
-			/>
-
-			<button
-				class="btn w-full preset-filled-primary-500"
-				onclick={searchAirports}
-				disabled={loading}
-			>
+			<div class="relative">
+				<input
+					class="input"
+					placeholder="Search by name, city, or code (e.g., KJFK, New York)"
+					bind:value={searchQuery}
+					oninput={handleInput}
+				/>
 				{#if loading}
 					<div
-						class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
+						class="absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 animate-spin rounded-full border-2 border-primary-500 border-t-transparent"
 					></div>
-					Searching...
-				{:else}
-					<Search class="mr-2 h-4 w-4" />
-					Search Airports
 				{/if}
-			</button>
+			</div>
 
 			<!-- Error message display -->
 			{#if error}
@@ -154,22 +181,24 @@
 								<td class="font-semibold">{airport.name}</td>
 								<td>
 									<span class="variant-soft badge">
-										{airport.airport_type}
+										{formatSnakeCase(airport.airport_type)}
 									</span>
 								</td>
 								<td>
 									<div class="flex items-center gap-1">
 										<MapPin class="h-4 w-4 text-surface-500" />
-										<span>
-											{airport.municipality || '—'}
-											{#if airport.iso_region}
-												<span class="text-surface-500">, {airport.iso_region}</span>
-											{/if}
-										</span>
+										<span>{formatLocation(airport)}</span>
 									</div>
 								</td>
 								<td class="font-mono text-sm">
-									{formatCoordinates(airport.latitude_deg, airport.longitude_deg)}
+									<a
+										href={getGoogleMapsUrl(airport.latitude_deg, airport.longitude_deg)}
+										target="_blank"
+										rel="noopener noreferrer"
+										class="text-primary-500 underline hover:text-primary-700"
+									>
+										{formatCoordinates(airport.latitude_deg, airport.longitude_deg)}
+									</a>
 								</td>
 								<td>
 									{#if airport.elevation_ft !== null}
