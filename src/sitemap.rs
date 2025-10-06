@@ -37,15 +37,12 @@ pub async fn handle_sitemap_generation(pool: PgPool, static_root: String) -> Res
     // Generate club URLs
     let club_urls = generate_club_urls(&club_ids)?;
 
-    // Get all device addresses from database
-    let device_addresses = get_all_device_addresses(pool).await?;
-    info!(
-        "Found {} devices for sitemap generation",
-        device_addresses.len()
-    );
+    // Get all device IDs from database
+    let device_ids = get_all_device_ids(pool).await?;
+    info!("Found {} devices for sitemap generation", device_ids.len());
 
     // Generate device URLs
-    let device_urls = generate_device_urls(&device_addresses)?;
+    let device_urls = generate_device_urls(&device_ids)?;
 
     // Combine all URLs
     let mut all_urls = static_urls;
@@ -142,11 +139,11 @@ async fn get_all_club_ids(pool: PgPool) -> Result<Vec<Uuid>> {
 }
 
 /// Generate device page URLs
-fn generate_device_urls(device_addresses: &[String]) -> Result<Vec<Url>> {
+fn generate_device_urls(device_ids: &[Uuid]) -> Result<Vec<Url>> {
     let mut urls = Vec::new();
 
-    for address in device_addresses {
-        let device_url = format!("{}/devices/{}", BASE_URL, address);
+    for device_id in device_ids {
+        let device_url = format!("{}/devices/{}", BASE_URL, device_id);
         let url = Url::builder(device_url).priority(0.5).build()?;
         urls.push(url);
     }
@@ -154,35 +151,17 @@ fn generate_device_urls(device_addresses: &[String]) -> Result<Vec<Url>> {
     Ok(urls)
 }
 
-/// Get all device addresses from the database
-async fn get_all_device_addresses(pool: PgPool) -> Result<Vec<String>> {
+/// Get all device IDs from the database
+async fn get_all_device_ids(pool: PgPool) -> Result<Vec<Uuid>> {
     let result = tokio::task::spawn_blocking(move || {
-        use crate::devices::AddressType;
         use crate::schema::devices::dsl::*;
 
         let mut conn = pool.get()?;
 
-        // Get all devices with their address_type and address
-        let device_data: Vec<(AddressType, i32)> = devices
-            .order((address_type.asc(), address.asc()))
-            .select((address_type, address))
-            .load::<(AddressType, i32)>(&mut conn)?;
+        // Get all device IDs (UUIDs)
+        let device_ids: Vec<Uuid> = devices.order(id.asc()).select(id).load::<Uuid>(&mut conn)?;
 
-        // Format as "TYPE:ADDRESS" strings (e.g., "I:DD1234", "O:123456")
-        let device_addresses: Vec<String> = device_data
-            .into_iter()
-            .map(|(addr_type_enum, addr)| {
-                // Convert address to hex for ICAO (I) and FLARM (F) types
-                match addr_type_enum {
-                    AddressType::Icao | AddressType::Flarm => {
-                        format!("{}:{:06X}", addr_type_enum, addr as u32)
-                    }
-                    _ => format!("{}:{}", addr_type_enum, addr),
-                }
-            })
-            .collect();
-
-        Ok::<Vec<String>, anyhow::Error>(device_addresses)
+        Ok::<Vec<Uuid>, anyhow::Error>(device_ids)
     })
     .await??;
 
