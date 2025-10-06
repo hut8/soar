@@ -2,6 +2,10 @@
 	import { Plane, Calendar, MapPin, Clock } from '@lucide/svelte';
 	import { serverCall } from '$lib/api/server';
 	import { onMount } from 'svelte';
+	import dayjs from 'dayjs';
+	import relativeTime from 'dayjs/plugin/relativeTime';
+
+	dayjs.extend(relativeTime);
 
 	interface Flight {
 		id: string;
@@ -29,16 +33,9 @@
 		return `${typePrefix}-${address}`;
 	}
 
-	function formatDateTime(dateString: string | null): string {
+	function formatRelativeTime(dateString: string | null): string {
 		if (!dateString) return '—';
-		const date = new Date(dateString);
-		return date.toLocaleString('en-US', {
-			year: 'numeric',
-			month: 'short',
-			day: 'numeric',
-			hour: '2-digit',
-			minute: '2-digit'
-		});
+		return dayjs(dateString).fromNow();
 	}
 
 	function formatDate(dateString: string | null): string {
@@ -159,7 +156,7 @@
 								<td>
 									<div class="flex items-center gap-1 text-sm">
 										<Clock class="h-3 w-3" />
-										{formatDateTime(flight.takeoff_time).split(', ')[1] || '—'}
+										{formatRelativeTime(flight.takeoff_time)}
 									</div>
 									{#if flight.departure_airport}
 										<div class="text-surface-500-400-token flex items-center gap-1 text-xs">
@@ -171,7 +168,7 @@
 								<td>
 									<div class="flex items-center gap-1 text-sm">
 										<Clock class="h-3 w-3" />
-										{formatDateTime(flight.landing_time).split(', ')[1] || '—'}
+										{formatRelativeTime(flight.landing_time)}
 									</div>
 									{#if flight.arrival_airport}
 										<div class="text-surface-500-400-token flex items-center gap-1 text-xs">
