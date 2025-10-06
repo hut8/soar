@@ -8,13 +8,10 @@ use serde::{Deserialize, Serialize};
 use tracing::{info, instrument};
 use uuid::Uuid;
 
-use crate::actions::fixes::enrich_devices_with_aircraft_data;
 use crate::actions::json_error;
 use crate::actions::views::{DeviceView, FlightView};
-use crate::aircraft_registrations_repo::AircraftRegistrationsRepository;
 use crate::device_repo::DeviceRepository;
 use crate::devices::AddressType;
-use crate::faa::aircraft_model_repo::AircraftModelRepository;
 use crate::fixes::Fix;
 use crate::fixes_repo::FixesRepository;
 use crate::flights_repo::FlightsRepository;
@@ -164,6 +161,184 @@ pub async fn get_device_fixes(
     }
 }
 
+/// Search devices by bounding box with enriched aircraft data
+async fn search_devices_by_bbox(
+    lat_max: f64,
+    lat_min: f64,
+    lon_max: f64,
+    lon_min: f64,
+    after: Option<DateTime<Utc>>,
+    pool: crate::web::PgPool,
+) -> impl IntoResponse {
+    // Validate coordinates
+    if !(-90.0..=90.0).contains(&lat_max) || !(-90.0..=90.0).contains(&lat_min) {
+        return json_error(
+            StatusCode::BAD_REQUEST,
+            "Latitude must be between -90 and 90 degrees",
+        )
+        .into_response();
+    }
+
+    if !(-180.0..=180.0).contains(&lon_max) || !(-180.0..=180.0).contains(&lon_min) {
+        return json_error(
+            StatusCode::BAD_REQUEST,
+            "Longitude must be between -180 and 180 degrees",
+        )
+        .into_response();
+    }
+
+    if lat_min >= lat_max {
+        return json_error(
+            StatusCode::BAD_REQUEST,
+            "latitude_min must be less than latitude_max",
+        )
+        .into_response();
+    }
+
+    if lon_min >= lon_max {
+        return json_error(
+            StatusCode::BAD_REQUEST,
+            "longitude_min must be less than longitude_max",
+        )
+        .into_response();
+    }
+
+    // Set default cutoff time to 24 hours ago if not provided
+    let cutoff_time = after.unwrap_or_else(|| Utc::now() - Duration::hours(24));
+
+    info!(
+        "Performing bounding box search with cutoff_time: {}",
+        cutoff_time
+    );
+
+    let fixes_repo = FixesRepository::new(pool.clone());
+
+    // Perform bounding box search
+    match fixes_repo
+        .get_devices_with_fixes_in_bounding_box(
+            lat_max,
+            lon_min,
+            lat_min,
+            lon_max,
+            cutoff_time,
+            None,
+        )
+        .await
+    {
+        Ok(devices_with_fixes) => {
+            info!("Found {} devices in bounding box", devices_with_fixes.len());
+
+            // Enrich with aircraft registration and model data
+            let enriched =
+                enrich_devices_with_aircraft_data(devices_with_fixes, pool.clone()).await;
+
+            info!("Enriched {} devices, returning response", enriched.len());
+            Json(enriched).into_response()
+        }
+        Err(e) => {
+            tracing::error!("Failed to get devices with fixes in bounding box: {}", e);
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to get devices with fixes in bounding box",
+            )
+            .into_response()
+        }
+    }
+}
+
+/// Search devices by aircraft registration number
+async fn search_devices_by_registration(
+    registration: String,
+    pool: crate::web::PgPool,
+) -> impl IntoResponse {
+    let device_repo = DeviceRepository::new(pool);
+
+    match device_repo.search_by_registration(&registration).await {
+        Ok(devices) => {
+            let device_views: Vec<DeviceView> = devices.into_iter().map(|d| d.into()).collect();
+            Json(DeviceSearchResponse {
+                devices: device_views,
+            })
+            .into_response()
+        }
+        Err(e) => {
+            tracing::error!(
+                "Failed to search devices by registration {}: {}",
+                registration,
+                e
+            );
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to search devices",
+            )
+            .into_response()
+        }
+    }
+}
+
+/// Search devices by address and address type
+async fn search_devices_by_address(
+    address_str: String,
+    address_type_str: String,
+    pool: crate::web::PgPool,
+) -> impl IntoResponse {
+    // Parse address from hex string
+    let address = match u32::from_str_radix(&address_str, 16) {
+        Ok(addr) => addr,
+        Err(_) => {
+            return json_error(
+                StatusCode::BAD_REQUEST,
+                "Invalid address format. Expected hexadecimal string",
+            )
+            .into_response();
+        }
+    };
+
+    // Parse address type
+    let address_type = match address_type_str.to_uppercase().as_str() {
+        "I" => AddressType::Icao,
+        "O" => AddressType::Ogn,
+        "F" => AddressType::Flarm,
+        _ => {
+            return json_error(
+                StatusCode::BAD_REQUEST,
+                "Invalid address-type. Must be I (ICAO), O (OGN), or F (FLARM)",
+            )
+            .into_response();
+        }
+    };
+
+    let device_repo = DeviceRepository::new(pool);
+
+    // Search by address and type
+    match device_repo
+        .search_by_address_and_type(address, address_type)
+        .await
+    {
+        Ok(Some(device)) => {
+            let device_view: DeviceView = device.into();
+            Json(DeviceSearchResponse {
+                devices: vec![device_view],
+            })
+            .into_response()
+        }
+        Ok(None) => Json(DeviceSearchResponse { devices: vec![] }).into_response(),
+        Err(e) => {
+            tracing::error!(
+                "Failed to search devices by address {} and type {}: {}",
+                address,
+                address_type_str,
+                e
+            );
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to search devices",
+            )
+            .into_response()
+        }
+    }
+}
+
 /// Search devices by registration, address+type, or bounding box
 #[instrument(skip(state), fields(
     has_bbox = query.latitude_max.is_some(),
@@ -180,9 +355,9 @@ pub async fn search_devices(
         || query.longitude_max.is_some()
         || query.longitude_min.is_some();
 
-    // Handle bounding box search
+    // Route to appropriate handler
     if has_bounding_box {
-        // If any bounding box parameter is provided, all four must be provided
+        // Validate all four bounding box parameters are provided
         match (
             query.latitude_max,
             query.latitude_min,
@@ -190,75 +365,7 @@ pub async fn search_devices(
             query.longitude_min,
         ) {
             (Some(lat_max), Some(lat_min), Some(lon_max), Some(lon_min)) => {
-                // Validate coordinates
-                if !(-90.0..=90.0).contains(&lat_max) || !(-90.0..=90.0).contains(&lat_min) {
-                    return json_error(
-                        StatusCode::BAD_REQUEST,
-                        "Latitude must be between -90 and 90 degrees",
-                    )
-                    .into_response();
-                }
-
-                if !(-180.0..=180.0).contains(&lon_max) || !(-180.0..=180.0).contains(&lon_min) {
-                    return json_error(
-                        StatusCode::BAD_REQUEST,
-                        "Longitude must be between -180 and 180 degrees",
-                    )
-                    .into_response();
-                }
-
-                if lat_min >= lat_max {
-                    return json_error(
-                        StatusCode::BAD_REQUEST,
-                        "latitude_min must be less than latitude_max",
-                    )
-                    .into_response();
-                }
-
-                if lon_min >= lon_max {
-                    return json_error(
-                        StatusCode::BAD_REQUEST,
-                        "longitude_min must be less than longitude_max",
-                    )
-                    .into_response();
-                }
-
-                // Set default cutoff time to 24 hours ago if not provided
-                let cutoff_time = query.after.unwrap_or_else(|| Utc::now() - Duration::hours(24));
-
-                info!("Performing bounding box search with cutoff_time: {}", cutoff_time);
-
-                let fixes_repo = FixesRepository::new(state.pool.clone());
-
-                // Perform bounding box search
-                match fixes_repo
-                    .get_devices_with_fixes_in_bounding_box(
-                        lat_max, lon_min, lat_min, lon_max, cutoff_time, None,
-                    )
-                    .await
-                {
-                    Ok(devices_with_fixes) => {
-                        info!("Found {} devices in bounding box", devices_with_fixes.len());
-
-                        // Enrich with aircraft registration and model data
-                        let enriched = enrich_devices_with_aircraft_data(
-                            devices_with_fixes,
-                            state.pool.clone(),
-                        )
-                        .await;
-
-                        info!("Enriched {} devices, returning response", enriched.len());
-                        Json(enriched).into_response()
-                    }
-                    Err(e) => {
-                        tracing::error!("Failed to get devices with fixes in bounding box: {}", e);
-                        json_error(
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            "Failed to get devices with fixes in bounding box",
-                        )
-                        .into_response()
-                    }
-                }
+                search_devices_by_bbox(lat_max, lat_min, lon_max, lon_min, query.after, state.pool).await.into_response()
             }
             _ => json_error(
                 StatusCode::BAD_REQUEST,
@@ -267,266 +374,128 @@ pub async fn search_devices(
             .into_response(),
         }
     } else {
-        // Original search logic (by registration or address+type)
-        let device_repo = DeviceRepository::new(state.pool);
-
-        // Validate query parameters - must have either registration OR (address + address-type)
+        // Route based on registration or address+type parameters
         match (&query.registration, &query.address, &query.address_type) {
             (Some(registration), None, None) => {
-                // Search by registration
-                match device_repo.search_by_registration(registration).await {
-                    Ok(devices) => {
-                        let device_views: Vec<DeviceView> =
-                            devices.into_iter().map(|d| d.into()).collect();
-                        Json(DeviceSearchResponse {
-                            devices: device_views,
-                        })
-                        .into_response()
-                    }
-                    Err(e) => {
-                        tracing::error!(
-                            "Failed to search devices by registration {}: {}",
-                            registration,
-                            e
-                        );
-                        json_error(
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            "Failed to search devices",
-                        )
-                        .into_response()
-                    }
-                }
+                search_devices_by_registration(registration.clone(), state.pool).await.into_response()
             }
             (None, Some(address_str), Some(address_type_str)) => {
-                // Parse address from hex string
-                let address = match u32::from_str_radix(address_str, 16) {
-                    Ok(addr) => addr,
-                    Err(_) => {
-                        return json_error(
-                            StatusCode::BAD_REQUEST,
-                            "Invalid address format. Expected hexadecimal string",
-                        )
-                        .into_response();
-                    }
-                };
-
-                // Parse address type
-                let address_type = match address_type_str.to_uppercase().as_str() {
-                    "I" => AddressType::Icao,
-                    "O" => AddressType::Ogn,
-                    "F" => AddressType::Flarm,
-                    _ => {
-                        return json_error(
-                            StatusCode::BAD_REQUEST,
-                            "Invalid address-type. Must be I (ICAO), O (OGN), or F (FLARM)",
-                        )
-                        .into_response();
-                    }
-                };
-
-                // Search by address and type
-                match device_repo
-                    .search_by_address_and_type(address, address_type)
-                    .await
-                {
-                    Ok(Some(device)) => {
-                        let device_view: DeviceView = device.into();
-                        Json(DeviceSearchResponse {
-                            devices: vec![device_view],
-                        })
-                        .into_response()
-                    }
-                    Ok(None) => Json(DeviceSearchResponse { devices: vec![] }).into_response(),
-                    Err(e) => {
-                        tracing::error!(
-                            "Failed to search devices by address {} and type {}: {}",
-                            address,
-                            address_type_str,
-                            e
-                        );
-                        json_error(
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            "Failed to search devices",
-                        )
-                        .into_response()
-                    }
-                }
+                search_devices_by_address(address_str.clone(), address_type_str.clone(), state.pool).await.into_response()
             }
-            _ => {
-                // Invalid parameter combination
-                json_error(
-                    StatusCode::BAD_REQUEST,
-                    "Must provide either 'registration' OR both 'address' and 'address-type' parameters",
-                ).into_response()
-            }
+            _ => json_error(
+                StatusCode::BAD_REQUEST,
+                "Must provide either 'registration' OR both 'address' and 'address-type' parameters",
+            )
+            .into_response(),
         }
     }
 }
 
-/// Get aircraft registration for a device by device ID
-pub async fn get_device_aircraft_registration(
-    Path(id): Path<Uuid>,
-    State(state): State<AppState>,
-) -> impl IntoResponse {
-    let aircraft_repo = AircraftRegistrationsRepository::new(state.pool.clone());
-    let device_repo = DeviceRepository::new(state.pool.clone());
+/// Helper function to enrich devices with aircraft registration and model data
+/// Optimized with batch queries to avoid N+1 query problem
+#[instrument(skip(pool, devices_with_fixes), fields(device_count = devices_with_fixes.len()))]
+pub(crate) async fn enrich_devices_with_aircraft_data(
+    devices_with_fixes: Vec<(crate::devices::DeviceModel, Vec<crate::fixes::Fix>)>,
+    pool: crate::web::PgPool,
+) -> Vec<crate::live_fixes::DeviceWithFixes> {
+    use std::collections::HashMap;
 
-    // First try to query aircraft_registrations table for a record with the given device_id
-    match aircraft_repo
-        .get_aircraft_registration_by_device_id(id)
-        .await
-    {
-        Ok(Some(aircraft_registration)) => {
-            return Json(aircraft_registration).into_response();
-        }
-        Ok(None) => {
-            // Fallback: try to find device and then look up by registration number
-            tracing::debug!(
-                "No aircraft registration found by device_id {}, trying registration lookup",
-                id
-            );
-        }
-        Err(e) => {
-            tracing::error!(
-                "Failed to get aircraft registration by device_id {}: {}",
-                id,
-                e
-            );
-        }
+    if devices_with_fixes.is_empty() {
+        return Vec::new();
     }
 
-    // Fallback: Get device and look up aircraft by registration number
-    match device_repo.get_device_by_uuid(id).await {
-        Ok(Some(device)) => {
-            // Try to find aircraft registration by registration number
-            match aircraft_repo
-                .get_aircraft_registration_model_by_n_number(&device.registration)
-                .await
-            {
-                Ok(Some(aircraft_model)) => Json(aircraft_model).into_response(),
-                Ok(None) => (StatusCode::NOT_FOUND).into_response(),
-                Err(e) => {
-                    tracing::error!(
-                        "Failed to get aircraft registration for device {} by n-number {}: {}",
-                        id,
-                        device.registration,
-                        e
-                    );
-                    json_error(
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "Failed to get aircraft registration",
-                    )
-                    .into_response()
-                }
-            }
-        }
-        Ok(None) => (StatusCode::NOT_FOUND).into_response(),
-        Err(e) => {
-            tracing::error!("Failed to get device by ID {}: {}", id, e);
-            json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get device").into_response()
-        }
-    }
-}
+    let aircraft_registrations_repo =
+        crate::aircraft_registrations_repo::AircraftRegistrationsRepository::new(pool.clone());
+    let aircraft_model_repo = crate::faa::aircraft_model_repo::AircraftModelRepository::new(pool);
 
-/// Get aircraft model for a device by device ID
-/// This joins aircraft_registrations to aircraft_models using manufacturer_code, model_code, and series_code
-pub async fn get_device_aircraft_model(
-    Path(id): Path<Uuid>,
-    State(state): State<AppState>,
-) -> impl IntoResponse {
-    let aircraft_repo = AircraftRegistrationsRepository::new(state.pool.clone());
-    let aircraft_model_repo = AircraftModelRepository::new(state.pool.clone());
-    let device_repo = DeviceRepository::new(state.pool.clone());
+    // Step 1: Collect all device IDs
+    let device_ids: Vec<uuid::Uuid> = devices_with_fixes
+        .iter()
+        .map(|(device, _)| device.id)
+        .collect();
 
-    // First try to get the aircraft registration for this device by device_id
-    let aircraft_registration = match aircraft_repo
-        .get_aircraft_registration_by_device_id(id)
+    // Step 2: Batch fetch all aircraft registrations
+    info!(
+        "Fetching aircraft registrations for {} devices",
+        device_ids.len()
+    );
+    let registrations = aircraft_registrations_repo
+        .get_aircraft_registrations_by_device_ids(&device_ids)
         .await
-    {
-        Ok(Some(registration)) => registration,
-        Ok(None) => {
-            // Fallback: try to find device and then look up by registration number
-            tracing::debug!(
-                "No aircraft registration found by device_id {}, trying registration lookup",
-                id
-            );
+        .unwrap_or_default();
+    info!("Fetched {} aircraft registrations", registrations.len());
 
-            match device_repo.get_device_by_uuid(id).await {
-                Ok(Some(device)) => {
-                    match aircraft_repo
-                        .get_aircraft_registration_model_by_n_number(&device.registration)
-                        .await
-                    {
-                        Ok(Some(aircraft_model)) => aircraft_model,
-                        Ok(None) => {
-                            return (StatusCode::NOT_FOUND).into_response();
-                        }
-                        Err(e) => {
-                            tracing::error!(
-                                "Failed to get aircraft registration for device {} by n-number {}: {}",
-                                id,
-                                device.registration,
-                                e
-                            );
-                            return json_error(
-                                StatusCode::INTERNAL_SERVER_ERROR,
-                                "Failed to get aircraft registration",
-                            )
-                            .into_response();
-                        }
-                    }
-                }
-                Ok(None) => {
-                    return (StatusCode::NOT_FOUND).into_response();
-                }
-                Err(e) => {
-                    tracing::error!("Failed to get device by ID {}: {}", id, e);
-                    return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get device")
-                        .into_response();
-                }
-            }
-        }
-        Err(e) => {
-            tracing::error!(
-                "Failed to get aircraft registration for device {}: {}",
-                id,
-                e
-            );
-            return json_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to get aircraft registration",
+    // Step 3: Build HashMap for O(1) lookup: device_id -> registration
+    // Filter out registrations without device_id
+    let registration_map: HashMap<
+        uuid::Uuid,
+        crate::aircraft_registrations::AircraftRegistrationModel,
+    > = registrations
+        .into_iter()
+        .filter_map(|reg| reg.device_id.map(|id| (id, reg)))
+        .collect();
+
+    // Step 4: Collect all unique (manufacturer, model, series) keys
+    let model_keys: Vec<(String, String, String)> = registration_map
+        .values()
+        .map(|reg| {
+            (
+                reg.manufacturer_code.clone(),
+                reg.model_code.clone(),
+                reg.series_code.clone(),
             )
-            .into_response();
-        }
-    };
+        })
+        .collect();
 
-    // Now get the aircraft model using the codes from the registration
-    match aircraft_model_repo
-        .get_aircraft_model_by_key(
-            &aircraft_registration.manufacturer_code,
-            &aircraft_registration.model_code,
-            &aircraft_registration.series_code,
-        )
+    // Step 5: Batch fetch all aircraft models
+    info!("Fetching aircraft models for {} keys", model_keys.len());
+    let models = aircraft_model_repo
+        .get_aircraft_models_by_keys(&model_keys)
         .await
-    {
-        Ok(Some(aircraft_model)) => Json(aircraft_model).into_response(),
-        Ok(None) => (StatusCode::NOT_FOUND).into_response(),
-        Err(e) => {
-            tracing::error!(
-                "Failed to get aircraft model for device {} with codes {}-{}-{}: {}",
-                id,
-                aircraft_registration.manufacturer_code,
-                aircraft_registration.model_code,
-                aircraft_registration.series_code,
-                e
-            );
-            json_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to get aircraft model",
-            )
-            .into_response()
-        }
+        .unwrap_or_default();
+    info!("Fetched {} aircraft models", models.len());
+
+    // Step 6: Build HashMap for O(1) lookup: (manufacturer, model, series) -> aircraft_model
+    let model_map: HashMap<(String, String, String), crate::faa::aircraft_models::AircraftModel> =
+        models
+            .into_iter()
+            .map(|model| {
+                (
+                    (
+                        model.manufacturer_code.clone(),
+                        model.model_code.clone(),
+                        model.series_code.clone(),
+                    ),
+                    model,
+                )
+            })
+            .collect();
+
+    // Step 7: Build enriched results
+    info!("Building enriched results");
+    let mut enriched = Vec::new();
+    for (device_model, device_fixes) in devices_with_fixes {
+        let aircraft_registration = registration_map.get(&device_model.id).cloned();
+
+        let aircraft_model = aircraft_registration.as_ref().and_then(|reg| {
+            model_map
+                .get(&(
+                    reg.manufacturer_code.clone(),
+                    reg.model_code.clone(),
+                    reg.series_code.clone(),
+                ))
+                .cloned()
+        });
+
+        enriched.push(crate::live_fixes::DeviceWithFixes {
+            device: device_model,
+            aircraft_registration,
+            aircraft_model,
+            recent_fixes: device_fixes,
+        });
     }
+
+    enriched
 }
 
 /// Parse YYYYMMDDHHMMSS format to DateTime<Utc>
