@@ -33,8 +33,8 @@ fn format_device_address_with_type(device_address: &str, address_type: AddressTy
 /// Simplified aircraft state - either idle or active
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum AircraftState {
-    Idle,   // Stationary or moving slowly (< 10 knots)
-    Active, // Moving fast (>= 10 knots) on ground or airborne
+    Idle,   // Stationary or moving slowly (< 20 knots)
+    Active, // Moving fast (>= 20 knots) on ground or airborne
 }
 
 /// Aircraft tracker with simplified state management
@@ -64,7 +64,7 @@ impl AircraftTracker {
     fn should_be_active(&self, fix: &Fix) -> bool {
         // Check ground speed first
         if let Some(ground_speed_knots) = fix.ground_speed_knots {
-            return ground_speed_knots >= 10.0;
+            return ground_speed_knots >= 20.0;
         }
 
         // If no ground speed, calculate from position changes
@@ -78,7 +78,7 @@ impl AircraftTracker {
                 let speed_ms = distance_meters / time_diff.num_seconds() as f64;
                 let speed_knots = speed_ms * 1.94384; // m/s to knots
 
-                return speed_knots >= 10.0;
+                return speed_knots >= 20.0;
             }
         }
 
@@ -671,7 +671,7 @@ impl FlightTracker {
                 None => {
                     // New aircraft - determine initial state
                     let ground_speed = fix.ground_speed_knots.unwrap_or(0.0);
-                    ground_speed >= 10.0
+                    ground_speed >= 20.0
                 }
             }
         };
@@ -706,10 +706,10 @@ impl FlightTracker {
 
                     // Check GPS quality before creating flight
                     if let Some(sats_used) = fix.satellites_used
-                        && sats_used < 3
+                        && sats_used < 4
                     {
                         warn!(
-                            "Ignoring takeoff for aircraft {} - insufficient GPS quality ({} satellites used, need >= 3)",
+                            "Ignoring takeoff for aircraft {} - insufficient GPS quality ({} satellites used, need >= 4)",
                             fix.device_id, sats_used
                         );
                         // Don't create a flight, just update position
@@ -1072,7 +1072,7 @@ mod tests {
         assert!(tracker.should_be_active(&fix));
 
         // Test with low speed
-        fix.ground_speed_knots = Some(5.0); // 5 knots - should be idle
+        fix.ground_speed_knots = Some(15.0); // 15 knots - should be idle (below 20 knot threshold)
         assert!(!tracker.should_be_active(&fix));
     }
 }

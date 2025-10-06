@@ -76,7 +76,7 @@ pub struct Fix {
     /// Lag between packet timestamp and when we received it (in milliseconds)
     pub lag: Option<i32>,
 
-    /// Whether the aircraft is considered active (ground_speed >= 15 knots)
+    /// Whether the aircraft is considered active (ground_speed >= 20 knots)
     #[serde(rename = "active")]
     pub is_active: bool,
 
@@ -165,7 +165,7 @@ impl Fix {
                     };
 
                 // Determine if aircraft is active based on ground speed
-                let is_active = ground_speed_knots.is_none_or(|speed| speed >= 15.0);
+                let is_active = ground_speed_knots.is_none_or(|speed| speed >= 20.0);
 
                 Ok(Some(Fix {
                     id: Uuid::new_v4(),
