@@ -11,7 +11,11 @@
 		TrendingUp,
 		Route,
 		MoveUpRight,
-		MapPinMinus
+		MapPinMinus,
+		ChevronsLeft,
+		ChevronLeft,
+		ChevronRight,
+		ChevronsRight
 	} from '@lucide/svelte';
 	import type { PageData } from './$types';
 	import dayjs from 'dayjs';
@@ -31,9 +35,11 @@
 	let currentPage = $state(1);
 	let pageSize = 50;
 
-	const totalPages = $derived(Math.ceil(data.fixes.length / pageSize));
+	// Reverse fixes to show chronologically (earliest first, landing last)
+	const reversedFixes = $derived([...data.fixes].reverse());
+	const totalPages = $derived(Math.ceil(reversedFixes.length / pageSize));
 	const paginatedFixes = $derived(
-		data.fixes.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+		reversedFixes.slice((currentPage - 1) * pageSize, currentPage * pageSize)
 	);
 
 	// Calculate flight duration
@@ -105,9 +111,12 @@
 			await loader.importLibrary('maps');
 			await loader.importLibrary('marker');
 
+			// Use reversed fixes for chronological order (earliest to latest)
+			const fixesInOrder = [...data.fixes].reverse();
+
 			// Calculate center and bounds
 			const bounds = new google.maps.LatLngBounds();
-			data.fixes.forEach((fix) => {
+			fixesInOrder.forEach((fix) => {
 				bounds.extend({ lat: fix.latitude, lng: fix.longitude });
 			});
 
@@ -123,8 +132,8 @@
 			// Fit bounds
 			map.fitBounds(bounds);
 
-			// Create flight path
-			const pathCoordinates = data.fixes.map((fix) => ({
+			// Create flight path (in chronological order)
+			const pathCoordinates = fixesInOrder.map((fix) => ({
 				lat: fix.latitude,
 				lng: fix.longitude
 			}));
@@ -139,9 +148,9 @@
 
 			flightPath.setMap(map);
 
-			// Add takeoff marker (green)
-			if (data.fixes.length > 0) {
-				const first = data.fixes[0];
+			// Add takeoff marker (green) - first fix chronologically
+			if (fixesInOrder.length > 0) {
+				const first = fixesInOrder[0];
 				const takeoffPin = document.createElement('div');
 				takeoffPin.innerHTML = `
 					<div style="background-color: #10b981; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white;"></div>
@@ -155,9 +164,9 @@
 				});
 			}
 
-			// Add landing marker (red) if flight is complete
-			if (data.flight.landing_time && data.fixes.length > 0) {
-				const last = data.fixes[data.fixes.length - 1];
+			// Add landing marker (red) if flight is complete - last fix chronologically
+			if (data.flight.landing_time && fixesInOrder.length > 0) {
+				const last = fixesInOrder[fixesInOrder.length - 1];
 				const landingPin = document.createElement('div');
 				landingPin.innerHTML = `
 					<div style="background-color: #ef4444; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white;"></div>
@@ -415,11 +424,23 @@
 					</div>
 					<div class="flex gap-2">
 						<button
+							onclick={() => goToPage(1)}
+							disabled={currentPage === 1}
+							class="variant-filled-surface btn btn-sm"
+							type="button"
+							title="First page (Takeoff)"
+						>
+							<ChevronsLeft class="h-4 w-4" />
+							Takeoff
+						</button>
+						<button
 							onclick={() => goToPage(currentPage - 1)}
 							disabled={currentPage === 1}
 							class="variant-filled-surface btn btn-sm"
 							type="button"
+							title="Previous page"
 						>
+							<ChevronLeft class="h-4 w-4" />
 							Previous
 						</button>
 						<button
@@ -427,8 +448,20 @@
 							disabled={currentPage === totalPages}
 							class="variant-filled-surface btn btn-sm"
 							type="button"
+							title="Next page"
 						>
 							Next
+							<ChevronRight class="h-4 w-4" />
+						</button>
+						<button
+							onclick={() => goToPage(totalPages)}
+							disabled={currentPage === totalPages}
+							class="variant-filled-surface btn btn-sm"
+							type="button"
+							title="Last page (Landing)"
+						>
+							Landing
+							<ChevronsRight class="h-4 w-4" />
 						</button>
 					</div>
 				</div>
