@@ -297,9 +297,12 @@ async fn handle_run(
     info!("Starting APRS client with server: {}:{}", server, port);
 
     // Start metrics server in the background
-    tokio::spawn(async {
-        soar::metrics::start_metrics_server(9090).await;
-    });
+    if is_production {
+        info!("Starting metrics server on port 9091");
+        tokio::spawn(async {
+            soar::metrics::start_metrics_server(9091).await;
+        });
+    }
 
     // Acquire instance lock to prevent multiple instances from running
     let is_production = env::var("SOAR_ENV")

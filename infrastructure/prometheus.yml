@@ -53,17 +53,17 @@ scrape_configs:
     static_configs:
       - targets:
           # Production APRS client
-          - 'localhost:9090'
+          - 'localhost:9091'
         labels:
-          instance: 'soar-run-prod'
-          component: 'aprs-client'
+          instance: 'soar'
+          component: 'run'
 
     # Add custom labels to all metrics from this job
     metric_relabel_configs:
       # Add a source label to identify metrics origin
       - source_labels: [__name__]
         target_label: source
-        replacement: 'soar'
+        replacement: 'soar-run'
 
   # Optional: Development instance (if running on same server)
   # - job_name: 'soar-web-dev'
