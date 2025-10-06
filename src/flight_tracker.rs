@@ -704,6 +704,23 @@ impl FlightTracker {
                         )
                     );
 
+                    // Check GPS quality before creating flight
+                    if let Some(sats_used) = fix.satellites_used
+                        && sats_used < 3
+                    {
+                        warn!(
+                            "Ignoring takeoff for aircraft {} - insufficient GPS quality ({} satellites used, need >= 3)",
+                            fix.device_id, sats_used
+                        );
+                        // Don't create a flight, just update position
+                        let mut trackers = self.aircraft_trackers.write().await;
+                        if let Some(tracker) = trackers.get_mut(&fix.device_id) {
+                            tracker.update_position(&fix);
+                            // Keep state as Idle since we're not creating a flight
+                        }
+                        return Ok(fix);
+                    }
+
                     // Update tracker state immediately to prevent duplicate flight creation
                     let mut trackers = self.aircraft_trackers.write().await;
                     if let Some(tracker) = trackers.get_mut(&fix.device_id) {

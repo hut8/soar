@@ -149,6 +149,21 @@ impl Fix {
                     aircraft_type_ogn = Some(AircraftType::from(id.aircraft_type));
                 }
 
+                // Parse GPS quality field (format: "AxB" where A=satellites_used, B=satellites_visible)
+                let (satellites_used, satellites_visible) =
+                    if let Some(ref gps_quality) = pos_packet.comment.gps_quality {
+                        // Parse "AxB" format
+                        if let Some((used_str, visible_str)) = gps_quality.split_once('x') {
+                            let used = used_str.parse::<i16>().ok();
+                            let visible = visible_str.parse::<i16>().ok();
+                            (used, visible)
+                        } else {
+                            (None, None)
+                        }
+                    } else {
+                        (None, None)
+                    };
+
                 // Determine if aircraft is active based on ground speed
                 let is_active = ground_speed_knots.is_none_or(|speed| speed >= 15.0);
 
@@ -178,10 +193,10 @@ impl Fix {
                     snr_db,
                     bit_errors_corrected,
                     freq_offset_khz,
-                    satellites_used: None, // Not currently parsed from APRS packets
-                    satellites_visible: None, // Not currently parsed from APRS packets
-                    club_id: None,         // To be set by processors
-                    flight_id: None,       // Will be set by flight detection processor
+                    satellites_used,
+                    satellites_visible,
+                    club_id: None,   // To be set by processors
+                    flight_id: None, // Will be set by flight detection processor
                     unparsed_data: pos_packet.comment.unparsed.clone(),
                     device_id,
                     received_at,
