@@ -33,6 +33,7 @@
 	const devicesPath = resolve('/devices');
 	const receiversPath = resolve('/receivers');
 	const airportsPath = resolve('/airports');
+	const flightsPath = resolve('/flights');
 	const loginPath = resolve('/login');
 	const registerPath = resolve('/register');
 	const profilePath = resolve('/profile');
@@ -102,6 +103,9 @@
 				</a>
 				<a href={airportsPath} class="btn preset-filled-primary-500 btn-sm">
 					<MapPin /> Airports
+				</a>
+				<a href={flightsPath} class="btn preset-filled-primary-500 btn-sm">
+					<Plane /> Flights
 				</a>
 			</nav>
 
@@ -261,6 +265,13 @@
 					onclick={() => (showMobileMenu = false)}
 				>
 					<MapPin size={16} /> Airports
+				</a>
+				<a
+					href={flightsPath}
+					class="btn w-full justify-start preset-filled-primary-500"
+					onclick={() => (showMobileMenu = false)}
+				>
+					<Plane size={16} /> Flights
 				</a>
 
 				<hr class="!my-6" />
