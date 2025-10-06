@@ -236,11 +236,32 @@ async fn metrics_middleware(request: Request<Body>, next: Next) -> Response {
     let method = request.method().clone();
 
     // Extract the matched route pattern (e.g., "/data/devices/{id}" instead of "/data/devices/123")
-    let path = request
+    let raw_path = request
         .extensions()
         .get::<MatchedPath>()
         .map(|matched_path| matched_path.as_str().to_string())
         .unwrap_or_else(|| request.uri().path().to_string());
+
+    // Normalize static file paths to avoid creating metrics for each individual file
+    let path = if raw_path.starts_with("/_app/")
+        || raw_path.starts_with("/assets/")
+        || raw_path.starts_with("/_immutable/")
+        || raw_path.ends_with(".js")
+        || raw_path.ends_with(".css")
+        || raw_path.ends_with(".woff")
+        || raw_path.ends_with(".woff2")
+        || raw_path.ends_with(".ttf")
+        || raw_path.ends_with(".svg")
+        || raw_path.ends_with(".png")
+        || raw_path.ends_with(".jpg")
+        || raw_path.ends_with(".jpeg")
+        || raw_path.ends_with(".ico")
+        || raw_path.ends_with(".webp")
+    {
+        "/static_files".to_string()
+    } else {
+        raw_path
+    };
 
     let response = next.run(request).await;
     let status = response.status();
