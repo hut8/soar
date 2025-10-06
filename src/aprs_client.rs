@@ -1166,12 +1166,17 @@ impl ReceiverPositionProcessor {
 pub struct ReceiverStatusProcessor {
     /// Repository for storing receiver status data
     status_repo: ReceiverStatusRepository,
+    /// Repository for looking up receiver IDs by callsign
+    receiver_repo: ReceiverRepository,
 }
 
 impl ReceiverStatusProcessor {
     /// Create a new ReceiverStatusProcessor
-    pub fn new(status_repo: ReceiverStatusRepository) -> Self {
-        Self { status_repo }
+    pub fn new(status_repo: ReceiverStatusRepository, receiver_repo: ReceiverRepository) -> Self {
+        Self {
+            status_repo,
+            receiver_repo,
+        }
     }
 
     /// Process a status packet from a receiver
@@ -1180,38 +1185,54 @@ impl ReceiverStatusProcessor {
         match packet.position_source_type() {
             PositionSourceType::Receiver => {
                 if let AprsData::Status(status) = &packet.data {
-                    // Extract receiver ID from packet source (callsign)
-                    // For now, use a placeholder implementation
-                    let receiver_id = self.extract_receiver_id(&packet.from.to_string());
+                    let callsign = packet.from.to_string();
+                    let status_comment = status.comment.clone();
+                    let received_at = chrono::Utc::now();
 
-                    if let Some(recv_id) = receiver_id {
-                        // Create NewReceiverStatus from status comment if available
-                        // The status.comment is already a StatusComment structure
-                        let new_status = NewReceiverStatus::from_status_comment(
-                            recv_id,
-                            &status.comment,
-                            chrono::Utc::now(), // packet timestamp (placeholder)
-                            chrono::Utc::now(), // received_at
-                        );
+                    // Look up receiver ID asynchronously
+                    tokio::spawn({
+                        let receiver_repo = self.receiver_repo.clone();
+                        let status_repo = self.status_repo.clone();
 
-                        // Store in database (async call would need runtime context)
-                        tokio::spawn({
-                            let repo = self.status_repo.clone();
-                            async move {
-                                match repo.insert(&new_status).await {
-                                    Ok(_) => {
-                                        // Track receiver status update metric
-                                        counter!("receiver_status_updates_total").increment(1);
-                                    }
-                                    Err(e) => {
-                                        error!("Failed to insert receiver status: {}", e);
+                        async move {
+                            // Look up receiver by callsign
+                            match receiver_repo.get_receiver_by_callsign(&callsign).await {
+                                Ok(Some(receiver)) => {
+                                    // Create NewReceiverStatus from status comment
+                                    let new_status = NewReceiverStatus::from_status_comment(
+                                        receiver.id,
+                                        &status_comment,
+                                        received_at, // packet timestamp
+                                        received_at, // received_at
+                                    );
+
+                                    // Insert receiver status
+                                    match status_repo.insert(&new_status).await {
+                                        Ok(_) => {
+                                            debug!("Inserted receiver status for {}", callsign);
+                                            // Track receiver status update metric
+                                            counter!("receiver_status_updates_total").increment(1);
+                                        }
+                                        Err(e) => {
+                                            error!(
+                                                "Failed to insert receiver status for {}: {}",
+                                                callsign, e
+                                            );
+                                        }
                                     }
                                 }
+                                Ok(None) => {
+                                    debug!("Receiver not found for callsign: {}", callsign);
+                                }
+                                Err(e) => {
+                                    error!(
+                                        "Failed to look up receiver by callsign {}: {}",
+                                        callsign, e
+                                    );
+                                }
                             }
-                        });
-                    } else {
-                        debug!("Could not extract receiver ID from source: {}", packet.from);
-                    }
+                        }
+                    });
                 } else {
                     warn!("Expected status packet but got different packet type");
                 }
@@ -1223,14 +1244,6 @@ impl ReceiverStatusProcessor {
                 );
             }
         }
-    }
-
-    /// Extract receiver ID from callsign
-    /// TODO: Implement proper lookup from receivers table
-    fn extract_receiver_id(&self, callsign: &str) -> Option<uuid::Uuid> {
-        // Placeholder implementation - in real code, this should query the receivers table
-        trace!("Would look up receiver ID for callsign: {}", callsign);
-        None // For now, return None
     }
 }
 
