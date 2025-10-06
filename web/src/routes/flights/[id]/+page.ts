@@ -1,0 +1,62 @@
+import { error } from '@sveltejs/kit';
+import type { PageLoad } from './$types';
+import { serverCall } from '$lib/api/server';
+
+export const load: PageLoad = async ({ params }) => {
+	const { id } = params;
+
+	try {
+		const [flightResponse, fixesResponse] = await Promise.all([
+			serverCall<{
+				flight: {
+					id: string;
+					device_id?: string;
+					device_address: string;
+					device_address_type: string;
+					takeoff_time?: string;
+					landing_time?: string;
+					departure_airport?: string;
+					arrival_airport?: string;
+					tow_aircraft_id?: string;
+					tow_release_height_msl?: number;
+					club_id?: string;
+					takeoff_altitude_offset_ft?: number;
+					landing_altitude_offset_ft?: number;
+					takeoff_runway_ident?: string;
+					landing_runway_ident?: string;
+					created_at: string;
+					updated_at: string;
+				};
+			}>(`/flights/${id}`),
+			serverCall<{
+				fixes: Array<{
+					id: string;
+					device_id?: string;
+					device_address_hex?: string;
+					timestamp: string;
+					latitude: number;
+					longitude: number;
+					altitude_feet?: number;
+					altitude_agl_feet?: number;
+					track_degrees?: number;
+					ground_speed_knots?: number;
+					climb_fpm?: number;
+					registration?: string;
+					model?: string;
+					flight_id?: string;
+					active: boolean;
+				}>;
+				count: number;
+			}>(`/flights/${id}/fixes`)
+		]);
+
+		return {
+			flight: flightResponse.flight,
+			fixes: fixesResponse.fixes,
+			fixesCount: fixesResponse.count
+		};
+	} catch (err) {
+		console.error('Failed to load flight:', err);
+		throw error(404, 'Flight not found');
+	}
+};

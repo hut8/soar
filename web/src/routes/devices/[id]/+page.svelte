@@ -611,11 +611,12 @@
 						<table class="w-full table-auto">
 							<thead class="bg-surface-100-800-token border-surface-300-600-token border-b">
 								<tr>
-									<th class="px-3 py-2 text-left text-sm font-medium">Flight ID</th>
 									<th class="px-3 py-2 text-left text-sm font-medium">Takeoff</th>
 									<th class="px-3 py-2 text-left text-sm font-medium">Landing</th>
+									<th class="px-3 py-2 text-left text-sm font-medium">Duration</th>
 									<th class="px-3 py-2 text-left text-sm font-medium">Departure</th>
 									<th class="px-3 py-2 text-left text-sm font-medium">Arrival</th>
+									<th class="px-3 py-2 text-left text-sm font-medium">Actions</th>
 								</tr>
 							</thead>
 							<tbody>
@@ -627,15 +628,36 @@
 											? 'bg-surface-50-900-token'
 											: ''}"
 									>
-										<td class="px-3 py-2 font-mono text-sm">{flight.id}</td>
 										<td class="px-3 py-2 text-sm">
 											{flight.takeoff_time ? formatDate(flight.takeoff_time) : 'Unknown'}
 										</td>
 										<td class="px-3 py-2 text-sm">
 											{flight.landing_time ? formatDate(flight.landing_time) : 'In Progress'}
 										</td>
+										<td class="px-3 py-2 text-sm">
+											{#if flight.takeoff_time && flight.landing_time}
+												{@const start = new Date(flight.takeoff_time)}
+												{@const end = new Date(flight.landing_time)}
+												{@const diffMs = end.getTime() - start.getTime()}
+												{@const hours = Math.floor(diffMs / (1000 * 60 * 60))}
+												{@const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60))}
+												{hours}h {minutes}m
+											{:else}
+												-
+											{/if}
+										</td>
 										<td class="px-3 py-2 text-sm">{flight.departure_airport || 'Unknown'}</td>
 										<td class="px-3 py-2 text-sm">{flight.arrival_airport || 'Unknown'}</td>
+										<td class="px-3 py-2 text-sm">
+											<a
+												href="/flights/{flight.id}"
+												target="_blank"
+												rel="noopener noreferrer"
+												class="text-primary-500 underline hover:text-primary-700"
+											>
+												View Flight
+											</a>
+										</td>
 									</tr>
 								{/each}
 							</tbody>
