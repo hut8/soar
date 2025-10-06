@@ -104,7 +104,7 @@
         },
         "tooltip": {
           "mode": "multi",
-          "sort": "none"
+          "sort": "desc"
         }
       },
       "targets": [
@@ -114,35 +114,13 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(http_request_duration_seconds_sum{source=\"soar\"}[5m]) / rate(http_request_duration_seconds_count{source=\"soar\"}[5m])",
-          "legendFormat": "Average Request Duration",
+          "expr": "histogram_quantile(0.95, sum by(endpoint, le) (rate(http_request_duration_seconds_bucket{source=\"soar\"}[5m])))",
+          "legendFormat": "{{endpoint}}",
           "range": true,
           "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{source=\"soar\"}[5m]))",
-          "legendFormat": "P95 Request Duration",
-          "range": true,
-          "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "expr": "histogram_quantile(0.99, rate(http_request_duration_seconds_bucket{source=\"soar\"}[5m]))",
-          "legendFormat": "P99 Request Duration",
-          "range": true,
-          "refId": "C"
         }
       ],
-      "title": "HTTP Request Duration",
+      "title": "HTTP Request P95 Duration by Endpoint",
       "type": "timeseries"
     },
     {
@@ -215,7 +193,7 @@
         },
         "tooltip": {
           "mode": "multi",
-          "sort": "none"
+          "sort": "desc"
         }
       },
       "targets": [
@@ -225,13 +203,191 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(http_requests_total{source=\"soar\"}[5m]))",
-          "legendFormat": "Requests per second",
+          "expr": "sum by(endpoint) (rate(http_requests_total{source=\"soar\"}[5m]))",
+          "legendFormat": "{{endpoint}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "HTTP Request Rate",
+      "title": "HTTP Request Rate by Endpoint",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 9
+      },
+      "id": 15,
+      "options": {
+        "legend": {
+          "calcs": ["mean", "lastNotNull", "max"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum by(endpoint) (rate(http_request_duration_seconds_sum{source=\"soar\"}[5m])) / sum by(endpoint) (rate(http_request_duration_seconds_count{source=\"soar\"}[5m]))",
+          "legendFormat": "{{endpoint}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "HTTP Request Average Duration by Endpoint",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 9
+      },
+      "id": 16,
+      "options": {
+        "legend": {
+          "calcs": ["mean", "lastNotNull", "max"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum by(status) (rate(http_requests_total{source=\"soar\"}[5m]))",
+          "legendFormat": "{{status}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "HTTP Response Status Codes",
       "type": "timeseries"
     },
     {
@@ -240,7 +396,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 9
+        "y": 17
       },
       "id": 4,
       "panels": [],
@@ -313,7 +469,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 10
+        "y": 18
       },
       "id": 5,
       "options": {
@@ -424,7 +580,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 10
+        "y": 18
       },
       "id": 6,
       "options": {
@@ -461,7 +617,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 18
+        "y": 26
       },
       "id": 7,
       "panels": [],
@@ -534,7 +690,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 19
+        "y": 27
       },
       "id": 8,
       "options": {
@@ -645,7 +801,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 19
+        "y": 27
       },
       "id": 9,
       "options": {
@@ -682,7 +838,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 27
+        "y": 35
       },
       "id": 10,
       "panels": [],
@@ -725,7 +881,7 @@
         "h": 4,
         "w": 6,
         "x": 0,
-        "y": 28
+        "y": 36
       },
       "id": 11,
       "options": {
@@ -748,7 +904,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "(rate(http_request_duration_seconds_sum{source=\"soar\"}[5m]) / rate(http_request_duration_seconds_count{source=\"soar\"}[5m])) * 1000",
+          "expr": "(sum(rate(http_request_duration_seconds_sum{source=\"soar\"}[5m])) / sum(rate(http_request_duration_seconds_count{source=\"soar\"}[5m]))) * 1000",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -785,7 +941,7 @@
         "h": 4,
         "w": 6,
         "x": 6,
-        "y": 28
+        "y": 36
       },
       "id": 12,
       "options": {
@@ -853,7 +1009,7 @@
         "h": 4,
         "w": 6,
         "x": 12,
-        "y": 28
+        "y": 36
       },
       "id": 13,
       "options": {
@@ -921,7 +1077,7 @@
         "h": 4,
         "w": 6,
         "x": 18,
-        "y": 28
+        "y": 36
       },
       "id": 14,
       "options": {
@@ -987,6 +1143,6 @@
   "timezone": "",
   "title": "SOAR Performance Dashboard",
   "uid": "soar-performance",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }
