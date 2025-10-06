@@ -43,6 +43,8 @@ pub struct ReceiverRecord {
     pub country: Option<String>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
+    pub latitude: Option<f64>,
+    pub longitude: Option<f64>,
 }
 
 /// Database representation of a receiver photo
@@ -79,6 +81,8 @@ impl Receiver {
             country: self.country.clone(),
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
+            latitude: None,
+            longitude: None,
         };
 
         (receiver_record, photos, links)
@@ -86,7 +90,7 @@ impl Receiver {
 }
 
 /// Diesel model for the receivers table - used for database operations
-#[derive(Debug, Clone, Queryable, Selectable, Insertable, AsChangeset, Serialize, Deserialize)]
+#[derive(Debug, Clone, Queryable, Selectable, Serialize, Deserialize)]
 #[diesel(table_name = crate::schema::receivers)]
 pub struct ReceiverModel {
     pub id: i32,
@@ -97,6 +101,9 @@ pub struct ReceiverModel {
     pub country: Option<String>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
+    pub latitude: Option<f64>,
+    pub longitude: Option<f64>,
+    // location is a generated column, so it's only in Queryable/Selectable
 }
 
 /// Insert model for new receivers
@@ -109,6 +116,18 @@ pub struct NewReceiverModel {
     pub contact: Option<String>,
     pub email: Option<String>,
     pub country: Option<String>,
+    pub latitude: Option<f64>,
+    pub longitude: Option<f64>,
+}
+
+/// Update model for receivers (for updating position)
+#[derive(Debug, Clone, AsChangeset, Serialize, Deserialize)]
+#[diesel(table_name = crate::schema::receivers)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct UpdateReceiverModel {
+    pub latitude: Option<f64>,
+    pub longitude: Option<f64>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
 /// Diesel model for the receivers_photos table
@@ -163,6 +182,8 @@ impl From<ReceiverRecord> for ReceiverModel {
             country: record.country,
             created_at: record.created_at,
             updated_at: record.updated_at,
+            latitude: record.latitude,
+            longitude: record.longitude,
         }
     }
 }
@@ -179,6 +200,8 @@ impl From<ReceiverModel> for ReceiverRecord {
             country: model.country,
             created_at: model.created_at,
             updated_at: model.updated_at,
+            latitude: model.latitude,
+            longitude: model.longitude,
         }
     }
 }

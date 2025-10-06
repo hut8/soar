@@ -369,6 +369,9 @@ diesel::table! {
 }
 
 diesel::table! {
+    use diesel::sql_types::*;
+    use super::sql_types::Geography;
+
     receivers (id) {
         id -> Int4,
         callsign -> Text,
@@ -378,6 +381,9 @@ diesel::table! {
         country -> Nullable<Text>,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
+        latitude -> Nullable<Float8>,
+        longitude -> Nullable<Float8>,
+        location -> Nullable<Geography>,
     }
 }
 

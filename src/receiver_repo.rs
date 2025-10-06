@@ -7,12 +7,13 @@ use tracing::{info, warn};
 use crate::receivers::{
     NewReceiverLinkModel, NewReceiverModel, NewReceiverPhotoModel, Receiver, ReceiverLinkModel,
     ReceiverLinkRecord, ReceiverModel, ReceiverPhotoModel, ReceiverPhotoRecord, ReceiverRecord,
-    ReceiversData,
+    ReceiversData, UpdateReceiverModel,
 };
 use crate::schema::{receivers, receivers_links, receivers_photos};
 
 type PgPool = Pool<ConnectionManager<PgConnection>>;
 
+#[derive(Clone)]
 pub struct ReceiverRepository {
     pool: PgPool,
 }
@@ -61,6 +62,8 @@ impl ReceiverRepository {
                         contact: receiver.contact.clone(),
                         email: receiver.email.clone(),
                         country: receiver.country.clone(),
+                        latitude: None,
+                        longitude: None,
                     };
 
                     let receiver_result = diesel::insert_into(receivers::table)
@@ -354,6 +357,129 @@ impl ReceiverRepository {
 
                 Ok(rows_affected > 0)
             })
+        })
+        .await?
+    }
+
+    /// Update receiver position by callsign
+    pub async fn update_receiver_position(
+        &self,
+        callsign: &str,
+        latitude: f64,
+        longitude: f64,
+    ) -> Result<bool> {
+        let pool = self.pool.clone();
+        let callsign = callsign.to_string();
+
+        tokio::task::spawn_blocking(move || -> Result<bool> {
+            let mut conn = pool.get()?;
+
+            let update = UpdateReceiverModel {
+                latitude: Some(latitude),
+                longitude: Some(longitude),
+                updated_at: Utc::now(),
+            };
+
+            let rows_affected =
+                diesel::update(receivers::table.filter(receivers::callsign.eq(&callsign)))
+                    .set(&update)
+                    .execute(&mut conn)?;
+
+            Ok(rows_affected > 0)
+        })
+        .await?
+    }
+
+    /// Get a receiver by ID
+    pub async fn get_receiver_by_id(&self, id: i32) -> Result<Option<ReceiverModel>> {
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || -> Result<Option<ReceiverModel>> {
+            let mut conn = pool.get()?;
+            let receiver = receivers::table
+                .filter(receivers::id.eq(id))
+                .select(ReceiverModel::as_select())
+                .first::<ReceiverModel>(&mut conn)
+                .optional()?;
+
+            Ok(receiver)
+        })
+        .await?
+    }
+
+    /// Get receivers in a bounding box
+    pub async fn get_receivers_in_bounding_box(
+        &self,
+        nw_lat: f64,
+        nw_lng: f64,
+        se_lat: f64,
+        se_lng: f64,
+    ) -> Result<Vec<ReceiverModel>> {
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || -> Result<Vec<ReceiverModel>> {
+            let mut conn = pool.get()?;
+
+            // Build the bounding box envelope query
+            let bbox_sql = r#"
+                SELECT r.*
+                FROM receivers r
+                WHERE r.location IS NOT NULL
+                  AND ST_Intersects(
+                      r.location,
+                      ST_MakeEnvelope($1, $2, $3, $4, 4326)::geography
+                  )
+                ORDER BY r.callsign
+            "#;
+
+            #[derive(QueryableByName)]
+            struct ReceiverRow {
+                #[diesel(sql_type = diesel::sql_types::Int4)]
+                id: i32,
+                #[diesel(sql_type = diesel::sql_types::Text)]
+                callsign: String,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+                description: Option<String>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+                contact: Option<String>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+                email: Option<String>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+                country: Option<String>,
+                #[diesel(sql_type = diesel::sql_types::Timestamptz)]
+                created_at: chrono::DateTime<chrono::Utc>,
+                #[diesel(sql_type = diesel::sql_types::Timestamptz)]
+                updated_at: chrono::DateTime<chrono::Utc>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float8>)]
+                latitude: Option<f64>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float8>)]
+                longitude: Option<f64>,
+            }
+
+            let receiver_rows: Vec<ReceiverRow> = diesel::sql_query(bbox_sql)
+                .bind::<diesel::sql_types::Double, _>(nw_lng) // min_lon
+                .bind::<diesel::sql_types::Double, _>(se_lat) // min_lat
+                .bind::<diesel::sql_types::Double, _>(se_lng) // max_lon
+                .bind::<diesel::sql_types::Double, _>(nw_lat) // max_lat
+                .load(&mut conn)?;
+
+            let receivers: Vec<ReceiverModel> = receiver_rows
+                .into_iter()
+                .map(|row| ReceiverModel {
+                    id: row.id,
+                    callsign: row.callsign,
+                    description: row.description,
+                    contact: row.contact,
+                    email: row.email,
+                    country: row.country,
+                    created_at: row.created_at,
+                    updated_at: row.updated_at,
+                    latitude: row.latitude,
+                    longitude: row.longitude,
+                })
+                .collect();
+
+            Ok(receivers)
         })
         .await?
     }

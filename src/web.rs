@@ -413,6 +413,9 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
             "/devices/{id}/aircraft/model",
             get(actions::get_device_aircraft_model),
         )
+        // Receiver routes
+        .route("/receivers", get(actions::search_receivers))
+        .route("/receivers/{id}", get(actions::get_receiver_by_id))
         // Authentication routes
         .route("/auth/register", post(actions::register_user))
         .route("/auth/login", post(actions::login_user))

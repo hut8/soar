@@ -1,11 +1,13 @@
 use crate::fix_processor::FixProcessor;
 use crate::flight_tracker::FlightTracker;
+use crate::receiver_repo::ReceiverRepository;
 use crate::receiver_status_repo::ReceiverStatusRepository;
 use crate::receiver_statuses::NewReceiverStatus;
 use crate::server_messages::ServerMessage;
 use crate::server_messages_repo::ServerMessagesRepository;
 use anyhow::Result;
 use chrono::{DateTime, NaiveDateTime, Utc};
+use num_traits::AsPrimitive;
 
 /// Result type for connection attempts
 enum ConnectionResult {
@@ -972,6 +974,8 @@ impl PacketHandler for PacketRouter {
 pub struct PositionPacketProcessor {
     /// Aircraft position processor for handling aircraft-specific logic
     aircraft_processor: Option<AircraftPositionProcessor>,
+    /// Receiver position processor for handling receiver-specific logic
+    receiver_processor: Option<ReceiverPositionProcessor>,
 }
 
 impl Default for PositionPacketProcessor {
@@ -985,12 +989,19 @@ impl PositionPacketProcessor {
     pub fn new() -> Self {
         Self {
             aircraft_processor: None,
+            receiver_processor: None,
         }
     }
 
     /// Add an aircraft position processor
     pub fn with_aircraft_processor(mut self, processor: AircraftPositionProcessor) -> Self {
         self.aircraft_processor = Some(processor);
+        self
+    }
+
+    /// Add a receiver position processor
+    pub fn with_receiver_processor(mut self, processor: ReceiverPositionProcessor) -> Self {
+        self.receiver_processor = Some(processor);
         self
     }
 
@@ -1005,10 +1016,14 @@ impl PositionPacketProcessor {
                 }
             }
             PositionSourceType::Receiver => {
-                trace!(
-                    "Position from receiver {} - logging and ignoring",
-                    packet.from
-                );
+                if let Some(receiver_proc) = &self.receiver_processor {
+                    receiver_proc.process_receiver_position(packet);
+                } else {
+                    trace!(
+                        "No receiver processor configured, skipping receiver position from {}",
+                        packet.from
+                    );
+                }
             }
             PositionSourceType::WeatherStation => {
                 trace!(
@@ -1072,6 +1087,67 @@ impl AircraftPositionProcessor {
 
         // Note: The flight detection processor is now handled inside FixProcessor
         // so we don't need to call it separately here anymore
+    }
+}
+
+/// Processor for handling receiver position packets
+pub struct ReceiverPositionProcessor {
+    /// Repository for updating receiver locations
+    receiver_repo: ReceiverRepository,
+}
+
+impl ReceiverPositionProcessor {
+    /// Create a new ReceiverPositionProcessor
+    pub fn new(receiver_repo: ReceiverRepository) -> Self {
+        Self { receiver_repo }
+    }
+
+    /// Process a receiver position packet and update its location
+    pub fn process_receiver_position(&self, packet: &AprsPacket) {
+        // Extract position data from packet
+        if let AprsData::Position(position) = &packet.data {
+            let callsign = packet.from.to_string();
+            let latitude = position.latitude.as_();
+            let longitude = position.longitude.as_();
+
+            trace!(
+                "Processing receiver position for {}: lat={}, lon={}",
+                callsign, latitude, longitude
+            );
+
+            // Update receiver position in database (async)
+            tokio::spawn({
+                let repo = self.receiver_repo.clone();
+                let callsign = callsign.clone();
+                async move {
+                    match repo
+                        .update_receiver_position(&callsign, latitude, longitude)
+                        .await
+                    {
+                        Ok(true) => {
+                            debug!(
+                                "Updated receiver position for {}: ({}, {})",
+                                callsign, latitude, longitude
+                            );
+                        }
+                        Ok(false) => {
+                            warn!(
+                                "Receiver {} not found in database, position not updated",
+                                callsign
+                            );
+                        }
+                        Err(e) => {
+                            error!("Failed to update receiver position for {}: {}", callsign, e);
+                        }
+                    }
+                }
+            });
+        } else {
+            warn!(
+                "Expected position packet from receiver {} but got different packet type",
+                packet.from
+            );
+        }
     }
 }
 
