@@ -1,8 +1,10 @@
 <script lang="ts">
 	import { Switch, Slider } from '@skeletonlabs/skeleton-svelte';
-	import { X } from '@lucide/svelte';
+	import { X, Trash2 } from '@lucide/svelte';
 	import { browser } from '$app/environment';
 	import { onMount } from 'svelte';
+	import { DeviceRegistry } from '$lib/services/DeviceRegistry';
+	import { toaster } from '$lib/toaster';
 
 	// Props
 	let { showModal = $bindable(), onSettingsChange } = $props();
@@ -88,6 +90,26 @@
 			}
 		}
 	});
+
+	function clearDevicesCache() {
+		if (
+			confirm(
+				'Are you sure you want to clear all cached device data? This will remove all stored devices from your browser.'
+			)
+		) {
+			try {
+				DeviceRegistry.getInstance().clear();
+				toaster.success({
+					title: 'Device cache cleared successfully'
+				});
+			} catch (error) {
+				console.error('Failed to clear device cache:', error);
+				toaster.error({
+					title: 'Failed to clear device cache'
+				});
+			}
+		}
+	}
 </script>
 
 <!-- Settings Modal -->
@@ -181,6 +203,24 @@
 							<span>~5h</span>
 							<span>24h</span>
 						</div>
+					</div>
+				</section>
+
+				<!-- Cache Management -->
+				<section>
+					<h3 class="mb-3 text-lg font-semibold">Cache Management</h3>
+					<div class="space-y-3">
+						<p class="text-sm text-gray-600">
+							Clear all cached device data from your browser's local storage.
+						</p>
+						<button
+							class="variant-filled-error btn w-full"
+							onclick={clearDevicesCache}
+							type="button"
+						>
+							<Trash2 size={16} />
+							<span>Clear Devices Cache</span>
+						</button>
 					</div>
 				</section>
 			</div>

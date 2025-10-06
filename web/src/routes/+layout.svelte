@@ -14,6 +14,7 @@
 		Users,
 		Plane,
 		Radio,
+		Antenna,
 		Wifi,
 		WifiOff,
 		RotateCcw,
@@ -29,6 +30,7 @@
 	const clubsPath = resolve('/clubs');
 	const operationsPath = resolve('/operations');
 	const devicesPath = resolve('/devices');
+	const receiversPath = resolve('/receivers');
 	const loginPath = resolve('/login');
 	const registerPath = resolve('/register');
 	const profilePath = resolve('/profile');
@@ -92,6 +94,9 @@
 				</a>
 				<a href={devicesPath} class="btn preset-filled-primary-500 btn-sm">
 					<Radio /> Devices
+				</a>
+				<a href={receiversPath} class="btn preset-filled-primary-500 btn-sm">
+					<Antenna /> Receivers
 				</a>
 			</nav>
 
@@ -237,6 +242,13 @@
 					onclick={() => (showMobileMenu = false)}
 				>
 					<Radio size={16} /> Devices
+				</a>
+				<a
+					href={receiversPath}
+					class="btn w-full justify-start preset-filled-primary-500"
+					onclick={() => (showMobileMenu = false)}
+				>
+					<Antenna size={16} /> Receivers
 				</a>
 
 				<hr class="!my-6" />
