@@ -157,8 +157,8 @@ impl FlightTracker {
                 // Log error if offset is too large (> 500 feet)
                 if offset.abs() > 500.0 {
                     error!(
-                        "Large altitude offset detected: {:.0} ft (indicated={} ft, known_elevation={:.1} ft) at ({:.6}, {:.6})",
-                        offset, reported_altitude_ft, elevation_ft, lat, lon
+                        "Large altitude offset detected: {:.0} ft (indicated={} ft, known_elevation={:.1} ft) at ({:.6}, {:.6}). Fix: {:?}",
+                        offset, reported_altitude_ft, elevation_ft, lat, lon, fix
                     );
                 }
 
