@@ -34,6 +34,7 @@ pub struct Fix {
     pub longitude: f64,
     // Note: location field is skipped as it's computed from lat/lng
     pub altitude_feet: Option<i32>,
+    #[serde(rename = "altitude_agl_feet")]
     pub altitude_agl: Option<i32>,
 
     /// Aircraft identification - canonically a 24-bit unsigned integer stored as i32 in DB
