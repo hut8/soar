@@ -535,6 +535,71 @@ impl FlightTracker {
             }
         };
 
+        // Check if this is a spurious flight (too short or no altitude variation)
+        if let Some(takeoff_time) = flight.takeoff_time {
+            let duration_seconds = (fix.timestamp - takeoff_time).num_seconds();
+
+            // Get all fixes for this flight to check altitude range
+            let flight_fixes = self
+                .fixes_repo
+                .get_fixes_for_flight(flight_id, None)
+                .await?;
+
+            let altitude_range = if !flight_fixes.is_empty() {
+                let altitudes: Vec<i32> = flight_fixes
+                    .iter()
+                    .filter_map(|f| f.altitude_feet)
+                    .collect();
+
+                if altitudes.is_empty() {
+                    None
+                } else {
+                    let max_alt = altitudes.iter().max().unwrap();
+                    let min_alt = altitudes.iter().min().unwrap();
+                    Some(max_alt - min_alt)
+                }
+            } else {
+                None
+            };
+
+            // Check if flight is spurious (duration < 60 seconds OR altitude range < 50 feet)
+            let is_spurious =
+                duration_seconds < 60 || altitude_range.map(|range| range < 50).unwrap_or(false);
+
+            if is_spurious {
+                warn!(
+                    "Detected spurious flight {}: duration={}s, altitude_range={:?}ft. Deleting flight.",
+                    flight_id, duration_seconds, altitude_range
+                );
+
+                // Clear flight_id from all associated fixes
+                match self.fixes_repo.clear_flight_id(flight_id).await {
+                    Ok(count) => {
+                        info!("Cleared flight_id from {} fixes", count);
+                    }
+                    Err(e) => {
+                        error!("Failed to clear flight_id from fixes: {}", e);
+                    }
+                }
+
+                // Delete the flight
+                match self.flights_repo.delete_flight(flight_id).await {
+                    Ok(true) => {
+                        info!("Deleted spurious flight {}", flight_id);
+                        return Ok(());
+                    }
+                    Ok(false) => {
+                        warn!("Flight {} was already deleted", flight_id);
+                        return Ok(());
+                    }
+                    Err(e) => {
+                        error!("Failed to delete spurious flight {}: {}", flight_id, e);
+                        return Err(e);
+                    }
+                }
+            }
+        }
+
         // Calculate total distance flown
         let total_distance_meters = match flight.total_distance(&self.fixes_repo).await {
             Ok(dist) => dist,

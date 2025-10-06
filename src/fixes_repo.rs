@@ -825,4 +825,30 @@ impl FixesRepository {
 
         Ok(result)
     }
+
+    /// Clear flight_id from all fixes associated with a flight
+    /// Used when deleting spurious flights
+    pub async fn clear_flight_id(&self, flight_id_param: Uuid) -> Result<usize> {
+        let pool = self.pool.clone();
+
+        let result = tokio::task::spawn_blocking(move || {
+            use crate::schema::fixes::dsl::*;
+            let mut conn = pool.get()?;
+
+            let updated_count = diesel::update(fixes)
+                .filter(flight_id.eq(flight_id_param))
+                .set(flight_id.eq(None::<Uuid>))
+                .execute(&mut conn)?;
+
+            Ok::<usize, anyhow::Error>(updated_count)
+        })
+        .await??;
+
+        debug!(
+            "Cleared flight_id from {} fixes for flight {}",
+            result, flight_id_param
+        );
+
+        Ok(result)
+    }
 }
