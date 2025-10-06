@@ -21,7 +21,7 @@ google_maps = { version = "3.8.3", features = [
 ], default-features = false }
 hex = { version = "0.4", features = ["serde"] }
 include_dir = "0.7"
-jsonwebtoken = "9.0"
+jsonwebtoken = "10.0"
 lettre = { version = "0.11", features = [
     "tokio1-rustls-tls",
     "smtp-transport",
