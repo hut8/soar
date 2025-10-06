@@ -53,118 +53,19 @@ pub trait PacketHandler: Send + Sync + std::any::Any {
     fn as_any(&self) -> &dyn std::any::Any;
 }
 
-/// Trait for processing APRS position messages
-pub trait PositionProcessor: Send + Sync {
-    /// Process an APRS position message
-    ///
-    /// # Arguments
-    /// * `packet` - The complete APRS packet containing position data
-    /// * `raw_message` - The raw APRS message string
-    fn process_position(&self, packet: &AprsPacket, raw_message: &str);
-}
-
-/// Trait for processing APRS status messages
-pub trait StatusProcessor: Send + Sync {
-    /// Process an APRS status message
-    ///
-    /// # Arguments
-    /// * `packet` - The complete APRS packet containing status data
-    /// * `raw_message` - The raw APRS message string
-    fn process_status(&self, packet: &AprsPacket, raw_message: &str);
-}
-
-/// Unified processor struct that contains all processor types
-/// This simplifies APRS client construction by grouping all processors together
+/// Unified processor struct that contains the packet processor
 #[derive(Clone)]
 pub struct AprsProcessors {
     /// Processor for general APRS packets and raw message handling
     pub packet_processor: Arc<dyn PacketHandler>,
-    /// Optional processor for position fixes (backward compatibility)
-    pub fix_processor: Option<FixProcessor>,
-    /// Optional processor for position messages
-    pub position_processor: Option<Arc<dyn PositionProcessor>>,
-    /// Optional processor for status messages
-    pub status_processor: Option<Arc<dyn StatusProcessor>>,
 }
 
 impl AprsProcessors {
-    /// Create a new AprsProcessors with just a packet processor
-    pub fn new(packet_processor: Arc<dyn PacketHandler>) -> Self {
-        Self {
-            packet_processor,
-            fix_processor: None,
-            position_processor: None,
-            status_processor: None,
-        }
-    }
-
-    /// Create a new AprsProcessors with a PacketRouter (recommended approach)
-    /// This is the modern way to configure APRS processing
+    /// Create a new AprsProcessors with a PacketRouter
     pub fn with_packet_router(router: PacketRouter) -> Self {
-        Self::new(Arc::new(router))
-    }
-
-    /// Create a new AprsProcessors with packet and fix processors
-    pub fn with_fix_processor(
-        packet_processor: Arc<dyn PacketHandler>,
-        fix_processor: FixProcessor,
-    ) -> Self {
         Self {
-            packet_processor,
-            fix_processor: Some(fix_processor),
-            position_processor: None,
-            status_processor: None,
+            packet_processor: Arc::new(router),
         }
-    }
-
-    /// Create a new AprsProcessors with packet, position, and status processors
-    pub fn with_processors(
-        packet_processor: Arc<dyn PacketHandler>,
-        position_processor: Option<Arc<dyn PositionProcessor>>,
-        status_processor: Option<Arc<dyn StatusProcessor>>,
-    ) -> Self {
-        Self {
-            packet_processor,
-            fix_processor: None,
-            position_processor,
-            status_processor,
-        }
-    }
-
-    /// Create a new AprsProcessors with all processor types
-    pub fn with_all_processors(
-        packet_processor: Arc<dyn PacketHandler>,
-        fix_processor: Option<FixProcessor>,
-        position_processor: Option<Arc<dyn PositionProcessor>>,
-        status_processor: Option<Arc<dyn StatusProcessor>>,
-    ) -> Self {
-        Self {
-            packet_processor,
-            fix_processor,
-            position_processor,
-            status_processor,
-        }
-    }
-
-    /// Add a fix processor to existing processors
-    pub fn add_fix_processor(mut self, fix_processor: FixProcessor) -> Self {
-        self.fix_processor = Some(fix_processor);
-        self
-    }
-
-    /// Add a position processor to existing processors
-    pub fn add_position_processor(
-        mut self,
-        position_processor: Arc<dyn PositionProcessor>,
-    ) -> Self {
-        self.position_processor = Some(position_processor);
-        self
-    }
-
-    /// Add a status processor to existing processors
-    pub fn add_status_processor(mut self, status_processor: Arc<dyn StatusProcessor>) -> Self {
-        self.status_processor = Some(status_processor);
-        self
     }
 }
 
@@ -228,19 +129,9 @@ impl AprsClient {
         }
     }
 
-    /// Create a new APRS client with a PacketRouter (modern recommended approach)
-    /// This is the simplest way to create an APRS client with the new architecture
+    /// Create a new APRS client with a PacketRouter
     pub fn with_packet_router(config: AprsClientConfig, router: PacketRouter) -> Self {
         Self::new(config, AprsProcessors::with_packet_router(router))
-    }
-
-    /// Create a new APRS client with position and status processors (backward compatibility)
-    pub fn new_with_processors(config: AprsClientConfig, processors: &AprsProcessors) -> Self {
-        Self {
-            config,
-            processors: processors.clone(),
-            shutdown_tx: None,
-        }
     }
 
     /// Start the APRS client
@@ -542,11 +433,8 @@ impl AprsClient {
                 // Log unparsed fragments if present and configured
                 Self::log_unparsed_fragments_if_configured(&parsed, message, config).await;
 
-                // Dispatch the packet to the packet processor - this is the primary responsibility
-                processors.packet_processor.process_packet(parsed.clone());
-
-                // Backward compatibility: still support the old processor interfaces
-                Self::handle_backward_compatibility(&parsed, message, processors).await;
+                // Dispatch the packet to the packet processor
+                processors.packet_processor.process_packet(parsed);
             }
             Err(e) => {
                 // For OGNFNT sources with invalid lat/lon, log as trace instead of error
@@ -591,44 +479,6 @@ impl AprsClient {
                     }
                 }
                 _ => {}
-            }
-        }
-    }
-
-    /// Handle backward compatibility with old processor interfaces
-    async fn handle_backward_compatibility(
-        packet: &AprsPacket,
-        message: &str,
-        processors: &AprsProcessors,
-    ) {
-        match &packet.data {
-            AprsData::Position(_) => {
-                // Process with position processor if available (backward compatibility)
-                if let Some(pos_proc) = &processors.position_processor {
-                    pos_proc.process_position(packet, message);
-                }
-
-                // Process with fix processor if available (backward compatibility)
-                // Only process aircraft position sources for fixes
-                if let Some(ref fix_proc) = processors.fix_processor {
-                    if packet.position_source_type() == PositionSourceType::Aircraft {
-                        fix_proc.process_aprs_packet(packet.clone(), message);
-                    } else {
-                        trace!(
-                            "Skipping fix processing for non-aircraft position source: {:?}",
-                            packet.position_source_type()
-                        );
-                    }
-                }
-            }
-            AprsData::Status(_) => {
-                // Process with status processor if available (backward compatibility)
-                if let Some(status_proc) = &processors.status_processor {
-                    status_proc.process_status(packet, message);
-                }
-            }
-            _ => {
-                trace!("Received non-position/non-status message, only packet processor called");
             }
         }
     }
@@ -1453,12 +1303,16 @@ mod tests {
     #[tokio::test]
     async fn test_packet_processor() {
         let counter = Arc::new(AtomicUsize::new(0));
-        let processor: Arc<dyn PacketHandler> = Arc::new(TestPacketProcessor {
+        let test_processor = TestPacketProcessor {
             counter: Arc::clone(&counter),
-        });
+        };
+
+        // Directly assign the test processor (this is a test workaround)
+        let processors = AprsProcessors {
+            packet_processor: Arc::new(test_processor),
+        };
 
         let config = AprsClientConfig::default();
-        let processors = AprsProcessors::new(processor);
 
         // Simulate processing a message
         AprsClient::process_message("TEST>APRS:>Test message", &processors, &config).await;
