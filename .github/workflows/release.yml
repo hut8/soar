@@ -15,7 +15,7 @@ jobs:
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
       version: ${{ steps.get_version.outputs.version }}
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -34,21 +34,21 @@ jobs:
           release_name: Release ${{ steps.get_version.outputs.version }}
           body: |
             SOAR Release ${{ steps.get_version.outputs.version }}
-            
+
             ## Changes
             See the [commit history](https://github.com/${{ github.repository }}/compare/${{ steps.get_version.outputs.version }}...HEAD) for detailed changes.
-            
+
             ## Installation
             Download the appropriate binary for your platform from the assets below.
-            
+
             ## Usage
             ```bash
             # Extract the binary
             tar -xzf soar-*.tar.gz
-            
+
             # Make it executable
             chmod +x soar
-            
+
             # Run with help to see available commands
             ./soar --help
             ```
@@ -59,7 +59,7 @@ jobs:
     name: Build Release (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     needs: create-release
-    
+
     strategy:
       matrix:
         include:
@@ -78,7 +78,7 @@ jobs:
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             artifact_name: soar-windows-x64
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -156,7 +156,7 @@ jobs:
     name: Build and Push Docker Image
     runs-on: ubuntu-latest
     needs: create-release
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

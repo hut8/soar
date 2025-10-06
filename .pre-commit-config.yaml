@@ -8,6 +8,7 @@ repos:
         language: system
         files: ^web/(package\.json|package-lock\.json)$
         pass_filenames: false
+        stages: [pre-commit, pre-push]
 
       - id: web-format
         name: Auto-fix web formatting (Prettier)
@@ -15,6 +16,7 @@ repos:
         language: system
         files: ^web/.*\.(js|ts|svelte)$
         pass_filenames: false
+        stages: [pre-commit, pre-push]
 
       - id: web-lint
         name: Run web linter (ESLint + Prettier check)
@@ -22,6 +24,7 @@ repos:
         language: system
         files: ^web/.*\.(js|ts|svelte)$
         pass_filenames: false
+        stages: [pre-commit, pre-push]
 
       - id: web-type-check
         name: Run web type checking
@@ -29,6 +32,7 @@ repos:
         language: system
         files: ^web/.*\.(js|ts|svelte)$
         pass_filenames: false
+        stages: [pre-commit, pre-push]
 
       - id: web-test
         name: Run web tests (Playwright E2E)
@@ -36,6 +40,7 @@ repos:
         language: system
         files: ^web/.*\.(js|ts|svelte)$
         pass_filenames: false
+        stages: [pre-push, manual]
 
       - id: web-build
         name: Build web project
@@ -43,6 +48,7 @@ repos:
         language: system
         files: ^web/.*\.(js|ts|svelte)$
         pass_filenames: false
+        stages: [pre-push, manual]
 
   # Rust formatting (matching CI check)
   - repo: local
@@ -53,6 +59,7 @@ repos:
         language: system
         files: \.rs$
         pass_filenames: false
+        stages: [pre-commit, pre-push]
 
   # Rust linting (matching CI clippy check)
   - repo: local
@@ -63,16 +70,18 @@ repos:
         language: system
         files: \.rs$
         pass_filenames: false
+        stages: [pre-commit, pre-push]
 
   # Rust tests (matching CI test run)
   - repo: local
     hooks:
       - id: rust-test
         name: Run Rust tests
-        entry: bash -c 'export DATABASE_URL="${DATABASE_URL:-postgres://postgres:postgres@localhost:5432/soar_test}" && cargo test --verbose'
+        entry: bash -c 'export DATABASE_URL="${DATABASE_URL:-postgres://postgres:postgres@localhost:5432/soar_test}" && cargo test'
         language: system
         files: \.rs$
         pass_filenames: false
+        stages: [pre-push, manual]
 
   # Security audit (matching CI security-audit job)
   - repo: local
@@ -83,26 +92,27 @@ repos:
         language: system
         files: ^(Cargo\.toml|Cargo\.lock)$
         pass_filenames: false
-
-      - id: cargo-outdated
-        name: Check for outdated dependencies
-        entry: bash -c 'cargo outdated --exit-code 1 || echo "Some dependencies are outdated (non-critical)"'
-        language: system
-        files: ^(Cargo\.toml|Cargo\.lock)$
-        pass_filenames: false
+        stages: [pre-commit, pre-push]
 
   # General file checks
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.4.0
     hooks:
       - id: trailing-whitespace
+        stages: [pre-commit, pre-push]
       - id: end-of-file-fixer
+        stages: [pre-commit, pre-push]
       - id: check-yaml
+        stages: [pre-commit, pre-push]
       - id: check-toml
+        stages: [pre-commit, pre-push]
       - id: check-json
+        stages: [pre-commit, pre-push]
       - id: check-merge-conflict
+        stages: [pre-commit, pre-push]
       - id: check-added-large-files
         args: ["--maxkb=1000"]
+        stages: [pre-commit, pre-push]
 
 # Performance optimizations
 default_stages: [pre-commit]
