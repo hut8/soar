@@ -65,6 +65,7 @@ impl ReceiverRepository {
                         country: receiver.country.clone(),
                         latitude: None,
                         longitude: None,
+                        from_ogn_db: true, // These come from OGN database
                     };
 
                     let receiver_result = diesel::insert_into(receivers::table)
@@ -160,6 +161,49 @@ impl ReceiverRepository {
 
             info!("Successfully upserted {} receivers", upserted_count);
             Ok(upserted_count)
+        })
+        .await?
+    }
+
+    /// Insert a minimal receiver (auto-discovered from status messages)
+    /// Returns the receiver ID if successful
+    pub async fn insert_minimal_receiver(&self, callsign: &str) -> Result<Uuid> {
+        let pool = self.pool.clone();
+        let callsign = callsign.trim().to_string();
+
+        tokio::task::spawn_blocking(move || -> Result<Uuid> {
+            let mut conn = pool.get()?;
+
+            let new_receiver = NewReceiverModel {
+                callsign: callsign.clone(),
+                description: None,
+                contact: None,
+                email: None,
+                country: None,
+                latitude: None,
+                longitude: None,
+                from_ogn_db: false, // Auto-discovered, not from OGN database
+            };
+
+            let receiver_id = diesel::insert_into(receivers::table)
+                .values(&new_receiver)
+                .on_conflict(receivers::callsign)
+                .do_nothing() // If it already exists, just return the existing ID
+                .returning(receivers::id)
+                .get_result::<Uuid>(&mut conn)
+                .or_else(|_| {
+                    // If insert was skipped due to conflict, fetch the existing receiver
+                    receivers::table
+                        .filter(receivers::callsign.eq(&callsign))
+                        .select(receivers::id)
+                        .first::<Uuid>(&mut conn)
+                })?;
+
+            info!(
+                "Auto-inserted minimal receiver {} with ID {}",
+                callsign, receiver_id
+            );
+            Ok(receiver_id)
         })
         .await?
     }
@@ -476,6 +520,10 @@ impl ReceiverRepository {
                 latitude: Option<f64>,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float8>)]
                 longitude: Option<f64>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Timestamptz>)]
+                latest_packet_at: Option<chrono::DateTime<chrono::Utc>>,
+                #[diesel(sql_type = diesel::sql_types::Bool)]
+                from_ogn_db: bool,
             }
 
             let receiver_rows: Vec<ReceiverRow> = diesel::sql_query(bbox_sql)
@@ -498,6 +546,8 @@ impl ReceiverRepository {
                     updated_at: row.updated_at,
                     latitude: row.latitude,
                     longitude: row.longitude,
+                    latest_packet_at: row.latest_packet_at,
+                    from_ogn_db: row.from_ogn_db,
                 })
                 .collect();
 
@@ -581,6 +631,10 @@ impl ReceiverRepository {
                 latitude: Option<f64>,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float8>)]
                 longitude: Option<f64>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Timestamptz>)]
+                latest_packet_at: Option<chrono::DateTime<chrono::Utc>>,
+                #[diesel(sql_type = diesel::sql_types::Bool)]
+                from_ogn_db: bool,
             }
 
             let receiver_rows: Vec<ReceiverRow> = diesel::sql_query(radius_sql)
@@ -602,10 +656,29 @@ impl ReceiverRepository {
                     updated_at: row.updated_at,
                     latitude: row.latitude,
                     longitude: row.longitude,
+                    latest_packet_at: row.latest_packet_at,
+                    from_ogn_db: row.from_ogn_db,
                 })
                 .collect();
 
             Ok(receivers)
+        })
+        .await?
+    }
+
+    /// Update the latest_packet_at timestamp for a receiver
+    pub async fn update_latest_packet_at(&self, receiver_id: Uuid) -> Result<bool> {
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || -> Result<bool> {
+            let mut conn = pool.get()?;
+
+            let rows_affected =
+                diesel::update(receivers::table.filter(receivers::id.eq(receiver_id)))
+                    .set(receivers::latest_packet_at.eq(Utc::now()))
+                    .execute(&mut conn)?;
+
+            Ok(rows_affected > 0)
         })
         .await?
     }

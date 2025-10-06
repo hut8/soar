@@ -989,24 +989,51 @@ impl ReceiverPositionProcessor {
                 let repo = self.receiver_repo.clone();
                 let callsign = callsign.clone();
                 async move {
-                    match repo
-                        .update_receiver_position(&callsign, latitude, longitude)
-                        .await
-                    {
-                        Ok(true) => {
-                            debug!(
-                                "Updated receiver position for {}: ({}, {})",
-                                callsign, latitude, longitude
-                            );
+                    // First, get the receiver to obtain its ID
+                    match repo.get_receiver_by_callsign(&callsign).await {
+                        Ok(Some(receiver)) => {
+                            // Update position
+                            match repo
+                                .update_receiver_position(&callsign, latitude, longitude)
+                                .await
+                            {
+                                Ok(true) => {
+                                    debug!(
+                                        "Updated receiver position for {}: ({}, {})",
+                                        callsign, latitude, longitude
+                                    );
+
+                                    // Update latest_packet_at
+                                    if let Err(e) = repo.update_latest_packet_at(receiver.id).await
+                                    {
+                                        error!(
+                                            "Failed to update latest_packet_at for receiver {}: {}",
+                                            callsign, e
+                                        );
+                                    }
+                                }
+                                Ok(false) => {
+                                    warn!(
+                                        "Receiver {} not found in database, position not updated",
+                                        callsign
+                                    );
+                                }
+                                Err(e) => {
+                                    error!(
+                                        "Failed to update receiver position for {}: {}",
+                                        callsign, e
+                                    );
+                                }
+                            }
                         }
-                        Ok(false) => {
+                        Ok(None) => {
                             warn!(
                                 "Receiver {} not found in database, position not updated",
                                 callsign
                             );
                         }
                         Err(e) => {
-                            error!("Failed to update receiver position for {}: {}", callsign, e);
+                            error!("Failed to look up receiver {}: {}", callsign, e);
                         }
                     }
                 }
@@ -1052,6 +1079,7 @@ impl ReceiverStatusProcessor {
         if let AprsData::Status(status) = &packet.data {
             let status_comment = status.comment.clone();
             let received_at = chrono::Utc::now();
+            let raw_data = packet.raw.clone().unwrap_or_default();
 
             debug!("Status comment from {}: {:?}", callsign, status_comment);
 
@@ -1059,6 +1087,7 @@ impl ReceiverStatusProcessor {
             tokio::spawn({
                 let receiver_repo = self.receiver_repo.clone();
                 let status_repo = self.status_repo.clone();
+                let raw_data = raw_data.clone();
 
                 async move {
                     // Look up receiver by callsign
@@ -1075,6 +1104,7 @@ impl ReceiverStatusProcessor {
                                 &status_comment,
                                 received_at, // packet timestamp
                                 received_at, // received_at
+                                raw_data.clone(),
                             );
 
                             // Insert receiver status
@@ -1083,6 +1113,16 @@ impl ReceiverStatusProcessor {
                                     info!("Inserted receiver status for {}", callsign);
                                     // Track receiver status update metric
                                     counter!("receiver_status_updates_total").increment(1);
+
+                                    // Update receiver's latest_packet_at
+                                    if let Err(e) =
+                                        receiver_repo.update_latest_packet_at(receiver.id).await
+                                    {
+                                        error!(
+                                            "Failed to update latest_packet_at for receiver {}: {}",
+                                            callsign, e
+                                        );
+                                    }
                                 }
                                 Err(e) => {
                                     error!(
@@ -1094,9 +1134,60 @@ impl ReceiverStatusProcessor {
                         }
                         Ok(None) => {
                             debug!(
-                                "Status packet from {} is not a known receiver, skipping",
+                                "Status packet from {} is not a known receiver, auto-inserting",
                                 callsign
                             );
+
+                            // Auto-insert minimal receiver
+                            match receiver_repo.insert_minimal_receiver(&callsign).await {
+                                Ok(receiver_id) => {
+                                    info!(
+                                        "Auto-inserted receiver {} (id: {}), now inserting status",
+                                        callsign, receiver_id
+                                    );
+
+                                    // Create NewReceiverStatus from status comment
+                                    let new_status = NewReceiverStatus::from_status_comment(
+                                        receiver_id,
+                                        &status_comment,
+                                        received_at, // packet timestamp
+                                        received_at, // received_at
+                                        raw_data.clone(),
+                                    );
+
+                                    // Insert receiver status
+                                    match status_repo.insert(&new_status).await {
+                                        Ok(_) => {
+                                            info!(
+                                                "Inserted receiver status for auto-discovered receiver {}",
+                                                callsign
+                                            );
+                                            // Track receiver status update metric
+                                            counter!("receiver_status_updates_total").increment(1);
+
+                                            // Update receiver's latest_packet_at
+                                            if let Err(e) = receiver_repo
+                                                .update_latest_packet_at(receiver_id)
+                                                .await
+                                            {
+                                                error!(
+                                                    "Failed to update latest_packet_at for receiver {}: {}",
+                                                    callsign, e
+                                                );
+                                            }
+                                        }
+                                        Err(e) => {
+                                            error!(
+                                                "Failed to insert receiver status for auto-discovered receiver {}: {}",
+                                                callsign, e
+                                            );
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    error!("Failed to auto-insert receiver {}: {}", callsign, e);
+                                }
+                            }
                         }
                         Err(e) => {
                             error!("Failed to look up receiver by callsign {}: {}", callsign, e);

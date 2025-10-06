@@ -11,6 +11,7 @@ use crate::device_repo::DeviceRepository;
 use crate::fixes_repo::{AircraftTypeOgn, FixesRepository};
 use crate::flight_tracker::FlightTracker;
 use crate::nats_publisher::NatsFixPublisher;
+use crate::receiver_repo::ReceiverRepository;
 use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
 use ogn_parser::AprsPacket;
@@ -21,6 +22,7 @@ pub struct FixProcessor {
     fixes_repo: FixesRepository,
     device_repo: DeviceRepository,
     aircraft_registrations_repo: AircraftRegistrationsRepository,
+    receiver_repo: ReceiverRepository,
     flight_detection_processor: FlightTracker,
     nats_publisher: Option<NatsFixPublisher>,
     /// Cache to track tow plane status updates to avoid unnecessary database calls
@@ -34,6 +36,7 @@ impl FixProcessor {
             fixes_repo: FixesRepository::new(diesel_pool.clone()),
             device_repo: DeviceRepository::new(diesel_pool.clone()),
             aircraft_registrations_repo: AircraftRegistrationsRepository::new(diesel_pool.clone()),
+            receiver_repo: ReceiverRepository::new(diesel_pool.clone()),
             flight_detection_processor: FlightTracker::new(&diesel_pool),
             nats_publisher: None,
             tow_plane_cache: Arc::new(RwLock::new(HashMap::new())),
@@ -51,6 +54,7 @@ impl FixProcessor {
             fixes_repo: FixesRepository::new(diesel_pool.clone()),
             device_repo: DeviceRepository::new(diesel_pool.clone()),
             aircraft_registrations_repo: AircraftRegistrationsRepository::new(diesel_pool.clone()),
+            receiver_repo: ReceiverRepository::new(diesel_pool.clone()),
             flight_detection_processor: FlightTracker::new(&diesel_pool),
             nats_publisher: Some(nats_publisher),
             tow_plane_cache: Arc::new(RwLock::new(HashMap::new())),
@@ -65,7 +69,8 @@ impl FixProcessor {
         Self {
             fixes_repo: FixesRepository::new(diesel_pool.clone()),
             device_repo: DeviceRepository::new(diesel_pool.clone()),
-            aircraft_registrations_repo: AircraftRegistrationsRepository::new(diesel_pool),
+            aircraft_registrations_repo: AircraftRegistrationsRepository::new(diesel_pool.clone()),
+            receiver_repo: ReceiverRepository::new(diesel_pool.clone()),
             flight_detection_processor: flight_tracker,
             nats_publisher: None,
             tow_plane_cache: Arc::new(RwLock::new(HashMap::new())),
@@ -83,7 +88,8 @@ impl FixProcessor {
         Ok(Self {
             fixes_repo: FixesRepository::new(diesel_pool.clone()),
             device_repo: DeviceRepository::new(diesel_pool.clone()),
-            aircraft_registrations_repo: AircraftRegistrationsRepository::new(diesel_pool),
+            aircraft_registrations_repo: AircraftRegistrationsRepository::new(diesel_pool.clone()),
+            receiver_repo: ReceiverRepository::new(diesel_pool.clone()),
             flight_detection_processor: flight_tracker,
             nats_publisher: Some(nats_publisher),
             tow_plane_cache: Arc::new(RwLock::new(HashMap::new())),
@@ -235,6 +241,19 @@ impl FixProcessor {
                     "Successfully saved fix to database for aircraft {}",
                     updated_fix.device_address_hex()
                 );
+
+                // Update receiver's latest_packet_at if this fix has a receiver_id
+                if let Some(receiver_id) = updated_fix.receiver_id {
+                    let receiver_repo = self.receiver_repo.clone();
+                    tokio::spawn(async move {
+                        if let Err(e) = receiver_repo.update_latest_packet_at(receiver_id).await {
+                            error!(
+                                "Failed to update latest_packet_at for receiver {}: {}",
+                                receiver_id, e
+                            );
+                        }
+                    });
+                }
             }
             Err(e) => {
                 error!(

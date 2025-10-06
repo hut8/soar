@@ -45,6 +45,7 @@ pub struct ReceiverRecord {
     pub updated_at: chrono::DateTime<chrono::Utc>,
     pub latitude: Option<f64>,
     pub longitude: Option<f64>,
+    pub from_ogn_db: bool,
 }
 
 /// Database representation of a receiver photo
@@ -86,6 +87,7 @@ impl Receiver {
             updated_at: chrono::Utc::now(),
             latitude: None,
             longitude: None,
+            from_ogn_db: true, // These come from the OGN database
         };
 
         (receiver_record, photos, links)
@@ -107,6 +109,8 @@ pub struct ReceiverModel {
     pub longitude: Option<f64>,
     // location is a generated column, so it's only in Queryable/Selectable
     pub id: uuid::Uuid,
+    pub latest_packet_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub from_ogn_db: bool,
 }
 
 /// Insert model for new receivers
@@ -121,6 +125,7 @@ pub struct NewReceiverModel {
     pub country: Option<String>,
     pub latitude: Option<f64>,
     pub longitude: Option<f64>,
+    pub from_ogn_db: bool,
 }
 
 /// Update model for receivers (for updating position)
@@ -187,6 +192,8 @@ impl From<ReceiverRecord> for ReceiverModel {
             updated_at: record.updated_at,
             latitude: record.latitude,
             longitude: record.longitude,
+            latest_packet_at: None,
+            from_ogn_db: record.from_ogn_db,
         }
     }
 }
@@ -208,6 +215,7 @@ impl From<ReceiverModel> for ReceiverRecord {
             updated_at: model.updated_at,
             latitude: model.latitude,
             longitude: model.longitude,
+            from_ogn_db: model.from_ogn_db,
         }
     }
 }

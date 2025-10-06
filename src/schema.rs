@@ -375,6 +375,7 @@ diesel::table! {
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
         receiver_id -> Uuid,
+        raw_data -> Text,
     }
 }
 
@@ -394,6 +395,8 @@ diesel::table! {
         longitude -> Nullable<Float8>,
         location -> Nullable<Geography>,
         id -> Uuid,
+        latest_packet_at -> Nullable<Timestamptz>,
+        from_ogn_db -> Bool,
     }
 }
 

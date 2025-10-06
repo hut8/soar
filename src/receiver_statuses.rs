@@ -58,6 +58,7 @@ pub struct ReceiverStatus {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub receiver_id: Uuid,
+    pub raw_data: String,
 }
 
 /// For inserting new receiver statuses (without auto-generated fields)
@@ -97,6 +98,9 @@ pub struct NewReceiverStatus {
 
     // Computed lag in milliseconds
     pub lag: Option<i32>,
+
+    // Raw APRS packet data
+    pub raw_data: String,
 }
 
 impl NewReceiverStatus {
@@ -107,6 +111,7 @@ impl NewReceiverStatus {
         status_comment: &StatusComment,
         packet_timestamp: DateTime<Utc>,
         received_at: DateTime<Utc>,
+        raw_data: String,
     ) -> Self {
         // Calculate lag in milliseconds
         let lag = Some((received_at - packet_timestamp).num_milliseconds() as i32);
@@ -147,6 +152,7 @@ impl NewReceiverStatus {
             ognr_pilotaware_version: status_comment.ognr_pilotaware_version.clone(),
             unparsed_data: status_comment.unparsed.clone(),
             lag,
+            raw_data,
         }
     }
 
@@ -198,11 +204,13 @@ mod tests {
         let received_time = Utc.with_ymd_and_hms(2024, 1, 1, 12, 0, 1).unwrap(); // 1 second later
 
         let test_receiver_id = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
+        let raw_data = "TEST>APRS,TCPXX*:>v1.0.0 Linux CPU:0.75 RAM:1024/2048".to_string();
         let new_status = NewReceiverStatus::from_status_comment(
             test_receiver_id,
             &status_comment,
             packet_time,
             received_time,
+            raw_data.clone(),
         );
 
         assert_eq!(new_status.receiver_id, test_receiver_id);
@@ -211,5 +219,6 @@ mod tests {
         assert_eq!(new_status.platform, Some("Linux".to_string()));
         assert_eq!(new_status.lag, Some(1000)); // 1 second = 1000ms
         assert_eq!(new_status.unparsed_data, Some("unparsed data".to_string()));
+        assert_eq!(new_status.raw_data, raw_data);
     }
 }
