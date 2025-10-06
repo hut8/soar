@@ -8,6 +8,23 @@ use uuid::Uuid;
 use crate::Fix;
 use crate::devices::AddressType;
 
+/// Calculate the distance between two points using the Haversine formula
+/// Returns distance in meters
+fn haversine_distance(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
+    const EARTH_RADIUS_M: f64 = 6_371_000.0; // Earth's radius in meters
+
+    let lat1_rad = lat1.to_radians();
+    let lat2_rad = lat2.to_radians();
+    let delta_lat = (lat2 - lat1).to_radians();
+    let delta_lon = (lon2 - lon1).to_radians();
+
+    let a = (delta_lat / 2.0).sin().powi(2)
+        + lat1_rad.cos() * lat2_rad.cos() * (delta_lon / 2.0).sin().powi(2);
+    let c = 2.0 * a.sqrt().atan2((1.0 - a).sqrt());
+
+    EARTH_RADIUS_M * c
+}
+
 /// A flight representing a complete takeoff to landing sequence
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Flight {
@@ -139,6 +156,95 @@ impl Flight {
     /// Check if this flight used a tow plane
     pub fn has_tow(&self) -> bool {
         self.tow_aircraft_id.is_some()
+    }
+
+    /// Calculate the total distance flown during this flight
+    /// Returns the sum of distances between consecutive fixes in meters
+    /// Returns None if there are insufficient fixes or no fixes available
+    pub async fn total_distance(
+        &self,
+        fixes_repo: &crate::fixes_repo::FixesRepository,
+    ) -> Result<Option<f64>> {
+        let start_time = self.takeoff_time.unwrap_or(self.created_at);
+        let end_time = self.landing_time.unwrap_or_else(Utc::now);
+
+        let fixes = fixes_repo
+            .get_fixes_for_aircraft_with_time_range(
+                &self.device_id.unwrap_or(Uuid::nil()),
+                start_time,
+                end_time,
+                None,
+            )
+            .await?;
+
+        if fixes.len() < 2 {
+            return Ok(None);
+        }
+
+        let mut total = 0.0;
+        for i in 1..fixes.len() {
+            let prev = &fixes[i - 1];
+            let curr = &fixes[i];
+            total +=
+                haversine_distance(prev.latitude, prev.longitude, curr.latitude, curr.longitude);
+        }
+
+        Ok(Some(total))
+    }
+
+    /// Calculate the maximum displacement from the departure airport
+    /// Only applicable if the departure and arrival airports are the same (i.e., a local flight)
+    /// Returns the maximum distance in meters from the departure airport, or None if not applicable
+    pub async fn maximum_displacement(
+        &self,
+        fixes_repo: &crate::fixes_repo::FixesRepository,
+        airports_repo: &crate::airports_repo::AirportsRepository,
+    ) -> Result<Option<f64>> {
+        // Only applicable for flights where departure == arrival
+        if self.departure_airport.is_none()
+            || self.arrival_airport.is_none()
+            || self.departure_airport != self.arrival_airport
+        {
+            return Ok(None);
+        }
+
+        // Get the departure airport coordinates
+        let airport_ident = self.departure_airport.as_ref().unwrap();
+        let airport = match airports_repo.get_airport_by_ident(airport_ident).await? {
+            Some(a) => a,
+            None => return Ok(None),
+        };
+
+        let (airport_lat, airport_lon) = match (airport.latitude_deg, airport.longitude_deg) {
+            (Some(lat), Some(lon)) => (
+                lat.to_string().parse::<f64>().unwrap_or(0.0),
+                lon.to_string().parse::<f64>().unwrap_or(0.0),
+            ),
+            _ => return Ok(None),
+        };
+
+        let start_time = self.takeoff_time.unwrap_or(self.created_at);
+        let end_time = self.landing_time.unwrap_or_else(Utc::now);
+
+        let fixes = fixes_repo
+            .get_fixes_for_aircraft_with_time_range(
+                &self.device_id.unwrap_or(Uuid::nil()),
+                start_time,
+                end_time,
+                None,
+            )
+            .await?;
+
+        if fixes.is_empty() {
+            return Ok(None);
+        }
+
+        let max_distance = fixes
+            .iter()
+            .map(|fix| haversine_distance(airport_lat, airport_lon, fix.latitude, fix.longitude))
+            .fold(0.0_f64, |acc, d| acc.max(d));
+
+        Ok(Some(max_distance))
     }
 
     /// Generate a Google Earth compatible KML file for this flight

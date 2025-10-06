@@ -183,6 +183,7 @@ impl From<RunwayModel> for Runway {
     }
 }
 
+#[derive(Clone)]
 pub struct RunwaysRepository {
     pool: DieselPgPool,
 }

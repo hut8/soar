@@ -16,6 +16,7 @@ use crate::elevation::ElevationDB;
 use crate::fixes_repo::FixesRepository;
 use crate::flights::Flight;
 use crate::flights_repo::FlightsRepository;
+use crate::runways_repo::RunwaysRepository;
 use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
 
@@ -117,6 +118,13 @@ fn haversine_distance(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
     let c = 2.0 * a.sqrt().atan2((1.0 - a).sqrt());
 
     EARTH_RADIUS_M * c
+}
+
+/// Calculate the angular difference between two headings in degrees
+/// Returns the smallest angle between the two headings (0-180 degrees)
+fn angular_difference(angle1: f64, angle2: f64) -> f64 {
+    let diff = (angle1 - angle2).abs() % 360.0;
+    if diff > 180.0 { 360.0 - diff } else { diff }
 }
 
 impl FlightTracker {
@@ -221,6 +229,7 @@ impl FlightTracker {
 pub struct FlightTracker {
     flights_repo: FlightsRepository,
     airports_repo: AirportsRepository,
+    runways_repo: RunwaysRepository,
     fixes_repo: FixesRepository,
     elevation_db: ElevationDB,
     aircraft_trackers: Arc<RwLock<HashMap<uuid::Uuid, AircraftTracker>>>,
@@ -232,6 +241,7 @@ impl Clone for FlightTracker {
         Self {
             flights_repo: self.flights_repo.clone(),
             airports_repo: self.airports_repo.clone(),
+            runways_repo: self.runways_repo.clone(),
             fixes_repo: self.fixes_repo.clone(),
             elevation_db: self.elevation_db.clone(),
             aircraft_trackers: Arc::clone(&self.aircraft_trackers),
@@ -246,6 +256,7 @@ impl FlightTracker {
         Self {
             flights_repo: FlightsRepository::new(pool.clone()),
             airports_repo: AirportsRepository::new(pool.clone()),
+            runways_repo: RunwaysRepository::new(pool.clone()),
             fixes_repo: FixesRepository::new(pool.clone()),
             elevation_db,
             aircraft_trackers: Arc::new(RwLock::new(HashMap::new())),
@@ -262,6 +273,7 @@ impl FlightTracker {
         Self {
             flights_repo: FlightsRepository::new(pool.clone()),
             airports_repo: AirportsRepository::new(pool.clone()),
+            runways_repo: RunwaysRepository::new(pool.clone()),
             fixes_repo: FixesRepository::new(pool.clone()),
             elevation_db,
             aircraft_trackers: Arc::new(RwLock::new(HashMap::new())),
@@ -279,6 +291,109 @@ impl FlightTracker {
             Ok(airports) if !airports.is_empty() => Some(airports[0].0.ident.clone()),
             _ => None,
         }
+    }
+
+    /// Determine runway identifier based on aircraft course during takeoff/landing
+    /// Loads fixes from 20 seconds before to 20 seconds after the event time
+    /// Returns the runway identifier (e.g., "14" or "32") that best matches the aircraft's course
+    async fn determine_runway_identifier(
+        &self,
+        device_id: &Uuid,
+        event_time: DateTime<Utc>,
+        latitude: f64,
+        longitude: f64,
+    ) -> Option<String> {
+        // Find nearby runways (within 2km)
+        let nearby_runways = match self
+            .runways_repo
+            .find_nearest_runway_endpoints(latitude, longitude, 2000.0, 10)
+            .await
+        {
+            Ok(runways) if !runways.is_empty() => runways,
+            _ => return None,
+        };
+
+        // Get fixes from 20 seconds before to 20 seconds after the event
+        let start_time = event_time - chrono::Duration::seconds(20);
+        let end_time = event_time + chrono::Duration::seconds(20);
+
+        let fixes = match self
+            .fixes_repo
+            .get_fixes_for_aircraft_with_time_range(device_id, start_time, end_time, None)
+            .await
+        {
+            Ok(f) if !f.is_empty() => f,
+            _ => return None,
+        };
+
+        // Calculate average course from fixes that have track_degrees
+        let courses: Vec<f32> = fixes.iter().filter_map(|fix| fix.track_degrees).collect();
+
+        if courses.is_empty() {
+            return None;
+        }
+
+        let avg_course = courses.iter().sum::<f32>() as f64 / courses.len() as f64;
+
+        // Find the runway end whose heading is closest to the aircraft's course
+        let mut best_match: Option<(String, f64)> = None;
+
+        for (runway, _, endpoint_type) in nearby_runways {
+            // Determine which end to check based on which is closer
+            let (ident, heading) = match endpoint_type.as_str() {
+                "low_end" => {
+                    // Aircraft is near low end, check both ends to see which direction they're traveling
+                    if let (Some(le_heading), Some(he_heading)) =
+                        (runway.le_heading_degt, runway.he_heading_degt)
+                    {
+                        // Calculate angular difference for both directions
+                        let le_diff = angular_difference(avg_course, le_heading);
+                        let he_diff = angular_difference(avg_course, he_heading);
+
+                        if le_diff < he_diff {
+                            (runway.le_ident.clone(), le_heading)
+                        } else {
+                            (runway.he_ident.clone(), he_heading)
+                        }
+                    } else {
+                        continue;
+                    }
+                }
+                "high_end" => {
+                    // Aircraft is near high end, check both ends to see which direction they're traveling
+                    if let (Some(le_heading), Some(he_heading)) =
+                        (runway.le_heading_degt, runway.he_heading_degt)
+                    {
+                        let le_diff = angular_difference(avg_course, le_heading);
+                        let he_diff = angular_difference(avg_course, he_heading);
+
+                        if he_diff < le_diff {
+                            (runway.he_ident.clone(), he_heading)
+                        } else {
+                            (runway.le_ident.clone(), le_heading)
+                        }
+                    } else {
+                        continue;
+                    }
+                }
+                _ => continue,
+            };
+
+            if let Some(ident_str) = ident {
+                let heading_diff = angular_difference(avg_course, heading);
+
+                // Update best match if this is closer (or first match)
+                match best_match {
+                    None => best_match = Some((ident_str, heading_diff)),
+                    Some((_, current_diff)) if heading_diff < current_diff => {
+                        best_match = Some((ident_str, heading_diff));
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        best_match.map(|(ident, _)| ident)
     }
 
     /// Create a new flight for aircraft already airborne (no takeoff data)
@@ -338,9 +453,15 @@ impl FlightTracker {
     async fn create_flight(&self, fix: &Fix) -> Result<Uuid> {
         let departure_airport = self.find_nearby_airport(fix.latitude, fix.longitude).await;
 
+        // Determine takeoff runway
+        let takeoff_runway = self
+            .determine_runway_identifier(&fix.device_id, fix.timestamp, fix.latitude, fix.longitude)
+            .await;
+
         let mut flight = Flight::new_with_takeoff_from_fix(fix, fix.timestamp);
         flight.device_address_type = fix.address_type;
         flight.departure_airport = departure_airport.clone();
+        flight.takeoff_runway_ident = takeoff_runway.clone();
 
         // Calculate takeoff altitude offset (difference between reported altitude and true elevation)
         flight.takeoff_altitude_offset_ft = self.calculate_altitude_offset_ft(fix).await;
@@ -397,6 +518,11 @@ impl FlightTracker {
     async fn complete_flight(&self, flight_id: Uuid, fix: &Fix) -> Result<()> {
         let arrival_airport = self.find_nearby_airport(fix.latitude, fix.longitude).await;
 
+        // Determine landing runway
+        let landing_runway = self
+            .determine_runway_identifier(&fix.device_id, fix.timestamp, fix.latitude, fix.longitude)
+            .await;
+
         // Calculate landing altitude offset (difference between reported altitude and true elevation)
         let landing_altitude_offset_ft = self.calculate_altitude_offset_ft(fix).await;
 
@@ -407,6 +533,7 @@ impl FlightTracker {
                 fix.timestamp,
                 arrival_airport.clone(),
                 landing_altitude_offset_ft,
+                landing_runway.clone(),
             )
             .await
         {
