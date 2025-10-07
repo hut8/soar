@@ -320,8 +320,30 @@ impl FlightTracker {
             .find_nearest_runway_endpoints(latitude, longitude, 2000.0, 10)
             .await
         {
-            Ok(runways) if !runways.is_empty() => runways,
-            _ => return None,
+            Ok(runways) if !runways.is_empty() => {
+                debug!(
+                    "Found {} nearby runway endpoints for device {} at ({}, {})",
+                    runways.len(),
+                    device_id,
+                    latitude,
+                    longitude
+                );
+                runways
+            }
+            Ok(_) => {
+                debug!(
+                    "No nearby runways found for device {} at ({}, {})",
+                    device_id, latitude, longitude
+                );
+                return None;
+            }
+            Err(e) => {
+                warn!(
+                    "Error finding nearby runways for device {}: {}",
+                    device_id, e
+                );
+                return None;
+            }
         };
 
         // Get fixes from 20 seconds before to 20 seconds after the event
@@ -333,18 +355,50 @@ impl FlightTracker {
             .get_fixes_for_aircraft_with_time_range(device_id, start_time, end_time, None)
             .await
         {
-            Ok(f) if !f.is_empty() => f,
-            _ => return None,
+            Ok(f) if !f.is_empty() => {
+                debug!(
+                    "Found {} fixes for device {} between {} and {}",
+                    f.len(),
+                    device_id,
+                    start_time,
+                    end_time
+                );
+                f
+            }
+            Ok(_) => {
+                debug!(
+                    "No fixes found for device {} between {} and {}",
+                    device_id, start_time, end_time
+                );
+                return None;
+            }
+            Err(e) => {
+                warn!(
+                    "Error loading fixes for device {} during runway detection: {}",
+                    device_id, e
+                );
+                return None;
+            }
         };
 
         // Calculate average course from fixes that have track_degrees
         let courses: Vec<f32> = fixes.iter().filter_map(|fix| fix.track_degrees).collect();
 
         if courses.is_empty() {
+            debug!(
+                "No track_degrees data in fixes for device {}, cannot determine runway",
+                device_id
+            );
             return None;
         }
 
         let avg_course = courses.iter().sum::<f32>() as f64 / courses.len() as f64;
+        debug!(
+            "Calculated average course {} from {} fixes for device {}",
+            avg_course,
+            courses.len(),
+            device_id
+        );
 
         // Find the runway end whose heading is closest to the aircraft's course
         let mut best_match: Option<(String, f64)> = None;
@@ -404,7 +458,19 @@ impl FlightTracker {
             }
         }
 
-        best_match.map(|(ident, _)| ident)
+        match best_match {
+            Some((ident, diff)) => {
+                debug!(
+                    "Determined runway {} for device {} (heading diff: {:.1}°)",
+                    ident, device_id, diff
+                );
+                Some(ident)
+            }
+            None => {
+                debug!("No suitable runway match found for device {}", device_id);
+                None
+            }
+        }
     }
 
     /// Create a new flight for aircraft already airborne (no takeoff data)
