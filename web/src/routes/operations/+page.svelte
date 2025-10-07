@@ -153,15 +153,16 @@
 		zoom: number;
 	}
 
-	// Helper function to calculate color based on altitude (red at 0 ft, blue at 18000+ ft)
+	// Helper function to calculate color based on altitude (red at 500 ft, blue at 18000+ ft)
 	function getAltitudeColor(altitude_feet: number | null | undefined): string {
 		const altitude = altitude_feet || 0;
 
-		// Clamp altitude to 0-18000 range for color calculation
-		const clampedAltitude = Math.max(0, Math.min(18000, altitude));
+		// Clamp altitude to 500-18000 range for color calculation
+		const clampedAltitude = Math.max(500, Math.min(18000, altitude));
 
 		// Calculate interpolation factor (0 to 1)
-		const factor = clampedAltitude / 18000;
+		// 500 ft = 0, 18000 ft = 1
+		const factor = (clampedAltitude - 500) / (18000 - 500);
 
 		// Red: rgb(239, 68, 68) or #ef4444
 		// Blue: rgb(59, 130, 246) or #3b82f6
@@ -980,11 +981,13 @@
 		// Create label with tail number + model (if available) on top, altitude on bottom
 		const tailDiv = document.createElement('div');
 		tailDiv.className = 'aircraft-tail';
+		tailDiv.style.color = altitudeColor;
 		// Include aircraft model after tail number if available
 		tailDiv.textContent = aircraftModel ? `${tailNumber} (${aircraftModel})` : tailNumber;
 
 		const altDiv = document.createElement('div');
 		altDiv.className = 'aircraft-altitude';
+		altDiv.style.color = altitudeColor;
 		altDiv.textContent = altitudeText;
 
 		// Apply transparency if fix is old (>5 minutes)
@@ -1083,6 +1086,10 @@
 				const tailNumber = device.registration || device.address || 'Unknown';
 				const { altitudeText, isOld } = formatAltitudeWithTime(fix.altitude_feet, fix.timestamp);
 				const aircraftModel = device.aircraft_model;
+
+				// Update text colors to match altitude
+				tailDiv.style.color = altitudeColor;
+				altDiv.style.color = altitudeColor;
 
 				// Include aircraft model after tail number if available
 				tailDiv.textContent = aircraftModel ? `${tailNumber} (${aircraftModel})` : tailNumber;
@@ -1426,18 +1433,19 @@
 
 			// Process each device and add to registry
 			for (const deviceData of devicesWithFixes) {
-				// Add fixes to device registry
-				for (const fix of deviceData.recent_fixes) {
-					await deviceRegistry.addFixToDevice(fix, false);
-				}
-
-				// Update device info with aircraft data
+				// First, register the device info with aircraft data
+				// This prevents individual API calls when adding fixes
 				await deviceRegistry.updateDeviceInfo(
 					deviceData.device.id,
 					deviceData.device,
 					deviceData.aircraft_registration,
 					deviceData.aircraft_model
 				);
+
+				// Then add fixes to the already-registered device
+				for (const fix of deviceData.recent_fixes) {
+					await deviceRegistry.addFixToDevice(fix, false);
+				}
 			}
 
 			console.log('[REST] Devices loaded, WebSocket subscriptions will provide live updates');
@@ -1796,8 +1804,8 @@
 	}
 
 	:global(.aircraft-label) {
-		background: rgba(239, 68, 68, 0.75); /* Changed to 75% opacity */
-		border: 2px solid #dc2626;
+		background: rgba(255, 255, 255, 0.95); /* White background with 95% opacity */
+		border: 2px solid;
 		border-radius: 6px;
 		padding: 4px 8px;
 		margin-top: 6px;
@@ -1808,24 +1816,22 @@
 	}
 
 	:global(.aircraft-marker:hover .aircraft-label) {
-		background: rgba(239, 68, 68, 1); /* Fully opaque on hover */
+		background: rgba(255, 255, 255, 1); /* Fully opaque on hover */
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
 	}
 
 	:global(.aircraft-tail) {
 		font-size: 12px;
 		font-weight: 700;
-		color: white;
 		line-height: 1.2;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+		text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5);
 	}
 
 	:global(.aircraft-altitude) {
 		font-size: 10px;
 		font-weight: 600;
-		color: rgba(255, 255, 255, 0.9);
 		line-height: 1.1;
-		text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+		text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5);
 		margin-top: 1px;
 	}
 </style>
