@@ -439,23 +439,29 @@
 			</div>
 		{:else}
 			<div class="overflow-x-auto">
-				<table class="table">
-					<thead>
+				<table class="w-full table-auto">
+					<thead class="bg-surface-100-800-token border-surface-300-600-token border-b">
 						<tr>
-							<th>Time</th>
-							<th>Location</th>
-							<th>Altitude</th>
-							<th>AGL</th>
-							<th>Speed</th>
-							<th>Track</th>
-							<th>Climb</th>
+							<th class="px-3 py-2 text-left text-sm font-medium">Time</th>
+							<th class="px-3 py-2 text-left text-sm font-medium">Location</th>
+							<th class="px-3 py-2 text-left text-sm font-medium">Altitude</th>
+							<th class="px-3 py-2 text-left text-sm font-medium">AGL</th>
+							<th class="px-3 py-2 text-left text-sm font-medium">Speed</th>
+							<th class="px-3 py-2 text-left text-sm font-medium">Track</th>
+							<th class="px-3 py-2 text-left text-sm font-medium">Climb</th>
 						</tr>
 					</thead>
 					<tbody>
 						{#each paginatedFixes as fix, index (fix.id)}
-							<tr class={index % 2 === 0 ? 'bg-surface-50-900-token' : ''}>
-								<td>{formatFixTime(fix.timestamp)}</td>
-								<td>
+							<tr
+								class="border-surface-200-700-token hover:bg-surface-100-800-token border-b {index %
+									2 ===
+								0
+									? 'bg-surface-50-900-token'
+									: ''}"
+							>
+								<td class="px-3 py-2 text-sm">{formatFixTime(fix.timestamp)}</td>
+								<td class="px-3 py-2 text-sm">
 									<a
 										href="https://www.google.com/maps?q={fix.latitude},{fix.longitude}"
 										target="_blank"
@@ -465,18 +471,25 @@
 										{fix.latitude.toFixed(6)}, {fix.longitude.toFixed(6)}
 									</a>
 								</td>
-								<td>{formatAltitude(fix.altitude_feet)}</td>
-								<td>{formatAltitude(fix.altitude_agl_feet)}</td>
-								<td>{fix.ground_speed_knots ? `${fix.ground_speed_knots.toFixed(1)} kt` : 'N/A'}</td
+								<td class="px-3 py-2 text-sm">{formatAltitude(fix.altitude_feet)}</td>
+								<td class="px-3 py-2 text-sm">{formatAltitude(fix.altitude_agl_feet)}</td>
+								<td class="px-3 py-2 text-sm"
+									>{fix.ground_speed_knots ? `${fix.ground_speed_knots.toFixed(1)} kt` : 'N/A'}</td
 								>
-								<td>{fix.track_degrees ? `${fix.track_degrees.toFixed(0)}°` : 'N/A'}</td>
-								<td>{fix.climb_fpm ? `${fix.climb_fpm.toFixed(0)} fpm` : 'N/A'}</td>
+								<td class="px-3 py-2 text-sm"
+									>{fix.track_degrees ? `${fix.track_degrees.toFixed(0)}°` : 'N/A'}</td
+								>
+								<td class="px-3 py-2 text-sm"
+									>{fix.climb_fpm ? `${fix.climb_fpm.toFixed(0)} fpm` : 'N/A'}</td
+								>
 							</tr>
 							{#if showRawData}
 								<tr
-									class={index % 2 === 0 ? 'bg-surface-100-800-token' : 'bg-surface-200-700-token'}
+									class="border-surface-200-700-token border-b {index % 2 === 0
+										? 'bg-surface-100-800-token'
+										: 'bg-surface-50-900-token'}"
 								>
-									<td colspan="7" class="font-mono text-sm">
+									<td colspan="7" class="px-3 py-2 font-mono text-sm">
 										{fix.raw_packet}
 									</td>
 								</tr>
