@@ -493,6 +493,107 @@
 				{/if}
 			</div>
 
+			<!-- Flights Section -->
+			<div class="space-y-4 card p-6">
+				<h2 class="flex items-center gap-2 h2">
+					<Plane class="h-6 w-6" />
+					Flight History
+				</h2>
+
+				{#if loadingFlights}
+					<div class="flex items-center justify-center py-8">
+						<ProgressRing size="w-6 h-6" />
+						<span class="ml-2">Loading flight history...</span>
+					</div>
+				{:else if flights.length === 0}
+					<div class="text-surface-600-300-token py-8 text-center">
+						<Plane class="mx-auto mb-4 h-12 w-12 text-surface-400" />
+						<p>No flights found for this aircraft</p>
+					</div>
+				{:else}
+					<div class="overflow-x-auto">
+						<table class="w-full table-auto">
+							<thead class="bg-surface-100-800-token border-surface-300-600-token border-b">
+								<tr>
+									<th class="px-3 py-2 text-left text-sm font-medium">Takeoff</th>
+									<th class="px-3 py-2 text-left text-sm font-medium">Landing</th>
+									<th class="px-3 py-2 text-left text-sm font-medium">Duration</th>
+									<th class="px-3 py-2 text-left text-sm font-medium">Departure</th>
+									<th class="px-3 py-2 text-left text-sm font-medium">Arrival</th>
+									<th class="px-3 py-2 text-left text-sm font-medium">Actions</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each flights as flight, index (flight.id)}
+									<tr
+										class="border-surface-200-700-token hover:bg-surface-100-800-token border-b {index %
+											2 ===
+										0
+											? 'bg-surface-50-900-token'
+											: ''}"
+									>
+										<td class="px-3 py-2 text-sm">
+											{flight.takeoff_time ? formatDate(flight.takeoff_time) : 'Unknown'}
+										</td>
+										<td class="px-3 py-2 text-sm">
+											{flight.landing_time ? formatDate(flight.landing_time) : 'In Progress'}
+										</td>
+										<td class="px-3 py-2 text-sm">
+											{#if flight.takeoff_time && flight.landing_time}
+												{@const start = new Date(flight.takeoff_time)}
+												{@const end = new Date(flight.landing_time)}
+												{@const diffMs = end.getTime() - start.getTime()}
+												{@const hours = Math.floor(diffMs / (1000 * 60 * 60))}
+												{@const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60))}
+												{hours}h {minutes}m
+											{:else}
+												-
+											{/if}
+										</td>
+										<td class="px-3 py-2 text-sm">{flight.departure_airport || 'Unknown'}</td>
+										<td class="px-3 py-2 text-sm">{flight.arrival_airport || 'Unknown'}</td>
+										<td class="px-3 py-2 text-sm">
+											<a
+												href="/flights/{flight.id}"
+												target="_blank"
+												rel="noopener noreferrer"
+												class="text-primary-500 underline hover:text-primary-700"
+											>
+												View Flight
+											</a>
+										</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+
+					<!-- Pagination for flights -->
+					{#if flightsTotalPages > 1}
+						<div class="flex items-center justify-between pt-4">
+							<p class="text-surface-600-300-token text-sm">
+								Page {flightsPage} of {flightsTotalPages}
+							</p>
+							<div class="flex gap-2">
+								<button
+									class="btn preset-tonal btn-sm"
+									disabled={flightsPage <= 1}
+									onclick={() => loadFlights(flightsPage - 1)}
+								>
+									Previous
+								</button>
+								<button
+									class="btn preset-tonal btn-sm"
+									disabled={flightsPage >= flightsTotalPages}
+									onclick={() => loadFlights(flightsPage + 1)}
+								>
+									Next
+								</button>
+							</div>
+						</div>
+					{/if}
+				{/if}
+			</div>
 			<!-- Position Fixes Section -->
 			<div class="space-y-4 card p-6">
 				<div class="flex items-center justify-between">
@@ -590,108 +691,6 @@
 									class="btn preset-tonal btn-sm"
 									disabled={fixesPage >= fixesTotalPages}
 									onclick={() => loadFixes(fixesPage + 1)}
-								>
-									Next
-								</button>
-							</div>
-						</div>
-					{/if}
-				{/if}
-			</div>
-
-			<!-- Flights Section -->
-			<div class="space-y-4 card p-6">
-				<h2 class="flex items-center gap-2 h2">
-					<Plane class="h-6 w-6" />
-					Flight History
-				</h2>
-
-				{#if loadingFlights}
-					<div class="flex items-center justify-center py-8">
-						<ProgressRing size="w-6 h-6" />
-						<span class="ml-2">Loading flight history...</span>
-					</div>
-				{:else if flights.length === 0}
-					<div class="text-surface-600-300-token py-8 text-center">
-						<Plane class="mx-auto mb-4 h-12 w-12 text-surface-400" />
-						<p>No flights found for this aircraft</p>
-					</div>
-				{:else}
-					<div class="overflow-x-auto">
-						<table class="w-full table-auto">
-							<thead class="bg-surface-100-800-token border-surface-300-600-token border-b">
-								<tr>
-									<th class="px-3 py-2 text-left text-sm font-medium">Takeoff</th>
-									<th class="px-3 py-2 text-left text-sm font-medium">Landing</th>
-									<th class="px-3 py-2 text-left text-sm font-medium">Duration</th>
-									<th class="px-3 py-2 text-left text-sm font-medium">Departure</th>
-									<th class="px-3 py-2 text-left text-sm font-medium">Arrival</th>
-									<th class="px-3 py-2 text-left text-sm font-medium">Actions</th>
-								</tr>
-							</thead>
-							<tbody>
-								{#each flights as flight, index (flight.id)}
-									<tr
-										class="border-surface-200-700-token hover:bg-surface-100-800-token border-b {index %
-											2 ===
-										0
-											? 'bg-surface-50-900-token'
-											: ''}"
-									>
-										<td class="px-3 py-2 text-sm">
-											{flight.takeoff_time ? formatDate(flight.takeoff_time) : 'Unknown'}
-										</td>
-										<td class="px-3 py-2 text-sm">
-											{flight.landing_time ? formatDate(flight.landing_time) : 'In Progress'}
-										</td>
-										<td class="px-3 py-2 text-sm">
-											{#if flight.takeoff_time && flight.landing_time}
-												{@const start = new Date(flight.takeoff_time)}
-												{@const end = new Date(flight.landing_time)}
-												{@const diffMs = end.getTime() - start.getTime()}
-												{@const hours = Math.floor(diffMs / (1000 * 60 * 60))}
-												{@const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60))}
-												{hours}h {minutes}m
-											{:else}
-												-
-											{/if}
-										</td>
-										<td class="px-3 py-2 text-sm">{flight.departure_airport || 'Unknown'}</td>
-										<td class="px-3 py-2 text-sm">{flight.arrival_airport || 'Unknown'}</td>
-										<td class="px-3 py-2 text-sm">
-											<a
-												href="/flights/{flight.id}"
-												target="_blank"
-												rel="noopener noreferrer"
-												class="text-primary-500 underline hover:text-primary-700"
-											>
-												View Flight
-											</a>
-										</td>
-									</tr>
-								{/each}
-							</tbody>
-						</table>
-					</div>
-
-					<!-- Pagination for flights -->
-					{#if flightsTotalPages > 1}
-						<div class="flex items-center justify-between pt-4">
-							<p class="text-surface-600-300-token text-sm">
-								Page {flightsPage} of {flightsTotalPages}
-							</p>
-							<div class="flex gap-2">
-								<button
-									class="btn preset-tonal btn-sm"
-									disabled={flightsPage <= 1}
-									onclick={() => loadFlights(flightsPage - 1)}
-								>
-									Previous
-								</button>
-								<button
-									class="btn preset-tonal btn-sm"
-									disabled={flightsPage >= flightsTotalPages}
-									onclick={() => loadFlights(flightsPage + 1)}
 								>
 									Next
 								</button>
