@@ -62,7 +62,10 @@
 	let hideInactiveFixes = false;
 
 	$: deviceId = $page.params.id || '';
-	$: filteredFixes = hideInactiveFixes ? fixes.filter((fix) => fix.active) : fixes;
+
+	function handleFilterChange() {
+		loadFixes(1);
+	}
 
 	onMount(async () => {
 		if (deviceId) {
@@ -114,8 +117,9 @@
 	async function loadFixes(page: number = 1) {
 		loadingFixes = true;
 		try {
+			const activeParam = hideInactiveFixes ? '&active=true' : '';
 			const response = await serverCall<FixesResponse>(
-				`/devices/${deviceId}/fixes?page=${page}&per_page=50`
+				`/devices/${deviceId}/fixes?page=${page}&per_page=50${activeParam}`
 			);
 			fixes = response.fixes;
 			fixesPage = response.page;
@@ -196,7 +200,7 @@
 <div class="container mx-auto max-w-6xl space-y-6 p-4">
 	<!-- Back Button -->
 	<div class="flex items-center gap-4">
-		<button class="variant-soft btn btn-sm" onclick={goBack}>
+		<button class="btn preset-tonal btn-sm" onclick={goBack}>
 			<ArrowLeft class="mr-2 h-4 w-4" />
 			Back to Devices
 		</button>
@@ -214,12 +218,12 @@
 
 	<!-- Error State -->
 	{#if error}
-		<div class="alert variant-filled-error">
+		<div class="alert preset-filled-error-500">
 			<div class="alert-message">
 				<h3 class="h3">Error Loading Device</h3>
 				<p>{error}</p>
 				<div class="alert-actions">
-					<button class="variant-filled btn" onclick={loadDevice}> Try Again </button>
+					<button class="btn preset-filled" onclick={loadDevice}> Try Again </button>
 				</div>
 			</div>
 		</div>
@@ -244,18 +248,20 @@
 
 						<div class="mt-3 flex flex-wrap gap-2">
 							<span
-								class="badge {device.tracked ? 'variant-filled-success' : 'variant-filled-surface'}"
+								class="badge {device.tracked
+									? 'preset-filled-success-500'
+									: 'preset-filled-surface-500'}"
 							>
 								{device.tracked ? 'Tracked' : 'Not Tracked'}
 							</span>
 							<span
 								class="badge {device.identified
-									? 'variant-filled-primary'
-									: 'variant-filled-surface'}"
+									? 'preset-filled-primary-500'
+									: 'preset-filled-surface-500'}"
 							>
 								{device.identified ? 'Identified' : 'Unidentified'}
 							</span>
-							<span class="variant-soft badge">
+							<span class="badge preset-tonal">
 								{device.address_type}
 							</span>
 						</div>
@@ -496,7 +502,12 @@
 					</h2>
 					{#if fixes.length > 0}
 						<label class="flex items-center gap-2 text-sm">
-							<input type="checkbox" class="checkbox" bind:checked={hideInactiveFixes} />
+							<input
+								type="checkbox"
+								class="checkbox"
+								bind:checked={hideInactiveFixes}
+								onchange={handleFilterChange}
+							/>
 							<span>Hide inactive fixes</span>
 						</label>
 					{/if}
@@ -510,12 +521,11 @@
 				{:else if fixes.length === 0}
 					<div class="text-surface-600-300-token py-8 text-center">
 						<Activity class="mx-auto mb-4 h-12 w-12 text-surface-400" />
-						<p>No position fixes found in the last 24 hours</p>
-					</div>
-				{:else if filteredFixes.length === 0}
-					<div class="text-surface-600-300-token py-8 text-center">
-						<Activity class="mx-auto mb-4 h-12 w-12 text-surface-400" />
-						<p>No active fixes found. Uncheck "Hide inactive fixes" to see all fixes.</p>
+						<p>
+							{hideInactiveFixes
+								? 'No active fixes found'
+								: 'No position fixes found in the last 24 hours'}
+						</p>
 					</div>
 				{:else}
 					<div class="overflow-x-auto">
@@ -531,7 +541,7 @@
 								</tr>
 							</thead>
 							<tbody>
-								{#each filteredFixes as fix, index (fix.id)}
+								{#each fixes as fix, index (fix.id)}
 									<tr
 										class="border-surface-200-700-token hover:bg-surface-100-800-token border-b {index %
 											2 ===
@@ -570,14 +580,14 @@
 							</p>
 							<div class="flex gap-2">
 								<button
-									class="variant-soft btn btn-sm"
+									class="btn preset-tonal btn-sm"
 									disabled={fixesPage <= 1}
 									onclick={() => loadFixes(fixesPage - 1)}
 								>
 									Previous
 								</button>
 								<button
-									class="variant-soft btn btn-sm"
+									class="btn preset-tonal btn-sm"
 									disabled={fixesPage >= fixesTotalPages}
 									onclick={() => loadFixes(fixesPage + 1)}
 								>
@@ -672,14 +682,14 @@
 							</p>
 							<div class="flex gap-2">
 								<button
-									class="variant-soft btn btn-sm"
+									class="btn preset-tonal btn-sm"
 									disabled={flightsPage <= 1}
 									onclick={() => loadFlights(flightsPage - 1)}
 								>
 									Previous
 								</button>
 								<button
-									class="variant-soft btn btn-sm"
+									class="btn preset-tonal btn-sm"
 									disabled={flightsPage >= flightsTotalPages}
 									onclick={() => loadFlights(flightsPage + 1)}
 								>

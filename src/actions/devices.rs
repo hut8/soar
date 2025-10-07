@@ -25,6 +25,8 @@ pub struct FixesQuery {
     pub page: Option<i64>,
     /// Results per page
     pub per_page: Option<i64>,
+    /// Filter for active fixes only
+    pub active: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -129,9 +131,10 @@ pub async fn get_device_fixes(
 
             let page = query.page.unwrap_or(1).max(1);
             let per_page = query.per_page.unwrap_or(50).clamp(1, 100);
+            let active_only = query.active;
 
             match fixes_repo
-                .get_fixes_by_device_paginated(id, after_datetime, page, per_page)
+                .get_fixes_by_device_paginated(id, after_datetime, page, per_page, active_only)
                 .await
             {
                 Ok((fixes, total_count)) => {

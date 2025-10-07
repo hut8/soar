@@ -425,6 +425,7 @@ impl FixesRepository {
         after: Option<DateTime<Utc>>,
         page: i64,
         per_page: i64,
+        active_only: Option<bool>,
     ) -> Result<(Vec<Fix>, i64)> {
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
@@ -436,12 +437,18 @@ impl FixesRepository {
             if let Some(after_timestamp) = after {
                 count_query = count_query.filter(timestamp.gt(after_timestamp));
             }
+            if active_only == Some(true) {
+                count_query = count_query.filter(is_active.eq(true));
+            }
             let total_count = count_query.count().get_result::<i64>(&mut conn)?;
 
             // Build query for paginated results
             let mut query = fixes.filter(device_id.eq(device_uuid)).into_boxed();
             if let Some(after_timestamp) = after {
                 query = query.filter(timestamp.gt(after_timestamp));
+            }
+            if active_only == Some(true) {
+                query = query.filter(is_active.eq(true));
             }
             let offset = (page - 1) * per_page;
             let results = query
