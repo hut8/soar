@@ -1093,7 +1093,7 @@ impl ReceiverStatusProcessor {
                     // Look up receiver by callsign
                     match receiver_repo.get_receiver_by_callsign(&callsign).await {
                         Ok(Some(receiver)) => {
-                            info!(
+                            debug!(
                                 "Found receiver {} (id: {}) for status update",
                                 callsign, receiver.id
                             );
@@ -1110,7 +1110,7 @@ impl ReceiverStatusProcessor {
                             // Insert receiver status
                             match status_repo.insert(&new_status).await {
                                 Ok(_) => {
-                                    info!("Inserted receiver status for {}", callsign);
+                                    debug!("Inserted receiver status for {}", callsign);
                                     // Track receiver status update metric
                                     counter!("receiver_status_updates_total").increment(1);
 
@@ -1158,7 +1158,7 @@ impl ReceiverStatusProcessor {
                                     // Insert receiver status
                                     match status_repo.insert(&new_status).await {
                                         Ok(_) => {
-                                            info!(
+                                            debug!(
                                                 "Inserted receiver status for auto-discovered receiver {}",
                                                 callsign
                                             );
