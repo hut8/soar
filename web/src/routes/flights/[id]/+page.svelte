@@ -236,7 +236,9 @@
 					Flight {data.flight.device_address}
 				</h1>
 				{#if isOutlanding}
-					<span class="variant-filled-warning chip flex items-center gap-2 text-base font-semibold">
+					<span
+						class="chip flex items-center gap-2 preset-filled-warning-500 text-base font-semibold"
+					>
 						<MapPinMinus class="h-5 w-5" />
 						Outlanding
 					</span>
@@ -244,7 +246,7 @@
 			</div>
 			<button
 				onclick={downloadKML}
-				class="variant-filled-primary btn flex items-center gap-2"
+				class="btn flex items-center gap-2 preset-filled-primary-500"
 				type="button"
 			>
 				<Download class="h-4 w-4" />
@@ -492,7 +494,7 @@
 						<button
 							onclick={() => goToPage(1)}
 							disabled={currentPage === 1}
-							class="variant-filled-surface btn btn-sm"
+							class="btn preset-tonal btn-sm"
 							type="button"
 							title="First page (Takeoff)"
 						>
@@ -502,7 +504,7 @@
 						<button
 							onclick={() => goToPage(currentPage - 1)}
 							disabled={currentPage === 1}
-							class="variant-filled-surface btn btn-sm"
+							class="btn preset-tonal btn-sm"
 							type="button"
 							title="Previous page"
 						>
@@ -512,7 +514,7 @@
 						<button
 							onclick={() => goToPage(currentPage + 1)}
 							disabled={currentPage === totalPages}
-							class="variant-filled-surface btn btn-sm"
+							class="btn preset-tonal btn-sm"
 							type="button"
 							title="Next page"
 						>
@@ -522,7 +524,7 @@
 						<button
 							onclick={() => goToPage(totalPages)}
 							disabled={currentPage === totalPages}
-							class="variant-filled-surface btn btn-sm"
+							class="btn preset-tonal btn-sm"
 							type="button"
 							title="Last page (Landing)"
 						>
