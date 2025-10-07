@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 use crate::actions::json_error;
 use crate::actions::views::FlightView;
+use crate::airports_repo::AirportsRepository;
 use crate::fixes::Fix;
 use crate::fixes_repo::FixesRepository;
 use crate::flights::Flight;
@@ -36,11 +37,36 @@ pub async fn get_flight_by_id(
     Path(id): Path<Uuid>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    let flights_repo = FlightsRepository::new(state.pool);
+    let flights_repo = FlightsRepository::new(state.pool.clone());
+    let airports_repo = AirportsRepository::new(state.pool.clone());
 
     match flights_repo.get_flight_by_id(id).await {
         Ok(Some(flight)) => {
-            let flight_view: FlightView = flight.into();
+            // Look up airport IDs if airport identifiers are present
+            let departure_airport_id = if let Some(ref dep_ident) = flight.departure_airport {
+                airports_repo
+                    .get_airport_by_ident(dep_ident)
+                    .await
+                    .ok()
+                    .flatten()
+                    .map(|a| a.id)
+            } else {
+                None
+            };
+
+            let arrival_airport_id = if let Some(ref arr_ident) = flight.arrival_airport {
+                airports_repo
+                    .get_airport_by_ident(arr_ident)
+                    .await
+                    .ok()
+                    .flatten()
+                    .map(|a| a.id)
+            } else {
+                None
+            };
+
+            let flight_view =
+                FlightView::from_flight(flight, departure_airport_id, arrival_airport_id);
             Json(FlightResponse {
                 flight: flight_view,
             })

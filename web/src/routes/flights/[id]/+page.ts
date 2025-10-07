@@ -16,7 +16,9 @@ export const load: PageLoad = async ({ params }) => {
 					takeoff_time?: string;
 					landing_time?: string;
 					departure_airport?: string;
+					departure_airport_id?: number;
 					arrival_airport?: string;
+					arrival_airport_id?: number;
 					tow_aircraft_id?: string;
 					tow_release_height_msl?: number;
 					club_id?: string;
@@ -47,6 +49,7 @@ export const load: PageLoad = async ({ params }) => {
 					model?: string;
 					flight_id?: string;
 					active: boolean;
+					raw_packet: string;
 				}>;
 				count: number;
 			}>(`/flights/${id}/fixes`)

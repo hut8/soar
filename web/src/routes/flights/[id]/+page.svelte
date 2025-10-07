@@ -35,6 +35,10 @@
 	let currentPage = $state(1);
 	let pageSize = 50;
 
+	// Display options
+	let showRawData = $state(false);
+	let useRelativeTimes = $state(false);
+
 	// Reverse fixes to show chronologically (earliest first, landing last)
 	const reversedFixes = $derived([...data.fixes].reverse());
 	const totalPages = $derived(Math.ceil(reversedFixes.length / pageSize));
@@ -53,6 +57,18 @@
 		const hours = Math.floor(diffMs / (1000 * 60 * 60));
 		const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
 		return `${hours}h ${minutes}m`;
+	});
+
+	// Calculate fixes per second rate
+	const fixesPerSecond = $derived(() => {
+		if (!data.flight.takeoff_time || !data.flight.landing_time || data.fixesCount === 0) {
+			return null;
+		}
+		const start = new Date(data.flight.takeoff_time);
+		const end = new Date(data.flight.landing_time);
+		const durationSeconds = (end.getTime() - start.getTime()) / 1000;
+		if (durationSeconds <= 0) return null;
+		return (data.fixesCount / durationSeconds).toFixed(2);
 	});
 
 	// Check if this is an outlanding (flight complete but no arrival airport)
@@ -75,6 +91,14 @@
 	function formatDateTimeMobile(dateString: string | undefined): string {
 		if (!dateString) return 'N/A';
 		return dayjs(dateString).fromNow();
+	}
+
+	// Format timestamp for fixes table (relative or absolute based on checkbox)
+	function formatFixTime(timestamp: string): string {
+		if (useRelativeTimes) {
+			return dayjs(timestamp).fromNow();
+		}
+		return new Date(timestamp).toLocaleTimeString();
 	}
 
 	// Format altitude
@@ -305,7 +329,15 @@
 				<div>
 					<div class="text-surface-600-300-token text-sm">Departure</div>
 					<div class="font-semibold">
-						{data.flight.departure_airport || 'Unknown'}
+						{#if data.flight.departure_airport && data.flight.departure_airport_id}
+							<a href="/airports/{data.flight.departure_airport_id}" class="anchor">
+								{data.flight.departure_airport}
+							</a>
+						{:else if data.flight.departure_airport}
+							{data.flight.departure_airport}
+						{:else}
+							Unknown
+						{/if}
 					</div>
 					{#if data.flight.takeoff_runway_ident}
 						<div class="text-surface-600-300-token text-sm">
@@ -324,7 +356,15 @@
 					<div class="text-surface-600-300-token text-sm">Arrival</div>
 					<div class="font-semibold">
 						{#if data.flight.landing_time}
-							{data.flight.arrival_airport || 'Unknown'}
+							{#if data.flight.arrival_airport && data.flight.arrival_airport_id}
+								<a href="/airports/{data.flight.arrival_airport_id}" class="anchor">
+									{data.flight.arrival_airport}
+								</a>
+							{:else if data.flight.arrival_airport}
+								{data.flight.arrival_airport}
+							{:else}
+								Unknown
+							{/if}
 						{:else}
 							In Progress
 						{/if}
@@ -369,7 +409,26 @@
 
 	<!-- Fixes Table -->
 	<div class="card p-6" id="fixes-table">
-		<h2 class="mb-4 h2">Position Fixes ({data.fixesCount})</h2>
+		<div class="mb-4 flex items-center justify-between">
+			<h2 class="h2">
+				Position Fixes ({data.fixesCount})
+				{#if fixesPerSecond()}
+					<span class="text-surface-600-300-token ml-2 text-lg">
+						({fixesPerSecond()} fixes/sec)
+					</span>
+				{/if}
+			</h2>
+			<div class="flex gap-4">
+				<label class="flex cursor-pointer items-center gap-2">
+					<input type="checkbox" class="checkbox" bind:checked={showRawData} />
+					<span class="text-sm">Display Raw</span>
+				</label>
+				<label class="flex cursor-pointer items-center gap-2">
+					<input type="checkbox" class="checkbox" bind:checked={useRelativeTimes} />
+					<span class="text-sm">Relative Times</span>
+				</label>
+			</div>
+		</div>
 
 		{#if data.fixes.length === 0}
 			<div class="text-surface-600-300-token py-8 text-center">
@@ -393,7 +452,7 @@
 					<tbody>
 						{#each paginatedFixes as fix (fix.id)}
 							<tr>
-								<td>{new Date(fix.timestamp).toLocaleTimeString()}</td>
+								<td>{formatFixTime(fix.timestamp)}</td>
 								<td>
 									<a
 										href="https://www.google.com/maps?q={fix.latitude},{fix.longitude}"
@@ -411,6 +470,13 @@
 								<td>{fix.track_degrees ? `${fix.track_degrees.toFixed(0)}°` : 'N/A'}</td>
 								<td>{fix.climb_fpm ? `${fix.climb_fpm.toFixed(0)} fpm` : 'N/A'}</td>
 							</tr>
+							{#if showRawData}
+								<tr class="bg-surface-200-700-token">
+									<td colspan="7" class="font-mono text-sm">
+										{fix.raw_packet}
+									</td>
+								</tr>
+							{/if}
 						{/each}
 					</tbody>
 				</table>
