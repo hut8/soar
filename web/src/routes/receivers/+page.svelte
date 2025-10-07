@@ -12,7 +12,7 @@
 	const GOOGLE_MAPS_API_KEY = 'AIzaSyBaK8UU0l4z-k6b-UPlLzw3wv_Ti71XNy8';
 
 	interface Receiver {
-		id: number;
+		id: string;
 		callsign: string;
 		description: string | null;
 		contact: string | null;

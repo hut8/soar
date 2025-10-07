@@ -26,7 +26,7 @@
 	dayjs.extend(relativeTime);
 
 	interface Receiver {
-		id: number;
+		id: string;
 		callsign: string;
 		description: string | null;
 		contact: string | null;
@@ -63,14 +63,14 @@
 		received_at: string;
 		version: string | null;
 		platform: string | null;
-		cpu_load: number | null;
-		cpu_temperature: number | null;
-		ram_free: number | null;
-		ram_total: number | null;
+		cpu_load: number | string | null; // BigDecimal from backend
+		cpu_temperature: number | string | null; // BigDecimal from backend
+		ram_free: number | string | null; // BigDecimal from backend
+		ram_total: number | string | null; // BigDecimal from backend
 		visible_senders: number | null;
 		senders: number | null;
-		voltage: number | null;
-		amperage: number | null;
+		voltage: number | string | null; // BigDecimal from backend
+		amperage: number | string | null; // BigDecimal from backend
 		lag: number | null;
 	}
 
@@ -211,11 +211,21 @@
 		}
 	}
 
-	function formatRamUsage(ramFree: number | null, ramTotal: number | null): string {
+	function formatRamUsage(
+		ramFree: number | string | null,
+		ramTotal: number | string | null
+	): string {
 		if (ramFree === null || ramTotal === null) return '—';
-		const usedMb = ramTotal - ramFree;
-		const percentUsed = ((usedMb / ramTotal) * 100).toFixed(1);
-		return `${usedMb.toFixed(0)} / ${ramTotal.toFixed(0)} MB (${percentUsed}%)`;
+
+		// Parse BigDecimal values that come as strings from the API
+		const freeNum = typeof ramFree === 'string' ? parseFloat(ramFree) : ramFree;
+		const totalNum = typeof ramTotal === 'string' ? parseFloat(ramTotal) : ramTotal;
+
+		if (isNaN(freeNum) || isNaN(totalNum)) return '—';
+
+		const usedMb = totalNum - freeNum;
+		const percentUsed = ((usedMb / totalNum) * 100).toFixed(1);
+		return `${usedMb.toFixed(0)} / ${totalNum.toFixed(0)} MB (${percentUsed}%)`;
 	}
 </script>
 
@@ -526,10 +536,10 @@
 										<td class="text-xs">{status.platform || '—'}</td>
 										<td class="text-sm">
 											{#if status.cpu_load !== null}
-												{(status.cpu_load * 100).toFixed(0)}%
+												{(Number(status.cpu_load) * 100).toFixed(0)}%
 												{#if status.cpu_temperature !== null}
 													<span class="text-surface-500-400-token text-xs">
-														({status.cpu_temperature.toFixed(1)}°C)
+														({Number(status.cpu_temperature).toFixed(1)}°C)
 													</span>
 												{/if}
 											{:else}
@@ -551,10 +561,10 @@
 										</td>
 										<td>
 											{#if status.voltage !== null}
-												{status.voltage.toFixed(2)}V
+												{Number(status.voltage).toFixed(2)}V
 												{#if status.amperage !== null}
 													<span class="text-surface-500-400-token text-xs">
-														({status.amperage.toFixed(2)}A)
+														({Number(status.amperage).toFixed(2)}A)
 													</span>
 												{/if}
 											{:else}
