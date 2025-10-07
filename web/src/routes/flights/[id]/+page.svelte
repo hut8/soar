@@ -452,8 +452,8 @@
 						</tr>
 					</thead>
 					<tbody>
-						{#each paginatedFixes as fix (fix.id)}
-							<tr>
+						{#each paginatedFixes as fix, index (fix.id)}
+							<tr class={index % 2 === 0 ? 'bg-surface-50-900-token' : ''}>
 								<td>{formatFixTime(fix.timestamp)}</td>
 								<td>
 									<a
@@ -473,7 +473,9 @@
 								<td>{fix.climb_fpm ? `${fix.climb_fpm.toFixed(0)} fpm` : 'N/A'}</td>
 							</tr>
 							{#if showRawData}
-								<tr class="bg-surface-200-700-token">
+								<tr
+									class={index % 2 === 0 ? 'bg-surface-100-800-token' : 'bg-surface-200-700-token'}
+								>
 									<td colspan="7" class="font-mono text-sm">
 										{fix.raw_packet}
 									</td>
