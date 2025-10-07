@@ -46,11 +46,11 @@ pub struct Flight {
     /// Landing time (optional - null for flights in progress)
     pub landing_time: Option<DateTime<Utc>>,
 
-    /// Departure airport identifier
-    pub departure_airport: Option<String>,
+    /// Departure airport ID (foreign key to airports table)
+    pub departure_airport_id: Option<i32>,
 
-    /// Arrival airport identifier (may be same as departure for local flights)
-    pub arrival_airport: Option<String>,
+    /// Arrival airport ID (foreign key to airports table - may be same as departure for local flights)
+    pub arrival_airport_id: Option<i32>,
 
     /// Tow aircraft registration number (foreign key to aircraft_registrations)
     /// If present, the referenced aircraft must have is_tow_plane = true
@@ -98,8 +98,8 @@ impl Flight {
             device_address_type: AddressType::Unknown,
             takeoff_time,
             landing_time: None,
-            departure_airport: None,
-            arrival_airport: None,
+            departure_airport_id: None,
+            arrival_airport_id: None,
             tow_aircraft_id: None,
             tow_release_height_msl: None,
             club_id: None,
@@ -124,8 +124,8 @@ impl Flight {
             device_address_type: fix.address_type,
             takeoff_time,
             landing_time: None,
-            departure_airport: None,
-            arrival_airport: None,
+            departure_airport_id: None,
+            arrival_airport_id: None,
             tow_aircraft_id: None,
             tow_release_height_msl: None,
             club_id: fix.club_id,
@@ -213,16 +213,16 @@ impl Flight {
         airports_repo: &crate::airports_repo::AirportsRepository,
     ) -> Result<Option<f64>> {
         // Only applicable for flights where departure == arrival
-        if self.departure_airport.is_none()
-            || self.arrival_airport.is_none()
-            || self.departure_airport != self.arrival_airport
+        if self.departure_airport_id.is_none()
+            || self.arrival_airport_id.is_none()
+            || self.departure_airport_id != self.arrival_airport_id
         {
             return Ok(None);
         }
 
         // Get the departure airport coordinates
-        let airport_ident = self.departure_airport.as_ref().unwrap();
-        let airport = match airports_repo.get_airport_by_ident(airport_ident).await? {
+        let airport_id = self.departure_airport_id.unwrap();
+        let airport = match airports_repo.get_airport_by_id(airport_id).await? {
             Some(a) => a,
             None => return Ok(None),
         };
@@ -441,8 +441,6 @@ pub struct FlightModel {
     pub device_address: String,
     pub takeoff_time: Option<DateTime<Utc>>,
     pub landing_time: Option<DateTime<Utc>>,
-    pub departure_airport: Option<String>,
-    pub arrival_airport: Option<String>,
     pub tow_aircraft_id: Option<String>,
     pub tow_release_height_msl: Option<i32>,
     pub club_id: Option<Uuid>,
@@ -456,6 +454,8 @@ pub struct FlightModel {
     pub landing_runway_ident: Option<String>,
     pub total_distance_meters: Option<f64>,
     pub maximum_displacement_meters: Option<f64>,
+    pub departure_airport_id: Option<i32>,
+    pub arrival_airport_id: Option<i32>,
 }
 
 /// Insert model for new flights
@@ -466,8 +466,6 @@ pub struct NewFlightModel {
     pub device_address: String,
     pub takeoff_time: Option<DateTime<Utc>>,
     pub landing_time: Option<DateTime<Utc>>,
-    pub departure_airport: Option<String>,
-    pub arrival_airport: Option<String>,
     pub tow_aircraft_id: Option<String>,
     pub tow_release_height_msl: Option<i32>,
     pub club_id: Option<Uuid>,
@@ -479,6 +477,8 @@ pub struct NewFlightModel {
     pub landing_runway_ident: Option<String>,
     pub total_distance_meters: Option<f64>,
     pub maximum_displacement_meters: Option<f64>,
+    pub departure_airport_id: Option<i32>,
+    pub arrival_airport_id: Option<i32>,
 }
 
 /// Conversion from Flight (API model) to FlightModel (database model)
@@ -490,8 +490,6 @@ impl From<Flight> for FlightModel {
             device_address_type: flight.device_address_type,
             takeoff_time: flight.takeoff_time,
             landing_time: flight.landing_time,
-            departure_airport: flight.departure_airport,
-            arrival_airport: flight.arrival_airport,
             tow_aircraft_id: flight.tow_aircraft_id,
             tow_release_height_msl: flight.tow_release_height_msl,
             club_id: flight.club_id,
@@ -504,6 +502,8 @@ impl From<Flight> for FlightModel {
             landing_runway_ident: flight.landing_runway_ident,
             total_distance_meters: flight.total_distance_meters,
             maximum_displacement_meters: flight.maximum_displacement_meters,
+            departure_airport_id: flight.departure_airport_id,
+            arrival_airport_id: flight.arrival_airport_id,
         }
     }
 }
@@ -517,8 +517,6 @@ impl From<Flight> for NewFlightModel {
             device_address_type: flight.device_address_type,
             takeoff_time: flight.takeoff_time,
             landing_time: flight.landing_time,
-            departure_airport: flight.departure_airport,
-            arrival_airport: flight.arrival_airport,
             tow_aircraft_id: flight.tow_aircraft_id,
             tow_release_height_msl: flight.tow_release_height_msl,
             club_id: flight.club_id,
@@ -529,6 +527,8 @@ impl From<Flight> for NewFlightModel {
             landing_runway_ident: flight.landing_runway_ident,
             total_distance_meters: flight.total_distance_meters,
             maximum_displacement_meters: flight.maximum_displacement_meters,
+            departure_airport_id: flight.departure_airport_id,
+            arrival_airport_id: flight.arrival_airport_id,
         }
     }
 }
@@ -543,8 +543,8 @@ impl From<FlightModel> for Flight {
             device_address_type: model.device_address_type,
             takeoff_time: model.takeoff_time,
             landing_time: model.landing_time,
-            departure_airport: model.departure_airport,
-            arrival_airport: model.arrival_airport,
+            departure_airport_id: model.departure_airport_id,
+            arrival_airport_id: model.arrival_airport_id,
             tow_aircraft_id: model.tow_aircraft_id,
             tow_release_height_msl: model.tow_release_height_msl,
             club_id: model.club_id,

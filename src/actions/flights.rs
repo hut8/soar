@@ -42,31 +42,31 @@ pub async fn get_flight_by_id(
 
     match flights_repo.get_flight_by_id(id).await {
         Ok(Some(flight)) => {
-            // Look up airport IDs if airport identifiers are present
-            let departure_airport_id = if let Some(ref dep_ident) = flight.departure_airport {
+            // Look up airport identifiers if airport IDs are present
+            let departure_airport_ident = if let Some(dep_id) = flight.departure_airport_id {
                 airports_repo
-                    .get_airport_by_ident(dep_ident)
+                    .get_airport_by_id(dep_id)
                     .await
                     .ok()
                     .flatten()
-                    .map(|a| a.id)
+                    .map(|a| a.ident)
             } else {
                 None
             };
 
-            let arrival_airport_id = if let Some(ref arr_ident) = flight.arrival_airport {
+            let arrival_airport_ident = if let Some(arr_id) = flight.arrival_airport_id {
                 airports_repo
-                    .get_airport_by_ident(arr_ident)
+                    .get_airport_by_id(arr_id)
                     .await
                     .ok()
                     .flatten()
-                    .map(|a| a.id)
+                    .map(|a| a.ident)
             } else {
                 None
             };
 
             let flight_view =
-                FlightView::from_flight(flight, departure_airport_id, arrival_airport_id);
+                FlightView::from_flight(flight, departure_airport_ident, arrival_airport_ident);
             Json(FlightResponse {
                 flight: flight_view,
             })

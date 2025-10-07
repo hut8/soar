@@ -292,13 +292,14 @@ impl FlightTracker {
     }
 
     /// Find nearest airport within 2km of given coordinates
-    async fn find_nearby_airport(&self, latitude: f64, longitude: f64) -> Option<String> {
+    /// Returns the airport ID (not the identifier string)
+    async fn find_nearby_airport(&self, latitude: f64, longitude: f64) -> Option<i32> {
         match self
             .airports_repo
             .find_nearest_airports(latitude, longitude, 2000.0, 1) // 2km radius, 1 result
             .await
         {
-            Ok(airports) if !airports.is_empty() => Some(airports[0].0.ident.clone()),
+            Ok(airports) if !airports.is_empty() => Some(airports[0].0.id),
             _ => None,
         }
     }
@@ -461,7 +462,7 @@ impl FlightTracker {
 
     /// Create a new flight for takeoff
     async fn create_flight(&self, fix: &Fix) -> Result<Uuid> {
-        let departure_airport = self.find_nearby_airport(fix.latitude, fix.longitude).await;
+        let departure_airport_id = self.find_nearby_airport(fix.latitude, fix.longitude).await;
 
         // Determine takeoff runway
         let takeoff_runway = self
@@ -470,7 +471,7 @@ impl FlightTracker {
 
         let mut flight = Flight::new_with_takeoff_from_fix(fix, fix.timestamp);
         flight.device_address_type = fix.address_type;
-        flight.departure_airport = departure_airport.clone();
+        flight.departure_airport_id = departure_airport_id;
         flight.takeoff_runway_ident = takeoff_runway.clone();
 
         // Calculate takeoff altitude offset (difference between reported altitude and true elevation)
@@ -486,8 +487,8 @@ impl FlightTracker {
                     fix.device_id,
                     fix.latitude,
                     fix.longitude,
-                    if departure_airport.is_some() {
-                        format!(" from {}", departure_airport.as_ref().unwrap())
+                    if departure_airport_id.is_some() {
+                        format!(" from airport ID {}", departure_airport_id.unwrap())
                     } else {
                         String::new()
                     }
@@ -526,7 +527,7 @@ impl FlightTracker {
 
     /// Update flight with landing information
     async fn complete_flight(&self, flight_id: Uuid, fix: &Fix) -> Result<()> {
-        let arrival_airport = self.find_nearby_airport(fix.latitude, fix.longitude).await;
+        let arrival_airport_id = self.find_nearby_airport(fix.latitude, fix.longitude).await;
 
         // Determine landing runway
         let landing_runway = self
@@ -642,7 +643,7 @@ impl FlightTracker {
             .update_flight_landing(
                 flight_id,
                 fix.timestamp,
-                arrival_airport.clone(),
+                arrival_airport_id,
                 landing_altitude_offset_ft,
                 landing_runway.clone(),
                 total_distance_meters,
@@ -656,8 +657,8 @@ impl FlightTracker {
                     flight_id,
                     fix.latitude,
                     fix.longitude,
-                    if arrival_airport.is_some() {
-                        format!(" at {}", arrival_airport.as_ref().unwrap())
+                    if arrival_airport_id.is_some() {
+                        format!(" at airport ID {}", arrival_airport_id.unwrap())
                     } else {
                         String::new()
                     }

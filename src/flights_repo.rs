@@ -75,7 +75,7 @@ impl FlightsRepository {
         &self,
         flight_id: Uuid,
         landing_time_param: DateTime<Utc>,
-        arrival_airport_param: Option<String>,
+        arrival_airport_id_param: Option<i32>,
         landing_altitude_offset_ft_param: Option<i32>,
         landing_runway_ident_param: Option<String>,
         total_distance_meters_param: Option<f64>,
@@ -91,7 +91,7 @@ impl FlightsRepository {
             diesel::update(flights.filter(id.eq(flight_id)))
                 .set((
                     landing_time.eq(&Some(landing_time_param)),
-                    arrival_airport.eq(&arrival_airport_param),
+                    arrival_airport_id.eq(&arrival_airport_id_param),
                     landing_altitude_offset_ft.eq(&landing_altitude_offset_ft_param),
                     landing_runway_ident.eq(&landing_runway_ident_param),
                     total_distance_meters.eq(&total_distance_meters_param),
@@ -383,8 +383,8 @@ impl FlightsRepository {
     pub async fn update_flight_details(
         &self,
         flight_id: Uuid,
-        departure_airport_param: Option<String>,
-        arrival_airport_param: Option<String>,
+        departure_airport_id_param: Option<i32>,
+        arrival_airport_id_param: Option<i32>,
         tow_aircraft_id_param: Option<String>,
         tow_release_height_msl_param: Option<i32>,
     ) -> Result<bool> {
@@ -397,8 +397,8 @@ impl FlightsRepository {
 
             let rows = diesel::update(flights.filter(id.eq(flight_id)))
                 .set((
-                    departure_airport.eq(&departure_airport_param),
-                    arrival_airport.eq(&arrival_airport_param),
+                    departure_airport_id.eq(&departure_airport_id_param),
+                    arrival_airport_id.eq(&arrival_airport_id_param),
                     tow_aircraft_id.eq(&tow_aircraft_id_param),
                     tow_release_height_msl.eq(&tow_release_height_msl_param),
                     updated_at.eq(Utc::now()),

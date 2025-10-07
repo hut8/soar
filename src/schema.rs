@@ -300,10 +300,6 @@ diesel::table! {
         device_address -> Varchar,
         takeoff_time -> Nullable<Timestamptz>,
         landing_time -> Nullable<Timestamptz>,
-        #[max_length = 10]
-        departure_airport -> Nullable<Varchar>,
-        #[max_length = 10]
-        arrival_airport -> Nullable<Varchar>,
         #[max_length = 5]
         tow_aircraft_id -> Nullable<Varchar>,
         tow_release_height_msl -> Nullable<Int4>,
@@ -318,6 +314,8 @@ diesel::table! {
         landing_runway_ident -> Nullable<Text>,
         total_distance_meters -> Nullable<Float8>,
         maximum_displacement_meters -> Nullable<Float8>,
+        departure_airport_id -> Nullable<Int4>,
+        arrival_airport_id -> Nullable<Int4>,
     }
 }
 

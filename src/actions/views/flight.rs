@@ -36,11 +36,11 @@ pub struct FlightView {
 }
 
 impl FlightView {
-    /// Create a FlightView from a Flight with optional airport IDs
+    /// Create a FlightView from a Flight with optional airport identifiers
     pub fn from_flight(
         flight: Flight,
-        departure_airport_id: Option<i32>,
-        arrival_airport_id: Option<i32>,
+        departure_airport_ident: Option<String>,
+        arrival_airport_ident: Option<String>,
     ) -> Self {
         // Calculate duration in seconds if both takeoff and landing times are available
         let duration_seconds = match (flight.takeoff_time, flight.landing_time) {
@@ -56,10 +56,10 @@ impl FlightView {
             takeoff_time: flight.takeoff_time,
             landing_time: flight.landing_time,
             duration_seconds,
-            departure_airport: flight.departure_airport,
-            departure_airport_id,
-            arrival_airport: flight.arrival_airport,
-            arrival_airport_id,
+            departure_airport: departure_airport_ident,
+            departure_airport_id: flight.departure_airport_id,
+            arrival_airport: arrival_airport_ident,
+            arrival_airport_id: flight.arrival_airport_id,
             tow_aircraft_id: flight.tow_aircraft_id,
             tow_release_height_msl: flight.tow_release_height_msl,
             club_id: flight.club_id,
