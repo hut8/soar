@@ -981,13 +981,11 @@
 		// Create label with tail number + model (if available) on top, altitude on bottom
 		const tailDiv = document.createElement('div');
 		tailDiv.className = 'aircraft-tail';
-		tailDiv.style.color = altitudeColor;
 		// Include aircraft model after tail number if available
 		tailDiv.textContent = aircraftModel ? `${tailNumber} (${aircraftModel})` : tailNumber;
 
 		const altDiv = document.createElement('div');
 		altDiv.className = 'aircraft-altitude';
-		altDiv.style.color = altitudeColor;
 		altDiv.textContent = altitudeText;
 
 		// Apply transparency if fix is old (>5 minutes)
@@ -1086,10 +1084,6 @@
 				const tailNumber = device.registration || device.address || 'Unknown';
 				const { altitudeText, isOld } = formatAltitudeWithTime(fix.altitude_feet, fix.timestamp);
 				const aircraftModel = device.aircraft_model;
-
-				// Update text colors to match altitude
-				tailDiv.style.color = altitudeColor;
-				altDiv.style.color = altitudeColor;
 
 				// Include aircraft model after tail number if available
 				tailDiv.textContent = aircraftModel ? `${tailNumber} (${aircraftModel})` : tailNumber;
