@@ -4,7 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::{Mutex, Notify};
-use tracing::debug;
+use tracing::{debug, info};
 
 /// Copernicus DEM resolution options
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -83,7 +83,13 @@ impl TileDownloader {
     /// Ensure a tile is cached locally, downloading if necessary
     /// If multiple concurrent requests ask for the same tile, only one download occurs
     /// and the others wait for it to complete
-    pub async fn ensure_cached(&self, tile_name: &str, resolution: Resolution) -> Result<PathBuf> {
+    pub async fn ensure_cached(
+        &self,
+        tile_name: &str,
+        resolution: Resolution,
+        lat: f64,
+        lon: f64,
+    ) -> Result<PathBuf> {
         let path = self.tile_path(tile_name, resolution);
 
         // Fast path: tile already cached
@@ -110,6 +116,10 @@ impl TileDownloader {
 
         if should_download {
             // We are responsible for downloading
+            info!(
+                "Downloading elevation tile {} for coordinates ({:.4}, {:.4})",
+                tile_name, lat, lon
+            );
             let url = tile_url(tile_name, resolution);
 
             // Ensure the subdirectory exists before downloading
@@ -147,13 +157,16 @@ impl TileDownloader {
         let name_glo30 = tile_name(Resolution::Glo30, lat, lon);
 
         // Try GLO-30 first
-        match self.ensure_cached(&name_glo30, Resolution::Glo30).await {
+        match self
+            .ensure_cached(&name_glo30, Resolution::Glo30, lat, lon)
+            .await
+        {
             Ok(path) => Ok(path),
             Err(e) => {
                 // GLO-30 failed, try GLO-90
                 debug!("GLO-30 tile not available ({}), falling back to GLO-90", e);
                 let name_glo90 = tile_name(Resolution::Glo90, lat, lon);
-                self.ensure_cached(&name_glo90, Resolution::Glo90)
+                self.ensure_cached(&name_glo90, Resolution::Glo90, lat, lon)
                     .await
                     .with_context(|| {
                         format!(
@@ -167,7 +180,7 @@ impl TileDownloader {
 
     /// Download a tile from the given URL to the specified path
     async fn download_tile(&self, path: &Path, url: &str) -> Result<()> {
-        debug!("downloading elevation tile from {url}");
+        info!("Downloading elevation tile from {url}");
 
         let bytes = reqwest::get(url)
             .await
