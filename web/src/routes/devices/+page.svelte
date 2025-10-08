@@ -306,7 +306,7 @@
 								oninput={() => (error = '')}
 							/>
 						{:else if searchType === 'device'}
-							<div class="space-y-3">
+							<div class="flex items-start gap-3">
 								<Segment
 									name="address-type-desktop"
 									value={deviceAddressType}
@@ -323,7 +323,7 @@
 									<Segment.Item value="F">FLARM</Segment.Item>
 								</Segment>
 								<input
-									class="input"
+									class="input flex-1"
 									placeholder="Device address"
 									bind:value={searchQuery}
 									onkeydown={handleKeydown}
