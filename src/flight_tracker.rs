@@ -313,6 +313,30 @@ impl FlightTracker {
         format!("{:02}", runway_number)
     }
 
+    /// Check if an aircraft type uses runways
+    fn uses_runways(aircraft_type: &crate::ogn_aprs_aircraft::AircraftType) -> bool {
+        use crate::ogn_aprs_aircraft::AircraftType;
+        match aircraft_type {
+            // Aircraft that use runways
+            AircraftType::Glider => true,
+            AircraftType::TowTug => true,
+            AircraftType::RecipEngine => true,
+            AircraftType::JetTurboprop => true,
+            AircraftType::DropPlane => true,
+            // Aircraft that don't use runways
+            AircraftType::Paraglider => false,
+            AircraftType::HangGlider => false,
+            AircraftType::HelicopterGyro => false,
+            AircraftType::Balloon => false,
+            AircraftType::Airship => false,
+            AircraftType::SkydiverParachute => false, // The parachute itself, not the plane
+            AircraftType::Uav => false,
+            AircraftType::StaticObstacle => false,
+            AircraftType::Reserved => false,
+            AircraftType::Unknown => true, // Default to true for unknown types
+        }
+    }
+
     /// Determine runway identifier based on aircraft course during takeoff/landing
     /// First tries to match against nearby runways with coordinates from the database.
     /// If no runways found or no good match, infers runway from aircraft heading.
@@ -359,6 +383,19 @@ impl FlightTracker {
                 return None;
             }
         };
+
+        // Check if this aircraft type uses runways
+        // Get aircraft type from the first fix (all fixes should have the same type for a device)
+        if let Some(first_fix) = fixes.first()
+            && let Some(aircraft_type) = first_fix.aircraft_type_ogn
+            && !Self::uses_runways(&aircraft_type)
+        {
+            debug!(
+                "Aircraft type {:?} does not use runways, skipping runway detection for device {}",
+                aircraft_type, device_id
+            );
+            return None;
+        }
 
         // Calculate average course from fixes that have track_degrees
         let courses: Vec<f32> = fixes.iter().filter_map(|fix| fix.track_degrees).collect();
