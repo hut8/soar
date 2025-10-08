@@ -24,23 +24,6 @@ fn bigdecimal_to_f64(value: Option<BigDecimal>) -> Option<f64> {
     value.and_then(|v| v.to_f64())
 }
 
-/// Calculate the distance between two points using the Haversine formula
-/// Returns distance in meters
-fn haversine_distance(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
-    const EARTH_RADIUS_M: f64 = 6_371_000.0; // Earth's radius in meters
-
-    let lat1_rad = lat1.to_radians();
-    let lat2_rad = lat2.to_radians();
-    let delta_lat = (lat2 - lat1).to_radians();
-    let delta_lon = (lon2 - lon1).to_radians();
-
-    let a = (delta_lat / 2.0).sin().powi(2)
-        + lat1_rad.cos() * lat2_rad.cos() * (delta_lon / 2.0).sin().powi(2);
-    let c = 2.0 * a.sqrt().atan2((1.0 - a).sqrt());
-
-    EARTH_RADIUS_M * c
-}
-
 /// Diesel model for the runways table - used for database operations
 #[derive(Debug, Clone, Queryable, Selectable, Insertable, AsChangeset)]
 #[diesel(table_name = runways)]
@@ -510,9 +493,8 @@ impl RunwaysRepository {
         Ok(result.into_iter().map(Runway::from).collect())
     }
 
-    /// Find nearest runway endpoints to a given point using coordinate-based distance calculation
+    /// Find nearest runway endpoints to a given point using PostGIS spatial functions
     /// Returns runway endpoints within the specified distance (in meters) ordered by distance
-    /// Note: This is a simplified version that doesn't use PostGIS geography types
     pub async fn find_nearest_runway_endpoints(
         &self,
         latitude: f64,
@@ -520,69 +502,147 @@ impl RunwaysRepository {
         max_distance_meters: f64,
         limit: i64,
     ) -> Result<Vec<(Runway, f64, String)>> {
-        use crate::schema::runways::dsl::*;
-
         let pool = self.pool.clone();
+
+        #[derive(Debug, QueryableByName)]
+        struct RunwayEndpointResult {
+            #[diesel(sql_type = diesel::sql_types::Integer)]
+            id: i32,
+            #[diesel(sql_type = diesel::sql_types::Integer)]
+            airport_ref: i32,
+            #[diesel(sql_type = diesel::sql_types::Text)]
+            airport_ident: String,
+            #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Integer>)]
+            length_ft: Option<i32>,
+            #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Integer>)]
+            width_ft: Option<i32>,
+            #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+            surface: Option<String>,
+            #[diesel(sql_type = diesel::sql_types::Bool)]
+            lighted: bool,
+            #[diesel(sql_type = diesel::sql_types::Bool)]
+            closed: bool,
+            #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+            le_ident: Option<String>,
+            #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Numeric>)]
+            le_latitude_deg: Option<BigDecimal>,
+            #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Numeric>)]
+            le_longitude_deg: Option<BigDecimal>,
+            #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Integer>)]
+            le_elevation_ft: Option<i32>,
+            #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Numeric>)]
+            le_heading_degt: Option<BigDecimal>,
+            #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Integer>)]
+            le_displaced_threshold_ft: Option<i32>,
+            #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+            he_ident: Option<String>,
+            #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Numeric>)]
+            he_latitude_deg: Option<BigDecimal>,
+            #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Numeric>)]
+            he_longitude_deg: Option<BigDecimal>,
+            #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Integer>)]
+            he_elevation_ft: Option<i32>,
+            #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Numeric>)]
+            he_heading_degt: Option<BigDecimal>,
+            #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Integer>)]
+            he_displaced_threshold_ft: Option<i32>,
+            #[diesel(sql_type = diesel::sql_types::Double)]
+            distance_meters: f64,
+            #[diesel(sql_type = diesel::sql_types::Text)]
+            endpoint_type: String,
+        }
+
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            // Get runways that have coordinates for either endpoint
-            let runway_models: Vec<RunwayModel> = runways
-                .filter(
-                    (le_latitude_deg
-                        .is_not_null()
-                        .and(le_longitude_deg.is_not_null()))
-                    .or(he_latitude_deg
-                        .is_not_null()
-                        .and(he_longitude_deg.is_not_null())),
+            // Use raw SQL with PostGIS to find nearest runway endpoints
+            // UNION two queries: one for low end, one for high end
+            let sql = r#"
+                (
+                    SELECT id, airport_ref, airport_ident, length_ft, width_ft, surface,
+                           lighted, closed, le_ident, le_latitude_deg, le_longitude_deg,
+                           le_elevation_ft, le_heading_degt, le_displaced_threshold_ft,
+                           he_ident, he_latitude_deg, he_longitude_deg, he_elevation_ft,
+                           he_heading_degt, he_displaced_threshold_ft,
+                           ST_Distance(
+                               ST_SetSRID(ST_MakePoint(le_longitude_deg::float8, le_latitude_deg::float8), 4326)::geography,
+                               ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography
+                           ) as distance_meters,
+                           'low_end' as endpoint_type
+                    FROM runways
+                    WHERE le_latitude_deg IS NOT NULL
+                      AND le_longitude_deg IS NOT NULL
+                      AND ST_DWithin(
+                          ST_SetSRID(ST_MakePoint(le_longitude_deg::float8, le_latitude_deg::float8), 4326)::geography,
+                          ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography,
+                          $3
+                      )
                 )
-                .order(id.asc())
-                .limit(limit)
-                .select(RunwayModel::as_select())
-                .load::<RunwayModel>(&mut conn)?;
+                UNION ALL
+                (
+                    SELECT id, airport_ref, airport_ident, length_ft, width_ft, surface,
+                           lighted, closed, le_ident, le_latitude_deg, le_longitude_deg,
+                           le_elevation_ft, le_heading_degt, le_displaced_threshold_ft,
+                           he_ident, he_latitude_deg, he_longitude_deg, he_elevation_ft,
+                           he_heading_degt, he_displaced_threshold_ft,
+                           ST_Distance(
+                               ST_SetSRID(ST_MakePoint(he_longitude_deg::float8, he_latitude_deg::float8), 4326)::geography,
+                               ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography
+                           ) as distance_meters,
+                           'high_end' as endpoint_type
+                    FROM runways
+                    WHERE he_latitude_deg IS NOT NULL
+                      AND he_longitude_deg IS NOT NULL
+                      AND ST_DWithin(
+                          ST_SetSRID(ST_MakePoint(he_longitude_deg::float8, he_latitude_deg::float8), 4326)::geography,
+                          ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography,
+                          $3
+                      )
+                )
+                ORDER BY distance_meters
+                LIMIT $4
+            "#;
 
-            Ok::<Vec<RunwayModel>, anyhow::Error>(runway_models)
+            let results: Vec<RunwayEndpointResult> = diesel::sql_query(sql)
+                .bind::<diesel::sql_types::Double, _>(latitude)
+                .bind::<diesel::sql_types::Double, _>(longitude)
+                .bind::<diesel::sql_types::Double, _>(max_distance_meters)
+                .bind::<diesel::sql_types::BigInt, _>(limit)
+                .load(&mut conn)?;
+
+            Ok::<Vec<RunwayEndpointResult>, anyhow::Error>(results)
         })
         .await??;
 
-        let mut runways_with_distance = Vec::new();
-        for runway_model in result {
-            let runway = Runway::from(runway_model);
-
-            // Calculate approximate distance using Haversine formula for both endpoints
-            let mut min_distance = f64::MAX;
-            let mut endpoint_type = String::new();
-
-            // Check low end coordinates
-            if let (Some(le_lat), Some(le_lon)) = (runway.le_latitude_deg, runway.le_longitude_deg)
-            {
-                let distance = haversine_distance(latitude, longitude, le_lat, le_lon);
-                if distance < min_distance {
-                    min_distance = distance;
-                    endpoint_type = "low_end".to_string();
-                }
-            }
-
-            // Check high end coordinates
-            if let (Some(he_lat), Some(he_lon)) = (runway.he_latitude_deg, runway.he_longitude_deg)
-            {
-                let distance = haversine_distance(latitude, longitude, he_lat, he_lon);
-                if distance < min_distance {
-                    min_distance = distance;
-                    endpoint_type = "high_end".to_string();
-                }
-            }
-
-            // Only include if within max distance
-            if min_distance <= max_distance_meters {
-                runways_with_distance.push((runway, min_distance, endpoint_type));
-            }
-        }
-
-        // Sort by distance and limit results
-        runways_with_distance
-            .sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
-        runways_with_distance.truncate(limit as usize);
+        // Convert results to (Runway, distance, endpoint_type) tuples
+        let runways_with_distance = result
+            .into_iter()
+            .map(|r| {
+                let runway = Runway {
+                    id: r.id,
+                    airport_ref: r.airport_ref,
+                    airport_ident: r.airport_ident,
+                    length_ft: r.length_ft,
+                    width_ft: r.width_ft,
+                    surface: r.surface,
+                    lighted: r.lighted,
+                    closed: r.closed,
+                    le_ident: r.le_ident,
+                    le_latitude_deg: bigdecimal_to_f64(r.le_latitude_deg),
+                    le_longitude_deg: bigdecimal_to_f64(r.le_longitude_deg),
+                    le_elevation_ft: r.le_elevation_ft,
+                    le_heading_degt: bigdecimal_to_f64(r.le_heading_degt),
+                    le_displaced_threshold_ft: r.le_displaced_threshold_ft,
+                    he_ident: r.he_ident,
+                    he_latitude_deg: bigdecimal_to_f64(r.he_latitude_deg),
+                    he_longitude_deg: bigdecimal_to_f64(r.he_longitude_deg),
+                    he_elevation_ft: r.he_elevation_ft,
+                    he_heading_degt: bigdecimal_to_f64(r.he_heading_degt),
+                    he_displaced_threshold_ft: r.he_displaced_threshold_ft,
+                };
+                (runway, r.distance_meters, r.endpoint_type)
+            })
+            .collect();
 
         Ok(runways_with_distance)
     }
