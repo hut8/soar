@@ -294,9 +294,26 @@ impl FlightTracker {
         }
     }
 
+    /// Convert heading in degrees to runway identifier
+    /// e.g., 230° -> "23", 47° -> "05", 354° -> "35"
+    fn heading_to_runway_identifier(heading: f64) -> String {
+        // Round to nearest 10 degrees and divide by 10
+        let runway_number = ((heading / 10.0).round() as i32) % 36;
+        // Handle 360° -> 36 -> 0
+        let runway_number = if runway_number == 0 {
+            36
+        } else {
+            runway_number
+        };
+        // Format with leading zero
+        format!("{:02}", runway_number)
+    }
+
     /// Determine runway identifier based on aircraft course during takeoff/landing
+    /// First tries to match against nearby runways with coordinates from the database.
+    /// If no runways found or no good match, infers runway from aircraft heading.
     /// Loads fixes from 20 seconds before to 20 seconds after the event time
-    /// Returns the runway identifier (e.g., "14" or "32") that best matches the aircraft's course
+    /// Returns the runway identifier (e.g., "14" or "32")
     async fn determine_runway_identifier(
         &self,
         device_id: &Uuid,
@@ -304,38 +321,6 @@ impl FlightTracker {
         latitude: f64,
         longitude: f64,
     ) -> Option<String> {
-        // Find nearby runways (within 2km)
-        let nearby_runways = match self
-            .runways_repo
-            .find_nearest_runway_endpoints(latitude, longitude, 2000.0, 10)
-            .await
-        {
-            Ok(runways) if !runways.is_empty() => {
-                debug!(
-                    "Found {} nearby runway endpoints for device {} at ({}, {})",
-                    runways.len(),
-                    device_id,
-                    latitude,
-                    longitude
-                );
-                runways
-            }
-            Ok(_) => {
-                debug!(
-                    "No nearby runways found for device {} at ({}, {})",
-                    device_id, latitude, longitude
-                );
-                return None;
-            }
-            Err(e) => {
-                warn!(
-                    "Error finding nearby runways for device {}: {}",
-                    device_id, e
-                );
-                return None;
-            }
-        };
-
         // Get fixes from 20 seconds before to 20 seconds after the event
         let start_time = event_time - chrono::Duration::seconds(20);
         let end_time = event_time + chrono::Duration::seconds(20);
@@ -384,83 +369,127 @@ impl FlightTracker {
 
         let avg_course = courses.iter().sum::<f32>() as f64 / courses.len() as f64;
         debug!(
-            "Calculated average course {} from {} fixes for device {}",
+            "Calculated average course {:.1}° from {} fixes for device {}",
             avg_course,
             courses.len(),
             device_id
         );
 
-        // Find the runway end whose heading is closest to the aircraft's course
-        let mut best_match: Option<(String, f64)> = None;
-
-        for (runway, _, endpoint_type) in nearby_runways {
-            // Determine which end to check based on which is closer
-            let (ident, heading) = match endpoint_type.as_str() {
-                "low_end" => {
-                    // Aircraft is near low end, check both ends to see which direction they're traveling
-                    if let (Some(le_heading), Some(he_heading)) =
-                        (runway.le_heading_degt, runway.he_heading_degt)
-                    {
-                        // Calculate angular difference for both directions
-                        let le_diff = angular_difference(avg_course, le_heading);
-                        let he_diff = angular_difference(avg_course, he_heading);
-
-                        if le_diff < he_diff {
-                            (runway.le_ident.clone(), le_heading)
-                        } else {
-                            (runway.he_ident.clone(), he_heading)
-                        }
-                    } else {
-                        continue;
-                    }
-                }
-                "high_end" => {
-                    // Aircraft is near high end, check both ends to see which direction they're traveling
-                    if let (Some(le_heading), Some(he_heading)) =
-                        (runway.le_heading_degt, runway.he_heading_degt)
-                    {
-                        let le_diff = angular_difference(avg_course, le_heading);
-                        let he_diff = angular_difference(avg_course, he_heading);
-
-                        if he_diff < le_diff {
-                            (runway.he_ident.clone(), he_heading)
-                        } else {
-                            (runway.le_ident.clone(), le_heading)
-                        }
-                    } else {
-                        continue;
-                    }
-                }
-                _ => continue,
-            };
-
-            if let Some(ident_str) = ident {
-                let heading_diff = angular_difference(avg_course, heading);
-
-                // Update best match if this is closer (or first match)
-                match best_match {
-                    None => best_match = Some((ident_str, heading_diff)),
-                    Some((_, current_diff)) if heading_diff < current_diff => {
-                        best_match = Some((ident_str, heading_diff));
-                    }
-                    _ => {}
-                }
-            }
-        }
-
-        match best_match {
-            Some((ident, diff)) => {
+        // Try to find nearby runways (within 2km)
+        let nearby_runways = match self
+            .runways_repo
+            .find_nearest_runway_endpoints(latitude, longitude, 2000.0, 10)
+            .await
+        {
+            Ok(runways) if !runways.is_empty() => {
                 debug!(
-                    "Determined runway {} for device {} (heading diff: {:.1}°)",
-                    ident, device_id, diff
+                    "Found {} nearby runway endpoints for device {} at ({}, {})",
+                    runways.len(),
+                    device_id,
+                    latitude,
+                    longitude
                 );
-                Some(ident)
+                Some(runways)
             }
-            None => {
-                debug!("No suitable runway match found for device {}", device_id);
+            Ok(_) => {
+                debug!(
+                    "No nearby runways found for device {} at ({}, {}), will infer from heading",
+                    device_id, latitude, longitude
+                );
                 None
             }
+            Err(e) => {
+                warn!(
+                    "Error finding nearby runways for device {}: {}, will infer from heading",
+                    device_id, e
+                );
+                None
+            }
+        };
+
+        // If we have nearby runways, try to match against them
+        if let Some(runways) = nearby_runways {
+            let mut best_match: Option<(String, f64)> = None;
+
+            for (runway, _, endpoint_type) in runways {
+                // Determine which end to check based on which is closer
+                let (ident, heading) = match endpoint_type.as_str() {
+                    "low_end" => {
+                        // Aircraft is near low end, check both ends to see which direction they're traveling
+                        if let (Some(le_heading), Some(he_heading)) =
+                            (runway.le_heading_degt, runway.he_heading_degt)
+                        {
+                            // Calculate angular difference for both directions
+                            let le_diff = angular_difference(avg_course, le_heading);
+                            let he_diff = angular_difference(avg_course, he_heading);
+
+                            if le_diff < he_diff {
+                                (runway.le_ident.clone(), le_heading)
+                            } else {
+                                (runway.he_ident.clone(), he_heading)
+                            }
+                        } else {
+                            continue;
+                        }
+                    }
+                    "high_end" => {
+                        // Aircraft is near high end, check both ends to see which direction they're traveling
+                        if let (Some(le_heading), Some(he_heading)) =
+                            (runway.le_heading_degt, runway.he_heading_degt)
+                        {
+                            let le_diff = angular_difference(avg_course, le_heading);
+                            let he_diff = angular_difference(avg_course, he_heading);
+
+                            if he_diff < le_diff {
+                                (runway.he_ident.clone(), he_heading)
+                            } else {
+                                (runway.le_ident.clone(), le_heading)
+                            }
+                        } else {
+                            continue;
+                        }
+                    }
+                    _ => continue,
+                };
+
+                if let Some(ident_str) = ident {
+                    let heading_diff = angular_difference(avg_course, heading);
+
+                    // Update best match if this is closer (or first match)
+                    match best_match {
+                        None => best_match = Some((ident_str, heading_diff)),
+                        Some((_, current_diff)) if heading_diff < current_diff => {
+                            best_match = Some((ident_str, heading_diff));
+                        }
+                        _ => {}
+                    }
+                }
+            }
+
+            // If we found a good match (within 30 degrees), use it
+            if let Some((ident, diff)) = best_match {
+                if diff < 30.0 {
+                    debug!(
+                        "Matched runway {} from database for device {} (heading diff: {:.1}°)",
+                        ident, device_id, diff
+                    );
+                    return Some(ident);
+                } else {
+                    debug!(
+                        "Best runway match {} has large heading diff ({:.1}°), will infer from heading instead",
+                        ident, diff
+                    );
+                }
+            }
         }
+
+        // Fallback: Infer runway from heading
+        let inferred_runway = Self::heading_to_runway_identifier(avg_course);
+        debug!(
+            "Inferred runway {} from heading {:.1}° for device {}",
+            inferred_runway, avg_course, device_id
+        );
+        Some(inferred_runway)
     }
 
     /// Create a new flight for aircraft already airborne (no takeoff data)
@@ -635,8 +664,8 @@ impl FlightTracker {
 
             if is_spurious {
                 warn!(
-                    "Detected spurious flight {}: duration={}s, altitude_range={:?}ft. Deleting flight.",
-                    flight_id, duration_seconds, altitude_range
+                    "Detected spurious flight {}: duration={}s, altitude_range={:?}ft. Deleting flight. Fix was {:?}",
+                    flight_id, duration_seconds, altitude_range, fix
                 );
 
                 // Clear flight_id from all associated fixes

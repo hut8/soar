@@ -815,7 +815,7 @@ impl PacketHandler for PacketRouter {
                 }
             }
             AprsData::Status(_) => {
-                debug!(
+                trace!(
                     "Received status packet from {} (source type: {:?})",
                     packet.from,
                     packet.position_source_type()
