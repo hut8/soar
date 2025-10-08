@@ -336,59 +336,63 @@
 							Aircraft Information
 						</h3>
 
-						<div class="space-y-3">
-							<div class="grid grid-cols-2 gap-4">
-								<div>
-									<dt class="text-sm font-medium text-gray-600">Registration</dt>
-									<dd class="font-mono text-sm">
-										{selectedDevice.registration || 'Unknown'}
-									</dd>
+						<div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+							<div class="space-y-3">
+								<div class="grid grid-cols-2 gap-4">
+									<div>
+										<dt class="text-sm font-medium text-gray-600">Registration</dt>
+										<dd class="font-mono text-sm">
+											{selectedDevice.registration || 'Unknown'}
+										</dd>
+									</div>
+									<div>
+										<dt class="text-sm font-medium text-gray-600">Address</dt>
+										<dd class="font-mono text-sm">
+											{formatDeviceAddress(selectedDevice.address_type, selectedDevice.address)}
+										</dd>
+									</div>
 								</div>
-								<div>
-									<dt class="text-sm font-medium text-gray-600">Address</dt>
-									<dd class="font-mono text-sm">
-										{formatDeviceAddress(selectedDevice.address_type, selectedDevice.address)}
-									</dd>
-								</div>
-							</div>
 
-							<div class="grid grid-cols-2 gap-4">
-								<div>
-									<dt class="text-sm font-medium text-gray-600">Aircraft Model</dt>
-									<dd class="text-sm">
-										{selectedDevice.aircraft_model || 'Unknown'}
-									</dd>
+								<div class="grid grid-cols-2 gap-4">
+									<div>
+										<dt class="text-sm font-medium text-gray-600">Aircraft Model</dt>
+										<dd class="text-sm">
+											{selectedDevice.aircraft_model || 'Unknown'}
+										</dd>
+									</div>
+									<div>
+										<dt class="text-sm font-medium text-gray-600">Competition Number</dt>
+										<dd class="text-sm">
+											{selectedDevice.cn || 'None'}
+										</dd>
+									</div>
 								</div>
-								<div>
-									<dt class="text-sm font-medium text-gray-600">Competition Number</dt>
-									<dd class="text-sm">
-										{selectedDevice.cn || 'None'}
-									</dd>
-								</div>
-							</div>
 
-							<div class="grid grid-cols-2 gap-4">
-								<div>
-									<dt class="text-sm font-medium text-gray-600">Tracked</dt>
-									<dd class="text-sm">
-										<span
-											class="badge variant-filled-{selectedDevice.tracked ? 'success' : 'warning'}"
-										>
-											{selectedDevice.tracked ? 'Yes' : 'No'}
-										</span>
-									</dd>
-								</div>
-								<div>
-									<dt class="text-sm font-medium text-gray-600">Identified</dt>
-									<dd class="text-sm">
-										<span
-											class="badge variant-filled-{selectedDevice.identified
-												? 'success'
-												: 'warning'}"
-										>
-											{selectedDevice.identified ? 'Yes' : 'No'}
-										</span>
-									</dd>
+								<div class="grid grid-cols-2 gap-4">
+									<div>
+										<dt class="text-sm font-medium text-gray-600">Tracked</dt>
+										<dd class="text-sm">
+											<span
+												class="badge variant-filled-{selectedDevice.tracked
+													? 'success'
+													: 'warning'}"
+											>
+												{selectedDevice.tracked ? 'Yes' : 'No'}
+											</span>
+										</dd>
+									</div>
+									<div>
+										<dt class="text-sm font-medium text-gray-600">Identified</dt>
+										<dd class="text-sm">
+											<span
+												class="badge variant-filled-{selectedDevice.identified
+													? 'success'
+													: 'warning'}"
+											>
+												{selectedDevice.identified ? 'Yes' : 'No'}
+											</span>
+										</dd>
+									</div>
 								</div>
 							</div>
 						</div>
@@ -549,47 +553,61 @@
 									</div>
 								</dl>
 							</div>
-
-							<!-- Recent Fixes List -->
-							<div class="max-h-64 overflow-y-auto rounded-lg border border-gray-200">
-								<table class="w-full text-sm">
-									<thead class="border-b border-gray-200 bg-gray-50">
-										<tr>
-											<th class="px-3 py-2 text-left font-medium text-gray-600">Time</th>
-											<th class="px-3 py-2 text-left font-medium text-gray-600">Altitude</th>
-											<th class="px-3 py-2 text-left font-medium text-gray-600">Speed</th>
-											<th class="px-3 py-2 text-left font-medium text-gray-600">Track</th>
-										</tr>
-									</thead>
-									<tbody>
-										{#each recentFixes.slice(0, 20) as fix (fix.id)}
-											<tr class="border-b border-gray-100 hover:bg-gray-50">
-												<td class="px-3 py-2">
-													{formatTimestamp(fix.timestamp).relative}
-												</td>
-												<td class="px-3 py-2">
-													{formatAltitude(fix.altitude_feet)}
-												</td>
-												<td class="px-3 py-2">
-													{formatSpeed(fix.ground_speed_knots)}
-												</td>
-												<td class="px-3 py-2">
-													{formatTrack(fix.track_degrees)}
-												</td>
-											</tr>
-										{/each}
-									</tbody>
-								</table>
-							</div>
-
-							{#if recentFixes.length > 20}
-								<p class="text-center text-xs text-gray-500">
-									Showing latest 20 of {recentFixes.length} fixes
-								</p>
-							{/if}
 						{/if}
 					</div>
 				</div>
+
+				<!-- Recent Fixes List - Full Width -->
+				{#if recentFixes.length > 0}
+					<div class="mt-6 space-y-4">
+						<h3 class="flex items-center gap-2 text-lg font-semibold">
+							<Clock size={20} />
+							Recent Fixes
+							<span class="text-sm font-normal text-gray-600"> (Last 24 hours) </span>
+						</h3>
+
+						<div class="max-h-64 overflow-y-auto rounded-lg border border-gray-200">
+							<table class="w-full text-sm">
+								<thead class="border-b border-gray-200 bg-gray-50">
+									<tr>
+										<th class="px-3 py-2 text-left font-medium text-gray-600">Time</th>
+										<th class="px-3 py-2 text-left font-medium text-gray-600">Altitude MSL</th>
+										<th class="px-3 py-2 text-left font-medium text-gray-600">Altitude AGL</th>
+										<th class="px-3 py-2 text-left font-medium text-gray-600">Speed</th>
+										<th class="px-3 py-2 text-left font-medium text-gray-600">Track</th>
+									</tr>
+								</thead>
+								<tbody>
+									{#each recentFixes.slice(0, 20) as fix (fix.id)}
+										<tr class="border-b border-gray-100 hover:bg-gray-50">
+											<td class="px-3 py-2">
+												{formatTimestamp(fix.timestamp).relative}
+											</td>
+											<td class="px-3 py-2">
+												{formatAltitude(fix.altitude_feet)}
+											</td>
+											<td class="px-3 py-2">
+												{formatAltitude(fix.altitude_agl_feet)}
+											</td>
+											<td class="px-3 py-2">
+												{formatSpeed(fix.ground_speed_knots)}
+											</td>
+											<td class="px-3 py-2">
+												{formatTrack(fix.track_degrees)}
+											</td>
+										</tr>
+									{/each}
+								</tbody>
+							</table>
+						</div>
+
+						{#if recentFixes.length > 20}
+							<p class="text-center text-xs text-gray-500">
+								Showing latest 20 of {recentFixes.length} fixes
+							</p>
+						{/if}
+					</div>
+				{/if}
 			</div>
 		</div>
 	</div>
