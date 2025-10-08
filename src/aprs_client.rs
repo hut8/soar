@@ -1069,7 +1069,7 @@ impl ReceiverStatusProcessor {
         let source_type = packet.position_source_type();
         let callsign = packet.from.to_string();
 
-        debug!(
+        trace!(
             "ReceiverStatusProcessor: Processing status packet from {} (source_type: {:?})",
             callsign, source_type
         );
@@ -1081,8 +1081,6 @@ impl ReceiverStatusProcessor {
             let received_at = chrono::Utc::now();
             let raw_data = packet.raw.clone().unwrap_or_default();
 
-            debug!("Status comment from {}: {:?}", callsign, status_comment);
-
             // Look up receiver ID asynchronously
             tokio::spawn({
                 let receiver_repo = self.receiver_repo.clone();
@@ -1093,11 +1091,6 @@ impl ReceiverStatusProcessor {
                     // Look up receiver by callsign
                     match receiver_repo.get_receiver_by_callsign(&callsign).await {
                         Ok(Some(receiver)) => {
-                            debug!(
-                                "Found receiver {} (id: {}) for status update",
-                                callsign, receiver.id
-                            );
-
                             // Create NewReceiverStatus from status comment
                             let new_status = NewReceiverStatus::from_status_comment(
                                 receiver.id,
@@ -1110,7 +1103,6 @@ impl ReceiverStatusProcessor {
                             // Insert receiver status
                             match status_repo.insert(&new_status).await {
                                 Ok(_) => {
-                                    debug!("Inserted receiver status for {}", callsign);
                                     // Track receiver status update metric
                                     counter!("receiver_status_updates_total").increment(1);
 
@@ -1158,10 +1150,6 @@ impl ReceiverStatusProcessor {
                                     // Insert receiver status
                                     match status_repo.insert(&new_status).await {
                                         Ok(_) => {
-                                            debug!(
-                                                "Inserted receiver status for auto-discovered receiver {}",
-                                                callsign
-                                            );
                                             // Track receiver status update metric
                                             counter!("receiver_status_updates_total").increment(1);
 
