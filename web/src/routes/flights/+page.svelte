@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Plane, Calendar, MapPin, Clock, ExternalLink } from '@lucide/svelte';
+	import { Plane, MapPin, Clock, ExternalLink } from '@lucide/svelte';
 	import { serverCall } from '$lib/api/server';
 	import { onMount } from 'svelte';
 	import dayjs from 'dayjs';
@@ -36,16 +36,6 @@
 	function formatRelativeTime(dateString: string | null): string {
 		if (!dateString) return '—';
 		return dayjs(dateString).fromNow();
-	}
-
-	function formatDate(dateString: string | null): string {
-		if (!dateString) return '—';
-		const date = new Date(dateString);
-		return date.toLocaleDateString('en-US', {
-			year: 'numeric',
-			month: 'short',
-			day: 'numeric'
-		});
 	}
 
 	function calculateFlightDuration(takeoff: string | null, landing: string | null): string {
@@ -137,9 +127,7 @@
 							<th>Takeoff</th>
 							<th>Landing</th>
 							<th>Duration</th>
-							<th>Route</th>
 							<th>Tow</th>
-							<th>Date</th>
 							<th>Actions</th>
 						</tr>
 					</thead>
@@ -188,19 +176,6 @@
 									{calculateFlightDuration(flight.takeoff_time, flight.landing_time)}
 								</td>
 								<td>
-									{#if flight.departure_airport && flight.arrival_airport}
-										{#if flight.departure_airport === flight.arrival_airport}
-											<span class="variant-soft-primary badge text-xs">Local</span>
-										{:else}
-											<span class="variant-soft-secondary badge text-xs">
-												{flight.departure_airport} → {flight.arrival_airport}
-											</span>
-										{/if}
-									{:else}
-										<span class="text-surface-500">—</span>
-									{/if}
-								</td>
-								<td>
 									{#if flight.tow_aircraft_id}
 										<div class="flex flex-col gap-1">
 											<span class="text-xs">{flight.tow_aircraft_id}</span>
@@ -213,12 +188,6 @@
 									{:else}
 										<span class="text-surface-500">—</span>
 									{/if}
-								</td>
-								<td>
-									<div class="text-surface-600-300-token flex items-center gap-1 text-sm">
-										<Calendar class="h-3 w-3" />
-										{formatDate(flight.landing_time)}
-									</div>
 								</td>
 								<td>
 									<a

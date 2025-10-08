@@ -926,14 +926,25 @@ impl FlightTracker {
                 None
             };
 
-            // Check if flight is spurious (duration < 60 seconds OR altitude range < 50 feet)
-            let is_spurious =
-                duration_seconds < 60 || altitude_range.map(|range| range < 50).unwrap_or(false);
+            // Check max AGL altitude if elevation data is available
+            let max_agl_altitude = if !flight_fixes.is_empty() {
+                flight_fixes.iter().filter_map(|f| f.altitude_agl).max()
+            } else {
+                None
+            };
+
+            // Check if flight is spurious:
+            // - Duration < 60 seconds OR
+            // - Altitude range < 50 feet OR
+            // - If elevation data is available, max AGL < 100 feet
+            let is_spurious = duration_seconds < 60
+                || altitude_range.map(|range| range < 50).unwrap_or(false)
+                || max_agl_altitude.map(|agl| agl < 100).unwrap_or(false);
 
             if is_spurious {
                 warn!(
-                    "Detected spurious flight {}: duration={}s, altitude_range={:?}ft. Deleting flight. Fix was {:?}",
-                    flight_id, duration_seconds, altitude_range, fix
+                    "Detected spurious flight {}: duration={}s, altitude_range={:?}ft, max_agl={:?}ft. Deleting flight. Fix was {:?}",
+                    flight_id, duration_seconds, altitude_range, max_agl_altitude, fix
                 );
 
                 // Clear flight_id from all associated fixes
