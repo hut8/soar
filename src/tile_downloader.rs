@@ -61,6 +61,15 @@ impl TileDownloader {
         }
     }
 
+    /// Check if a file is a negative cache marker (0-byte file indicating tile doesn't exist)
+    fn is_negative_cache_marker(path: &Path) -> bool {
+        if let Ok(metadata) = fs::metadata(path) {
+            metadata.len() == 0
+        } else {
+            false
+        }
+    }
+
     /// Get the full path where a tile should be cached
     /// Checks both shared cache (/var/soar/elevation) and instance-specific cache
     /// Returns the first existing path, or the instance-specific path for downloads
@@ -91,6 +100,14 @@ impl TileDownloader {
         lon: f64,
     ) -> Result<PathBuf> {
         let path = self.tile_path(tile_name, resolution);
+
+        // Check if this is a negative cache marker (tile doesn't exist on server)
+        if Self::is_negative_cache_marker(&path) {
+            bail!(
+                "Tile {} is known to be unavailable (negative cache)",
+                tile_name
+            );
+        }
 
         // Fast path: tile already cached
         if path.exists() {
@@ -143,6 +160,14 @@ impl TileDownloader {
             // Wait for the downloader to finish
             notify.notified().await;
 
+            // Check if downloader created a negative cache marker
+            if Self::is_negative_cache_marker(&path) {
+                bail!(
+                    "Tile {} is known to be unavailable (negative cache)",
+                    tile_name
+                );
+            }
+
             // Double-check that the file now exists
             if path.exists() {
                 Ok(path)
@@ -179,13 +204,33 @@ impl TileDownloader {
     }
 
     /// Download a tile from the given URL to the specified path
+    /// On permanent errors (404, 410), creates an empty file as a negative cache marker
     async fn download_tile(&self, path: &Path, url: &str) -> Result<()> {
         info!("Downloading elevation tile from {url}");
 
-        let bytes = reqwest::get(url)
+        let response = reqwest::get(url)
             .await
-            .and_then(|r| r.error_for_status())
-            .with_context(|| format!("GET {url}"))?
+            .with_context(|| format!("GET {url}"))?;
+
+        let status = response.status();
+
+        // Check for permanent errors that should be negatively cached
+        if status == reqwest::StatusCode::NOT_FOUND || status == reqwest::StatusCode::GONE {
+            // Create empty file as negative cache marker
+            fs::write(path, [])
+                .with_context(|| format!("write negative cache marker {:?}", path))?;
+            bail!(
+                "Tile not available (HTTP {}), created negative cache marker",
+                status.as_u16()
+            );
+        }
+
+        // Check for other errors
+        let response = response
+            .error_for_status()
+            .with_context(|| format!("GET {url}"))?;
+
+        let bytes = response
             .bytes()
             .await
             .with_context(|| format!("read body {url}"))?;
