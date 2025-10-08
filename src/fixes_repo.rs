@@ -628,6 +628,8 @@ impl FixesRepository {
                     frequency_mhz: row.frequency_mhz,
                     pilot_name: row.pilot_name,
                     home_base_airport_ident: row.home_base_airport_ident,
+                    aircraft_type_ogn: None, // Not loaded in this query
+                    last_fix_at: None,       // Not loaded in this query
                 })
                 .collect();
 

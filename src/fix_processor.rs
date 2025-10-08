@@ -254,6 +254,23 @@ impl FixProcessor {
                         }
                     });
                 }
+
+                // Update device cached fields (aircraft_type_ogn and last_fix_at)
+                let device_repo = self.device_repo.clone();
+                let device_id = updated_fix.device_id;
+                let aircraft_type = updated_fix.aircraft_type_ogn;
+                let fix_timestamp = updated_fix.timestamp;
+                tokio::spawn(async move {
+                    if let Err(e) = device_repo
+                        .update_cached_fields(device_id, aircraft_type, fix_timestamp)
+                        .await
+                    {
+                        error!(
+                            "Failed to update cached fields for device {}: {}",
+                            device_id, e
+                        );
+                    }
+                });
             }
             Err(e) => {
                 error!(

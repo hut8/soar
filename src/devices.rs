@@ -10,6 +10,9 @@ use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use diesel_derive_enum::DbEnum;
 
+// Import AircraftType for the cached field
+use crate::ogn_aprs_aircraft::AircraftType;
+
 const DDB_URL_GLIDERNET: &str = "http://ddb.glidernet.org/download/?j=1";
 const DDB_URL_GLIDERNET_WORKERS: &str =
     "https://ddb-glidernet-download.davis-chappins.workers.dev/ddb.json";
@@ -145,6 +148,10 @@ pub struct Device {
     pub pilot_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub home_base_airport_ident: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub aircraft_type_ogn: Option<AircraftType>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_fix_at: Option<DateTime<Utc>>,
 }
 
 // Diesel database model for devices table
@@ -176,6 +183,8 @@ pub struct DeviceModel {
     pub frequency_mhz: Option<BigDecimal>,
     pub pilot_name: Option<String>,
     pub home_base_airport_ident: Option<String>,
+    pub aircraft_type_ogn: Option<AircraftType>,
+    pub last_fix_at: Option<DateTime<Utc>>,
 }
 
 // For inserting new devices (without timestamps which are set by DB)
@@ -193,6 +202,8 @@ pub struct NewDevice {
     pub frequency_mhz: Option<BigDecimal>,
     pub pilot_name: Option<String>,
     pub home_base_airport_ident: Option<String>,
+    pub aircraft_type_ogn: Option<AircraftType>,
+    pub last_fix_at: Option<DateTime<Utc>>,
 }
 
 impl From<Device> for NewDevice {
@@ -211,6 +222,8 @@ impl From<Device> for NewDevice {
                 .and_then(|f| f.to_string().parse().ok()),
             pilot_name: device.pilot_name,
             home_base_airport_ident: device.home_base_airport_ident,
+            aircraft_type_ogn: device.aircraft_type_ogn,
+            last_fix_at: device.last_fix_at,
         }
     }
 }
@@ -231,6 +244,8 @@ impl From<DeviceModel> for Device {
                 .and_then(|bd| bd.to_string().parse().ok()),
             pilot_name: model.pilot_name,
             home_base_airport_ident: model.home_base_airport_ident,
+            aircraft_type_ogn: model.aircraft_type_ogn,
+            last_fix_at: model.last_fix_at,
         }
     }
 }
@@ -590,6 +605,8 @@ impl DeviceFetcher {
                         frequency_mhz: None,
                         pilot_name: None,
                         home_base_airport_ident: None,
+                        aircraft_type_ogn: None,
+                        last_fix_at: None,
                     };
                     device_map.insert(
                         glidernet_device.address,
@@ -670,6 +687,8 @@ mod tests {
             frequency_mhz: None,
             pilot_name: None,
             home_base_airport_ident: None,
+            aircraft_type_ogn: None,
+            last_fix_at: None,
         };
 
         // Test that the device can be serialized/deserialized
@@ -943,6 +962,8 @@ mod tests {
             frequency_mhz: None,
             pilot_name: None,
             home_base_airport_ident: None,
+            aircraft_type_ogn: None,
+            last_fix_at: None,
         }
     }
 }

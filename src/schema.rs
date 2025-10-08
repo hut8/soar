@@ -218,6 +218,7 @@ diesel::table! {
 diesel::table! {
     use diesel::sql_types::*;
     use super::sql_types::AddressType;
+    use super::sql_types::AircraftTypeOgn;
 
     devices (id) {
         address -> Int4,
@@ -234,6 +235,8 @@ diesel::table! {
         frequency_mhz -> Nullable<Numeric>,
         pilot_name -> Nullable<Text>,
         home_base_airport_ident -> Nullable<Text>,
+        aircraft_type_ogn -> Nullable<AircraftTypeOgn>,
+        last_fix_at -> Nullable<Timestamptz>,
     }
 }
 

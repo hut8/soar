@@ -6,7 +6,9 @@ use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::devices::{AddressType, Device, DeviceModel, NewDevice};
+use crate::ogn_aprs_aircraft::AircraftType;
 use crate::schema::{aircraft_registrations, devices};
+use chrono::{DateTime, Utc};
 
 pub type PgPool = Pool<ConnectionManager<PgConnection>>;
 pub type PgPooledConnection = PooledConnection<ConnectionManager<PgConnection>>;
@@ -196,6 +198,32 @@ impl DeviceRepository {
             .into_iter()
             .map(|model| model.into())
             .collect())
+    }
+
+    /// Update cached fields (aircraft_type_ogn and last_fix_at) from a fix
+    pub async fn update_cached_fields(
+        &self,
+        device_id: Uuid,
+        aircraft_type: Option<AircraftType>,
+        fix_timestamp: DateTime<Utc>,
+    ) -> Result<()> {
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            diesel::update(devices::table.filter(devices::id.eq(device_id)))
+                .set((
+                    devices::aircraft_type_ogn.eq(aircraft_type),
+                    devices::last_fix_at.eq(fix_timestamp),
+                ))
+                .execute(&mut conn)?;
+
+            Ok::<(), anyhow::Error>(())
+        })
+        .await??;
+
+        Ok(())
     }
 }
 
