@@ -285,8 +285,8 @@ diesel::table! {
         is_active -> Bool,
         altitude_agl -> Nullable<Int4>,
         receiver_id -> Nullable<Uuid>,
-        satellites_used -> Nullable<Int2>,
-        satellites_visible -> Nullable<Int2>,
+        gnss_horizontal_resolution -> Nullable<Int2>,
+        gnss_vertical_resolution -> Nullable<Int2>,
     }
 }
 

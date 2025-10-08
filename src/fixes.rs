@@ -60,9 +60,9 @@ pub struct Fix {
     pub bit_errors_corrected: Option<i32>,
     pub freq_offset_khz: Option<f32>,
 
-    /// GPS satellite information
-    pub satellites_used: Option<i16>,
-    pub satellites_visible: Option<i16>,
+    /// GNSS resolution (units unknown)
+    pub gnss_horizontal_resolution: Option<i16>,
+    pub gnss_vertical_resolution: Option<i16>,
 
     /// Associations
     pub club_id: Option<Uuid>,
@@ -149,14 +149,14 @@ impl Fix {
                     aircraft_type_ogn = Some(AircraftType::from(id.aircraft_type));
                 }
 
-                // Parse GPS quality field (format: "AxB" where A=satellites_used, B=satellites_visible)
-                let (satellites_used, satellites_visible) =
+                // Parse GPS quality field (format: "AxB" where A=horizontal_resolution, B=vertical_resolution)
+                let (gnss_horizontal_resolution, gnss_vertical_resolution) =
                     if let Some(ref gps_quality) = pos_packet.comment.gps_quality {
                         // Parse "AxB" format
-                        if let Some((used_str, visible_str)) = gps_quality.split_once('x') {
-                            let used = used_str.parse::<i16>().ok();
-                            let visible = visible_str.parse::<i16>().ok();
-                            (used, visible)
+                        if let Some((horiz_str, vert_str)) = gps_quality.split_once('x') {
+                            let horiz = horiz_str.parse::<i16>().ok();
+                            let vert = vert_str.parse::<i16>().ok();
+                            (horiz, vert)
                         } else {
                             (None, None)
                         }
@@ -193,8 +193,8 @@ impl Fix {
                     snr_db,
                     bit_errors_corrected,
                     freq_offset_khz,
-                    satellites_used,
-                    satellites_visible,
+                    gnss_horizontal_resolution,
+                    gnss_vertical_resolution,
                     club_id: None,   // To be set by processors
                     flight_id: None, // Will be set by flight detection processor
                     unparsed_data: pos_packet.comment.unparsed.clone(),

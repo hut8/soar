@@ -149,26 +149,16 @@ impl FlightTracker {
                 // Calculate offset
                 let offset = reported_altitude_ft as f64 - elevation_ft;
 
-                // Check GPS quality before logging detailed information
-                let has_good_gps = fix.satellites_used.map(|sats| sats >= 4).unwrap_or(false);
+                info!(
+                    "Altitude offset calculation: indicated={} ft, known_elevation={:.1} ft, offset={:.0} ft at ({:.6}, {:.6})",
+                    reported_altitude_ft, elevation_ft, offset, lat, lon
+                );
 
-                if has_good_gps {
-                    info!(
-                        "Altitude offset calculation: indicated={} ft, known_elevation={:.1} ft, offset={:.0} ft at ({:.6}, {:.6})",
-                        reported_altitude_ft, elevation_ft, offset, lat, lon
-                    );
-
-                    // Log error if offset is too large (> 500 feet) and GPS quality is good
-                    if offset.abs() > 500.0 {
-                        error!(
-                            "Large altitude offset detected: {:.0} ft (indicated={} ft, known_elevation={:.1} ft) at ({:.6}, {:.6}). Fix: {:?}",
-                            offset, reported_altitude_ft, elevation_ft, lat, lon, fix
-                        );
-                    }
-                } else {
-                    debug!(
-                        "Skipping altitude offset logging - insufficient GPS quality ({} satellites)",
-                        fix.satellites_used.unwrap_or(0)
+                // Log error if offset is too large (> 500 feet)
+                if offset.abs() > 500.0 {
+                    error!(
+                        "Large altitude offset detected: {:.0} ft (indicated={} ft, known_elevation={:.1} ft) at ({:.6}, {:.6}). Fix: {:?}",
+                        offset, reported_altitude_ft, elevation_ft, lat, lon, fix
                     );
                 }
 
@@ -781,23 +771,6 @@ impl FlightTracker {
                         )
                     );
 
-                    // Check GPS quality before creating flight
-                    if let Some(sats_used) = fix.satellites_used
-                        && sats_used < 4
-                    {
-                        debug!(
-                            "Ignoring takeoff for aircraft {} - insufficient GPS quality ({} satellites used, need >= 4)",
-                            fix.device_id, sats_used
-                        );
-                        // Don't create a flight, just update position
-                        let mut trackers = self.aircraft_trackers.write().await;
-                        if let Some(tracker) = trackers.get_mut(&fix.device_id) {
-                            tracker.update_position(&fix);
-                            // Keep state as Idle since we're not creating a flight
-                        }
-                        return Ok(fix);
-                    }
-
                     // Update tracker state immediately to prevent duplicate flight creation
                     let mut trackers = self.aircraft_trackers.write().await;
                     if let Some(tracker) = trackers.get_mut(&fix.device_id) {
@@ -836,27 +809,6 @@ impl FlightTracker {
                             fix.address_type
                         )
                     );
-
-                    // Check GPS quality before completing flight
-                    if let Some(sats_used) = fix.satellites_used
-                        && sats_used < 4
-                    {
-                        warn!(
-                            "Ignoring landing for aircraft {} - insufficient GPS quality ({} satellites used, need >= 4)",
-                            fix.device_id, sats_used
-                        );
-                        // Don't complete the flight, just update position and keep flying
-                        let mut trackers = self.aircraft_trackers.write().await;
-                        if let Some(tracker) = trackers.get_mut(&fix.device_id) {
-                            tracker.update_position(&fix);
-                            // Keep state as Active since we're not completing the flight
-                        }
-                        // Keep the flight_id on the fix since it's still part of the flight
-                        if let Some(flight_id) = current_flight_id {
-                            fix.flight_id = Some(flight_id);
-                        }
-                        return Ok(fix);
-                    }
 
                     // Update tracker state FIRST to prevent race condition
                     let mut trackers = self.aircraft_trackers.write().await;
@@ -1158,8 +1110,8 @@ mod tests {
             snr_db: None,
             bit_errors_corrected: None,
             freq_offset_khz: None,
-            satellites_used: None,
-            satellites_visible: None,
+            gnss_horizontal_resolution: None,
+            gnss_vertical_resolution: None,
             club_id: None,
             unparsed_data: None,
             device_id: uuid::Uuid::new_v4(),
