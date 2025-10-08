@@ -31,6 +31,21 @@ export const load: PageLoad = async ({ params }) => {
 					created_at: string;
 					updated_at: string;
 				};
+				device?: {
+					id: string;
+					address: number;
+					address_type: string;
+					registration?: string;
+					aircraft_model?: string;
+					competition_number?: string;
+					tracked: boolean;
+					identified: boolean;
+					from_ddb: boolean;
+					aircraft_type_ogn?: string;
+					last_fix_at?: string;
+					created_at: string;
+					updated_at?: string;
+				};
 			}>(`/flights/${id}`),
 			serverCall<{
 				fixes: Array<{
@@ -57,6 +72,7 @@ export const load: PageLoad = async ({ params }) => {
 
 		return {
 			flight: flightResponse.flight,
+			device: flightResponse.device,
 			fixes: fixesResponse.fixes,
 			fixesCount: fixesResponse.count
 		};

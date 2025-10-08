@@ -321,7 +321,6 @@ impl FixesRepository {
         end_time: DateTime<Utc>,
         limit: Option<i64>,
     ) -> Result<Vec<Fix>> {
-        let limit = limit.unwrap_or(1000);
         let device_id_param = *device_id;
 
         let pool = self.pool.clone();
@@ -329,13 +328,18 @@ impl FixesRepository {
             use crate::schema::fixes::dsl::*;
             let mut conn = pool.get()?;
 
-            let results = fixes
+            let mut query = fixes
                 .filter(device_id.eq(device_id_param))
                 .filter(timestamp.between(start_time, end_time))
                 .order(timestamp.desc())
-                .limit(limit)
-                .select(Fix::as_select())
-                .load::<Fix>(&mut conn)?;
+                .into_boxed();
+
+            // Only apply limit if specified
+            if let Some(limit_value) = limit {
+                query = query.limit(limit_value);
+            }
+
+            let results = query.select(Fix::as_select()).load::<Fix>(&mut conn)?;
 
             Ok::<Vec<Fix>, anyhow::Error>(results)
         })

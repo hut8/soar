@@ -9,6 +9,8 @@ use uuid::Uuid;
 use crate::actions::json_error;
 use crate::actions::views::FlightView;
 use crate::airports_repo::AirportsRepository;
+use crate::device_repo::DeviceRepository;
+use crate::devices::Device;
 use crate::fixes::Fix;
 use crate::fixes_repo::FixesRepository;
 use crate::flights::Flight;
@@ -24,6 +26,7 @@ pub struct FlightsQueryParams {
 #[derive(Debug, Serialize)]
 pub struct FlightResponse {
     pub flight: FlightView,
+    pub device: Option<Device>,
 }
 
 #[derive(Debug, Serialize)]
@@ -39,6 +42,7 @@ pub async fn get_flight_by_id(
 ) -> impl IntoResponse {
     let flights_repo = FlightsRepository::new(state.pool.clone());
     let airports_repo = AirportsRepository::new(state.pool.clone());
+    let device_repo = DeviceRepository::new(state.pool.clone());
 
     match flights_repo.get_flight_by_id(id).await {
         Ok(Some(flight)) => {
@@ -65,10 +69,22 @@ pub async fn get_flight_by_id(
                 None
             };
 
+            // Look up device information
+            let device = if let Some(device_id) = flight.device_id {
+                device_repo
+                    .get_device_by_uuid(device_id)
+                    .await
+                    .ok()
+                    .flatten()
+            } else {
+                None
+            };
+
             let flight_view =
                 FlightView::from_flight(flight, departure_airport_ident, arrival_airport_ident);
             Json(FlightResponse {
                 flight: flight_view,
+                device,
             })
             .into_response()
         }

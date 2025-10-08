@@ -149,7 +149,7 @@ impl Fix {
                     aircraft_type_ogn = Some(AircraftType::from(id.aircraft_type));
                 }
 
-                // Parse GPS quality field (format: "AxB" where A=horizontal_resolution, B=vertical_resolution)
+                // Parse GPS quality field (format: "AxB" where A=horizontal_resolution, B=vertical_resolution, in meters)
                 let (gnss_horizontal_resolution, gnss_vertical_resolution) =
                     if let Some(ref gps_quality) = pos_packet.comment.gps_quality {
                         // Parse "AxB" format

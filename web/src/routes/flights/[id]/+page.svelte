@@ -401,6 +401,64 @@
 		</div>
 	</div>
 
+	<!-- Aircraft Information -->
+	{#if data.device}
+		<div class="card p-6">
+			<h2 class="mb-4 h2">Aircraft Information</h2>
+			<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+				<div>
+					<div class="text-surface-600-300-token text-sm">Registration</div>
+					<div class="font-mono text-sm font-semibold">
+						{data.device.registration || 'Unknown'}
+					</div>
+				</div>
+				<div>
+					<div class="text-surface-600-300-token text-sm">Address</div>
+					<div class="font-mono text-sm font-semibold">
+						{data.device.address_type.toUpperCase()}:{data.device.address
+							.toString(16)
+							.toUpperCase()
+							.padStart(6, '0')}
+					</div>
+				</div>
+				<div>
+					<div class="text-surface-600-300-token text-sm">Aircraft Model</div>
+					<div class="text-sm font-semibold">{data.device.aircraft_model || 'Unknown'}</div>
+				</div>
+				<div>
+					<div class="text-surface-600-300-token text-sm">Competition Number</div>
+					<div class="text-sm font-semibold">{data.device.competition_number || 'None'}</div>
+				</div>
+				<div>
+					<div class="text-surface-600-300-token text-sm">Aircraft Type</div>
+					<div class="text-sm font-semibold">
+						{#if data.device.aircraft_type_ogn}
+							{data.device.aircraft_type_ogn.replace(/_/g, ' ')}
+						{:else}
+							Unknown
+						{/if}
+					</div>
+				</div>
+				<div>
+					<div class="text-surface-600-300-token text-sm">Tracked</div>
+					<div class="text-sm">
+						<span class="chip preset-filled-{data.device.tracked ? 'success' : 'warning'}-500">
+							{data.device.tracked ? 'Yes' : 'No'}
+						</span>
+					</div>
+				</div>
+				<div>
+					<div class="text-surface-600-300-token text-sm">Identified</div>
+					<div class="text-sm">
+						<span class="chip preset-filled-{data.device.identified ? 'success' : 'warning'}-500">
+							{data.device.identified ? 'Yes' : 'No'}
+						</span>
+					</div>
+				</div>
+			</div>
+		</div>
+	{/if}
+
 	<!-- Map -->
 	{#if data.fixes.length > 0}
 		<div class="card p-6">
