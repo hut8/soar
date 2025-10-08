@@ -1824,14 +1824,16 @@
 		font-size: 12px;
 		font-weight: 700;
 		line-height: 1.2;
-		text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5);
+		color: #1f2937;
+		text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
 	}
 
 	:global(.aircraft-altitude) {
 		font-size: 10px;
 		font-weight: 600;
 		line-height: 1.1;
-		text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5);
+		color: #374151;
+		text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
 		margin-top: 1px;
 	}
 </style>
