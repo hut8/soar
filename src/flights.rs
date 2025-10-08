@@ -57,7 +57,20 @@ pub struct Flight {
     pub tow_aircraft_id: Option<String>,
 
     /// Tow release height in meters MSL (Mean Sea Level)
+    /// DEPRECATED: Use tow_release_altitude_msl_ft instead
     pub tow_release_height_msl: Option<i32>,
+
+    /// Device ID of the towplane that towed this glider (if this is a glider flight)
+    pub towed_by_device_id: Option<Uuid>,
+
+    /// Flight ID of the towplane flight that towed this glider (if this is a glider flight)
+    pub towed_by_flight_id: Option<Uuid>,
+
+    /// Tow release altitude in feet MSL (more precise than deprecated meters field)
+    pub tow_release_altitude_msl_ft: Option<i32>,
+
+    /// Timestamp when tow release occurred
+    pub tow_release_time: Option<DateTime<Utc>>,
 
     /// Club that owns the aircraft for this flight
     pub club_id: Option<Uuid>,
@@ -102,6 +115,10 @@ impl Flight {
             arrival_airport_id: None,
             tow_aircraft_id: None,
             tow_release_height_msl: None,
+            towed_by_device_id: None,
+            towed_by_flight_id: None,
+            tow_release_altitude_msl_ft: None,
+            tow_release_time: None,
             club_id: None,
             takeoff_altitude_offset_ft: None,
             landing_altitude_offset_ft: None,
@@ -128,6 +145,10 @@ impl Flight {
             arrival_airport_id: None,
             tow_aircraft_id: None,
             tow_release_height_msl: None,
+            towed_by_device_id: None,
+            towed_by_flight_id: None,
+            tow_release_altitude_msl_ft: None,
+            tow_release_time: None,
             club_id: fix.club_id,
             takeoff_altitude_offset_ft: None,
             landing_altitude_offset_ft: None,
@@ -456,6 +477,10 @@ pub struct FlightModel {
     pub maximum_displacement_meters: Option<f64>,
     pub departure_airport_id: Option<i32>,
     pub arrival_airport_id: Option<i32>,
+    pub towed_by_device_id: Option<Uuid>,
+    pub towed_by_flight_id: Option<Uuid>,
+    pub tow_release_altitude_msl_ft: Option<i32>,
+    pub tow_release_time: Option<DateTime<Utc>>,
 }
 
 /// Insert model for new flights
@@ -479,6 +504,10 @@ pub struct NewFlightModel {
     pub maximum_displacement_meters: Option<f64>,
     pub departure_airport_id: Option<i32>,
     pub arrival_airport_id: Option<i32>,
+    pub towed_by_device_id: Option<Uuid>,
+    pub towed_by_flight_id: Option<Uuid>,
+    pub tow_release_altitude_msl_ft: Option<i32>,
+    pub tow_release_time: Option<DateTime<Utc>>,
 }
 
 /// Conversion from Flight (API model) to FlightModel (database model)
@@ -504,6 +533,10 @@ impl From<Flight> for FlightModel {
             maximum_displacement_meters: flight.maximum_displacement_meters,
             departure_airport_id: flight.departure_airport_id,
             arrival_airport_id: flight.arrival_airport_id,
+            towed_by_device_id: flight.towed_by_device_id,
+            towed_by_flight_id: flight.towed_by_flight_id,
+            tow_release_altitude_msl_ft: flight.tow_release_altitude_msl_ft,
+            tow_release_time: flight.tow_release_time,
         }
     }
 }
@@ -529,6 +562,10 @@ impl From<Flight> for NewFlightModel {
             maximum_displacement_meters: flight.maximum_displacement_meters,
             departure_airport_id: flight.departure_airport_id,
             arrival_airport_id: flight.arrival_airport_id,
+            towed_by_device_id: flight.towed_by_device_id,
+            towed_by_flight_id: flight.towed_by_flight_id,
+            tow_release_altitude_msl_ft: flight.tow_release_altitude_msl_ft,
+            tow_release_time: flight.tow_release_time,
         }
     }
 }
@@ -554,6 +591,10 @@ impl From<FlightModel> for Flight {
             landing_runway_ident: model.landing_runway_ident,
             total_distance_meters: model.total_distance_meters,
             maximum_displacement_meters: model.maximum_displacement_meters,
+            towed_by_device_id: model.towed_by_device_id,
+            towed_by_flight_id: model.towed_by_flight_id,
+            tow_release_altitude_msl_ft: model.tow_release_altitude_msl_ft,
+            tow_release_time: model.tow_release_time,
             created_at: model.created_at,
             updated_at: model.updated_at,
         }

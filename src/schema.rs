@@ -316,6 +316,10 @@ diesel::table! {
         maximum_displacement_meters -> Nullable<Float8>,
         departure_airport_id -> Nullable<Int4>,
         arrival_airport_id -> Nullable<Int4>,
+        towed_by_device_id -> Nullable<Uuid>,
+        towed_by_flight_id -> Nullable<Uuid>,
+        tow_release_altitude_msl_ft -> Nullable<Int4>,
+        tow_release_time -> Nullable<Timestamptz>,
     }
 }
 
@@ -563,7 +567,6 @@ diesel::joinable!(fixes -> flights (flight_id));
 diesel::joinable!(fixes -> receivers (receiver_id));
 diesel::joinable!(flights -> aircraft_registrations (tow_aircraft_id));
 diesel::joinable!(flights -> clubs (club_id));
-diesel::joinable!(flights -> devices (device_id));
 diesel::joinable!(receiver_statuses -> receivers (receiver_id));
 diesel::joinable!(receivers_links -> receivers (receiver_id));
 diesel::joinable!(receivers_photos -> receivers (receiver_id));

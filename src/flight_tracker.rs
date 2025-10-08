@@ -46,6 +46,8 @@ struct AircraftTracker {
     last_position: Option<(f64, f64)>, // (lat, lon) for calculating speed
     last_position_time: Option<DateTime<Utc>>,
     last_fix_timestamp: Option<DateTime<Utc>>, // Track last processed fix to avoid duplicates
+    towed_by_device_id: Option<Uuid>, // For gliders: device_id of towplane (if being towed)
+    tow_released: bool,               // For gliders: whether tow release has been detected/recorded
 }
 
 impl AircraftTracker {
@@ -57,6 +59,8 @@ impl AircraftTracker {
             last_position: None,
             last_position_time: None,
             last_fix_timestamp: None,
+            towed_by_device_id: None,
+            tow_released: false,
         }
     }
 
@@ -492,6 +496,209 @@ impl FlightTracker {
         Some(inferred_runway)
     }
 
+    /// Detect if a glider taking off is being towed by a nearby towplane
+    /// Returns the towplane's (device_id, flight_id, current_altitude) if found
+    async fn detect_towing_at_takeoff(
+        &self,
+        glider_device_id: &Uuid,
+        glider_fix: &Fix,
+    ) -> Option<(Uuid, Uuid, i32)> {
+        // Only check for towing if this is a glider
+        use crate::ogn_aprs_aircraft::AircraftType;
+        if glider_fix.aircraft_type_ogn != Some(AircraftType::Glider) {
+            return None;
+        }
+
+        // Get all currently active aircraft trackers
+        let active_flights = {
+            let trackers = self.aircraft_trackers.read().await;
+            trackers
+                .iter()
+                .filter_map(|(device_id, tracker)| {
+                    // Skip ourselves and aircraft without active flights
+                    if device_id == glider_device_id || tracker.current_flight_id.is_none() {
+                        return None;
+                    }
+                    // Only consider aircraft that are active (flying)
+                    if tracker.state != AircraftState::Active {
+                        return None;
+                    }
+                    Some((*device_id, tracker.current_flight_id.unwrap()))
+                })
+                .collect::<Vec<_>>()
+        };
+
+        if active_flights.is_empty() {
+            return None;
+        }
+
+        // Get recent fixes for potential towplanes (within last 30 seconds)
+        let time_window_start = glider_fix.timestamp - chrono::Duration::seconds(30);
+
+        for (towplane_device_id, towplane_flight_id) in active_flights {
+            // Get the most recent fix for this potential towplane
+            match self
+                .fixes_repo
+                .get_latest_fix_for_device(towplane_device_id, time_window_start)
+                .await
+            {
+                Ok(Some(towplane_fix)) => {
+                    // Check if aircraft type suggests it's a towplane
+                    let is_likely_towplane = match towplane_fix.aircraft_type_ogn {
+                        Some(AircraftType::TowTug) => true,
+                        Some(AircraftType::RecipEngine) => true,
+                        Some(AircraftType::JetTurboprop) => true,
+                        Some(AircraftType::Glider) => false, // Gliders don't tow gliders
+                        _ => true,                           // Unknown types could be towplanes
+                    };
+
+                    if !is_likely_towplane {
+                        continue;
+                    }
+
+                    // Calculate distance between glider and potential towplane
+                    let distance_meters = haversine_distance(
+                        glider_fix.latitude,
+                        glider_fix.longitude,
+                        towplane_fix.latitude,
+                        towplane_fix.longitude,
+                    );
+
+                    // Check if they're close enough to be towing (within 200 meters / ~650 feet)
+                    if distance_meters <= 200.0 {
+                        // Check altitude difference (should be similar, within 200 feet)
+                        if let (Some(glider_alt), Some(towplane_alt)) =
+                            (glider_fix.altitude_feet, towplane_fix.altitude_feet)
+                        {
+                            let altitude_diff = (glider_alt - towplane_alt).abs();
+                            if altitude_diff <= 200 {
+                                info!(
+                                    "Detected towing: glider {} is being towed by towplane {} (distance: {:.0}m, alt diff: {}ft)",
+                                    glider_device_id,
+                                    towplane_device_id,
+                                    distance_meters,
+                                    altitude_diff
+                                );
+                                return Some((
+                                    towplane_device_id,
+                                    towplane_flight_id,
+                                    towplane_alt,
+                                ));
+                            }
+                        }
+                    }
+                }
+                Ok(None) => continue,
+                Err(e) => {
+                    debug!(
+                        "Failed to get latest fix for potential towplane {}: {}",
+                        towplane_device_id, e
+                    );
+                    continue;
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Check if a glider flight has been released from tow
+    /// This is called periodically during active flight to detect separation
+    async fn check_tow_release(
+        &self,
+        glider_device_id: &Uuid,
+        _glider_flight_id: &Uuid,
+        glider_fix: &Fix,
+        towplane_device_id: &Uuid,
+    ) -> bool {
+        // Get recent fix for towplane (within last 10 seconds)
+        let time_window = glider_fix.timestamp - chrono::Duration::seconds(10);
+
+        match self
+            .fixes_repo
+            .get_latest_fix_for_device(*towplane_device_id, time_window)
+            .await
+        {
+            Ok(Some(towplane_fix)) => {
+                // Calculate horizontal distance
+                let distance_meters = haversine_distance(
+                    glider_fix.latitude,
+                    glider_fix.longitude,
+                    towplane_fix.latitude,
+                    towplane_fix.longitude,
+                );
+
+                // Calculate 3D distance if we have altitudes
+                let separation_feet = if let (Some(glider_alt), Some(towplane_alt)) =
+                    (glider_fix.altitude_feet, towplane_fix.altitude_feet)
+                {
+                    let horizontal_feet = distance_meters * 3.28084; // meters to feet
+                    let vertical_feet = (glider_alt - towplane_alt).abs() as f64;
+                    (horizontal_feet.powi(2) + vertical_feet.powi(2)).sqrt()
+                } else {
+                    distance_meters * 3.28084 // Just horizontal distance in feet
+                };
+
+                // Release detected if separation > 500 feet
+                if separation_feet > 500.0 {
+                    info!(
+                        "Tow release detected for glider {}: separated {:.0} feet from towplane {}",
+                        glider_device_id, separation_feet, towplane_device_id
+                    );
+                    return true;
+                }
+
+                // Also check for diverging headings (one or both turned significantly)
+                if let (Some(glider_track), Some(towplane_track)) =
+                    (glider_fix.track_degrees, towplane_fix.track_degrees)
+                {
+                    let heading_diff =
+                        angular_difference(glider_track as f64, towplane_track as f64);
+                    if heading_diff > 45.0 && distance_meters > 100.0 {
+                        info!(
+                            "Tow release detected for glider {}: diverged {:.0}° from towplane {} (distance: {:.0}m)",
+                            glider_device_id, heading_diff, towplane_device_id, distance_meters
+                        );
+                        return true;
+                    }
+                }
+
+                false
+            }
+            Ok(None) => {
+                // No recent fix from towplane - might have landed or lost signal
+                // Consider this a release if we haven't seen them for 30+ seconds
+                warn!(
+                    "Lost contact with towplane {} for glider {} - assuming release",
+                    towplane_device_id, glider_device_id
+                );
+                true
+            }
+            Err(e) => {
+                debug!(
+                    "Error checking tow release for glider {}: {}",
+                    glider_device_id, e
+                );
+                false
+            }
+        }
+    }
+
+    /// Record tow release in the database
+    async fn record_tow_release(&self, glider_flight_id: &Uuid, release_fix: &Fix) -> Result<()> {
+        if let Some(altitude_ft) = release_fix.altitude_feet {
+            info!(
+                "Recording tow release for flight {} at {}ft MSL",
+                glider_flight_id, altitude_ft
+            );
+
+            self.flights_repo
+                .update_tow_release(*glider_flight_id, altitude_ft, release_fix.timestamp)
+                .await?;
+        }
+        Ok(())
+    }
+
     /// Create a new flight for aircraft already airborne (no takeoff data)
     async fn create_airborne_flight(&self, fix: &Fix) -> Result<Uuid> {
         info!("Creating airborne flight from fix: {:?}", fix);
@@ -596,6 +803,30 @@ impl FlightTracker {
                         "Failed to update existing fixes with flight_id {} for aircraft {}: {}",
                         flight_id, fix.device_id, e
                     );
+                }
+
+                // Check if this is a glider being towed
+                if let Some((towplane_device_id, towplane_flight_id, _)) =
+                    self.detect_towing_at_takeoff(&fix.device_id, fix).await
+                {
+                    // Update the flight with towing information
+                    if let Err(e) = self
+                        .flights_repo
+                        .update_towing_info(flight_id, towplane_device_id, towplane_flight_id)
+                        .await
+                    {
+                        warn!(
+                            "Failed to update towing info for flight {}: {}",
+                            flight_id, e
+                        );
+                    } else {
+                        // Update tracker to remember we're being towed
+                        let mut trackers = self.aircraft_trackers.write().await;
+                        if let Some(tracker) = trackers.get_mut(&fix.device_id) {
+                            tracker.towed_by_device_id = Some(towplane_device_id);
+                            tracker.tow_released = false;
+                        }
+                    }
                 }
 
                 Ok(flight_id)
@@ -845,6 +1076,9 @@ impl FlightTracker {
                         tracker.update_position(&fix);
                         tracker.current_flight_id = None;
                         tracker.state = new_state;
+                        // Reset towing state for next flight
+                        tracker.towed_by_device_id = None;
+                        tracker.tow_released = false;
                     }
                     drop(trackers); // Release lock immediately
 
@@ -868,7 +1102,52 @@ impl FlightTracker {
                     // If there's an ongoing flight, keep its flight_id
                     if let Some(flight_id) = current_flight_id {
                         fix.flight_id = Some(flight_id);
+
+                        // Check if this is a glider being towed that hasn't been released yet
+                        let (is_being_towed, towplane_id, already_released) = {
+                            let trackers = self.aircraft_trackers.read().await;
+                            if let Some(tracker) = trackers.get(&fix.device_id) {
+                                (
+                                    tracker.towed_by_device_id.is_some(),
+                                    tracker.towed_by_device_id,
+                                    tracker.tow_released,
+                                )
+                            } else {
+                                (false, None, false)
+                            }
+                        };
+
+                        if is_being_towed
+                            && !already_released
+                            && let Some(towplane_device_id) = towplane_id
+                        {
+                            // Check for tow release
+                            if self
+                                .check_tow_release(
+                                    &fix.device_id,
+                                    &flight_id,
+                                    &fix,
+                                    &towplane_device_id,
+                                )
+                                .await
+                            {
+                                // Record the release
+                                if let Err(e) = self.record_tow_release(&flight_id, &fix).await {
+                                    warn!(
+                                        "Failed to record tow release for flight {}: {}",
+                                        flight_id, e
+                                    );
+                                } else {
+                                    // Mark as released in tracker
+                                    let mut trackers = self.aircraft_trackers.write().await;
+                                    if let Some(tracker) = trackers.get_mut(&fix.device_id) {
+                                        tracker.tow_released = true;
+                                    }
+                                }
+                            }
+                        }
                     }
+
                     let mut trackers = self.aircraft_trackers.write().await;
                     if let Some(tracker) = trackers.get_mut(&fix.device_id) {
                         tracker.update_position(&fix);

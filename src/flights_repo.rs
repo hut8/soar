@@ -412,6 +412,64 @@ impl FlightsRepository {
         Ok(rows_affected > 0)
     }
 
+    /// Update towing information for a glider flight
+    pub async fn update_towing_info(
+        &self,
+        glider_flight_id: Uuid,
+        towplane_device_id: Uuid,
+        towplane_flight_id: Uuid,
+    ) -> Result<bool> {
+        use crate::schema::flights::dsl::*;
+
+        let pool = self.pool.clone();
+
+        let rows_affected = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            let rows = diesel::update(flights.filter(id.eq(glider_flight_id)))
+                .set((
+                    towed_by_device_id.eq(Some(towplane_device_id)),
+                    towed_by_flight_id.eq(Some(towplane_flight_id)),
+                    updated_at.eq(Utc::now()),
+                ))
+                .execute(&mut conn)?;
+
+            Ok::<usize, anyhow::Error>(rows)
+        })
+        .await??;
+
+        Ok(rows_affected > 0)
+    }
+
+    /// Update tow release information for a glider flight
+    pub async fn update_tow_release(
+        &self,
+        glider_flight_id: Uuid,
+        release_altitude_ft: i32,
+        release_time: DateTime<Utc>,
+    ) -> Result<bool> {
+        use crate::schema::flights::dsl::*;
+
+        let pool = self.pool.clone();
+
+        let rows_affected = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            let rows = diesel::update(flights.filter(id.eq(glider_flight_id)))
+                .set((
+                    tow_release_altitude_msl_ft.eq(Some(release_altitude_ft)),
+                    tow_release_time.eq(Some(release_time)),
+                    updated_at.eq(Utc::now()),
+                ))
+                .execute(&mut conn)?;
+
+            Ok::<usize, anyhow::Error>(rows)
+        })
+        .await??;
+
+        Ok(rows_affected > 0)
+    }
+
     /// Delete a flight by ID
     pub async fn delete_flight(&self, flight_id: Uuid) -> Result<bool> {
         use crate::schema::flights::dsl::*;

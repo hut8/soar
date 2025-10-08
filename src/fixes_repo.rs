@@ -419,6 +419,31 @@ impl FixesRepository {
         Ok(result)
     }
 
+    /// Get the most recent fix for a device after a given timestamp
+    pub async fn get_latest_fix_for_device(
+        &self,
+        device_uuid: Uuid,
+        after: DateTime<Utc>,
+    ) -> Result<Option<Fix>> {
+        let pool = self.pool.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            use crate::schema::fixes::dsl::*;
+            let mut conn = pool.get()?;
+            let fix_result = fixes
+                .filter(device_id.eq(device_uuid))
+                .filter(timestamp.gt(after))
+                .order(timestamp.desc())
+                .limit(1)
+                .select(Fix::as_select())
+                .first::<Fix>(&mut conn)
+                .optional()?;
+            Ok::<Option<Fix>, anyhow::Error>(fix_result)
+        })
+        .await??;
+
+        Ok(result)
+    }
+
     pub async fn get_fixes_by_device_paginated(
         &self,
         device_uuid: Uuid,
