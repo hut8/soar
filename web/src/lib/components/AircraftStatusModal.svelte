@@ -42,18 +42,24 @@
 	async function loadAircraftData() {
 		if (!selectedDevice) return;
 
-		// Get recent fixes (last 24 hours)
-		recentFixes = selectedDevice.getRecentFixes(24);
-
 		// Load aircraft registration and model data in parallel
 		loadingRegistration = true;
 		loadingModel = true;
 
 		try {
-			const [registration, model] = await Promise.all([
+			// Import DeviceRegistry to fetch recent fixes
+			const { DeviceRegistry } = await import('$lib/services/DeviceRegistry');
+			const registry = DeviceRegistry.getInstance();
+
+			// Load recent fixes from API and get registration/model in parallel
+			const [, registration, model] = await Promise.all([
+				registry.loadRecentFixesFromAPI(selectedDevice.id, 100),
 				selectedDevice.getAircraftRegistration(),
 				selectedDevice.getAircraftModel()
 			]);
+
+			// Update recent fixes from the device (last 24 hours)
+			recentFixes = selectedDevice.getRecentFixes(24);
 
 			aircraftRegistration = registration;
 			aircraftModel = model;
@@ -61,6 +67,7 @@
 			console.warn('Failed to load aircraft data:', error);
 			aircraftRegistration = null;
 			aircraftModel = null;
+			recentFixes = [];
 		} finally {
 			loadingRegistration = false;
 			loadingModel = false;

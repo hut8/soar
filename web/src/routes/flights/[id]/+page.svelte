@@ -226,7 +226,7 @@
 	<title>Flight {data.flight.device_address} | SOAR</title>
 </svelte:head>
 
-<div class="container mx-auto space-y-6 p-4">
+<div class="container mx-auto space-y-4 p-4">
 	<!-- Flight Header -->
 	<div class="card p-6">
 		<div class="mb-4 flex items-center justify-between">
@@ -403,31 +403,24 @@
 
 	<!-- Aircraft Information -->
 	{#if data.device}
-		<div class="card p-6">
-			<h2 class="mb-4 h2">Aircraft Information</h2>
-			<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+		<div class="card p-4">
+			<h2 class="mb-3 h3">Aircraft Information</h2>
+			<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
 				<div>
 					<div class="text-surface-600-300-token text-sm">Registration</div>
 					<div class="font-mono text-sm font-semibold">
 						{data.device.registration || 'Unknown'}
+						{#if data.device.competition_number}
+							<span class="text-surface-500-400-token ml-1">({data.device.competition_number})</span
+							>
+						{/if}
 					</div>
 				</div>
 				<div>
-					<div class="text-surface-600-300-token text-sm">Address</div>
-					<div class="font-mono text-sm font-semibold">
-						{data.device.address_type.toUpperCase()}:{data.device.address
-							.toString(16)
-							.toUpperCase()
-							.padStart(6, '0')}
+					<div class="text-surface-600-300-token text-sm">Model</div>
+					<div class="text-sm font-semibold">
+						{data.device.aircraft_model || 'Unknown'}
 					</div>
-				</div>
-				<div>
-					<div class="text-surface-600-300-token text-sm">Aircraft Model</div>
-					<div class="text-sm font-semibold">{data.device.aircraft_model || 'Unknown'}</div>
-				</div>
-				<div>
-					<div class="text-surface-600-300-token text-sm">Competition Number</div>
-					<div class="text-sm font-semibold">{data.device.competition_number || 'None'}</div>
 				</div>
 				<div>
 					<div class="text-surface-600-300-token text-sm">Aircraft Type</div>
@@ -439,30 +432,14 @@
 						{/if}
 					</div>
 				</div>
-				<div>
-					<div class="text-surface-600-300-token text-sm">Tracked</div>
-					<div class="text-sm">
-						<span class="chip preset-filled-{data.device.tracked ? 'success' : 'warning'}-500">
-							{data.device.tracked ? 'Yes' : 'No'}
-						</span>
-					</div>
-				</div>
-				<div>
-					<div class="text-surface-600-300-token text-sm">Identified</div>
-					<div class="text-sm">
-						<span class="chip preset-filled-{data.device.identified ? 'success' : 'warning'}-500">
-							{data.device.identified ? 'Yes' : 'No'}
-						</span>
-					</div>
-				</div>
 			</div>
 		</div>
 	{/if}
 
 	<!-- Map -->
 	{#if data.fixes.length > 0}
-		<div class="card p-6">
-			<h2 class="mb-4 h2">Flight Track</h2>
+		<div class="card p-4">
+			<h2 class="mb-3 h3">Flight Track</h2>
 			<div bind:this={mapContainer} class="h-96 w-full rounded-lg"></div>
 		</div>
 	{/if}
@@ -512,10 +489,10 @@
 					<tbody>
 						{#each paginatedFixes as fix, index (fix.id)}
 							<tr
-								class="border-surface-200-700-token hover:bg-surface-100-800-token border-b {index %
+								class="border-b border-gray-200 hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800 {index %
 									2 ===
 								0
-									? 'bg-surface-50-900-token'
+									? 'bg-gray-50 dark:bg-gray-900'
 									: ''}"
 							>
 								<td class="px-3 py-2 text-sm">{formatFixTime(fix.timestamp)}</td>
@@ -543,9 +520,9 @@
 							</tr>
 							{#if showRawData}
 								<tr
-									class="border-surface-200-700-token border-b {index % 2 === 0
-										? 'bg-surface-100-800-token'
-										: 'bg-surface-50-900-token'}"
+									class="border-b border-gray-200 dark:border-gray-700 {index % 2 === 0
+										? 'bg-gray-100 dark:bg-gray-800'
+										: ''}"
 								>
 									<td colspan="7" class="px-3 py-2 font-mono text-sm">
 										{fix.raw_packet}
