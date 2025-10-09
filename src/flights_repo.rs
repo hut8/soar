@@ -80,6 +80,7 @@ impl FlightsRepository {
         landing_runway_ident_param: Option<String>,
         total_distance_meters_param: Option<f64>,
         maximum_displacement_meters_param: Option<f64>,
+        runways_inferred_param: Option<bool>,
     ) -> Result<()> {
         use crate::schema::flights::dsl::*;
 
@@ -96,6 +97,7 @@ impl FlightsRepository {
                     landing_runway_ident.eq(&landing_runway_ident_param),
                     total_distance_meters.eq(&total_distance_meters_param),
                     maximum_displacement_meters.eq(&maximum_displacement_meters_param),
+                    runways_inferred.eq(&runways_inferred_param),
                     updated_at.eq(Utc::now()),
                 ))
                 .execute(&mut conn)?;

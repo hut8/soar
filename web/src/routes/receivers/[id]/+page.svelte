@@ -36,6 +36,7 @@
 		longitude: number | null;
 		created_at: string;
 		updated_at: string;
+		from_ogn_db: boolean;
 	}
 
 	interface Fix {
@@ -72,6 +73,7 @@
 		voltage: number | string | null; // BigDecimal from backend
 		amperage: number | string | null; // BigDecimal from backend
 		lag: number | null;
+		raw_data: string;
 	}
 
 	interface StatusesResponse {
@@ -80,23 +82,25 @@
 		total_pages: number;
 	}
 
-	let receiver: Receiver | null = null;
-	let fixes: Fix[] = [];
-	let statuses: ReceiverStatus[] = [];
-	let loading = true;
-	let loadingFixes = false;
-	let loadingStatuses = false;
-	let error = '';
-	let fixesError = '';
-	let statusesError = '';
-	let receiverId = '';
+	let receiver = $state<Receiver | null>(null);
+	let fixes = $state<Fix[]>([]);
+	let statuses = $state<ReceiverStatus[]>([]);
+	let loading = $state(true);
+	let loadingFixes = $state(false);
+	let loadingStatuses = $state(false);
+	let error = $state('');
+	let fixesError = $state('');
+	let statusesError = $state('');
 
-	let fixesPage = 1;
-	let fixesTotalPages = 1;
-	let statusesPage = 1;
-	let statusesTotalPages = 1;
+	let fixesPage = $state(1);
+	let fixesTotalPages = $state(1);
+	let statusesPage = $state(1);
+	let statusesTotalPages = $state(1);
 
-	$: receiverId = $page.params.id || '';
+	// Display options
+	let showRawData = $state(false);
+
+	let receiverId = $derived($page.params.id || '');
 
 	onMount(async () => {
 		if (receiverId) {
@@ -275,6 +279,9 @@
 						<div class="mb-2 flex items-center gap-3">
 							<Radio class="h-8 w-10 text-primary-500" />
 							<h1 class="h1">{receiver.callsign}</h1>
+							{#if receiver.from_ogn_db}
+								<span class="variant-filled-secondary chip text-sm">OGN DB</span>
+							{/if}
 						</div>
 						{#if receiver.description}
 							<p class="text-surface-600-300-token text-lg">{receiver.description}</p>
@@ -490,10 +497,16 @@
 
 			<!-- Statuses Section -->
 			<div class="card p-6">
-				<h2 class="mb-4 flex items-center gap-2 h2">
-					<Info class="h-6 w-6" />
-					Status Reports (Last 24 Hours)
-				</h2>
+				<div class="mb-4 flex items-center justify-between">
+					<h2 class="flex items-center gap-2 h2">
+						<Info class="h-6 w-6" />
+						Status Reports (Last 24 Hours)
+					</h2>
+					<label class="flex cursor-pointer items-center gap-2">
+						<input type="checkbox" class="checkbox" bind:checked={showRawData} />
+						<span class="text-sm">Show raw</span>
+					</label>
+				</div>
 
 				{#if loadingStatuses}
 					<div class="flex items-center justify-center space-x-4 p-8">
@@ -524,8 +537,14 @@
 								</tr>
 							</thead>
 							<tbody>
-								{#each statuses as status (status.id)}
-									<tr>
+								{#each statuses as status, index (status.id)}
+									<tr
+										class="border-b border-gray-200 hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800 {index %
+											2 ===
+										0
+											? 'bg-gray-50 dark:bg-gray-900'
+											: ''}"
+									>
 										<td class="text-xs">
 											<div>{formatDateTime(status.received_at)}</div>
 											<div class="text-surface-500-400-token">
@@ -573,6 +592,17 @@
 										</td>
 										<td>{status.lag !== null ? `${status.lag}ms` : '—'}</td>
 									</tr>
+									{#if showRawData}
+										<tr
+											class="border-b border-gray-200 dark:border-gray-700 {index % 2 === 0
+												? 'bg-gray-100 dark:bg-gray-800'
+												: ''}"
+										>
+											<td colspan="8" class="px-3 py-2 font-mono text-sm">
+												{status.raw_data}
+											</td>
+										</tr>
+									{/if}
 								{/each}
 							</tbody>
 						</table>

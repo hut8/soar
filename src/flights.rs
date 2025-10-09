@@ -95,6 +95,10 @@ pub struct Flight {
     /// Only computed for local flights where departure == arrival
     pub maximum_displacement_meters: Option<f64>,
 
+    /// Whether runways were inferred from heading (true) or looked up in database (false)
+    /// NULL if no runways were determined (both takeoff and landing runways are null)
+    pub runways_inferred: Option<bool>,
+
     /// Database timestamps
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -126,6 +130,7 @@ impl Flight {
             landing_runway_ident: None,
             total_distance_meters: None,
             maximum_displacement_meters: None,
+            runways_inferred: None,
             created_at: now,
             updated_at: now,
         }
@@ -156,6 +161,7 @@ impl Flight {
             landing_runway_ident: None,
             total_distance_meters: None,
             maximum_displacement_meters: None,
+            runways_inferred: None,
             created_at: now,
             updated_at: now,
         }
@@ -481,6 +487,7 @@ pub struct FlightModel {
     pub towed_by_flight_id: Option<Uuid>,
     pub tow_release_altitude_msl_ft: Option<i32>,
     pub tow_release_time: Option<DateTime<Utc>>,
+    pub runways_inferred: Option<bool>,
 }
 
 /// Insert model for new flights
@@ -508,6 +515,7 @@ pub struct NewFlightModel {
     pub towed_by_flight_id: Option<Uuid>,
     pub tow_release_altitude_msl_ft: Option<i32>,
     pub tow_release_time: Option<DateTime<Utc>>,
+    pub runways_inferred: Option<bool>,
 }
 
 /// Conversion from Flight (API model) to FlightModel (database model)
@@ -537,6 +545,7 @@ impl From<Flight> for FlightModel {
             towed_by_flight_id: flight.towed_by_flight_id,
             tow_release_altitude_msl_ft: flight.tow_release_altitude_msl_ft,
             tow_release_time: flight.tow_release_time,
+            runways_inferred: flight.runways_inferred,
         }
     }
 }
@@ -566,6 +575,7 @@ impl From<Flight> for NewFlightModel {
             towed_by_flight_id: flight.towed_by_flight_id,
             tow_release_altitude_msl_ft: flight.tow_release_altitude_msl_ft,
             tow_release_time: flight.tow_release_time,
+            runways_inferred: flight.runways_inferred,
         }
     }
 }
@@ -595,6 +605,7 @@ impl From<FlightModel> for Flight {
             towed_by_flight_id: model.towed_by_flight_id,
             tow_release_altitude_msl_ft: model.tow_release_altitude_msl_ft,
             tow_release_time: model.tow_release_time,
+            runways_inferred: model.runways_inferred,
             created_at: model.created_at,
             updated_at: model.updated_at,
         }

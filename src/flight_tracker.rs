@@ -48,6 +48,7 @@ struct AircraftTracker {
     last_fix_timestamp: Option<DateTime<Utc>>, // Track last processed fix to avoid duplicates
     towed_by_device_id: Option<Uuid>, // For gliders: device_id of towplane (if being towed)
     tow_released: bool,               // For gliders: whether tow release has been detected/recorded
+    takeoff_runway_inferred: Option<bool>, // Track whether takeoff runway was inferred (for determining runways_inferred field)
 }
 
 impl AircraftTracker {
@@ -61,6 +62,7 @@ impl AircraftTracker {
             last_fix_timestamp: None,
             towed_by_device_id: None,
             tow_released: false,
+            takeoff_runway_inferred: None,
         }
     }
 
@@ -341,14 +343,16 @@ impl FlightTracker {
     /// First tries to match against nearby runways with coordinates from the database.
     /// If no runways found or no good match, infers runway from aircraft heading.
     /// Loads fixes from 20 seconds before to 20 seconds after the event time
-    /// Returns the runway identifier (e.g., "14" or "32")
+    /// Returns a tuple of (runway_identifier, was_inferred)
+    /// - runway_identifier: e.g., "14" or "32"
+    /// - was_inferred: true if inferred from heading, false if looked up in database
     async fn determine_runway_identifier(
         &self,
         device_id: &Uuid,
         event_time: DateTime<Utc>,
         latitude: f64,
         longitude: f64,
-    ) -> Option<String> {
+    ) -> Option<(String, bool)> {
         // Get fixes from 20 seconds before to 20 seconds after the event
         let start_time = event_time - chrono::Duration::seconds(20);
         let end_time = event_time + chrono::Duration::seconds(20);
@@ -514,7 +518,7 @@ impl FlightTracker {
                         "Matched runway {} from database for device {} (heading diff: {:.1}°)",
                         ident, device_id, diff
                     );
-                    return Some(ident);
+                    return Some((ident, false)); // false = from database, not inferred
                 } else {
                     debug!(
                         "Best runway match {} has large heading diff ({:.1}°), will infer from heading instead",
@@ -530,7 +534,7 @@ impl FlightTracker {
             "Inferred runway {} from heading {:.1}° for device {}",
             inferred_runway, avg_course, device_id
         );
-        Some(inferred_runway)
+        Some((inferred_runway, true)) // true = inferred from heading
     }
 
     /// Detect if a glider taking off is being towed by a nearby towplane
@@ -793,10 +797,15 @@ impl FlightTracker {
     async fn create_flight(&self, fix: &Fix) -> Result<Uuid> {
         let departure_airport_id = self.find_nearby_airport(fix.latitude, fix.longitude).await;
 
-        // Determine takeoff runway
-        let takeoff_runway = self
+        // Determine takeoff runway and whether it was inferred
+        let takeoff_runway_info = self
             .determine_runway_identifier(&fix.device_id, fix.timestamp, fix.latitude, fix.longitude)
             .await;
+
+        let (takeoff_runway, takeoff_was_inferred) = match takeoff_runway_info {
+            Some((runway, was_inferred)) => (Some(runway), Some(was_inferred)),
+            None => (None, None),
+        };
 
         let mut flight = Flight::new_with_takeoff_from_fix(fix, fix.timestamp);
         flight.device_address_type = fix.address_type;
@@ -842,6 +851,14 @@ impl FlightTracker {
                     );
                 }
 
+                // Store takeoff runway source in tracker for later use when landing
+                {
+                    let mut trackers = self.aircraft_trackers.write().await;
+                    if let Some(tracker) = trackers.get_mut(&fix.device_id) {
+                        tracker.takeoff_runway_inferred = takeoff_was_inferred;
+                    }
+                }
+
                 // Check if this is a glider being towed
                 if let Some((towplane_device_id, towplane_flight_id, _)) =
                     self.detect_towing_at_takeoff(&fix.device_id, fix).await
@@ -882,13 +899,38 @@ impl FlightTracker {
     async fn complete_flight(&self, flight_id: Uuid, fix: &Fix) -> Result<()> {
         let arrival_airport_id = self.find_nearby_airport(fix.latitude, fix.longitude).await;
 
-        // Determine landing runway
-        let landing_runway = self
+        // Determine landing runway and whether it was inferred
+        let landing_runway_info = self
             .determine_runway_identifier(&fix.device_id, fix.timestamp, fix.latitude, fix.longitude)
             .await;
 
+        let (landing_runway, landing_was_inferred) = match landing_runway_info {
+            Some((runway, was_inferred)) => (Some(runway), Some(was_inferred)),
+            None => (None, None),
+        };
+
+        // Get the takeoff runway source from the tracker
+        let takeoff_runway_inferred = {
+            let trackers = self.aircraft_trackers.read().await;
+            trackers
+                .get(&fix.device_id)
+                .and_then(|tracker| tracker.takeoff_runway_inferred)
+        };
+
         // Calculate landing altitude offset (difference between reported altitude and true elevation)
         let landing_altitude_offset_ft = self.calculate_altitude_offset_ft(fix).await;
+
+        // Determine runways_inferred based on takeoff and landing runway sources
+        // Logic:
+        // - NULL if both takeoff and landing runways are null
+        // - true if both were inferred from heading
+        // - false if both were looked up in database
+        // - NULL if mixed sources (one inferred, one from database, or one is unknown)
+        let runways_inferred = match (takeoff_runway_inferred, landing_was_inferred) {
+            (Some(true), Some(true)) => Some(true),    // Both inferred
+            (Some(false), Some(false)) => Some(false), // Both from database
+            _ => None,                                 // Mixed, unknown, or one/both are null
+        };
 
         // Fetch the flight to compute distance metrics
         let flight = match self.flights_repo.get_flight_by_id(flight_id).await? {
@@ -1012,6 +1054,7 @@ impl FlightTracker {
                 landing_runway.clone(),
                 total_distance_meters,
                 maximum_displacement_meters,
+                runways_inferred,
             )
             .await
         {

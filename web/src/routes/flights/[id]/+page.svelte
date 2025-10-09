@@ -27,9 +27,9 @@
 
 	const GOOGLE_MAPS_API_KEY = 'AIzaSyBaK8UU0l4z-k6b-UPlLzw3wv_Ti71XNy8';
 
-	let mapContainer: HTMLElement;
-	let map: google.maps.Map;
-	let flightPath: google.maps.Polyline | null = null;
+	let mapContainer = $state<HTMLElement>();
+	let map = $state<google.maps.Map>();
+	let flightPath = $state<google.maps.Polyline | null>(null);
 
 	// Pagination state
 	let currentPage = $state(1);
@@ -71,10 +71,11 @@
 		return (data.fixesCount / durationSeconds).toFixed(2);
 	});
 
-	// Check if this is an outlanding (flight complete but no arrival airport)
+	// Check if this is an outlanding (flight complete with known departure but no arrival airport)
 	const isOutlanding = $derived(
 		data.flight.landing_time !== null &&
 			data.flight.landing_time !== undefined &&
+			data.flight.departure_airport &&
 			!data.flight.arrival_airport
 	);
 
@@ -124,7 +125,7 @@
 
 	// Initialize map
 	onMount(async () => {
-		if (data.fixes.length === 0) return;
+		if (data.fixes.length === 0 || !mapContainer) return;
 
 		try {
 			const loader = new Loader({
