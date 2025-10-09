@@ -37,6 +37,23 @@ RUN mkdir -p web/node_modules
 # Build the Rust application in release mode
 RUN cargo build --release
 
+# Upload debug symbols to Sentry (if SENTRY_AUTH_TOKEN is provided)
+# This happens after build so we have the debug info files
+ARG SENTRY_AUTH_TOKEN
+ARG SENTRY_ORG
+ARG SENTRY_PROJECT
+RUN if [ -n "$SENTRY_AUTH_TOKEN" ]; then \
+    echo "Installing sentry-cli..." && \
+    curl -sL https://sentry.io/get-cli/ | bash && \
+    echo "Uploading debug symbols to Sentry..." && \
+    sentry-cli debug-files upload \
+      --org "$SENTRY_ORG" \
+      --project "$SENTRY_PROJECT" \
+      target/release/soar || echo "Debug symbol upload failed (non-fatal)"; \
+  else \
+    echo "Skipping Sentry debug symbol upload (SENTRY_AUTH_TOKEN not set)"; \
+  fi
+
 # Runtime stage
 FROM debian:bullseye-slim
 
