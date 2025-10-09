@@ -127,15 +127,6 @@
 		}
 	}
 
-	function formatDate(dateString: string | undefined): string {
-		if (!dateString) return '—';
-		return new Date(dateString).toLocaleDateString('en-US', {
-			year: 'numeric',
-			month: 'short',
-			day: 'numeric'
-		});
-	}
-
 	function goToPage(page: number) {
 		if (page >= 0 && page < totalPages) {
 			currentPage = page;
@@ -401,8 +392,6 @@
 							<th>Registration</th>
 							<th>Aircraft Model</th>
 							<th>Competition #</th>
-							<th>Status</th>
-							<th>Updated</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -410,7 +399,7 @@
 							<tr>
 								<td>
 									<a
-										href={resolve(`/devices/${device.address}`)}
+										href={resolve(`/devices/${device.id}`)}
 										class="anchor font-mono text-primary-500 hover:text-primary-600"
 									>
 										{device.device_address}
@@ -419,27 +408,6 @@
 								<td class="font-semibold">{device.registration}</td>
 								<td>{device.aircraft_model}</td>
 								<td>{device.competition_number || '—'}</td>
-								<td>
-									<div class="flex flex-col gap-1">
-										<span
-											class="badge {device.tracked
-												? 'variant-filled-success'
-												: 'variant-filled-surface'} text-xs"
-										>
-											{device.tracked ? 'Tracked' : 'Not Tracked'}
-										</span>
-										<span
-											class="badge {device.identified
-												? 'variant-filled-primary'
-												: 'variant-filled-surface'} text-xs"
-										>
-											{device.identified ? 'Identified' : 'Unidentified'}
-										</span>
-									</div>
-								</td>
-								<td class="text-surface-600-300-token text-sm">
-									{formatDate(device.updated_at)}
-								</td>
 							</tr>
 						{/each}
 					</tbody>
