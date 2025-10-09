@@ -128,7 +128,7 @@ impl Fix {
                 let registration = None;
                 let model = None;
                 let squawk = None;
-                let climb_fpm = None;
+                let climb_fpm = pos_packet.comment.climb_rate.map(|c| c as i32);
                 let turn_rate_rot = None;
                 let snr_db = None;
                 let bit_errors_corrected = None;
