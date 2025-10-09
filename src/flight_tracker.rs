@@ -69,27 +69,49 @@ impl AircraftTracker {
     /// Determine if aircraft should be considered active based on fix
     fn should_be_active(&self, fix: &Fix) -> bool {
         // Check ground speed first
-        if let Some(ground_speed_knots) = fix.ground_speed_knots {
-            return ground_speed_knots >= 20.0;
-        }
+        let speed_indicates_active = if let Some(ground_speed_knots) = fix.ground_speed_knots {
+            ground_speed_knots >= 20.0
+        } else {
+            // If no ground speed, calculate from position changes
+            if let (Some((last_lat, last_lon)), Some(last_time)) =
+                (self.last_position, self.last_position_time)
+            {
+                let time_diff = fix.timestamp.signed_duration_since(last_time);
+                if time_diff.num_seconds() > 0 {
+                    let distance_meters =
+                        haversine_distance(last_lat, last_lon, fix.latitude, fix.longitude);
+                    let speed_ms = distance_meters / time_diff.num_seconds() as f64;
+                    let speed_knots = speed_ms * 1.94384; // m/s to knots
 
-        // If no ground speed, calculate from position changes
-        if let (Some((last_lat, last_lon)), Some(last_time)) =
-            (self.last_position, self.last_position_time)
-        {
-            let time_diff = fix.timestamp.signed_duration_since(last_time);
-            if time_diff.num_seconds() > 0 {
-                let distance_meters =
-                    haversine_distance(last_lat, last_lon, fix.latitude, fix.longitude);
-                let speed_ms = distance_meters / time_diff.num_seconds() as f64;
-                let speed_knots = speed_ms * 1.94384; // m/s to knots
-
-                return speed_knots >= 20.0;
+                    speed_knots >= 20.0
+                } else {
+                    // Can't calculate speed, use current state
+                    self.state == AircraftState::Active
+                }
+            } else {
+                // No previous position, use current state
+                self.state == AircraftState::Active
             }
+        };
+
+        // If speed indicates active, aircraft is active
+        if speed_indicates_active {
+            return true;
         }
 
-        // Default to current state if we can't determine speed
-        self.state == AircraftState::Active
+        // Speed indicates not active (potential landing)
+        // But don't register landing if AGL altitude is >= 250 feet
+        // Only land if altitude is unavailable OR altitude is < 250 feet AGL
+        if let Some(altitude_agl) = fix.altitude_agl
+            && altitude_agl >= 250
+        {
+            // Still too high to land - remain active
+            return true;
+        }
+
+        // Either altitude is unavailable, or altitude is < 250 feet
+        // Speed is low, so aircraft should be idle (landing)
+        false
     }
 
     fn update_position(&mut self, fix: &Fix) {
