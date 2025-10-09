@@ -196,6 +196,7 @@ jobs:
 
       - name: Create binary archive
         run: |
+          rm -rf release
           mkdir -p release
           cp target/release/soar release/
           cp README.md release/ || echo "No README.md found"
