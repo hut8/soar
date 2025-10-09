@@ -326,7 +326,7 @@
 
 						<footer class="border-surface-200-700-token border-t pt-4">
 							<div class="space-y-2">
-								<a href={resolve(`/clubs/${club.id}`)} class="variant-soft btn w-full btn-sm">
+								<a href={resolve(`/clubs/${club.id}`)} class="preset-soft btn w-full btn-sm">
 									<ExternalLink class="mr-2 h-4 w-4" />
 									View Details
 								</a>
@@ -336,7 +336,7 @@
 											href={generateGoogleMapsUrl(club)}
 											target="_blank"
 											rel="noopener noreferrer"
-											class="variant-ghost-primary btn flex-1 btn-sm"
+											class="preset-ghost-primary btn flex-1 btn-sm"
 										>
 											<Map class="mr-1 h-3 w-3" />
 											Maps
@@ -346,7 +346,7 @@
 												href={`https://www.google.com/maps/dir/?api=1&destination=${club.location.geolocation.latitude},${club.location.geolocation.longitude}`}
 												target="_blank"
 												rel="noopener noreferrer"
-												class="variant-ghost-secondary btn flex-1 btn-sm"
+												class="preset-ghost-secondary btn flex-1 btn-sm"
 											>
 												<Navigation class="mr-1 h-3 w-3" />
 												Directions

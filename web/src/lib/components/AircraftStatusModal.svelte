@@ -315,13 +315,13 @@
 						href="/devices/{selectedDevice.id}"
 						target="_blank"
 						rel="noopener noreferrer"
-						class="variant-filled-primary btn btn-sm"
+						class="preset-filled-primary btn btn-sm"
 						title="View detailed device page"
 					>
 						<ExternalLink size={16} />
 						View Details
 					</a>
-					<button class="variant-ghost-surface btn btn-sm" onclick={closeModal}>
+					<button class="preset-ghost-surface btn btn-sm" onclick={closeModal}>
 						<X size={20} />
 					</button>
 				</div>
@@ -373,9 +373,7 @@
 										<dt class="text-sm font-medium text-gray-600">Tracked</dt>
 										<dd class="text-sm">
 											<span
-												class="badge variant-filled-{selectedDevice.tracked
-													? 'success'
-													: 'warning'}"
+												class="badge preset-filled-{selectedDevice.tracked ? 'success' : 'warning'}"
 											>
 												{selectedDevice.tracked ? 'Yes' : 'No'}
 											</span>
@@ -385,7 +383,7 @@
 										<dt class="text-sm font-medium text-gray-600">Identified</dt>
 										<dd class="text-sm">
 											<span
-												class="badge variant-filled-{selectedDevice.identified
+												class="badge preset-filled-{selectedDevice.identified
 													? 'success'
 													: 'warning'}"
 											>

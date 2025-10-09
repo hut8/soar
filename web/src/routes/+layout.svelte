@@ -114,7 +114,7 @@
 				{#if $auth.isAuthenticated && $auth.user}
 					<div class="user-menu relative">
 						<button
-							class="variant-ghost-surface btn flex items-center space-x-2 btn-sm"
+							class="preset-ghost-surface btn flex items-center space-x-2 btn-sm"
 							onclick={() => (showUserMenu = !showUserMenu)}
 						>
 							<Avatar
@@ -162,7 +162,7 @@
 			<!-- Mobile Hamburger Menu -->
 			<div class="md:hidden">
 				<button
-					class="mobile-menu-button variant-ghost-surface btn p-2 btn-sm"
+					class="mobile-menu-button preset-ghost-surface btn p-2 btn-sm"
 					onclick={(e) => {
 						e.stopPropagation();
 						showMobileMenu = !showMobileMenu;

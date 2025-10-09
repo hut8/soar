@@ -219,7 +219,7 @@
 <div class="max-w-8xl container mx-auto space-y-6 p-4">
 	<!-- Back Button -->
 	<div class="flex items-center gap-4">
-		<button class="variant-soft btn btn-sm" onclick={goBack}>
+		<button class="preset-soft btn btn-sm" onclick={goBack}>
 			<ArrowLeft class="mr-2 h-4 w-4" />
 			Back to Clubs
 		</button>
@@ -237,12 +237,12 @@
 
 	<!-- Error State -->
 	{#if error}
-		<div class="alert variant-filled-error">
+		<div class="alert preset-filled-error">
 			<div class="alert-message">
 				<h3 class="h3">Error Loading Club</h3>
 				<p>{error}</p>
 				<div class="alert-actions">
-					<button class="variant-filled btn" onclick={loadClub}> Try Again </button>
+					<button class="btn preset-filled" onclick={loadClub}> Try Again </button>
 				</div>
 			</div>
 		</div>
@@ -273,7 +273,7 @@
 					{#if $auth.isAuthenticated && !isCurrentClub}
 						<div class="flex-shrink-0">
 							<button
-								class="variant-filled-primary btn"
+								class="preset-filled-primary btn"
 								onclick={setAsMyClub}
 								disabled={settingClub}
 							>
@@ -345,7 +345,7 @@
 										href={generateGoogleMapsUrl(club)}
 										target="_blank"
 										rel="noopener noreferrer"
-										class="variant-soft-primary btn btn-sm"
+										class="preset-soft-primary btn btn-sm"
 									>
 										<ExternalLink class="mr-2 h-4 w-4" />
 										Open in Google Maps
@@ -355,7 +355,7 @@
 											href={`https://www.google.com/maps/dir/?api=1&destination=${club.location.geolocation.latitude},${club.location.geolocation.longitude}`}
 											target="_blank"
 											rel="noopener noreferrer"
-											class="variant-soft-secondary btn btn-sm"
+											class="preset-soft-secondary btn btn-sm"
 										>
 											<Navigation class="mr-2 h-4 w-4" />
 											Get Directions
@@ -453,11 +453,11 @@
 							<span>Loading aircraft...</span>
 						</div>
 					{:else if aircraftError}
-						<div class="alert variant-filled-error">
+						<div class="alert preset-filled-error">
 							<div class="alert-message">
 								<p>{aircraftError}</p>
 								<div class="alert-actions">
-									<button class="variant-filled btn" onclick={loadAircraft}> Try Again </button>
+									<button class="btn preset-filled" onclick={loadAircraft}> Try Again </button>
 								</div>
 							</div>
 						</div>
@@ -477,7 +477,7 @@
 												href={`/devices/${plane.device_id}`}
 												target="_blank"
 												rel="noopener noreferrer"
-												class="variant-soft-primary btn btn-sm"
+												class="preset-soft-primary btn btn-sm"
 												title="View device details"
 											>
 												<Plane class="h-4 w-4" />
@@ -488,7 +488,7 @@
 											href={`https://www.flightaware.com/photos/aircraft/${plane.registration_number}`}
 											target="_blank"
 											rel="noopener noreferrer"
-											class="variant-soft-primary btn btn-sm"
+											class="preset-soft-primary btn btn-sm"
 											title="View photos on FlightAware"
 										>
 											<Image class="h-4 w-4" />
@@ -666,7 +666,7 @@
 							href={generateGoogleMapsUrl(club)}
 							target="_blank"
 							rel="noopener noreferrer"
-							class="variant-ghost-primary btn btn-sm"
+							class="preset-ghost-primary btn btn-sm"
 						>
 							<ExternalLink class="mr-2 h-4 w-4" />
 							View Larger Map
@@ -676,7 +676,7 @@
 								href={`https://www.google.com/maps/dir/?api=1&destination=${club.location.geolocation.latitude},${club.location.geolocation.longitude}`}
 								target="_blank"
 								rel="noopener noreferrer"
-								class="variant-ghost-secondary btn btn-sm"
+								class="preset-ghost-secondary btn btn-sm"
 							>
 								<Navigation class="mr-2 h-4 w-4" />
 								Get Directions

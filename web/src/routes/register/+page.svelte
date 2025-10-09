@@ -81,7 +81,7 @@
 
 	<div class="card p-6">
 		{#if error}
-			<div class="variant-filled-error mb-4 rounded-lg p-3 text-sm">
+			<div class="preset-filled-error mb-4 rounded-lg p-3 text-sm">
 				{error}
 			</div>
 		{/if}
@@ -160,7 +160,7 @@
 				/>
 			</label>
 
-			<button type="submit" class="variant-filled-primary btn w-full" disabled={loading}>
+			<button type="submit" class="preset-filled-primary btn w-full" disabled={loading}>
 				{loading ? 'Creating Account...' : 'Create Account'}
 			</button>
 		</form>

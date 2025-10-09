@@ -240,7 +240,7 @@
 <div class="max-w-8xl container mx-auto space-y-6 p-4">
 	<!-- Back Button -->
 	<div class="flex items-center gap-4">
-		<button class="variant-soft btn btn-sm" onclick={goBack}>
+		<button class="preset-soft btn btn-sm" onclick={goBack}>
 			<ArrowLeft class="mr-2 h-4 w-4" />
 			Back to Search
 		</button>
@@ -258,12 +258,12 @@
 
 	<!-- Error State -->
 	{#if error}
-		<div class="alert variant-filled-error">
+		<div class="alert preset-filled-error">
 			<div class="alert-message">
 				<h3 class="h3">Error Loading Receiver</h3>
 				<p>{error}</p>
 				<div class="alert-actions">
-					<button class="variant-filled btn" onclick={loadReceiver}> Try Again </button>
+					<button class="btn preset-filled" onclick={loadReceiver}> Try Again </button>
 				</div>
 			</div>
 		</div>
@@ -280,7 +280,7 @@
 							<Radio class="h-8 w-10 text-primary-500" />
 							<h1 class="h1">{receiver.callsign}</h1>
 							{#if receiver.from_ogn_db}
-								<span class="variant-filled-secondary chip text-sm">OGN DB</span>
+								<span class="preset-filled-secondary chip text-sm">OGN DB</span>
 							{/if}
 						</div>
 						{#if receiver.description}
@@ -332,7 +332,7 @@
 										href={generateGoogleMapsUrl(receiver)}
 										target="_blank"
 										rel="noopener noreferrer"
-										class="variant-soft-primary btn btn-sm"
+										class="preset-soft-primary btn btn-sm"
 									>
 										<ExternalLink class="mr-2 h-4 w-4" />
 										Open in Google Maps
@@ -341,7 +341,7 @@
 										href={`https://www.google.com/maps/dir/?api=1&destination=${receiver.latitude},${receiver.longitude}`}
 										target="_blank"
 										rel="noopener noreferrer"
-										class="variant-soft-secondary btn btn-sm"
+										class="preset-soft-secondary btn btn-sm"
 									>
 										<Navigation class="mr-2 h-4 w-4" />
 										Get Directions
@@ -418,7 +418,7 @@
 						<span>Loading fixes...</span>
 					</div>
 				{:else if fixesError}
-					<div class="alert variant-filled-error">
+					<div class="alert preset-filled-error">
 						<p>{fixesError}</p>
 					</div>
 				{:else if fixes.length === 0}
@@ -472,7 +472,7 @@
 					{#if fixesTotalPages > 1}
 						<div class="mt-4 flex items-center justify-between">
 							<button
-								class="variant-soft btn btn-sm"
+								class="preset-soft btn btn-sm"
 								disabled={fixesPage === 1}
 								onclick={prevFixesPage}
 							>
@@ -483,7 +483,7 @@
 								Page {fixesPage} of {fixesTotalPages}
 							</span>
 							<button
-								class="variant-soft btn btn-sm"
+								class="preset-soft btn btn-sm"
 								disabled={fixesPage === fixesTotalPages}
 								onclick={nextFixesPage}
 							>
@@ -514,7 +514,7 @@
 						<span>Loading statuses...</span>
 					</div>
 				{:else if statusesError}
-					<div class="alert variant-filled-error">
+					<div class="alert preset-filled-error">
 						<p>{statusesError}</p>
 					</div>
 				{:else if statuses.length === 0}
@@ -612,7 +612,7 @@
 					{#if statusesTotalPages > 1}
 						<div class="mt-4 flex items-center justify-between">
 							<button
-								class="variant-soft btn btn-sm"
+								class="preset-soft btn btn-sm"
 								disabled={statusesPage === 1}
 								onclick={prevStatusesPage}
 							>
@@ -623,7 +623,7 @@
 								Page {statusesPage} of {statusesTotalPages}
 							</span>
 							<button
-								class="variant-soft btn btn-sm"
+								class="preset-soft btn btn-sm"
 								disabled={statusesPage === statusesTotalPages}
 								onclick={nextStatusesPage}
 							>
@@ -660,7 +660,7 @@
 							href={generateGoogleMapsUrl(receiver)}
 							target="_blank"
 							rel="noopener noreferrer"
-							class="variant-ghost-primary btn btn-sm"
+							class="preset-ghost-primary btn btn-sm"
 						>
 							<ExternalLink class="mr-2 h-4 w-4" />
 							View Larger Map
@@ -669,7 +669,7 @@
 							href={`https://www.google.com/maps/dir/?api=1&destination=${receiver.latitude},${receiver.longitude}`}
 							target="_blank"
 							rel="noopener noreferrer"
-							class="variant-ghost-secondary btn btn-sm"
+							class="preset-ghost-secondary btn btn-sm"
 						>
 							<Navigation class="mr-2 h-4 w-4" />
 							Get Directions

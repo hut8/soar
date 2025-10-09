@@ -41,9 +41,9 @@
 						<div class="text-surface-700-200-token">
 							Email: {$auth.user.email}
 							{#if !$auth.user.email_verified}
-								<span class="variant-filled-warning ml-2 badge">Unverified</span>
+								<span class="preset-filled-warning ml-2 badge">Unverified</span>
 							{:else}
-								<span class="variant-filled-success ml-2 badge">Verified</span>
+								<span class="preset-filled-success ml-2 badge">Verified</span>
 							{/if}
 						</div>
 					</div>
@@ -52,7 +52,7 @@
 						<div class="text-surface-700-200-token capitalize">
 							Access Level: {$auth.user.access_level}
 							{#if $auth.user.access_level === 'admin'}
-								<span class="variant-filled-primary ml-2 badge">Administrator</span>
+								<span class="preset-filled-primary ml-2 badge">Administrator</span>
 							{/if}
 						</div>
 					</div>
@@ -76,17 +76,17 @@
 				<h2 class="text-xl font-semibold">Quick Actions</h2>
 
 				<div class="space-y-3">
-					<a href={resolve('/clubs')} class="variant-ghost-primary btn w-full justify-start">
+					<a href={resolve('/clubs')} class="preset-ghost-primary btn w-full justify-start">
 						🏢 Browse Clubs
 					</a>
-					<a href={resolve('/operations')} class="variant-ghost-primary btn w-full justify-start">
+					<a href={resolve('/operations')} class="preset-ghost-primary btn w-full justify-start">
 						🗺️ View Operations Map
 					</a>
 
 					{#if $auth.user.access_level === 'admin'}
 						<hr class="!my-4" />
 						<div class="text-surface-600-300-token text-sm font-medium">Administrator Tools</div>
-						<button class="variant-ghost-secondary btn w-full justify-start" disabled>
+						<button class="preset-ghost-secondary btn w-full justify-start" disabled>
 							👥 Manage Users (Coming Soon)
 						</button>
 					{/if}
@@ -122,6 +122,6 @@
 	<div class="text-center">
 		<h1 class="text-2xl font-bold">Access Required</h1>
 		<p class="text-surface-600-300-token mt-2">Please log in to view your profile.</p>
-		<a href={resolve('/login')} class="variant-filled-primary mt-4 btn"> Login </a>
+		<a href={resolve('/login')} class="preset-filled-primary mt-4 btn"> Login </a>
 	</div>
 {/if}

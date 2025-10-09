@@ -127,7 +127,7 @@
 <div class="max-w-8xl container mx-auto space-y-6 p-4">
 	<!-- Back Button -->
 	<div class="flex items-center gap-4">
-		<button class="variant-soft btn btn-sm" onclick={goBack}>
+		<button class="preset-soft btn btn-sm" onclick={goBack}>
 			<ArrowLeft class="mr-2 h-4 w-4" />
 			Back to Search
 		</button>
@@ -145,12 +145,12 @@
 
 	<!-- Error State -->
 	{#if error}
-		<div class="alert variant-filled-error">
+		<div class="alert preset-filled-error">
 			<div class="alert-message">
 				<h3 class="h3">Error Loading Airport</h3>
 				<p>{error}</p>
 				<div class="alert-actions">
-					<button class="variant-filled btn" onclick={loadAirport}> Try Again </button>
+					<button class="btn preset-filled" onclick={loadAirport}> Try Again </button>
 				</div>
 			</div>
 		</div>
@@ -168,14 +168,14 @@
 							<h1 class="h1">{airport.name}</h1>
 						</div>
 						<div class="flex flex-wrap items-center gap-2">
-							<span class="variant-soft-primary badge font-mono text-lg">
+							<span class="preset-soft-primary badge font-mono text-lg">
 								{getAirportCode(airport)}
 							</span>
-							<span class="variant-soft badge">
+							<span class="preset-soft badge">
 								{formatAirportType(airport.airport_type)}
 							</span>
 							{#if airport.scheduled_service}
-								<span class="variant-filled-success badge"> Scheduled Service </span>
+								<span class="preset-filled-success badge"> Scheduled Service </span>
 							{/if}
 						</div>
 					</div>
@@ -240,7 +240,7 @@
 										href={generateGoogleMapsUrl(airport)}
 										target="_blank"
 										rel="noopener noreferrer"
-										class="variant-soft-primary btn btn-sm"
+										class="preset-soft-primary btn btn-sm"
 									>
 										<ExternalLink class="mr-2 h-4 w-4" />
 										Open in Google Maps
@@ -249,7 +249,7 @@
 										href={`https://www.google.com/maps/dir/?api=1&destination=${airport.latitude_deg},${airport.longitude_deg}`}
 										target="_blank"
 										rel="noopener noreferrer"
-										class="variant-soft-secondary btn btn-sm"
+										class="preset-soft-secondary btn btn-sm"
 									>
 										<Navigation class="mr-2 h-4 w-4" />
 										Get Directions
@@ -302,7 +302,7 @@
 										href={airport.home_link}
 										target="_blank"
 										rel="noopener noreferrer"
-										class="variant-soft-primary btn btn-sm"
+										class="preset-soft-primary btn btn-sm"
 									>
 										<ExternalLink class="mr-2 h-4 w-4" />
 										Website
@@ -313,7 +313,7 @@
 										href={airport.wikipedia_link}
 										target="_blank"
 										rel="noopener noreferrer"
-										class="variant-soft-secondary btn btn-sm"
+										class="preset-soft-secondary btn btn-sm"
 									>
 										<ExternalLink class="mr-2 h-4 w-4" />
 										Wikipedia
@@ -342,7 +342,7 @@
 									</h3>
 									<div class="flex flex-wrap gap-2">
 										{#if runway.lighted}
-											<span class="variant-filled-success badge">
+											<span class="preset-filled-success badge">
 												<svg class="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
 													<path
 														d="M11 3a1 1 0 10-2 0v1a1 1 0 102 0V3zM15.657 5.757a1 1 0 00-1.414-1.414l-.707.707a1 1 0 001.414 1.414l.707-.707zM18 10a1 1 0 01-1 1h-1a1 1 0 110-2h1a1 1 0 011 1zM5.05 6.464A1 1 0 106.464 5.05l-.707-.707a1 1 0 00-1.414 1.414l.707.707zM5 10a1 1 0 01-1 1H3a1 1 0 110-2h1a1 1 0 011 1zM8 16v-1h4v1a2 2 0 11-4 0zM12 14c.015-.34.208-.646.477-.859a4 4 0 10-4.954 0c.27.213.462.519.476.859h4.002z"
@@ -352,7 +352,7 @@
 											</span>
 										{/if}
 										{#if runway.closed}
-											<span class="variant-filled-error badge">
+											<span class="preset-filled-error badge">
 												<svg class="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
 													<path
 														fill-rule="evenodd"
@@ -491,7 +491,7 @@
 							href={generateGoogleMapsUrl(airport)}
 							target="_blank"
 							rel="noopener noreferrer"
-							class="variant-ghost-primary btn btn-sm"
+							class="preset-ghost-primary btn btn-sm"
 						>
 							<ExternalLink class="mr-2 h-4 w-4" />
 							View Larger Map
@@ -500,7 +500,7 @@
 							href={`https://www.google.com/maps/dir/?api=1&destination=${airport.latitude_deg},${airport.longitude_deg}`}
 							target="_blank"
 							rel="noopener noreferrer"
-							class="variant-ghost-secondary btn btn-sm"
+							class="preset-ghost-secondary btn btn-sm"
 						>
 							<Navigation class="mr-2 h-4 w-4" />
 							Get Directions

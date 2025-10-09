@@ -236,7 +236,7 @@
 			<div class="flex-shrink-0 p-4 pb-0">
 				<div class="mb-4 flex items-center justify-between">
 					<h2 class="text-xl font-bold">Watchlist</h2>
-					<button class="variant-ghost-surface btn btn-sm" onclick={() => (showModal = false)}>
+					<button class="preset-ghost-surface btn btn-sm" onclick={() => (showModal = false)}>
 						<X size={20} />
 					</button>
 				</div>
@@ -333,7 +333,7 @@
 													Club Aircraft ({clubDevices.length})
 												</span>
 												<button
-													class="variant-filled-primary btn btn-sm"
+													class="preset-filled-primary btn btn-sm"
 													onclick={addAllClubDevices}
 													disabled={clubSearchInProgress}
 												>
@@ -364,7 +364,7 @@
 																</span>
 															{:else}
 																<button
-																	class="variant-filled-primary btn btn-sm"
+																	class="preset-filled-primary btn btn-sm"
 																	onclick={() => addDeviceToWatchlist(device)}
 																>
 																	<Plus size={14} />
@@ -487,7 +487,7 @@
 															Club Aircraft ({clubDevices.length})
 														</span>
 														<button
-															class="variant-filled-primary btn btn-sm"
+															class="preset-filled-primary btn btn-sm"
 															onclick={addAllClubDevices}
 															disabled={clubSearchInProgress}
 														>
@@ -518,7 +518,7 @@
 																		</span>
 																	{:else}
 																		<button
-																			class="variant-filled-primary btn btn-sm"
+																			class="preset-filled-primary btn btn-sm"
 																			onclick={() => addDeviceToWatchlist(device)}
 																		>
 																			<Plus size={14} />
@@ -559,7 +559,7 @@
 
 						{#if newWatchlistEntry.type !== 'club'}
 							<button
-								class="variant-filled-primary btn w-full btn-sm"
+								class="preset-filled-primary btn w-full btn-sm"
 								onclick={addWatchlistEntry}
 								disabled={searchInProgress}
 							>
@@ -641,7 +641,7 @@
 													onCheckedChange={() => toggleWatchlistEntry(entry.id)}
 												/>
 												<button
-													class="variant-ghost-error btn btn-sm"
+													class="preset-ghost-error btn btn-sm"
 													onclick={() => removeWatchlistEntry(entry.id)}
 												>
 													<X size={16} />
