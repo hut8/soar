@@ -112,7 +112,7 @@ struct FixDslRow {
     timestamp: DateTime<Utc>,
     latitude: f64,
     longitude: f64,
-    altitude_feet: Option<i32>,
+    altitude_msl_feet: Option<i32>,
     altitude_agl: Option<i32>,
     device_address: i32,
     address_type: AddressType,
@@ -154,7 +154,7 @@ impl From<FixDslRow> for Fix {
             lag: row.lag,
             latitude: row.latitude,
             longitude: row.longitude,
-            altitude_feet: row.altitude_feet,
+            altitude_msl_feet: row.altitude_msl_feet,
             altitude_agl: row.altitude_agl,
             device_address: row.device_address,
             address_type: row.address_type,
@@ -315,7 +315,7 @@ impl FixesRepository {
                 new_fix.device_address,
                 new_fix.latitude,
                 new_fix.longitude,
-                new_fix.altitude_feet.map_or("Unknown".to_string(), |a| a.to_string()),
+                new_fix.altitude_msl_feet.map_or("Unknown".to_string(), |a| a.to_string()),
                 new_fix.latitude,
                 new_fix.longitude
             );
@@ -701,7 +701,7 @@ impl FixesRepository {
                 #[diesel(sql_type = diesel::sql_types::Double)]
                 longitude: f64,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Int4>)]
-                altitude_feet: Option<i32>,
+                altitude_msl_feet: Option<i32>,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Int4>)]
                 altitude_agl: Option<i32>,
                 #[diesel(sql_type = diesel::sql_types::Int4)]
@@ -780,7 +780,7 @@ impl FixesRepository {
                     lag: fix_row.lag,
                     latitude: fix_row.latitude,
                     longitude: fix_row.longitude,
-                    altitude_feet: fix_row.altitude_feet,
+                    altitude_msl_feet: fix_row.altitude_msl_feet,
                     altitude_agl: fix_row.altitude_agl,
                     device_address: fix_row.device_address,
                     address_type: fix_row.address_type,

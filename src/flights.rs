@@ -371,7 +371,7 @@ impl Flight {
         // Add coordinates for flight track (longitude,latitude,altitude_meters)
         for fix in &fixes {
             let altitude_meters = fix
-                .altitude_feet
+                .altitude_msl_feet
                 .map(|alt| alt as f64 * 0.3048)
                 .unwrap_or(0.0);
             kml.push_str(&format!(
@@ -396,7 +396,7 @@ impl Flight {
             kml.push_str("      <Point>\n");
             kml.push_str("        <altitudeMode>absolute</altitudeMode>\n");
             let altitude_meters = first_fix
-                .altitude_feet
+                .altitude_msl_feet
                 .map(|alt| alt as f64 * 0.3048)
                 .unwrap_or(0.0);
             kml.push_str(&format!(
@@ -421,7 +421,7 @@ impl Flight {
             kml.push_str("      <Point>\n");
             kml.push_str("        <altitudeMode>absolute</altitudeMode>\n");
             let altitude_meters = last_fix
-                .altitude_feet
+                .altitude_msl_feet
                 .map(|alt| alt as f64 * 0.3048)
                 .unwrap_or(0.0);
             kml.push_str(&format!(

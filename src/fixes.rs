@@ -33,7 +33,8 @@ pub struct Fix {
     pub latitude: f64,
     pub longitude: f64,
     // Note: location field is skipped as it's computed from lat/lng
-    pub altitude_feet: Option<i32>,
+    #[serde(rename = "altitude_msl_feet")]
+    pub altitude_msl_feet: Option<i32>,
     #[serde(rename = "altitude_agl_feet")]
     pub altitude_agl: Option<i32>,
 
@@ -176,7 +177,7 @@ impl Fix {
                     timestamp,
                     latitude,
                     longitude,
-                    altitude_feet,
+                    altitude_msl_feet: altitude_feet,
                     altitude_agl: None, // Will be calculated by processors
                     device_address,
                     address_type,

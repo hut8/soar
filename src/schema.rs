@@ -259,7 +259,7 @@ diesel::table! {
         latitude -> Float8,
         longitude -> Float8,
         location -> Nullable<Geography>,
-        altitude_feet -> Nullable<Int4>,
+        altitude_msl_feet -> Nullable<Int4>,
         address_type -> AddressType,
         aircraft_type_ogn -> Nullable<AircraftTypeOgn>,
         #[max_length = 20]

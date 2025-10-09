@@ -161,7 +161,7 @@ impl FlightTracker {
     /// Returns None if elevation lookup fails or fix has no altitude
     async fn calculate_altitude_offset_ft(&self, fix: &Fix) -> Option<i32> {
         // Get reported altitude from fix (in feet)
-        let reported_altitude_ft = fix.altitude_feet?;
+        let reported_altitude_ft = fix.altitude_msl_feet?;
 
         let lat = fix.latitude;
         let lon = fix.longitude;
@@ -205,7 +205,7 @@ impl FlightTracker {
 
     async fn calculate_altitude_agl(&self, fix: &Fix) -> Option<i32> {
         // Get reported altitude from fix (in feet)
-        let reported_altitude_ft = fix.altitude_feet?;
+        let reported_altitude_ft = fix.altitude_msl_feet?;
 
         let lat = fix.latitude;
         let lon = fix.longitude;
@@ -631,7 +631,7 @@ impl FlightTracker {
                     if distance_meters <= 200.0 {
                         // Check altitude difference (should be similar, within 200 feet)
                         if let (Some(glider_alt), Some(towplane_alt)) =
-                            (glider_fix.altitude_feet, towplane_fix.altitude_feet)
+                            (glider_fix.altitude_msl_feet, towplane_fix.altitude_msl_feet)
                         {
                             let altitude_diff = (glider_alt - towplane_alt).abs();
                             if altitude_diff <= 200 {
@@ -693,7 +693,7 @@ impl FlightTracker {
 
                 // Calculate 3D distance if we have altitudes
                 let separation_feet = if let (Some(glider_alt), Some(towplane_alt)) =
-                    (glider_fix.altitude_feet, towplane_fix.altitude_feet)
+                    (glider_fix.altitude_msl_feet, towplane_fix.altitude_msl_feet)
                 {
                     let horizontal_feet = distance_meters * 3.28084; // meters to feet
                     let vertical_feet = (glider_alt - towplane_alt).abs() as f64;
@@ -749,7 +749,7 @@ impl FlightTracker {
 
     /// Record tow release in the database
     async fn record_tow_release(&self, glider_flight_id: &Uuid, release_fix: &Fix) -> Result<()> {
-        if let Some(altitude_ft) = release_fix.altitude_feet {
+        if let Some(altitude_ft) = release_fix.altitude_msl_feet {
             info!(
                 "Recording tow release for flight {} at {}ft MSL",
                 glider_flight_id, altitude_ft
@@ -976,7 +976,7 @@ impl FlightTracker {
             let altitude_range = if !flight_fixes.is_empty() {
                 let altitudes: Vec<i32> = flight_fixes
                     .iter()
-                    .filter_map(|f| f.altitude_feet)
+                    .filter_map(|f| f.altitude_msl_feet)
                     .collect();
 
                 if altitudes.is_empty() {
@@ -1513,7 +1513,7 @@ mod tests {
             lag: None,
             latitude: 40.0,
             longitude: -74.0,
-            altitude_feet: Some(1000),
+            altitude_msl_feet: Some(1000),
             altitude_agl: None,
             device_address: 0x123456,
             address_type: AddressType::Icao,
