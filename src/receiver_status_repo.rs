@@ -263,7 +263,7 @@ impl ReceiverStatusRepository {
                     WHERE receiver_id = $1
                         AND received_at BETWEEN $2 AND $3
                 )
-                SELECT AVG(interval_seconds) as avg_interval
+                SELECT AVG(interval_seconds)::double precision as avg_interval
                 FROM intervals
                 WHERE interval_seconds IS NOT NULL
             "#
@@ -275,7 +275,7 @@ impl ReceiverStatusRepository {
                     FROM receiver_statuses
                     WHERE receiver_id = $1
                 )
-                SELECT AVG(interval_seconds) as avg_interval
+                SELECT AVG(interval_seconds)::double precision as avg_interval
                 FROM intervals
                 WHERE interval_seconds IS NOT NULL
             "#
