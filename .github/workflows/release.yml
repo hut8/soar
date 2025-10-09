@@ -185,8 +185,9 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/soar:latest
             ghcr.io/${{ github.repository_owner }}/soar:${{ steps.get_version.outputs.version }}
+          secrets: |
+            sentry_token=${{ secrets.SENTRY_AUTH_TOKEN }}
           build-args: |
-            SENTRY_AUTH_TOKEN=${{ secrets.SENTRY_AUTH_TOKEN }}
             SENTRY_ORG=${{ secrets.SENTRY_ORG }}
             SENTRY_PROJECT=${{ secrets.SENTRY_PROJECT }}
           cache-from: type=gha

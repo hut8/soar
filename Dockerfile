@@ -4,7 +4,7 @@ FROM node:20-alpine AS web-builder
 # Install dependencies and build the web frontend
 WORKDIR /app/web
 COPY web/package*.json ./
-RUN npm ci --only=production
+RUN npm ci
 
 COPY web/ ./
 RUN npm run build
@@ -39,20 +39,22 @@ RUN cargo build --release
 
 # Upload debug symbols to Sentry (if SENTRY_AUTH_TOKEN is provided)
 # This happens after build so we have the debug info files
-ARG SENTRY_AUTH_TOKEN
+# Using BuildKit secret mount for secure token handling
 ARG SENTRY_ORG
 ARG SENTRY_PROJECT
-RUN if [ -n "$SENTRY_AUTH_TOKEN" ]; then \
-    echo "Installing sentry-cli..." && \
-    curl -sL https://sentry.io/get-cli/ | bash && \
-    echo "Uploading debug symbols to Sentry..." && \
-    sentry-cli debug-files upload \
-      --org "$SENTRY_ORG" \
-      --project "$SENTRY_PROJECT" \
-      target/release/soar || echo "Debug symbol upload failed (non-fatal)"; \
-  else \
-    echo "Skipping Sentry debug symbol upload (SENTRY_AUTH_TOKEN not set)"; \
-  fi
+RUN --mount=type=secret,id=sentry_token \
+    if [ -f /run/secrets/sentry_token ]; then \
+      echo "Installing sentry-cli..." && \
+      curl -sL https://sentry.io/get-cli/ | bash && \
+      echo "Uploading debug symbols to Sentry..." && \
+      export SENTRY_AUTH_TOKEN=$(cat /run/secrets/sentry_token) && \
+      sentry-cli debug-files upload \
+        --org "$SENTRY_ORG" \
+        --project "$SENTRY_PROJECT" \
+        target/release/soar || echo "Debug symbol upload failed (non-fatal)"; \
+    else \
+      echo "Skipping Sentry debug symbol upload (sentry_token secret not provided)"; \
+    fi
 
 # Runtime stage
 FROM debian:bullseye-slim
