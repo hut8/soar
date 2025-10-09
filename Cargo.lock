@@ -1686,12 +1686,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "hashbrown"
-version = "0.16.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5419bdc4f6a9207fbeba6d11b604d481addf78ecd10c11ad51e76c2f6482748d"
-
-[[package]]
 name = "headers"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2104,7 +2098,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4b0f83760fb341a774ed326568e19f5a863af4a952def8c39f9ab92fd95b88e5"
 dependencies = [
  "equivalent",
- "hashbrown 0.16.0",
+ "hashbrown 0.15.5",
 ]
 
 [[package]]
@@ -2626,7 +2620,7 @@ dependencies = [
 [[package]]
 name = "ogn-parser"
 version = "0.3.15"
-source = "git+https://github.com/hut8/ogn-parser-rs?branch=master#34506855f9a8cff4d0ca2b134b774c8dd08c68e3"
+source = "git+https://github.com/hut8/ogn-parser-rs?branch=master#ed2e4d355cf0e8cca582a19b019cb4fc7d227d35"
 dependencies = [
  "chrono",
  "flat_projection",
