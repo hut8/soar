@@ -1,0 +1,137 @@
+#!/bin/bash
+set -e
+
+# SOAR Release Script
+# Automates version bumping, tagging, and triggering release workflow
+#
+# Usage:
+#   ./release patch        # 0.1.0 → 0.1.1
+#   ./release minor        # 0.1.0 → 0.2.0
+#   ./release major        # 0.1.0 → 1.0.0
+#   ./release 1.2.3        # Set explicit version
+#   ./release patch --dry-run  # Test without pushing
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Parse arguments
+BUMP_TYPE="$1"
+DRY_RUN=false
+
+if [ -z "$BUMP_TYPE" ]; then
+    echo -e "${RED}Error: Version bump type required${NC}"
+    echo "Usage: ./release [patch|minor|major|VERSION] [--dry-run]"
+    exit 1
+fi
+
+if [ "$2" = "--dry-run" ] || [ "$BUMP_TYPE" = "--dry-run" ]; then
+    DRY_RUN=true
+    echo -e "${YELLOW}DRY RUN MODE - No changes will be pushed${NC}\n"
+fi
+
+# Validate we're on main branch
+CURRENT_BRANCH=$(git branch --show-current)
+if [ "$CURRENT_BRANCH" != "main" ]; then
+    echo -e "${RED}Error: Must be on main branch (currently on: $CURRENT_BRANCH)${NC}"
+    exit 1
+fi
+
+# Check for uncommitted changes
+if ! git diff-index --quiet HEAD --; then
+    echo -e "${RED}Error: Uncommitted changes detected. Please commit or stash first.${NC}"
+    git status --short
+    exit 1
+fi
+
+# Pull latest changes
+echo -e "${BLUE}Pulling latest changes...${NC}"
+git pull
+
+# Get current version from Cargo.toml
+CURRENT_VERSION=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+echo -e "${BLUE}Current version: ${GREEN}$CURRENT_VERSION${NC}"
+
+# Calculate new version
+if [[ "$BUMP_TYPE" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    # Explicit version provided
+    NEW_VERSION="$BUMP_TYPE"
+else
+    # Parse current version
+    IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+
+    case "$BUMP_TYPE" in
+        major)
+            MAJOR=$((MAJOR + 1))
+            MINOR=0
+            PATCH=0
+            ;;
+        minor)
+            MINOR=$((MINOR + 1))
+            PATCH=0
+            ;;
+        patch)
+            PATCH=$((PATCH + 1))
+            ;;
+        *)
+            echo -e "${RED}Error: Invalid bump type '$BUMP_TYPE'${NC}"
+            echo "Must be: patch, minor, major, or explicit version (e.g., 1.2.3)"
+            exit 1
+            ;;
+    esac
+
+    NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+fi
+
+echo -e "${BLUE}New version: ${GREEN}$NEW_VERSION${NC}\n"
+
+# Update Cargo.toml
+echo -e "${BLUE}Updating Cargo.toml...${NC}"
+sed -i.bak "s/^version = \".*\"/version = \"$NEW_VERSION\"/" Cargo.toml
+rm Cargo.toml.bak
+
+# Update web/package.json
+echo -e "${BLUE}Updating web/package.json...${NC}"
+cd web
+npm version "$NEW_VERSION" --no-git-tag-version
+cd ..
+
+# Update Cargo.lock
+echo -e "${BLUE}Updating Cargo.lock...${NC}"
+cargo check --quiet
+
+# Show changes
+echo -e "\n${BLUE}Changes to be committed:${NC}"
+git diff --stat
+
+# Commit changes
+echo -e "\n${BLUE}Committing version bump...${NC}"
+git add Cargo.toml Cargo.lock web/package.json web/package-lock.json
+git commit -m "chore: bump version to $NEW_VERSION"
+
+# Create git tag
+TAG="v$NEW_VERSION"
+echo -e "${BLUE}Creating git tag: ${GREEN}$TAG${NC}"
+git tag -a "$TAG" -m "Release $TAG"
+
+# Push changes
+if [ "$DRY_RUN" = true ]; then
+    echo -e "\n${YELLOW}DRY RUN: Skipping push${NC}"
+    echo "Would have pushed:"
+    echo "  - Commit: $(git log -1 --oneline)"
+    echo "  - Tag: $TAG"
+    echo -e "\n${YELLOW}To undo dry run changes:${NC}"
+    echo "  git reset --hard HEAD~1"
+    echo "  git tag -d $TAG"
+else
+    echo -e "${BLUE}Pushing commit and tag...${NC}"
+    git push origin main
+    git push origin "$TAG"
+
+    echo -e "\n${GREEN}✓ Release $TAG created successfully!${NC}"
+    echo -e "${BLUE}GitHub Actions will now build and publish the release${NC}"
+    echo -e "${BLUE}Watch progress at: https://github.com/$(git remote get-url origin | sed 's/.*github.com[:/]\(.*\)\.git/\1/')/actions${NC}"
+fi
