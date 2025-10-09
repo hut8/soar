@@ -18,6 +18,7 @@
 	import { serverCall } from '$lib/api/server';
 	import { auth, type User } from '$lib/stores/auth';
 	import type { ClubWithSoaring } from '$lib/types';
+	import { getStatusCodeDescription, formatSnakeCase } from '$lib/formatters';
 
 	interface Aircraft {
 		registration_number: string;
@@ -44,6 +45,8 @@
 		device_id?: string;
 		aircraft_type_ogn?: string;
 		model?: {
+			manufacturer_name?: string;
+			model_name?: string;
 			number_of_engines?: number;
 		};
 	}
@@ -581,6 +584,31 @@
 														</td>
 													</tr>
 												{/if}
+												{#if plane.model?.manufacturer_name && plane.model?.model_name}
+													<tr class="border-surface-200-700-token border-b">
+														<td
+															class="text-surface-600-300-token py-2 pr-4 text-right text-sm font-medium"
+														>
+															Make and Model:
+														</td>
+														<td class="py-2 text-left text-sm">
+															{plane.model.manufacturer_name}
+															{plane.model.model_name}
+														</td>
+													</tr>
+												{/if}
+												{#if plane.aircraft_type_ogn}
+													<tr class="border-surface-200-700-token border-b">
+														<td
+															class="text-surface-600-300-token py-2 pr-4 text-right text-sm font-medium"
+														>
+															Aircraft Type (OGN):
+														</td>
+														<td class="py-2 text-left text-sm">
+															{formatSnakeCase(plane.aircraft_type_ogn)}
+														</td>
+													</tr>
+												{/if}
 												{#if plane.engine_manufacturer_model_code}
 													<tr class="border-surface-200-700-token border-b">
 														<td
@@ -601,7 +629,7 @@
 															Status:
 														</td>
 														<td class="py-2 text-left text-sm">
-															{plane.status_code}
+															{getStatusCodeDescription(plane.status_code)}
 														</td>
 													</tr>
 												{/if}
