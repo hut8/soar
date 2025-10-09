@@ -174,6 +174,20 @@
 
 			flightPath.setMap(map);
 
+			// Add small markers for each fix (white dots)
+			fixesInOrder.forEach((fix) => {
+				const fixDot = document.createElement('div');
+				fixDot.innerHTML = `
+					<div style="background-color: white; width: 6px; height: 6px; border-radius: 50%; border: 1px solid rgba(0,0,0,0.3); box-shadow: 0 0 2px rgba(0,0,0,0.5);"></div>
+				`;
+
+				new google.maps.marker.AdvancedMarkerElement({
+					map,
+					position: { lat: fix.latitude, lng: fix.longitude },
+					content: fixDot
+				});
+			});
+
 			// Add takeoff marker (green) - first fix chronologically
 			if (fixesInOrder.length > 0) {
 				const first = fixesInOrder[0];

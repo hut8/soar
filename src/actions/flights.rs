@@ -70,18 +70,29 @@ pub async fn get_flight_by_id(
             };
 
             // Look up device information
-            let device = if let Some(device_id) = flight.device_id {
-                device_repo
-                    .get_device_by_uuid(device_id)
-                    .await
-                    .ok()
-                    .flatten()
-            } else {
-                None
-            };
+            let (device, aircraft_model, registration, aircraft_type_ogn) =
+                if let Some(device_id) = flight.device_id {
+                    match device_repo.get_device_by_uuid(device_id).await {
+                        Ok(Some(dev)) => (
+                            Some(dev.clone()),
+                            Some(dev.aircraft_model),
+                            Some(dev.registration),
+                            dev.aircraft_type_ogn,
+                        ),
+                        _ => (None, None, None, None),
+                    }
+                } else {
+                    (None, None, None, None)
+                };
 
-            let flight_view =
-                FlightView::from_flight(flight, departure_airport_ident, arrival_airport_ident);
+            let flight_view = FlightView::from_flight(
+                flight,
+                departure_airport_ident,
+                arrival_airport_ident,
+                aircraft_model,
+                registration,
+                aircraft_type_ogn,
+            );
             Json(FlightResponse {
                 flight: flight_view,
                 device,
@@ -251,12 +262,41 @@ pub async fn get_completed_flights(
     State(state): State<AppState>,
     Query(params): Query<FlightsQueryParams>,
 ) -> impl IntoResponse {
-    let flights_repo = FlightsRepository::new(state.pool);
+    let flights_repo = FlightsRepository::new(state.pool.clone());
+    let device_repo = DeviceRepository::new(state.pool.clone());
     let limit = params.limit.unwrap_or(100);
 
     match flights_repo.get_completed_flights(limit).await {
         Ok(flights) => {
-            let flight_views: Vec<FlightView> = flights.into_iter().map(|f| f.into()).collect();
+            let mut flight_views = Vec::new();
+
+            for flight in flights {
+                // Look up device information if device_id is present
+                let (aircraft_model, registration, aircraft_type_ogn) =
+                    if let Some(device_id) = flight.device_id {
+                        match device_repo.get_device_by_uuid(device_id).await {
+                            Ok(Some(device)) => (
+                                Some(device.aircraft_model),
+                                Some(device.registration),
+                                device.aircraft_type_ogn,
+                            ),
+                            _ => (None, None, None),
+                        }
+                    } else {
+                        (None, None, None)
+                    };
+
+                let flight_view = FlightView::from_flight(
+                    flight,
+                    None, // departure_airport_ident
+                    None, // arrival_airport_ident
+                    aircraft_model,
+                    registration,
+                    aircraft_type_ogn,
+                );
+                flight_views.push(flight_view);
+            }
+
             Json(flight_views).into_response()
         }
         Err(e) => {
@@ -310,18 +350,29 @@ pub async fn get_airport_flights(
                     None
                 };
 
-                let device = if let Some(device_id) = flight.device_id {
-                    device_repo
-                        .get_device_by_uuid(device_id)
-                        .await
-                        .ok()
-                        .flatten()
-                } else {
-                    None
-                };
+                let (device, aircraft_model, registration, aircraft_type_ogn) =
+                    if let Some(device_id) = flight.device_id {
+                        match device_repo.get_device_by_uuid(device_id).await {
+                            Ok(Some(dev)) => (
+                                Some(dev.clone()),
+                                Some(dev.aircraft_model),
+                                Some(dev.registration),
+                                dev.aircraft_type_ogn,
+                            ),
+                            _ => (None, None, None, None),
+                        }
+                    } else {
+                        (None, None, None, None)
+                    };
 
-                let flight_view =
-                    FlightView::from_flight(flight, departure_airport_ident, arrival_airport_ident);
+                let flight_view = FlightView::from_flight(
+                    flight,
+                    departure_airport_ident,
+                    arrival_airport_ident,
+                    aircraft_model,
+                    registration,
+                    aircraft_type_ogn,
+                );
                 flight_responses.push(FlightResponse {
                     flight: flight_view,
                     device,

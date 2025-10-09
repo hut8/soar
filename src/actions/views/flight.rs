@@ -4,6 +4,7 @@ use uuid::Uuid;
 
 use crate::devices::AddressType;
 use crate::flights::Flight;
+use crate::ogn_aprs_aircraft::AircraftType;
 
 /// Flight view for API responses with computed fields
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -33,14 +34,22 @@ pub struct FlightView {
     pub maximum_displacement_meters: Option<f64>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+
+    // Device information
+    pub aircraft_model: Option<String>,
+    pub registration: Option<String>,
+    pub aircraft_type_ogn: Option<AircraftType>,
 }
 
 impl FlightView {
-    /// Create a FlightView from a Flight with optional airport identifiers
+    /// Create a FlightView from a Flight with optional airport identifiers and device info
     pub fn from_flight(
         flight: Flight,
         departure_airport_ident: Option<String>,
         arrival_airport_ident: Option<String>,
+        aircraft_model: Option<String>,
+        registration: Option<String>,
+        aircraft_type_ogn: Option<AircraftType>,
     ) -> Self {
         // Calculate duration in seconds if both takeoff and landing times are available
         let duration_seconds = match (flight.takeoff_time, flight.landing_time) {
@@ -71,12 +80,15 @@ impl FlightView {
             maximum_displacement_meters: flight.maximum_displacement_meters,
             created_at: flight.created_at,
             updated_at: flight.updated_at,
+            aircraft_model,
+            registration,
+            aircraft_type_ogn,
         }
     }
 }
 
 impl From<Flight> for FlightView {
     fn from(flight: Flight) -> Self {
-        Self::from_flight(flight, None, None)
+        Self::from_flight(flight, None, None, None, None, None)
     }
 }

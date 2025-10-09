@@ -4,6 +4,7 @@
 	import { onMount } from 'svelte';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
+	import { formatSnakeCase } from '$lib/formatters';
 
 	dayjs.extend(relativeTime);
 
@@ -20,6 +21,9 @@
 		takeoff_altitude_offset_ft: number | null;
 		landing_altitude_offset_ft: number | null;
 		device_id: string | null;
+		aircraft_model: string | null;
+		registration: string | null;
+		aircraft_type_ogn: string | null;
 		created_at: string;
 		updated_at: string;
 	}
@@ -123,7 +127,7 @@
 				<table class="table-hover table">
 					<thead>
 						<tr>
-							<th>Device</th>
+							<th>Aircraft</th>
 							<th>Takeoff</th>
 							<th>Landing</th>
 							<th>Duration</th>
@@ -135,18 +139,45 @@
 						{#each flights as flight (flight.id)}
 							<tr>
 								<td>
-									{#if flight.device_id}
-										<a
-											href={`/devices/${flight.device_id}`}
-											class="anchor font-mono text-primary-500 hover:text-primary-600"
-										>
-											{formatDeviceAddress(flight.device_address, flight.device_address_type)}
-										</a>
-									{:else}
-										<span class="font-mono">
-											{formatDeviceAddress(flight.device_address, flight.device_address_type)}
-										</span>
-									{/if}
+									<div class="flex flex-col gap-1">
+										{#if flight.aircraft_model && flight.registration}
+											<div class="flex items-center gap-2">
+												{#if flight.device_id}
+													<a
+														href={`/devices/${flight.device_id}`}
+														class="anchor font-medium text-primary-500 hover:text-primary-600"
+													>
+														{flight.aircraft_model}
+													</a>
+												{:else}
+													<span class="font-medium">{flight.aircraft_model}</span>
+												{/if}
+												<span class="text-surface-500-400-token text-sm"
+													>({flight.registration})</span
+												>
+											</div>
+										{:else if flight.registration}
+											{#if flight.device_id}
+												<a
+													href={`/devices/${flight.device_id}`}
+													class="anchor font-medium text-primary-500 hover:text-primary-600"
+												>
+													{flight.registration}
+												</a>
+											{:else}
+												<span class="font-medium">{flight.registration}</span>
+											{/if}
+										{:else}
+											<span class="text-surface-500-400-token font-mono text-sm">
+												{formatDeviceAddress(flight.device_address, flight.device_address_type)}
+											</span>
+										{/if}
+										{#if flight.aircraft_type_ogn}
+											<span class="badge preset-filled-surface-500 text-xs">
+												{formatSnakeCase(flight.aircraft_type_ogn)}
+											</span>
+										{/if}
+									</div>
 								</td>
 								<td>
 									<div class="flex items-center gap-1 text-sm">
