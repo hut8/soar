@@ -147,11 +147,12 @@
 
 			const center = bounds.getCenter();
 
-			// Create map
+			// Create map with satellite view by default
 			map = new google.maps.Map(mapContainer, {
 				center: { lat: center.lat(), lng: center.lng() },
 				zoom: 12,
-				mapId: 'FLIGHT_MAP'
+				mapId: 'FLIGHT_MAP',
+				mapTypeId: google.maps.MapTypeId.SATELLITE
 			});
 
 			// Fit bounds
