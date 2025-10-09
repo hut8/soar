@@ -73,4 +73,7 @@ metrics-exporter-prometheus = "0.17"
 flarmnet = "0.5.0"
 
 [profile.release]
-debug = true
+# No debug symbols in release binary for smaller size and better security
+# If using Sentry, upload separate debug symbols using sentry-cli
+debug = false
+strip = true
