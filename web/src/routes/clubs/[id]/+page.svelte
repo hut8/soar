@@ -42,6 +42,7 @@
 		other_names: string[];
 		light_sport_type?: string;
 		device_id?: string;
+		aircraft_type_ogn?: string;
 		model?: {
 			number_of_engines?: number;
 		};
@@ -494,6 +495,15 @@
 											<Image class="h-4 w-4" />
 											Photos
 										</a>
+										{#if plane.aircraft_type_ogn === 'TowTug'}
+											<span
+												class="preset-filled-warning btn btn-sm"
+												title="This aircraft is a tow plane"
+											>
+												<Plane class="h-4 w-4" />
+												Tow/Tug
+											</span>
+										{/if}
 									</div>
 
 									<div class="overflow-x-auto">

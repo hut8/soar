@@ -4,6 +4,7 @@ use uuid::Uuid;
 
 use super::club::AircraftModelView;
 use crate::aircraft_registrations::{Aircraft, AirworthinessClass, LightSportType, RegistrantType};
+use crate::ogn_aprs_aircraft::AircraftType;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AircraftView {
@@ -34,6 +35,8 @@ pub struct AircraftView {
     pub device_id: Option<Uuid>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<AircraftModelView>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub aircraft_type_ogn: Option<AircraftType>,
 }
 
 impl From<Aircraft> for AircraftView {
@@ -64,7 +67,8 @@ impl From<Aircraft> for AircraftView {
             other_names: aircraft.other_names,
             light_sport_type: aircraft.light_sport_type,
             device_id: aircraft.device_id,
-            model: None, // Will be set when fetching with model data
+            model: None,             // Will be set when fetching with model data
+            aircraft_type_ogn: None, // Will be set when fetching with device data
         }
     }
 }
