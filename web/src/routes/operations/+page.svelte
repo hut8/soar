@@ -154,8 +154,8 @@
 	}
 
 	// Helper function to calculate color based on altitude (red at 500 ft, blue at 18000+ ft)
-	function getAltitudeColor(altitude_feet: number | null | undefined): string {
-		const altitude = altitude_feet || 0;
+	function getAltitudeColor(altitude_msl_feet: number | null | undefined): string {
+		const altitude = altitude_msl_feet || 0;
 
 		// Clamp altitude to 500-18000 range for color calculation
 		const clampedAltitude = Math.max(500, Math.min(18000, altitude));
@@ -175,13 +175,13 @@
 
 	// Helper function to format altitude with relative time and check if fix is old
 	function formatAltitudeWithTime(
-		altitude_feet: number | null | undefined,
+		altitude_msl_feet: number | null | undefined,
 		timestamp: string
 	): {
 		altitudeText: string;
 		isOld: boolean;
 	} {
-		const altitudeFt = altitude_feet ? `${altitude_feet}ft` : '---ft';
+		const altitudeFt = altitude_msl_feet ? `${altitude_msl_feet}ft` : '---ft';
 
 		// Calculate relative time, handling edge cases
 		const fixTime = dayjs(timestamp);
@@ -884,7 +884,7 @@
 			latestFix: {
 				lat: latestFix.latitude,
 				lng: latestFix.longitude,
-				alt: latestFix.altitude_feet,
+				alt: latestFix.altitude_msl_feet,
 				timestamp: latestFix.timestamp
 			},
 			mapExists: !!map
@@ -945,7 +945,7 @@
 		aircraftIcon.className = 'aircraft-icon';
 
 		// Calculate color based on altitude
-		const altitudeColor = getAltitudeColor(fix.altitude_feet);
+		const altitudeColor = getAltitudeColor(fix.altitude_msl_feet);
 		aircraftIcon.style.background = altitudeColor;
 
 		// Create SVG airplane icon that's more visible and oriented correctly
@@ -968,7 +968,7 @@
 
 		// Use proper device registration, fallback to address
 		const tailNumber = device.registration || device.address || 'Unknown';
-		const { altitudeText, isOld } = formatAltitudeWithTime(fix.altitude_feet, fix.timestamp);
+		const { altitudeText, isOld } = formatAltitudeWithTime(fix.altitude_msl_feet, fix.timestamp);
 		const aircraftModel = device.aircraft_model;
 
 		console.log('[MARKER] Aircraft info:', {
@@ -1065,7 +1065,7 @@
 			const altDiv = markerContent.querySelector('.aircraft-altitude') as HTMLElement;
 
 			// Calculate color based on altitude
-			const altitudeColor = getAltitudeColor(fix.altitude_feet);
+			const altitudeColor = getAltitudeColor(fix.altitude_msl_feet);
 
 			if (aircraftIcon) {
 				const track = fix.track_degrees || 0;
@@ -1082,7 +1082,10 @@
 			if (tailDiv && altDiv) {
 				// Use proper device registration, fallback to address
 				const tailNumber = device.registration || device.address || 'Unknown';
-				const { altitudeText, isOld } = formatAltitudeWithTime(fix.altitude_feet, fix.timestamp);
+				const { altitudeText, isOld } = formatAltitudeWithTime(
+					fix.altitude_msl_feet,
+					fix.timestamp
+				);
 				const aircraftModel = device.aircraft_model;
 
 				// Include aircraft model after tail number if available
@@ -1117,7 +1120,7 @@
 		updateMarkerScale(markerContent, currentZoom);
 
 		// Update the marker title with full timestamp
-		const { altitudeText } = formatAltitudeWithTime(fix.altitude_feet, fix.timestamp);
+		const { altitudeText } = formatAltitudeWithTime(fix.altitude_msl_feet, fix.timestamp);
 		const fullTimestamp = dayjs(fix.timestamp).format('YYYY-MM-DD HH:mm:ss UTC');
 		const title = device.aircraft_model
 			? `${device.registration || device.address} (${device.aircraft_model}) - ${altitudeText} - Last seen: ${fullTimestamp}`
@@ -1168,7 +1171,7 @@
 			const segmentOpacity = 0.7 - (i / (trailFixes.length - 2)) * 0.5;
 
 			// Use altitude-based color from the newer fix in the segment
-			const segmentColor = getAltitudeColor(trailFixes[i].altitude_feet);
+			const segmentColor = getAltitudeColor(trailFixes[i].altitude_msl_feet);
 
 			const segment = new google.maps.Polyline({
 				path: [
@@ -1192,7 +1195,7 @@
 			const opacity = 0.7 - (index / (trailFixCount - 1)) * 0.5;
 
 			// Use altitude-based color for each dot
-			const dotColor = getAltitudeColor(fix.altitude_feet);
+			const dotColor = getAltitudeColor(fix.altitude_msl_feet);
 
 			const dot = new google.maps.Circle({
 				center: { lat: fix.latitude, lng: fix.longitude },

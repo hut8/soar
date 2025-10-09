@@ -163,9 +163,9 @@
 		return dayjs(dateString).fromNow();
 	}
 
-	function formatAltitude(altitude_feet: number | undefined): string {
-		if (altitude_feet === undefined || altitude_feet === null) return 'Unknown';
-		return `${altitude_feet.toLocaleString()} ft`;
+	function formatAltitude(altitude_msl_feet: number | undefined): string {
+		if (altitude_msl_feet === undefined || altitude_msl_feet === null) return 'Unknown';
+		return `${altitude_msl_feet.toLocaleString()} ft`;
 	}
 
 	function formatSpeed(speed_knots: number | undefined): string {
@@ -660,7 +660,7 @@
 												{formatCoordinates(fix.latitude, fix.longitude)}
 											</a>
 										</td>
-										<td class="px-3 py-2 text-sm">{formatAltitude(fix.altitude_feet)}</td>
+										<td class="px-3 py-2 text-sm">{formatAltitude(fix.altitude_msl_feet)}</td>
 										<td class="px-3 py-2 text-sm">{formatAltitude(fix.altitude_agl_feet)}</td>
 										<td class="px-3 py-2 text-sm">{formatSpeed(fix.ground_speed_knots)}</td>
 										<td class="px-3 py-2 text-sm">{formatTrack(fix.track_degrees)}</td>

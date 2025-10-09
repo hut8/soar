@@ -507,7 +507,7 @@
 										{fix.latitude.toFixed(6)}, {fix.longitude.toFixed(6)}
 									</a>
 								</td>
-								<td class="px-3 py-2 text-sm">{formatAltitude(fix.altitude_feet)}</td>
+								<td class="px-3 py-2 text-sm">{formatAltitude(fix.altitude_msl_feet)}</td>
 								<td class="px-3 py-2 text-sm">{formatAltitude(fix.altitude_agl_feet)}</td>
 								<td class="px-3 py-2 text-sm"
 									>{fix.ground_speed_knots ? `${fix.ground_speed_knots.toFixed(1)} kt` : 'N/A'}</td

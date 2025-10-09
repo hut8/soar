@@ -44,7 +44,7 @@
 		timestamp: string;
 		latitude: number;
 		longitude: number;
-		altitude_feet: number | null;
+		altitude_msl_feet: number | null;
 		device_address: number;
 		ground_speed_knots: number | null;
 		track_degrees: number | null;
@@ -546,7 +546,7 @@
 										<td class="font-mono text-xs">
 											{fix.latitude.toFixed(4)}, {fix.longitude.toFixed(4)}
 										</td>
-										<td>{fix.altitude_feet !== null ? `${fix.altitude_feet} ft` : '—'}</td>
+										<td>{fix.altitude_msl_feet !== null ? `${fix.altitude_msl_feet} ft` : '—'}</td>
 										<td
 											>{fix.ground_speed_knots !== null
 												? `${fix.ground_speed_knots.toFixed(0)} kt`

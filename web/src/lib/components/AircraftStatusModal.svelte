@@ -79,9 +79,9 @@
 		selectedDevice = null;
 	}
 
-	function formatAltitude(altitude_feet: number | undefined): string {
-		if (altitude_feet === undefined || altitude_feet === null) return 'Unknown';
-		return `${altitude_feet.toLocaleString()} ft`;
+	function formatAltitude(altitude_msl_feet: number | undefined): string {
+		if (altitude_msl_feet === undefined || altitude_msl_feet === null) return 'Unknown';
+		return `${altitude_msl_feet.toLocaleString()} ft`;
 	}
 
 	function formatSpeed(speed_knots: number | undefined): string {
@@ -522,7 +522,7 @@
 								<dl class="grid grid-cols-2 gap-4 text-sm">
 									<div>
 										<dt class="font-medium text-gray-600">Altitude</dt>
-										<dd>{formatAltitude(latestFix.altitude_feet)}</dd>
+										<dd>{formatAltitude(latestFix.altitude_msl_feet)}</dd>
 									</div>
 									<div>
 										<dt class="font-medium text-gray-600">Ground Speed</dt>
@@ -584,7 +584,7 @@
 												{formatTimestamp(fix.timestamp).relative}
 											</td>
 											<td class="px-3 py-2">
-												{formatAltitude(fix.altitude_feet)}
+												{formatAltitude(fix.altitude_msl_feet)}
 											</td>
 											<td class="px-3 py-2">
 												{formatAltitude(fix.altitude_agl_feet)}
