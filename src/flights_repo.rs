@@ -498,4 +498,36 @@ impl FlightsRepository {
         self.get_flights_in_time_range(start_of_day, end_of_day, None)
             .await
     }
+
+    /// Get flights associated with an airport (either departure or arrival) within a time range
+    pub async fn get_flights_by_airport(
+        &self,
+        airport_id_val: i32,
+        since: DateTime<Utc>,
+    ) -> Result<Vec<Flight>> {
+        use crate::schema::flights::dsl::*;
+
+        let pool = self.pool.clone();
+
+        let results = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            let flight_models = flights
+                .filter(
+                    departure_airport_id
+                        .eq(Some(airport_id_val))
+                        .or(arrival_airport_id.eq(Some(airport_id_val))),
+                )
+                .filter(takeoff_time.ge(Some(since)))
+                .order(takeoff_time.desc())
+                .load::<FlightModel>(&mut conn)?;
+
+            let result_flights: Vec<Flight> = flight_models.into_iter().map(|f| f.into()).collect();
+
+            Ok::<Vec<Flight>, anyhow::Error>(result_flights)
+        })
+        .await??;
+
+        Ok(results)
+    }
 }

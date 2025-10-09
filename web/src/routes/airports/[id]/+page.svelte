@@ -10,7 +10,8 @@
 		Navigation,
 		Info,
 		ExternalLink,
-		Compass
+		Compass,
+		Clock
 	} from '@lucide/svelte';
 	import { ProgressRing } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall } from '$lib/api/server';
@@ -58,16 +59,41 @@
 		runways: Runway[];
 	}
 
+	interface FlightView {
+		id: string;
+		device_address: string;
+		takeoff_time: string | null;
+		landing_time: string | null;
+		departure_airport_ident: string | null;
+		arrival_airport_ident: string | null;
+		created_at: string;
+		updated_at: string;
+	}
+
+	interface Device {
+		id: string;
+		registration: string;
+		competition_number: string;
+	}
+
+	interface FlightResponse {
+		flight: FlightView;
+		device: Device | null;
+	}
+
 	let airport: Airport | null = null;
+	let flights: FlightResponse[] = [];
 	let loading = true;
+	let flightsLoading = false;
 	let error = '';
+	let flightsError = '';
 	let airportId = '';
 
 	$: airportId = $page.params.id || '';
 
 	onMount(async () => {
 		if (airportId) {
-			await loadAirport();
+			await Promise.all([loadAirport(), loadFlights()]);
 		}
 	});
 
@@ -83,6 +109,21 @@
 			console.error('Error loading airport:', err);
 		} finally {
 			loading = false;
+		}
+	}
+
+	async function loadFlights() {
+		flightsLoading = true;
+		flightsError = '';
+
+		try {
+			flights = await serverCall<FlightResponse[]>(`/airports/${airportId}/flights`);
+		} catch (err) {
+			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+			flightsError = `Failed to load flights: ${errorMessage}`;
+			console.error('Error loading flights:', err);
+		} finally {
+			flightsLoading = false;
 		}
 	}
 
@@ -117,6 +158,32 @@
 			.split('_')
 			.map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
 			.join(' ');
+	}
+
+	function formatDateTime(dateStr: string | null): string {
+		if (!dateStr) return '—';
+		const date = new Date(dateStr);
+		return date.toLocaleString('en-US', {
+			month: 'short',
+			day: 'numeric',
+			hour: '2-digit',
+			minute: '2-digit'
+		});
+	}
+
+	function getFlightStatus(flight: FlightView): string {
+		if (!flight.landing_time) return 'In Progress';
+		return 'Completed';
+	}
+
+	function getFlightType(flight: FlightView, currentAirportId: string): string {
+		const isDeparture = flight.departure_airport_ident === currentAirportId;
+		const isArrival = flight.arrival_airport_ident === currentAirportId;
+
+		if (isDeparture && isArrival) return 'Local';
+		if (isDeparture) return 'Departure';
+		if (isArrival) return 'Arrival';
+		return 'Unknown';
 	}
 </script>
 
@@ -465,6 +532,123 @@
 					</div>
 				</div>
 			{/if}
+
+			<!-- Recent Flights Section (Last 24 Hours) -->
+			<div class="card p-6">
+				<h2 class="mb-4 flex items-center gap-2 h2">
+					<Clock class="h-6 w-6" />
+					Recent Flights (Last 24 Hours)
+				</h2>
+
+				<!-- Flights Loading State -->
+				{#if flightsLoading}
+					<div class="flex items-center justify-center space-x-4 p-8">
+						<ProgressRing size="w-6 h-6" />
+						<span>Loading flights...</span>
+					</div>
+				{/if}
+
+				<!-- Flights Error State -->
+				{#if flightsError}
+					<div class="alert preset-filled-error mb-4">
+						<div class="alert-message">
+							<p>{flightsError}</p>
+						</div>
+					</div>
+				{/if}
+
+				<!-- Flights List -->
+				{#if !flightsLoading && !flightsError}
+					{#if flights.length === 0}
+						<p class="text-surface-500">No flights in the last 24 hours.</p>
+					{:else}
+						<div class="table-container">
+							<table class="table-hover table">
+								<thead>
+									<tr>
+										<th>Aircraft</th>
+										<th>Type</th>
+										<th>Departure</th>
+										<th>Arrival</th>
+										<th>Takeoff</th>
+										<th>Landing</th>
+										<th>Status</th>
+										<th>Actions</th>
+									</tr>
+								</thead>
+								<tbody>
+									{#each flights as flightData (flightData.flight.id)}
+										<tr>
+											<td>
+												{#if flightData.device}
+													<div class="flex flex-col">
+														<span class="font-mono font-semibold"
+															>{flightData.device.registration}</span
+														>
+														{#if flightData.device.competition_number}
+															<span class="text-sm text-surface-500"
+																>{flightData.device.competition_number}</span
+															>
+														{/if}
+													</div>
+												{:else}
+													<span class="font-mono">{flightData.flight.device_address}</span>
+												{/if}
+											</td>
+											<td>
+												<span
+													class="preset-soft badge"
+													class:preset-soft-primary={getFlightType(
+														flightData.flight,
+														airport?.ident || ''
+													) === 'Departure'}
+													class:preset-soft-success={getFlightType(
+														flightData.flight,
+														airport?.ident || ''
+													) === 'Arrival'}
+													class:preset-soft-secondary={getFlightType(
+														flightData.flight,
+														airport?.ident || ''
+													) === 'Local'}
+												>
+													{getFlightType(flightData.flight, airport?.ident || '')}
+												</span>
+											</td>
+											<td>
+												<span class="font-mono text-sm">
+													{flightData.flight.departure_airport_ident || '—'}
+												</span>
+											</td>
+											<td>
+												<span class="font-mono text-sm">
+													{flightData.flight.arrival_airport_ident || '—'}
+												</span>
+											</td>
+											<td>{formatDateTime(flightData.flight.takeoff_time)}</td>
+											<td>{formatDateTime(flightData.flight.landing_time)}</td>
+											<td>
+												{#if getFlightStatus(flightData.flight) === 'In Progress'}
+													<span class="preset-filled-warning badge">In Progress</span>
+												{:else}
+													<span class="preset-filled-success badge">Completed</span>
+												{/if}
+											</td>
+											<td>
+												<a
+													href={resolve(`/flights/${flightData.flight.id}`)}
+													class="preset-ghost-primary btn btn-sm"
+												>
+													View
+												</a>
+											</td>
+										</tr>
+									{/each}
+								</tbody>
+							</table>
+						</div>
+					{/if}
+				{/if}
+			</div>
 
 			<!-- Map Section -->
 			{#if airport.latitude_deg && airport.longitude_deg}

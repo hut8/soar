@@ -269,3 +269,74 @@ pub async fn get_completed_flights(
         }
     }
 }
+
+/// Get flights associated with an airport (departure or arrival) from the last 24 hours
+pub async fn get_airport_flights(
+    Path(airport_id): Path<i32>,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let flights_repo = FlightsRepository::new(state.pool.clone());
+    let airports_repo = AirportsRepository::new(state.pool.clone());
+    let device_repo = DeviceRepository::new(state.pool);
+
+    // Calculate 24 hours ago
+    let since = chrono::Utc::now() - chrono::Duration::hours(24);
+
+    match flights_repo.get_flights_by_airport(airport_id, since).await {
+        Ok(flights) => {
+            // Build flight views with airport idents and device info
+            let mut flight_responses = Vec::new();
+
+            for flight in flights {
+                let departure_airport_ident = if let Some(dep_id) = flight.departure_airport_id {
+                    airports_repo
+                        .get_airport_by_id(dep_id)
+                        .await
+                        .ok()
+                        .flatten()
+                        .map(|a| a.ident)
+                } else {
+                    None
+                };
+
+                let arrival_airport_ident = if let Some(arr_id) = flight.arrival_airport_id {
+                    airports_repo
+                        .get_airport_by_id(arr_id)
+                        .await
+                        .ok()
+                        .flatten()
+                        .map(|a| a.ident)
+                } else {
+                    None
+                };
+
+                let device = if let Some(device_id) = flight.device_id {
+                    device_repo
+                        .get_device_by_uuid(device_id)
+                        .await
+                        .ok()
+                        .flatten()
+                } else {
+                    None
+                };
+
+                let flight_view =
+                    FlightView::from_flight(flight, departure_airport_ident, arrival_airport_ident);
+                flight_responses.push(FlightResponse {
+                    flight: flight_view,
+                    device,
+                });
+            }
+
+            Json(flight_responses).into_response()
+        }
+        Err(e) => {
+            tracing::error!("Failed to get flights for airport {}: {}", airport_id, e);
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to get airport flights",
+            )
+            .into_response()
+        }
+    }
+}
