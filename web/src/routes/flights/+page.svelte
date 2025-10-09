@@ -4,7 +4,7 @@
 	import { onMount } from 'svelte';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
-	import { formatSnakeCase } from '$lib/formatters';
+	import { getAircraftTypeOgnDescription } from '$lib/formatters';
 
 	dayjs.extend(relativeTime);
 
@@ -155,27 +155,41 @@
 												<span class="text-surface-500-400-token text-sm"
 													>({flight.registration})</span
 												>
+												{#if flight.aircraft_type_ogn}
+													<span class="badge preset-filled-surface-500 text-xs">
+														{getAircraftTypeOgnDescription(flight.aircraft_type_ogn)}
+													</span>
+												{/if}
 											</div>
 										{:else if flight.registration}
-											{#if flight.device_id}
-												<a
-													href={`/devices/${flight.device_id}`}
-													class="anchor font-medium text-primary-500 hover:text-primary-600"
-												>
-													{flight.registration}
-												</a>
-											{:else}
-												<span class="font-medium">{flight.registration}</span>
-											{/if}
+											<div class="flex items-center gap-2">
+												{#if flight.device_id}
+													<a
+														href={`/devices/${flight.device_id}`}
+														class="anchor font-medium text-primary-500 hover:text-primary-600"
+													>
+														{flight.registration}
+													</a>
+												{:else}
+													<span class="font-medium">{flight.registration}</span>
+												{/if}
+												{#if flight.aircraft_type_ogn}
+													<span class="badge preset-filled-surface-500 text-xs">
+														{getAircraftTypeOgnDescription(flight.aircraft_type_ogn)}
+													</span>
+												{/if}
+											</div>
 										{:else}
-											<span class="text-surface-500-400-token font-mono text-sm">
-												{formatDeviceAddress(flight.device_address, flight.device_address_type)}
-											</span>
-										{/if}
-										{#if flight.aircraft_type_ogn}
-											<span class="badge preset-filled-surface-500 text-xs">
-												{formatSnakeCase(flight.aircraft_type_ogn)}
-											</span>
+											<div class="flex items-center gap-2">
+												<span class="text-surface-500-400-token font-mono text-sm">
+													{formatDeviceAddress(flight.device_address, flight.device_address_type)}
+												</span>
+												{#if flight.aircraft_type_ogn}
+													<span class="badge preset-filled-surface-500 text-xs">
+														{getAircraftTypeOgnDescription(flight.aircraft_type_ogn)}
+													</span>
+												{/if}
+											</div>
 										{/if}
 									</div>
 								</td>

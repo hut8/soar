@@ -18,7 +18,7 @@
 	import { serverCall } from '$lib/api/server';
 	import { auth, type User } from '$lib/stores/auth';
 	import type { ClubWithSoaring } from '$lib/types';
-	import { getStatusCodeDescription, formatSnakeCase } from '$lib/formatters';
+	import { getStatusCodeDescription, getAircraftTypeOgnDescription } from '$lib/formatters';
 
 	interface Aircraft {
 		registration_number: string;
@@ -498,7 +498,7 @@
 											<Image class="h-4 w-4" />
 											Photos
 										</a>
-										{#if plane.aircraft_type_ogn === 'TowTug'}
+										{#if plane.aircraft_type_ogn === 'tow_tug'}
 											<span
 												class="btn preset-filled-warning-500 btn-sm"
 												title="This aircraft is a tow plane"
@@ -605,7 +605,7 @@
 															Aircraft Type (OGN):
 														</td>
 														<td class="py-2 text-left text-sm">
-															{formatSnakeCase(plane.aircraft_type_ogn)}
+															{getAircraftTypeOgnDescription(plane.aircraft_type_ogn)}
 														</td>
 													</tr>
 												{/if}

@@ -98,3 +98,30 @@ export function getStatusCodeDescription(statusCode: string | undefined): string
 
 	return statusMap[statusCode] || statusCode;
 }
+
+/**
+ * Get human-readable description for OGN aircraft type codes
+ */
+export function getAircraftTypeOgnDescription(aircraftType: string | undefined | null): string {
+	if (!aircraftType) return 'Unknown';
+
+	const typeMap: Record<string, string> = {
+		reserved: 'Reserved',
+		glider: 'Glider',
+		tow_tug: 'Tow/Tug',
+		helicopter_gyro: 'Helicopter/Gyro',
+		skydiver_parachute: 'Skydiver/Parachute',
+		drop_plane: 'Drop Plane',
+		hang_glider: 'Hang Glider',
+		paraglider: 'Paraglider',
+		recip_engine: 'Reciprocating Engine',
+		jet_turboprop: 'Jet/Turboprop',
+		unknown: 'Unknown',
+		balloon: 'Balloon',
+		airship: 'Airship',
+		uav: 'UAV',
+		static_obstacle: 'Static Obstacle'
+	};
+
+	return typeMap[aircraftType] || aircraftType;
+}

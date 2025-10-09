@@ -13,6 +13,7 @@ pub enum AddressType {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, DbEnum, Serialize, Deserialize)]
 #[db_enum(existing_type_path = "crate::schema::sql_types::AircraftTypeOgn")]
+#[serde(rename_all = "snake_case")]
 pub enum AircraftType {
     Reserved,
     Glider,

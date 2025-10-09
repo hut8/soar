@@ -20,6 +20,7 @@
 	import type { PageData } from './$types';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
+	import { getAircraftTypeOgnDescription } from '$lib/formatters';
 
 	dayjs.extend(relativeTime);
 
@@ -441,11 +442,7 @@
 				<div>
 					<div class="text-surface-600-300-token text-sm">Aircraft Type</div>
 					<div class="text-sm font-semibold">
-						{#if data.device.aircraft_type_ogn}
-							{data.device.aircraft_type_ogn.replace(/_/g, ' ')}
-						{:else}
-							Unknown
-						{/if}
+						{getAircraftTypeOgnDescription(data.device.aircraft_type_ogn)}
 					</div>
 				</div>
 			</div>
