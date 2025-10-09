@@ -240,7 +240,7 @@
 <div class="max-w-8xl container mx-auto space-y-6 p-4">
 	<!-- Back Button -->
 	<div class="flex items-center gap-4">
-		<button class="preset-soft btn btn-sm" onclick={goBack}>
+		<button class="btn preset-tonal btn-sm" onclick={goBack}>
 			<ArrowLeft class="mr-2 h-4 w-4" />
 			Back to Search
 		</button>
@@ -332,7 +332,7 @@
 										href={generateGoogleMapsUrl(receiver)}
 										target="_blank"
 										rel="noopener noreferrer"
-										class="preset-soft-primary btn btn-sm"
+										class="btn preset-tonal-primary btn-sm"
 									>
 										<ExternalLink class="mr-2 h-4 w-4" />
 										Open in Google Maps
@@ -341,7 +341,7 @@
 										href={`https://www.google.com/maps/dir/?api=1&destination=${receiver.latitude},${receiver.longitude}`}
 										target="_blank"
 										rel="noopener noreferrer"
-										class="preset-soft-secondary btn btn-sm"
+										class="btn preset-tonal-secondary btn-sm"
 									>
 										<Navigation class="mr-2 h-4 w-4" />
 										Get Directions
@@ -472,7 +472,7 @@
 					{#if fixesTotalPages > 1}
 						<div class="mt-4 flex items-center justify-between">
 							<button
-								class="preset-soft btn btn-sm"
+								class="btn preset-tonal btn-sm"
 								disabled={fixesPage === 1}
 								onclick={prevFixesPage}
 							>
@@ -483,7 +483,7 @@
 								Page {fixesPage} of {fixesTotalPages}
 							</span>
 							<button
-								class="preset-soft btn btn-sm"
+								class="btn preset-tonal btn-sm"
 								disabled={fixesPage === fixesTotalPages}
 								onclick={nextFixesPage}
 							>
@@ -612,7 +612,7 @@
 					{#if statusesTotalPages > 1}
 						<div class="mt-4 flex items-center justify-between">
 							<button
-								class="preset-soft btn btn-sm"
+								class="btn preset-tonal btn-sm"
 								disabled={statusesPage === 1}
 								onclick={prevStatusesPage}
 							>
@@ -623,7 +623,7 @@
 								Page {statusesPage} of {statusesTotalPages}
 							</span>
 							<button
-								class="preset-soft btn btn-sm"
+								class="btn preset-tonal btn-sm"
 								disabled={statusesPage === statusesTotalPages}
 								onclick={nextStatusesPage}
 							>
@@ -660,7 +660,7 @@
 							href={generateGoogleMapsUrl(receiver)}
 							target="_blank"
 							rel="noopener noreferrer"
-							class="preset-ghost-primary btn btn-sm"
+							class="btn preset-tonal-primary btn-sm"
 						>
 							<ExternalLink class="mr-2 h-4 w-4" />
 							View Larger Map
@@ -669,7 +669,7 @@
 							href={`https://www.google.com/maps/dir/?api=1&destination=${receiver.latitude},${receiver.longitude}`}
 							target="_blank"
 							rel="noopener noreferrer"
-							class="preset-ghost-secondary btn btn-sm"
+							class="btn preset-tonal-secondary btn-sm"
 						>
 							<Navigation class="mr-2 h-4 w-4" />
 							Get Directions

@@ -160,14 +160,14 @@
 		<!-- Search Method Toggle -->
 		<div class="flex justify-center gap-2">
 			<button
-				class="btn btn-sm {!locationSearch ? 'preset-filled' : 'preset-soft'}"
+				class="btn btn-sm {!locationSearch ? 'preset-filled-primary-500' : 'preset-tonal'}"
 				on:click={() => (locationSearch = false)}
 			>
 				<Search class="mr-2 h-4 w-4" />
 				Name Search
 			</button>
 			<button
-				class="btn btn-sm {locationSearch ? 'preset-filled' : 'preset-soft'}"
+				class="btn btn-sm {locationSearch ? 'preset-filled-primary-500' : 'preset-tonal'}"
 				on:click={() => (locationSearch = true)}
 			>
 				<MapPinHouse class="mr-2 h-4 w-4" />
@@ -326,7 +326,7 @@
 
 						<footer class="border-surface-200-700-token border-t pt-4">
 							<div class="space-y-2">
-								<a href={resolve(`/clubs/${club.id}`)} class="preset-soft btn w-full btn-sm">
+								<a href={resolve(`/clubs/${club.id}`)} class="btn w-full preset-tonal btn-sm">
 									<ExternalLink class="mr-2 h-4 w-4" />
 									View Details
 								</a>
@@ -336,7 +336,7 @@
 											href={generateGoogleMapsUrl(club)}
 											target="_blank"
 											rel="noopener noreferrer"
-											class="preset-ghost-primary btn flex-1 btn-sm"
+											class="btn flex-1 preset-tonal-primary btn-sm"
 										>
 											<Map class="mr-1 h-3 w-3" />
 											Maps
@@ -346,7 +346,7 @@
 												href={`https://www.google.com/maps/dir/?api=1&destination=${club.location.geolocation.latitude},${club.location.geolocation.longitude}`}
 												target="_blank"
 												rel="noopener noreferrer"
-												class="preset-ghost-secondary btn flex-1 btn-sm"
+												class="btn flex-1 preset-tonal-secondary btn-sm"
 											>
 												<Navigation class="mr-1 h-3 w-3" />
 												Directions

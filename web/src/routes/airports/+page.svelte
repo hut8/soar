@@ -180,7 +180,7 @@
 								</td>
 								<td class="font-semibold">{airport.name}</td>
 								<td>
-									<span class="preset-soft badge">
+									<span class="badge preset-tonal">
 										{formatSnakeCase(airport.airport_type)}
 									</span>
 								</td>

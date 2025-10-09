@@ -236,7 +236,7 @@
 			<div class="flex-shrink-0 p-4 pb-0">
 				<div class="mb-4 flex items-center justify-between">
 					<h2 class="text-xl font-bold">Watchlist</h2>
-					<button class="preset-ghost-surface btn btn-sm" onclick={() => (showModal = false)}>
+					<button class="btn preset-tonal-surface btn-sm" onclick={() => (showModal = false)}>
 						<X size={20} />
 					</button>
 				</div>
@@ -641,7 +641,7 @@
 													onCheckedChange={() => toggleWatchlistEntry(entry.id)}
 												/>
 												<button
-													class="preset-ghost-error btn btn-sm"
+													class="btn preset-tonal-error btn-sm"
 													onclick={() => removeWatchlistEntry(entry.id)}
 												>
 													<X size={16} />

@@ -194,7 +194,7 @@
 <div class="max-w-8xl container mx-auto space-y-6 p-4">
 	<!-- Back Button -->
 	<div class="flex items-center gap-4">
-		<button class="preset-soft btn btn-sm" onclick={goBack}>
+		<button class="btn preset-tonal btn-sm" onclick={goBack}>
 			<ArrowLeft class="mr-2 h-4 w-4" />
 			Back to Search
 		</button>
@@ -235,14 +235,14 @@
 							<h1 class="h1">{airport.name}</h1>
 						</div>
 						<div class="flex flex-wrap items-center gap-2">
-							<span class="preset-soft-primary badge font-mono text-lg">
+							<span class="badge preset-tonal-primary font-mono text-lg">
 								{getAirportCode(airport)}
 							</span>
-							<span class="preset-soft badge">
+							<span class="badge preset-tonal">
 								{formatAirportType(airport.airport_type)}
 							</span>
 							{#if airport.scheduled_service}
-								<span class="preset-filled-success badge"> Scheduled Service </span>
+								<span class="badge preset-filled-success-500"> Scheduled Service </span>
 							{/if}
 						</div>
 					</div>
@@ -307,7 +307,7 @@
 										href={generateGoogleMapsUrl(airport)}
 										target="_blank"
 										rel="noopener noreferrer"
-										class="preset-soft-primary btn btn-sm"
+										class="btn preset-tonal-primary btn-sm"
 									>
 										<ExternalLink class="mr-2 h-4 w-4" />
 										Open in Google Maps
@@ -316,7 +316,7 @@
 										href={`https://www.google.com/maps/dir/?api=1&destination=${airport.latitude_deg},${airport.longitude_deg}`}
 										target="_blank"
 										rel="noopener noreferrer"
-										class="preset-soft-secondary btn btn-sm"
+										class="btn preset-tonal-secondary btn-sm"
 									>
 										<Navigation class="mr-2 h-4 w-4" />
 										Get Directions
@@ -369,7 +369,7 @@
 										href={airport.home_link}
 										target="_blank"
 										rel="noopener noreferrer"
-										class="preset-soft-primary btn btn-sm"
+										class="btn preset-tonal-primary btn-sm"
 									>
 										<ExternalLink class="mr-2 h-4 w-4" />
 										Website
@@ -380,7 +380,7 @@
 										href={airport.wikipedia_link}
 										target="_blank"
 										rel="noopener noreferrer"
-										class="preset-soft-secondary btn btn-sm"
+										class="btn preset-tonal-secondary btn-sm"
 									>
 										<ExternalLink class="mr-2 h-4 w-4" />
 										Wikipedia
@@ -409,7 +409,7 @@
 									</h3>
 									<div class="flex flex-wrap gap-2">
 										{#if runway.lighted}
-											<span class="preset-filled-success badge">
+											<span class="badge preset-filled-success-500">
 												<svg class="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
 													<path
 														d="M11 3a1 1 0 10-2 0v1a1 1 0 102 0V3zM15.657 5.757a1 1 0 00-1.414-1.414l-.707.707a1 1 0 001.414 1.414l.707-.707zM18 10a1 1 0 01-1 1h-1a1 1 0 110-2h1a1 1 0 011 1zM5.05 6.464A1 1 0 106.464 5.05l-.707-.707a1 1 0 00-1.414 1.414l.707.707zM5 10a1 1 0 01-1 1H3a1 1 0 110-2h1a1 1 0 011 1zM8 16v-1h4v1a2 2 0 11-4 0zM12 14c.015-.34.208-.646.477-.859a4 4 0 10-4.954 0c.27.213.462.519.476.859h4.002z"
@@ -419,7 +419,7 @@
 											</span>
 										{/if}
 										{#if runway.closed}
-											<span class="preset-filled-error badge">
+											<span class="badge preset-filled-error-500">
 												<svg class="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
 													<path
 														fill-rule="evenodd"
@@ -597,16 +597,16 @@
 											</td>
 											<td>
 												<span
-													class="preset-soft badge"
-													class:preset-soft-primary={getFlightType(
+													class="badge preset-tonal"
+													class:preset-tonal-primary={getFlightType(
 														flightData.flight,
 														airport?.ident || ''
 													) === 'Departure'}
-													class:preset-soft-success={getFlightType(
+													class:preset-tonal-success={getFlightType(
 														flightData.flight,
 														airport?.ident || ''
 													) === 'Arrival'}
-													class:preset-soft-secondary={getFlightType(
+													class:preset-tonal-secondary={getFlightType(
 														flightData.flight,
 														airport?.ident || ''
 													) === 'Local'}
@@ -628,15 +628,15 @@
 											<td>{formatDateTime(flightData.flight.landing_time)}</td>
 											<td>
 												{#if getFlightStatus(flightData.flight) === 'In Progress'}
-													<span class="preset-filled-warning badge">In Progress</span>
+													<span class="badge preset-filled-warning-500">In Progress</span>
 												{:else}
-													<span class="preset-filled-success badge">Completed</span>
+													<span class="badge preset-filled-success-500">Completed</span>
 												{/if}
 											</td>
 											<td>
 												<a
 													href={resolve(`/flights/${flightData.flight.id}`)}
-													class="preset-ghost-primary btn btn-sm"
+													class="btn preset-tonal-primary btn-sm"
 												>
 													View
 												</a>
@@ -675,7 +675,7 @@
 							href={generateGoogleMapsUrl(airport)}
 							target="_blank"
 							rel="noopener noreferrer"
-							class="preset-ghost-primary btn btn-sm"
+							class="btn preset-tonal-primary btn-sm"
 						>
 							<ExternalLink class="mr-2 h-4 w-4" />
 							View Larger Map
@@ -684,7 +684,7 @@
 							href={`https://www.google.com/maps/dir/?api=1&destination=${airport.latitude_deg},${airport.longitude_deg}`}
 							target="_blank"
 							rel="noopener noreferrer"
-							class="preset-ghost-secondary btn btn-sm"
+							class="btn preset-tonal-secondary btn-sm"
 						>
 							<Navigation class="mr-2 h-4 w-4" />
 							Get Directions

@@ -219,7 +219,7 @@
 <div class="max-w-8xl container mx-auto space-y-6 p-4">
 	<!-- Back Button -->
 	<div class="flex items-center gap-4">
-		<button class="preset-soft btn btn-sm" onclick={goBack}>
+		<button class="btn preset-tonal btn-sm" onclick={goBack}>
 			<ArrowLeft class="mr-2 h-4 w-4" />
 			Back to Clubs
 		</button>
@@ -273,7 +273,7 @@
 					{#if $auth.isAuthenticated && !isCurrentClub}
 						<div class="flex-shrink-0">
 							<button
-								class="preset-filled-primary btn"
+								class="btn preset-filled-primary-500"
 								onclick={setAsMyClub}
 								disabled={settingClub}
 							>
@@ -345,7 +345,7 @@
 										href={generateGoogleMapsUrl(club)}
 										target="_blank"
 										rel="noopener noreferrer"
-										class="preset-soft-primary btn btn-sm"
+										class="btn preset-tonal-primary btn-sm"
 									>
 										<ExternalLink class="mr-2 h-4 w-4" />
 										Open in Google Maps
@@ -355,7 +355,7 @@
 											href={`https://www.google.com/maps/dir/?api=1&destination=${club.location.geolocation.latitude},${club.location.geolocation.longitude}`}
 											target="_blank"
 											rel="noopener noreferrer"
-											class="preset-soft-secondary btn btn-sm"
+											class="btn preset-tonal-secondary btn-sm"
 										>
 											<Navigation class="mr-2 h-4 w-4" />
 											Get Directions
@@ -477,7 +477,7 @@
 												href={`/devices/${plane.device_id}`}
 												target="_blank"
 												rel="noopener noreferrer"
-												class="preset-soft-primary btn btn-sm"
+												class="btn preset-tonal-primary btn-sm"
 												title="View device details"
 											>
 												<Plane class="h-4 w-4" />
@@ -488,7 +488,7 @@
 											href={`https://www.flightaware.com/photos/aircraft/${plane.registration_number}`}
 											target="_blank"
 											rel="noopener noreferrer"
-											class="preset-soft-primary btn btn-sm"
+											class="btn preset-tonal-primary btn-sm"
 											title="View photos on FlightAware"
 										>
 											<Image class="h-4 w-4" />
@@ -666,7 +666,7 @@
 							href={generateGoogleMapsUrl(club)}
 							target="_blank"
 							rel="noopener noreferrer"
-							class="preset-ghost-primary btn btn-sm"
+							class="btn preset-tonal-primary btn-sm"
 						>
 							<ExternalLink class="mr-2 h-4 w-4" />
 							View Larger Map
@@ -676,7 +676,7 @@
 								href={`https://www.google.com/maps/dir/?api=1&destination=${club.location.geolocation.latitude},${club.location.geolocation.longitude}`}
 								target="_blank"
 								rel="noopener noreferrer"
-								class="preset-ghost-secondary btn btn-sm"
+								class="btn preset-tonal-secondary btn-sm"
 							>
 								<Navigation class="mr-2 h-4 w-4" />
 								Get Directions

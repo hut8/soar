@@ -194,7 +194,7 @@
 										href={`/flights/${flight.id}`}
 										target="_blank"
 										rel="noopener noreferrer"
-										class="preset-ghost-surface btn flex items-center gap-1 btn-sm"
+										class="btn flex items-center gap-1 preset-tonal-surface btn-sm"
 									>
 										<ExternalLink class="h-3 w-3" />
 										Open

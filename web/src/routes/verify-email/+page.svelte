@@ -88,13 +88,13 @@
 					<p class="text-surface-600-300-token mb-4">{error}</p>
 					<div class="space-y-2">
 						<button
-							class="preset-filled-primary btn w-full"
+							class="btn w-full preset-filled-primary-500"
 							onclick={() => goto(resolve('/login'))}
 						>
 							Go to Login
 						</button>
 						<button
-							class="preset-soft-surface btn w-full"
+							class="btn w-full preset-tonal-surface"
 							onclick={() => goto(resolve('/register'))}
 						>
 							Register New Account

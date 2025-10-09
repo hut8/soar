@@ -261,9 +261,6 @@
 							>
 								{device.identified ? 'Identified' : 'Unidentified'}
 							</span>
-							<span class="badge preset-tonal">
-								{device.address_type}
-							</span>
 						</div>
 					</div>
 				</div>

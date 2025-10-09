@@ -76,17 +76,17 @@
 				<h2 class="text-xl font-semibold">Quick Actions</h2>
 
 				<div class="space-y-3">
-					<a href={resolve('/clubs')} class="preset-ghost-primary btn w-full justify-start">
+					<a href={resolve('/clubs')} class="btn w-full justify-start preset-tonal-primary">
 						🏢 Browse Clubs
 					</a>
-					<a href={resolve('/operations')} class="preset-ghost-primary btn w-full justify-start">
+					<a href={resolve('/operations')} class="btn w-full justify-start preset-tonal-primary">
 						🗺️ View Operations Map
 					</a>
 
 					{#if $auth.user.access_level === 'admin'}
 						<hr class="!my-4" />
 						<div class="text-surface-600-300-token text-sm font-medium">Administrator Tools</div>
-						<button class="preset-ghost-secondary btn w-full justify-start" disabled>
+						<button class="btn w-full justify-start preset-tonal-secondary" disabled>
 							👥 Manage Users (Coming Soon)
 						</button>
 					{/if}
