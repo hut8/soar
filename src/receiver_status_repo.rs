@@ -242,6 +242,68 @@ impl ReceiverStatusRepository {
 
         Ok((statuses, total_count))
     }
+
+    /// Get average time between status updates for a receiver
+    /// Returns the average interval in seconds between consecutive status updates
+    pub async fn get_average_update_interval(
+        &self,
+        receiver_id: Uuid,
+        start_time: Option<DateTime<Utc>>,
+        end_time: Option<DateTime<Utc>>,
+    ) -> Result<Option<f64>> {
+        let mut conn = self.get_connection()?;
+
+        // Build query based on whether time range is specified
+        let sql = if start_time.is_some() && end_time.is_some() {
+            r#"
+                WITH intervals AS (
+                    SELECT
+                        EXTRACT(EPOCH FROM (received_at - LAG(received_at) OVER (ORDER BY received_at))) as interval_seconds
+                    FROM receiver_statuses
+                    WHERE receiver_id = $1
+                        AND received_at BETWEEN $2 AND $3
+                )
+                SELECT AVG(interval_seconds) as avg_interval
+                FROM intervals
+                WHERE interval_seconds IS NOT NULL
+            "#
+        } else {
+            r#"
+                WITH intervals AS (
+                    SELECT
+                        EXTRACT(EPOCH FROM (received_at - LAG(received_at) OVER (ORDER BY received_at))) as interval_seconds
+                    FROM receiver_statuses
+                    WHERE receiver_id = $1
+                )
+                SELECT AVG(interval_seconds) as avg_interval
+                FROM intervals
+                WHERE interval_seconds IS NOT NULL
+            "#
+        };
+
+        let result = if let (Some(start), Some(end)) = (start_time, end_time) {
+            diesel::sql_query(sql)
+                .bind::<diesel::sql_types::Uuid, _>(receiver_id)
+                .bind::<diesel::sql_types::Timestamptz, _>(start)
+                .bind::<diesel::sql_types::Timestamptz, _>(end)
+                .get_result::<AverageIntervalResult>(&mut conn)
+                .optional()?
+        } else {
+            diesel::sql_query(sql)
+                .bind::<diesel::sql_types::Uuid, _>(receiver_id)
+                .get_result::<AverageIntervalResult>(&mut conn)
+                .optional()?
+        };
+
+        Ok(result.and_then(|r| r.avg_interval))
+    }
+}
+
+/// Result struct for average interval query
+#[derive(Debug, Clone, QueryableByName)]
+struct AverageIntervalResult {
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Double>)]
+    avg_interval: Option<f64>,
 }
 
 /// Statistics summary for a receiver over a time period

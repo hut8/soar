@@ -443,6 +443,10 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
             "/receivers/{id}/statuses",
             get(actions::get_receiver_statuses),
         )
+        .route(
+            "/receivers/{id}/statistics",
+            get(actions::get_receiver_statistics),
+        )
         // Authentication routes
         .route("/auth/register", post(actions::register_user))
         .route("/auth/login", post(actions::login_user))

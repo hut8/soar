@@ -82,15 +82,24 @@
 		total_pages: number;
 	}
 
+	interface ReceiverStatistics {
+		average_update_interval_seconds: number | null;
+		total_status_count: number;
+		days_included: number | null;
+	}
+
 	let receiver = $state<Receiver | null>(null);
 	let fixes = $state<Fix[]>([]);
 	let statuses = $state<ReceiverStatus[]>([]);
+	let statistics = $state<ReceiverStatistics | null>(null);
 	let loading = $state(true);
 	let loadingFixes = $state(false);
 	let loadingStatuses = $state(false);
+	let loadingStatistics = $state(false);
 	let error = $state('');
 	let fixesError = $state('');
 	let statusesError = $state('');
+	let statisticsError = $state('');
 
 	let fixesPage = $state(1);
 	let fixesTotalPages = $state(1);
@@ -107,6 +116,7 @@
 			await loadReceiver();
 			await loadFixes();
 			await loadStatuses();
+			await loadStatistics();
 		}
 	});
 
@@ -160,6 +170,22 @@
 			console.error('Error loading statuses:', err);
 		} finally {
 			loadingStatuses = false;
+		}
+	}
+
+	async function loadStatistics() {
+		loadingStatistics = true;
+		statisticsError = '';
+
+		try {
+			const response = await serverCall<ReceiverStatistics>(`/receivers/${receiverId}/statistics`);
+			statistics = response;
+		} catch (err) {
+			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+			statisticsError = `Failed to load statistics: ${errorMessage}`;
+			console.error('Error loading statistics:', err);
+		} finally {
+			loadingStatistics = false;
 		}
 	}
 
@@ -230,6 +256,22 @@
 		const usedMb = totalNum - freeNum;
 		const percentUsed = ((usedMb / totalNum) * 100).toFixed(1);
 		return `${usedMb.toFixed(0)} / ${totalNum.toFixed(0)} MB (${percentUsed}%)`;
+	}
+
+	function formatDuration(seconds: number | null): string {
+		if (seconds === null || seconds === undefined) return '—';
+
+		const hours = Math.floor(seconds / 3600);
+		const minutes = Math.floor((seconds % 3600) / 60);
+		const secs = Math.floor(seconds % 60);
+
+		if (hours > 0) {
+			return `${hours}h ${minutes}m`;
+		} else if (minutes > 0) {
+			return `${minutes}m ${secs}s`;
+		} else {
+			return `${secs}s`;
+		}
 	}
 </script>
 
@@ -403,6 +445,55 @@
 						</div>
 					</div>
 				</div>
+			</div>
+
+			<!-- Statistics Section -->
+			<div class="card p-6">
+				<h2 class="mb-4 flex items-center gap-2 h2">
+					<Signal class="h-6 w-6" />
+					Statistics
+				</h2>
+
+				{#if loadingStatistics}
+					<div class="flex items-center justify-center space-x-4 p-8">
+						<ProgressRing size="w-6 h-6" />
+						<span>Loading statistics...</span>
+					</div>
+				{:else if statisticsError}
+					<div class="alert preset-filled-error">
+						<p>{statisticsError}</p>
+					</div>
+				{:else if statistics}
+					<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+						<!-- Average Update Interval -->
+						<div class="space-y-2 card p-4">
+							<p class="text-surface-600-300-token text-sm">Average Time Between Updates</p>
+							<p class="text-2xl font-semibold">
+								{formatDuration(statistics.average_update_interval_seconds)}
+							</p>
+						</div>
+
+						<!-- Total Status Count -->
+						<div class="space-y-2 card p-4">
+							<p class="text-surface-600-300-token text-sm">Total Status Updates</p>
+							<p class="text-2xl font-semibold">
+								{statistics.total_status_count.toLocaleString()}
+							</p>
+						</div>
+
+						<!-- Time Period -->
+						<div class="space-y-2 card p-4">
+							<p class="text-surface-600-300-token text-sm">Time Period</p>
+							<p class="text-2xl font-semibold">
+								{#if statistics.days_included}
+									Last {statistics.days_included} days
+								{:else}
+									All time
+								{/if}
+							</p>
+						</div>
+					</div>
+				{/if}
 			</div>
 
 			<!-- Fixes Section -->

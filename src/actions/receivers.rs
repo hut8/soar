@@ -377,3 +377,88 @@ pub struct ReceiverStatusesResponse {
     pub page: i64,
     pub total_pages: i64,
 }
+
+/// Get statistics for a specific receiver
+pub async fn get_receiver_statistics(
+    Path(id): Path<Uuid>,
+    Query(params): Query<ReceiverStatisticsQuery>,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    use crate::receiver_status_repo::ReceiverStatusRepository;
+
+    let receiver_repo = ReceiverRepository::new(state.pool.clone());
+    let status_repo = ReceiverStatusRepository::new(state.pool.clone());
+
+    // First verify the receiver exists
+    match receiver_repo.get_receiver_by_id(id).await {
+        Ok(Some(_)) => {}
+        Ok(None) => return json_error(StatusCode::NOT_FOUND, "Receiver not found").into_response(),
+        Err(e) => {
+            tracing::error!("Failed to get receiver {}: {}", id, e);
+            return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get receiver")
+                .into_response();
+        }
+    };
+
+    // Determine time range for statistics
+    let (start_time, end_time) = if let Some(days) = params.days {
+        let end = chrono::Utc::now();
+        let start = end - chrono::Duration::days(days);
+        (Some(start), Some(end))
+    } else {
+        (None, None)
+    };
+
+    // Get average update interval
+    let avg_interval_seconds = match status_repo
+        .get_average_update_interval(id, start_time, end_time)
+        .await
+    {
+        Ok(interval) => interval,
+        Err(e) => {
+            tracing::error!(
+                "Failed to get average update interval for receiver {}: {}",
+                id,
+                e
+            );
+            return json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to calculate statistics",
+            )
+            .into_response();
+        }
+    };
+
+    // Get total status count
+    let total_count = match status_repo.count_for_receiver(id).await {
+        Ok(count) => count,
+        Err(e) => {
+            tracing::error!("Failed to count statuses for receiver {}: {}", id, e);
+            return json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to calculate statistics",
+            )
+            .into_response();
+        }
+    };
+
+    Json(ReceiverStatisticsResponse {
+        average_update_interval_seconds: avg_interval_seconds,
+        total_status_count: total_count,
+        days_included: params.days,
+    })
+    .into_response()
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ReceiverStatisticsQuery {
+    /// Number of days to include in statistics (defaults to all time if not specified)
+    pub days: Option<i64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ReceiverStatisticsResponse {
+    pub average_update_interval_seconds: Option<f64>,
+    pub total_status_count: i64,
+    pub days_included: Option<i64>,
+}
