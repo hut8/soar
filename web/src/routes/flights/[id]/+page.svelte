@@ -537,11 +537,11 @@
 
 			<!-- Pagination -->
 			{#if totalPages > 1}
-				<div class="mt-4 flex items-center justify-between">
+				<div class="mt-4 flex flex-col items-center gap-3 sm:flex-row sm:justify-between">
 					<div class="text-surface-600-300-token text-sm">
 						Page {currentPage} of {totalPages}
 					</div>
-					<div class="flex gap-2">
+					<div class="flex flex-wrap justify-center gap-2">
 						<button
 							onclick={() => goToPage(1)}
 							disabled={currentPage === 1}
