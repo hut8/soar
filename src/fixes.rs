@@ -3,11 +3,41 @@ use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use num_traits::AsPrimitive;
 use ogn_parser::AprsPacket;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use uuid::Uuid;
 
 use crate::devices::AddressType;
 use crate::ogn_aprs_aircraft::{AdsbEmitterCategory, AircraftType};
+
+/// Custom serializer for via field to convert Vec to comma-separated string
+fn serialize_via<S>(via: &[Option<String>], serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let via_string = via
+        .iter()
+        .map(|opt| opt.as_deref().unwrap_or(""))
+        .collect::<Vec<&str>>()
+        .join(",");
+    serializer.serialize_str(&via_string)
+}
+
+/// Custom deserializer for via field to convert comma-separated string to Vec
+fn deserialize_via<'de, D>(deserializer: D) -> Result<Vec<Option<String>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    Ok(s.split(',')
+        .map(|s| {
+            if s.is_empty() {
+                None
+            } else {
+                Some(s.to_string())
+            }
+        })
+        .collect())
+}
 
 /// A position fix representing an aircraft's location and associated data
 /// This is the unified domain entity for position updates and database storage
@@ -21,6 +51,7 @@ pub struct Fix {
     /// APRS packet header information
     pub source: String,
     pub destination: String,
+    #[serde(serialize_with = "serialize_via", deserialize_with = "deserialize_via")]
     pub via: Vec<Option<String>>, // NOT NULL in DB but contains nullable strings
 
     /// Raw APRS packet for debugging/audit purposes
