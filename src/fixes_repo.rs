@@ -240,6 +240,27 @@ impl FixesRepository {
         Ok(receiver_uuid)
     }
 
+    /// Look up club UUID by device UUID
+    fn lookup_club_id_by_device_uuid(
+        conn: &mut diesel::PgConnection,
+        device_uuid: Uuid,
+    ) -> Result<Option<Uuid>> {
+        use crate::schema::{aircraft_registrations, devices};
+
+        let club_uuid = devices::table
+            .inner_join(
+                aircraft_registrations::table
+                    .on(aircraft_registrations::device_id.eq(devices::id.nullable())),
+            )
+            .filter(devices::id.eq(device_uuid))
+            .select(aircraft_registrations::club_id)
+            .first::<Option<Uuid>>(conn)
+            .optional()?
+            .flatten();
+
+        Ok(club_uuid)
+    }
+
     /// Insert a new fix into the database
     pub async fn insert(&self, fix: &Fix) -> Result<()> {
         use crate::schema::fixes::dsl::*;
@@ -276,6 +297,12 @@ impl FixesRepository {
                     callsign,
                 ).ok(); // Use ok() to convert Result to Option, ignoring errors
             }
+
+            // Look up club_id from device's aircraft registration
+            new_fix.club_id =
+                Self::lookup_club_id_by_device_uuid(&mut conn, new_fix.device_id)
+                    .ok()
+                    .flatten();
 
             diesel::insert_into(fixes)
                 .values(&new_fix)
