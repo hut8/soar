@@ -33,8 +33,16 @@ export async function serverCall<T>(
 		});
 
 		if (!response.ok) {
+			// Try to parse error as JSON first (standard format: {"errors": "message"})
 			const errorText = await response.text();
-			throw new ServerError(errorText || 'Request failed', response.status);
+			try {
+				const errorData = JSON.parse(errorText);
+				const errorMessage = errorData.errors || errorData.message || errorText;
+				throw new ServerError(errorMessage, response.status);
+			} catch {
+				// If JSON parsing fails, use the raw text
+				throw new ServerError(errorText || 'Request failed', response.status);
+			}
 		}
 
 		if (response.status === 204) {
