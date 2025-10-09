@@ -69,13 +69,13 @@
 
 	<div class="card p-6">
 		{#if message}
-			<div class="preset-filled-success mb-4 rounded-lg p-3 text-sm">
+			<div class="mb-4 rounded-lg preset-filled-success-500 p-3 text-sm">
 				{message}
 			</div>
 		{/if}
 
 		{#if error}
-			<div class="preset-filled-error mb-4 rounded-lg p-3 text-sm">
+			<div class="mb-4 rounded-lg preset-filled-error-500 p-3 text-sm">
 				{error}
 			</div>
 		{/if}

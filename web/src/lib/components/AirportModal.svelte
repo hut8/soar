@@ -130,7 +130,7 @@
 								href={`/airports/${selectedAirport.id}`}
 								target="_blank"
 								rel="noopener noreferrer"
-								class="btn preset-tonal-primary btn-sm"
+								class="preset-tonal-primary-500 btn btn-sm"
 								title="View full airport details"
 							>
 								<ExternalLink class="h-4 w-4" />
@@ -145,7 +145,7 @@
 						</p>
 					</div>
 				</div>
-				<button class="btn preset-tonal-surface btn-sm" onclick={closeModal}>
+				<button class="preset-tonal-surface-500 btn btn-sm" onclick={closeModal}>
 					<X size={20} />
 				</button>
 			</div>

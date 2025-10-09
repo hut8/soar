@@ -130,7 +130,7 @@
 		>
 			<div class="mb-4 flex items-center justify-between">
 				<h2 class="text-xl font-bold">Map Settings</h2>
-				<button class="btn preset-tonal-surface btn-sm" onclick={() => (showModal = false)}>
+				<button class="preset-tonal-surface-500 btn btn-sm" onclick={() => (showModal = false)}>
 					<X size={20} />
 				</button>
 			</div>
@@ -214,7 +214,7 @@
 							Clear all cached device data from your browser's local storage.
 						</p>
 						<button
-							class="preset-filled-error btn w-full"
+							class="btn w-full preset-filled-error-500"
 							onclick={clearDevicesCache}
 							type="button"
 						>

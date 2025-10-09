@@ -241,7 +241,7 @@
 
 	<!-- Error State -->
 	{#if error}
-		<div class="alert preset-filled-error">
+		<div class="alert preset-filled-error-500">
 			<div class="alert-message">
 				<h3 class="h3">Error Loading Club</h3>
 				<p>{error}</p>
@@ -349,7 +349,7 @@
 										href={generateGoogleMapsUrl(club)}
 										target="_blank"
 										rel="noopener noreferrer"
-										class="btn preset-tonal-primary btn-sm"
+										class="preset-tonal-primary-500 btn btn-sm"
 									>
 										<ExternalLink class="mr-2 h-4 w-4" />
 										Open in Google Maps
@@ -359,7 +359,7 @@
 											href={`https://www.google.com/maps/dir/?api=1&destination=${club.location.geolocation.latitude},${club.location.geolocation.longitude}`}
 											target="_blank"
 											rel="noopener noreferrer"
-											class="btn preset-tonal-secondary btn-sm"
+											class="preset-tonal-secondary-500 btn btn-sm"
 										>
 											<Navigation class="mr-2 h-4 w-4" />
 											Get Directions
@@ -457,7 +457,7 @@
 							<span>Loading aircraft...</span>
 						</div>
 					{:else if aircraftError}
-						<div class="alert preset-filled-error">
+						<div class="alert preset-filled-error-500">
 							<div class="alert-message">
 								<p>{aircraftError}</p>
 								<div class="alert-actions">
@@ -481,7 +481,7 @@
 												href={`/devices/${plane.device_id}`}
 												target="_blank"
 												rel="noopener noreferrer"
-												class="btn preset-tonal-primary btn-sm"
+												class="preset-tonal-primary-500 btn btn-sm"
 												title="View device details"
 											>
 												<Plane class="h-4 w-4" />
@@ -492,7 +492,7 @@
 											href={`https://www.flightaware.com/photos/aircraft/${plane.registration_number}`}
 											target="_blank"
 											rel="noopener noreferrer"
-											class="btn preset-tonal-primary btn-sm"
+											class="preset-tonal-primary-500 btn btn-sm"
 											title="View photos on FlightAware"
 										>
 											<Image class="h-4 w-4" />
@@ -500,7 +500,7 @@
 										</a>
 										{#if plane.aircraft_type_ogn === 'TowTug'}
 											<span
-												class="preset-filled-warning btn btn-sm"
+												class="btn preset-filled-warning-500 btn-sm"
 												title="This aircraft is a tow plane"
 											>
 												<Plane class="h-4 w-4" />
@@ -704,7 +704,7 @@
 							href={generateGoogleMapsUrl(club)}
 							target="_blank"
 							rel="noopener noreferrer"
-							class="btn preset-tonal-primary btn-sm"
+							class="preset-tonal-primary-500 btn btn-sm"
 						>
 							<ExternalLink class="mr-2 h-4 w-4" />
 							View Larger Map
@@ -714,7 +714,7 @@
 								href={`https://www.google.com/maps/dir/?api=1&destination=${club.location.geolocation.latitude},${club.location.geolocation.longitude}`}
 								target="_blank"
 								rel="noopener noreferrer"
-								class="btn preset-tonal-secondary btn-sm"
+								class="preset-tonal-secondary-500 btn btn-sm"
 							>
 								<Navigation class="mr-2 h-4 w-4" />
 								Get Directions

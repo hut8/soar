@@ -212,7 +212,7 @@
 
 	<!-- Error State -->
 	{#if error}
-		<div class="alert preset-filled-error">
+		<div class="alert preset-filled-error-500">
 			<div class="alert-message">
 				<h3 class="h3">Error Loading Airport</h3>
 				<p>{error}</p>
@@ -235,7 +235,7 @@
 							<h1 class="h1">{airport.name}</h1>
 						</div>
 						<div class="flex flex-wrap items-center gap-2">
-							<span class="badge preset-tonal-primary font-mono text-lg">
+							<span class="preset-tonal-primary-500 badge font-mono text-lg">
 								{getAirportCode(airport)}
 							</span>
 							<span class="badge preset-tonal">
@@ -307,7 +307,7 @@
 										href={generateGoogleMapsUrl(airport)}
 										target="_blank"
 										rel="noopener noreferrer"
-										class="btn preset-tonal-primary btn-sm"
+										class="preset-tonal-primary-500 btn btn-sm"
 									>
 										<ExternalLink class="mr-2 h-4 w-4" />
 										Open in Google Maps
@@ -316,7 +316,7 @@
 										href={`https://www.google.com/maps/dir/?api=1&destination=${airport.latitude_deg},${airport.longitude_deg}`}
 										target="_blank"
 										rel="noopener noreferrer"
-										class="btn preset-tonal-secondary btn-sm"
+										class="preset-tonal-secondary-500 btn btn-sm"
 									>
 										<Navigation class="mr-2 h-4 w-4" />
 										Get Directions
@@ -369,7 +369,7 @@
 										href={airport.home_link}
 										target="_blank"
 										rel="noopener noreferrer"
-										class="btn preset-tonal-primary btn-sm"
+										class="preset-tonal-primary-500 btn btn-sm"
 									>
 										<ExternalLink class="mr-2 h-4 w-4" />
 										Website
@@ -380,7 +380,7 @@
 										href={airport.wikipedia_link}
 										target="_blank"
 										rel="noopener noreferrer"
-										class="btn preset-tonal-secondary btn-sm"
+										class="preset-tonal-secondary-500 btn btn-sm"
 									>
 										<ExternalLink class="mr-2 h-4 w-4" />
 										Wikipedia
@@ -550,7 +550,7 @@
 
 				<!-- Flights Error State -->
 				{#if flightsError}
-					<div class="alert preset-filled-error mb-4">
+					<div class="alert mb-4 preset-filled-error-500">
 						<div class="alert-message">
 							<p>{flightsError}</p>
 						</div>
@@ -598,15 +598,15 @@
 											<td>
 												<span
 													class="badge preset-tonal"
-													class:preset-tonal-primary={getFlightType(
+													class:preset-tonal-primary-500={getFlightType(
 														flightData.flight,
 														airport?.ident || ''
 													) === 'Departure'}
-													class:preset-tonal-success={getFlightType(
+													class:preset-tonal-success-500={getFlightType(
 														flightData.flight,
 														airport?.ident || ''
 													) === 'Arrival'}
-													class:preset-tonal-secondary={getFlightType(
+													class:preset-tonal-secondary-500={getFlightType(
 														flightData.flight,
 														airport?.ident || ''
 													) === 'Local'}
@@ -636,7 +636,7 @@
 											<td>
 												<a
 													href={resolve(`/flights/${flightData.flight.id}`)}
-													class="btn preset-tonal-primary btn-sm"
+													class="preset-tonal-primary-500 btn btn-sm"
 												>
 													View
 												</a>
@@ -675,7 +675,7 @@
 							href={generateGoogleMapsUrl(airport)}
 							target="_blank"
 							rel="noopener noreferrer"
-							class="btn preset-tonal-primary btn-sm"
+							class="preset-tonal-primary-500 btn btn-sm"
 						>
 							<ExternalLink class="mr-2 h-4 w-4" />
 							View Larger Map
@@ -684,7 +684,7 @@
 							href={`https://www.google.com/maps/dir/?api=1&destination=${airport.latitude_deg},${airport.longitude_deg}`}
 							target="_blank"
 							rel="noopener noreferrer"
-							class="btn preset-tonal-secondary btn-sm"
+							class="preset-tonal-secondary-500 btn btn-sm"
 						>
 							<Navigation class="mr-2 h-4 w-4" />
 							Get Directions

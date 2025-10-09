@@ -95,7 +95,7 @@
 
 <div class="club-selector">
 	{#if error}
-		<div class="preset-filled-error mb-2 rounded-lg p-2 text-sm">
+		<div class="mb-2 rounded-lg preset-filled-error-500 p-2 text-sm">
 			{error}
 		</div>
 	{/if}

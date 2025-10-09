@@ -94,7 +94,7 @@
 							Go to Login
 						</button>
 						<button
-							class="btn w-full preset-tonal-surface"
+							class="preset-tonal-surface-500 btn w-full"
 							onclick={() => goto(resolve('/register'))}
 						>
 							Register New Account

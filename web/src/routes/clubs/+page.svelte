@@ -336,7 +336,7 @@
 											href={generateGoogleMapsUrl(club)}
 											target="_blank"
 											rel="noopener noreferrer"
-											class="btn flex-1 preset-tonal-primary btn-sm"
+											class="preset-tonal-primary-500 btn flex-1 btn-sm"
 										>
 											<Map class="mr-1 h-3 w-3" />
 											Maps
@@ -346,7 +346,7 @@
 												href={`https://www.google.com/maps/dir/?api=1&destination=${club.location.geolocation.latitude},${club.location.geolocation.longitude}`}
 												target="_blank"
 												rel="noopener noreferrer"
-												class="btn flex-1 preset-tonal-secondary btn-sm"
+												class="preset-tonal-secondary-500 btn flex-1 btn-sm"
 											>
 												<Navigation class="mr-1 h-3 w-3" />
 												Directions

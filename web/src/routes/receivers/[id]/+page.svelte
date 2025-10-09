@@ -300,7 +300,7 @@
 
 	<!-- Error State -->
 	{#if error}
-		<div class="alert preset-filled-error">
+		<div class="alert preset-filled-error-500">
 			<div class="alert-message">
 				<h3 class="h3">Error Loading Receiver</h3>
 				<p>{error}</p>
@@ -322,7 +322,7 @@
 							<Radio class="h-8 w-10 text-primary-500" />
 							<h1 class="h1">{receiver.callsign}</h1>
 							{#if receiver.from_ogn_db}
-								<span class="preset-filled-secondary chip text-sm">OGN DB</span>
+								<span class="chip preset-filled-secondary-500 text-sm">OGN DB</span>
 							{/if}
 						</div>
 						{#if receiver.description}
@@ -374,7 +374,7 @@
 										href={generateGoogleMapsUrl(receiver)}
 										target="_blank"
 										rel="noopener noreferrer"
-										class="btn preset-tonal-primary btn-sm"
+										class="preset-tonal-primary-500 btn btn-sm"
 									>
 										<ExternalLink class="mr-2 h-4 w-4" />
 										Open in Google Maps
@@ -383,7 +383,7 @@
 										href={`https://www.google.com/maps/dir/?api=1&destination=${receiver.latitude},${receiver.longitude}`}
 										target="_blank"
 										rel="noopener noreferrer"
-										class="btn preset-tonal-secondary btn-sm"
+										class="preset-tonal-secondary-500 btn btn-sm"
 									>
 										<Navigation class="mr-2 h-4 w-4" />
 										Get Directions
@@ -460,7 +460,7 @@
 						<span>Loading statistics...</span>
 					</div>
 				{:else if statisticsError}
-					<div class="alert preset-filled-error">
+					<div class="alert preset-filled-error-500">
 						<p>{statisticsError}</p>
 					</div>
 				{:else if statistics}
@@ -509,7 +509,7 @@
 						<span>Loading fixes...</span>
 					</div>
 				{:else if fixesError}
-					<div class="alert preset-filled-error">
+					<div class="alert preset-filled-error-500">
 						<p>{fixesError}</p>
 					</div>
 				{:else if fixes.length === 0}
@@ -605,7 +605,7 @@
 						<span>Loading statuses...</span>
 					</div>
 				{:else if statusesError}
-					<div class="alert preset-filled-error">
+					<div class="alert preset-filled-error-500">
 						<p>{statusesError}</p>
 					</div>
 				{:else if statuses.length === 0}
@@ -751,7 +751,7 @@
 							href={generateGoogleMapsUrl(receiver)}
 							target="_blank"
 							rel="noopener noreferrer"
-							class="btn preset-tonal-primary btn-sm"
+							class="preset-tonal-primary-500 btn btn-sm"
 						>
 							<ExternalLink class="mr-2 h-4 w-4" />
 							View Larger Map
@@ -760,7 +760,7 @@
 							href={`https://www.google.com/maps/dir/?api=1&destination=${receiver.latitude},${receiver.longitude}`}
 							target="_blank"
 							rel="noopener noreferrer"
-							class="btn preset-tonal-secondary btn-sm"
+							class="preset-tonal-secondary-500 btn btn-sm"
 						>
 							<Navigation class="mr-2 h-4 w-4" />
 							Get Directions

@@ -321,7 +321,7 @@
 						<ExternalLink size={16} />
 						View Details
 					</a>
-					<button class="btn preset-tonal-surface btn-sm" onclick={closeModal}>
+					<button class="preset-tonal-surface-500 btn btn-sm" onclick={closeModal}>
 						<X size={20} />
 					</button>
 				</div>

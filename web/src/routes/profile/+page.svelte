@@ -41,9 +41,9 @@
 						<div class="text-surface-700-200-token">
 							Email: {$auth.user.email}
 							{#if !$auth.user.email_verified}
-								<span class="preset-filled-warning ml-2 badge">Unverified</span>
+								<span class="ml-2 badge preset-filled-warning-500">Unverified</span>
 							{:else}
-								<span class="preset-filled-success ml-2 badge">Verified</span>
+								<span class="ml-2 badge preset-filled-success-500">Verified</span>
 							{/if}
 						</div>
 					</div>
@@ -76,17 +76,20 @@
 				<h2 class="text-xl font-semibold">Quick Actions</h2>
 
 				<div class="space-y-3">
-					<a href={resolve('/clubs')} class="btn w-full justify-start preset-tonal-primary">
+					<a href={resolve('/clubs')} class="preset-tonal-primary-500 btn w-full justify-start">
 						🏢 Browse Clubs
 					</a>
-					<a href={resolve('/operations')} class="btn w-full justify-start preset-tonal-primary">
+					<a
+						href={resolve('/operations')}
+						class="preset-tonal-primary-500 btn w-full justify-start"
+					>
 						🗺️ View Operations Map
 					</a>
 
 					{#if $auth.user.access_level === 'admin'}
 						<hr class="!my-4" />
 						<div class="text-surface-600-300-token text-sm font-medium">Administrator Tools</div>
-						<button class="btn w-full justify-start preset-tonal-secondary" disabled>
+						<button class="preset-tonal-secondary-500 btn w-full justify-start" disabled>
 							👥 Manage Users (Coming Soon)
 						</button>
 					{/if}

@@ -114,14 +114,9 @@
 				{#if $auth.isAuthenticated && $auth.user}
 					<div class="user-menu relative">
 						<button
-							class="btn flex items-center space-x-2 preset-tonal-surface btn-sm"
+							class="btn preset-filled-primary-500 btn-sm"
 							onclick={() => (showUserMenu = !showUserMenu)}
 						>
-							<Avatar
-								initials={[0, 1]}
-								background="bg-primary-500"
-								name="{$auth.user.first_name} {$auth.user.last_name}"
-							/>
 							<span class="hidden sm:inline">{$auth.user.first_name}</span>
 						</button>
 
@@ -162,7 +157,7 @@
 			<!-- Mobile Hamburger Menu -->
 			<div class="md:hidden">
 				<button
-					class="mobile-menu-button btn preset-tonal-surface p-2 btn-sm"
+					class="mobile-menu-button preset-tonal-surface-500 btn p-2 btn-sm"
 					onclick={(e) => {
 						e.stopPropagation();
 						showMobileMenu = !showMobileMenu;
