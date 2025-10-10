@@ -139,6 +139,7 @@ struct FixDslRow {
     lag: Option<i32>,
     is_active: bool,
     receiver_id: Option<Uuid>,
+    aprs_message_id: Option<Uuid>,
 }
 
 impl From<FixDslRow> for Fix {
@@ -179,6 +180,7 @@ impl From<FixDslRow> for Fix {
             device_id: row.device_id, // Now directly a Uuid
             is_active: row.is_active,
             receiver_id: row.receiver_id,
+            aprs_message_id: row.aprs_message_id,
         }
     }
 }
@@ -754,6 +756,8 @@ impl FixesRepository {
                 is_active: bool,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
                 receiver_id: Option<uuid::Uuid>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
+                aprs_message_id: Option<uuid::Uuid>,
             }
 
             let fix_rows: Vec<FixRow> = diesel::sql_query(fixes_sql)
@@ -805,6 +809,7 @@ impl FixesRepository {
                     device_id: fix_row.device_id,
                     is_active: fix_row.is_active,
                     receiver_id: fix_row.receiver_id,
+                    aprs_message_id: fix_row.aprs_message_id,
                 };
                 fixes_by_device
                     .entry(device_id)

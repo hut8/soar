@@ -114,6 +114,9 @@ pub struct Fix {
 
     /// Receiver that reported this fix (from via array)
     pub receiver_id: Option<Uuid>,
+
+    /// Reference to the APRS message that contains the raw packet data
+    pub aprs_message_id: Option<Uuid>,
 }
 
 impl Fix {
@@ -234,7 +237,8 @@ impl Fix {
                     received_at,
                     lag,
                     is_active,
-                    receiver_id: None, // Will be set during fix insertion
+                    receiver_id: None,     // Will be set during fix insertion
+                    aprs_message_id: None, // Will be populated during data migration
                 }))
             }
             _ => {

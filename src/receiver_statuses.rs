@@ -59,6 +59,7 @@ pub struct ReceiverStatus {
     pub updated_at: DateTime<Utc>,
     pub receiver_id: Uuid,
     pub raw_data: String,
+    pub aprs_message_id: Option<Uuid>,
 }
 
 /// For inserting new receiver statuses (without auto-generated fields)

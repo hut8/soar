@@ -195,6 +195,16 @@ diesel::table! {
 }
 
 diesel::table! {
+    aprs_messages (id) {
+        id -> Uuid,
+        raw_message -> Text,
+        received_at -> Timestamptz,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
     club_pilots (id) {
         id -> Uuid,
         first_name -> Text,
@@ -304,6 +314,7 @@ diesel::table! {
         receiver_id -> Nullable<Uuid>,
         gnss_horizontal_resolution -> Nullable<Int2>,
         gnss_vertical_resolution -> Nullable<Int2>,
+        aprs_message_id -> Nullable<Uuid>,
     }
 }
 
@@ -396,6 +407,7 @@ diesel::table! {
         updated_at -> Timestamptz,
         receiver_id -> Uuid,
         raw_data -> Text,
+        aprs_message_id -> Nullable<Uuid>,
     }
 }
 
@@ -580,12 +592,14 @@ diesel::joinable!(aircraft_registrations -> status_codes (status_code));
 diesel::joinable!(aircraft_registrations -> type_engines (type_engine_code));
 diesel::joinable!(clubs -> airports (home_base_airport_id));
 diesel::joinable!(clubs -> locations (location_id));
+diesel::joinable!(fixes -> aprs_messages (aprs_message_id));
 diesel::joinable!(fixes -> clubs (club_id));
 diesel::joinable!(fixes -> devices (device_id));
 diesel::joinable!(fixes -> flights (flight_id));
 diesel::joinable!(fixes -> receivers (receiver_id));
 diesel::joinable!(flights -> aircraft_registrations (tow_aircraft_id));
 diesel::joinable!(flights -> clubs (club_id));
+diesel::joinable!(receiver_statuses -> aprs_messages (aprs_message_id));
 diesel::joinable!(receiver_statuses -> receivers (receiver_id));
 diesel::joinable!(receivers -> locations (location_id));
 diesel::joinable!(receivers_links -> receivers (receiver_id));
@@ -597,6 +611,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     aircraft_other_names,
     aircraft_registrations,
     airports,
+    aprs_messages,
     club_pilots,
     clubs,
     countries,
