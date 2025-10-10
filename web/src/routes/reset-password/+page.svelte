@@ -58,6 +58,7 @@
 				goto(resolve('/login'));
 			}, 3000);
 		} catch (err) {
+			console.error('Password reset error:', err);
 			if (err instanceof AuthApiError) {
 				if (err.status === 400) {
 					error = 'Reset link has expired or is invalid. Please request a new one.';
@@ -65,7 +66,8 @@
 					error = err.message;
 				}
 			} else {
-				error = 'Failed to reset password. Please try again.';
+				const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+				error = `Failed to reset password: ${errorMessage}`;
 			}
 		} finally {
 			loading = false;

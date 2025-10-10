@@ -15,7 +15,8 @@
 		ChevronsLeft,
 		ChevronLeft,
 		ChevronRight,
-		ChevronsRight
+		ChevronsRight,
+		Info
 	} from '@lucide/svelte';
 	import type { PageData } from './$types';
 	import dayjs from 'dayjs';
@@ -359,8 +360,17 @@
 						{/if}
 					</div>
 					{#if data.flight.takeoff_runway_ident}
-						<div class="text-surface-600-300-token text-sm">
-							Runway {data.flight.takeoff_runway_ident}
+						<div class="text-surface-600-300-token flex items-center gap-2 text-sm">
+							<span>Runway {data.flight.takeoff_runway_ident}</span>
+							{#if data.flight.runways_inferred === true}
+								<span
+									class="preset-tonal-surface-500 chip flex items-center gap-1 text-xs"
+									title="This runway was inferred from the aircraft's heading during takeoff, not matched to airport runway data"
+								>
+									<Info class="h-3 w-3" />
+									Inferred
+								</span>
+							{/if}
 						</div>
 					{:else if data.flight.departure_airport}
 						<div class="text-surface-600-300-token text-sm">Runway Unknown</div>
@@ -390,8 +400,17 @@
 					</div>
 					{#if data.flight.landing_time && data.flight.arrival_airport}
 						{#if data.flight.landing_runway_ident}
-							<div class="text-surface-600-300-token text-sm">
-								Runway {data.flight.landing_runway_ident}
+							<div class="text-surface-600-300-token flex items-center gap-2 text-sm">
+								<span>Runway {data.flight.landing_runway_ident}</span>
+								{#if data.flight.runways_inferred === true}
+									<span
+										class="preset-tonal-surface-500 chip flex items-center gap-1 text-xs"
+										title="This runway was inferred from the aircraft's heading during landing, not matched to airport runway data"
+									>
+										<Info class="h-3 w-3" />
+										Inferred
+									</span>
+								{/if}
 							</div>
 						{:else}
 							<div class="text-surface-600-300-token text-sm">Runway Unknown</div>

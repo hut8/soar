@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Plane, MapPin, Clock, ExternalLink } from '@lucide/svelte';
+	import { Plane, MapPin, Clock, ExternalLink, MoveUp } from '@lucide/svelte';
 	import { serverCall } from '$lib/api/server';
 	import { onMount } from 'svelte';
 	import dayjs from 'dayjs';
@@ -20,6 +20,7 @@
 		tow_release_height_msl: number | null;
 		takeoff_altitude_offset_ft: number | null;
 		landing_altitude_offset_ft: number | null;
+		total_distance_meters: number | null;
 		device_id: string | null;
 		aircraft_model: string | null;
 		registration: string | null;
@@ -55,6 +56,17 @@
 		const hours = Math.floor(durationMs / (1000 * 60 * 60));
 		const minutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
 		return `${hours}h ${minutes}m`;
+	}
+
+	function formatDistance(meters: number | null): string {
+		if (meters === null || meters === undefined) return '—';
+		const nm = meters / 1852;
+		const km = meters / 1000;
+		if (nm >= 1) {
+			return `${nm.toFixed(1)} nm`;
+		} else {
+			return `${km.toFixed(1)} km`;
+		}
 	}
 
 	async function loadFlights() {
@@ -136,6 +148,7 @@
 							<th>Takeoff</th>
 							<th>Landing</th>
 							<th>Duration</th>
+							<th>Distance</th>
 							<th>Tow</th>
 							<th>Actions</th>
 						</tr>
@@ -165,6 +178,15 @@
 														{getAircraftTypeOgnDescription(flight.aircraft_type_ogn)}
 													</span>
 												{/if}
+												{#if flight.tow_aircraft_id}
+													<span
+														class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
+														title="This aircraft was towed by {flight.tow_aircraft_id}"
+													>
+														<MoveUp class="h-3 w-3" />
+														Towed
+													</span>
+												{/if}
 											</div>
 										{:else if flight.registration}
 											<div class="flex items-center gap-2">
@@ -183,6 +205,15 @@
 														{getAircraftTypeOgnDescription(flight.aircraft_type_ogn)}
 													</span>
 												{/if}
+												{#if flight.tow_aircraft_id}
+													<span
+														class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
+														title="This aircraft was towed by {flight.tow_aircraft_id}"
+													>
+														<MoveUp class="h-3 w-3" />
+														Towed
+													</span>
+												{/if}
 											</div>
 										{:else}
 											<div class="flex items-center gap-2">
@@ -192,6 +223,15 @@
 												{#if flight.aircraft_type_ogn}
 													<span class="badge preset-filled-surface-500 text-xs">
 														{getAircraftTypeOgnDescription(flight.aircraft_type_ogn)}
+													</span>
+												{/if}
+												{#if flight.tow_aircraft_id}
+													<span
+														class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
+														title="This aircraft was towed by {flight.tow_aircraft_id}"
+													>
+														<MoveUp class="h-3 w-3" />
+														Towed
 													</span>
 												{/if}
 											</div>
@@ -238,6 +278,9 @@
 								</td>
 								<td class="font-semibold">
 									{calculateFlightDuration(flight.takeoff_time, flight.landing_time)}
+								</td>
+								<td class="font-semibold">
+									{formatDistance(flight.total_distance_meters)}
 								</td>
 								<td>
 									{#if flight.tow_aircraft_id}
@@ -323,6 +366,15 @@
 										{getAircraftTypeOgnDescription(flight.aircraft_type_ogn)}
 									</span>
 								{/if}
+								{#if flight.tow_aircraft_id}
+									<span
+										class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
+										title="This aircraft was towed by {flight.tow_aircraft_id}"
+									>
+										<MoveUp class="h-3 w-3" />
+										Towed
+									</span>
+								{/if}
 							</div>
 							<a
 								href={`/flights/${flight.id}`}
@@ -380,6 +432,14 @@
 							<span class="text-surface-600-300-token">Duration:</span>
 							<span class="font-semibold">
 								{calculateFlightDuration(flight.takeoff_time, flight.landing_time)}
+							</span>
+						</div>
+
+						<!-- Distance -->
+						<div class="flex justify-between">
+							<span class="text-surface-600-300-token">Distance:</span>
+							<span class="font-semibold">
+								{formatDistance(flight.total_distance_meters)}
 							</span>
 						</div>
 

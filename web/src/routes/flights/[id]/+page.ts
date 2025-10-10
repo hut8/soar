@@ -28,6 +28,7 @@ export const load: PageLoad = async ({ params }) => {
 					landing_runway_ident?: string;
 					total_distance_meters?: number;
 					maximum_displacement_meters?: number;
+					runways_inferred?: boolean;
 					created_at: string;
 					updated_at: string;
 				};

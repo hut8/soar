@@ -195,6 +195,20 @@ diesel::table! {
 }
 
 diesel::table! {
+    club_pilots (id) {
+        id -> Uuid,
+        first_name -> Text,
+        last_name -> Text,
+        is_tow_pilot -> Bool,
+        is_instructor -> Bool,
+        is_licensed -> Bool,
+        is_student -> Bool,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
     clubs (id) {
         id -> Uuid,
         #[max_length = 255]
@@ -583,6 +597,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     aircraft_other_names,
     aircraft_registrations,
     airports,
+    club_pilots,
     clubs,
     countries,
     devices,
