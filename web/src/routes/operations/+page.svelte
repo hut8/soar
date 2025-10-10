@@ -86,7 +86,7 @@
 	let airports: AirportView[] = [];
 	let airportMarkers: google.maps.marker.AdvancedMarkerElement[] = [];
 	let shouldShowAirports: boolean = false;
-	let airportUpdateDebounceTimer: number | null = null;
+	let airportUpdateDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 	// Aircraft display variables
 	let aircraftMarkers = new SvelteMap<string, google.maps.marker.AdvancedMarkerElement>();
