@@ -182,11 +182,11 @@ impl FlightTracker {
                     reported_altitude_ft, elevation_ft, offset, lat, lon
                 );
 
-                // Log error if offset is too large (> 500 feet)
-                if offset.abs() > 500.0 {
-                    error!(
-                        "Large altitude offset detected: {:.0} ft (indicated={} ft, known_elevation={:.1} ft) at ({:.6}, {:.6}). Fix: {:?}",
-                        offset, reported_altitude_ft, elevation_ft, lat, lon, fix
+                // Log warning if offset is too large (> 250 feet)
+                if offset.abs() > 250.0 {
+                    warn!(
+                        "Large altitude offset detected: {:.0} ft (indicated={} ft, known_elevation={:.1} ft) at ({:.6}, {:.6})",
+                        offset, reported_altitude_ft, elevation_ft, lat, lon
                     );
                 }
 
@@ -365,15 +365,19 @@ impl FlightTracker {
     /// First tries to match against nearby runways with coordinates from the database.
     /// If no runways found or no good match, infers runway from aircraft heading.
     /// Loads fixes from 20 seconds before to 20 seconds after the event time
+    ///
     /// Returns a tuple of (runway_identifier, was_inferred)
     /// - runway_identifier: e.g., "14" or "32"
     /// - was_inferred: true if inferred from heading, false if looked up in database
+    ///
+    /// If airport_ref is provided, only searches for runways at that specific airport
     async fn determine_runway_identifier(
         &self,
         device_id: &Uuid,
         event_time: DateTime<Utc>,
         latitude: f64,
         longitude: f64,
+        airport_ref: Option<i32>,
     ) -> Option<(String, bool)> {
         // Get fixes from 20 seconds before to 20 seconds after the event
         let start_time = event_time - chrono::Duration::seconds(20);
@@ -443,9 +447,10 @@ impl FlightTracker {
         );
 
         // Try to find nearby runways (within 2km)
+        // If we have an airport_ref, use it to filter runways to that airport only
         let nearby_runways = match self
             .runways_repo
-            .find_nearest_runway_endpoints(latitude, longitude, 2000.0, 10)
+            .find_nearest_runway_endpoints(latitude, longitude, 2000.0, 10, airport_ref)
             .await
         {
             Ok(runways) if !runways.is_empty() => {
@@ -820,8 +825,15 @@ impl FlightTracker {
         let departure_airport_id = self.find_nearby_airport(fix.latitude, fix.longitude).await;
 
         // Determine takeoff runway and whether it was inferred
+        // Pass the departure airport to optimize runway search
         let takeoff_runway_info = self
-            .determine_runway_identifier(&fix.device_id, fix.timestamp, fix.latitude, fix.longitude)
+            .determine_runway_identifier(
+                &fix.device_id,
+                fix.timestamp,
+                fix.latitude,
+                fix.longitude,
+                departure_airport_id,
+            )
             .await;
 
         let (takeoff_runway, takeoff_was_inferred) = match takeoff_runway_info {
@@ -922,8 +934,15 @@ impl FlightTracker {
         let arrival_airport_id = self.find_nearby_airport(fix.latitude, fix.longitude).await;
 
         // Determine landing runway and whether it was inferred
+        // Pass the arrival airport to optimize runway search
         let landing_runway_info = self
-            .determine_runway_identifier(&fix.device_id, fix.timestamp, fix.latitude, fix.longitude)
+            .determine_runway_identifier(
+                &fix.device_id,
+                fix.timestamp,
+                fix.latitude,
+                fix.longitude,
+                arrival_airport_id,
+            )
             .await;
 
         let (landing_runway, landing_was_inferred) = match landing_runway_info {
@@ -1144,6 +1163,23 @@ impl FlightTracker {
                         )
                     );
 
+                    // Check altitude offset to validate this is a real takeoff
+                    // If offset > 250 ft, the altitude data is likely unreliable
+                    let altitude_offset = self.calculate_altitude_offset_ft(&fix).await;
+                    let skip_flight_creation = if let Some(offset) = altitude_offset {
+                        if offset.abs() > 250 {
+                            warn!(
+                                "Skipping flight creation for aircraft {} due to large altitude offset ({} ft) - altitude data may be unreliable",
+                                fix.device_id, offset
+                            );
+                            true
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
+                    };
+
                     // Update tracker state immediately to prevent duplicate flight creation
                     let mut trackers = self.aircraft_trackers.write().await;
                     if let Some(tracker) = trackers.get_mut(&fix.device_id) {
@@ -1152,23 +1188,28 @@ impl FlightTracker {
                     }
                     drop(trackers); // Release lock immediately
 
-                    // Create flight in background (similar to landing)
-                    let tracker_clone = self.clone();
-                    let takeoff_fix = fix.clone();
-                    tokio::spawn(async move {
-                        match tracker_clone.create_flight(&takeoff_fix).await {
-                            Ok(flight_id) => {
-                                // Update tracker with the flight_id
-                                let mut trackers = tracker_clone.aircraft_trackers.write().await;
-                                if let Some(tracker) = trackers.get_mut(&takeoff_fix.device_id) {
-                                    tracker.current_flight_id = Some(flight_id);
+                    // Only create flight if altitude data is reliable
+                    if !skip_flight_creation {
+                        // Create flight in background (similar to landing)
+                        let tracker_clone = self.clone();
+                        let takeoff_fix = fix.clone();
+                        tokio::spawn(async move {
+                            match tracker_clone.create_flight(&takeoff_fix).await {
+                                Ok(flight_id) => {
+                                    // Update tracker with the flight_id
+                                    let mut trackers =
+                                        tracker_clone.aircraft_trackers.write().await;
+                                    if let Some(tracker) = trackers.get_mut(&takeoff_fix.device_id)
+                                    {
+                                        tracker.current_flight_id = Some(flight_id);
+                                    }
+                                }
+                                Err(e) => {
+                                    warn!("Failed to create flight for takeoff: {}", e);
                                 }
                             }
-                            Err(e) => {
-                                warn!("Failed to create flight for takeoff: {}", e);
-                            }
-                        }
-                    });
+                        });
+                    }
 
                     // Set flight_id on the fix (it will be set later by the background task)
                     // For now, we don't have it yet, so leave it as None
