@@ -107,7 +107,7 @@
 	// Format altitude
 	function formatAltitude(feet: number | undefined): string {
 		if (feet === undefined || feet === null) return 'N/A';
-		return `${feet.toLocaleString()} ft`;
+		return `${Math.round(feet)} ft`;
 	}
 
 	// Format distance in meters to nautical miles and kilometers
@@ -509,13 +509,13 @@
 				<table class="w-full table-auto">
 					<thead class="bg-surface-100-800-token border-surface-300-600-token border-b">
 						<tr>
-							<th class="px-3 py-2 text-left text-sm font-medium">Time</th>
-							<th class="px-3 py-2 text-left text-sm font-medium">Location</th>
-							<th class="px-3 py-2 text-left text-sm font-medium">Altitude</th>
-							<th class="px-3 py-2 text-left text-sm font-medium">AGL</th>
-							<th class="px-3 py-2 text-left text-sm font-medium">Speed</th>
-							<th class="px-3 py-2 text-left text-sm font-medium">Track</th>
-							<th class="px-3 py-2 text-left text-sm font-medium">Climb</th>
+							<th class="px-2 py-1.5 text-left text-xs font-medium">Time</th>
+							<th class="px-2 py-1.5 text-left text-xs font-medium">Location</th>
+							<th class="px-2 py-1.5 text-left text-xs font-medium">Alt MSL</th>
+							<th class="px-2 py-1.5 text-left text-xs font-medium">AGL</th>
+							<th class="px-2 py-1.5 text-left text-xs font-medium">Speed</th>
+							<th class="px-2 py-1.5 text-left text-xs font-medium">Track</th>
+							<th class="px-2 py-1.5 text-left text-xs font-medium">Climb</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -527,26 +527,26 @@
 									? 'bg-gray-50 dark:bg-gray-900'
 									: ''}"
 							>
-								<td class="px-3 py-2 text-sm">{formatFixTime(fix.timestamp)}</td>
-								<td class="px-3 py-2 text-sm">
+								<td class="px-2 py-1.5 text-xs">{formatFixTime(fix.timestamp)}</td>
+								<td class="px-2 py-1.5 text-xs">
 									<a
 										href="https://www.google.com/maps?q={fix.latitude},{fix.longitude}"
 										target="_blank"
 										rel="noopener noreferrer"
 										class="anchor text-primary-500 hover:text-primary-600"
 									>
-										{fix.latitude.toFixed(6)}, {fix.longitude.toFixed(6)}
+										{fix.latitude.toFixed(4)}, {fix.longitude.toFixed(4)}
 									</a>
 								</td>
-								<td class="px-3 py-2 text-sm">{formatAltitude(fix.altitude_msl_feet)}</td>
-								<td class="px-3 py-2 text-sm">{formatAltitude(fix.altitude_agl_feet)}</td>
-								<td class="px-3 py-2 text-sm"
+								<td class="px-2 py-1.5 text-xs">{formatAltitude(fix.altitude_msl_feet)}</td>
+								<td class="px-2 py-1.5 text-xs">{formatAltitude(fix.altitude_agl_feet)}</td>
+								<td class="px-2 py-1.5 text-xs"
 									>{fix.ground_speed_knots ? `${fix.ground_speed_knots.toFixed(1)} kt` : 'N/A'}</td
 								>
-								<td class="px-3 py-2 text-sm"
+								<td class="px-2 py-1.5 text-xs"
 									>{fix.track_degrees ? `${fix.track_degrees.toFixed(0)}°` : 'N/A'}</td
 								>
-								<td class="px-3 py-2 text-sm"
+								<td class="px-2 py-1.5 text-xs"
 									>{fix.climb_fpm ? `${fix.climb_fpm.toFixed(0)} fpm` : 'N/A'}</td
 								>
 							</tr>
@@ -556,7 +556,7 @@
 										? 'bg-gray-100 dark:bg-gray-800'
 										: ''}"
 								>
-									<td colspan="7" class="px-3 py-2 font-mono text-sm">
+									<td colspan="7" class="px-2 py-1.5 font-mono text-xs">
 										{fix.raw_packet}
 									</td>
 								</tr>
