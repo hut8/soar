@@ -15,7 +15,9 @@
 		takeoff_time: string | null;
 		landing_time: string | null;
 		departure_airport: string | null;
+		departure_airport_country: string | null;
 		arrival_airport: string | null;
+		arrival_airport_country: string | null;
 		tow_aircraft_id: string | null;
 		tow_release_height_msl: number | null;
 		takeoff_altitude_offset_ft: number | null;
@@ -402,7 +404,8 @@
 								{#if flight.departure_airport}
 									<span class="text-surface-500-400-token flex items-center gap-1 text-xs">
 										<MapPin class="h-3 w-3" />
-										{flight.departure_airport}
+										{flight.departure_airport}{#if flight.departure_airport_country}
+											({flight.departure_airport_country}){/if}
 									</span>
 								{/if}
 							</div>
@@ -421,7 +424,8 @@
 								{#if flight.arrival_airport}
 									<span class="text-surface-500-400-token flex items-center gap-1 text-xs">
 										<MapPin class="h-3 w-3" />
-										{flight.arrival_airport}
+										{flight.arrival_airport}{#if flight.arrival_airport_country}
+											({flight.arrival_airport_country}){/if}
 									</span>
 								{/if}
 							</div>
