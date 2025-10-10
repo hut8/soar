@@ -6,6 +6,7 @@ pub mod devices;
 pub mod fixes;
 pub mod flights;
 pub mod receivers;
+pub mod user_settings;
 pub mod users;
 pub mod views;
 
@@ -17,6 +18,7 @@ pub use devices::*;
 pub use fixes::*;
 pub use flights::*;
 pub use receivers::*;
+pub use user_settings::*;
 pub use users::*;
 
 use axum::{

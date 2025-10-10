@@ -580,6 +580,7 @@ diesel::table! {
         email_verification_expires_at -> Nullable<Timestamptz>,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
+        settings -> Jsonb,
     }
 }
 

@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -23,6 +24,7 @@ pub struct User {
     pub email_verification_expires_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub settings: JsonValue,
 }
 
 #[derive(Debug, Deserialize)]
@@ -65,6 +67,7 @@ pub struct UserInfo {
     pub is_admin: bool,
     pub club_id: Option<Uuid>,
     pub email_verified: bool,
+    pub settings: JsonValue,
 }
 
 #[derive(Debug, Deserialize)]
@@ -102,6 +105,7 @@ impl User {
             is_admin: self.is_admin,
             club_id: self.club_id,
             email_verified: self.email_verified,
+            settings: self.settings.clone(),
         }
     }
 }

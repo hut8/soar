@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
 use uuid::Uuid;
 
 use crate::users::User;
@@ -15,6 +16,7 @@ pub struct UserView {
     pub email_verified: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub settings: JsonValue,
 }
 
 impl From<User> for UserView {
@@ -29,6 +31,7 @@ impl From<User> for UserView {
             email_verified: user.email_verified,
             created_at: user.created_at,
             updated_at: user.updated_at,
+            settings: user.settings,
         }
     }
 }

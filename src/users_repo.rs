@@ -7,6 +7,7 @@ use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool};
 use rand::Rng;
+use serde_json::Value as JsonValue;
 use uuid::Uuid;
 
 use crate::schema::users;
@@ -32,6 +33,7 @@ pub struct UserRecord {
     pub email_verification_expires_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub settings: JsonValue,
 }
 
 #[derive(Insertable)]
@@ -64,6 +66,7 @@ impl From<UserRecord> for User {
             email_verification_expires_at: record.email_verification_expires_at,
             created_at: record.created_at,
             updated_at: record.updated_at,
+            settings: record.settings,
         }
     }
 }
@@ -446,5 +449,20 @@ impl UsersRepository {
             .map(|_| rng.sample(rand::distr::Alphanumeric) as char)
             .collect();
         token
+    }
+
+    /// Update user settings
+    pub async fn update_user_settings(&self, user_id: Uuid, settings: JsonValue) -> Result<bool> {
+        let pool = self.pool.clone();
+        let now = Utc::now();
+
+        tokio::task::spawn_blocking(move || -> Result<bool> {
+            let mut conn = pool.get()?;
+            let rows_affected = diesel::update(users::table.filter(users::id.eq(user_id)))
+                .set((users::settings.eq(settings), users::updated_at.eq(now)))
+                .execute(&mut conn)?;
+            Ok(rows_affected > 0)
+        })
+        .await?
     }
 }
