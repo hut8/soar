@@ -6,6 +6,7 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { auth } from '$lib/stores/auth';
+	import { theme } from '$lib/stores/theme';
 	import { websocketStatus, debugStatus } from '$lib/stores/watchlist';
 	import { onMount } from 'svelte';
 	import LoadingBar from '$lib/components/LoadingBar.svelte';
@@ -24,7 +25,9 @@
 		X,
 		LogIn,
 		UserPlus as SignUp,
-		User
+		User,
+		Sun,
+		Moon
 	} from '@lucide/svelte';
 
 	const base = resolve('/');
@@ -42,9 +45,10 @@
 	let showUserMenu = $state(false);
 	let showMobileMenu = $state(false);
 
-	// Initialize auth from localStorage on mount
+	// Initialize auth and theme from localStorage on mount
 	onMount(() => {
 		auth.initFromStorage();
+		theme.init();
 
 		// Add click outside listener
 		document.addEventListener('click', handleClickOutside);
@@ -108,6 +112,19 @@
 					<Plane /> Flights
 				</a>
 			</nav>
+
+			<!-- Theme Toggle -->
+			<button
+				class="preset-tonal-surface-500 btn btn-sm"
+				onclick={() => theme.toggle()}
+				title={$theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+			>
+				{#if $theme === 'dark'}
+					<Sun size={18} />
+				{:else}
+					<Moon size={18} />
+				{/if}
+			</button>
 
 			<!-- Desktop Auth -->
 			<div class="hidden md:flex">
@@ -268,6 +285,20 @@
 				>
 					<Plane size={16} /> Flights
 				</a>
+
+				<hr class="!my-6" />
+
+				<!-- Mobile Theme Toggle -->
+				<button
+					class="btn w-full justify-start preset-filled-surface-500"
+					onclick={() => theme.toggle()}
+				>
+					{#if $theme === 'dark'}
+						<Sun size={16} /> Light Mode
+					{:else}
+						<Moon size={16} /> Dark Mode
+					{/if}
+				</button>
 
 				<hr class="!my-6" />
 

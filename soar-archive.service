@@ -1,0 +1,32 @@
+[Unit]
+Description=SOAR Archive - Archive Old Fixes Data
+Documentation=https://github.com/your-repo/soar
+After=network-online.target postgresql.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+Type=oneshot
+User=soar
+Group=soar
+WorkingDirectory=/var/soar
+
+# Calculate date 7 days ago (UTC) and run archive command
+# Archives all fixes older than 7 days to /var/soar/archive
+ExecStart=/bin/sh -c '/usr/local/bin/soar archive "$(date -u -d "7 days ago" "+%%Y-%%m-%%d")" --archive-path /var/soar/archive'
+
+# Environment variables
+EnvironmentFile=/etc/soar/env
+
+# Security settings
+NoNewPrivileges=yes
+ReadWritePaths=-/var/soar/archive
+
+# Process limits
+LimitNOFILE=65536
+
+# Timeout (allow up to 2 hours for archiving large datasets)
+TimeoutStartSec=7200
+
+[Install]
+WantedBy=multi-user.target soar.target

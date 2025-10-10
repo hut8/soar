@@ -1,0 +1,41 @@
+# SOAR Archive Timer
+#
+# This systemd timer automatically runs the `soar archive` command once daily at 2:00 AM.
+# It archives fixes data older than 7 days to compressed CSV files in /var/soar/archive
+# and deletes the archived data from the database.
+#
+# Installation:
+#   sudo cp soar-archive.service soar-archive.timer /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable soar-archive.timer
+#   sudo systemctl start soar-archive.timer
+#
+# Check status:
+#   sudo systemctl status soar-archive.timer
+#   sudo systemctl list-timers soar-archive.timer
+#
+# Manual execution:
+#   sudo systemctl start soar-archive.service
+#
+# View logs:
+#   sudo journalctl -u soar-archive.service -f
+
+[Unit]
+Description=SOAR Archive Timer - Daily Archival of Old Data
+Requires=soar-archive.service
+
+[Timer]
+# Run daily at 2:00 AM local time (before pull-data at 3:00 AM)
+OnCalendar=*-*-* 02:00:00
+
+# If the system was down when the timer should have triggered, run it as soon as possible
+Persistent=yes
+
+# Add some randomization to avoid exact timing conflicts
+RandomizedDelaySec=300
+
+# Ensure the service isn't triggered more than once per day even if the system time changes
+AccuracySec=30min
+
+[Install]
+WantedBy=timers.target soar.target
