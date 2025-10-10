@@ -97,7 +97,6 @@ pub struct Fix {
     pub gnss_vertical_resolution: Option<i16>,
 
     /// Associations
-    pub club_id: Option<Uuid>,
     pub flight_id: Option<Uuid>,
     pub unparsed_data: Option<String>,
     pub device_id: Uuid,
@@ -230,7 +229,6 @@ impl Fix {
                     freq_offset_khz,
                     gnss_horizontal_resolution,
                     gnss_vertical_resolution,
-                    club_id: None,   // To be set by processors
                     flight_id: None, // Will be set by flight detection processor
                     unparsed_data: pos_packet.comment.unparsed.clone(),
                     device_id,

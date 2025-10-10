@@ -1584,7 +1584,6 @@ mod tests {
             freq_offset_khz: None,
             gnss_horizontal_resolution: None,
             gnss_vertical_resolution: None,
-            club_id: None,
             unparsed_data: None,
             device_id: uuid::Uuid::new_v4(),
             is_active: true, // 50 knots is active

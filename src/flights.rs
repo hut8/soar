@@ -154,7 +154,7 @@ impl Flight {
             towed_by_flight_id: None,
             tow_release_altitude_msl_ft: None,
             tow_release_time: None,
-            club_id: fix.club_id,
+            club_id: None, // Will be populated from device
             takeoff_altitude_offset_ft: None,
             landing_altitude_offset_ft: None,
             takeoff_runway_ident: None,

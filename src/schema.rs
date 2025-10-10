@@ -261,6 +261,7 @@ diesel::table! {
         home_base_airport_ident -> Nullable<Text>,
         aircraft_type_ogn -> Nullable<AircraftTypeOgn>,
         last_fix_at -> Nullable<Timestamptz>,
+        club_id -> Nullable<Uuid>,
     }
 }
 
@@ -302,7 +303,6 @@ diesel::table! {
         snr_db -> Nullable<Float4>,
         bit_errors_corrected -> Nullable<Int4>,
         freq_offset_khz -> Nullable<Float4>,
-        club_id -> Nullable<Uuid>,
         flight_id -> Nullable<Uuid>,
         unparsed_data -> Nullable<Varchar>,
         device_id -> Uuid,
@@ -593,8 +593,8 @@ diesel::joinable!(aircraft_registrations -> status_codes (status_code));
 diesel::joinable!(aircraft_registrations -> type_engines (type_engine_code));
 diesel::joinable!(clubs -> airports (home_base_airport_id));
 diesel::joinable!(clubs -> locations (location_id));
+diesel::joinable!(devices -> clubs (club_id));
 diesel::joinable!(fixes -> aprs_messages (aprs_message_id));
-diesel::joinable!(fixes -> clubs (club_id));
 diesel::joinable!(fixes -> devices (device_id));
 diesel::joinable!(fixes -> flights (flight_id));
 diesel::joinable!(fixes -> receivers (receiver_id));

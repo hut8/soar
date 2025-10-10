@@ -152,6 +152,8 @@ pub struct Device {
     pub aircraft_type_ogn: Option<AircraftType>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_fix_at: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub club_id: Option<uuid::Uuid>,
 }
 
 // Diesel database model for devices table
@@ -185,6 +187,7 @@ pub struct DeviceModel {
     pub home_base_airport_ident: Option<String>,
     pub aircraft_type_ogn: Option<AircraftType>,
     pub last_fix_at: Option<DateTime<Utc>>,
+    pub club_id: Option<uuid::Uuid>,
 }
 
 // For inserting new devices (without timestamps which are set by DB)
@@ -204,6 +207,7 @@ pub struct NewDevice {
     pub home_base_airport_ident: Option<String>,
     pub aircraft_type_ogn: Option<AircraftType>,
     pub last_fix_at: Option<DateTime<Utc>>,
+    pub club_id: Option<uuid::Uuid>,
 }
 
 impl From<Device> for NewDevice {
@@ -224,6 +228,7 @@ impl From<Device> for NewDevice {
             home_base_airport_ident: device.home_base_airport_ident,
             aircraft_type_ogn: device.aircraft_type_ogn,
             last_fix_at: device.last_fix_at,
+            club_id: device.club_id,
         }
     }
 }
@@ -246,6 +251,7 @@ impl From<DeviceModel> for Device {
             home_base_airport_ident: model.home_base_airport_ident,
             aircraft_type_ogn: model.aircraft_type_ogn,
             last_fix_at: model.last_fix_at,
+            club_id: model.club_id,
         }
     }
 }
@@ -607,6 +613,7 @@ impl DeviceFetcher {
                         home_base_airport_ident: None,
                         aircraft_type_ogn: None,
                         last_fix_at: None,
+                        club_id: None,
                     };
                     device_map.insert(
                         glidernet_device.address,
@@ -689,6 +696,7 @@ mod tests {
             home_base_airport_ident: None,
             aircraft_type_ogn: None,
             last_fix_at: None,
+            club_id: None,
         };
 
         // Test that the device can be serialized/deserialized
@@ -964,6 +972,7 @@ mod tests {
             home_base_airport_ident: None,
             aircraft_type_ogn: None,
             last_fix_at: None,
+            club_id: None,
         }
     }
 }

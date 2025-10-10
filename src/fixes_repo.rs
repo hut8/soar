@@ -131,7 +131,6 @@ struct FixDslRow {
     freq_offset_khz: Option<f32>,
     gnss_horizontal_resolution: Option<i16>,
     gnss_vertical_resolution: Option<i16>,
-    club_id: Option<Uuid>,
     flight_id: Option<Uuid>,
     unparsed_data: Option<String>,
     device_id: Uuid,
@@ -175,7 +174,6 @@ impl From<FixDslRow> for Fix {
             freq_offset_khz: row.freq_offset_khz,
             gnss_horizontal_resolution: row.gnss_horizontal_resolution,
             gnss_vertical_resolution: row.gnss_vertical_resolution,
-            club_id: row.club_id,
             unparsed_data: row.unparsed_data,
             device_id: row.device_id, // Now directly a Uuid
             is_active: row.is_active,
@@ -242,27 +240,6 @@ impl FixesRepository {
         Ok(receiver_uuid)
     }
 
-    /// Look up club UUID by device UUID
-    fn lookup_club_id_by_device_uuid(
-        conn: &mut diesel::PgConnection,
-        device_uuid: Uuid,
-    ) -> Result<Option<Uuid>> {
-        use crate::schema::{aircraft_registrations, devices};
-
-        let club_uuid = devices::table
-            .inner_join(
-                aircraft_registrations::table
-                    .on(aircraft_registrations::device_id.eq(devices::id.nullable())),
-            )
-            .filter(devices::id.eq(device_uuid))
-            .select(aircraft_registrations::club_id)
-            .first::<Option<Uuid>>(conn)
-            .optional()?
-            .flatten();
-
-        Ok(club_uuid)
-    }
-
     /// Insert a new fix into the database
     pub async fn insert(&self, fix: &Fix) -> Result<()> {
         use crate::schema::fixes::dsl::*;
@@ -299,12 +276,6 @@ impl FixesRepository {
                     callsign,
                 ).ok(); // Use ok() to convert Result to Option, ignoring errors
             }
-
-            // Look up club_id from device's aircraft registration
-            new_fix.club_id =
-                Self::lookup_club_id_by_device_uuid(&mut conn, new_fix.device_id)
-                    .ok()
-                    .flatten();
 
             diesel::insert_into(fixes)
                 .values(&new_fix)
@@ -663,6 +634,7 @@ impl FixesRepository {
                     home_base_airport_ident: row.home_base_airport_ident,
                     aircraft_type_ogn: None, // Not loaded in this query
                     last_fix_at: None,       // Not loaded in this query
+                    club_id: None,           // Not loaded in this query
                 })
                 .collect();
 
@@ -741,8 +713,6 @@ impl FixesRepository {
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Int2>)]
                 gnss_vertical_resolution: Option<i16>,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
-                club_id: Option<uuid::Uuid>,
-                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
                 flight_id: Option<uuid::Uuid>,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
                 unparsed_data: Option<String>,
@@ -804,7 +774,6 @@ impl FixesRepository {
                     freq_offset_khz: fix_row.freq_offset_khz,
                     gnss_horizontal_resolution: fix_row.gnss_horizontal_resolution,
                     gnss_vertical_resolution: fix_row.gnss_vertical_resolution,
-                    club_id: fix_row.club_id,
                     unparsed_data: fix_row.unparsed_data,
                     device_id: fix_row.device_id,
                     is_active: fix_row.is_active,
