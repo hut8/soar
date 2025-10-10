@@ -6,6 +6,21 @@ use crate::devices::AddressType;
 use crate::flights::Flight;
 use crate::ogn_aprs_aircraft::AircraftType;
 
+/// Helper struct for airport information when constructing FlightView
+#[derive(Debug, Clone, Default)]
+pub struct AirportInfo {
+    pub ident: Option<String>,
+    pub country: Option<String>,
+}
+
+/// Helper struct for device information when constructing FlightView
+#[derive(Debug, Clone, Default)]
+pub struct DeviceInfo {
+    pub aircraft_model: Option<String>,
+    pub registration: Option<String>,
+    pub aircraft_type_ogn: Option<AircraftType>,
+}
+
 /// Flight view for API responses with computed fields
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FlightView {
@@ -21,8 +36,10 @@ pub struct FlightView {
 
     pub departure_airport: Option<String>,
     pub departure_airport_id: Option<i32>,
+    pub departure_airport_country: Option<String>,
     pub arrival_airport: Option<String>,
     pub arrival_airport_id: Option<i32>,
+    pub arrival_airport_country: Option<String>,
     pub tow_aircraft_id: Option<String>,
     pub tow_release_height_msl: Option<i32>,
     pub club_id: Option<Uuid>,
@@ -42,20 +59,22 @@ pub struct FlightView {
 }
 
 impl FlightView {
-    /// Create a FlightView from a Flight with optional airport identifiers and device info
+    /// Create a FlightView from a Flight with optional airport and device info
     pub fn from_flight(
         flight: Flight,
-        departure_airport_ident: Option<String>,
-        arrival_airport_ident: Option<String>,
-        aircraft_model: Option<String>,
-        registration: Option<String>,
-        aircraft_type_ogn: Option<AircraftType>,
+        departure_airport: Option<AirportInfo>,
+        arrival_airport: Option<AirportInfo>,
+        device_info: Option<DeviceInfo>,
     ) -> Self {
         // Calculate duration in seconds if both takeoff and landing times are available
         let duration_seconds = match (flight.takeoff_time, flight.landing_time) {
             (Some(takeoff), Some(landing)) => Some((landing - takeoff).num_seconds()),
             _ => None,
         };
+
+        let departure_airport = departure_airport.unwrap_or_default();
+        let arrival_airport = arrival_airport.unwrap_or_default();
+        let device_info = device_info.unwrap_or_default();
 
         Self {
             id: flight.id,
@@ -65,10 +84,12 @@ impl FlightView {
             takeoff_time: flight.takeoff_time,
             landing_time: flight.landing_time,
             duration_seconds,
-            departure_airport: departure_airport_ident,
+            departure_airport: departure_airport.ident,
             departure_airport_id: flight.departure_airport_id,
-            arrival_airport: arrival_airport_ident,
+            departure_airport_country: departure_airport.country,
+            arrival_airport: arrival_airport.ident,
             arrival_airport_id: flight.arrival_airport_id,
+            arrival_airport_country: arrival_airport.country,
             tow_aircraft_id: flight.tow_aircraft_id,
             tow_release_height_msl: flight.tow_release_height_msl,
             club_id: flight.club_id,
@@ -80,15 +101,15 @@ impl FlightView {
             maximum_displacement_meters: flight.maximum_displacement_meters,
             created_at: flight.created_at,
             updated_at: flight.updated_at,
-            aircraft_model,
-            registration,
-            aircraft_type_ogn,
+            aircraft_model: device_info.aircraft_model,
+            registration: device_info.registration,
+            aircraft_type_ogn: device_info.aircraft_type_ogn,
         }
     }
 }
 
 impl From<Flight> for FlightView {
     fn from(flight: Flight) -> Self {
-        Self::from_flight(flight, None, None, None, None, None)
+        Self::from_flight(flight, None, None, None)
     }
 }

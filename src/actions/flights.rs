@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::actions::json_error;
-use crate::actions::views::FlightView;
+use crate::actions::views::{AirportInfo, DeviceInfo, FlightView};
 use crate::airports_repo::AirportsRepository;
 use crate::device_repo::DeviceRepository;
 use crate::devices::Device;
@@ -46,53 +46,54 @@ pub async fn get_flight_by_id(
 
     match flights_repo.get_flight_by_id(id).await {
         Ok(Some(flight)) => {
-            // Look up airport identifiers if airport IDs are present
-            let departure_airport_ident = if let Some(dep_id) = flight.departure_airport_id {
+            // Look up airport identifiers and country codes if airport IDs are present
+            let departure_airport = if let Some(dep_id) = flight.departure_airport_id {
                 airports_repo
                     .get_airport_by_id(dep_id)
                     .await
                     .ok()
                     .flatten()
-                    .map(|a| a.ident)
+                    .map(|a| AirportInfo {
+                        ident: Some(a.ident),
+                        country: a.iso_country,
+                    })
             } else {
                 None
             };
 
-            let arrival_airport_ident = if let Some(arr_id) = flight.arrival_airport_id {
+            let arrival_airport = if let Some(arr_id) = flight.arrival_airport_id {
                 airports_repo
                     .get_airport_by_id(arr_id)
                     .await
                     .ok()
                     .flatten()
-                    .map(|a| a.ident)
+                    .map(|a| AirportInfo {
+                        ident: Some(a.ident),
+                        country: a.iso_country,
+                    })
             } else {
                 None
             };
 
             // Look up device information
-            let (device, aircraft_model, registration, aircraft_type_ogn) =
-                if let Some(device_id) = flight.device_id {
-                    match device_repo.get_device_by_uuid(device_id).await {
-                        Ok(Some(dev)) => (
-                            Some(dev.clone()),
-                            Some(dev.aircraft_model),
-                            Some(dev.registration),
-                            dev.aircraft_type_ogn,
-                        ),
-                        _ => (None, None, None, None),
-                    }
-                } else {
-                    (None, None, None, None)
-                };
+            let (device, device_info) = if let Some(device_id) = flight.device_id {
+                match device_repo.get_device_by_uuid(device_id).await {
+                    Ok(Some(dev)) => (
+                        Some(dev.clone()),
+                        Some(DeviceInfo {
+                            aircraft_model: Some(dev.aircraft_model),
+                            registration: Some(dev.registration),
+                            aircraft_type_ogn: dev.aircraft_type_ogn,
+                        }),
+                    ),
+                    _ => (None, None),
+                }
+            } else {
+                (None, None)
+            };
 
-            let flight_view = FlightView::from_flight(
-                flight,
-                departure_airport_ident,
-                arrival_airport_ident,
-                aircraft_model,
-                registration,
-                aircraft_type_ogn,
-            );
+            let flight_view =
+                FlightView::from_flight(flight, departure_airport, arrival_airport, device_info);
             Json(FlightResponse {
                 flight: flight_view,
                 device,
@@ -272,28 +273,20 @@ pub async fn get_completed_flights(
 
             for flight in flights {
                 // Look up device information if device_id is present
-                let (aircraft_model, registration, aircraft_type_ogn) =
-                    if let Some(device_id) = flight.device_id {
-                        match device_repo.get_device_by_uuid(device_id).await {
-                            Ok(Some(device)) => (
-                                Some(device.aircraft_model),
-                                Some(device.registration),
-                                device.aircraft_type_ogn,
-                            ),
-                            _ => (None, None, None),
-                        }
-                    } else {
-                        (None, None, None)
-                    };
+                let device_info = if let Some(device_id) = flight.device_id {
+                    match device_repo.get_device_by_uuid(device_id).await {
+                        Ok(Some(device)) => Some(DeviceInfo {
+                            aircraft_model: Some(device.aircraft_model),
+                            registration: Some(device.registration),
+                            aircraft_type_ogn: device.aircraft_type_ogn,
+                        }),
+                        _ => None,
+                    }
+                } else {
+                    None
+                };
 
-                let flight_view = FlightView::from_flight(
-                    flight,
-                    None, // departure_airport_ident
-                    None, // arrival_airport_ident
-                    aircraft_model,
-                    registration,
-                    aircraft_type_ogn,
-                );
+                let flight_view = FlightView::from_flight(flight, None, None, device_info);
                 flight_views.push(flight_view);
             }
 
@@ -328,50 +321,55 @@ pub async fn get_airport_flights(
             let mut flight_responses = Vec::new();
 
             for flight in flights {
-                let departure_airport_ident = if let Some(dep_id) = flight.departure_airport_id {
+                let departure_airport = if let Some(dep_id) = flight.departure_airport_id {
                     airports_repo
                         .get_airport_by_id(dep_id)
                         .await
                         .ok()
                         .flatten()
-                        .map(|a| a.ident)
+                        .map(|a| AirportInfo {
+                            ident: Some(a.ident),
+                            country: a.iso_country,
+                        })
                 } else {
                     None
                 };
 
-                let arrival_airport_ident = if let Some(arr_id) = flight.arrival_airport_id {
+                let arrival_airport = if let Some(arr_id) = flight.arrival_airport_id {
                     airports_repo
                         .get_airport_by_id(arr_id)
                         .await
                         .ok()
                         .flatten()
-                        .map(|a| a.ident)
+                        .map(|a| AirportInfo {
+                            ident: Some(a.ident),
+                            country: a.iso_country,
+                        })
                 } else {
                     None
                 };
 
-                let (device, aircraft_model, registration, aircraft_type_ogn) =
-                    if let Some(device_id) = flight.device_id {
-                        match device_repo.get_device_by_uuid(device_id).await {
-                            Ok(Some(dev)) => (
-                                Some(dev.clone()),
-                                Some(dev.aircraft_model),
-                                Some(dev.registration),
-                                dev.aircraft_type_ogn,
-                            ),
-                            _ => (None, None, None, None),
-                        }
-                    } else {
-                        (None, None, None, None)
-                    };
+                let (device, device_info) = if let Some(device_id) = flight.device_id {
+                    match device_repo.get_device_by_uuid(device_id).await {
+                        Ok(Some(dev)) => (
+                            Some(dev.clone()),
+                            Some(DeviceInfo {
+                                aircraft_model: Some(dev.aircraft_model),
+                                registration: Some(dev.registration),
+                                aircraft_type_ogn: dev.aircraft_type_ogn,
+                            }),
+                        ),
+                        _ => (None, None),
+                    }
+                } else {
+                    (None, None)
+                };
 
                 let flight_view = FlightView::from_flight(
                     flight,
-                    departure_airport_ident,
-                    arrival_airport_ident,
-                    aircraft_model,
-                    registration,
-                    aircraft_type_ogn,
+                    departure_airport,
+                    arrival_airport,
+                    device_info,
                 );
                 flight_responses.push(FlightResponse {
                     flight: flight_view,
