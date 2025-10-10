@@ -3,11 +3,14 @@
 /**
  * Convert TitleCase strings to Title Case with spaces
  * Example: "FixedWingSingleEngine" -> "Fixed Wing Single Engine"
+ * Example: "UpTo12499" -> "Up To 12499"
  */
 export function formatTitleCase(value: string | null | undefined): string {
 	if (!value) return 'Unknown';
 	return value
-		.replace(/([A-Z])/g, ' $1')
+		.replace(/([a-z])([A-Z])/g, '$1 $2') // Space before capital after lowercase
+		.replace(/(\d)([A-Z])/g, '$1 $2') // Space before capital after digit
+		.replace(/([a-zA-Z])(\d)/g, '$1 $2') // Space before digit after letter
 		.trim()
 		.replace(/\s+/g, ' ');
 }
