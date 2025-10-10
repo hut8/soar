@@ -403,6 +403,7 @@ diesel::table! {
         id -> Uuid,
         latest_packet_at -> Nullable<Timestamptz>,
         from_ogn_db -> Bool,
+        location_id -> Nullable<Uuid>,
     }
 }
 
@@ -572,6 +573,7 @@ diesel::joinable!(fixes -> receivers (receiver_id));
 diesel::joinable!(flights -> aircraft_registrations (tow_aircraft_id));
 diesel::joinable!(flights -> clubs (club_id));
 diesel::joinable!(receiver_statuses -> receivers (receiver_id));
+diesel::joinable!(receivers -> locations (location_id));
 diesel::joinable!(receivers_links -> receivers (receiver_id));
 diesel::joinable!(receivers_photos -> receivers (receiver_id));
 diesel::joinable!(users -> clubs (club_id));

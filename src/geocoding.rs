@@ -59,6 +59,56 @@ struct NominatimResponse {
     place_id: Option<i64>,
 }
 
+// Nominatim reverse geocoding response structure
+#[derive(Debug, Deserialize)]
+struct NominatimReverseResponse {
+    #[allow(dead_code)]
+    lat: String,
+    #[allow(dead_code)]
+    lon: String,
+    display_name: String,
+    address: NominatimAddress,
+}
+
+#[derive(Debug, Deserialize)]
+struct NominatimAddress {
+    #[serde(default)]
+    house_number: Option<String>,
+    #[serde(default)]
+    road: Option<String>,
+    #[serde(default)]
+    suburb: Option<String>,
+    #[serde(default)]
+    city: Option<String>,
+    #[serde(default)]
+    town: Option<String>,
+    #[serde(default)]
+    village: Option<String>,
+    #[allow(dead_code)]
+    #[serde(default)]
+    county: Option<String>,
+    #[serde(default)]
+    state: Option<String>,
+    #[serde(default)]
+    postcode: Option<String>,
+    #[serde(default)]
+    country: Option<String>,
+    #[allow(dead_code)]
+    #[serde(default)]
+    country_code: Option<String>,
+}
+
+// Reverse geocoding result
+#[derive(Debug, Clone)]
+pub struct ReverseGeocodeResult {
+    pub street1: Option<String>,
+    pub city: Option<String>,
+    pub state: Option<String>,
+    pub zip_code: Option<String>,
+    pub country: Option<String>,
+    pub display_name: String,
+}
+
 pub struct Geocoder {
     client: reqwest::Client,
     base_url: String,
@@ -209,6 +259,257 @@ impl Geocoder {
         );
 
         Ok(Point::new(latitude, longitude))
+    }
+
+    /// Reverse geocode coordinates using Nominatim
+    async fn reverse_geocode_with_nominatim(
+        &self,
+        latitude: f64,
+        longitude: f64,
+    ) -> Result<ReverseGeocodeResult> {
+        debug!(
+            "Reverse geocoding coordinates with Nominatim: ({}, {})",
+            latitude, longitude
+        );
+
+        let url = format!("{}/reverse", self.base_url);
+
+        let params = [
+            ("lat", latitude.to_string()),
+            ("lon", longitude.to_string()),
+            ("format", "json".to_string()),
+            ("addressdetails", "1".to_string()),
+        ];
+
+        let response = self
+            .client
+            .get(&url)
+            .query(&params)
+            .header("User-Agent", &self.user_agent)
+            .send()
+            .await
+            .map_err(|e| anyhow!("Failed to send reverse geocoding request: {}", e))?;
+
+        if !response.status().is_success() {
+            return Err(anyhow!(
+                "Reverse geocoding request failed with status: {}",
+                response.status()
+            ));
+        }
+
+        let result: NominatimReverseResponse = response
+            .json()
+            .await
+            .map_err(|e| anyhow!("Failed to parse reverse geocoding response: {}", e))?;
+
+        // Build street address from components
+        let street1 = if let Some(house) = &result.address.house_number {
+            if let Some(road) = &result.address.road {
+                Some(format!("{} {}", house, road))
+            } else {
+                result.address.road.clone()
+            }
+        } else {
+            result.address.road.clone()
+        };
+
+        // Pick the best city name (city > town > village > suburb)
+        let city = result
+            .address
+            .city
+            .or_else(|| result.address.town.clone())
+            .or_else(|| result.address.village.clone())
+            .or_else(|| result.address.suburb.clone());
+
+        debug!(
+            "Nominatim reverse geocoded ({}, {}) to {}",
+            latitude, longitude, result.display_name
+        );
+
+        Ok(ReverseGeocodeResult {
+            street1,
+            city,
+            state: result.address.state,
+            zip_code: result.address.postcode,
+            country: result.address.country,
+            display_name: result.display_name,
+        })
+    }
+
+    /// Reverse geocode coordinates using Google Maps as fallback
+    async fn reverse_geocode_with_google_maps(
+        &self,
+        latitude: f64,
+        longitude: f64,
+    ) -> Result<ReverseGeocodeResult> {
+        let google_client = self
+            .google_maps_client
+            .as_ref()
+            .ok_or_else(|| anyhow!("Google Maps client not available"))?;
+
+        debug!(
+            "Reverse geocoding coordinates with Google Maps: ({}, {})",
+            latitude, longitude
+        );
+
+        use rust_decimal::Decimal;
+        use std::str::FromStr;
+
+        let lat_decimal = Decimal::from_str(&latitude.to_string())
+            .map_err(|e| anyhow!("Failed to convert latitude to Decimal: {}", e))?;
+        let lng_decimal = Decimal::from_str(&longitude.to_string())
+            .map_err(|e| anyhow!("Failed to convert longitude to Decimal: {}", e))?;
+
+        let latlng = google_maps::LatLng::try_from_dec(lat_decimal, lng_decimal)
+            .map_err(|e| anyhow!("Invalid coordinates for Google Maps: {}", e))?;
+
+        let geocoding_response = google_client
+            .reverse_geocoding(latlng)
+            .execute()
+            .await
+            .map_err(|e| anyhow!("Google Maps reverse geocoding request failed: {}", e))?;
+
+        if geocoding_response.results.is_empty() {
+            return Err(anyhow!(
+                "No Google Maps reverse geocoding results found for coordinates: ({}, {})",
+                latitude,
+                longitude
+            ));
+        }
+
+        let result = &geocoding_response.results[0];
+        let display_name = result.formatted_address.clone();
+
+        // Extract address components
+        let mut street_number: Option<String> = None;
+        let mut route: Option<String> = None;
+        let mut city: Option<String> = None;
+        let mut state: Option<String> = None;
+        let mut zip_code: Option<String> = None;
+        let mut country: Option<String> = None;
+
+        use google_maps::PlaceType;
+
+        for component in &result.address_components {
+            let types = &component.types;
+            let long_name = &component.long_name;
+
+            if types.contains(&PlaceType::StreetNumber) {
+                street_number = Some(long_name.clone());
+            } else if types.contains(&PlaceType::Route) {
+                route = Some(long_name.clone());
+            } else if types.contains(&PlaceType::Locality) {
+                city = Some(long_name.clone());
+            } else if types.contains(&PlaceType::AdministrativeAreaLevel1) {
+                state = Some(component.short_name.clone());
+            } else if types.contains(&PlaceType::PostalCode) {
+                zip_code = Some(long_name.clone());
+            } else if types.contains(&PlaceType::Country) {
+                country = Some(long_name.clone());
+            }
+        }
+
+        // Build street address
+        let street1 = match (street_number, route) {
+            (Some(num), Some(rd)) => Some(format!("{} {}", num, rd)),
+            (None, Some(rd)) => Some(rd),
+            (Some(num), None) => Some(num),
+            (None, None) => None,
+        };
+
+        debug!(
+            "Google Maps reverse geocoded ({}, {}) to {}",
+            latitude, longitude, display_name
+        );
+
+        Ok(ReverseGeocodeResult {
+            street1,
+            city,
+            state,
+            zip_code,
+            country,
+            display_name,
+        })
+    }
+
+    /// Reverse geocode coordinates to address with Google Maps fallback
+    pub async fn reverse_geocode(
+        &self,
+        latitude: f64,
+        longitude: f64,
+    ) -> Result<ReverseGeocodeResult> {
+        // Validate coordinates
+        if !(-90.0..=90.0).contains(&latitude) {
+            return Err(anyhow!("Invalid latitude: {}", latitude));
+        }
+        if !(-180.0..=180.0).contains(&longitude) {
+            return Err(anyhow!("Invalid longitude: {}", longitude));
+        }
+
+        debug!(
+            "Reverse geocoding coordinates: ({}, {})",
+            latitude, longitude
+        );
+
+        // First try Nominatim
+        match self
+            .reverse_geocode_with_nominatim(latitude, longitude)
+            .await
+        {
+            Ok(result) => {
+                debug!(
+                    "Successfully reverse geocoded with Nominatim: ({}, {})",
+                    latitude, longitude
+                );
+                Ok(result)
+            }
+            Err(nominatim_error) => {
+                warn!(
+                    "Nominatim reverse geocoding failed for ({}, {}): {}",
+                    latitude, longitude, nominatim_error
+                );
+
+                // Try Google Maps as fallback if available
+                if self.google_maps_client.is_some() {
+                    info!(
+                        "Attempting Google Maps fallback for reverse geocoding: ({}, {})",
+                        latitude, longitude
+                    );
+                    match self
+                        .reverse_geocode_with_google_maps(latitude, longitude)
+                        .await
+                    {
+                        Ok(result) => {
+                            info!(
+                                "Successfully reverse geocoded with Google Maps fallback: ({}, {})",
+                                latitude, longitude
+                            );
+                            Ok(result)
+                        }
+                        Err(google_error) => {
+                            warn!(
+                                "Google Maps reverse geocoding also failed for ({}, {}): {}",
+                                latitude, longitude, google_error
+                            );
+                            Err(anyhow!(
+                                "Both Nominatim and Google Maps reverse geocoding failed for ({}, {}). Nominatim error: {}. Google Maps error: {}",
+                                latitude,
+                                longitude,
+                                nominatim_error,
+                                google_error
+                            ))
+                        }
+                    }
+                } else {
+                    Err(anyhow!(
+                        "Nominatim reverse geocoding failed for ({}, {}) and Google Maps fallback not available: {}",
+                        latitude,
+                        longitude,
+                        nominatim_error
+                    ))
+                }
+            }
+        }
     }
 
     /// Geocode an address using Google Maps as fallback

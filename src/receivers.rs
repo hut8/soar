@@ -46,6 +46,7 @@ pub struct ReceiverRecord {
     pub latitude: Option<f64>,
     pub longitude: Option<f64>,
     pub from_ogn_db: bool,
+    pub location_id: Option<uuid::Uuid>,
 }
 
 /// Database representation of a receiver photo
@@ -88,6 +89,7 @@ impl Receiver {
             latitude: None,
             longitude: None,
             from_ogn_db: true, // These come from the OGN database
+            location_id: None, // Will be populated by reverse geocoding
         };
 
         (receiver_record, photos, links)
@@ -111,6 +113,7 @@ pub struct ReceiverModel {
     pub id: uuid::Uuid,
     pub latest_packet_at: Option<chrono::DateTime<chrono::Utc>>,
     pub from_ogn_db: bool,
+    pub location_id: Option<uuid::Uuid>,
 }
 
 /// Insert model for new receivers
@@ -194,6 +197,7 @@ impl From<ReceiverRecord> for ReceiverModel {
             longitude: record.longitude,
             latest_packet_at: None,
             from_ogn_db: record.from_ogn_db,
+            location_id: record.location_id,
         }
     }
 }
@@ -216,6 +220,7 @@ impl From<ReceiverModel> for ReceiverRecord {
             latitude: model.latitude,
             longitude: model.longitude,
             from_ogn_db: model.from_ogn_db,
+            location_id: model.location_id,
         }
     }
 }

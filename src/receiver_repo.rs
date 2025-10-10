@@ -524,6 +524,8 @@ impl ReceiverRepository {
                 latest_packet_at: Option<chrono::DateTime<chrono::Utc>>,
                 #[diesel(sql_type = diesel::sql_types::Bool)]
                 from_ogn_db: bool,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
+                location_id: Option<Uuid>,
             }
 
             let receiver_rows: Vec<ReceiverRow> = diesel::sql_query(bbox_sql)
@@ -548,6 +550,7 @@ impl ReceiverRepository {
                     longitude: row.longitude,
                     latest_packet_at: row.latest_packet_at,
                     from_ogn_db: row.from_ogn_db,
+                    location_id: row.location_id,
                 })
                 .collect();
 
@@ -635,6 +638,8 @@ impl ReceiverRepository {
                 latest_packet_at: Option<chrono::DateTime<chrono::Utc>>,
                 #[diesel(sql_type = diesel::sql_types::Bool)]
                 from_ogn_db: bool,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
+                location_id: Option<Uuid>,
             }
 
             let receiver_rows: Vec<ReceiverRow> = diesel::sql_query(radius_sql)
@@ -658,6 +663,7 @@ impl ReceiverRepository {
                     longitude: row.longitude,
                     latest_packet_at: row.latest_packet_at,
                     from_ogn_db: row.from_ogn_db,
+                    location_id: row.location_id,
                 })
                 .collect();
 
