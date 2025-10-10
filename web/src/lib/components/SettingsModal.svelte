@@ -5,9 +5,19 @@
 	import { onMount } from 'svelte';
 	import { DeviceRegistry } from '$lib/services/DeviceRegistry';
 	import { toaster } from '$lib/toaster';
+	import { auth } from '$lib/stores/auth';
+	import { serverCall } from '$lib/api/server';
 
 	// Props
 	let { showModal = $bindable(), onSettingsChange } = $props();
+
+	// Settings interface
+	interface SettingsData {
+		showCompassRose?: boolean;
+		showAirportMarkers?: boolean;
+		showRunwayOverlays?: boolean;
+		trailLength?: number[];
+	}
 
 	// Settings state
 	let showCompassRose = $state(true);
@@ -33,9 +43,33 @@
 	}
 
 	// Settings persistence functions
-	function loadSettings() {
+	async function loadSettings() {
 		if (!browser) return;
 
+		// If user is authenticated, load from backend
+		if ($auth.isAuthenticated && $auth.token) {
+			try {
+				const backendSettings = await serverCall<SettingsData>('/user/settings', {
+					headers: {
+						Authorization: `Bearer ${$auth.token}`
+					}
+				});
+
+				// Apply backend settings if they exist
+				if (backendSettings && Object.keys(backendSettings).length > 0) {
+					showCompassRose = backendSettings.showCompassRose ?? true;
+					showAirportMarkers = backendSettings.showAirportMarkers ?? true;
+					showRunwayOverlays = backendSettings.showRunwayOverlays ?? false;
+					trailLength = backendSettings.trailLength ?? [0];
+					trailLengthSlider = [hoursToSlider(trailLength[0])];
+					return;
+				}
+			} catch (e) {
+				console.warn('Failed to load settings from backend, falling back to localStorage:', e);
+			}
+		}
+
+		// Fallback to localStorage for non-authenticated users or if backend fails
 		const saved = localStorage.getItem('operationsSettings');
 		if (saved) {
 			try {
@@ -54,7 +88,7 @@
 		}
 	}
 
-	function saveSettings() {
+	async function saveSettings() {
 		if (!browser) return;
 
 		const settings = {
@@ -63,7 +97,27 @@
 			showRunwayOverlays,
 			trailLength
 		};
+
+		// Always save to localStorage for offline support
 		localStorage.setItem('operationsSettings', JSON.stringify(settings));
+
+		// If user is authenticated, also save to backend
+		if ($auth.isAuthenticated && $auth.token) {
+			try {
+				await serverCall('/user/settings', {
+					method: 'PUT',
+					headers: {
+						Authorization: `Bearer ${$auth.token}`
+					},
+					body: JSON.stringify(settings)
+				});
+			} catch (e) {
+				console.warn('Failed to save settings to backend:', e);
+				toaster.warning({
+					title: 'Settings saved locally only'
+				});
+			}
+		}
 
 		// Notify parent component of settings changes
 		if (onSettingsChange) {
