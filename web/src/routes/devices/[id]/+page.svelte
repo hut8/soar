@@ -515,8 +515,8 @@
 									<th class="px-3 py-2 text-left text-sm font-medium">Takeoff</th>
 									<th class="px-3 py-2 text-left text-sm font-medium">Landing</th>
 									<th class="px-3 py-2 text-left text-sm font-medium">Duration</th>
-									<th class="px-3 py-2 text-left text-sm font-medium">Departure</th>
-									<th class="px-3 py-2 text-left text-sm font-medium">Arrival</th>
+									<th class="px-3 py-2 text-left text-sm font-medium">Takeoff Airport</th>
+									<th class="px-3 py-2 text-left text-sm font-medium">Landing Airport</th>
 									<th class="px-3 py-2 text-left text-sm font-medium">Actions</th>
 								</tr>
 							</thead>
