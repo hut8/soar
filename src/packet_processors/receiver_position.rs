@@ -1,3 +1,4 @@
+use crate::locations_repo::LocationsRepository;
 use crate::receiver_repo::ReceiverRepository;
 use num_traits::AsPrimitive;
 use ogn_parser::{AprsData, AprsPacket};
@@ -7,12 +8,17 @@ use tracing::{debug, error, info, warn};
 pub struct ReceiverPositionProcessor {
     /// Repository for updating receiver locations
     receiver_repo: ReceiverRepository,
+    /// Repository for managing location records
+    locations_repo: LocationsRepository,
 }
 
 impl ReceiverPositionProcessor {
     /// Create a new ReceiverPositionProcessor
-    pub fn new(receiver_repo: ReceiverRepository) -> Self {
-        Self { receiver_repo }
+    pub fn new(receiver_repo: ReceiverRepository, locations_repo: LocationsRepository) -> Self {
+        Self {
+            receiver_repo,
+            locations_repo,
+        }
     }
 
     /// Process a receiver position packet and update its location
@@ -31,40 +37,31 @@ impl ReceiverPositionProcessor {
             // Update receiver position in database (async)
             tokio::spawn({
                 let repo = self.receiver_repo.clone();
+                let locations_repo = self.locations_repo.clone();
                 let callsign = callsign.clone();
                 async move {
                     // First, get the receiver to obtain its ID
                     match repo.get_receiver_by_callsign(&callsign).await {
-                        Ok(Some(receiver)) => {
-                            // Update position
+                        Ok(Some(_receiver)) => {
+                            // Update receiver location via locations table
                             match repo
-                                .update_receiver_position(&callsign, latitude, longitude)
+                                .update_receiver_position_with_location(
+                                    &callsign,
+                                    latitude,
+                                    longitude,
+                                    &locations_repo,
+                                )
                                 .await
                             {
-                                Ok(true) => {
+                                Ok(_) => {
                                     debug!(
-                                        "Updated receiver position for {}: ({}, {})",
+                                        "Successfully updated position for receiver {}: ({}, {})",
                                         callsign, latitude, longitude
-                                    );
-
-                                    // Update latest_packet_at
-                                    if let Err(e) = repo.update_latest_packet_at(receiver.id).await
-                                    {
-                                        error!(
-                                            "Failed to update latest_packet_at for receiver {}: {}",
-                                            callsign, e
-                                        );
-                                    }
-                                }
-                                Ok(false) => {
-                                    warn!(
-                                        "Receiver {} not found in database, position not updated",
-                                        callsign
                                     );
                                 }
                                 Err(e) => {
                                     error!(
-                                        "Failed to update receiver position for {}: {}",
+                                        "Failed to update position for receiver {}: {}",
                                         callsign, e
                                     );
                                 }
@@ -78,42 +75,28 @@ impl ReceiverPositionProcessor {
 
                             // Auto-insert minimal receiver
                             match repo.insert_minimal_receiver(&callsign).await {
-                                Ok(receiver_id) => {
-                                    info!(
-                                        "Auto-inserted receiver {} (id: {}), now updating position",
-                                        callsign, receiver_id
-                                    );
+                                Ok(_receiver_id) => {
+                                    info!("Auto-inserted receiver {}", callsign);
 
-                                    // Update position
+                                    // Update receiver location via locations table
                                     match repo
-                                        .update_receiver_position(&callsign, latitude, longitude)
+                                        .update_receiver_position_with_location(
+                                            &callsign,
+                                            latitude,
+                                            longitude,
+                                            &locations_repo,
+                                        )
                                         .await
                                     {
-                                        Ok(true) => {
+                                        Ok(_) => {
                                             debug!(
-                                                "Updated receiver position for {}: ({}, {})",
+                                                "Successfully updated position for auto-inserted receiver {}: ({}, {})",
                                                 callsign, latitude, longitude
-                                            );
-
-                                            // Update latest_packet_at
-                                            if let Err(e) =
-                                                repo.update_latest_packet_at(receiver_id).await
-                                            {
-                                                error!(
-                                                    "Failed to update latest_packet_at for receiver {}: {}",
-                                                    callsign, e
-                                                );
-                                            }
-                                        }
-                                        Ok(false) => {
-                                            warn!(
-                                                "Receiver {} not found in database after auto-insertion, position not updated",
-                                                callsign
                                             );
                                         }
                                         Err(e) => {
                                             error!(
-                                                "Failed to update receiver position for auto-discovered receiver {}: {}",
+                                                "Failed to update position for auto-inserted receiver {}: {}",
                                                 callsign, e
                                             );
                                         }
