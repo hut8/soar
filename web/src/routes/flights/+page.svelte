@@ -18,6 +18,8 @@
 		departure_airport_country: string | null;
 		arrival_airport: string | null;
 		arrival_airport_country: string | null;
+		takeoff_runway_ident: string | null;
+		landing_runway_ident: string | null;
 		tow_aircraft_id: string | null;
 		tow_release_height_msl: number | null;
 		takeoff_altitude_offset_ft: number | null;
@@ -375,11 +377,21 @@
 
 					<!-- Flight details in compact single row -->
 					<div class="text-surface-600-300-token text-sm">
+						{#if flight.departure_airport}
+							<span class="font-medium"
+								>{flight.departure_airport}{#if flight.takeoff_runway_ident}/{flight.takeoff_runway_ident}{/if}</span
+							>
+						{/if}
 						{formatLocalTime(flight.takeoff_time)}
 						<span class="text-surface-500-400-token text-xs">
 							({formatRelativeTime(flight.takeoff_time)})
 						</span>
 						<span class="mx-1">-</span>
+						{#if flight.arrival_airport}
+							<span class="font-medium"
+								>{flight.arrival_airport}{#if flight.landing_runway_ident}/{flight.landing_runway_ident}{/if}</span
+							>
+						{/if}
 						{formatLocalTime(flight.landing_time)}
 						<span class="text-surface-500-400-token text-xs">
 							({formatRelativeTime(flight.landing_time)})
