@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Search, MapPin, Radio } from '@lucide/svelte';
+	import { Search, MapPin, Radio, Navigation } from '@lucide/svelte';
 	import { resolve } from '$app/paths';
 	import { serverCall } from '$lib/api/server';
 	import { Loader } from '@googlemaps/js-api-loader';
@@ -42,6 +42,7 @@
 	let selectedLongitude = $state<number | null>(null);
 	let radiusMiles = $state(100);
 	let autocomplete = $state<google.maps.places.Autocomplete | null>(null);
+	let gettingLocation = $state(false);
 
 	// Initialize Google Places Autocomplete
 	async function initAutocomplete() {
@@ -113,6 +114,58 @@
 	function handleKeydown(event: KeyboardEvent) {
 		if (event.key === 'Enter') {
 			searchReceivers();
+		}
+	}
+
+	async function useMyLocation() {
+		if (!navigator.geolocation) {
+			error = 'Geolocation is not supported by your browser';
+			return;
+		}
+
+		gettingLocation = true;
+		error = '';
+
+		try {
+			const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+				navigator.geolocation.getCurrentPosition(resolve, reject, {
+					enableHighAccuracy: true,
+					timeout: 10000,
+					maximumAge: 0
+				});
+			});
+
+			selectedLatitude = position.coords.latitude;
+			selectedLongitude = position.coords.longitude;
+
+			// Update the input field to show "My Location"
+			if (locationInput) {
+				locationInput.value = 'My Location';
+			}
+
+			// Automatically search with the user's location
+			await searchReceivers();
+		} catch (err) {
+			if (err instanceof GeolocationPositionError) {
+				switch (err.code) {
+					case err.PERMISSION_DENIED:
+						error = 'Location permission denied. Please enable location access in your browser.';
+						break;
+					case err.POSITION_UNAVAILABLE:
+						error = 'Location information is unavailable.';
+						break;
+					case err.TIMEOUT:
+						error = 'Location request timed out.';
+						break;
+					default:
+						error = 'An error occurred while getting your location.';
+				}
+			} else {
+				error = 'Failed to get your location';
+			}
+			console.error('Geolocation error:', err);
+		} finally {
+			gettingLocation = false;
 		}
 	}
 
@@ -237,12 +290,28 @@
 		{:else}
 			<!-- Location Search -->
 			<div class="space-y-3 rounded-lg border p-3">
-				<input
-					bind:this={locationInput}
-					class="input"
-					placeholder="Enter a city or location"
-					oninput={() => (error = '')}
-				/>
+				<div class="flex gap-2">
+					<input
+						bind:this={locationInput}
+						class="input flex-1"
+						placeholder="Enter a city or location"
+						oninput={() => (error = '')}
+					/>
+					<button
+						class="preset-tonal-primary-500 btn"
+						onclick={useMyLocation}
+						disabled={gettingLocation || loading}
+						title="Use my current location"
+					>
+						{#if gettingLocation}
+							<div
+								class="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
+							></div>
+						{:else}
+							<Navigation class="h-4 w-4" />
+						{/if}
+					</button>
+				</div>
 
 				<div class="flex items-center gap-3">
 					<label class="flex-1">
