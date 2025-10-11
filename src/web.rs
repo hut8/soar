@@ -419,6 +419,15 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         .route("/flights/{id}", get(actions::get_flight_by_id))
         .route("/flights/{id}/kml", get(actions::get_flight_kml))
         .route("/flights/{id}/fixes", get(actions::get_flight_fixes))
+        // Pilot routes
+        .route("/pilots/{id}", get(actions::get_pilot_by_id))
+        .route("/clubs/{id}/pilots", get(actions::get_pilots_by_club))
+        .route("/flights/{id}/pilots", get(actions::get_pilots_for_flight))
+        .route("/flights/{id}/pilots", post(actions::link_pilot_to_flight))
+        .route(
+            "/flights/{flight_id}/pilots/{pilot_id}",
+            delete(actions::unlink_pilot_from_flight),
+        )
         // Aircraft routes
         .route("/clubs/{id}/aircraft", get(actions::get_aircraft_by_club))
         .route("/clubs/{id}/devices", get(actions::get_devices_by_club))

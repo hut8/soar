@@ -38,6 +38,8 @@ pub mod message_processors;
 pub mod metrics;
 pub mod nats_publisher;
 pub mod ogn_aprs_aircraft;
+pub mod pilots;
+pub mod pilots_repo;
 pub mod pull;
 pub mod receiver_repo;
 pub mod receiver_status_repo;

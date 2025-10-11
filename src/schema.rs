@@ -205,20 +205,6 @@ diesel::table! {
 }
 
 diesel::table! {
-    club_pilots (id) {
-        id -> Uuid,
-        first_name -> Text,
-        last_name -> Text,
-        is_tow_pilot -> Bool,
-        is_instructor -> Bool,
-        is_licensed -> Bool,
-        is_student -> Bool,
-        created_at -> Timestamptz,
-        updated_at -> Timestamptz,
-    }
-}
-
-diesel::table! {
     clubs (id) {
         id -> Uuid,
         #[max_length = 255]
@@ -319,6 +305,19 @@ diesel::table! {
 }
 
 diesel::table! {
+    flight_pilots (id) {
+        id -> Uuid,
+        flight_id -> Uuid,
+        pilot_id -> Uuid,
+        is_tow_pilot -> Bool,
+        is_student -> Bool,
+        is_instructor -> Bool,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
     use diesel::sql_types::*;
     use super::sql_types::AddressType;
 
@@ -369,6 +368,18 @@ diesel::table! {
         geolocation -> Nullable<Point>,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    pilots (id) {
+        id -> Uuid,
+        first_name -> Text,
+        last_name -> Text,
+        is_licensed -> Bool,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+        club_id -> Nullable<Uuid>,
     }
 }
 
@@ -598,8 +609,11 @@ diesel::joinable!(fixes -> aprs_messages (aprs_message_id));
 diesel::joinable!(fixes -> devices (device_id));
 diesel::joinable!(fixes -> flights (flight_id));
 diesel::joinable!(fixes -> receivers (receiver_id));
+diesel::joinable!(flight_pilots -> flights (flight_id));
+diesel::joinable!(flight_pilots -> pilots (pilot_id));
 diesel::joinable!(flights -> aircraft_registrations (tow_aircraft_id));
 diesel::joinable!(flights -> clubs (club_id));
+diesel::joinable!(pilots -> clubs (club_id));
 diesel::joinable!(receiver_statuses -> aprs_messages (aprs_message_id));
 diesel::joinable!(receiver_statuses -> receivers (receiver_id));
 diesel::joinable!(receivers -> locations (location_id));
@@ -613,13 +627,14 @@ diesel::allow_tables_to_appear_in_same_query!(
     aircraft_registrations,
     airports,
     aprs_messages,
-    club_pilots,
     clubs,
     countries,
     devices,
     fixes,
+    flight_pilots,
     flights,
     locations,
+    pilots,
     receiver_statuses,
     receivers,
     receivers_links,
