@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::devices::AddressType;
-use crate::flights::Flight;
+use crate::flights::{Flight, FlightState};
 use crate::ogn_aprs_aircraft::AircraftType;
 
 /// Helper struct for airport information when constructing FlightView
@@ -30,6 +30,10 @@ pub struct FlightView {
     pub device_address_type: AddressType,
     pub takeoff_time: Option<DateTime<Utc>>,
     pub landing_time: Option<DateTime<Utc>>,
+    pub timed_out_at: Option<DateTime<Utc>>,
+
+    /// Current state of the flight (active, complete, or timed_out)
+    pub state: FlightState,
 
     /// Duration of the flight in seconds (null if takeoff_time or landing_time is null)
     pub duration_seconds: Option<i64>,
@@ -66,6 +70,9 @@ impl FlightView {
         arrival_airport: Option<AirportInfo>,
         device_info: Option<DeviceInfo>,
     ) -> Self {
+        // Calculate state before moving any fields
+        let state = flight.state();
+
         // Calculate duration in seconds if both takeoff and landing times are available
         let duration_seconds = match (flight.takeoff_time, flight.landing_time) {
             (Some(takeoff), Some(landing)) => Some((landing - takeoff).num_seconds()),
@@ -83,6 +90,8 @@ impl FlightView {
             device_address_type: flight.device_address_type,
             takeoff_time: flight.takeoff_time,
             landing_time: flight.landing_time,
+            timed_out_at: flight.timed_out_at,
+            state,
             duration_seconds,
             departure_airport: departure_airport.ident,
             departure_airport_id: flight.departure_airport_id,

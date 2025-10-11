@@ -5,6 +5,7 @@
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
 	import { getAircraftTypeOgnDescription, getAircraftTypeColor } from '$lib/formatters';
+	import FlightStateBadge from '$lib/components/FlightStateBadge.svelte';
 
 	dayjs.extend(relativeTime);
 
@@ -14,6 +15,8 @@
 		device_address_type: string;
 		takeoff_time: string | null;
 		landing_time: string | null;
+		timed_out_at: string | null;
+		state: 'active' | 'complete' | 'timed_out';
 		departure_airport: string | null;
 		departure_airport_country: string | null;
 		arrival_airport: string | null;
@@ -150,6 +153,7 @@
 						<tr>
 							<th>Aircraft</th>
 							<th>Type</th>
+							<th>Status</th>
 							<th>Takeoff</th>
 							<th>Landing</th>
 							<th>Duration</th>
@@ -250,6 +254,9 @@
 									{:else}
 										<span class="text-surface-500">—</span>
 									{/if}
+								</td>
+								<td>
+									<FlightStateBadge state={flight.state} />
 								</td>
 								<td>
 									<div class="flex flex-col gap-1">
@@ -377,6 +384,7 @@
 									{formatDeviceAddress(flight.device_address, flight.device_address_type)}
 								</span>
 							{/if}
+							<FlightStateBadge state={flight.state} />
 							{#if flight.aircraft_type_ogn}
 								<span class="badge {getAircraftTypeColor(flight.aircraft_type_ogn)} text-xs">
 									{getAircraftTypeOgnDescription(flight.aircraft_type_ogn)}

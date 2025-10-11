@@ -350,6 +350,7 @@ diesel::table! {
         runways_inferred -> Nullable<Bool>,
         takeoff_location_id -> Nullable<Uuid>,
         landing_location_id -> Nullable<Uuid>,
+        timed_out_at -> Nullable<Timestamptz>,
     }
 }
 

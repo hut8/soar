@@ -15,6 +15,8 @@ export const load: PageLoad = async ({ params }) => {
 					device_address_type: string;
 					takeoff_time?: string;
 					landing_time?: string;
+					timed_out_at?: string;
+					state: 'active' | 'complete' | 'timed_out';
 					departure_airport?: string;
 					departure_airport_id?: number;
 					arrival_airport?: string;

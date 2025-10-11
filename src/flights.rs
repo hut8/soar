@@ -8,6 +8,18 @@ use uuid::Uuid;
 use crate::Fix;
 use crate::devices::AddressType;
 
+/// Flight state enum representing the current status of a flight
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FlightState {
+    /// Flight is currently active (no landing_time, no timed_out_at)
+    Active,
+    /// Flight completed with normal landing (has landing_time)
+    Complete,
+    /// Flight timed out due to no beacons for 5+ minutes (has timed_out_at)
+    TimedOut,
+}
+
 /// Calculate the distance between two points using the Haversine formula
 /// Returns distance in meters
 fn haversine_distance(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
@@ -105,12 +117,32 @@ pub struct Flight {
     /// Landing location ID (foreign key to locations table)
     pub landing_location_id: Option<Uuid>,
 
+    /// Timestamp when flight was timed out (no beacons for 5+ minutes)
+    /// Mutually exclusive with landing_time - a flight is either landed or timed out, not both
+    pub timed_out_at: Option<DateTime<Utc>>,
+
     /// Database timestamps
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
 
 impl Flight {
+    /// Get the current state of the flight
+    pub fn state(&self) -> FlightState {
+        if self.timed_out_at.is_some() {
+            FlightState::TimedOut
+        } else if self.landing_time.is_some() {
+            FlightState::Complete
+        } else {
+            FlightState::Active
+        }
+    }
+
+    /// Check if the flight is timed out
+    pub fn is_timed_out(&self) -> bool {
+        self.timed_out_at.is_some()
+    }
+
     /// Create a new flight with takeoff time
     pub fn new(device_address: String, takeoff_time: Option<DateTime<Utc>>) -> Self {
         let now = Utc::now();
@@ -139,6 +171,7 @@ impl Flight {
             runways_inferred: None,
             takeoff_location_id: None,
             landing_location_id: None,
+            timed_out_at: None,
             created_at: now,
             updated_at: now,
         }
@@ -172,6 +205,7 @@ impl Flight {
             runways_inferred: None,
             takeoff_location_id: None,
             landing_location_id: None,
+            timed_out_at: None,
             created_at: now,
             updated_at: now,
         }
@@ -500,6 +534,7 @@ pub struct FlightModel {
     pub runways_inferred: Option<bool>,
     pub takeoff_location_id: Option<Uuid>,
     pub landing_location_id: Option<Uuid>,
+    pub timed_out_at: Option<DateTime<Utc>>,
 }
 
 /// Insert model for new flights
@@ -530,6 +565,7 @@ pub struct NewFlightModel {
     pub runways_inferred: Option<bool>,
     pub takeoff_location_id: Option<Uuid>,
     pub landing_location_id: Option<Uuid>,
+    pub timed_out_at: Option<DateTime<Utc>>,
 }
 
 /// Conversion from Flight (API model) to FlightModel (database model)
@@ -562,6 +598,7 @@ impl From<Flight> for FlightModel {
             runways_inferred: flight.runways_inferred,
             takeoff_location_id: flight.takeoff_location_id,
             landing_location_id: flight.landing_location_id,
+            timed_out_at: flight.timed_out_at,
         }
     }
 }
@@ -594,6 +631,7 @@ impl From<Flight> for NewFlightModel {
             runways_inferred: flight.runways_inferred,
             takeoff_location_id: flight.takeoff_location_id,
             landing_location_id: flight.landing_location_id,
+            timed_out_at: flight.timed_out_at,
         }
     }
 }
@@ -626,6 +664,7 @@ impl From<FlightModel> for Flight {
             runways_inferred: model.runways_inferred,
             takeoff_location_id: model.takeoff_location_id,
             landing_location_id: model.landing_location_id,
+            timed_out_at: model.timed_out_at,
             created_at: model.created_at,
             updated_at: model.updated_at,
         }

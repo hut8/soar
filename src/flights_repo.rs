@@ -532,4 +532,32 @@ impl FlightsRepository {
 
         Ok(results)
     }
+
+    /// Mark a flight as timed out (no beacons received for 5+ minutes)
+    /// Does NOT set landing fields - this is a timeout, not a landing
+    pub async fn timeout_flight(
+        &self,
+        flight_id: Uuid,
+        timeout_time: DateTime<Utc>,
+    ) -> Result<bool> {
+        use crate::schema::flights::dsl::*;
+
+        let pool = self.pool.clone();
+
+        let rows_affected = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            let rows = diesel::update(flights.filter(id.eq(flight_id)))
+                .set((
+                    timed_out_at.eq(Some(timeout_time)),
+                    updated_at.eq(Utc::now()),
+                ))
+                .execute(&mut conn)?;
+
+            Ok::<usize, anyhow::Error>(rows)
+        })
+        .await??;
+
+        Ok(rows_affected > 0)
+    }
 }
