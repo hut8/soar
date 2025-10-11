@@ -38,6 +38,7 @@ pub mod message_processors;
 pub mod metrics;
 pub mod nats_publisher;
 pub mod ogn_aprs_aircraft;
+pub mod packet_processors;
 pub mod pilots;
 pub mod pilots_repo;
 pub mod pull;
@@ -57,9 +58,12 @@ pub mod users_repo;
 pub mod web;
 
 pub use aprs_client::{
-    AircraftPositionProcessor, AprsClient, AprsClientConfig, AprsClientConfigBuilder,
-    AprsProcessors, PacketHandler, PacketRouter, PositionPacketProcessor, ReceiverStatusProcessor,
-    ServerStatusProcessor,
+    AprsClient, AprsClientConfig, AprsClientConfigBuilder, AprsProcessors, ArchiveService,
+    PacketHandler,
 };
 pub use fixes::Fix;
 pub use nats_publisher::NatsFixPublisher;
+pub use packet_processors::{
+    AircraftPositionProcessor, PacketRouter, PositionPacketProcessor, ReceiverPositionProcessor,
+    ReceiverStatusProcessor, ServerStatusProcessor,
+};
