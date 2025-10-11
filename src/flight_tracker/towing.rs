@@ -2,7 +2,6 @@ use crate::Fix;
 use crate::fixes_repo::FixesRepository;
 use crate::flights_repo::FlightsRepository;
 use anyhow::Result;
-use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;

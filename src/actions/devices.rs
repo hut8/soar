@@ -15,7 +15,6 @@ use crate::devices::AddressType;
 use crate::fixes::Fix;
 use crate::fixes_repo::FixesRepository;
 use crate::flights_repo::FlightsRepository;
-use crate::locations_repo::LocationsRepository;
 use crate::web::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -545,8 +544,7 @@ pub async fn get_device_flights(
     Query(query): Query<FlightsQuery>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    let flights_repo = FlightsRepository::new(state.pool.clone());
-    let locations_repo = LocationsRepository::new(state.pool);
+    let flights_repo = FlightsRepository::new(state.pool);
 
     let page = query.page.unwrap_or(1).max(1);
     let per_page = query.per_page.unwrap_or(100).clamp(1, 100);
@@ -559,27 +557,7 @@ pub async fn get_device_flights(
             let mut flight_views = Vec::new();
 
             for flight in flights {
-                // Look up location information
-                let takeoff_location = if let Some(location_id) = flight.takeoff_location_id {
-                    locations_repo.get_by_id(location_id).await.ok().flatten()
-                } else {
-                    None
-                };
-
-                let landing_location = if let Some(location_id) = flight.landing_location_id {
-                    locations_repo.get_by_id(location_id).await.ok().flatten()
-                } else {
-                    None
-                };
-
-                let flight_view = FlightView::from_flight(
-                    flight,
-                    None,
-                    None,
-                    None,
-                    takeoff_location,
-                    landing_location,
-                );
+                let flight_view = FlightView::from_flight(flight, None, None, None);
                 flight_views.push(flight_view);
             }
 

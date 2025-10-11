@@ -76,6 +76,7 @@ impl FlightsRepository {
         flight_id: Uuid,
         landing_time_param: DateTime<Utc>,
         arrival_airport_id_param: Option<i32>,
+        landing_location_id_param: Option<Uuid>,
         landing_altitude_offset_ft_param: Option<i32>,
         landing_runway_ident_param: Option<String>,
         total_distance_meters_param: Option<f64>,
@@ -93,6 +94,7 @@ impl FlightsRepository {
                 .set((
                     landing_time.eq(&Some(landing_time_param)),
                     arrival_airport_id.eq(&arrival_airport_id_param),
+                    landing_location_id.eq(&landing_location_id_param),
                     landing_altitude_offset_ft.eq(&landing_altitude_offset_ft_param),
                     landing_runway_ident.eq(&landing_runway_ident_param),
                     total_distance_meters.eq(&total_distance_meters_param),

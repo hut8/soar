@@ -3,6 +3,7 @@ use crate::airports_repo::AirportsRepository;
 use crate::elevation::ElevationDB;
 use crate::fixes_repo::FixesRepository;
 use crate::flights_repo::FlightsRepository;
+use crate::locations_repo::LocationsRepository;
 use crate::runways_repo::RunwaysRepository;
 use anyhow::Result;
 use std::collections::HashMap;
@@ -18,9 +19,11 @@ use super::towing::{check_tow_release, record_tow_release};
 use super::utils::format_device_address_with_type;
 
 /// Process state transition for an aircraft and return updated fix with flight_id
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn process_state_transition(
     flights_repo: &FlightsRepository,
     airports_repo: &AirportsRepository,
+    locations_repo: &LocationsRepository,
     runways_repo: &RunwaysRepository,
     fixes_repo: &FixesRepository,
     elevation_db: &ElevationDB,
@@ -102,6 +105,7 @@ pub(crate) async fn process_state_transition(
                     // Create flight in background (similar to landing)
                     let flights_repo_clone = flights_repo.clone();
                     let airports_repo_clone = airports_repo.clone();
+                    let locations_repo_clone = locations_repo.clone();
                     let runways_repo_clone = runways_repo.clone();
                     let fixes_repo_clone = fixes_repo.clone();
                     let elevation_db_clone = elevation_db.clone();
@@ -111,6 +115,7 @@ pub(crate) async fn process_state_transition(
                         match create_flight(
                             &flights_repo_clone,
                             &airports_repo_clone,
+                            &locations_repo_clone,
                             &runways_repo_clone,
                             &fixes_repo_clone,
                             &elevation_db_clone,
@@ -166,6 +171,7 @@ pub(crate) async fn process_state_transition(
                     // Spawn background task to complete flight (don't await)
                     let flights_repo_clone = flights_repo.clone();
                     let airports_repo_clone = airports_repo.clone();
+                    let locations_repo_clone = locations_repo.clone();
                     let runways_repo_clone = runways_repo.clone();
                     let fixes_repo_clone = fixes_repo.clone();
                     let elevation_db_clone = elevation_db.clone();
@@ -175,6 +181,7 @@ pub(crate) async fn process_state_transition(
                         if let Err(e) = complete_flight(
                             &flights_repo_clone,
                             &airports_repo_clone,
+                            &locations_repo_clone,
                             &runways_repo_clone,
                             &fixes_repo_clone,
                             &elevation_db_clone,

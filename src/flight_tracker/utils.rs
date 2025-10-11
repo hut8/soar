@@ -1,5 +1,5 @@
 use crate::devices::AddressType;
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use std::collections::HashMap;
 use tracing::{debug, info};
 use uuid::Uuid;

@@ -4,6 +4,7 @@ use crate::elevation::ElevationDB;
 use crate::fixes_repo::FixesRepository;
 use crate::flights::Flight;
 use crate::flights_repo::FlightsRepository;
+use crate::locations_repo::LocationsRepository;
 use crate::runways_repo::RunwaysRepository;
 use anyhow::Result;
 use std::collections::HashMap;
@@ -14,7 +15,7 @@ use uuid::Uuid;
 
 use super::aircraft_tracker::AircraftTracker;
 use super::altitude::calculate_altitude_offset_ft;
-use super::location::find_nearby_airport;
+use super::location::{create_or_find_location, find_nearby_airport};
 use super::runway::determine_runway_identifier;
 use super::towing::detect_towing_at_takeoff;
 use super::utils::format_device_address_with_type;
@@ -76,9 +77,11 @@ pub(crate) async fn create_airborne_flight(
 }
 
 /// Create a new flight for takeoff
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn create_flight(
     flights_repo: &FlightsRepository,
     airports_repo: &AirportsRepository,
+    locations_repo: &LocationsRepository,
     runways_repo: &RunwaysRepository,
     fixes_repo: &FixesRepository,
     elevation_db: &ElevationDB,
@@ -87,6 +90,16 @@ pub(crate) async fn create_flight(
 ) -> Result<Uuid> {
     let departure_airport_id =
         find_nearby_airport(airports_repo, fix.latitude, fix.longitude).await;
+
+    // Create or find a location for the takeoff point
+    let takeoff_location_id = create_or_find_location(
+        airports_repo,
+        locations_repo,
+        fix.latitude,
+        fix.longitude,
+        departure_airport_id,
+    )
+    .await;
 
     // Determine takeoff runway and whether it was inferred
     // Pass the departure airport to optimize runway search
@@ -109,6 +122,7 @@ pub(crate) async fn create_flight(
     let mut flight = Flight::new_with_takeoff_from_fix(fix, fix.timestamp);
     flight.device_address_type = fix.address_type;
     flight.departure_airport_id = departure_airport_id;
+    flight.takeoff_location_id = takeoff_location_id;
     flight.takeoff_runway_ident = takeoff_runway.clone();
 
     // Calculate takeoff altitude offset (difference between reported altitude and true elevation)
@@ -193,9 +207,11 @@ pub(crate) async fn create_flight(
 }
 
 /// Update flight with landing information
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn complete_flight(
     flights_repo: &FlightsRepository,
     airports_repo: &AirportsRepository,
+    locations_repo: &LocationsRepository,
     runways_repo: &RunwaysRepository,
     fixes_repo: &FixesRepository,
     elevation_db: &ElevationDB,
@@ -204,6 +220,16 @@ pub(crate) async fn complete_flight(
     fix: &Fix,
 ) -> Result<()> {
     let arrival_airport_id = find_nearby_airport(airports_repo, fix.latitude, fix.longitude).await;
+
+    // Create or find a location for the landing point
+    let landing_location_id = create_or_find_location(
+        airports_repo,
+        locations_repo,
+        fix.latitude,
+        fix.longitude,
+        arrival_airport_id,
+    )
+    .await;
 
     // Determine landing runway and whether it was inferred
     // Pass the arrival airport to optimize runway search
@@ -358,6 +384,7 @@ pub(crate) async fn complete_flight(
             flight_id,
             fix.timestamp,
             arrival_airport_id,
+            landing_location_id,
             landing_altitude_offset_ft,
             landing_runway.clone(),
             total_distance_meters,

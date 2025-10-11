@@ -217,6 +217,7 @@ impl FlightTracker {
         match state_transitions::process_state_transition(
             &self.flights_repo,
             &self.airports_repo,
+            &self.locations_repo,
             &self.runways_repo,
             &self.fixes_repo,
             &self.elevation_db,
