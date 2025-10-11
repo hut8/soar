@@ -1027,10 +1027,58 @@ impl ReceiverPositionProcessor {
                             }
                         }
                         Ok(None) => {
-                            warn!(
-                                "Receiver {} not found in database, position not updated",
+                            debug!(
+                                "Position packet from {} is not a known receiver, auto-inserting",
                                 callsign
                             );
+
+                            // Auto-insert minimal receiver
+                            match repo.insert_minimal_receiver(&callsign).await {
+                                Ok(receiver_id) => {
+                                    info!(
+                                        "Auto-inserted receiver {} (id: {}), now updating position",
+                                        callsign, receiver_id
+                                    );
+
+                                    // Update position
+                                    match repo
+                                        .update_receiver_position(&callsign, latitude, longitude)
+                                        .await
+                                    {
+                                        Ok(true) => {
+                                            debug!(
+                                                "Updated receiver position for {}: ({}, {})",
+                                                callsign, latitude, longitude
+                                            );
+
+                                            // Update latest_packet_at
+                                            if let Err(e) =
+                                                repo.update_latest_packet_at(receiver_id).await
+                                            {
+                                                error!(
+                                                    "Failed to update latest_packet_at for receiver {}: {}",
+                                                    callsign, e
+                                                );
+                                            }
+                                        }
+                                        Ok(false) => {
+                                            warn!(
+                                                "Receiver {} not found in database after auto-insertion, position not updated",
+                                                callsign
+                                            );
+                                        }
+                                        Err(e) => {
+                                            error!(
+                                                "Failed to update receiver position for auto-discovered receiver {}: {}",
+                                                callsign, e
+                                            );
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    error!("Failed to auto-insert receiver {}: {}", callsign, e);
+                                }
+                            }
                         }
                         Err(e) => {
                             error!("Failed to look up receiver {}: {}", callsign, e);
