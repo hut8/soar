@@ -15,7 +15,7 @@ SOAR is a comprehensive aircraft tracking and club management system built with:
 
 ### NO BYPASSING QUALITY CONTROLS
 - **NEVER use `git commit --no-verify`** - All commits must pass pre-commit hooks
-- **NEVER use `git push`** - Only commit changes, never push to remote
+- **NEVER push to main** - Pushing to feature branches is okay, but never push directly to main
 - **NEVER skip CI checks** - Local development must match GitHub Actions pipeline
 - **ASK BEFORE removing large amounts of working code** - Get confirmation before major deletions
 - **AVOID duplicate code** - Check for existing implementations before writing new code
