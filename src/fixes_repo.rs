@@ -829,7 +829,7 @@ impl FixesRepository {
                     .execute(&mut conn)?
             } else {
                 diesel::update(fixes)
-                    .filter(device_address.eq(&device_address))
+                    .filter(device_id.eq(device_id_param))
                     .filter(timestamp.ge(start_time))
                     .filter(flight_id.is_null())
                     .set(flight_id.eq(flight_id_param))
