@@ -348,6 +348,8 @@ diesel::table! {
         tow_release_altitude_msl_ft -> Nullable<Int4>,
         tow_release_time -> Nullable<Timestamptz>,
         runways_inferred -> Nullable<Bool>,
+        takeoff_location_id -> Nullable<Uuid>,
+        landing_location_id -> Nullable<Uuid>,
     }
 }
 
