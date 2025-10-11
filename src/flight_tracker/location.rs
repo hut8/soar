@@ -5,6 +5,10 @@ use crate::locations_repo::LocationsRepository;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
+/// Reverse geocoding is disabled for flight takeoffs and landings
+/// When this is false, create_or_find_location will not perform reverse geocoding
+const GEOCODING_ENABLED_FOR_TAKEOFF_LANDING: bool = false;
+
 /// Find nearest airport within 2km of given coordinates
 /// Returns the airport ID (not the identifier string)
 pub(crate) async fn find_nearby_airport(
@@ -25,6 +29,8 @@ pub(crate) async fn find_nearby_airport(
 /// If an airport is present at these coordinates, use the airport's location instead
 /// Otherwise, perform reverse geocoding via Nominatim and create a new location
 /// Returns the location ID if successful
+///
+/// Note: Geocoding is currently disabled via GEOCODING_ENABLED_FOR_TAKEOFF_LANDING constant
 pub(crate) async fn create_or_find_location(
     _airports_repo: &AirportsRepository,
     locations_repo: &LocationsRepository,
@@ -32,6 +38,15 @@ pub(crate) async fn create_or_find_location(
     longitude: f64,
     _airport_id: Option<i32>,
 ) -> Option<Uuid> {
+    // Check if geocoding is enabled
+    if !GEOCODING_ENABLED_FOR_TAKEOFF_LANDING {
+        debug!(
+            "Geocoding disabled for takeoff/landing at coordinates ({}, {}), skipping location creation",
+            latitude, longitude
+        );
+        return None;
+    }
+
     // Perform reverse geocoding
     debug!(
         "Performing reverse geocoding for coordinates ({}, {})",
