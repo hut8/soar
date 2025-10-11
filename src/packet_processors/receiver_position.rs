@@ -29,11 +29,6 @@ impl ReceiverPositionProcessor {
             let latitude = position.latitude.as_();
             let longitude = position.longitude.as_();
 
-            info!(
-                "Processing receiver position for {}: lat={}, lon={}",
-                callsign, latitude, longitude
-            );
-
             // Update receiver position in database (async)
             tokio::spawn({
                 let repo = self.receiver_repo.clone();
