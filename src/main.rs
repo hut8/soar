@@ -11,7 +11,8 @@ use tracing::{info, warn};
 
 use soar::aprs_client::{
     AircraftPositionProcessor, AprsClient, AprsClientConfigBuilder, PacketRouter,
-    PositionPacketProcessor, ReceiverStatusProcessor, ServerStatusProcessor,
+    PositionPacketProcessor, ReceiverPositionProcessor, ReceiverStatusProcessor,
+    ServerStatusProcessor,
 };
 use soar::fix_processor::FixProcessor;
 use soar::flight_tracker::FlightTracker;
@@ -467,16 +468,20 @@ async fn handle_run(
     let receiver_repo = ReceiverRepository::new(diesel_pool.clone());
     let receiver_status_repo = ReceiverStatusRepository::new(diesel_pool.clone());
     let receiver_status_processor =
-        ReceiverStatusProcessor::new(receiver_status_repo, receiver_repo);
+        ReceiverStatusProcessor::new(receiver_status_repo, receiver_repo.clone());
+
+    // Create receiver position processor for receiver position messages
+    let receiver_position_processor = ReceiverPositionProcessor::new(receiver_repo.clone());
 
     // Create aircraft position processor
     // Note: FlightDetectionProcessor is now handled inside FixProcessor
     let aircraft_position_processor =
         AircraftPositionProcessor::new().with_fix_processor(fix_processor.clone());
 
-    // Create position packet processor
-    let position_processor =
-        PositionPacketProcessor::new().with_aircraft_processor(aircraft_position_processor);
+    // Create position packet processor with BOTH aircraft and receiver processors
+    let position_processor = PositionPacketProcessor::new()
+        .with_aircraft_processor(aircraft_position_processor)
+        .with_receiver_processor(receiver_position_processor);
 
     // Create PacketRouter with all processors
     let packet_router = if let Some(archive_path) = archive_dir.clone() {
