@@ -1,7 +1,5 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { goto } from '$app/navigation';
-	import { auth } from '$lib/stores/auth';
 	import { Users, Radar, Radio, Antenna, MapPin, Plane } from '@lucide/svelte';
 
 	const clubsPath = resolve('/clubs');
@@ -10,11 +8,6 @@
 	const receiversPath = resolve('/receivers');
 	const airportsPath = resolve('/airports');
 	const flightsPath = resolve('/flights');
-
-	// Watch for auth changes and redirect when user becomes authenticated
-	$: if ($auth.isAuthenticated && $auth.user) {
-		goto(clubsPath);
-	}
 </script>
 
 <svelte:head>
