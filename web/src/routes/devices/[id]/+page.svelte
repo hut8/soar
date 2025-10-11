@@ -390,103 +390,73 @@
 							Aircraft Model Details
 						</h2>
 
-						<div class="space-y-3">
-							<div class="flex items-start gap-3">
-								<Plane class="mt-1 h-4 w-4 text-surface-500" />
-								<div>
-									<p class="text-surface-600-300-token mb-1 text-sm">Manufacturer</p>
-									<p>{aircraftModel.manufacturer_name}</p>
-								</div>
+						<dl class="grid grid-cols-2 gap-4 text-sm">
+							<div>
+								<dt class="text-surface-600-300-token mb-1 font-medium">Manufacturer</dt>
+								<dd>{aircraftModel.manufacturer_name}</dd>
 							</div>
 
-							<div class="flex items-start gap-3">
-								<Plane class="mt-1 h-4 w-4 text-surface-500" />
-								<div>
-									<p class="text-surface-600-300-token mb-1 text-sm">Model</p>
-									<p>{aircraftModel.model_name}</p>
-								</div>
+							<div>
+								<dt class="text-surface-600-300-token mb-1 font-medium">Model</dt>
+								<dd>{aircraftModel.model_name}</dd>
 							</div>
 
 							{#if aircraftModel.aircraft_type}
-								<div class="flex items-start gap-3">
-									<Info class="mt-1 h-4 w-4 text-surface-500" />
-									<div>
-										<p class="text-surface-600-300-token mb-1 text-sm">Aircraft Type</p>
-										<p>{formatTitleCase(aircraftModel.aircraft_type)}</p>
-									</div>
+								<div>
+									<dt class="text-surface-600-300-token mb-1 font-medium">Aircraft Type</dt>
+									<dd>{formatTitleCase(aircraftModel.aircraft_type)}</dd>
 								</div>
 							{/if}
 
 							{#if aircraftModel.engine_type}
-								<div class="flex items-start gap-3">
-									<Settings class="mt-1 h-4 w-4 text-surface-500" />
-									<div>
-										<p class="text-surface-600-300-token mb-1 text-sm">Engine Type</p>
-										<p>{formatTitleCase(aircraftModel.engine_type)}</p>
-									</div>
+								<div>
+									<dt class="text-surface-600-300-token mb-1 font-medium">Engine Type</dt>
+									<dd>{formatTitleCase(aircraftModel.engine_type)}</dd>
 								</div>
 							{/if}
 
 							{#if aircraftModel.aircraft_category}
-								<div class="flex items-start gap-3">
-									<Info class="mt-1 h-4 w-4 text-surface-500" />
-									<div>
-										<p class="text-surface-600-300-token mb-1 text-sm">Category</p>
-										<p>{formatTitleCase(aircraftModel.aircraft_category)}</p>
-									</div>
+								<div>
+									<dt class="text-surface-600-300-token mb-1 font-medium">Category</dt>
+									<dd>{formatTitleCase(aircraftModel.aircraft_category)}</dd>
 								</div>
 							{/if}
 
 							{#if aircraftModel.builder_certification}
-								<div class="flex items-start gap-3">
-									<Info class="mt-1 h-4 w-4 text-surface-500" />
-									<div>
-										<p class="text-surface-600-300-token mb-1 text-sm">Builder Certification</p>
-										<p>{formatTitleCase(aircraftModel.builder_certification)}</p>
-									</div>
+								<div>
+									<dt class="text-surface-600-300-token mb-1 font-medium">Builder Certification</dt>
+									<dd>{formatTitleCase(aircraftModel.builder_certification)}</dd>
 								</div>
 							{/if}
 
 							{#if aircraftModel.number_of_seats}
-								<div class="flex items-start gap-3">
-									<User class="mt-1 h-4 w-4 text-surface-500" />
-									<div>
-										<p class="text-surface-600-300-token mb-1 text-sm">Seats</p>
-										<p>{aircraftModel.number_of_seats}</p>
-									</div>
+								<div>
+									<dt class="text-surface-600-300-token mb-1 font-medium">Seats</dt>
+									<dd>{aircraftModel.number_of_seats}</dd>
 								</div>
 							{/if}
 
 							{#if aircraftModel.number_of_engines !== null && aircraftModel.number_of_engines !== undefined}
-								<div class="flex items-start gap-3">
-									<Settings class="mt-1 h-4 w-4 text-surface-500" />
-									<div>
-										<p class="text-surface-600-300-token mb-1 text-sm">Engines</p>
-										<p>{aircraftModel.number_of_engines}</p>
-									</div>
+								<div>
+									<dt class="text-surface-600-300-token mb-1 font-medium">Engines</dt>
+									<dd>{aircraftModel.number_of_engines}</dd>
 								</div>
 							{/if}
 
 							{#if aircraftModel.weight_class}
-								<div class="flex items-start gap-3">
-									<Info class="mt-1 h-4 w-4 text-surface-500" />
-									<div>
-										<p class="text-surface-600-300-token mb-1 text-sm">Weight Class</p>
-										<p>{formatTitleCase(aircraftModel.weight_class)}</p>
-									</div>
+								<div>
+									<dt class="text-surface-600-300-token mb-1 font-medium">Weight Class</dt>
+									<dd>{formatTitleCase(aircraftModel.weight_class)}</dd>
 								</div>
 							{/if}
 
 							{#if aircraftModel.cruising_speed && aircraftModel.cruising_speed > 0}
-								<div class="flex items-start gap-3">
-									<Activity class="mt-1 h-4 w-4 text-surface-500" />
-									<div>
-										<p class="text-surface-600-300-token mb-1 text-sm">Cruising Speed</p>
-										<p>{aircraftModel.cruising_speed} kts</p>
-									</div>
+								<div>
+									<dt class="text-surface-600-300-token mb-1 font-medium">Cruising Speed</dt>
+									<dd>{aircraftModel.cruising_speed} kts</dd>
 								</div>
 							{/if}
-						</div>
+						</dl>
 					</div>
 				{/if}
 			</div>
