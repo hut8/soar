@@ -161,14 +161,14 @@
 		<div class="flex justify-center gap-2">
 			<button
 				class="btn btn-sm {!locationSearch ? 'preset-filled-primary-500' : 'preset-tonal'}"
-				on:click={() => (locationSearch = false)}
+				onclick={() => (locationSearch = false)}
 			>
 				<Search class="mr-2 h-4 w-4" />
 				Name Search
 			</button>
 			<button
 				class="btn btn-sm {locationSearch ? 'preset-filled-primary-500' : 'preset-tonal'}"
-				on:click={() => (locationSearch = true)}
+				onclick={() => (locationSearch = true)}
 			>
 				<MapPinHouse class="mr-2 h-4 w-4" />
 				Location Search
@@ -183,7 +183,7 @@
 						<span>Search and Select Club</span>
 						<input
 							bind:value={searchInput}
-							on:input={(e) => handleSearchInput((e.target as HTMLInputElement).value)}
+							oninput={(e) => handleSearchInput((e.target as HTMLInputElement).value)}
 							class="input"
 							type="text"
 							placeholder="Type to search clubs..."
@@ -198,7 +198,7 @@
 						>
 							{#each filteredClubs as club (club.id)}
 								<button
-									on:click={() => selectClub(club.id)}
+									onclick={() => selectClub(club.id)}
 									class="hover:bg-surface-200-700-token border-surface-200-700-token w-full border-b px-4 py-3 text-left transition-colors last:border-b-0"
 								>
 									<div class="font-medium text-primary-500">{club.name}</div>
@@ -253,7 +253,7 @@
 					</label>
 				</div>
 				<div class="flex justify-center">
-					<button class="btn preset-filled-primary-500" on:click={getCurrentLocation}>
+					<button class="btn preset-filled-primary-500" onclick={getCurrentLocation}>
 						<MapPinHouse class="mr-2 h-4 w-4" />
 						Use My Location
 					</button>
@@ -282,84 +282,183 @@
 		</div>
 	{/if}
 
-	<!-- Results -->
+	<!-- Results - Desktop Table -->
 	{#if !loading && !error && clubs.length > 0}
-		<section class="space-y-6">
-			<header class="text-center">
+		<section class="hidden card md:block">
+			<header class="card-header">
 				<h2 class="h2">Search Results</h2>
 				<p class="text-surface-500-400-token">
 					{clubs.length} club{clubs.length === 1 ? '' : 's'} found
 				</p>
 			</header>
 
-			<div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-				{#each clubs as club (club.id)}
-					<article class="space-y-4 card p-6 transition-transform duration-200 hover:scale-[1.02]">
-						<header>
-							<h3 class="h3 text-primary-500">{club.name}</h3>
-						</header>
-
-						<div class="space-y-3 text-sm">
-							<div class="flex items-start gap-3">
-								<MapPinHouse class="mt-0.5 h-4 w-4 text-surface-500" />
-								<span class="flex-1">{formatAddress(club)}</span>
-							</div>
-
-							{#if club.location?.geolocation}
-								<div class="flex items-center gap-3">
-									<Navigation class="h-4 w-4 text-surface-500" />
-									<span class="font-mono text-xs">
-										{club.location.geolocation.latitude.toFixed(4)}, {club.location.geolocation.longitude.toFixed(
-											4
-										)}
-									</span>
-								</div>
-							{/if}
-
-							{#if club.home_base_airport_id}
-								<div class="flex items-center gap-3">
-									<Plane class="h-4 w-4 text-surface-500" />
-									<span>Airport ID: {club.home_base_airport_id}</span>
-								</div>
-							{/if}
-						</div>
-
-						<footer class="border-surface-200-700-token border-t pt-4">
-							<div class="space-y-2">
-								<a href={resolve(`/clubs/${club.id}`)} class="btn w-full preset-tonal btn-sm">
-									<ExternalLink class="mr-2 h-4 w-4" />
-									View Details
-								</a>
-								{#if generateGoogleMapsUrl(club)}
+			<div class="table-container">
+				<table class="table-hover table">
+					<thead>
+						<tr>
+							<th>Club Name</th>
+							<th>Address</th>
+							<th>Airport</th>
+							<th>Coordinates</th>
+							<th>Actions</th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each clubs as club (club.id)}
+							<tr>
+								<td>
+									<a
+										href={resolve(`/clubs/${club.id}`)}
+										class="anchor font-medium text-primary-500 hover:text-primary-600"
+									>
+										{club.name}
+									</a>
+								</td>
+								<td>
+									<div class="flex items-start gap-2">
+										<MapPinHouse class="mt-0.5 h-4 w-4 flex-shrink-0 text-surface-500" />
+										<span class="text-sm">{formatAddress(club)}</span>
+									</div>
+								</td>
+								<td>
+									{#if club.home_base_airport_id}
+										<div class="flex items-center gap-2">
+											<Plane class="h-4 w-4 text-surface-500" />
+											<span class="font-mono text-sm">{club.home_base_airport_id}</span>
+										</div>
+									{:else}
+										<span class="text-surface-500">—</span>
+									{/if}
+								</td>
+								<td>
+									{#if club.location?.geolocation}
+										<div class="flex items-center gap-2">
+											<Navigation class="h-4 w-4 text-surface-500" />
+											<span class="font-mono text-xs">
+												{club.location.geolocation.latitude.toFixed(4)}, {club.location.geolocation.longitude.toFixed(
+													4
+												)}
+											</span>
+										</div>
+									{:else}
+										<span class="text-surface-500">—</span>
+									{/if}
+								</td>
+								<td>
 									<div class="flex gap-1">
 										<a
-											href={generateGoogleMapsUrl(club)}
-											target="_blank"
-											rel="noopener noreferrer"
-											class="preset-tonal-primary-500 btn flex-1 btn-sm"
+											href={resolve(`/clubs/${club.id}`)}
+											class="preset-tonal-surface-500 btn flex items-center gap-1 btn-sm"
 										>
-											<Map class="mr-1 h-3 w-3" />
-											Maps
+											<ExternalLink class="h-3 w-3" />
+											View
 										</a>
-										{#if club.location?.geolocation}
+										{#if generateGoogleMapsUrl(club)}
 											<a
-												href={`https://www.google.com/maps/dir/?api=1&destination=${club.location.geolocation.latitude},${club.location.geolocation.longitude}`}
+												href={generateGoogleMapsUrl(club)}
 												target="_blank"
 												rel="noopener noreferrer"
-												class="preset-tonal-secondary-500 btn flex-1 btn-sm"
+												class="preset-tonal-primary-500 btn flex items-center gap-1 btn-sm"
 											>
-												<Navigation class="mr-1 h-3 w-3" />
-												Directions
+												<Map class="h-3 w-3" />
+												Map
 											</a>
 										{/if}
 									</div>
-								{/if}
-							</div>
-						</footer>
-					</article>
-				{/each}
+								</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
 			</div>
 		</section>
+
+		<!-- Results - Mobile Cards -->
+		<div class="block space-y-4 md:hidden">
+			<div class="card-header">
+				<h2 class="h2">Search Results</h2>
+				<p class="text-surface-500-400-token">
+					{clubs.length} club{clubs.length === 1 ? '' : 's'} found
+				</p>
+			</div>
+
+			{#each clubs as club (club.id)}
+				<article class="relative card p-4 transition-all duration-200 hover:shadow-lg">
+					<!-- Club header -->
+					<div
+						class="border-surface-200-700-token mb-3 flex items-start justify-between border-b pb-3"
+					>
+						<a
+							href={resolve(`/clubs/${club.id}`)}
+							class="relative z-10 anchor font-semibold text-primary-500 hover:text-primary-600"
+						>
+							{club.name}
+						</a>
+						<a
+							href={resolve(`/clubs/${club.id}`)}
+							class="relative z-10 flex-shrink-0"
+							title="View club details"
+						>
+							<ExternalLink class="h-4 w-4 text-surface-400 hover:text-primary-500" />
+						</a>
+					</div>
+
+					<!-- Club details -->
+					<div class="space-y-2 text-sm">
+						<div class="flex items-start gap-2">
+							<MapPinHouse class="mt-0.5 h-4 w-4 flex-shrink-0 text-surface-500" />
+							<span class="text-surface-600-300-token flex-1">{formatAddress(club)}</span>
+						</div>
+
+						{#if club.location?.geolocation}
+							<div class="flex items-center gap-2">
+								<Navigation class="h-4 w-4 flex-shrink-0 text-surface-500" />
+								<span class="text-surface-600-300-token font-mono text-xs">
+									{club.location.geolocation.latitude.toFixed(4)}, {club.location.geolocation.longitude.toFixed(
+										4
+									)}
+								</span>
+							</div>
+						{/if}
+
+						{#if club.home_base_airport_id}
+							<div class="flex items-center gap-2">
+								<Plane class="h-4 w-4 flex-shrink-0 text-surface-500" />
+								<span class="text-surface-600-300-token">
+									Airport: <span class="font-mono">{club.home_base_airport_id}</span>
+								</span>
+							</div>
+						{/if}
+					</div>
+
+					<!-- Actions -->
+					{#if generateGoogleMapsUrl(club)}
+						<div class="mt-3 flex gap-2">
+							<a
+								href={generateGoogleMapsUrl(club)}
+								target="_blank"
+								rel="noopener noreferrer"
+								class="preset-tonal-primary-500 btn flex-1 btn-sm"
+							>
+								<Map class="mr-1 h-3 w-3" />
+								Maps
+							</a>
+							{#if club.location?.geolocation}
+								<a
+									href={`https://www.google.com/maps/dir/?api=1&destination=${club.location.geolocation.latitude},${club.location.geolocation.longitude}`}
+									target="_blank"
+									rel="noopener noreferrer"
+									class="preset-tonal-secondary-500 btn flex-1 btn-sm"
+								>
+									<Navigation class="mr-1 h-3 w-3" />
+									Directions
+								</a>
+							{/if}
+						</div>
+					{/if}
+				</article>
+			{/each}
+		</div>
 	{:else if !loading && !error && clubs.length === 0 && (searchQuery || (latitude && longitude))}
 		<div class="space-y-4 card p-12 text-center">
 			<Search class="mx-auto mb-4 h-16 w-16 text-surface-400" />
