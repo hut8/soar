@@ -14,6 +14,12 @@ use crate::schema::{receivers, receivers_links, receivers_photos};
 
 type PgPool = Pool<ConnectionManager<PgConnection>>;
 
+/// TEMPORARY: Geocoding is disabled for receivers
+/// When inserting or updating receivers, the location_id field will NOT be automatically populated
+/// This is a temporary measure to avoid unnecessary geocoding API calls
+#[allow(dead_code)]
+const GEOCODING_ENABLED_FOR_RECEIVERS: bool = false;
+
 #[derive(Clone)]
 pub struct ReceiverRepository {
     pool: PgPool,
@@ -33,6 +39,7 @@ impl ReceiverRepository {
 
     /// Upsert receivers into the database
     /// This will insert new receivers or update existing ones based on callsign
+    /// Note: Geocoding (location_id lookup) is temporarily disabled
     pub async fn upsert_receivers<I>(&self, receivers: I) -> Result<usize>
     where
         I: IntoIterator<Item = Receiver>,
@@ -89,6 +96,9 @@ impl ReceiverRepository {
                             continue;
                         }
                     };
+
+                    // GEOCODING DISABLED: We do NOT automatically populate location_id here
+                    // When GEOCODING_ENABLED_FOR_RECEIVERS is false, receivers will have NULL location_id
 
                     // Delete existing photos and links for this receiver
                     let _ = diesel::delete(
@@ -167,6 +177,7 @@ impl ReceiverRepository {
 
     /// Insert a minimal receiver (auto-discovered from status messages)
     /// Returns the receiver ID if successful
+    /// Note: Geocoding (location_id lookup) is temporarily disabled
     pub async fn insert_minimal_receiver(&self, callsign: &str) -> Result<Uuid> {
         let pool = self.pool.clone();
         let callsign = callsign.trim().to_string();
@@ -428,6 +439,7 @@ impl ReceiverRepository {
     }
 
     /// Update receiver position by callsign
+    /// Note: Geocoding (location_id lookup) is temporarily disabled
     pub async fn update_receiver_position(
         &self,
         callsign: &str,
@@ -450,6 +462,9 @@ impl ReceiverRepository {
                 diesel::update(receivers::table.filter(receivers::callsign.eq(&callsign)))
                     .set(&update)
                     .execute(&mut conn)?;
+
+            // GEOCODING DISABLED: We do NOT automatically set location_id here
+            // This avoids unnecessary geocoding API calls for receiver position updates
 
             Ok(rows_affected > 0)
         })

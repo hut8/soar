@@ -13,6 +13,11 @@ use crate::geocoding::Geocoder;
 use crate::locations::Location;
 use crate::locations_repo::LocationsRepository;
 
+/// TEMPORARY: Reverse geocoding is disabled for flight takeoffs and landings
+/// When this is false, the FlightLocationProcessor will not perform reverse geocoding
+/// This is a temporary measure to avoid unnecessary geocoding API calls
+const GEOCODING_ENABLED_FOR_FLIGHTS: bool = false;
+
 /// Background processor that adds location data to completed flights
 /// This runs periodically and processes flights that don't have location data yet
 pub struct FlightLocationProcessor {
@@ -57,6 +62,12 @@ impl FlightLocationProcessor {
 
     /// Process a batch of flights that need location data
     async fn process_flights_needing_locations(&self) -> Result<()> {
+        // GEOCODING DISABLED: Skip processing if geocoding is disabled
+        if !GEOCODING_ENABLED_FOR_FLIGHTS {
+            debug!("Flight location geocoding is temporarily disabled, skipping");
+            return Ok(());
+        }
+
         // Get completed flights without location data (limit to 10 per batch to be nice to Nominatim)
         let flights = self
             .flights_repo
@@ -179,6 +190,7 @@ impl FlightLocationProcessor {
     }
 
     /// Create a location from coordinates using reverse geocoding
+    /// Note: This method is not called when GEOCODING_ENABLED_FOR_FLIGHTS is false
     async fn create_location_from_coordinates(
         &self,
         latitude: f64,
