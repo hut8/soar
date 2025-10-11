@@ -78,7 +78,7 @@
 		error = '';
 
 		try {
-			const response = await serverCall<Flight[]>('/flights/completed?limit=100');
+			const response = await serverCall<Flight[]>('/flights?completed=true&limit=100');
 			flights = response || [];
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';

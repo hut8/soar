@@ -106,7 +106,7 @@
 		try {
 			// TODO: Replace with actual API endpoints for club-specific flights
 			// For now, fetch all flights and filter by date
-			const allCompleted = await serverCall<Flight[]>('/flights/completed?limit=100');
+			const allCompleted = await serverCall<Flight[]>('/flights?completed=true&limit=100');
 
 			// Filter flights for the selected date
 			const selectedDateStart = dayjs(selectedDate).startOf('day');

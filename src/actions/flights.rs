@@ -21,6 +21,7 @@ use crate::web::AppState;
 pub struct FlightsQueryParams {
     pub club_id: Option<Uuid>,
     pub limit: Option<i64>,
+    pub completed: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]
@@ -216,89 +217,89 @@ fn generate_kml_filename(flight: &Flight) -> String {
     format!("{}.kml", base_name)
 }
 
-/// Search flights by club ID, or return recent flights in progress
+/// Search flights by club ID, or return recent flights (in progress or completed)
 pub async fn search_flights(
-    State(state): State<AppState>,
-    Query(params): Query<FlightsQueryParams>,
-) -> impl IntoResponse {
-    let flights_repo = FlightsRepository::new(state.pool);
-
-    if let Some(_club_id) = params.club_id {
-        // Club-based flight search would require joining with aircraft_registrations
-        // For now, just return flights in progress
-        match flights_repo.get_flights_in_progress().await {
-            Ok(flights) => {
-                let flight_views: Vec<FlightView> = flights.into_iter().map(|f| f.into()).collect();
-                Json(flight_views).into_response()
-            }
-            Err(e) => {
-                tracing::error!("Failed to get flights by club ID: {}", e);
-                json_error(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "Failed to get flights by club ID",
-                )
-                .into_response()
-            }
-        }
-    } else {
-        match flights_repo.get_flights_in_progress().await {
-            Ok(flights) => {
-                let flight_views: Vec<FlightView> = flights.into_iter().map(|f| f.into()).collect();
-                Json(flight_views).into_response()
-            }
-            Err(e) => {
-                tracing::error!("Failed to get recent flights: {}", e);
-                json_error(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "Failed to get recent flights",
-                )
-                .into_response()
-            }
-        }
-    }
-}
-
-/// Get recent completed flights
-pub async fn get_completed_flights(
     State(state): State<AppState>,
     Query(params): Query<FlightsQueryParams>,
 ) -> impl IntoResponse {
     let flights_repo = FlightsRepository::new(state.pool.clone());
     let device_repo = DeviceRepository::new(state.pool.clone());
+
+    let completed = params.completed.unwrap_or(false);
     let limit = params.limit.unwrap_or(100);
 
-    match flights_repo.get_completed_flights(limit).await {
-        Ok(flights) => {
-            let mut flight_views = Vec::new();
+    if completed {
+        // Get completed flights with device info
+        match flights_repo.get_completed_flights(limit).await {
+            Ok(flights) => {
+                let mut flight_views = Vec::new();
 
-            for flight in flights {
-                // Look up device information if device_id is present
-                let device_info = if let Some(device_id) = flight.device_id {
-                    match device_repo.get_device_by_uuid(device_id).await {
-                        Ok(Some(device)) => Some(DeviceInfo {
-                            aircraft_model: Some(device.aircraft_model),
-                            registration: Some(device.registration),
-                            aircraft_type_ogn: device.aircraft_type_ogn,
-                        }),
-                        _ => None,
-                    }
-                } else {
-                    None
-                };
+                for flight in flights {
+                    // Look up device information if device_id is present
+                    let device_info = if let Some(device_id) = flight.device_id {
+                        match device_repo.get_device_by_uuid(device_id).await {
+                            Ok(Some(device)) => Some(DeviceInfo {
+                                aircraft_model: Some(device.aircraft_model),
+                                registration: Some(device.registration),
+                                aircraft_type_ogn: device.aircraft_type_ogn,
+                            }),
+                            _ => None,
+                        }
+                    } else {
+                        None
+                    };
 
-                let flight_view = FlightView::from_flight(flight, None, None, device_info);
-                flight_views.push(flight_view);
+                    let flight_view = FlightView::from_flight(flight, None, None, device_info);
+                    flight_views.push(flight_view);
+                }
+
+                Json(flight_views).into_response()
             }
-
-            Json(flight_views).into_response()
+            Err(e) => {
+                tracing::error!("Failed to get completed flights: {}", e);
+                json_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to get completed flights",
+                )
+                .into_response()
+            }
         }
-        Err(e) => {
-            tracing::error!("Failed to get completed flights: {}", e);
-            json_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to get completed flights",
-            )
-            .into_response()
+    } else {
+        // Get flights in progress
+        if let Some(_club_id) = params.club_id {
+            // Club-based flight search would require joining with aircraft_registrations
+            // For now, just return flights in progress
+            match flights_repo.get_flights_in_progress().await {
+                Ok(flights) => {
+                    let flight_views: Vec<FlightView> =
+                        flights.into_iter().map(|f| f.into()).collect();
+                    Json(flight_views).into_response()
+                }
+                Err(e) => {
+                    tracing::error!("Failed to get flights by club ID: {}", e);
+                    json_error(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Failed to get flights by club ID",
+                    )
+                    .into_response()
+                }
+            }
+        } else {
+            match flights_repo.get_flights_in_progress().await {
+                Ok(flights) => {
+                    let flight_views: Vec<FlightView> =
+                        flights.into_iter().map(|f| f.into()).collect();
+                    Json(flight_views).into_response()
+                }
+                Err(e) => {
+                    tracing::error!("Failed to get recent flights: {}", e);
+                    json_error(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Failed to get recent flights",
+                    )
+                    .into_response()
+                }
+            }
         }
     }
 }
