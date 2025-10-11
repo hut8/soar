@@ -881,14 +881,14 @@ impl PositionPacketProcessor {
                 if let Some(aircraft_proc) = &self.aircraft_processor {
                     aircraft_proc.process_aircraft_position(packet);
                 } else {
-                    trace!("No aircraft processor configured, skipping aircraft position");
+                    warn!("No aircraft processor configured, skipping aircraft position");
                 }
             }
             PositionSourceType::Receiver => {
                 if let Some(receiver_proc) = &self.receiver_processor {
                     receiver_proc.process_receiver_position(packet);
                 } else {
-                    trace!(
+                    warn!(
                         "No receiver processor configured, skipping receiver position from {}",
                         packet.from
                     );
