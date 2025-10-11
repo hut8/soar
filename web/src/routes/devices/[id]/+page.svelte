@@ -390,73 +390,108 @@
 							Aircraft Model Details
 						</h2>
 
-						<dl class="grid grid-cols-2 gap-4 text-sm">
-							<div>
-								<dt class="text-surface-600-300-token mb-1 font-medium">Manufacturer</dt>
-								<dd>{aircraftModel.manufacturer_name}</dd>
+						<div class="space-y-4">
+							<!-- Primary Information -->
+							<div
+								class="border-surface-300-600-token bg-surface-50-900-token rounded-lg border p-4"
+							>
+								<h3
+									class="text-surface-600-300-token mb-3 text-xs font-semibold tracking-wide uppercase"
+								>
+									Basic Information
+								</h3>
+								<dl class="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+									<div>
+										<dt class="text-surface-600-300-token mb-1 font-medium">Manufacturer</dt>
+										<dd class="font-semibold">{aircraftModel.manufacturer_name}</dd>
+									</div>
+									<div>
+										<dt class="text-surface-600-300-token mb-1 font-medium">Model</dt>
+										<dd class="font-semibold">{aircraftModel.model_name}</dd>
+									</div>
+									{#if aircraftModel.aircraft_type}
+										<div>
+											<dt class="text-surface-600-300-token mb-1 font-medium">Aircraft Type</dt>
+											<dd>{formatTitleCase(aircraftModel.aircraft_type)}</dd>
+										</div>
+									{/if}
+									{#if aircraftModel.aircraft_category}
+										<div>
+											<dt class="text-surface-600-300-token mb-1 font-medium">Category</dt>
+											<dd>{formatTitleCase(aircraftModel.aircraft_category)}</dd>
+										</div>
+									{/if}
+								</dl>
 							</div>
 
-							<div>
-								<dt class="text-surface-600-300-token mb-1 font-medium">Model</dt>
-								<dd>{aircraftModel.model_name}</dd>
-							</div>
-
-							{#if aircraftModel.aircraft_type}
-								<div>
-									<dt class="text-surface-600-300-token mb-1 font-medium">Aircraft Type</dt>
-									<dd>{formatTitleCase(aircraftModel.aircraft_type)}</dd>
+							<!-- Technical Specifications -->
+							{#if aircraftModel.engine_type || (aircraftModel.number_of_engines !== null && aircraftModel.number_of_engines !== undefined) || aircraftModel.builder_certification || aircraftModel.weight_class}
+								<div
+									class="border-surface-300-600-token bg-surface-50-900-token rounded-lg border p-4"
+								>
+									<h3
+										class="text-surface-600-300-token mb-3 text-xs font-semibold tracking-wide uppercase"
+									>
+										Technical Specifications
+									</h3>
+									<dl class="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+										{#if aircraftModel.engine_type}
+											<div>
+												<dt class="text-surface-600-300-token mb-1 font-medium">Engine Type</dt>
+												<dd>{formatTitleCase(aircraftModel.engine_type)}</dd>
+											</div>
+										{/if}
+										{#if aircraftModel.number_of_engines !== null && aircraftModel.number_of_engines !== undefined}
+											<div>
+												<dt class="text-surface-600-300-token mb-1 font-medium">Engines</dt>
+												<dd>{aircraftModel.number_of_engines}</dd>
+											</div>
+										{/if}
+										{#if aircraftModel.builder_certification}
+											<div>
+												<dt class="text-surface-600-300-token mb-1 font-medium">
+													Builder Certification
+												</dt>
+												<dd>{formatTitleCase(aircraftModel.builder_certification)}</dd>
+											</div>
+										{/if}
+										{#if aircraftModel.weight_class}
+											<div>
+												<dt class="text-surface-600-300-token mb-1 font-medium">Weight Class</dt>
+												<dd>{formatTitleCase(aircraftModel.weight_class)}</dd>
+											</div>
+										{/if}
+									</dl>
 								</div>
 							{/if}
 
-							{#if aircraftModel.engine_type}
-								<div>
-									<dt class="text-surface-600-300-token mb-1 font-medium">Engine Type</dt>
-									<dd>{formatTitleCase(aircraftModel.engine_type)}</dd>
+							<!-- Capacity & Performance -->
+							{#if aircraftModel.number_of_seats || (aircraftModel.cruising_speed && aircraftModel.cruising_speed > 0)}
+								<div
+									class="border-surface-300-600-token bg-surface-50-900-token rounded-lg border p-4"
+								>
+									<h3
+										class="text-surface-600-300-token mb-3 text-xs font-semibold tracking-wide uppercase"
+									>
+										Capacity & Performance
+									</h3>
+									<dl class="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+										{#if aircraftModel.number_of_seats}
+											<div>
+												<dt class="text-surface-600-300-token mb-1 font-medium">Seats</dt>
+												<dd>{aircraftModel.number_of_seats}</dd>
+											</div>
+										{/if}
+										{#if aircraftModel.cruising_speed && aircraftModel.cruising_speed > 0}
+											<div>
+												<dt class="text-surface-600-300-token mb-1 font-medium">Cruising Speed</dt>
+												<dd>{aircraftModel.cruising_speed} kts</dd>
+											</div>
+										{/if}
+									</dl>
 								</div>
 							{/if}
-
-							{#if aircraftModel.aircraft_category}
-								<div>
-									<dt class="text-surface-600-300-token mb-1 font-medium">Category</dt>
-									<dd>{formatTitleCase(aircraftModel.aircraft_category)}</dd>
-								</div>
-							{/if}
-
-							{#if aircraftModel.builder_certification}
-								<div>
-									<dt class="text-surface-600-300-token mb-1 font-medium">Builder Certification</dt>
-									<dd>{formatTitleCase(aircraftModel.builder_certification)}</dd>
-								</div>
-							{/if}
-
-							{#if aircraftModel.number_of_seats}
-								<div>
-									<dt class="text-surface-600-300-token mb-1 font-medium">Seats</dt>
-									<dd>{aircraftModel.number_of_seats}</dd>
-								</div>
-							{/if}
-
-							{#if aircraftModel.number_of_engines !== null && aircraftModel.number_of_engines !== undefined}
-								<div>
-									<dt class="text-surface-600-300-token mb-1 font-medium">Engines</dt>
-									<dd>{aircraftModel.number_of_engines}</dd>
-								</div>
-							{/if}
-
-							{#if aircraftModel.weight_class}
-								<div>
-									<dt class="text-surface-600-300-token mb-1 font-medium">Weight Class</dt>
-									<dd>{formatTitleCase(aircraftModel.weight_class)}</dd>
-								</div>
-							{/if}
-
-							{#if aircraftModel.cruising_speed && aircraftModel.cruising_speed > 0}
-								<div>
-									<dt class="text-surface-600-300-token mb-1 font-medium">Cruising Speed</dt>
-									<dd>{aircraftModel.cruising_speed} kts</dd>
-								</div>
-							{/if}
-						</dl>
+						</div>
 					</div>
 				{/if}
 			</div>
