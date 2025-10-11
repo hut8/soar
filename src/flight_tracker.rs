@@ -618,7 +618,7 @@ impl FlightTracker {
                     let is_likely_towplane = match towplane_fix.aircraft_type_ogn {
                         Some(AircraftType::TowTug) => true,
                         Some(AircraftType::RecipEngine) => true,
-                        Some(AircraftType::JetTurboprop) => true,
+                        Some(AircraftType::JetTurboprop) => false,
                         Some(AircraftType::Glider) => false, // Gliders don't tow gliders
                         _ => true,                           // Unknown types could be towplanes
                     };

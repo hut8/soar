@@ -149,6 +149,7 @@
 					<thead>
 						<tr>
 							<th>Aircraft</th>
+							<th>Type</th>
 							<th>Takeoff</th>
 							<th>Landing</th>
 							<th>Duration</th>
@@ -182,13 +183,6 @@
 														></span
 													>
 												{/if}
-												{#if flight.aircraft_type_ogn}
-													<span
-														class="badge {getAircraftTypeColor(flight.aircraft_type_ogn)} text-xs"
-													>
-														{getAircraftTypeOgnDescription(flight.aircraft_type_ogn)}
-													</span>
-												{/if}
 												{#if flight.tow_aircraft_id}
 													<span
 														class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
@@ -211,13 +205,6 @@
 												{:else}
 													<span class="font-medium">{flight.registration}</span>
 												{/if}
-												{#if flight.aircraft_type_ogn}
-													<span
-														class="badge {getAircraftTypeColor(flight.aircraft_type_ogn)} text-xs"
-													>
-														{getAircraftTypeOgnDescription(flight.aircraft_type_ogn)}
-													</span>
-												{/if}
 												{#if flight.tow_aircraft_id}
 													<span
 														class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
@@ -233,13 +220,6 @@
 												<span class="text-surface-500-400-token font-mono text-sm">
 													{formatDeviceAddress(flight.device_address, flight.device_address_type)}
 												</span>
-												{#if flight.aircraft_type_ogn}
-													<span
-														class="badge {getAircraftTypeColor(flight.aircraft_type_ogn)} text-xs"
-													>
-														{getAircraftTypeOgnDescription(flight.aircraft_type_ogn)}
-													</span>
-												{/if}
 												{#if flight.tow_aircraft_id}
 													<span
 														class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
@@ -252,6 +232,15 @@
 											</div>
 										{/if}
 									</div>
+								</td>
+								<td>
+									{#if flight.aircraft_type_ogn}
+										<span class="badge {getAircraftTypeColor(flight.aircraft_type_ogn)} text-xs">
+											{getAircraftTypeOgnDescription(flight.aircraft_type_ogn)}
+										</span>
+									{:else}
+										<span class="text-surface-500">—</span>
+									{/if}
 								</td>
 								<td>
 									<div class="flex flex-col gap-1">
