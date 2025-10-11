@@ -64,8 +64,8 @@
 		device_address: string;
 		takeoff_time: string | null;
 		landing_time: string | null;
-		departure_airport_ident: string | null;
-		arrival_airport_ident: string | null;
+		departure_airport: string | null;
+		arrival_airport: string | null;
 		created_at: string;
 		updated_at: string;
 	}
@@ -177,8 +177,8 @@
 	}
 
 	function getFlightType(flight: FlightView, currentAirportId: string): string {
-		const isDeparture = flight.departure_airport_ident === currentAirportId;
-		const isArrival = flight.arrival_airport_ident === currentAirportId;
+		const isDeparture = flight.departure_airport === currentAirportId;
+		const isArrival = flight.arrival_airport === currentAirportId;
 
 		if (isDeparture && isArrival) return 'Local';
 		if (isDeparture) return 'Departure';
@@ -616,12 +616,12 @@
 											</td>
 											<td>
 												<span class="font-mono text-sm">
-													{flightData.flight.departure_airport_ident || '—'}
+													{flightData.flight.departure_airport || '—'}
 												</span>
 											</td>
 											<td>
 												<span class="font-mono text-sm">
-													{flightData.flight.arrival_airport_ident || '—'}
+													{flightData.flight.arrival_airport || '—'}
 												</span>
 											</td>
 											<td>{formatDateTime(flightData.flight.takeoff_time)}</td>

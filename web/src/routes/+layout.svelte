@@ -1,6 +1,6 @@
 <script lang="ts">
 	import '../app.css';
-	import { AppBar, Avatar, Toaster } from '@skeletonlabs/skeleton-svelte';
+	import { AppBar, Toaster } from '@skeletonlabs/skeleton-svelte';
 	import { toaster } from '$lib/toaster';
 	import favicon from '$lib/assets/favicon.svg';
 	import { resolve } from '$app/paths';
@@ -286,35 +286,8 @@
 					<Plane size={16} /> Flights
 				</a>
 
-				<hr class="!my-6" />
-
-				<!-- Mobile Theme Toggle -->
-				<button
-					class="btn w-full justify-start preset-filled-surface-500"
-					onclick={() => theme.toggle()}
-				>
-					{#if $theme === 'dark'}
-						<Sun size={16} /> Light Mode
-					{:else}
-						<Moon size={16} /> Dark Mode
-					{/if}
-				</button>
-
-				<hr class="!my-6" />
-
 				{#if $auth.isAuthenticated && $auth.user}
 					<div class="space-y-4">
-						<div class="bg-surface-100-800-token flex items-center space-x-3 rounded p-3">
-							<Avatar
-								initials={[0, 1]}
-								background="bg-primary-500"
-								name="{$auth.user.first_name} {$auth.user.last_name}"
-							/>
-							<div>
-								<div class="font-medium">{$auth.user.first_name} {$auth.user.last_name}</div>
-								<div class="text-surface-600-300-token text-sm">{$auth.user.email}</div>
-							</div>
-						</div>
 						<a
 							href={profilePath}
 							class="btn w-full justify-start preset-filled-primary-500"
@@ -350,6 +323,17 @@
 						</a>
 					</div>
 				{/if}
+				<!-- Mobile Theme Toggle -->
+				<button
+					class="btn w-full justify-start preset-filled-surface-500"
+					onclick={() => theme.toggle()}
+				>
+					{#if $theme === 'dark'}
+						<Sun size={16} /> Light Mode
+					{:else}
+						<Moon size={16} /> Dark Mode
+					{/if}
+				</button>
 			</nav>
 		</div>
 	{/if}

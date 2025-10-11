@@ -373,9 +373,10 @@
 					{:else}
 						<div class="text-surface-600-300-token py-8 text-center">
 							<Plane class="mx-auto mb-4 h-12 w-12 text-surface-400" />
-							<p>No aircraft registration found for {device.registration}</p>
-							<p class="mt-2 text-sm">
-								The device may be linked to an aircraft not in our database
+							<p>
+								No aircraft registration found for {device.registration}
+								<br />
+								<i>Data is currently only available for aircraft registered in the USA</i>
 							</p>
 						</div>
 					{/if}

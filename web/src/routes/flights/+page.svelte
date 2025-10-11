@@ -217,9 +217,18 @@
 											</div>
 										{:else}
 											<div class="flex items-center gap-2">
-												<span class="text-surface-500-400-token font-mono text-sm">
-													{formatDeviceAddress(flight.device_address, flight.device_address_type)}
-												</span>
+												{#if flight.device_id}
+													<a
+														href={`/devices/${flight.device_id}`}
+														class="text-surface-500-400-token anchor font-mono text-sm hover:text-primary-500"
+													>
+														{formatDeviceAddress(flight.device_address, flight.device_address_type)}
+													</a>
+												{:else}
+													<span class="text-surface-500-400-token font-mono text-sm">
+														{formatDeviceAddress(flight.device_address, flight.device_address_type)}
+													</span>
+												{/if}
 												{#if flight.tow_aircraft_id}
 													<span
 														class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
@@ -328,19 +337,41 @@
 			</div>
 
 			{#each flights as flight (flight.id)}
-				<a
-					href={`/flights/${flight.id}`}
-					class="block card p-4 transition-all duration-200 hover:scale-[1.01] hover:shadow-lg"
-				>
+				<div class="relative card p-4 transition-all duration-200 hover:shadow-lg">
 					<!-- Aircraft info -->
 					<div
 						class="border-surface-200-700-token mb-3 flex items-start justify-between border-b pb-3"
 					>
 						<div class="flex flex-wrap items-center gap-2">
 							{#if flight.aircraft_model && flight.registration}
-								<span class="font-semibold">{flight.aircraft_model} ({flight.registration})</span>
+								{#if flight.device_id}
+									<a
+										href={`/devices/${flight.device_id}`}
+										class="relative z-10 anchor font-semibold text-primary-500 hover:text-primary-600"
+									>
+										{flight.aircraft_model} ({flight.registration})
+									</a>
+								{:else}
+									<span class="font-semibold">{flight.aircraft_model} ({flight.registration})</span>
+								{/if}
 							{:else if flight.registration}
-								<span class="font-semibold">{flight.registration}</span>
+								{#if flight.device_id}
+									<a
+										href={`/devices/${flight.device_id}`}
+										class="relative z-10 anchor font-semibold text-primary-500 hover:text-primary-600"
+									>
+										{flight.registration}
+									</a>
+								{:else}
+									<span class="font-semibold">{flight.registration}</span>
+								{/if}
+							{:else if flight.device_id}
+								<a
+									href={`/devices/${flight.device_id}`}
+									class="text-surface-500-400-token relative z-10 anchor font-mono text-sm hover:text-primary-500"
+								>
+									{formatDeviceAddress(flight.device_address, flight.device_address_type)}
+								</a>
 							{:else}
 								<span class="text-surface-500-400-token font-mono text-sm">
 									{formatDeviceAddress(flight.device_address, flight.device_address_type)}
@@ -361,7 +392,13 @@
 								</span>
 							{/if}
 						</div>
-						<ExternalLink class="h-4 w-4 flex-shrink-0 text-surface-400" />
+						<a
+							href={`/flights/${flight.id}`}
+							class="relative z-10 flex-shrink-0"
+							title="View flight details"
+						>
+							<ExternalLink class="h-4 w-4 text-surface-400 hover:text-primary-500" />
+						</a>
 					</div>
 
 					<!-- Flight details in compact single row -->
@@ -392,7 +429,7 @@
 							{formatDistance(flight.total_distance_meters)}
 						</span>
 					</div>
-				</a>
+				</div>
 			{/each}
 		</div>
 	{/if}

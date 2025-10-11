@@ -16,12 +16,13 @@
 		ChevronLeft,
 		ChevronRight,
 		ChevronsRight,
-		Info
+		Info,
+		ExternalLink
 	} from '@lucide/svelte';
 	import type { PageData } from './$types';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
-	import { getAircraftTypeOgnDescription } from '$lib/formatters';
+	import { getAircraftTypeOgnDescription, formatDeviceAddress } from '$lib/formatters';
 	import { GOOGLE_MAPS_API_KEY } from '$lib/config';
 
 	dayjs.extend(relativeTime);
@@ -250,7 +251,7 @@
 			<div class="flex items-center gap-4">
 				<h1 class="flex items-center gap-2 h1">
 					<Plane class="h-8 w-8" />
-					Flight {data.flight.device_address}
+					Flight
 				</h1>
 				{#if isOutlanding}
 					<span
@@ -267,7 +268,7 @@
 				type="button"
 			>
 				<Download class="h-4 w-4" />
-				Download KML
+				KML
 			</button>
 		</div>
 
@@ -439,7 +440,22 @@
 	<!-- Aircraft Information -->
 	{#if data.device}
 		<div class="card p-4">
-			<h2 class="mb-3 h3">Aircraft Information</h2>
+			<div class="mb-3 flex items-center justify-between gap-3">
+				<h2 class="h3">Aircraft Information</h2>
+				{#if data.flight.device_id && data.flight.device_address && data.flight.device_address_type}
+					<a
+						href="/devices/{data.flight.device_id}"
+						target="_blank"
+						rel="noopener noreferrer"
+						class="btn flex items-center gap-2 preset-filled-primary-500 btn-sm"
+					>
+						<span class="font-mono">
+							{formatDeviceAddress(data.flight.device_address_type, data.flight.device_address)}
+						</span>
+						<ExternalLink class="h-4 w-4" />
+					</a>
+				{/if}
+			</div>
 			<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
 				<div>
 					<div class="text-surface-600-300-token text-sm">Registration</div>
@@ -590,7 +606,6 @@
 							title="Previous page"
 						>
 							<ChevronLeft class="h-4 w-4" />
-							Previous
 						</button>
 						<button
 							onclick={() => goToPage(currentPage + 1)}
@@ -599,7 +614,6 @@
 							type="button"
 							title="Next page"
 						>
-							Next
 							<ChevronRight class="h-4 w-4" />
 						</button>
 						<button
