@@ -98,10 +98,10 @@ jobs:
         with:
           cache-on-failure: true
 
-      - name: Install PostgreSQL client and GDAL development libraries
+      - name: Install PostgreSQL client, GDAL, and mold linker
         run: |
           sudo apt-get update
-          sudo apt-get install -y postgresql-client libgdal-dev
+          sudo apt-get install -y postgresql-client libgdal-dev mold clang
 
       - name: Setup test database
         env:
@@ -187,7 +187,7 @@ jobs:
       - name: Install GDAL and mold linker
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgdal-dev mold
+          sudo apt-get install -y libgdal-dev mold clang
 
       - name: Build release binary
         env:
@@ -234,7 +234,7 @@ jobs:
       - name: Install GDAL development libraries
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgdal-dev
+          sudo apt-get install -y libgdal-dev mold clang
       - name: Install cargo-audit
         run: cargo install cargo-audit
 

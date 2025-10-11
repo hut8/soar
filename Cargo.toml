@@ -72,6 +72,15 @@ metrics = "0.24"
 metrics-exporter-prometheus = "0.17"
 flarmnet = { version = "0.5.0", features = ["xcsoar"] }
 
+# Optimized development profile with light optimization
+# Use with: cargo build --profile dev-fast
+[profile.dev-fast]
+inherits = "dev"
+opt-level = 1              # Light optimization, faster than release
+debug = 1                  # Reduced debug info
+split-debuginfo = "unpacked"
+incremental = true
+
 [profile.release]
 # Generate debug symbols for Sentry crash symbolication
 # Symbols are stripped from the binary and uploaded separately
