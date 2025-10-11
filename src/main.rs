@@ -419,6 +419,9 @@ async fn handle_run(
     // Start periodic state saving (every 5 seconds)
     flight_tracker.start_periodic_state_saving(5);
 
+    // Start flight timeout checker (every 60 seconds)
+    flight_tracker.start_timeout_checker(60);
+
     // Create database fix processor to save all valid fixes to the database
     // Try to create with NATS first, fall back to without NATS if connection fails
     let fix_processor = match FixProcessor::with_flight_tracker_and_nats(

@@ -7,6 +7,7 @@ use crate::flights_repo::FlightsRepository;
 use crate::locations_repo::LocationsRepository;
 use crate::runways_repo::RunwaysRepository;
 use anyhow::Result;
+use chrono::Utc;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -201,6 +202,52 @@ pub(crate) async fn create_flight(
                 "Failed to create flight for aircraft {}: {}",
                 fix.device_id, e
             );
+            Err(e)
+        }
+    }
+}
+
+/// Timeout a flight that has not received beacons for 5+ minutes
+/// Does NOT set landing location - this is a timeout, not a landing
+pub(crate) async fn timeout_flight(
+    flights_repo: &FlightsRepository,
+    aircraft_trackers: &Arc<RwLock<HashMap<Uuid, AircraftTracker>>>,
+    flight_id: Uuid,
+    device_id: Uuid,
+) -> Result<()> {
+    let timeout_time = Utc::now();
+
+    info!(
+        "Timing out flight {} for device {} (no beacons for 5+ minutes)",
+        flight_id, device_id
+    );
+
+    // Mark flight as timed out in database
+    match flights_repo.timeout_flight(flight_id, timeout_time).await {
+        Ok(true) => {
+            info!("Successfully timed out flight {}", flight_id);
+
+            // Clear tracker state
+            let mut trackers = aircraft_trackers.write().await;
+            if let Some(tracker) = trackers.get_mut(&device_id) {
+                tracker.state = super::aircraft_tracker::AircraftState::Idle;
+                tracker.current_flight_id = None;
+                // Reset towing state
+                tracker.towed_by_device_id = None;
+                tracker.tow_released = false;
+            }
+
+            Ok(())
+        }
+        Ok(false) => {
+            warn!(
+                "Flight {} was not found when attempting to timeout",
+                flight_id
+            );
+            Ok(())
+        }
+        Err(e) => {
+            error!("Failed to timeout flight {}: {}", flight_id, e);
             Err(e)
         }
     }
