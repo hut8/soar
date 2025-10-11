@@ -2,6 +2,7 @@
 	/// <reference types="@types/google.maps" />
 	import { onMount } from 'svelte';
 	import { Loader } from '@googlemaps/js-api-loader';
+	import Plotly from 'plotly.js-dist-min';
 	import {
 		Download,
 		Plane,
@@ -32,6 +33,9 @@
 	let mapContainer = $state<HTMLElement>();
 	let map = $state<google.maps.Map>();
 	let flightPath = $state<google.maps.Polyline | null>(null);
+	let altitudeChartContainer = $state<HTMLElement>();
+	let altitudeInfoWindow = $state<google.maps.InfoWindow | null>(null);
+	let fixMarkers: google.maps.marker.AdvancedMarkerElement[] = [];
 
 	// Pagination state
 	let currentPage = $state(1);
@@ -176,18 +180,44 @@
 
 			flightPath.setMap(map);
 
-			// Add small markers for each fix (white dots)
+			// Create info window for altitude display
+			altitudeInfoWindow = new google.maps.InfoWindow();
+
+			// Add small markers for each fix (white dots) with click/touch handlers
 			fixesInOrder.forEach((fix) => {
 				const fixDot = document.createElement('div');
 				fixDot.innerHTML = `
-					<div style="background-color: white; width: 6px; height: 6px; border-radius: 50%; border: 1px solid rgba(0,0,0,0.3); box-shadow: 0 0 2px rgba(0,0,0,0.5);"></div>
+					<div style="background-color: white; width: 6px; height: 6px; border-radius: 50%; border: 1px solid rgba(0,0,0,0.3); box-shadow: 0 0 2px rgba(0,0,0,0.5); cursor: pointer;"></div>
 				`;
 
-				new google.maps.marker.AdvancedMarkerElement({
+				const marker = new google.maps.marker.AdvancedMarkerElement({
 					map,
 					position: { lat: fix.latitude, lng: fix.longitude },
 					content: fixDot
 				});
+
+				// Add click/touch handler to show altitude info
+				marker.addListener('click', () => {
+					const mslAlt = fix.altitude_msl_feet ? Math.round(fix.altitude_msl_feet) : 'N/A';
+					const aglAlt = fix.altitude_agl_feet ? Math.round(fix.altitude_agl_feet) : 'N/A';
+					const timestamp = dayjs(fix.timestamp).format('h:mm:ss A');
+
+					const content = `
+						<div style="padding: 8px; min-width: 180px;">
+							<div style="font-weight: bold; margin-bottom: 6px;">${timestamp}</div>
+							<div style="display: flex; flex-direction: column; gap: 4px;">
+								<div><span style="color: #3b82f6; font-weight: 600;">MSL:</span> ${mslAlt} ft</div>
+								<div><span style="color: #10b981; font-weight: 600;">AGL:</span> ${aglAlt} ft</div>
+							</div>
+						</div>
+					`;
+
+					altitudeInfoWindow?.setContent(content);
+					altitudeInfoWindow?.setPosition({ lat: fix.latitude, lng: fix.longitude });
+					altitudeInfoWindow?.open(map);
+				});
+
+				fixMarkers.push(marker);
 			});
 
 			// Add takeoff marker (green) - first fix chronologically
@@ -223,6 +253,109 @@
 			}
 		} catch (error) {
 			console.error('Failed to load Google Maps:', error);
+		}
+
+		// Initialize altitude chart
+		if (altitudeChartContainer && data.fixes.length > 0) {
+			try {
+				const fixesInOrder = [...data.fixes].reverse();
+
+				// Prepare data for the chart
+				const timestamps = fixesInOrder.map((fix) => new Date(fix.timestamp));
+				const altitudesMsl = fixesInOrder.map((fix) => fix.altitude_msl_feet || 0);
+				const altitudesAgl = fixesInOrder.map((fix) => fix.altitude_agl_feet || 0);
+
+				// Create traces for MSL and AGL
+				const traceMsl = {
+					x: timestamps,
+					y: altitudesMsl,
+					type: 'scatter' as const,
+					mode: 'lines' as const,
+					name: 'MSL Altitude',
+					line: { color: '#3b82f6', width: 2 },
+					hovertemplate: '<b>MSL:</b> %{y:.0f} ft<br>%{x}<extra></extra>'
+				};
+
+				const traceAgl = {
+					x: timestamps,
+					y: altitudesAgl,
+					type: 'scatter' as const,
+					mode: 'lines' as const,
+					name: 'AGL Altitude',
+					line: { color: '#10b981', width: 2 },
+					hovertemplate: '<b>AGL:</b> %{y:.0f} ft<br>%{x}<extra></extra>'
+				};
+
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				const layout: any = {
+					title: { text: 'Altitude Profile' },
+					xaxis: {
+						title: { text: 'Time' },
+						type: 'date'
+					},
+					yaxis: {
+						title: { text: 'Altitude (ft)' },
+						rangemode: 'tozero'
+					},
+					hovermode: 'x unified',
+					showlegend: true,
+					legend: {
+						x: 0.01,
+						y: 0.99,
+						bgcolor: 'rgba(255, 255, 255, 0.8)'
+					},
+					margin: { l: 60, r: 20, t: 40, b: 60 }
+				};
+
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				const config: any = {
+					responsive: true,
+					displayModeBar: true,
+					displaylogo: false,
+					modeBarButtonsToRemove: ['pan2d', 'lasso2d', 'select2d']
+				};
+
+				await Plotly.newPlot(altitudeChartContainer, [traceMsl, traceAgl], layout, config);
+
+				// Add hover event to highlight position on map
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				altitudeChartContainer.addEventListener('plotly_hover', (event: any) => {
+					const data = event.detail || event;
+					if (data.points && data.points.length > 0) {
+						const pointIndex = data.points[0].pointIndex;
+						if (pointIndex >= 0 && pointIndex < fixesInOrder.length) {
+							const fix = fixesInOrder[pointIndex];
+							const mslAlt = fix.altitude_msl_feet ? Math.round(fix.altitude_msl_feet) : 'N/A';
+							const aglAlt = fix.altitude_agl_feet ? Math.round(fix.altitude_agl_feet) : 'N/A';
+							const timestamp = dayjs(fix.timestamp).format('h:mm:ss A');
+
+							const content = `
+								<div style="padding: 8px; min-width: 180px;">
+									<div style="font-weight: bold; margin-bottom: 6px;">${timestamp}</div>
+									<div style="display: flex; flex-direction: column; gap: 4px;">
+										<div><span style="color: #3b82f6; font-weight: 600;">MSL:</span> ${mslAlt} ft</div>
+										<div><span style="color: #10b981; font-weight: 600;">AGL:</span> ${aglAlt} ft</div>
+									</div>
+								</div>
+							`;
+
+							altitudeInfoWindow?.setContent(content);
+							altitudeInfoWindow?.setPosition({ lat: fix.latitude, lng: fix.longitude });
+							altitudeInfoWindow?.open(map);
+
+							// Pan to the position on the map
+							map?.panTo({ lat: fix.latitude, lng: fix.longitude });
+						}
+					}
+				});
+
+				// Close info window when not hovering
+				altitudeChartContainer.addEventListener('plotly_unhover', () => {
+					altitudeInfoWindow?.close();
+				});
+			} catch (error) {
+				console.error('Failed to create altitude chart:', error);
+			}
 		}
 	});
 
@@ -488,6 +621,12 @@
 		<div class="card p-4">
 			<h2 class="mb-3 h3">Flight Track</h2>
 			<div bind:this={mapContainer} class="h-96 w-full rounded-lg"></div>
+		</div>
+
+		<!-- Altitude Chart -->
+		<div class="card p-4">
+			<h2 class="mb-3 h3">Altitude Profile</h2>
+			<div bind:this={altitudeChartContainer} class="h-80 w-full"></div>
 		</div>
 	{/if}
 
