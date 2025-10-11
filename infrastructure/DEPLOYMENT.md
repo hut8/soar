@@ -109,10 +109,12 @@ The deployment manages these systemd services:
 - **soar-web.service**: Web server component
 - **soar-pull-data.service**: Data collection service
 - **soar-sitemap.service**: Sitemap generation service
+- **soar-archive.service**: Old fixes data archival service
 
 ### Timers
 - **soar-pull-data.timer**: Periodic data collection
 - **soar-sitemap.timer**: Periodic sitemap generation
+- **soar-archive.timer**: Daily archival of old fixes data
 
 ## Monitoring
 

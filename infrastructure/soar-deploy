@@ -63,11 +63,13 @@ SERVICES=(
     "soar-web.service"
     "soar-pull-data.service"
     "soar-sitemap.service"
+    "soar-archive.service"
 )
 
 TIMERS=(
     "soar-pull-data.timer"
     "soar-sitemap.timer"
+    "soar-archive.timer"
 )
 
 # Stop all services before deployment
