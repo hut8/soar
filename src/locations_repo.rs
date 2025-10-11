@@ -166,6 +166,28 @@ impl LocationsRepository {
         Ok(results.into_iter().map(|model| model.into()).collect())
     }
 
+    /// Find or create a location by geolocation only (for receivers)
+    /// This creates a minimal location record with just coordinates
+    pub async fn find_or_create_by_geolocation(
+        &self,
+        latitude: f64,
+        longitude: f64,
+    ) -> Result<Location> {
+        // Use the general find_or_create with only geolocation
+        self.find_or_create(
+            None, // street1
+            None, // street2
+            None, // city
+            None, // state
+            None, // zip_code
+            None, // region_code
+            None, // county_mail_code
+            None, // country_mail_code
+            Some(Point::new(latitude, longitude)),
+        )
+        .await
+    }
+
     /// Find or create a location by address (atomic operation)
     #[allow(clippy::too_many_arguments)]
     pub async fn find_or_create(

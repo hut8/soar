@@ -469,20 +469,30 @@ impl ReceiverRepository {
         .await?
     }
 
-    /// Get receivers in a bounding box
-    /// TODO: Reimplement this function to use the locations table with geolocation
+    /// Get receivers in a bounding box by joining with locations table
     pub async fn get_receivers_in_bounding_box(
         &self,
-        _nw_lat: f64,
-        _nw_lng: f64,
-        _se_lat: f64,
-        _se_lng: f64,
+        nw_lat: f64,
+        nw_lng: f64,
+        se_lat: f64,
+        se_lng: f64,
     ) -> Result<Vec<ReceiverModel>> {
+        use crate::schema::locations;
+        use diesel::dsl::sql;
+
         let pool = self.pool.clone();
 
         tokio::task::spawn_blocking(move || -> Result<Vec<ReceiverModel>> {
             let mut conn = pool.get()?;
+
+            // Join receivers with locations and filter by bounding box using PostGIS
+            // ST_MakeEnvelope creates a rectangular polygon from the coordinates
             let receiver_models = receivers::table
+                .inner_join(locations::table.on(receivers::location_id.eq(locations::id.nullable())))
+                .filter(sql::<diesel::sql_types::Bool>(&format!(
+                    "ST_Within(locations.geolocation::geometry, ST_MakeEnvelope({}, {}, {}, {}, 4326))",
+                    nw_lng, se_lat, se_lng, nw_lat
+                )))
                 .order(receivers::callsign.asc())
                 .limit(1000)
                 .select(ReceiverModel::as_select())
@@ -518,19 +528,32 @@ impl ReceiverRepository {
         .await?
     }
 
-    /// Get receivers within a radius (in miles) from a point
-    /// TODO: Reimplement this function to use the locations table with geolocation
+    /// Get receivers within a radius (in miles) from a point by joining with locations table
     pub async fn get_receivers_within_radius(
         &self,
-        _latitude: f64,
-        _longitude: f64,
-        _radius_miles: f64,
+        latitude: f64,
+        longitude: f64,
+        radius_miles: f64,
     ) -> Result<Vec<ReceiverModel>> {
+        use crate::schema::locations;
+        use diesel::dsl::sql;
+
         let pool = self.pool.clone();
 
         tokio::task::spawn_blocking(move || -> Result<Vec<ReceiverModel>> {
             let mut conn = pool.get()?;
+
+            // Convert miles to meters for PostGIS ST_DWithin (1 mile = 1609.34 meters)
+            let radius_meters = radius_miles * 1609.34;
+
+            // Join receivers with locations and filter by distance using PostGIS
+            // ST_DWithin works with geography type for accurate distance calculations
             let receiver_models = receivers::table
+                .inner_join(locations::table.on(receivers::location_id.eq(locations::id.nullable())))
+                .filter(sql::<diesel::sql_types::Bool>(&format!(
+                    "ST_DWithin(locations.geolocation, ST_SetSRID(ST_MakePoint({}, {}), 4326)::geography, {})",
+                    longitude, latitude, radius_meters
+                )))
                 .order(receivers::callsign.asc())
                 .limit(1000)
                 .select(ReceiverModel::as_select())
@@ -556,6 +579,32 @@ impl ReceiverRepository {
             Ok(rows_affected > 0)
         })
         .await?
+    }
+
+    /// Update receiver position by creating/finding a location and linking it
+    /// This method coordinates with LocationsRepository to handle the location record
+    pub async fn update_receiver_position_with_location(
+        &self,
+        callsign: &str,
+        latitude: f64,
+        longitude: f64,
+        locations_repo: &crate::locations_repo::LocationsRepository,
+    ) -> Result<bool> {
+        // First, find or create the location record
+        let location = locations_repo
+            .find_or_create_by_geolocation(latitude, longitude)
+            .await?;
+
+        // Update the receiver to link to this location
+        self.update_receiver_location(callsign, location.id).await?;
+
+        // Update the latest_packet_at timestamp
+        let receiver = self.get_receiver_by_callsign(callsign).await?;
+        if let Some(receiver) = receiver {
+            self.update_latest_packet_at(receiver.id).await?;
+        }
+
+        Ok(true)
     }
 }
 
