@@ -52,14 +52,14 @@
 		name: string;
 	}
 
-	let club: Club | null = null;
-	let selectedDate = dayjs().format('YYYY-MM-DD');
-	let flightsInProgress: Flight[] = [];
-	let completedFlights: Flight[] = [];
-	let loadingClub = true;
-	let loadingFlights = true;
-	let error = '';
-	let flightsError = '';
+	let club = $state<Club | null>(null);
+	let selectedDate = $state(dayjs().format('YYYY-MM-DD'));
+	let flightsInProgress = $state<Flight[]>([]);
+	let completedFlights = $state<Flight[]>([]);
+	let loadingClub = $state(true);
+	let loadingFlights = $state(true);
+	let error = $state('');
+	let flightsError = $state('');
 
 	// Pilot modal state
 	let pilotModalOpen = $state(false);
