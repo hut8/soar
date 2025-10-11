@@ -1,13 +1,13 @@
 <script lang="ts">
 	/// <reference types="@types/google.maps" />
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import { Loader } from '@googlemaps/js-api-loader';
 	import Plotly from 'plotly.js-dist-min';
 	import {
 		Download,
 		Plane,
-		MapPin,
-		Clock,
+		PlaneTakeoff,
+		PlaneLanding,
 		Gauge,
 		TrendingUp,
 		Route,
@@ -18,13 +18,15 @@
 		ChevronRight,
 		ChevronsRight,
 		Info,
-		ExternalLink
+		ExternalLink,
+		MountainSnow
 	} from '@lucide/svelte';
 	import type { PageData } from './$types';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
 	import { getAircraftTypeOgnDescription, formatDeviceAddress } from '$lib/formatters';
 	import { GOOGLE_MAPS_API_KEY } from '$lib/config';
+	import { serverCall } from '$lib/api/server';
 
 	dayjs.extend(relativeTime);
 
@@ -36,6 +38,7 @@
 	let altitudeChartContainer = $state<HTMLElement>();
 	let altitudeInfoWindow = $state<google.maps.InfoWindow | null>(null);
 	let fixMarkers: google.maps.marker.AdvancedMarkerElement[] = [];
+	let pollingInterval: ReturnType<typeof setInterval> | null = null;
 
 	// Pagination state
 	let currentPage = $state(1);
@@ -75,6 +78,13 @@
 		const durationSeconds = (end.getTime() - start.getTime()) / 1000;
 		if (durationSeconds <= 0) return null;
 		return (data.fixesCount / durationSeconds).toFixed(2);
+	});
+
+	// Calculate maximum altitude from fixes
+	const maxAltitude = $derived(() => {
+		if (data.fixes.length === 0) return null;
+		const maxMsl = Math.max(...data.fixes.map((f) => f.altitude_msl_feet || 0));
+		return maxMsl > 0 ? maxMsl : null;
 	});
 
 	// Check if this is an outlanding (flight complete with known departure but no arrival airport)
@@ -126,6 +136,195 @@
 			return `${nm.toFixed(2)} nm (${km.toFixed(2)} km)`;
 		} else {
 			return `${km.toFixed(2)} km`;
+		}
+	}
+
+	// Check if flight is in progress
+	function isFlightInProgress(): boolean {
+		return !data.flight.landing_time;
+	}
+
+	// Poll for updates to in-progress flights
+	async function pollForUpdates() {
+		try {
+			const [flightResponse, fixesResponse] = await Promise.all([
+				serverCall<{
+					flight: typeof data.flight;
+					device?: typeof data.device;
+				}>(`/flights/${data.flight.id}`),
+				serverCall<{
+					fixes: typeof data.fixes;
+					count: number;
+				}>(`/flights/${data.flight.id}/fixes`)
+			]);
+
+			// Update flight data
+			data.flight = flightResponse.flight;
+			if (flightResponse.device) {
+				data.device = flightResponse.device;
+			}
+
+			// Update fixes data
+			data.fixes = fixesResponse.fixes;
+			data.fixesCount = fixesResponse.count;
+
+			// If flight has landed, stop polling
+			if (data.flight.landing_time) {
+				stopPolling();
+			}
+
+			// Update map and chart
+			updateMapAndChart();
+		} catch (err) {
+			console.error('Failed to poll for flight updates:', err);
+		}
+	}
+
+	// Start polling for in-progress flights
+	function startPolling() {
+		if (isFlightInProgress() && !pollingInterval) {
+			pollingInterval = setInterval(pollForUpdates, 10000); // Poll every 10 seconds
+		}
+	}
+
+	// Stop polling
+	function stopPolling() {
+		if (pollingInterval) {
+			clearInterval(pollingInterval);
+			pollingInterval = null;
+		}
+	}
+
+	// Update map and altitude chart with new data
+	function updateMapAndChart() {
+		if (data.fixes.length === 0) return;
+
+		// Update map
+		if (map && flightPath) {
+			const fixesInOrder = [...data.fixes].reverse();
+
+			// Update flight path
+			const pathCoordinates = fixesInOrder.map((fix) => ({
+				lat: fix.latitude,
+				lng: fix.longitude
+			}));
+			flightPath.setPath(pathCoordinates);
+
+			// Clear existing fix markers
+			fixMarkers.forEach((marker) => {
+				marker.map = null;
+			});
+			fixMarkers = [];
+
+			// Re-add fix markers
+			fixesInOrder.forEach((fix) => {
+				const fixDot = document.createElement('div');
+				fixDot.innerHTML = `
+					<div style="background-color: white; width: 6px; height: 6px; border-radius: 50%; border: 1px solid rgba(0,0,0,0.3); box-shadow: 0 0 2px rgba(0,0,0,0.5); cursor: pointer;"></div>
+				`;
+
+				const marker = new google.maps.marker.AdvancedMarkerElement({
+					map,
+					position: { lat: fix.latitude, lng: fix.longitude },
+					content: fixDot
+				});
+
+				marker.addListener('click', () => {
+					const mslAlt = fix.altitude_msl_feet ? Math.round(fix.altitude_msl_feet) : 'N/A';
+					const aglAlt = fix.altitude_agl_feet ? Math.round(fix.altitude_agl_feet) : 'N/A';
+					const timestamp = dayjs(fix.timestamp).format('h:mm:ss A');
+
+					const content = `
+						<div style="padding: 8px; min-width: 180px;">
+							<div style="font-weight: bold; margin-bottom: 6px;">${timestamp}</div>
+							<div style="display: flex; flex-direction: column; gap: 4px;">
+								<div><span style="color: #3b82f6; font-weight: 600;">MSL:</span> ${mslAlt} ft</div>
+								<div><span style="color: #10b981; font-weight: 600;">AGL:</span> ${aglAlt} ft</div>
+							</div>
+						</div>
+					`;
+
+					altitudeInfoWindow?.setContent(content);
+					altitudeInfoWindow?.setPosition({ lat: fix.latitude, lng: fix.longitude });
+					altitudeInfoWindow?.open(map);
+				});
+
+				fixMarkers.push(marker);
+			});
+
+			// Update bounds to show all fixes
+			const bounds = new google.maps.LatLngBounds();
+			fixesInOrder.forEach((fix) => {
+				bounds.extend({ lat: fix.latitude, lng: fix.longitude });
+			});
+			map.fitBounds(bounds);
+
+			// Add landing marker if flight is complete
+			if (data.flight.landing_time && fixesInOrder.length > 0) {
+				const last = fixesInOrder[fixesInOrder.length - 1];
+				const landingPin = document.createElement('div');
+				landingPin.innerHTML = `
+					<div style="background-color: #ef4444; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white;"></div>
+				`;
+
+				new google.maps.marker.AdvancedMarkerElement({
+					map,
+					position: { lat: last.latitude, lng: last.longitude },
+					content: landingPin,
+					title: 'Landing'
+				});
+			}
+		}
+
+		// Update altitude chart
+		if (altitudeChartContainer && Plotly) {
+			const fixesInOrder = [...data.fixes].reverse();
+			const timestamps = fixesInOrder.map((fix) => new Date(fix.timestamp));
+			const altitudesMsl = fixesInOrder.map((fix) => fix.altitude_msl_feet || 0);
+			const altitudesAgl = fixesInOrder.map((fix) => fix.altitude_agl_feet || 0);
+
+			Plotly.react(
+				altitudeChartContainer,
+				[
+					{
+						x: timestamps,
+						y: altitudesMsl,
+						type: 'scatter' as const,
+						mode: 'lines' as const,
+						name: 'MSL Altitude',
+						line: { color: '#3b82f6', width: 2 },
+						hovertemplate: '<b>MSL:</b> %{y:.0f} ft<br>%{x}<extra></extra>'
+					},
+					{
+						x: timestamps,
+						y: altitudesAgl,
+						type: 'scatter' as const,
+						mode: 'lines' as const,
+						name: 'AGL Altitude',
+						line: { color: '#10b981', width: 2 },
+						hovertemplate: '<b>AGL:</b> %{y:.0f} ft<br>%{x}<extra></extra>'
+					}
+				],
+				{
+					title: { text: 'Altitude Profile' },
+					xaxis: {
+						title: { text: 'Time' },
+						type: 'date'
+					},
+					yaxis: {
+						title: { text: 'Altitude (ft)' },
+						rangemode: 'tozero'
+					},
+					hovermode: 'x unified',
+					showlegend: true,
+					legend: {
+						x: 0.01,
+						y: 0.99,
+						bgcolor: 'rgba(255, 255, 255, 0.8)'
+					},
+					margin: { l: 60, r: 20, t: 40, b: 60 }
+				}
+			);
 		}
 	}
 
@@ -357,6 +556,14 @@
 				console.error('Failed to create altitude chart:', error);
 			}
 		}
+
+		// Start polling if flight is in progress
+		startPolling();
+	});
+
+	// Cleanup on component unmount
+	onDestroy(() => {
+		stopPolling();
 	});
 
 	// KML download
@@ -406,82 +613,18 @@
 		</div>
 
 		<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-			<!-- Takeoff Time -->
+			<!-- Takeoff -->
 			<div class="flex items-start gap-3">
-				<Clock class="mt-1 h-5 w-5 text-primary-500" />
+				<PlaneTakeoff class="mt-1 h-5 w-5 text-primary-500" />
 				<div>
-					<div class="text-surface-600-300-token text-sm">Takeoff Time</div>
+					<div class="text-surface-600-300-token text-sm">Takeoff</div>
 					<div class="font-semibold">
 						<!-- Mobile: relative time only -->
 						<span class="md:hidden">{formatDateTimeMobile(data.flight.takeoff_time)}</span>
 						<!-- Desktop: relative time with full datetime -->
 						<span class="hidden md:inline">{formatDateTime(data.flight.takeoff_time)}</span>
 					</div>
-				</div>
-			</div>
-
-			<!-- Landing Time -->
-			<div class="flex items-start gap-3">
-				<Clock class="mt-1 h-5 w-5 text-primary-500" />
-				<div>
-					<div class="text-surface-600-300-token text-sm">Landing Time</div>
-					<div class="font-semibold">
-						{#if data.flight.landing_time}
-							<!-- Mobile: relative time only -->
-							<span class="md:hidden">{formatDateTimeMobile(data.flight.landing_time)}</span>
-							<!-- Desktop: relative time with full datetime -->
-							<span class="hidden md:inline">{formatDateTime(data.flight.landing_time)}</span>
-						{:else}
-							In Progress
-						{/if}
-					</div>
-				</div>
-			</div>
-
-			<!-- Duration -->
-			{#if duration()}
-				<div class="flex items-start gap-3">
-					<Gauge class="mt-1 h-5 w-5 text-primary-500" />
-					<div>
-						<div class="text-surface-600-300-token text-sm">Duration</div>
-						<div class="font-semibold">{duration()}</div>
-					</div>
-				</div>
-			{/if}
-
-			<!-- Total Distance -->
-			{#if data.flight.total_distance_meters}
-				<div class="flex items-start gap-3">
-					<Route class="mt-1 h-5 w-5 text-primary-500" />
-					<div>
-						<div class="text-surface-600-300-token text-sm">Total Distance</div>
-						<div class="font-semibold">{formatDistance(data.flight.total_distance_meters)}</div>
-					</div>
-				</div>
-			{/if}
-
-			<!-- Maximum Displacement -->
-			{#if data.flight.maximum_displacement_meters}
-				<div class="flex items-start gap-3">
-					<MoveUpRight class="mt-1 h-5 w-5 text-primary-500" />
-					<div>
-						<div class="text-surface-600-300-token text-sm">Max Displacement</div>
-						<div class="font-semibold">
-							{formatDistance(data.flight.maximum_displacement_meters)}
-						</div>
-						<div class="text-surface-600-300-token text-sm">
-							from {data.flight.departure_airport}
-						</div>
-					</div>
-				</div>
-			{/if}
-
-			<!-- Departure Airport -->
-			<div class="flex items-start gap-3">
-				<MapPin class="mt-1 h-5 w-5 text-primary-500" />
-				<div>
-					<div class="text-surface-600-300-token text-sm">Departure</div>
-					<div class="font-semibold">
+					<div class="text-surface-600-300-token text-sm">
 						{#if data.flight.departure_airport && data.flight.departure_airport_id}
 							<a href="/airports/{data.flight.departure_airport_id}" class="anchor">
 								{data.flight.departure_airport}
@@ -511,12 +654,22 @@
 				</div>
 			</div>
 
-			<!-- Arrival Airport -->
+			<!-- Landing -->
 			<div class="flex items-start gap-3">
-				<MapPin class="mt-1 h-5 w-5 text-primary-500" />
+				<PlaneLanding class="mt-1 h-5 w-5 text-primary-500" />
 				<div>
-					<div class="text-surface-600-300-token text-sm">Arrival</div>
+					<div class="text-surface-600-300-token text-sm">Landing</div>
 					<div class="font-semibold">
+						{#if data.flight.landing_time}
+							<!-- Mobile: relative time only -->
+							<span class="md:hidden">{formatDateTimeMobile(data.flight.landing_time)}</span>
+							<!-- Desktop: relative time with full datetime -->
+							<span class="hidden md:inline">{formatDateTime(data.flight.landing_time)}</span>
+						{:else}
+							In Progress
+						{/if}
+					</div>
+					<div class="text-surface-600-300-token text-sm">
 						{#if data.flight.landing_time}
 							{#if data.flight.arrival_airport && data.flight.arrival_airport_id}
 								<a href="/airports/{data.flight.arrival_airport_id}" class="anchor">
@@ -552,13 +705,66 @@
 				</div>
 			</div>
 
+			<!-- Duration -->
+			{#if duration()}
+				<div class="flex items-start gap-3">
+					<Gauge class="mt-1 h-5 w-5 text-primary-500" />
+					<div>
+						<div class="text-surface-600-300-token text-sm">Duration</div>
+						<div class="font-semibold">{duration()}</div>
+					</div>
+				</div>
+			{/if}
+
+			<!-- Maximum Altitude -->
+			{#if maxAltitude()}
+				<div class="flex items-start gap-3">
+					<MountainSnow class="mt-1 h-5 w-5 text-primary-500" />
+					<div>
+						<div class="text-surface-600-300-token text-sm">Maximum Altitude</div>
+						<div class="font-semibold">{formatAltitude(maxAltitude() ?? undefined)}</div>
+					</div>
+				</div>
+			{/if}
+
+			<!-- Total Distance -->
+			{#if data.flight.total_distance_meters}
+				<div class="flex items-start gap-3">
+					<Route class="mt-1 h-5 w-5 text-primary-500" />
+					<div>
+						<div class="text-surface-600-300-token text-sm">Total Distance</div>
+						<div class="font-semibold">{formatDistance(data.flight.total_distance_meters)}</div>
+					</div>
+				</div>
+			{/if}
+
+			<!-- Maximum Displacement -->
+			{#if data.flight.maximum_displacement_meters}
+				<div class="flex items-start gap-3">
+					<MoveUpRight class="mt-1 h-5 w-5 text-primary-500" />
+					<div>
+						<div class="text-surface-600-300-token text-sm">Max Displacement</div>
+						<div class="font-semibold">
+							{formatDistance(data.flight.maximum_displacement_meters)}
+						</div>
+						<div class="text-surface-600-300-token text-sm">
+							from {data.flight.departure_airport}
+						</div>
+					</div>
+				</div>
+			{/if}
+
 			<!-- Tow Aircraft -->
 			{#if data.flight.tow_aircraft_id}
 				<div class="flex items-start gap-3">
 					<TrendingUp class="mt-1 h-5 w-5 text-primary-500" />
 					<div>
 						<div class="text-surface-600-300-token text-sm">Tow Aircraft</div>
-						<div class="font-semibold">{data.flight.tow_aircraft_id}</div>
+						<div class="font-semibold">
+							<a href="/devices/{data.flight.tow_aircraft_id}" class="anchor">
+								{data.flight.tow_aircraft_id}
+							</a>
+						</div>
 						{#if data.flight.tow_release_height_msl}
 							<div class="text-surface-600-300-token text-sm">
 								Release: {data.flight.tow_release_height_msl} ft MSL
