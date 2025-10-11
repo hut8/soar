@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, trace, warn};
+use tracing::{debug, error, info, instrument, trace, warn};
 use uuid::Uuid;
 
 use crate::Fix;
@@ -159,6 +159,9 @@ impl FlightTracker {
     /// Calculate altitude offset in feet between reported altitude and true MSL elevation
     /// Returns the difference (reported_altitude_ft - true_elevation_ft)
     /// Returns None if elevation lookup fails or fix has no altitude
+    #[instrument(skip(self), fields(
+        aircraft = %format_device_address_with_type(&fix.device_address_hex(), fix.address_type)
+    ))]
     async fn calculate_altitude_offset_ft(&self, fix: &Fix) -> Option<i32> {
         // Get reported altitude from fix (in feet)
         let reported_altitude_ft = fix.altitude_msl_feet?;
@@ -1170,7 +1173,11 @@ impl FlightTracker {
                         if offset.abs() > 250 {
                             warn!(
                                 "Skipping flight creation for aircraft {} due to large altitude offset ({} ft) - altitude data may be unreliable",
-                                fix.device_id, offset
+                                format_device_address_with_type(
+                                    fix.device_address_hex().as_ref(),
+                                    fix.address_type
+                                ),
+                                offset
                             );
                             true
                         } else {
