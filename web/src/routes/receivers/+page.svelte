@@ -328,7 +328,7 @@
 				{#each receivers as receiver (receiver.id)}
 					<a
 						href={resolve(`/receivers/${receiver.id}`)}
-						class="hover:preset-filled-surface-200 card p-4"
+						class="card p-6 transition-all duration-200 hover:scale-[1.02] hover:shadow-lg"
 					>
 						<div class="space-y-2">
 							<h3 class="h4 font-bold">{receiver.callsign}</h3>
