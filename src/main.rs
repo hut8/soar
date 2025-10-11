@@ -9,15 +9,15 @@ use std::fs;
 use std::path::Path;
 use tracing::{info, warn};
 
-use soar::aprs_client::{
-    AircraftPositionProcessor, AprsClient, AprsClientConfigBuilder, PacketRouter,
-    PositionPacketProcessor, ReceiverPositionProcessor, ReceiverStatusProcessor,
-    ServerStatusProcessor,
-};
+use soar::aprs_client::{AprsClient, AprsClientConfigBuilder};
 use soar::fix_processor::FixProcessor;
 use soar::flight_tracker::FlightTracker;
 use soar::instance_lock::InstanceLock;
 use soar::live_fixes::LiveFixService;
+use soar::packet_processors::{
+    AircraftPositionProcessor, PacketRouter, PositionPacketProcessor, ReceiverPositionProcessor,
+    ReceiverStatusProcessor, ServerStatusProcessor,
+};
 use soar::receiver_repo::ReceiverRepository;
 use soar::receiver_status_repo::ReceiverStatusRepository;
 use soar::server_messages_repo::ServerMessagesRepository;
