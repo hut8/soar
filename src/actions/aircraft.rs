@@ -19,53 +19,80 @@ pub async fn get_aircraft_by_club(
     Path(club_id): Path<Uuid>,
 ) -> impl IntoResponse {
     let aircraft_repo = AircraftRegistrationsRepository::new(state.pool.clone());
+    let aircraft_model_repo = AircraftModelRepository::new(state.pool.clone());
     let device_repo = DeviceRepository::new(state.pool.clone());
 
-    match aircraft_repo
-        .get_aircraft_with_models_by_club_id(club_id)
-        .await
-    {
-        Ok(aircraft_with_models) => {
-            let mut aircraft_views: Vec<AircraftView> = Vec::new();
-
-            for (aircraft, model) in aircraft_with_models {
-                let mut view = AircraftView::from(aircraft);
-                view.club_id = Some(club_id); // Set the club_id in the view
-                view.model = model.map(AircraftModelView::from); // Add model data if available
-
-                // Fetch device data if device_id is present
-                if let Some(device_id) = view.device_id {
-                    match device_repo.get_device_by_uuid(device_id).await {
-                        Ok(Some(device)) => {
-                            view.aircraft_type_ogn = device.aircraft_type_ogn;
-                        }
-                        Ok(None) => {
-                            // Device not found, leave aircraft_type_ogn as None
-                        }
-                        Err(e) => {
-                            error!(
-                                "Failed to get device {} for aircraft {}: {}",
-                                device_id, view.registration_number, e
-                            );
-                            // Continue without device data
-                        }
-                    }
-                }
-
-                aircraft_views.push(view);
-            }
-
-            Json(aircraft_views).into_response()
-        }
+    // First get all devices for this club
+    let devices = match device_repo.search_by_club_id(club_id).await {
+        Ok(devices) => devices,
         Err(e) => {
-            error!("Failed to get aircraft by club: {}", e);
-            (
+            error!("Failed to get devices by club: {}", e);
+            return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to get aircraft by club",
+                "Failed to get devices by club",
             )
-                .into_response()
+                .into_response();
         }
+    };
+
+    let mut aircraft_views: Vec<AircraftView> = Vec::new();
+
+    // For each device, get its aircraft registration and model
+    for device in devices {
+        // Get aircraft registration if it exists
+        let aircraft = match aircraft_repo
+            .get_aircraft_registration_by_device_id(device.id.unwrap())
+            .await
+        {
+            Ok(Some(reg)) => reg,
+            Ok(None) => continue, // No aircraft registration for this device
+            Err(e) => {
+                error!(
+                    "Failed to get aircraft registration for device {}: {}",
+                    device.id.unwrap(),
+                    e
+                );
+                continue;
+            }
+        };
+
+        // Convert AircraftRegistrationModel to Aircraft, then to view
+        let aircraft_domain: crate::aircraft_registrations::Aircraft = aircraft.clone().into();
+        let mut view = AircraftView::from(aircraft_domain);
+        view.club_id = Some(club_id);
+        view.aircraft_type_ogn = device.aircraft_type_ogn;
+
+        // Get aircraft model if available
+        match aircraft_model_repo
+            .get_aircraft_model_by_key(
+                &aircraft.manufacturer_code,
+                &aircraft.model_code,
+                &aircraft.series_code,
+            )
+            .await
+        {
+            Ok(Some(model)) => {
+                // Convert AircraftModel to AircraftModelRecord
+                let model_record: crate::faa::aircraft_model_repo::AircraftModelRecord =
+                    model.into();
+                view.model = Some(AircraftModelView::from(model_record));
+            }
+            Ok(None) => {
+                // No model found, leave as None
+            }
+            Err(e) => {
+                error!(
+                    "Failed to get aircraft model for {}: {}",
+                    aircraft.registration_number, e
+                );
+                // Continue without model data
+            }
+        }
+
+        aircraft_views.push(view);
     }
+
+    Json(aircraft_views).into_response()
 }
 
 /// Get aircraft registration for a device by device ID

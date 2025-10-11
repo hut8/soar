@@ -130,7 +130,6 @@ diesel::table! {
         kit_model_name -> Nullable<Varchar>,
         #[max_length = 9]
         approved_operations_raw -> Nullable<Varchar>,
-        club_id -> Nullable<Uuid>,
         home_base_airport_id -> Nullable<Int4>,
         is_tow_plane -> Nullable<Bool>,
         location_id -> Nullable<Uuid>,
@@ -593,7 +592,6 @@ diesel::table! {
 
 diesel::joinable!(aircraft_other_names -> aircraft_registrations (registration_number));
 diesel::joinable!(aircraft_registrations -> airports (home_base_airport_id));
-diesel::joinable!(aircraft_registrations -> clubs (club_id));
 diesel::joinable!(aircraft_registrations -> devices (device_id));
 diesel::joinable!(aircraft_registrations -> locations (location_id));
 diesel::joinable!(aircraft_registrations -> status_codes (status_code));

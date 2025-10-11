@@ -155,6 +155,7 @@ export class Device {
 	public cn: string; // Competition number
 	public tracked: boolean;
 	public identified: boolean;
+	public club_id?: string | null; // Club assignment
 	public aircraft: AircraftRegistration | null = null; // Lazy-loaded aircraft registration data
 	public aircraftModel: AircraftModel | null = null; // Lazy-loaded aircraft model data
 	public fixes: Fix[] = []; // Array with most recent fix first (index 0)
@@ -169,6 +170,7 @@ export class Device {
 		cn: string;
 		tracked: boolean;
 		identified: boolean;
+		club_id?: string | null;
 		aircraft?: AircraftRegistration | null;
 		aircraftModel?: AircraftModel | null;
 	}) {
@@ -180,6 +182,7 @@ export class Device {
 		this.cn = data.cn;
 		this.tracked = data.tracked;
 		this.identified = data.identified;
+		this.club_id = data.club_id;
 		this.aircraft = data.aircraft || null;
 		this.aircraftModel = data.aircraftModel || null;
 	}
@@ -305,6 +308,7 @@ export class Device {
 		cn: string;
 		tracked: boolean;
 		identified: boolean;
+		club_id?: string | null;
 		aircraft: AircraftRegistration | null;
 		aircraftModel: AircraftModel | null;
 	} {
@@ -317,6 +321,7 @@ export class Device {
 			cn: this.cn,
 			tracked: this.tracked,
 			identified: this.identified,
+			club_id: this.club_id,
 			aircraft: this.aircraft,
 			aircraftModel: this.aircraftModel
 		};
@@ -332,6 +337,7 @@ export class Device {
 		cn: string;
 		tracked: boolean;
 		identified: boolean;
+		club_id?: string | null;
 		aircraft?: AircraftRegistration | null;
 		aircraftModel?: AircraftModel | null;
 	} {
@@ -348,6 +354,7 @@ export class Device {
 			typeof obj.cn === 'string' &&
 			typeof obj.tracked === 'boolean' &&
 			typeof obj.identified === 'boolean' &&
+			(obj.club_id === null || obj.club_id === undefined || typeof obj.club_id === 'string') &&
 			(obj.aircraft === null || obj.aircraft === undefined || typeof obj.aircraft === 'object') &&
 			(obj.aircraftModel === null ||
 				obj.aircraftModel === undefined ||
@@ -365,6 +372,7 @@ export class Device {
 		cn: string;
 		tracked: boolean;
 		identified: boolean;
+		club_id?: string | null;
 		aircraft?: AircraftRegistration | null;
 		aircraftModel?: AircraftModel | null;
 	}): Device {
@@ -377,6 +385,7 @@ export class Device {
 			cn: data.cn,
 			tracked: data.tracked,
 			identified: data.identified,
+			club_id: data.club_id,
 			aircraft: data.aircraft || null,
 			aircraftModel: data.aircraftModel || null
 		});

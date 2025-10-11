@@ -10,6 +10,7 @@ use uuid::Uuid;
 
 use crate::actions::json_error;
 use crate::actions::views::{DeviceView, FlightView};
+use crate::auth::AdminUser;
 use crate::device_repo::DeviceRepository;
 use crate::devices::AddressType;
 use crate::fixes::Fix;
@@ -574,6 +575,44 @@ pub async fn get_device_flights(
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to get flights for device",
+            )
+            .into_response()
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateDeviceClubRequest {
+    pub club_id: Option<Uuid>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct UpdateDeviceClubResponse {
+    pub success: bool,
+    pub message: String,
+}
+
+/// Update the club assignment for a device (admin only)
+pub async fn update_device_club(
+    AdminUser(_user): AdminUser,
+    Path(id): Path<Uuid>,
+    State(state): State<AppState>,
+    Json(payload): Json<UpdateDeviceClubRequest>,
+) -> impl IntoResponse {
+    let device_repo = DeviceRepository::new(state.pool);
+
+    match device_repo.update_club_id(id, payload.club_id).await {
+        Ok(true) => Json(UpdateDeviceClubResponse {
+            success: true,
+            message: "Device club assignment updated successfully".to_string(),
+        })
+        .into_response(),
+        Ok(false) => json_error(StatusCode::NOT_FOUND, "Device not found").into_response(),
+        Err(e) => {
+            tracing::error!("Failed to update device club assignment: {}", e);
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to update device club assignment",
             )
             .into_response()
         }

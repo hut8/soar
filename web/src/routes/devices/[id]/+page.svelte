@@ -11,18 +11,23 @@
 		Calendar,
 		Info,
 		Activity,
-		Settings
+		Settings,
+		Building2,
+		Save
 	} from '@lucide/svelte';
 	import { ProgressRing } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall } from '$lib/api/server';
+	import { auth } from '$lib/stores/auth';
 	import {
 		Device,
 		type AircraftRegistration,
 		type AircraftModel,
 		type Fix,
-		type Flight
+		type Flight,
+		type Club
 	} from '$lib/types';
 	import { formatTitleCase, formatDeviceAddress, getStatusCodeDescription } from '$lib/formatters';
+	import { toaster } from '$lib/toaster';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
 
@@ -60,8 +65,13 @@
 	let fixesTotalPages = 1;
 	let flightsTotalPages = 1;
 	let hideInactiveFixes = false;
+	let clubs: Club[] = [];
+	let selectedClubId: string = '';
+	let savingClub = false;
 
 	$: deviceId = $page.params.id || '';
+	$: isAdmin = $auth.user?.access_level === 'admin';
+	$: userClubId = $auth.user?.club_id;
 
 	function handleFilterChange() {
 		loadFixes(1);
@@ -72,6 +82,9 @@
 			await loadDevice();
 			await loadFixes();
 			await loadFlights();
+			if (isAdmin) {
+				await loadClubs();
+			}
 		}
 	});
 
@@ -90,10 +103,16 @@
 				cn: string;
 				tracked: boolean;
 				identified: boolean;
+				club_id?: string | null;
 				aircraft?: AircraftRegistration | null;
 				aircraftModel?: AircraftModel | null;
 			}>(`/devices/${deviceId}`);
 			device = Device.fromJSON(deviceData);
+
+			// Initialize selected club ID if device has one
+			if (device.club_id) {
+				selectedClubId = device.club_id;
+			}
 
 			// Load aircraft registration and model data in parallel
 			const [registration, model] = await Promise.all([
@@ -190,6 +209,44 @@
 
 	function goBack() {
 		goto(resolve('/devices'));
+	}
+
+	async function loadClubs() {
+		try {
+			const response = await serverCall<{ clubs: Club[] }>('/clubs');
+			clubs = response.clubs || [];
+		} catch (err) {
+			console.error('Failed to load clubs:', err);
+		}
+	}
+
+	async function assignToMyClub() {
+		if (!userClubId) return;
+		selectedClubId = userClubId;
+		await updateDeviceClub();
+	}
+
+	async function updateDeviceClub() {
+		if (!deviceId || savingClub) return;
+
+		savingClub = true;
+		try {
+			await serverCall(`/devices/${deviceId}/club`, {
+				method: 'PUT',
+				body: JSON.stringify({ club_id: selectedClubId || null })
+			});
+
+			toaster.success({ title: 'Device club assignment updated successfully' });
+
+			// Reload device to get updated data
+			await loadDevice();
+		} catch (err) {
+			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+			toaster.error({ title: `Failed to update club assignment: ${errorMessage}` });
+			console.error('Error updating device club:', err);
+		} finally {
+			savingClub = false;
+		}
 	}
 </script>
 
@@ -305,6 +362,62 @@
 						{/if}
 					</div>
 				</div>
+
+				<!-- Club Assignment (Admin Only) -->
+				{#if isAdmin}
+					<div class="space-y-4 card p-6">
+						<h2 class="flex items-center gap-2 h2">
+							<Building2 class="h-6 w-6" />
+							Club Assignment
+						</h2>
+
+						<div class="space-y-4">
+							<div>
+								<label for="club-select" class="text-surface-600-300-token mb-2 block text-sm">
+									Assign Device to Club
+								</label>
+								<select
+									id="club-select"
+									class="select"
+									bind:value={selectedClubId}
+									disabled={savingClub}
+								>
+									<option value="">No club assigned</option>
+									{#each clubs as club (club.id)}
+										<option value={club.id}>{club.name}</option>
+									{/each}
+								</select>
+							</div>
+
+							<div class="flex gap-2">
+								<button
+									class="btn preset-filled-primary-500"
+									onclick={updateDeviceClub}
+									disabled={savingClub}
+								>
+									{#if savingClub}
+										<ProgressRing size="w-4 h-4" />
+										<span>Saving...</span>
+									{:else}
+										<Save class="h-4 w-4" />
+										<span>Save Assignment</span>
+									{/if}
+								</button>
+
+								{#if userClubId}
+									<button
+										class="btn preset-filled-secondary-500"
+										onclick={assignToMyClub}
+										disabled={savingClub}
+									>
+										<Building2 class="h-4 w-4" />
+										<span>Assign to My Club</span>
+									</button>
+								{/if}
+							</div>
+						</div>
+					</div>
+				{/if}
 
 				<!-- Aircraft Registration -->
 				<div class="space-y-4 card p-6">

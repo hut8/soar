@@ -6,10 +6,8 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use crate::aircraft_registrations::{Aircraft, AircraftRegistrationModel, NewAircraftRegistration};
-use crate::clubs_repo::{ClubsRepository, LocationParams};
-use crate::faa::aircraft_model_repo::AircraftModelRecord;
 use crate::locations_repo::LocationsRepository;
-use crate::schema::{aircraft_models, aircraft_other_names, aircraft_registrations};
+use crate::schema::{aircraft_other_names, aircraft_registrations};
 
 pub type DieselPgPool = Pool<ConnectionManager<PgConnection>>;
 pub type DieselPgPooledConnection = PooledConnection<ConnectionManager<PgConnection>>;
@@ -17,17 +15,14 @@ pub type DieselPgPooledConnection = PooledConnection<ConnectionManager<PgConnect
 #[derive(Clone)]
 pub struct AircraftRegistrationsRepository {
     pool: DieselPgPool,
-    clubs_repo: ClubsRepository,
     locations_repo: LocationsRepository,
 }
 
 impl AircraftRegistrationsRepository {
     pub fn new(pool: DieselPgPool) -> Self {
-        let clubs_repo = ClubsRepository::new(pool.clone());
         let locations_repo = LocationsRepository::new(pool.clone());
         Self {
             pool,
-            clubs_repo,
             locations_repo,
         }
     }
@@ -78,48 +73,12 @@ impl AircraftRegistrationsRepository {
                 }
             };
 
-            // Check if this aircraft has a club name
-            let club_id = if let Some(club_name) = aircraft_reg.club_name() {
-                info!(
-                    "Processing aircraft {} with club name: {}",
-                    aircraft_reg.n_number, club_name
-                );
+            // TODO: Club detection from FAA data is temporarily disabled since club_id
+            // moved from aircraft_registrations to devices table. This logic needs to be
+            // refactored to work with the new schema where clubs are associated with devices.
 
-                // Find or create the club with generalized location data (no street address)
-                let location_params = LocationParams {
-                    street1: None, // Exclude street address for generalized location
-                    street2: None, // Exclude street address for generalized location
-                    city: aircraft_reg.city.clone(),
-                    state: aircraft_reg.state.clone(),
-                    zip_code: aircraft_reg.zip_code.clone(),
-                    region_code: aircraft_reg.region_code.clone(),
-                    county_mail_code: aircraft_reg.county_mail_code.clone(),
-                    country_mail_code: aircraft_reg.country_mail_code.clone(),
-                };
-                match self
-                    .clubs_repo
-                    .find_or_create_club(&club_name, location_params)
-                    .await
-                {
-                    Ok(club) => {
-                        info!("Found/created club '{}' with ID: {}", club.name, club.id);
-                        Some(club.id)
-                    }
-                    Err(e) => {
-                        error!(
-                            "Failed to find/create club '{}' for aircraft {}: {}",
-                            club_name, aircraft_reg.n_number, e
-                        );
-                        None
-                    }
-                }
-            } else {
-                None
-            };
-
-            // Create NewAircraftRegistration with club_id and location_id
+            // Create NewAircraftRegistration with location_id
             let mut new_aircraft_reg: NewAircraftRegistration = aircraft_reg.clone().into();
-            new_aircraft_reg.club_id = club_id;
             new_aircraft_reg.location_id = Some(location.id);
             let result = diesel::insert_into(aircraft_registrations::table)
                 .values(&new_aircraft_reg)
@@ -266,7 +225,6 @@ impl AircraftRegistrationsRepository {
                         .eq(excluded(aircraft_registrations::kit_model_name)),
                     aircraft_registrations::device_id
                         .eq(excluded(aircraft_registrations::device_id)),
-                    aircraft_registrations::club_id.eq(excluded(aircraft_registrations::club_id)),
                 ))
                 .execute(&mut conn);
 
@@ -415,79 +373,15 @@ impl AircraftRegistrationsRepository {
         Ok(aircraft_list)
     }
 
-    /// Get aircraft registrations by club ID
-    pub async fn get_by_club_id(&self, club_id: Uuid) -> Result<Vec<Aircraft>> {
-        let mut conn = self.get_connection()?;
-        let aircraft_models = aircraft_registrations::table
-            .filter(aircraft_registrations::club_id.eq(club_id))
-            .select(AircraftRegistrationModel::as_select())
-            .load::<AircraftRegistrationModel>(&mut conn)?;
-
-        let mut aircraft_list = Vec::new();
-        for model in aircraft_models {
-            let aircraft = self.model_to_aircraft(model).await?;
-            aircraft_list.push(aircraft);
-        }
-
-        Ok(aircraft_list)
-    }
-
-    /// Get aircraft models (make/model/series) for a specific club
-    pub async fn get_aircraft_models_by_club_id(
-        &self,
-        club_id: Uuid,
-    ) -> Result<Vec<AircraftModelRecord>> {
-        let mut conn = self.get_connection()?;
-
-        let models = aircraft_registrations::table
-            .inner_join(
-                aircraft_models::table.on(aircraft_registrations::manufacturer_code
-                    .eq(aircraft_models::manufacturer_code)
-                    .and(aircraft_registrations::model_code.eq(aircraft_models::model_code))
-                    .and(aircraft_registrations::series_code.eq(aircraft_models::series_code))),
-            )
-            .filter(aircraft_registrations::club_id.eq(club_id))
-            .select(AircraftModelRecord::as_select())
-            .distinct()
-            .load::<AircraftModelRecord>(&mut conn)?;
-
-        Ok(models)
-    }
-
-    /// Get aircraft with their models for a specific club
-    pub async fn get_aircraft_with_models_by_club_id(
-        &self,
-        club_id: Uuid,
-    ) -> Result<Vec<(Aircraft, Option<AircraftModelRecord>)>> {
-        let mut conn = self.get_connection()?;
-
-        // Get aircraft for the club
-        let aircraft_list = aircraft_registrations::table
-            .filter(aircraft_registrations::club_id.eq(club_id))
-            .select(AircraftRegistrationModel::as_select())
-            .load::<AircraftRegistrationModel>(&mut conn)?;
-
-        let mut result = Vec::new();
-
-        // For each aircraft, try to find its model
-        for aircraft_model in aircraft_list {
-            let model = aircraft_models::table
-                .filter(
-                    aircraft_models::manufacturer_code
-                        .eq(&aircraft_model.manufacturer_code)
-                        .and(aircraft_models::model_code.eq(&aircraft_model.model_code))
-                        .and(aircraft_models::series_code.eq(&aircraft_model.series_code)),
-                )
-                .select(AircraftModelRecord::as_select())
-                .first::<AircraftModelRecord>(&mut conn)
-                .optional()?;
-
-            let aircraft = self.model_to_aircraft(aircraft_model).await?;
-            result.push((aircraft, model));
-        }
-
-        Ok(result)
-    }
+    // TODO: The following methods were removed because club_id moved from aircraft_registrations
+    // to devices table. To query aircraft by club, you should now:
+    // 1. Query devices table for devices with the given club_id
+    // 2. Join with aircraft_registrations on device_id
+    //
+    // Removed methods:
+    // - get_by_club_id
+    // - get_aircraft_models_by_club_id
+    // - get_aircraft_with_models_by_club_id
 
     /// Update is_tow_plane field for an aircraft based on device_id
     /// Only updates if the current value is different to avoid updating the updated_at column unnecessarily

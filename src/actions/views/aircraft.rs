@@ -95,6 +95,7 @@ pub struct DeviceView {
     pub competition_number: String,
     pub tracked: bool,
     pub identified: bool,
+    pub club_id: Option<Uuid>,
 }
 
 impl DeviceView {
@@ -132,6 +133,7 @@ impl DeviceView {
             competition_number: device.competition_number,
             tracked: device.tracked,
             identified: device.identified,
+            club_id: device.club_id,
         }
     }
 }

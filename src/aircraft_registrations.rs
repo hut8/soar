@@ -517,7 +517,6 @@ pub struct AircraftRegistrationModel {
     pub unique_id: Option<String>,
     pub kit_mfr_name: Option<String>,
     pub kit_model_name: Option<String>,
-    pub club_id: Option<Uuid>,
     pub device_id: Option<Uuid>,
     pub light_sport_type: Option<LightSportType>,
 }
@@ -581,7 +580,6 @@ pub struct NewAircraftRegistration {
     pub unique_id: Option<String>,
     pub kit_mfr_name: Option<String>,
     pub kit_model_name: Option<String>,
-    pub club_id: Option<Uuid>,
     pub device_id: Option<Uuid>,
     pub light_sport_type: Option<LightSportType>,
 }
@@ -1289,7 +1287,6 @@ impl From<Aircraft> for NewAircraftRegistration {
             unique_id: aircraft.unique_id,
             kit_mfr_name: aircraft.kit_mfr_name,
             kit_model_name: aircraft.kit_model_name,
-            club_id: None, // Will be set by repository logic
             device_id: aircraft.device_id,
             light_sport_type: aircraft.light_sport_type,
         }

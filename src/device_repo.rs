@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::devices::{AddressType, Device, DeviceModel, NewDevice};
 use crate::ogn_aprs_aircraft::AircraftType;
-use crate::schema::{aircraft_registrations, devices};
+use crate::schema::devices;
 use chrono::{DateTime, Utc};
 
 pub type PgPool = Pool<ConnectionManager<PgConnection>>;
@@ -127,13 +127,8 @@ impl DeviceRepository {
         let mut conn = self.get_connection()?;
 
         let device_models = devices::table
-            .inner_join(
-                aircraft_registrations::table
-                    .on(aircraft_registrations::registration_number.eq(devices::registration)),
-            )
-            .filter(aircraft_registrations::club_id.eq(club_id))
+            .filter(devices::club_id.eq(club_id))
             .order_by(devices::registration)
-            .select(DeviceModel::as_select())
             .load::<DeviceModel>(&mut conn)?;
 
         Ok(device_models
@@ -224,6 +219,26 @@ impl DeviceRepository {
         .await??;
 
         Ok(())
+    }
+
+    /// Update the club assignment for a device
+    pub async fn update_club_id(&self, device_id: Uuid, club_id: Option<Uuid>) -> Result<bool> {
+        let mut conn = self.get_connection()?;
+
+        let rows_updated = diesel::update(devices::table.filter(devices::id.eq(device_id)))
+            .set(devices::club_id.eq(club_id))
+            .execute(&mut conn)?;
+
+        if rows_updated > 0 {
+            info!(
+                "Updated device {} club assignment to {:?}",
+                device_id, club_id
+            );
+            Ok(true)
+        } else {
+            warn!("No device found with ID {}", device_id);
+            Ok(false)
+        }
     }
 }
 
