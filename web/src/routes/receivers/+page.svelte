@@ -37,35 +37,20 @@
 	let searchQuery = $state('');
 
 	// Location search
-	let locationInput = $state<HTMLInputElement>();
+	let autocompleteElement = $state<google.maps.places.PlaceAutocompleteElement | null>(null);
 	let selectedLatitude = $state<number | null>(null);
 	let selectedLongitude = $state<number | null>(null);
 	let radiusMiles = $state(100);
-	let autocomplete = $state<google.maps.places.Autocomplete | null>(null);
 	let gettingLocation = $state(false);
 
-	// Initialize Google Places Autocomplete
-	async function initAutocomplete() {
-		// Wait for Google Maps to load
-		if (typeof google === 'undefined' || !google.maps || !google.maps.places) {
-			console.warn('Google Maps not loaded yet, retrying...');
-			setTimeout(initAutocomplete, 100);
-			return;
-		}
+	// Handle place selection from autocomplete
+	function handlePlaceSelect(event: Event) {
+		const placeEvent = event as CustomEvent;
+		const place = placeEvent.detail.place;
 
-		if (locationInput && !autocomplete) {
-			autocomplete = new google.maps.places.Autocomplete(locationInput, {
-				types: ['(cities)'],
-				fields: ['geometry', 'name', 'formatted_address']
-			});
-
-			autocomplete.addListener('place_changed', () => {
-				const place = autocomplete?.getPlace();
-				if (place?.geometry?.location) {
-					selectedLatitude = place.geometry.location.lat();
-					selectedLongitude = place.geometry.location.lng();
-				}
-			});
+		if (place?.location) {
+			selectedLatitude = place.location.lat();
+			selectedLongitude = place.location.lng();
 		}
 	}
 
@@ -138,11 +123,6 @@
 			selectedLatitude = position.coords.latitude;
 			selectedLongitude = position.coords.longitude;
 
-			// Update the input field to show "My Location"
-			if (locationInput) {
-				locationInput.value = 'My Location';
-			}
-
 			// Automatically search with the user's location
 			await searchReceivers();
 		} catch (err) {
@@ -211,12 +191,6 @@
 		loadGoogleMapsScript();
 		// Load recently updated receivers
 		loadRecentReceivers();
-	});
-
-	$effect(() => {
-		if (searchMode === 'location' && locationInput) {
-			initAutocomplete();
-		}
 	});
 </script>
 
@@ -291,12 +265,12 @@
 			<!-- Location Search -->
 			<div class="space-y-3 rounded-lg border p-3">
 				<div class="flex gap-2">
-					<input
-						bind:this={locationInput}
-						class="input flex-1"
+					<gmp-place-autocomplete
+						bind:this={autocompleteElement}
+						class="flex-1"
 						placeholder="Enter a city or location"
-						oninput={() => (error = '')}
-					/>
+						ongmp-placeselect={handlePlaceSelect}
+					></gmp-place-autocomplete>
 					<button
 						class="preset-tonal-primary-500 btn"
 						onclick={useMyLocation}
