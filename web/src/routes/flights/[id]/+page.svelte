@@ -48,6 +48,22 @@
 	// Display options
 	let showRawData = $state(false);
 	let useRelativeTimes = $state(false);
+	let includeNearbyFlights = $state(false);
+
+	// Nearby flights data - type includes aircraft_model and registration from device
+	interface NearbyFlight {
+		id: string;
+		device_address: string;
+		takeoff_time?: string;
+		landing_time?: string;
+		departure_airport?: string;
+		arrival_airport?: string;
+		aircraft_model?: string;
+		registration?: string;
+	}
+	let nearbyFlights = $state<NearbyFlight[]>([]);
+	let nearbyFlightPaths = $state<google.maps.Polyline[]>([]);
+	let isLoadingNearbyFlights = $state(false);
 
 	// Reverse fixes to show chronologically (earliest first, landing last)
 	const reversedFixes = $derived([...data.fixes].reverse());
@@ -144,6 +160,77 @@
 	function isFlightInProgress(): boolean {
 		return data.flight.state === 'active';
 	}
+
+	// Fetch nearby flights and their fixes
+	async function fetchNearbyFlights() {
+		if (!includeNearbyFlights) {
+			// Clear nearby flights from map
+			nearbyFlightPaths.forEach((path) => path.setMap(null));
+			nearbyFlightPaths = [];
+			nearbyFlights = [];
+			return;
+		}
+
+		isLoadingNearbyFlights = true;
+		try {
+			// Fetch nearby flights
+			const flights = await serverCall<NearbyFlight[]>(`/flights/${data.flight.id}/nearby`);
+			nearbyFlights = flights;
+
+			// Fetch fixes for each nearby flight and add to map
+			if (map) {
+				// Clear existing nearby flight paths
+				nearbyFlightPaths.forEach((path) => path.setMap(null));
+				nearbyFlightPaths = [];
+
+				// Color palette for nearby flights (excluding red which is used for main flight)
+				const colors = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'];
+
+				for (let i = 0; i < nearbyFlights.length; i++) {
+					const nearbyFlight = nearbyFlights[i];
+					try {
+						const fixesResponse = await serverCall<{
+							fixes: typeof data.fixes;
+							count: number;
+						}>(`/flights/${nearbyFlight.id}/fixes`);
+
+						if (fixesResponse.fixes.length > 0) {
+							// Draw flight path for this nearby flight
+							const fixesInOrder = [...fixesResponse.fixes].reverse();
+							const pathCoordinates = fixesInOrder.map((fix) => ({
+								lat: fix.latitude,
+								lng: fix.longitude
+							}));
+
+							const flightPath = new google.maps.Polyline({
+								path: pathCoordinates,
+								geodesic: true,
+								strokeColor: colors[i % colors.length],
+								strokeOpacity: 0.6,
+								strokeWeight: 2
+							});
+
+							flightPath.setMap(map);
+							nearbyFlightPaths.push(flightPath);
+						}
+					} catch (err) {
+						console.error(`Failed to fetch fixes for nearby flight ${nearbyFlight.id}:`, err);
+					}
+				}
+			}
+		} catch (err) {
+			console.error('Failed to fetch nearby flights:', err);
+		} finally {
+			isLoadingNearbyFlights = false;
+		}
+	}
+
+	// Watch for changes to includeNearbyFlights
+	$effect(() => {
+		if (includeNearbyFlights !== undefined) {
+			fetchNearbyFlights();
+		}
+	});
 
 	// Poll for updates to in-progress flights
 	async function pollForUpdates() {
@@ -836,7 +923,16 @@
 	<!-- Map -->
 	{#if data.fixes.length > 0}
 		<div class="card p-4">
-			<h2 class="mb-3 h3">Flight Track</h2>
+			<div class="mb-3 flex items-center justify-between">
+				<h2 class="h3">Flight Track</h2>
+				<label class="flex cursor-pointer items-center gap-2">
+					<input type="checkbox" class="checkbox" bind:checked={includeNearbyFlights} />
+					<span class="text-sm">Include Nearby Flights</span>
+					{#if isLoadingNearbyFlights}
+						<span class="text-surface-600-300-token text-xs">(Loading...)</span>
+					{/if}
+				</label>
+			</div>
 			<div bind:this={mapContainer} class="h-96 w-full rounded-lg"></div>
 		</div>
 
@@ -987,4 +1083,56 @@
 			{/if}
 		{/if}
 	</div>
+
+	<!-- Nearby Flights List -->
+	{#if includeNearbyFlights && nearbyFlights.length > 0}
+		<div class="card p-6">
+			<h2 class="mb-4 h2">Nearby Flights ({nearbyFlights.length})</h2>
+			<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+				{#each nearbyFlights as flight, index (flight.id)}
+					{@const colorIndex = index % 6}
+					{@const colors = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4']}
+					{@const colorNames = ['Blue', 'Green', 'Orange', 'Purple', 'Pink', 'Cyan']}
+					<a href="/flights/{flight.id}" class="card p-4 hover:ring-2 hover:ring-primary-500">
+						<div class="mb-3 flex items-center justify-between">
+							<div class="flex items-center gap-2">
+								<div
+									class="h-3 w-8 rounded"
+									style="background-color: {colors[colorIndex]}; opacity: 0.6;"
+								></div>
+								<span class="text-surface-600-300-token text-xs">{colorNames[colorIndex]}</span>
+							</div>
+							{#if flight.aircraft_model}
+								<span class="text-surface-600-300-token text-xs">{flight.aircraft_model}</span>
+							{/if}
+						</div>
+						<div class="space-y-2">
+							{#if flight.registration}
+								<div>
+									<div class="text-surface-600-300-token text-xs">Registration</div>
+									<div class="font-mono text-sm font-semibold">{flight.registration}</div>
+								</div>
+							{/if}
+							<div>
+								<div class="text-surface-600-300-token text-xs">Takeoff</div>
+								<div class="text-sm">{formatDateTimeMobile(flight.takeoff_time)}</div>
+								{#if flight.departure_airport}
+									<div class="text-surface-600-300-token text-xs">{flight.departure_airport}</div>
+								{/if}
+							</div>
+							{#if flight.landing_time}
+								<div>
+									<div class="text-surface-600-300-token text-xs">Landing</div>
+									<div class="text-sm">{formatDateTimeMobile(flight.landing_time)}</div>
+									{#if flight.arrival_airport}
+										<div class="text-surface-600-300-token text-xs">{flight.arrival_airport}</div>
+									{/if}
+								</div>
+							{/if}
+						</div>
+					</a>
+				{/each}
+			</div>
+		</div>
+	{/if}
 </div>
