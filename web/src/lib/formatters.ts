@@ -128,3 +128,31 @@ export function getAircraftTypeOgnDescription(aircraftType: string | undefined |
 
 	return typeMap[aircraftType] || aircraftType;
 }
+
+/**
+ * Get color class for OGN aircraft type badges
+ * Returns a Skeleton UI preset color class for consistent color-coding
+ */
+export function getAircraftTypeColor(aircraftType: string | undefined | null): string {
+	if (!aircraftType) return 'preset-filled-surface-500';
+
+	const colorMap: Record<string, string> = {
+		glider: 'preset-filled-primary-500', // Blue for gliders
+		tow_tug: 'preset-filled-error-500', // Red for tow tugs
+		helicopter_gyro: 'preset-filled-secondary-500', // Purple for helicopters
+		skydiver_parachute: 'preset-filled-success-500', // Green for skydivers
+		drop_plane: 'preset-filled-warning-500', // Orange for drop planes
+		hang_glider: 'preset-filled-tertiary-500', // Cyan for hang gliders
+		paraglider: 'preset-filled-tertiary-500', // Cyan for paragliders
+		recip_engine: 'preset-filled-warning-500', // Orange for reciprocating engines
+		jet_turboprop: 'preset-filled-error-500', // Red for jets/turboprops
+		balloon: 'preset-filled-secondary-500', // Purple for balloons
+		airship: 'preset-filled-secondary-500', // Purple for airships
+		uav: 'preset-filled-surface-500', // Gray for UAVs
+		static_obstacle: 'preset-filled-surface-500', // Gray for obstacles
+		unknown: 'preset-filled-surface-500', // Gray for unknown
+		reserved: 'preset-filled-surface-500' // Gray for reserved
+	};
+
+	return colorMap[aircraftType] || 'preset-filled-surface-500';
+}

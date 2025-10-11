@@ -4,7 +4,7 @@
 	import { onMount } from 'svelte';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
-	import { getAircraftTypeOgnDescription } from '$lib/formatters';
+	import { getAircraftTypeOgnDescription, getAircraftTypeColor } from '$lib/formatters';
 
 	dayjs.extend(relativeTime);
 
@@ -168,15 +168,22 @@
 														class="anchor font-medium text-primary-500 hover:text-primary-600"
 													>
 														{flight.aircraft_model}
+														<span class="text-surface-500-400-token text-sm font-normal"
+															>({flight.registration})</span
+														>
 													</a>
 												{:else}
-													<span class="font-medium">{flight.aircraft_model}</span>
+													<span class="font-medium"
+														>{flight.aircraft_model}
+														<span class="text-surface-500-400-token text-sm font-normal"
+															>({flight.registration})</span
+														></span
+													>
 												{/if}
-												<span class="text-surface-500-400-token text-sm"
-													>({flight.registration})</span
-												>
 												{#if flight.aircraft_type_ogn}
-													<span class="badge preset-filled-surface-500 text-xs">
+													<span
+														class="badge {getAircraftTypeColor(flight.aircraft_type_ogn)} text-xs"
+													>
 														{getAircraftTypeOgnDescription(flight.aircraft_type_ogn)}
 													</span>
 												{/if}
@@ -203,7 +210,9 @@
 													<span class="font-medium">{flight.registration}</span>
 												{/if}
 												{#if flight.aircraft_type_ogn}
-													<span class="badge preset-filled-surface-500 text-xs">
+													<span
+														class="badge {getAircraftTypeColor(flight.aircraft_type_ogn)} text-xs"
+													>
 														{getAircraftTypeOgnDescription(flight.aircraft_type_ogn)}
 													</span>
 												{/if}
@@ -223,7 +232,9 @@
 													{formatDeviceAddress(flight.device_address, flight.device_address_type)}
 												</span>
 												{#if flight.aircraft_type_ogn}
-													<span class="badge preset-filled-surface-500 text-xs">
+													<span
+														class="badge {getAircraftTypeColor(flight.aircraft_type_ogn)} text-xs"
+													>
 														{getAircraftTypeOgnDescription(flight.aircraft_type_ogn)}
 													</span>
 												{/if}
@@ -339,11 +350,18 @@
 												class="anchor font-medium text-primary-500"
 											>
 												{flight.aircraft_model}
+												<span class="text-surface-500-400-token text-sm font-normal"
+													>({flight.registration})</span
+												>
 											</a>
 										{:else}
-											<span class="font-medium">{flight.aircraft_model}</span>
+											<span class="font-medium"
+												>{flight.aircraft_model}
+												<span class="text-surface-500-400-token text-sm font-normal"
+													>({flight.registration})</span
+												></span
+											>
 										{/if}
-										<span class="text-surface-500-400-token text-sm">({flight.registration})</span>
 									</div>
 								{:else if flight.registration}
 									<div class="flex items-center gap-2">
@@ -364,7 +382,7 @@
 									</span>
 								{/if}
 								{#if flight.aircraft_type_ogn}
-									<span class="badge preset-filled-surface-500 text-xs">
+									<span class="badge {getAircraftTypeColor(flight.aircraft_type_ogn)} text-xs">
 										{getAircraftTypeOgnDescription(flight.aircraft_type_ogn)}
 									</span>
 								{/if}
