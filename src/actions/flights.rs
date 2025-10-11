@@ -15,6 +15,7 @@ use crate::fixes::Fix;
 use crate::fixes_repo::FixesRepository;
 use crate::flights::Flight;
 use crate::flights_repo::FlightsRepository;
+use crate::locations_repo::LocationsRepository;
 use crate::web::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -44,6 +45,7 @@ pub async fn get_flight_by_id(
     let flights_repo = FlightsRepository::new(state.pool.clone());
     let airports_repo = AirportsRepository::new(state.pool.clone());
     let device_repo = DeviceRepository::new(state.pool.clone());
+    let locations_repo = LocationsRepository::new(state.pool.clone());
 
     match flights_repo.get_flight_by_id(id).await {
         Ok(Some(flight)) => {
@@ -93,8 +95,27 @@ pub async fn get_flight_by_id(
                 (None, None)
             };
 
-            let flight_view =
-                FlightView::from_flight(flight, departure_airport, arrival_airport, device_info);
+            // Look up location information
+            let takeoff_location = if let Some(location_id) = flight.takeoff_location_id {
+                locations_repo.get_by_id(location_id).await.ok().flatten()
+            } else {
+                None
+            };
+
+            let landing_location = if let Some(location_id) = flight.landing_location_id {
+                locations_repo.get_by_id(location_id).await.ok().flatten()
+            } else {
+                None
+            };
+
+            let flight_view = FlightView::from_flight(
+                flight,
+                departure_airport,
+                arrival_airport,
+                device_info,
+                takeoff_location,
+                landing_location,
+            );
             Json(FlightResponse {
                 flight: flight_view,
                 device,
@@ -230,6 +251,8 @@ pub async fn search_flights(
 
     if completed {
         // Get completed flights with device info
+        let locations_repo = LocationsRepository::new(state.pool.clone());
+
         match flights_repo.get_completed_flights(limit).await {
             Ok(flights) => {
                 let mut flight_views = Vec::new();
@@ -249,7 +272,27 @@ pub async fn search_flights(
                         None
                     };
 
-                    let flight_view = FlightView::from_flight(flight, None, None, device_info);
+                    // Look up location information
+                    let takeoff_location = if let Some(location_id) = flight.takeoff_location_id {
+                        locations_repo.get_by_id(location_id).await.ok().flatten()
+                    } else {
+                        None
+                    };
+
+                    let landing_location = if let Some(location_id) = flight.landing_location_id {
+                        locations_repo.get_by_id(location_id).await.ok().flatten()
+                    } else {
+                        None
+                    };
+
+                    let flight_view = FlightView::from_flight(
+                        flight,
+                        None,
+                        None,
+                        device_info,
+                        takeoff_location,
+                        landing_location,
+                    );
                     flight_views.push(flight_view);
                 }
 
@@ -311,7 +354,8 @@ pub async fn get_airport_flights(
 ) -> impl IntoResponse {
     let flights_repo = FlightsRepository::new(state.pool.clone());
     let airports_repo = AirportsRepository::new(state.pool.clone());
-    let device_repo = DeviceRepository::new(state.pool);
+    let device_repo = DeviceRepository::new(state.pool.clone());
+    let locations_repo = LocationsRepository::new(state.pool);
 
     // Calculate 24 hours ago
     let since = chrono::Utc::now() - chrono::Duration::hours(24);
@@ -366,11 +410,26 @@ pub async fn get_airport_flights(
                     (None, None)
                 };
 
+                // Look up location information
+                let takeoff_location = if let Some(location_id) = flight.takeoff_location_id {
+                    locations_repo.get_by_id(location_id).await.ok().flatten()
+                } else {
+                    None
+                };
+
+                let landing_location = if let Some(location_id) = flight.landing_location_id {
+                    locations_repo.get_by_id(location_id).await.ok().flatten()
+                } else {
+                    None
+                };
+
                 let flight_view = FlightView::from_flight(
                     flight,
                     departure_airport,
                     arrival_airport,
                     device_info,
+                    takeoff_location,
+                    landing_location,
                 );
                 flight_responses.push(FlightResponse {
                     flight: flight_view,
