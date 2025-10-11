@@ -2,14 +2,13 @@
 	import { Search, MapPin, Radio, Navigation } from '@lucide/svelte';
 	import { resolve } from '$app/paths';
 	import { serverCall } from '$lib/api/server';
+	import { GOOGLE_MAPS_API_KEY } from '$lib/config';
 	import { Loader } from '@googlemaps/js-api-loader';
 	import { onMount } from 'svelte';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
 
 	dayjs.extend(relativeTime);
-
-	const GOOGLE_MAPS_API_KEY = 'AIzaSyBaK8UU0l4z-k6b-UPlLzw3wv_Ti71XNy8';
 
 	interface Receiver {
 		id: string;

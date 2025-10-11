@@ -22,12 +22,11 @@
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
 	import { getAircraftTypeOgnDescription } from '$lib/formatters';
+	import { GOOGLE_MAPS_API_KEY } from '$lib/config';
 
 	dayjs.extend(relativeTime);
 
 	let { data }: { data: PageData } = $props();
-
-	const GOOGLE_MAPS_API_KEY = 'AIzaSyBaK8UU0l4z-k6b-UPlLzw3wv_Ti71XNy8';
 
 	let mapContainer = $state<HTMLElement>();
 	let map = $state<google.maps.Map>();

@@ -19,6 +19,7 @@
 	import relativeTime from 'dayjs/plugin/relativeTime';
 	import type { Fix } from '$lib/types';
 	import type { DeviceRegistryEvent } from '$lib/services/DeviceRegistry';
+	import { GOOGLE_MAPS_API_KEY } from '$lib/config';
 
 	// Extend dayjs with relative time plugin
 	dayjs.extend(relativeTime);
@@ -66,8 +67,6 @@
 		keywords: string | null;
 		runways: RunwayView[];
 	}
-	// Placeholder for Google Maps API key - to be added later
-	const GOOGLE_MAPS_API_KEY = 'AIzaSyBaK8UU0l4z-k6b-UPlLzw3wv_Ti71XNy8';
 
 	let mapContainer: HTMLElement;
 	let map: google.maps.Map;
