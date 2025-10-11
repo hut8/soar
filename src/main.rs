@@ -471,7 +471,9 @@ async fn handle_run(
         ReceiverStatusProcessor::new(receiver_status_repo, receiver_repo.clone());
 
     // Create receiver position processor for receiver position messages
-    let receiver_position_processor = ReceiverPositionProcessor::new(receiver_repo.clone());
+    let locations_repo = soar::locations_repo::LocationsRepository::new(diesel_pool.clone());
+    let receiver_position_processor =
+        ReceiverPositionProcessor::new(receiver_repo.clone(), locations_repo);
 
     // Create aircraft position processor
     // Note: FlightDetectionProcessor is now handled inside FixProcessor
