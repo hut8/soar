@@ -24,6 +24,15 @@ fi
 
 echo -e "${GREEN}Provisioning SOAR server...${NC}"
 
+# Create soar user if it doesn't exist
+if ! id "soar" &>/dev/null; then
+    echo -e "${BLUE}Creating 'soar' system user...${NC}"
+    sudo useradd --system --user-group --create-home --home-dir /home/soar --shell /bin/bash soar
+    echo -e "${GREEN}'soar' user created successfully${NC}"
+else
+    echo -e "${BLUE}'soar' user already exists${NC}"
+fi
+
 # Install sudoers configuration for deployment
 echo -e "${BLUE}Installing deployment sudoers configuration...${NC}"
 sudo cp infrastructure/sudoers.d/soar /etc/sudoers.d/
@@ -65,21 +74,11 @@ sudo mkdir -p /var/soar/archive
 sudo mkdir -p /etc/soar
 
 # Set ownership for soar user
-if id "soar" &>/dev/null; then
-    echo "Setting ownership for soar user..."
-    sudo chown -R soar:soar /var/soar
-    sudo chown -R soar:soar /var/soar/archive
-
-    # Ensure soar user has a home directory for backups
-    if [ ! -d /home/soar ]; then
-        echo "Creating home directory for soar user..."
-        sudo mkdir -p /home/soar
-        sudo chown soar:soar /home/soar
-        sudo chmod 755 /home/soar
-    fi
-else
-    echo -e "${YELLOW}Warning: 'soar' user not found. Please create the user before running services.${NC}"
-fi
+echo -e "${BLUE}Setting ownership for soar user...${NC}"
+sudo chown -R soar:soar /var/soar
+sudo chown -R soar:soar /var/soar/archive
+sudo chown soar:soar /home/soar
+sudo chmod 755 /home/soar
 
 echo -e "${GREEN}Server provisioning complete!${NC}"
 echo
