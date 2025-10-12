@@ -111,6 +111,55 @@ impl DeviceRepository {
         Ok(device_model)
     }
 
+    /// Get or insert a device by address and address type
+    /// If the device doesn't exist, it will be created with from_ddb=false, tracked=true, identified=true
+    pub async fn get_or_insert_device_by_address(
+        &self,
+        address: i32,
+        address_type: AddressType,
+    ) -> Result<DeviceModel> {
+        let mut conn = self.get_connection()?;
+
+        // Try to get existing device
+        if let Some(device_model) = devices::table
+            .filter(devices::address.eq(address))
+            .filter(devices::address_type.eq(address_type))
+            .first::<DeviceModel>(&mut conn)
+            .optional()?
+        {
+            return Ok(device_model);
+        }
+
+        // Device not found, insert a new one
+        let new_device = NewDevice {
+            address,
+            address_type,
+            aircraft_model: String::new(),
+            registration: String::new(),
+            competition_number: String::new(),
+            tracked: true,
+            identified: true,
+            from_ddb: false,
+            frequency_mhz: None,
+            pilot_name: None,
+            home_base_airport_ident: None,
+            aircraft_type_ogn: None,
+            last_fix_at: None,
+            club_id: None,
+        };
+
+        let inserted_device = diesel::insert_into(devices::table)
+            .values(&new_device)
+            .get_result::<DeviceModel>(&mut conn)?;
+
+        info!(
+            "Inserted new device with address {:06X} ({:?})",
+            address, address_type
+        );
+
+        Ok(inserted_device)
+    }
+
     /// Get a device by its UUID
     pub async fn get_device_by_uuid(&self, device_uuid: Uuid) -> Result<Option<Device>> {
         let mut conn = self.get_connection()?;
