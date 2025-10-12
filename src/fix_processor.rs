@@ -182,13 +182,13 @@ impl FixProcessor {
                         };
                     }
 
-                    // Look up device_id based on device_address and address_type
+                    // Look up or create device based on device_address and address_type
                     match device_repo
-                        .get_device_model_by_address(device_address, address_type)
+                        .get_or_insert_device_by_address(device_address, address_type)
                         .await
                     {
-                        Ok(Some(device_model)) => {
-                            // Device exists, create fix with proper device_id
+                        Ok(device_model) => {
+                            // Device exists or was just created, create fix with proper device_id
                             match Fix::from_aprs_packet(packet, received_at, device_model.id) {
                                 Ok(Some(fix)) => {
                                     self_clone.process_fix_internal(fix, &raw_message).await;
@@ -204,15 +204,9 @@ impl FixProcessor {
                                 }
                             }
                         }
-                        Ok(None) => {
-                            trace!(
-                                "Device address {:06X} ({:?}) not found in devices table, skipping fix processing",
-                                device_address, address_type
-                            );
-                        }
                         Err(e) => {
                             error!(
-                                "Failed to lookup device address {:06X} ({:?}): {}, skipping fix processing",
+                                "Failed to get or insert device address {:06X} ({:?}): {}, skipping fix processing",
                                 device_address, address_type, e
                             );
                         }
