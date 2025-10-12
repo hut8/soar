@@ -560,4 +560,121 @@ impl FlightsRepository {
 
         Ok(rows_affected > 0)
     }
+
+    /// Get nearby flights that occurred within the same time frame and bounding box as a given flight
+    /// Returns flights without fixes (lightweight response)
+    pub async fn get_nearby_flights(&self, flight_id: Uuid) -> Result<Vec<Flight>> {
+        use crate::schema::flights::dsl::*;
+
+        let pool = self.pool.clone();
+
+        let results = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            // Get the target flight's bounding box and time range
+            let bbox_sql = r#"
+                SELECT
+                    MIN(fx.latitude) as min_lat,
+                    MAX(fx.latitude) as max_lat,
+                    MIN(fx.longitude) as min_lon,
+                    MAX(fx.longitude) as max_lon,
+                    COALESCE(f.takeoff_time, f.created_at) as start_time,
+                    COALESCE(f.landing_time, NOW()) as end_time
+                FROM fixes fx
+                JOIN flights f ON f.id = fx.flight_id
+                WHERE fx.flight_id = $1
+                GROUP BY f.id, f.takeoff_time, f.landing_time, f.created_at
+            "#;
+
+            #[derive(QueryableByName)]
+            struct FlightBounds {
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Double>)]
+                min_lat: Option<f64>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Double>)]
+                max_lat: Option<f64>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Double>)]
+                min_lon: Option<f64>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Double>)]
+                max_lon: Option<f64>,
+                #[diesel(sql_type = diesel::sql_types::Timestamptz)]
+                start_time: DateTime<Utc>,
+                #[diesel(sql_type = diesel::sql_types::Timestamptz)]
+                end_time: DateTime<Utc>,
+            }
+
+            let bounds: Option<FlightBounds> = diesel::sql_query(bbox_sql)
+                .bind::<diesel::sql_types::Uuid, _>(flight_id)
+                .get_result(&mut conn)
+                .optional()?;
+
+            // If we can't get bounds (no fixes), return empty vector
+            let bounds = match bounds {
+                Some(b)
+                    if b.min_lat.is_some()
+                        && b.max_lat.is_some()
+                        && b.min_lon.is_some()
+                        && b.max_lon.is_some() =>
+                {
+                    b
+                }
+                _ => return Ok(Vec::new()),
+            };
+
+            let (min_lat_val, max_lat_val, min_lon_val, max_lon_val) = (
+                bounds.min_lat.unwrap(),
+                bounds.max_lat.unwrap(),
+                bounds.min_lon.unwrap(),
+                bounds.max_lon.unwrap(),
+            );
+
+            // Query for nearby flights using Diesel query builder with a subquery
+            let nearby_flight_ids: Vec<Uuid> = diesel::sql_query(
+                r#"
+                SELECT DISTINCT f.id
+                FROM flights f
+                JOIN fixes fx ON fx.flight_id = f.id
+                WHERE f.id != $1
+                  AND COALESCE(f.takeoff_time, f.created_at) <= $2
+                  AND COALESCE(f.landing_time, NOW()) >= $3
+                  AND fx.latitude BETWEEN $4 AND $5
+                  AND fx.longitude BETWEEN $6 AND $7
+                "#,
+            )
+            .bind::<diesel::sql_types::Uuid, _>(flight_id)
+            .bind::<diesel::sql_types::Timestamptz, _>(bounds.end_time)
+            .bind::<diesel::sql_types::Timestamptz, _>(bounds.start_time)
+            .bind::<diesel::sql_types::Double, _>(min_lat_val)
+            .bind::<diesel::sql_types::Double, _>(max_lat_val)
+            .bind::<diesel::sql_types::Double, _>(min_lon_val)
+            .bind::<diesel::sql_types::Double, _>(max_lon_val)
+            .load::<OnlyId>(&mut conn)?
+            .into_iter()
+            .map(|r| r.id)
+            .collect();
+
+            if nearby_flight_ids.is_empty() {
+                return Ok(Vec::new());
+            }
+
+            // Now get the full flight data using the type-safe query builder
+            let flight_models: Vec<FlightModel> = flights
+                .filter(id.eq_any(&nearby_flight_ids))
+                .order(takeoff_time.desc())
+                .select(FlightModel::as_select())
+                .load(&mut conn)?;
+
+            let result_flights: Vec<Flight> = flight_models.into_iter().map(|f| f.into()).collect();
+
+            Ok::<Vec<Flight>, anyhow::Error>(result_flights)
+        })
+        .await??;
+
+        Ok(results)
+    }
+}
+
+#[derive(QueryableByName)]
+struct OnlyId {
+    #[diesel(sql_type = diesel::sql_types::Uuid)]
+    id: Uuid,
 }

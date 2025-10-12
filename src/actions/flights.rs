@@ -390,3 +390,49 @@ pub async fn get_airport_flights(
         }
     }
 }
+
+/// Get nearby flights that occurred during the same time period as a given flight
+/// Returns flights without fixes for lightweight response
+pub async fn get_nearby_flights(
+    Path(id): Path<Uuid>,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let flights_repo = FlightsRepository::new(state.pool.clone());
+    let device_repo = DeviceRepository::new(state.pool);
+
+    match flights_repo.get_nearby_flights(id).await {
+        Ok(flights) => {
+            // Build flight views with device info
+            let mut flight_views = Vec::new();
+
+            for flight in flights {
+                // Look up device information if device_id is present
+                let device_info = if let Some(device_id) = flight.device_id {
+                    match device_repo.get_device_by_uuid(device_id).await {
+                        Ok(Some(device)) => Some(DeviceInfo {
+                            aircraft_model: Some(device.aircraft_model),
+                            registration: Some(device.registration),
+                            aircraft_type_ogn: device.aircraft_type_ogn,
+                        }),
+                        _ => None,
+                    }
+                } else {
+                    None
+                };
+
+                let flight_view = FlightView::from_flight(flight, None, None, device_info);
+                flight_views.push(flight_view);
+            }
+
+            Json(flight_views).into_response()
+        }
+        Err(e) => {
+            tracing::error!("Failed to get nearby flights for flight {}: {}", id, e);
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to get nearby flights",
+            )
+            .into_response()
+        }
+    }
+}
