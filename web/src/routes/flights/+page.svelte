@@ -36,7 +36,8 @@
 		updated_at: string;
 	}
 
-	let flights: Flight[] = [];
+	let completedFlights: Flight[] = [];
+	let activeFlights: Flight[] = [];
 	let loading = true;
 	let error = '';
 
@@ -81,13 +82,19 @@
 		error = '';
 
 		try {
-			const response = await serverCall<Flight[]>('/flights?completed=true&limit=100');
-			flights = response || [];
+			// Load both active and completed flights in parallel
+			const [activeResponse, completedResponse] = await Promise.all([
+				serverCall<Flight[]>('/flights?completed=false&limit=50'),
+				serverCall<Flight[]>('/flights?completed=true&limit=100')
+			]);
+			activeFlights = activeResponse || [];
+			completedFlights = completedResponse || [];
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			error = `Failed to load flights: ${errorMessage}`;
 			console.error('Error loading flights:', err);
-			flights = [];
+			activeFlights = [];
+			completedFlights = [];
 		} finally {
 			loading = false;
 		}
@@ -107,9 +114,9 @@
 	<header class="space-y-2 text-center">
 		<h1 class="flex items-center justify-center gap-2 h1">
 			<Plane class="h-8 w-8" />
-			Recent Completed Flights
+			Flights
 		</h1>
-		<p class="text-surface-500-400-token">Showing the most recent 100 completed flights</p>
+		<p class="text-surface-500-400-token">Active flights and recent completed flights</p>
 	</header>
 
 	<!-- Loading State -->
@@ -128,317 +135,648 @@
 			</div>
 			<button class="btn preset-filled-primary-500" onclick={loadFlights}> Try Again </button>
 		</div>
-	{:else if flights.length === 0}
+	{:else if activeFlights.length === 0 && completedFlights.length === 0}
 		<!-- Empty State -->
 		<div class="space-y-4 card p-12 text-center">
 			<Plane class="mx-auto mb-4 h-16 w-16 text-surface-400" />
 			<div class="space-y-2">
-				<h3 class="h3">No completed flights found</h3>
-				<p class="text-surface-500-400-token">No flights have been completed yet.</p>
+				<h3 class="h3">No flights found</h3>
+				<p class="text-surface-500-400-token">No flights have been recorded yet.</p>
 			</div>
 		</div>
 	{:else}
-		<!-- Flights Table (Desktop) -->
-		<section class="hidden card md:block">
-			<header class="card-header">
-				<h2 class="h2">Completed Flights</h2>
-				<p class="text-surface-500-400-token">
-					{flights.length} flight{flights.length === 1 ? '' : 's'} found
-				</p>
-			</header>
+		<!-- Active Flights Table (Desktop) -->
+		{#if activeFlights.length > 0}
+			<section class="hidden card md:block">
+				<header class="card-header">
+					<h2 class="h2">Active Flights</h2>
+					<p class="text-surface-500-400-token">
+						{activeFlights.length} flight{activeFlights.length === 1 ? '' : 's'} in progress
+					</p>
+				</header>
 
-			<div class="table-container">
-				<table class="table-hover table">
-					<thead>
-						<tr>
-							<th>Aircraft</th>
-							<th>Type</th>
-							<th>Status</th>
-							<th>Takeoff</th>
-							<th>Landing</th>
-							<th>Duration</th>
-							<th>Distance</th>
-							<th>Tow</th>
-							<th>Actions</th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each flights as flight (flight.id)}
+				<div class="table-container">
+					<table class="table-hover table">
+						<thead>
 							<tr>
-								<td>
-									<div class="flex flex-col gap-1">
-										{#if flight.aircraft_model && flight.registration}
-											<div class="flex items-center gap-2">
-												{#if flight.device_id}
-													<a
-														href={`/devices/${flight.device_id}`}
-														class="anchor font-medium text-primary-500 hover:text-primary-600"
-													>
-														{flight.aircraft_model}
-														<span class="text-surface-500-400-token text-sm font-normal"
-															>({flight.registration})</span
+								<th>Aircraft</th>
+								<th>Type</th>
+								<th>Status</th>
+								<th>Takeoff</th>
+								<th>Landing</th>
+								<th>Duration</th>
+								<th>Distance</th>
+								<th>Tow</th>
+								<th>Actions</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each activeFlights as flight (flight.id)}
+								<tr>
+									<td>
+										<div class="flex flex-col gap-1">
+											{#if flight.aircraft_model && flight.registration}
+												<div class="flex items-center gap-2">
+													{#if flight.device_id}
+														<a
+															href={`/devices/${flight.device_id}`}
+															class="anchor font-medium text-primary-500 hover:text-primary-600"
 														>
-													</a>
-												{:else}
-													<span class="font-medium"
-														>{flight.aircraft_model}
-														<span class="text-surface-500-400-token text-sm font-normal"
-															>({flight.registration})</span
-														></span
-													>
-												{/if}
-												{#if flight.tow_aircraft_id}
-													<span
-														class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
-														title="This aircraft was towed by {flight.tow_aircraft_id}"
-													>
-														<MoveUp class="h-3 w-3" />
-														Towed
-													</span>
-												{/if}
+															{flight.aircraft_model}
+															<span class="text-surface-500-400-token text-sm font-normal"
+																>({flight.registration})</span
+															>
+														</a>
+													{:else}
+														<span class="font-medium"
+															>{flight.aircraft_model}
+															<span class="text-surface-500-400-token text-sm font-normal"
+																>({flight.registration})</span
+															></span
+														>
+													{/if}
+													{#if flight.tow_aircraft_id}
+														<span
+															class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
+															title="This aircraft was towed by {flight.tow_aircraft_id}"
+														>
+															<MoveUp class="h-3 w-3" />
+															Towed
+														</span>
+													{/if}
+												</div>
+											{:else if flight.registration}
+												<div class="flex items-center gap-2">
+													{#if flight.device_id}
+														<a
+															href={`/devices/${flight.device_id}`}
+															class="anchor font-medium text-primary-500 hover:text-primary-600"
+														>
+															{flight.registration}
+														</a>
+													{:else}
+														<span class="font-medium">{flight.registration}</span>
+													{/if}
+													{#if flight.tow_aircraft_id}
+														<span
+															class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
+															title="This aircraft was towed by {flight.tow_aircraft_id}"
+														>
+															<MoveUp class="h-3 w-3" />
+															Towed
+														</span>
+													{/if}
+												</div>
+											{:else}
+												<div class="flex items-center gap-2">
+													{#if flight.device_id}
+														<a
+															href={`/devices/${flight.device_id}`}
+															class="text-surface-500-400-token anchor font-mono text-sm hover:text-primary-500"
+														>
+															{formatDeviceAddress(
+																flight.device_address,
+																flight.device_address_type
+															)}
+														</a>
+													{:else}
+														<span class="text-surface-500-400-token font-mono text-sm">
+															{formatDeviceAddress(
+																flight.device_address,
+																flight.device_address_type
+															)}
+														</span>
+													{/if}
+													{#if flight.tow_aircraft_id}
+														<span
+															class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
+															title="This aircraft was towed by {flight.tow_aircraft_id}"
+														>
+															<MoveUp class="h-3 w-3" />
+															Towed
+														</span>
+													{/if}
+												</div>
+											{/if}
+										</div>
+									</td>
+									<td>
+										{#if flight.aircraft_type_ogn}
+											<span class="badge {getAircraftTypeColor(flight.aircraft_type_ogn)} text-xs">
+												{getAircraftTypeOgnDescription(flight.aircraft_type_ogn)}
+											</span>
+										{:else}
+											<span class="text-surface-500">—</span>
+										{/if}
+									</td>
+									<td>
+										<FlightStateBadge state={flight.state} />
+									</td>
+									<td>
+										<div class="flex flex-col gap-1">
+											<div class="flex items-center gap-1 text-sm">
+												<Clock class="h-3 w-3" />
+												{formatRelativeTime(flight.takeoff_time)}
 											</div>
-										{:else if flight.registration}
-											<div class="flex items-center gap-2">
-												{#if flight.device_id}
-													<a
-														href={`/devices/${flight.device_id}`}
-														class="anchor font-medium text-primary-500 hover:text-primary-600"
-													>
-														{flight.registration}
-													</a>
-												{:else}
-													<span class="font-medium">{flight.registration}</span>
-												{/if}
-												{#if flight.tow_aircraft_id}
-													<span
-														class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
-														title="This aircraft was towed by {flight.tow_aircraft_id}"
-													>
-														<MoveUp class="h-3 w-3" />
-														Towed
+											{#if flight.takeoff_time}
+												<div class="text-surface-500-400-token text-xs">
+													{formatLocalTime(flight.takeoff_time)}
+												</div>
+											{/if}
+											{#if flight.departure_airport}
+												<div class="text-surface-500-400-token flex items-center gap-1 text-xs">
+													<MapPin class="h-3 w-3" />
+													{flight.departure_airport}
+												</div>
+											{/if}
+										</div>
+									</td>
+									<td>
+										<div class="flex flex-col gap-1">
+											<div class="flex items-center gap-1 text-sm">
+												<Clock class="h-3 w-3" />
+												{formatRelativeTime(flight.landing_time)}
+											</div>
+											{#if flight.landing_time}
+												<div class="text-surface-500-400-token text-xs">
+													{formatLocalTime(flight.landing_time)}
+												</div>
+											{/if}
+											{#if flight.arrival_airport}
+												<div class="text-surface-500-400-token flex items-center gap-1 text-xs">
+													<MapPin class="h-3 w-3" />
+													{flight.arrival_airport}
+												</div>
+											{/if}
+										</div>
+									</td>
+									<td class="font-semibold">
+										{calculateFlightDuration(flight.takeoff_time, flight.landing_time)}
+									</td>
+									<td class="font-semibold">
+										{formatDistance(flight.total_distance_meters)}
+									</td>
+									<td>
+										{#if flight.tow_aircraft_id}
+											<div class="flex flex-col gap-1">
+												<span class="text-xs">{flight.tow_aircraft_id}</span>
+												{#if flight.tow_release_height_msl}
+													<span class="text-surface-500-400-token text-xs">
+														{flight.tow_release_height_msl}m MSL
 													</span>
 												{/if}
 											</div>
 										{:else}
-											<div class="flex items-center gap-2">
-												{#if flight.device_id}
-													<a
-														href={`/devices/${flight.device_id}`}
-														class="text-surface-500-400-token anchor font-mono text-sm hover:text-primary-500"
-													>
-														{formatDeviceAddress(flight.device_address, flight.device_address_type)}
-													</a>
-												{:else}
-													<span class="text-surface-500-400-token font-mono text-sm">
-														{formatDeviceAddress(flight.device_address, flight.device_address_type)}
-													</span>
-												{/if}
-												{#if flight.tow_aircraft_id}
-													<span
-														class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
-														title="This aircraft was towed by {flight.tow_aircraft_id}"
-													>
-														<MoveUp class="h-3 w-3" />
-														Towed
-													</span>
-												{/if}
-											</div>
+											<span class="text-surface-500">—</span>
 										{/if}
-									</div>
-								</td>
-								<td>
-									{#if flight.aircraft_type_ogn}
-										<span class="badge {getAircraftTypeColor(flight.aircraft_type_ogn)} text-xs">
-											{getAircraftTypeOgnDescription(flight.aircraft_type_ogn)}
-										</span>
-									{:else}
-										<span class="text-surface-500">—</span>
-									{/if}
-								</td>
-								<td>
-									<FlightStateBadge state={flight.state} />
-								</td>
-								<td>
-									<div class="flex flex-col gap-1">
-										<div class="flex items-center gap-1 text-sm">
-											<Clock class="h-3 w-3" />
-											{formatRelativeTime(flight.takeoff_time)}
-										</div>
-										{#if flight.takeoff_time}
-											<div class="text-surface-500-400-token text-xs">
-												{formatLocalTime(flight.takeoff_time)}
-											</div>
-										{/if}
-										{#if flight.departure_airport}
-											<div class="text-surface-500-400-token flex items-center gap-1 text-xs">
-												<MapPin class="h-3 w-3" />
-												{flight.departure_airport}
-											</div>
-										{/if}
-									</div>
-								</td>
-								<td>
-									<div class="flex flex-col gap-1">
-										<div class="flex items-center gap-1 text-sm">
-											<Clock class="h-3 w-3" />
-											{formatRelativeTime(flight.landing_time)}
-										</div>
-										{#if flight.landing_time}
-											<div class="text-surface-500-400-token text-xs">
-												{formatLocalTime(flight.landing_time)}
-											</div>
-										{/if}
-										{#if flight.arrival_airport}
-											<div class="text-surface-500-400-token flex items-center gap-1 text-xs">
-												<MapPin class="h-3 w-3" />
-												{flight.arrival_airport}
-											</div>
-										{/if}
-									</div>
-								</td>
-								<td class="font-semibold">
-									{calculateFlightDuration(flight.takeoff_time, flight.landing_time)}
-								</td>
-								<td class="font-semibold">
-									{formatDistance(flight.total_distance_meters)}
-								</td>
-								<td>
-									{#if flight.tow_aircraft_id}
+									</td>
+									<td>
+										<a
+											href={`/flights/${flight.id}`}
+											target="_blank"
+											rel="noopener noreferrer"
+											class="preset-tonal-surface-500 btn flex items-center gap-1 btn-sm"
+										>
+											<ExternalLink class="h-3 w-3" />
+											Open
+										</a>
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			</section>
+		{/if}
+
+		<!-- Completed Flights Table (Desktop) -->
+		{#if completedFlights.length > 0}
+			<section class="hidden card md:block">
+				<header class="card-header">
+					<h2 class="h2">Completed Flights</h2>
+					<p class="text-surface-500-400-token">
+						{completedFlights.length} flight{completedFlights.length === 1 ? '' : 's'} found
+					</p>
+				</header>
+
+				<div class="table-container">
+					<table class="table-hover table">
+						<thead>
+							<tr>
+								<th>Aircraft</th>
+								<th>Type</th>
+								<th>Status</th>
+								<th>Takeoff</th>
+								<th>Landing</th>
+								<th>Duration</th>
+								<th>Distance</th>
+								<th>Tow</th>
+								<th>Actions</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each completedFlights as flight (flight.id)}
+								<tr>
+									<td>
 										<div class="flex flex-col gap-1">
-											<span class="text-xs">{flight.tow_aircraft_id}</span>
-											{#if flight.tow_release_height_msl}
-												<span class="text-surface-500-400-token text-xs">
-													{flight.tow_release_height_msl}m MSL
-												</span>
+											{#if flight.aircraft_model && flight.registration}
+												<div class="flex items-center gap-2">
+													{#if flight.device_id}
+														<a
+															href={`/devices/${flight.device_id}`}
+															class="anchor font-medium text-primary-500 hover:text-primary-600"
+														>
+															{flight.aircraft_model}
+															<span class="text-surface-500-400-token text-sm font-normal"
+																>({flight.registration})</span
+															>
+														</a>
+													{:else}
+														<span class="font-medium"
+															>{flight.aircraft_model}
+															<span class="text-surface-500-400-token text-sm font-normal"
+																>({flight.registration})</span
+															></span
+														>
+													{/if}
+													{#if flight.tow_aircraft_id}
+														<span
+															class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
+															title="This aircraft was towed by {flight.tow_aircraft_id}"
+														>
+															<MoveUp class="h-3 w-3" />
+															Towed
+														</span>
+													{/if}
+												</div>
+											{:else if flight.registration}
+												<div class="flex items-center gap-2">
+													{#if flight.device_id}
+														<a
+															href={`/devices/${flight.device_id}`}
+															class="anchor font-medium text-primary-500 hover:text-primary-600"
+														>
+															{flight.registration}
+														</a>
+													{:else}
+														<span class="font-medium">{flight.registration}</span>
+													{/if}
+													{#if flight.tow_aircraft_id}
+														<span
+															class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
+															title="This aircraft was towed by {flight.tow_aircraft_id}"
+														>
+															<MoveUp class="h-3 w-3" />
+															Towed
+														</span>
+													{/if}
+												</div>
+											{:else}
+												<div class="flex items-center gap-2">
+													{#if flight.device_id}
+														<a
+															href={`/devices/${flight.device_id}`}
+															class="text-surface-500-400-token anchor font-mono text-sm hover:text-primary-500"
+														>
+															{formatDeviceAddress(
+																flight.device_address,
+																flight.device_address_type
+															)}
+														</a>
+													{:else}
+														<span class="text-surface-500-400-token font-mono text-sm">
+															{formatDeviceAddress(
+																flight.device_address,
+																flight.device_address_type
+															)}
+														</span>
+													{/if}
+													{#if flight.tow_aircraft_id}
+														<span
+															class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
+															title="This aircraft was towed by {flight.tow_aircraft_id}"
+														>
+															<MoveUp class="h-3 w-3" />
+															Towed
+														</span>
+													{/if}
+												</div>
 											{/if}
 										</div>
+									</td>
+									<td>
+										{#if flight.aircraft_type_ogn}
+											<span class="badge {getAircraftTypeColor(flight.aircraft_type_ogn)} text-xs">
+												{getAircraftTypeOgnDescription(flight.aircraft_type_ogn)}
+											</span>
+										{:else}
+											<span class="text-surface-500">—</span>
+										{/if}
+									</td>
+									<td>
+										<FlightStateBadge state={flight.state} />
+									</td>
+									<td>
+										<div class="flex flex-col gap-1">
+											<div class="flex items-center gap-1 text-sm">
+												<Clock class="h-3 w-3" />
+												{formatRelativeTime(flight.takeoff_time)}
+											</div>
+											{#if flight.takeoff_time}
+												<div class="text-surface-500-400-token text-xs">
+													{formatLocalTime(flight.takeoff_time)}
+												</div>
+											{/if}
+											{#if flight.departure_airport}
+												<div class="text-surface-500-400-token flex items-center gap-1 text-xs">
+													<MapPin class="h-3 w-3" />
+													{flight.departure_airport}
+												</div>
+											{/if}
+										</div>
+									</td>
+									<td>
+										<div class="flex flex-col gap-1">
+											<div class="flex items-center gap-1 text-sm">
+												<Clock class="h-3 w-3" />
+												{formatRelativeTime(flight.landing_time)}
+											</div>
+											{#if flight.landing_time}
+												<div class="text-surface-500-400-token text-xs">
+													{formatLocalTime(flight.landing_time)}
+												</div>
+											{/if}
+											{#if flight.arrival_airport}
+												<div class="text-surface-500-400-token flex items-center gap-1 text-xs">
+													<MapPin class="h-3 w-3" />
+													{flight.arrival_airport}
+												</div>
+											{/if}
+										</div>
+									</td>
+									<td class="font-semibold">
+										{calculateFlightDuration(flight.takeoff_time, flight.landing_time)}
+									</td>
+									<td class="font-semibold">
+										{formatDistance(flight.total_distance_meters)}
+									</td>
+									<td>
+										{#if flight.tow_aircraft_id}
+											<div class="flex flex-col gap-1">
+												<span class="text-xs">{flight.tow_aircraft_id}</span>
+												{#if flight.tow_release_height_msl}
+													<span class="text-surface-500-400-token text-xs">
+														{flight.tow_release_height_msl}m MSL
+													</span>
+												{/if}
+											</div>
+										{:else}
+											<span class="text-surface-500">—</span>
+										{/if}
+									</td>
+									<td>
+										<a
+											href={`/flights/${flight.id}`}
+											target="_blank"
+											rel="noopener noreferrer"
+											class="preset-tonal-surface-500 btn flex items-center gap-1 btn-sm"
+										>
+											<ExternalLink class="h-3 w-3" />
+											Open
+										</a>
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			</section>
+		{/if}
+
+		<!-- Active Flights Cards (Mobile) -->
+		{#if activeFlights.length > 0}
+			<div class="block space-y-4 md:hidden">
+				<div class="card-header">
+					<h2 class="h2">Active Flights</h2>
+					<p class="text-surface-500-400-token">
+						{activeFlights.length} flight{activeFlights.length === 1 ? '' : 's'} in progress
+					</p>
+				</div>
+
+				{#each activeFlights as flight (flight.id)}
+					<div class="relative card p-4 transition-all duration-200 hover:shadow-lg">
+						<!-- Aircraft info -->
+						<div
+							class="border-surface-200-700-token mb-3 flex items-start justify-between border-b pb-3"
+						>
+							<div class="flex flex-wrap items-center gap-2">
+								{#if flight.aircraft_model && flight.registration}
+									{#if flight.device_id}
+										<a
+											href={`/devices/${flight.device_id}`}
+											class="relative z-10 anchor font-semibold text-primary-500 hover:text-primary-600"
+										>
+											{flight.aircraft_model} ({flight.registration})
+										</a>
 									{:else}
-										<span class="text-surface-500">—</span>
+										<span class="font-semibold"
+											>{flight.aircraft_model} ({flight.registration})</span
+										>
 									{/if}
-								</td>
-								<td>
-									<a
-										href={`/flights/${flight.id}`}
-										target="_blank"
-										rel="noopener noreferrer"
-										class="preset-tonal-surface-500 btn flex items-center gap-1 btn-sm"
-									>
-										<ExternalLink class="h-3 w-3" />
-										Open
-									</a>
-								</td>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
-			</div>
-		</section>
-
-		<!-- Flights Cards (Mobile) -->
-		<div class="block space-y-4 md:hidden">
-			<div class="card-header">
-				<h2 class="h2">Completed Flights</h2>
-				<p class="text-surface-500-400-token">
-					{flights.length} flight{flights.length === 1 ? '' : 's'} found
-				</p>
-			</div>
-
-			{#each flights as flight (flight.id)}
-				<div class="relative card p-4 transition-all duration-200 hover:shadow-lg">
-					<!-- Aircraft info -->
-					<div
-						class="border-surface-200-700-token mb-3 flex items-start justify-between border-b pb-3"
-					>
-						<div class="flex flex-wrap items-center gap-2">
-							{#if flight.aircraft_model && flight.registration}
-								{#if flight.device_id}
+								{:else if flight.registration}
+									{#if flight.device_id}
+										<a
+											href={`/devices/${flight.device_id}`}
+											class="relative z-10 anchor font-semibold text-primary-500 hover:text-primary-600"
+										>
+											{flight.registration}
+										</a>
+									{:else}
+										<span class="font-semibold">{flight.registration}</span>
+									{/if}
+								{:else if flight.device_id}
 									<a
 										href={`/devices/${flight.device_id}`}
-										class="relative z-10 anchor font-semibold text-primary-500 hover:text-primary-600"
+										class="text-surface-500-400-token relative z-10 anchor font-mono text-sm hover:text-primary-500"
 									>
-										{flight.aircraft_model} ({flight.registration})
+										{formatDeviceAddress(flight.device_address, flight.device_address_type)}
 									</a>
 								{:else}
-									<span class="font-semibold">{flight.aircraft_model} ({flight.registration})</span>
+									<span class="text-surface-500-400-token font-mono text-sm">
+										{formatDeviceAddress(flight.device_address, flight.device_address_type)}
+									</span>
 								{/if}
-							{:else if flight.registration}
-								{#if flight.device_id}
-									<a
-										href={`/devices/${flight.device_id}`}
-										class="relative z-10 anchor font-semibold text-primary-500 hover:text-primary-600"
+								<FlightStateBadge state={flight.state} />
+								{#if flight.aircraft_type_ogn}
+									<span class="badge {getAircraftTypeColor(flight.aircraft_type_ogn)} text-xs">
+										{getAircraftTypeOgnDescription(flight.aircraft_type_ogn)}
+									</span>
+								{/if}
+								{#if flight.tow_aircraft_id}
+									<span
+										class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
+										title="This aircraft was towed by {flight.tow_aircraft_id}"
 									>
-										{flight.registration}
-									</a>
-								{:else}
-									<span class="font-semibold">{flight.registration}</span>
+										<MoveUp class="h-3 w-3" />
+										Towed
+									</span>
 								{/if}
-							{:else if flight.device_id}
-								<a
-									href={`/devices/${flight.device_id}`}
-									class="text-surface-500-400-token relative z-10 anchor font-mono text-sm hover:text-primary-500"
+							</div>
+							<a
+								href={`/flights/${flight.id}`}
+								class="relative z-10 flex-shrink-0"
+								title="View flight details"
+							>
+								<ExternalLink class="h-4 w-4 text-surface-400 hover:text-primary-500" />
+							</a>
+						</div>
+
+						<!-- Flight details in compact single row -->
+						<div class="text-surface-600-300-token text-sm">
+							{#if flight.departure_airport}
+								<span class="font-medium"
+									>{flight.departure_airport}{#if flight.takeoff_runway_ident}/{flight.takeoff_runway_ident}{/if}</span
 								>
-									{formatDeviceAddress(flight.device_address, flight.device_address_type)}
-								</a>
+							{/if}
+							{formatLocalTime(flight.takeoff_time)}
+							<span class="text-surface-500-400-token text-xs">
+								({formatRelativeTime(flight.takeoff_time)})
+							</span>
+							{#if flight.landing_time}
+								<span class="mx-1">-</span>
+								{#if flight.arrival_airport}
+									<span class="font-medium"
+										>{flight.arrival_airport}{#if flight.landing_runway_ident}/{flight.landing_runway_ident}{/if}</span
+									>
+								{/if}
+								{formatLocalTime(flight.landing_time)}
+								<span class="text-surface-500-400-token text-xs">
+									({formatRelativeTime(flight.landing_time)})
+								</span>
+								<span class="mx-2 font-semibold">
+									{calculateFlightDuration(flight.takeoff_time, flight.landing_time)}
+								</span>
+								<span class="font-semibold">
+									{formatDistance(flight.total_distance_meters)}
+								</span>
 							{:else}
-								<span class="text-surface-500-400-token font-mono text-sm">
-									{formatDeviceAddress(flight.device_address, flight.device_address_type)}
-								</span>
-							{/if}
-							<FlightStateBadge state={flight.state} />
-							{#if flight.aircraft_type_ogn}
-								<span class="badge {getAircraftTypeColor(flight.aircraft_type_ogn)} text-xs">
-									{getAircraftTypeOgnDescription(flight.aircraft_type_ogn)}
-								</span>
-							{/if}
-							{#if flight.tow_aircraft_id}
-								<span
-									class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
-									title="This aircraft was towed by {flight.tow_aircraft_id}"
-								>
-									<MoveUp class="h-3 w-3" />
-									Towed
-								</span>
+								<span class="mx-2 font-semibold text-green-600">In Flight</span>
 							{/if}
 						</div>
-						<a
-							href={`/flights/${flight.id}`}
-							class="relative z-10 flex-shrink-0"
-							title="View flight details"
-						>
-							<ExternalLink class="h-4 w-4 text-surface-400 hover:text-primary-500" />
-						</a>
 					</div>
+				{/each}
+			</div>
+		{/if}
 
-					<!-- Flight details in compact single row -->
-					<div class="text-surface-600-300-token text-sm">
-						{#if flight.departure_airport}
-							<span class="font-medium"
-								>{flight.departure_airport}{#if flight.takeoff_runway_ident}/{flight.takeoff_runway_ident}{/if}</span
-							>
-						{/if}
-						{formatLocalTime(flight.takeoff_time)}
-						<span class="text-surface-500-400-token text-xs">
-							({formatRelativeTime(flight.takeoff_time)})
-						</span>
-						<span class="mx-1">-</span>
-						{#if flight.arrival_airport}
-							<span class="font-medium"
-								>{flight.arrival_airport}{#if flight.landing_runway_ident}/{flight.landing_runway_ident}{/if}</span
-							>
-						{/if}
-						{formatLocalTime(flight.landing_time)}
-						<span class="text-surface-500-400-token text-xs">
-							({formatRelativeTime(flight.landing_time)})
-						</span>
-						<span class="mx-2 font-semibold">
-							{calculateFlightDuration(flight.takeoff_time, flight.landing_time)}
-						</span>
-						<span class="font-semibold">
-							{formatDistance(flight.total_distance_meters)}
-						</span>
-					</div>
+		<!-- Completed Flights Cards (Mobile) -->
+		{#if completedFlights.length > 0}
+			<div class="block space-y-4 md:hidden">
+				<div class="card-header">
+					<h2 class="h2">Completed Flights</h2>
+					<p class="text-surface-500-400-token">
+						{completedFlights.length} flight{completedFlights.length === 1 ? '' : 's'} found
+					</p>
 				</div>
-			{/each}
-		</div>
+
+				{#each completedFlights as flight (flight.id)}
+					<div class="relative card p-4 transition-all duration-200 hover:shadow-lg">
+						<!-- Aircraft info -->
+						<div
+							class="border-surface-200-700-token mb-3 flex items-start justify-between border-b pb-3"
+						>
+							<div class="flex flex-wrap items-center gap-2">
+								{#if flight.aircraft_model && flight.registration}
+									{#if flight.device_id}
+										<a
+											href={`/devices/${flight.device_id}`}
+											class="relative z-10 anchor font-semibold text-primary-500 hover:text-primary-600"
+										>
+											{flight.aircraft_model} ({flight.registration})
+										</a>
+									{:else}
+										<span class="font-semibold"
+											>{flight.aircraft_model} ({flight.registration})</span
+										>
+									{/if}
+								{:else if flight.registration}
+									{#if flight.device_id}
+										<a
+											href={`/devices/${flight.device_id}`}
+											class="relative z-10 anchor font-semibold text-primary-500 hover:text-primary-600"
+										>
+											{flight.registration}
+										</a>
+									{:else}
+										<span class="font-semibold">{flight.registration}</span>
+									{/if}
+								{:else if flight.device_id}
+									<a
+										href={`/devices/${flight.device_id}`}
+										class="text-surface-500-400-token relative z-10 anchor font-mono text-sm hover:text-primary-500"
+									>
+										{formatDeviceAddress(flight.device_address, flight.device_address_type)}
+									</a>
+								{:else}
+									<span class="text-surface-500-400-token font-mono text-sm">
+										{formatDeviceAddress(flight.device_address, flight.device_address_type)}
+									</span>
+								{/if}
+								<FlightStateBadge state={flight.state} />
+								{#if flight.aircraft_type_ogn}
+									<span class="badge {getAircraftTypeColor(flight.aircraft_type_ogn)} text-xs">
+										{getAircraftTypeOgnDescription(flight.aircraft_type_ogn)}
+									</span>
+								{/if}
+								{#if flight.tow_aircraft_id}
+									<span
+										class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
+										title="This aircraft was towed by {flight.tow_aircraft_id}"
+									>
+										<MoveUp class="h-3 w-3" />
+										Towed
+									</span>
+								{/if}
+							</div>
+							<a
+								href={`/flights/${flight.id}`}
+								class="relative z-10 flex-shrink-0"
+								title="View flight details"
+							>
+								<ExternalLink class="h-4 w-4 text-surface-400 hover:text-primary-500" />
+							</a>
+						</div>
+
+						<!-- Flight details in compact single row -->
+						<div class="text-surface-600-300-token text-sm">
+							{#if flight.departure_airport}
+								<span class="font-medium"
+									>{flight.departure_airport}{#if flight.takeoff_runway_ident}/{flight.takeoff_runway_ident}{/if}</span
+								>
+							{/if}
+							{formatLocalTime(flight.takeoff_time)}
+							<span class="text-surface-500-400-token text-xs">
+								({formatRelativeTime(flight.takeoff_time)})
+							</span>
+							<span class="mx-1">-</span>
+							{#if flight.arrival_airport}
+								<span class="font-medium"
+									>{flight.arrival_airport}{#if flight.landing_runway_ident}/{flight.landing_runway_ident}{/if}</span
+								>
+							{/if}
+							{formatLocalTime(flight.landing_time)}
+							<span class="text-surface-500-400-token text-xs">
+								({formatRelativeTime(flight.landing_time)})
+							</span>
+							<span class="mx-2 font-semibold">
+								{calculateFlightDuration(flight.takeoff_time, flight.landing_time)}
+							</span>
+							<span class="font-semibold">
+								{formatDistance(flight.total_distance_meters)}
+							</span>
+						</div>
+					</div>
+				{/each}
+			</div>
+		{/if}
 	{/if}
 </div>
