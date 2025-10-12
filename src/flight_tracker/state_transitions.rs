@@ -71,18 +71,18 @@ pub(crate) async fn process_state_transition(
                     )
                 );
 
-                // Check altitude offset to validate this is a real takeoff
+                // Check altitude offset to determine if airport/runway lookup should be skipped
                 // If offset > 250 ft, the altitude data is likely unreliable
                 let altitude_offset = calculate_altitude_offset_ft(elevation_db, &fix).await;
-                let skip_flight_creation = if let Some(offset) = altitude_offset {
+                let skip_airport_runway_lookup = if let Some(offset) = altitude_offset {
                     if offset.abs() > 250 {
                         warn!(
-                            "Skipping flight creation for aircraft {} due to large altitude offset ({} ft) - altitude data may be unreliable",
+                            "Large altitude offset ({} ft) detected for aircraft {} - will create flight but skip airport/runway lookup",
+                            offset,
                             format_device_address_with_type(
                                 fix.device_address_hex().as_ref(),
                                 fix.address_type
-                            ),
-                            offset
+                            )
                         );
                         true
                     } else {
@@ -100,43 +100,41 @@ pub(crate) async fn process_state_transition(
                 }
                 drop(trackers); // Release lock immediately
 
-                // Only create flight if altitude data is reliable
-                if !skip_flight_creation {
-                    // Create flight in background (similar to landing)
-                    let flights_repo_clone = flights_repo.clone();
-                    let airports_repo_clone = airports_repo.clone();
-                    let locations_repo_clone = locations_repo.clone();
-                    let runways_repo_clone = runways_repo.clone();
-                    let fixes_repo_clone = fixes_repo.clone();
-                    let elevation_db_clone = elevation_db.clone();
-                    let trackers_clone = Arc::clone(aircraft_trackers);
-                    let takeoff_fix = fix.clone();
-                    tokio::spawn(async move {
-                        match create_flight(
-                            &flights_repo_clone,
-                            &airports_repo_clone,
-                            &locations_repo_clone,
-                            &runways_repo_clone,
-                            &fixes_repo_clone,
-                            &elevation_db_clone,
-                            &trackers_clone,
-                            &takeoff_fix,
-                        )
-                        .await
-                        {
-                            Ok(flight_id) => {
-                                // Update tracker with the flight_id
-                                let mut trackers = trackers_clone.write().await;
-                                if let Some(tracker) = trackers.get_mut(&takeoff_fix.device_id) {
-                                    tracker.current_flight_id = Some(flight_id);
-                                }
-                            }
-                            Err(e) => {
-                                warn!("Failed to create flight for takeoff: {}", e);
+                // Always create flight, but skip airport/runway lookup if altitude is unreliable
+                let flights_repo_clone = flights_repo.clone();
+                let airports_repo_clone = airports_repo.clone();
+                let locations_repo_clone = locations_repo.clone();
+                let runways_repo_clone = runways_repo.clone();
+                let fixes_repo_clone = fixes_repo.clone();
+                let elevation_db_clone = elevation_db.clone();
+                let trackers_clone = Arc::clone(aircraft_trackers);
+                let takeoff_fix = fix.clone();
+                tokio::spawn(async move {
+                    match create_flight(
+                        &flights_repo_clone,
+                        &airports_repo_clone,
+                        &locations_repo_clone,
+                        &runways_repo_clone,
+                        &fixes_repo_clone,
+                        &elevation_db_clone,
+                        &trackers_clone,
+                        &takeoff_fix,
+                        skip_airport_runway_lookup,
+                    )
+                    .await
+                    {
+                        Ok(flight_id) => {
+                            // Update tracker with the flight_id
+                            let mut trackers = trackers_clone.write().await;
+                            if let Some(tracker) = trackers.get_mut(&takeoff_fix.device_id) {
+                                tracker.current_flight_id = Some(flight_id);
                             }
                         }
-                    });
-                }
+                        Err(e) => {
+                            warn!("Failed to create flight for takeoff: {}", e);
+                        }
+                    }
+                });
 
                 // Set flight_id on the fix (it will be set later by the background task)
                 // For now, we don't have it yet, so leave it as None
