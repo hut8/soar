@@ -27,6 +27,7 @@
 	import { getAircraftTypeOgnDescription, formatDeviceAddress } from '$lib/formatters';
 	import { GOOGLE_MAPS_API_KEY } from '$lib/config';
 	import { serverCall } from '$lib/api/server';
+	import FlightStateBadge from '$lib/components/FlightStateBadge.svelte';
 
 	dayjs.extend(relativeTime);
 
@@ -141,7 +142,7 @@
 
 	// Check if flight is in progress
 	function isFlightInProgress(): boolean {
-		return !data.flight.landing_time;
+		return data.flight.state === 'active';
 	}
 
 	// Poll for updates to in-progress flights
@@ -168,8 +169,8 @@
 			data.fixes = fixesResponse.fixes;
 			data.fixesCount = fixesResponse.count;
 
-			// If flight has landed, stop polling
-			if (data.flight.landing_time) {
+			// If flight has landed or timed out, stop polling
+			if (data.flight.state !== 'active') {
 				stopPolling();
 			}
 
@@ -593,6 +594,7 @@
 					<Plane class="h-8 w-8" />
 					Flight
 				</h1>
+				<FlightStateBadge state={data.flight.state} />
 				{#if isOutlanding}
 					<span
 						class="chip flex items-center gap-2 preset-filled-warning-500 text-base font-semibold"
@@ -654,13 +656,20 @@
 				</div>
 			</div>
 
-			<!-- Landing -->
+			<!-- Landing / Timeout -->
 			<div class="flex items-start gap-3">
 				<PlaneLanding class="mt-1 h-5 w-5 text-primary-500" />
 				<div>
-					<div class="text-surface-600-300-token text-sm">Landing</div>
+					<div class="text-surface-600-300-token text-sm">
+						{data.flight.state === 'timed_out' ? 'Timed Out' : 'Landing'}
+					</div>
 					<div class="font-semibold">
-						{#if data.flight.landing_time}
+						{#if data.flight.state === 'timed_out' && data.flight.timed_out_at}
+							<!-- Mobile: relative time only -->
+							<span class="md:hidden">{formatDateTimeMobile(data.flight.timed_out_at)}</span>
+							<!-- Desktop: relative time with full datetime -->
+							<span class="hidden md:inline">{formatDateTime(data.flight.timed_out_at)}</span>
+						{:else if data.flight.landing_time}
 							<!-- Mobile: relative time only -->
 							<span class="md:hidden">{formatDateTimeMobile(data.flight.landing_time)}</span>
 							<!-- Desktop: relative time with full datetime -->
@@ -670,7 +679,9 @@
 						{/if}
 					</div>
 					<div class="text-surface-600-300-token text-sm">
-						{#if data.flight.landing_time}
+						{#if data.flight.state === 'timed_out'}
+							No beacons received for 5+ minutes
+						{:else if data.flight.landing_time}
 							{#if data.flight.arrival_airport && data.flight.arrival_airport_id}
 								<a href="/airports/{data.flight.arrival_airport_id}" class="anchor">
 									{data.flight.arrival_airport}

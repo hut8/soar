@@ -221,9 +221,21 @@ pub(crate) async fn determine_runway_identifier(
             }
         }
 
-        // If we found a good match (within 30 degrees), use it
+        // If we found a match and we're searching at a specific airport (airport_ref provided),
+        // always use the best match from the database since we know runway data exists
         if let Some((ident, diff)) = best_match {
-            if diff < 30.0 {
+            if airport_ref.is_some() {
+                // Airport-specific search: always use the closest runway from database
+                debug!(
+                    "Matched runway {} from database for device {} at airport {} (heading diff: {:.1}°)",
+                    ident,
+                    device_id,
+                    airport_ref.unwrap(),
+                    diff
+                );
+                return Some((ident, false)); // false = from database, not inferred
+            } else if diff < 30.0 {
+                // General search: only use if heading difference is reasonable
                 debug!(
                     "Matched runway {} from database for device {} (heading diff: {:.1}°)",
                     ident, device_id, diff

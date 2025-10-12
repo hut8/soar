@@ -170,6 +170,26 @@ impl FlightTracker {
         }
     }
 
+    /// Start a background task to periodically check for timed-out flights
+    pub fn start_timeout_checker(&self, check_interval_secs: u64) {
+        let tracker = self.clone();
+        tokio::spawn(async move {
+            let mut interval =
+                tokio::time::interval(std::time::Duration::from_secs(check_interval_secs));
+            // Skip the first tick (immediate execution)
+            interval.tick().await;
+
+            loop {
+                interval.tick().await;
+                tracker.check_and_timeout_stale_flights().await;
+            }
+        });
+        info!(
+            "Started flight timeout checker (every {} seconds)",
+            check_interval_secs
+        );
+    }
+
     /// Calculate altitude AGL and update the fix in the database asynchronously
     /// This method is designed to be called in a background task after the fix is inserted
     pub async fn calculate_and_update_agl_async(
@@ -179,6 +199,54 @@ impl FlightTracker {
         fixes_repo: FixesRepository,
     ) {
         altitude::calculate_and_update_agl_async(&self.elevation_db, fix_id, fix, fixes_repo).await;
+    }
+
+    /// Check all active flights and timeout any that haven't received beacons for 5+ minutes
+    pub async fn check_and_timeout_stale_flights(&self) {
+        let timeout_threshold = chrono::Duration::minutes(5);
+        let now = chrono::Utc::now();
+
+        // Collect flights that need to be timed out
+        let flights_to_timeout: Vec<(Uuid, Uuid)> = {
+            let trackers = self.aircraft_trackers.read().await;
+            trackers
+                .iter()
+                .filter_map(|(device_id, tracker)| {
+                    // Check if this tracker has an active flight
+                    if let Some(flight_id) = tracker.current_flight_id {
+                        // Check if last update was more than 5 minutes ago
+                        let elapsed = now.signed_duration_since(tracker.last_update);
+                        if elapsed > timeout_threshold {
+                            info!(
+                                "Flight {} for device {} is stale (last update {} seconds ago)",
+                                flight_id,
+                                device_id,
+                                elapsed.num_seconds()
+                            );
+                            return Some((flight_id, *device_id));
+                        }
+                    }
+                    None
+                })
+                .collect()
+        };
+
+        // Timeout each stale flight
+        for (flight_id, device_id) in flights_to_timeout {
+            if let Err(e) = flight_lifecycle::timeout_flight(
+                &self.flights_repo,
+                &self.aircraft_trackers,
+                flight_id,
+                device_id,
+            )
+            .await
+            {
+                error!(
+                    "Failed to timeout flight {} for device {}: {}",
+                    flight_id, device_id, e
+                );
+            }
+        }
     }
 
     /// Process a fix and return it with updated flight_id

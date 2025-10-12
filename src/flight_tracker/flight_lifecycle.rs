@@ -7,6 +7,7 @@ use crate::flights_repo::FlightsRepository;
 use crate::locations_repo::LocationsRepository;
 use crate::runways_repo::RunwaysRepository;
 use anyhow::Result;
+use chrono::Utc;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -87,46 +88,68 @@ pub(crate) async fn create_flight(
     elevation_db: &ElevationDB,
     aircraft_trackers: &Arc<RwLock<HashMap<Uuid, AircraftTracker>>>,
     fix: &Fix,
+    skip_airport_runway_lookup: bool,
 ) -> Result<Uuid> {
-    let departure_airport_id =
-        find_nearby_airport(airports_repo, fix.latitude, fix.longitude).await;
+    // Calculate takeoff altitude offset (difference between reported altitude and true elevation)
+    let takeoff_altitude_offset_ft = calculate_altitude_offset_ft(elevation_db, fix).await;
 
-    // Create or find a location for the takeoff point
-    let takeoff_location_id = create_or_find_location(
-        airports_repo,
-        locations_repo,
-        fix.latitude,
-        fix.longitude,
-        departure_airport_id,
-    )
-    .await;
+    // Only look up airport and runway if altitude data is reliable
+    let (departure_airport_id, takeoff_location_id, takeoff_runway, takeoff_was_inferred) =
+        if skip_airport_runway_lookup {
+            info!(
+                "Skipping airport/runway lookup for aircraft {} due to unreliable altitude data",
+                format_device_address_with_type(
+                    fix.device_address_hex().as_ref(),
+                    fix.address_type
+                )
+            );
+            (None, None, None, None)
+        } else {
+            let departure_airport_id =
+                find_nearby_airport(airports_repo, fix.latitude, fix.longitude).await;
 
-    // Determine takeoff runway and whether it was inferred
-    // Pass the departure airport to optimize runway search
-    let takeoff_runway_info = determine_runway_identifier(
-        fixes_repo,
-        runways_repo,
-        &fix.device_id,
-        fix.timestamp,
-        fix.latitude,
-        fix.longitude,
-        departure_airport_id,
-    )
-    .await;
+            // Create or find a location for the takeoff point
+            let takeoff_location_id = create_or_find_location(
+                airports_repo,
+                locations_repo,
+                fix.latitude,
+                fix.longitude,
+                departure_airport_id,
+            )
+            .await;
 
-    let (takeoff_runway, takeoff_was_inferred) = match takeoff_runway_info {
-        Some((runway, was_inferred)) => (Some(runway), Some(was_inferred)),
-        None => (None, None),
-    };
+            // Determine takeoff runway and whether it was inferred
+            // Pass the departure airport to optimize runway search
+            let takeoff_runway_info = determine_runway_identifier(
+                fixes_repo,
+                runways_repo,
+                &fix.device_id,
+                fix.timestamp,
+                fix.latitude,
+                fix.longitude,
+                departure_airport_id,
+            )
+            .await;
+
+            let (takeoff_runway, takeoff_was_inferred) = match takeoff_runway_info {
+                Some((runway, was_inferred)) => (Some(runway), Some(was_inferred)),
+                None => (None, None),
+            };
+
+            (
+                departure_airport_id,
+                takeoff_location_id,
+                takeoff_runway,
+                takeoff_was_inferred,
+            )
+        };
 
     let mut flight = Flight::new_with_takeoff_from_fix(fix, fix.timestamp);
     flight.device_address_type = fix.address_type;
     flight.departure_airport_id = departure_airport_id;
     flight.takeoff_location_id = takeoff_location_id;
     flight.takeoff_runway_ident = takeoff_runway.clone();
-
-    // Calculate takeoff altitude offset (difference between reported altitude and true elevation)
-    flight.takeoff_altitude_offset_ft = calculate_altitude_offset_ft(elevation_db, fix).await;
+    flight.takeoff_altitude_offset_ft = takeoff_altitude_offset_ft;
 
     let flight_id = flight.id;
 
@@ -201,6 +224,52 @@ pub(crate) async fn create_flight(
                 "Failed to create flight for aircraft {}: {}",
                 fix.device_id, e
             );
+            Err(e)
+        }
+    }
+}
+
+/// Timeout a flight that has not received beacons for 5+ minutes
+/// Does NOT set landing location - this is a timeout, not a landing
+pub(crate) async fn timeout_flight(
+    flights_repo: &FlightsRepository,
+    aircraft_trackers: &Arc<RwLock<HashMap<Uuid, AircraftTracker>>>,
+    flight_id: Uuid,
+    device_id: Uuid,
+) -> Result<()> {
+    let timeout_time = Utc::now();
+
+    info!(
+        "Timing out flight {} for device {} (no beacons for 5+ minutes)",
+        flight_id, device_id
+    );
+
+    // Mark flight as timed out in database
+    match flights_repo.timeout_flight(flight_id, timeout_time).await {
+        Ok(true) => {
+            info!("Successfully timed out flight {}", flight_id);
+
+            // Clear tracker state
+            let mut trackers = aircraft_trackers.write().await;
+            if let Some(tracker) = trackers.get_mut(&device_id) {
+                tracker.state = super::aircraft_tracker::AircraftState::Idle;
+                tracker.current_flight_id = None;
+                // Reset towing state
+                tracker.towed_by_device_id = None;
+                tracker.tow_released = false;
+            }
+
+            Ok(())
+        }
+        Ok(false) => {
+            warn!(
+                "Flight {} was not found when attempting to timeout",
+                flight_id
+            );
+            Ok(())
+        }
+        Err(e) => {
+            error!("Failed to timeout flight {}: {}", flight_id, e);
             Err(e)
         }
     }
