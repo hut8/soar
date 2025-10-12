@@ -1,22 +1,25 @@
-import { handleErrorWithSentry, replayIntegration } from '@sentry/sveltekit';
 import * as Sentry from '@sentry/sveltekit';
+import { replayIntegration } from '@sentry/sveltekit';
+import type { HandleClientError } from '@sveltejs/kit';
 
 Sentry.init({
-	dsn: import.meta.env.VITE_SENTRY_DSN,
-	environment: import.meta.env.MODE,
-	tracesSampleRate: 1.0,
+	dsn: 'https://5d2b053d9c52b539568f9bb038cfae06@o4510021799706624.ingest.us.sentry.io/4510173675520000',
+	environment: import.meta.env.MODE || 'production',
 
-	// This sets the sample rate to be 10%. You may want this to be 100% while
-	// in development and sample at a lower rate in production
+	// Adjust trace sample rate for production
+	tracesSampleRate: import.meta.env.MODE === 'development' ? 1.0 : 0.1,
+
+	// Session replay settings
 	replaysSessionSampleRate: 0.1,
-
-	// If the entire session is not sampled, use the below sample rate to sample
-	// sessions when an error occurs.
 	replaysOnErrorSampleRate: 1.0,
 
-	// If you don't want to use Session Replay, just remove the line below:
 	integrations: [replayIntegration()]
 });
 
-// If you have a custom error handler, pass it to `handleErrorWithSentry`
-export const handleError = handleErrorWithSentry();
+export const handleError: HandleClientError = ({ error, event }) => {
+	Sentry.captureException(error, { contexts: { sveltekit: { event } } });
+
+	return {
+		message: 'An error occurred'
+	};
+};
