@@ -148,8 +148,11 @@
 		}
 	}
 
-	function formatCoordinates(lat: number | null, lng: number | null): string {
-		if (lat === null || lng === null) return '—';
+	function formatCoordinates(
+		lat: number | null | undefined,
+		lng: number | null | undefined
+	): string {
+		if (lat == null || lng == null) return '—';
 		return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
 	}
 
@@ -345,7 +348,7 @@
 									</div>
 								{/if}
 
-								{#if receiver.latitude !== null && receiver.longitude !== null}
+								{#if receiver.latitude != null && receiver.longitude != null}
 									<div class="text-surface-500-400-token text-xs">
 										{formatCoordinates(receiver.latitude, receiver.longitude)}
 									</div>
