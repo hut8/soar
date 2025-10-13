@@ -28,6 +28,7 @@ StartLimitBurst=3
 
 # Process limits
 LimitNOFILE=65536
+MemoryMax=32G
 
 [Install]
 WantedBy=multi-user.target soar.target
