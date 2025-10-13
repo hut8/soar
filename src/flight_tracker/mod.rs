@@ -21,9 +21,10 @@ use aircraft_tracker::AircraftTracker;
 use anyhow::Result;
 use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
-use metrics::histogram;
+use metrics::{gauge, histogram};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, trace, warn};
@@ -38,6 +39,7 @@ pub struct FlightTracker {
     elevation_db: ElevationDB,
     aircraft_trackers: Arc<RwLock<HashMap<Uuid, AircraftTracker>>>,
     state_file_path: Option<std::path::PathBuf>,
+    fix_counter: Arc<AtomicU64>,
 }
 
 impl Clone for FlightTracker {
@@ -51,6 +53,7 @@ impl Clone for FlightTracker {
             elevation_db: self.elevation_db.clone(),
             aircraft_trackers: Arc::clone(&self.aircraft_trackers),
             state_file_path: self.state_file_path.clone(),
+            fix_counter: Arc::clone(&self.fix_counter),
         }
     }
 }
@@ -67,6 +70,7 @@ impl FlightTracker {
             elevation_db,
             aircraft_trackers: Arc::new(RwLock::new(HashMap::new())),
             state_file_path: None,
+            fix_counter: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -85,6 +89,7 @@ impl FlightTracker {
             elevation_db,
             aircraft_trackers: Arc::new(RwLock::new(HashMap::new())),
             state_file_path: Some(state_path),
+            fix_counter: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -106,9 +111,10 @@ impl FlightTracker {
 
             debug!("Saved flight tracker state to {:?}", state_path);
 
-            // Record metric for state persistence duration
+            // Record metrics for state persistence
             histogram!("flight_tracker_save_duration_seconds")
                 .record(start.elapsed().as_secs_f64());
+            gauge!("flight_tracker_active_devices").set(trackers.len() as f64);
         }
         Ok(())
     }
@@ -136,9 +142,25 @@ impl FlightTracker {
             let json = tokio::fs::read_to_string(state_path).await?;
             let trackers: HashMap<Uuid, AircraftTracker> = serde_json::from_str(&json)?;
 
-            // Replace the current trackers with the loaded state
+            // Filter out stale devices (inactive for more than 2 hours)
+            let cutoff_time = chrono::Utc::now() - chrono::Duration::hours(2);
+            let original_count = trackers.len();
+            let filtered_trackers: HashMap<Uuid, AircraftTracker> = trackers
+                .into_iter()
+                .filter(|(_, tracker)| tracker.last_update >= cutoff_time)
+                .collect();
+
+            let filtered_count = original_count - filtered_trackers.len();
+            if filtered_count > 0 {
+                info!(
+                    "Filtered out {} stale devices from loaded state",
+                    filtered_count
+                );
+            }
+
+            // Replace the current trackers with the filtered loaded state
             let mut current_trackers = self.aircraft_trackers.write().await;
-            *current_trackers = trackers;
+            *current_trackers = filtered_trackers;
 
             info!(
                 "Loaded flight tracker state from {:?} ({} aircraft)",
@@ -295,8 +317,9 @@ impl FlightTracker {
         .await
         {
             Ok(updated_fix) => {
-                // Periodically clean up old trackers (roughly every 1000 fixes)
-                if rand::random::<u16>().is_multiple_of(1000) {
+                // Deterministically clean up old trackers every 1000 fixes
+                let count = self.fix_counter.fetch_add(1, Ordering::Relaxed);
+                if count.is_multiple_of(1000) {
                     let trackers = Arc::clone(&self.aircraft_trackers);
                     tokio::spawn(async move {
                         let mut trackers_write = trackers.write().await;

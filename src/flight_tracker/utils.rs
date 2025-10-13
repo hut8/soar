@@ -1,5 +1,6 @@
 use crate::devices::AddressType;
 use chrono::Utc;
+use metrics::gauge;
 use std::collections::HashMap;
 use tracing::{debug, info};
 use uuid::Uuid;
@@ -21,7 +22,7 @@ pub(crate) fn format_device_address_with_type(
 
 /// Clean up old trackers for aircraft that haven't been seen recently
 pub(crate) async fn cleanup_old_trackers(trackers: &mut HashMap<Uuid, AircraftTracker>) {
-    let cutoff_time = Utc::now() - chrono::Duration::hours(24);
+    let cutoff_time = Utc::now() - chrono::Duration::hours(2);
 
     let old_count = trackers.len();
     trackers.retain(|device_address, tracker| {
@@ -37,4 +38,7 @@ pub(crate) async fn cleanup_old_trackers(trackers: &mut HashMap<Uuid, AircraftTr
     if removed_count > 0 {
         info!("Cleaned up {} stale aircraft trackers", removed_count);
     }
+
+    // Record metric for active tracker count
+    gauge!("flight_tracker_active_devices").set(trackers.len() as f64);
 }
