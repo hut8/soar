@@ -161,23 +161,7 @@ impl Fix {
                 let emitter_category = None;
                 let registration = None;
                 let model = None;
-
-                // Parse squawk code from unparsed data (format: "Sq7615")
-                let squawk = pos_packet.comment.unparsed.as_ref().and_then(|unparsed| {
-                    // Look for "Sq" followed by 4 digits
-                    unparsed
-                        .split_whitespace()
-                        .find(|token| token.starts_with("Sq") && token.len() == 6)
-                        .and_then(|token| {
-                            let digits = &token[2..];
-                            if digits.chars().all(|c| c.is_ascii_digit()) {
-                                Some(digits.to_string())
-                            } else {
-                                None
-                            }
-                        })
-                });
-
+                let squawk = pos_packet.comment.squawk.clone();
                 let climb_fpm = pos_packet.comment.climb_rate.map(|c| c as i32);
                 let turn_rate_rot = None;
                 let snr_db = None;
