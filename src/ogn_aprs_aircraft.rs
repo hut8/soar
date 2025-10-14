@@ -101,27 +101,27 @@ pub enum AdsbEmitterCategory {
 impl fmt::Display for AdsbEmitterCategory {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
-            AdsbEmitterCategory::A0 => "A0",
-            AdsbEmitterCategory::A1 => "A1",
-            AdsbEmitterCategory::A2 => "A2",
-            AdsbEmitterCategory::A3 => "A3",
-            AdsbEmitterCategory::A4 => "A4",
-            AdsbEmitterCategory::A5 => "A5",
-            AdsbEmitterCategory::A6 => "A6",
-            AdsbEmitterCategory::A7 => "A7",
-            AdsbEmitterCategory::B0 => "B0",
-            AdsbEmitterCategory::B1 => "B1",
-            AdsbEmitterCategory::B2 => "B2",
-            AdsbEmitterCategory::B3 => "B3",
-            AdsbEmitterCategory::B4 => "B4",
-            AdsbEmitterCategory::B6 => "B6",
-            AdsbEmitterCategory::B7 => "B7",
-            AdsbEmitterCategory::C0 => "C0",
-            AdsbEmitterCategory::C1 => "C1",
-            AdsbEmitterCategory::C2 => "C2",
-            AdsbEmitterCategory::C3 => "C3",
-            AdsbEmitterCategory::C4 => "C4",
-            AdsbEmitterCategory::C5 => "C5",
+            AdsbEmitterCategory::A0 => "a0",
+            AdsbEmitterCategory::A1 => "a1",
+            AdsbEmitterCategory::A2 => "a2",
+            AdsbEmitterCategory::A3 => "a3",
+            AdsbEmitterCategory::A4 => "a4",
+            AdsbEmitterCategory::A5 => "a5",
+            AdsbEmitterCategory::A6 => "a6",
+            AdsbEmitterCategory::A7 => "a7",
+            AdsbEmitterCategory::B0 => "b0",
+            AdsbEmitterCategory::B1 => "b1",
+            AdsbEmitterCategory::B2 => "b2",
+            AdsbEmitterCategory::B3 => "b3",
+            AdsbEmitterCategory::B4 => "b4",
+            AdsbEmitterCategory::B6 => "b6",
+            AdsbEmitterCategory::B7 => "b7",
+            AdsbEmitterCategory::C0 => "c0",
+            AdsbEmitterCategory::C1 => "c1",
+            AdsbEmitterCategory::C2 => "c2",
+            AdsbEmitterCategory::C3 => "c3",
+            AdsbEmitterCategory::C4 => "c4",
+            AdsbEmitterCategory::C5 => "c5",
         };
         write!(f, "{}", s)
     }
@@ -174,10 +174,10 @@ mod tests {
     use super::*;
     #[test]
     fn test_adsb_emitter_category_to_string() {
-        assert_eq!(AdsbEmitterCategory::A0.to_string(), "A0");
-        assert_eq!(AdsbEmitterCategory::A3.to_string(), "A3");
-        assert_eq!(AdsbEmitterCategory::B1.to_string(), "B1");
-        assert_eq!(AdsbEmitterCategory::C5.to_string(), "C5");
+        assert_eq!(AdsbEmitterCategory::A0.to_string(), "a0");
+        assert_eq!(AdsbEmitterCategory::A3.to_string(), "a3");
+        assert_eq!(AdsbEmitterCategory::B1.to_string(), "b1");
+        assert_eq!(AdsbEmitterCategory::C5.to_string(), "c5");
     }
 
     #[test]
