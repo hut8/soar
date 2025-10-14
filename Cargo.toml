@@ -62,7 +62,7 @@ axum-tungstenite = "0.3.0"
 futures-util = "0.3.31"
 sentry = { version = "0.43.0", features = ["tracing", "logs"] }
 postgis_diesel = { version = "3.0.2", features = ["serde", "serde_geojson"] }
-rust_decimal = "1.38"
+rust_decimal = "1.39"
 zip = "6"
 directories = "6.0.0"
 gdal = "0.18.0"
