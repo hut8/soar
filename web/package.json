@@ -28,7 +28,7 @@
 		"@tailwindcss/typography": "^0.5.19",
 		"@types/google.maps": "^3.58.1",
 		"@types/plotly.js": "^3.0.6",
-		"eslint": "^9.18.0",
+		"eslint": "^9.37.0",
 		"eslint-config-prettier": "^10.0.1",
 		"eslint-plugin-svelte": "^3.12.4",
 		"globals": "^16.0.0",
