@@ -4122,7 +4122,7 @@ version = "0.45.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "912fea629a3fc7bfcb97f7bde31a5c815df8526ba19088dcef3ae32ea1e25418"
 dependencies = [
- "bitflags",
+ "bitflags 2.9.4",
  "log",
  "sentry-core",
 ]

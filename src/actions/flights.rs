@@ -226,7 +226,7 @@ pub async fn search_flights(
     let device_repo = DeviceRepository::new(state.pool.clone());
 
     let completed = params.completed.unwrap_or(false);
-    let limit = params.limit.unwrap_or(100);
+    let limit = params.limit.unwrap_or(50);
 
     if completed {
         // Get completed flights with device info
@@ -268,8 +268,8 @@ pub async fn search_flights(
         // Get flights in progress
         if let Some(_club_id) = params.club_id {
             // Club-based flight search would require joining with aircraft_registrations
-            // For now, just return flights in progress
-            match flights_repo.get_flights_in_progress().await {
+            // For now, just return flights in progress with limit
+            match flights_repo.get_flights_in_progress(limit).await {
                 Ok(flights) => {
                     let flight_views: Vec<FlightView> =
                         flights.into_iter().map(|f| f.into()).collect();
@@ -285,7 +285,7 @@ pub async fn search_flights(
                 }
             }
         } else {
-            match flights_repo.get_flights_in_progress().await {
+            match flights_repo.get_flights_in_progress(limit).await {
                 Ok(flights) => {
                     let flight_views: Vec<FlightView> =
                         flights.into_iter().map(|f| f.into()).collect();
