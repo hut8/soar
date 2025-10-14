@@ -157,16 +157,28 @@ impl Fix {
                 let mut device_address = 0i32;
                 let mut address_type = AddressType::Unknown;
                 let mut aircraft_type_ogn = None;
-                let flight_number = None;
-                let emitter_category = None;
+                let flight_number = pos_packet.comment.flight_number.clone();
+                let emitter_category = pos_packet
+                    .comment
+                    .adsb_emitter_category
+                    .and_then(|cat| cat.to_string().parse().ok());
                 let registration = None;
                 let model = None;
                 let squawk = pos_packet.comment.squawk.clone();
                 let climb_fpm = pos_packet.comment.climb_rate.map(|c| c as i32);
-                let turn_rate_rot = None;
-                let snr_db = None;
-                let bit_errors_corrected = None;
-                let freq_offset_khz = None;
+                let turn_rate_rot = pos_packet
+                    .comment
+                    .turn_rate
+                    .and_then(|t| t.to_string().parse::<f32>().ok());
+                let snr_db = pos_packet
+                    .comment
+                    .signal_quality
+                    .and_then(|s| s.to_string().parse::<f32>().ok());
+                let bit_errors_corrected = pos_packet.comment.error.map(|e| e as i32);
+                let freq_offset_khz = pos_packet
+                    .comment
+                    .frequency_offset
+                    .and_then(|f| f.to_string().parse::<f32>().ok());
 
                 // Try to parse OGN parameters from comment
                 if let Some(ref id) = pos_packet.comment.id {
