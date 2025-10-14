@@ -416,8 +416,8 @@ async fn handle_run(
         warn!("Failed to load flight tracker state: {}", e);
     }
 
-    // Start periodic state saving (every 5 seconds)
-    flight_tracker.start_periodic_state_saving(5);
+    // Start periodic state saving (every 30 seconds)
+    flight_tracker.start_periodic_state_saving(30);
 
     // Start flight timeout checker (every 60 seconds)
     flight_tracker.start_timeout_checker(60);

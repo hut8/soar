@@ -276,16 +276,23 @@ impl FlightTracker {
     pub async fn process_fix(&self, fix: Fix) -> Option<Fix> {
         // Check for duplicate fixes first (within 1 second)
         let is_duplicate = {
+            let lock_start = Instant::now();
             let trackers_read = self.aircraft_trackers.try_read();
             match trackers_read {
                 Ok(trackers) => {
+                    histogram!("flight_tracker_read_lock_duration_seconds")
+                        .record(lock_start.elapsed().as_secs_f64());
                     if let Some(tracker) = trackers.get(&fix.device_id) {
                         tracker.is_duplicate_fix(&fix)
                     } else {
                         false // New aircraft, not a duplicate
                     }
                 }
-                Err(_) => false, // Could not get read lock, process anyway
+                Err(_) => {
+                    // Could not get read lock, process anyway
+                    metrics::counter!("flight_tracker_read_lock_contention_total").increment(1);
+                    false
+                }
             }
         };
 
