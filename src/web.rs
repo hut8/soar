@@ -242,7 +242,7 @@ async fn metrics_middleware(request: Request<Body>, next: Next) -> Response {
         .map(|matched_path| matched_path.as_str().to_string())
         .unwrap_or_else(|| request.uri().path().to_string());
 
-    // Normalize static file paths to avoid creating metrics for each individual file
+    // Normalize paths to avoid creating metrics for each individual request
     let path = if raw_path.starts_with("/_app/")
         || raw_path.starts_with("/assets/")
         || raw_path.starts_with("/_immutable/")
@@ -258,9 +258,18 @@ async fn metrics_middleware(request: Request<Body>, next: Next) -> Response {
         || raw_path.ends_with(".ico")
         || raw_path.ends_with(".webp")
     {
+        // Static assets (JS, CSS, fonts, images)
         "/static_files".to_string()
-    } else {
+    } else if raw_path.starts_with("/data/") {
+        // API routes - keep the matched path pattern (e.g., "/data/devices/{id}")
         raw_path
+    } else if raw_path == "/robots.txt" || raw_path.starts_with("/sitemap") {
+        // Keep robots.txt and sitemap routes as-is
+        raw_path
+    } else {
+        // Everything else is served by the fallback handler (client-side routing via index.html)
+        // This includes /, /devices/uuid, /flights/uuid, etc.
+        "/[...fallback]".to_string()
     };
 
     let response = next.run(request).await;
