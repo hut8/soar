@@ -22,10 +22,12 @@ use super::towing::detect_towing_at_takeoff;
 use super::utils::format_device_address_with_type;
 
 /// Create a new flight for aircraft already airborne (no takeoff data)
+/// Accepts a pre-generated flight_id to prevent race conditions
 pub(crate) async fn create_airborne_flight(
     flights_repo: &FlightsRepository,
     fixes_repo: &FixesRepository,
     fix: &Fix,
+    flight_id: Uuid,
 ) -> Result<Uuid> {
     // Check for existing active flights for this device
     match flights_repo
@@ -57,12 +59,10 @@ pub(crate) async fn create_airborne_flight(
         }
     }
 
-    info!("Creating airborne flight from fix: {:?}", fix);
-    let mut flight = Flight::new_airborne_from_fix(fix);
+    info!("Creating airborne flight {} from fix: {:?}", flight_id, fix);
+    let mut flight = Flight::new_airborne_from_fix_with_id(fix, flight_id);
     flight.device_address_type = fix.address_type;
     // No departure airport since we don't know where they took off from
-
-    let flight_id = flight.id;
 
     match flights_repo.create_flight(flight).await {
         Ok(_) => {
@@ -108,6 +108,7 @@ pub(crate) async fn create_airborne_flight(
 }
 
 /// Create a new flight for takeoff
+/// Accepts a pre-generated flight_id to prevent race conditions
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn create_flight(
     flights_repo: &FlightsRepository,
@@ -118,6 +119,7 @@ pub(crate) async fn create_flight(
     elevation_db: &ElevationDB,
     aircraft_trackers: &Arc<RwLock<HashMap<Uuid, AircraftTracker>>>,
     fix: &Fix,
+    flight_id: Uuid,
     skip_airport_runway_lookup: bool,
 ) -> Result<Uuid> {
     // Check for existing active flights for this device
@@ -204,14 +206,12 @@ pub(crate) async fn create_flight(
             )
         };
 
-    let mut flight = Flight::new_with_takeoff_from_fix(fix, fix.timestamp);
+    let mut flight = Flight::new_with_takeoff_from_fix_with_id(fix, flight_id, fix.timestamp);
     flight.device_address_type = fix.address_type;
     flight.departure_airport_id = departure_airport_id;
     flight.takeoff_location_id = takeoff_location_id;
     flight.takeoff_runway_ident = takeoff_runway.clone();
     flight.takeoff_altitude_offset_ft = takeoff_altitude_offset_ft;
-
-    let flight_id = flight.id;
 
     match flights_repo.create_flight(flight).await {
         Ok(_) => {

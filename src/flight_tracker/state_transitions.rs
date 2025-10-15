@@ -92,11 +92,16 @@ pub(crate) async fn process_state_transition(
                     false
                 };
 
+                // Generate flight_id FIRST to prevent race condition
+                let flight_id = Uuid::new_v4();
+
                 // Update tracker state immediately to prevent duplicate flight creation
+                // CRITICAL: Set current_flight_id to the pre-generated ID before spawning background task
                 let mut trackers = aircraft_trackers.write().await;
                 if let Some(tracker) = trackers.get_mut(&fix.device_id) {
                     tracker.update_position(&fix);
                     tracker.state = new_state.clone();
+                    tracker.current_flight_id = Some(flight_id);
                 }
                 drop(trackers); // Release lock immediately
 
@@ -119,19 +124,21 @@ pub(crate) async fn process_state_transition(
                         &elevation_db_clone,
                         &trackers_clone,
                         &takeoff_fix,
+                        flight_id,
                         skip_airport_runway_lookup,
                     )
                     .await
                     {
-                        Ok(flight_id) => {
-                            // Update tracker with the flight_id
-                            let mut trackers = trackers_clone.write().await;
-                            if let Some(tracker) = trackers.get_mut(&takeoff_fix.device_id) {
-                                tracker.current_flight_id = Some(flight_id);
-                            }
+                        Ok(_) => {
+                            // Flight created successfully - flight_id already set in tracker above
                         }
                         Err(e) => {
                             warn!("Failed to create flight for takeoff: {}", e);
+                            // Clear flight_id from tracker on error
+                            let mut trackers = trackers_clone.write().await;
+                            if let Some(tracker) = trackers.get_mut(&takeoff_fix.device_id) {
+                                tracker.current_flight_id = None;
+                            }
                         }
                     }
                 });
@@ -255,43 +262,49 @@ pub(crate) async fn process_state_transition(
         }
     } else {
         // New aircraft - only create a flight if we detect a true takeoff (idle→active)
-        // For aircraft first seen in Active state, just track them without creating a flight
-        // A flight will be created later when they transition from active→idle→active (true takeoff)
+        // For aircraft first seen in Active state, create an airborne flight
         let mut new_tracker = AircraftTracker::new(new_state.clone());
         new_tracker.update_position(&fix);
 
-        // Insert tracker FIRST to prevent race condition with duplicate flight creation
-        let mut trackers = aircraft_trackers.write().await;
-        trackers.insert(fix.device_id, new_tracker);
-        info!(
-            "Started tracking aircraft {} in {:?} state",
-            fix.device_id, new_state
-        );
-        drop(trackers); // Release lock immediately
-
         if new_state == AircraftState::Active {
+            // Generate flight_id FIRST to prevent race condition
+            let flight_id = Uuid::new_v4();
+            new_tracker.current_flight_id = Some(flight_id);
+
             debug!(
-                "New in-flight aircraft detected: {}",
+                "New in-flight aircraft detected: {} - creating airborne flight {}",
                 format_device_address_with_type(
                     fix.device_address_hex().as_ref(),
                     fix.address_type
-                )
+                ),
+                flight_id
             );
-            // Create flight in background to avoid blocking and prevent race condition
+
+            // Insert tracker FIRST with flight_id already set to prevent race condition
+            let mut trackers = aircraft_trackers.write().await;
+            trackers.insert(fix.device_id, new_tracker);
+            info!(
+                "Started tracking aircraft {} in {:?} state with flight {}",
+                fix.device_id, new_state, flight_id
+            );
+            drop(trackers); // Release lock immediately
+
+            // Create flight in background to avoid blocking
             let flights_repo_clone = flights_repo.clone();
             let fixes_repo_clone = fixes_repo.clone();
             let trackers_clone = Arc::clone(aircraft_trackers);
             let airborne_fix = fix.clone();
             tokio::spawn(async move {
-                match create_airborne_flight(&flights_repo_clone, &fixes_repo_clone, &airborne_fix)
-                    .await
+                match create_airborne_flight(
+                    &flights_repo_clone,
+                    &fixes_repo_clone,
+                    &airborne_fix,
+                    flight_id,
+                )
+                .await
                 {
-                    Ok(flight_id) => {
-                        // Update tracker with the flight_id
-                        let mut trackers = trackers_clone.write().await;
-                        if let Some(tracker) = trackers.get_mut(&airborne_fix.device_id) {
-                            tracker.current_flight_id = Some(flight_id);
-                        }
+                    Ok(_) => {
+                        // Flight created successfully - flight_id already set in tracker above
                         info!(
                             "Created airborne flight {} for aircraft {} (no takeoff data)",
                             flight_id,
@@ -303,13 +316,26 @@ pub(crate) async fn process_state_transition(
                     }
                     Err(e) => {
                         warn!(
-                            "Failed to create airborne flight for {}: {}",
-                            airborne_fix.device_id, e
+                            "Failed to create airborne flight {} for {}: {}",
+                            flight_id, airborne_fix.device_id, e
                         );
+                        // Clear flight_id from tracker on error
+                        let mut trackers = trackers_clone.write().await;
+                        if let Some(tracker) = trackers.get_mut(&airborne_fix.device_id) {
+                            tracker.current_flight_id = None;
+                        }
                     }
                 }
             });
-            // Note: flight_id will be set on subsequent fixes for this aircraft
+            // Note: flight_id is already set on tracker, subsequent fixes will use it
+        } else {
+            // Idle aircraft - just track without creating a flight
+            let mut trackers = aircraft_trackers.write().await;
+            trackers.insert(fix.device_id, new_tracker);
+            info!(
+                "Started tracking aircraft {} in {:?} state",
+                fix.device_id, new_state
+            );
         }
     }
 

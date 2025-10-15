@@ -215,9 +215,88 @@ impl Flight {
         Self::new_from_fix(fix, None)
     }
 
+    /// Create a new flight for device already airborne with a pre-generated UUID
+    /// This is used to prevent race conditions when creating flights asynchronously
+    pub fn new_airborne_from_fix_with_id(fix: &Fix, flight_id: Uuid) -> Self {
+        let now = Utc::now();
+        info!("Creating airborne flight {} from fix: {:?}", flight_id, fix);
+        Self {
+            id: flight_id,
+            device_id: fix.device_id.into(),
+            device_address: fix.device_address_hex(),
+            device_address_type: fix.address_type,
+            takeoff_time: None,
+            landing_time: None,
+            departure_airport_id: None,
+            arrival_airport_id: None,
+            tow_aircraft_id: None,
+            tow_release_height_msl: None,
+            towed_by_device_id: None,
+            towed_by_flight_id: None,
+            tow_release_altitude_msl_ft: None,
+            tow_release_time: None,
+            club_id: None,
+            takeoff_altitude_offset_ft: None,
+            landing_altitude_offset_ft: None,
+            takeoff_runway_ident: None,
+            landing_runway_ident: None,
+            total_distance_meters: None,
+            maximum_displacement_meters: None,
+            runways_inferred: None,
+            takeoff_location_id: None,
+            landing_location_id: None,
+            timed_out_at: None,
+            created_at: now,
+            updated_at: now,
+        }
+    }
+
     /// Create a new flight with known takeoff time
     pub fn new_with_takeoff_from_fix(fix: &Fix, takeoff_time: DateTime<Utc>) -> Self {
         Self::new_from_fix(fix, Some(takeoff_time))
+    }
+
+    /// Create a new flight with known takeoff time and pre-generated UUID
+    /// This is used to prevent race conditions when creating flights asynchronously
+    pub fn new_with_takeoff_from_fix_with_id(
+        fix: &Fix,
+        flight_id: Uuid,
+        takeoff_time: DateTime<Utc>,
+    ) -> Self {
+        let now = Utc::now();
+        info!(
+            "Creating flight {} with takeoff from fix: {:?}",
+            flight_id, fix
+        );
+        Self {
+            id: flight_id,
+            device_id: fix.device_id.into(),
+            device_address: fix.device_address_hex(),
+            device_address_type: fix.address_type,
+            takeoff_time: Some(takeoff_time),
+            landing_time: None,
+            departure_airport_id: None,
+            arrival_airport_id: None,
+            tow_aircraft_id: None,
+            tow_release_height_msl: None,
+            towed_by_device_id: None,
+            towed_by_flight_id: None,
+            tow_release_altitude_msl_ft: None,
+            tow_release_time: None,
+            club_id: None,
+            takeoff_altitude_offset_ft: None,
+            landing_altitude_offset_ft: None,
+            takeoff_runway_ident: None,
+            landing_runway_ident: None,
+            total_distance_meters: None,
+            maximum_displacement_meters: None,
+            runways_inferred: None,
+            takeoff_location_id: None,
+            landing_location_id: None,
+            timed_out_at: None,
+            created_at: now,
+            updated_at: now,
+        }
     }
 
     /// Check if the flight is still in progress (no landing time)
