@@ -2,7 +2,7 @@ use anyhow::{Context, Result, bail};
 use directories::BaseDirs;
 use gdal::{Dataset, raster::ResampleAlg};
 use lru::LruCache;
-use metrics::{counter, histogram};
+use metrics::{counter, gauge, histogram};
 use std::{env, num::NonZeroUsize, path::PathBuf, sync::Arc, time::Instant};
 use tokio::sync::Mutex;
 
@@ -24,7 +24,7 @@ pub struct ElevationDB {
     /// Manages tile downloads with deduplication
     tile_downloader: TileDownloader,
     /// LRU cache for elevation results: (rounded_lat, rounded_lon) -> elevation_meters
-    /// 50,000 entries ≈ 5MB of memory, provides excellent hit rate for multi-aircraft operations
+    /// 500,000 entries ≈ 28MB of memory, provides excellent hit rate for multi-aircraft operations
     elevation_cache: Arc<Mutex<LruCache<CacheKey, Option<f64>>>>,
 }
 
@@ -52,7 +52,7 @@ impl ElevationDB {
             tile_downloader: TileDownloader::new(storage_path.clone()),
             storage_path,
             elevation_cache: Arc::new(Mutex::new(LruCache::new(
-                NonZeroUsize::new(50_000).unwrap(),
+                NonZeroUsize::new(500_000).unwrap(),
             ))),
         })
     }
@@ -69,7 +69,7 @@ impl ElevationDB {
             tile_downloader: TileDownloader::new(storage_path.clone()),
             storage_path,
             elevation_cache: Arc::new(Mutex::new(LruCache::new(
-                NonZeroUsize::new(50_000).unwrap(),
+                NonZeroUsize::new(500_000).unwrap(),
             ))),
         })
     }
@@ -96,9 +96,17 @@ impl ElevationDB {
             let mut cache = self.elevation_cache.lock().await;
             if let Some(cached_elevation) = cache.get(&cache_key) {
                 counter!("elevation_cache_hits").increment(1);
+
+                // Copy the elevation value before releasing the cache lock
+                let elevation = *cached_elevation;
+
+                // Update cache size metric (each entry ≈ 56 bytes: 8 for key + 16 for value + 32 LRU overhead)
+                let size_mb = (cache.len() * 56) as f64 / 1_048_576.0;
+                gauge!("elevation_cache_size_mb").set(size_mb);
+
                 histogram!("elevation_lookup_duration_seconds")
                     .record(start.elapsed().as_secs_f64());
-                return Ok(*cached_elevation);
+                return Ok(elevation);
             }
         }
 
@@ -150,6 +158,10 @@ impl ElevationDB {
         {
             let mut cache = self.elevation_cache.lock().await;
             cache.put(cache_key, elevation);
+
+            // Update cache size metric (each entry ≈ 56 bytes: 8 for key + 16 for value + 32 LRU overhead)
+            let size_mb = (cache.len() * 56) as f64 / 1_048_576.0;
+            gauge!("elevation_cache_size_mb").set(size_mb);
         }
 
         // Record metric for elevation lookup duration
