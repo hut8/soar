@@ -437,7 +437,15 @@ impl AprsClient {
                 {
                     trace!("Failed to parse APRS message '{message}': {e}");
                 } else {
-                    error!("Failed to parse APRS message '{message}': {e}");
+                    info!("Failed to parse APRS message '{message}': {e}");
+                    // Log entire message to unparsed log if configured
+                    if let Some(log_path) = &config.unparsed_log_path {
+                        Self::log_unparsed_to_csv(log_path, "unparsed", message, message)
+                            .await
+                            .unwrap_or_else(|e| {
+                                warn!("Failed to write to unparsed log: {}", e);
+                            });
+                    }
                 }
             }
         }
