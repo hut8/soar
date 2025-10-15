@@ -409,10 +409,36 @@ pub(crate) async fn complete_flight(
             match flights_repo.delete_flight(flight_id).await {
                 Ok(true) => {
                     info!("Deleted spurious flight {}", flight_id);
+
+                    // Clear tracker state since flight was deleted
+                    // This prevents future fixes from trying to use the deleted flight_id
+                    {
+                        let mut trackers = aircraft_trackers.write().await;
+                        if let Some(tracker) = trackers.get_mut(&fix.device_id) {
+                            tracker.current_flight_id = None;
+                            // Reset towing state
+                            tracker.towed_by_device_id = None;
+                            tracker.tow_released = false;
+                            tracker.takeoff_runway_inferred = None;
+                        }
+                    }
+
                     return Ok(());
                 }
                 Ok(false) => {
                     warn!("Flight {} was already deleted", flight_id);
+
+                    // Still clear tracker state to be safe
+                    {
+                        let mut trackers = aircraft_trackers.write().await;
+                        if let Some(tracker) = trackers.get_mut(&fix.device_id) {
+                            tracker.current_flight_id = None;
+                            tracker.towed_by_device_id = None;
+                            tracker.tow_released = false;
+                            tracker.takeoff_runway_inferred = None;
+                        }
+                    }
+
                     return Ok(());
                 }
                 Err(e) => {
