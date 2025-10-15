@@ -198,8 +198,8 @@ diesel::table! {
         id -> Uuid,
         raw_message -> Text,
         received_at -> Timestamptz,
-        created_at -> Timestamptz,
-        updated_at -> Timestamptz,
+        receiver_id -> Nullable<Uuid>,
+        unparsed -> Nullable<Text>,
     }
 }
 
@@ -597,6 +597,7 @@ diesel::joinable!(aircraft_registrations -> devices (device_id));
 diesel::joinable!(aircraft_registrations -> locations (location_id));
 diesel::joinable!(aircraft_registrations -> status_codes (status_code));
 diesel::joinable!(aircraft_registrations -> type_engines (type_engine_code));
+diesel::joinable!(aprs_messages -> receivers (receiver_id));
 diesel::joinable!(clubs -> airports (home_base_airport_id));
 diesel::joinable!(clubs -> locations (location_id));
 diesel::joinable!(devices -> clubs (club_id));

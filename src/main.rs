@@ -3,13 +3,11 @@ use clap::{Parser, Subcommand};
 use diesel::r2d2::{ConnectionManager, Pool};
 use diesel::{PgConnection, QueryableByName, RunQueryDsl};
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
-use pyroscope::{PyroscopeAgent, pyroscope::PyroscopeAgentRunning};
-use pyroscope_pprofrs::{PprofConfig, pprof_backend};
 use soar::pull;
 use std::env;
 use std::fs;
 use std::path::Path;
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 
 use soar::aprs_client::{AprsClient, AprsClientConfigBuilder};
 use soar::fix_processor::FixProcessor;
@@ -524,75 +522,6 @@ async fn handle_run(
     }
 }
 
-/// Initialize Pyroscope profiling for production environments
-fn init_pyroscope() -> Result<Option<PyroscopeAgent<PyroscopeAgentRunning>>> {
-    // Only initialize in production
-    let is_production = env::var("SOAR_ENV")
-        .map(|env| env == "production")
-        .unwrap_or(false);
-
-    if !is_production {
-        return Ok(None);
-    }
-
-    // Get Pyroscope configuration from environment
-    let pyroscope_url = match env::var("PYROSCOPE_URL") {
-        Ok(url) => url,
-        Err(_) => {
-            info!("PYROSCOPE_URL not set, profiling disabled");
-            return Ok(None);
-        }
-    };
-
-    // Application name defaults to "soar" but can be overridden
-    let app_name = env::var("PYROSCOPE_APP_NAME").unwrap_or_else(|_| "soar".to_string());
-
-    // Sample rate (default 100 Hz)
-    let sample_rate = env::var("PYROSCOPE_SAMPLE_RATE")
-        .ok()
-        .and_then(|s| s.parse::<u32>().ok())
-        .unwrap_or(100);
-
-    info!(
-        "Initializing Pyroscope profiling: url={}, app={}, sample_rate={}",
-        pyroscope_url, app_name, sample_rate
-    );
-
-    // Configure profiling backend
-    let pprof_config = PprofConfig::new().sample_rate(sample_rate);
-    let backend_impl = pprof_backend(pprof_config);
-
-    // Build agent with optional basic auth
-    let mut agent_builder =
-        PyroscopeAgent::builder(&pyroscope_url, &app_name).backend(backend_impl);
-
-    // Add basic auth if credentials are provided
-    if let (Ok(user), Ok(password)) = (env::var("PYROSCOPE_USER"), env::var("PYROSCOPE_PASSWORD")) {
-        info!("Using basic auth for Pyroscope");
-        agent_builder = agent_builder.basic_auth(user, password);
-    }
-
-    // Add tags for additional context
-    let version = env::var("SENTRY_RELEASE").unwrap_or_else(|_| String::new());
-    let mut tags = vec![("language", "rust")];
-    if !version.is_empty() {
-        tags.push(("version", version.as_str()));
-    }
-    agent_builder = agent_builder.tags(tags);
-
-    // Build the agent
-    let agent = agent_builder
-        .build()
-        .context("Failed to build Pyroscope agent")?;
-
-    // Start profiling
-    let agent_running = agent.start().context("Failed to start Pyroscope agent")?;
-
-    info!("Pyroscope profiling started successfully");
-
-    Ok(Some(agent_running))
-}
-
 #[tokio::main]
 async fn main() -> Result<()> {
     // Load environment variables from .env file early
@@ -707,15 +636,6 @@ async fn main() -> Result<()> {
     } else {
         subscriber.init();
     }
-
-    // Initialize Pyroscope profiling if in production
-    let _pyroscope_agent = match init_pyroscope() {
-        Ok(agent) => agent,
-        Err(e) => {
-            error!("Failed to initialize Pyroscope: {}", e);
-            None
-        }
-    };
 
     let cli = Cli::parse();
 
