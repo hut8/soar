@@ -112,6 +112,16 @@
 			!data.flight.arrival_airport
 	);
 
+	// Check if any fix has AGL data available
+	const hasAglData = $derived(
+		data.fixes.some(
+			(fix) =>
+				fix.altitude_agl_feet !== null &&
+				fix.altitude_agl_feet !== undefined &&
+				fix.altitude_agl_feet > 0
+		)
+	);
+
 	// Format date/time with relative time and full datetime
 	function formatDateTime(dateString: string | undefined): string {
 		if (!dateString) return 'N/A';
@@ -227,9 +237,7 @@
 
 	// Watch for changes to includeNearbyFlights
 	$effect(() => {
-		if (includeNearbyFlights !== undefined) {
-			fetchNearbyFlights();
-		}
+		fetchNearbyFlights();
 	});
 
 	// Poll for updates to in-progress flights
@@ -369,50 +377,52 @@
 			const fixesInOrder = [...data.fixes].reverse();
 			const timestamps = fixesInOrder.map((fix) => new Date(fix.timestamp));
 			const altitudesMsl = fixesInOrder.map((fix) => fix.altitude_msl_feet || 0);
-			const altitudesAgl = fixesInOrder.map((fix) => fix.altitude_agl_feet || 0);
 
-			Plotly.react(
-				altitudeChartContainer,
-				[
-					{
-						x: timestamps,
-						y: altitudesMsl,
-						type: 'scatter' as const,
-						mode: 'lines' as const,
-						name: 'MSL Altitude',
-						line: { color: '#3b82f6', width: 2 },
-						hovertemplate: '<b>MSL:</b> %{y:.0f} ft<br>%{x}<extra></extra>'
-					},
-					{
-						x: timestamps,
-						y: altitudesAgl,
-						type: 'scatter' as const,
-						mode: 'lines' as const,
-						name: 'AGL Altitude',
-						line: { color: '#10b981', width: 2 },
-						hovertemplate: '<b>AGL:</b> %{y:.0f} ft<br>%{x}<extra></extra>'
-					}
-				],
+			// Only include AGL trace if AGL data is available
+			const traces = [
 				{
-					title: { text: 'Altitude Profile' },
-					xaxis: {
-						title: { text: 'Time' },
-						type: 'date'
-					},
-					yaxis: {
-						title: { text: 'Altitude (ft)' },
-						rangemode: 'tozero'
-					},
-					hovermode: 'x unified',
-					showlegend: true,
-					legend: {
-						x: 0.01,
-						y: 0.99,
-						bgcolor: 'rgba(255, 255, 255, 0.8)'
-					},
-					margin: { l: 60, r: 20, t: 40, b: 60 }
+					x: timestamps,
+					y: altitudesMsl,
+					type: 'scatter' as const,
+					mode: 'lines' as const,
+					name: 'MSL Altitude',
+					line: { color: '#3b82f6', width: 2 },
+					hovertemplate: '<b>MSL:</b> %{y:.0f} ft<br>%{x}<extra></extra>'
 				}
-			);
+			];
+
+			if (hasAglData) {
+				const altitudesAgl = fixesInOrder.map((fix) => fix.altitude_agl_feet || 0);
+				traces.push({
+					x: timestamps,
+					y: altitudesAgl,
+					type: 'scatter' as const,
+					mode: 'lines' as const,
+					name: 'AGL Altitude',
+					line: { color: '#10b981', width: 2 },
+					hovertemplate: '<b>AGL:</b> %{y:.0f} ft<br>%{x}<extra></extra>'
+				});
+			}
+
+			Plotly.react(altitudeChartContainer, traces, {
+				title: { text: 'Altitude Profile' },
+				xaxis: {
+					title: { text: 'Time' },
+					type: 'date'
+				},
+				yaxis: {
+					title: { text: 'Altitude (ft)' },
+					rangemode: 'tozero'
+				},
+				hovermode: 'x unified',
+				showlegend: true,
+				legend: {
+					x: 0.01,
+					y: 0.99,
+					bgcolor: 'rgba(255, 255, 255, 0.8)'
+				},
+				margin: { l: 60, r: 20, t: 40, b: 60 }
+			});
 		}
 	}
 
@@ -550,28 +560,32 @@
 				// Prepare data for the chart
 				const timestamps = fixesInOrder.map((fix) => new Date(fix.timestamp));
 				const altitudesMsl = fixesInOrder.map((fix) => fix.altitude_msl_feet || 0);
-				const altitudesAgl = fixesInOrder.map((fix) => fix.altitude_agl_feet || 0);
 
-				// Create traces for MSL and AGL
-				const traceMsl = {
-					x: timestamps,
-					y: altitudesMsl,
-					type: 'scatter' as const,
-					mode: 'lines' as const,
-					name: 'MSL Altitude',
-					line: { color: '#3b82f6', width: 2 },
-					hovertemplate: '<b>MSL:</b> %{y:.0f} ft<br>%{x}<extra></extra>'
-				};
+				// Create traces - only include AGL if data is available
+				const traces = [
+					{
+						x: timestamps,
+						y: altitudesMsl,
+						type: 'scatter' as const,
+						mode: 'lines' as const,
+						name: 'MSL Altitude',
+						line: { color: '#3b82f6', width: 2 },
+						hovertemplate: '<b>MSL:</b> %{y:.0f} ft<br>%{x}<extra></extra>'
+					}
+				];
 
-				const traceAgl = {
-					x: timestamps,
-					y: altitudesAgl,
-					type: 'scatter' as const,
-					mode: 'lines' as const,
-					name: 'AGL Altitude',
-					line: { color: '#10b981', width: 2 },
-					hovertemplate: '<b>AGL:</b> %{y:.0f} ft<br>%{x}<extra></extra>'
-				};
+				if (hasAglData) {
+					const altitudesAgl = fixesInOrder.map((fix) => fix.altitude_agl_feet || 0);
+					traces.push({
+						x: timestamps,
+						y: altitudesAgl,
+						type: 'scatter' as const,
+						mode: 'lines' as const,
+						name: 'AGL Altitude',
+						line: { color: '#10b981', width: 2 },
+						hovertemplate: '<b>AGL:</b> %{y:.0f} ft<br>%{x}<extra></extra>'
+					});
+				}
 
 				// eslint-disable-next-line @typescript-eslint/no-explicit-any
 				const layout: any = {
@@ -602,7 +616,7 @@
 					modeBarButtonsToRemove: ['pan2d', 'lasso2d', 'select2d']
 				};
 
-				await Plotly.newPlot(altitudeChartContainer, [traceMsl, traceAgl], layout, config);
+				await Plotly.newPlot(altitudeChartContainer, traces, layout, config);
 
 				// Add hover event to highlight position on map
 				// eslint-disable-next-line @typescript-eslint/no-explicit-any

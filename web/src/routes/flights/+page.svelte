@@ -161,7 +161,6 @@
 							<tr>
 								<th>Aircraft</th>
 								<th>Type</th>
-								<th>Status</th>
 								<th>Takeoff</th>
 								<th>Landing</th>
 								<th>Duration</th>
@@ -268,9 +267,6 @@
 										{:else}
 											<span class="text-surface-500">—</span>
 										{/if}
-									</td>
-									<td>
-										<FlightStateBadge state={flight.state} />
 									</td>
 									<td>
 										<div class="flex flex-col gap-1">
@@ -606,7 +602,6 @@
 										{formatDeviceAddress(flight.device_address, flight.device_address_type)}
 									</span>
 								{/if}
-								<FlightStateBadge state={flight.state} />
 								{#if flight.aircraft_type_ogn}
 									<span class="badge {getAircraftTypeColor(flight.aircraft_type_ogn)} text-xs">
 										{getAircraftTypeOgnDescription(flight.aircraft_type_ogn)}
