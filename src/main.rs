@@ -603,12 +603,6 @@ async fn main() -> Result<()> {
                 let _ = client.flush(Some(std::time::Duration::from_secs(2)));
             }
         }));
-
-        // Send a test event to verify Sentry is working
-        sentry::configure_scope(|scope| {
-            scope.set_tag("startup", "test");
-        });
-        sentry::capture_message("Application started", sentry::Level::Info);
     }
 
     // Initialize tracing with TRACE level by default, but silence async_nats TRACE/DEBUG
