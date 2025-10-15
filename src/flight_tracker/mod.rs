@@ -26,7 +26,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
@@ -38,6 +38,8 @@ pub struct FlightTracker {
     locations_repo: LocationsRepository,
     elevation_db: ElevationDB,
     aircraft_trackers: Arc<RwLock<HashMap<Uuid, AircraftTracker>>>,
+    // Per-device mutexes to ensure sequential processing per device
+    device_locks: Arc<RwLock<HashMap<Uuid, Arc<Mutex<()>>>>>,
     state_file_path: Option<std::path::PathBuf>,
     fix_counter: Arc<AtomicU64>,
 }
@@ -52,6 +54,7 @@ impl Clone for FlightTracker {
             locations_repo: self.locations_repo.clone(),
             elevation_db: self.elevation_db.clone(),
             aircraft_trackers: Arc::clone(&self.aircraft_trackers),
+            device_locks: Arc::clone(&self.device_locks),
             state_file_path: self.state_file_path.clone(),
             fix_counter: Arc::clone(&self.fix_counter),
         }
@@ -69,6 +72,7 @@ impl FlightTracker {
             locations_repo: LocationsRepository::new(pool.clone()),
             elevation_db,
             aircraft_trackers: Arc::new(RwLock::new(HashMap::new())),
+            device_locks: Arc::new(RwLock::new(HashMap::new())),
             state_file_path: None,
             fix_counter: Arc::new(AtomicU64::new(0)),
         }
@@ -88,6 +92,7 @@ impl FlightTracker {
             locations_repo: LocationsRepository::new(pool.clone()),
             elevation_db,
             aircraft_trackers: Arc::new(RwLock::new(HashMap::new())),
+            device_locks: Arc::new(RwLock::new(HashMap::new())),
             state_file_path: Some(state_path),
             fix_counter: Arc::new(AtomicU64::new(0)),
         }
@@ -274,6 +279,30 @@ impl FlightTracker {
     /// Process a fix and return it with updated flight_id
     /// This replaces the old FixHandler::process_fix method
     pub async fn process_fix(&self, fix: Fix) -> Option<Fix> {
+        // Get or create the per-device lock
+        // This ensures fixes for the same device are processed sequentially
+        let device_lock = {
+            // First try to get an existing lock
+            {
+                let locks_read = self.device_locks.read().await;
+                if let Some(lock) = locks_read.get(&fix.device_id) {
+                    Arc::clone(lock)
+                } else {
+                    // Lock doesn't exist, need to create it
+                    drop(locks_read);
+                    let mut locks_write = self.device_locks.write().await;
+                    // Double-check it wasn't created while we waited for write lock
+                    locks_write
+                        .entry(fix.device_id)
+                        .or_insert_with(|| Arc::new(Mutex::new(())))
+                        .clone()
+                }
+            }
+        };
+
+        // Acquire the per-device lock - this ensures sequential processing
+        let _guard = device_lock.lock().await;
+
         // Check for duplicate fixes first (within 1 second)
         let is_duplicate = {
             let lock_start = Instant::now();
@@ -343,5 +372,6 @@ impl FlightTracker {
                 None
             }
         }
+        // Lock is automatically released when _guard goes out of scope
     }
 }
