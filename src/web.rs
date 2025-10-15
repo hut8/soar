@@ -497,9 +497,14 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         .route("/robots.txt", get(robots_txt))
         .route(
             "/sitemap.xml",
-            get(|| sitemap_file(Path("sitemap.xml".to_string()))),
+            get(|| async move { sitemap_file(Path("sitemap.xml".to_string())).await }),
         )
-        .route("/sitemap-:number.xml", get(sitemap_file))
+        .route(
+            "/sitemap-{number}.xml",
+            get(|Path(number): Path<String>| async move {
+                sitemap_file(Path(format!("sitemap-{}.xml", number))).await
+            }),
+        )
         .fallback(handle_static_file)
         .with_state(app_state.clone())
         .layer(middleware::from_fn(metrics_middleware))
