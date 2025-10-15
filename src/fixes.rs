@@ -50,7 +50,7 @@ pub struct Fix {
 
     /// APRS packet header information
     pub source: String,
-    pub destination: String,
+    pub aprs_type: String,
     #[serde(serialize_with = "serialize_via", deserialize_with = "deserialize_via")]
     pub via: Vec<Option<String>>, // NOT NULL in DB but contains nullable strings
 
@@ -135,9 +135,9 @@ impl Fix {
         // Calculate lag (difference between received_at and timestamp in milliseconds)
         let lag = Some((received_at - timestamp).num_milliseconds() as i32);
 
-        // Extract source, destination, and via from packet header
+        // Extract source, aprs_type, and via from packet header
         let source = packet.from.to_string();
-        let destination = packet.to.to_string();
+        let aprs_type = packet.to.to_string();
         let via = packet.via.iter().map(|v| Some(v.to_string())).collect();
 
         // Only process position packets
@@ -216,7 +216,7 @@ impl Fix {
                 Ok(Some(Fix {
                     id: Uuid::new_v4(),
                     source,
-                    destination,
+                    aprs_type,
                     via,
                     raw_packet: packet.raw.unwrap_or_default(),
                     timestamp,

@@ -106,7 +106,7 @@ impl From<AircraftTypeOgn> for ForeignAircraftType {
 struct FixDslRow {
     id: Uuid,
     source: String,
-    destination: String,
+    aprs_type: String,
     via: Vec<Option<String>>, // NOT NULL array that can contain NULL elements
     raw_packet: String,
     timestamp: DateTime<Utc>,
@@ -146,7 +146,7 @@ impl From<FixDslRow> for Fix {
         Self {
             id: row.id,
             source: row.source,
-            destination: row.destination,
+            aprs_type: row.aprs_type,
             via: row.via, // Now directly a Vec<Option<String>>
             raw_packet: row.raw_packet,
             timestamp: row.timestamp,
@@ -663,7 +663,7 @@ impl FixesRepository {
                 #[diesel(sql_type = diesel::sql_types::Text)]
                 source: String,
                 #[diesel(sql_type = diesel::sql_types::Text)]
-                destination: String,
+                aprs_type: String,
                 #[diesel(sql_type = diesel::sql_types::Array<diesel::sql_types::Nullable<diesel::sql_types::Text>>)]
                 via: Vec<Option<String>>,
                 #[diesel(sql_type = diesel::sql_types::Text)]
@@ -746,7 +746,7 @@ impl FixesRepository {
                 let fix = Fix {
                     id: fix_row.id,
                     source: fix_row.source,
-                    destination: fix_row.destination,
+                    aprs_type: fix_row.aprs_type,
                     via: fix_row.via,
                     raw_packet: fix_row.raw_packet,
                     timestamp: fix_row.timestamp,

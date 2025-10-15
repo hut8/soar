@@ -262,7 +262,7 @@ diesel::table! {
         #[max_length = 9]
         source -> Varchar,
         #[max_length = 9]
-        destination -> Varchar,
+        aprs_type -> Varchar,
         via -> Array<Nullable<Text>>,
         raw_packet -> Text,
         timestamp -> Timestamptz,

@@ -123,7 +123,7 @@ mod tests {
             id: uuid::Uuid::new_v4(),
             raw_packet: "TEST-1>APRS,TCPXX*:!4000.00N/07400.00W>000/000/A=001000".to_string(),
             source: "TEST".to_string(),
-            destination: "APRS".to_string(),
+            aprs_type: "APRS".to_string(),
             via: vec![],
             timestamp: Utc::now(),
             received_at: Utc::now(),
