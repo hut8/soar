@@ -173,14 +173,6 @@
 
 	// Fetch nearby flights and their fixes
 	async function fetchNearbyFlights() {
-		if (!includeNearbyFlights) {
-			// Clear nearby flights from map
-			nearbyFlightPaths.forEach((path) => path.setMap(null));
-			nearbyFlightPaths = [];
-			nearbyFlights = [];
-			return;
-		}
-
 		isLoadingNearbyFlights = true;
 		try {
 			// Fetch nearby flights
@@ -237,7 +229,16 @@
 
 	// Watch for changes to includeNearbyFlights
 	$effect(() => {
-		fetchNearbyFlights();
+		// Read includeNearbyFlights to make this effect reactive to it
+		const shouldInclude = includeNearbyFlights;
+		if (shouldInclude) {
+			fetchNearbyFlights();
+		} else {
+			// Clear nearby flights from map
+			nearbyFlightPaths.forEach((path) => path.setMap(null));
+			nearbyFlightPaths = [];
+			nearbyFlights = [];
+		}
 	});
 
 	// Poll for updates to in-progress flights
