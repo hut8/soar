@@ -7,6 +7,7 @@ use uuid::Uuid;
 
 use crate::Fix;
 use crate::aircraft_registrations_repo::AircraftRegistrationsRepository;
+use crate::aprs_messages_repo::{AprsMessagesRepository, NewAprsMessage};
 use crate::device_repo::DeviceRepository;
 use crate::fixes_repo::{AircraftTypeOgn, FixesRepository};
 use crate::flight_tracker::FlightTracker;
@@ -20,6 +21,7 @@ use ogn_parser::AprsPacket;
 #[derive(Clone)]
 pub struct FixProcessor {
     fixes_repo: FixesRepository,
+    aprs_messages_repo: AprsMessagesRepository,
     device_repo: DeviceRepository,
     aircraft_registrations_repo: AircraftRegistrationsRepository,
     receiver_repo: ReceiverRepository,
@@ -34,6 +36,7 @@ impl FixProcessor {
     pub fn new(diesel_pool: Pool<ConnectionManager<PgConnection>>) -> Self {
         Self {
             fixes_repo: FixesRepository::new(diesel_pool.clone()),
+            aprs_messages_repo: AprsMessagesRepository::new(diesel_pool.clone()),
             device_repo: DeviceRepository::new(diesel_pool.clone()),
             aircraft_registrations_repo: AircraftRegistrationsRepository::new(diesel_pool.clone()),
             receiver_repo: ReceiverRepository::new(diesel_pool.clone()),
@@ -52,6 +55,7 @@ impl FixProcessor {
 
         Ok(Self {
             fixes_repo: FixesRepository::new(diesel_pool.clone()),
+            aprs_messages_repo: AprsMessagesRepository::new(diesel_pool.clone()),
             device_repo: DeviceRepository::new(diesel_pool.clone()),
             aircraft_registrations_repo: AircraftRegistrationsRepository::new(diesel_pool.clone()),
             receiver_repo: ReceiverRepository::new(diesel_pool.clone()),
@@ -68,6 +72,7 @@ impl FixProcessor {
     ) -> Self {
         Self {
             fixes_repo: FixesRepository::new(diesel_pool.clone()),
+            aprs_messages_repo: AprsMessagesRepository::new(diesel_pool.clone()),
             device_repo: DeviceRepository::new(diesel_pool.clone()),
             aircraft_registrations_repo: AircraftRegistrationsRepository::new(diesel_pool.clone()),
             receiver_repo: ReceiverRepository::new(diesel_pool.clone()),
@@ -87,6 +92,7 @@ impl FixProcessor {
 
         Ok(Self {
             fixes_repo: FixesRepository::new(diesel_pool.clone()),
+            aprs_messages_repo: AprsMessagesRepository::new(diesel_pool.clone()),
             device_repo: DeviceRepository::new(diesel_pool.clone()),
             aircraft_registrations_repo: AircraftRegistrationsRepository::new(diesel_pool.clone()),
             receiver_repo: ReceiverRepository::new(diesel_pool.clone()),
@@ -158,11 +164,56 @@ impl FixProcessor {
     /// This is the main entry point that orchestrates the entire pipeline
     pub fn process_aprs_packet(&self, packet: AprsPacket, raw_message: &str) {
         let device_repo = self.device_repo.clone();
+        let receiver_repo = self.receiver_repo.clone();
+        let aprs_messages_repo = self.aprs_messages_repo.clone();
         let self_clone = self.clone();
         let raw_message = raw_message.to_string();
 
         tokio::spawn(async move {
             let received_at = chrono::Utc::now();
+
+            // Step 0: Insert APRS message first and get its ID
+            // Extract unparsed data from the packet if present
+            let unparsed = match &packet.data {
+                ogn_parser::AprsData::Position(pos) => pos.comment.unparsed.clone(),
+                ogn_parser::AprsData::Status(status) => status.comment.unparsed.clone(),
+                _ => None,
+            };
+
+            // Get receiver callsign from packet via array (last entry)
+            let receiver_callsign = packet.via.last().cloned();
+
+            // Look up or insert receiver and get its ID
+            let receiver_id = if let Some(ref callsign) = receiver_callsign {
+                match receiver_repo.insert_minimal_receiver(&callsign.0).await {
+                    Ok(id) => Some(id),
+                    Err(e) => {
+                        error!("Failed to insert/lookup receiver {}: {}", callsign, e);
+                        None
+                    }
+                }
+            } else {
+                None
+            };
+
+            // Create and insert the APRS message
+            let aprs_message_id = {
+                let new_aprs_message = NewAprsMessage {
+                    id: Uuid::new_v4(),
+                    raw_message: raw_message.clone(),
+                    received_at,
+                    receiver_id,
+                    unparsed,
+                };
+
+                match aprs_messages_repo.insert(new_aprs_message).await {
+                    Ok(id) => Some(id),
+                    Err(e) => {
+                        error!("Failed to insert APRS message: {}", e);
+                        None
+                    }
+                }
+            };
 
             // Try to create a fix from the packet
             match packet.data {
@@ -190,7 +241,9 @@ impl FixProcessor {
                         Ok(device_model) => {
                             // Device exists or was just created, create fix with proper device_id
                             match Fix::from_aprs_packet(packet, received_at, device_model.id) {
-                                Ok(Some(fix)) => {
+                                Ok(Some(mut fix)) => {
+                                    // Set the aprs_message_id on the fix
+                                    fix.aprs_message_id = aprs_message_id;
                                     self_clone.process_fix_internal(fix, &raw_message).await;
                                 }
                                 Ok(None) => {

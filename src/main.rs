@@ -469,8 +469,13 @@ async fn handle_run(
     // Create receiver status processor for receiver status messages
     let receiver_repo = ReceiverRepository::new(diesel_pool.clone());
     let receiver_status_repo = ReceiverStatusRepository::new(diesel_pool.clone());
-    let receiver_status_processor =
-        ReceiverStatusProcessor::new(receiver_status_repo, receiver_repo.clone());
+    let aprs_messages_repo =
+        soar::aprs_messages_repo::AprsMessagesRepository::new(diesel_pool.clone());
+    let receiver_status_processor = ReceiverStatusProcessor::new(
+        receiver_status_repo,
+        receiver_repo.clone(),
+        aprs_messages_repo,
+    );
 
     // Create receiver position processor for receiver position messages
     let locations_repo = soar::locations_repo::LocationsRepository::new(diesel_pool.clone());

@@ -18,6 +18,7 @@ pub struct NewAprsMessage {
     pub unparsed: Option<String>,
 }
 
+#[derive(Clone)]
 pub struct AprsMessagesRepository {
     pool: PgPool,
 }

@@ -102,6 +102,7 @@ pub struct NewReceiverStatus {
 
     // Raw APRS packet data
     pub raw_data: String,
+    pub aprs_message_id: Option<Uuid>,
 }
 
 impl NewReceiverStatus {
@@ -154,6 +155,7 @@ impl NewReceiverStatus {
             unparsed_data: status_comment.unparsed.clone(),
             lag,
             raw_data,
+            aprs_message_id: None, // Will be set by the processor
         }
     }
 
