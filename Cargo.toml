@@ -85,7 +85,6 @@ incremental = true
 
 [profile.release]
 # Generate debug symbols for profiling and Sentry crash symbolication
-# Keep symbols in binary for pprof flamegraph generation
-debug = 2                  # Full debug info
-strip = "none"             # Keep symbols in binary for profiling
-split-debuginfo = "packed" # Keep debug info in separate files
+# Keep symbols embedded in binary for pprof flamegraph generation and Sentry uploads
+debug = 2       # Full debug info
+strip = "none"  # Keep symbols in binary for profiling and Sentry

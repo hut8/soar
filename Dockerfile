@@ -40,11 +40,12 @@ RUN cargo build --release
 # Runtime stage
 FROM debian:bullseye-slim
 
-# Install runtime dependencies
+# Install runtime dependencies including debug symbols for Sentry symbolication
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     libssl1.1 \
     libpq5 \
+    libc6-dbg \
     && rm -rf /var/lib/apt/lists/*
 
 # Create a non-root user

@@ -267,6 +267,40 @@ jobs:
           tar -xzf soar-linux-x64.tar.gz
           chmod +x soar
 
+      - name: Install sentry-cli
+        run: |
+          curl -sL https://sentry.io/get-cli/ | bash
+
+      - name: Upload debug symbols to Sentry
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+        run: |
+          # Upload the binary with embedded debug symbols
+          sentry-cli debug-files upload \
+            --org "$SENTRY_ORG" \
+            --project "$SENTRY_PROJECT" \
+            ./soar
+
+      - name: Create Sentry release
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+        run: |
+          # Use commit SHA as release version for main branch deploys
+          export VERSION="${GITHUB_SHA}"
+          sentry-cli releases new "$VERSION" \
+            --org "$SENTRY_ORG" \
+            --project "$SENTRY_PROJECT"
+          sentry-cli releases set-commits "$VERSION" --auto \
+            --org "$SENTRY_ORG" \
+            --project "$SENTRY_PROJECT"
+          sentry-cli releases finalize "$VERSION" \
+            --org "$SENTRY_ORG" \
+            --project "$SENTRY_PROJECT"
+
       - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
