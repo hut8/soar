@@ -554,7 +554,8 @@ async fn main() -> Result<()> {
 
         Some(sentry::init(sentry::ClientOptions {
             dsn: Some(sentry_dsn.parse().expect("Invalid SENTRY_DSN format")),
-            traces_sample_rate: 0.2,
+            sample_rate: 0.05,        // Sample 5% of error events
+            traces_sample_rate: 0.05, // Sample 5% of performance traces
             attach_stacktrace: true,
             release,
             enable_logs: true,
