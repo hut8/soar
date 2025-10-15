@@ -276,9 +276,14 @@ impl FlightTracker {
         }
     }
 
-    /// Process a fix and return it with updated flight_id
-    /// This replaces the old FixHandler::process_fix method
-    pub async fn process_fix(&self, fix: Fix) -> Option<Fix> {
+    /// Process a fix, insert it into the database, and return it with updated flight_id
+    /// This method holds the per-device lock through the entire process including DB insertion
+    /// to prevent race conditions where concurrent fixes try to use a flight_id before the flight exists
+    pub async fn process_and_insert_fix(
+        &self,
+        fix: Fix,
+        fixes_repo: &FixesRepository,
+    ) -> Option<Fix> {
         // Get or create the per-device lock
         // This ensures fixes for the same device are processed sequentially
         let device_lock = {
@@ -338,8 +343,105 @@ impl FlightTracker {
             fix.device_id, fix.latitude, fix.longitude, fix.ground_speed_knots
         );
 
-        // Process state transition and return updated fix
+        // Process state transition
         let fix_device_address = fix.device_address; // Store for error logging
+        let updated_fix = match state_transitions::process_state_transition(
+            &self.flights_repo,
+            &self.airports_repo,
+            &self.locations_repo,
+            &self.runways_repo,
+            &self.fixes_repo,
+            &self.elevation_db,
+            &self.aircraft_trackers,
+            fix,
+        )
+        .await
+        {
+            Ok(updated_fix) => updated_fix,
+            Err(e) => {
+                error!(
+                    "Failed to process state transition for aircraft {}: {}",
+                    fix_device_address, e
+                );
+                return None;
+            }
+        };
+
+        // Insert the fix into the database WHILE STILL HOLDING THE LOCK
+        // This ensures that if the fix has a flight_id, that flight already exists
+        match fixes_repo.insert(&updated_fix).await {
+            Ok(_) => {
+                trace!(
+                    "Successfully saved fix to database for aircraft {}",
+                    updated_fix.device_address_hex()
+                );
+
+                // Deterministically clean up old trackers every 1000 fixes
+                let count = self.fix_counter.fetch_add(1, Ordering::Relaxed);
+                if count.is_multiple_of(1000) {
+                    let trackers = Arc::clone(&self.aircraft_trackers);
+                    tokio::spawn(async move {
+                        let mut trackers_write = trackers.write().await;
+                        utils::cleanup_old_trackers(&mut trackers_write).await;
+                    });
+                }
+
+                Some(updated_fix)
+            }
+            Err(e) => {
+                error!(
+                    "Failed to save fix to database for fix: {:?}\ncause:{:?}",
+                    updated_fix, e
+                );
+                None
+            }
+        }
+        // Lock is automatically released when _guard goes out of scope
+    }
+
+    /// Process a fix and return it with updated flight_id (without database insertion)
+    /// DEPRECATED: Use process_and_insert_fix() instead to avoid race conditions
+    #[deprecated(note = "Use process_and_insert_fix() to avoid race conditions")]
+    pub async fn process_fix(&self, fix: Fix) -> Option<Fix> {
+        // Get or create the per-device lock
+        let device_lock = {
+            {
+                let locks_read = self.device_locks.read().await;
+                if let Some(lock) = locks_read.get(&fix.device_id) {
+                    Arc::clone(lock)
+                } else {
+                    drop(locks_read);
+                    let mut locks_write = self.device_locks.write().await;
+                    locks_write
+                        .entry(fix.device_id)
+                        .or_insert_with(|| Arc::new(Mutex::new(())))
+                        .clone()
+                }
+            }
+        };
+
+        let _guard = device_lock.lock().await;
+
+        // Check for duplicates
+        let is_duplicate = {
+            let trackers_read = self.aircraft_trackers.try_read();
+            match trackers_read {
+                Ok(trackers) => {
+                    if let Some(tracker) = trackers.get(&fix.device_id) {
+                        tracker.is_duplicate_fix(&fix)
+                    } else {
+                        false
+                    }
+                }
+                Err(_) => false,
+            }
+        };
+
+        if is_duplicate {
+            return None;
+        }
+
+        // Process state transition
         match state_transitions::process_state_transition(
             &self.flights_repo,
             &self.airports_repo,
@@ -352,26 +454,11 @@ impl FlightTracker {
         )
         .await
         {
-            Ok(updated_fix) => {
-                // Deterministically clean up old trackers every 1000 fixes
-                let count = self.fix_counter.fetch_add(1, Ordering::Relaxed);
-                if count.is_multiple_of(1000) {
-                    let trackers = Arc::clone(&self.aircraft_trackers);
-                    tokio::spawn(async move {
-                        let mut trackers_write = trackers.write().await;
-                        utils::cleanup_old_trackers(&mut trackers_write).await;
-                    });
-                }
-                Some(updated_fix)
-            }
+            Ok(updated_fix) => Some(updated_fix),
             Err(e) => {
-                error!(
-                    "Failed to process state transition for aircraft {}: {}",
-                    fix_device_address, e
-                );
+                error!("Failed to process state transition: {}", e);
                 None
             }
         }
-        // Lock is automatically released when _guard goes out of scope
     }
 }

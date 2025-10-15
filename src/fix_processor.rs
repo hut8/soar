@@ -275,58 +275,46 @@ impl FixProcessor {
 
     /// Internal method to process a fix through the complete pipeline
     async fn process_fix_internal(&self, fix: Fix, raw_message: &str) {
-        // Step 1: Process through flight detection (adds flight_id)
-        let updated_fix = match self.flight_detection_processor.process_fix(fix).await {
+        // Step 1 & 2: Process through flight detection AND save to database
+        // This is done atomically while holding a per-device lock to prevent race conditions
+        let updated_fix = match self
+            .flight_detection_processor
+            .process_and_insert_fix(fix, &self.fixes_repo)
+            .await
+        {
             Some(fix) => fix,
-            None => return, // Fix was discarded (duplicate, etc.)
+            None => return, // Fix was discarded (duplicate, error, etc.)
         };
 
-        // Step 2: Save to database
-        match self.fixes_repo.insert(&updated_fix).await {
-            Ok(_) => {
-                trace!(
-                    "Successfully saved fix to database for aircraft {}",
-                    updated_fix.device_address_hex()
-                );
-
-                // Update receiver's latest_packet_at if this fix has a receiver_id
-                if let Some(receiver_id) = updated_fix.receiver_id {
-                    let receiver_repo = self.receiver_repo.clone();
-                    tokio::spawn(async move {
-                        if let Err(e) = receiver_repo.update_latest_packet_at(receiver_id).await {
-                            error!(
-                                "Failed to update latest_packet_at for receiver {}: {}",
-                                receiver_id, e
-                            );
-                        }
-                    });
+        // Step 3: Update receiver's latest_packet_at if this fix has a receiver_id
+        if let Some(receiver_id) = updated_fix.receiver_id {
+            let receiver_repo = self.receiver_repo.clone();
+            tokio::spawn(async move {
+                if let Err(e) = receiver_repo.update_latest_packet_at(receiver_id).await {
+                    error!(
+                        "Failed to update latest_packet_at for receiver {}: {}",
+                        receiver_id, e
+                    );
                 }
-
-                // Update device cached fields (aircraft_type_ogn and last_fix_at)
-                let device_repo = self.device_repo.clone();
-                let device_id = updated_fix.device_id;
-                let aircraft_type = updated_fix.aircraft_type_ogn;
-                let fix_timestamp = updated_fix.timestamp;
-                tokio::spawn(async move {
-                    if let Err(e) = device_repo
-                        .update_cached_fields(device_id, aircraft_type, fix_timestamp)
-                        .await
-                    {
-                        error!(
-                            "Failed to update cached fields for device {}: {}",
-                            device_id, e
-                        );
-                    }
-                });
-            }
-            Err(e) => {
-                error!(
-                    "Failed to save fix to database for fix: {:?}\ncause:{:?}",
-                    updated_fix, e
-                );
-                return; // Don't continue if we can't save
-            }
+            });
         }
+
+        // Step 4: Update device cached fields (aircraft_type_ogn and last_fix_at)
+        let device_repo = self.device_repo.clone();
+        let device_id = updated_fix.device_id;
+        let aircraft_type = updated_fix.aircraft_type_ogn;
+        let fix_timestamp = updated_fix.timestamp;
+        tokio::spawn(async move {
+            if let Err(e) = device_repo
+                .update_cached_fields(device_id, aircraft_type, fix_timestamp)
+                .await
+            {
+                error!(
+                    "Failed to update cached fields for device {}: {}",
+                    device_id, e
+                );
+            }
+        });
 
         // Step 2.5: Calculate and update altitude_agl asynchronously (non-blocking)
         let flight_tracker = self.flight_detection_processor.clone();
