@@ -391,3 +391,4 @@ test('device search functionality', async ({ page }) => {
 - The rust backend for this project is in src/ and the frontend is a Svelte 5 project in web/
 - You should absolutely never use --no-verify
 - When running clippy or cargo build, set the timeout to ten minutes
+- Use a timeout of 10 minutes for running "cargo test" or "cargo clippy"
