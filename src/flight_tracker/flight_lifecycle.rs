@@ -27,6 +27,36 @@ pub(crate) async fn create_airborne_flight(
     fixes_repo: &FixesRepository,
     fix: &Fix,
 ) -> Result<Uuid> {
+    // Check for existing active flights for this device
+    match flights_repo
+        .get_active_flights_for_device(fix.device_id)
+        .await
+    {
+        Ok(active_flights) if !active_flights.is_empty() => {
+            error!(
+                "Device {} already has {} active flight(s) when attempting to create airborne flight. \
+                Active flight IDs: {:?}. Fix: device={}, lat={:.6}, lon={:.6}, alt={:?}, timestamp={}",
+                fix.device_id,
+                active_flights.len(),
+                active_flights.iter().map(|f| f.id).collect::<Vec<_>>(),
+                fix.device_id,
+                fix.latitude,
+                fix.longitude,
+                fix.altitude_msl_feet,
+                fix.timestamp
+            );
+        }
+        Ok(_) => {
+            // No active flights, proceed normally
+        }
+        Err(e) => {
+            warn!(
+                "Failed to check for existing active flights for device {}: {}",
+                fix.device_id, e
+            );
+        }
+    }
+
     info!("Creating airborne flight from fix: {:?}", fix);
     let mut flight = Flight::new_airborne_from_fix(fix);
     flight.device_address_type = fix.address_type;
@@ -90,6 +120,36 @@ pub(crate) async fn create_flight(
     fix: &Fix,
     skip_airport_runway_lookup: bool,
 ) -> Result<Uuid> {
+    // Check for existing active flights for this device
+    match flights_repo
+        .get_active_flights_for_device(fix.device_id)
+        .await
+    {
+        Ok(active_flights) if !active_flights.is_empty() => {
+            error!(
+                "Device {} already has {} active flight(s) when attempting to create new flight. \
+                Active flight IDs: {:?}. Fix: device={}, lat={:.6}, lon={:.6}, alt={:?}, timestamp={}",
+                fix.device_id,
+                active_flights.len(),
+                active_flights.iter().map(|f| f.id).collect::<Vec<_>>(),
+                fix.device_id,
+                fix.latitude,
+                fix.longitude,
+                fix.altitude_msl_feet,
+                fix.timestamp
+            );
+        }
+        Ok(_) => {
+            // No active flights, proceed normally
+        }
+        Err(e) => {
+            warn!(
+                "Failed to check for existing active flights for device {}: {}",
+                fix.device_id, e
+            );
+        }
+    }
+
     // Calculate takeoff altitude offset (difference between reported altitude and true elevation)
     let takeoff_altitude_offset_ft = calculate_altitude_offset_ft(elevation_db, fix).await;
 

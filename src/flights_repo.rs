@@ -224,6 +224,31 @@ impl FlightsRepository {
         Ok(results.into_iter().map(|model| model.into()).collect())
     }
 
+    /// Get active flights for a device (no landing_time and no timed_out_at)
+    /// Returns only flights that are truly active (not completed or timed out)
+    pub async fn get_active_flights_for_device(&self, device_id_val: Uuid) -> Result<Vec<Flight>> {
+        use crate::schema::flights::dsl::*;
+
+        let pool = self.pool.clone();
+
+        let results = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            let flight_models: Vec<FlightModel> = flights
+                .filter(device_id.eq(device_id_val))
+                .filter(landing_time.is_null())
+                .filter(timed_out_at.is_null())
+                .order(takeoff_time.desc())
+                .select(FlightModel::as_select())
+                .load(&mut conn)?;
+
+            Ok::<Vec<FlightModel>, anyhow::Error>(flight_models)
+        })
+        .await??;
+
+        Ok(results.into_iter().map(|model| model.into()).collect())
+    }
+
     /// Get recent completed flights (with landing time OR timeout) ordered by completion time descending
     /// Completed means either landed (landing_time is set) or timed out (timed_out_at is set)
     pub async fn get_completed_flights(&self, limit: i64) -> Result<Vec<Flight>> {

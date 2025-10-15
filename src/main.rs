@@ -15,7 +15,6 @@ use soar::aprs_client::{AprsClient, AprsClientConfigBuilder};
 use soar::fix_processor::FixProcessor;
 use soar::flight_tracker::FlightTracker;
 use soar::instance_lock::InstanceLock;
-use soar::live_fixes::LiveFixService;
 use soar::packet_processors::{
     AircraftPositionProcessor, PacketRouter, PositionPacketProcessor, ReceiverPositionProcessor,
     ReceiverStatusProcessor, ServerStatusProcessor,
@@ -803,14 +802,7 @@ async fn main() -> Result<()> {
                 }
             };
 
-            // Start live fixes service if NATS URL is configured
-            if let Ok(nats_url) = env::var("NATS_URL") {
-                info!("Starting live fixes service with NATS URL: {}", nats_url);
-                let _live_fix_service = LiveFixService::new(&nats_url).await?;
-            } else {
-                warn!("NATS_URL not configured, live fixes will not be available");
-            }
-
+            // Live fixes service is initialized inside start_web_server
             soar::web::start_web_server(interface, final_port, diesel_pool).await
         }
         Commands::Archive {
