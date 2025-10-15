@@ -24,7 +24,7 @@ pub struct ElevationDB {
     /// Manages tile downloads with deduplication
     tile_downloader: TileDownloader,
     /// LRU cache for elevation results: (rounded_lat, rounded_lon) -> elevation_meters
-    /// 10,000 entries ≈ 1MB of memory, provides good hit rate for typical aircraft operations
+    /// 50,000 entries ≈ 5MB of memory, provides excellent hit rate for multi-aircraft operations
     elevation_cache: Arc<Mutex<LruCache<CacheKey, Option<f64>>>>,
 }
 
@@ -52,7 +52,7 @@ impl ElevationDB {
             tile_downloader: TileDownloader::new(storage_path.clone()),
             storage_path,
             elevation_cache: Arc::new(Mutex::new(LruCache::new(
-                NonZeroUsize::new(10_000).unwrap(),
+                NonZeroUsize::new(50_000).unwrap(),
             ))),
         })
     }
@@ -69,7 +69,7 @@ impl ElevationDB {
             tile_downloader: TileDownloader::new(storage_path.clone()),
             storage_path,
             elevation_cache: Arc::new(Mutex::new(LruCache::new(
-                NonZeroUsize::new(10_000).unwrap(),
+                NonZeroUsize::new(50_000).unwrap(),
             ))),
         })
     }

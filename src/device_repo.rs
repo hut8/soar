@@ -113,6 +113,7 @@ impl DeviceRepository {
 
     /// Get or insert a device by address and address type
     /// If the device doesn't exist, it will be created with from_ddb=false, tracked=true, identified=true
+    /// Uses INSERT ... ON CONFLICT to handle race conditions atomically
     pub async fn get_or_insert_device_by_address(
         &self,
         address: i32,
@@ -120,17 +121,6 @@ impl DeviceRepository {
     ) -> Result<DeviceModel> {
         let mut conn = self.get_connection()?;
 
-        // Try to get existing device
-        if let Some(device_model) = devices::table
-            .filter(devices::address.eq(address))
-            .filter(devices::address_type.eq(address_type))
-            .first::<DeviceModel>(&mut conn)
-            .optional()?
-        {
-            return Ok(device_model);
-        }
-
-        // Device not found, insert a new one
         let new_device = NewDevice {
             address,
             address_type,
@@ -148,16 +138,17 @@ impl DeviceRepository {
             club_id: None,
         };
 
-        let inserted_device = diesel::insert_into(devices::table)
+        // Use INSERT ... ON CONFLICT ... DO UPDATE RETURNING to atomically handle race conditions
+        // This ensures we always get a device_id, even if concurrent inserts happen
+        // The DO UPDATE with a no-op ensures RETURNING gives us the existing row on conflict
+        let device_model = diesel::insert_into(devices::table)
             .values(&new_device)
+            .on_conflict((devices::address_type, devices::address))
+            .do_update()
+            .set(devices::address.eq(excluded(devices::address))) // No-op update to trigger RETURNING
             .get_result::<DeviceModel>(&mut conn)?;
 
-        info!(
-            "Inserted new device with address {:06X} ({:?})",
-            address, address_type
-        );
-
-        Ok(inserted_device)
+        Ok(device_model)
     }
 
     /// Get a device by its UUID
