@@ -536,11 +536,23 @@ async fn main() -> Result<()> {
     // Initialize Sentry for error tracking (errors only, no performance monitoring)
     let _guard = if let Ok(sentry_dsn) = env::var("SENTRY_DSN") {
         info!("Initializing Sentry with DSN");
+
+        // Use SENTRY_RELEASE env var if set (for deployed versions with commit SHA),
+        // otherwise fall back to CARGO_PKG_VERSION for local development
+        let release = env::var("SENTRY_RELEASE")
+            .ok()
+            .or_else(|| Some(env!("CARGO_PKG_VERSION").to_string()))
+            .map(Into::into);
+
+        if let Some(ref r) = release {
+            info!("Sentry release version: {}", r);
+        }
+
         Some(sentry::init(sentry::ClientOptions {
             dsn: Some(sentry_dsn.parse().expect("Invalid SENTRY_DSN format")),
             traces_sample_rate: 0.2,
             attach_stacktrace: true,
-            release: Some(env!("CARGO_PKG_VERSION").into()),
+            release,
             enable_logs: true,
             environment: env::var("SOAR_ENV").ok().map(Into::into),
             session_mode: sentry::SessionMode::Request,

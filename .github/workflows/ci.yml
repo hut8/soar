@@ -289,12 +289,12 @@ jobs:
           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
         run: |
-          # Use commit SHA as release version for main branch deploys
-          export VERSION="${GITHUB_SHA}"
+          # Use short commit SHA as release version (matching app's SENTRY_RELEASE env var)
+          export VERSION="${GITHUB_SHA:0:7}"
           sentry-cli releases new "$VERSION" \
             --org "$SENTRY_ORG" \
             --project "$SENTRY_PROJECT"
-          sentry-cli releases set-commits "$VERSION" --auto \
+          sentry-cli releases set-commits "$VERSION" --auto --ignore-missing \
             --org "$SENTRY_ORG" \
             --project "$SENTRY_PROJECT"
           sentry-cli releases finalize "$VERSION" \
@@ -321,7 +321,11 @@ jobs:
           cp *.service deploy-pkg/ || echo "No service files found in root"
           cp *.timer deploy-pkg/ || echo "No timer files found in root"
 
+          # Create version file with commit SHA (short form for Sentry)
+          echo "${GITHUB_SHA:0:7}" > deploy-pkg/VERSION
+
           echo "Deployment package prepared for timestamp: $TIMESTAMP"
+          echo "Commit SHA (short): ${GITHUB_SHA:0:7}"
           ls -lh deploy-pkg/
 
       - name: Upload deployment package

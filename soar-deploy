@@ -157,6 +157,27 @@ chmod +x "${BINARY_PATH}/${BINARY_NAME}"
 chown root:root "${BINARY_PATH}/${BINARY_NAME}"
 log_info "Binary installed successfully"
 
+# Update Sentry release version in /etc/soar/env
+if [ -f "${DEPLOY_DIR}/VERSION" ]; then
+    VERSION=$(cat "${DEPLOY_DIR}/VERSION")
+    log_info "Setting Sentry release version to: ${VERSION}"
+
+    # Create or update /etc/soar/env with SENTRY_RELEASE
+    if [ -f /etc/soar/env ]; then
+        # Remove existing SENTRY_RELEASE line if present
+        sed -i '/^SENTRY_RELEASE=/d' /etc/soar/env
+    else
+        touch /etc/soar/env
+    fi
+
+    # Append new SENTRY_RELEASE
+    echo "SENTRY_RELEASE=${VERSION}" >> /etc/soar/env
+    chmod 644 /etc/soar/env
+    log_info "Updated /etc/soar/env with Sentry release version"
+else
+    log_warn "VERSION file not found in deployment directory, Sentry release version not updated"
+fi
+
 # Install service files if they exist
 if ls "${DEPLOY_DIR}"/*.service &> /dev/null; then
     log_info "Installing service files..."
