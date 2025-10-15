@@ -73,6 +73,8 @@ metrics-exporter-prometheus = "0.17"
 flarmnet = { version = "0.5.0", features = ["xcsoar"] }
 pprof = { version = "0.15", features = ["flamegraph", "protobuf-codec"] }
 lru = "0.12"
+pyroscope = "0.5.8"
+pyroscope_pprofrs = "0.2.10"
 
 # Optimized development profile with light optimization
 # Use with: cargo build --profile dev-fast

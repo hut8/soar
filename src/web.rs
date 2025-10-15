@@ -65,9 +65,14 @@ pub struct AppState {
     pub live_fix_service: Option<LiveFixService>, // Live fix service for WebSocket subscriptions
 }
 
-async fn handle_static_file(uri: Uri, request: Request<Body>) -> impl IntoResponse {
+async fn handle_static_file(uri: Uri, request: Request<Body>) -> Response {
     let path = uri.path().trim_start_matches('/');
     let compilation_timestamp = get_compilation_timestamp();
+
+    // Handle sitemap files (sitemap-1.xml, sitemap-2.xml, etc.)
+    if path.starts_with("sitemap-") && path.ends_with(".xml") {
+        return sitemap_file(Path(path.to_string())).await.into_response();
+    }
 
     // Check if client sent If-Modified-Since header
     let if_modified_since = request
@@ -499,12 +504,7 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
             "/sitemap.xml",
             get(|| async move { sitemap_file(Path("sitemap.xml".to_string())).await }),
         )
-        .route(
-            "/sitemap-{number}.xml",
-            get(|Path(number): Path<String>| async move {
-                sitemap_file(Path(format!("sitemap-{}.xml", number))).await
-            }),
-        )
+        // Note: numbered sitemap files (sitemap-1.xml, etc.) are handled in the fallback handler
         .fallback(handle_static_file)
         .with_state(app_state.clone())
         .layer(middleware::from_fn(metrics_middleware))
