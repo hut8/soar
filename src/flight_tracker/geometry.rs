@@ -1,5 +1,6 @@
 /// Calculate distance between two points using Haversine formula
 /// Returns distance in meters
+#[allow(dead_code)]
 pub(crate) fn haversine_distance(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
     const EARTH_RADIUS_M: f64 = 6_371_000.0;
 

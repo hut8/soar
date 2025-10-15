@@ -6,19 +6,38 @@ use crate::flights_repo::FlightsRepository;
 use crate::locations_repo::LocationsRepository;
 use crate::runways_repo::RunwaysRepository;
 use anyhow::Result;
-use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use chrono::Utc;
+use tracing::{debug, warn};
 use uuid::Uuid;
 
-use super::aircraft_tracker::{AircraftState, AircraftTracker};
+use super::ActiveFlightsMap;
 use super::altitude::calculate_altitude_offset_ft;
-use super::flight_lifecycle::{complete_flight, create_airborne_flight, create_flight};
-use super::towing::{check_tow_release, record_tow_release};
-use super::utils::format_device_address_with_type;
+use super::flight_lifecycle::{complete_flight, create_flight};
+
+/// Determine if aircraft should be active based on fix data
+fn should_be_active(fix: &Fix) -> bool {
+    // Check ground speed
+    let speed_indicates_active = fix.ground_speed_knots.map(|s| s >= 20.0).unwrap_or(false);
+
+    if speed_indicates_active {
+        return true;
+    }
+
+    // Speed is low - check altitude to see if still airborne
+    // Don't register landing if AGL altitude is >= 250 feet
+    if let Some(altitude_agl) = fix.altitude_agl
+        && altitude_agl >= 250
+    {
+        // Still too high to land - remain active
+        return true;
+    }
+
+    // Speed is low and either altitude is unavailable or < 250 feet AGL
+    false
+}
 
 /// Process state transition for an aircraft and return updated fix with flight_id
+/// active_flights: device_id -> (flight_id, last_fix_timestamp, last_update_time)
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn process_state_transition(
     flights_repo: &FlightsRepository,
@@ -27,289 +46,132 @@ pub(crate) async fn process_state_transition(
     runways_repo: &RunwaysRepository,
     fixes_repo: &FixesRepository,
     elevation_db: &ElevationDB,
-    aircraft_trackers: &Arc<RwLock<HashMap<Uuid, AircraftTracker>>>,
+    active_flights: &ActiveFlightsMap,
     mut fix: Fix,
 ) -> Result<Fix> {
-    // Determine the new state first
-    let should_be_active = {
-        let trackers = aircraft_trackers.read().await;
-        match trackers.get(&fix.device_id) {
-            Some(tracker) => tracker.should_be_active(&fix),
-            None => {
-                // New aircraft - determine initial state
-                let ground_speed = fix.ground_speed_knots.unwrap_or(0.0);
-                ground_speed >= 20.0
-            }
-        }
+    let is_active = should_be_active(&fix);
+    let current_flight_id = {
+        let flights = active_flights.read().await;
+        flights
+            .get(&fix.device_id)
+            .map(|(flight_id, _, _)| *flight_id)
     };
 
-    let new_state = if should_be_active {
-        AircraftState::Active
-    } else {
-        AircraftState::Idle
-    };
+    match (current_flight_id, is_active) {
+        (None, true) => {
+            // Device should be active but has no flight - create one
+            debug!("Creating new flight for device {}", fix.device_id);
 
-    // Check if this is an existing aircraft and get the old state
-    let (is_existing, old_state, current_flight_id) = {
-        let trackers = aircraft_trackers.read().await;
-        match trackers.get(&fix.device_id) {
-            Some(tracker) => (true, tracker.state.clone(), tracker.current_flight_id),
-            None => (false, AircraftState::Idle, None), // Default values for new aircraft
-        }
-    };
+            // Generate flight_id
+            let flight_id = Uuid::new_v4();
 
-    if is_existing {
-        // Handle existing aircraft
-        match (old_state, &new_state) {
-            (AircraftState::Idle, AircraftState::Active) => {
-                // Takeoff detected - update state FIRST to prevent race condition
-                debug!(
-                    "Takeoff detected for aircraft {}",
-                    format_device_address_with_type(
-                        fix.device_address_hex().as_ref(),
-                        fix.address_type
-                    )
-                );
-
-                // Check altitude offset to determine if airport/runway lookup should be skipped
-                // If offset > 250 ft, the altitude data is likely unreliable
-                let altitude_offset = calculate_altitude_offset_ft(elevation_db, &fix).await;
-                let skip_airport_runway_lookup = if let Some(offset) = altitude_offset {
+            // Check altitude offset to determine if we should skip airport/runway lookup
+            let altitude_offset = calculate_altitude_offset_ft(elevation_db, &fix).await;
+            let skip_airport_runway_lookup = altitude_offset
+                .map(|offset| {
                     if offset.abs() > 250 {
                         warn!(
-                            "Large altitude offset ({} ft) detected for aircraft {} - will create flight but skip airport/runway lookup",
-                            offset,
-                            format_device_address_with_type(
-                                fix.device_address_hex().as_ref(),
-                                fix.address_type
-                            )
+                            "Large altitude offset ({} ft) for device {} - skipping airport/runway lookup",
+                            offset, fix.device_id
                         );
                         true
                     } else {
                         false
                     }
-                } else {
-                    false
-                };
+                })
+                .unwrap_or(false);
 
-                // Generate flight_id FIRST to prevent race condition
-                let flight_id = Uuid::new_v4();
-
-                // Update tracker state immediately to prevent duplicate flight creation
-                let mut trackers = aircraft_trackers.write().await;
-                if let Some(tracker) = trackers.get_mut(&fix.device_id) {
-                    tracker.update_position(&fix);
-                    tracker.state = new_state.clone();
-                    tracker.current_flight_id = Some(flight_id);
-                }
-                drop(trackers); // Release lock immediately
-
-                // Create flight synchronously to ensure it exists before subsequent fixes arrive
-                match create_flight(
-                    flights_repo,
-                    airports_repo,
-                    locations_repo,
-                    runways_repo,
-                    fixes_repo,
-                    elevation_db,
-                    aircraft_trackers,
-                    &fix,
-                    flight_id,
-                    skip_airport_runway_lookup,
-                )
-                .await
-                {
-                    Ok(_) => {
-                        // Flight created successfully - set flight_id on this fix
-                        fix.flight_id = Some(flight_id);
-                    }
-                    Err(e) => {
-                        warn!("Failed to create flight for takeoff: {}", e);
-                        // Clear flight_id from tracker on error
-                        let mut trackers = aircraft_trackers.write().await;
-                        if let Some(tracker) = trackers.get_mut(&fix.device_id) {
-                            tracker.current_flight_id = None;
-                        }
-                    }
-                }
+            // Add to active flights map BEFORE creating flight in database
+            {
+                let mut flights = active_flights.write().await;
+                flights.insert(fix.device_id, (flight_id, fix.timestamp, Utc::now()));
             }
-            (AircraftState::Active, AircraftState::Idle) => {
-                // Landing detected
-                debug!(
-                    "Landing detected for aircraft {}",
-                    format_device_address_with_type(
-                        fix.device_address_hex().as_ref(),
-                        fix.address_type
-                    )
-                );
 
-                // Update tracker state FIRST to prevent race condition
-                let mut trackers = aircraft_trackers.write().await;
-                if let Some(tracker) = trackers.get_mut(&fix.device_id) {
-                    tracker.update_position(&fix);
-                    tracker.current_flight_id = None;
-                    tracker.state = new_state;
-                    // Reset towing state for next flight
-                    tracker.towed_by_device_id = None;
-                    tracker.tow_released = false;
-                }
-                drop(trackers); // Release lock immediately
-
-                // Complete flight in background if there was an active flight
-                if let Some(flight_id) = current_flight_id {
-                    // Keep the flight_id on the fix since it was part of this flight
+            // Create flight synchronously
+            match create_flight(
+                flights_repo,
+                airports_repo,
+                locations_repo,
+                runways_repo,
+                fixes_repo,
+                elevation_db,
+                &fix,
+                flight_id,
+                skip_airport_runway_lookup,
+            )
+            .await
+            {
+                Ok(_) => {
+                    // Flight created successfully - set flight_id on fix
                     fix.flight_id = Some(flight_id);
-
-                    // Spawn background task to complete flight (don't await)
-                    let flights_repo_clone = flights_repo.clone();
-                    let airports_repo_clone = airports_repo.clone();
-                    let locations_repo_clone = locations_repo.clone();
-                    let runways_repo_clone = runways_repo.clone();
-                    let fixes_repo_clone = fixes_repo.clone();
-                    let elevation_db_clone = elevation_db.clone();
-                    let trackers_clone = Arc::clone(aircraft_trackers);
-                    let landing_fix = fix.clone();
-                    tokio::spawn(async move {
-                        if let Err(e) = complete_flight(
-                            &flights_repo_clone,
-                            &airports_repo_clone,
-                            &locations_repo_clone,
-                            &runways_repo_clone,
-                            &fixes_repo_clone,
-                            &elevation_db_clone,
-                            &trackers_clone,
-                            flight_id,
-                            &landing_fix,
-                        )
-                        .await
-                        {
-                            warn!("Failed to complete flight for landing: {}", e);
-                        }
-                    });
                 }
-            }
-            _ => {
-                // No state change, just update position
-                // If there's an ongoing flight, keep its flight_id
-                if let Some(flight_id) = current_flight_id {
-                    fix.flight_id = Some(flight_id);
-
-                    // Check if this is a glider being towed that hasn't been released yet
-                    let (is_being_towed, towplane_id, already_released) = {
-                        let trackers = aircraft_trackers.read().await;
-                        if let Some(tracker) = trackers.get(&fix.device_id) {
-                            (
-                                tracker.towed_by_device_id.is_some(),
-                                tracker.towed_by_device_id,
-                                tracker.tow_released,
-                            )
-                        } else {
-                            (false, None, false)
-                        }
-                    };
-
-                    if is_being_towed
-                        && !already_released
-                        && let Some(towplane_device_id) = towplane_id
-                    {
-                        // Check for tow release
-                        if check_tow_release(
-                            fixes_repo,
-                            &fix.device_id,
-                            &flight_id,
-                            &fix,
-                            &towplane_device_id,
-                        )
-                        .await
-                        {
-                            // Record the release
-                            if let Err(e) = record_tow_release(flights_repo, &flight_id, &fix).await
-                            {
-                                warn!(
-                                    "Failed to record tow release for flight {}: {}",
-                                    flight_id, e
-                                );
-                            } else {
-                                // Mark as released in tracker
-                                let mut trackers = aircraft_trackers.write().await;
-                                if let Some(tracker) = trackers.get_mut(&fix.device_id) {
-                                    tracker.tow_released = true;
-                                }
-                            }
-                        }
-                    }
-                }
-
-                let mut trackers = aircraft_trackers.write().await;
-                if let Some(tracker) = trackers.get_mut(&fix.device_id) {
-                    tracker.update_position(&fix);
-                    tracker.state = new_state;
+                Err(e) => {
+                    warn!("Failed to create flight: {}", e);
+                    // Remove from active flights map on error
+                    let mut flights = active_flights.write().await;
+                    flights.remove(&fix.device_id);
                 }
             }
         }
-    } else {
-        // New aircraft - only create a flight if we detect a true takeoff (idle→active)
-        // For aircraft first seen in Active state, create an airborne flight
-        let mut new_tracker = AircraftTracker::new(new_state.clone());
-        new_tracker.update_position(&fix);
-
-        if new_state == AircraftState::Active {
-            // Generate flight_id FIRST to prevent race condition
-            let flight_id = Uuid::new_v4();
-            new_tracker.current_flight_id = Some(flight_id);
-
+        (Some(flight_id), false) => {
+            // Device has flight but should now be idle - complete the flight
             debug!(
-                "New in-flight aircraft detected: {} - creating airborne flight {}",
-                format_device_address_with_type(
-                    fix.device_address_hex().as_ref(),
-                    fix.address_type
-                ),
-                flight_id
+                "Completing flight {} for device {}",
+                flight_id, fix.device_id
             );
 
-            // Insert tracker FIRST with flight_id already set to prevent race condition
-            let mut trackers = aircraft_trackers.write().await;
-            trackers.insert(fix.device_id, new_tracker);
-            info!(
-                "Started tracking aircraft {} in {:?} state with flight {}",
-                fix.device_id, new_state, flight_id
-            );
-            drop(trackers); // Release lock immediately
+            // Keep flight_id on this fix since it's part of the flight
+            fix.flight_id = Some(flight_id);
 
-            // Create flight synchronously to ensure it exists before subsequent fixes arrive
-            match create_airborne_flight(flights_repo, fixes_repo, &fix, flight_id).await {
-                Ok(_) => {
-                    // Flight created successfully - set flight_id on this fix
-                    fix.flight_id = Some(flight_id);
-                    info!(
-                        "Created airborne flight {} for aircraft {} (no takeoff data)",
-                        flight_id,
-                        format_device_address_with_type(
-                            fix.device_address_hex().as_ref(),
-                            fix.address_type
-                        )
-                    );
+            // Remove from active flights map immediately
+            {
+                let mut flights = active_flights.write().await;
+                flights.remove(&fix.device_id);
+            }
+
+            // Complete flight in background (don't block)
+            let flights_repo_clone = flights_repo.clone();
+            let airports_repo_clone = airports_repo.clone();
+            let locations_repo_clone = locations_repo.clone();
+            let runways_repo_clone = runways_repo.clone();
+            let fixes_repo_clone = fixes_repo.clone();
+            let elevation_db_clone = elevation_db.clone();
+            let landing_fix = fix.clone();
+            tokio::spawn(async move {
+                if let Err(e) = complete_flight(
+                    &flights_repo_clone,
+                    &airports_repo_clone,
+                    &locations_repo_clone,
+                    &runways_repo_clone,
+                    &fixes_repo_clone,
+                    &elevation_db_clone,
+                    flight_id,
+                    &landing_fix,
+                )
+                .await
+                {
+                    warn!("Failed to complete flight {}: {}", flight_id, e);
                 }
-                Err(e) => {
-                    warn!(
-                        "Failed to create airborne flight {} for {}: {}",
-                        flight_id, fix.device_id, e
-                    );
-                    // Clear flight_id from tracker on error
-                    let mut trackers = aircraft_trackers.write().await;
-                    if let Some(tracker) = trackers.get_mut(&fix.device_id) {
-                        tracker.current_flight_id = None;
-                    }
+            });
+        }
+        (Some(flight_id), true) => {
+            // Device has flight and is still active - just update
+            fix.flight_id = Some(flight_id);
+
+            // Update last fix timestamp and last update time
+            {
+                let mut flights = active_flights.write().await;
+                if let Some(entry) = flights.get_mut(&fix.device_id) {
+                    entry.1 = fix.timestamp;
+                    entry.2 = Utc::now();
                 }
             }
-        } else {
-            // Idle aircraft - just track without creating a flight
-            let mut trackers = aircraft_trackers.write().await;
-            trackers.insert(fix.device_id, new_tracker);
-            info!(
-                "Started tracking aircraft {} in {:?} state",
-                fix.device_id, new_state
-            );
+        }
+        (None, false) => {
+            // Device has no flight and should be idle - check if we need to create an airborne flight
+            // Only create airborne flight if we've never seen this device before
+            // For now, just do nothing - fixes without flights are fine
+            debug!("Device {} is idle with no active flight", fix.device_id);
         }
     }
 

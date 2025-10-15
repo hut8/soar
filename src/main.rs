@@ -443,17 +443,11 @@ async fn handle_run(
         }
     };
 
-    // Set up shutdown handler to save state on exit
-    let shutdown_flight_tracker = fix_processor.flight_tracker().clone();
+    // Set up shutdown handler
     tokio::spawn(async move {
         match tokio::signal::ctrl_c().await {
             Ok(()) => {
-                info!("Received Ctrl+C, saving flight tracker state before exit...");
-                if let Err(e) = shutdown_flight_tracker.save_state().await {
-                    warn!("Failed to save flight tracker state on shutdown: {}", e);
-                } else {
-                    info!("Flight tracker state saved successfully");
-                }
+                info!("Received Ctrl+C, exiting...");
                 std::process::exit(0);
             }
             Err(err) => {

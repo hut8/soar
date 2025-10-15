@@ -1,12 +1,9 @@
-mod aircraft_tracker;
 mod altitude;
 mod flight_lifecycle;
 mod geometry;
 mod location;
 mod runway;
 mod state_transitions;
-mod towing;
-mod utils;
 
 pub use altitude::calculate_and_update_agl_async;
 
@@ -17,19 +14,20 @@ use crate::fixes_repo::FixesRepository;
 use crate::flights_repo::FlightsRepository;
 use crate::locations_repo::LocationsRepository;
 use crate::runways_repo::RunwaysRepository;
-use aircraft_tracker::AircraftTracker;
 use anyhow::Result;
+use chrono::{DateTime, Utc};
 use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
-use metrics::{gauge, histogram};
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Instant;
 use tokio::sync::{Mutex, RwLock};
-use tracing::{debug, error, info, trace, warn};
+use tracing::{error, info, trace};
 use uuid::Uuid;
 
+/// Type alias for active flights map: device_id -> (flight_id, last_fix_timestamp, last_update_time)
+pub(crate) type ActiveFlightsMap = Arc<RwLock<HashMap<Uuid, (Uuid, DateTime<Utc>, DateTime<Utc>)>>>;
+
+/// Simple flight tracker - just tracks which device is currently on which flight
 pub struct FlightTracker {
     flights_repo: FlightsRepository,
     airports_repo: AirportsRepository,
@@ -37,11 +35,10 @@ pub struct FlightTracker {
     fixes_repo: FixesRepository,
     locations_repo: LocationsRepository,
     elevation_db: ElevationDB,
-    aircraft_trackers: Arc<RwLock<HashMap<Uuid, AircraftTracker>>>,
+    // Simple map: device_id -> (flight_id, last_fix_timestamp, last_update_time)
+    active_flights: ActiveFlightsMap,
     // Per-device mutexes to ensure sequential processing per device
     device_locks: Arc<RwLock<HashMap<Uuid, Arc<Mutex<()>>>>>,
-    state_file_path: Option<std::path::PathBuf>,
-    fix_counter: Arc<AtomicU64>,
 }
 
 impl Clone for FlightTracker {
@@ -53,10 +50,8 @@ impl Clone for FlightTracker {
             fixes_repo: self.fixes_repo.clone(),
             locations_repo: self.locations_repo.clone(),
             elevation_db: self.elevation_db.clone(),
-            aircraft_trackers: Arc::clone(&self.aircraft_trackers),
+            active_flights: Arc::clone(&self.active_flights),
             device_locks: Arc::clone(&self.device_locks),
-            state_file_path: self.state_file_path.clone(),
-            fix_counter: Arc::clone(&self.fix_counter),
         }
     }
 }
@@ -71,130 +66,30 @@ impl FlightTracker {
             fixes_repo: FixesRepository::new(pool.clone()),
             locations_repo: LocationsRepository::new(pool.clone()),
             elevation_db,
-            aircraft_trackers: Arc::new(RwLock::new(HashMap::new())),
+            active_flights: Arc::new(RwLock::new(HashMap::new())),
             device_locks: Arc::new(RwLock::new(HashMap::new())),
-            state_file_path: None,
-            fix_counter: Arc::new(AtomicU64::new(0)),
         }
     }
 
     /// Create a new FlightTracker with state persistence enabled
+    /// Note: State persistence has been removed for simplicity
     pub fn with_state_persistence(
         pool: &Pool<ConnectionManager<PgConnection>>,
-        state_path: std::path::PathBuf,
+        _state_path: std::path::PathBuf,
     ) -> Self {
-        let elevation_db = ElevationDB::new().expect("Failed to initialize ElevationDB");
-        Self {
-            flights_repo: FlightsRepository::new(pool.clone()),
-            airports_repo: AirportsRepository::new(pool.clone()),
-            runways_repo: RunwaysRepository::new(pool.clone()),
-            fixes_repo: FixesRepository::new(pool.clone()),
-            locations_repo: LocationsRepository::new(pool.clone()),
-            elevation_db,
-            aircraft_trackers: Arc::new(RwLock::new(HashMap::new())),
-            device_locks: Arc::new(RwLock::new(HashMap::new())),
-            state_file_path: Some(state_path),
-            fix_counter: Arc::new(AtomicU64::new(0)),
-        }
+        // Just create a normal FlightTracker - state persistence removed
+        Self::new(pool)
     }
 
-    /// Save the current state to disk atomically
-    pub async fn save_state(&self) -> Result<()> {
-        let start = Instant::now();
-
-        if let Some(state_path) = &self.state_file_path {
-            // Get a read lock on the trackers
-            let trackers = self.aircraft_trackers.read().await;
-
-            // Serialize to JSON
-            let json = serde_json::to_string_pretty(&*trackers)?;
-
-            // Write atomically by writing to a temporary file first, then renaming
-            let temp_path = state_path.with_extension("tmp");
-            tokio::fs::write(&temp_path, json).await?;
-            tokio::fs::rename(&temp_path, state_path).await?;
-
-            debug!("Saved flight tracker state to {:?}", state_path);
-
-            // Record metrics for state persistence
-            histogram!("flight_tracker_save_duration_seconds")
-                .record(start.elapsed().as_secs_f64());
-            gauge!("flight_tracker_active_devices").set(trackers.len() as f64);
-        }
-        Ok(())
-    }
-
-    /// Load state from disk if it exists and is less than 24 hours old
+    /// Load state from disk - now a no-op
     pub async fn load_state(&self) -> Result<()> {
-        if let Some(state_path) = &self.state_file_path
-            && state_path.exists()
-        {
-            // Check if the file is older than 24 hours
-            let metadata = tokio::fs::metadata(state_path).await?;
-            if let Ok(modified) = metadata.modified() {
-                let age = std::time::SystemTime::now()
-                    .duration_since(modified)
-                    .unwrap_or(std::time::Duration::from_secs(0));
-
-                if age > std::time::Duration::from_secs(24 * 60 * 60) {
-                    info!("Flight state file is older than 24 hours, deleting it");
-                    tokio::fs::remove_file(state_path).await?;
-                    return Ok(());
-                }
-            }
-
-            // Load and deserialize the state
-            let json = tokio::fs::read_to_string(state_path).await?;
-            let trackers: HashMap<Uuid, AircraftTracker> = serde_json::from_str(&json)?;
-
-            // Filter out stale devices (inactive for more than 2 hours)
-            let cutoff_time = chrono::Utc::now() - chrono::Duration::hours(2);
-            let original_count = trackers.len();
-            let filtered_trackers: HashMap<Uuid, AircraftTracker> = trackers
-                .into_iter()
-                .filter(|(_, tracker)| tracker.last_update >= cutoff_time)
-                .collect();
-
-            let filtered_count = original_count - filtered_trackers.len();
-            if filtered_count > 0 {
-                info!(
-                    "Filtered out {} stale devices from loaded state",
-                    filtered_count
-                );
-            }
-
-            // Replace the current trackers with the filtered loaded state
-            let mut current_trackers = self.aircraft_trackers.write().await;
-            *current_trackers = filtered_trackers;
-
-            info!(
-                "Loaded flight tracker state from {:?} ({} aircraft)",
-                state_path,
-                current_trackers.len()
-            );
-        }
+        // State persistence removed
         Ok(())
     }
 
-    /// Start a background task to periodically save state
-    pub fn start_periodic_state_saving(&self, interval_secs: u64) {
-        if self.state_file_path.is_some() {
-            let tracker = self.clone();
-            tokio::spawn(async move {
-                let mut interval =
-                    tokio::time::interval(std::time::Duration::from_secs(interval_secs));
-                loop {
-                    interval.tick().await;
-                    if let Err(e) = tracker.save_state().await {
-                        warn!("Failed to save flight tracker state: {}", e);
-                    }
-                }
-            });
-            info!(
-                "Started periodic state saving (every {} seconds)",
-                interval_secs
-            );
-        }
+    /// Start periodic state saving - now a no-op
+    pub fn start_periodic_state_saving(&self, _interval_secs: u64) {
+        // State persistence removed
     }
 
     /// Start a background task to periodically check for timed-out flights
@@ -218,7 +113,6 @@ impl FlightTracker {
     }
 
     /// Calculate altitude AGL and update the fix in the database asynchronously
-    /// This method is designed to be called in a background task after the fix is inserted
     pub async fn calculate_and_update_agl_async(
         &self,
         fix_id: uuid::Uuid,
@@ -235,14 +129,12 @@ impl FlightTracker {
 
         // Collect flights that need to be timed out
         let flights_to_timeout: Vec<(Uuid, Uuid)> = {
-            let trackers = self.aircraft_trackers.read().await;
-            trackers
+            let active_flights = self.active_flights.read().await;
+            active_flights
                 .iter()
-                .filter_map(|(device_id, tracker)| {
-                    // Check if this tracker has an active flight
-                    if let Some(flight_id) = tracker.current_flight_id {
-                        // Check if last update was more than 5 minutes ago
-                        let elapsed = now.signed_duration_since(tracker.last_update);
+                .filter_map(
+                    |(device_id, (flight_id, _last_fix_time, last_update_time))| {
+                        let elapsed = now.signed_duration_since(*last_update_time);
                         if elapsed > timeout_threshold {
                             info!(
                                 "Flight {} for device {} is stale (last update {} seconds ago)",
@@ -250,11 +142,11 @@ impl FlightTracker {
                                 device_id,
                                 elapsed.num_seconds()
                             );
-                            return Some((flight_id, *device_id));
+                            return Some((*flight_id, *device_id));
                         }
-                    }
-                    None
-                })
+                        None
+                    },
+                )
                 .collect()
         };
 
@@ -262,7 +154,7 @@ impl FlightTracker {
         for (flight_id, device_id) in flights_to_timeout {
             if let Err(e) = flight_lifecycle::timeout_flight(
                 &self.flights_repo,
-                &self.aircraft_trackers,
+                &self.active_flights,
                 flight_id,
                 device_id,
             )
@@ -278,55 +170,39 @@ impl FlightTracker {
 
     /// Process a fix, insert it into the database, and return it with updated flight_id
     /// This method holds the per-device lock through the entire process including DB insertion
-    /// to prevent race conditions where concurrent fixes try to use a flight_id before the flight exists
     pub async fn process_and_insert_fix(
         &self,
         fix: Fix,
         fixes_repo: &FixesRepository,
     ) -> Option<Fix> {
         // Get or create the per-device lock
-        // This ensures fixes for the same device are processed sequentially
         let device_lock = {
-            // First try to get an existing lock
-            {
-                let locks_read = self.device_locks.read().await;
-                if let Some(lock) = locks_read.get(&fix.device_id) {
-                    Arc::clone(lock)
-                } else {
-                    // Lock doesn't exist, need to create it
-                    drop(locks_read);
-                    let mut locks_write = self.device_locks.write().await;
-                    // Double-check it wasn't created while we waited for write lock
-                    locks_write
-                        .entry(fix.device_id)
-                        .or_insert_with(|| Arc::new(Mutex::new(())))
-                        .clone()
-                }
+            let locks_read = self.device_locks.read().await;
+            if let Some(lock) = locks_read.get(&fix.device_id) {
+                Arc::clone(lock)
+            } else {
+                drop(locks_read);
+                let mut locks_write = self.device_locks.write().await;
+                locks_write
+                    .entry(fix.device_id)
+                    .or_insert_with(|| Arc::new(Mutex::new(())))
+                    .clone()
             }
         };
 
-        // Acquire the per-device lock - this ensures sequential processing
+        // Acquire the per-device lock - ensures sequential processing
         let _guard = device_lock.lock().await;
 
-        // Check for duplicate fixes first (within 1 second)
+        // Check for duplicate fixes (within 1 second)
         let is_duplicate = {
-            let lock_start = Instant::now();
-            let trackers_read = self.aircraft_trackers.try_read();
-            match trackers_read {
-                Ok(trackers) => {
-                    histogram!("flight_tracker_read_lock_duration_seconds")
-                        .record(lock_start.elapsed().as_secs_f64());
-                    if let Some(tracker) = trackers.get(&fix.device_id) {
-                        tracker.is_duplicate_fix(&fix)
-                    } else {
-                        false // New aircraft, not a duplicate
-                    }
-                }
-                Err(_) => {
-                    // Could not get read lock, process anyway
-                    metrics::counter!("flight_tracker_read_lock_contention_total").increment(1);
-                    false
-                }
+            let active_flights = self.active_flights.read().await;
+            if let Some((_flight_id, last_fix_time, _last_update)) =
+                active_flights.get(&fix.device_id)
+            {
+                let time_diff = fix.timestamp.signed_duration_since(*last_fix_time);
+                time_diff.num_seconds().abs() < 1
+            } else {
+                false
             }
         };
 
@@ -344,7 +220,6 @@ impl FlightTracker {
         );
 
         // Process state transition
-        let fix_device_address = fix.device_address; // Store for error logging
         let updated_fix = match state_transitions::process_state_transition(
             &self.flights_repo,
             &self.airports_repo,
@@ -352,40 +227,25 @@ impl FlightTracker {
             &self.runways_repo,
             &self.fixes_repo,
             &self.elevation_db,
-            &self.aircraft_trackers,
+            &self.active_flights,
             fix,
         )
         .await
         {
             Ok(updated_fix) => updated_fix,
             Err(e) => {
-                error!(
-                    "Failed to process state transition for aircraft {}: {}",
-                    fix_device_address, e
-                );
+                error!("Failed to process state transition: {}", e);
                 return None;
             }
         };
 
         // Insert the fix into the database WHILE STILL HOLDING THE LOCK
-        // This ensures that if the fix has a flight_id, that flight already exists
         match fixes_repo.insert(&updated_fix).await {
             Ok(_) => {
                 trace!(
                     "Successfully saved fix to database for aircraft {}",
                     updated_fix.device_address_hex()
                 );
-
-                // Deterministically clean up old trackers every 1000 fixes
-                let count = self.fix_counter.fetch_add(1, Ordering::Relaxed);
-                if count.is_multiple_of(1000) {
-                    let trackers = Arc::clone(&self.aircraft_trackers);
-                    tokio::spawn(async move {
-                        let mut trackers_write = trackers.write().await;
-                        utils::cleanup_old_trackers(&mut trackers_write).await;
-                    });
-                }
-
                 Some(updated_fix)
             }
             Err(e) => {
@@ -393,70 +253,6 @@ impl FlightTracker {
                     "Failed to save fix to database for fix: {:?}\ncause:{:?}",
                     updated_fix, e
                 );
-                None
-            }
-        }
-        // Lock is automatically released when _guard goes out of scope
-    }
-
-    /// Process a fix and return it with updated flight_id (without database insertion)
-    /// DEPRECATED: Use process_and_insert_fix() instead to avoid race conditions
-    #[deprecated(note = "Use process_and_insert_fix() to avoid race conditions")]
-    pub async fn process_fix(&self, fix: Fix) -> Option<Fix> {
-        // Get or create the per-device lock
-        let device_lock = {
-            {
-                let locks_read = self.device_locks.read().await;
-                if let Some(lock) = locks_read.get(&fix.device_id) {
-                    Arc::clone(lock)
-                } else {
-                    drop(locks_read);
-                    let mut locks_write = self.device_locks.write().await;
-                    locks_write
-                        .entry(fix.device_id)
-                        .or_insert_with(|| Arc::new(Mutex::new(())))
-                        .clone()
-                }
-            }
-        };
-
-        let _guard = device_lock.lock().await;
-
-        // Check for duplicates
-        let is_duplicate = {
-            let trackers_read = self.aircraft_trackers.try_read();
-            match trackers_read {
-                Ok(trackers) => {
-                    if let Some(tracker) = trackers.get(&fix.device_id) {
-                        tracker.is_duplicate_fix(&fix)
-                    } else {
-                        false
-                    }
-                }
-                Err(_) => false,
-            }
-        };
-
-        if is_duplicate {
-            return None;
-        }
-
-        // Process state transition
-        match state_transitions::process_state_transition(
-            &self.flights_repo,
-            &self.airports_repo,
-            &self.locations_repo,
-            &self.runways_repo,
-            &self.fixes_repo,
-            &self.elevation_db,
-            &self.aircraft_trackers,
-            fix,
-        )
-        .await
-        {
-            Ok(updated_fix) => Some(updated_fix),
-            Err(e) => {
-                error!("Failed to process state transition: {}", e);
                 None
             }
         }

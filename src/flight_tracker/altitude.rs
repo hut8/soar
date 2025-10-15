@@ -1,16 +1,11 @@
 use crate::Fix;
 use crate::elevation::ElevationDB;
 use crate::fixes_repo::FixesRepository;
-use tracing::{debug, info, instrument, trace, warn};
-
-use super::utils::format_device_address_with_type;
+use tracing::{debug, info, trace, warn};
 
 /// Calculate altitude offset in feet between reported altitude and true MSL elevation
 /// Returns the difference (reported_altitude_ft - true_elevation_ft)
 /// Returns None if elevation lookup fails or fix has no altitude
-#[instrument(skip(elevation_db), fields(
-    aircraft = %format_device_address_with_type(&fix.device_address_hex(), fix.address_type)
-))]
 pub(crate) async fn calculate_altitude_offset_ft(
     elevation_db: &ElevationDB,
     fix: &Fix,
