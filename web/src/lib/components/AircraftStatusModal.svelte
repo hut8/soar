@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { X, Plane, MapPin, Clock, RotateCcw, ExternalLink } from '@lucide/svelte';
+	import { X, Plane, MapPin, Clock, RotateCcw, ExternalLink, Compass } from '@lucide/svelte';
 	import type { Device, Aircraft, Fix, AircraftRegistration, AircraftModel } from '$lib/types';
 	import { formatTitleCase, formatDeviceAddress, getStatusCodeDescription } from '$lib/formatters';
 	import dayjs from 'dayjs';
@@ -27,6 +27,7 @@
 	let deviceHeading: number = $state(0);
 	let isCompassActive: boolean = $state(false);
 	let directionToAircraft: number = $state(0);
+	let aircraftHeading: number = $state(0);
 
 	// Update data when device changes
 	$effect(() => {
@@ -170,6 +171,11 @@
 			return;
 		}
 
+		// Update aircraft heading from track_degrees
+		if (latestFix.track_degrees !== undefined && latestFix.track_degrees !== null) {
+			aircraftHeading = latestFix.track_degrees;
+		}
+
 		// Calculate bearing from user to aircraft
 		const bearing = calculateBearing(
 			userLocation.lat,
@@ -299,11 +305,27 @@
 			<!-- Header -->
 			<div class="flex items-center justify-between border-b border-gray-200 p-6">
 				<div class="flex items-center gap-3">
-					<div
-						class="flex h-10 w-10 items-center justify-center rounded-full bg-red-500 text-white"
-					>
-						<Plane size={24} />
-					</div>
+					{#if isCompassActive}
+						<!-- Compass icon with aircraft heading -->
+						<div class="flex flex-col items-center">
+							<div
+								class="aircraft-compass flex h-10 w-10 items-center justify-center rounded-full bg-red-500 text-white"
+								style="transform: rotate({aircraftHeading}deg)"
+							>
+								<Compass size={24} />
+							</div>
+							<div class="mt-1 text-xs font-semibold text-gray-700">
+								{Math.round(aircraftHeading)}°
+							</div>
+						</div>
+					{:else}
+						<!-- Static plane icon when compass not available -->
+						<div
+							class="flex h-10 w-10 items-center justify-center rounded-full bg-red-500 text-white"
+						>
+							<Plane size={24} />
+						</div>
+					{/if}
 					<div>
 						<h2 class="text-xl font-bold">Aircraft Status</h2>
 						<p class="text-sm text-gray-600">
@@ -622,5 +644,9 @@
 	.direction-arrow {
 		transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 		filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.3));
+	}
+
+	.aircraft-compass {
+		transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 	}
 </style>
