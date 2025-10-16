@@ -39,6 +39,16 @@ pub mod sql_types {
 }
 
 diesel::table! {
+    aircraft_approved_operations (id) {
+        id -> Uuid,
+        #[max_length = 6]
+        aircraft_registration_id -> Varchar,
+        operation -> Varchar,
+        created_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
     aircraft_models (manufacturer_code, model_code, series_code) {
         manufacturer_code -> Text,
         model_code -> Text,
@@ -86,36 +96,6 @@ diesel::table! {
         registrant_name -> Nullable<Varchar>,
         last_action_date -> Nullable<Date>,
         certificate_issue_date -> Nullable<Date>,
-        op_restricted_other -> Bool,
-        op_restricted_ag_pest_control -> Bool,
-        op_restricted_aerial_surveying -> Bool,
-        op_restricted_aerial_advertising -> Bool,
-        op_restricted_forest -> Bool,
-        op_restricted_patrolling -> Bool,
-        op_restricted_weather_control -> Bool,
-        op_restricted_carriage_of_cargo -> Bool,
-        op_experimental_show_compliance -> Bool,
-        op_experimental_research_development -> Bool,
-        op_experimental_amateur_built -> Bool,
-        op_experimental_exhibition -> Bool,
-        op_experimental_racing -> Bool,
-        op_experimental_crew_training -> Bool,
-        op_experimental_market_survey -> Bool,
-        op_experimental_operating_kit_built -> Bool,
-        op_experimental_light_sport_reg_prior_2008 -> Bool,
-        op_experimental_light_sport_operating_kit_built -> Bool,
-        op_experimental_light_sport_prev_21_190 -> Bool,
-        op_experimental_uas_research_development -> Bool,
-        op_experimental_uas_market_survey -> Bool,
-        op_experimental_uas_crew_training -> Bool,
-        op_experimental_uas_exhibition -> Bool,
-        op_experimental_uas_compliance_with_cfr -> Bool,
-        op_sfp_ferry_for_repairs_alterations_storage -> Bool,
-        op_sfp_evacuate_impending_danger -> Bool,
-        op_sfp_excess_of_max_certificated -> Bool,
-        op_sfp_delivery_or_export -> Bool,
-        op_sfp_production_flight_testing -> Bool,
-        op_sfp_customer_demo -> Bool,
         type_engine_code -> Nullable<Int2>,
         status_code -> Nullable<Text>,
         transponder_code -> Nullable<Int8>,
@@ -591,6 +571,7 @@ diesel::table! {
     }
 }
 
+diesel::joinable!(aircraft_approved_operations -> aircraft_registrations (aircraft_registration_id));
 diesel::joinable!(aircraft_other_names -> aircraft_registrations (registration_number));
 diesel::joinable!(aircraft_registrations -> airports (home_base_airport_id));
 diesel::joinable!(aircraft_registrations -> devices (device_id));
@@ -618,6 +599,7 @@ diesel::joinable!(receivers_photos -> receivers (receiver_id));
 diesel::joinable!(users -> clubs (club_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
+    aircraft_approved_operations,
     aircraft_models,
     aircraft_other_names,
     aircraft_registrations,
