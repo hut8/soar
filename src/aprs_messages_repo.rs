@@ -45,7 +45,6 @@ impl AprsMessagesRepository {
         })
         .await??;
 
-        debug!("Inserted APRS message with ID: {}", message_id);
         Ok(message_id)
     }
 }
