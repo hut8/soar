@@ -19,7 +19,7 @@
 		"@eslint/compat": "^1.2.5",
 		"@eslint/js": "^9.36.0",
 		"@playwright/test": "^1.56.0",
-		"@skeletonlabs/skeleton-svelte": "^1.5.3",
+		"@skeletonlabs/skeleton-svelte": "^1.5.2",
 		"@sveltejs/adapter-static": "^3.0.10",
 		"@sveltejs/kit": "^2.42.2",
 		"@sveltejs/vite-plugin-svelte": "^6.2.1",
