@@ -1495,7 +1495,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "(rate(elevation_lookup_duration_seconds_sum{source=\"soar\"}[5m]) / rate(elevation_lookup_duration_seconds_count{source=\"soar\"}[5m])) * 1000",
+          "expr": "rate(elevation_lookup_duration_seconds_sum{source=\"soar\"}[5m]) / rate(elevation_lookup_duration_seconds_count{source=\"soar\"}[5m])",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
