@@ -207,11 +207,6 @@ impl ReceiverRepository {
                         .select(receivers::id)
                         .first::<Uuid>(&mut conn)
                 })?;
-
-            info!(
-                "Auto-inserted minimal receiver {} with ID {}",
-                callsign, receiver_id
-            );
             Ok(receiver_id)
         })
         .await?
