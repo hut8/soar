@@ -197,8 +197,8 @@ pub(crate) async fn complete_flight(
             None
         };
 
-        // Check if flight is spurious
-        let is_spurious = duration_seconds < 60
+        // Check if flight is spurious (< 2 minutes)
+        let is_spurious = duration_seconds < 120
             || altitude_range.map(|range| range < 50).unwrap_or(false)
             || max_agl_altitude.map(|agl| agl < 100).unwrap_or(false);
 

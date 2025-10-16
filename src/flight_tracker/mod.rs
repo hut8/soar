@@ -18,14 +18,54 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 use tracing::{error, info, trace};
 use uuid::Uuid;
 
-/// Type alias for active flights map: device_id -> (flight_id, last_fix_timestamp, last_update_time)
-pub(crate) type ActiveFlightsMap = Arc<RwLock<HashMap<Uuid, (Uuid, DateTime<Utc>, DateTime<Utc>)>>>;
+/// Tracks the current flight state for a device
+#[derive(Debug, Clone)]
+pub(crate) struct CurrentFlightState {
+    /// The flight ID for the current active flight
+    pub flight_id: Uuid,
+    /// Timestamp of the last fix received for this flight
+    pub last_fix_timestamp: DateTime<Utc>,
+    /// Wall-clock time when we last updated this flight state
+    pub last_update_time: DateTime<Utc>,
+    /// History of the last 3 fixes' is_active status (most recent last)
+    /// Used to detect takeoff (inactive -> active transition)
+    pub recent_fix_history: VecDeque<bool>,
+}
+
+impl CurrentFlightState {
+    /// Create a new CurrentFlightState with initial fix activity
+    pub fn new(flight_id: Uuid, fix_timestamp: DateTime<Utc>, is_active: bool) -> Self {
+        let mut history = VecDeque::with_capacity(3);
+        history.push_back(is_active);
+        Self {
+            flight_id,
+            last_fix_timestamp: fix_timestamp,
+            last_update_time: Utc::now(),
+            recent_fix_history: history,
+        }
+    }
+
+    /// Update state with a new fix
+    pub fn update(&mut self, fix_timestamp: DateTime<Utc>, is_active: bool) {
+        self.last_fix_timestamp = fix_timestamp;
+        self.last_update_time = Utc::now();
+
+        // Keep only last 3 fixes
+        if self.recent_fix_history.len() >= 3 {
+            self.recent_fix_history.pop_front();
+        }
+        self.recent_fix_history.push_back(is_active);
+    }
+}
+
+/// Type alias for active flights map: device_id -> CurrentFlightState
+pub(crate) type ActiveFlightsMap = Arc<RwLock<HashMap<Uuid, CurrentFlightState>>>;
 
 /// Simple flight tracker - just tracks which device is currently on which flight
 pub struct FlightTracker {
@@ -132,21 +172,19 @@ impl FlightTracker {
             let active_flights = self.active_flights.read().await;
             active_flights
                 .iter()
-                .filter_map(
-                    |(device_id, (flight_id, _last_fix_time, last_update_time))| {
-                        let elapsed = now.signed_duration_since(*last_update_time);
-                        if elapsed > timeout_threshold {
-                            info!(
-                                "Flight {} for device {} is stale (last update {} seconds ago)",
-                                flight_id,
-                                device_id,
-                                elapsed.num_seconds()
-                            );
-                            return Some((*flight_id, *device_id));
-                        }
-                        None
-                    },
-                )
+                .filter_map(|(device_id, state)| {
+                    let elapsed = now.signed_duration_since(state.last_update_time);
+                    if elapsed > timeout_threshold {
+                        info!(
+                            "Flight {} for device {} is stale (last update {} seconds ago)",
+                            state.flight_id,
+                            device_id,
+                            elapsed.num_seconds()
+                        );
+                        return Some((state.flight_id, *device_id));
+                    }
+                    None
+                })
                 .collect()
         };
 
@@ -158,7 +196,7 @@ impl FlightTracker {
                 let active_flights = self.active_flights.read().await;
                 active_flights
                     .get(&device_id)
-                    .map(|(fid, _, _)| *fid == flight_id)
+                    .map(|state| state.flight_id == flight_id)
                     .unwrap_or(false)
             };
 
@@ -211,10 +249,10 @@ impl FlightTracker {
         // Check for duplicate fixes (within 1 second)
         let is_duplicate = {
             let active_flights = self.active_flights.read().await;
-            if let Some((_flight_id, last_fix_time, _last_update)) =
-                active_flights.get(&fix.device_id)
-            {
-                let time_diff = fix.timestamp.signed_duration_since(*last_fix_time);
+            if let Some(state) = active_flights.get(&fix.device_id) {
+                let time_diff = fix
+                    .timestamp
+                    .signed_duration_since(state.last_fix_timestamp);
                 time_diff.num_seconds().abs() < 1
             } else {
                 false
