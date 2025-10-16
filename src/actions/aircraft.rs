@@ -12,7 +12,7 @@ use crate::faa::aircraft_model_repo::AircraftModelRepository;
 use crate::web::AppState;
 
 use super::json_error;
-use super::views::{AircraftView, club::AircraftModelView};
+use super::views::{AircraftRegistrationView, club::AircraftModelView};
 
 pub async fn get_aircraft_by_club(
     State(state): State<AppState>,
@@ -35,7 +35,7 @@ pub async fn get_aircraft_by_club(
         }
     };
 
-    let mut aircraft_views: Vec<AircraftView> = Vec::new();
+    let mut aircraft_views: Vec<AircraftRegistrationView> = Vec::new();
 
     // For each device, get its aircraft registration and model
     for device in devices {
@@ -58,7 +58,7 @@ pub async fn get_aircraft_by_club(
 
         // Convert AircraftRegistrationModel to Aircraft, then to view
         let aircraft_domain: crate::aircraft_registrations::Aircraft = aircraft.clone().into();
-        let mut view = AircraftView::from(aircraft_domain);
+        let mut view = AircraftRegistrationView::from(aircraft_domain);
         view.club_id = Some(club_id);
         view.aircraft_type_ogn = device.aircraft_type_ogn;
 

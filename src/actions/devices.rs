@@ -9,7 +9,7 @@ use tracing::{info, instrument};
 use uuid::Uuid;
 
 use crate::actions::json_error;
-use crate::actions::views::{DeviceView, FlightView};
+use crate::actions::views::{Aircraft, DeviceView, FlightView};
 use crate::auth::AdminUser;
 use crate::device_repo::DeviceRepository;
 use crate::devices::AddressType;
@@ -401,7 +401,7 @@ pub async fn search_devices(
 pub(crate) async fn enrich_devices_with_aircraft_data(
     devices_with_fixes: Vec<(crate::devices::DeviceModel, Vec<crate::fixes::Fix>)>,
     pool: crate::web::PgPool,
-) -> Vec<crate::live_fixes::DeviceWithFixes> {
+) -> Vec<Aircraft> {
     use std::collections::HashMap;
 
     if devices_with_fixes.is_empty() {
@@ -491,11 +491,15 @@ pub(crate) async fn enrich_devices_with_aircraft_data(
                 .cloned()
         });
 
-        enriched.push(crate::live_fixes::DeviceWithFixes {
-            device: device_model,
+        // Convert DeviceModel to DeviceView
+        let mut device_view = DeviceView::from_device_model(device_model);
+        // Add the fixes to the device view
+        device_view.fixes = Some(device_fixes);
+
+        enriched.push(Aircraft {
+            device: device_view,
             aircraft_registration,
             aircraft_model,
-            recent_fixes: device_fixes,
         });
     }
 

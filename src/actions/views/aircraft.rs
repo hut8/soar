@@ -3,11 +3,13 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::club::AircraftModelView;
-use crate::aircraft_registrations::{Aircraft, AirworthinessClass, LightSportType, RegistrantType};
+use crate::aircraft_registrations::{
+    Aircraft as AircraftDomain, AirworthinessClass, LightSportType, RegistrantType,
+};
 use crate::ogn_aprs_aircraft::AircraftType;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AircraftView {
+pub struct AircraftRegistrationView {
     pub registration_number: String,
     pub serial_number: String,
     pub manufacturer_code: Option<String>,
@@ -39,8 +41,8 @@ pub struct AircraftView {
     pub aircraft_type_ogn: Option<AircraftType>,
 }
 
-impl From<Aircraft> for AircraftView {
-    fn from(aircraft: Aircraft) -> Self {
+impl From<AircraftDomain> for AircraftRegistrationView {
+    fn from(aircraft: AircraftDomain) -> Self {
         Self {
             registration_number: aircraft.n_number,
             serial_number: aircraft.serial_number,
@@ -76,14 +78,13 @@ impl From<Aircraft> for AircraftView {
 #[derive(Debug, Clone, Serialize)]
 pub struct AircraftWithDeviceView {
     #[serde(flatten)]
-    pub aircraft: AircraftView,
+    pub aircraft: AircraftRegistrationView,
     pub device: Option<DeviceView>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeviceView {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub id: Option<uuid::Uuid>,
+    pub id: uuid::Uuid,
 
     /// Formatted device address with prefix (e.g., "OGN-8B570F", "FLARM-123456", "ICAO-ABCDEF")
     pub device_address: String,
@@ -96,6 +97,16 @@ pub struct DeviceView {
     pub tracked: bool,
     pub identified: bool,
     pub club_id: Option<Uuid>,
+    pub created_at: String,
+    pub updated_at: String,
+    pub from_ddb: bool,
+    pub frequency_mhz: Option<f64>,
+    pub pilot_name: Option<String>,
+    pub home_base_airport_ident: Option<String>,
+    pub aircraft_type_ogn: Option<crate::ogn_aprs_aircraft::AircraftType>,
+    pub last_fix_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fixes: Option<Vec<crate::fixes::Fix>>,
 }
 
 impl DeviceView {
@@ -124,7 +135,9 @@ impl DeviceView {
         .to_string();
 
         Self {
-            id: device.id,
+            id: device
+                .id
+                .expect("Device must have an ID to create DeviceView"),
             device_address,
             address_type,
             address: address_hex,
@@ -134,6 +147,64 @@ impl DeviceView {
             tracked: device.tracked,
             identified: device.identified,
             club_id: device.club_id,
+            created_at: chrono::Utc::now().to_rfc3339(),
+            updated_at: chrono::Utc::now().to_rfc3339(),
+            from_ddb: false,
+            frequency_mhz: device.frequency_mhz,
+            pilot_name: device.pilot_name,
+            home_base_airport_ident: device.home_base_airport_ident,
+            aircraft_type_ogn: device.aircraft_type_ogn,
+            last_fix_at: device.last_fix_at.map(|dt| dt.to_rfc3339()),
+            fixes: None,
+        }
+    }
+
+    pub fn from_device_model(device_model: crate::devices::DeviceModel) -> Self {
+        // Format address as 6-digit hex
+        let address_hex = format!("{:06X}", device_model.address as u32);
+
+        // Create prefix based on address type
+        let prefix = match device_model.address_type {
+            crate::devices::AddressType::Ogn => "OGN",
+            crate::devices::AddressType::Flarm => "FLARM",
+            crate::devices::AddressType::Icao => "ICAO",
+            crate::devices::AddressType::Unknown => "UNKNOWN",
+        };
+
+        // Combine prefix and address
+        let device_address = format!("{}-{}", prefix, address_hex);
+
+        // Address type as single character for backward compatibility
+        let address_type = match device_model.address_type {
+            crate::devices::AddressType::Ogn => "O",
+            crate::devices::AddressType::Flarm => "F",
+            crate::devices::AddressType::Icao => "I",
+            crate::devices::AddressType::Unknown => "",
+        }
+        .to_string();
+
+        Self {
+            id: device_model.id,
+            device_address,
+            address_type,
+            address: address_hex,
+            aircraft_model: device_model.aircraft_model,
+            registration: device_model.registration,
+            competition_number: device_model.competition_number,
+            tracked: device_model.tracked,
+            identified: device_model.identified,
+            club_id: device_model.club_id,
+            created_at: device_model.created_at.to_rfc3339(),
+            updated_at: device_model.updated_at.to_rfc3339(),
+            from_ddb: device_model.from_ddb,
+            frequency_mhz: device_model
+                .frequency_mhz
+                .and_then(|bd| bd.to_string().parse().ok()),
+            pilot_name: device_model.pilot_name,
+            home_base_airport_ident: device_model.home_base_airport_ident,
+            aircraft_type_ogn: device_model.aircraft_type_ogn,
+            last_fix_at: device_model.last_fix_at.map(|dt| dt.to_rfc3339()),
+            fixes: None,
         }
     }
 }
@@ -142,4 +213,22 @@ impl From<crate::devices::Device> for DeviceView {
     fn from(device: crate::devices::Device) -> Self {
         Self::from_device(device)
     }
+}
+
+impl From<crate::devices::DeviceModel> for DeviceView {
+    fn from(device_model: crate::devices::DeviceModel) -> Self {
+        Self::from_device_model(device_model)
+    }
+}
+
+/// Complete aircraft information with device, registration, model, and recent fixes
+/// This is the enriched view used when returning devices with full aircraft data
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Aircraft {
+    #[serde(flatten)]
+    pub device: DeviceView,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub aircraft_registration: Option<crate::aircraft_registrations::AircraftRegistrationModel>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub aircraft_model: Option<crate::faa::aircraft_models::AircraftModel>,
 }

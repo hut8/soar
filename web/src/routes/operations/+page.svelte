@@ -11,7 +11,7 @@
 	import AirportModal from '$lib/components/AirportModal.svelte';
 	import { DeviceRegistry } from '$lib/services/DeviceRegistry';
 	import { FixFeed } from '$lib/services/FixFeed';
-	import { Device } from '$lib/types';
+	import type { Device } from '$lib/types';
 	import { toaster } from '$lib/toaster';
 	import { debugStatus } from '$lib/stores/watchlist';
 	import { browser } from '$app/environment';
@@ -319,7 +319,8 @@
 			} else if (event.type === 'device_updated') {
 				// When a device is updated, create or update its marker if we have a map
 				if (map) {
-					const latestFix = event.device.getLatestFix();
+					const fixes = event.device.fixes || [];
+					const latestFix = fixes.length > 0 ? fixes[0] : null;
 					if (latestFix) {
 						updateAircraftMarkerFromDevice(event.device, latestFix);
 					}
@@ -352,7 +353,8 @@
 			'devices'
 		);
 		activeDevices.forEach((device) => {
-			const latestFix = device.getLatestFix();
+			const fixes = device.fixes || [];
+			const latestFix = fixes.length > 0 ? fixes[0] : null;
 			if (latestFix) {
 				updateAircraftMarkerFromDevice(device, latestFix);
 			}
@@ -1148,7 +1150,7 @@
 			return;
 		}
 
-		const fixes = device.getRecentFixes(24); // Get last 24 hours of fixes
+		const fixes = device.fixes || []; // Get all fixes from device
 		const trailFixCount = Math.min(fixes.length, currentSettings.trailLength);
 
 		if (trailFixCount < 2) {
@@ -1428,20 +1430,12 @@
 			console.log(`[REST] Received ${devicesWithFixes.length} devices`);
 
 			// Process each device and add to registry
-			for (const deviceData of devicesWithFixes) {
-				// First, register the device info with aircraft data
+			for (const aircraft of devicesWithFixes) {
+				// First, register the aircraft (includes device info)
 				// This prevents individual API calls when adding fixes
-				await deviceRegistry.updateDeviceInfo(
-					deviceData.device.id,
-					deviceData.device,
-					deviceData.aircraft_registration,
-					deviceData.aircraft_model
-				);
+				await deviceRegistry.updateDeviceFromAircraft(aircraft);
 
-				// Then add fixes to the already-registered device
-				for (const fix of deviceData.recent_fixes) {
-					await deviceRegistry.addFixToDevice(fix, false);
-				}
+				// Fixes are already included in aircraft.fixes, no need to add them separately
 			}
 
 			console.log('[REST] Devices loaded, WebSocket subscriptions will provide live updates');

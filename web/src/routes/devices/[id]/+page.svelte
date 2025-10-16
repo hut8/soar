@@ -18,14 +18,7 @@
 	import { ProgressRing } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall } from '$lib/api/server';
 	import { auth } from '$lib/stores/auth';
-	import {
-		Device,
-		type AircraftRegistration,
-		type AircraftModel,
-		type Fix,
-		type Flight,
-		type Club
-	} from '$lib/types';
+	import type { Device, AircraftRegistration, AircraftModel, Fix, Flight, Club } from '$lib/types';
 	import { formatTitleCase, formatDeviceAddress, getStatusCodeDescription } from '$lib/formatters';
 	import { toaster } from '$lib/toaster';
 	import dayjs from 'dayjs';
@@ -94,20 +87,8 @@
 
 		try {
 			// Load device data
-			const deviceData = await serverCall<{
-				id?: string;
-				address_type: string;
-				address: string;
-				aircraft_model: string;
-				registration: string;
-				cn: string;
-				tracked: boolean;
-				identified: boolean;
-				club_id?: string | null;
-				aircraft?: AircraftRegistration | null;
-				aircraftModel?: AircraftModel | null;
-			}>(`/devices/${deviceId}`);
-			device = Device.fromJSON(deviceData);
+			const deviceData = await serverCall<Device>(`/devices/${deviceId}`);
+			device = deviceData;
 
 			// Initialize selected club ID if device has one
 			if (device.club_id) {
@@ -351,12 +332,12 @@
 							</div>
 						</div>
 
-						{#if device.cn}
+						{#if device.competition_number}
 							<div class="flex items-start gap-3">
 								<Activity class="mt-1 h-4 w-4 text-surface-500" />
 								<div>
 									<p class="text-surface-600-300-token mb-1 text-sm">Competition Number</p>
-									<p class="font-mono">{device.cn}</p>
+									<p class="font-mono">{device.competition_number}</p>
 								</div>
 							</div>
 						{/if}

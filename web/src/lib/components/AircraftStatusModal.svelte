@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { X, Plane, MapPin, Clock, RotateCcw, ExternalLink } from '@lucide/svelte';
-	import { Device, type Fix, type AircraftRegistration, type AircraftModel } from '$lib/types';
+	import type { Device, Aircraft, Fix, AircraftRegistration, AircraftModel } from '$lib/types';
 	import { formatTitleCase, formatDeviceAddress, getStatusCodeDescription } from '$lib/formatters';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
@@ -51,18 +51,22 @@
 			const { DeviceRegistry } = await import('$lib/services/DeviceRegistry');
 			const registry = DeviceRegistry.getInstance();
 
-			// Load recent fixes from API and get registration/model in parallel
-			const [, registration, model] = await Promise.all([
-				registry.loadRecentFixesFromAPI(selectedDevice.id, 100),
-				selectedDevice.getAircraftRegistration(),
-				selectedDevice.getAircraftModel()
-			]);
+			// Load recent fixes from API
+			await registry.loadRecentFixesFromAPI(selectedDevice.id, 100);
 
 			// Update recent fixes from the device (last 24 hours)
-			recentFixes = selectedDevice.getRecentFixes(24);
+			const now = Date.now();
+			const twentyFourHoursAgo = now - 24 * 60 * 60 * 1000;
+			const allFixes = selectedDevice.fixes || [];
+			recentFixes = allFixes.filter((fix: Fix) => {
+				const fixTime = new Date(fix.timestamp).getTime();
+				return fixTime > twentyFourHoursAgo;
+			});
 
-			aircraftRegistration = registration;
-			aircraftModel = model;
+			// Check if device is actually an Aircraft with registration/model data
+			const aircraft = selectedDevice as Aircraft;
+			aircraftRegistration = aircraft.aircraft_registration || null;
+			aircraftModel = aircraft.aircraft_model_details || null;
 		} catch (error) {
 			console.warn('Failed to load aircraft data:', error);
 			aircraftRegistration = null;
@@ -160,7 +164,8 @@
 			return;
 		}
 
-		const latestFix = selectedDevice.getLatestFix();
+		const fixes = selectedDevice.fixes || [];
+		const latestFix = fixes.length > 0 ? fixes[0] : null;
 		if (!latestFix) {
 			return;
 		}
@@ -363,7 +368,7 @@
 									<div>
 										<dt class="text-sm font-medium text-gray-600">Competition Number</dt>
 										<dd class="text-sm">
-											{selectedDevice.cn || 'None'}
+											{selectedDevice.competition_number || 'None'}
 										</dd>
 									</div>
 								</div>

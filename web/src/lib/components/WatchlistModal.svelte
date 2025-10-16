@@ -207,9 +207,13 @@
 					aircraft_model: 'Unknown',
 					address_type: 'Unknown',
 					address: 'Unknown',
-					cn: '',
+					competition_number: '',
 					tracked: false,
-					identified: false
+					identified: false,
+					device_address: 'Unknown',
+					created_at: '',
+					updated_at: '',
+					from_ddb: false
 				}
 			};
 		})
@@ -608,10 +612,10 @@
 															<span class="truncate text-lg font-medium"
 																>{entry.device.registration || 'Unknown Registration'}</span
 															>
-															{#if entry.device.cn}
+															{#if entry.device.competition_number}
 																<span
 																	class="flex-shrink-0 rounded bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800"
-																	>{entry.device.cn}</span
+																	>{entry.device.competition_number}</span
 																>
 															{/if}
 														</div>

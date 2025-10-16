@@ -1,7 +1,6 @@
 import { writable } from 'svelte/store';
 import { browser } from '$app/environment';
-import { Device } from '$lib/types';
-import type { WatchlistEntry, Fix } from '$lib/types';
+import type { Device, WatchlistEntry, Fix } from '$lib/types';
 import { DeviceRegistry } from '$lib/services/DeviceRegistry';
 import { FixFeed } from '$lib/services/FixFeed';
 
@@ -264,7 +263,8 @@ function createDeviceRegistryStore() {
 			let devices: Device[] = [];
 			subscribe((state) => {
 				devices = state.registry.getAllDevices().filter((device) => {
-					const latestFix = device.getLatestFix();
+					const fixes = device.fixes || [];
+					const latestFix = fixes.length > 0 ? fixes[0] : null;
 					if (!latestFix) return false;
 					// Consider active if last fix was within the last hour
 					const oneHourAgo = Date.now() - 60 * 60 * 1000;
@@ -279,7 +279,7 @@ function createDeviceRegistryStore() {
 			let deviceFixes: Fix[] = [];
 			subscribe((state) => {
 				const device = state.registry.getDevice(deviceId);
-				deviceFixes = device ? device.fixes : [];
+				deviceFixes = device ? device.fixes || [] : [];
 			})();
 			return deviceFixes;
 		},
@@ -360,7 +360,7 @@ export const fixes = {
 		const devices = deviceRegistry.getActiveDevices();
 		const allFixes: Fix[] = [];
 		devices.forEach((device) => {
-			allFixes.push(...device.fixes);
+			allFixes.push(...(device.fixes || []));
 		});
 		// Sort by timestamp, most recent first
 		return allFixes.sort(

@@ -1,7 +1,6 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
-use tracing::debug;
 use uuid::Uuid;
 
 use crate::web::PgPool;
