@@ -561,11 +561,11 @@ impl ReceiverRepository {
             let radius_meters = radius_miles * 1609.34;
 
             // Join receivers with locations and filter by distance using PostGIS
-            // ST_DWithin works with geography type for accurate distance calculations
+            // Cast both the stored point and the search point to geography for accurate distance calculations
             let receiver_models = receivers::table
                 .inner_join(locations::table.on(receivers::location_id.eq(locations::id.nullable())))
                 .filter(sql::<diesel::sql_types::Bool>(&format!(
-                    "ST_DWithin(locations.geolocation, ST_SetSRID(ST_MakePoint({}, {}), 4326)::geography, {})",
+                    "ST_DWithin(locations.geolocation::geography, ST_SetSRID(ST_MakePoint({}, {}), 4326)::geography, {})",
                     longitude, latitude, radius_meters
                 )))
                 .order(receivers::callsign.asc())

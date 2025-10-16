@@ -327,7 +327,8 @@
 				<span class="text-surface-500-400-token">({receivers.length})</span>
 			</h2>
 
-			<div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+			<!-- Mobile: Card Layout -->
+			<div class="grid gap-4 md:hidden">
 				{#each receivers as receiver (receiver.id)}
 					<a
 						href={resolve(`/receivers/${receiver.id}`)}
@@ -361,6 +362,43 @@
 						</div>
 					</a>
 				{/each}
+			</div>
+
+			<!-- Desktop: Table Layout -->
+			<div class="hidden card md:block">
+				<div class="table-container">
+					<table class="table-hover table">
+						<thead>
+							<tr>
+								<th>Callsign</th>
+								<th>Description</th>
+								<th>Country</th>
+								<th>Coordinates</th>
+								<th>Last Heard</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each receivers as receiver (receiver.id)}
+								<tr
+									class="cursor-pointer"
+									onclick={() => (window.location.href = resolve(`/receivers/${receiver.id}`))}
+								>
+									<td class="font-semibold">{receiver.callsign}</td>
+									<td class="text-surface-600-300-token">
+										{receiver.description || '—'}
+									</td>
+									<td>{receiver.country || '—'}</td>
+									<td class="text-surface-500-400-token text-sm">
+										{formatCoordinates(receiver.latitude, receiver.longitude)}
+									</td>
+									<td class="text-surface-500-400-token text-sm">
+										{getLastHeard(receiver.updated_at)}
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
 			</div>
 		</section>
 	{:else if !loading && receivers.length === 0 && (searchQuery || selectedLatitude !== null)}

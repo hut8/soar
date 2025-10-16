@@ -81,10 +81,10 @@
 </svelte:head>
 
 <div class="flex h-full min-h-screen flex-col">
-	<AppBar classes="preset-glass-neutral relative z-[70]">
+	<AppBar background="bg-orange-400 dark:bg-orange-900" classes="relative z-[70]">
 		{#snippet lead()}
-			<a href={base} class="flex items-center space-x-2">
-				<div class="flex items-center gap-3 text-xl font-bold text-primary-500">
+			<a href={base} class="btn flex items-center space-x-2 preset-filled-primary-500">
+				<div class="flex items-center gap-3 text-xl font-bold">
 					<Plane />
 					Glider.flights
 				</div>
