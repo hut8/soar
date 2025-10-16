@@ -6,17 +6,18 @@ use crate::flights_repo::FlightsRepository;
 use crate::locations_repo::LocationsRepository;
 use crate::runways_repo::RunwaysRepository;
 use anyhow::Result;
-use chrono::Utc;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
-use super::ActiveFlightsMap;
+use super::altitude::calculate_altitude_agl;
 use super::altitude::calculate_altitude_offset_ft;
 use super::flight_lifecycle::{complete_flight, create_flight};
+use super::{ActiveFlightsMap, CurrentFlightState};
 
 /// Determine if aircraft should be active based on fix data
+/// This checks ground speed first, then altitude (if available)
 fn should_be_active(fix: &Fix) -> bool {
-    // Check ground speed
+    // Check ground speed - >= 20 knots means active
     let speed_indicates_active = fix.ground_speed_knots.map(|s| s >= 20.0).unwrap_or(false);
 
     if speed_indicates_active {
@@ -24,7 +25,7 @@ fn should_be_active(fix: &Fix) -> bool {
     }
 
     // Speed is low - check altitude to see if still airborne
-    // Don't register landing if AGL altitude is >= 250 feet
+    // Don't register landing if AGL altitude is >= 250 feet (hovering helicopter, slow glider)
     if let Some(altitude_agl) = fix.altitude_agl
         && altitude_agl >= 250
     {
@@ -37,7 +38,6 @@ fn should_be_active(fix: &Fix) -> bool {
 }
 
 /// Process state transition for an aircraft and return updated fix with flight_id
-/// active_flights: device_id -> (flight_id, last_fix_timestamp, last_update_time)
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn process_state_transition(
     flights_repo: &FlightsRepository,
@@ -50,128 +50,219 @@ pub(crate) async fn process_state_transition(
     mut fix: Fix,
 ) -> Result<Fix> {
     let is_active = should_be_active(&fix);
-    let current_flight_id = {
+
+    // Get current flight state
+    let current_flight_state = {
         let flights = active_flights.read().await;
-        flights
-            .get(&fix.device_id)
-            .map(|(flight_id, _, _)| *flight_id)
+        flights.get(&fix.device_id).cloned()
     };
 
-    match (current_flight_id, is_active) {
-        (None, true) => {
-            // Device should be active but has no flight - create one
-            debug!("Creating new flight for device {}", fix.device_id);
-
-            // Generate flight_id
-            let flight_id = Uuid::new_v4();
-
-            // Check altitude offset to determine if we should skip airport/runway lookup
-            let altitude_offset = calculate_altitude_offset_ft(elevation_db, &fix).await;
-            let skip_airport_runway_lookup = altitude_offset
-                .map(|offset| {
-                    if offset.abs() > 250 {
-                        warn!(
-                            "Large altitude offset ({} ft) for device {} - skipping airport/runway lookup",
-                            offset, fix.device_id
-                        );
-                        true
-                    } else {
-                        false
-                    }
-                })
-                .unwrap_or(false);
-
-            // Add to active flights map BEFORE creating flight in database
-            {
-                let mut flights = active_flights.write().await;
-                flights.insert(fix.device_id, (flight_id, fix.timestamp, Utc::now()));
-            }
-
-            // Create flight synchronously
-            match create_flight(
-                flights_repo,
-                airports_repo,
-                locations_repo,
-                runways_repo,
-                fixes_repo,
-                elevation_db,
-                &fix,
-                flight_id,
-                skip_airport_runway_lookup,
-            )
-            .await
-            {
-                Ok(_) => {
-                    // Flight created successfully - set flight_id on fix
-                    fix.flight_id = Some(flight_id);
-                }
-                Err(e) => {
-                    warn!("Failed to create flight: {}", e);
-                    // Remove from active flights map on error
-                    let mut flights = active_flights.write().await;
-                    flights.remove(&fix.device_id);
-                }
-            }
-        }
-        (Some(flight_id), false) => {
-            // Device has flight but should now be idle - complete the flight
+    match (current_flight_state, is_active) {
+        // Case 1: Active flight exists and current fix is active
+        (Some(mut state), true) => {
             debug!(
-                "Completing flight {} for device {}",
-                flight_id, fix.device_id
+                "Device {} has active flight {} - continuing flight",
+                fix.device_id, state.flight_id
             );
 
-            // Keep flight_id on this fix since it's part of the flight
-            fix.flight_id = Some(flight_id);
+            // Assign existing flight_id to this fix
+            fix.flight_id = Some(state.flight_id);
 
-            // Remove from active flights map immediately
-            {
-                let mut flights = active_flights.write().await;
-                flights.remove(&fix.device_id);
-            }
+            // Update the state with this fix
+            state.update(fix.timestamp, is_active);
 
-            // Complete flight in background (don't block)
-            let flights_repo_clone = flights_repo.clone();
-            let airports_repo_clone = airports_repo.clone();
-            let locations_repo_clone = locations_repo.clone();
-            let runways_repo_clone = runways_repo.clone();
-            let fixes_repo_clone = fixes_repo.clone();
-            let elevation_db_clone = elevation_db.clone();
-            let landing_fix = fix.clone();
-            tokio::spawn(async move {
-                if let Err(e) = complete_flight(
-                    &flights_repo_clone,
-                    &airports_repo_clone,
-                    &locations_repo_clone,
-                    &runways_repo_clone,
-                    &fixes_repo_clone,
-                    &elevation_db_clone,
+            // Write back updated state
+            let mut flights = active_flights.write().await;
+            flights.insert(fix.device_id, state);
+        }
+
+        // Case 2: No flight and fix is active - need to create a flight
+        (None, true) => {
+            // Check if this is a takeoff or mid-flight appearance
+            // We need to query recent fixes to determine this
+            let recent_fixes = fixes_repo
+                .get_fixes_for_device(fix.device_id, Some(3))
+                .await
+                .unwrap_or_default();
+
+            // If we have 3+ recent fixes and they're all inactive, this is a takeoff
+            let is_takeoff =
+                recent_fixes.len() >= 3 && recent_fixes.iter().all(|f| !should_be_active(f));
+
+            let flight_id = Uuid::new_v4();
+
+            if is_takeoff {
+                // Case 2a: Taking off - last fixes were inactive
+                info!(
+                    "Device {} is taking off (recent fixes were inactive) - creating flight {} with airport lookup",
+                    fix.device_id, flight_id
+                );
+
+                // Calculate altitude offset and check if reasonable for takeoff
+                let altitude_offset = calculate_altitude_offset_ft(elevation_db, &fix).await;
+                if let Some(offset) = altitude_offset
+                    && offset.abs() > 250
+                {
+                    warn!(
+                        "Large altitude offset at takeoff: {} ft for device {} at ({:.6}, {:.6}). Aircraft should be on ground at takeoff.",
+                        offset, fix.device_id, fix.latitude, fix.longitude
+                    );
+                }
+
+                // Create flight state and add to map BEFORE creating in database
+                let state = CurrentFlightState::new(flight_id, fix.timestamp, is_active);
+                {
+                    let mut flights = active_flights.write().await;
+                    flights.insert(fix.device_id, state);
+                }
+
+                // Create flight WITH airport/runway lookup
+                match create_flight(
+                    flights_repo,
+                    airports_repo,
+                    locations_repo,
+                    runways_repo,
+                    fixes_repo,
+                    elevation_db,
+                    &fix,
                     flight_id,
-                    &landing_fix,
+                    false, // DO perform airport/runway lookup
                 )
                 .await
                 {
-                    warn!("Failed to complete flight {}: {}", flight_id, e);
+                    Ok(_) => {
+                        fix.flight_id = Some(flight_id);
+                    }
+                    Err(e) => {
+                        warn!("Failed to create flight: {}", e);
+                        let mut flights = active_flights.write().await;
+                        flights.remove(&fix.device_id);
+                    }
                 }
-            });
-        }
-        (Some(flight_id), true) => {
-            // Device has flight and is still active - just update
-            fix.flight_id = Some(flight_id);
+            } else {
+                // Case 2b: First fix is active OR recent fixes were also active - appearing mid-flight
+                info!(
+                    "Device {} appearing in-flight (first fix or recent fixes active) - creating flight {} without airport lookup",
+                    fix.device_id, flight_id
+                );
 
-            // Update last fix timestamp and last update time
-            {
-                let mut flights = active_flights.write().await;
-                if let Some(entry) = flights.get_mut(&fix.device_id) {
-                    entry.1 = fix.timestamp;
-                    entry.2 = Utc::now();
+                // Create flight state and add to map
+                let state = CurrentFlightState::new(flight_id, fix.timestamp, is_active);
+                {
+                    let mut flights = active_flights.write().await;
+                    flights.insert(fix.device_id, state);
+                }
+
+                // Create flight WITHOUT airport/runway lookup (skip_airport_runway_lookup = true)
+                match create_flight(
+                    flights_repo,
+                    airports_repo,
+                    locations_repo,
+                    runways_repo,
+                    fixes_repo,
+                    elevation_db,
+                    &fix,
+                    flight_id,
+                    true, // SKIP airport/runway lookup for mid-flight appearance
+                )
+                .await
+                {
+                    Ok(_) => {
+                        fix.flight_id = Some(flight_id);
+                    }
+                    Err(e) => {
+                        warn!("Failed to create flight: {}", e);
+                        let mut flights = active_flights.write().await;
+                        flights.remove(&fix.device_id);
+                    }
                 }
             }
         }
+
+        // Case 3a: No flight and fix is inactive - idle aircraft on ground
         (None, false) => {
-            // Device has no flight and should be idle - check if we need to create an airborne flight
-            // Only create airborne flight if we've never seen this device before
-            // For now, just do nothing - fixes without flights are fine
-            debug!("Device {} is idle with no active flight", fix.device_id);
+            debug!(
+                "Device {} is idle on ground with no active flight",
+                fix.device_id
+            );
+            // Just save the fix without a flight_id
+        }
+
+        // Case 3b: Flight exists but fix is inactive - landing or still airborne?
+        (Some(state), false) => {
+            let flight_id = state.flight_id;
+
+            // Calculate AGL to determine if we're actually landing or just slow at altitude
+            let agl = calculate_altitude_agl(elevation_db, &fix).await;
+
+            match agl {
+                Some(altitude_agl) if altitude_agl >= 250 => {
+                    // Case 3b2: Still airborne (>= 250 ft AGL) - slow moving aircraft
+                    info!(
+                        "Device {} slow but still airborne at {} ft AGL - continuing flight {}",
+                        fix.device_id, altitude_agl, flight_id
+                    );
+
+                    // Keep the flight active, assign flight_id to fix
+                    fix.flight_id = Some(flight_id);
+
+                    // Update altitude_agl on the fix
+                    fix.altitude_agl = Some(altitude_agl);
+
+                    // Update state (still treat as active even though speed is low)
+                    let mut updated_state = state;
+                    updated_state.update(fix.timestamp, true); // Force active since airborne
+
+                    let mut flights = active_flights.write().await;
+                    flights.insert(fix.device_id, updated_state);
+                }
+                _ => {
+                    // Case 3b1: Landing (< 250 ft AGL OR elevation unknown)
+                    info!(
+                        "Device {} landing (AGL: {:?} ft) - completing flight {}",
+                        fix.device_id, agl, flight_id
+                    );
+
+                    // Assign flight_id to this landing fix
+                    fix.flight_id = Some(flight_id);
+
+                    // Update altitude_agl if we have it
+                    if let Some(altitude_agl) = agl {
+                        fix.altitude_agl = Some(altitude_agl);
+                    }
+
+                    // Remove from active flights map immediately
+                    {
+                        let mut flights = active_flights.write().await;
+                        flights.remove(&fix.device_id);
+                    }
+
+                    // Complete flight in background (includes airport/runway lookup for landing)
+                    let flights_repo_clone = flights_repo.clone();
+                    let airports_repo_clone = airports_repo.clone();
+                    let locations_repo_clone = locations_repo.clone();
+                    let runways_repo_clone = runways_repo.clone();
+                    let fixes_repo_clone = fixes_repo.clone();
+                    let elevation_db_clone = elevation_db.clone();
+                    let landing_fix = fix.clone();
+                    tokio::spawn(async move {
+                        if let Err(e) = complete_flight(
+                            &flights_repo_clone,
+                            &airports_repo_clone,
+                            &locations_repo_clone,
+                            &runways_repo_clone,
+                            &fixes_repo_clone,
+                            &elevation_db_clone,
+                            flight_id,
+                            &landing_fix,
+                        )
+                        .await
+                        {
+                            warn!("Failed to complete flight {}: {}", flight_id, e);
+                        }
+                    });
+                }
+            }
         }
     }
 

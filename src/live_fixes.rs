@@ -28,6 +28,8 @@ pub struct LiveFix {
     pub climb_rate: f64,
 }
 
+use crate::actions::views::Aircraft;
+
 // Enhanced WebSocket message system with typed messages
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
@@ -36,16 +38,7 @@ pub enum WebSocketMessage {
     Fix(LiveFix),
 
     #[serde(rename = "device")]
-    Device(Box<DeviceWithFixes>),
-}
-
-// Complete device information with recent fixes for initial area subscription
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DeviceWithFixes {
-    pub device: crate::devices::DeviceModel,
-    pub aircraft_registration: Option<crate::aircraft_registrations::AircraftRegistrationModel>,
-    pub aircraft_model: Option<crate::faa::aircraft_models::AircraftModel>,
-    pub recent_fixes: Vec<crate::fixes::Fix>,
+    Device(Box<Aircraft>),
 }
 
 // Subscription management structure (used for both device and area subscriptions)

@@ -1,7 +1,6 @@
 import { browser } from '$app/environment';
 import { serverCall } from '$lib/api/server';
-import { Device } from '$lib/types';
-import type { Fix } from '$lib/types';
+import type { Aircraft, Device, Fix } from '$lib/types';
 
 // Event types for subscribers
 export type DeviceRegistryEvent =
@@ -11,11 +10,18 @@ export type DeviceRegistryEvent =
 
 export type DeviceRegistrySubscriber = (event: DeviceRegistryEvent) => void;
 
+// Internal type to store device with its fixes
+interface DeviceWithFixesCache {
+	device: Device;
+	fixes: Fix[];
+}
+
 export class DeviceRegistry {
 	private static instance: DeviceRegistry | null = null;
-	private devices = new Map<string, Device>();
+	private devices = new Map<string, DeviceWithFixesCache>();
 	private subscribers = new Set<DeviceRegistrySubscriber>();
 	private readonly storageKeyPrefix = 'device.';
+	private readonly maxFixAge = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 
 	private constructor() {
 		// Private constructor for singleton pattern
@@ -53,14 +59,16 @@ export class DeviceRegistry {
 	public getDevice(deviceId: string): Device | null {
 		// Check in-memory cache first
 		if (this.devices.has(deviceId)) {
-			return this.devices.get(deviceId)!;
+			const cached = this.devices.get(deviceId)!;
+			// Return device with current fixes
+			return { ...cached.device, fixes: cached.fixes };
 		}
 
 		// Try to load from localStorage
 		const stored = this.loadDeviceFromStorage(deviceId);
 		if (stored) {
 			this.devices.set(deviceId, stored);
-			return stored;
+			return { ...stored.device, fixes: stored.fixes };
 		}
 
 		return null;
@@ -90,13 +98,16 @@ export class DeviceRegistry {
 			);
 		}
 
-		this.devices.set(device.id, device);
-		this.saveDeviceToStorage(device);
+		// Get existing fixes if any, or use the ones from the device, or empty array
+		const existingFixes = this.devices.get(device.id)?.fixes || device.fixes || [];
+
+		this.devices.set(device.id, { device, fixes: existingFixes });
+		this.saveDeviceToStorage({ device, fixes: existingFixes });
 
 		// Notify subscribers
 		this.notifySubscribers({
 			type: 'device_updated',
-			device
+			device: { ...device, fixes: existingFixes }
 		});
 
 		this.notifySubscribers({
@@ -105,53 +116,74 @@ export class DeviceRegistry {
 		});
 	}
 
+	// Helper method to clean up old fixes
+	private cleanupOldFixes(fixes: Fix[]): Fix[] {
+		const cutoffTime = Date.now() - this.maxFixAge;
+		return fixes.filter((fix) => {
+			const fixTime = new Date(fix.timestamp).getTime();
+			return fixTime > cutoffTime;
+		});
+	}
+
+	// Add a new fix to device's fixes array
+	private addFixToDeviceCache(deviceId: string, fix: Fix): void {
+		const cached = this.devices.get(deviceId);
+		if (!cached) return;
+
+		// Add fix to the beginning (most recent first)
+		cached.fixes.unshift(fix);
+
+		// Clean up old fixes
+		cached.fixes = this.cleanupOldFixes(cached.fixes);
+
+		// Update the map
+		this.devices.set(deviceId, cached);
+	}
+
 	// Create or update device from backend API data
 	public async updateDeviceFromAPI(deviceId: string): Promise<Device | null> {
 		try {
-			// API response structure
-			type APIDevice = {
-				id?: string;
-				address_type: string;
-				address: string;
-				aircraft_model: string;
-				registration: string;
-				cn: string;
-				tracked: boolean;
-				identified: boolean;
-			};
-
-			const apiDevice = await serverCall<APIDevice>(`/devices/${deviceId}`);
+			const apiDevice = await serverCall<Device>(`/devices/${deviceId}`);
 			if (!apiDevice) return null;
 
-			let cachedDevice = this.getDevice(deviceId);
-
-			if (cachedDevice) {
-				// Update existing device info
-				cachedDevice.address_type = apiDevice.address_type;
-				cachedDevice.address = apiDevice.address;
-				cachedDevice.aircraft_model = apiDevice.aircraft_model;
-				cachedDevice.registration = apiDevice.registration;
-				cachedDevice.cn = apiDevice.cn;
-				cachedDevice.tracked = apiDevice.tracked;
-				cachedDevice.identified = apiDevice.identified;
-			} else {
-				// Create new device
-				cachedDevice = Device.fromJSON({
-					id: deviceId,
-					address_type: apiDevice.address_type,
-					address: apiDevice.address,
-					aircraft_model: apiDevice.aircraft_model,
-					registration: apiDevice.registration,
-					cn: apiDevice.cn,
-					tracked: apiDevice.tracked,
-					identified: apiDevice.identified
-				});
-			}
-
-			this.setDevice(cachedDevice);
-			return cachedDevice;
+			this.setDevice(apiDevice);
+			return this.getDevice(deviceId);
 		} catch (error) {
 			console.warn(`Failed to fetch device ${deviceId} from API:`, error);
+			return null;
+		}
+	}
+
+	// Update device from Aircraft data (from WebSocket or bbox search)
+	public async updateDeviceFromAircraft(aircraft: Aircraft): Promise<Device | null> {
+		try {
+			// Extract the device portion
+			const device: Device = {
+				id: aircraft.id,
+				device_address: aircraft.device_address,
+				address_type: aircraft.address_type,
+				address: aircraft.address,
+				aircraft_model: aircraft.aircraft_model,
+				registration: aircraft.registration,
+				competition_number: aircraft.competition_number,
+				tracked: aircraft.tracked,
+				identified: aircraft.identified,
+				club_id: aircraft.club_id,
+				created_at: aircraft.created_at,
+				updated_at: aircraft.updated_at,
+				from_ddb: aircraft.from_ddb,
+				frequency_mhz: aircraft.frequency_mhz,
+				pilot_name: aircraft.pilot_name,
+				home_base_airport_ident: aircraft.home_base_airport_ident,
+				aircraft_type_ogn: aircraft.aircraft_type_ogn,
+				last_fix_at: aircraft.last_fix_at,
+				fixes: aircraft.fixes
+			};
+
+			this.setDevice(device);
+			return this.getDevice(device.id);
+		} catch (error) {
+			console.warn(`Failed to update device from aircraft data:`, error);
 			return null;
 		}
 	}
@@ -196,29 +228,39 @@ export class DeviceRegistry {
 				}
 			}
 
-			// If still no device, create a minimal one
+			// If still no device, create a minimal one (won't be persisted if no registration)
 			if (!device) {
 				console.log('[REGISTRY] Creating minimal device for fix:', deviceId);
-				device = new Device({
+				device = {
 					id: deviceId,
+					device_address: fix.device_address_hex || '',
 					address_type: '',
 					address: fix.device_address_hex || '',
 					aircraft_model: fix.model || '',
 					registration: fix.registration || '',
-					cn: '',
+					competition_number: '',
 					tracked: false,
-					identified: false
-				});
+					identified: false,
+					club_id: null,
+					created_at: new Date().toISOString(),
+					updated_at: new Date().toISOString(),
+					from_ddb: false,
+					fixes: []
+				};
 			}
 		} else {
 			console.log('[REGISTRY] Using existing device:', {
 				deviceId,
 				registration: device.registration,
-				existingFixCount: device.fixes.length
+				existingFixCount: device.fixes?.length || 0
 			});
 		}
 
-		device.addFix(fix);
+		// Add the fix using the helper method
+		this.addFixToDeviceCache(deviceId, fix);
+
+		// Get the updated device
+		device = this.getDevice(deviceId)!;
 
 		// Only persist device if it has a registration number
 		if (device.registration && device.registration.trim() !== '') {
@@ -227,9 +269,6 @@ export class DeviceRegistry {
 			console.warn(
 				`[REGISTRY] Device ${device.id} has no registration, keeping in memory only (not persisting)`
 			);
-			// Still update in-memory map but don't persist to localStorage
-			this.devices.set(device.id, device);
-
 			// Notify subscribers even for non-persisted devices
 			this.notifySubscribers({
 				type: 'device_updated',
@@ -242,7 +281,7 @@ export class DeviceRegistry {
 			});
 		}
 
-		console.log('[REGISTRY] Fix added to device. New fix count:', device.fixes.length);
+		console.log('[REGISTRY] Fix added to device. New fix count:', device.fixes?.length || 0);
 
 		// Notify subscribers about the fix
 		this.notifySubscribers({
@@ -258,7 +297,10 @@ export class DeviceRegistry {
 
 	// Get all devices
 	public getAllDevices(): Device[] {
-		return Array.from(this.devices.values());
+		return Array.from(this.devices.values()).map((cached) => ({
+			...cached.device,
+			fixes: cached.fixes
+		}));
 	}
 
 	// Get all devices with recent fixes (within last hour)
@@ -266,16 +308,17 @@ export class DeviceRegistry {
 		const cutoffTime = Date.now() - withinHours * 60 * 60 * 1000;
 
 		return this.getAllDevices().filter((device) => {
-			const latestFix = device.getLatestFix();
-			if (!latestFix) return false;
+			const fixes = device.fixes || [];
+			if (fixes.length === 0) return false;
+			const latestFix = fixes[0]; // Most recent is first
 			return new Date(latestFix.timestamp).getTime() > cutoffTime;
 		});
 	}
 
 	// Get fixes for a specific device
 	public getFixesForDevice(deviceId: string): Fix[] {
-		const device = this.getDevice(deviceId);
-		return device ? device.fixes : [];
+		const cached = this.devices.get(deviceId);
+		return cached ? cached.fixes : [];
 	}
 
 	// Clear all devices (for cleanup)
@@ -301,26 +344,26 @@ export class DeviceRegistry {
 	}
 
 	// Private methods for localStorage management
-	private saveDeviceToStorage(device: Device): void {
+	private saveDeviceToStorage(cached: DeviceWithFixesCache): void {
 		if (!browser) return;
 
 		// Double-check validation (should be prevented by setDevice already)
-		if (!device.registration || device.registration.trim() === '') {
+		if (!cached.device.registration || cached.device.registration.trim() === '') {
 			throw new Error(
-				`[REGISTRY] Attempted to save device ${device.id} without registration to localStorage. ` +
+				`[REGISTRY] Attempted to save device ${cached.device.id} without registration to localStorage. ` +
 					`This should have been prevented by setDevice validation.`
 			);
 		}
 
 		try {
-			const key = this.storageKeyPrefix + device.id;
-			localStorage.setItem(key, JSON.stringify(device.toJSON()));
+			const key = this.storageKeyPrefix + cached.device.id;
+			localStorage.setItem(key, JSON.stringify(cached));
 		} catch (error) {
 			console.warn('Failed to save device to localStorage:', error);
 		}
 	}
 
-	private loadDeviceFromStorage(deviceId: string): Device | null {
+	private loadDeviceFromStorage(deviceId: string): DeviceWithFixesCache | null {
 		if (!browser) return null;
 
 		const key = this.storageKeyPrefix + deviceId;
@@ -328,23 +371,16 @@ export class DeviceRegistry {
 
 		if (stored) {
 			try {
-				const data = JSON.parse(stored);
-
-				// Validate the data structure
-				if (!Device.isValidDeviceData(data)) {
-					console.warn(`Invalid device data structure for ${deviceId}, removing and will re-fetch`);
-					localStorage.removeItem(key);
-					return null;
-				}
+				const data = JSON.parse(stored) as DeviceWithFixesCache;
 
 				// Validate device has required fields (registration number)
-				if (!data.registration || data.registration.trim() === '') {
+				if (!data.device || !data.device.registration || data.device.registration.trim() === '') {
 					console.warn(`Device ${deviceId} has no registration number, removing from localStorage`);
 					localStorage.removeItem(key);
 					return null;
 				}
 
-				return Device.fromJSON(data);
+				return data;
 			} catch (e) {
 				console.warn(`Failed to parse stored device ${deviceId}:`, e);
 				// Remove corrupted data
@@ -372,73 +408,6 @@ export class DeviceRegistry {
 		} catch (error) {
 			console.warn(`Failed to load recent fixes for device ${deviceId}:`, error);
 			return [];
-		}
-	}
-
-	// Update device info from complete DeviceWithFixes data
-	public async updateDeviceInfo(
-		deviceId: string,
-		deviceData: {
-			id: string;
-			registration: string;
-			device_address_hex: string;
-			created_at: string;
-			updated_at: string;
-		},
-		aircraftRegistration?: {
-			id: string;
-			device_id: string;
-			tail_number: string;
-			manufacturer_code: string;
-			model_code: string;
-			series_code: string;
-			created_at: string;
-			updated_at: string;
-		},
-		aircraftModel?: {
-			manufacturer_code: string;
-			model_code: string;
-			series_code: string;
-			manufacturer_name: string;
-			model_name: string;
-			aircraft_type?: string;
-			engine_type?: string;
-			aircraft_category?: string;
-			builder_certification?: string;
-			number_of_engines?: number;
-			number_of_seats?: number;
-			weight_class?: string;
-			cruising_speed?: number;
-			type_certificate_data_sheet?: string;
-			type_certificate_data_holder?: string;
-		}
-	): Promise<Device | null> {
-		try {
-			let device = this.getDevice(deviceId);
-
-			if (device) {
-				// Update existing device
-				device.registration = deviceData.registration || device.registration;
-				// We could update other fields if the backend DeviceModel had more fields
-			} else {
-				// Create new device from the complete data
-				device = Device.fromJSON({
-					id: deviceId,
-					address_type: '', // Not in DeviceModel from backend, would need to be added
-					address: deviceData.device_address_hex || '',
-					aircraft_model: aircraftModel?.model_name || '',
-					registration: deviceData.registration || '',
-					cn: '', // Not in DeviceModel from backend
-					tracked: true, // Assume tracked if we received it
-					identified: !!aircraftRegistration // Identified if we have registration
-				});
-			}
-
-			this.setDevice(device);
-			return device;
-		} catch (error) {
-			console.warn(`Failed to update device info for ${deviceId}:`, error);
-			return null;
 		}
 	}
 }

@@ -1,45 +1,6 @@
 import { browser, dev } from '$app/environment';
-import type { Fix } from '$lib/types';
+import type { Aircraft, Fix } from '$lib/types';
 import { DeviceRegistry } from './DeviceRegistry';
-
-// DeviceWithFixes type to match the backend structure
-export interface DeviceWithFixes {
-	device: {
-		id: string;
-		registration: string;
-		device_address_hex: string;
-		created_at: string;
-		updated_at: string;
-	};
-	aircraft_registration?: {
-		id: string;
-		device_id: string;
-		tail_number: string;
-		manufacturer_code: string;
-		model_code: string;
-		series_code: string;
-		created_at: string;
-		updated_at: string;
-	};
-	aircraft_model?: {
-		manufacturer_code: string;
-		model_code: string;
-		series_code: string;
-		manufacturer_name: string;
-		model_name: string;
-		aircraft_type?: string;
-		engine_type?: string;
-		aircraft_category?: string;
-		builder_certification?: string;
-		number_of_engines?: number;
-		number_of_seats?: number;
-		weight_class?: string;
-		cruising_speed?: number;
-		type_certificate_data_sheet?: string;
-		type_certificate_data_holder?: string;
-	};
-	recent_fixes: Fix[];
-}
 
 // Event types for subscribers
 export type FixFeedEvent =
@@ -47,7 +8,7 @@ export type FixFeedEvent =
 	| { type: 'connection_closed'; code: number; reason: string }
 	| { type: 'connection_error'; error: Event }
 	| { type: 'fix_received'; fix: Fix }
-	| { type: 'device_received'; device: DeviceWithFixes }
+	| { type: 'device_received'; device: Aircraft }
 	| { type: 'subscription_added'; deviceId: string }
 	| { type: 'subscription_removed'; deviceId: string }
 	| { type: 'reconnecting'; attempt: number; maxAttempts: number };
@@ -194,12 +155,13 @@ export class FixFeed {
 							fix
 						});
 					} else if (rawMessage.type === 'device') {
-						// Handle DeviceWithFixes message
-						const deviceWithFixes: DeviceWithFixes = rawMessage;
+						// Handle Aircraft message
+						const aircraft: Aircraft = rawMessage;
 
 						// Add all recent fixes to device registry
-						if (deviceWithFixes.recent_fixes?.length > 0) {
-							for (const fix of deviceWithFixes.recent_fixes) {
+						const aircraftFixes = aircraft.fixes || [];
+						if (aircraftFixes.length > 0) {
+							for (const fix of aircraftFixes) {
 								this.deviceRegistry.addFixToDevice(fix, false).catch((error) => {
 									console.warn('Failed to add device fix to registry:', error);
 								});
@@ -207,21 +169,14 @@ export class FixFeed {
 						}
 
 						// Update device registry with complete device info
-						this.deviceRegistry
-							.updateDeviceInfo(
-								deviceWithFixes.device.id,
-								deviceWithFixes.device,
-								deviceWithFixes.aircraft_registration,
-								deviceWithFixes.aircraft_model
-							)
-							.catch((error) => {
-								console.warn('Failed to update device info in registry:', error);
-							});
+						this.deviceRegistry.updateDeviceFromAircraft(aircraft).catch((error) => {
+							console.warn('Failed to update device info in registry:', error);
+						});
 
 						// Notify subscribers
 						this.notifySubscribers({
 							type: 'device_received',
-							device: deviceWithFixes
+							device: aircraft
 						});
 					} else {
 						console.warn('Unknown WebSocket message type:', rawMessage.type);
@@ -456,7 +411,7 @@ export class FixFeed {
 		lonMin: number,
 		lonMax: number,
 		after?: Date
-	): Promise<DeviceWithFixes[]> {
+	): Promise<Aircraft[]> {
 		if (!browser) return [];
 
 		const params = new URLSearchParams({
@@ -473,7 +428,7 @@ export class FixFeed {
 		try {
 			const { serverCall } = await import('$lib/api/server');
 			const response = await serverCall(`/devices?${params}`);
-			return response as DeviceWithFixes[];
+			return response as Aircraft[];
 		} catch (error) {
 			console.error('Failed to fetch devices in bounding box:', error);
 			return [];

@@ -145,251 +145,35 @@ export interface AircraftModel {
 	type_certificate_data_holder: string | null;
 }
 
-// Device class with integrated caching functionality
-export class Device {
-	public id: string;
-	public address_type: string; // F, O, I, or empty string
-	public address: string; // Hex format like "ABCDEF"
-	public aircraft_model: string;
-	public registration: string;
-	public cn: string; // Competition number
-	public tracked: boolean;
-	public identified: boolean;
-	public club_id?: string | null; // Club assignment
-	public aircraft: AircraftRegistration | null = null; // Lazy-loaded aircraft registration data
-	public aircraftModel: AircraftModel | null = null; // Lazy-loaded aircraft model data
-	public fixes: Fix[] = []; // Array with most recent fix first (index 0)
-	private readonly maxFixAge = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+// Device interface matching backend DeviceView exactly
+export interface Device {
+	id: string;
+	device_address: string; // Formatted like "FLARM-A0B380"
+	address_type: string; // F, O, I, or empty string
+	address: string; // Hex format like "ABCDEF"
+	aircraft_model: string;
+	registration: string;
+	competition_number: string;
+	tracked: boolean;
+	identified: boolean;
+	club_id?: string | null;
+	created_at: string;
+	updated_at: string;
+	from_ddb: boolean;
+	frequency_mhz?: number | null;
+	pilot_name?: string | null;
+	home_base_airport_ident?: string | null;
+	aircraft_type_ogn?: string | null;
+	last_fix_at?: string | null;
+	fixes?: Fix[];
+}
 
-	constructor(data: {
-		id?: string;
-		address_type: string;
-		address: string;
-		aircraft_model: string;
-		registration: string;
-		cn: string;
-		tracked: boolean;
-		identified: boolean;
-		club_id?: string | null;
-		aircraft?: AircraftRegistration | null;
-		aircraftModel?: AircraftModel | null;
-	}) {
-		this.id = data.id || '';
-		this.address_type = data.address_type;
-		this.address = data.address;
-		this.aircraft_model = data.aircraft_model;
-		this.registration = data.registration;
-		this.cn = data.cn;
-		this.tracked = data.tracked;
-		this.identified = data.identified;
-		this.club_id = data.club_id;
-		this.aircraft = data.aircraft || null;
-		this.aircraftModel = data.aircraftModel || null;
-	}
-
-	// Add a new fix, maintaining the most-recent-first order
-	addFix(fix: Fix): void {
-		console.log('[DEVICE] Adding fix to device:', {
-			deviceId: this.id,
-			registration: this.registration,
-			fixTimestamp: fix.timestamp,
-			currentFixCount: this.fixes.length
-		});
-
-		// Add fix to the beginning of the array (most recent first)
-		this.fixes.unshift(fix);
-
-		// Remove fixes older than 24 hours
-		this.cleanupOldFixes();
-
-		console.log('[DEVICE] Fix added. New fix count:', this.fixes.length);
-	}
-
-	// Get the most recent fix
-	getLatestFix(): Fix | null {
-		return this.fixes.length > 0 ? this.fixes[0] : null;
-	}
-
-	// Get all fixes within the last N hours
-	getRecentFixes(hours: number = 24): Fix[] {
-		const cutoffTime = Date.now() - hours * 60 * 60 * 1000;
-		return this.fixes.filter((fix) => {
-			const fixTime = new Date(fix.timestamp).getTime();
-			return fixTime > cutoffTime;
-		});
-	}
-
-	// Lazy-load aircraft registration data
-	async getAircraftRegistration(): Promise<AircraftRegistration | null> {
-		// Return cached data if available
-		if (this.aircraft) {
-			console.log('[DEVICE] Returning cached aircraft registration for:', this.id);
-			return this.aircraft;
-		}
-
-		// Fetch from API if not cached
-		try {
-			console.log('[DEVICE] Fetching aircraft registration for device:', this.id);
-			const { serverCall } = await import('$lib/api/server');
-			const aircraft = await serverCall<AircraftRegistration>(
-				`/devices/${this.id}/aircraft/registration`
-			);
-
-			if (aircraft) {
-				console.log('[DEVICE] Fetched aircraft registration:', aircraft.n_number);
-				this.aircraft = aircraft;
-
-				// Save updated device to localStorage via DeviceRegistry
-				const { DeviceRegistry } = await import('$lib/services/DeviceRegistry');
-				DeviceRegistry.getInstance().setDevice(this);
-			} else {
-				console.log('[DEVICE] No aircraft registration found for device:', this.id);
-			}
-
-			return aircraft;
-		} catch (error) {
-			console.warn('[DEVICE] Failed to fetch aircraft registration:', error);
-			return null;
-		}
-	}
-
-	// Lazy-load aircraft model data
-	async getAircraftModel(): Promise<AircraftModel | null> {
-		// Return cached data if available
-		if (this.aircraftModel) {
-			console.log('[DEVICE] Returning cached aircraft model for:', this.id);
-			return this.aircraftModel;
-		}
-
-		// Fetch from API if not cached
-		try {
-			console.log('[DEVICE] Fetching aircraft model for device:', this.id);
-			const { serverCall } = await import('$lib/api/server');
-			const aircraftModel = await serverCall<AircraftModel>(`/devices/${this.id}/aircraft/model`);
-
-			if (aircraftModel) {
-				console.log(
-					'[DEVICE] Fetched aircraft model:',
-					aircraftModel.manufacturer_name,
-					aircraftModel.model_name
-				);
-				this.aircraftModel = aircraftModel;
-
-				// Save updated device to localStorage via DeviceRegistry
-				const { DeviceRegistry } = await import('$lib/services/DeviceRegistry');
-				DeviceRegistry.getInstance().setDevice(this);
-			} else {
-				console.log('[DEVICE] No aircraft model found for device:', this.id);
-			}
-
-			return aircraftModel;
-		} catch (error) {
-			console.warn('[DEVICE] Failed to fetch aircraft model:', error);
-			return null;
-		}
-	}
-
-	// Remove fixes older than 24 hours
-	private cleanupOldFixes(): void {
-		const cutoffTime = Date.now() - this.maxFixAge;
-		this.fixes = this.fixes.filter((fix) => {
-			const fixTime = new Date(fix.timestamp).getTime();
-			return fixTime > cutoffTime;
-		});
-	}
-
-	// Convert to plain object for localStorage serialization
-	toJSON(): {
-		id: string;
-		address_type: string;
-		address: string;
-		aircraft_model: string;
-		registration: string;
-		cn: string;
-		tracked: boolean;
-		identified: boolean;
-		club_id?: string | null;
-		aircraft: AircraftRegistration | null;
-		aircraftModel: AircraftModel | null;
-	} {
-		return {
-			id: this.id,
-			address_type: this.address_type,
-			address: this.address,
-			aircraft_model: this.aircraft_model,
-			registration: this.registration,
-			cn: this.cn,
-			tracked: this.tracked,
-			identified: this.identified,
-			club_id: this.club_id,
-			aircraft: this.aircraft,
-			aircraftModel: this.aircraftModel
-		};
-	}
-
-	// Validate device data structure
-	static isValidDeviceData(data: unknown): data is {
-		id?: string;
-		address_type: string;
-		address: string;
-		aircraft_model: string;
-		registration: string;
-		cn: string;
-		tracked: boolean;
-		identified: boolean;
-		club_id?: string | null;
-		aircraft?: AircraftRegistration | null;
-		aircraftModel?: AircraftModel | null;
-	} {
-		if (!data || typeof data !== 'object') {
-			return false;
-		}
-
-		const obj = data as Record<string, unknown>;
-		return (
-			typeof obj.address_type === 'string' &&
-			typeof obj.address === 'string' &&
-			typeof obj.aircraft_model === 'string' &&
-			typeof obj.registration === 'string' &&
-			typeof obj.cn === 'string' &&
-			typeof obj.tracked === 'boolean' &&
-			typeof obj.identified === 'boolean' &&
-			(obj.club_id === null || obj.club_id === undefined || typeof obj.club_id === 'string') &&
-			(obj.aircraft === null || obj.aircraft === undefined || typeof obj.aircraft === 'object') &&
-			(obj.aircraftModel === null ||
-				obj.aircraftModel === undefined ||
-				typeof obj.aircraftModel === 'object')
-		);
-	}
-
-	// Create from plain object (localStorage deserialization or API response)
-	static fromJSON(data: {
-		id?: string;
-		address_type: string;
-		address: string;
-		aircraft_model: string;
-		registration: string;
-		cn: string;
-		tracked: boolean;
-		identified: boolean;
-		club_id?: string | null;
-		aircraft?: AircraftRegistration | null;
-		aircraftModel?: AircraftModel | null;
-	}): Device {
-		return new Device({
-			id: data.id,
-			address_type: data.address_type,
-			address: data.address,
-			aircraft_model: data.aircraft_model,
-			registration: data.registration,
-			cn: data.cn,
-			tracked: data.tracked,
-			identified: data.identified,
-			club_id: data.club_id,
-			aircraft: data.aircraft || null,
-			aircraftModel: data.aircraftModel || null
-		});
-	}
+// Aircraft extends Device with optional aircraft registration and model
+// This matches the backend Aircraft (formerly DeviceWithFixes)
+// Note: Device.aircraft_model is a string, but we add optional detailed aircraft_model here
+export interface Aircraft extends Device {
+	aircraft_registration?: AircraftRegistration;
+	aircraft_model_details?: AircraftModel;
 }
 
 export interface Fix {

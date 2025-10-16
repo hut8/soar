@@ -1,7 +1,7 @@
 use crate::Fix;
 use crate::elevation::ElevationDB;
 use crate::fixes_repo::FixesRepository;
-use tracing::{debug, info, trace, warn};
+use tracing::{debug, trace};
 
 /// Calculate altitude offset in feet between reported altitude and true MSL elevation
 /// Returns the difference (reported_altitude_ft - true_elevation_ft)
@@ -27,18 +27,10 @@ pub(crate) async fn calculate_altitude_offset_ft(
             // Calculate offset
             let offset = reported_altitude_ft as f64 - elevation_ft;
 
-            info!(
+            debug!(
                 "Altitude offset calculation: indicated={} ft, known_elevation={:.1} ft, offset={:.0} ft at ({:.6}, {:.6})",
                 reported_altitude_ft, elevation_ft, offset, lat, lon
             );
-
-            // Log warning if offset is too large (> 250 feet)
-            if offset.abs() > 250.0 {
-                warn!(
-                    "Large altitude offset detected: {:.0} ft (indicated={} ft, known_elevation={:.1} ft) at ({:.6}, {:.6})",
-                    offset, reported_altitude_ft, elevation_ft, lat, lon
-                );
-            }
 
             Some(offset.round() as i32)
         }
