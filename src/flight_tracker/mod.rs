@@ -152,6 +152,21 @@ impl FlightTracker {
 
         // Timeout each stale flight
         for (flight_id, device_id) in flights_to_timeout {
+            // Double-check that the flight still exists in the map before timing it out
+            // (it may have already landed and been removed)
+            let should_timeout = {
+                let active_flights = self.active_flights.read().await;
+                active_flights
+                    .get(&device_id)
+                    .map(|(fid, _, _)| *fid == flight_id)
+                    .unwrap_or(false)
+            };
+
+            if !should_timeout {
+                // Flight was already removed (probably landed), skip timeout
+                continue;
+            }
+
             if let Err(e) = flight_lifecycle::timeout_flight(
                 &self.flights_repo,
                 &self.active_flights,
