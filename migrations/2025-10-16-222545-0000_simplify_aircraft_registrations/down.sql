@@ -1,0 +1,35 @@
+-- Re-add all op_* columns to aircraft_registrations
+ALTER TABLE aircraft_registrations
+    ADD COLUMN op_restricted_other BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN op_restricted_ag_pest_control BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN op_restricted_aerial_surveying BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN op_restricted_aerial_advertising BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN op_restricted_forest BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN op_restricted_patrolling BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN op_restricted_weather_control BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN op_restricted_carriage_of_cargo BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN op_experimental_show_compliance BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN op_experimental_research_development BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN op_experimental_amateur_built BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN op_experimental_exhibition BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN op_experimental_racing BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN op_experimental_crew_training BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN op_experimental_market_survey BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN op_experimental_operating_kit_built BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN op_experimental_light_sport_reg_prior_2008 BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN op_experimental_light_sport_operating_kit_built BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN op_experimental_light_sport_prev_21_190 BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN op_experimental_uas_research_development BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN op_experimental_uas_market_survey BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN op_experimental_uas_crew_training BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN op_experimental_uas_exhibition BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN op_experimental_uas_compliance_with_cfr BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN op_sfp_ferry_for_repairs_alterations_storage BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN op_sfp_evacuate_impending_danger BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN op_sfp_excess_of_max_certificated BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN op_sfp_delivery_or_export BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN op_sfp_production_flight_testing BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN op_sfp_customer_demo BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Drop the new aircraft_approved_operations table
+DROP TABLE IF EXISTS aircraft_approved_operations;

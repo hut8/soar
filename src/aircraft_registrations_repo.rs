@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::aircraft_registrations::{Aircraft, AircraftRegistrationModel, NewAircraftRegistration};
 use crate::locations_repo::LocationsRepository;
-use crate::schema::{aircraft_other_names, aircraft_registrations};
+use crate::schema::{aircraft_approved_operations, aircraft_other_names, aircraft_registrations};
 
 pub type DieselPgPool = Pool<ConnectionManager<PgConnection>>;
 pub type DieselPgPooledConnection = PooledConnection<ConnectionManager<PgConnection>>;
@@ -112,97 +112,6 @@ impl AircraftRegistrationsRepository {
                         .eq(excluded(aircraft_registrations::airworthiness_class)),
                     aircraft_registrations::approved_operations_raw
                         .eq(excluded(aircraft_registrations::approved_operations_raw)),
-                    // Operational flags
-                    aircraft_registrations::op_restricted_other
-                        .eq(excluded(aircraft_registrations::op_restricted_other)),
-                    aircraft_registrations::op_restricted_ag_pest_control.eq(excluded(
-                        aircraft_registrations::op_restricted_ag_pest_control,
-                    )),
-                    aircraft_registrations::op_restricted_aerial_surveying.eq(excluded(
-                        aircraft_registrations::op_restricted_aerial_surveying,
-                    )),
-                    aircraft_registrations::op_restricted_aerial_advertising.eq(excluded(
-                        aircraft_registrations::op_restricted_aerial_advertising,
-                    )),
-                    aircraft_registrations::op_restricted_forest
-                        .eq(excluded(aircraft_registrations::op_restricted_forest)),
-                    aircraft_registrations::op_restricted_patrolling
-                        .eq(excluded(aircraft_registrations::op_restricted_patrolling)),
-                    aircraft_registrations::op_restricted_weather_control.eq(excluded(
-                        aircraft_registrations::op_restricted_weather_control,
-                    )),
-                    aircraft_registrations::op_restricted_carriage_of_cargo.eq(excluded(
-                        aircraft_registrations::op_restricted_carriage_of_cargo,
-                    )),
-                    aircraft_registrations::op_experimental_show_compliance.eq(excluded(
-                        aircraft_registrations::op_experimental_show_compliance,
-                    )),
-                    aircraft_registrations::op_experimental_research_development.eq(excluded(
-                        aircraft_registrations::op_experimental_research_development,
-                    )),
-                    aircraft_registrations::op_experimental_amateur_built.eq(excluded(
-                        aircraft_registrations::op_experimental_amateur_built,
-                    )),
-                    aircraft_registrations::op_experimental_exhibition
-                        .eq(excluded(aircraft_registrations::op_experimental_exhibition)),
-                    aircraft_registrations::op_experimental_racing
-                        .eq(excluded(aircraft_registrations::op_experimental_racing)),
-                    aircraft_registrations::op_experimental_crew_training.eq(excluded(
-                        aircraft_registrations::op_experimental_crew_training,
-                    )),
-                    aircraft_registrations::op_experimental_market_survey.eq(excluded(
-                        aircraft_registrations::op_experimental_market_survey,
-                    )),
-                    aircraft_registrations::op_experimental_operating_kit_built.eq(excluded(
-                        aircraft_registrations::op_experimental_operating_kit_built,
-                    )),
-                    aircraft_registrations::op_experimental_light_sport_reg_prior_2008.eq(
-                        excluded(
-                            aircraft_registrations::op_experimental_light_sport_reg_prior_2008,
-                        ),
-                    ),
-                    aircraft_registrations::op_experimental_light_sport_operating_kit_built.eq(
-                        excluded(
-                            aircraft_registrations::op_experimental_light_sport_operating_kit_built,
-                        ),
-                    ),
-                    aircraft_registrations::op_experimental_light_sport_prev_21_190.eq(excluded(
-                        aircraft_registrations::op_experimental_light_sport_prev_21_190,
-                    )),
-                    aircraft_registrations::op_experimental_uas_research_development.eq(excluded(
-                        aircraft_registrations::op_experimental_uas_research_development,
-                    )),
-                    aircraft_registrations::op_experimental_uas_market_survey.eq(excluded(
-                        aircraft_registrations::op_experimental_uas_market_survey,
-                    )),
-                    aircraft_registrations::op_experimental_uas_crew_training.eq(excluded(
-                        aircraft_registrations::op_experimental_uas_crew_training,
-                    )),
-                    aircraft_registrations::op_experimental_uas_exhibition.eq(excluded(
-                        aircraft_registrations::op_experimental_uas_exhibition,
-                    )),
-                    aircraft_registrations::op_experimental_uas_compliance_with_cfr.eq(excluded(
-                        aircraft_registrations::op_experimental_uas_compliance_with_cfr,
-                    )),
-                    aircraft_registrations::op_sfp_ferry_for_repairs_alterations_storage.eq(
-                        excluded(
-                            aircraft_registrations::op_sfp_ferry_for_repairs_alterations_storage,
-                        ),
-                    ),
-                    aircraft_registrations::op_sfp_evacuate_impending_danger.eq(excluded(
-                        aircraft_registrations::op_sfp_evacuate_impending_danger,
-                    )),
-                    aircraft_registrations::op_sfp_excess_of_max_certificated.eq(excluded(
-                        aircraft_registrations::op_sfp_excess_of_max_certificated,
-                    )),
-                    aircraft_registrations::op_sfp_delivery_or_export
-                        .eq(excluded(aircraft_registrations::op_sfp_delivery_or_export)),
-                    aircraft_registrations::op_sfp_production_flight_testing.eq(excluded(
-                        aircraft_registrations::op_sfp_production_flight_testing,
-                    )),
-                    aircraft_registrations::op_sfp_customer_demo
-                        .eq(excluded(aircraft_registrations::op_sfp_customer_demo)),
-                    // Other fields
                     aircraft_registrations::aircraft_type
                         .eq(excluded(aircraft_registrations::aircraft_type)),
                     aircraft_registrations::type_engine_code
@@ -225,6 +134,8 @@ impl AircraftRegistrationsRepository {
                         .eq(excluded(aircraft_registrations::kit_model_name)),
                     aircraft_registrations::device_id
                         .eq(excluded(aircraft_registrations::device_id)),
+                    aircraft_registrations::light_sport_type
+                        .eq(excluded(aircraft_registrations::light_sport_type)),
                 ))
                 .execute(&mut conn);
 
@@ -266,6 +177,38 @@ impl AircraftRegistrationsRepository {
                                     other_name, aircraft_reg.n_number, e
                                 );
                             }
+                        }
+                    }
+
+                    // Now handle approved operations - delete existing and insert new ones
+                    let approved_ops = aircraft_reg.to_approved_operations();
+                    if !approved_ops.is_empty() {
+                        // First delete existing approved operations for this registration
+                        let delete_result = diesel::delete(aircraft_approved_operations::table)
+                            .filter(
+                                aircraft_approved_operations::aircraft_registration_id
+                                    .eq(&aircraft_reg.n_number),
+                            )
+                            .execute(&mut conn);
+
+                        if let Err(e) = delete_result {
+                            warn!(
+                                "Failed to delete existing approved operations for {}: {}",
+                                aircraft_reg.n_number, e
+                            );
+                        }
+
+                        // Insert new approved operations
+                        let insert_result =
+                            diesel::insert_into(aircraft_approved_operations::table)
+                                .values(&approved_ops)
+                                .execute(&mut conn);
+
+                        if let Err(e) = insert_result {
+                            warn!(
+                                "Failed to insert approved operations for {}: {}",
+                                aircraft_reg.n_number, e
+                            );
                         }
                     }
 
