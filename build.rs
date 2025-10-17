@@ -1,3 +1,4 @@
+use std::fs;
 use std::path::Path;
 use std::process::Command;
 
@@ -6,6 +7,15 @@ pub fn main() {
     println!("cargo:rerun-if-changed=web/src");
     println!("cargo:rerun-if-changed=web/package.json");
     println!("cargo:rerun-if-changed=web/package-lock.json");
+
+    // Always ensure web/build directory exists for include_dir! macro
+    // This is required even in dev mode because include_dir! runs at compile time
+    let web_build_path = Path::new("web/build");
+    if !web_build_path.exists() {
+        fs::create_dir_all(web_build_path)
+            .expect("Failed to create web/build directory for include_dir! macro");
+        println!("Created empty web/build directory for include_dir! macro");
+    }
 
     // Skip web build if environment variable is set
     if std::env::var("SKIP_WEB_BUILD").is_ok() {
