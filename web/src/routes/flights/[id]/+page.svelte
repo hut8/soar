@@ -104,6 +104,13 @@
 		return maxMsl > 0 ? maxMsl : null;
 	});
 
+	// Calculate maximum AGL altitude from fixes
+	const maxAglAltitude = $derived(() => {
+		if (data.fixes.length === 0) return null;
+		const maxAgl = Math.max(...data.fixes.map((f) => f.altitude_agl_feet || 0));
+		return maxAgl > 0 ? maxAgl : null;
+	});
+
 	// Check if this is an outlanding (flight complete with known departure but no arrival airport)
 	const isOutlanding = $derived(
 		data.flight.landing_time !== null &&
@@ -690,25 +697,27 @@
 <div class="container mx-auto space-y-4 p-4">
 	<!-- Flight Header -->
 	<div class="card p-6">
-		<div class="mb-4 flex items-center justify-between">
-			<div class="flex items-center gap-4">
+		<div class="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+			<div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
 				<h1 class="flex items-center gap-2 h1">
 					<Plane class="h-8 w-8" />
 					Flight
 				</h1>
-				<FlightStateBadge state={data.flight.state} />
-				{#if isOutlanding}
-					<span
-						class="chip flex items-center gap-2 preset-filled-warning-500 text-base font-semibold"
-					>
-						<MapPinMinus class="h-5 w-5" />
-						Outlanding
-					</span>
-				{/if}
+				<div class="flex items-center gap-2">
+					<FlightStateBadge state={data.flight.state} />
+					{#if isOutlanding}
+						<span
+							class="chip flex items-center gap-2 preset-filled-warning-500 text-base font-semibold"
+						>
+							<MapPinMinus class="h-5 w-5" />
+							Outlanding
+						</span>
+					{/if}
+				</div>
 			</div>
 			<button
 				onclick={downloadKML}
-				class="btn flex items-center gap-2 preset-filled-primary-500"
+				class="btn flex items-center gap-2 self-start preset-filled-primary-500 md:self-auto"
 				type="button"
 			>
 				<Download class="h-4 w-4" />
@@ -830,12 +839,19 @@
 			{/if}
 
 			<!-- Maximum Altitude -->
-			{#if maxAltitude()}
+			{#if maxAltitude() || maxAglAltitude()}
 				<div class="flex items-start gap-3">
 					<MountainSnow class="mt-1 h-5 w-5 text-primary-500" />
 					<div>
 						<div class="text-surface-600-300-token text-sm">Maximum Altitude</div>
-						<div class="font-semibold">{formatAltitude(maxAltitude() ?? undefined)}</div>
+						{#if maxAltitude()}
+							<div class="font-semibold">{formatAltitude(maxAltitude() ?? undefined)} MSL</div>
+						{/if}
+						{#if maxAglAltitude()}
+							<div class="text-surface-600-300-token text-sm">
+								{formatAltitude(maxAglAltitude() ?? undefined)} AGL
+							</div>
+						{/if}
 					</div>
 				</div>
 			{/if}
