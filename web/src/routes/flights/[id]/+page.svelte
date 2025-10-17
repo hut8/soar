@@ -178,6 +178,18 @@
 		return data.flight.state === 'active';
 	}
 
+	// Handle nearby flights toggle
+	function handleNearbyFlightsToggle() {
+		if (includeNearbyFlights) {
+			fetchNearbyFlights();
+		} else {
+			// Clear nearby flights from map
+			nearbyFlightPaths.forEach((path) => path.setMap(null));
+			nearbyFlightPaths = [];
+			nearbyFlights = [];
+		}
+	}
+
 	// Fetch nearby flights and their fixes
 	async function fetchNearbyFlights() {
 		isLoadingNearbyFlights = true;
@@ -233,20 +245,6 @@
 			isLoadingNearbyFlights = false;
 		}
 	}
-
-	// Watch for changes to includeNearbyFlights
-	$effect(() => {
-		// Read includeNearbyFlights to make this effect reactive to it
-		const shouldInclude = includeNearbyFlights;
-		if (shouldInclude) {
-			fetchNearbyFlights();
-		} else {
-			// Clear nearby flights from map
-			nearbyFlightPaths.forEach((path) => path.setMap(null));
-			nearbyFlightPaths = [];
-			nearbyFlights = [];
-		}
-	});
 
 	// Poll for updates to in-progress flights
 	async function pollForUpdates() {
@@ -955,7 +953,12 @@
 			<div class="mb-3 flex items-center justify-between">
 				<h2 class="h3">Flight Track</h2>
 				<label class="flex cursor-pointer items-center gap-2">
-					<input type="checkbox" class="checkbox" bind:checked={includeNearbyFlights} />
+					<input
+						type="checkbox"
+						class="checkbox"
+						bind:checked={includeNearbyFlights}
+						onchange={handleNearbyFlightsToggle}
+					/>
 					<span class="text-sm">Include Nearby Flights</span>
 					{#if isLoadingNearbyFlights}
 						<span class="text-surface-600-300-token text-xs">(Loading...)</span>
