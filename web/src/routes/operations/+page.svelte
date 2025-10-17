@@ -436,14 +436,8 @@
 			},
 			zoomControl: false,
 			scaleControl: true,
-			streetViewControl: true,
-			streetViewControlOptions: {
-				position: window.google.maps.ControlPosition.RIGHT_TOP
-			},
-			fullscreenControl: true,
-			fullscreenControlOptions: {
-				position: window.google.maps.ControlPosition.RIGHT_TOP
-			}
+			streetViewControl: false,
+			fullscreenControl: false
 		});
 
 		// Add event listeners for viewport changes
@@ -1505,7 +1499,7 @@
 
 	<!-- Compass Rose -->
 	{#if isCompassActive && currentSettings.showCompassRose}
-		<div class="compass-container absolute bottom-8 left-1/2 z-10 -translate-x-1/2 transform">
+		<div class="compass-container absolute top-4 right-4 z-10">
 			<div class="compass-rose" style="transform: rotate({compassHeading}deg)">
 				<svg width="80" height="80" viewBox="0 0 80 80">
 					<!-- Outer circle -->
