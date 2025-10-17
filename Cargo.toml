@@ -2,6 +2,7 @@
 name = "soar"
 version = "0.1.2"
 edition = "2024"
+resolver = "2"
 
 [dependencies]
 anyhow = "1.0"
@@ -50,7 +51,7 @@ diesel = { version = "2.2", features = [
 diesel_migrations = "2.2"
 diesel-derive-enum = { version = "3.0.0-beta.1", features = ["postgres"] }
 r2d2 = "0.8"
-tokio = { version = "1.0", features = ["full"] }
+tokio = { version = "1.0", features = ["rt-multi-thread", "macros", "fs", "sync", "time", "signal"] }
 tower = "0.5"
 tower-http = { version = "0.6", features = ["fs", "trace", "cors"] }
 tracing = { version = "0.1" }
@@ -84,7 +85,9 @@ split-debuginfo = "unpacked"
 incremental = true
 
 [profile.release]
-# Generate debug symbols for profiling and Sentry crash symbolication
-# Keep symbols embedded in binary for pprof flamegraph generation and Sentry uploads
-debug = 2       # Full debug info
-strip = "none"  # Keep symbols in binary for profiling and Sentry
+# Optimize for faster builds while maintaining Sentry symbolication
+debug = 1           # Line numbers only (vs debug = 2 full symbols) - faster to compile
+strip = "none"      # Keep symbols in binary for profiling and Sentry
+lto = "thin"        # Thin LTO for better optimization without full rebuild cost
+codegen-units = 16  # Balance between compile time and runtime performance
+incremental = false # Disable for release builds (incompatible with LTO)
