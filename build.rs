@@ -13,6 +13,22 @@ pub fn main() {
         return;
     }
 
+    // Skip web build in development mode (non-release builds)
+    // In dev mode, frontend runs on http://localhost:5173 via Vite dev server
+    // Backend runs on http://localhost:1337
+    let profile = std::env::var("PROFILE").unwrap_or_else(|_| "debug".to_string());
+    if profile != "release" {
+        println!(
+            "Skipping web build in development mode (profile: {})",
+            profile
+        );
+        println!("Frontend should be accessed at http://localhost:5173");
+        println!("Backend will run on http://localhost:1337");
+        return;
+    }
+
+    println!("Building frontend for release...");
+
     // Check if we're in the web directory or the parent directory
     let web_dir = if Path::new("web").exists() {
         "web"
