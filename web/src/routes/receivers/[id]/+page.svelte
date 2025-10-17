@@ -544,15 +544,23 @@
 										</td>
 										<td class="font-mono text-sm">{fix.registration || '—'}</td>
 										<td class="font-mono text-xs">
-											{fix.latitude.toFixed(4)}, {fix.longitude.toFixed(4)}
+											{fix.latitude?.toFixed(4) ?? '—'}, {fix.longitude?.toFixed(4) ?? '—'}
 										</td>
-										<td>{fix.altitude_msl_feet !== null ? `${fix.altitude_msl_feet} ft` : '—'}</td>
 										<td
-											>{fix.ground_speed_knots !== null
+											>{fix.altitude_msl_feet !== null && fix.altitude_msl_feet !== undefined
+												? `${fix.altitude_msl_feet} ft`
+												: '—'}</td
+										>
+										<td
+											>{fix.ground_speed_knots !== null && fix.ground_speed_knots !== undefined
 												? `${fix.ground_speed_knots.toFixed(0)} kt`
 												: '—'}</td
 										>
-										<td>{fix.snr_db !== null ? `${fix.snr_db.toFixed(1)} dB` : '—'}</td>
+										<td
+											>{fix.snr_db !== null && fix.snr_db !== undefined
+												? `${fix.snr_db.toFixed(1)} dB`
+												: '—'}</td
+										>
 									</tr>
 								{/each}
 							</tbody>
