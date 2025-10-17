@@ -12,7 +12,6 @@ use crate::actions::json_error;
 use crate::actions::views::{Aircraft, DeviceView, FlightView};
 use crate::auth::AdminUser;
 use crate::device_repo::DeviceRepository;
-use crate::devices::AddressType;
 use crate::fixes::Fix;
 use crate::fixes_repo::FixesRepository;
 use crate::flights_repo::FlightsRepository;
@@ -280,10 +279,11 @@ async fn search_devices_by_registration(
     }
 }
 
-/// Search devices by address and address type
+/// Search devices by address
+/// Note: address_type_str is still accepted for backwards compatibility but ignored
 async fn search_devices_by_address(
     address_str: String,
-    address_type_str: String,
+    _address_type_str: String,
     pool: crate::web::PgPool,
 ) -> impl IntoResponse {
     // Parse address from hex string
@@ -298,27 +298,10 @@ async fn search_devices_by_address(
         }
     };
 
-    // Parse address type
-    let address_type = match address_type_str.to_uppercase().as_str() {
-        "I" => AddressType::Icao,
-        "O" => AddressType::Ogn,
-        "F" => AddressType::Flarm,
-        _ => {
-            return json_error(
-                StatusCode::BAD_REQUEST,
-                "Invalid address-type. Must be I (ICAO), O (OGN), or F (FLARM)",
-            )
-            .into_response();
-        }
-    };
-
     let device_repo = DeviceRepository::new(pool);
 
-    // Search by address and type
-    match device_repo
-        .search_by_address_and_type(address, address_type)
-        .await
-    {
+    // Search by address (address is unique now)
+    match device_repo.search_by_address(address).await {
         Ok(Some(device)) => {
             let device_view: DeviceView = device.into();
             Json(DeviceSearchResponse {
@@ -328,12 +311,7 @@ async fn search_devices_by_address(
         }
         Ok(None) => Json(DeviceSearchResponse { devices: vec![] }).into_response(),
         Err(e) => {
-            tracing::error!(
-                "Failed to search devices by address {} and type {}: {}",
-                address,
-                address_type_str,
-                e
-            );
+            tracing::error!("Failed to search devices by address {}: {}", address, e);
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to search devices",
