@@ -437,7 +437,8 @@
 			zoomControl: false,
 			scaleControl: true,
 			streetViewControl: false,
-			fullscreenControl: false
+			fullscreenControl: false,
+			gestureHandling: 'greedy' // Allow one-finger gestures on mobile
 		});
 
 		// Add event listeners for viewport changes
