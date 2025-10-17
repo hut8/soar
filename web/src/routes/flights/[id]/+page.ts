@@ -2,7 +2,7 @@ import { error } from '@sveltejs/kit';
 import type { PageLoad } from './$types';
 import { serverCall } from '$lib/api/server';
 
-export const load: PageLoad = async ({ params }) => {
+export const load: PageLoad = async ({ params, fetch }) => {
 	const { id } = params;
 
 	try {
@@ -49,7 +49,7 @@ export const load: PageLoad = async ({ params }) => {
 					created_at: string;
 					updated_at?: string;
 				};
-			}>(`/flights/${id}`),
+			}>(`/flights/${id}`, {}, undefined, fetch),
 			serverCall<{
 				fixes: Array<{
 					id: string;
@@ -70,7 +70,7 @@ export const load: PageLoad = async ({ params }) => {
 					raw_packet: string;
 				}>;
 				count: number;
-			}>(`/flights/${id}/fixes`)
+			}>(`/flights/${id}/fixes`, {}, undefined, fetch)
 		]);
 
 		return {

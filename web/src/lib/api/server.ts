@@ -19,12 +19,16 @@ type FromJSON<T> = { fromJSON(data: unknown): T };
 export async function serverCall<T>(
 	endpoint: string,
 	options: RequestInit = {},
-	cls?: FromJSON<T>
+	cls?: FromJSON<T>,
+	customFetch?: typeof fetch
 ): Promise<T> {
 	loading.startRequest();
 
+	// Use provided fetch (from SvelteKit load function) or fall back to global fetch
+	const fetchFn = customFetch || fetch;
+
 	try {
-		const response = await fetch(`${API_BASE}${endpoint}`, {
+		const response = await fetchFn(`${API_BASE}${endpoint}`, {
 			...options,
 			headers: {
 				'Content-Type': 'application/json',
