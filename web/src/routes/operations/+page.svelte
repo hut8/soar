@@ -428,12 +428,8 @@
 			mapId: 'SOAR_MAP', // Required for AdvancedMarkerElement
 			center: mapState.center,
 			zoom: mapState.zoom,
-			mapTypeId: window.google.maps.MapTypeId.TERRAIN,
-			mapTypeControl: true,
-			mapTypeControlOptions: {
-				style: window.google.maps.MapTypeControlStyle.HORIZONTAL_BAR,
-				position: window.google.maps.ControlPosition.LEFT_BOTTOM
-			},
+			mapTypeId: window.google.maps.MapTypeId.SATELLITE,
+			mapTypeControl: false, // Hide map type control (only satellite view allowed)
 			zoomControl: false,
 			scaleControl: true,
 			streetViewControl: false,
