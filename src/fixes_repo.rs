@@ -193,29 +193,26 @@ impl FixesRepository {
         Self { pool }
     }
 
-    /// Look up device UUID by device_address (hex string) and address_type
+    /// Look up device UUID by device_address (hex string)
     fn lookup_device_uuid_by_address(
         conn: &mut diesel::PgConnection,
         device_address: &str,
-        address_type_: AddressType,
     ) -> Result<Uuid> {
         // Convert hex string to integer for database lookup
         let device_address_int = u32::from_str_radix(device_address, 16)?;
-        let opt_uuid = Self::lookup_device_uuid(conn, device_address_int, address_type_)?;
+        let opt_uuid = Self::lookup_device_uuid(conn, device_address_int)?;
         opt_uuid.ok_or_else(|| anyhow::anyhow!("Device not found"))
     }
 
-    /// Look up device UUID by raw device_id and address_type (legacy method)
+    /// Look up device UUID by raw device_id
     fn lookup_device_uuid(
         conn: &mut diesel::PgConnection,
         raw_device_id: u32,
-        address_type_: AddressType,
     ) -> Result<Option<Uuid>> {
         use crate::schema::devices::dsl::*;
 
         let device_uuid = devices
             .filter(address.eq(raw_device_id as i32))
-            .filter(address_type.eq(address_type_))
             .select(id)
             .first::<Uuid>(conn)
             .optional()?;
@@ -247,9 +244,8 @@ impl FixesRepository {
         let mut new_fix = fix.clone();
         let pool = self.pool.clone();
 
-        // Look up device UUID if we have device address and address type
+        // Look up device UUID if we have device address
         let dev_address = fix.device_address_hex();
-        let address_type_enum = fix.address_type;
         let dev_address_owned = dev_address.to_string();
 
         // Get the receiver callsign from the via array (last entry)
@@ -262,11 +258,10 @@ impl FixesRepository {
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            // Look up the device UUID using device address and address type
+            // Look up the device UUID using device address
             new_fix.device_id = Self::lookup_device_uuid_by_address(
                 &mut conn,
                     &dev_address_owned,
-                    address_type_enum,
                 )?;
 
             // Look up the receiver UUID using receiver callsign

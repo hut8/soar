@@ -233,9 +233,19 @@ impl FixProcessor {
                         };
                     }
 
-                    // Look up or create device based on device_address and address_type
+                    // When creating devices spontaneously (not from DDB), determine address_type from aprs_type
+                    // aprs_type is the packet destination (e.g., "OGFLR", "OGADSB")
+                    let aprs_type = packet.to.to_string();
+                    let spontaneous_address_type = match aprs_type.as_str() {
+                        "OGFLR" => crate::devices::AddressType::Flarm,
+                        "OGADSB" => crate::devices::AddressType::Icao,
+                        _ => crate::devices::AddressType::Unknown,
+                    };
+
+                    // Look up or create device based on device_address
+                    // When creating spontaneously, use address_type derived from aprs_type
                     match device_repo
-                        .get_or_insert_device_by_address(device_address, address_type)
+                        .get_or_insert_device_by_address(device_address, spontaneous_address_type)
                         .await
                     {
                         Ok(device_model) => {

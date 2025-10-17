@@ -44,7 +44,7 @@ impl DeviceRepository {
         for new_device in new_devices {
             let result = diesel::insert_into(devices::table)
                 .values(&new_device)
-                .on_conflict((devices::address_type, devices::address))
+                .on_conflict(devices::address)
                 .do_update()
                 .set((
                     devices::aircraft_model.eq(excluded(devices::aircraft_model)),
@@ -79,39 +79,29 @@ impl DeviceRepository {
         Ok(count)
     }
 
-    /// Get a device by its address and address type
-    /// Address alone is not unique - must be combined with address_type for proper lookup
-    pub async fn get_device_by_address(
-        &self,
-        address: u32,
-        address_type: AddressType,
-    ) -> Result<Option<Device>> {
+    /// Get a device by its address
+    /// Address is unique across all devices
+    pub async fn get_device_by_address(&self, address: u32) -> Result<Option<Device>> {
         let mut conn = self.get_connection()?;
         let device_model = devices::table
             .filter(devices::address.eq(address as i32))
-            .filter(devices::address_type.eq(address_type))
             .first::<DeviceModel>(&mut conn)
             .optional()?;
 
         Ok(device_model.map(|model| model.into()))
     }
 
-    /// Get a device model (with UUID) by address and address type
-    pub async fn get_device_model_by_address(
-        &self,
-        address: i32,
-        address_type: AddressType,
-    ) -> Result<Option<DeviceModel>> {
+    /// Get a device model (with UUID) by address
+    pub async fn get_device_model_by_address(&self, address: i32) -> Result<Option<DeviceModel>> {
         let mut conn = self.get_connection()?;
         let device_model = devices::table
             .filter(devices::address.eq(address))
-            .filter(devices::address_type.eq(address_type))
             .first::<DeviceModel>(&mut conn)
             .optional()?;
         Ok(device_model)
     }
 
-    /// Get or insert a device by address and address type
+    /// Get or insert a device by address
     /// If the device doesn't exist, it will be created with from_ddb=false, tracked=true, identified=true
     /// Uses INSERT ... ON CONFLICT to handle race conditions atomically
     pub async fn get_or_insert_device_by_address(
@@ -143,7 +133,7 @@ impl DeviceRepository {
         // The DO UPDATE with a no-op ensures RETURNING gives us the existing row on conflict
         let device_model = diesel::insert_into(devices::table)
             .values(&new_device)
-            .on_conflict((devices::address_type, devices::address))
+            .on_conflict(devices::address)
             .do_update()
             .set(devices::address.eq(excluded(devices::address))) // No-op update to trigger RETURNING
             .get_result::<DeviceModel>(&mut conn)?;
@@ -177,30 +167,12 @@ impl DeviceRepository {
             .collect())
     }
 
-    /// Search devices by address (returns all devices with this address across all address types)
-    pub async fn search_by_address(&self, address: u32) -> Result<Vec<Device>> {
-        let mut conn = self.get_connection()?;
-        let device_models = devices::table
-            .filter(devices::address.eq(address as i32))
-            .load::<DeviceModel>(&mut conn)?;
-
-        Ok(device_models
-            .into_iter()
-            .map(|model| model.into())
-            .collect())
-    }
-
-    /// Search devices by address and address type combination
-    /// Returns a single device since (address, address_type) is a unique key
-    pub async fn search_by_address_and_type(
-        &self,
-        address: u32,
-        address_type: AddressType,
-    ) -> Result<Option<Device>> {
+    /// Search devices by address
+    /// Returns a single device since address is unique
+    pub async fn search_by_address(&self, address: u32) -> Result<Option<Device>> {
         let mut conn = self.get_connection()?;
         let device_model = devices::table
             .filter(devices::address.eq(address as i32))
-            .filter(devices::address_type.eq(address_type))
             .first::<DeviceModel>(&mut conn)
             .optional()?;
 
