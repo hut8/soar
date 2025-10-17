@@ -179,7 +179,14 @@ impl Flight {
 
     pub fn new_from_fix(fix: &Fix, takeoff_time: Option<DateTime<Utc>>) -> Self {
         let now = Utc::now();
-        info!("Creating flight from fix: {:?}", fix);
+        info!(
+            "Creating flight for {} from fix {} with climb: {:?} alt: {:?} speed: {:?}",
+            fix.device_address_hex(),
+            fix.id,
+            fix.climb_fpm,
+            fix.altitude_msl_feet,
+            fix.ground_speed_knots
+        );
         Self {
             id: Uuid::new_v4(),
             device_id: fix.device_id.into(),

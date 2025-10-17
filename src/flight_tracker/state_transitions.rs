@@ -6,7 +6,7 @@ use crate::flights_repo::FlightsRepository;
 use crate::locations_repo::LocationsRepository;
 use crate::runways_repo::RunwaysRepository;
 use anyhow::Result;
-use tracing::{debug, info, warn};
+use tracing::{info, trace, warn};
 use uuid::Uuid;
 
 use super::altitude::calculate_altitude_agl;
@@ -60,7 +60,7 @@ pub(crate) async fn process_state_transition(
     match (current_flight_state, is_active) {
         // Case 1: Active flight exists and current fix is active
         (Some(mut state), true) => {
-            debug!(
+            trace!(
                 "Device {} has active flight {} - continuing flight",
                 fix.device_id, state.flight_id
             );
@@ -181,7 +181,7 @@ pub(crate) async fn process_state_transition(
 
         // Case 3a: No flight and fix is inactive - idle aircraft on ground
         (None, false) => {
-            debug!(
+            trace!(
                 "Device {} is idle on ground with no active flight",
                 fix.device_id
             );

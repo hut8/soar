@@ -2,7 +2,7 @@ use crate::locations_repo::LocationsRepository;
 use crate::receiver_repo::ReceiverRepository;
 use num_traits::AsPrimitive;
 use ogn_parser::{AprsData, AprsPacket};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info, trace, warn};
 
 /// Processor for handling receiver position packets
 pub struct ReceiverPositionProcessor {
@@ -49,7 +49,7 @@ impl ReceiverPositionProcessor {
                                 .await
                             {
                                 Ok(_) => {
-                                    debug!(
+                                    trace!(
                                         "Successfully updated position for receiver {}: ({}, {})",
                                         callsign, latitude, longitude
                                     );
