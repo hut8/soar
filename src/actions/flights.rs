@@ -44,9 +44,10 @@ pub async fn get_flight_by_id(
     let flights_repo = FlightsRepository::new(state.pool.clone());
     let airports_repo = AirportsRepository::new(state.pool.clone());
     let device_repo = DeviceRepository::new(state.pool.clone());
+    let fixes_repo = FixesRepository::new(state.pool.clone());
 
     match flights_repo.get_flight_by_id(id).await {
-        Ok(Some(flight)) => {
+        Ok(Some(mut flight)) => {
             // Look up airport identifiers and country codes if airport IDs are present
             let departure_airport = if let Some(dep_id) = flight.departure_airport_id {
                 airports_repo
@@ -92,6 +93,22 @@ pub async fn get_flight_by_id(
             } else {
                 (None, None)
             };
+
+            // For active flights, calculate distance metrics dynamically
+            if flight.landing_time.is_none() {
+                // Calculate total distance flown
+                if let Ok(Some(total_distance)) = flight.total_distance(&fixes_repo).await {
+                    flight.total_distance_meters = Some(total_distance);
+                }
+
+                // Calculate maximum displacement from takeoff point
+                if let Ok(Some(max_displacement)) = flight
+                    .maximum_displacement(&fixes_repo, &airports_repo)
+                    .await
+                {
+                    flight.maximum_displacement_meters = Some(max_displacement);
+                }
+            }
 
             let flight_view =
                 FlightView::from_flight(flight, departure_airport, arrival_airport, device_info);

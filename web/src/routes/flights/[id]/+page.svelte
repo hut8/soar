@@ -767,65 +767,63 @@
 				</div>
 			</div>
 
-			<!-- Landing / Timeout -->
-			<div class="flex items-start gap-3">
-				<PlaneLanding class="mt-1 h-5 w-5 text-primary-500" />
-				<div>
-					<div class="text-surface-600-300-token text-sm">
-						{data.flight.state === 'timed_out' ? 'Timed Out' : 'Landing'}
-					</div>
-					<div class="font-semibold">
-						{#if data.flight.state === 'timed_out' && data.flight.timed_out_at}
-							<!-- Mobile: relative time only -->
-							<span class="md:hidden">{formatDateTimeMobile(data.flight.timed_out_at)}</span>
-							<!-- Desktop: relative time with full datetime -->
-							<span class="hidden md:inline">{formatDateTime(data.flight.timed_out_at)}</span>
-						{:else if data.flight.landing_time}
-							<!-- Mobile: relative time only -->
-							<span class="md:hidden">{formatDateTimeMobile(data.flight.landing_time)}</span>
-							<!-- Desktop: relative time with full datetime -->
-							<span class="hidden md:inline">{formatDateTime(data.flight.landing_time)}</span>
-						{:else}
-							In Progress
-						{/if}
-					</div>
-					<div class="text-surface-600-300-token text-sm">
-						{#if data.flight.state === 'timed_out'}
-							No beacons received for 5+ minutes
-						{:else if data.flight.landing_time}
-							{#if data.flight.arrival_airport && data.flight.arrival_airport_id}
-								<a href="/airports/{data.flight.arrival_airport_id}" class="anchor">
-									{data.flight.arrival_airport}
-								</a>
-							{:else if data.flight.arrival_airport}
-								{data.flight.arrival_airport}
-							{:else}
-								Unknown
+			<!-- Landing / Timeout (hidden for active flights) -->
+			{#if data.flight.state === 'timed_out' || data.flight.landing_time}
+				<div class="flex items-start gap-3">
+					<PlaneLanding class="mt-1 h-5 w-5 text-primary-500" />
+					<div>
+						<div class="text-surface-600-300-token text-sm">
+							{data.flight.state === 'timed_out' ? 'Timed Out' : 'Landing'}
+						</div>
+						<div class="font-semibold">
+							{#if data.flight.state === 'timed_out' && data.flight.timed_out_at}
+								<!-- Mobile: relative time only -->
+								<span class="md:hidden">{formatDateTimeMobile(data.flight.timed_out_at)}</span>
+								<!-- Desktop: relative time with full datetime -->
+								<span class="hidden md:inline">{formatDateTime(data.flight.timed_out_at)}</span>
+							{:else if data.flight.landing_time}
+								<!-- Mobile: relative time only -->
+								<span class="md:hidden">{formatDateTimeMobile(data.flight.landing_time)}</span>
+								<!-- Desktop: relative time with full datetime -->
+								<span class="hidden md:inline">{formatDateTime(data.flight.landing_time)}</span>
 							{/if}
-						{:else}
-							In Progress
+						</div>
+						<div class="text-surface-600-300-token text-sm">
+							{#if data.flight.state === 'timed_out'}
+								No beacons received for 5+ minutes
+							{:else if data.flight.landing_time}
+								{#if data.flight.arrival_airport && data.flight.arrival_airport_id}
+									<a href="/airports/{data.flight.arrival_airport_id}" class="anchor">
+										{data.flight.arrival_airport}
+									</a>
+								{:else if data.flight.arrival_airport}
+									{data.flight.arrival_airport}
+								{:else}
+									Unknown
+								{/if}
+							{/if}
+						</div>
+						{#if data.flight.landing_time && data.flight.arrival_airport}
+							{#if data.flight.landing_runway_ident}
+								<div class="text-surface-600-300-token flex items-center gap-2 text-sm">
+									<span>Runway {data.flight.landing_runway_ident}</span>
+									{#if data.flight.runways_inferred === true}
+										<span
+											class="preset-tonal-surface-500 chip flex items-center gap-1 text-xs"
+											title="This runway was inferred from the aircraft's heading during landing, not matched to airport runway data"
+										>
+											<Info class="h-3 w-3" />
+											Inferred
+										</span>
+									{/if}
+								</div>
+							{:else}
+								<div class="text-surface-600-300-token text-sm">Runway Unknown</div>
+							{/if}
 						{/if}
 					</div>
-					{#if data.flight.landing_time && data.flight.arrival_airport}
-						{#if data.flight.landing_runway_ident}
-							<div class="text-surface-600-300-token flex items-center gap-2 text-sm">
-								<span>Runway {data.flight.landing_runway_ident}</span>
-								{#if data.flight.runways_inferred === true}
-									<span
-										class="preset-tonal-surface-500 chip flex items-center gap-1 text-xs"
-										title="This runway was inferred from the aircraft's heading during landing, not matched to airport runway data"
-									>
-										<Info class="h-3 w-3" />
-										Inferred
-									</span>
-								{/if}
-							</div>
-						{:else}
-							<div class="text-surface-600-300-token text-sm">Runway Unknown</div>
-						{/if}
-					{/if}
 				</div>
-			</div>
+			{/if}
 
 			<!-- Duration -->
 			{#if duration()}
