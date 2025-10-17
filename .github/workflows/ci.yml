@@ -87,15 +87,18 @@ jobs:
         with:
           components: clippy, rustfmt
 
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-
       - name: Install PostgreSQL client, GDAL, and mold linker
         run: |
           sudo apt-get update
           sudo apt-get install -y postgresql-client libgdal-dev mold clang
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          shared-key: "test-build"
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          cache-all-crates: true
 
       - name: Setup test database
         env:
@@ -173,15 +176,18 @@ jobs:
       - name: Install Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
 
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-
       - name: Install GDAL and mold linker
         run: |
           sudo apt-get update
           sudo apt-get install -y libgdal-dev mold clang
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          shared-key: "release-build"
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          cache-all-crates: true
 
       - name: Build release binary
         env:
