@@ -84,6 +84,11 @@ debug = 1                  # Reduced debug info
 split-debuginfo = "unpacked"
 incremental = true
 
+[profile.dev]
+opt-level = 1
+[profile.dev.package."*"]
+opt-level = 3
+
 [profile.release]
 # Optimize for faster builds while maintaining Sentry symbolication
 debug = 1           # Line numbers only (vs debug = 2 full symbols) - faster to compile

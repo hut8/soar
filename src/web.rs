@@ -183,27 +183,38 @@ async fn request_logging_middleware(request: Request<Body>, next: Next) -> Respo
     let request_id = Uuid::new_v4().to_string()[..8].to_string();
     let start_time = Instant::now();
 
-    // Format query parameters for logging
-    let query_params_formatted = format_query_params(query_string);
+    // Skip logging for metrics endpoint to reduce noise
+    let should_log = path != "/data/metrics";
 
-    info!(
-        "Started {} {} [{}{}]",
-        method, path, request_id, query_params_formatted
-    );
+    // Format query parameters for logging
+    let query_params_formatted = if should_log {
+        format_query_params(query_string)
+    } else {
+        String::new()
+    };
+
+    if should_log {
+        info!(
+            "Started {} {} [{}{}]",
+            method, path, request_id, query_params_formatted
+        );
+    }
 
     let response = next.run(request).await;
     let duration = start_time.elapsed();
     let status = response.status();
 
-    info!(
-        "Completed {} {} [{}{}] {} in {:.2}ms",
-        method,
-        path,
-        request_id,
-        query_params_formatted,
-        status.as_u16(),
-        duration.as_secs_f64() * 1000.0
-    );
+    if should_log {
+        info!(
+            "Completed {} {} [{}{}] {} in {:.2}ms",
+            method,
+            path,
+            request_id,
+            query_params_formatted,
+            status.as_u16(),
+            duration.as_secs_f64() * 1000.0
+        );
+    }
 
     response
 }
