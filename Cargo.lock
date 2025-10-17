@@ -1870,9 +1870,6 @@ name = "hex"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
-dependencies = [
- "serde",
-]
 
 [[package]]
 name = "hkdf"
@@ -4412,7 +4409,6 @@ dependencies = [
  "anyhow",
  "argon2",
  "async-nats",
- "async-trait",
  "axum",
  "axum-extra",
  "axum-tungstenite",
@@ -4430,7 +4426,6 @@ dependencies = [
  "futures-util",
  "gdal",
  "google_maps",
- "hex",
  "include_dir",
  "jsonwebtoken",
  "lettre",
@@ -4451,7 +4446,6 @@ dependencies = [
  "rust_decimal",
  "sentry",
  "serde",
- "serde_derive",
  "serde_json",
  "sitemap-rs",
  "tokio",
