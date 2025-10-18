@@ -19,7 +19,8 @@
 		ChevronsRight,
 		Info,
 		ExternalLink,
-		MountainSnow
+		MountainSnow,
+		Clock
 	} from '@lucide/svelte';
 	import type { PageData } from './$types';
 	import dayjs from 'dayjs';
@@ -730,10 +731,14 @@
 				<div>
 					<div class="text-surface-600-300-token text-sm">Takeoff</div>
 					<div class="font-semibold">
-						<!-- Mobile: relative time only -->
-						<span class="md:hidden">{formatDateTimeMobile(data.flight.takeoff_time)}</span>
-						<!-- Desktop: relative time with full datetime -->
-						<span class="hidden md:inline">{formatDateTime(data.flight.takeoff_time)}</span>
+						{#if data.flight.takeoff_time}
+							<!-- Mobile: relative time only -->
+							<span class="md:hidden">{formatDateTimeMobile(data.flight.takeoff_time)}</span>
+							<!-- Desktop: relative time with full datetime -->
+							<span class="hidden md:inline">{formatDateTime(data.flight.takeoff_time)}</span>
+						{:else}
+							Unknown
+						{/if}
 					</div>
 					<div class="text-surface-600-300-token text-sm">
 						{#if data.flight.departure_airport && data.flight.departure_airport_id}
@@ -898,6 +903,21 @@
 					</div>
 				</div>
 			{/if}
+
+			<!-- Recognized at -->
+			<div class="flex items-start gap-3">
+				<Clock class="mt-1 h-5 w-5 text-primary-500" />
+				<div>
+					<div class="text-surface-600-300-token text-sm">Recognized at</div>
+					<div class="font-semibold">
+						<!-- Mobile: relative time only -->
+						<span class="md:hidden">{formatDateTimeMobile(data.flight.created_at)}</span>
+						<!-- Desktop: relative time with full datetime -->
+						<span class="hidden md:inline">{formatDateTime(data.flight.created_at)}</span>
+					</div>
+					<div class="text-surface-600-300-token text-sm">When flight was first detected</div>
+				</div>
+			</div>
 		</div>
 	</div>
 
