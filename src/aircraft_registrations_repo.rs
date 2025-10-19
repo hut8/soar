@@ -2,7 +2,7 @@ use anyhow::Result;
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
 use diesel::upsert::excluded;
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::aircraft_registrations::{Aircraft, AircraftRegistrationModel, NewAircraftRegistration};
@@ -40,45 +40,139 @@ impl AircraftRegistrationsRepository {
     where
         I: IntoIterator<Item = Aircraft>,
     {
-        let mut conn = self.get_connection()?;
-        let mut upserted_count = 0;
+        use std::collections::HashMap;
+        use std::time::Instant;
 
-        // Process each aircraft for club linking and conversion
+        // Type aliases to reduce complexity
+        type LocationKey = (String, String, String, String, String, String);
+        type LocationData = (
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+        );
+
         let aircraft_vec: Vec<Aircraft> = aircraft.into_iter().collect();
+        let total_count = aircraft_vec.len();
+        info!("Starting import of {} aircraft registrations", total_count);
 
-        for aircraft_reg in aircraft_vec {
-            // First, create/find location for this aircraft registration's address
-            let location = match self
+        let start_time = Instant::now();
+
+        // PHASE 1: Build caches for locations and clubs
+        info!("Building location and club caches...");
+
+        // Build location cache - key is (street1, street2, city, state, zip, country)
+        let mut location_cache: HashMap<LocationKey, Uuid> = HashMap::new();
+
+        // Build club cache - key is club_name
+        let mut club_cache: HashMap<String, Uuid> = HashMap::new();
+
+        // Collect unique locations
+        let mut unique_locations: Vec<LocationData> = Vec::new();
+        let mut location_set: std::collections::HashSet<LocationKey> =
+            std::collections::HashSet::new();
+
+        for aircraft_reg in &aircraft_vec {
+            let key = (
+                aircraft_reg.street1.clone().unwrap_or_default(),
+                aircraft_reg.street2.clone().unwrap_or_default(),
+                aircraft_reg.city.clone().unwrap_or_default(),
+                aircraft_reg.state.clone().unwrap_or_default(),
+                aircraft_reg.zip_code.clone().unwrap_or_default(),
+                aircraft_reg
+                    .country_mail_code
+                    .clone()
+                    .unwrap_or_else(|| "US".to_string()),
+            );
+
+            if location_set.insert(key.clone()) {
+                unique_locations.push((
+                    aircraft_reg.street1.clone().unwrap_or_default(),
+                    aircraft_reg.street2.clone().unwrap_or_default(),
+                    aircraft_reg.city.clone().unwrap_or_default(),
+                    aircraft_reg.state.clone().unwrap_or_default(),
+                    aircraft_reg.zip_code.clone().unwrap_or_default(),
+                    aircraft_reg.region_code.clone().unwrap_or_default(),
+                    aircraft_reg.county_mail_code.clone().unwrap_or_default(),
+                    aircraft_reg
+                        .country_mail_code
+                        .clone()
+                        .unwrap_or_else(|| "US".to_string()),
+                ));
+            }
+        }
+
+        info!("Found {} unique locations to cache", unique_locations.len());
+
+        // Batch create all unique locations and populate cache
+        for loc in unique_locations {
+            match self
                 .locations_repo
                 .find_or_create(
-                    aircraft_reg.street1.clone(),
-                    aircraft_reg.street2.clone(),
-                    aircraft_reg.city.clone(),
-                    aircraft_reg.state.clone(),
-                    aircraft_reg.zip_code.clone(),
-                    aircraft_reg.region_code.clone(),
-                    aircraft_reg.county_mail_code.clone(),
-                    aircraft_reg.country_mail_code.clone(),
-                    None, // geolocation will be set by triggers if coordinates are available
+                    if loc.0.is_empty() {
+                        None
+                    } else {
+                        Some(loc.0.clone())
+                    },
+                    if loc.1.is_empty() {
+                        None
+                    } else {
+                        Some(loc.1.clone())
+                    },
+                    if loc.2.is_empty() {
+                        None
+                    } else {
+                        Some(loc.2.clone())
+                    },
+                    if loc.3.is_empty() {
+                        None
+                    } else {
+                        Some(loc.3.clone())
+                    },
+                    if loc.4.is_empty() {
+                        None
+                    } else {
+                        Some(loc.4.clone())
+                    },
+                    if loc.5.is_empty() {
+                        None
+                    } else {
+                        Some(loc.5.clone())
+                    },
+                    if loc.6.is_empty() {
+                        None
+                    } else {
+                        Some(loc.6.clone())
+                    },
+                    Some(loc.7.clone()),
+                    None,
                 )
                 .await
             {
-                Ok(location) => location,
-                Err(e) => {
-                    error!(
-                        "Failed to create/find location for aircraft {}: {}",
-                        aircraft_reg.n_number, e
-                    );
-                    // Continue processing other aircraft
-                    continue;
+                Ok(location) => {
+                    let key = (loc.0, loc.1, loc.2, loc.3, loc.4, loc.7);
+                    location_cache.insert(key, location.id);
                 }
-            };
+                Err(e) => {
+                    warn!("Failed to create location: {}", e);
+                }
+            }
+        }
 
-            // Detect if this aircraft is registered to a soaring club and link it
-            let club_id = if let Some(club_name) = aircraft_reg.club_name() {
-                let clubs_repo = ClubsRepository::new(self.pool.clone());
+        info!("Location cache built with {} entries", location_cache.len());
 
-                // Use the aircraft's registration location for the club
+        // Collect unique clubs
+        let mut unique_clubs: Vec<(String, crate::clubs_repo::LocationParams)> = Vec::new();
+        let mut club_set: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+        for aircraft_reg in &aircraft_vec {
+            if let Some(club_name) = aircraft_reg.club_name()
+                && club_set.insert(club_name.clone())
+            {
                 let location_params = crate::clubs_repo::LocationParams {
                     street1: aircraft_reg.street1.clone(),
                     street2: aircraft_reg.street2.clone(),
@@ -89,182 +183,228 @@ impl AircraftRegistrationsRepository {
                     county_mail_code: aircraft_reg.county_mail_code.clone(),
                     country_mail_code: aircraft_reg.country_mail_code.clone(),
                 };
+                unique_clubs.push((club_name, location_params));
+            }
+        }
 
-                match clubs_repo
-                    .find_or_create_club(&club_name, location_params)
-                    .await
-                {
-                    Ok(club) => {
-                        info!(
-                            "Linked aircraft {} to club: {} ({})",
-                            aircraft_reg.n_number, club.name, club.id
-                        );
-                        Some(club.id)
-                    }
-                    Err(e) => {
-                        warn!(
-                            "Failed to find/create club '{}' for aircraft {}: {}",
-                            club_name, aircraft_reg.n_number, e
-                        );
-                        None
-                    }
-                }
-            } else {
-                None
-            };
+        info!("Found {} unique clubs to cache", unique_clubs.len());
 
-            // Create NewAircraftRegistration with location_id and club_id
-            let mut new_aircraft_reg: NewAircraftRegistration = aircraft_reg.clone().into();
-            new_aircraft_reg.location_id = Some(location.id);
-            new_aircraft_reg.club_id = club_id;
-            let result = diesel::insert_into(aircraft_registrations::table)
-                .values(&new_aircraft_reg)
-                .on_conflict(aircraft_registrations::registration_number)
-                .do_update()
-                .set((
-                    aircraft_registrations::serial_number
-                        .eq(excluded(aircraft_registrations::serial_number)),
-                    aircraft_registrations::manufacturer_code
-                        .eq(excluded(aircraft_registrations::manufacturer_code)),
-                    aircraft_registrations::model_code
-                        .eq(excluded(aircraft_registrations::model_code)),
-                    aircraft_registrations::series_code
-                        .eq(excluded(aircraft_registrations::series_code)),
-                    aircraft_registrations::engine_manufacturer_code
-                        .eq(excluded(aircraft_registrations::engine_manufacturer_code)),
-                    aircraft_registrations::engine_model_code
-                        .eq(excluded(aircraft_registrations::engine_model_code)),
-                    aircraft_registrations::year_mfr.eq(excluded(aircraft_registrations::year_mfr)),
-                    aircraft_registrations::registrant_type_code
-                        .eq(excluded(aircraft_registrations::registrant_type_code)),
-                    aircraft_registrations::registrant_name
-                        .eq(excluded(aircraft_registrations::registrant_name)),
-                    aircraft_registrations::location_id
-                        .eq(excluded(aircraft_registrations::location_id)),
-                    aircraft_registrations::last_action_date
-                        .eq(excluded(aircraft_registrations::last_action_date)),
-                    aircraft_registrations::certificate_issue_date
-                        .eq(excluded(aircraft_registrations::certificate_issue_date)),
-                    aircraft_registrations::airworthiness_class
-                        .eq(excluded(aircraft_registrations::airworthiness_class)),
-                    aircraft_registrations::approved_operations_raw
-                        .eq(excluded(aircraft_registrations::approved_operations_raw)),
-                    aircraft_registrations::aircraft_type
-                        .eq(excluded(aircraft_registrations::aircraft_type)),
-                    aircraft_registrations::type_engine_code
-                        .eq(excluded(aircraft_registrations::type_engine_code)),
-                    aircraft_registrations::status_code
-                        .eq(excluded(aircraft_registrations::status_code)),
-                    aircraft_registrations::transponder_code
-                        .eq(excluded(aircraft_registrations::transponder_code)),
-                    aircraft_registrations::fractional_owner
-                        .eq(excluded(aircraft_registrations::fractional_owner)),
-                    aircraft_registrations::airworthiness_date
-                        .eq(excluded(aircraft_registrations::airworthiness_date)),
-                    aircraft_registrations::expiration_date
-                        .eq(excluded(aircraft_registrations::expiration_date)),
-                    aircraft_registrations::unique_id
-                        .eq(excluded(aircraft_registrations::unique_id)),
-                    aircraft_registrations::kit_mfr_name
-                        .eq(excluded(aircraft_registrations::kit_mfr_name)),
-                    aircraft_registrations::kit_model_name
-                        .eq(excluded(aircraft_registrations::kit_model_name)),
-                    aircraft_registrations::device_id
-                        .eq(excluded(aircraft_registrations::device_id)),
-                    aircraft_registrations::light_sport_type
-                        .eq(excluded(aircraft_registrations::light_sport_type)),
-                    aircraft_registrations::club_id.eq(excluded(aircraft_registrations::club_id)),
-                ))
-                .execute(&mut conn);
-
-            match result {
-                Ok(_) => {
-                    // Now insert the other names into the aircraft_other_names table
-                    if !aircraft_reg.other_names.is_empty() {
-                        // First delete existing other names for this registration
-                        let delete_result = diesel::delete(aircraft_other_names::table)
-                            .filter(
-                                aircraft_other_names::registration_number
-                                    .eq(&aircraft_reg.n_number),
-                            )
-                            .execute(&mut conn);
-
-                        if let Err(e) = delete_result {
-                            warn!(
-                                "Failed to delete existing other names for {}: {}",
-                                aircraft_reg.n_number, e
-                            );
-                        }
-
-                        // Insert new other names
-                        for (seq, other_name) in aircraft_reg.other_names.iter().enumerate() {
-                            let new_other_name = (
-                                aircraft_other_names::registration_number
-                                    .eq(&aircraft_reg.n_number),
-                                aircraft_other_names::seq.eq((seq + 1) as i16), // 1-based sequence
-                                aircraft_other_names::other_name.eq(other_name),
-                            );
-
-                            let insert_result = diesel::insert_into(aircraft_other_names::table)
-                                .values(&new_other_name)
-                                .execute(&mut conn);
-
-                            if let Err(e) = insert_result {
-                                warn!(
-                                    "Failed to insert other name '{}' for {}: {}",
-                                    other_name, aircraft_reg.n_number, e
-                                );
-                            }
-                        }
-                    }
-
-                    // Now handle approved operations - delete existing and insert new ones
-                    let approved_ops = aircraft_reg.to_approved_operations();
-                    if !approved_ops.is_empty() {
-                        // First delete existing approved operations for this registration
-                        let delete_result = diesel::delete(aircraft_approved_operations::table)
-                            .filter(
-                                aircraft_approved_operations::aircraft_registration_id
-                                    .eq(&aircraft_reg.n_number),
-                            )
-                            .execute(&mut conn);
-
-                        if let Err(e) = delete_result {
-                            warn!(
-                                "Failed to delete existing approved operations for {}: {}",
-                                aircraft_reg.n_number, e
-                            );
-                        }
-
-                        // Insert new approved operations
-                        let insert_result =
-                            diesel::insert_into(aircraft_approved_operations::table)
-                                .values(&approved_ops)
-                                .execute(&mut conn);
-
-                        if let Err(e) = insert_result {
-                            warn!(
-                                "Failed to insert approved operations for {}: {}",
-                                aircraft_reg.n_number, e
-                            );
-                        }
-                    }
-
-                    upserted_count += 1;
+        // Batch create all unique clubs and populate cache
+        let clubs_repo = ClubsRepository::new(self.pool.clone());
+        for (club_name, location_params) in unique_clubs {
+            match clubs_repo
+                .find_or_create_club(&club_name, location_params)
+                .await
+            {
+                Ok(club) => {
+                    club_cache.insert(club_name.clone(), club.id);
                 }
                 Err(e) => {
-                    warn!(
-                        "Failed to upsert aircraft registration {}: {}",
-                        new_aircraft_reg.registration_number, e
-                    );
-                    // Continue with other aircraft rather than failing the entire batch
+                    warn!("Failed to create club '{}': {}", club_name, e);
                 }
             }
         }
 
+        info!("Club cache built with {} entries", club_cache.len());
+
+        // PHASE 2: Process aircraft in batches
+        const BATCH_SIZE: usize = 5000;
+        let mut upserted_count = 0;
+
+        for batch_start in (0..total_count).step_by(BATCH_SIZE) {
+            let batch_end = (batch_start + BATCH_SIZE).min(total_count);
+            let batch = &aircraft_vec[batch_start..batch_end];
+
+            let mut conn = self.get_connection()?;
+
+            // Prepare batch data
+            let mut aircraft_registrations: Vec<NewAircraftRegistration> = Vec::new();
+            let mut all_other_names: Vec<(String, i16, String)> = Vec::new();
+            let mut all_approved_ops: Vec<
+                crate::aircraft_registrations::NewAircraftApprovedOperation,
+            > = Vec::new();
+            let mut registration_numbers: Vec<String> = Vec::new();
+
+            for aircraft_reg in batch {
+                // Look up location from cache
+                let location_key = (
+                    aircraft_reg.street1.clone().unwrap_or_default(),
+                    aircraft_reg.street2.clone().unwrap_or_default(),
+                    aircraft_reg.city.clone().unwrap_or_default(),
+                    aircraft_reg.state.clone().unwrap_or_default(),
+                    aircraft_reg.zip_code.clone().unwrap_or_default(),
+                    aircraft_reg
+                        .country_mail_code
+                        .clone()
+                        .unwrap_or_else(|| "US".to_string()),
+                );
+
+                let location_id = location_cache.get(&location_key).copied();
+
+                // Look up club from cache
+                let club_id = aircraft_reg
+                    .club_name()
+                    .and_then(|club_name| club_cache.get(&club_name).copied());
+
+                // Create NewAircraftRegistration
+                let mut new_aircraft_reg: NewAircraftRegistration = aircraft_reg.clone().into();
+                new_aircraft_reg.location_id = location_id;
+                new_aircraft_reg.club_id = club_id;
+
+                aircraft_registrations.push(new_aircraft_reg);
+                registration_numbers.push(aircraft_reg.n_number.clone());
+
+                // Collect other names
+                for (seq, other_name) in aircraft_reg.other_names.iter().enumerate() {
+                    all_other_names.push((
+                        aircraft_reg.n_number.clone(),
+                        (seq + 1) as i16,
+                        other_name.clone(),
+                    ));
+                }
+
+                // Collect approved operations
+                for op in aircraft_reg.to_approved_operations() {
+                    all_approved_ops.push(op);
+                }
+            }
+
+            // Batch upsert aircraft registrations
+            for new_aircraft_reg in &aircraft_registrations {
+                let result = diesel::insert_into(aircraft_registrations::table)
+                    .values(new_aircraft_reg)
+                    .on_conflict(aircraft_registrations::registration_number)
+                    .do_update()
+                    .set((
+                        aircraft_registrations::serial_number
+                            .eq(excluded(aircraft_registrations::serial_number)),
+                        aircraft_registrations::manufacturer_code
+                            .eq(excluded(aircraft_registrations::manufacturer_code)),
+                        aircraft_registrations::model_code
+                            .eq(excluded(aircraft_registrations::model_code)),
+                        aircraft_registrations::series_code
+                            .eq(excluded(aircraft_registrations::series_code)),
+                        aircraft_registrations::engine_manufacturer_code
+                            .eq(excluded(aircraft_registrations::engine_manufacturer_code)),
+                        aircraft_registrations::engine_model_code
+                            .eq(excluded(aircraft_registrations::engine_model_code)),
+                        aircraft_registrations::year_mfr
+                            .eq(excluded(aircraft_registrations::year_mfr)),
+                        aircraft_registrations::registrant_type_code
+                            .eq(excluded(aircraft_registrations::registrant_type_code)),
+                        aircraft_registrations::registrant_name
+                            .eq(excluded(aircraft_registrations::registrant_name)),
+                        aircraft_registrations::location_id
+                            .eq(excluded(aircraft_registrations::location_id)),
+                        aircraft_registrations::last_action_date
+                            .eq(excluded(aircraft_registrations::last_action_date)),
+                        aircraft_registrations::certificate_issue_date
+                            .eq(excluded(aircraft_registrations::certificate_issue_date)),
+                        aircraft_registrations::airworthiness_class
+                            .eq(excluded(aircraft_registrations::airworthiness_class)),
+                        aircraft_registrations::approved_operations_raw
+                            .eq(excluded(aircraft_registrations::approved_operations_raw)),
+                        aircraft_registrations::aircraft_type
+                            .eq(excluded(aircraft_registrations::aircraft_type)),
+                        aircraft_registrations::type_engine_code
+                            .eq(excluded(aircraft_registrations::type_engine_code)),
+                        aircraft_registrations::status_code
+                            .eq(excluded(aircraft_registrations::status_code)),
+                        aircraft_registrations::transponder_code
+                            .eq(excluded(aircraft_registrations::transponder_code)),
+                        aircraft_registrations::fractional_owner
+                            .eq(excluded(aircraft_registrations::fractional_owner)),
+                        aircraft_registrations::airworthiness_date
+                            .eq(excluded(aircraft_registrations::airworthiness_date)),
+                        aircraft_registrations::expiration_date
+                            .eq(excluded(aircraft_registrations::expiration_date)),
+                        aircraft_registrations::unique_id
+                            .eq(excluded(aircraft_registrations::unique_id)),
+                        aircraft_registrations::kit_mfr_name
+                            .eq(excluded(aircraft_registrations::kit_mfr_name)),
+                        aircraft_registrations::kit_model_name
+                            .eq(excluded(aircraft_registrations::kit_model_name)),
+                        aircraft_registrations::device_id
+                            .eq(excluded(aircraft_registrations::device_id)),
+                        aircraft_registrations::light_sport_type
+                            .eq(excluded(aircraft_registrations::light_sport_type)),
+                        aircraft_registrations::club_id
+                            .eq(excluded(aircraft_registrations::club_id)),
+                    ))
+                    .execute(&mut conn);
+
+                match result {
+                    Ok(_) => upserted_count += 1,
+                    Err(e) => warn!(
+                        "Failed to upsert aircraft {}: {}",
+                        new_aircraft_reg.registration_number, e
+                    ),
+                }
+            }
+
+            // Batch delete existing other_names for this batch
+            if !registration_numbers.is_empty() {
+                let _ = diesel::delete(aircraft_other_names::table)
+                    .filter(aircraft_other_names::registration_number.eq_any(&registration_numbers))
+                    .execute(&mut conn);
+            }
+
+            // Batch insert other_names
+            if !all_other_names.is_empty() {
+                for (reg_num, seq, other_name) in &all_other_names {
+                    let _ = diesel::insert_into(aircraft_other_names::table)
+                        .values((
+                            aircraft_other_names::registration_number.eq(reg_num),
+                            aircraft_other_names::seq.eq(seq),
+                            aircraft_other_names::other_name.eq(other_name),
+                        ))
+                        .execute(&mut conn);
+                }
+            }
+
+            // Batch delete existing approved_operations for this batch
+            if !registration_numbers.is_empty() {
+                let _ = diesel::delete(aircraft_approved_operations::table)
+                    .filter(
+                        aircraft_approved_operations::aircraft_registration_id
+                            .eq_any(&registration_numbers),
+                    )
+                    .execute(&mut conn);
+            }
+
+            // Batch insert approved_operations
+            if !all_approved_ops.is_empty() {
+                let _ = diesel::insert_into(aircraft_approved_operations::table)
+                    .values(&all_approved_ops)
+                    .execute(&mut conn);
+            }
+
+            // Log progress every 1000 records
+            if batch_end.is_multiple_of(1000) || batch_end == total_count {
+                let elapsed = start_time.elapsed().as_secs_f64();
+                let rate = batch_end as f64 / elapsed;
+                let remaining = total_count - batch_end;
+                let eta_seconds = (remaining as f64 / rate) as u64;
+                let percentage = (batch_end as f64 / total_count as f64) * 100.0;
+
+                info!(
+                    "Progress: {}/{} ({:.1}%) | Rate: {:.0} records/sec | ETA: {}m {}s",
+                    batch_end,
+                    total_count,
+                    percentage,
+                    rate,
+                    eta_seconds / 60,
+                    eta_seconds % 60
+                );
+            }
+        }
+
+        let elapsed = start_time.elapsed();
         info!(
-            "Successfully upserted {} aircraft registrations",
-            upserted_count
+            "Successfully upserted {} aircraft registrations in {:.1} seconds ({:.0} records/sec)",
+            upserted_count,
+            elapsed.as_secs_f64(),
+            upserted_count as f64 / elapsed.as_secs_f64()
         );
         Ok(upserted_count)
     }
