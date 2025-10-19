@@ -20,6 +20,7 @@ pub mod device_repo;
 pub mod devices;
 pub mod elevation;
 pub mod email;
+pub mod email_reporter;
 pub mod faa;
 pub mod fetch_receivers;
 pub mod fix_processor;
