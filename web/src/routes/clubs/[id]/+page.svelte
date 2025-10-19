@@ -11,7 +11,8 @@
 		Navigation,
 		UserCheck,
 		ExternalLink,
-		Image
+		Image,
+		ClipboardList
 	} from '@lucide/svelte';
 	import { ProgressRing } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall } from '$lib/api/server';
@@ -265,13 +266,20 @@
 							</button>
 						</div>
 					{:else if $auth.isAuthenticated && isCurrentClub}
-						<div class="flex-shrink-0">
+						<div class="flex flex-shrink-0 flex-col gap-2">
 							<div
 								class="inline-flex items-center gap-2 rounded-full bg-success-500 px-4 py-2 text-sm text-white"
 							>
 								<UserCheck class="h-4 w-4" />
 								My Club
 							</div>
+							<a
+								href={resolve(`/clubs/${clubId}/operations`)}
+								class="btn preset-filled-secondary-500 btn-sm"
+							>
+								<ClipboardList class="mr-2 h-4 w-4" />
+								Club Operations
+							</a>
 						</div>
 					{/if}
 				</div>
