@@ -201,8 +201,8 @@ impl FlightsRepository {
     }
 
     /// Get flights in progress (no landing time) ordered by takeoff time descending
-    /// Limited to the specified number of flights
-    pub async fn get_flights_in_progress(&self, limit: i64) -> Result<Vec<Flight>> {
+    /// Limited to the specified number of flights with optional offset
+    pub async fn get_flights_in_progress(&self, limit: i64, offset: i64) -> Result<Vec<Flight>> {
         use crate::schema::flights::dsl::*;
 
         let pool = self.pool.clone();
@@ -214,6 +214,7 @@ impl FlightsRepository {
                 .filter(landing_time.is_null())
                 .order(takeoff_time.desc())
                 .limit(limit)
+                .offset(offset)
                 .select(FlightModel::as_select())
                 .load(&mut conn)?;
 
@@ -251,7 +252,7 @@ impl FlightsRepository {
 
     /// Get recent completed flights (with landing time OR timeout) ordered by completion time descending
     /// Completed means either landed (landing_time is set) or timed out (timed_out_at is set)
-    pub async fn get_completed_flights(&self, limit: i64) -> Result<Vec<Flight>> {
+    pub async fn get_completed_flights(&self, limit: i64, offset: i64) -> Result<Vec<Flight>> {
         use crate::schema::flights::dsl::*;
 
         let pool = self.pool.clone();
@@ -263,6 +264,7 @@ impl FlightsRepository {
                 .filter(landing_time.is_not_null().or(timed_out_at.is_not_null()))
                 .order(landing_time.desc().nulls_last())
                 .limit(limit)
+                .offset(offset)
                 .select(FlightModel::as_select())
                 .load(&mut conn)?;
 
@@ -387,6 +389,27 @@ impl FlightsRepository {
 
             let count = flights
                 .filter(landing_time.is_null())
+                .count()
+                .get_result::<i64>(&mut conn)?;
+
+            Ok::<i64, anyhow::Error>(count)
+        })
+        .await??;
+
+        Ok(count)
+    }
+
+    /// Get the count of completed flights (with landing time OR timeout)
+    pub async fn get_completed_flights_count(&self) -> Result<i64> {
+        use crate::schema::flights::dsl::*;
+
+        let pool = self.pool.clone();
+
+        let count = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            let count = flights
+                .filter(landing_time.is_not_null().or(timed_out_at.is_not_null()))
                 .count()
                 .get_result::<i64>(&mut conn)?;
 
