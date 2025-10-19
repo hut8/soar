@@ -242,7 +242,14 @@ impl AircraftRegistrationsRepository {
 
             match result {
                 Ok(count) => upserted_count += count,
-                Err(e) => warn!("Failed to batch upsert aircraft: {}", e),
+                Err(e) => {
+                    return Err(anyhow::anyhow!(
+                        "Failed to batch upsert aircraft at batch {}-{}: {}",
+                        batch_start,
+                        batch_end,
+                        e
+                    ));
+                }
             }
 
             // Batch delete existing other_names for this batch
