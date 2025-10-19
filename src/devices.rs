@@ -10,8 +10,8 @@ use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use diesel_derive_enum::DbEnum;
 
-// Import AircraftType for the cached field
-use crate::ogn_aprs_aircraft::AircraftType;
+// Import AircraftType and AdsbEmitterCategory for the cached fields
+use crate::ogn_aprs_aircraft::{AdsbEmitterCategory, AircraftType};
 
 const DDB_URL_GLIDERNET: &str = "http://ddb.glidernet.org/download/?j=1";
 const DDB_URL_GLIDERNET_WORKERS: &str =
@@ -154,6 +154,10 @@ pub struct Device {
     pub last_fix_at: Option<DateTime<Utc>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub club_id: Option<uuid::Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icao_model_code: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub adsb_emitter_category: Option<AdsbEmitterCategory>,
 }
 
 // Diesel database model for devices table
@@ -188,6 +192,8 @@ pub struct DeviceModel {
     pub aircraft_type_ogn: Option<AircraftType>,
     pub last_fix_at: Option<DateTime<Utc>>,
     pub club_id: Option<uuid::Uuid>,
+    pub icao_model_code: Option<String>,
+    pub adsb_emitter_category: Option<AdsbEmitterCategory>,
 }
 
 // For inserting new devices (without timestamps which are set by DB)
@@ -208,6 +214,8 @@ pub struct NewDevice {
     pub aircraft_type_ogn: Option<AircraftType>,
     pub last_fix_at: Option<DateTime<Utc>>,
     pub club_id: Option<uuid::Uuid>,
+    pub icao_model_code: Option<String>,
+    pub adsb_emitter_category: Option<AdsbEmitterCategory>,
 }
 
 impl From<Device> for NewDevice {
@@ -229,6 +237,8 @@ impl From<Device> for NewDevice {
             aircraft_type_ogn: device.aircraft_type_ogn,
             last_fix_at: device.last_fix_at,
             club_id: device.club_id,
+            icao_model_code: device.icao_model_code,
+            adsb_emitter_category: device.adsb_emitter_category,
         }
     }
 }
@@ -252,6 +262,8 @@ impl From<DeviceModel> for Device {
             aircraft_type_ogn: model.aircraft_type_ogn,
             last_fix_at: model.last_fix_at,
             club_id: model.club_id,
+            icao_model_code: model.icao_model_code,
+            adsb_emitter_category: model.adsb_emitter_category,
         }
     }
 }
@@ -614,6 +626,8 @@ impl DeviceFetcher {
                         aircraft_type_ogn: None,
                         last_fix_at: None,
                         club_id: None,
+                        icao_model_code: None,
+                        adsb_emitter_category: None,
                     };
                     device_map.insert(
                         glidernet_device.address,
@@ -697,6 +711,8 @@ mod tests {
             aircraft_type_ogn: None,
             last_fix_at: None,
             club_id: None,
+            icao_model_code: None,
+            adsb_emitter_category: None,
         };
 
         // Test that the device can be serialized/deserialized
@@ -973,6 +989,8 @@ mod tests {
             aircraft_type_ogn: None,
             last_fix_at: None,
             club_id: None,
+            icao_model_code: None,
+            adsb_emitter_category: None,
         }
     }
 }

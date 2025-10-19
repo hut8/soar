@@ -6,7 +6,7 @@ use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::devices::{AddressType, Device, DeviceModel, NewDevice};
-use crate::ogn_aprs_aircraft::AircraftType;
+use crate::ogn_aprs_aircraft::{AdsbEmitterCategory, AircraftType};
 use crate::schema::devices;
 use chrono::{DateTime, Utc};
 
@@ -126,6 +126,8 @@ impl DeviceRepository {
             aircraft_type_ogn: None,
             last_fix_at: None,
             club_id: None,
+            icao_model_code: None,
+            adsb_emitter_category: None,
         };
 
         // Use INSERT ... ON CONFLICT ... DO UPDATE RETURNING to atomically handle race conditions
@@ -251,6 +253,44 @@ impl DeviceRepository {
             warn!("No device found with ID {}", device_id);
             Ok(false)
         }
+    }
+
+    /// Update ICAO model code and/or ADS-B emitter category for a device
+    /// Only updates fields that are Some (allows partial updates)
+    pub async fn update_adsb_fields(
+        &self,
+        device_id: Uuid,
+        icao_model_code: Option<String>,
+        adsb_emitter_category: Option<AdsbEmitterCategory>,
+    ) -> Result<()> {
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            // Build dynamic update based on which fields are provided
+            if icao_model_code.is_some() && adsb_emitter_category.is_some() {
+                diesel::update(devices::table.filter(devices::id.eq(device_id)))
+                    .set((
+                        devices::icao_model_code.eq(icao_model_code),
+                        devices::adsb_emitter_category.eq(adsb_emitter_category),
+                    ))
+                    .execute(&mut conn)?;
+            } else if let Some(code) = icao_model_code {
+                diesel::update(devices::table.filter(devices::id.eq(device_id)))
+                    .set(devices::icao_model_code.eq(code))
+                    .execute(&mut conn)?;
+            } else if let Some(category) = adsb_emitter_category {
+                diesel::update(devices::table.filter(devices::id.eq(device_id)))
+                    .set(devices::adsb_emitter_category.eq(category))
+                    .execute(&mut conn)?;
+            }
+
+            Ok::<(), anyhow::Error>(())
+        })
+        .await??;
+
+        Ok(())
     }
 }
 

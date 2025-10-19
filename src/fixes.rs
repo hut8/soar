@@ -7,7 +7,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use uuid::Uuid;
 
 use crate::devices::AddressType;
-use crate::ogn_aprs_aircraft::{AdsbEmitterCategory, AircraftType};
+use crate::ogn_aprs_aircraft::AircraftType;
 
 /// Custom serializer for via field to convert Vec to comma-separated string
 fn serialize_via<S>(via: &[Option<String>], serializer: S) -> Result<S::Ok, S::Error>
@@ -54,9 +54,6 @@ pub struct Fix {
     #[serde(serialize_with = "serialize_via", deserialize_with = "deserialize_via")]
     pub via: Vec<Option<String>>, // NOT NULL in DB but contains nullable strings
 
-    /// Raw APRS packet for debugging/audit purposes
-    pub raw_packet: String,
-
     /// Timestamp when this fix was received/parsed
     pub timestamp: DateTime<Utc>,
 
@@ -76,9 +73,7 @@ pub struct Fix {
 
     /// Flight information
     pub flight_number: Option<String>,
-    pub emitter_category: Option<AdsbEmitterCategory>,
     pub registration: Option<String>,
-    pub model: Option<String>,
     pub squawk: Option<String>,
 
     /// Performance data
@@ -103,9 +98,6 @@ pub struct Fix {
 
     /// Timestamp when we received/processed the packet
     pub received_at: DateTime<Utc>,
-
-    /// Lag between packet timestamp and when we received it (in milliseconds)
-    pub lag: Option<i32>,
 
     /// Whether the aircraft is considered active (ground_speed >= 20 knots)
     #[serde(rename = "active")]
@@ -132,9 +124,6 @@ impl Fix {
         // For now, use received_at as the packet timestamp
         let timestamp = received_at;
 
-        // Calculate lag (difference between received_at and timestamp in milliseconds)
-        let lag = Some((received_at - timestamp).num_milliseconds() as i32);
-
         // Extract source, aprs_type, and via from packet header
         let source = packet.from.to_string();
         let aprs_type = packet.to.to_string();
@@ -158,12 +147,7 @@ impl Fix {
                 let mut address_type = AddressType::Unknown;
                 let mut aircraft_type_ogn = None;
                 let flight_number = pos_packet.comment.flight_number.clone();
-                let emitter_category = pos_packet
-                    .comment
-                    .adsb_emitter_category
-                    .and_then(|cat| cat.to_string().parse().ok());
                 let registration = None;
-                let model = None;
                 let squawk = pos_packet.comment.squawk.clone();
                 let climb_fpm = pos_packet.comment.climb_rate.map(|c| c as i32);
                 let turn_rate_rot = pos_packet
@@ -218,7 +202,6 @@ impl Fix {
                     source,
                     aprs_type,
                     via,
-                    raw_packet: packet.raw.unwrap_or_default(),
                     timestamp,
                     latitude,
                     longitude,
@@ -228,9 +211,7 @@ impl Fix {
                     address_type,
                     aircraft_type_ogn,
                     flight_number,
-                    emitter_category,
                     registration,
-                    model,
                     squawk,
                     ground_speed_knots,
                     track_degrees,
@@ -245,10 +226,9 @@ impl Fix {
                     unparsed_data: pos_packet.comment.unparsed.clone(),
                     device_id,
                     received_at,
-                    lag,
                     is_active,
                     receiver_id: None,     // Will be set during fix insertion
-                    aprs_message_id: None, // Will be populated during data migration
+                    aprs_message_id: None, // Will be populated during fix processing
                 }))
             }
             _ => {

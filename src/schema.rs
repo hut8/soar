@@ -208,6 +208,7 @@ diesel::table! {
     use diesel::sql_types::*;
     use super::sql_types::AddressType;
     use super::sql_types::AircraftTypeOgn;
+    use super::sql_types::AdsbEmitterCategory;
 
     devices (id) {
         address -> Int4,
@@ -227,6 +228,9 @@ diesel::table! {
         aircraft_type_ogn -> Nullable<AircraftTypeOgn>,
         last_fix_at -> Nullable<Timestamptz>,
         club_id -> Nullable<Uuid>,
+        #[max_length = 8]
+        icao_model_code -> Nullable<Varchar>,
+        adsb_emitter_category -> Nullable<AdsbEmitterCategory>,
     }
 }
 
@@ -235,7 +239,6 @@ diesel::table! {
     use super::sql_types::Geography;
     use super::sql_types::AddressType;
     use super::sql_types::AircraftTypeOgn;
-    use super::sql_types::AdsbEmitterCategory;
 
     fixes (id) {
         id -> Uuid,
@@ -244,7 +247,6 @@ diesel::table! {
         #[max_length = 9]
         aprs_type -> Varchar,
         via -> Array<Nullable<Text>>,
-        raw_packet -> Text,
         timestamp -> Timestamptz,
         latitude -> Float8,
         longitude -> Float8,
@@ -254,11 +256,8 @@ diesel::table! {
         aircraft_type_ogn -> Nullable<AircraftTypeOgn>,
         #[max_length = 20]
         flight_number -> Nullable<Varchar>,
-        emitter_category -> Nullable<AdsbEmitterCategory>,
         #[max_length = 10]
         registration -> Nullable<Varchar>,
-        #[max_length = 50]
-        model -> Nullable<Varchar>,
         #[max_length = 4]
         squawk -> Nullable<Varchar>,
         ground_speed_knots -> Nullable<Float4>,
@@ -272,7 +271,6 @@ diesel::table! {
         unparsed_data -> Nullable<Varchar>,
         device_id -> Uuid,
         received_at -> Timestamptz,
-        lag -> Nullable<Int4>,
         device_address -> Int4,
         is_active -> Bool,
         altitude_agl -> Nullable<Int4>,
@@ -306,8 +304,6 @@ diesel::table! {
         device_address -> Varchar,
         takeoff_time -> Nullable<Timestamptz>,
         landing_time -> Nullable<Timestamptz>,
-        #[max_length = 5]
-        tow_aircraft_id -> Nullable<Varchar>,
         tow_release_height_msl -> Nullable<Int4>,
         club_id -> Nullable<Uuid>,
         created_at -> Timestamptz,
@@ -588,7 +584,6 @@ diesel::joinable!(fixes -> flights (flight_id));
 diesel::joinable!(fixes -> receivers (receiver_id));
 diesel::joinable!(flight_pilots -> flights (flight_id));
 diesel::joinable!(flight_pilots -> pilots (pilot_id));
-diesel::joinable!(flights -> aircraft_registrations (tow_aircraft_id));
 diesel::joinable!(flights -> clubs (club_id));
 diesel::joinable!(pilots -> clubs (club_id));
 diesel::joinable!(receiver_statuses -> aprs_messages (aprs_message_id));

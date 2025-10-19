@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::fixes::Fix;
 use crate::ogn_aprs_aircraft::{
-    AddressType as ForeignAddressType, AdsbEmitterCategory, AircraftType as ForeignAircraftType,
+    AddressType as ForeignAddressType, AircraftType as ForeignAircraftType,
 };
 use crate::web::PgPool;
 
@@ -108,7 +108,6 @@ struct FixDslRow {
     source: String,
     aprs_type: String,
     via: Vec<Option<String>>, // NOT NULL array that can contain NULL elements
-    raw_packet: String,
     timestamp: DateTime<Utc>,
     latitude: f64,
     longitude: f64,
@@ -118,9 +117,7 @@ struct FixDslRow {
     address_type: AddressType,
     aircraft_type_ogn: Option<AircraftTypeOgn>,
     flight_number: Option<String>,
-    emitter_category: Option<AdsbEmitterCategory>,
     registration: Option<String>,
-    model: Option<String>,
     squawk: Option<String>,
     ground_speed_knots: Option<f32>,
     track_degrees: Option<f32>,
@@ -135,7 +132,6 @@ struct FixDslRow {
     unparsed_data: Option<String>,
     device_id: Uuid,
     received_at: DateTime<Utc>,
-    lag: Option<i32>,
     is_active: bool,
     receiver_id: Option<Uuid>,
     aprs_message_id: Option<Uuid>,
@@ -148,10 +144,8 @@ impl From<FixDslRow> for Fix {
             source: row.source,
             aprs_type: row.aprs_type,
             via: row.via, // Now directly a Vec<Option<String>>
-            raw_packet: row.raw_packet,
             timestamp: row.timestamp,
             received_at: row.received_at,
-            lag: row.lag,
             latitude: row.latitude,
             longitude: row.longitude,
             altitude_msl_feet: row.altitude_msl_feet,
@@ -161,9 +155,7 @@ impl From<FixDslRow> for Fix {
             aircraft_type_ogn: row.aircraft_type_ogn.map(|t| t.into()),
             flight_id: row.flight_id,
             flight_number: row.flight_number,
-            emitter_category: row.emitter_category,
             registration: row.registration,
-            model: row.model,
             squawk: row.squawk,
             ground_speed_knots: row.ground_speed_knots,
             track_degrees: row.track_degrees,
@@ -627,9 +619,11 @@ impl FixesRepository {
                     frequency_mhz: row.frequency_mhz,
                     pilot_name: row.pilot_name,
                     home_base_airport_ident: row.home_base_airport_ident,
-                    aircraft_type_ogn: None, // Not loaded in this query
-                    last_fix_at: None,       // Not loaded in this query
-                    club_id: None,           // Not loaded in this query
+                    aircraft_type_ogn: None,        // Not loaded in this query
+                    last_fix_at: None,              // Not loaded in this query
+                    club_id: None,                  // Not loaded in this query
+                    icao_model_code: None,          // Not loaded in this query
+                    adsb_emitter_category: None,    // Not loaded in this query
                 })
                 .collect();
 
@@ -661,8 +655,6 @@ impl FixesRepository {
                 aprs_type: String,
                 #[diesel(sql_type = diesel::sql_types::Array<diesel::sql_types::Nullable<diesel::sql_types::Text>>)]
                 via: Vec<Option<String>>,
-                #[diesel(sql_type = diesel::sql_types::Text)]
-                raw_packet: String,
                 #[diesel(sql_type = diesel::sql_types::Timestamptz)]
                 timestamp: DateTime<Utc>,
                 #[diesel(sql_type = diesel::sql_types::Double)]
@@ -681,12 +673,8 @@ impl FixesRepository {
                 aircraft_type_ogn: Option<AircraftTypeOgn>,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
                 flight_number: Option<String>,
-                #[diesel(sql_type = diesel::sql_types::Nullable<crate::schema::sql_types::AdsbEmitterCategory>)]
-                emitter_category: Option<AdsbEmitterCategory>,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
                 registration: Option<String>,
-                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
-                model: Option<String>,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
                 squawk: Option<String>,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float4>)]
@@ -715,8 +703,6 @@ impl FixesRepository {
                 device_id: uuid::Uuid,
                 #[diesel(sql_type = diesel::sql_types::Timestamptz)]
                 received_at: DateTime<Utc>,
-                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Int4>)]
-                lag: Option<i32>,
                 #[diesel(sql_type = diesel::sql_types::Bool)]
                 is_active: bool,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
@@ -743,10 +729,8 @@ impl FixesRepository {
                     source: fix_row.source,
                     aprs_type: fix_row.aprs_type,
                     via: fix_row.via,
-                    raw_packet: fix_row.raw_packet,
                     timestamp: fix_row.timestamp,
                     received_at: fix_row.received_at,
-                    lag: fix_row.lag,
                     latitude: fix_row.latitude,
                     longitude: fix_row.longitude,
                     altitude_msl_feet: fix_row.altitude_msl_feet,
@@ -756,9 +740,7 @@ impl FixesRepository {
                     aircraft_type_ogn: fix_row.aircraft_type_ogn.map(|t| t.into()),
                     flight_id: fix_row.flight_id,
                     flight_number: fix_row.flight_number,
-                    emitter_category: fix_row.emitter_category,
                     registration: fix_row.registration,
-                    model: fix_row.model,
                     squawk: fix_row.squawk,
                     ground_speed_knots: fix_row.ground_speed_knots,
                     track_degrees: fix_row.track_degrees,

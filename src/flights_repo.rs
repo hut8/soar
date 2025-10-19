@@ -347,29 +347,15 @@ impl FlightsRepository {
     }
 
     /// Get flights that used a specific tow aircraft
+    /// DEPRECATED: tow_aircraft_id column has been removed, use towed_by_device_id instead
+    #[allow(dead_code)]
     pub async fn get_flights_by_tow_aircraft(
         &self,
-        tow_aircraft_id_param: &str,
+        _tow_aircraft_id_param: &str,
     ) -> Result<Vec<Flight>> {
-        use crate::schema::flights::dsl::*;
-
-        let pool = self.pool.clone();
-        let tow_aircraft_id_val = tow_aircraft_id_param.to_string();
-
-        let results = tokio::task::spawn_blocking(move || {
-            let mut conn = pool.get()?;
-
-            let flight_models: Vec<FlightModel> = flights
-                .filter(tow_aircraft_id.eq(&Some(tow_aircraft_id_val)))
-                .order(takeoff_time.desc())
-                .select(FlightModel::as_select())
-                .load(&mut conn)?;
-
-            Ok::<Vec<FlightModel>, anyhow::Error>(flight_models)
-        })
-        .await??;
-
-        Ok(results.into_iter().map(|model| model.into()).collect())
+        // This method is deprecated and no longer functional
+        // Use get_flights_by_device instead with towed_by_device_id
+        Ok(vec![])
     }
 
     /// Get the total count of flights in the database
@@ -412,12 +398,14 @@ impl FlightsRepository {
     }
 
     /// Update flight details (departure/arrival airports, tow info)
+    /// DEPRECATED: tow_aircraft_id parameter removed
+    #[allow(dead_code)]
     pub async fn update_flight_details(
         &self,
         flight_id: Uuid,
         departure_airport_id_param: Option<i32>,
         arrival_airport_id_param: Option<i32>,
-        tow_aircraft_id_param: Option<String>,
+        _tow_aircraft_id_param: Option<String>,
         tow_release_height_msl_param: Option<i32>,
     ) -> Result<bool> {
         use crate::schema::flights::dsl::*;
@@ -431,7 +419,6 @@ impl FlightsRepository {
                 .set((
                     departure_airport_id.eq(&departure_airport_id_param),
                     arrival_airport_id.eq(&arrival_airport_id_param),
-                    tow_aircraft_id.eq(&tow_aircraft_id_param),
                     tow_release_height_msl.eq(&tow_release_height_msl_param),
                     updated_at.eq(Utc::now()),
                 ))
