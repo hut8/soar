@@ -178,11 +178,10 @@
 								<th>Aircraft</th>
 								<th>Type</th>
 								<th>Takeoff</th>
-								<th>Landing</th>
 								<th>Duration</th>
 								<th>Distance</th>
 								<th>Tow</th>
-								<th>Actions</th>
+								<th></th>
 							</tr>
 						</thead>
 						<tbody>
@@ -303,25 +302,6 @@
 											{/if}
 										</div>
 									</td>
-									<td>
-										<div class="flex flex-col gap-1">
-											<div class="flex items-center gap-1 text-sm">
-												<Clock class="h-3 w-3" />
-												{formatRelativeTime(flight.landing_time)}
-											</div>
-											{#if flight.landing_time}
-												<div class="text-surface-500-400-token text-xs">
-													{formatLocalTime(flight.landing_time)}
-												</div>
-											{/if}
-											{#if flight.arrival_airport}
-												<div class="text-surface-500-400-token flex items-center gap-1 text-xs">
-													<MapPin class="h-3 w-3" />
-													{flight.arrival_airport}
-												</div>
-											{/if}
-										</div>
-									</td>
 									<td class="font-semibold">
 										{calculateFlightDuration(flight.takeoff_time, flight.landing_time)}
 									</td>
@@ -347,7 +327,7 @@
 											href={`/flights/${flight.id}`}
 											target="_blank"
 											rel="noopener noreferrer"
-											class="preset-tonal-surface-500 btn flex items-center gap-1 btn-sm"
+											class="preset-filled-primary btn flex items-center gap-1 btn-sm"
 										>
 											<ExternalLink class="h-3 w-3" />
 											Open
@@ -383,7 +363,7 @@
 								<th>Duration</th>
 								<th>Distance</th>
 								<th>Tow</th>
-								<th>Actions</th>
+								<th></th>
 							</tr>
 						</thead>
 						<tbody>
@@ -551,7 +531,7 @@
 											href={`/flights/${flight.id}`}
 											target="_blank"
 											rel="noopener noreferrer"
-											class="preset-tonal-surface-500 btn flex items-center gap-1 btn-sm"
+											class="preset-filled-primary btn flex items-center gap-1 btn-sm"
 										>
 											<ExternalLink class="h-3 w-3" />
 											Open
