@@ -3,8 +3,27 @@ use chrono::Local;
 use diesel::PgConnection;
 use diesel::r2d2::ConnectionManager;
 use r2d2::Pool;
-use std::{fs, io};
+use std::{env, fs, io};
 use tracing::{info, warn};
+
+/// Get the data directory based on environment
+///
+/// In production (SOAR_ENV=production), uses /tmp/soar/data-{date}
+/// In development, uses ~/.cache/soar/data-{date}
+fn get_data_directory(date: &str) -> Result<String> {
+    let is_production = env::var("SOAR_ENV")
+        .map(|env| env == "production")
+        .unwrap_or(false);
+
+    if is_production {
+        Ok(format!("/tmp/soar/data-{}", date))
+    } else {
+        // Use ~/.cache/soar for development
+        let home_dir =
+            env::var("HOME").map_err(|_| anyhow::anyhow!("HOME environment variable not set"))?;
+        Ok(format!("{}/.cache/soar/data-{}", home_dir, date))
+    }
+}
 
 async fn download_with_retry(
     client: &reqwest::Client,
@@ -137,10 +156,10 @@ pub async fn handle_pull_data(diesel_pool: Pool<ConnectionManager<PgConnection>>
     info!("Starting pull-data operation");
 
     // Create temporary directory with date only (no time)
-    let date = Local::now().format("%Y%m%d");
-    let temp_dir = format!("/tmp/soar/data-{}", date);
+    let date = Local::now().format("%Y%m%d").to_string();
+    let temp_dir = get_data_directory(&date)?;
 
-    info!("Creating temporary directory: {}", temp_dir);
+    info!("Creating data directory: {}", temp_dir);
     fs::create_dir_all(&temp_dir)?;
 
     let client = reqwest::Client::new();
