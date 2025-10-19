@@ -216,6 +216,11 @@ pub async fn handle_pull_data(diesel_pool: Pool<ConnectionManager<PgConnection>>
     }
     info!("Aircraft registrations data extracted to: {}", master_path);
 
+    // Download unified FlarmNet database
+    let flarmnet_url = "https://turbo87.github.io/united-flarmnet/united.fln";
+    let flarmnet_path = format!("{}/united.fln", temp_dir);
+    download_text_file_atomically(&client, flarmnet_url, &flarmnet_path, max_retries).await?;
+
     // Display the temporary directory
     info!("Data directory located at: {}", temp_dir);
 
@@ -228,7 +233,7 @@ pub async fn handle_pull_data(diesel_pool: Pool<ConnectionManager<PgConnection>>
         Some(airports_path),
         Some(runways_path),
         Some(receivers_path),
-        true,
+        Some(flarmnet_path),
         true,
         true,
     )

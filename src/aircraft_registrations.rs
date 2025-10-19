@@ -626,6 +626,7 @@ pub struct AircraftRegistrationModel {
     pub registrant_type_code: Option<RegistrantType>,
     pub light_sport_type: Option<LightSportType>,
     pub aircraft_type: Option<AircraftType>,
+    pub club_id: Option<Uuid>,
 }
 
 // Insertable model for new aircraft registrations (without generated fields)
@@ -659,6 +660,7 @@ pub struct NewAircraftRegistration {
     pub kit_model_name: Option<String>,
     pub device_id: Option<Uuid>,
     pub light_sport_type: Option<LightSportType>,
+    pub club_id: Option<Uuid>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1332,6 +1334,7 @@ impl From<Aircraft> for NewAircraftRegistration {
             kit_model_name: aircraft.kit_model_name,
             device_id: aircraft.device_id,
             light_sport_type: aircraft.light_sport_type,
+            club_id: None, // Will be set in repository based on club_name() logic
         }
     }
 }

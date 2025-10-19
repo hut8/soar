@@ -10,7 +10,7 @@ use crate::airports::read_airports_csv_file;
 use crate::airports_repo::AirportsRepository;
 use crate::clubs_repo::ClubsRepository;
 use crate::device_repo::DeviceRepository;
-use crate::devices::DeviceFetcher;
+use crate::devices::read_flarmnet_file;
 use crate::faa::aircraft_model_repo::AircraftModelRepository;
 use crate::faa::aircraft_models::read_aircraft_models_file;
 use crate::geocoding::geocode_components;
@@ -29,7 +29,7 @@ pub async fn handle_load_data(
     airports_path: Option<String>,
     runways_path: Option<String>,
     receivers_path: Option<String>,
-    pull_devices: bool,
+    devices_path: Option<String>,
     geocode: bool,
     link_home_bases: bool,
 ) -> Result<()> {
@@ -37,13 +37,13 @@ pub async fn handle_load_data(
         scope.set_tag("operation", "load-data");
     });
     info!(
-        "Loading data - Models: {:?}, Registrations: {:?}, Airports: {:?}, Runways: {:?}, Receivers: {:?}, Pull Devices: {}, Geocode: {}",
+        "Loading data - Models: {:?}, Registrations: {:?}, Airports: {:?}, Runways: {:?}, Receivers: {:?}, Devices: {:?}, Geocode: {}",
         aircraft_models_path,
         aircraft_registrations_path,
         airports_path,
         runways_path,
         receivers_path,
-        pull_devices,
+        devices_path,
         geocode
     );
 
@@ -279,23 +279,16 @@ pub async fn handle_load_data(
         info!("Skipping receivers - no path provided");
     }
 
-    // Pull devices if requested
-    if pull_devices {
-        info!("Pulling devices from unified FlarmNet...");
-
-        // Create device fetcher and fetch devices from unified FlarmNet
-        let device_fetcher = DeviceFetcher::new();
-
-        match device_fetcher.fetch_unified_flarmnet().await {
+    // Load devices (if provided)
+    if let Some(ref devices_path) = devices_path {
+        info!("Loading devices from: {}", devices_path);
+        match read_flarmnet_file(devices_path) {
             Ok(devices) => {
                 let device_count = devices.len();
-                info!(
-                    "Successfully fetched {} devices from unified FlarmNet",
-                    device_count
-                );
+                info!("Successfully loaded {} devices", device_count);
 
                 if device_count == 0 {
-                    info!("No devices found in unified FlarmNet response");
+                    info!("No devices found in FlarmNet file");
                 } else {
                     // Create device repository and upsert devices
                     let device_repo = DeviceRepository::new(diesel_pool.clone());
@@ -314,6 +307,18 @@ pub async fn handle_load_data(
                                     error!("Failed to get device count: {}", e);
                                 }
                             }
+
+                            // Copy club_id from aircraft_registrations to devices based on registration number
+                            info!("Linking devices to clubs based on aircraft registrations...");
+                            match link_devices_to_clubs(&diesel_pool).await {
+                                Ok(linked_count) => {
+                                    info!("Successfully linked {} devices to clubs", linked_count);
+                                }
+                                Err(e) => {
+                                    error!("Failed to link devices to clubs: {}", e);
+                                    // Don't return error - this is not critical for data loading
+                                }
+                            }
                         }
                         Err(e) => {
                             error!("Failed to upsert devices: {}", e);
@@ -323,15 +328,12 @@ pub async fn handle_load_data(
                 }
             }
             Err(e) => {
-                error!("Failed to fetch devices from unified FlarmNet: {}", e);
-                return Err(anyhow::anyhow!(
-                    "Failed to fetch devices from unified FlarmNet: {}",
-                    e
-                ));
+                error!("Failed to read devices file: {}", e);
+                return Err(e);
             }
         }
     } else {
-        info!("Skipping device pull - not requested");
+        info!("Skipping devices - no path provided");
     }
 
     // Geocode locations if requested
@@ -635,8 +637,8 @@ pub async fn handle_load_data(
         info!("Skipping home base linking - not requested");
     }
 
-    // Link aircraft to devices if either devices were pulled or aircraft were loaded
-    if pull_devices || aircraft_registrations_path.is_some() {
+    // Link aircraft to devices if either devices were loaded or aircraft were loaded
+    if devices_path.is_some() || aircraft_registrations_path.is_some() {
         info!("Linking aircraft to devices based on registration numbers...");
 
         match link_aircraft_to_devices(&diesel_pool).await {
@@ -649,7 +651,7 @@ pub async fn handle_load_data(
             }
         }
     } else {
-        info!("Skipping aircraft-device linking - no devices pulled and no aircraft loaded");
+        info!("Skipping aircraft-device linking - no devices loaded and no aircraft loaded");
     }
 
     Ok(())
@@ -683,4 +685,48 @@ async fn link_aircraft_to_devices(
     info!("Linked {} aircraft to devices", linked_count);
 
     Ok(linked_count)
+}
+
+/// Link devices to clubs by copying club_id from aircraft_registrations based on registration number
+/// Only updates devices that match an aircraft registration with a non-null club_id
+async fn link_devices_to_clubs(diesel_pool: &Pool<ConnectionManager<PgConnection>>) -> Result<u32> {
+    info!("Starting device-club linking process...");
+
+    use crate::schema::{aircraft_registrations, devices};
+    use diesel::prelude::*;
+
+    let mut conn = diesel_pool.get()?;
+
+    // Load all aircraft registrations with club_id
+    let aircraft_with_clubs: Vec<(String, uuid::Uuid)> = aircraft_registrations::table
+        .select((
+            aircraft_registrations::registration_number,
+            aircraft_registrations::club_id,
+        ))
+        .filter(aircraft_registrations::club_id.is_not_null())
+        .load::<(String, Option<uuid::Uuid>)>(&mut conn)?
+        .into_iter()
+        .filter_map(|(reg, club_id)| club_id.map(|id| (reg, id)))
+        .collect();
+
+    info!(
+        "Found {} aircraft registrations with club associations",
+        aircraft_with_clubs.len()
+    );
+
+    let mut linked_count = 0;
+
+    // Update devices in batches
+    for (registration, club_id) in aircraft_with_clubs {
+        let updated = diesel::update(devices::table)
+            .filter(devices::registration.eq(&registration))
+            .set(devices::club_id.eq(club_id))
+            .execute(&mut conn)?;
+
+        linked_count += updated;
+    }
+
+    info!("Linked {} devices to clubs", linked_count);
+
+    Ok(linked_count as u32)
 }

@@ -47,11 +47,12 @@ enum Commands {
         #[arg(long)]
         static_root: Option<String>,
     },
-    /// Load aircraft model and registration data, receivers, and optionally pull devices from DDB
+    /// Load aircraft model and registration data, receivers, and devices from files
     ///
     /// Aircraft registrations and models should come from the "releasable aircraft" FAA database.
     /// Airports and runways should come from "our airports" database.
     /// Receivers JSON file can be created from <https://github.com/hut8/ogn-rdb>
+    /// Devices file should be the unified FlarmNet database from <https://turbo87.github.io/united-flarmnet/united.fln>
     LoadData {
         /// Path to the aircraft model data file (from ACFTREF.txt in the "releasable aircraft" FAA database
         /// <https://www.faa.gov/licenses_certificates/aircraft_certification/aircraft_registry/releasable_aircraft_download>)
@@ -74,9 +75,9 @@ enum Commands {
         /// Path to the receivers JSON file (can be created from <https://github.com/hut8/ogn-rdb>)
         #[arg(long)]
         receivers: Option<String>,
-        /// Also pull devices from DDB (Device Database) and upsert them into the database
+        /// Path to the devices file (unified FlarmNet database from <https://turbo87.github.io/united-flarmnet/united.fln>)
         #[arg(long)]
-        pull_devices: bool,
+        devices: Option<String>,
         /// Geocode registered addresses of aircraft belonging to clubs that haven't been geocoded yet
         #[arg(long)]
         geocode: bool,
@@ -655,7 +656,7 @@ async fn main() -> Result<()> {
             airports,
             runways,
             receivers,
-            pull_devices,
+            devices,
             geocode,
             link_home_bases,
         } => {
@@ -666,7 +667,7 @@ async fn main() -> Result<()> {
                 airports,
                 runways,
                 receivers,
-                pull_devices,
+                devices,
                 geocode,
                 link_home_bases,
             )

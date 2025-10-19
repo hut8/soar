@@ -128,6 +128,7 @@ diesel::table! {
         registrant_type_code -> Nullable<RegistrantType>,
         light_sport_type -> Nullable<LightSportType>,
         aircraft_type -> Nullable<AircraftType>,
+        club_id -> Nullable<Uuid>,
     }
 }
 
@@ -570,6 +571,7 @@ diesel::table! {
 diesel::joinable!(aircraft_approved_operations -> aircraft_registrations (aircraft_registration_id));
 diesel::joinable!(aircraft_other_names -> aircraft_registrations (registration_number));
 diesel::joinable!(aircraft_registrations -> airports (home_base_airport_id));
+diesel::joinable!(aircraft_registrations -> clubs (club_id));
 diesel::joinable!(aircraft_registrations -> devices (device_id));
 diesel::joinable!(aircraft_registrations -> locations (location_id));
 diesel::joinable!(aircraft_registrations -> status_codes (status_code));

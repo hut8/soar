@@ -382,6 +382,87 @@ pub enum DeviceSearchCriteria {
     },
 }
 
+/// Read and decode unified FlarmNet file from disk
+pub fn read_flarmnet_file(path: &str) -> Result<Vec<Device>> {
+    info!("Reading unified FlarmNet file from: {}", path);
+
+    let content = std::fs::read_to_string(path)
+        .map_err(|e| anyhow::anyhow!("Failed to read FlarmNet file {}: {}", path, e))?;
+
+    match flarmnet::xcsoar::decode_file(&content) {
+        Ok(decoded) => {
+            info!(
+                "Successfully decoded unified FlarmNet file with {} total records",
+                decoded.records.len()
+            );
+
+            let reg_parser = flydent::Parser::new();
+
+            // Convert FlarmNet records to Device structs
+            let devices: Vec<Device> = decoded
+                .records
+                .into_iter()
+                .filter_map(|result| {
+                    match result {
+                        Ok(record) => {
+                            // Parse FLARM ID as hex address
+                            let address = u32::from_str_radix(&record.flarm_id, 16).ok()?;
+
+                            // Normalize registration using flydent parser
+                            let registration =
+                                match reg_parser.parse(&record.registration, false, false) {
+                                    Some(r) => r.canonical_callsign().to_string(),
+                                    None => String::new(),
+                                };
+
+                            Some(Device {
+                                id: None, // Will be set by database
+                                address_type: AddressType::Flarm,
+                                address,
+                                aircraft_model: record.plane_type,
+                                registration,
+                                competition_number: record.call_sign,
+                                tracked: true,
+                                identified: true,
+                                frequency_mhz: record.frequency.parse().ok(),
+                                pilot_name: if record.pilot_name.is_empty() {
+                                    None
+                                } else {
+                                    Some(record.pilot_name)
+                                },
+                                home_base_airport_ident: if record.airfield.is_empty() {
+                                    None
+                                } else {
+                                    Some(record.airfield)
+                                },
+                                aircraft_type_ogn: None, // Not provided in FlarmNet
+                                last_fix_at: None,
+                                club_id: None,
+                                icao_model_code: None,
+                                adsb_emitter_category: None,
+                            })
+                        }
+                        Err(e) => {
+                            warn!("Skipping record due to decode error: {}", e);
+                            None
+                        }
+                    }
+                })
+                .collect();
+
+            info!(
+                "Successfully converted {} unified FlarmNet records to devices",
+                devices.len()
+            );
+            Ok(devices)
+        }
+        Err(e) => {
+            warn!("Failed to decode unified FlarmNet file: {}", e);
+            Err(anyhow::anyhow!("FlarmNet decode error: {}", e))
+        }
+    }
+}
+
 impl DeviceFetcher {
     pub fn new() -> Self {
         Self

@@ -6,6 +6,7 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use crate::aircraft_registrations::{Aircraft, AircraftRegistrationModel, NewAircraftRegistration};
+use crate::clubs_repo::ClubsRepository;
 use crate::locations_repo::LocationsRepository;
 use crate::schema::{aircraft_approved_operations, aircraft_other_names, aircraft_registrations};
 
@@ -73,13 +74,49 @@ impl AircraftRegistrationsRepository {
                 }
             };
 
-            // TODO: Club detection from FAA data is temporarily disabled since club_id
-            // moved from aircraft_registrations to devices table. This logic needs to be
-            // refactored to work with the new schema where clubs are associated with devices.
+            // Detect if this aircraft is registered to a soaring club and link it
+            let club_id = if let Some(club_name) = aircraft_reg.club_name() {
+                let clubs_repo = ClubsRepository::new(self.pool.clone());
 
-            // Create NewAircraftRegistration with location_id
+                // Use the aircraft's registration location for the club
+                let location_params = crate::clubs_repo::LocationParams {
+                    street1: aircraft_reg.street1.clone(),
+                    street2: aircraft_reg.street2.clone(),
+                    city: aircraft_reg.city.clone(),
+                    state: aircraft_reg.state.clone(),
+                    zip_code: aircraft_reg.zip_code.clone(),
+                    region_code: aircraft_reg.region_code.clone(),
+                    county_mail_code: aircraft_reg.county_mail_code.clone(),
+                    country_mail_code: aircraft_reg.country_mail_code.clone(),
+                };
+
+                match clubs_repo
+                    .find_or_create_club(&club_name, location_params)
+                    .await
+                {
+                    Ok(club) => {
+                        info!(
+                            "Linked aircraft {} to club: {} ({})",
+                            aircraft_reg.n_number, club.name, club.id
+                        );
+                        Some(club.id)
+                    }
+                    Err(e) => {
+                        warn!(
+                            "Failed to find/create club '{}' for aircraft {}: {}",
+                            club_name, aircraft_reg.n_number, e
+                        );
+                        None
+                    }
+                }
+            } else {
+                None
+            };
+
+            // Create NewAircraftRegistration with location_id and club_id
             let mut new_aircraft_reg: NewAircraftRegistration = aircraft_reg.clone().into();
             new_aircraft_reg.location_id = Some(location.id);
+            new_aircraft_reg.club_id = club_id;
             let result = diesel::insert_into(aircraft_registrations::table)
                 .values(&new_aircraft_reg)
                 .on_conflict(aircraft_registrations::registration_number)
@@ -136,6 +173,7 @@ impl AircraftRegistrationsRepository {
                         .eq(excluded(aircraft_registrations::device_id)),
                     aircraft_registrations::light_sport_type
                         .eq(excluded(aircraft_registrations::light_sport_type)),
+                    aircraft_registrations::club_id.eq(excluded(aircraft_registrations::club_id)),
                 ))
                 .execute(&mut conn);
 
