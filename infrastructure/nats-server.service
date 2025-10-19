@@ -23,4 +23,3 @@ Group=daemon
 
 [Install]
 WantedBy=multi-user.target
-
