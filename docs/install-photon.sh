@@ -62,14 +62,13 @@ fi
 print_info "Creating directory structure..."
 mkdir -p /opt/photon
 mkdir -p /var/lib/photon
-mkdir -p /var/log/photon
 
 # Set ownership
 chown -R photon:photon /opt/photon
 chown -R photon:photon /var/lib/photon
-chown -R photon:photon /var/log/photon
 
 print_info "Directories created and permissions set"
+print_info "Logs will be managed by journald (no separate log directory needed)"
 
 # Step 4: Download Photon JAR
 print_info "Downloading Photon ${PHOTON_VERSION}..."
@@ -115,8 +114,9 @@ ExecStart=/usr/bin/java \${JAVA_OPTS} -jar /opt/photon/photon.jar \\
     -listen-port 2322 \\
     -cors-any
 
-StandardOutput=append:/var/log/photon/photon.log
-StandardError=append:/var/log/photon/photon-error.log
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=photon
 
 Restart=on-failure
 RestartSec=10s
@@ -127,35 +127,15 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/photon /var/log/photon
+ReadWritePaths=/var/lib/photon
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-print_info "Systemd service file created"
+print_info "Systemd service file created (logs to journald)"
 
-# Step 6: Setup log rotation
-print_info "Setting up log rotation..."
-cat > /etc/logrotate.d/photon << EOF
-/var/log/photon/*.log {
-    daily
-    rotate 14
-    compress
-    delaycompress
-    missingok
-    notifempty
-    create 0640 photon photon
-    sharedscripts
-    postrotate
-        systemctl reload photon > /dev/null 2>&1 || true
-    endscript
-}
-EOF
-
-print_info "Log rotation configured"
-
-# Step 7: Reload systemd
+# Step 6: Reload systemd
 print_info "Reloading systemd daemon..."
 systemctl daemon-reload
 
@@ -178,10 +158,12 @@ print_info ""
 print_info "2. Start the service:"
 print_info "   sudo systemctl start photon"
 print_info ""
-print_info "3. Check status:"
+print_info "3. Check status and logs:"
 print_info "   sudo systemctl status photon"
+print_info "   sudo journalctl -u photon -f"
 print_info ""
 print_info "4. Test the service:"
 print_info "   curl 'http://localhost:2322/api?q=Berlin'"
 print_info ""
+print_info "Note: Logs are managed by journald. Use 'journalctl -u photon' to view them."
 print_info "For more information, see: docs/photon-deployment.md"

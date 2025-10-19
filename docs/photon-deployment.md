@@ -53,14 +53,12 @@ sudo mkdir -p /opt/photon
 # Data directory (for OpenSearch data)
 sudo mkdir -p /var/lib/photon
 
-# Log directory
-sudo mkdir -p /var/log/photon
-
 # Set ownership
 sudo chown -R photon:photon /opt/photon
 sudo chown -R photon:photon /var/lib/photon
-sudo chown -R photon:photon /var/log/photon
 ```
+
+Note: Logs are automatically managed by journald, so no separate log directory is needed.
 
 ### 4. Download Photon
 
@@ -141,9 +139,11 @@ ExecStart=/usr/bin/java ${JAVA_OPTS} -jar /opt/photon/photon.jar \
     -listen-port 2322 \
     -cors-any
 
-# Logging
-StandardOutput=append:/var/log/photon/photon.log
-StandardError=append:/var/log/photon/photon-error.log
+# Logging to journald (systemd's logging system)
+# View logs with: journalctl -u photon -f
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=photon
 
 # Restart policy
 Restart=on-failure
@@ -157,7 +157,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/photon /var/log/photon
+ReadWritePaths=/var/lib/photon
 
 [Install]
 WantedBy=multi-user.target
@@ -224,20 +224,35 @@ sudo systemctl status photon
 
 ### Monitor Logs
 
+Photon logs to journald (systemd's logging system). Use `journalctl` to view logs:
+
 ```bash
-# View live logs
+# View live logs (follow mode)
 sudo journalctl -u photon -f
 
-# View recent logs
+# View recent logs (last 100 lines)
 sudo journalctl -u photon -n 100
 
 # View logs from specific time
 sudo journalctl -u photon --since "1 hour ago"
+sudo journalctl -u photon --since "2025-01-15 10:00:00"
 
-# Check log files directly
-sudo tail -f /var/log/photon/photon.log
-sudo tail -f /var/log/photon/photon-error.log
+# View logs with priority (errors only)
+sudo journalctl -u photon -p err
+
+# Search logs for specific text
+sudo journalctl -u photon | grep "error"
+
+# Export logs to file
+sudo journalctl -u photon > photon-logs.txt
 ```
+
+**Journald advantages:**
+- Automatic log rotation and retention management
+- Integrated with systemd status
+- Efficient storage with compression
+- Advanced filtering and searching capabilities
+- No need for separate log rotation configuration
 
 ### Restart/Stop Service
 
@@ -419,24 +434,32 @@ else
 fi
 ```
 
-### Log Rotation
+### Log Retention
 
-Create `/etc/logrotate.d/photon`:
+Journald automatically manages log rotation and retention. To configure retention settings, edit `/etc/systemd/journald.conf`:
 
+```ini
+[Journal]
+# Keep logs for 30 days
+MaxRetentionSec=30d
+
+# Limit journal size to 1GB
+SystemMaxUse=1G
+
+# Limit individual log file size
+SystemMaxFileSize=100M
 ```
-/var/log/photon/*.log {
-    daily
-    rotate 14
-    compress
-    delaycompress
-    missingok
-    notifempty
-    create 0640 photon photon
-    sharedscripts
-    postrotate
-        systemctl reload photon > /dev/null 2>&1 || true
-    endscript
-}
+
+After changing journald configuration, restart the service:
+
+```bash
+sudo systemctl restart systemd-journald
+```
+
+View current journal disk usage:
+
+```bash
+journalctl --disk-usage
 ```
 
 ## Resources
@@ -452,8 +475,9 @@ This deployment guide provides a production-ready setup for Photon using systemd
 
 - Run as a dedicated `photon` user
 - Store data in `/var/lib/photon`
-- Log to `/var/log/photon`
+- Log to journald (systemd's integrated logging)
 - Automatically restart on failure
 - Start on system boot
+- Include security hardening with systemd protections
 
 Adjust memory settings and configuration based on your specific requirements and available resources.

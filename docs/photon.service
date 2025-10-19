@@ -27,9 +27,11 @@ ExecStart=/usr/bin/java ${JAVA_OPTS} -jar /opt/photon/photon.jar \
     -listen-port 2322 \
     -cors-any
 
-# Logging
-StandardOutput=append:/var/log/photon/photon.log
-StandardError=append:/var/log/photon/photon-error.log
+# Logging to journald (systemd's logging system)
+# View logs with: journalctl -u photon -f
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=photon
 
 # Restart policy
 Restart=on-failure
@@ -43,7 +45,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/photon /var/log/photon
+ReadWritePaths=/var/lib/photon
 
 [Install]
 WantedBy=multi-user.target
