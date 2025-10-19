@@ -281,27 +281,21 @@ pub async fn handle_load_data(
 
     // Pull devices if requested
     if pull_devices {
-        info!("Pulling devices from DDB...");
+        info!("Pulling devices from unified FlarmNet...");
 
-        // Create device fetcher and fetch devices
+        // Create device fetcher and fetch devices from unified FlarmNet
         let device_fetcher = DeviceFetcher::new();
 
-        // Fetch unified FlarmNet in parallel (just for testing/logging for now)
-        // This will be used to replace the existing FlarmNet source in the future
-        tokio::spawn(async move {
-            let fetcher = DeviceFetcher::new();
-            if let Err(e) = fetcher.fetch_unified_flarmnet().await {
-                warn!("Unified FlarmNet fetch/decode failed: {}", e);
-            }
-        });
-
-        match device_fetcher.fetch_all().await {
+        match device_fetcher.fetch_unified_flarmnet().await {
             Ok(devices) => {
                 let device_count = devices.len();
-                info!("Successfully fetched {} devices from DDB", device_count);
+                info!(
+                    "Successfully fetched {} devices from unified FlarmNet",
+                    device_count
+                );
 
                 if device_count == 0 {
-                    info!("No devices found in DDB response");
+                    info!("No devices found in unified FlarmNet response");
                 } else {
                     // Create device repository and upsert devices
                     let device_repo = DeviceRepository::new(diesel_pool.clone());
@@ -329,8 +323,11 @@ pub async fn handle_load_data(
                 }
             }
             Err(e) => {
-                error!("Failed to fetch devices from DDB: {}", e);
-                return Err(anyhow::anyhow!("Failed to fetch devices from DDB: {}", e));
+                error!("Failed to fetch devices from unified FlarmNet: {}", e);
+                return Err(anyhow::anyhow!(
+                    "Failed to fetch devices from unified FlarmNet: {}",
+                    e
+                ));
             }
         }
     } else {
