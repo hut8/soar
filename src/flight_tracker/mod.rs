@@ -33,15 +33,15 @@ pub(crate) struct CurrentFlightState {
     pub last_fix_timestamp: DateTime<Utc>,
     /// Wall-clock time when we last updated this flight state
     pub last_update_time: DateTime<Utc>,
-    /// History of the last 3 fixes' is_active status (most recent last)
-    /// Used to detect takeoff (inactive -> active transition)
+    /// History of the last 5 fixes' is_active status (most recent last)
+    /// Used to detect takeoff (inactive -> active transition) and landing debounce
     pub recent_fix_history: VecDeque<bool>,
 }
 
 impl CurrentFlightState {
     /// Create a new CurrentFlightState with initial fix activity
     pub fn new(flight_id: Uuid, fix_timestamp: DateTime<Utc>, is_active: bool) -> Self {
-        let mut history = VecDeque::with_capacity(3);
+        let mut history = VecDeque::with_capacity(5);
         history.push_back(is_active);
         Self {
             flight_id,
@@ -56,11 +56,16 @@ impl CurrentFlightState {
         self.last_fix_timestamp = fix_timestamp;
         self.last_update_time = Utc::now();
 
-        // Keep only last 3 fixes
-        if self.recent_fix_history.len() >= 3 {
+        // Keep only last 5 fixes
+        if self.recent_fix_history.len() >= 5 {
             self.recent_fix_history.pop_front();
         }
         self.recent_fix_history.push_back(is_active);
+    }
+
+    /// Check if we have 5 consecutive inactive fixes (for landing debounce)
+    pub fn has_five_consecutive_inactive(&self) -> bool {
+        self.recent_fix_history.len() >= 5 && self.recent_fix_history.iter().all(|&active| !active)
     }
 }
 
