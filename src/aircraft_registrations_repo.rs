@@ -43,127 +43,17 @@ impl AircraftRegistrationsRepository {
         use std::collections::HashMap;
         use std::time::Instant;
 
-        // Type aliases to reduce complexity
-        type LocationKey = (String, String, String, String, String, String);
-        type LocationData = (
-            String,
-            String,
-            String,
-            String,
-            String,
-            String,
-            String,
-            String,
-        );
-
         let aircraft_vec: Vec<Aircraft> = aircraft.into_iter().collect();
         let total_count = aircraft_vec.len();
         info!("Starting import of {} aircraft registrations", total_count);
 
         let start_time = Instant::now();
 
-        // PHASE 1: Build caches for locations and clubs
-        info!("Building location and club caches...");
-
-        // Build location cache - key is (street1, street2, city, state, zip, country)
-        let mut location_cache: HashMap<LocationKey, Uuid> = HashMap::new();
+        // PHASE 1: Build club cache
+        info!("Building club cache...");
 
         // Build club cache - key is club_name
         let mut club_cache: HashMap<String, Uuid> = HashMap::new();
-
-        // Collect unique locations
-        let mut unique_locations: Vec<LocationData> = Vec::new();
-        let mut location_set: std::collections::HashSet<LocationKey> =
-            std::collections::HashSet::new();
-
-        for aircraft_reg in &aircraft_vec {
-            let key = (
-                aircraft_reg.street1.clone().unwrap_or_default(),
-                aircraft_reg.street2.clone().unwrap_or_default(),
-                aircraft_reg.city.clone().unwrap_or_default(),
-                aircraft_reg.state.clone().unwrap_or_default(),
-                aircraft_reg.zip_code.clone().unwrap_or_default(),
-                aircraft_reg
-                    .country_mail_code
-                    .clone()
-                    .unwrap_or_else(|| "US".to_string()),
-            );
-
-            if location_set.insert(key.clone()) {
-                unique_locations.push((
-                    aircraft_reg.street1.clone().unwrap_or_default(),
-                    aircraft_reg.street2.clone().unwrap_or_default(),
-                    aircraft_reg.city.clone().unwrap_or_default(),
-                    aircraft_reg.state.clone().unwrap_or_default(),
-                    aircraft_reg.zip_code.clone().unwrap_or_default(),
-                    aircraft_reg.region_code.clone().unwrap_or_default(),
-                    aircraft_reg.county_mail_code.clone().unwrap_or_default(),
-                    aircraft_reg
-                        .country_mail_code
-                        .clone()
-                        .unwrap_or_else(|| "US".to_string()),
-                ));
-            }
-        }
-
-        info!("Found {} unique locations to cache", unique_locations.len());
-
-        // Batch create all unique locations and populate cache
-        for loc in unique_locations {
-            match self
-                .locations_repo
-                .find_or_create(
-                    if loc.0.is_empty() {
-                        None
-                    } else {
-                        Some(loc.0.clone())
-                    },
-                    if loc.1.is_empty() {
-                        None
-                    } else {
-                        Some(loc.1.clone())
-                    },
-                    if loc.2.is_empty() {
-                        None
-                    } else {
-                        Some(loc.2.clone())
-                    },
-                    if loc.3.is_empty() {
-                        None
-                    } else {
-                        Some(loc.3.clone())
-                    },
-                    if loc.4.is_empty() {
-                        None
-                    } else {
-                        Some(loc.4.clone())
-                    },
-                    if loc.5.is_empty() {
-                        None
-                    } else {
-                        Some(loc.5.clone())
-                    },
-                    if loc.6.is_empty() {
-                        None
-                    } else {
-                        Some(loc.6.clone())
-                    },
-                    Some(loc.7.clone()),
-                    None,
-                )
-                .await
-            {
-                Ok(location) => {
-                    let key = (loc.0, loc.1, loc.2, loc.3, loc.4, loc.7);
-                    location_cache.insert(key, location.id);
-                }
-                Err(e) => {
-                    warn!("Failed to create location: {}", e);
-                }
-            }
-        }
-
-        info!("Location cache built with {} entries", location_cache.len());
 
         // Collect unique clubs
         let mut unique_clubs: Vec<(String, crate::clubs_repo::LocationParams)> = Vec::new();
@@ -226,20 +116,31 @@ impl AircraftRegistrationsRepository {
             let mut registration_numbers: Vec<String> = Vec::new();
 
             for aircraft_reg in batch {
-                // Look up location from cache
-                let location_key = (
-                    aircraft_reg.street1.clone().unwrap_or_default(),
-                    aircraft_reg.street2.clone().unwrap_or_default(),
-                    aircraft_reg.city.clone().unwrap_or_default(),
-                    aircraft_reg.state.clone().unwrap_or_default(),
-                    aircraft_reg.zip_code.clone().unwrap_or_default(),
-                    aircraft_reg
-                        .country_mail_code
-                        .clone()
-                        .unwrap_or_else(|| "US".to_string()),
-                );
-
-                let location_id = location_cache.get(&location_key).copied();
+                // Create or find location for this aircraft
+                let location_id = match self
+                    .locations_repo
+                    .find_or_create(
+                        aircraft_reg.street1.clone(),
+                        aircraft_reg.street2.clone(),
+                        aircraft_reg.city.clone(),
+                        aircraft_reg.state.clone(),
+                        aircraft_reg.zip_code.clone(),
+                        aircraft_reg.region_code.clone(),
+                        aircraft_reg.county_mail_code.clone(),
+                        aircraft_reg.country_mail_code.clone(),
+                        None,
+                    )
+                    .await
+                {
+                    Ok(location) => Some(location.id),
+                    Err(e) => {
+                        warn!(
+                            "Failed to create/find location for aircraft {}: {}",
+                            aircraft_reg.n_number, e
+                        );
+                        None
+                    }
+                };
 
                 // Look up club from cache
                 let club_id = aircraft_reg
