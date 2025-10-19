@@ -9,7 +9,7 @@ incremental = true
 # Requires: sudo apt install mold clang
 # If mold is not installed, cargo will fall back to the default linker
 linker = "clang"
-rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+# rustflags = ["-C", "link-arg=-fuse-ld=mold"]
 
 # Optimization flags for development builds
 [profile.dev]
@@ -28,18 +28,3 @@ debug = 0  # No debug info for dependencies in dev builds
 [profile.dev.build-override]
 opt-level = 0
 debug = 1
-
-# Fast development profile with some optimization
-[profile.dev-fast]
-inherits = "dev"
-opt-level = 1  # Light optimization, much faster than release
-debug = 1
-split-debuginfo = "unpacked"
-incremental = true
-
-# For quick checks without optimization
-[profile.dev-check]
-inherits = "dev"
-opt-level = 0
-debug = 0
-incremental = true

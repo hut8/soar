@@ -78,11 +78,14 @@ lru = "0.12"
 inherits = "dev"
 opt-level = 1              # Light optimization, faster than release
 debug = 1                  # Reduced debug info
+codegen-units = 256        # Maximum parallelism for faster compilation
 split-debuginfo = "unpacked"
 incremental = true
 
 [profile.dev]
 opt-level = 1
+debug = 1                  # Line numbers only - faster compilation than full debug info
+codegen-units = 256        # Maximum parallelism for faster compilation
 [profile.dev.package."*"]
 opt-level = 3
 
