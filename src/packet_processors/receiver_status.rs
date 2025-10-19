@@ -111,7 +111,6 @@ impl ReceiverStatusProcessor {
                         &status_comment,
                         received_at, // packet timestamp
                         received_at, // received_at
-                        raw_data.clone(),
                     );
 
                     // Set the aprs_message_id on the receiver status

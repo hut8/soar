@@ -393,10 +393,7 @@ diesel::table! {
         ognr_pilotaware_version -> Nullable<Text>,
         unparsed_data -> Nullable<Text>,
         lag -> Nullable<Int4>,
-        created_at -> Timestamptz,
-        updated_at -> Timestamptz,
         receiver_id -> Uuid,
-        raw_data -> Text,
         aprs_message_id -> Nullable<Uuid>,
     }
 }
