@@ -21,6 +21,7 @@ use crate::web::AppState;
 pub struct FlightsQueryParams {
     pub club_id: Option<Uuid>,
     pub limit: Option<i64>,
+    pub offset: Option<i64>,
     pub completed: Option<bool>,
 }
 
@@ -34,6 +35,12 @@ pub struct FlightResponse {
 pub struct FlightFixesResponse {
     pub fixes: Vec<Fix>,
     pub count: usize,
+}
+
+#[derive(Debug, Serialize)]
+pub struct FlightsListResponse {
+    pub flights: Vec<FlightView>,
+    pub total_count: i64,
 }
 
 /// Get a flight by its UUID
@@ -244,11 +251,15 @@ pub async fn search_flights(
 
     let completed = params.completed.unwrap_or(false);
     let limit = params.limit.unwrap_or(50);
+    let offset = params.offset.unwrap_or(0);
 
     if completed {
-        // Get completed flights with device info
-        match flights_repo.get_completed_flights(limit).await {
-            Ok(flights) => {
+        // Get completed flights with device info and total count
+        let total_count_result = flights_repo.get_completed_flights_count().await;
+        let flights_result = flights_repo.get_completed_flights(limit, offset).await;
+
+        match (total_count_result, flights_result) {
+            (Ok(total_count), Ok(flights)) => {
                 let mut flight_views = Vec::new();
 
                 for flight in flights {
@@ -270,10 +281,14 @@ pub async fn search_flights(
                     flight_views.push(flight_view);
                 }
 
-                Json(flight_views).into_response()
+                Json(FlightsListResponse {
+                    flights: flight_views,
+                    total_count,
+                })
+                .into_response()
             }
-            Err(e) => {
-                tracing::error!("Failed to get completed flights: {}", e);
+            _ => {
+                tracing::error!("Failed to get completed flights or count");
                 json_error(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Failed to get completed flights",
@@ -282,40 +297,26 @@ pub async fn search_flights(
             }
         }
     } else {
-        // Get flights in progress
-        if let Some(_club_id) = params.club_id {
-            // Club-based flight search would require joining with aircraft_registrations
-            // For now, just return flights in progress with limit
-            match flights_repo.get_flights_in_progress(limit).await {
-                Ok(flights) => {
-                    let flight_views: Vec<FlightView> =
-                        flights.into_iter().map(|f| f.into()).collect();
-                    Json(flight_views).into_response()
-                }
-                Err(e) => {
-                    tracing::error!("Failed to get flights by club ID: {}", e);
-                    json_error(
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "Failed to get flights by club ID",
-                    )
-                    .into_response()
-                }
+        // Get flights in progress with total count
+        let total_count_result = flights_repo.get_flights_in_progress_count().await;
+        let flights_result = flights_repo.get_flights_in_progress(limit, offset).await;
+
+        match (total_count_result, flights_result) {
+            (Ok(total_count), Ok(flights)) => {
+                let flight_views: Vec<FlightView> = flights.into_iter().map(|f| f.into()).collect();
+                Json(FlightsListResponse {
+                    flights: flight_views,
+                    total_count,
+                })
+                .into_response()
             }
-        } else {
-            match flights_repo.get_flights_in_progress(limit).await {
-                Ok(flights) => {
-                    let flight_views: Vec<FlightView> =
-                        flights.into_iter().map(|f| f.into()).collect();
-                    Json(flight_views).into_response()
-                }
-                Err(e) => {
-                    tracing::error!("Failed to get recent flights: {}", e);
-                    json_error(
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "Failed to get recent flights",
-                    )
-                    .into_response()
-                }
+            _ => {
+                tracing::error!("Failed to get flights in progress or count");
+                json_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to get flights in progress",
+                )
+                .into_response()
             }
         }
     }

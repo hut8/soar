@@ -1,5 +1,13 @@
 <script lang="ts">
-	import { Plane, MapPin, Clock, ExternalLink, MoveUp } from '@lucide/svelte';
+	import {
+		Plane,
+		MapPin,
+		Clock,
+		ExternalLink,
+		MoveUp,
+		ChevronLeft,
+		ChevronRight
+	} from '@lucide/svelte';
 	import { serverCall } from '$lib/api/server';
 	import { onMount } from 'svelte';
 	import dayjs from 'dayjs';
@@ -36,8 +44,18 @@
 		updated_at: string;
 	}
 
+	interface FlightsListResponse {
+		flights: Flight[];
+		total_count: number;
+	}
+
 	let completedFlights: Flight[] = [];
 	let activeFlights: Flight[] = [];
+	let activeTotalCount = 0;
+	let completedTotalCount = 0;
+	let activeCurrentPage = 1;
+	let completedCurrentPage = 1;
+	const ITEMS_PER_PAGE = 50;
 	let loading = true;
 	let error = '';
 
@@ -98,23 +116,48 @@
 		error = '';
 
 		try {
+			const activeOffset = (activeCurrentPage - 1) * ITEMS_PER_PAGE;
+			const completedOffset = (completedCurrentPage - 1) * ITEMS_PER_PAGE;
+
 			// Load both active and completed flights in parallel
 			const [activeResponse, completedResponse] = await Promise.all([
-				serverCall<Flight[]>('/flights?completed=false&limit=50'),
-				serverCall<Flight[]>('/flights?completed=true&limit=100')
+				serverCall<FlightsListResponse>(
+					`/flights?completed=false&limit=${ITEMS_PER_PAGE}&offset=${activeOffset}`
+				),
+				serverCall<FlightsListResponse>(
+					`/flights?completed=true&limit=${ITEMS_PER_PAGE}&offset=${completedOffset}`
+				)
 			]);
-			activeFlights = activeResponse || [];
-			completedFlights = completedResponse || [];
+
+			activeFlights = activeResponse.flights || [];
+			activeTotalCount = activeResponse.total_count || 0;
+			completedFlights = completedResponse.flights || [];
+			completedTotalCount = completedResponse.total_count || 0;
 		} catch (err) {
 			const errorMessage = extractErrorMessage(err);
 			error = `Failed to load flights: ${errorMessage}`;
 			console.error('Error loading flights:', err);
 			activeFlights = [];
 			completedFlights = [];
+			activeTotalCount = 0;
+			completedTotalCount = 0;
 		} finally {
 			loading = false;
 		}
 	}
+
+	function handleActivePageChange(newPage: number) {
+		activeCurrentPage = newPage;
+		loadFlights();
+	}
+
+	function handleCompletedPageChange(newPage: number) {
+		completedCurrentPage = newPage;
+		loadFlights();
+	}
+
+	$: activeTotalPages = Math.ceil(activeTotalCount / ITEMS_PER_PAGE);
+	$: completedTotalPages = Math.ceil(completedTotalCount / ITEMS_PER_PAGE);
 
 	onMount(() => {
 		loadFlights();
@@ -167,7 +210,7 @@
 				<header class="card-header">
 					<h2 class="h2">Active Flights</h2>
 					<p class="text-surface-500-400-token">
-						{activeFlights.length} flight{activeFlights.length === 1 ? '' : 's'} in progress
+						{activeTotalCount} flight{activeTotalCount === 1 ? '' : 's'} in progress
 					</p>
 				</header>
 
@@ -178,11 +221,10 @@
 								<th>Aircraft</th>
 								<th>Type</th>
 								<th>Takeoff</th>
-								<th>Landing</th>
 								<th>Duration</th>
 								<th>Distance</th>
 								<th>Tow</th>
-								<th>Actions</th>
+								<th></th>
 							</tr>
 						</thead>
 						<tbody>
@@ -303,25 +345,6 @@
 											{/if}
 										</div>
 									</td>
-									<td>
-										<div class="flex flex-col gap-1">
-											<div class="flex items-center gap-1 text-sm">
-												<Clock class="h-3 w-3" />
-												{formatRelativeTime(flight.landing_time)}
-											</div>
-											{#if flight.landing_time}
-												<div class="text-surface-500-400-token text-xs">
-													{formatLocalTime(flight.landing_time)}
-												</div>
-											{/if}
-											{#if flight.arrival_airport}
-												<div class="text-surface-500-400-token flex items-center gap-1 text-xs">
-													<MapPin class="h-3 w-3" />
-													{flight.arrival_airport}
-												</div>
-											{/if}
-										</div>
-									</td>
 									<td class="font-semibold">
 										{calculateFlightDuration(flight.takeoff_time, flight.landing_time)}
 									</td>
@@ -347,7 +370,7 @@
 											href={`/flights/${flight.id}`}
 											target="_blank"
 											rel="noopener noreferrer"
-											class="preset-tonal-surface-500 btn flex items-center gap-1 btn-sm"
+											class="preset-filled-primary btn flex items-center gap-1 btn-sm"
 										>
 											<ExternalLink class="h-3 w-3" />
 											Open
@@ -358,6 +381,33 @@
 						</tbody>
 					</table>
 				</div>
+
+				<!-- Active Flights Pagination -->
+				{#if activeTotalPages > 1}
+					<footer class="card-footer flex items-center justify-between">
+						<div class="text-surface-500-400-token text-sm">
+							Page {activeCurrentPage} of {activeTotalPages}
+						</div>
+						<div class="flex gap-2">
+							<button
+								class="btn preset-tonal-surface btn-sm"
+								disabled={activeCurrentPage === 1}
+								onclick={() => handleActivePageChange(activeCurrentPage - 1)}
+							>
+								<ChevronLeft class="h-4 w-4" />
+								Previous
+							</button>
+							<button
+								class="btn preset-tonal-surface btn-sm"
+								disabled={activeCurrentPage === activeTotalPages}
+								onclick={() => handleActivePageChange(activeCurrentPage + 1)}
+							>
+								Next
+								<ChevronRight class="h-4 w-4" />
+							</button>
+						</div>
+					</footer>
+				{/if}
 			</section>
 		{/if}
 
@@ -367,7 +417,7 @@
 				<header class="card-header">
 					<h2 class="h2">Completed Flights</h2>
 					<p class="text-surface-500-400-token">
-						{completedFlights.length} flight{completedFlights.length === 1 ? '' : 's'} found
+						{completedTotalCount} flight{completedTotalCount === 1 ? '' : 's'} found
 					</p>
 				</header>
 
@@ -383,7 +433,7 @@
 								<th>Duration</th>
 								<th>Distance</th>
 								<th>Tow</th>
-								<th>Actions</th>
+								<th></th>
 							</tr>
 						</thead>
 						<tbody>
@@ -551,7 +601,7 @@
 											href={`/flights/${flight.id}`}
 											target="_blank"
 											rel="noopener noreferrer"
-											class="preset-tonal-surface-500 btn flex items-center gap-1 btn-sm"
+											class="preset-filled-primary btn flex items-center gap-1 btn-sm"
 										>
 											<ExternalLink class="h-3 w-3" />
 											Open
@@ -562,6 +612,33 @@
 						</tbody>
 					</table>
 				</div>
+
+				<!-- Completed Flights Pagination -->
+				{#if completedTotalPages > 1}
+					<footer class="card-footer flex items-center justify-between">
+						<div class="text-surface-500-400-token text-sm">
+							Page {completedCurrentPage} of {completedTotalPages}
+						</div>
+						<div class="flex gap-2">
+							<button
+								class="btn preset-tonal-surface btn-sm"
+								disabled={completedCurrentPage === 1}
+								onclick={() => handleCompletedPageChange(completedCurrentPage - 1)}
+							>
+								<ChevronLeft class="h-4 w-4" />
+								Previous
+							</button>
+							<button
+								class="btn preset-tonal-surface btn-sm"
+								disabled={completedCurrentPage === completedTotalPages}
+								onclick={() => handleCompletedPageChange(completedCurrentPage + 1)}
+							>
+								Next
+								<ChevronRight class="h-4 w-4" />
+							</button>
+						</div>
+					</footer>
+				{/if}
 			</section>
 		{/if}
 
@@ -571,7 +648,7 @@
 				<div class="card-header">
 					<h2 class="h2">Active Flights</h2>
 					<p class="text-surface-500-400-token">
-						{activeFlights.length} flight{activeFlights.length === 1 ? '' : 's'} in progress
+						{activeTotalCount} flight{activeTotalCount === 1 ? '' : 's'} in progress
 					</p>
 				</div>
 
@@ -685,7 +762,7 @@
 				<div class="card-header">
 					<h2 class="h2">Completed Flights</h2>
 					<p class="text-surface-500-400-token">
-						{completedFlights.length} flight{completedFlights.length === 1 ? '' : 's'} found
+						{completedTotalCount} flight{completedTotalCount === 1 ? '' : 's'} found
 					</p>
 				</div>
 

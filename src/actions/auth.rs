@@ -270,7 +270,7 @@ pub async fn confirm_password_reset(
                 .update_password(user.id, &payload.new_password)
                 .await
             {
-                Ok(true) => (StatusCode::OK, "Password updated successfully").into_response(),
+                Ok(true) => StatusCode::NO_CONTENT.into_response(),
                 Ok(false) => (StatusCode::NOT_FOUND, "User not found").into_response(),
                 Err(e) => {
                     error!("Failed to update password: {}", e);

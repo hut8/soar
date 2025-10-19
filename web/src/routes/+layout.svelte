@@ -134,7 +134,10 @@
 							class="btn preset-filled-primary-500 btn-sm"
 							onclick={() => (showUserMenu = !showUserMenu)}
 						>
-							<span class="hidden sm:inline">{$auth.user.first_name}</span>
+							<span class="hidden sm:inline">
+								<User size={16} />
+								{$auth.user.first_name}
+							</span>
 						</button>
 
 						{#if showUserMenu}
