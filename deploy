@@ -71,8 +71,8 @@ log_info "Build successful! Now stopping services to deploy..."
 log_info "Stopping SOAR services..."
 sudo systemctl stop ${RUN_SERVICE_NAME} 2>/dev/null || true
 sudo systemctl stop ${WEB_SERVICE_NAME} 2>/dev/null || true
-sudo systemctl stop ${PULL_DATA_TIMER_NAME}.timer 2>/dev/null || true
-sudo systemctl stop ${SITEMAP_TIMER_NAME}.timer 2>/dev/null || true
+# Note: NOT stopping timers to avoid interrupting scheduled data pulls
+# Timers will pick up the new binary on their next scheduled run
 
 # Create service user if it doesn't exist
 if ! id "${SERVICE_USER}" &>/dev/null; then
@@ -138,8 +138,13 @@ sudo systemctl enable ${SITEMAP_TIMER_NAME}.timer
 log_info "Starting SOAR services..."
 sudo systemctl restart ${RUN_SERVICE_NAME}
 sudo systemctl restart ${WEB_SERVICE_NAME}
-sudo systemctl restart ${PULL_DATA_TIMER_NAME}.timer
-sudo systemctl restart ${SITEMAP_TIMER_NAME}.timer
+
+# Don't restart timers - just ensure they're enabled and let systemd schedule handle them
+log_info "Ensuring timers are enabled (not restarting to avoid interrupting scheduled runs)..."
+sudo systemctl is-enabled ${PULL_DATA_TIMER_NAME}.timer >/dev/null 2>&1 || sudo systemctl enable ${PULL_DATA_TIMER_NAME}.timer
+sudo systemctl is-enabled ${SITEMAP_TIMER_NAME}.timer >/dev/null 2>&1 || sudo systemctl enable ${SITEMAP_TIMER_NAME}.timer
+log_info "  Note: Timers managed by systemd schedule - new binary used on next scheduled run"
+log_info "  Currently running timer services will complete normally without interruption"
 
 # Check service status
 sleep 3

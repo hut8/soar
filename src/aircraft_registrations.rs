@@ -15,6 +15,20 @@ use crate::aircraft_types::AircraftType;
 use crate::locations::Point;
 use crate::schema::aircraft_approved_operations;
 
+/// Canonicalize a registration number using flydent
+/// This ensures consistent formatting for matching with devices
+fn canonicalize_registration(registration: &str) -> String {
+    let parser = flydent::Parser::new();
+    match parser.parse(registration, false, false) {
+        Some(r) => r.canonical_callsign().to_string(),
+        None => {
+            // If flydent can't parse it, return the original
+            // This handles edge cases where the registration format is unusual
+            registration.to_string()
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum)]
 #[db_enum(existing_type_path = "crate::schema::sql_types::AirworthinessClass")]
 pub enum AirworthinessClass {
@@ -879,11 +893,15 @@ impl Aircraft {
             return Err(anyhow!("Missing N-number at positions 1–5"));
         }
 
-        let n_number = if n_number_raw.starts_with('N') {
+        // Ensure it starts with 'N', then canonicalize
+        let n_number_with_prefix = if n_number_raw.starts_with('N') {
             n_number_raw
         } else {
             format!("N{}", n_number_raw)
         };
+
+        // Canonicalize the registration number for consistent matching with devices
+        let n_number = canonicalize_registration(&n_number_with_prefix);
 
         let serial_number = to_string_trim(fw(line, 7, 36));
 
@@ -1076,15 +1094,20 @@ impl Aircraft {
             ));
         }
 
-        let n_number = to_string_trim(fields[0]);
-        if n_number.is_empty() {
+        let n_number_raw = to_string_trim(fields[0]);
+        if n_number_raw.is_empty() {
             return Err(anyhow!("Missing N-number in CSV"));
         }
-        let n_number = if !n_number.starts_with("N") {
-            format!("N{}", n_number)
+
+        // Ensure it starts with 'N', then canonicalize
+        let n_number_with_prefix = if !n_number_raw.starts_with("N") {
+            format!("N{}", n_number_raw)
         } else {
-            n_number
+            n_number_raw
         };
+
+        // Canonicalize the registration number for consistent matching with devices
+        let n_number = canonicalize_registration(&n_number_with_prefix);
 
         let serial_number = to_string_trim(fields[1]);
 
