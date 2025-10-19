@@ -84,6 +84,22 @@
 		}
 	});
 
+	function extractErrorMessage(err: unknown): string {
+		if (err instanceof Error) {
+			// Try to parse the error message as JSON
+			try {
+				const parsed = JSON.parse(err.message);
+				if (parsed && typeof parsed === 'object' && 'errors' in parsed) {
+					return String(parsed.errors);
+				}
+			} catch {
+				// Not JSON, return the original message
+			}
+			return err.message;
+		}
+		return 'Unknown error';
+	}
+
 	async function loadClub() {
 		loadingClub = true;
 		error = '';
@@ -91,7 +107,7 @@
 		try {
 			club = await serverCall<Club>(`/clubs/${clubId}`);
 		} catch (err) {
-			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+			const errorMessage = extractErrorMessage(err);
 			error = `Failed to load club: ${errorMessage}`;
 			console.error('Error loading club:', err);
 		} finally {
@@ -121,7 +137,7 @@
 			// TODO: Add API endpoint for flights in progress
 			flightsInProgress = [];
 		} catch (err) {
-			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+			const errorMessage = extractErrorMessage(err);
 			flightsError = `Failed to load flights: ${errorMessage}`;
 			console.error('Error loading flights:', err);
 		} finally {

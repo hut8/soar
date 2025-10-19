@@ -97,6 +97,22 @@
 		}
 	});
 
+	function extractErrorMessage(err: unknown): string {
+		if (err instanceof Error) {
+			// Try to parse the error message as JSON
+			try {
+				const parsed = JSON.parse(err.message);
+				if (parsed && typeof parsed === 'object' && 'errors' in parsed) {
+					return String(parsed.errors);
+				}
+			} catch {
+				// Not JSON, return the original message
+			}
+			return err.message;
+		}
+		return 'Unknown error';
+	}
+
 	async function loadAirport() {
 		loading = true;
 		error = '';
@@ -104,7 +120,7 @@
 		try {
 			airport = await serverCall<Airport>(`/airports/${airportId}`);
 		} catch (err) {
-			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+			const errorMessage = extractErrorMessage(err);
 			error = `Failed to load airport: ${errorMessage}`;
 			console.error('Error loading airport:', err);
 		} finally {
@@ -119,7 +135,7 @@
 		try {
 			flights = await serverCall<FlightResponse[]>(`/airports/${airportId}/flights`);
 		} catch (err) {
-			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+			const errorMessage = extractErrorMessage(err);
 			flightsError = `Failed to load flights: ${errorMessage}`;
 			console.error('Error loading flights:', err);
 		} finally {

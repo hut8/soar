@@ -70,6 +70,22 @@
 		loadFixes(1);
 	}
 
+	function extractErrorMessage(err: unknown): string {
+		if (err instanceof Error) {
+			// Try to parse the error message as JSON
+			try {
+				const parsed = JSON.parse(err.message);
+				if (parsed && typeof parsed === 'object' && 'errors' in parsed) {
+					return String(parsed.errors);
+				}
+			} catch {
+				// Not JSON, return the original message
+			}
+			return err.message;
+		}
+		return 'Unknown error';
+	}
+
 	onMount(async () => {
 		if (deviceId) {
 			await loadDevice();
@@ -106,7 +122,7 @@
 			aircraftRegistration = registration;
 			aircraftModel = model;
 		} catch (err) {
-			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+			const errorMessage = extractErrorMessage(err);
 			error = `Failed to load device: ${errorMessage}`;
 			console.error('Error loading device:', err);
 		} finally {
@@ -222,7 +238,7 @@
 			// Reload device to get updated data
 			await loadDevice();
 		} catch (err) {
-			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+			const errorMessage = extractErrorMessage(err);
 			toaster.error({ title: `Failed to update club assignment: ${errorMessage}` });
 			console.error('Error updating device club:', err);
 		} finally {
