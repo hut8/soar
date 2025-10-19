@@ -99,7 +99,9 @@ impl AircraftRegistrationsRepository {
         info!("Club cache built with {} entries", club_cache.len());
 
         // PHASE 2: Process aircraft in batches
-        const BATCH_SIZE: usize = 5000;
+        // PostgreSQL has a limit of 65535 parameters per query
+        // With ~30 fields per aircraft, we can safely do ~2000 records per batch
+        const BATCH_SIZE: usize = 2000;
         let mut upserted_count = 0;
 
         for batch_start in (0..total_count).step_by(BATCH_SIZE) {
