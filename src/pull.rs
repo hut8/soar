@@ -155,6 +155,11 @@ pub async fn handle_pull_data(diesel_pool: Pool<ConnectionManager<PgConnection>>
     });
     info!("Starting pull-data operation");
 
+    // Start metrics server on port 9092 for profiling during data pull
+    tokio::spawn(async {
+        crate::metrics::start_metrics_server(9092).await;
+    });
+
     // Create temporary directory with date only (no time)
     let date = Local::now().format("%Y%m%d").to_string();
     let temp_dir = get_data_directory(&date)?;

@@ -263,12 +263,15 @@ impl AircraftRegistrationsRepository {
         const LOCATION_BATCH_SIZE: usize = 1000;
         const MAX_CONCURRENT: usize = 50; // Higher concurrency for location lookups only
         let mut locations_filled = 0;
+        let mut total_location_lookup_time = 0.0;
+        let mut total_update_time = 0.0;
 
         for batch_start in (0..total_count).step_by(LOCATION_BATCH_SIZE) {
             let batch_end = (batch_start + LOCATION_BATCH_SIZE).min(total_count);
             let batch = &aircraft_vec[batch_start..batch_end];
 
-            // Parallel location lookups
+            // Parallel location lookups - TIMED
+            let lookup_start = Instant::now();
             let location_results: Vec<(String, Result<crate::locations::Location>)> =
                 stream::iter(batch.iter().map(|aircraft_reg| {
                     let reg_num = aircraft_reg.n_number.clone();
@@ -293,8 +296,11 @@ impl AircraftRegistrationsRepository {
                 .buffer_unordered(MAX_CONCURRENT)
                 .collect()
                 .await;
+            let lookup_elapsed = lookup_start.elapsed().as_secs_f64();
+            total_location_lookup_time += lookup_elapsed;
 
-            // Update location_ids in database
+            // Update location_ids in database - TIMED
+            let update_start = Instant::now();
             let mut conn = self.get_connection()?;
             for (reg_num, location_result) in location_results {
                 if let Ok(location) = location_result {
@@ -308,21 +314,27 @@ impl AircraftRegistrationsRepository {
                     }
                 }
             }
+            let update_elapsed = update_start.elapsed().as_secs_f64();
+            total_update_time += update_elapsed;
 
             if batch_end.is_multiple_of(1000) || batch_end == total_count {
                 info!(
-                    "Location progress: {}/{} ({:.1}%)",
+                    "Location progress: {}/{} ({:.1}%) | Batch lookup: {:.2}s | Batch updates: {:.2}s",
                     batch_end,
                     total_count,
-                    (batch_end as f64 / total_count as f64) * 100.0
+                    (batch_end as f64 / total_count as f64) * 100.0,
+                    lookup_elapsed,
+                    update_elapsed
                 );
             }
         }
 
         info!(
-            "Phase 2b complete: Filled {} locations in {:.1} seconds",
+            "Phase 2b complete: Filled {} locations in {:.1} seconds (Lookups: {:.1}s, Updates: {:.1}s)",
             locations_filled,
-            phase2b_start.elapsed().as_secs_f64()
+            phase2b_start.elapsed().as_secs_f64(),
+            total_location_lookup_time,
+            total_update_time
         );
 
         let elapsed = start_time.elapsed();
