@@ -250,27 +250,6 @@ impl Location {
     pub fn has_coordinates(&self) -> bool {
         self.geolocation.is_some()
     }
-
-    /// Generate a consistent address key for deduplication and caching
-    /// Matches the unique constraint logic (COALESCE to empty string)
-    pub fn address_key(
-        street1: Option<&str>,
-        street2: Option<&str>,
-        city: Option<&str>,
-        state: Option<&str>,
-        zip_code: Option<&str>,
-        country_mail_code: Option<&str>,
-    ) -> String {
-        format!(
-            "{}|{}|{}|{}|{}|{}",
-            street1.unwrap_or(""),
-            street2.unwrap_or(""),
-            city.unwrap_or(""),
-            state.unwrap_or(""),
-            zip_code.unwrap_or(""),
-            country_mail_code.unwrap_or("US")
-        )
-    }
 }
 
 #[cfg(test)]
