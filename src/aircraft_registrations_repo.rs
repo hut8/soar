@@ -6,7 +6,9 @@ use futures_util::stream::{self, StreamExt};
 use tracing::{info, warn};
 use uuid::Uuid;
 
-use crate::aircraft_registrations::{Aircraft, AircraftRegistrationModel, NewAircraftRegistration};
+use crate::aircraft_registrations::{
+    Aircraft, AircraftRegistrationModel, NewAircraftOtherName, NewAircraftRegistration,
+};
 use crate::clubs_repo::ClubsRepository;
 use crate::locations_repo::LocationsRepository;
 use crate::schema::{aircraft_approved_operations, aircraft_other_names, aircraft_registrations};
@@ -116,6 +118,7 @@ impl AircraftRegistrationsRepository {
             let mut all_approved_ops: Vec<
                 crate::aircraft_registrations::NewAircraftApprovedOperation,
             > = Vec::new();
+            let mut all_other_names: Vec<NewAircraftOtherName> = Vec::new();
 
             for aircraft_reg in batch.iter() {
                 // Look up club from cache
@@ -133,6 +136,11 @@ impl AircraftRegistrationsRepository {
                 // Collect approved operations
                 for op in aircraft_reg.to_approved_operations() {
                     all_approved_ops.push(op);
+                }
+
+                // Collect other names
+                for other_name in aircraft_reg.to_other_names() {
+                    all_other_names.push(other_name);
                 }
             }
 
@@ -225,6 +233,22 @@ impl AircraftRegistrationsRepository {
                 // Insert new approved_operations
                 let _ = diesel::insert_into(aircraft_approved_operations::table)
                     .values(&all_approved_ops)
+                    .execute(&mut conn);
+            }
+
+            // Batch insert aircraft_other_names
+            if !all_other_names.is_empty() {
+                let registration_numbers: Vec<String> =
+                    batch.iter().map(|a| a.n_number.clone()).collect();
+
+                // Delete existing other_names for this batch
+                let _ = diesel::delete(aircraft_other_names::table)
+                    .filter(aircraft_other_names::registration_number.eq_any(&registration_numbers))
+                    .execute(&mut conn);
+
+                // Insert new other_names
+                let _ = diesel::insert_into(aircraft_other_names::table)
+                    .values(&all_other_names)
                     .execute(&mut conn);
             }
 
