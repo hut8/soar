@@ -13,7 +13,7 @@ use uuid::Uuid;
 // Import Point from clubs module
 use crate::aircraft_types::AircraftType;
 use crate::locations::Point;
-use crate::schema::aircraft_approved_operations;
+use crate::schema::{aircraft_approved_operations, aircraft_other_names};
 
 /// Canonicalize a registration number using flydent
 /// This ensures consistent formatting for matching with devices
@@ -464,6 +464,15 @@ pub struct AircraftApprovedOperation {
 pub struct NewAircraftApprovedOperation {
     pub aircraft_registration_id: String,
     pub operation: String,
+}
+
+// Insertable model for new aircraft other names (without generated fields)
+#[derive(Debug, Clone, Insertable, Serialize, Deserialize)]
+#[diesel(table_name = aircraft_other_names, check_for_backend(diesel::pg::Pg))]
+pub struct NewAircraftOtherName {
+    pub registration_number: String,
+    pub seq: i16,
+    pub other_name: String,
 }
 
 /// Minimal, adjustable mapping from the 9-char ops string to flags.
@@ -1371,6 +1380,19 @@ impl Aircraft {
             .map(|operation| NewAircraftApprovedOperation {
                 aircraft_registration_id: self.n_number.clone(),
                 operation,
+            })
+            .collect()
+    }
+
+    /// Get the list of other names for this aircraft as NewAircraftOtherName records
+    pub fn to_other_names(&self) -> Vec<NewAircraftOtherName> {
+        self.other_names
+            .iter()
+            .enumerate()
+            .map(|(index, other_name)| NewAircraftOtherName {
+                registration_number: self.n_number.clone(),
+                seq: (index + 1) as i16, // 1-based sequence number
+                other_name: other_name.clone(),
             })
             .collect()
     }
