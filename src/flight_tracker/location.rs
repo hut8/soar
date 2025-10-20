@@ -85,7 +85,7 @@ pub(crate) async fn create_or_find_location(
                     location.region_code.clone(),
                     location.county_mail_code.clone(),
                     location.country_mail_code.clone(),
-                    location.geolocation.clone(),
+                    location.geolocation,
                 )
                 .await
             {

@@ -2,7 +2,6 @@ use anyhow::Result;
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
 use diesel::upsert::excluded;
-use futures_util::stream::{self, StreamExt};
 use tracing::{info, warn};
 use uuid::Uuid;
 
@@ -111,13 +110,11 @@ impl AircraftRegistrationsRepository {
 
             let mut conn = self.get_connection()?;
 
-            // Prepare batch data - parallelize location creation with controlled concurrency
-            // Limit to 20 concurrent location lookups to avoid exhausting the connection pool
-            const MAX_CONCURRENT_LOCATION_LOOKUPS: usize = 20;
-
-            let location_results: Vec<Result<crate::locations::Location>> =
-                stream::iter(batch.iter().map(|aircraft_reg| {
-                    self.locations_repo.find_or_create(
+            // Build unique locations for this batch and batch upsert them
+            let batch_locations: Vec<crate::locations::Location> = batch
+                .iter()
+                .map(|aircraft_reg| {
+                    crate::locations::Location::new(
                         aircraft_reg.street1.clone(),
                         aircraft_reg.street2.clone(),
                         aircraft_reg.city.clone(),
@@ -126,12 +123,16 @@ impl AircraftRegistrationsRepository {
                         aircraft_reg.region_code.clone(),
                         aircraft_reg.county_mail_code.clone(),
                         aircraft_reg.country_mail_code.clone(),
-                        None,
+                        None, // geolocation
                     )
-                }))
-                .buffer_unordered(MAX_CONCURRENT_LOCATION_LOOKUPS)
-                .collect()
-                .await;
+                })
+                .collect();
+
+            // Batch upsert all locations and get cache
+            let location_cache = self
+                .locations_repo
+                .batch_upsert_and_build_cache(batch_locations)
+                .await?;
 
             let mut aircraft_registrations: Vec<NewAircraftRegistration> = Vec::new();
             let mut all_other_names: Vec<(String, i16, String)> = Vec::new();
@@ -140,18 +141,17 @@ impl AircraftRegistrationsRepository {
             > = Vec::new();
             let mut registration_numbers: Vec<String> = Vec::new();
 
-            for (idx, aircraft_reg) in batch.iter().enumerate() {
-                // Get location_id from parallel results
-                let location_id = match &location_results[idx] {
-                    Ok(location) => Some(location.id),
-                    Err(e) => {
-                        warn!(
-                            "Failed to create/find location for aircraft {}: {}",
-                            aircraft_reg.n_number, e
-                        );
-                        None
-                    }
-                };
+            for aircraft_reg in batch.iter() {
+                // Look up location_id from cache
+                let address_key = crate::locations::Location::address_key(
+                    aircraft_reg.street1.as_deref(),
+                    aircraft_reg.street2.as_deref(),
+                    aircraft_reg.city.as_deref(),
+                    aircraft_reg.state.as_deref(),
+                    aircraft_reg.zip_code.as_deref(),
+                    aircraft_reg.country_mail_code.as_deref(),
+                );
+                let location_id = location_cache.get(&address_key).map(|loc| loc.id);
 
                 // Look up club from cache
                 let club_id = aircraft_reg
