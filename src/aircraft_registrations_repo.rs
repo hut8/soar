@@ -2,7 +2,7 @@ use anyhow::Result;
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
 use diesel::upsert::excluded;
-use futures_util::future;
+use futures_util::stream::{self, StreamExt};
 use tracing::{info, warn};
 use uuid::Uuid;
 
@@ -101,7 +101,8 @@ impl AircraftRegistrationsRepository {
         // PHASE 2: Process aircraft in batches
         // PostgreSQL has a limit of 65535 parameters per query
         // With ~30 fields per aircraft, we can safely do ~2000 records per batch
-        const BATCH_SIZE: usize = 2000;
+        // Reduced to 1000 to limit parallel location lookups and avoid connection pool exhaustion
+        const BATCH_SIZE: usize = 1000;
         let mut upserted_count = 0;
 
         for batch_start in (0..total_count).step_by(BATCH_SIZE) {
@@ -110,10 +111,12 @@ impl AircraftRegistrationsRepository {
 
             let mut conn = self.get_connection()?;
 
-            // Prepare batch data - parallelize location creation
-            let location_futures: Vec<_> = batch
-                .iter()
-                .map(|aircraft_reg| {
+            // Prepare batch data - parallelize location creation with controlled concurrency
+            // Limit to 20 concurrent location lookups to avoid exhausting the connection pool
+            const MAX_CONCURRENT_LOCATION_LOOKUPS: usize = 20;
+
+            let location_results: Vec<Result<crate::locations::Location>> =
+                stream::iter(batch.iter().map(|aircraft_reg| {
                     self.locations_repo.find_or_create(
                         aircraft_reg.street1.clone(),
                         aircraft_reg.street2.clone(),
@@ -125,11 +128,10 @@ impl AircraftRegistrationsRepository {
                         aircraft_reg.country_mail_code.clone(),
                         None,
                     )
-                })
-                .collect();
-
-            // Execute all location lookups in parallel
-            let location_results = future::join_all(location_futures).await;
+                }))
+                .buffer_unordered(MAX_CONCURRENT_LOCATION_LOOKUPS)
+                .collect()
+                .await;
 
             let mut aircraft_registrations: Vec<NewAircraftRegistration> = Vec::new();
             let mut all_other_names: Vec<(String, i16, String)> = Vec::new();
