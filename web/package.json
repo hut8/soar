@@ -47,7 +47,7 @@
 		"@googlemaps/js-api-loader": "^1.16.10",
 		"@lucide/svelte": "^0.545.0",
 		"@sentry/sveltekit": "^10.20.0",
-		"@skeletonlabs/skeleton": "^3.2",
+		"@skeletonlabs/skeleton": "^4.1",
 		"@skeletonlabs/tw-plugin": "^0.4.1",
 		"autoprefixer": "^10.4.21",
 		"dayjs": "^1.11.18",
