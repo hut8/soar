@@ -98,12 +98,13 @@ impl AircraftRegistrationsRepository {
 
         info!("Club cache built with {} entries", club_cache.len());
 
-        // PHASE 2: Process aircraft in batches
+        // PHASE 2: Fast bulk insert of all aircraft registrations (WITHOUT locations)
         // PostgreSQL has a limit of 65535 parameters per query
         // With ~30 fields per aircraft, we can safely do ~2000 records per batch
-        // Reduced to 1000 to limit parallel location lookups and avoid connection pool exhaustion
-        const BATCH_SIZE: usize = 1000;
+        const BATCH_SIZE: usize = 2000;
         let mut upserted_count = 0;
+
+        info!("Phase 2a: Bulk inserting all aircraft registrations without locations...");
 
         for batch_start in (0..total_count).step_by(BATCH_SIZE) {
             let batch_end = (batch_start + BATCH_SIZE).min(total_count);
@@ -111,69 +112,23 @@ impl AircraftRegistrationsRepository {
 
             let mut conn = self.get_connection()?;
 
-            // Prepare batch data - parallelize location creation with controlled concurrency
-            // Limit to 20 concurrent location lookups to avoid exhausting the connection pool
-            const MAX_CONCURRENT_LOCATION_LOOKUPS: usize = 20;
-
-            let location_results: Vec<Result<crate::locations::Location>> =
-                stream::iter(batch.iter().map(|aircraft_reg| {
-                    self.locations_repo.find_or_create(
-                        aircraft_reg.street1.clone(),
-                        aircraft_reg.street2.clone(),
-                        aircraft_reg.city.clone(),
-                        aircraft_reg.state.clone(),
-                        aircraft_reg.zip_code.clone(),
-                        aircraft_reg.region_code.clone(),
-                        aircraft_reg.county_mail_code.clone(),
-                        aircraft_reg.country_mail_code.clone(),
-                        None,
-                    )
-                }))
-                .buffer_unordered(MAX_CONCURRENT_LOCATION_LOOKUPS)
-                .collect()
-                .await;
-
             let mut aircraft_registrations: Vec<NewAircraftRegistration> = Vec::new();
-            let mut all_other_names: Vec<(String, i16, String)> = Vec::new();
             let mut all_approved_ops: Vec<
                 crate::aircraft_registrations::NewAircraftApprovedOperation,
             > = Vec::new();
-            let mut registration_numbers: Vec<String> = Vec::new();
 
-            for (idx, aircraft_reg) in batch.iter().enumerate() {
-                // Get location_id from parallel results
-                let location_id = match &location_results[idx] {
-                    Ok(location) => Some(location.id),
-                    Err(e) => {
-                        warn!(
-                            "Failed to create/find location for aircraft {}: {}",
-                            aircraft_reg.n_number, e
-                        );
-                        None
-                    }
-                };
-
+            for aircraft_reg in batch.iter() {
                 // Look up club from cache
                 let club_id = aircraft_reg
                     .club_name()
                     .and_then(|club_name| club_cache.get(&club_name).copied());
 
-                // Create NewAircraftRegistration
+                // Create NewAircraftRegistration with NULL location_id
                 let mut new_aircraft_reg: NewAircraftRegistration = aircraft_reg.clone().into();
-                new_aircraft_reg.location_id = location_id;
+                new_aircraft_reg.location_id = None; // Will fill in Phase 2b
                 new_aircraft_reg.club_id = club_id;
 
                 aircraft_registrations.push(new_aircraft_reg);
-                registration_numbers.push(aircraft_reg.n_number.clone());
-
-                // Collect other names
-                for (seq, other_name) in aircraft_reg.other_names.iter().enumerate() {
-                    all_other_names.push((
-                        aircraft_reg.n_number.clone(),
-                        (seq + 1) as i16,
-                        other_name.clone(),
-                    ));
-                }
 
                 // Collect approved operations
                 for op in aircraft_reg.to_approved_operations() {
@@ -254,43 +209,20 @@ impl AircraftRegistrationsRepository {
                 }
             }
 
-            // Batch delete existing other_names for this batch
-            if !registration_numbers.is_empty() {
-                let _ = diesel::delete(aircraft_other_names::table)
-                    .filter(aircraft_other_names::registration_number.eq_any(&registration_numbers))
-                    .execute(&mut conn);
-            }
+            // Batch insert approved_operations
+            if !all_approved_ops.is_empty() {
+                let registration_numbers: Vec<String> =
+                    batch.iter().map(|a| a.n_number.clone()).collect();
 
-            // Batch insert other_names
-            if !all_other_names.is_empty() {
-                let other_names_insertable: Vec<_> = all_other_names
-                    .iter()
-                    .map(|(reg_num, seq, other_name)| {
-                        (
-                            aircraft_other_names::registration_number.eq(reg_num),
-                            aircraft_other_names::seq.eq(seq),
-                            aircraft_other_names::other_name.eq(other_name),
-                        )
-                    })
-                    .collect();
-
-                let _ = diesel::insert_into(aircraft_other_names::table)
-                    .values(&other_names_insertable)
-                    .execute(&mut conn);
-            }
-
-            // Batch delete existing approved_operations for this batch
-            if !registration_numbers.is_empty() {
+                // Delete existing approved_operations for this batch
                 let _ = diesel::delete(aircraft_approved_operations::table)
                     .filter(
                         aircraft_approved_operations::aircraft_registration_id
                             .eq_any(&registration_numbers),
                     )
                     .execute(&mut conn);
-            }
 
-            // Batch insert approved_operations
-            if !all_approved_ops.is_empty() {
+                // Insert new approved_operations
                 let _ = diesel::insert_into(aircraft_approved_operations::table)
                     .values(&all_approved_ops)
                     .execute(&mut conn);
@@ -315,6 +247,83 @@ impl AircraftRegistrationsRepository {
                 );
             }
         }
+
+        info!(
+            "Phase 2a complete: Inserted {} aircraft registrations in {:.1} seconds",
+            upserted_count,
+            start_time.elapsed().as_secs_f64()
+        );
+
+        // PHASE 2b: Fill in location_id for aircraft with address data
+        info!("Phase 2b: Filling in locations for all aircraft...");
+        let phase2b_start = Instant::now();
+
+        // Use original aircraft_vec which has address fields
+        // Process in batches with parallel location lookups
+        const LOCATION_BATCH_SIZE: usize = 1000;
+        const MAX_CONCURRENT: usize = 50; // Higher concurrency for location lookups only
+        let mut locations_filled = 0;
+
+        for batch_start in (0..total_count).step_by(LOCATION_BATCH_SIZE) {
+            let batch_end = (batch_start + LOCATION_BATCH_SIZE).min(total_count);
+            let batch = &aircraft_vec[batch_start..batch_end];
+
+            // Parallel location lookups
+            let location_results: Vec<(String, Result<crate::locations::Location>)> =
+                stream::iter(batch.iter().map(|aircraft_reg| {
+                    let reg_num = aircraft_reg.n_number.clone();
+                    let locations_repo = self.locations_repo.clone();
+                    let street1 = aircraft_reg.street1.clone();
+                    let street2 = aircraft_reg.street2.clone();
+                    let city = aircraft_reg.city.clone();
+                    let state = aircraft_reg.state.clone();
+                    let zip = aircraft_reg.zip_code.clone();
+                    let region = aircraft_reg.region_code.clone();
+                    let county = aircraft_reg.county_mail_code.clone();
+                    let country = aircraft_reg.country_mail_code.clone();
+                    async move {
+                        let result = locations_repo
+                            .find_or_create(
+                                street1, street2, city, state, zip, region, county, country, None,
+                            )
+                            .await;
+                        (reg_num, result)
+                    }
+                }))
+                .buffer_unordered(MAX_CONCURRENT)
+                .collect()
+                .await;
+
+            // Update location_ids in database
+            let mut conn = self.get_connection()?;
+            for (reg_num, location_result) in location_results {
+                if let Ok(location) = location_result {
+                    match diesel::update(aircraft_registrations::table)
+                        .filter(aircraft_registrations::registration_number.eq(&reg_num))
+                        .set(aircraft_registrations::location_id.eq(location.id))
+                        .execute(&mut conn)
+                    {
+                        Ok(_) => locations_filled += 1,
+                        Err(e) => warn!("Failed to update location for {}: {}", reg_num, e),
+                    }
+                }
+            }
+
+            if batch_end.is_multiple_of(1000) || batch_end == total_count {
+                info!(
+                    "Location progress: {}/{} ({:.1}%)",
+                    batch_end,
+                    total_count,
+                    (batch_end as f64 / total_count as f64) * 100.0
+                );
+            }
+        }
+
+        info!(
+            "Phase 2b complete: Filled {} locations in {:.1} seconds",
+            locations_filled,
+            phase2b_start.elapsed().as_secs_f64()
+        );
 
         let elapsed = start_time.elapsed();
         info!(
