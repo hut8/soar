@@ -104,17 +104,23 @@ else
     fi
 fi
 
-# Stop services
-log_info "Stopping SOAR services..."
+# Stop main services only (NOT timer-controlled services or timers)
+log_info "Stopping main SOAR services..."
 systemctl stop ${RUN_SERVICE}.service 2>/dev/null && log_info "${RUN_SERVICE}.service stopped" || log_info "${RUN_SERVICE}.service is not running"
-systemctl stop ${WEB_SERVICE}.service 2>/dev/null && log_info "Stopping ${WEB_SERVICE}.service..." || log_info "${WEB_SERVICE}.service is not running"
-systemctl stop ${PULL_DATA_SERVICE}.service 2>/dev/null && log_info "Stopping ${PULL_DATA_SERVICE}.service..." || log_info "${PULL_DATA_SERVICE}.service is not running"
-systemctl stop ${SITEMAP_SERVICE}.service 2>/dev/null && log_info "Stopping ${SITEMAP_SERVICE}.service..." || log_info "${SITEMAP_SERVICE}.service is not running"
+systemctl stop ${WEB_SERVICE}.service 2>/dev/null && log_info "${WEB_SERVICE}.service stopped" || log_info "${WEB_SERVICE}.service is not running"
 
-# Stop timers
-log_info "Stopping SOAR timers..."
-systemctl stop ${PULL_DATA_TIMER}.timer 2>/dev/null && log_info "Stopping ${PULL_DATA_TIMER}.timer..." || true
-systemctl stop ${SITEMAP_TIMER}.timer 2>/dev/null && log_info "Stopping ${SITEMAP_TIMER}.timer..." || true
+# NOTE: NOT stopping timer-controlled services (soar-pull-data, soar-sitemap)
+# They should only be started/stopped by their timers, not manually
+# If they're running, let them complete naturally
+
+# NOTE: NOT stopping or restarting timers
+# Timers will automatically use the new binary on their next scheduled run
+# This prevents interrupting currently running data pulls or sitemap generation
+log_info "Timer-controlled services and timers left untouched:"
+log_info "  - ${PULL_DATA_SERVICE}.service (will complete if running)"
+log_info "  - ${SITEMAP_SERVICE}.service (will complete if running)"
+log_info "  - ${PULL_DATA_TIMER}.timer (new binary used on next scheduled run)"
+log_info "  - ${SITEMAP_TIMER}.timer (new binary used on next scheduled run)"
 
 # Create service user if it doesn't exist
 if ! id "${SERVICE_USER}" &>/dev/null; then
@@ -147,6 +153,10 @@ if [ -f "${BINARY_PATH}/${BINARY_NAME}" ]; then
     BACKUP_PATH="${DEPLOY_BASE}/${BINARY_NAME}.backup.$(date +%s)"
     log_info "Backing up current binary to ${BACKUP_PATH}..."
     cp "${BINARY_PATH}/${BINARY_NAME}" "${BACKUP_PATH}"
+
+    # Keep only the 5 most recent backups
+    log_info "Cleaning up old backups (keeping 5 most recent)..."
+    ls -t ${DEPLOY_BASE}/${BINARY_NAME}.backup.* 2>/dev/null | tail -n +6 | xargs -r rm -f
 fi
 
 # Install new binary
@@ -172,7 +182,10 @@ if [ -f "${DEPLOY_DIR}/VERSION" ]; then
 
     # Append new SENTRY_RELEASE
     echo "SENTRY_RELEASE=${VERSION}" >> /etc/soar/env
-    chmod 644 /etc/soar/env
+
+    # Ensure proper permissions (readable by service user)
+    chown ${SERVICE_USER}:${SERVICE_GROUP} /etc/soar/env
+    chmod 640 /etc/soar/env
     log_info "Updated /etc/soar/env with Sentry release version"
 else
     log_warn "VERSION file not found in deployment directory, Sentry release version not updated"
@@ -202,37 +215,45 @@ fi
 log_info "Reloading systemd daemon..."
 systemctl daemon-reload
 
-# Enable and start services
-log_info "Enabling and starting SOAR services..."
+# Enable and start main services
+log_info "Enabling and starting main SOAR services..."
 
 # soar-run
 log_info "Enabling ${RUN_SERVICE}.service..."
 systemctl enable ${RUN_SERVICE}.service
 log_info "Starting ${RUN_SERVICE}.service..."
-systemctl start ${RUN_SERVICE}.service || log_warn "Failed to start ${RUN_SERVICE}.service"
+systemctl restart ${RUN_SERVICE}.service || log_warn "Failed to start ${RUN_SERVICE}.service"
 
 # soar-web
 log_info "Enabling ${WEB_SERVICE}.service..."
 systemctl enable ${WEB_SERVICE}.service
 log_info "Starting ${WEB_SERVICE}.service..."
-systemctl start ${WEB_SERVICE}.service || log_warn "Failed to start ${WEB_SERVICE}.service"
+systemctl restart ${WEB_SERVICE}.service || log_warn "Failed to start ${WEB_SERVICE}.service"
 
 # Disable timer-controlled services (they should only be started by their timers)
-log_info "Disabling timer-controlled services..."
+log_info "Ensuring timer-controlled services are disabled (timer-managed only)..."
 systemctl disable ${PULL_DATA_SERVICE}.service 2>/dev/null || true
 systemctl disable ${SITEMAP_SERVICE}.service 2>/dev/null || true
 
-# Enable and start timers
-log_info "Enabling and starting SOAR timers..."
-log_info "Enabling ${PULL_DATA_TIMER}.timer..."
-systemctl enable ${PULL_DATA_TIMER}.timer
-log_info "Starting ${PULL_DATA_TIMER}.timer..."
-systemctl start ${PULL_DATA_TIMER}.timer
+# Ensure timers are enabled (but don't restart them to avoid interrupting scheduled runs)
+log_info "Ensuring timers are enabled (not restarting to preserve schedule)..."
+systemctl is-enabled ${PULL_DATA_TIMER}.timer >/dev/null 2>&1 || {
+    log_info "Enabling ${PULL_DATA_TIMER}.timer..."
+    systemctl enable ${PULL_DATA_TIMER}.timer
+    # Start timer only if it wasn't already enabled (first-time setup)
+    log_info "Starting ${PULL_DATA_TIMER}.timer for the first time..."
+    systemctl start ${PULL_DATA_TIMER}.timer
+}
 
-log_info "Enabling ${SITEMAP_TIMER}.timer..."
-systemctl enable ${SITEMAP_TIMER}.timer
-log_info "Starting ${SITEMAP_TIMER}.timer..."
-systemctl start ${SITEMAP_TIMER}.timer
+systemctl is-enabled ${SITEMAP_TIMER}.timer >/dev/null 2>&1 || {
+    log_info "Enabling ${SITEMAP_TIMER}.timer..."
+    systemctl enable ${SITEMAP_TIMER}.timer
+    # Start timer only if it wasn't already enabled (first-time setup)
+    log_info "Starting ${SITEMAP_TIMER}.timer for the first time..."
+    systemctl start ${SITEMAP_TIMER}.timer
+}
+
+log_info "Timers will automatically use new binary on next scheduled run"
 
 # Wait for services to initialize
 log_info "Waiting for services to initialize..."
@@ -244,10 +265,10 @@ log_info "Checking service status..."
 check_service() {
     local service=$1
     if systemctl is-active --quiet "$service"; then
-        log_info "$service: ACTIVE"
+        log_info "$service: ✅ ACTIVE"
         return 0
     else
-        log_error "$service: FAILED"
+        log_error "$service: ❌ FAILED"
         log_info "Recent logs for $service:"
         journalctl -u "$service" --no-pager -n 10
         return 1
@@ -261,7 +282,7 @@ check_service ${WEB_SERVICE}.service || FAILED=1
 check_service ${PULL_DATA_TIMER}.timer || FAILED=1
 check_service ${SITEMAP_TIMER}.timer || FAILED=1
 
-# Show recent logs
+# Show recent logs if any service failed
 if [ $FAILED -eq 1 ]; then
     log_error "One or more services failed to start properly"
     log_info "Recent logs from ${RUN_SERVICE}:"
@@ -273,8 +294,26 @@ else
     log_info "✅ All services started successfully!"
 fi
 
+# Show timer status
+log_info ""
+log_info "Timer schedule status:"
+systemctl list-timers ${PULL_DATA_TIMER}.timer ${SITEMAP_TIMER}.timer --no-pager
+
 # Cleanup deployment directory
+log_info ""
 log_info "Cleaning up deployment directory..."
 rm -rf "$DEPLOY_DIR"
 
 log_info "🚀 Deployment completed successfully!"
+log_info ""
+log_info "Service Management:"
+log_info "  Status: systemctl status ${RUN_SERVICE} ${WEB_SERVICE}"
+log_info "  Timer Status: systemctl list-timers ${PULL_DATA_TIMER}.timer ${SITEMAP_TIMER}.timer"
+log_info "  Logs: journalctl -u ${RUN_SERVICE} -f"
+log_info "  Web logs: journalctl -u ${WEB_SERVICE} -f"
+log_info "  Pull-data logs: journalctl -u ${PULL_DATA_SERVICE} -f"
+log_info "  Sitemap logs: journalctl -u ${SITEMAP_SERVICE} -f"
+log_info ""
+log_info "Note: Timer-controlled services (${PULL_DATA_SERVICE}, ${SITEMAP_SERVICE})"
+log_info "      will use the new binary on their next scheduled run"
+log_info "      Currently running instances will complete normally without interruption"
