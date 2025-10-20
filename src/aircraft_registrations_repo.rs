@@ -266,14 +266,52 @@ impl AircraftRegistrationsRepository {
         let mut total_location_lookup_time = 0.0;
         let mut total_update_time = 0.0;
 
+        // Cache to avoid duplicate location lookups - key is (street1, street2, city, state, zip, country)
+        let mut location_cache: HashMap<
+            (String, String, String, String, String, String),
+            uuid::Uuid,
+        > = HashMap::new();
+        let mut cache_hits = 0;
+        let mut cache_misses = 0;
+
         for batch_start in (0..total_count).step_by(LOCATION_BATCH_SIZE) {
             let batch_end = (batch_start + LOCATION_BATCH_SIZE).min(total_count);
             let batch = &aircraft_vec[batch_start..batch_end];
 
-            // Parallel location lookups - TIMED
+            // Parallel location lookups - TIMED (only for cache misses)
             let lookup_start = Instant::now();
+
+            // First, check which addresses need lookup (not in cache)
+            let mut to_lookup: Vec<&Aircraft> = Vec::new();
+            let mut cached_locations: Vec<(String, uuid::Uuid)> = Vec::new();
+
+            for aircraft_reg in batch.iter() {
+                let cache_key = (
+                    aircraft_reg.street1.clone().unwrap_or_default(),
+                    aircraft_reg.street2.clone().unwrap_or_default(),
+                    aircraft_reg.city.clone().unwrap_or_default(),
+                    aircraft_reg.state.clone().unwrap_or_default(),
+                    aircraft_reg.zip_code.clone().unwrap_or_default(),
+                    aircraft_reg
+                        .country_mail_code
+                        .clone()
+                        .unwrap_or_else(|| "US".to_string()),
+                );
+
+                if let Some(&location_id) = location_cache.get(&cache_key) {
+                    // Cache hit - use cached location
+                    cached_locations.push((aircraft_reg.n_number.clone(), location_id));
+                    cache_hits += 1;
+                } else {
+                    // Cache miss - need to look up
+                    to_lookup.push(aircraft_reg);
+                    cache_misses += 1;
+                }
+            }
+
+            // Only do database lookups for cache misses
             let location_results: Vec<(String, Result<crate::locations::Location>)> =
-                stream::iter(batch.iter().map(|aircraft_reg| {
+                stream::iter(to_lookup.iter().map(|aircraft_reg| {
                     let reg_num = aircraft_reg.n_number.clone();
                     let locations_repo = self.locations_repo.clone();
                     let street1 = aircraft_reg.street1.clone();
@@ -299,19 +337,41 @@ impl AircraftRegistrationsRepository {
             let lookup_elapsed = lookup_start.elapsed().as_secs_f64();
             total_location_lookup_time += lookup_elapsed;
 
+            // Add newly looked-up locations to cache and prepare for update
+            let cache_hit_count = cached_locations.len();
+            let mut all_updates: Vec<(String, uuid::Uuid)> = cached_locations;
+            for (i, (reg_num, location_result)) in location_results.into_iter().enumerate() {
+                if let Ok(location) = location_result {
+                    // Add to cache
+                    let aircraft_reg = to_lookup[i];
+                    let cache_key = (
+                        aircraft_reg.street1.clone().unwrap_or_default(),
+                        aircraft_reg.street2.clone().unwrap_or_default(),
+                        aircraft_reg.city.clone().unwrap_or_default(),
+                        aircraft_reg.state.clone().unwrap_or_default(),
+                        aircraft_reg.zip_code.clone().unwrap_or_default(),
+                        aircraft_reg
+                            .country_mail_code
+                            .clone()
+                            .unwrap_or_else(|| "US".to_string()),
+                    );
+                    location_cache.insert(cache_key, location.id);
+
+                    all_updates.push((reg_num, location.id));
+                }
+            }
+
             // Update location_ids in database - TIMED
             let update_start = Instant::now();
             let mut conn = self.get_connection()?;
-            for (reg_num, location_result) in location_results {
-                if let Ok(location) = location_result {
-                    match diesel::update(aircraft_registrations::table)
-                        .filter(aircraft_registrations::registration_number.eq(&reg_num))
-                        .set(aircraft_registrations::location_id.eq(location.id))
-                        .execute(&mut conn)
-                    {
-                        Ok(_) => locations_filled += 1,
-                        Err(e) => warn!("Failed to update location for {}: {}", reg_num, e),
-                    }
+            for (reg_num, location_id) in all_updates {
+                match diesel::update(aircraft_registrations::table)
+                    .filter(aircraft_registrations::registration_number.eq(&reg_num))
+                    .set(aircraft_registrations::location_id.eq(location_id))
+                    .execute(&mut conn)
+                {
+                    Ok(_) => locations_filled += 1,
+                    Err(e) => warn!("Failed to update location for {}: {}", reg_num, e),
                 }
             }
             let update_elapsed = update_start.elapsed().as_secs_f64();
@@ -319,10 +379,13 @@ impl AircraftRegistrationsRepository {
 
             if batch_end.is_multiple_of(1000) || batch_end == total_count {
                 info!(
-                    "Location progress: {}/{} ({:.1}%) | Batch lookup: {:.2}s | Batch updates: {:.2}s",
+                    "Location progress: {}/{} ({:.1}%) | Lookups: {} | Cache hits: {} | Batch time: {:.2}s (lookup: {:.2}s, update: {:.2}s)",
                     batch_end,
                     total_count,
                     (batch_end as f64 / total_count as f64) * 100.0,
+                    to_lookup.len(),
+                    cache_hit_count,
+                    lookup_elapsed + update_elapsed,
                     lookup_elapsed,
                     update_elapsed
                 );
@@ -330,11 +393,18 @@ impl AircraftRegistrationsRepository {
         }
 
         info!(
-            "Phase 2b complete: Filled {} locations in {:.1} seconds (Lookups: {:.1}s, Updates: {:.1}s)",
+            "Phase 2b complete: Filled {} locations in {:.1} seconds (Lookups: {:.1}s, Updates: {:.1}s) | Cache: {} hits, {} misses ({:.1}% hit rate)",
             locations_filled,
             phase2b_start.elapsed().as_secs_f64(),
             total_location_lookup_time,
-            total_update_time
+            total_update_time,
+            cache_hits,
+            cache_misses,
+            if (cache_hits + cache_misses) > 0 {
+                (cache_hits as f64 / (cache_hits + cache_misses) as f64) * 100.0
+            } else {
+                0.0
+            }
         );
 
         let elapsed = start_time.elapsed();
