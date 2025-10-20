@@ -110,8 +110,9 @@ pub(crate) async fn timeout_flight(
             Ok(())
         }
         Ok(false) => {
-            warn!(
-                "Flight {} was not found when attempting to timeout",
+            // Flight already completed/deleted - benign race between timeout checker and landing/spurious deletion
+            tracing::debug!(
+                "Flight {} already completed or deleted (benign race with landing/spurious deletion)",
                 flight_id
             );
             Ok(())
