@@ -2,6 +2,7 @@ mod aircraft_models;
 mod aircraft_registrations;
 mod airports_runways;
 mod devices_receivers;
+mod home_base_linking;
 
 use anyhow::Result;
 use diesel::PgConnection;
@@ -155,9 +156,19 @@ pub async fn handle_load_data(
     }
 
     // Link home bases (if requested)
-    // TODO: Implement home base linking with metrics tracking
     if link_home_bases {
-        warn!("Home base linking not yet implemented in refactored loader");
+        let metrics = home_base_linking::link_home_bases_with_metrics(diesel_pool.clone()).await;
+
+        if !metrics.success
+            && let Some(ref config) = email_config
+        {
+            let _ = send_failure_email(
+                config,
+                &metrics.name,
+                metrics.error_message.as_deref().unwrap_or("Unknown error"),
+            );
+        }
+        report.add_entity(metrics);
     }
 
     report.total_duration_secs = overall_start.elapsed().as_secs_f64();
