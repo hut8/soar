@@ -205,7 +205,6 @@ async fn fetch_page(client: &reqwest::Client, url: &str, page_id: i64) -> reqwes
 fn parse_description_links(mut text: String) -> (String, Vec<Link>) {
     let mut links: Vec<Link> = Vec::new();
 
-    info!("Parse description links: {}", text);
     // Replace each [*href label] with just "label" and collect links
     let replaced = WIKIDOT_LINK_RE.replace_all(&text, |caps: &Captures| {
         let href = caps.get(1).unwrap().as_str().to_string();
