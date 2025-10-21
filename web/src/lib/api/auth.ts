@@ -1,4 +1,4 @@
-import type { User } from '$lib/stores/auth';
+import type { User } from '$lib/types';
 import { serverCall, ServerError } from './server';
 
 export interface LoginRequest {

@@ -16,8 +16,8 @@
 	} from '@lucide/svelte';
 	import { ProgressRing } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall } from '$lib/api/server';
-	import { auth, type User } from '$lib/stores/auth';
-	import type { ClubWithSoaring } from '$lib/types';
+	import { auth } from '$lib/stores/auth';
+	import type { ClubWithSoaring, User } from '$lib/types';
 	import { getStatusCodeDescription, getAircraftTypeOgnDescription } from '$lib/formatters';
 
 	interface Aircraft {
