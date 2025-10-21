@@ -4,10 +4,6 @@ version = "0.1.2"
 edition = "2024"
 resolver = "2"
 
-[features]
-default = []
-console = ["console-subscriber"]
-
 [dependencies]
 anyhow = "1.0"
 argon2 = "0.5"
@@ -52,7 +48,7 @@ diesel_migrations = "2.2"
 diesel-derive-enum = { version = "3.0.0-beta.1", features = ["postgres"] }
 r2d2 = "0.8"
 tokio = { version = "1.0", features = ["rt-multi-thread", "macros", "fs", "sync", "time", "signal", "tracing"] }
-console-subscriber = { version = "0.4", optional = true }
+console-subscriber = "0.4"
 tower = "0.5"
 tower-http = { version = "0.6", features = ["fs", "trace", "cors"] }
 tracing = { version = "0.1" }
