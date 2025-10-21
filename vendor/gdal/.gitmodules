@@ -1,3 +1,0 @@
-[submodule "gdal-src/source"]
-	path = gdal-src/source
-	url = https://github.com/OSGeo/gdal
