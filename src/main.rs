@@ -628,6 +628,8 @@ async fn main() -> Result<()> {
 
     let registry = tracing_subscriber::registry().with(filter);
 
+    let fmt_layer = tracing_subscriber::fmt::layer();
+
     match &cli.command {
         Commands::Run { .. } => {
             // Run subcommand uses tokio-console on port 6669 (default)
@@ -639,9 +641,13 @@ async fn main() -> Result<()> {
                 .as_ref()
                 .map(|_| sentry::integrations::tracing::layer())
             {
-                registry.with(console_layer).with(sentry_layer).init();
+                registry
+                    .with(fmt_layer)
+                    .with(console_layer)
+                    .with(sentry_layer)
+                    .init();
             } else {
-                registry.with(console_layer).init();
+                registry.with(fmt_layer).with(console_layer).init();
             }
 
             info!(
@@ -658,9 +664,13 @@ async fn main() -> Result<()> {
                 .as_ref()
                 .map(|_| sentry::integrations::tracing::layer())
             {
-                registry.with(console_layer).with(sentry_layer).init();
+                registry
+                    .with(fmt_layer)
+                    .with(console_layer)
+                    .with(sentry_layer)
+                    .init();
             } else {
-                registry.with(console_layer).init();
+                registry.with(fmt_layer).with(console_layer).init();
             }
 
             info!(
@@ -669,8 +679,6 @@ async fn main() -> Result<()> {
         }
         _ => {
             // Other subcommands use regular tracing (no tokio-console overhead)
-            let fmt_layer = tracing_subscriber::fmt::layer();
-
             if let Some(sentry_layer) = _guard
                 .as_ref()
                 .map(|_| sentry::integrations::tracing::layer())
