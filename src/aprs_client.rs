@@ -582,7 +582,7 @@ impl Default for AprsClientConfigBuilder {
 /// Archive service for managing daily log files and compression
 #[derive(Clone)]
 pub struct ArchiveService {
-    sender: mpsc::UnboundedSender<String>,
+    sender: mpsc::Sender<String>,
 }
 
 impl ArchiveService {
@@ -609,12 +609,21 @@ impl ArchiveService {
             }
         }
 
-        let (sender, mut receiver) = mpsc::unbounded_channel::<String>();
+        // Use bounded channel to prevent unbounded memory growth
+        // Capacity of 10,000 messages should handle bursts while limiting memory to ~1.5MB
+        // (assuming ~150 bytes per APRS message)
+        let (sender, mut receiver) = mpsc::channel::<String>(10_000);
+
+        info!(
+            "Archive service initialized with bounded channel (capacity: 10,000 messages, ~1.5MB buffer)"
+        );
 
         // Spawn background task for file writing and management
         tokio::spawn(async move {
             let mut current_file: Option<std::fs::File> = None;
             let mut current_date: Option<chrono::NaiveDate> = None;
+            let mut messages_written = 0u64;
+            let mut last_stats_log = std::time::Instant::now();
 
             while let Some(message) = receiver.recv().await {
                 let now = Local::now();
@@ -661,10 +670,42 @@ impl ArchiveService {
                 }
 
                 // Write message to current file
-                if let Some(file) = &mut current_file
-                    && let Err(e) = writeln!(file, "{}", message)
-                {
-                    warn!("Failed to write to archive file: {}", e);
+                if let Some(file) = &mut current_file {
+                    let write_start = std::time::Instant::now();
+                    if let Err(e) = writeln!(file, "{}", message) {
+                        error!(
+                            "Failed to write to archive file: {} - this may cause message backlog",
+                            e
+                        );
+                    } else {
+                        messages_written += 1;
+                        let write_duration = write_start.elapsed();
+
+                        // Warn if a single write takes more than 100ms (indicates I/O issues)
+                        if write_duration.as_millis() > 100 {
+                            warn!(
+                                "Slow archive write detected: {}ms - disk I/O may be bottleneck",
+                                write_duration.as_millis()
+                            );
+                        }
+                    }
+                }
+
+                // Log statistics every 5 minutes
+                if last_stats_log.elapsed().as_secs() >= 300 {
+                    let queue_len = receiver.len();
+                    info!(
+                        "Archive stats: {} messages written in last 5min, {} messages queued",
+                        messages_written, queue_len
+                    );
+                    if queue_len > 5000 {
+                        warn!(
+                            "Archive queue is building up ({} messages) - disk writes may be too slow",
+                            queue_len
+                        );
+                    }
+                    messages_written = 0;
+                    last_stats_log = std::time::Instant::now();
                 }
             }
 
@@ -710,9 +751,26 @@ impl ArchiveService {
 
     /// Archive a message
     pub fn archive(&self, message: &str) {
-        // Send to background task (non-blocking)
-        if let Err(e) = self.sender.send(message.to_string()) {
-            warn!("Failed to send message to archive service: {}", e);
+        // Use try_send to avoid blocking the caller
+        // This provides backpressure if the archive writer can't keep up
+        match self.sender.try_send(message.to_string()) {
+            Ok(_) => {
+                // Message successfully queued
+            }
+            Err(mpsc::error::TrySendError::Full(_)) => {
+                // Channel is full - indicates archive writer is falling behind
+                // This is a sign of disk I/O issues or excessive message rate
+                warn!(
+                    "Archive channel is FULL (10,000 messages buffered) - dropping message. \
+                     This indicates disk writes are slower than incoming APRS messages. \
+                     Check disk I/O performance and consider increasing channel capacity."
+                );
+                // Message is dropped to prevent unbounded memory growth
+            }
+            Err(mpsc::error::TrySendError::Closed(_)) => {
+                // Archive service has shut down
+                error!("Archive service channel is closed - cannot archive message");
+            }
         }
     }
 }
