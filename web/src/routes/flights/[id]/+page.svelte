@@ -1069,8 +1069,7 @@
 									>{fix.climb_fpm ? `${fix.climb_fpm.toFixed(0)} fpm` : 'N/A'}</td
 								>
 							</tr>
-							<!-- TODO: Backend doesn't currently expose raw_packet in Fix API response
-							{#if showRawData}
+							{#if showRawData && fix.raw_packet}
 								<tr
 									class="border-b border-gray-200 dark:border-gray-700 {index % 2 === 0
 										? 'bg-gray-100 dark:bg-gray-800'
@@ -1081,7 +1080,6 @@
 									</td>
 								</tr>
 							{/if}
-							-->
 						{/each}
 					</tbody>
 				</table>

@@ -312,13 +312,17 @@ impl FixesRepository {
 
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
-            use crate::schema::fixes::dsl::*;
+            use crate::schema::{aprs_messages, fixes};
             let mut conn = pool.get()?;
 
-            let mut query = fixes
-                .filter(device_id.eq(device_id_param))
-                .filter(timestamp.between(start_time, end_time))
-                .order(timestamp.desc())
+            let mut query = fixes::table
+                .left_join(
+                    aprs_messages::table
+                        .on(fixes::aprs_message_id.eq(aprs_messages::id.nullable())),
+                )
+                .filter(fixes::device_id.eq(device_id_param))
+                .filter(fixes::timestamp.between(start_time, end_time))
+                .order(fixes::timestamp.desc())
                 .into_boxed();
 
             // Only apply limit if specified
@@ -326,7 +330,16 @@ impl FixesRepository {
                 query = query.limit(limit_value);
             }
 
-            let results = query.select(Fix::as_select()).load::<Fix>(&mut conn)?;
+            // Select all Fix fields plus raw_message from aprs_messages as raw_packet
+            let results = query
+                .select((Fix::as_select(), aprs_messages::raw_message.nullable()))
+                .load::<(Fix, Option<String>)>(&mut conn)?
+                .into_iter()
+                .map(|(mut fix, raw_packet)| {
+                    fix.raw_packet = raw_packet;
+                    fix
+                })
+                .collect();
 
             Ok::<Vec<Fix>, anyhow::Error>(results)
         })

@@ -192,6 +192,7 @@ export interface Fix {
 	model?: string;
 	flight_id?: string;
 	active: boolean;
+	raw_packet?: string; // Raw APRS packet data (joined from aprs_messages table)
 }
 
 // User authentication and profile
