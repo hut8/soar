@@ -11,7 +11,7 @@ use crate::actions::views::{AirportInfo, DeviceInfo, FlightView};
 use crate::airports_repo::AirportsRepository;
 use crate::device_repo::DeviceRepository;
 use crate::devices::Device;
-use crate::fixes::Fix;
+use crate::fixes::FixWithRawPacket;
 use crate::fixes_repo::FixesRepository;
 use crate::flights::Flight;
 use crate::flights_repo::FlightsRepository;
@@ -33,7 +33,7 @@ pub struct FlightResponse {
 
 #[derive(Debug, Serialize)]
 pub struct FlightFixesResponse {
-    pub fixes: Vec<Fix>,
+    pub fixes: Vec<FixWithRawPacket>,
     pub count: usize,
 }
 

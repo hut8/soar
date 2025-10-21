@@ -121,13 +121,11 @@ mod tests {
         // Create a fix with high ground speed
         let mut fix = Fix {
             id: uuid::Uuid::new_v4(),
-            raw_packet: "TEST-1>APRS,TCPXX*:!4000.00N/07400.00W>000/000/A=001000".to_string(),
             source: "TEST".to_string(),
             aprs_type: "APRS".to_string(),
             via: vec![],
             timestamp: Utc::now(),
             received_at: Utc::now(),
-            lag: None,
             latitude: 40.0,
             longitude: -74.0,
             altitude_msl_feet: Some(1000),
@@ -137,9 +135,7 @@ mod tests {
             aircraft_type_ogn: None,
             flight_id: None,
             flight_number: None,
-            emitter_category: None,
             registration: None,
-            model: None,
             squawk: None,
             ground_speed_knots: Some(50.0), // 50 knots - should be active
             track_degrees: None,

@@ -393,7 +393,10 @@
 									</td>
 									<td>
 										<div class="text-sm">
-											{formatAltitude(flight.latest_altitude_msl_feet, flight.latest_altitude_agl_feet)}
+											{formatAltitude(
+												flight.latest_altitude_msl_feet,
+												flight.latest_altitude_agl_feet
+											)}
 										</div>
 									</td>
 									<td>

@@ -108,11 +108,38 @@ pub struct Fix {
 
     /// Reference to the APRS message that contains the raw packet data
     pub aprs_message_id: Option<Uuid>,
+}
+
+/// Extended Fix struct that includes raw packet data from aprs_messages table
+/// Used for API responses where raw packet data is needed
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FixWithRawPacket {
+    #[serde(flatten)]
+    pub fix: Fix,
 
     /// Raw APRS packet data (joined from aprs_messages table)
-    /// This field is not in the fixes table - it's populated via LEFT JOIN for API responses
-    #[diesel(deserialize_as = "Option<String>")]
     pub raw_packet: Option<String>,
+}
+
+impl FixWithRawPacket {
+    /// Create a FixWithRawPacket from a Fix and optional raw packet string
+    pub fn new(fix: Fix, raw_packet: Option<String>) -> Self {
+        Self { fix, raw_packet }
+    }
+}
+
+impl std::ops::Deref for FixWithRawPacket {
+    type Target = Fix;
+
+    fn deref(&self) -> &Self::Target {
+        &self.fix
+    }
+}
+
+impl std::ops::DerefMut for FixWithRawPacket {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.fix
+    }
 }
 
 impl Fix {
@@ -234,7 +261,6 @@ impl Fix {
                     is_active,
                     receiver_id: None,     // Will be set during fix insertion
                     aprs_message_id: None, // Will be populated during fix processing
-                    raw_packet: None,      // Will be populated via LEFT JOIN for API responses
                 }))
             }
             _ => {

@@ -307,7 +307,7 @@ impl FixesRepository {
         start_time: DateTime<Utc>,
         end_time: DateTime<Utc>,
         limit: Option<i64>,
-    ) -> Result<Vec<Fix>> {
+    ) -> Result<Vec<crate::fixes::FixWithRawPacket>> {
         let device_id_param = *device_id;
 
         let pool = self.pool.clone();
@@ -335,13 +335,10 @@ impl FixesRepository {
                 .select((Fix::as_select(), aprs_messages::raw_message.nullable()))
                 .load::<(Fix, Option<String>)>(&mut conn)?
                 .into_iter()
-                .map(|(mut fix, raw_packet)| {
-                    fix.raw_packet = raw_packet;
-                    fix
-                })
+                .map(|(fix, raw_packet)| crate::fixes::FixWithRawPacket::new(fix, raw_packet))
                 .collect();
 
-            Ok::<Vec<Fix>, anyhow::Error>(results)
+            Ok::<Vec<crate::fixes::FixWithRawPacket>, anyhow::Error>(results)
         })
         .await??;
 
