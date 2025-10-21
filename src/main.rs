@@ -617,11 +617,46 @@ async fn main() -> Result<()> {
         }));
     }
 
-    // Initialize tracing with TRACE level by default, but silence async_nats TRACE/DEBUG
-    console_subscriber::init();
-    info!("tokio-console subscriber initialized - connect with `tokio-console`");
-
     let cli = Cli::parse();
+
+    // Initialize tokio-console only for Run and Web subcommands, with different ports
+    match &cli.command {
+        Commands::Run { .. } => {
+            // Run subcommand uses port 6669 (default)
+            console_subscriber::init();
+            info!(
+                "tokio-console subscriber initialized on port 6669 - connect with `tokio-console`"
+            );
+        }
+        Commands::Web { .. } => {
+            // Web subcommand uses port 6670 to avoid conflict
+            console_subscriber::ConsoleLayer::builder()
+                .server_addr(([0, 0, 0, 0], 6670))
+                .init();
+            info!(
+                "tokio-console subscriber initialized on port 6670 - connect with `tokio-console http://localhost:6670`"
+            );
+        }
+        _ => {
+            // Other subcommands use regular tracing (no tokio-console overhead)
+            use tracing_subscriber::{
+                EnvFilter, FmtSubscriber, layer::SubscriberExt, util::SubscriberInitExt,
+            };
+
+            let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+                EnvFilter::new("info,soar=debug,async_nats=warn,soar::nats_publisher=warn")
+            });
+
+            let subscriber = FmtSubscriber::builder().with_env_filter(filter).finish();
+
+            if _guard.is_some() {
+                let sentry_layer = sentry::integrations::tracing::layer();
+                subscriber.with(sentry_layer).init();
+            } else {
+                subscriber.init();
+            }
+        }
+    }
 
     // Set up database connection - Diesel for all repositories
     let diesel_pool = setup_diesel_database().await?;
