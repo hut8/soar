@@ -2,7 +2,8 @@ use anyhow::Result;
 use async_nats::Client;
 use serde_json;
 use std::sync::Arc;
-use tracing::{debug, error, info};
+use tokio::sync::mpsc;
+use tracing::{debug, error, info, warn};
 
 use crate::Fix;
 
@@ -54,7 +55,11 @@ fn get_area_subject(topic_prefix: &str, latitude: f64, longitude: f64) -> String
 /// NATS publisher for aircraft position fixes
 #[derive(Clone)]
 pub struct NatsFixPublisher {
-    nats_client: Arc<Client>,
+    // Keep the Arc<Client> alive to maintain the NATS connection
+    // Even though we don't use it directly after initialization,
+    // dropping it would close the connection
+    _nats_client: Arc<Client>,
+    fix_sender: mpsc::Sender<Fix>,
 }
 
 impl NatsFixPublisher {
@@ -71,25 +76,93 @@ impl NatsFixPublisher {
             .connect(nats_url)
             .await?;
 
+        let nats_client = Arc::new(nats_client);
+
+        // Create bounded channel for fixes (capacity: 1000 fixes ~= 2MB buffer)
+        let (fix_sender, mut fix_receiver) = mpsc::channel::<Fix>(1000);
+
+        info!(
+            "NATS publisher initialized with bounded channel (capacity: 1000 fixes, ~2MB buffer)"
+        );
+
+        // Spawn SINGLE background task to publish all fixes
+        let client_clone = Arc::clone(&nats_client);
+        tokio::spawn(async move {
+            info!("NATS publisher background task started");
+            let mut fixes_published = 0u64;
+            let mut last_stats_log = std::time::Instant::now();
+
+            while let Some(fix) = fix_receiver.recv().await {
+                let device_id = fix.device_id.to_string();
+
+                match publish_to_nats(&client_clone, &device_id, &fix).await {
+                    Ok(()) => {
+                        fixes_published += 1;
+                        metrics::counter!("nats_publisher_fixes_published").increment(1);
+                        debug!("Published fix for device {}", device_id);
+                    }
+                    Err(e) => {
+                        error!("Failed to publish fix for device {}: {}", device_id, e);
+                        metrics::counter!("nats_publisher_errors").increment(1);
+                    }
+                }
+
+                // Update queue depth metric
+                metrics::gauge!("nats_publisher_queue_depth").set(fix_receiver.len() as f64);
+
+                // Log statistics every 5 minutes
+                if last_stats_log.elapsed().as_secs() >= 300 {
+                    let queue_len = fix_receiver.len();
+                    info!(
+                        "NATS publisher stats: {} fixes published in last 5min, {} fixes queued",
+                        fixes_published, queue_len
+                    );
+                    if queue_len > 500 {
+                        warn!(
+                            "NATS publisher queue is building up ({} fixes) - NATS publishing may be slow",
+                            queue_len
+                        );
+                    }
+                    fixes_published = 0;
+                    last_stats_log = std::time::Instant::now();
+                }
+            }
+
+            warn!("NATS publisher background task stopped");
+        });
+
         Ok(Self {
-            nats_client: Arc::new(nats_client),
+            _nats_client: nats_client,
+            fix_sender,
         })
     }
 }
 
 impl NatsFixPublisher {
     /// Process a fix and publish it to NATS
+    /// Uses try_send to avoid blocking - provides backpressure if NATS publishing is slow
     pub fn process_fix(&self, fix: Fix, _raw_message: &str) {
-        // Clone the client for the async task
-        let nats_client = Arc::clone(&self.nats_client);
-
-        tokio::spawn(async move {
-            // Use device UUID as the device_id in NATS subject
-            if let Err(e) = publish_to_nats(&nats_client, &fix.device_id.to_string(), &fix).await {
-                error!("Failed to publish fix for device {}: {}", fix.device_id, e);
-            } else {
-                debug!("Published fix for device {}", fix.device_id);
+        // Use try_send to avoid blocking the caller
+        // This provides backpressure if the NATS publisher can't keep up
+        match self.fix_sender.try_send(fix) {
+            Ok(_) => {
+                // Fix successfully queued for publishing
             }
-        });
+            Err(mpsc::error::TrySendError::Full(_)) => {
+                // Channel is full - indicates NATS publisher is falling behind
+                warn!(
+                    "NATS publisher channel is FULL (1000 fixes buffered) - dropping fix. \
+                     This indicates NATS publishing is slower than incoming fix rate. \
+                     Check NATS server performance or increase channel capacity."
+                );
+                metrics::counter!("nats_publisher_dropped_fixes").increment(1);
+                // Fix is dropped to prevent unbounded memory growth
+            }
+            Err(mpsc::error::TrySendError::Closed(_)) => {
+                // NATS publisher task has shut down
+                error!("NATS publisher channel is closed - cannot publish fix");
+                metrics::counter!("nats_publisher_errors").increment(1);
+            }
+        }
     }
 }

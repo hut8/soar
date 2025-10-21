@@ -618,24 +618,34 @@ async fn main() -> Result<()> {
     }
 
     // Initialize tracing with TRACE level by default, but silence async_nats TRACE/DEBUG
-    use tracing_subscriber::{
-        EnvFilter, FmtSubscriber, layer::SubscriberExt, util::SubscriberInitExt,
-    };
+    // Use tokio-console if the "console" feature is enabled
+    #[cfg(feature = "console")]
+    {
+        console_subscriber::init();
+        info!("tokio-console subscriber initialized - connect with `tokio-console`");
+    }
 
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-        // Default filter: TRACE for soar, INFO for async_nats, WARN for everything else
-        EnvFilter::new("info,soar=debug,async_nats=warn,soar::nats_publisher=warn")
-    });
+    #[cfg(not(feature = "console"))]
+    {
+        use tracing_subscriber::{
+            EnvFilter, FmtSubscriber, layer::SubscriberExt, util::SubscriberInitExt,
+        };
 
-    // Create base subscriber
-    let subscriber = FmtSubscriber::builder().with_env_filter(filter).finish();
+        let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+            // Default filter: TRACE for soar, INFO for async_nats, WARN for everything else
+            EnvFilter::new("info,soar=debug,async_nats=warn,soar::nats_publisher=warn")
+        });
 
-    // Add Sentry layer if Sentry is enabled
-    if _guard.is_some() {
-        let sentry_layer = sentry::integrations::tracing::layer();
-        subscriber.with(sentry_layer).init();
-    } else {
-        subscriber.init();
+        // Create base subscriber
+        let subscriber = FmtSubscriber::builder().with_env_filter(filter).finish();
+
+        // Add Sentry layer if Sentry is enabled
+        if _guard.is_some() {
+            let sentry_layer = sentry::integrations::tracing::layer();
+            subscriber.with(sentry_layer).init();
+        } else {
+            subscriber.init();
+        }
     }
 
     let cli = Cli::parse();
