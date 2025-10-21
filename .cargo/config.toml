@@ -3,6 +3,8 @@
 [build]
 # Incremental compilation (enabled by default for dev, but explicit here)
 incremental = true
+# Enable tokio_unstable for tokio-console support
+rustflags = ["--cfg", "tokio_unstable"]
 
 [target.x86_64-unknown-linux-gnu]
 # Fast linker configuration using mold
