@@ -622,6 +622,12 @@ async fn main() -> Result<()> {
     // Initialize tracing/tokio-console based on subcommand
     use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        EnvFilter::new("info,soar=debug,async_nats=warn,soar::nats_publisher=warn")
+    });
+
+    let registry = tracing_subscriber::registry().with(filter);
+
     match &cli.command {
         Commands::Run { .. } => {
             // Run subcommand uses tokio-console on port 6669 (default)
@@ -629,22 +635,13 @@ async fn main() -> Result<()> {
                 .server_addr(([0, 0, 0, 0], 6669))
                 .spawn();
 
-            let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-                EnvFilter::new("info,soar=debug,async_nats=warn,soar::nats_publisher=warn")
-            });
-
-            if _guard.is_some() {
-                let sentry_layer = sentry::integrations::tracing::layer();
-                tracing_subscriber::registry()
-                    .with(console_layer)
-                    .with(filter)
-                    .with(sentry_layer)
-                    .init();
+            if let Some(sentry_layer) = _guard
+                .as_ref()
+                .map(|_| sentry::integrations::tracing::layer())
+            {
+                registry.with(console_layer).with(sentry_layer).init();
             } else {
-                tracing_subscriber::registry()
-                    .with(console_layer)
-                    .with(filter)
-                    .init();
+                registry.with(console_layer).init();
             }
 
             info!(
@@ -657,22 +654,13 @@ async fn main() -> Result<()> {
                 .server_addr(([0, 0, 0, 0], 6670))
                 .spawn();
 
-            let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-                EnvFilter::new("info,soar=debug,async_nats=warn,soar::nats_publisher=warn")
-            });
-
-            if _guard.is_some() {
-                let sentry_layer = sentry::integrations::tracing::layer();
-                tracing_subscriber::registry()
-                    .with(console_layer)
-                    .with(filter)
-                    .with(sentry_layer)
-                    .init();
+            if let Some(sentry_layer) = _guard
+                .as_ref()
+                .map(|_| sentry::integrations::tracing::layer())
+            {
+                registry.with(console_layer).with(sentry_layer).init();
             } else {
-                tracing_subscriber::registry()
-                    .with(console_layer)
-                    .with(filter)
-                    .init();
+                registry.with(console_layer).init();
             }
 
             info!(
@@ -681,24 +669,15 @@ async fn main() -> Result<()> {
         }
         _ => {
             // Other subcommands use regular tracing (no tokio-console overhead)
-            let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-                EnvFilter::new("info,soar=debug,async_nats=warn,soar::nats_publisher=warn")
-            });
-
             let fmt_layer = tracing_subscriber::fmt::layer();
 
-            if _guard.is_some() {
-                let sentry_layer = sentry::integrations::tracing::layer();
-                tracing_subscriber::registry()
-                    .with(fmt_layer)
-                    .with(filter)
-                    .with(sentry_layer)
-                    .init();
+            if let Some(sentry_layer) = _guard
+                .as_ref()
+                .map(|_| sentry::integrations::tracing::layer())
+            {
+                registry.with(fmt_layer).with(sentry_layer).init();
             } else {
-                tracing_subscriber::registry()
-                    .with(fmt_layer)
-                    .with(filter)
-                    .init();
+                registry.with(fmt_layer).init();
             }
         }
     }
