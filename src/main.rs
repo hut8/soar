@@ -619,41 +619,86 @@ async fn main() -> Result<()> {
 
     let cli = Cli::parse();
 
-    // Initialize tokio-console only for Run and Web subcommands, with different ports
+    // Initialize tracing/tokio-console based on subcommand
+    use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
+
     match &cli.command {
         Commands::Run { .. } => {
-            // Run subcommand uses port 6669 (default)
-            console_subscriber::init();
+            // Run subcommand uses tokio-console on port 6669 (default)
+            let console_layer = console_subscriber::ConsoleLayer::builder()
+                .server_addr(([0, 0, 0, 0], 6669))
+                .spawn();
+
+            let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+                EnvFilter::new("info,soar=debug,async_nats=warn,soar::nats_publisher=warn")
+            });
+
+            if _guard.is_some() {
+                let sentry_layer = sentry::integrations::tracing::layer();
+                tracing_subscriber::registry()
+                    .with(console_layer)
+                    .with(filter)
+                    .with(sentry_layer)
+                    .init();
+            } else {
+                tracing_subscriber::registry()
+                    .with(console_layer)
+                    .with(filter)
+                    .init();
+            }
+
             info!(
                 "tokio-console subscriber initialized on port 6669 - connect with `tokio-console`"
             );
         }
         Commands::Web { .. } => {
-            // Web subcommand uses port 6670 to avoid conflict
-            console_subscriber::ConsoleLayer::builder()
+            // Web subcommand uses tokio-console on port 6670 to avoid conflict
+            let console_layer = console_subscriber::ConsoleLayer::builder()
                 .server_addr(([0, 0, 0, 0], 6670))
-                .init();
+                .spawn();
+
+            let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+                EnvFilter::new("info,soar=debug,async_nats=warn,soar::nats_publisher=warn")
+            });
+
+            if _guard.is_some() {
+                let sentry_layer = sentry::integrations::tracing::layer();
+                tracing_subscriber::registry()
+                    .with(console_layer)
+                    .with(filter)
+                    .with(sentry_layer)
+                    .init();
+            } else {
+                tracing_subscriber::registry()
+                    .with(console_layer)
+                    .with(filter)
+                    .init();
+            }
+
             info!(
                 "tokio-console subscriber initialized on port 6670 - connect with `tokio-console http://localhost:6670`"
             );
         }
         _ => {
             // Other subcommands use regular tracing (no tokio-console overhead)
-            use tracing_subscriber::{
-                EnvFilter, FmtSubscriber, layer::SubscriberExt, util::SubscriberInitExt,
-            };
-
             let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
                 EnvFilter::new("info,soar=debug,async_nats=warn,soar::nats_publisher=warn")
             });
 
-            let subscriber = FmtSubscriber::builder().with_env_filter(filter).finish();
+            let fmt_layer = tracing_subscriber::fmt::layer();
 
             if _guard.is_some() {
                 let sentry_layer = sentry::integrations::tracing::layer();
-                subscriber.with(sentry_layer).init();
+                tracing_subscriber::registry()
+                    .with(fmt_layer)
+                    .with(filter)
+                    .with(sentry_layer)
+                    .init();
             } else {
-                subscriber.init();
+                tracing_subscriber::registry()
+                    .with(fmt_layer)
+                    .with(filter)
+                    .init();
             }
         }
     }
