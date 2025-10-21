@@ -191,8 +191,21 @@ jobs:
 
       - name: Build release binary
         env:
-          RUSTFLAGS: "-C link-arg=-fuse-ld=mold -C linker=clang"
+          RUSTFLAGS: "-C link-arg=-fuse-ld=mold -C linker=clang --cfg tokio_unstable"
         run: cargo build --release
+
+      - name: Verify runtime initialization
+        run: |
+          echo "Testing runtime initialization (Sentry, tracing, tokio-console)..."
+          timeout 10s ./target/release/soar verify-runtime || EXIT_CODE=$?
+          if [ ${EXIT_CODE:-0} -eq 124 ]; then
+            echo "ERROR: verify-runtime command timed out (likely hung)"
+            exit 1
+          elif [ ${EXIT_CODE:-0} -ne 0 ]; then
+            echo "ERROR: verify-runtime command failed with exit code $EXIT_CODE"
+            exit $EXIT_CODE
+          fi
+          echo "✓ Runtime verification passed"
 
       - name: Create binary archive
         run: |

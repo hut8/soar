@@ -157,6 +157,11 @@ enum Commands {
         #[arg(long)]
         archive_path: String,
     },
+    /// Verify runtime initialization (Sentry, tracing, tokio-console)
+    ///
+    /// Tests that the runtime can initialize without panicking. Used for CI/CD
+    /// to catch configuration issues like missing tokio_unstable flag.
+    VerifyRuntime {},
 }
 
 async fn setup_diesel_database() -> Result<Pool<ConnectionManager<PgConnection>>> {
@@ -631,8 +636,8 @@ async fn main() -> Result<()> {
     let fmt_layer = tracing_subscriber::fmt::layer();
 
     match &cli.command {
-        Commands::Run { .. } => {
-            // Run subcommand uses tokio-console on port 6669 (default)
+        Commands::Run { .. } | Commands::VerifyRuntime { .. } => {
+            // Run and VerifyRuntime subcommands use tokio-console on port 6669 (default)
             let console_layer = console_subscriber::ConsoleLayer::builder()
                 .server_addr(([0, 0, 0, 0], 6669))
                 .spawn();
@@ -780,5 +785,15 @@ async fn main() -> Result<()> {
             before,
             archive_path,
         } => soar::archive::handle_archive(diesel_pool, before, archive_path).await,
+        Commands::VerifyRuntime {} => {
+            // Verify runtime initialization completed successfully
+            info!("Runtime verification successful:");
+            info!("  ✓ Sentry integration initialized");
+            info!("  ✓ Tracing subscriber initialized");
+            info!("  ✓ tokio-console layer initialized (port 6669)");
+            info!("  ✓ All runtime components ready");
+            info!("Runtime verification PASSED");
+            Ok(())
+        }
     }
 }
