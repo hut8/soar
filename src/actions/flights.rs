@@ -300,10 +300,53 @@ pub async fn search_flights(
         // Get flights in progress with total count
         let total_count_result = flights_repo.get_flights_in_progress_count().await;
         let flights_result = flights_repo.get_flights_in_progress(limit, offset).await;
+        let fixes_repo = FixesRepository::new(state.pool.clone());
 
         match (total_count_result, flights_result) {
             (Ok(total_count), Ok(flights)) => {
-                let flight_views: Vec<FlightView> = flights.into_iter().map(|f| f.into()).collect();
+                let mut flight_views = Vec::new();
+
+                for flight in flights {
+                    // Look up device information if device_id is present
+                    let device_info = if let Some(device_id) = flight.device_id {
+                        match device_repo.get_device_by_uuid(device_id).await {
+                            Ok(Some(device)) => Some(DeviceInfo {
+                                aircraft_model: Some(device.aircraft_model),
+                                registration: Some(device.registration),
+                                aircraft_type_ogn: device.aircraft_type_ogn,
+                            }),
+                            _ => None,
+                        }
+                    } else {
+                        None
+                    };
+
+                    // Get latest altitude information for active flights
+                    let (latest_altitude_msl, latest_altitude_agl) =
+                        if let Some(device_id) = flight.device_id {
+                            let start_time = flight.takeoff_time.unwrap_or(flight.created_at);
+                            match fixes_repo
+                                .get_latest_fix_for_device(device_id, start_time)
+                                .await
+                            {
+                                Ok(Some(fix)) => (fix.altitude_msl_feet, fix.altitude_agl),
+                                _ => (None, None),
+                            }
+                        } else {
+                            (None, None)
+                        };
+
+                    let flight_view = FlightView::from_flight_with_altitude(
+                        flight,
+                        None,
+                        None,
+                        device_info,
+                        latest_altitude_msl,
+                        latest_altitude_agl,
+                    );
+                    flight_views.push(flight_view);
+                }
+
                 Json(FlightsListResponse {
                     flights: flight_views,
                     total_count,
