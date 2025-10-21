@@ -1,0 +1,11 @@
+[package]
+authors = ["LIAUD Corentin <corentinliaud26@gmail.com>"]
+categories = ["data-structures"]
+description = "Easy and highly-configurable XML builder/writer"
+edition = "2021"
+keywords = ["xml"]
+license = "MIT"
+name = "xml-builder"
+readme = "README.md"
+repository = "https://github.com/cocool97/xml-builder"
+version = "0.5.4"

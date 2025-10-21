@@ -28,3 +28,13 @@ debug = 0  # No debug info for dependencies in dev builds
 [profile.dev.build-override]
 opt-level = 0
 debug = 1
+[source.crates-io]
+replace-with = "vendored-sources"
+
+[source."git+https://github.com/hut8/ogn-parser-rs?branch=master"]
+git = "https://github.com/hut8/ogn-parser-rs"
+branch = "master"
+replace-with = "vendored-sources"
+
+[source.vendored-sources]
+directory = "vendor"

@@ -1,0 +1,27 @@
+[package]
+name = "flarmnet"
+version = "0.5.0"
+description = "FlarmNet file decoder/encoder"
+authors = ["Tobias Bieniek <tobias.bieniek@gmail.com>"]
+license = "MIT/Apache-2.0"
+repository = "https://github.com/glide-rs/flarmnet-rs.git"
+keywords = ["flarm", "flarmnet", "ogn", "glider", "gliding"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+default = ["lx", "xcsoar"]
+lx = ["minidom", "quick-xml"]
+xcsoar = ["encoding_rs"]
+
+[dependencies]
+encoding_rs = { version = "0.8.32", optional = true }
+minidom = { version = "0.12.0", optional = true }
+quick-xml = { version = "0.30.0", optional = true }
+thiserror = "1.0.44"
+
+[dev-dependencies]
+anyhow = "1.0.72"
+clap = { version = "4.3.21", features = ["derive"] }
+insta = "1.31.0"
