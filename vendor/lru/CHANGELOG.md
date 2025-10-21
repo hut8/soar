@@ -1,5 +1,29 @@
 # Changelog
 
+## [v0.16.2](https://github.com/jeromefroe/lru-rs/tree/0.16.2) - 2025-10-14
+
+- Upgrade hashbrown dependency to 0.16.0.
+
+## [v0.16.1](https://github.com/jeromefroe/lru-rs/tree/0.16.1) - 2025-09-08
+
+- Fix `Clone` for unbounded cache.
+
+## [v0.16.0](https://github.com/jeromefroe/lru-rs/tree/0.16.0) - 2025-07-02
+
+- Implement `Clone` for caches with custom hashers.
+
+## [v0.15.0](https://github.com/jeromefroe/lru-rs/tree/0.15.0) - 2025-06-26
+
+- Return bool from `promote` and `demote` to indicate whether key was found.
+
+## [v0.14.0](https://github.com/jeromefroe/lru-rs/tree/0.14.0) - 2025-04-12
+
+- Use `NonZeroUsize::MAX` instead of `unwrap()`, and update MSRV to 1.70.0.
+
+## [v0.13.0](https://github.com/jeromefroe/lru-rs/tree/0.13.0) - 2025-01-27
+
+- Add `peek_mru` and `pop_mru` methods, upgrade dependency on `hashbrown` to 0.15.2, and update MSRV to 1.65.0.
+
 ## [v0.12.5](https://github.com/jeromefroe/lru-rs/tree/0.12.5) - 2024-10-30
 
 - Upgrade hashbrown dependency to 0.15.

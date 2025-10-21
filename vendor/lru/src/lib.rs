@@ -193,13 +193,22 @@ pub struct LruCache<K, V, S = DefaultHasher> {
     tail: *mut LruEntry<K, V>,
 }
 
-impl<K, V> Clone for LruCache<K, V>
+impl<K, V, S> Clone for LruCache<K, V, S>
 where
     K: Hash + PartialEq + Eq + Clone,
     V: Clone,
+    S: BuildHasher + Clone,
 {
     fn clone(&self) -> Self {
-        let mut new_lru = LruCache::new(self.cap());
+        let map_cap = if self.is_unbounded() {
+            self.len()
+        } else {
+            self.cap().get()
+        };
+        let mut new_lru = LruCache::construct(
+            self.cap(),
+            HashMap::with_capacity_and_hasher(map_cap, self.map.hasher().clone()),
+        );
 
         for (key, value) in self.iter().rev() {
             new_lru.push(key.clone(), value.clone());
@@ -233,7 +242,7 @@ impl<K: Hash + Eq, V> LruCache<K, V> {
     /// let mut cache: LruCache<isize, &str> = LruCache::unbounded();
     /// ```
     pub fn unbounded() -> LruCache<K, V> {
-        LruCache::construct(NonZeroUsize::new(usize::MAX).unwrap(), HashMap::default())
+        LruCache::construct(NonZeroUsize::MAX, HashMap::default())
     }
 }
 
@@ -269,10 +278,7 @@ impl<K: Hash + Eq, V, S: BuildHasher> LruCache<K, V, S> {
     /// let mut cache: LruCache<isize, &str> = LruCache::unbounded_with_hasher(s);
     /// ```
     pub fn unbounded_with_hasher(hash_builder: S) -> LruCache<K, V, S> {
-        LruCache::construct(
-            NonZeroUsize::new(usize::MAX).unwrap(),
-            HashMap::with_hasher(hash_builder),
-        )
+        LruCache::construct(NonZeroUsize::MAX, HashMap::with_hasher(hash_builder))
     }
 
     /// Creates a new LRU Cache with the given capacity.
@@ -295,6 +301,11 @@ impl<K: Hash + Eq, V, S: BuildHasher> LruCache<K, V, S> {
         }
 
         cache
+    }
+
+    /// Whether this LRU cache is unbounded.
+    fn is_unbounded(&self) -> bool {
+        self.cap() == NonZeroUsize::MAX
     }
 
     /// Puts a key-value pair into cache. If the key already exists in the cache, then it updates
@@ -1063,6 +1074,37 @@ impl<K: Hash + Eq, V, S: BuildHasher> LruCache<K, V, S> {
         Some((key, val))
     }
 
+    /// Returns the value corresponding to the most recently used item or `None` if the
+    /// cache is empty. Like `peek`, `peek_mru` does not update the LRU list so the item's
+    /// position will be unchanged.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use lru::LruCache;
+    /// use std::num::NonZeroUsize;
+    /// let mut cache = LruCache::new(NonZeroUsize::new(2).unwrap());
+    ///
+    /// cache.put(1, "a");
+    /// cache.put(2, "b");
+    ///
+    /// assert_eq!(cache.peek_mru(), Some((&2, &"b")));
+    /// ```
+    pub fn peek_mru(&self) -> Option<(&K, &V)> {
+        if self.is_empty() {
+            return None;
+        }
+
+        let (key, val);
+        unsafe {
+            let node: *mut LruEntry<K, V> = (*self.head).next;
+            key = &(*(*node).key.as_ptr()) as &K;
+            val = &(*(*node).val.as_ptr()) as &V;
+        }
+
+        Some((key, val))
+    }
+
     /// Returns a bool indicating whether the given key is in the cache. Does not update the
     /// LRU list.
     ///
@@ -1194,7 +1236,36 @@ impl<K: Hash + Eq, V, S: BuildHasher> LruCache<K, V, S> {
         unsafe { Some((key.assume_init(), val.assume_init())) }
     }
 
-    /// Marks the key as the most recently used one.
+    /// Removes and returns the key and value corresponding to the most recently
+    /// used item or `None` if the cache is empty.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use lru::LruCache;
+    /// use std::num::NonZeroUsize;
+    /// let mut cache = LruCache::new(NonZeroUsize::new(2).unwrap());
+    ///
+    /// cache.put(2, "a");
+    /// cache.put(3, "b");
+    /// cache.put(4, "c");
+    /// cache.get(&3);
+    ///
+    /// assert_eq!(cache.pop_mru(), Some((3, "b")));
+    /// assert_eq!(cache.pop_mru(), Some((4, "c")));
+    /// assert_eq!(cache.pop_mru(), None);
+    /// assert_eq!(cache.len(), 0);
+    /// ```
+    pub fn pop_mru(&mut self) -> Option<(K, V)> {
+        let node = self.remove_first()?;
+        // N.B.: Can't destructure directly because of https://github.com/rust-lang/rust/issues/28536
+        let node = *node;
+        let LruEntry { key, val, .. } = node;
+        unsafe { Some((key.assume_init(), val.assume_init())) }
+    }
+
+    /// Marks the key as the most recently used one. Returns true if the key
+    /// was promoted because it exists in the cache, false otherwise.
     ///
     /// # Example
     ///
@@ -1213,10 +1284,13 @@ impl<K: Hash + Eq, V, S: BuildHasher> LruCache<K, V, S> {
     /// // assert_eq!(cache.pop_lru(), Some((3, "c")));
     ///
     /// // By promoting 3, we make sure it isn't popped.
-    /// cache.promote(&3);
+    /// assert!(cache.promote(&3));
     /// assert_eq!(cache.pop_lru(), Some((1, "a")));
+    ///
+    /// // Promoting an entry that doesn't exist doesn't do anything.
+    /// assert!(!cache.promote(&4));
     /// ```
-    pub fn promote<Q>(&mut self, k: &Q)
+    pub fn promote<Q>(&mut self, k: &Q) -> bool
     where
         K: Borrow<Q>,
         Q: Hash + Eq + ?Sized,
@@ -1225,10 +1299,14 @@ impl<K: Hash + Eq, V, S: BuildHasher> LruCache<K, V, S> {
             let node_ptr: *mut LruEntry<K, V> = node.as_ptr();
             self.detach(node_ptr);
             self.attach(node_ptr);
+            true
+        } else {
+            false
         }
     }
 
-    /// Marks the key as the least recently used one.
+    /// Marks the key as the least recently used one. Returns true if the key was demoted
+    /// because it exists in the cache, false otherwise.
     ///
     /// # Example
     ///
@@ -1247,12 +1325,15 @@ impl<K: Hash + Eq, V, S: BuildHasher> LruCache<K, V, S> {
     /// // assert_eq!(cache.pop_lru(), Some((3, "c")));
     ///
     /// // By demoting 1 and 2, we make sure those are popped first.
-    /// cache.demote(&2);
-    /// cache.demote(&1);
+    /// assert!(cache.demote(&2));
+    /// assert!(cache.demote(&1));
     /// assert_eq!(cache.pop_lru(), Some((1, "a")));
     /// assert_eq!(cache.pop_lru(), Some((2, "b")));
+    ///
+    /// // Demoting a key that doesn't exist does nothing.
+    /// assert!(!cache.demote(&4));
     /// ```
-    pub fn demote<Q>(&mut self, k: &Q)
+    pub fn demote<Q>(&mut self, k: &Q) -> bool
     where
         K: Borrow<Q>,
         Q: Hash + Eq + ?Sized,
@@ -1261,6 +1342,9 @@ impl<K: Hash + Eq, V, S: BuildHasher> LruCache<K, V, S> {
             let node_ptr: *mut LruEntry<K, V> = node.as_ptr();
             self.detach(node_ptr);
             self.attach_last(node_ptr);
+            true
+        } else {
+            false
         }
     }
 
@@ -1440,10 +1524,26 @@ impl<K: Hash + Eq, V, S: BuildHasher> LruCache<K, V, S> {
         }
     }
 
+    fn remove_first(&mut self) -> Option<Box<LruEntry<K, V>>> {
+        let next;
+        unsafe { next = (*self.head).next }
+        if !core::ptr::eq(next, self.tail) {
+            let old_key = KeyRef {
+                k: unsafe { &(*(*(*self.head).next).key.as_ptr()) },
+            };
+            let old_node = self.map.remove(&old_key).unwrap();
+            let node_ptr: *mut LruEntry<K, V> = old_node.as_ptr();
+            self.detach(node_ptr);
+            unsafe { Some(Box::from_raw(node_ptr)) }
+        } else {
+            None
+        }
+    }
+
     fn remove_last(&mut self) -> Option<Box<LruEntry<K, V>>> {
         let prev;
         unsafe { prev = (*self.tail).prev }
-        if prev != self.head {
+        if !core::ptr::eq(prev, self.head) {
             let old_key = KeyRef {
                 k: unsafe { &(*(*(*self.tail).prev).key.as_ptr()) },
             };
@@ -2096,6 +2196,23 @@ mod tests {
     }
 
     #[test]
+    fn test_peek_mru() {
+        let mut cache = LruCache::new(NonZeroUsize::new(2).unwrap());
+
+        assert!(cache.peek_mru().is_none());
+
+        cache.put("apple", "red");
+        cache.put("banana", "yellow");
+        assert_opt_eq_tuple(cache.peek_mru(), ("banana", "yellow"));
+
+        cache.get(&"apple");
+        assert_opt_eq_tuple(cache.peek_mru(), ("apple", "red"));
+
+        cache.clear();
+        assert!(cache.peek_mru().is_none());
+    }
+
+    #[test]
     fn test_contains() {
         let mut cache = LruCache::new(NonZeroUsize::new(2).unwrap());
 
@@ -2177,6 +2294,41 @@ mod tests {
         assert_eq!(cache.pop_lru(), Some((25, "A")));
         for _ in 0..50 {
             assert_eq!(cache.pop_lru(), None);
+        }
+    }
+
+    #[test]
+    fn test_pop_mru() {
+        let mut cache = LruCache::new(NonZeroUsize::new(200).unwrap());
+
+        for i in 0..75 {
+            cache.put(i, "A");
+        }
+        for i in 0..75 {
+            cache.put(i + 100, "B");
+        }
+        for i in 0..75 {
+            cache.put(i + 200, "C");
+        }
+        assert_eq!(cache.len(), 200);
+
+        for i in 0..75 {
+            assert_opt_eq(cache.get(&(74 - i + 100)), "B");
+        }
+        assert_opt_eq(cache.get(&25), "A");
+
+        assert_eq!(cache.pop_mru(), Some((25, "A")));
+        for i in 0..75 {
+            assert_eq!(cache.pop_mru(), Some((i + 100, "B")));
+        }
+        for i in 0..75 {
+            assert_eq!(cache.pop_mru(), Some((74 - i + 200, "C")));
+        }
+        for i in (26..75).into_iter().rev() {
+            assert_eq!(cache.pop_mru(), Some((i, "A")));
+        }
+        for _ in 0..50 {
+            assert_eq!(cache.pop_mru(), None);
         }
     }
 
@@ -2658,6 +2810,28 @@ mod tests {
     #[test]
     fn test_clone() {
         let mut cache = LruCache::new(NonZeroUsize::new(3).unwrap());
+        cache.put("a", 1);
+        cache.put("b", 2);
+        cache.put("c", 3);
+
+        let mut cloned = cache.clone();
+
+        assert_eq!(cache.pop_lru(), Some(("a", 1)));
+        assert_eq!(cloned.pop_lru(), Some(("a", 1)));
+
+        assert_eq!(cache.pop_lru(), Some(("b", 2)));
+        assert_eq!(cloned.pop_lru(), Some(("b", 2)));
+
+        assert_eq!(cache.pop_lru(), Some(("c", 3)));
+        assert_eq!(cloned.pop_lru(), Some(("c", 3)));
+
+        assert_eq!(cache.pop_lru(), None);
+        assert_eq!(cloned.pop_lru(), None);
+    }
+
+    #[test]
+    fn test_clone_unbounded() {
+        let mut cache = LruCache::unbounded();
         cache.put("a", 1);
         cache.put("b", 2);
         cache.put("c", 3);
