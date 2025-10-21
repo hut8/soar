@@ -55,11 +55,15 @@ pub async fn fixes_live_websocket(ws: WebSocketUpgrade, State(state): State<AppS
 async fn handle_websocket(socket: WebSocket, state: AppState) {
     info!("New WebSocket connection established for live fixes");
 
+    // Track active WebSocket connections
+    metrics::gauge!("websocket_connections").increment(1.0);
+
     // Get live fix service from app state
     let live_fix_service = match &state.live_fix_service {
         Some(service) => service.clone(),
         None => {
             warn!("Live fix service not available");
+            metrics::gauge!("websocket_connections").decrement(1.0);
             return;
         }
     };
@@ -106,6 +110,8 @@ async fn handle_websocket(socket: WebSocket, state: AppState) {
         }
     }
 
+    // Decrement active connection count
+    metrics::gauge!("websocket_connections").decrement(1.0);
     info!("WebSocket connection terminated");
 }
 
@@ -150,18 +156,35 @@ async fn handle_websocket_write(
     mut fix_rx: mpsc::UnboundedReceiver<WebSocketMessage>,
 ) {
     while let Some(websocket_message) = fix_rx.recv().await {
+        // Track WebSocket queue depth (messages buffered for sending to client)
+        // Note: This is an approximation since we can't directly measure unbounded channel depth
+        // We track this after recv to see how many are still waiting
+        let queue_depth = fix_rx.len();
+        metrics::gauge!("websocket_queue_depth").set(queue_depth as f64);
+
+        if queue_depth > 100 {
+            warn!(
+                "WebSocket queue depth is high ({} messages) - client may be slow to consume messages",
+                queue_depth
+            );
+        }
+
         let fix_json = match serde_json::to_string(&websocket_message) {
             Ok(json) => json,
             Err(e) => {
                 error!("Failed to serialize WebSocket message: {}", e);
+                metrics::counter!("websocket_serialization_errors").increment(1);
                 continue;
             }
         };
 
         if let Err(e) = sender.send(Message::Text(fix_json.into())).await {
             error!("Failed to send WebSocket message to client: {}", e);
+            metrics::counter!("websocket_send_errors").increment(1);
             break;
         }
+
+        metrics::counter!("websocket_messages_sent").increment(1);
     }
 }
 
@@ -190,6 +213,8 @@ async fn handle_subscriptions(
                                                 Ok(receiver) => {
                                                     subscribed_aircraft.push(id.clone());
                                                     receivers.insert(id.clone(), receiver);
+                                                    metrics::gauge!("websocket_active_subscriptions").increment(1.0);
+                                                    metrics::counter!("websocket_device_subscribes").increment(1);
                                                     info!("Successfully subscribed to device: {}", id);
                                                 }
                                                 Err(e) => {
@@ -203,6 +228,8 @@ async fn handle_subscriptions(
                                         if subscribed_aircraft.contains(&id) {
                                             subscribed_aircraft.retain(|device_id| device_id != &id);
                                             receivers.remove(&id);
+                                            metrics::gauge!("websocket_active_subscriptions").decrement(1.0);
+                                            metrics::counter!("websocket_device_unsubscribes").increment(1);
                                             if let Err(e) = live_fix_service.unsubscribe_from_device(&id).await {
                                                 error!("Failed to unsubscribe from device {}: {}", id, e);
                                             } else {
@@ -225,6 +252,8 @@ async fn handle_subscriptions(
                                                 Ok(receiver) => {
                                                     subscribed_aircraft.push(area_key.clone());
                                                     receivers.insert(area_key, receiver);
+                                                    metrics::gauge!("websocket_active_subscriptions").increment(1.0);
+                                                    metrics::counter!("websocket_area_subscribes").increment(1);
                                                     info!("Successfully subscribed to area: lat={}, lon={}", latitude, longitude);
                                                 }
                                                 Err(e) => {
@@ -239,6 +268,8 @@ async fn handle_subscriptions(
                                         if subscribed_aircraft.contains(&area_key) {
                                             subscribed_aircraft.retain(|key| key != &area_key);
                                             receivers.remove(&area_key);
+                                            metrics::gauge!("websocket_active_subscriptions").decrement(1.0);
+                                            metrics::counter!("websocket_area_unsubscribes").increment(1);
                                             if let Err(e) = live_fix_service.unsubscribe_from_area(latitude, longitude).await {
                                                 error!("Failed to unsubscribe from area lat={}, lon={}: {}", latitude, longitude, e);
                                             } else {
@@ -323,6 +354,7 @@ async fn handle_subscriptions(
                             subscription_key, e
                         );
                     } else {
+                        metrics::gauge!("websocket_active_subscriptions").decrement(1.0);
                         info!("Cleaned up area subscription: {}", subscription_key);
                     }
                 } else {
@@ -342,6 +374,7 @@ async fn handle_subscriptions(
                     subscription_key, e
                 );
             } else {
+                metrics::gauge!("websocket_active_subscriptions").decrement(1.0);
                 info!("Cleaned up device subscription: {}", subscription_key);
             }
         }
