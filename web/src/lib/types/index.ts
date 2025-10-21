@@ -192,8 +192,21 @@ export interface Fix {
 	model?: string;
 	flight_id?: string;
 	active: boolean;
+	raw_packet?: string; // Raw APRS packet data (joined from aprs_messages table)
 }
 
+// User authentication and profile
+export interface User {
+	id: string;
+	first_name: string;
+	last_name: string;
+	email: string;
+	access_level: 'standard' | 'admin';
+	club_id?: string;
+	email_verified: boolean;
+}
+
+// Flight interface matching backend FlightView
 export interface Flight {
 	id: string;
 	device_id?: string; // UUID foreign key to devices table
@@ -201,13 +214,31 @@ export interface Flight {
 	device_address_type: string; // F, O, I, or empty string - kept for compatibility
 	takeoff_time?: string; // ISO datetime string - null for flights first seen airborne
 	landing_time?: string; // ISO datetime string - null for flights in progress
+	timed_out_at?: string; // ISO datetime string when flight timed out
+	state: 'active' | 'complete' | 'timed_out'; // Flight state
+	duration_seconds?: number; // Duration in seconds (null if takeoff_time or landing_time is null)
 	departure_airport?: string; // Airport identifier
+	departure_airport_id?: number; // Airport ID in database
+	departure_airport_country?: string; // Country code
 	arrival_airport?: string; // Airport identifier
+	arrival_airport_id?: number; // Airport ID in database
+	arrival_airport_country?: string; // Country code
 	tow_aircraft_id?: string; // Registration number of tow aircraft
 	tow_release_height_msl?: number; // Tow release height in meters MSL
 	club_id?: string; // UUID of club that owns the aircraft
+	takeoff_altitude_offset_ft?: number; // Altitude offset at takeoff
+	landing_altitude_offset_ft?: number; // Altitude offset at landing
+	takeoff_runway_ident?: string; // Takeoff runway identifier
+	landing_runway_ident?: string; // Landing runway identifier
+	total_distance_meters?: number; // Total distance flown in meters
+	maximum_displacement_meters?: number; // Maximum displacement from takeoff point
+	runways_inferred?: boolean; // Whether runways were inferred from heading vs matched to airport data
 	created_at: string; // ISO datetime string
 	updated_at: string; // ISO datetime string
+	// Device information (merged into FlightView from DeviceInfo)
+	aircraft_model?: string;
+	registration?: string;
+	aircraft_type_ogn?: string;
 }
 
 export interface WatchlistEntry {

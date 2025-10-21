@@ -1,15 +1,6 @@
 import { writable } from 'svelte/store';
 import { browser } from '$app/environment';
-
-export interface User {
-	id: string;
-	first_name: string;
-	last_name: string;
-	email: string;
-	access_level: 'standard' | 'admin';
-	club_id?: string;
-	email_verified: boolean;
-}
+import type { User } from '$lib/types';
 
 export interface AuthStore {
 	isAuthenticated: boolean;

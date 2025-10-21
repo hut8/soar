@@ -108,6 +108,11 @@ pub struct Fix {
 
     /// Reference to the APRS message that contains the raw packet data
     pub aprs_message_id: Option<Uuid>,
+
+    /// Raw APRS packet data (joined from aprs_messages table)
+    /// This field is not in the fixes table - it's populated via LEFT JOIN for API responses
+    #[diesel(deserialize_as = "Option<String>")]
+    pub raw_packet: Option<String>,
 }
 
 impl Fix {
@@ -229,6 +234,7 @@ impl Fix {
                     is_active,
                     receiver_id: None,     // Will be set during fix insertion
                     aprs_message_id: None, // Will be populated during fix processing
+                    raw_packet: None,      // Will be populated via LEFT JOIN for API responses
                 }))
             }
             _ => {

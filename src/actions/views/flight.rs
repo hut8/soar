@@ -52,6 +52,7 @@ pub struct FlightView {
     pub landing_runway_ident: Option<String>,
     pub total_distance_meters: Option<f64>,
     pub maximum_displacement_meters: Option<f64>,
+    pub runways_inferred: Option<bool>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 
@@ -106,6 +107,7 @@ impl FlightView {
             landing_runway_ident: flight.landing_runway_ident,
             total_distance_meters: flight.total_distance_meters,
             maximum_displacement_meters: flight.maximum_displacement_meters,
+            runways_inferred: flight.runways_inferred,
             created_at: flight.created_at,
             updated_at: flight.updated_at,
             aircraft_model: device_info.aircraft_model,
