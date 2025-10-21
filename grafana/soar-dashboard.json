@@ -4,7 +4,7 @@
     "tags": ["soar", "metrics"],
     "timezone": "browser",
     "schemaVersion": 38,
-    "version": 1,
+    "version": 2,
     "refresh": "30s",
     "panels": [
       {
@@ -225,6 +225,587 @@
             },
             "unit": "short",
             "decimals": 0
+          }
+        }
+      },
+      {
+        "id": 5,
+        "title": "NATS Publisher Queue Depth",
+        "type": "timeseries",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 16
+        },
+        "targets": [
+          {
+            "expr": "nats_publisher_queue_depth",
+            "refId": "A",
+            "legendFormat": "Queue Depth"
+          }
+        ],
+        "options": {
+          "tooltip": {
+            "mode": "single",
+            "sort": "none"
+          },
+          "legend": {
+            "showLegend": true,
+            "displayMode": "list",
+            "placement": "bottom"
+          }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "linear",
+              "lineWidth": 2,
+              "fillOpacity": 20,
+              "gradientMode": "none",
+              "spanNulls": false,
+              "showPoints": "auto",
+              "pointSize": 5
+            },
+            "color": {
+              "mode": "thresholds"
+            },
+            "unit": "short",
+            "decimals": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "value": null,
+                  "color": "green"
+                },
+                {
+                  "value": 500,
+                  "color": "yellow"
+                },
+                {
+                  "value": 900,
+                  "color": "red"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 6,
+        "title": "NATS Publisher Throughput",
+        "type": "timeseries",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 16
+        },
+        "targets": [
+          {
+            "expr": "rate(nats_publisher_fixes_published[5m]) * 60",
+            "refId": "A",
+            "legendFormat": "Fixes Published/min"
+          },
+          {
+            "expr": "rate(nats_publisher_dropped_fixes[5m]) * 60",
+            "refId": "B",
+            "legendFormat": "Fixes Dropped/min"
+          }
+        ],
+        "options": {
+          "tooltip": {
+            "mode": "multi",
+            "sort": "none"
+          },
+          "legend": {
+            "showLegend": true,
+            "displayMode": "list",
+            "placement": "bottom"
+          }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "linear",
+              "lineWidth": 2,
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "spanNulls": false,
+              "showPoints": "auto",
+              "pointSize": 5
+            },
+            "color": {
+              "mode": "palette-classic"
+            },
+            "unit": "short",
+            "decimals": 2
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Fixes Dropped/min"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "red"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "id": 7,
+        "title": "NATS Publisher Stats",
+        "type": "stat",
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 0,
+          "y": 24
+        },
+        "targets": [
+          {
+            "expr": "nats_publisher_fixes_published",
+            "refId": "A",
+            "legendFormat": "Total Published"
+          },
+          {
+            "expr": "nats_publisher_dropped_fixes",
+            "refId": "B",
+            "legendFormat": "Total Dropped"
+          },
+          {
+            "expr": "nats_publisher_errors",
+            "refId": "C",
+            "legendFormat": "Total Errors"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "decimals": 0,
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "value": null,
+                  "color": "green"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 8,
+        "title": "NATS Publisher Error Rate",
+        "type": "timeseries",
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 6,
+          "y": 24
+        },
+        "targets": [
+          {
+            "expr": "rate(nats_publisher_errors[5m]) * 60",
+            "refId": "A",
+            "legendFormat": "Errors/min"
+          }
+        ],
+        "options": {
+          "tooltip": {
+            "mode": "single",
+            "sort": "none"
+          },
+          "legend": {
+            "showLegend": true,
+            "displayMode": "list",
+            "placement": "bottom"
+          }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "linear",
+              "lineWidth": 2,
+              "fillOpacity": 20,
+              "gradientMode": "none",
+              "spanNulls": false,
+              "showPoints": "auto",
+              "pointSize": 5
+            },
+            "color": {
+              "mode": "fixed",
+              "fixedColor": "red"
+            },
+            "unit": "short",
+            "decimals": 2
+          }
+        }
+      },
+      {
+        "id": 9,
+        "title": "WebSocket Active Connections",
+        "type": "stat",
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 12,
+          "y": 24
+        },
+        "targets": [
+          {
+            "expr": "websocket_connections",
+            "refId": "A",
+            "legendFormat": "Active Connections"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "decimals": 0,
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "value": null,
+                  "color": "green"
+                },
+                {
+                  "value": 50,
+                  "color": "yellow"
+                },
+                {
+                  "value": 100,
+                  "color": "red"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 10,
+        "title": "WebSocket Active Subscriptions",
+        "type": "stat",
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 18,
+          "y": 24
+        },
+        "targets": [
+          {
+            "expr": "websocket_active_subscriptions",
+            "refId": "A",
+            "legendFormat": "Active Subscriptions"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "decimals": 0,
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "value": null,
+                  "color": "green"
+                },
+                {
+                  "value": 100,
+                  "color": "yellow"
+                },
+                {
+                  "value": 200,
+                  "color": "red"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 11,
+        "title": "WebSocket Queue Depth",
+        "type": "timeseries",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 32
+        },
+        "targets": [
+          {
+            "expr": "websocket_queue_depth",
+            "refId": "A",
+            "legendFormat": "Queue Depth"
+          }
+        ],
+        "options": {
+          "tooltip": {
+            "mode": "single",
+            "sort": "none"
+          },
+          "legend": {
+            "showLegend": true,
+            "displayMode": "list",
+            "placement": "bottom"
+          }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "linear",
+              "lineWidth": 2,
+              "fillOpacity": 20,
+              "gradientMode": "none",
+              "spanNulls": false,
+              "showPoints": "auto",
+              "pointSize": 5
+            },
+            "color": {
+              "mode": "thresholds"
+            },
+            "unit": "short",
+            "decimals": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "value": null,
+                  "color": "green"
+                },
+                {
+                  "value": 50,
+                  "color": "yellow"
+                },
+                {
+                  "value": 100,
+                  "color": "red"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 12,
+        "title": "WebSocket Message Throughput",
+        "type": "timeseries",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 32
+        },
+        "targets": [
+          {
+            "expr": "rate(websocket_messages_sent[5m]) * 60",
+            "refId": "A",
+            "legendFormat": "Messages Sent/min"
+          }
+        ],
+        "options": {
+          "tooltip": {
+            "mode": "single",
+            "sort": "none"
+          },
+          "legend": {
+            "showLegend": true,
+            "displayMode": "list",
+            "placement": "bottom"
+          }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "linear",
+              "lineWidth": 2,
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "spanNulls": false,
+              "showPoints": "auto",
+              "pointSize": 5
+            },
+            "color": {
+              "mode": "palette-classic"
+            },
+            "unit": "short",
+            "decimals": 2
+          }
+        }
+      },
+      {
+        "id": 13,
+        "title": "WebSocket Subscription Activity",
+        "type": "timeseries",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 40
+        },
+        "targets": [
+          {
+            "expr": "rate(websocket_device_subscribes[5m]) * 60",
+            "refId": "A",
+            "legendFormat": "Device Subscribes/min"
+          },
+          {
+            "expr": "rate(websocket_device_unsubscribes[5m]) * 60",
+            "refId": "B",
+            "legendFormat": "Device Unsubscribes/min"
+          },
+          {
+            "expr": "rate(websocket_area_subscribes[5m]) * 60",
+            "refId": "C",
+            "legendFormat": "Area Subscribes/min"
+          },
+          {
+            "expr": "rate(websocket_area_unsubscribes[5m]) * 60",
+            "refId": "D",
+            "legendFormat": "Area Unsubscribes/min"
+          }
+        ],
+        "options": {
+          "tooltip": {
+            "mode": "multi",
+            "sort": "none"
+          },
+          "legend": {
+            "showLegend": true,
+            "displayMode": "list",
+            "placement": "bottom"
+          }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "linear",
+              "lineWidth": 2,
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "spanNulls": false,
+              "showPoints": "auto",
+              "pointSize": 5
+            },
+            "color": {
+              "mode": "palette-classic"
+            },
+            "unit": "short",
+            "decimals": 2
+          }
+        }
+      },
+      {
+        "id": 14,
+        "title": "WebSocket Errors",
+        "type": "timeseries",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 40
+        },
+        "targets": [
+          {
+            "expr": "rate(websocket_send_errors[5m]) * 60",
+            "refId": "A",
+            "legendFormat": "Send Errors/min"
+          },
+          {
+            "expr": "rate(websocket_serialization_errors[5m]) * 60",
+            "refId": "B",
+            "legendFormat": "Serialization Errors/min"
+          }
+        ],
+        "options": {
+          "tooltip": {
+            "mode": "multi",
+            "sort": "none"
+          },
+          "legend": {
+            "showLegend": true,
+            "displayMode": "list",
+            "placement": "bottom"
+          }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "linear",
+              "lineWidth": 2,
+              "fillOpacity": 20,
+              "gradientMode": "none",
+              "spanNulls": false,
+              "showPoints": "auto",
+              "pointSize": 5
+            },
+            "color": {
+              "mode": "fixed",
+              "fixedColor": "red"
+            },
+            "unit": "short",
+            "decimals": 2
           }
         }
       }
