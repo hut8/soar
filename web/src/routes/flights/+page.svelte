@@ -42,6 +42,9 @@
 		aircraft_type_ogn: string | null;
 		created_at: string;
 		updated_at: string;
+		latest_altitude_msl_feet: number | null;
+		latest_altitude_agl_feet: number | null;
+		duration_seconds: number | null;
 	}
 
 	interface FlightsListResponse {
@@ -93,6 +96,28 @@
 		} else {
 			return `${km.toFixed(1)} km`;
 		}
+	}
+
+	function calculateActiveDuration(takeoff: string | null): string {
+		if (!takeoff) return '—';
+		const takeoffTime = new Date(takeoff).getTime();
+		const nowTime = new Date().getTime();
+		const durationMs = nowTime - takeoffTime;
+		const hours = Math.floor(durationMs / (1000 * 60 * 60));
+		const minutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
+		return `${hours}h ${minutes}m`;
+	}
+
+	function formatAltitude(mslFeet: number | null, aglFeet: number | null): string {
+		if (mslFeet === null && aglFeet === null) return '—';
+		const parts: string[] = [];
+		if (mslFeet !== null) {
+			parts.push(`${mslFeet.toLocaleString()} ft MSL`);
+		}
+		if (aglFeet !== null) {
+			parts.push(`${aglFeet.toLocaleString()} ft AGL`);
+		}
+		return parts.join(' / ');
 	}
 
 	function extractErrorMessage(err: unknown): string {
@@ -220,9 +245,11 @@
 							<tr>
 								<th>Aircraft</th>
 								<th>Type</th>
+								<th>Recognized at</th>
 								<th>Takeoff</th>
 								<th>Duration</th>
 								<th>Distance</th>
+								<th>Altitude</th>
 								<th>Tow</th>
 								<th></th>
 							</tr>
@@ -330,6 +357,19 @@
 										<div class="flex flex-col gap-1">
 											<div class="flex items-center gap-1 text-sm">
 												<Clock class="h-3 w-3" />
+												{formatRelativeTime(flight.created_at)}
+											</div>
+											{#if flight.created_at}
+												<div class="text-surface-500-400-token text-xs">
+													{formatLocalTime(flight.created_at)}
+												</div>
+											{/if}
+										</div>
+									</td>
+									<td>
+										<div class="flex flex-col gap-1">
+											<div class="flex items-center gap-1 text-sm">
+												<Clock class="h-3 w-3" />
 												{formatRelativeTime(flight.takeoff_time)}
 											</div>
 											{#if flight.takeoff_time}
@@ -346,10 +386,15 @@
 										</div>
 									</td>
 									<td class="font-semibold">
-										{calculateFlightDuration(flight.takeoff_time, flight.landing_time)}
+										{calculateActiveDuration(flight.takeoff_time)}
 									</td>
 									<td class="font-semibold">
 										{formatDistance(flight.total_distance_meters)}
+									</td>
+									<td>
+										<div class="text-sm">
+											{formatAltitude(flight.latest_altitude_msl_feet, flight.latest_altitude_agl_feet)}
+										</div>
 									</td>
 									<td>
 										{#if flight.tow_aircraft_id}
@@ -719,36 +764,42 @@
 							</a>
 						</div>
 
-						<!-- Flight details in compact single row -->
-						<div class="text-surface-600-300-token text-sm">
-							{#if flight.departure_airport}
-								<span class="font-medium"
-									>{flight.departure_airport}{#if flight.takeoff_runway_ident}/{flight.takeoff_runway_ident}{/if}</span
-								>
-							{/if}
-							{formatLocalTime(flight.takeoff_time)}
-							<span class="text-surface-500-400-token text-xs">
-								({formatRelativeTime(flight.takeoff_time)})
-							</span>
-							{#if flight.landing_time}
-								<span class="mx-1">-</span>
-								{#if flight.arrival_airport}
+						<!-- Flight details -->
+						<div class="text-surface-600-300-token space-y-2 text-sm">
+							<div>
+								<span class="text-surface-500-400-token text-xs">Recognized:</span>
+								{formatLocalTime(flight.created_at)}
+								<span class="text-surface-500-400-token text-xs">
+									({formatRelativeTime(flight.created_at)})
+								</span>
+							</div>
+							<div>
+								<span class="text-surface-500-400-token text-xs">Takeoff:</span>
+								{#if flight.departure_airport}
 									<span class="font-medium"
-										>{flight.arrival_airport}{#if flight.landing_runway_ident}/{flight.landing_runway_ident}{/if}</span
+										>{flight.departure_airport}{#if flight.takeoff_runway_ident}/{flight.takeoff_runway_ident}{/if}</span
 									>
 								{/if}
-								{formatLocalTime(flight.landing_time)}
+								{formatLocalTime(flight.takeoff_time)}
 								<span class="text-surface-500-400-token text-xs">
-									({formatRelativeTime(flight.landing_time)})
+									({formatRelativeTime(flight.takeoff_time)})
 								</span>
-								<span class="mx-2 font-semibold">
-									{calculateFlightDuration(flight.takeoff_time, flight.landing_time)}
-								</span>
-								<span class="font-semibold">
-									{formatDistance(flight.total_distance_meters)}
-								</span>
-							{:else}
-								<span class="mx-2 font-semibold text-green-600">In Flight</span>
+							</div>
+							<div class="flex gap-4">
+								<div>
+									<span class="text-surface-500-400-token text-xs">Duration:</span>
+									<span class="font-semibold">{calculateActiveDuration(flight.takeoff_time)}</span>
+								</div>
+								<div>
+									<span class="text-surface-500-400-token text-xs">Distance:</span>
+									<span class="font-semibold">{formatDistance(flight.total_distance_meters)}</span>
+								</div>
+							</div>
+							{#if flight.latest_altitude_msl_feet !== null || flight.latest_altitude_agl_feet !== null}
+								<div>
+									<span class="text-surface-500-400-token text-xs">Altitude:</span>
+									{formatAltitude(flight.latest_altitude_msl_feet, flight.latest_altitude_agl_feet)}
+								</div>
 							{/if}
 						</div>
 					</div>

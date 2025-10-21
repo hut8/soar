@@ -60,6 +60,10 @@ pub struct FlightView {
     pub aircraft_model: Option<String>,
     pub registration: Option<String>,
     pub aircraft_type_ogn: Option<AircraftType>,
+
+    // Latest altitude information (for active flights)
+    pub latest_altitude_msl_feet: Option<i32>,
+    pub latest_altitude_agl_feet: Option<i32>,
 }
 
 impl FlightView {
@@ -69,6 +73,25 @@ impl FlightView {
         departure_airport: Option<AirportInfo>,
         arrival_airport: Option<AirportInfo>,
         device_info: Option<DeviceInfo>,
+    ) -> Self {
+        Self::from_flight_with_altitude(
+            flight,
+            departure_airport,
+            arrival_airport,
+            device_info,
+            None,
+            None,
+        )
+    }
+
+    /// Create a FlightView from a Flight with optional airport, device info, and altitude info
+    pub fn from_flight_with_altitude(
+        flight: Flight,
+        departure_airport: Option<AirportInfo>,
+        arrival_airport: Option<AirportInfo>,
+        device_info: Option<DeviceInfo>,
+        latest_altitude_msl_feet: Option<i32>,
+        latest_altitude_agl_feet: Option<i32>,
     ) -> Self {
         // Calculate state before moving any fields
         let state = flight.state();
@@ -113,6 +136,8 @@ impl FlightView {
             aircraft_model: device_info.aircraft_model,
             registration: device_info.registration,
             aircraft_type_ogn: device_info.aircraft_type_ogn,
+            latest_altitude_msl_feet,
+            latest_altitude_agl_feet,
         }
     }
 }
