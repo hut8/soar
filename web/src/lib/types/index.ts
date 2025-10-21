@@ -231,6 +231,7 @@ export interface Flight {
 	landing_runway_ident?: string; // Landing runway identifier
 	total_distance_meters?: number; // Total distance flown in meters
 	maximum_displacement_meters?: number; // Maximum displacement from takeoff point
+	runways_inferred?: boolean; // Whether runways were inferred from heading vs matched to airport data
 	created_at: string; // ISO datetime string
 	updated_at: string; // ISO datetime string
 	// Device information (merged into FlightView from DeviceInfo)

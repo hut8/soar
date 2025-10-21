@@ -17,6 +17,7 @@
 		ChevronLeft,
 		ChevronRight,
 		ChevronsRight,
+		Info,
 		ExternalLink,
 		MountainSnow,
 		Clock
@@ -753,7 +754,6 @@
 					{#if data.flight.takeoff_runway_ident}
 						<div class="text-surface-600-300-token flex items-center gap-2 text-sm">
 							<span>Runway {data.flight.takeoff_runway_ident}</span>
-							<!-- TODO: Backend doesn't currently expose runways_inferred in FlightView
 							{#if data.flight.runways_inferred === true}
 								<span
 									class="preset-tonal-surface-500 chip flex items-center gap-1 text-xs"
@@ -763,7 +763,6 @@
 									Inferred
 								</span>
 							{/if}
-							-->
 						</div>
 					{:else if data.flight.departure_airport}
 						<div class="text-surface-600-300-token text-sm">Runway Unknown</div>
@@ -811,7 +810,6 @@
 							{#if data.flight.landing_runway_ident}
 								<div class="text-surface-600-300-token flex items-center gap-2 text-sm">
 									<span>Runway {data.flight.landing_runway_ident}</span>
-									<!-- TODO: Backend doesn't currently expose runways_inferred in FlightView
 									{#if data.flight.runways_inferred === true}
 										<span
 											class="preset-tonal-surface-500 chip flex items-center gap-1 text-xs"
@@ -821,7 +819,6 @@
 											Inferred
 										</span>
 									{/if}
-									-->
 								</div>
 							{:else}
 								<div class="text-surface-600-300-token text-sm">Runway Unknown</div>
