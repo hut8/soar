@@ -43,6 +43,36 @@ impl AircraftTracker {
 
     /// Determine if aircraft should be considered active based on fix
     pub fn should_be_active(&self, fix: &Fix) -> bool {
+        // Special case: If no altitude data and speed < 80 knots, consider inactive
+        // This handles cases where altitude data is missing but we can still infer ground state from speed
+        if fix.altitude_agl.is_none() && fix.altitude_msl_feet.is_none() {
+            // Calculate speed (from fix or from position changes)
+            let speed_knots = if let Some(ground_speed_knots) = fix.ground_speed_knots {
+                ground_speed_knots
+            } else if let (Some((last_lat, last_lon)), Some(last_time)) =
+                (self.last_position, self.last_position_time)
+            {
+                let time_diff = fix.timestamp.signed_duration_since(last_time);
+                if time_diff.num_seconds() > 0 {
+                    let distance_meters =
+                        haversine_distance(last_lat, last_lon, fix.latitude, fix.longitude);
+                    let speed_ms = distance_meters / time_diff.num_seconds() as f64;
+                    speed_ms * 1.94384 // m/s to knots
+                } else {
+                    0.0
+                }
+            } else {
+                0.0
+            };
+
+            if speed_knots < 80.0 {
+                // No altitude data and slow speed - likely on ground
+                return false;
+            }
+            // No altitude data but high speed - assume active/airborne
+            return true;
+        }
+
         // Check ground speed first
         let speed_indicates_active = if let Some(ground_speed_knots) = fix.ground_speed_knots {
             ground_speed_knots >= 20.0
