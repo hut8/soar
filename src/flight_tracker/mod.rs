@@ -21,6 +21,7 @@ use diesel::r2d2::{ConnectionManager, Pool};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
+use tracing::Instrument;
 use tracing::{error, info, trace};
 use uuid::Uuid;
 
@@ -140,17 +141,20 @@ impl FlightTracker {
     /// Start a background task to periodically check for timed-out flights
     pub fn start_timeout_checker(&self, check_interval_secs: u64) {
         let tracker = self.clone();
-        tokio::spawn(async move {
-            let mut interval =
-                tokio::time::interval(std::time::Duration::from_secs(check_interval_secs));
-            // Skip the first tick (immediate execution)
-            interval.tick().await;
-
-            loop {
+        tokio::spawn(
+            async move {
+                let mut interval =
+                    tokio::time::interval(std::time::Duration::from_secs(check_interval_secs));
+                // Skip the first tick (immediate execution)
                 interval.tick().await;
-                tracker.check_and_timeout_stale_flights().await;
+
+                loop {
+                    interval.tick().await;
+                    tracker.check_and_timeout_stale_flights().await;
+                }
             }
-        });
+            .instrument(tracing::info_span!("flight_timeout_checker")),
+        );
         info!(
             "Started flight timeout checker (every {} seconds)",
             check_interval_secs
@@ -158,6 +162,7 @@ impl FlightTracker {
     }
 
     /// Calculate altitude AGL and update the fix in the database asynchronously
+    #[tracing::instrument(skip(self, fix, fixes_repo), fields(fix_id = %fix_id))]
     pub async fn calculate_and_update_agl_async(
         &self,
         fix_id: uuid::Uuid,
@@ -168,6 +173,7 @@ impl FlightTracker {
     }
 
     /// Check all active flights and timeout any that haven't received beacons for 8+ hours
+    #[tracing::instrument(skip(self))]
     pub async fn check_and_timeout_stale_flights(&self) {
         let timeout_threshold = chrono::Duration::hours(8);
         let now = chrono::Utc::now();

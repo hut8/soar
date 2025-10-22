@@ -7,6 +7,7 @@ use soar::pull;
 use std::env;
 use std::fs;
 use std::path::Path;
+use tracing::Instrument;
 use tracing::{info, warn};
 
 use soar::aprs_client::{AprsClient, AprsClientConfigBuilder};
@@ -164,6 +165,7 @@ enum Commands {
     VerifyRuntime {},
 }
 
+#[tracing::instrument]
 async fn setup_diesel_database() -> Result<Pool<ConnectionManager<PgConnection>>> {
     // Load environment variables from .env file
     dotenvy::dotenv().ok();
@@ -303,6 +305,7 @@ fn determine_archive_dir() -> Result<String> {
 }
 
 #[allow(clippy::too_many_arguments)]
+#[tracing::instrument(skip_all, fields(server = %server, port = %port))]
 async fn handle_run(
     server: String,
     port: u16,
@@ -327,9 +330,12 @@ async fn handle_run(
     // Start metrics server in the background
     if is_production {
         info!("Starting metrics server on port 9091");
-        tokio::spawn(async {
-            soar::metrics::start_metrics_server(9091).await;
-        });
+        tokio::spawn(
+            async {
+                soar::metrics::start_metrics_server(9091).await;
+            }
+            .instrument(tracing::info_span!("metrics_server")),
+        );
     }
     let lock_name = if is_production {
         "soar-run-production"
@@ -450,17 +456,20 @@ async fn handle_run(
     };
 
     // Set up shutdown handler
-    tokio::spawn(async move {
-        match tokio::signal::ctrl_c().await {
-            Ok(()) => {
-                info!("Received Ctrl+C, exiting...");
-                std::process::exit(0);
-            }
-            Err(err) => {
-                eprintln!("Unable to listen for shutdown signal: {}", err);
+    tokio::spawn(
+        async move {
+            match tokio::signal::ctrl_c().await {
+                Ok(()) => {
+                    info!("Received Ctrl+C, exiting...");
+                    std::process::exit(0);
+                }
+                Err(err) => {
+                    eprintln!("Unable to listen for shutdown signal: {}", err);
+                }
             }
         }
-    });
+        .instrument(tracing::info_span!("shutdown_handler")),
+    );
 
     // Create server status processor for server messages
     let server_messages_repo = ServerMessagesRepository::new(diesel_pool.clone());
@@ -478,9 +487,7 @@ async fn handle_run(
     );
 
     // Create receiver position processor for receiver position messages
-    let locations_repo = soar::locations_repo::LocationsRepository::new(diesel_pool.clone());
-    let receiver_position_processor =
-        ReceiverPositionProcessor::new(receiver_repo.clone(), locations_repo);
+    let receiver_position_processor = ReceiverPositionProcessor::new(receiver_repo.clone());
 
     // Create aircraft position processor
     // Note: FlightDetectionProcessor is now handled inside FixProcessor

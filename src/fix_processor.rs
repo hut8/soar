@@ -2,6 +2,7 @@ use num_traits::AsPrimitive;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tracing::Instrument;
 use tracing::{debug, error, trace};
 use uuid::Uuid;
 
@@ -169,8 +170,9 @@ impl FixProcessor {
         let self_clone = self.clone();
         let raw_message = raw_message.to_string();
 
-        tokio::spawn(async move {
-            let received_at = chrono::Utc::now();
+        tokio::spawn(
+            async move {
+                let received_at = chrono::Utc::now();
 
             // Step 0: Insert APRS message first and get its ID
             // Extract unparsed data from the packet if present
@@ -196,8 +198,8 @@ impl FixProcessor {
                 None
             };
 
-            // Create and insert the APRS message
-            let aprs_message_id = {
+            // Create and insert the APRS message - receiver_id is now NOT NULL, so we skip if None
+            let aprs_message_id = if let Some(receiver_id) = receiver_id {
                 let new_aprs_message = NewAprsMessage {
                     id: Uuid::new_v4(),
                     raw_message: raw_message.clone(),
@@ -213,6 +215,11 @@ impl FixProcessor {
                         None
                     }
                 }
+            } else {
+                error!(
+                    "Cannot insert APRS message without receiver_id (receiver_id is now NOT NULL)"
+                );
+                None
             };
 
             // Try to create a fix from the packet
@@ -261,21 +268,24 @@ impl FixProcessor {
                             if icao_model_code.is_some() || adsb_emitter_category.is_some() {
                                 let device_repo_clone = device_repo.clone();
                                 let device_id = device_model.id;
-                                tokio::spawn(async move {
-                                    if let Err(e) = device_repo_clone
-                                        .update_adsb_fields(
-                                            device_id,
-                                            icao_model_code,
-                                            adsb_emitter_category,
-                                        )
-                                        .await
-                                    {
-                                        error!(
-                                            "Failed to update ADS-B fields for device {}: {}",
-                                            device_id, e
-                                        );
+                                tokio::spawn(
+                                    async move {
+                                        if let Err(e) = device_repo_clone
+                                            .update_adsb_fields(
+                                                device_id,
+                                                icao_model_code,
+                                                adsb_emitter_category,
+                                            )
+                                            .await
+                                        {
+                                            error!(
+                                                "Failed to update ADS-B fields for device {}: {}",
+                                                device_id, e
+                                            );
+                                        }
                                     }
-                                });
+                                    .instrument(tracing::debug_span!("update_device_adsb_fields", device_id = %device_id))
+                                );
                             }
 
                             // Device exists or was just created, create fix with proper device_id
@@ -309,10 +319,13 @@ impl FixProcessor {
                     trace!("Non-position packet, no fix to process");
                 }
             }
-        });
+        }
+        .instrument(tracing::debug_span!("process_aprs_packet"))
+        );
     }
 
     /// Internal method to process a fix through the complete pipeline
+    #[tracing::instrument(skip(self, fix, raw_message), fields(device_id = %fix.device_id))]
     async fn process_fix_internal(&self, fix: Fix, raw_message: &str) {
         // Step 1 & 2: Process through flight detection AND save to database
         // This is done atomically while holding a per-device lock to prevent race conditions
@@ -328,14 +341,19 @@ impl FixProcessor {
         // Step 3: Update receiver's latest_packet_at if this fix has a receiver_id
         if let Some(receiver_id) = updated_fix.receiver_id {
             let receiver_repo = self.receiver_repo.clone();
-            tokio::spawn(async move {
-                if let Err(e) = receiver_repo.update_latest_packet_at(receiver_id).await {
-                    error!(
-                        "Failed to update latest_packet_at for receiver {}: {}",
-                        receiver_id, e
-                    );
+            tokio::spawn(
+                async move {
+                    if let Err(e) = receiver_repo.update_latest_packet_at(receiver_id).await {
+                        error!(
+                            "Failed to update latest_packet_at for receiver {}: {}",
+                            receiver_id, e
+                        );
+                    }
                 }
-            });
+                .instrument(
+                    tracing::debug_span!("update_receiver_timestamp", receiver_id = %receiver_id),
+                ),
+            );
         }
 
         // Step 4: Update device cached fields (aircraft_type_ogn and last_fix_at)
@@ -343,17 +361,22 @@ impl FixProcessor {
         let device_id = updated_fix.device_id;
         let aircraft_type = updated_fix.aircraft_type_ogn;
         let fix_timestamp = updated_fix.timestamp;
-        tokio::spawn(async move {
-            if let Err(e) = device_repo
-                .update_cached_fields(device_id, aircraft_type, fix_timestamp)
-                .await
-            {
-                error!(
-                    "Failed to update cached fields for device {}: {}",
-                    device_id, e
-                );
+        tokio::spawn(
+            async move {
+                if let Err(e) = device_repo
+                    .update_cached_fields(device_id, aircraft_type, fix_timestamp)
+                    .await
+                {
+                    error!(
+                        "Failed to update cached fields for device {}: {}",
+                        device_id, e
+                    );
+                }
             }
-        });
+            .instrument(
+                tracing::debug_span!("update_device_cached_fields", device_id = %device_id),
+            ),
+        );
 
         // Step 2.5: Calculate and update altitude_agl asynchronously (non-blocking)
         let flight_tracker = self.flight_detection_processor.clone();
@@ -361,11 +384,14 @@ impl FixProcessor {
         let fix_id = updated_fix.id;
         let fix_for_agl = updated_fix.clone();
 
-        tokio::spawn(async move {
-            flight_tracker
-                .calculate_and_update_agl_async(fix_id, &fix_for_agl, fixes_repo)
-                .await;
-        });
+        tokio::spawn(
+            async move {
+                flight_tracker
+                    .calculate_and_update_agl_async(fix_id, &fix_for_agl, fixes_repo)
+                    .await;
+            }
+            .instrument(tracing::debug_span!("calculate_altitude_agl", fix_id = %fix_id)),
+        );
 
         // Step 3: Publish to NATS with updated fix (including flight_id)
         if let Some(nats_publisher) = self.nats_publisher.as_ref() {

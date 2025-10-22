@@ -18,6 +18,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
 use tokio::time::{sleep, timeout};
+use tracing::Instrument;
 use tracing::trace;
 use tracing::{error, info, warn};
 
@@ -127,6 +128,7 @@ impl AprsClient {
 
     /// Start the APRS client
     /// This will connect to the server and begin processing messages
+    #[tracing::instrument(skip(self))]
     pub async fn start(&mut self) -> Result<()> {
         let (shutdown_tx, mut shutdown_rx) = mpsc::channel::<()>(1);
         self.shutdown_tx = Some(shutdown_tx);
@@ -134,61 +136,65 @@ impl AprsClient {
         let config = self.config.clone();
         let processors = self.processors.clone();
 
-        tokio::spawn(async move {
-            let mut retry_count = 0;
+        tokio::spawn(
+            async move {
+                let mut retry_count = 0;
 
-            loop {
-                // Check if shutdown was requested
-                if shutdown_rx.try_recv().is_ok() {
-                    info!("Shutdown requested, stopping APRS client");
-                    break;
-                }
-
-                match Self::connect_and_run(&config, processors.clone()).await {
-                    ConnectionResult::Success => {
-                        info!("APRS client connection ended normally");
-                        retry_count = 0; // Reset retry count on successful connection
+                loop {
+                    // Check if shutdown was requested
+                    if shutdown_rx.try_recv().is_ok() {
+                        info!("Shutdown requested, stopping APRS client");
+                        break;
                     }
-                    ConnectionResult::ConnectionFailed(e) => {
-                        error!("APRS client connection failed: {}", e);
-                        retry_count += 1;
 
-                        if retry_count >= config.max_retries {
-                            error!(
-                                "Maximum retry attempts ({}) reached, stopping client",
-                                config.max_retries
-                            );
-                            break;
+                    match Self::connect_and_run(&config, processors.clone()).await {
+                        ConnectionResult::Success => {
+                            info!("APRS client connection ended normally");
+                            retry_count = 0; // Reset retry count on successful connection
                         }
+                        ConnectionResult::ConnectionFailed(e) => {
+                            error!("APRS client connection failed: {}", e);
+                            retry_count += 1;
 
-                        warn!(
-                            "Retrying connection in {} seconds (attempt {}/{})",
-                            config.retry_delay_seconds, retry_count, config.max_retries
-                        );
-                        sleep(Duration::from_secs(config.retry_delay_seconds)).await;
-                    }
-                    ConnectionResult::OperationFailed(e) => {
-                        error!(
-                            "APRS client operation failed after successful connection: {}",
-                            e
-                        );
-                        // Reset retry count since connection was initially successful
-                        retry_count = 0;
+                            if retry_count >= config.max_retries {
+                                error!(
+                                    "Maximum retry attempts ({}) reached, stopping client",
+                                    config.max_retries
+                                );
+                                break;
+                            }
 
-                        warn!(
-                            "Retrying connection in {} seconds (connection was successful)",
-                            config.retry_delay_seconds
-                        );
-                        sleep(Duration::from_secs(config.retry_delay_seconds)).await;
+                            warn!(
+                                "Retrying connection in {} seconds (attempt {}/{})",
+                                config.retry_delay_seconds, retry_count, config.max_retries
+                            );
+                            sleep(Duration::from_secs(config.retry_delay_seconds)).await;
+                        }
+                        ConnectionResult::OperationFailed(e) => {
+                            error!(
+                                "APRS client operation failed after successful connection: {}",
+                                e
+                            );
+                            // Reset retry count since connection was initially successful
+                            retry_count = 0;
+
+                            warn!(
+                                "Retrying connection in {} seconds (connection was successful)",
+                                config.retry_delay_seconds
+                            );
+                            sleep(Duration::from_secs(config.retry_delay_seconds)).await;
+                        }
                     }
                 }
             }
-        });
+            .instrument(tracing::info_span!("aprs_client_connection_loop")),
+        );
 
         Ok(())
     }
 
     /// Stop the APRS client
+    #[tracing::instrument(skip(self))]
     pub async fn stop(&mut self) {
         if let Some(shutdown_tx) = self.shutdown_tx.take() {
             let _ = shutdown_tx.send(()).await;
@@ -196,6 +202,7 @@ impl AprsClient {
     }
 
     /// Connect to the APRS server and run the message processing loop
+    #[tracing::instrument(skip(config, processors), fields(server = %config.server, port = %config.port))]
     async fn connect_and_run(
         config: &AprsClientConfig,
         processors: AprsProcessors,

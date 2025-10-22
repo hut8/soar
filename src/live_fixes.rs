@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{Mutex, broadcast};
+use tracing::Instrument;
 use tracing::{error, info, warn};
 
 /// Get the topic prefix based on the environment
@@ -106,9 +107,12 @@ impl LiveFixService {
         let device_id_clone = device_id.to_string();
         let broadcaster_clone = broadcaster.clone();
 
-        let task_handle = tokio::spawn(async move {
-            Self::handle_device_messages(subscriber, device_id_clone, broadcaster_clone).await;
-        });
+        let task_handle = tokio::spawn(
+            async move {
+                Self::handle_device_messages(subscriber, device_id_clone, broadcaster_clone).await;
+            }
+            .instrument(tracing::info_span!("live_fix_device_handler", device_id = %device_id)),
+        );
 
         // Store the subscription
         let subscription = Subscription {
@@ -156,9 +160,12 @@ impl LiveFixService {
         let area_key_clone = area_key.clone();
         let broadcaster_clone = broadcaster.clone();
 
-        let task_handle = tokio::spawn(async move {
-            Self::handle_area_messages(subscriber, area_key_clone, broadcaster_clone).await;
-        });
+        let task_handle = tokio::spawn(
+            async move {
+                Self::handle_area_messages(subscriber, area_key_clone, broadcaster_clone).await;
+            }
+            .instrument(tracing::info_span!("live_fix_area_handler", latitude = %latitude, longitude = %longitude))
+        );
 
         // Store the subscription
         let subscription = Subscription {
