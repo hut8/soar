@@ -102,7 +102,7 @@ pub(crate) async fn timeout_flight(
     let flight = match flights_repo.get_flight_by_id(flight_id).await? {
         Some(f) => f,
         None => {
-            warn!("Flight {} not found when timing out", flight_id);
+            error!("Flight {} not found when timing out", flight_id);
             // Remove from active flights even if flight doesn't exist
             let mut flights = active_flights.write().await;
             flights.remove(&device_id);

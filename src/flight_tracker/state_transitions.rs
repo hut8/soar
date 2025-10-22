@@ -73,7 +73,7 @@ pub(crate) async fn process_state_transition(
                 .update_last_fix_at(state.flight_id, fix.timestamp)
                 .await
             {
-                warn!(
+                error!(
                     "Failed to update last_fix_at for flight {}: {}",
                     state.flight_id, e
                 );
@@ -224,7 +224,7 @@ pub(crate) async fn process_state_transition(
                         .update_last_fix_at(flight_id, fix.timestamp)
                         .await
                     {
-                        warn!(
+                        error!(
                             "Failed to update last_fix_at for flight {}: {}",
                             flight_id, e
                         );
@@ -259,7 +259,7 @@ pub(crate) async fn process_state_transition(
                             .update_last_fix_at(flight_id, fix.timestamp)
                             .await
                         {
-                            warn!(
+                            error!(
                                 "Failed to update last_fix_at for flight {}: {}",
                                 flight_id, e
                             );
@@ -322,7 +322,7 @@ pub(crate) async fn process_state_transition(
                             .update_last_fix_at(flight_id, fix.timestamp)
                             .await
                         {
-                            warn!(
+                            error!(
                                 "Failed to update last_fix_at for flight {}: {}",
                                 flight_id, e
                             );
