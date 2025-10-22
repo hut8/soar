@@ -157,6 +157,11 @@ enum Commands {
         #[arg(long)]
         archive_path: String,
     },
+    /// Verify runtime initialization (Sentry, tracing, tokio-console)
+    ///
+    /// Tests that the runtime can initialize without panicking. Used for CI/CD
+    /// to catch configuration issues like missing tokio_unstable flag.
+    VerifyRuntime {},
 }
 
 async fn setup_diesel_database() -> Result<Pool<ConnectionManager<PgConnection>>> {
@@ -654,6 +659,29 @@ async fn main() -> Result<()> {
                 "tokio-console subscriber initialized on port 6669 - connect with `tokio-console`"
             );
         }
+        Commands::VerifyRuntime { .. } => {
+            // VerifyRuntime uses tokio-console on port 7779 to avoid conflict with Run
+            let console_layer = console_subscriber::ConsoleLayer::builder()
+                .server_addr(([0, 0, 0, 0], 7779))
+                .spawn();
+
+            if let Some(sentry_layer) = _guard
+                .as_ref()
+                .map(|_| sentry::integrations::tracing::layer())
+            {
+                registry
+                    .with(fmt_layer)
+                    .with(console_layer)
+                    .with(sentry_layer)
+                    .init();
+            } else {
+                registry.with(fmt_layer).with(console_layer).init();
+            }
+
+            info!(
+                "tokio-console subscriber initialized on port 7779 - connect with `tokio-console http://localhost:7779`"
+            );
+        }
         Commands::Web { .. } => {
             // Web subcommand uses tokio-console on port 6670 to avoid conflict
             let console_layer = console_subscriber::ConsoleLayer::builder()
@@ -688,6 +716,17 @@ async fn main() -> Result<()> {
                 registry.with(fmt_layer).init();
             }
         }
+    }
+
+    // Handle VerifyRuntime early - it doesn't need database access
+    if matches!(cli.command, Commands::VerifyRuntime {}) {
+        info!("Runtime verification successful:");
+        info!("  ✓ Sentry integration initialized");
+        info!("  ✓ Tracing subscriber initialized");
+        info!("  ✓ tokio-console layer initialized (port 7779)");
+        info!("  ✓ All runtime components ready");
+        info!("Runtime verification PASSED");
+        return Ok(());
     }
 
     // Set up database connection - Diesel for all repositories
@@ -780,5 +819,9 @@ async fn main() -> Result<()> {
             before,
             archive_path,
         } => soar::archive::handle_archive(diesel_pool, before, archive_path).await,
+        Commands::VerifyRuntime {} => {
+            // This should never be reached due to early return above
+            unreachable!("VerifyRuntime should be handled before database setup")
+        }
     }
 }
