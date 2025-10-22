@@ -69,7 +69,6 @@ pub(crate) async fn create_or_find_location(
                 result.state,
                 result.zip_code,
                 None,                                                // region_code
-                None,                                                // county_mail_code
                 result.country.map(|c| c.chars().take(2).collect()), // country code (first 2 chars)
                 Some(crate::locations::Point::new(latitude, longitude)),
             );
@@ -83,7 +82,6 @@ pub(crate) async fn create_or_find_location(
                     location.state.clone(),
                     location.zip_code.clone(),
                     location.region_code.clone(),
-                    location.county_mail_code.clone(),
                     location.country_mail_code.clone(),
                     location.geolocation,
                 )

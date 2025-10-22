@@ -216,7 +216,6 @@ impl FlightLocationProcessor {
                     result.state,
                     result.zip_code,
                     None, // region_code
-                    None, // county_mail_code
                     result.country.map(|c| {
                         // Take first 2 characters for country code
                         c.chars().take(2).collect()
@@ -234,7 +233,6 @@ impl FlightLocationProcessor {
                         location.state.clone(),
                         location.zip_code.clone(),
                         location.region_code.clone(),
-                        location.county_mail_code.clone(),
                         location.country_mail_code.clone(),
                         location.geolocation.clone(),
                     )

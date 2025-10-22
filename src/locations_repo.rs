@@ -181,7 +181,6 @@ impl LocationsRepository {
             None, // state
             None, // zip_code
             None, // region_code
-            None, // county_mail_code
             None, // country_mail_code
             Some(Point::new(latitude, longitude)),
         )
@@ -198,7 +197,6 @@ impl LocationsRepository {
         state: Option<String>,
         zip_code: Option<String>,
         region_code: Option<String>,
-        county_mail_code: Option<String>,
         country_mail_code: Option<String>,
         geolocation: Option<Point>,
     ) -> Result<Location> {
@@ -213,7 +211,6 @@ impl LocationsRepository {
         let param_state = state.clone();
         let param_zip_code = zip_code.clone();
         let param_region_code = region_code.clone();
-        let param_county_mail_code = county_mail_code.clone();
         let param_country_mail_code = country_mail_code.clone();
         let param_geolocation = geolocation;
 
@@ -228,7 +225,6 @@ impl LocationsRepository {
                 param_state.clone(),
                 param_zip_code.clone(),
                 param_region_code.clone(),
-                param_county_mail_code.clone(),
                 param_country_mail_code.clone(),
                 param_geolocation,
             );
@@ -242,43 +238,17 @@ impl LocationsRepository {
                 .execute(&mut conn)?;
 
             // Now select the location (either the one we just created or the existing one)
-            // We need to match the exact COALESCE logic from the unique constraint
+            // Use direct nullable comparisons matching the simplified unique index
             use crate::schema::locations::dsl::*;
-            use diesel::dsl::sql;
 
-            let search_street1 = param_street1.as_deref().unwrap_or("");
-            let search_street2 = param_street2.as_deref().unwrap_or("");
-            let search_city = param_city.as_deref().unwrap_or("");
-            let search_state = param_state.as_deref().unwrap_or("");
-            let search_zip_code = param_zip_code.as_deref().unwrap_or("");
-            let search_country = param_country_mail_code.as_deref().unwrap_or("US");
-
-            // Use Diesel's sql function to match the exact same COALESCE logic as the unique constraint
+            // Use direct nullable comparisons - no COALESCE needed
             let location_model = locations
-                .filter(
-                    sql::<diesel::sql_types::Bool>("COALESCE(street1, '') = ")
-                        .bind::<diesel::sql_types::Text, _>(search_street1),
-                )
-                .filter(
-                    sql::<diesel::sql_types::Bool>("COALESCE(street2, '') = ")
-                        .bind::<diesel::sql_types::Text, _>(search_street2),
-                )
-                .filter(
-                    sql::<diesel::sql_types::Bool>("COALESCE(city, '') = ")
-                        .bind::<diesel::sql_types::Text, _>(search_city),
-                )
-                .filter(
-                    sql::<diesel::sql_types::Bool>("COALESCE(state, '') = ")
-                        .bind::<diesel::sql_types::Text, _>(search_state),
-                )
-                .filter(
-                    sql::<diesel::sql_types::Bool>("COALESCE(zip_code, '') = ")
-                        .bind::<diesel::sql_types::Text, _>(search_zip_code),
-                )
-                .filter(
-                    sql::<diesel::sql_types::Bool>("COALESCE(country_mail_code, 'US') = ")
-                        .bind::<diesel::sql_types::Text, _>(search_country),
-                )
+                .filter(street1.eq(&param_street1))
+                .filter(street2.eq(&param_street2))
+                .filter(city.eq(&param_city))
+                .filter(state.eq(&param_state))
+                .filter(zip_code.eq(&param_zip_code))
+                .filter(country_mail_code.eq(&param_country_mail_code))
                 .select(LocationModel::as_select())
                 .first::<LocationModel>(&mut conn)?;
 
@@ -304,7 +274,6 @@ mod tests {
             state: Some("CA".to_string()),
             zip_code: Some("12345".to_string()),
             region_code: Some("4".to_string()),
-            county_mail_code: Some("037".to_string()),
             country_mail_code: Some("US".to_string()),
             geolocation: Some(Point::new(34.0522, -118.2437)),
             created_at: Utc::now(),
