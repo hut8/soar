@@ -3,6 +3,7 @@ use async_nats::Client;
 use serde_json;
 use std::sync::Arc;
 use tokio::sync::mpsc;
+use tracing::Instrument;
 use tracing::{debug, error, info, warn};
 
 use crate::Fix;
@@ -16,6 +17,7 @@ fn get_topic_prefix() -> &'static str {
 }
 
 /// Publish Fix to NATS (both device and area topics)
+#[tracing::instrument(skip(nats_client, fix), fields(device_id = %device_id))]
 async fn publish_to_nats(nats_client: &Client, device_id: &str, fix: &Fix) -> Result<()> {
     let topic_prefix = get_topic_prefix();
 
@@ -87,10 +89,11 @@ impl NatsFixPublisher {
 
         // Spawn SINGLE background task to publish all fixes
         let client_clone = Arc::clone(&nats_client);
-        tokio::spawn(async move {
-            info!("NATS publisher background task started");
-            let mut fixes_published = 0u64;
-            let mut last_stats_log = std::time::Instant::now();
+        tokio::spawn(
+            async move {
+                info!("NATS publisher background task started");
+                let mut fixes_published = 0u64;
+                let mut last_stats_log = std::time::Instant::now();
 
             while let Some(fix) = fix_receiver.recv().await {
                 let device_id = fix.device_id.to_string();
@@ -129,7 +132,9 @@ impl NatsFixPublisher {
             }
 
             warn!("NATS publisher background task stopped");
-        });
+        }
+        .instrument(tracing::info_span!("nats_publisher_background_task"))
+        );
 
         Ok(Self {
             _nats_client: nats_client,
