@@ -91,37 +91,24 @@ impl FlightsRepository {
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            // Build the update tuple conditionally based on whether last_fix_at is provided
-            let rows_affected = if let Some(last_fix_time) = last_fix_at_param {
-                diesel::update(flights.filter(id.eq(flight_id)))
-                    .set((
-                        landing_time.eq(&Some(landing_time_param)),
-                        arrival_airport_id.eq(&arrival_airport_id_param),
-                        landing_location_id.eq(&landing_location_id_param),
-                        landing_altitude_offset_ft.eq(&landing_altitude_offset_ft_param),
-                        landing_runway_ident.eq(&landing_runway_ident_param),
-                        total_distance_meters.eq(&total_distance_meters_param),
-                        maximum_displacement_meters.eq(&maximum_displacement_meters_param),
-                        runways_inferred.eq(&runways_inferred_param),
-                        last_fix_at.eq(last_fix_time),
-                        updated_at.eq(Utc::now()),
-                    ))
-                    .execute(&mut conn)?
-            } else {
-                diesel::update(flights.filter(id.eq(flight_id)))
-                    .set((
-                        landing_time.eq(&Some(landing_time_param)),
-                        arrival_airport_id.eq(&arrival_airport_id_param),
-                        landing_location_id.eq(&landing_location_id_param),
-                        landing_altitude_offset_ft.eq(&landing_altitude_offset_ft_param),
-                        landing_runway_ident.eq(&landing_runway_ident_param),
-                        total_distance_meters.eq(&total_distance_meters_param),
-                        maximum_displacement_meters.eq(&maximum_displacement_meters_param),
-                        runways_inferred.eq(&runways_inferred_param),
-                        updated_at.eq(Utc::now()),
-                    ))
-                    .execute(&mut conn)?
-            };
+            // If last_fix_at not provided, use landing_time (by definition a flight has at least one fix)
+            let last_fix_time = last_fix_at_param.unwrap_or(landing_time_param);
+
+            // Single UPDATE query with all fields including last_fix_at
+            let rows_affected = diesel::update(flights.filter(id.eq(flight_id)))
+                .set((
+                    landing_time.eq(&Some(landing_time_param)),
+                    arrival_airport_id.eq(&arrival_airport_id_param),
+                    landing_location_id.eq(&landing_location_id_param),
+                    landing_altitude_offset_ft.eq(&landing_altitude_offset_ft_param),
+                    landing_runway_ident.eq(&landing_runway_ident_param),
+                    total_distance_meters.eq(&total_distance_meters_param),
+                    maximum_displacement_meters.eq(&maximum_displacement_meters_param),
+                    runways_inferred.eq(&runways_inferred_param),
+                    last_fix_at.eq(last_fix_time),
+                    updated_at.eq(Utc::now()),
+                ))
+                .execute(&mut conn)?;
 
             if rows_affected == 0 {
                 return Err(anyhow::anyhow!(
