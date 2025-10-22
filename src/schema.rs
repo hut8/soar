@@ -179,7 +179,7 @@ diesel::table! {
         id -> Uuid,
         raw_message -> Text,
         received_at -> Timestamptz,
-        receiver_id -> Nullable<Uuid>,
+        receiver_id -> Uuid,
         unparsed -> Nullable<Text>,
     }
 }
@@ -398,6 +398,9 @@ diesel::table! {
 }
 
 diesel::table! {
+    use diesel::sql_types::*;
+    use super::sql_types::Geography;
+
     receivers (id) {
         callsign -> Text,
         description -> Nullable<Text>,
@@ -409,7 +412,7 @@ diesel::table! {
         id -> Uuid,
         latest_packet_at -> Nullable<Timestamptz>,
         from_ogn_db -> Bool,
-        location_id -> Nullable<Uuid>,
+        location -> Nullable<Geography>,
     }
 }
 
@@ -586,7 +589,6 @@ diesel::joinable!(flights -> clubs (club_id));
 diesel::joinable!(pilots -> clubs (club_id));
 diesel::joinable!(receiver_statuses -> aprs_messages (aprs_message_id));
 diesel::joinable!(receiver_statuses -> receivers (receiver_id));
-diesel::joinable!(receivers -> locations (location_id));
 diesel::joinable!(receivers_links -> receivers (receiver_id));
 diesel::joinable!(receivers_photos -> receivers (receiver_id));
 diesel::joinable!(users -> clubs (club_id));

@@ -44,7 +44,7 @@ pub struct ReceiverRecord {
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
     pub from_ogn_db: bool,
-    pub location_id: Option<uuid::Uuid>,
+    // Note: location field omitted - use raw SQL queries to access receivers.location when needed
 }
 
 /// Database representation of a receiver photo
@@ -85,7 +85,6 @@ impl Receiver {
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
             from_ogn_db: true, // These come from the OGN database
-            location_id: None, // Will be populated by reverse geocoding
         };
 
         (receiver_record, photos, links)
@@ -95,6 +94,7 @@ impl Receiver {
 /// Diesel model for the receivers table - used for database operations
 #[derive(Debug, Clone, Queryable, Selectable, Serialize, Deserialize)]
 #[diesel(table_name = crate::schema::receivers)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct ReceiverModel {
     pub callsign: String,
     pub description: Option<String>,
@@ -106,7 +106,8 @@ pub struct ReceiverModel {
     pub id: uuid::Uuid,
     pub latest_packet_at: Option<chrono::DateTime<chrono::Utc>>,
     pub from_ogn_db: bool,
-    pub location_id: Option<uuid::Uuid>,
+    // Note: location field is skipped - Geography type not easily deserializable
+    // Use raw SQL queries to access receivers.location when needed
 }
 
 /// Insert model for new receivers
@@ -120,17 +121,10 @@ pub struct NewReceiverModel {
     pub email: Option<String>,
     pub country: Option<String>,
     pub from_ogn_db: bool,
-    pub location_id: Option<uuid::Uuid>,
+    // Note: location field is skipped for inserts - use separate update method to set location
 }
 
-/// Update model for receivers (for updating location)
-#[derive(Debug, Clone, AsChangeset, Serialize, Deserialize)]
-#[diesel(table_name = crate::schema::receivers)]
-#[diesel(check_for_backend(diesel::pg::Pg))]
-pub struct UpdateReceiverModel {
-    pub location_id: Option<uuid::Uuid>,
-    pub updated_at: chrono::DateTime<chrono::Utc>,
-}
+// Note: UpdateReceiverModel removed - location updates are handled via raw SQL in ReceiverRepository
 
 /// Diesel model for the receivers_photos table
 #[derive(Debug, Clone, Queryable, Selectable, Insertable, AsChangeset, Serialize, Deserialize)]
@@ -186,7 +180,6 @@ impl From<ReceiverRecord> for ReceiverModel {
             updated_at: record.updated_at,
             latest_packet_at: None,
             from_ogn_db: record.from_ogn_db,
-            location_id: record.location_id,
         }
     }
 }
@@ -207,7 +200,6 @@ impl From<ReceiverModel> for ReceiverRecord {
             created_at: model.created_at,
             updated_at: model.updated_at,
             from_ogn_db: model.from_ogn_db,
-            location_id: model.location_id,
         }
     }
 }
