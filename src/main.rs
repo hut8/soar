@@ -632,22 +632,34 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     // Initialize tracing/tokio-console based on subcommand
-    use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
+    use tracing_subscriber::{EnvFilter, filter, layer::SubscriberExt, util::SubscriberInitExt};
 
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-        EnvFilter::new("info,soar=debug,async_nats=warn,soar::nats_publisher=warn")
+    // Create separate filter for fmt_layer (console output)
+    // Use RUST_LOG if set, otherwise default based on production mode
+    let fmt_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        if is_production {
+            EnvFilter::new("warn")
+        } else {
+            EnvFilter::new("debug")
+        }
     });
 
-    let registry = tracing_subscriber::registry().with(filter);
+    // Create filter for tokio-console layer (needs tokio=trace,runtime=trace for task visibility)
+    let console_filter = EnvFilter::new("warn,tokio=trace,runtime=trace");
 
-    let fmt_layer = tracing_subscriber::fmt::layer();
+    let registry = tracing_subscriber::registry();
+
+    let fmt_layer = filter::Filtered::new(tracing_subscriber::fmt::layer(), fmt_filter);
 
     match &cli.command {
         Commands::Run { .. } => {
             // Run subcommand uses tokio-console on port 6669 (default)
-            let console_layer = console_subscriber::ConsoleLayer::builder()
-                .server_addr(([0, 0, 0, 0], 6669))
-                .spawn();
+            let console_layer = filter::Filtered::new(
+                console_subscriber::ConsoleLayer::builder()
+                    .server_addr(([0, 0, 0, 0], 6669))
+                    .spawn(),
+                console_filter.clone(),
+            );
 
             if let Some(sentry_layer) = _guard
                 .as_ref()
@@ -668,9 +680,12 @@ async fn main() -> Result<()> {
         }
         Commands::VerifyRuntime { .. } => {
             // VerifyRuntime uses tokio-console on port 7779 to avoid conflict with Run
-            let console_layer = console_subscriber::ConsoleLayer::builder()
-                .server_addr(([0, 0, 0, 0], 7779))
-                .spawn();
+            let console_layer = filter::Filtered::new(
+                console_subscriber::ConsoleLayer::builder()
+                    .server_addr(([0, 0, 0, 0], 7779))
+                    .spawn(),
+                console_filter.clone(),
+            );
 
             if let Some(sentry_layer) = _guard
                 .as_ref()
@@ -691,9 +706,12 @@ async fn main() -> Result<()> {
         }
         Commands::Web { .. } => {
             // Web subcommand uses tokio-console on port 6670 to avoid conflict
-            let console_layer = console_subscriber::ConsoleLayer::builder()
-                .server_addr(([0, 0, 0, 0], 6670))
-                .spawn();
+            let console_layer = filter::Filtered::new(
+                console_subscriber::ConsoleLayer::builder()
+                    .server_addr(([0, 0, 0, 0], 6670))
+                    .spawn(),
+                console_filter.clone(),
+            );
 
             if let Some(sentry_layer) = _guard
                 .as_ref()
