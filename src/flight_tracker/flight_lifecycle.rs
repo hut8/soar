@@ -175,7 +175,10 @@ pub(crate) async fn complete_flight(
     )
     .await;
 
-    let landing_runway = landing_runway_info.map(|(runway, _)| runway);
+    let (landing_runway, landing_runway_inferred) = match landing_runway_info {
+        Some((runway, was_inferred)) => (Some(runway), Some(was_inferred)),
+        None => (None, None),
+    };
     let landing_altitude_offset_ft = calculate_altitude_offset_ft(elevation_db, fix).await;
 
     // Fetch the flight to compute distance metrics
@@ -309,8 +312,8 @@ pub(crate) async fn complete_flight(
             landing_runway,
             total_distance_meters,
             maximum_displacement_meters,
-            None,                // runways_inferred - simplified, always null
-            Some(fix.timestamp), // last_fix_at - update in same query to avoid two UPDATEs
+            landing_runway_inferred, // Track whether runway was inferred from heading or looked up
+            Some(fix.timestamp),     // last_fix_at - update in same query to avoid two UPDATEs
         )
         .await?;
 
