@@ -68,6 +68,22 @@ pub(crate) async fn process_state_transition(
             // Assign existing flight_id to this fix
             fix.flight_id = Some(state.flight_id);
 
+            // Update last_fix_at in database (non-blocking)
+            let flights_repo_clone = flights_repo.clone();
+            let flight_id = state.flight_id;
+            let fix_timestamp = fix.timestamp;
+            tokio::spawn(async move {
+                if let Err(e) = flights_repo_clone
+                    .update_last_fix_at(flight_id, fix_timestamp)
+                    .await
+                {
+                    warn!(
+                        "Failed to update last_fix_at for flight {}: {}",
+                        flight_id, e
+                    );
+                }
+            });
+
             // Update the state with this fix
             state.update(fix.timestamp, is_active);
 
@@ -132,6 +148,7 @@ pub(crate) async fn process_state_transition(
                 {
                     Ok(_) => {
                         fix.flight_id = Some(flight_id);
+                        // Note: last_fix_at is already set during flight creation
                     }
                     Err(e) => {
                         warn!("Failed to create flight: {}", e);
@@ -169,6 +186,7 @@ pub(crate) async fn process_state_transition(
                 {
                     Ok(_) => {
                         fix.flight_id = Some(flight_id);
+                        // Note: last_fix_at is already set during flight creation
                     }
                     Err(e) => {
                         warn!("Failed to create flight: {}", e);
@@ -206,6 +224,21 @@ pub(crate) async fn process_state_transition(
                     // Keep the flight active, assign flight_id to fix
                     fix.flight_id = Some(flight_id);
 
+                    // Update last_fix_at in database (non-blocking)
+                    let flights_repo_clone = flights_repo.clone();
+                    let fix_timestamp = fix.timestamp;
+                    tokio::spawn(async move {
+                        if let Err(e) = flights_repo_clone
+                            .update_last_fix_at(flight_id, fix_timestamp)
+                            .await
+                        {
+                            warn!(
+                                "Failed to update last_fix_at for flight {}: {}",
+                                flight_id, e
+                            );
+                        }
+                    });
+
                     // Update altitude_agl on the fix
                     fix.altitude_agl = Some(altitude_agl);
 
@@ -229,6 +262,21 @@ pub(crate) async fn process_state_transition(
 
                         // Assign flight_id to this landing fix
                         fix.flight_id = Some(flight_id);
+
+                        // Update last_fix_at in database (non-blocking)
+                        let flights_repo_clone = flights_repo.clone();
+                        let fix_timestamp = fix.timestamp;
+                        tokio::spawn(async move {
+                            if let Err(e) = flights_repo_clone
+                                .update_last_fix_at(flight_id, fix_timestamp)
+                                .await
+                            {
+                                warn!(
+                                    "Failed to update last_fix_at for flight {}: {}",
+                                    flight_id, e
+                                );
+                            }
+                        });
 
                         // Update altitude_agl if we have it
                         if let Some(altitude_agl) = agl {
@@ -281,6 +329,21 @@ pub(crate) async fn process_state_transition(
 
                         // Assign flight_id to this fix
                         fix.flight_id = Some(flight_id);
+
+                        // Update last_fix_at in database (non-blocking)
+                        let flights_repo_clone = flights_repo.clone();
+                        let fix_timestamp = fix.timestamp;
+                        tokio::spawn(async move {
+                            if let Err(e) = flights_repo_clone
+                                .update_last_fix_at(flight_id, fix_timestamp)
+                                .await
+                            {
+                                warn!(
+                                    "Failed to update last_fix_at for flight {}: {}",
+                                    flight_id, e
+                                );
+                            }
+                        });
 
                         // Update altitude_agl if we have it
                         if let Some(altitude_agl) = agl {

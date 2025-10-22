@@ -571,8 +571,9 @@ impl FlightsRepository {
         Ok(results)
     }
 
-    /// Mark a flight as timed out (no beacons received for 5+ minutes)
+    /// Mark a flight as timed out (no beacons received for 8+ hours)
     /// Does NOT set landing fields - this is a timeout, not a landing
+    /// The timeout_time should be set to the last_fix_at value
     pub async fn timeout_flight(
         &self,
         flight_id: Uuid,
@@ -590,6 +591,31 @@ impl FlightsRepository {
                     timed_out_at.eq(Some(timeout_time)),
                     updated_at.eq(Utc::now()),
                 ))
+                .execute(&mut conn)?;
+
+            Ok::<usize, anyhow::Error>(rows)
+        })
+        .await??;
+
+        Ok(rows_affected > 0)
+    }
+
+    /// Update the last_fix_at timestamp for a flight
+    /// This should be called whenever a new fix is assigned to a flight
+    pub async fn update_last_fix_at(
+        &self,
+        flight_id: Uuid,
+        fix_timestamp: DateTime<Utc>,
+    ) -> Result<bool> {
+        use crate::schema::flights::dsl::*;
+
+        let pool = self.pool.clone();
+
+        let rows_affected = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            let rows = diesel::update(flights.filter(id.eq(flight_id)))
+                .set((last_fix_at.eq(fix_timestamp), updated_at.eq(Utc::now())))
                 .execute(&mut conn)?;
 
             Ok::<usize, anyhow::Error>(rows)

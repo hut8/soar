@@ -84,25 +84,42 @@ pub(crate) async fn create_flight(
     Ok(flight_id)
 }
 
-/// Timeout a flight that has not received beacons for 5+ minutes
+/// Timeout a flight that has not received beacons for 8+ hours
 /// Does NOT set landing location - this is a timeout, not a landing
+/// Sets timed_out_at to the last_fix_at value from the flight
 pub(crate) async fn timeout_flight(
     flights_repo: &FlightsRepository,
     active_flights: &ActiveFlightsMap,
     flight_id: Uuid,
     device_id: Uuid,
 ) -> Result<()> {
-    let timeout_time = Utc::now();
-
     info!(
-        "Timing out flight {} for device {} (no beacons for 5+ minutes)",
+        "Timing out flight {} for device {} (no beacons for 8+ hours)",
         flight_id, device_id
     );
+
+    // Fetch the flight to get the last_fix_at timestamp
+    let flight = match flights_repo.get_flight_by_id(flight_id).await? {
+        Some(f) => f,
+        None => {
+            warn!("Flight {} not found when timing out", flight_id);
+            // Remove from active flights even if flight doesn't exist
+            let mut flights = active_flights.write().await;
+            flights.remove(&device_id);
+            return Ok(());
+        }
+    };
+
+    // Use last_fix_at as the timeout time
+    let timeout_time = flight.last_fix_at;
 
     // Mark flight as timed out in database
     match flights_repo.timeout_flight(flight_id, timeout_time).await {
         Ok(true) => {
-            info!("Successfully timed out flight {}", flight_id);
+            info!(
+                "Successfully timed out flight {} at {}",
+                flight_id, timeout_time
+            );
 
             // Remove from active flights
             let mut flights = active_flights.write().await;
