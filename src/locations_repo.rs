@@ -173,18 +173,64 @@ impl LocationsRepository {
         latitude: f64,
         longitude: f64,
     ) -> Result<Location> {
-        // Use the general find_or_create with only geolocation
-        self.find_or_create(
-            None, // street1
-            None, // street2
-            None, // city
-            None, // state
-            None, // zip_code
-            None, // region_code
-            None, // country_mail_code
-            Some(Point::new(latitude, longitude)),
-        )
-        .await
+        use crate::schema::locations::dsl::*;
+        use diesel::dsl::sql;
+
+        let pool = self.pool.clone();
+        let point = Point::new(latitude, longitude);
+
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            // For geolocation-only lookups, we need special handling because
+            // PostgreSQL unique indexes treat NULL values as distinct.
+            // We can't rely on the address-based unique index for this case.
+
+            // First, try to find an existing location with matching coordinates
+            // Use ST_Equals to check for exact coordinate matches
+            let existing: Option<LocationModel> = locations
+                .filter(sql::<diesel::sql_types::Bool>(&format!(
+                    "ST_Equals(geolocation::geometry, ST_SetSRID(ST_MakePoint({}, {}), 4326)::geometry)",
+                    point.longitude, point.latitude
+                )))
+                .filter(street1.is_null())
+                .filter(street2.is_null())
+                .filter(city.is_null())
+                .filter(state.is_null())
+                .filter(zip_code.is_null())
+                .filter(country_mail_code.is_null())
+                .select(LocationModel::as_select())
+                .first::<LocationModel>(&mut conn)
+                .optional()?;
+
+            if let Some(location_model) = existing {
+                return Ok::<Location, anyhow::Error>(location_model.into());
+            }
+
+            // If not found, create a new location
+            let new_location = Location::new(
+                None, // street1
+                None, // street2
+                None, // city
+                None, // state
+                None, // zip_code
+                None, // region_code
+                None, // country_mail_code
+                Some(point),
+            );
+
+            let new_location_model: NewLocationModel = new_location.into();
+
+            let created_location = diesel::insert_into(locations)
+                .values(&new_location_model)
+                .returning(LocationModel::as_returning())
+                .get_result::<LocationModel>(&mut conn)?;
+
+            Ok(created_location.into())
+        })
+        .await??;
+
+        Ok(result)
     }
 
     /// Find or create a location by address (atomic operation)
