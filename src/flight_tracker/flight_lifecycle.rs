@@ -309,7 +309,8 @@ pub(crate) async fn complete_flight(
             landing_runway,
             total_distance_meters,
             maximum_displacement_meters,
-            None, // runways_inferred - simplified, always null
+            None,                // runways_inferred - simplified, always null
+            Some(fix.timestamp), // last_fix_at - update in same query to avoid two UPDATEs
         )
         .await?;
 

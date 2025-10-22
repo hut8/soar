@@ -14,6 +14,21 @@ use super::altitude::calculate_altitude_offset_ft;
 use super::flight_lifecycle::{complete_flight, create_flight};
 use super::{ActiveFlightsMap, CurrentFlightState};
 
+/// Helper function to update last_fix_at timestamp in database
+/// Logs error if update fails but doesn't propagate the error
+async fn update_flight_timestamp(
+    flights_repo: &FlightsRepository,
+    flight_id: Uuid,
+    timestamp: chrono::DateTime<chrono::Utc>,
+) {
+    if let Err(e) = flights_repo.update_last_fix_at(flight_id, timestamp).await {
+        error!(
+            "Failed to update last_fix_at for flight {}: {}",
+            flight_id, e
+        );
+    }
+}
+
 /// Determine if aircraft should be active based on fix data
 /// This checks ground speed first, then altitude (if available)
 fn should_be_active(fix: &Fix) -> bool {
@@ -69,15 +84,7 @@ pub(crate) async fn process_state_transition(
             fix.flight_id = Some(state.flight_id);
 
             // Update last_fix_at in database
-            if let Err(e) = flights_repo
-                .update_last_fix_at(state.flight_id, fix.timestamp)
-                .await
-            {
-                error!(
-                    "Failed to update last_fix_at for flight {}: {}",
-                    state.flight_id, e
-                );
-            }
+            update_flight_timestamp(flights_repo, state.flight_id, fix.timestamp).await;
 
             // Update the state with this fix
             state.update(fix.timestamp, is_active);
@@ -220,15 +227,7 @@ pub(crate) async fn process_state_transition(
                     fix.flight_id = Some(flight_id);
 
                     // Update last_fix_at in database
-                    if let Err(e) = flights_repo
-                        .update_last_fix_at(flight_id, fix.timestamp)
-                        .await
-                    {
-                        error!(
-                            "Failed to update last_fix_at for flight {}: {}",
-                            flight_id, e
-                        );
-                    }
+                    update_flight_timestamp(flights_repo, flight_id, fix.timestamp).await;
 
                     // Update altitude_agl on the fix
                     fix.altitude_agl = Some(altitude_agl);
@@ -254,17 +253,6 @@ pub(crate) async fn process_state_transition(
                         // Assign flight_id to this landing fix
                         fix.flight_id = Some(flight_id);
 
-                        // Update last_fix_at in database
-                        if let Err(e) = flights_repo
-                            .update_last_fix_at(flight_id, fix.timestamp)
-                            .await
-                        {
-                            error!(
-                                "Failed to update last_fix_at for flight {}: {}",
-                                flight_id, e
-                            );
-                        }
-
                         // Update altitude_agl if we have it
                         if let Some(altitude_agl) = agl {
                             fix.altitude_agl = Some(altitude_agl);
@@ -277,6 +265,7 @@ pub(crate) async fn process_state_transition(
                         }
 
                         // Complete flight in background (includes airport/runway lookup for landing)
+                        // Note: complete_flight will update both landing fields AND last_fix_at in a single UPDATE
                         let flights_repo_clone = flights_repo.clone();
                         let airports_repo_clone = airports_repo.clone();
                         let locations_repo_clone = locations_repo.clone();
@@ -318,15 +307,7 @@ pub(crate) async fn process_state_transition(
                         fix.flight_id = Some(flight_id);
 
                         // Update last_fix_at in database
-                        if let Err(e) = flights_repo
-                            .update_last_fix_at(flight_id, fix.timestamp)
-                            .await
-                        {
-                            error!(
-                                "Failed to update last_fix_at for flight {}: {}",
-                                flight_id, e
-                            );
-                        }
+                        update_flight_timestamp(flights_repo, flight_id, fix.timestamp).await;
 
                         // Update altitude_agl if we have it
                         if let Some(altitude_agl) = agl {
