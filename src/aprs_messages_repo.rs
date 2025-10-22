@@ -13,7 +13,7 @@ pub struct NewAprsMessage {
     pub id: Uuid,
     pub raw_message: String,
     pub received_at: DateTime<Utc>,
-    pub receiver_id: Option<Uuid>,
+    pub receiver_id: Uuid,
     pub unparsed: Option<String>,
 }
 

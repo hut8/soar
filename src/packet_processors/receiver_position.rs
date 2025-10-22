@@ -1,4 +1,3 @@
-use crate::locations_repo::LocationsRepository;
 use crate::receiver_repo::ReceiverRepository;
 use num_traits::AsPrimitive;
 use ogn_parser::{AprsData, AprsPacket};
@@ -8,17 +7,12 @@ use tracing::{debug, error, info, trace, warn};
 pub struct ReceiverPositionProcessor {
     /// Repository for updating receiver locations
     receiver_repo: ReceiverRepository,
-    /// Repository for managing location records
-    locations_repo: LocationsRepository,
 }
 
 impl ReceiverPositionProcessor {
     /// Create a new ReceiverPositionProcessor
-    pub fn new(receiver_repo: ReceiverRepository, locations_repo: LocationsRepository) -> Self {
-        Self {
-            receiver_repo,
-            locations_repo,
-        }
+    pub fn new(receiver_repo: ReceiverRepository) -> Self {
+        Self { receiver_repo }
     }
 
     /// Process a receiver position packet and update its location
@@ -32,20 +26,14 @@ impl ReceiverPositionProcessor {
             // Update receiver position in database (async)
             tokio::spawn({
                 let repo = self.receiver_repo.clone();
-                let locations_repo = self.locations_repo.clone();
                 let callsign = callsign.clone();
                 async move {
                     // First, get the receiver to obtain its ID
                     match repo.get_receiver_by_callsign(&callsign).await {
                         Ok(Some(_receiver)) => {
-                            // Update receiver location via locations table
+                            // Update receiver location directly
                             match repo
-                                .update_receiver_position_with_location(
-                                    &callsign,
-                                    latitude,
-                                    longitude,
-                                    &locations_repo,
-                                )
+                                .update_receiver_position(&callsign, latitude, longitude)
                                 .await
                             {
                                 Ok(_) => {
@@ -73,14 +61,9 @@ impl ReceiverPositionProcessor {
                                 Ok(_receiver_id) => {
                                     info!("Auto-inserted receiver {}", callsign);
 
-                                    // Update receiver location via locations table
+                                    // Update receiver location directly
                                     match repo
-                                        .update_receiver_position_with_location(
-                                            &callsign,
-                                            latitude,
-                                            longitude,
-                                            &locations_repo,
-                                        )
+                                        .update_receiver_position(&callsign, latitude, longitude)
                                         .await
                                     {
                                         Ok(_) => {

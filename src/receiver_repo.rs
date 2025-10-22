@@ -8,7 +8,7 @@ use uuid::Uuid;
 use crate::receivers::{
     NewReceiverLinkModel, NewReceiverModel, NewReceiverPhotoModel, Receiver, ReceiverLinkModel,
     ReceiverLinkRecord, ReceiverModel, ReceiverPhotoModel, ReceiverPhotoRecord, ReceiverRecord,
-    ReceiversData, UpdateReceiverModel,
+    ReceiversData,
 };
 use crate::schema::{receivers, receivers_links, receivers_photos};
 
@@ -71,7 +71,6 @@ impl ReceiverRepository {
                         email: receiver.email.clone(),
                         country: receiver.country.clone(),
                         from_ogn_db: true, // These come from OGN database
-                        location_id: None, // Will be populated later if needed
                     };
 
                     let receiver_result = diesel::insert_into(receivers::table)
@@ -191,7 +190,6 @@ impl ReceiverRepository {
                 email: None,
                 country: None,
                 from_ogn_db: false, // Auto-discovered, not from OGN database
-                location_id: None,
             };
 
             let receiver_id = diesel::insert_into(receivers::table)
@@ -431,30 +429,30 @@ impl ReceiverRepository {
         .await?
     }
 
-    /// Update receiver location by callsign
+    /// Update receiver location by callsign using raw SQL
     pub async fn update_receiver_location(
         &self,
         callsign: &str,
-        location_id: Uuid,
+        latitude: f64,
+        longitude: f64,
     ) -> Result<bool> {
         let pool = self.pool.clone();
         let callsign = callsign.to_string();
 
         tokio::task::spawn_blocking(move || -> Result<bool> {
+            use diesel::sql_query;
+
             let mut conn = pool.get()?;
 
-            let update = UpdateReceiverModel {
-                location_id: Some(location_id),
-                updated_at: Utc::now(),
-            };
-
-            let rows_affected =
-                diesel::update(receivers::table.filter(receivers::callsign.eq(&callsign)))
-                    .set(&update)
-                    .execute(&mut conn)?;
-
-            // GEOCODING DISABLED: We do NOT automatically set location_id here
-            // This avoids unnecessary geocoding API calls for receiver position updates
+            // Use raw SQL to update the geography column
+            // ST_SetSRID(ST_MakePoint(lng, lat), 4326)::geography creates a PostGIS geography point
+            let rows_affected = sql_query(
+                "UPDATE receivers SET location = ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, updated_at = NOW() WHERE callsign = $3"
+            )
+            .bind::<diesel::sql_types::Double, _>(longitude)
+            .bind::<diesel::sql_types::Double, _>(latitude)
+            .bind::<diesel::sql_types::Text, _>(&callsign)
+            .execute(&mut conn)?;
 
             Ok(rows_affected > 0)
         })
@@ -478,7 +476,7 @@ impl ReceiverRepository {
         .await?
     }
 
-    /// Get receivers in a bounding box by joining with locations table
+    /// Get receivers in a bounding box using receivers.location directly
     pub async fn get_receivers_in_bounding_box(
         &self,
         nw_lat: f64,
@@ -486,7 +484,6 @@ impl ReceiverRepository {
         se_lat: f64,
         se_lng: f64,
     ) -> Result<Vec<ReceiverModel>> {
-        use crate::schema::locations;
         use diesel::dsl::sql;
 
         let pool = self.pool.clone();
@@ -494,12 +491,12 @@ impl ReceiverRepository {
         tokio::task::spawn_blocking(move || -> Result<Vec<ReceiverModel>> {
             let mut conn = pool.get()?;
 
-            // Join receivers with locations and filter by bounding box using PostGIS
+            // Filter receivers by bounding box using PostGIS on receivers.location
             // ST_MakeEnvelope creates a rectangular polygon from the coordinates
             let receiver_models = receivers::table
-                .inner_join(locations::table.on(receivers::location_id.eq(locations::id.nullable())))
+                .filter(receivers::location.is_not_null())
                 .filter(sql::<diesel::sql_types::Bool>(&format!(
-                    "ST_Within(locations.geolocation::geometry, ST_MakeEnvelope({}, {}, {}, {}, 4326))",
+                    "ST_Within(receivers.location::geometry, ST_MakeEnvelope({}, {}, {}, {}, 4326))",
                     nw_lng, se_lat, se_lng, nw_lat
                 )))
                 .order(receivers::callsign.asc())
@@ -537,14 +534,13 @@ impl ReceiverRepository {
         .await?
     }
 
-    /// Get receivers within a radius (in miles) from a point by joining with locations table
+    /// Get receivers within a radius (in miles) from a point using receivers.location directly
     pub async fn get_receivers_within_radius(
         &self,
         latitude: f64,
         longitude: f64,
         radius_miles: f64,
     ) -> Result<Vec<ReceiverModel>> {
-        use crate::schema::locations;
         use diesel::dsl::sql;
 
         let pool = self.pool.clone();
@@ -555,12 +551,12 @@ impl ReceiverRepository {
             // Convert miles to meters for PostGIS ST_DWithin (1 mile = 1609.34 meters)
             let radius_meters = radius_miles * 1609.34;
 
-            // Join receivers with locations and filter by distance using PostGIS
+            // Filter receivers by distance using PostGIS on receivers.location
             // Cast both the stored point and the search point to geography for accurate distance calculations
             let receiver_models = receivers::table
-                .inner_join(locations::table.on(receivers::location_id.eq(locations::id.nullable())))
+                .filter(receivers::location.is_not_null())
                 .filter(sql::<diesel::sql_types::Bool>(&format!(
-                    "ST_DWithin(locations.geolocation::geography, ST_SetSRID(ST_MakePoint({}, {}), 4326)::geography, {})",
+                    "ST_DWithin(receivers.location, ST_SetSRID(ST_MakePoint({}, {}), 4326)::geography, {})",
                     longitude, latitude, radius_meters
                 )))
                 .order(receivers::callsign.asc())
@@ -590,22 +586,17 @@ impl ReceiverRepository {
         .await?
     }
 
-    /// Update receiver position by creating/finding a location and linking it
-    /// This method coordinates with LocationsRepository to handle the location record
-    pub async fn update_receiver_position_with_location(
+    /// Update receiver position by directly storing coordinates
+    /// No longer uses the locations table - stores coordinates directly in receivers.location
+    pub async fn update_receiver_position(
         &self,
         callsign: &str,
         latitude: f64,
         longitude: f64,
-        locations_repo: &crate::locations_repo::LocationsRepository,
     ) -> Result<bool> {
-        // First, find or create the location record
-        let location = locations_repo
-            .find_or_create_by_geolocation(latitude, longitude)
+        // Update the receiver location
+        self.update_receiver_location(callsign, latitude, longitude)
             .await?;
-
-        // Update the receiver to link to this location
-        self.update_receiver_location(callsign, location.id).await?;
 
         // Update the latest_packet_at timestamp
         let receiver = self.get_receiver_by_callsign(callsign).await?;

@@ -89,7 +89,7 @@ impl ReceiverStatusProcessor {
                             id: Uuid::new_v4(),
                             raw_message: raw_data.clone(),
                             received_at,
-                            receiver_id: Some(receiver_id),
+                            receiver_id,
                             unparsed,
                         };
 

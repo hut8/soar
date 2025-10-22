@@ -198,8 +198,8 @@ impl FixProcessor {
                 None
             };
 
-            // Create and insert the APRS message
-            let aprs_message_id = {
+            // Create and insert the APRS message - receiver_id is now NOT NULL, so we skip if None
+            let aprs_message_id = if let Some(receiver_id) = receiver_id {
                 let new_aprs_message = NewAprsMessage {
                     id: Uuid::new_v4(),
                     raw_message: raw_message.clone(),
@@ -215,6 +215,11 @@ impl FixProcessor {
                         None
                     }
                 }
+            } else {
+                error!(
+                    "Cannot insert APRS message without receiver_id (receiver_id is now NOT NULL)"
+                );
+                None
             };
 
             // Try to create a fix from the packet
