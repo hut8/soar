@@ -12,11 +12,13 @@ use crate::devices::AddressType;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FlightState {
-    /// Flight is currently active (no landing_time, no timed_out_at)
+    /// Flight is currently active (no landing_time, no timed_out_at, last_fix_at within 10 minutes)
     Active,
+    /// Flight is stale (no beacons for 10+ minutes but less than 8 hours)
+    Stale,
     /// Flight completed with normal landing (has landing_time)
     Complete,
-    /// Flight timed out due to no beacons for 5+ minutes (has timed_out_at)
+    /// Flight timed out due to no beacons for 8+ hours (has timed_out_at)
     TimedOut,
 }
 
@@ -113,9 +115,13 @@ pub struct Flight {
     /// Landing location ID (foreign key to locations table)
     pub landing_location_id: Option<Uuid>,
 
-    /// Timestamp when flight was timed out (no beacons for 5+ minutes)
+    /// Timestamp when flight was timed out (no beacons for 8+ hours)
     /// Mutually exclusive with landing_time - a flight is either landed or timed out, not both
     pub timed_out_at: Option<DateTime<Utc>>,
+
+    /// Timestamp of the last fix received for this flight
+    /// Updated whenever a fix is assigned to this flight
+    pub last_fix_at: DateTime<Utc>,
 
     /// Database timestamps
     pub created_at: DateTime<Utc>,
@@ -130,7 +136,13 @@ impl Flight {
         } else if self.landing_time.is_some() {
             FlightState::Complete
         } else {
-            FlightState::Active
+            // Check if flight is stale (no beacons for 10+ minutes)
+            let time_since_last_fix = Utc::now().signed_duration_since(self.last_fix_at);
+            if time_since_last_fix > chrono::Duration::minutes(10) {
+                FlightState::Stale
+            } else {
+                FlightState::Active
+            }
         }
     }
 
@@ -167,6 +179,7 @@ impl Flight {
             takeoff_location_id: None,
             landing_location_id: None,
             timed_out_at: None,
+            last_fix_at: now,
             created_at: now,
             updated_at: now,
         }
@@ -207,6 +220,7 @@ impl Flight {
             takeoff_location_id: None,
             landing_location_id: None,
             timed_out_at: None,
+            last_fix_at: fix.timestamp,
             created_at: now,
             updated_at: now,
         }
@@ -246,6 +260,7 @@ impl Flight {
             takeoff_location_id: None,
             landing_location_id: None,
             timed_out_at: None,
+            last_fix_at: fix.timestamp,
             created_at: now,
             updated_at: now,
         }
@@ -293,6 +308,7 @@ impl Flight {
             takeoff_location_id: None,
             landing_location_id: None,
             timed_out_at: None,
+            last_fix_at: fix.timestamp,
             created_at: now,
             updated_at: now,
         }
@@ -612,6 +628,7 @@ pub struct FlightModel {
     pub takeoff_location_id: Option<Uuid>,
     pub landing_location_id: Option<Uuid>,
     pub timed_out_at: Option<DateTime<Utc>>,
+    pub last_fix_at: DateTime<Utc>,
 }
 
 /// Insert model for new flights
@@ -642,6 +659,7 @@ pub struct NewFlightModel {
     pub takeoff_location_id: Option<Uuid>,
     pub landing_location_id: Option<Uuid>,
     pub timed_out_at: Option<DateTime<Utc>>,
+    pub last_fix_at: DateTime<Utc>,
 }
 
 /// Conversion from Flight (API model) to FlightModel (database model)
@@ -674,6 +692,7 @@ impl From<Flight> for FlightModel {
             takeoff_location_id: flight.takeoff_location_id,
             landing_location_id: flight.landing_location_id,
             timed_out_at: flight.timed_out_at,
+            last_fix_at: flight.last_fix_at,
         }
     }
 }
@@ -706,6 +725,7 @@ impl From<Flight> for NewFlightModel {
             takeoff_location_id: flight.takeoff_location_id,
             landing_location_id: flight.landing_location_id,
             timed_out_at: flight.timed_out_at,
+            last_fix_at: flight.last_fix_at,
         }
     }
 }
@@ -738,6 +758,7 @@ impl From<FlightModel> for Flight {
             takeoff_location_id: model.takeoff_location_id,
             landing_location_id: model.landing_location_id,
             timed_out_at: model.timed_out_at,
+            last_fix_at: model.last_fix_at,
             created_at: model.created_at,
             updated_at: model.updated_at,
         }

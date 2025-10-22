@@ -82,6 +82,7 @@ impl FlightsRepository {
         total_distance_meters_param: Option<f64>,
         maximum_displacement_meters_param: Option<f64>,
         runways_inferred_param: Option<bool>,
+        last_fix_at_param: Option<DateTime<Utc>>,
     ) -> Result<()> {
         use crate::schema::flights::dsl::*;
 
@@ -90,7 +91,11 @@ impl FlightsRepository {
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            diesel::update(flights.filter(id.eq(flight_id)))
+            // If last_fix_at not provided, use landing_time (by definition a flight has at least one fix)
+            let last_fix_time = last_fix_at_param.unwrap_or(landing_time_param);
+
+            // Single UPDATE query with all fields including last_fix_at
+            let rows_affected = diesel::update(flights.filter(id.eq(flight_id)))
                 .set((
                     landing_time.eq(&Some(landing_time_param)),
                     arrival_airport_id.eq(&arrival_airport_id_param),
@@ -100,9 +105,16 @@ impl FlightsRepository {
                     total_distance_meters.eq(&total_distance_meters_param),
                     maximum_displacement_meters.eq(&maximum_displacement_meters_param),
                     runways_inferred.eq(&runways_inferred_param),
+                    last_fix_at.eq(last_fix_time),
                     updated_at.eq(Utc::now()),
                 ))
                 .execute(&mut conn)?;
+
+            if rows_affected == 0 {
+                return Err(anyhow::anyhow!(
+                    "No rows affected when updating flight landing"
+                ));
+            }
 
             Ok::<(), anyhow::Error>(())
         })
@@ -571,8 +583,9 @@ impl FlightsRepository {
         Ok(results)
     }
 
-    /// Mark a flight as timed out (no beacons received for 5+ minutes)
+    /// Mark a flight as timed out (no beacons received for 8+ hours)
     /// Does NOT set landing fields - this is a timeout, not a landing
+    /// The timeout_time should be set to the last_fix_at value
     pub async fn timeout_flight(
         &self,
         flight_id: Uuid,
@@ -590,6 +603,31 @@ impl FlightsRepository {
                     timed_out_at.eq(Some(timeout_time)),
                     updated_at.eq(Utc::now()),
                 ))
+                .execute(&mut conn)?;
+
+            Ok::<usize, anyhow::Error>(rows)
+        })
+        .await??;
+
+        Ok(rows_affected > 0)
+    }
+
+    /// Update the last_fix_at timestamp for a flight
+    /// This should be called whenever a new fix is assigned to a flight
+    pub async fn update_last_fix_at(
+        &self,
+        flight_id: Uuid,
+        fix_timestamp: DateTime<Utc>,
+    ) -> Result<bool> {
+        use crate::schema::flights::dsl::*;
+
+        let pool = self.pool.clone();
+
+        let rows_affected = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            let rows = diesel::update(flights.filter(id.eq(flight_id)))
+                .set((last_fix_at.eq(fix_timestamp), updated_at.eq(Utc::now())))
                 .execute(&mut conn)?;
 
             Ok::<usize, anyhow::Error>(rows)

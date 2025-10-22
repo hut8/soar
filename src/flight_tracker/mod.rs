@@ -172,10 +172,10 @@ impl FlightTracker {
         altitude::calculate_and_update_agl_async(&self.elevation_db, fix_id, fix, fixes_repo).await;
     }
 
-    /// Check all active flights and timeout any that haven't received beacons for 5+ minutes
+    /// Check all active flights and timeout any that haven't received beacons for 8+ hours
     #[tracing::instrument(skip(self))]
     pub async fn check_and_timeout_stale_flights(&self) {
-        let timeout_threshold = chrono::Duration::minutes(5);
+        let timeout_threshold = chrono::Duration::hours(8);
         let now = chrono::Utc::now();
 
         // Collect flights that need to be timed out
