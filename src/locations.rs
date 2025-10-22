@@ -17,7 +17,6 @@ pub struct Location {
     pub state: Option<String>,
     pub zip_code: Option<String>,
     pub region_code: Option<String>,
-    pub county_mail_code: Option<String>,
     pub country_mail_code: Option<String>,
     pub geolocation: Option<Point>,
     pub created_at: DateTime<Utc>,
@@ -84,7 +83,6 @@ pub struct LocationModel {
     pub state: Option<String>,
     pub zip_code: Option<String>,
     pub region_code: Option<String>,
-    pub county_mail_code: Option<String>,
     pub country_mail_code: Option<String>,
     pub geolocation: Option<Point>, // PostgreSQL point type
     pub created_at: DateTime<Utc>,
@@ -103,7 +101,6 @@ pub struct NewLocationModel {
     pub state: Option<String>,
     pub zip_code: Option<String>,
     pub region_code: Option<String>,
-    pub county_mail_code: Option<String>,
     pub country_mail_code: Option<String>,
     pub geolocation: Option<Point>, // PostgreSQL point type
 }
@@ -119,7 +116,6 @@ impl From<Location> for LocationModel {
             state: location.state,
             zip_code: location.zip_code,
             region_code: location.region_code,
-            county_mail_code: location.county_mail_code,
             country_mail_code: location.country_mail_code,
             geolocation: location.geolocation,
             created_at: location.created_at,
@@ -139,7 +135,6 @@ impl From<Location> for NewLocationModel {
             state: location.state,
             zip_code: location.zip_code,
             region_code: location.region_code,
-            county_mail_code: location.county_mail_code,
             country_mail_code: location.country_mail_code,
             geolocation: location.geolocation,
         }
@@ -157,7 +152,6 @@ impl From<LocationModel> for Location {
             state: model.state,
             zip_code: model.zip_code,
             region_code: model.region_code,
-            county_mail_code: model.county_mail_code,
             country_mail_code: model.country_mail_code,
             geolocation: model.geolocation,
             created_at: model.created_at,
@@ -176,7 +170,6 @@ impl Location {
         state: Option<String>,
         zip_code: Option<String>,
         region_code: Option<String>,
-        county_mail_code: Option<String>,
         country_mail_code: Option<String>,
         geolocation: Option<Point>,
     ) -> Self {
@@ -189,7 +182,6 @@ impl Location {
             state,
             zip_code,
             region_code,
-            county_mail_code,
             country_mail_code,
             geolocation,
             created_at: now,
@@ -265,7 +257,6 @@ mod tests {
             Some("CA".to_string()),
             Some("12345".to_string()),
             Some("4".to_string()),
-            Some("037".to_string()),
             Some("US".to_string()),
             Some(Point::new(34.0522, -118.2437)),
         );
@@ -286,7 +277,6 @@ mod tests {
             Some("CA".to_string()),
             Some("12345".to_string()),
             None,
-            None,
             Some("US".to_string()),
             None,
         );
@@ -306,7 +296,6 @@ mod tests {
             None,
             Some("75001".to_string()),
             None,
-            None,
             Some("FR".to_string()),
             None,
         );
@@ -319,7 +308,7 @@ mod tests {
 
     #[test]
     fn test_empty_address_string() {
-        let location = Location::new(None, None, None, None, None, None, None, None, None);
+        let location = Location::new(None, None, None, None, None, None, None, None);
 
         assert_eq!(location.address_string(), None);
     }

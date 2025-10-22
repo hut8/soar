@@ -73,7 +73,6 @@ impl AircraftRegistrationsRepository {
                     state: aircraft_reg.state.clone(),
                     zip_code: aircraft_reg.zip_code.clone(),
                     region_code: aircraft_reg.region_code.clone(),
-                    county_mail_code: aircraft_reg.county_mail_code.clone(),
                     country_mail_code: aircraft_reg.country_mail_code.clone(),
                 };
                 unique_clubs.push((club_name, location_params));
@@ -344,12 +343,11 @@ impl AircraftRegistrationsRepository {
                     let state = aircraft_reg.state.clone();
                     let zip = aircraft_reg.zip_code.clone();
                     let region = aircraft_reg.region_code.clone();
-                    let county = aircraft_reg.county_mail_code.clone();
                     let country = aircraft_reg.country_mail_code.clone();
                     async move {
                         let result = locations_repo
                             .find_or_create(
-                                street1, street2, city, state, zip, region, county, country, None,
+                                street1, street2, city, state, zip, region, country, None,
                             )
                             .await;
                         (reg_num, result)
