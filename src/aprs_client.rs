@@ -22,48 +22,6 @@ use tracing::Instrument;
 use tracing::trace;
 use tracing::{error, info, warn};
 
-/// Trait for processing APRS packets
-/// Implementors can define custom logic for handling received APRS packets
-pub trait PacketHandler: Send + Sync + std::any::Any {
-    /// Process a received APRS packet
-    ///
-    /// # Arguments
-    /// * `packet` - The parsed APRS packet
-    fn process_packet(&self, _packet: AprsPacket) {
-        // Default implementation does nothing
-    }
-
-    /// Process a raw APRS message (optional - for logging, archiving, etc.)
-    ///
-    /// # Arguments
-    /// * `raw_message` - The raw APRS message string received from the server
-    fn process_raw_message(&self, _raw_message: &str) {
-        // Default implementation does nothing
-    }
-
-    /// Support for downcasting to concrete types
-    fn as_any(&self) -> &dyn std::any::Any;
-}
-
-/// Unified processor struct that contains the packet processor
-#[derive(Clone)]
-pub struct AprsProcessors {
-    /// Processor for general APRS packets and raw message handling
-    pub packet_processor: Arc<dyn PacketHandler>,
-}
-
-impl AprsProcessors {
-    /// Create a new AprsProcessors with a PacketRouter
-    pub fn with_packet_router(router: PacketRouter) -> Self {
-        Self {
-            packet_processor: Arc::new(router),
-        }
-    }
-}
-
-/// Type alias for boxed packet processor trait objects
-pub type BoxedPacketProcessor = Box<dyn PacketHandler>;
-
 /// Configuration for the APRS client
 #[derive(Debug, Clone)]
 pub struct AprsClientConfig {
@@ -106,24 +64,18 @@ impl Default for AprsClientConfig {
 /// APRS client that connects to an APRS-IS server via TCP
 pub struct AprsClient {
     config: AprsClientConfig,
-    processors: AprsProcessors,
+    router: Arc<PacketRouter>,
     shutdown_tx: Option<mpsc::Sender<()>>,
 }
 
 impl AprsClient {
-    /// Create a new APRS client with unified processors
-    /// This is the recommended constructor that takes an AprsProcessors struct
-    pub fn new(config: AprsClientConfig, processors: AprsProcessors) -> Self {
+    /// Create a new APRS client with a PacketRouter
+    pub fn new(config: AprsClientConfig, router: PacketRouter) -> Self {
         Self {
             config,
-            processors,
+            router: Arc::new(router),
             shutdown_tx: None,
         }
-    }
-
-    /// Create a new APRS client with a PacketRouter
-    pub fn with_packet_router(config: AprsClientConfig, router: PacketRouter) -> Self {
-        Self::new(config, AprsProcessors::with_packet_router(router))
     }
 
     /// Start the APRS client
@@ -134,7 +86,7 @@ impl AprsClient {
         self.shutdown_tx = Some(shutdown_tx);
 
         let config = self.config.clone();
-        let processors = self.processors.clone();
+        let router = self.router.clone();
 
         tokio::spawn(
             async move {
@@ -147,7 +99,7 @@ impl AprsClient {
                         break;
                     }
 
-                    match Self::connect_and_run(&config, processors.clone()).await {
+                    match Self::connect_and_run(&config, router.clone()).await {
                         ConnectionResult::Success => {
                             info!("APRS client connection ended normally");
                             retry_count = 0; // Reset retry count on successful connection
@@ -202,10 +154,10 @@ impl AprsClient {
     }
 
     /// Connect to the APRS server and run the message processing loop
-    #[tracing::instrument(skip(config, processors), fields(server = %config.server, port = %config.port))]
+    #[tracing::instrument(skip(config, router), fields(server = %config.server, port = %config.port))]
     async fn connect_and_run(
         config: &AprsClientConfig,
-        processors: AprsProcessors,
+        router: Arc<PacketRouter>,
     ) -> ConnectionResult {
         info!(
             "Connecting to APRS server {}:{}",
@@ -282,9 +234,9 @@ impl AprsClient {
                                 }
                                 // Route server messages (lines starting with #) and regular APRS messages differently
                                 if !trimmed_line.starts_with('#') {
-                                    Self::process_message(trimmed_line, &processors, config).await;
+                                    Self::process_message(trimmed_line, &router, config).await;
                                 } else {
-                                    Self::process_server_message(trimmed_line, &processors).await;
+                                    Self::process_server_message(trimmed_line, &router).await;
                                 }
                             }
                         }
@@ -398,41 +350,25 @@ impl AprsClient {
     }
 
     /// Process a server message (line starting with #)
-    async fn process_server_message(message: &str, processors: &AprsProcessors) {
+    async fn process_server_message(message: &str, router: &Arc<PacketRouter>) {
         // First log the server message for backward compatibility
         info!("Server message: {}", message);
 
-        // Try to process with PacketRouter if available
-        // We need to use Any to check if it's a PacketRouter since we only have dyn PacketHandler
-        if let Some(router) = processors
-            .packet_processor
-            .as_any()
-            .downcast_ref::<PacketRouter>()
-        {
-            trace!("Successfully downcast to PacketRouter, processing server message");
-            router.process_server_message(message).await;
-        } else {
-            trace!("Packet processor is not a PacketRouter, server message only logged");
-        }
+        // Process with PacketRouter
+        router.process_server_message(message).await;
     }
 
     /// Process a received APRS message
-    async fn process_message(
-        message: &str,
-        processors: &AprsProcessors,
-        config: &AprsClientConfig,
-    ) {
-        // Always call process_raw_message first (for logging/archiving)
-        processors.packet_processor.process_raw_message(message);
-
+    async fn process_message(message: &str, router: &Arc<PacketRouter>, config: &AprsClientConfig) {
         // Try to parse the message using ogn-parser
         match ogn_parser::parse(message) {
             Ok(parsed) => {
                 // Log unparsed fragments if present and configured
                 Self::log_unparsed_fragments_if_configured(&parsed, message, config).await;
 
-                // Dispatch the packet to the packet processor
-                processors.packet_processor.process_packet(parsed);
+                // Dispatch the packet to the packet router
+                // The router will handle archiving and generic processing before type-specific routing
+                router.process_packet(parsed, message).await;
             }
             Err(e) => {
                 // For OGNFNT sources with invalid lat/lon, log as trace instead of error
@@ -786,7 +722,6 @@ impl ArchiveService {
 mod tests {
     use super::*;
     use chrono::NaiveDateTime;
-    use std::sync::atomic::{AtomicUsize, Ordering};
 
     #[test]
     fn test_config_builder() {
@@ -884,39 +819,9 @@ mod tests {
         );
     }
 
-    struct TestPacketProcessor {
-        counter: Arc<AtomicUsize>,
-    }
-
-    impl PacketHandler for TestPacketProcessor {
-        fn process_packet(&self, _packet: AprsPacket) {
-            self.counter.fetch_add(1, Ordering::SeqCst);
-        }
-
-        fn as_any(&self) -> &dyn std::any::Any {
-            self
-        }
-    }
-
-    #[tokio::test]
-    async fn test_packet_processor() {
-        let counter = Arc::new(AtomicUsize::new(0));
-        let test_processor = TestPacketProcessor {
-            counter: Arc::clone(&counter),
-        };
-
-        // Directly assign the test processor (this is a test workaround)
-        let processors = AprsProcessors {
-            packet_processor: Arc::new(test_processor),
-        };
-
-        let config = AprsClientConfig::default();
-
-        // Simulate processing a message
-        AprsClient::process_message("TEST>APRS:>Test message", &processors, &config).await;
-
-        assert_eq!(counter.load(Ordering::SeqCst), 1);
-    }
+    // Note: test_packet_processor removed as PacketHandler trait was removed
+    // Integration tests for packet processing should be done at a higher level
+    // with a real PacketRouter instance
 
     #[test]
     fn test_config_builder_with_archive() {
