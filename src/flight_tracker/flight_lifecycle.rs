@@ -7,7 +7,6 @@ use crate::flights_repo::FlightsRepository;
 use crate::locations_repo::LocationsRepository;
 use crate::runways_repo::RunwaysRepository;
 use anyhow::Result;
-use chrono::Utc;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
