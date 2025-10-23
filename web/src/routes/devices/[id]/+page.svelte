@@ -293,7 +293,7 @@
 						<div class="mb-2 flex items-center gap-3">
 							<Radio class="h-8 w-8 text-primary-500" />
 							<div>
-								<h1 class="h1">{device.registration}</h1>
+								<h1 class="h1">{device.registration || 'Unknown'}</h1>
 								<p class="text-surface-600-300-token font-mono text-sm">
 									Address: {formatDeviceAddress(device.address_type, device.address)}
 								</p>
@@ -430,7 +430,7 @@
 								<div>
 									<p class="text-surface-600-300-token mb-1 text-sm">Registration Number</p>
 									<p class="font-mono font-semibold">
-										{device.registration || aircraftRegistration.n_number}
+										{device.registration || aircraftRegistration.n_number || 'Unknown'}
 									</p>
 								</div>
 							</div>
@@ -484,7 +484,7 @@
 						<div class="text-surface-600-300-token py-8 text-center">
 							<Plane class="mx-auto mb-4 h-12 w-12 text-surface-400" />
 							<p>
-								No aircraft registration found for {device.registration}
+								No aircraft registration found for {device.registration || 'Unknown'}
 								<br />
 								<i>Data is currently only available for aircraft registered in the USA</i>
 							</p>

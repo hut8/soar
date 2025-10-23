@@ -90,11 +90,6 @@ export class DeviceRegistry {
 
 	// Add or update a device
 	public setDevice(device: Device): void {
-		// Normalize registration: use "Unknown" if missing
-		if (!device.registration || device.registration.trim() === '') {
-			device.registration = 'Unknown';
-		}
-
 		// Get existing fixes if any, or use the ones from the device, or empty array
 		const existingFixes = this.devices.get(device.id)?.fixes || device.fixes || [];
 
@@ -225,7 +220,7 @@ export class DeviceRegistry {
 				}
 			}
 
-			// If still no device, create a minimal one with "Unknown" registration if needed
+			// If still no device, create a minimal one
 			if (!device) {
 				console.log('[REGISTRY] Creating minimal device for fix:', deviceId);
 				device = {
@@ -234,7 +229,7 @@ export class DeviceRegistry {
 					address_type: '',
 					address: fix.device_address_hex || '',
 					aircraft_model: fix.model || '',
-					registration: fix.registration || 'Unknown',
+					registration: fix.registration || '',
 					competition_number: '',
 					tracked: false,
 					identified: false,
@@ -345,14 +340,6 @@ export class DeviceRegistry {
 		if (stored) {
 			try {
 				const data = JSON.parse(stored) as DeviceWithFixesCache;
-
-				// Normalize registration to "Unknown" if missing
-				if (!data.device || !data.device.registration || data.device.registration.trim() === '') {
-					if (data.device) {
-						data.device.registration = 'Unknown';
-					}
-				}
-
 				return data;
 			} catch (e) {
 				console.warn(`Failed to parse stored device ${deviceId}:`, e);
