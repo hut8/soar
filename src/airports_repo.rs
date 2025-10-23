@@ -114,12 +114,13 @@ impl AirportsRepository {
                 let mut conn = pool.get()?;
 
                 // Use Diesel's on_conflict for upserts
+                // Conflict on ident (unique constraint) rather than id (primary key)
                 let upserted_count = diesel::insert_into(airports)
                     .values(&batch_vec)
-                    .on_conflict(id)
+                    .on_conflict(ident)
                     .do_update()
                     .set((
-                        ident.eq(excluded(ident)),
+                        id.eq(excluded(id)),
                         type_.eq(excluded(type_)),
                         name.eq(excluded(name)),
                         latitude_deg.eq(excluded(latitude_deg)),
