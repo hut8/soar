@@ -41,84 +41,6 @@ impl AircraftTracker {
         }
     }
 
-    /// Determine if aircraft should be considered active based on fix
-    pub fn should_be_active(&self, fix: &Fix) -> bool {
-        // Special case: If no altitude data and speed < 80 knots, consider inactive
-        // This handles cases where altitude data is missing but we can still infer ground state from speed
-        if fix.altitude_agl.is_none() && fix.altitude_msl_feet.is_none() {
-            // Calculate speed (from fix or from position changes)
-            let speed_knots = if let Some(ground_speed_knots) = fix.ground_speed_knots {
-                ground_speed_knots
-            } else if let (Some((last_lat, last_lon)), Some(last_time)) =
-                (self.last_position, self.last_position_time)
-            {
-                let time_diff = fix.timestamp.signed_duration_since(last_time);
-                if time_diff.num_seconds() > 0 {
-                    let distance_meters =
-                        haversine_distance(last_lat, last_lon, fix.latitude, fix.longitude);
-                    let speed_ms = distance_meters / time_diff.num_seconds() as f64;
-                    speed_ms * 1.94384 // m/s to knots
-                } else {
-                    0.0
-                }
-            } else {
-                0.0
-            };
-
-            if speed_knots < 80.0 {
-                // No altitude data and slow speed - likely on ground
-                return false;
-            }
-            // No altitude data but high speed - assume active/airborne
-            return true;
-        }
-
-        // Check ground speed first
-        let speed_indicates_active = if let Some(ground_speed_knots) = fix.ground_speed_knots {
-            ground_speed_knots >= 20.0
-        } else {
-            // If no ground speed, calculate from position changes
-            if let (Some((last_lat, last_lon)), Some(last_time)) =
-                (self.last_position, self.last_position_time)
-            {
-                let time_diff = fix.timestamp.signed_duration_since(last_time);
-                if time_diff.num_seconds() > 0 {
-                    let distance_meters =
-                        haversine_distance(last_lat, last_lon, fix.latitude, fix.longitude);
-                    let speed_ms = distance_meters / time_diff.num_seconds() as f64;
-                    let speed_knots = speed_ms * 1.94384; // m/s to knots
-
-                    speed_knots >= 20.0
-                } else {
-                    // Can't calculate speed, use current state
-                    self.state == AircraftState::Active
-                }
-            } else {
-                // No previous position, use current state
-                self.state == AircraftState::Active
-            }
-        };
-
-        // If speed indicates active, aircraft is active
-        if speed_indicates_active {
-            return true;
-        }
-
-        // Speed indicates not active (potential landing)
-        // But don't register landing if AGL altitude is >= 250 feet
-        // Only land if altitude is unavailable OR altitude is < 250 feet AGL
-        if let Some(altitude_agl) = fix.altitude_agl
-            && altitude_agl >= 250
-        {
-            // Still too high to land - remain active
-            return true;
-        }
-
-        // Either altitude is unavailable, or altitude is < 250 feet
-        // Speed is low, so aircraft should be idle (landing)
-        false
-    }
-
     pub fn update_position(&mut self, fix: &Fix) {
         self.last_position = Some((fix.latitude, fix.longitude));
         self.last_position_time = Some(fix.timestamp);
@@ -141,6 +63,7 @@ impl AircraftTracker {
 mod tests {
     use super::*;
     use crate::devices::AddressType;
+    use crate::flight_tracker::state_transitions::should_be_active;
     use chrono::Utc;
 
     #[test]
@@ -183,10 +106,10 @@ mod tests {
             aprs_message_id: None,
         };
 
-        assert!(tracker.should_be_active(&fix));
+        assert!(should_be_active(&fix));
 
         // Test with low speed
         fix.ground_speed_knots = Some(15.0); // 15 knots - should be idle (below 20 knot threshold)
-        assert!(!tracker.should_be_active(&fix));
+        assert!(!should_be_active(&fix));
     }
 }

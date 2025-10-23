@@ -31,7 +31,7 @@ async fn update_flight_timestamp(
 
 /// Determine if aircraft should be active based on fix data
 /// This checks ground speed first, then altitude (if available)
-fn should_be_active(fix: &Fix) -> bool {
+pub(crate) fn should_be_active(fix: &Fix) -> bool {
     // Special case: If no altitude data and speed < 80 knots, consider inactive
     // This handles cases where altitude data is missing but we can still infer ground state from speed
     if fix.altitude_agl.is_none() && fix.altitude_msl_feet.is_none() {
