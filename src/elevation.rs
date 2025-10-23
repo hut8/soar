@@ -69,6 +69,10 @@ pub struct ElevationDB {
 impl ElevationDB {
     /// Create a new ElevationDB using ELEVATION_DATA_PATH env var or default cache directory
     pub fn new() -> Result<Self> {
+        // Configure GDAL with larger cache settings before opening any datasets
+        gdal::config::set_config_option("GDAL_MAX_DATASET_POOL_SIZE", "512")?;
+        gdal::config::set_config_option("GDAL_CACHEMAX", "512")?; // MB
+
         let storage_path = match env::var("ELEVATION_DATA_PATH") {
             Ok(path) => PathBuf::from(path),
             Err(_) => {
@@ -98,6 +102,10 @@ impl ElevationDB {
 
     /// Create a new ElevationDB with an explicit storage path
     pub fn with_path(storage_path: PathBuf) -> Result<Self> {
+        // Configure GDAL with larger cache settings before opening any datasets
+        gdal::config::set_config_option("GDAL_MAX_DATASET_POOL_SIZE", "512")?;
+        gdal::config::set_config_option("GDAL_CACHEMAX", "512")?; // MB
+
         std::fs::create_dir_all(&storage_path).with_context(|| {
             format!(
                 "Failed to create elevation storage directory: {:?}",
