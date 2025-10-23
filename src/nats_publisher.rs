@@ -4,7 +4,7 @@ use serde_json;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::Instrument;
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 
 use crate::Fix;
 
@@ -24,25 +24,17 @@ async fn publish_to_nats(nats_client: &Client, device_id: &str, fix: &Fix) -> Re
     // Serialize the Fix to JSON once
     let payload = serde_json::to_vec(fix)?;
 
-    // 1. Publish by device ID (existing functionality)
+    // Publish by device
     let device_subject = format!("{}.fix.{}", topic_prefix, device_id);
     nats_client
         .publish(device_subject.clone(), payload.clone().into())
         .await?;
-    debug!(
-        "Published fix for {} to NATS device subject: {}",
-        device_id, device_subject
-    );
 
-    // 2. Publish by area (new functionality)
+    // Publish by area
     let area_subject = get_area_subject(topic_prefix, fix.latitude, fix.longitude);
     nats_client
         .publish(area_subject.clone(), payload.into())
         .await?;
-    debug!(
-        "Published fix for {} to NATS area subject: {}",
-        device_id, area_subject
-    );
 
     Ok(())
 }
@@ -102,7 +94,6 @@ impl NatsFixPublisher {
                     Ok(()) => {
                         fixes_published += 1;
                         metrics::counter!("nats_publisher_fixes_published").increment(1);
-                        debug!("Published fix for device {}", device_id);
                     }
                     Err(e) => {
                         error!("Failed to publish fix for device {}: {}", device_id, e);
