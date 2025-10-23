@@ -229,8 +229,7 @@ diesel::table! {
         aircraft_type_ogn -> Nullable<AircraftTypeOgn>,
         last_fix_at -> Nullable<Timestamptz>,
         club_id -> Nullable<Uuid>,
-        #[max_length = 8]
-        icao_model_code -> Nullable<Varchar>,
+        icao_model_code -> Nullable<Text>,
         adsb_emitter_category -> Nullable<AdsbEmitterCategory>,
     }
 }
