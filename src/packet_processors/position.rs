@@ -1,4 +1,5 @@
 use super::aircraft::AircraftPositionProcessor;
+use super::generic::PacketContext;
 use super::receiver_position::ReceiverPositionProcessor;
 use ogn_parser::{AprsPacket, PositionSourceType};
 use tracing::{trace, warn};
@@ -39,18 +40,22 @@ impl PositionPacketProcessor {
     }
 
     /// Process a position packet, routing based on source type
-    pub fn process_position_packet(&self, packet: &AprsPacket) {
+    pub async fn process_position_packet(&self, packet: &AprsPacket, context: PacketContext) {
         match packet.position_source_type() {
             PositionSourceType::Aircraft => {
                 if let Some(aircraft_proc) = &self.aircraft_processor {
-                    aircraft_proc.process_aircraft_position(packet);
+                    aircraft_proc
+                        .process_aircraft_position(packet, context)
+                        .await;
                 } else {
                     warn!("No aircraft processor configured, skipping aircraft position");
                 }
             }
             PositionSourceType::Receiver => {
                 if let Some(receiver_proc) = &self.receiver_processor {
-                    receiver_proc.process_receiver_position(packet);
+                    receiver_proc
+                        .process_receiver_position(packet, context)
+                        .await;
                 } else {
                     warn!(
                         "No receiver processor configured, skipping receiver position from {}",

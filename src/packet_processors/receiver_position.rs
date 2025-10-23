@@ -1,7 +1,8 @@
+use crate::packet_processors::generic::PacketContext;
 use crate::receiver_repo::ReceiverRepository;
 use num_traits::AsPrimitive;
 use ogn_parser::{AprsData, AprsPacket};
-use tracing::{debug, error, info, trace, warn};
+use tracing::{error, trace, warn};
 
 /// Processor for handling receiver position packets
 pub struct ReceiverPositionProcessor {
@@ -16,81 +17,38 @@ impl ReceiverPositionProcessor {
     }
 
     /// Process a receiver position packet and update its location
-    pub fn process_receiver_position(&self, packet: &AprsPacket) {
+    /// Note: Receiver is guaranteed to exist in database (created by GenericProcessor)
+    pub async fn process_receiver_position(&self, packet: &AprsPacket, _context: PacketContext) {
         // Extract position data from packet
         if let AprsData::Position(position) = &packet.data {
             let callsign = packet.from.to_string();
             let latitude = position.latitude.as_();
             let longitude = position.longitude.as_();
 
-            // Update receiver position in database (async)
-            tokio::spawn({
-                let repo = self.receiver_repo.clone();
-                let callsign = callsign.clone();
-                async move {
-                    // First, get the receiver to obtain its ID
-                    match repo.get_receiver_by_callsign(&callsign).await {
-                        Ok(Some(_receiver)) => {
-                            // Update receiver location directly
-                            match repo
-                                .update_receiver_position(&callsign, latitude, longitude)
-                                .await
-                            {
-                                Ok(_) => {
-                                    trace!(
-                                        "Successfully updated position for receiver {}: ({}, {})",
-                                        callsign, latitude, longitude
-                                    );
-                                }
-                                Err(e) => {
-                                    error!(
-                                        "Failed to update position for receiver {}: {}",
-                                        callsign, e
-                                    );
-                                }
-                            }
-                        }
-                        Ok(None) => {
-                            debug!(
-                                "Position packet from {} is not a known receiver, auto-inserting",
-                                callsign
-                            );
-
-                            // Auto-insert minimal receiver
-                            match repo.insert_minimal_receiver(&callsign).await {
-                                Ok(_receiver_id) => {
-                                    info!("Auto-inserted receiver {}", callsign);
-
-                                    // Update receiver location directly
-                                    match repo
-                                        .update_receiver_position(&callsign, latitude, longitude)
-                                        .await
-                                    {
-                                        Ok(_) => {
-                                            debug!(
-                                                "Successfully updated position for auto-inserted receiver {}: ({}, {})",
-                                                callsign, latitude, longitude
-                                            );
-                                        }
-                                        Err(e) => {
-                                            error!(
-                                                "Failed to update position for auto-inserted receiver {}: {}",
-                                                callsign, e
-                                            );
-                                        }
-                                    }
-                                }
-                                Err(e) => {
-                                    error!("Failed to auto-insert receiver {}: {}", callsign, e);
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            error!("Failed to look up receiver {}: {}", callsign, e);
-                        }
+            // Update receiver position in database
+            match self
+                .receiver_repo
+                .update_receiver_position(&callsign, latitude, longitude)
+                .await
+            {
+                Ok(updated) => {
+                    if updated {
+                        trace!(
+                            "Successfully updated position for receiver {}: ({}, {})",
+                            callsign, latitude, longitude
+                        );
+                    } else {
+                        // This shouldn't happen since GenericProcessor ensures receiver exists
+                        warn!(
+                            "Receiver {} not found when updating position - this indicates a race condition or database issue",
+                            callsign
+                        );
                     }
                 }
-            });
+                Err(e) => {
+                    error!("Failed to update position for receiver {}: {}", callsign, e);
+                }
+            }
         } else {
             warn!(
                 "Expected position packet from receiver {} but got different packet type",

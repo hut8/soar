@@ -23,9 +23,10 @@
 
 [Unit]
 Description=SOAR - Soaring Observation And Records System
-Documentation=https://github.com/your-repo/soar
+Documentation=https://github.com/hut8/soar
 After=network-online.target postgresql.service nats-server.service
 Wants=soar-run.service soar-web.service soar-pull-data.timer
+# Note: soar-archive.timer is disabled for now and must be manually enabled if needed
 Requires=postgresql.service nats-server.service
 
 [Install]

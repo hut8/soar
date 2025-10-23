@@ -1,6 +1,6 @@
 [Unit]
 Description=SOAR Archive - Archive Old Fixes Data
-Documentation=https://github.com/your-repo/soar
+Documentation=https://github.com/hut8/soar
 After=network-online.target postgresql.service
 Wants=network-online.target
 Requires=postgresql.service

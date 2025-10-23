@@ -36,7 +36,6 @@ pub mod live_fixes;
 pub mod loader;
 pub mod locations;
 pub mod locations_repo;
-pub mod message_processors;
 pub mod metrics;
 pub mod nats_publisher;
 pub mod ogn_aprs_aircraft;
@@ -59,10 +58,7 @@ pub mod users;
 pub mod users_repo;
 pub mod web;
 
-pub use aprs_client::{
-    AprsClient, AprsClientConfig, AprsClientConfigBuilder, AprsProcessors, ArchiveService,
-    PacketHandler,
-};
+pub use aprs_client::{AprsClient, AprsClientConfig, AprsClientConfigBuilder, ArchiveService};
 pub use fixes::Fix;
 pub use nats_publisher::NatsFixPublisher;
 pub use packet_processors::{

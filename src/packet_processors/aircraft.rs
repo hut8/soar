@@ -1,5 +1,6 @@
 use crate::fix_processor::FixProcessor;
 use crate::flight_tracker::FlightTracker;
+use crate::packet_processors::generic::PacketContext;
 use ogn_parser::AprsPacket;
 use std::sync::Arc;
 use tracing::warn;
@@ -40,12 +41,15 @@ impl AircraftPositionProcessor {
     }
 
     /// Process an aircraft position packet
-    pub fn process_aircraft_position(&self, packet: &AprsPacket) {
+    /// Note: Receiver is guaranteed to exist and APRS message already inserted by GenericProcessor
+    pub async fn process_aircraft_position(&self, packet: &AprsPacket, context: PacketContext) {
         let raw_message = packet.raw.clone().unwrap_or_default();
 
         // Convert to Fix and process with fix processor if available
         if let Some(ref fix_proc) = self.fix_processor {
-            fix_proc.process_aprs_packet(packet.clone(), &raw_message);
+            fix_proc
+                .process_aprs_packet(packet.clone(), &raw_message, context)
+                .await;
         } else {
             warn!("No fix processor configured, skipping aircraft position");
         }

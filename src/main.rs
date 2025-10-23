@@ -15,8 +15,8 @@ use soar::fix_processor::FixProcessor;
 use soar::flight_tracker::FlightTracker;
 use soar::instance_lock::InstanceLock;
 use soar::packet_processors::{
-    AircraftPositionProcessor, PacketRouter, PositionPacketProcessor, ReceiverPositionProcessor,
-    ReceiverStatusProcessor, ServerStatusProcessor,
+    AircraftPositionProcessor, GenericProcessor, PacketRouter, PositionPacketProcessor,
+    ReceiverPositionProcessor, ReceiverStatusProcessor, ServerStatusProcessor,
 };
 use soar::receiver_repo::ReceiverRepository;
 use soar::receiver_status_repo::ReceiverStatusRepository;
@@ -475,16 +475,18 @@ async fn handle_run(
     let server_messages_repo = ServerMessagesRepository::new(diesel_pool.clone());
     let server_status_processor = ServerStatusProcessor::new(server_messages_repo);
 
-    // Create receiver status processor for receiver status messages
+    // Create repositories
     let receiver_repo = ReceiverRepository::new(diesel_pool.clone());
     let receiver_status_repo = ReceiverStatusRepository::new(diesel_pool.clone());
     let aprs_messages_repo =
         soar::aprs_messages_repo::AprsMessagesRepository::new(diesel_pool.clone());
-    let receiver_status_processor = ReceiverStatusProcessor::new(
-        receiver_status_repo,
-        receiver_repo.clone(),
-        aprs_messages_repo,
-    );
+
+    // Create GenericProcessor for receiver identification and APRS message insertion
+    let generic_processor = GenericProcessor::new(receiver_repo.clone(), aprs_messages_repo);
+
+    // Create receiver status processor for receiver status messages
+    let receiver_status_processor =
+        ReceiverStatusProcessor::new(receiver_status_repo, receiver_repo.clone());
 
     // Create receiver position processor for receiver position messages
     let receiver_position_processor = ReceiverPositionProcessor::new(receiver_repo.clone());
@@ -501,13 +503,13 @@ async fn handle_run(
 
     // Create PacketRouter with all processors
     let packet_router = if let Some(archive_path) = archive_dir.clone() {
-        PacketRouter::with_archive(archive_path)
+        PacketRouter::with_archive(generic_processor, archive_path)
             .await?
             .with_position_processor(position_processor)
             .with_receiver_status_processor(receiver_status_processor)
             .with_server_status_processor(server_status_processor)
     } else {
-        PacketRouter::new()
+        PacketRouter::new(generic_processor)
             .with_position_processor(position_processor)
             .with_receiver_status_processor(receiver_status_processor)
             .with_server_status_processor(server_status_processor)
@@ -519,7 +521,7 @@ async fn handle_run(
     );
 
     // Create and start APRS client with PacketRouter
-    let mut client = AprsClient::with_packet_router(config, packet_router);
+    let mut client = AprsClient::new(config, packet_router);
 
     info!("Starting APRS client...");
     client.start().await?;
