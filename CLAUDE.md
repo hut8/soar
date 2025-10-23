@@ -14,6 +14,7 @@ SOAR is a comprehensive aircraft tracking and club management system built with:
 ## Critical Development Rules
 
 ### NO BYPASSING QUALITY CONTROLS
+- **NEVER commit directly to main** - The main branch is protected. ALWAYS create a feature/topic branch first
 - **NEVER use `git commit --no-verify`** - All commits must pass pre-commit hooks
 - **NEVER push to main** - Pushing to feature branches is okay, but never push directly to main
 - **NEVER skip CI checks** - Local development must match GitHub Actions pipeline
@@ -392,3 +393,47 @@ test('device search functionality', async ({ page }) => {
 - You should absolutely never use --no-verify
 - When running clippy or cargo build, set the timeout to ten minutes
 - Use a timeout of 10 minutes for running "cargo test" or "cargo clippy"
+
+## Branch Protection Rules
+
+**CRITICAL**: The `main` branch is protected and does not allow direct commits.
+
+### Always Use Feature Branches
+- **NEVER commit directly to main** - Always create a feature/topic branch first
+- Use descriptive branch names:
+  - `feature/description` for new features
+  - `fix/description` for bug fixes
+  - `refactor/description` for code refactoring
+  - `docs/description` for documentation changes
+
+### Proper Development Workflow
+1. **Create a topic branch**: `git checkout -b feature/my-feature`
+2. **Make changes and commit**: Only stage specific files you modified
+3. **Push to remote**: `git push origin feature/my-feature`
+4. **Create Pull Request**: Use GitHub UI to create PR for review
+
+### If You Accidentally Commit to Main
+If you accidentally commit to main, follow these steps to fix it:
+1. `git reset --hard HEAD~N` (where N is the number of commits to undo)
+2. `git checkout -b topic/branch-name commit-hash` (create branch for each commit)
+3. `git checkout main` (return to main)
+
+Example:
+```bash
+# You accidentally made 3 commits to main
+git log --oneline -3  # See the commits
+# c3c3c3c third commit
+# b2b2b2b second commit
+# a1a1a1a first commit
+
+# Undo the commits on main
+git reset --hard HEAD~3
+
+# Create branches for each
+git checkout -b feature/third-feature c3c3c3c
+git checkout -b feature/second-feature b2b2b2b
+git checkout -b fix/first-fix a1a1a1a
+
+# Return to main
+git checkout main
+```
