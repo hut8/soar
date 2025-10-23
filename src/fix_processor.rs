@@ -169,9 +169,8 @@ impl FixProcessor {
         let self_clone = self.clone();
         let raw_message = raw_message.to_string();
 
-        tokio::spawn(
-            async move {
-                let received_at = chrono::Utc::now();
+        async move {
+            let received_at = chrono::Utc::now();
 
             // Try to create a fix from the packet
             match packet.data {
@@ -276,7 +275,7 @@ impl FixProcessor {
             }
         }
         .instrument(tracing::debug_span!("process_aprs_packet"))
-        );
+        .await;
     }
 
     /// Internal method to process a fix through the complete pipeline
