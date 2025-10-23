@@ -257,8 +257,11 @@ impl FixProcessor {
                     {
                         Ok(device_model) => {
                             // Extract ICAO model code and ADS-B emitter category from packet for device update
-                            // TODO: ICAO model code is not currently in ogn_parser - extract from ADS-B data when available
-                            let icao_model_code: Option<String> = None;
+                            let icao_model_code: Option<String> = pos_packet
+                                .comment
+                                .model
+                                .as_ref()
+                                .map(|model| model.to_string());
                             let adsb_emitter_category = pos_packet
                                 .comment
                                 .adsb_emitter_category
