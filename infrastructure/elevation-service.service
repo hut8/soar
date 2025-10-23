@@ -1,0 +1,23 @@
+[Unit]
+Description=Elevation Service
+After=network-online.target
+
+[Service]
+PrivateTmp=true
+Type=simple
+ExecStart=/usr/local/bin/elevation-service
+ExecReload=/bin/kill -s HUP $MAINPID
+ExecStop=/bin/kill -s SIGTERM $MAINPID
+TimeoutStopSec=30
+
+Restart=on-failure
+
+User=daemon
+Group=daemon
+
+Environment="TILE_SET_PATH=/var/soar/elevation"
+Environment="PORT=5125"
+Environment="TILE_SET_CACHE=512"
+
+[Install]
+WantedBy=multi-user.target

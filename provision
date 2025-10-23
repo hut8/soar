@@ -56,6 +56,7 @@ sudo cp soar-pull-data.timer /etc/systemd/system/
 sudo cp soar-sitemap.service /etc/systemd/system/
 sudo cp soar-sitemap.timer /etc/systemd/system/
 sudo cp infrastructure/nats-server.service /etc/systemd/system/
+sudo cp infrastructure/elevation-service.service /etc/systemd/system/
 
 # Reload systemd daemon
 echo "Reloading systemd daemon..."
@@ -68,11 +69,13 @@ sudo systemctl enable soar-run.service
 sudo systemctl enable soar-web.service
 sudo systemctl enable soar-pull-data.timer
 sudo systemctl enable nats-server.service
+sudo systemctl enable elevation-service.service
 
 # Create necessary directories
 echo -e "${BLUE}Creating directories...${NC}"
 sudo mkdir -p /var/soar/logs
 sudo mkdir -p /var/soar/archive
+sudo mkdir -p /var/soar/elevation
 sudo mkdir -p /etc/soar
 
 # Set ownership for soar user
@@ -95,9 +98,11 @@ echo "  sudo systemctl start soar-web.service"
 echo "  sudo systemctl stop soar-run.service"
 echo "  sudo systemctl restart soar-pull-data.timer"
 echo "  sudo systemctl start nats-server.service"
+echo "  sudo systemctl start elevation-service.service"
 echo
 echo -e "${YELLOW}Check logs:${NC}"
 echo "  sudo journalctl -u soar-run.service -f"
 echo "  sudo journalctl -u soar-web.service -f"
 echo "  sudo journalctl -u soar-pull-data.service -f"
 echo "  sudo journalctl -u nats-server.service -f"
+echo "  sudo journalctl -u elevation-service.service -f"
