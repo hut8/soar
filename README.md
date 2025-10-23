@@ -146,6 +146,30 @@ cargo install diesel_cli --no-default-features --features postgres
 - Ourairports (open, worldwide data) - https://ourairports.com/data/
 - FAA NASR: This seems like the best for the USA - https://www.faa.gov/air_traffic/flight_info/aeronav/aero_data/NASR_Subscription/2025-08-07/
 
+### Elevation Data
+
+SOAR uses elevation data for terrain analysis and flight altitude calculations. The elevation dataset must be downloaded separately.
+
+**Download the elevation dataset** (approximately 27 GB):
+
+```bash
+# Install rclone if not already installed
+# Ubuntu/Debian: sudo apt install rclone
+# macOS: brew install rclone
+
+# Download the Skadi elevation tiles dataset
+rclone copy --progress :s3,provider=AWS,anonymous=true,region=us-east-1:elevation-tiles-prod/skadi .
+```
+
+This will download HGT elevation tiles to your current directory. By default, SOAR looks for elevation data in:
+- Production: `/tmp/soar/elevation/` or as specified by `ELEVATION_DATA_PATH`
+- Development: `~/.cache/elevation/copernicus-dem-30m/` or as specified by `ELEVATION_DATA_PATH`
+
+To use a custom location, set the `ELEVATION_DATA_PATH` environment variable:
+```bash
+export ELEVATION_DATA_PATH=/path/to/your/elevation/data
+```
+
 ## License
 
 This project is licensed under the MIT License.
