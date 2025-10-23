@@ -405,7 +405,7 @@
 										{device.device_address}
 									</a>
 								</td>
-								<td class="font-semibold">{device.registration}</td>
+								<td class="font-semibold">{device.registration || 'Unknown'}</td>
 								<td>{device.aircraft_model}</td>
 								<td>{device.competition_number || '—'}</td>
 							</tr>

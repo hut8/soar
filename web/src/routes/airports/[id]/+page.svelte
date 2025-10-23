@@ -599,7 +599,7 @@
 												{#if flightData.device}
 													<div class="flex flex-col">
 														<span class="font-mono font-semibold"
-															>{flightData.device.registration}</span
+															>{flightData.device.registration || 'Unknown'}</span
 														>
 														{#if flightData.device.competition_number}
 															<span class="text-sm text-surface-500"
