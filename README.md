@@ -150,22 +150,19 @@ cargo install diesel_cli --no-default-features --features postgres
 
 SOAR uses elevation data for terrain analysis and flight altitude calculations. The elevation dataset must be downloaded separately.
 
-**Download the elevation dataset** (approximately 27 GB):
+**Download the elevation dataset** (approximately 200+ GB):
 
 ```bash
 # Install rclone if not already installed
 # Ubuntu/Debian: sudo apt install rclone
 # macOS: brew install rclone
 
-# Download the Skadi elevation tiles dataset
-rclone copy --progress :s3,provider=AWS,anonymous=true,region=us-east-1:elevation-tiles-prod/skadi .
+# Download the Skadi elevation tiles dataset to /var/soar/elevation
+sudo mkdir -p /var/soar/elevation
+sudo rclone copy --progress :s3,provider=AWS,anonymous=true,region=us-east-1:elevation-tiles-prod/skadi /var/soar/elevation
 ```
 
-This will download HGT elevation tiles to your current directory. By default, SOAR looks for elevation data in:
-- Production: `/tmp/soar/elevation/` or as specified by `ELEVATION_DATA_PATH`
-- Development: `~/.cache/elevation/copernicus-dem-30m/` or as specified by `ELEVATION_DATA_PATH`
-
-To use a custom location, set the `ELEVATION_DATA_PATH` environment variable:
+By default, SOAR looks for elevation data at `/var/soar/elevation`. To use a custom location, set the `ELEVATION_DATA_PATH` environment variable:
 ```bash
 export ELEVATION_DATA_PATH=/path/to/your/elevation/data
 ```
