@@ -190,7 +190,9 @@
 	}
 
 	function formatCoordinates(lat: number | null, lng: number | null): string {
-		if (lat === null || lng === null) return 'Not available';
+		if (lat === null || lng === null || typeof lat !== 'number' || typeof lng !== 'number') {
+			return 'Not available';
+		}
 		return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
 	}
 
