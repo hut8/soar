@@ -102,10 +102,12 @@ impl AprsClient {
                     match Self::connect_and_run(&config, router.clone()).await {
                         ConnectionResult::Success => {
                             info!("APRS client connection ended normally");
+                            metrics::counter!("aprs.connection.ended").increment(1);
                             retry_count = 0; // Reset retry count on successful connection
                         }
                         ConnectionResult::ConnectionFailed(e) => {
                             error!("APRS client connection failed: {}", e);
+                            metrics::counter!("aprs.connection.failed").increment(1);
                             retry_count += 1;
 
                             if retry_count >= config.max_retries {
@@ -127,6 +129,7 @@ impl AprsClient {
                                 "APRS client operation failed after successful connection: {}",
                                 e
                             );
+                            metrics::counter!("aprs.connection.operation_failed").increment(1);
                             // Reset retry count since connection was initially successful
                             retry_count = 0;
 
@@ -168,6 +171,7 @@ impl AprsClient {
         let stream = match TcpStream::connect(format!("{}:{}", config.server, config.port)).await {
             Ok(stream) => {
                 info!("Connected to APRS server");
+                metrics::counter!("aprs.connection.established").increment(1);
                 stream
             }
             Err(e) => {
@@ -192,12 +196,31 @@ impl AprsClient {
         // Read and process messages with timeout detection
         let mut line_buffer = Vec::new();
         let mut first_message = true;
-        let message_timeout = Duration::from_secs(60); // 1 minute timeout
+        let message_timeout = Duration::from_secs(300); // 5 minute timeout (increased from 60s)
+        let keepalive_interval = Duration::from_secs(20); // Send keepalive every 20 seconds
+        let mut last_keepalive = tokio::time::Instant::now();
 
         loop {
             line_buffer.clear();
 
-            // Use timeout to detect if no message received within 1 minute
+            // Check if we need to send a keepalive
+            if last_keepalive.elapsed() >= keepalive_interval {
+                // Send a comment as keepalive (APRS-IS servers expect periodic activity)
+                let keepalive_msg = "# soar keepalive\r\n";
+                if let Err(e) = writer.write_all(keepalive_msg.as_bytes()).await {
+                    warn!("Failed to send keepalive: {}", e);
+                    return ConnectionResult::OperationFailed(e.into());
+                }
+                if let Err(e) = writer.flush().await {
+                    warn!("Failed to flush keepalive: {}", e);
+                    return ConnectionResult::OperationFailed(e.into());
+                }
+                trace!("Sent keepalive to APRS server");
+                metrics::counter!("aprs.keepalive.sent").increment(1);
+                last_keepalive = tokio::time::Instant::now();
+            }
+
+            // Use timeout to detect if no message received within 5 minutes
             match timeout(
                 message_timeout,
                 Self::read_line_with_invalid_utf8_handling(&mut buf_reader, &mut line_buffer),
@@ -246,12 +269,12 @@ impl AprsClient {
                     }
                 }
                 Err(_) => {
-                    // Timeout occurred - no message received for 1 minute
+                    // Timeout occurred - no message received for 5 minutes
                     error!(
-                        "No message received from APRS server for 1 minute, disconnecting and reconnecting"
+                        "No message received from APRS server for 5 minutes, disconnecting and reconnecting"
                     );
                     return ConnectionResult::OperationFailed(anyhow::anyhow!(
-                        "Message timeout - no data received for 1 minute"
+                        "Message timeout - no data received for 5 minutes"
                     ));
                 }
             }
