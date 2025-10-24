@@ -19,7 +19,13 @@
 	import { serverCall } from '$lib/api/server';
 	import { auth } from '$lib/stores/auth';
 	import type { Device, AircraftRegistration, AircraftModel, Fix, Flight, Club } from '$lib/types';
-	import { formatTitleCase, formatDeviceAddress, getStatusCodeDescription } from '$lib/formatters';
+	import {
+		formatTitleCase,
+		formatDeviceAddress,
+		getStatusCodeDescription,
+		getAircraftTypeOgnDescription,
+		getAircraftTypeColor
+	} from '$lib/formatters';
 	import { toaster } from '$lib/toaster';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
@@ -315,6 +321,18 @@
 							>
 								{device.identified ? 'Identified' : 'Unidentified'}
 							</span>
+							<span
+								class="badge {device.from_ddb
+									? 'preset-filled-success-500'
+									: 'preset-tonal-primary-500'}"
+							>
+								{device.from_ddb ? 'From OGN DB' : 'Not in OGN DB'}
+							</span>
+							{#if device.aircraft_type_ogn}
+								<span class="badge {getAircraftTypeColor(device.aircraft_type_ogn)} text-xs">
+									{getAircraftTypeOgnDescription(device.aircraft_type_ogn)}
+								</span>
+							{/if}
 						</div>
 					</div>
 				</div>
