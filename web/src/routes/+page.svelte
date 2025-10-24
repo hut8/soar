@@ -23,14 +23,18 @@
 <!-- Video Overlay for Text Legibility -->
 <div class="fixed top-0 left-0 z-[-1] h-full w-full bg-black/40"></div>
 
-<div class="relative z-10 flex min-h-screen flex-col">
+<div
+	class="relative z-10 flex min-h-screen flex-col md:fixed md:inset-0 md:top-16 md:overflow-hidden"
+>
 	<!-- Main Navigation -->
-	<section class="flex flex-1 items-center justify-center p-8">
-		<div class="grid w-full max-w-6xl grid-cols-1 gap-8 md:grid-cols-3 md:gap-12">
+	<section class="flex flex-1 items-center justify-center p-12 md:h-full">
+		<div
+			class="grid h-full w-full max-w-7xl grid-cols-1 content-evenly justify-items-center gap-y-24 md:grid-cols-3 md:gap-x-12 md:gap-y-32"
+		>
 			<!-- Clubs Button -->
 			<a
 				href={clubsPath}
-				class="group flex items-center justify-center border border-white/30 bg-white/20 p-8 backdrop-blur-md transition-all duration-200 hover:bg-white/30 hover:shadow-xl"
+				class="group flex w-64 items-center justify-center border border-white/30 bg-white/20 p-8 backdrop-blur-md transition-all duration-200 hover:bg-white/30 hover:shadow-xl"
 			>
 				<div class="space-y-6 text-center">
 					<div class="flex justify-center">
@@ -41,7 +45,7 @@
 						</div>
 					</div>
 					<div class="space-y-2">
-						<h2 class="text-2xl font-bold text-white drop-shadow-lg">Browse Clubs</h2>
+						<h2 class="text-2xl font-bold text-white drop-shadow-lg">Clubs</h2>
 					</div>
 				</div>
 			</a>
@@ -49,7 +53,7 @@
 			<!-- Operations Button -->
 			<a
 				href={operationsPath}
-				class="group flex items-center justify-center border border-white/30 bg-white/20 p-8 backdrop-blur-md transition-all duration-200 hover:bg-white/30 hover:shadow-xl"
+				class="group flex w-64 items-center justify-center border border-white/30 bg-white/20 p-8 backdrop-blur-md transition-all duration-200 hover:bg-white/30 hover:shadow-xl"
 			>
 				<div class="space-y-6 text-center">
 					<div class="flex justify-center">
@@ -60,7 +64,7 @@
 						</div>
 					</div>
 					<div class="space-y-2">
-						<h2 class="text-2xl font-bold text-white drop-shadow-lg">Live Operations</h2>
+						<h2 class="text-2xl font-bold text-white drop-shadow-lg">Operations</h2>
 					</div>
 				</div>
 			</a>
@@ -68,7 +72,7 @@
 			<!-- Aircraft Button -->
 			<a
 				href={devicesPath}
-				class="group flex items-center justify-center border border-white/30 bg-white/20 p-8 backdrop-blur-md transition-all duration-200 hover:bg-white/30 hover:shadow-xl"
+				class="group flex w-64 items-center justify-center border border-white/30 bg-white/20 p-8 backdrop-blur-md transition-all duration-200 hover:bg-white/30 hover:shadow-xl"
 			>
 				<div class="space-y-6 text-center">
 					<div class="flex justify-center">
@@ -87,7 +91,7 @@
 			<!-- Receivers Button -->
 			<a
 				href={receiversPath}
-				class="group flex items-center justify-center border border-white/30 bg-white/20 p-8 backdrop-blur-md transition-all duration-200 hover:bg-white/30 hover:shadow-xl"
+				class="group flex w-64 items-center justify-center border border-white/30 bg-white/20 p-8 backdrop-blur-md transition-all duration-200 hover:bg-white/30 hover:shadow-xl"
 			>
 				<div class="space-y-6 text-center">
 					<div class="flex justify-center">
@@ -106,7 +110,7 @@
 			<!-- Airports Button -->
 			<a
 				href={airportsPath}
-				class="group flex items-center justify-center border border-white/30 bg-white/20 p-8 backdrop-blur-md transition-all duration-200 hover:bg-white/30 hover:shadow-xl"
+				class="group flex w-64 items-center justify-center border border-white/30 bg-white/20 p-8 backdrop-blur-md transition-all duration-200 hover:bg-white/30 hover:shadow-xl"
 			>
 				<div class="space-y-6 text-center">
 					<div class="flex justify-center">
@@ -125,7 +129,7 @@
 			<!-- Flights Button -->
 			<a
 				href={flightsPath}
-				class="group flex items-center justify-center border border-white/30 bg-white/20 p-8 backdrop-blur-md transition-all duration-200 hover:bg-white/30 hover:shadow-xl"
+				class="group flex w-64 items-center justify-center border border-white/30 bg-white/20 p-8 backdrop-blur-md transition-all duration-200 hover:bg-white/30 hover:shadow-xl"
 			>
 				<div class="space-y-6 text-center">
 					<div class="flex justify-center">
