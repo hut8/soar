@@ -17,7 +17,7 @@ pub(crate) async fn calculate_altitude_offset_ft(
     let lon = fix.longitude;
 
     // Run blocking elevation lookup in a separate thread
-    let elevation_result = elevation_db.elevation_egm2008(lat, lon).await.ok()?;
+    let elevation_result = elevation_db.elevation_at(lat, lon).await.ok()?;
 
     // Get true elevation at this location (in meters)
     match elevation_result {
@@ -53,7 +53,7 @@ pub(crate) async fn calculate_altitude_agl(elevation_db: &ElevationDB, fix: &Fix
     let lon = fix.longitude;
 
     // Run blocking elevation lookup in a separate thread
-    let elevation_result = elevation_db.elevation_egm2008(lat, lon).await.ok()?;
+    let elevation_result = elevation_db.elevation_at(lat, lon).await.ok()?;
 
     // Get true elevation at this location (in meters)
     match elevation_result {

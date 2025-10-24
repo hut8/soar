@@ -11,7 +11,7 @@ async fn test_elevation_mount_everest_region() {
     let lon = 86.5;
 
     let elevation_db = ElevationDB::new().expect("Failed to initialize ElevationDB");
-    let result = elevation_db.elevation_egm2008(lat, lon).await;
+    let result = elevation_db.elevation_at(lat, lon).await;
 
     // Skip test if elevation service is not available
     if result.is_err() {
@@ -47,7 +47,7 @@ async fn test_elevation_denver() {
     let lon = -104.9903;
 
     let elevation_db = ElevationDB::new().expect("Failed to initialize ElevationDB");
-    let result = elevation_db.elevation_egm2008(lat, lon).await;
+    let result = elevation_db.elevation_at(lat, lon).await;
 
     // Skip test if elevation service is not available
     if result.is_err() {
@@ -82,7 +82,7 @@ async fn test_elevation_sea_level() {
     let lon = -73.9654;
 
     let elevation_db = ElevationDB::new().expect("Failed to initialize ElevationDB");
-    let result = elevation_db.elevation_egm2008(lat, lon).await;
+    let result = elevation_db.elevation_at(lat, lon).await;
 
     // Skip test if elevation service is not available
     if result.is_err() {
@@ -113,7 +113,7 @@ async fn test_elevation_sea_level() {
 #[tokio::test]
 async fn test_invalid_latitude() {
     let elevation_db = ElevationDB::new().expect("Failed to initialize ElevationDB");
-    let result = elevation_db.elevation_egm2008(91.0, 0.0).await; // Latitude > 90
+    let result = elevation_db.elevation_at(91.0, 0.0).await; // Latitude > 90
     assert!(
         result.is_err(),
         "Should fail for latitude > 90 (either at validation or tile fetch)"
@@ -127,7 +127,7 @@ async fn test_invalid_latitude() {
 #[tokio::test]
 async fn test_invalid_longitude() {
     let elevation_db = ElevationDB::new().expect("Failed to initialize ElevationDB");
-    let result = elevation_db.elevation_egm2008(0.0, 181.0).await; // Longitude > 180
+    let result = elevation_db.elevation_at(0.0, 181.0).await; // Longitude > 180
     assert!(
         result.is_err(),
         "Should fail for longitude > 180 (either at validation or tile fetch)"
@@ -139,11 +139,11 @@ async fn test_invalid_longitude() {
 #[tokio::test]
 async fn test_nan_coordinates() {
     let elevation_db = ElevationDB::new().expect("Failed to initialize ElevationDB");
-    let result = elevation_db.elevation_egm2008(f64::NAN, 0.0).await;
+    let result = elevation_db.elevation_at(f64::NAN, 0.0).await;
     assert!(result.is_err(), "Should fail for NaN latitude");
     assert!(result.unwrap_err().to_string().contains("bad coord"));
 
-    let result = elevation_db.elevation_egm2008(0.0, f64::NAN).await;
+    let result = elevation_db.elevation_at(0.0, f64::NAN).await;
     assert!(result.is_err(), "Should fail for NaN longitude");
     assert!(result.unwrap_err().to_string().contains("bad coord"));
 }
@@ -152,11 +152,11 @@ async fn test_nan_coordinates() {
 #[tokio::test]
 async fn test_infinite_coordinates() {
     let elevation_db = ElevationDB::new().expect("Failed to initialize ElevationDB");
-    let result = elevation_db.elevation_egm2008(f64::INFINITY, 0.0).await;
+    let result = elevation_db.elevation_at(f64::INFINITY, 0.0).await;
     assert!(result.is_err(), "Should fail for infinite latitude");
     assert!(result.unwrap_err().to_string().contains("bad coord"));
 
-    let result = elevation_db.elevation_egm2008(0.0, f64::INFINITY).await;
+    let result = elevation_db.elevation_at(0.0, f64::INFINITY).await;
     assert!(result.is_err(), "Should fail for infinite longitude");
     assert!(result.unwrap_err().to_string().contains("bad coord"));
 }
@@ -170,7 +170,7 @@ async fn test_elevation_ocean() {
     let lon = -160.0;
 
     let elevation_db = ElevationDB::new().expect("Failed to initialize ElevationDB");
-    let result = elevation_db.elevation_egm2008(lat, lon).await;
+    let result = elevation_db.elevation_at(lat, lon).await;
     // Ocean tiles might not exist or might return None for NoData
     // Either case is acceptable
     if let Ok(Some(elev_m)) = result {
@@ -194,7 +194,7 @@ async fn test_elevation_caching() {
     let elevation_db = ElevationDB::new().expect("Failed to initialize ElevationDB");
 
     // First call - will query elevation service and cache result
-    let result1 = elevation_db.elevation_egm2008(lat, lon).await;
+    let result1 = elevation_db.elevation_at(lat, lon).await;
 
     // Skip test if elevation service is not available
     if result1.is_err() {
@@ -205,7 +205,7 @@ async fn test_elevation_caching() {
     assert!(result1.is_ok(), "First elevation lookup should succeed");
 
     // Second call - should use cached result
-    let result2 = elevation_db.elevation_egm2008(lat, lon).await;
+    let result2 = elevation_db.elevation_at(lat, lon).await;
     assert!(result2.is_ok(), "Second elevation lookup should succeed");
 
     // Both should return the same value
@@ -224,7 +224,7 @@ async fn test_elevation_southern_hemisphere() {
     let lon = 151.2093;
 
     let elevation_db = ElevationDB::new().expect("Failed to initialize ElevationDB");
-    let result = elevation_db.elevation_egm2008(lat, lon).await;
+    let result = elevation_db.elevation_at(lat, lon).await;
 
     // Skip test if elevation service is not available
     if result.is_err() {
@@ -258,7 +258,7 @@ async fn test_elevation_tile_boundary() {
     let lon = 0.0;
 
     let elevation_db = ElevationDB::new().expect("Failed to initialize ElevationDB");
-    let result = elevation_db.elevation_egm2008(lat, lon).await;
+    let result = elevation_db.elevation_at(lat, lon).await;
 
     // Skip test if elevation service is not available
     if result.is_err() {
@@ -288,7 +288,7 @@ async fn test_elevation_near_tile_boundary() {
     let lon = 0.1;
 
     let elevation_db = ElevationDB::new().expect("Failed to initialize ElevationDB");
-    let result = elevation_db.elevation_egm2008(lat, lon).await;
+    let result = elevation_db.elevation_at(lat, lon).await;
 
     // Skip test if elevation service is not available
     if result.is_err() {
@@ -319,7 +319,7 @@ async fn test_elevation_death_valley() {
     let lon = -116.8295;
 
     let elevation_db = ElevationDB::new().expect("Failed to initialize ElevationDB");
-    let result = elevation_db.elevation_egm2008(lat, lon).await;
+    let result = elevation_db.elevation_at(lat, lon).await;
 
     // Skip test if elevation service is not available
     if result.is_err() {
@@ -353,7 +353,7 @@ async fn test_elevation_grand_canyon() {
     let lon = -112.1401;
 
     let elevation_db = ElevationDB::new().expect("Failed to initialize ElevationDB");
-    let result = elevation_db.elevation_egm2008(lat, lon).await;
+    let result = elevation_db.elevation_at(lat, lon).await;
 
     // Skip test if elevation service is not available
     if result.is_err() {
@@ -387,7 +387,7 @@ async fn test_elevation_mexico_city() {
     let lon = -99.1332;
 
     let elevation_db = ElevationDB::new().expect("Failed to initialize ElevationDB");
-    let result = elevation_db.elevation_egm2008(lat, lon).await;
+    let result = elevation_db.elevation_at(lat, lon).await;
 
     // Skip test if elevation service is not available
     if result.is_err() {
@@ -421,7 +421,7 @@ async fn test_elevation_tokyo() {
     let lon = 139.7454;
 
     let elevation_db = ElevationDB::new().expect("Failed to initialize ElevationDB");
-    let result = elevation_db.elevation_egm2008(lat, lon).await;
+    let result = elevation_db.elevation_at(lat, lon).await;
 
     // Skip test if elevation service is not available
     if result.is_err() {
