@@ -16,9 +16,10 @@
 		Calendar,
 		Signal,
 		ChevronLeft,
-		ChevronRight
+		ChevronRight,
+		FileText
 	} from '@lucide/svelte';
-	import { ProgressRing } from '@skeletonlabs/skeleton-svelte';
+	import { ProgressRing, Tab, TabGroup } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall } from '$lib/api/server';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
@@ -88,26 +89,46 @@
 		days_included: number | null;
 	}
 
+	interface RawMessage {
+		id: string;
+		raw_message: string;
+		received_at: string;
+		receiver_id: string;
+		unparsed: string | null;
+	}
+
+	interface RawMessagesResponse {
+		messages: RawMessage[];
+		page: number;
+		total_pages: number;
+	}
+
 	let receiver = $state<Receiver | null>(null);
 	let fixes = $state<Fix[]>([]);
 	let statuses = $state<ReceiverStatus[]>([]);
+	let rawMessages = $state<RawMessage[]>([]);
 	let statistics = $state<ReceiverStatistics | null>(null);
 	let loading = $state(true);
 	let loadingFixes = $state(false);
 	let loadingStatuses = $state(false);
+	let loadingRawMessages = $state(false);
 	let loadingStatistics = $state(false);
 	let error = $state('');
 	let fixesError = $state('');
 	let statusesError = $state('');
+	let rawMessagesError = $state('');
 	let statisticsError = $state('');
 
 	let fixesPage = $state(1);
 	let fixesTotalPages = $state(1);
 	let statusesPage = $state(1);
 	let statusesTotalPages = $state(1);
+	let rawMessagesPage = $state(1);
+	let rawMessagesTotalPages = $state(1);
 
 	// Display options
 	let showRawData = $state(false);
+	let activeTab = $state(0); // 0 = Status Reports, 1 = Raw Messages
 
 	let receiverId = $derived($page.params.id || '');
 
@@ -117,6 +138,13 @@
 			await loadFixes();
 			await loadStatuses();
 			await loadStatistics();
+		}
+	});
+
+	// Load raw messages when switching to that tab
+	$effect(() => {
+		if (activeTab === 1 && receiverId && rawMessages.length === 0 && !loadingRawMessages) {
+			loadRawMessages();
 		}
 	});
 
@@ -189,6 +217,25 @@
 		}
 	}
 
+	async function loadRawMessages() {
+		loadingRawMessages = true;
+		rawMessagesError = '';
+
+		try {
+			const response = await serverCall<RawMessagesResponse>(
+				`/receivers/${receiverId}/raw-messages?page=${rawMessagesPage}&per_page=100`
+			);
+			rawMessages = response.messages || [];
+			rawMessagesTotalPages = response.total_pages || 1;
+		} catch (err) {
+			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+			rawMessagesError = `Failed to load raw messages: ${errorMessage}`;
+			console.error('Error loading raw messages:', err);
+		} finally {
+			loadingRawMessages = false;
+		}
+	}
+
 	function formatCoordinates(lat: number | null, lng: number | null): string {
 		if (lat === null || lng === null || typeof lat !== 'number' || typeof lng !== 'number') {
 			return 'Not available';
@@ -240,6 +287,20 @@
 		if (statusesPage > 1) {
 			statusesPage--;
 			await loadStatuses();
+		}
+	}
+
+	async function nextRawMessagesPage() {
+		if (rawMessagesPage < rawMessagesTotalPages) {
+			rawMessagesPage++;
+			await loadRawMessages();
+		}
+	}
+
+	async function prevRawMessagesPage() {
+		if (rawMessagesPage > 1) {
+			rawMessagesPage--;
+			await loadRawMessages();
 		}
 	}
 
@@ -596,18 +657,33 @@
 				{/if}
 			</div>
 
-			<!-- Statuses Section -->
+			<!-- Status Reports and Raw Messages Section with Tabs -->
 			<div class="card p-6">
-				<div class="mb-4 flex items-center justify-between">
-					<h2 class="flex items-center gap-2 h2">
-						<Info class="h-6 w-6" />
-						Status Reports (Last 24 Hours)
-					</h2>
-					<label class="flex cursor-pointer items-center gap-2">
-						<input type="checkbox" class="checkbox" bind:checked={showRawData} />
-						<span class="text-sm">Show raw</span>
-					</label>
-				</div>
+				<h2 class="mb-4 flex items-center gap-2 h2">
+					<Info class="h-6 w-6" />
+					Receiver Data (Last 24 Hours)
+				</h2>
+
+				<TabGroup bind:value={activeTab}>
+					<Tab value={0}>
+						<Signal class="mr-2 h-4 w-4" />
+						Status Reports
+					</Tab>
+					<Tab value={1}>
+						<FileText class="mr-2 h-4 w-4" />
+						Raw Messages
+					</Tab>
+				</TabGroup>
+
+				<!-- Status Reports Tab Content -->
+				{#if activeTab === 0}
+				<div class="mt-4">
+					<div class="mb-4 flex items-center justify-end">
+						<label class="flex cursor-pointer items-center gap-2">
+							<input type="checkbox" class="checkbox" bind:checked={showRawData} />
+							<span class="text-sm">Show raw</span>
+						</label>
+					</div>
 
 				{#if loadingStatuses}
 					<div class="flex items-center justify-center space-x-4 p-8">
@@ -733,6 +809,83 @@
 							</button>
 						</div>
 					{/if}
+				{/if}
+				</div>
+				{/if}
+
+				<!-- Raw Messages Tab Content -->
+				{#if activeTab === 1}
+				<div class="mt-4">
+				{#if loadingRawMessages}
+					<div class="flex items-center justify-center space-x-4 p-8">
+						<ProgressRing size="w-6 h-6" />
+						<span>Loading raw messages...</span>
+					</div>
+				{:else if rawMessagesError}
+					<div class="alert preset-filled-error-500">
+						<p>{rawMessagesError}</p>
+					</div>
+				{:else if rawMessages.length === 0}
+					<p class="text-surface-500-400-token p-4 text-center">
+						No raw messages received in the last 24 hours
+					</p>
+				{:else}
+					<div class="table-container">
+						<table class="table-hover table">
+							<thead>
+								<tr>
+									<th>Timestamp</th>
+									<th>Raw Message</th>
+									<th>Unparsed Data</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each rawMessages as message (message.id)}
+									<tr>
+										<td class="text-xs" style="min-width: 150px;">
+											<div>{formatDateTime(message.received_at)}</div>
+											<div class="text-surface-500-400-token">
+												{formatRelativeTime(message.received_at)}
+											</div>
+										</td>
+										<td class="font-mono text-xs" style="max-width: 600px; word-break: break-all;">
+											{message.raw_message}
+										</td>
+										<td class="font-mono text-xs">
+											{message.unparsed || '—'}
+										</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+
+					<!-- Pagination Controls -->
+					{#if rawMessagesTotalPages > 1}
+						<div class="mt-4 flex items-center justify-between">
+							<button
+								class="btn preset-tonal btn-sm"
+								disabled={rawMessagesPage === 1}
+								onclick={prevRawMessagesPage}
+							>
+								<ChevronLeft class="h-4 w-4" />
+								Previous
+							</button>
+							<span class="text-sm">
+								Page {rawMessagesPage} of {rawMessagesTotalPages}
+							</span>
+							<button
+								class="btn preset-tonal btn-sm"
+								disabled={rawMessagesPage === rawMessagesTotalPages}
+								onclick={nextRawMessagesPage}
+							>
+								Next
+								<ChevronRight class="h-4 w-4" />
+							</button>
+						</div>
+					{/if}
+				{/if}
+				</div>
 				{/if}
 			</div>
 
