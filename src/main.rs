@@ -305,7 +305,7 @@ fn determine_archive_dir() -> Result<String> {
 }
 
 #[allow(clippy::too_many_arguments)]
-#[tracing::instrument(skip_all, fields(server = %server, port = %port))]
+#[tracing::instrument(skip_all)]
 async fn handle_run(
     server: String,
     port: u16,

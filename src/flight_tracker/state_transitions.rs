@@ -278,29 +278,20 @@ pub(crate) async fn process_state_transition(
 
                         // Complete flight in background (includes airport/runway lookup for landing)
                         // Note: complete_flight will update both landing fields AND last_fix_at in a single UPDATE
-                        let flights_repo_clone = flights_repo.clone();
-                        let airports_repo_clone = airports_repo.clone();
-                        let locations_repo_clone = locations_repo.clone();
-                        let runways_repo_clone = runways_repo.clone();
-                        let fixes_repo_clone = fixes_repo.clone();
-                        let elevation_db_clone = elevation_db.clone();
-                        let landing_fix = fix.clone();
-                        tokio::spawn(async move {
-                            if let Err(e) = complete_flight(
-                                &flights_repo_clone,
-                                &airports_repo_clone,
-                                &locations_repo_clone,
-                                &runways_repo_clone,
-                                &fixes_repo_clone,
-                                &elevation_db_clone,
-                                flight_id,
-                                &landing_fix,
-                            )
-                            .await
-                            {
-                                warn!("Failed to complete flight {}: {}", flight_id, e);
-                            }
-                        });
+                        if let Err(e) = complete_flight(
+                            flights_repo,
+                            airports_repo,
+                            locations_repo,
+                            runways_repo,
+                            fixes_repo,
+                            elevation_db,
+                            flight_id,
+                            &fix,
+                        )
+                        .await
+                        {
+                            warn!("Failed to complete flight {}: {}", flight_id, e);
+                        }
                     } else {
                         // Not enough consecutive inactive fixes yet - keep flight active
                         info!(

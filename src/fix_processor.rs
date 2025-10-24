@@ -159,121 +159,111 @@ impl FixProcessor {
     /// Process an APRS packet by looking up device and creating a Fix
     /// This is the main entry point that orchestrates the entire pipeline
     /// Note: Receiver is guaranteed to exist and APRS message already inserted by GenericProcessor
+    #[tracing::instrument(skip(self, packet, raw_message, context))]
     pub async fn process_aprs_packet(
         &self,
         packet: AprsPacket,
         raw_message: &str,
         context: PacketContext,
     ) {
-        let device_repo = self.device_repo.clone();
-        let self_clone = self.clone();
-        let raw_message = raw_message.to_string();
+        let received_at = chrono::Utc::now();
 
-        tokio::spawn(
-            async move {
-                let received_at = chrono::Utc::now();
+        // Try to create a fix from the packet
+        match packet.data {
+            ogn_parser::AprsData::Position(ref pos_packet) => {
+                let mut device_address = 0i32;
+                let mut address_type = crate::devices::AddressType::Unknown;
 
-            // Try to create a fix from the packet
-            match packet.data {
-                ogn_parser::AprsData::Position(ref pos_packet) => {
-                    let mut device_address = 0i32;
-                    let mut address_type = crate::devices::AddressType::Unknown;
-
-                    // Extract device info from OGN parameters
-                    if let Some(ref id) = pos_packet.comment.id {
-                        device_address = id.address.as_();
-                        address_type = match id.address_type {
-                            0 => crate::devices::AddressType::Unknown,
-                            1 => crate::devices::AddressType::Icao,
-                            2 => crate::devices::AddressType::Flarm,
-                            3 => crate::devices::AddressType::Ogn,
-                            _ => crate::devices::AddressType::Unknown,
-                        };
-                    }
-
-                    // When creating devices spontaneously (not from DDB), determine address_type from aprs_type
-                    // aprs_type is the packet destination (e.g., "OGFLR", "OGADSB")
-                    let aprs_type = packet.to.to_string();
-                    let spontaneous_address_type = match aprs_type.as_str() {
-                        "OGFLR" => crate::devices::AddressType::Flarm,
-                        "OGADSB" => crate::devices::AddressType::Icao,
+                // Extract device info from OGN parameters
+                if let Some(ref id) = pos_packet.comment.id {
+                    device_address = id.address.as_();
+                    address_type = match id.address_type {
+                        0 => crate::devices::AddressType::Unknown,
+                        1 => crate::devices::AddressType::Icao,
+                        2 => crate::devices::AddressType::Flarm,
+                        3 => crate::devices::AddressType::Ogn,
                         _ => crate::devices::AddressType::Unknown,
                     };
+                }
 
-                    // Look up or create device based on device_address
-                    // When creating spontaneously, use address_type derived from aprs_type
-                    match device_repo
-                        .get_or_insert_device_by_address(device_address, spontaneous_address_type)
-                        .await
-                    {
-                        Ok(device_model) => {
-                            // Extract ICAO model code and ADS-B emitter category from packet for device update
-                            let icao_model_code: Option<String> = pos_packet
-                                .comment
-                                .model
-                                .as_ref()
-                                .map(|model| model.to_string());
-                            let adsb_emitter_category = pos_packet
-                                .comment
-                                .adsb_emitter_category
-                                .and_then(|cat| cat.to_string().parse().ok());
+                // When creating devices spontaneously (not from DDB), determine address_type from aprs_type
+                // aprs_type is the packet destination (e.g., "OGFLR", "OGADSB")
+                let aprs_type = packet.to.to_string();
+                let spontaneous_address_type = match aprs_type.as_str() {
+                    "OGFLR" => crate::devices::AddressType::Flarm,
+                    "OGADSB" => crate::devices::AddressType::Icao,
+                    _ => crate::devices::AddressType::Unknown,
+                };
 
-                            // Update device fields if we have new information
-                            let needs_model_update = device_model.icao_model_code.is_none() && icao_model_code.is_some();
-                            let needs_adsb_update = device_model.adsb_emitter_category.is_none() && adsb_emitter_category.is_some();
-                            if needs_model_update || needs_adsb_update {
-                                let device_repo_clone = device_repo.clone();
-                                let device_id = device_model.id;
-                                if let Err(e) = device_repo_clone
-                                    .update_adsb_fields(
-                                        device_id,
-                                        icao_model_code,
-                                        adsb_emitter_category,
-                                    )
-                                    .await
-                                {
-                                    error!(
-                                        "Failed to update ADS-B fields for device {}: {}",
-                                        device_id, e
-                                    );
-                                }
-                            }
+                // Look up or create device based on device_address
+                // When creating spontaneously, use address_type derived from aprs_type
+                match self
+                    .device_repo
+                    .get_or_insert_device_by_address(device_address, spontaneous_address_type)
+                    .await
+                {
+                    Ok(device_model) => {
+                        // Extract ICAO model code and ADS-B emitter category from packet for device update
+                        let icao_model_code: Option<String> = pos_packet
+                            .comment
+                            .model
+                            .as_ref()
+                            .map(|model| model.to_string());
+                        let adsb_emitter_category = pos_packet
+                            .comment
+                            .adsb_emitter_category
+                            .and_then(|cat| cat.to_string().parse().ok());
 
-                            // Device exists or was just created, create fix with proper device_id
-                            match Fix::from_aprs_packet(packet, received_at, device_model.id) {
-                                Ok(Some(mut fix)) => {
-                                    // Set the aprs_message_id and receiver_id from context
-                                    fix.aprs_message_id = Some(context.aprs_message_id);
-                                    fix.receiver_id = Some(context.receiver_id);
-                                    self_clone.process_fix_internal(fix, &raw_message).await;
-                                }
-                                Ok(None) => {
-                                    trace!("No position fix in APRS position packet");
-                                }
-                                Err(e) => {
-                                    debug!(
-                                        "Failed to extract fix from APRS position packet: {}",
-                                        e
-                                    );
-                                }
-                            }
-                        }
-                        Err(e) => {
+                        // Update device fields if we have new information
+                        let needs_model_update =
+                            device_model.icao_model_code.is_none() && icao_model_code.is_some();
+                        let needs_adsb_update = device_model.adsb_emitter_category.is_none()
+                            && adsb_emitter_category.is_some();
+                        if (needs_model_update || needs_adsb_update)
+                            && let Err(e) = self
+                                .device_repo
+                                .update_adsb_fields(
+                                    device_model.id,
+                                    icao_model_code,
+                                    adsb_emitter_category,
+                                )
+                                .await
+                        {
                             error!(
-                                "Failed to get or insert device address {:06X} ({:?}): {}, skipping fix processing",
-                                device_address, address_type, e
+                                "Failed to update ADS-B fields for device {}: {}",
+                                device_model.id, e
                             );
                         }
+
+                        // Device exists or was just created, create fix with proper device_id
+                        match Fix::from_aprs_packet(packet, received_at, device_model.id) {
+                            Ok(Some(mut fix)) => {
+                                // Set the aprs_message_id and receiver_id from context
+                                fix.aprs_message_id = Some(context.aprs_message_id);
+                                fix.receiver_id = Some(context.receiver_id);
+                                self.process_fix_internal(fix, raw_message).await;
+                            }
+                            Ok(None) => {
+                                trace!("No position fix in APRS position packet");
+                            }
+                            Err(e) => {
+                                debug!("Failed to extract fix from APRS position packet: {}", e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        error!(
+                            "Failed to get or insert device address {:06X} ({:?}): {}, skipping fix processing",
+                            device_address, address_type, e
+                        );
                     }
                 }
-                _ => {
-                    // Non-position packets return without processing
-                    trace!("Non-position packet, no fix to process");
-                }
+            }
+            _ => {
+                // Non-position packets return without processing
+                trace!("Non-position packet, no fix to process");
             }
         }
-        .instrument(tracing::debug_span!("process_aprs_packet"))
-        );
     }
 
     /// Internal method to process a fix through the complete pipeline
