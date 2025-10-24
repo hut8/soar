@@ -73,6 +73,9 @@ impl CurrentFlightState {
 /// Type alias for active flights map: device_id -> CurrentFlightState
 pub(crate) type ActiveFlightsMap = Arc<RwLock<HashMap<Uuid, CurrentFlightState>>>;
 
+/// Type alias for device locks map: device_id -> Arc<Mutex<()>>
+pub(crate) type DeviceLocksMap = Arc<RwLock<HashMap<Uuid, Arc<Mutex<()>>>>>;
+
 /// Simple flight tracker - just tracks which device is currently on which flight
 pub struct FlightTracker {
     flights_repo: FlightsRepository,
@@ -84,7 +87,7 @@ pub struct FlightTracker {
     // Simple map: device_id -> (flight_id, last_fix_timestamp, last_update_time)
     active_flights: ActiveFlightsMap,
     // Per-device mutexes to ensure sequential processing per device
-    device_locks: Arc<RwLock<HashMap<Uuid, Arc<Mutex<()>>>>>,
+    device_locks: DeviceLocksMap,
 }
 
 impl Clone for FlightTracker {
@@ -172,6 +175,15 @@ impl FlightTracker {
         altitude::calculate_and_update_agl_async(&self.elevation_db, fix_id, fix, fixes_repo).await;
     }
 
+    /// Clean up the device lock for a specific device
+    /// This should be called when a flight completes or times out
+    pub async fn cleanup_device_lock(&self, device_id: Uuid) {
+        let mut locks = self.device_locks.write().await;
+        if locks.remove(&device_id).is_some() {
+            trace!("Cleaned up device lock for device {}", device_id);
+        }
+    }
+
     /// Check all active flights and timeout any that haven't received beacons for 8+ hours
     #[tracing::instrument(skip(self))]
     pub async fn check_and_timeout_stale_flights(&self) {
@@ -228,6 +240,9 @@ impl FlightTracker {
                     "Failed to timeout flight {} for device {}: {}",
                     flight_id, device_id, e
                 );
+            } else {
+                // Clean up the device lock after successful timeout
+                self.cleanup_device_lock(device_id).await;
             }
         }
     }
@@ -292,6 +307,7 @@ impl FlightTracker {
             &self.fixes_repo,
             &self.elevation_db,
             &self.active_flights,
+            &self.device_locks,
             fix,
         )
         .await
