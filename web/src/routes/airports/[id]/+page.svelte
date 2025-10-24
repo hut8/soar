@@ -11,7 +11,8 @@
 		Info,
 		ExternalLink,
 		Compass,
-		Clock
+		Clock,
+		Users
 	} from '@lucide/svelte';
 	import { ProgressRing } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall } from '$lib/api/server';
@@ -81,19 +82,28 @@
 		device: Device | null;
 	}
 
+	interface Club {
+		id: string;
+		name: string;
+		home_base_airport_id: number | null;
+	}
+
 	let airport: Airport | null = null;
 	let flights: FlightResponse[] = [];
+	let clubs: Club[] = [];
 	let loading = true;
 	let flightsLoading = false;
+	let clubsLoading = false;
 	let error = '';
 	let flightsError = '';
+	let clubsError = '';
 	let airportId = '';
 
 	$: airportId = $page.params.id || '';
 
 	onMount(async () => {
 		if (airportId) {
-			await Promise.all([loadAirport(), loadFlights()]);
+			await Promise.all([loadAirport(), loadFlights(), loadClubs()]);
 		}
 	});
 
@@ -140,6 +150,21 @@
 			console.error('Error loading flights:', err);
 		} finally {
 			flightsLoading = false;
+		}
+	}
+
+	async function loadClubs() {
+		clubsLoading = true;
+		clubsError = '';
+
+		try {
+			clubs = await serverCall<Club[]>(`/airports/${airportId}/clubs`);
+		} catch (err) {
+			const errorMessage = extractErrorMessage(err);
+			clubsError = `Failed to load clubs: ${errorMessage}`;
+			console.error('Error loading clubs:', err);
+		} finally {
+			clubsLoading = false;
 		}
 	}
 
@@ -548,6 +573,54 @@
 					</div>
 				</div>
 			{/if}
+
+			<!-- Clubs Based at Airport -->
+			<div class="card p-6">
+				<h2 class="mb-4 flex items-center gap-2 h2">
+					<Users class="h-6 w-6" />
+					Clubs Based at This Airport
+				</h2>
+
+				<!-- Clubs Loading State -->
+				{#if clubsLoading}
+					<div class="flex items-center justify-center space-x-4 p-8">
+						<ProgressRing size="w-6 h-6" />
+						<span>Loading clubs...</span>
+					</div>
+				{/if}
+
+				<!-- Clubs Error State -->
+				{#if clubsError}
+					<div class="alert mb-4 preset-filled-error-500">
+						<div class="alert-message">
+							<p>{clubsError}</p>
+						</div>
+					</div>
+				{/if}
+
+				<!-- Clubs List -->
+				{#if !clubsLoading && !clubsError}
+					{#if clubs.length === 0}
+						<p class="text-surface-500">No clubs are based at this airport.</p>
+					{:else}
+						<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+							{#each clubs as club (club.id)}
+								<a
+									href={resolve(`/clubs/${club.id}`)}
+									class="card preset-tonal hover:preset-filled-primary-500 p-4 transition-all"
+								>
+									<div class="flex items-center gap-3">
+										<Users class="h-5 w-5 text-primary-500" />
+										<div class="flex-1">
+											<h3 class="font-semibold">{club.name}</h3>
+										</div>
+									</div>
+								</a>
+							{/each}
+						</div>
+					{/if}
+				{/if}
+			</div>
 
 			<!-- Recent Flights Section (Last 24 Hours) -->
 			<div class="card p-6">

@@ -7,10 +7,11 @@ use serde::Deserialize;
 use tracing::error;
 
 use crate::airports_repo::AirportsRepository;
+use crate::clubs_repo::ClubsRepository;
 use crate::runways_repo::RunwaysRepository;
 use crate::web::AppState;
 
-use super::{json_error, views::AirportView};
+use super::{json_error, views::AirportView, views::ClubView};
 
 #[derive(Debug, Deserialize)]
 pub struct AirportSearchParams {
@@ -206,5 +207,28 @@ pub async fn search_airports(
             StatusCode::BAD_REQUEST,
             "Either 'q' for text search, 'latitude', 'longitude', and 'radius' for geographic search, or 'nw_lat', 'nw_lng', 'se_lat', and 'se_lng' for bounding box search must be provided",
         ).into_response()
+    }
+}
+
+/// Get clubs based at a specific airport
+pub async fn get_clubs_by_airport(
+    State(state): State<AppState>,
+    axum::extract::Path(airport_id): axum::extract::Path<i32>,
+) -> impl IntoResponse {
+    let clubs_repo = ClubsRepository::new(state.pool);
+
+    match clubs_repo.get_clubs_by_airport(airport_id).await {
+        Ok(clubs) => {
+            let club_views: Vec<ClubView> = clubs.into_iter().map(|club| club.into()).collect();
+            Json(club_views).into_response()
+        }
+        Err(e) => {
+            error!("Failed to get clubs for airport {}: {}", airport_id, e);
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to get clubs for airport",
+            )
+            .into_response()
+        }
     }
 }
