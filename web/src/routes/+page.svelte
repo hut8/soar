@@ -25,8 +25,8 @@
 
 <div class="relative z-10 flex min-h-screen flex-col">
 	<!-- Main Navigation -->
-	<section class="flex flex-1 flex-col">
-		<div class="grid h-full flex-1 grid-cols-1 gap-4 p-4 md:grid-cols-3 md:grid-rows-2">
+	<section class="flex flex-1 items-center justify-center p-8">
+		<div class="grid w-full max-w-6xl grid-cols-1 gap-8 md:grid-cols-3 md:gap-12">
 			<!-- Clubs Button -->
 			<a
 				href={clubsPath}
