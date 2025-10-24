@@ -328,7 +328,7 @@
 							<span
 								class="badge {device.from_ddb
 									? 'preset-filled-success-500'
-									: 'preset-tonal-primary-500'}"
+									: 'preset-filled-secondary-500'}"
 							>
 								{device.from_ddb ? 'From OGN DB' : 'Not in OGN DB'}
 							</span>
