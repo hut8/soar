@@ -1,7 +1,13 @@
 <script lang="ts">
 	import { X, Plane, MapPin, Clock, RotateCcw, ExternalLink } from '@lucide/svelte';
 	import type { Device, Aircraft, Fix, AircraftRegistration, AircraftModel } from '$lib/types';
-	import { formatTitleCase, formatDeviceAddress, getStatusCodeDescription } from '$lib/formatters';
+	import {
+		formatTitleCase,
+		formatDeviceAddress,
+		getStatusCodeDescription,
+		getAircraftTypeOgnDescription,
+		getAircraftTypeColor
+	} from '$lib/formatters';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
 	import { onMount } from 'svelte';
@@ -417,6 +423,23 @@
 										</dd>
 									</div>
 								</div>
+
+								{#if selectedDevice.aircraft_type_ogn}
+									<div class="grid grid-cols-1 gap-4">
+										<div>
+											<dt class="text-sm font-medium text-gray-600">Aircraft Type</dt>
+											<dd class="text-sm">
+												<span
+													class="badge {getAircraftTypeColor(
+														selectedDevice.aircraft_type_ogn
+													)} text-xs"
+												>
+													{getAircraftTypeOgnDescription(selectedDevice.aircraft_type_ogn)}
+												</span>
+											</dd>
+										</div>
+									</div>
+								{/if}
 							</div>
 						</div>
 
