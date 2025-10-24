@@ -79,6 +79,11 @@ impl ElevationDB {
     /// Get elevation in meters (EGM2008 geoid) for a given lat/lon
     /// Uses a cache to avoid repeated HTTP queries for nearby coordinates
     pub async fn elevation_egm2008(&self, lat: f64, lon: f64) -> Result<Option<f64>> {
+        // Validate coordinates
+        if !lat.is_finite() || !lon.is_finite() {
+            anyhow::bail!("bad coord: lat and lon must be finite values");
+        }
+
         // Create cache key by rounding to ~100m grid
         let cache_key = (round_coord_for_cache(lat), round_coord_for_cache(lon));
 
