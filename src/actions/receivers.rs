@@ -42,7 +42,7 @@ pub async fn get_receiver_by_id(
 ) -> impl IntoResponse {
     let receiver_repo = ReceiverRepository::new(state.pool);
 
-    match receiver_repo.get_receiver_by_id(id).await {
+    match receiver_repo.get_receiver_view_by_id(id).await {
         Ok(Some(receiver)) => Json(receiver).into_response(),
         Ok(None) => json_error(StatusCode::NOT_FOUND, "Receiver not found").into_response(),
         Err(e) => {
