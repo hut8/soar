@@ -139,9 +139,13 @@
 	async function loadFixes(page: number = 1) {
 		loadingFixes = true;
 		try {
+			// Calculate timestamp for 24 hours ago in YYYYMMDDHHMMSS UTC format
+			const twentyFourHoursAgo = dayjs().utc().subtract(24, 'hour');
+			const afterParam = twentyFourHoursAgo.format('YYYYMMDDHHmmss');
+
 			const activeParam = hideInactiveFixes ? '&active=true' : '';
 			const response = await serverCall<FixesResponse>(
-				`/devices/${deviceId}/fixes?page=${page}&per_page=50${activeParam}`
+				`/devices/${deviceId}/fixes?page=${page}&per_page=50&after=${afterParam}${activeParam}`
 			);
 			fixes = response.fixes;
 			fixesPage = response.page;
