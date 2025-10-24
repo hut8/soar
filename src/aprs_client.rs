@@ -14,7 +14,7 @@ use ogn_parser::{AprsData, AprsPacket};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::fs::OpenOptions;
-use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
 use tokio::time::{sleep, timeout};
@@ -285,43 +285,20 @@ impl AprsClient {
 
     /// Read a line from the buffered reader, handling invalid UTF-8 bytes
     /// Reads bytes until a newline character is found, including invalid UTF-8 sequences
+    /// Uses efficient buffered reading instead of byte-at-a-time to avoid TCP backpressure
     async fn read_line_with_invalid_utf8_handling(
         reader: &mut BufReader<tokio::net::tcp::OwnedReadHalf>,
         buffer: &mut Vec<u8>,
     ) -> Result<usize> {
-        let mut byte = [0u8; 1];
-        let mut total_bytes_read = 0;
+        use tokio::io::AsyncBufReadExt;
 
-        loop {
-            match reader.read(&mut byte).await {
-                Ok(0) => {
-                    // End of stream
-                    if total_bytes_read == 0 {
-                        return Ok(0); // No bytes read, stream closed
-                    } else {
-                        break; // Some bytes read before EOF
-                    }
-                }
-                Ok(1) => {
-                    total_bytes_read += 1;
-                    buffer.push(byte[0]);
-
-                    // Stop at newline character
-                    if byte[0] == b'\n' {
-                        break;
-                    }
-                }
-                Ok(_) => {
-                    // This shouldn't happen with a 1-byte buffer, but handle it just in case
-                    continue;
-                }
-                Err(e) => {
-                    return Err(e.into());
-                }
-            }
+        // Use BufReader's efficient read_until which reads in chunks
+        // This is much faster than reading one byte at a time
+        match reader.read_until(b'\n', buffer).await {
+            Ok(0) => Ok(0), // EOF
+            Ok(n) => Ok(n), // Successfully read n bytes up to and including newline
+            Err(e) => Err(e.into()),
         }
-
-        Ok(total_bytes_read)
     }
 
     /// Format a byte buffer as a hex dump for logging invalid UTF-8 sequences
