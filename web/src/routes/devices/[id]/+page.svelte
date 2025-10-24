@@ -315,6 +315,13 @@
 							>
 								{device.identified ? 'Identified' : 'Unidentified'}
 							</span>
+							<span
+								class="badge {device.from_ddb
+									? 'preset-filled-success-500'
+									: 'preset-tonal-primary-500'}"
+							>
+								From OGN DB
+							</span>
 						</div>
 					</div>
 				</div>
