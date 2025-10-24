@@ -14,7 +14,7 @@ use ogn_parser::{AprsData, AprsPacket};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::fs::OpenOptions;
-use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
 use tokio::time::{sleep, timeout};
@@ -102,10 +102,12 @@ impl AprsClient {
                     match Self::connect_and_run(&config, router.clone()).await {
                         ConnectionResult::Success => {
                             info!("APRS client connection ended normally");
+                            metrics::counter!("aprs.connection.ended").increment(1);
                             retry_count = 0; // Reset retry count on successful connection
                         }
                         ConnectionResult::ConnectionFailed(e) => {
                             error!("APRS client connection failed: {}", e);
+                            metrics::counter!("aprs.connection.failed").increment(1);
                             retry_count += 1;
 
                             if retry_count >= config.max_retries {
@@ -127,6 +129,7 @@ impl AprsClient {
                                 "APRS client operation failed after successful connection: {}",
                                 e
                             );
+                            metrics::counter!("aprs.connection.operation_failed").increment(1);
                             // Reset retry count since connection was initially successful
                             retry_count = 0;
 
@@ -168,6 +171,7 @@ impl AprsClient {
         let stream = match TcpStream::connect(format!("{}:{}", config.server, config.port)).await {
             Ok(stream) => {
                 info!("Connected to APRS server");
+                metrics::counter!("aprs.connection.established").increment(1);
                 stream
             }
             Err(e) => {
@@ -192,12 +196,31 @@ impl AprsClient {
         // Read and process messages with timeout detection
         let mut line_buffer = Vec::new();
         let mut first_message = true;
-        let message_timeout = Duration::from_secs(60); // 1 minute timeout
+        let message_timeout = Duration::from_secs(300); // 5 minute timeout (increased from 60s)
+        let keepalive_interval = Duration::from_secs(20); // Send keepalive every 20 seconds
+        let mut last_keepalive = tokio::time::Instant::now();
 
         loop {
             line_buffer.clear();
 
-            // Use timeout to detect if no message received within 1 minute
+            // Check if we need to send a keepalive
+            if last_keepalive.elapsed() >= keepalive_interval {
+                // Send a comment as keepalive (APRS-IS servers expect periodic activity)
+                let keepalive_msg = "# soar keepalive\r\n";
+                if let Err(e) = writer.write_all(keepalive_msg.as_bytes()).await {
+                    warn!("Failed to send keepalive: {}", e);
+                    return ConnectionResult::OperationFailed(e.into());
+                }
+                if let Err(e) = writer.flush().await {
+                    warn!("Failed to flush keepalive: {}", e);
+                    return ConnectionResult::OperationFailed(e.into());
+                }
+                trace!("Sent keepalive to APRS server");
+                metrics::counter!("aprs.keepalive.sent").increment(1);
+                last_keepalive = tokio::time::Instant::now();
+            }
+
+            // Use timeout to detect if no message received within 5 minutes
             match timeout(
                 message_timeout,
                 Self::read_line_with_invalid_utf8_handling(&mut buf_reader, &mut line_buffer),
@@ -246,12 +269,12 @@ impl AprsClient {
                     }
                 }
                 Err(_) => {
-                    // Timeout occurred - no message received for 1 minute
+                    // Timeout occurred - no message received for 5 minutes
                     error!(
-                        "No message received from APRS server for 1 minute, disconnecting and reconnecting"
+                        "No message received from APRS server for 5 minutes, disconnecting and reconnecting"
                     );
                     return ConnectionResult::OperationFailed(anyhow::anyhow!(
-                        "Message timeout - no data received for 1 minute"
+                        "Message timeout - no data received for 5 minutes"
                     ));
                 }
             }
@@ -262,43 +285,20 @@ impl AprsClient {
 
     /// Read a line from the buffered reader, handling invalid UTF-8 bytes
     /// Reads bytes until a newline character is found, including invalid UTF-8 sequences
+    /// Uses efficient buffered reading instead of byte-at-a-time to avoid TCP backpressure
     async fn read_line_with_invalid_utf8_handling(
         reader: &mut BufReader<tokio::net::tcp::OwnedReadHalf>,
         buffer: &mut Vec<u8>,
     ) -> Result<usize> {
-        let mut byte = [0u8; 1];
-        let mut total_bytes_read = 0;
+        use tokio::io::AsyncBufReadExt;
 
-        loop {
-            match reader.read(&mut byte).await {
-                Ok(0) => {
-                    // End of stream
-                    if total_bytes_read == 0 {
-                        return Ok(0); // No bytes read, stream closed
-                    } else {
-                        break; // Some bytes read before EOF
-                    }
-                }
-                Ok(1) => {
-                    total_bytes_read += 1;
-                    buffer.push(byte[0]);
-
-                    // Stop at newline character
-                    if byte[0] == b'\n' {
-                        break;
-                    }
-                }
-                Ok(_) => {
-                    // This shouldn't happen with a 1-byte buffer, but handle it just in case
-                    continue;
-                }
-                Err(e) => {
-                    return Err(e.into());
-                }
-            }
+        // Use BufReader's efficient read_until which reads in chunks
+        // This is much faster than reading one byte at a time
+        match reader.read_until(b'\n', buffer).await {
+            Ok(0) => Ok(0), // EOF
+            Ok(n) => Ok(n), // Successfully read n bytes up to and including newline
+            Err(e) => Err(e.into()),
         }
-
-        Ok(total_bytes_read)
     }
 
     /// Format a byte buffer as a hex dump for logging invalid UTF-8 sequences
