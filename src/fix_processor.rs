@@ -215,26 +215,23 @@ impl FixProcessor {
                             .and_then(|cat| cat.to_string().parse().ok());
 
                         // Update device fields if we have new information
-                        if icao_model_code.is_some() || adsb_emitter_category.is_some() {
-                            let device_repo = self.device_repo.clone();
-                            let device_id = device_model.id;
-                            tokio::spawn(
-                                async move {
-                                    if let Err(e) = device_repo
-                                        .update_adsb_fields(
-                                            device_id,
-                                            icao_model_code,
-                                            adsb_emitter_category,
-                                        )
-                                        .await
-                                    {
-                                        error!(
-                                            "Failed to update ADS-B fields for device {}: {}",
-                                            device_id, e
-                                        );
-                                    }
-                                }
-                                .instrument(tracing::debug_span!("update_device_adsb_fields", device_id = %device_id))
+                        let needs_model_update =
+                            device_model.icao_model_code.is_none() && icao_model_code.is_some();
+                        let needs_adsb_update = device_model.adsb_emitter_category.is_none()
+                            && adsb_emitter_category.is_some();
+                        if (needs_model_update || needs_adsb_update)
+                            && let Err(e) = self
+                                .device_repo
+                                .update_adsb_fields(
+                                    device_model.id,
+                                    icao_model_code,
+                                    adsb_emitter_category,
+                                )
+                                .await
+                        {
+                            error!(
+                                "Failed to update ADS-B fields for device {}: {}",
+                                device_model.id, e
                             );
                         }
 

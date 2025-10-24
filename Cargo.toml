@@ -62,8 +62,6 @@ sentry = { version = "0.45.0", features = ["tracing", "logs"] }
 postgis_diesel = { version = "3.0.2", features = ["serde", "serde_geojson"] }
 rust_decimal = "1.39"
 zip = "6"
-directories = "6.0.0"
-gdal = "0.18.0"
 flydent = ">= 0.4"
 sitemap-rs = "0.4.0"
 metrics = "0.24"

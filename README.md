@@ -146,6 +146,50 @@ cargo install diesel_cli --no-default-features --features postgres
 - Ourairports (open, worldwide data) - https://ourairports.com/data/
 - FAA NASR: This seems like the best for the USA - https://www.faa.gov/air_traffic/flight_info/aeronav/aero_data/NASR_Subscription/2025-08-07/
 
+### Elevation Data
+
+SOAR uses elevation data for terrain analysis and flight altitude calculations. The elevation dataset must be downloaded separately, and the elevation service must be built and installed.
+
+**1. Download the elevation dataset** (approximately 200+ GB):
+
+```bash
+# Install rclone if not already installed
+# Ubuntu/Debian: sudo apt install rclone
+# macOS: brew install rclone
+
+# Download the Skadi elevation tiles dataset to /var/soar/elevation
+sudo mkdir -p /var/soar/elevation
+sudo rclone copy --progress :s3,provider=AWS,anonymous=true,region=us-east-1:elevation-tiles-prod/skadi /var/soar/elevation
+```
+
+**2. Build and install the elevation service**:
+
+```bash
+# Clone and build the elevation service
+git clone https://github.com/racemap/elevation-service
+cd elevation-service
+cargo build --release
+
+# Install the binary
+sudo cp target/release/elevation-service /usr/local/bin/
+
+# Install the systemd service
+sudo cp infrastructure/elevation-service.service /etc/systemd/system/elevation-service.service
+sudo systemctl daemon-reload
+sudo systemctl enable elevation-service
+sudo systemctl start elevation-service
+```
+
+The elevation service will run on port 5125 with the following configuration:
+- Tile set path: `/var/soar/elevation`
+- Port: `5125`
+- Tile cache: `512` tiles in memory
+
+By default, SOAR looks for elevation data at `/var/soar/elevation`. To use a custom location, set the `ELEVATION_DATA_PATH` environment variable:
+```bash
+export ELEVATION_DATA_PATH=/path/to/your/elevation/data
+```
+
 ## License
 
 This project is licensed under the MIT License.
