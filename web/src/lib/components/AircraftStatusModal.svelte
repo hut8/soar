@@ -402,6 +402,21 @@
 										</dd>
 									</div>
 								</div>
+
+								<div class="grid grid-cols-1 gap-4">
+									<div>
+										<dt class="text-sm font-medium text-gray-600">OGN Database</dt>
+										<dd class="text-sm">
+											<span
+												class="badge {selectedDevice.from_ddb
+													? 'preset-filled-success-500'
+													: 'preset-tonal-primary-500'}"
+											>
+												{selectedDevice.from_ddb ? 'From OGN DB' : 'Not in OGN DB'}
+											</span>
+										</dd>
+									</div>
+								</div>
 							</div>
 						</div>
 

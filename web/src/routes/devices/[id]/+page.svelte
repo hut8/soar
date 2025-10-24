@@ -320,7 +320,7 @@
 									? 'preset-filled-success-500'
 									: 'preset-tonal-primary-500'}"
 							>
-								From OGN DB
+								{device.from_ddb ? 'From OGN DB' : 'Not in OGN DB'}
 							</span>
 						</div>
 					</div>
