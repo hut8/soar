@@ -522,7 +522,7 @@ async fn handle_run(
 
     // Create bounded channel for APRS messages (capacity: 10000)
     // Increased from 1000 to handle bursts of incoming APRS traffic
-    let (message_tx, mut message_rx) =
+    let (message_tx, message_rx) =
         tokio::sync::mpsc::channel::<soar::aprs_client::AprsMessage>(10_000);
 
     info!("Created bounded message queue with capacity 10,000");
