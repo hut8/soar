@@ -1,9 +1,14 @@
 <script lang="ts">
-	import { Search, Radio, Plane, Antenna, Building2 } from '@lucide/svelte';
+	import { Search, Radio, Plane, Antenna, Building2, Check, X, Activity } from '@lucide/svelte';
 	import { Segment } from '@skeletonlabs/skeleton-svelte';
 	import { resolve } from '$app/paths';
 	import { serverCall } from '$lib/api/server';
 	import ClubSelector from '$lib/components/ClubSelector.svelte';
+	import {
+		formatDeviceAddress,
+		getAircraftTypeOgnDescription,
+		getAircraftTypeColor
+	} from '$lib/formatters';
 
 	interface Device {
 		id?: string;
@@ -15,6 +20,8 @@
 		competition_number: string;
 		tracked: boolean;
 		identified: boolean;
+		from_ddb?: boolean;
+		aircraft_type_ogn?: string;
 		created_at?: string;
 		updated_at?: string;
 	}
@@ -368,55 +375,121 @@
 		</div>
 	</section>
 
-	<!-- Results Table -->
+	<!-- Results Cards -->
 	{#if !loading && devices.length > 0}
-		<section class="card">
-			<header class="card-header">
-				<h2 class="h2">Search Results</h2>
-				<p class="text-surface-500-400-token">
-					{devices.length} device{devices.length === 1 ? '' : 's'} found
-					{#if totalPages > 1}
-						(showing {currentPage * pageSize + 1}-{Math.min(
-							(currentPage + 1) * pageSize,
-							devices.length
-						)})
-					{/if}
-				</p>
-			</header>
+		<section class="space-y-4">
+			<!-- Results Header -->
+			<div class="flex items-center justify-between">
+				<div>
+					<h2 class="h2">Search Results</h2>
+					<p class="text-surface-500-400-token">
+						{devices.length} device{devices.length === 1 ? '' : 's'} found
+						{#if totalPages > 1}
+							(showing {currentPage * pageSize + 1}-{Math.min(
+								(currentPage + 1) * pageSize,
+								devices.length
+							)})
+						{/if}
+					</p>
+				</div>
+			</div>
 
-			<div class="table-container">
-				<table class="table-hover table">
-					<thead>
-						<tr>
-							<th>Device Address</th>
-							<th>Registration</th>
-							<th>Aircraft Model</th>
-							<th>Competition #</th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each paginatedDevices as device (device.id || device.address)}
-							<tr>
-								<td>
-									<a
-										href={resolve(`/devices/${device.id}`)}
-										class="anchor font-mono text-primary-500 hover:text-primary-600"
-									>
+			<!-- Device Cards Grid -->
+			<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+				{#each paginatedDevices as device (device.id || device.address)}
+					<a
+						href={resolve(`/devices/${device.id}`)}
+						class="group card p-5 card-hover transition-all hover:scale-[1.02]"
+					>
+						<!-- Header Section -->
+						<div class="mb-4 flex items-start justify-between">
+							<div class="flex items-center gap-2">
+								<Radio class="h-5 w-5 text-primary-500" />
+								<div>
+									<h3 class="font-mono text-lg font-bold group-hover:text-primary-500">
 										{device.device_address}
-									</a>
-								</td>
-								<td class="font-semibold">{device.registration || 'Unknown'}</td>
-								<td>{device.aircraft_model}</td>
-								<td>{device.competition_number || '—'}</td>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
+									</h3>
+									<p class="text-surface-600-300-token text-xs">
+										{formatDeviceAddress(device.address_type, device.address)}
+									</p>
+								</div>
+							</div>
+						</div>
+
+						<!-- Registration and Model -->
+						<div class="mb-4 space-y-2">
+							<div class="flex items-center gap-2">
+								<Plane class="h-4 w-4 text-surface-500" />
+								<div>
+									<p class="text-surface-600-300-token text-xs">Registration</p>
+									<p class="text-sm font-semibold">
+										{device.registration || 'Unknown'}
+									</p>
+								</div>
+							</div>
+							<div class="flex items-center gap-2">
+								<Antenna class="h-4 w-4 text-surface-500" />
+								<div>
+									<p class="text-surface-600-300-token text-xs">Aircraft Model</p>
+									<p class="text-sm">{device.aircraft_model || 'Unknown'}</p>
+								</div>
+							</div>
+							{#if device.competition_number}
+								<div class="flex items-center gap-2">
+									<Activity class="h-4 w-4 text-surface-500" />
+									<div>
+										<p class="text-surface-600-300-token text-xs">Competition Number</p>
+										<p class="font-mono text-sm">{device.competition_number}</p>
+									</div>
+								</div>
+							{/if}
+						</div>
+
+						<!-- Status Badges -->
+						<div class="flex flex-wrap gap-2">
+							<span
+								class="badge text-xs {device.tracked
+									? 'preset-filled-success-500'
+									: 'preset-filled-surface-500'}"
+							>
+								{#if device.tracked}
+									<Check class="mr-1 h-3 w-3" />
+								{:else}
+									<X class="mr-1 h-3 w-3" />
+								{/if}
+								{device.tracked ? 'Tracked' : 'Not Tracked'}
+							</span>
+							<span
+								class="badge text-xs {device.identified
+									? 'preset-filled-primary-500'
+									: 'preset-filled-surface-500'}"
+							>
+								{#if device.identified}
+									<Check class="mr-1 h-3 w-3" />
+								{:else}
+									<X class="mr-1 h-3 w-3" />
+								{/if}
+								{device.identified ? 'Identified' : 'Unidentified'}
+							</span>
+							{#if device.from_ddb}
+								<span class="badge preset-filled-success-500 text-xs">
+									<Check class="mr-1 h-3 w-3" />
+									OGN DB
+								</span>
+							{/if}
+							{#if device.aircraft_type_ogn}
+								<span class="badge {getAircraftTypeColor(device.aircraft_type_ogn)} text-xs">
+									{getAircraftTypeOgnDescription(device.aircraft_type_ogn)}
+								</span>
+							{/if}
+						</div>
+					</a>
+				{/each}
 			</div>
 
 			<!-- Pagination Controls -->
 			{#if totalPages > 1}
-				<footer class="card-footer flex items-center justify-between">
+				<div class="flex items-center justify-between card p-4">
 					<div class="text-surface-500-400-token text-sm">
 						Page {currentPage + 1} of {totalPages}
 					</div>
@@ -450,7 +523,7 @@
 							Last
 						</button>
 					</div>
-				</footer>
+				</div>
 			{/if}
 		</section>
 	{:else if !loading && devices.length === 0 && searchQuery}
