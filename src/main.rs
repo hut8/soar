@@ -520,33 +520,63 @@ async fn handle_run(
         archive_dir, nats_url
     );
 
-    // Create bounded channel for APRS messages (capacity: 1000)
+    // Create bounded channel for APRS messages (capacity: 10000)
+    // Increased from 1000 to handle bursts of incoming APRS traffic
     let (message_tx, mut message_rx) =
-        tokio::sync::mpsc::channel::<soar::aprs_client::AprsMessage>(1000);
+        tokio::sync::mpsc::channel::<soar::aprs_client::AprsMessage>(10_000);
 
-    info!("Created bounded message queue with capacity 1000");
+    info!("Created bounded message queue with capacity 10,000");
 
-    // Create processing task that reads from queue and dispatches to router
+    // Create multiple processing workers to consume queue in parallel
+    // Using 5 workers allows parallel processing of different devices while maintaining
+    // correct ordering per device (FlightTracker uses per-device locks internally)
     let packet_router = std::sync::Arc::new(packet_router);
-    let router_clone = packet_router.clone();
-    tokio::spawn(async move {
-        while let Some(message) = message_rx.recv().await {
-            // Track queue size
-            metrics::gauge!("aprs.queue.size").set(message_rx.len() as f64);
+    let num_workers = 5;
 
-            let start = std::time::Instant::now();
-            match message {
-                soar::aprs_client::AprsMessage::Packet { packet, raw } => {
-                    router_clone.process_packet(*packet, &raw).await;
-                }
-                soar::aprs_client::AprsMessage::ServerMessage(msg) => {
-                    router_clone.process_server_message(&msg).await;
+    // Wrap receiver in Arc<Mutex> to share among workers
+    let shared_rx = std::sync::Arc::new(tokio::sync::Mutex::new(message_rx));
+
+    info!(
+        "Spawning {} worker tasks to process APRS messages in parallel",
+        num_workers
+    );
+
+    for worker_id in 0..num_workers {
+        let worker_rx = shared_rx.clone();
+        let router_clone = packet_router.clone();
+
+        tokio::spawn(async move {
+            loop {
+                // Lock the receiver and try to get a message
+                let message = {
+                    let mut rx = worker_rx.lock().await;
+                    rx.recv().await
+                };
+
+                match message {
+                    Some(msg) => {
+                        let start = std::time::Instant::now();
+                        match msg {
+                            soar::aprs_client::AprsMessage::Packet { packet, raw } => {
+                                router_clone.process_packet(*packet, &raw).await;
+                            }
+                            soar::aprs_client::AprsMessage::ServerMessage(msg) => {
+                                router_clone.process_server_message(&msg).await;
+                            }
+                        }
+                        let duration = start.elapsed();
+                        metrics::histogram!("aprs.processing.duration_ms")
+                            .record(duration.as_millis() as f64);
+                        metrics::counter!("aprs.worker.processed", "worker_id" => worker_id.to_string()).increment(1);
+                    }
+                    None => {
+                        // Channel closed, exit worker
+                        break;
+                    }
                 }
             }
-            let duration = start.elapsed();
-            metrics::histogram!("aprs.processing.duration_ms").record(duration.as_millis() as f64);
-        }
-    });
+        });
+    }
 
     // Create and start APRS client with message sender
     let mut client = AprsClient::new(config, message_tx);

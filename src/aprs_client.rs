@@ -366,11 +366,25 @@ impl AprsClient {
         // First log the server message for backward compatibility
         info!("Server message: {}", message);
 
-        // Send to processing queue
+        // Send to processing queue with timeout
         let aprs_message = AprsMessage::ServerMessage(message.to_string());
-        if let Err(e) = message_tx.try_send(aprs_message) {
-            error!("Failed to send server message to processing queue: {:?}", e);
-            metrics::counter!("aprs.queue.full").increment(1);
+        match timeout(Duration::from_secs(1), message_tx.send(aprs_message)).await {
+            Ok(Ok(())) => {
+                // Successfully sent
+            }
+            Ok(Err(_)) => {
+                // Channel closed
+                error!("Processing queue channel closed - cannot send server message");
+                metrics::counter!("aprs.queue.closed").increment(1);
+            }
+            Err(_) => {
+                // Timeout - queue is backed up
+                warn!(
+                    "Processing queue full for 1 second - dropping server message. \
+                     This indicates packet processing is slower than incoming rate."
+                );
+                metrics::counter!("aprs.queue.full").increment(1);
+            }
         }
     }
 
@@ -383,14 +397,28 @@ impl AprsClient {
         // Try to parse the message using ogn-parser
         match ogn_parser::parse(message) {
             Ok(parsed) => {
-                // Send parsed packet to processing queue
+                // Send parsed packet to processing queue with timeout
                 let aprs_message = AprsMessage::Packet {
                     packet: Box::new(parsed),
                     raw: message.to_string(),
                 };
-                if let Err(e) = message_tx.try_send(aprs_message) {
-                    error!("Failed to send packet to processing queue: {:?}", e);
-                    metrics::counter!("aprs.queue.full").increment(1);
+                match timeout(Duration::from_secs(1), message_tx.send(aprs_message)).await {
+                    Ok(Ok(())) => {
+                        // Successfully sent
+                    }
+                    Ok(Err(_)) => {
+                        // Channel closed
+                        error!("Processing queue channel closed - cannot send packet");
+                        metrics::counter!("aprs.queue.closed").increment(1);
+                    }
+                    Err(_) => {
+                        // Timeout - queue is backed up
+                        warn!(
+                            "Processing queue full for 1 second - dropping packet. \
+                             This indicates packet processing is slower than incoming rate."
+                        );
+                        metrics::counter!("aprs.queue.full").increment(1);
+                    }
                 }
             }
             Err(e) => {
