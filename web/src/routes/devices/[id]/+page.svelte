@@ -19,13 +19,21 @@
 	import { serverCall } from '$lib/api/server';
 	import { auth } from '$lib/stores/auth';
 	import type { Device, AircraftRegistration, AircraftModel, Fix, Flight, Club } from '$lib/types';
-	import { formatTitleCase, formatDeviceAddress, getStatusCodeDescription } from '$lib/formatters';
+	import {
+		formatTitleCase,
+		formatDeviceAddress,
+		getStatusCodeDescription,
+		getAircraftTypeOgnDescription,
+		getAircraftTypeColor
+	} from '$lib/formatters';
 	import { toaster } from '$lib/toaster';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
+	import utc from 'dayjs/plugin/utc';
 
-	// Extend dayjs with relative time plugin
+	// Extend dayjs with plugins
 	dayjs.extend(relativeTime);
+	dayjs.extend(utc);
 
 	interface FixesResponse {
 		fixes: Fix[];
@@ -133,9 +141,13 @@
 	async function loadFixes(page: number = 1) {
 		loadingFixes = true;
 		try {
+			// Calculate timestamp for 24 hours ago in YYYYMMDDHHMMSS UTC format
+			const twentyFourHoursAgo = dayjs().utc().subtract(24, 'hour');
+			const afterParam = twentyFourHoursAgo.format('YYYYMMDDHHmmss');
+
 			const activeParam = hideInactiveFixes ? '&active=true' : '';
 			const response = await serverCall<FixesResponse>(
-				`/devices/${deviceId}/fixes?page=${page}&per_page=50${activeParam}`
+				`/devices/${deviceId}/fixes?page=${page}&per_page=50&after=${afterParam}${activeParam}`
 			);
 			fixes = response.fixes;
 			fixesPage = response.page;
@@ -315,6 +327,18 @@
 							>
 								{device.identified ? 'Identified' : 'Unidentified'}
 							</span>
+							<span
+								class="badge {device.from_ddb
+									? 'preset-filled-success-500'
+									: 'preset-tonal-primary-500'}"
+							>
+								{device.from_ddb ? 'From OGN DB' : 'Not in OGN DB'}
+							</span>
+							{#if device.aircraft_type_ogn}
+								<span class="badge {getAircraftTypeColor(device.aircraft_type_ogn)} text-xs">
+									{getAircraftTypeOgnDescription(device.aircraft_type_ogn)}
+								</span>
+							{/if}
 						</div>
 					</div>
 				</div>

@@ -4,18 +4,166 @@
     "tags": ["soar", "metrics"],
     "timezone": "browser",
     "schemaVersion": 38,
-    "version": 2,
+    "version": 3,
     "refresh": "30s",
     "panels": [
       {
         "id": 1,
-        "title": "Receiver Status Updates (Total)",
-        "type": "stat",
+        "title": "HTTP Request Duration (P95)",
+        "type": "timeseries",
         "gridPos": {
           "h": 8,
           "w": 12,
           "x": 0,
           "y": 0
+        },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum by(endpoint, le) (rate(http_request_duration_seconds_bucket[5m])))",
+            "refId": "A",
+            "legendFormat": "{{endpoint}}"
+          }
+        ],
+        "options": {
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          },
+          "legend": {
+            "showLegend": true,
+            "displayMode": "table",
+            "placement": "bottom"
+          }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "linear",
+              "lineWidth": 1,
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "spanNulls": false,
+              "showPoints": "auto",
+              "pointSize": 5
+            },
+            "color": {
+              "mode": "palette-classic"
+            },
+            "unit": "s",
+            "decimals": 3
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "HTTP Request Rate by Endpoint",
+        "type": "timeseries",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 0
+        },
+        "targets": [
+          {
+            "expr": "sum by(endpoint) (rate(http_requests_total[5m]))",
+            "refId": "A",
+            "legendFormat": "{{endpoint}}"
+          }
+        ],
+        "options": {
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          },
+          "legend": {
+            "showLegend": true,
+            "displayMode": "table",
+            "placement": "bottom"
+          }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "linear",
+              "lineWidth": 1,
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "spanNulls": false,
+              "showPoints": "auto",
+              "pointSize": 5
+            },
+            "color": {
+              "mode": "palette-classic"
+            },
+            "unit": "reqps",
+            "decimals": 2
+          }
+        }
+      },
+      {
+        "id": 3,
+        "title": "HTTP Response Status Codes",
+        "type": "timeseries",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 8
+        },
+        "targets": [
+          {
+            "expr": "sum by(status) (rate(http_requests_total[5m]))",
+            "refId": "A",
+            "legendFormat": "{{status}}"
+          }
+        ],
+        "options": {
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          },
+          "legend": {
+            "showLegend": true,
+            "displayMode": "table",
+            "placement": "bottom"
+          }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "linear",
+              "lineWidth": 1,
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "spanNulls": false,
+              "showPoints": "auto",
+              "pointSize": 5,
+              "stacking": {
+                "mode": "normal",
+                "group": "A"
+              }
+            },
+            "color": {
+              "mode": "palette-classic"
+            },
+            "unit": "short",
+            "decimals": 2
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "Receiver Status Updates (Total)",
+        "type": "stat",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 8
         },
         "targets": [
           {
@@ -55,73 +203,402 @@
         }
       },
       {
-        "id": 2,
-        "title": "Receiver Status Updates per Hour",
-        "type": "graph",
+        "id": 5,
+        "title": "APRS Connection Status",
+        "type": "stat",
         "gridPos": {
-          "h": 8,
-          "w": 12,
-          "x": 12,
-          "y": 0
+          "h": 4,
+          "w": 6,
+          "x": 0,
+          "y": 16
         },
         "targets": [
           {
-            "expr": "rate(receiver_status_updates_total[5m]) * 3600",
+            "expr": "aprs_connection_established",
             "refId": "A",
-            "legendFormat": "Updates/Hour"
+            "legendFormat": "Established"
           }
         ],
-        "xaxis": {
-          "mode": "time"
-        },
-        "yaxes": [
-          {
-            "format": "short",
-            "label": "Updates per Hour"
-          },
-          {
-            "format": "short"
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
           }
-        ],
-        "lines": true,
-        "fill": 1,
-        "linewidth": 2,
-        "points": false,
-        "pointradius": 5,
-        "bars": false,
-        "stack": false,
-        "percentage": false,
-        "legend": {
-          "show": true,
-          "values": false,
-          "min": false,
-          "max": false,
-          "current": false,
-          "total": false,
-          "avg": false
         },
-        "nullPointMode": "null",
-        "tooltip": {
-          "shared": true,
-          "sort": 0,
-          "value_type": "individual"
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "decimals": 0,
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "value": null,
+                  "color": "green"
+                }
+              ]
+            }
+          }
         }
       },
       {
-        "id": 3,
-        "title": "Receiver Status Updates Rate (1h)",
+        "id": 6,
+        "title": "APRS Connection Events",
+        "type": "timeseries",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 6,
+          "y": 16
+        },
+        "targets": [
+          {
+            "expr": "rate(aprs_connection_established[5m]) * 60",
+            "refId": "A",
+            "legendFormat": "Established/min"
+          },
+          {
+            "expr": "rate(aprs_connection_ended[5m]) * 60",
+            "refId": "B",
+            "legendFormat": "Ended/min"
+          },
+          {
+            "expr": "rate(aprs_connection_failed[5m]) * 60",
+            "refId": "C",
+            "legendFormat": "Failed/min"
+          }
+        ],
+        "options": {
+          "tooltip": {
+            "mode": "multi",
+            "sort": "none"
+          },
+          "legend": {
+            "showLegend": true,
+            "displayMode": "table",
+            "placement": "bottom"
+          }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "linear",
+              "lineWidth": 2,
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "spanNulls": false,
+              "showPoints": "auto",
+              "pointSize": 5
+            },
+            "color": {
+              "mode": "palette-classic"
+            },
+            "unit": "short",
+            "decimals": 2
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Failed/min"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "red"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "id": 7,
+        "title": "APRS Keepalive & Operation Failures",
+        "type": "timeseries",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 18,
+          "y": 16
+        },
+        "targets": [
+          {
+            "expr": "rate(aprs_keepalive_sent[5m]) * 60",
+            "refId": "A",
+            "legendFormat": "Keepalives/min"
+          },
+          {
+            "expr": "rate(aprs_connection_operation_failed[5m]) * 60",
+            "refId": "B",
+            "legendFormat": "Operation Failures/min"
+          }
+        ],
+        "options": {
+          "tooltip": {
+            "mode": "multi",
+            "sort": "none"
+          },
+          "legend": {
+            "showLegend": true,
+            "displayMode": "list",
+            "placement": "bottom"
+          }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "linear",
+              "lineWidth": 2,
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "spanNulls": false,
+              "showPoints": "auto",
+              "pointSize": 5
+            },
+            "color": {
+              "mode": "palette-classic"
+            },
+            "unit": "short",
+            "decimals": 2
+          }
+        }
+      },
+      {
+        "id": 8,
+        "title": "APRS Connection Totals",
         "type": "stat",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 0,
+          "y": 20
+        },
+        "targets": [
+          {
+            "expr": "aprs_connection_failed",
+            "refId": "A",
+            "legendFormat": "Total Failed"
+          },
+          {
+            "expr": "aprs_connection_operation_failed",
+            "refId": "B",
+            "legendFormat": "Total Op Failures"
+          }
+        ],
+        "options": {
+          "graphMode": "none",
+          "colorMode": "value",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "decimals": 0,
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "value": null,
+                  "color": "green"
+                },
+                {
+                  "value": 10,
+                  "color": "yellow"
+                },
+                {
+                  "value": 50,
+                  "color": "red"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 9,
+        "title": "Elevation Lookup Duration",
+        "type": "timeseries",
         "gridPos": {
           "h": 8,
           "w": 12,
           "x": 0,
-          "y": 8
+          "y": 24
         },
         "targets": [
           {
-            "expr": "rate(receiver_status_updates_total[1h]) * 3600",
+            "expr": "rate(elevation_lookup_duration_seconds_sum[5m]) / rate(elevation_lookup_duration_seconds_count[5m])",
             "refId": "A",
-            "legendFormat": "Updates/Hour"
+            "legendFormat": "Average Lookup Time"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(elevation_lookup_duration_seconds_bucket[5m]))",
+            "refId": "B",
+            "legendFormat": "P95 Lookup Time"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(elevation_lookup_duration_seconds_bucket[5m]))",
+            "refId": "C",
+            "legendFormat": "P99 Lookup Time"
+          }
+        ],
+        "options": {
+          "tooltip": {
+            "mode": "multi",
+            "sort": "none"
+          },
+          "legend": {
+            "showLegend": true,
+            "displayMode": "table",
+            "placement": "bottom"
+          }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "linear",
+              "lineWidth": 1,
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "spanNulls": false,
+              "showPoints": "auto",
+              "pointSize": 5
+            },
+            "color": {
+              "mode": "palette-classic"
+            },
+            "unit": "s",
+            "decimals": 4,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "value": null,
+                  "color": "green"
+                },
+                {
+                  "value": 0.1,
+                  "color": "yellow"
+                },
+                {
+                  "value": 0.5,
+                  "color": "red"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 10,
+        "title": "Elevation Cache Hit Rate",
+        "type": "timeseries",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 24
+        },
+        "targets": [
+          {
+            "expr": "rate(elevation_cache_hits[5m]) / (rate(elevation_cache_hits[5m]) + rate(elevation_cache_misses[5m])) * 100",
+            "refId": "A",
+            "legendFormat": "Cache Hit %"
+          }
+        ],
+        "options": {
+          "tooltip": {
+            "mode": "single",
+            "sort": "none"
+          },
+          "legend": {
+            "showLegend": true,
+            "displayMode": "list",
+            "placement": "bottom"
+          }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "linear",
+              "lineWidth": 2,
+              "fillOpacity": 20,
+              "gradientMode": "none",
+              "spanNulls": false,
+              "showPoints": "auto",
+              "pointSize": 5
+            },
+            "color": {
+              "mode": "thresholds"
+            },
+            "unit": "percent",
+            "decimals": 1,
+            "min": 0,
+            "max": 100,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "value": null,
+                  "color": "red"
+                },
+                {
+                  "value": 50,
+                  "color": "yellow"
+                },
+                {
+                  "value": 80,
+                  "color": "green"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 11,
+        "title": "Elevation Cache Metrics",
+        "type": "stat",
+        "gridPos": {
+          "h": 4,
+          "w": 8,
+          "x": 0,
+          "y": 32
+        },
+        "targets": [
+          {
+            "expr": "elevation_cache_size_mb",
+            "refId": "A",
+            "legendFormat": "Cache Size (MB)"
+          },
+          {
+            "expr": "elevation_dataset_cache_size",
+            "refId": "B",
+            "legendFormat": "Dataset Cache Size"
           }
         ],
         "options": {
@@ -148,14 +625,6 @@
                 {
                   "value": null,
                   "color": "green"
-                },
-                {
-                  "value": 100,
-                  "color": "yellow"
-                },
-                {
-                  "value": 1000,
-                  "color": "red"
                 }
               ]
             }
@@ -163,20 +632,20 @@
         }
       },
       {
-        "id": 4,
-        "title": "Receiver Status Updates Timeline",
+        "id": 12,
+        "title": "Elevation Dataset Cache Hit Rate",
         "type": "timeseries",
         "gridPos": {
           "h": 8,
-          "w": 12,
-          "x": 12,
-          "y": 8
+          "w": 8,
+          "x": 8,
+          "y": 32
         },
         "targets": [
           {
-            "expr": "increase(receiver_status_updates_total[5m])",
+            "expr": "rate(elevation_dataset_cache_hits[5m]) / (rate(elevation_dataset_cache_hits[5m]) + rate(elevation_dataset_cache_misses[5m])) * 100",
             "refId": "A",
-            "legendFormat": "Updates (5m window)"
+            "legendFormat": "Dataset Cache Hit %"
           }
         ],
         "options": {
@@ -195,48 +664,279 @@
             "custom": {
               "drawStyle": "line",
               "lineInterpolation": "linear",
-              "barAlignment": 0,
+              "lineWidth": 2,
+              "fillOpacity": 20,
+              "gradientMode": "none",
+              "spanNulls": false,
+              "showPoints": "auto",
+              "pointSize": 5
+            },
+            "color": {
+              "mode": "thresholds"
+            },
+            "unit": "percent",
+            "decimals": 1,
+            "min": 0,
+            "max": 100,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "value": null,
+                  "color": "red"
+                },
+                {
+                  "value": 50,
+                  "color": "yellow"
+                },
+                {
+                  "value": 90,
+                  "color": "green"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 13,
+        "title": "Elevation GDAL Operations",
+        "type": "timeseries",
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 16,
+          "y": 32
+        },
+        "targets": [
+          {
+            "expr": "rate(elevation_dataset_open_duration_seconds_sum[5m]) / rate(elevation_dataset_open_duration_seconds_count[5m])",
+            "refId": "A",
+            "legendFormat": "Avg Dataset Open Time"
+          },
+          {
+            "expr": "rate(elevation_gdal_read_duration_seconds_sum[5m]) / rate(elevation_gdal_read_duration_seconds_count[5m])",
+            "refId": "B",
+            "legendFormat": "Avg GDAL Read Time"
+          }
+        ],
+        "options": {
+          "tooltip": {
+            "mode": "multi",
+            "sort": "none"
+          },
+          "legend": {
+            "showLegend": true,
+            "displayMode": "list",
+            "placement": "bottom"
+          }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "linear",
               "lineWidth": 1,
               "fillOpacity": 10,
               "gradientMode": "none",
               "spanNulls": false,
               "showPoints": "auto",
-              "pointSize": 5,
-              "stacking": {
-                "mode": "none",
-                "group": "A"
-              },
-              "axisPlacement": "auto",
-              "axisLabel": "",
-              "scaleDistribution": {
-                "type": "linear"
-              },
-              "hideFrom": {
-                "tooltip": false,
-                "viz": false,
-                "legend": false
-              },
-              "thresholdsStyle": {
-                "mode": "off"
-              }
+              "pointSize": 5
             },
             "color": {
               "mode": "palette-classic"
             },
-            "unit": "short",
-            "decimals": 0
+            "unit": "s",
+            "decimals": 4
           }
         }
       },
       {
-        "id": 5,
+        "id": 14,
+        "title": "Flight Tracker Active Devices",
+        "type": "stat",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 0,
+          "y": 40
+        },
+        "targets": [
+          {
+            "expr": "flight_tracker_active_devices",
+            "refId": "A",
+            "legendFormat": "Active Devices"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "decimals": 0,
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "value": null,
+                  "color": "green"
+                },
+                {
+                  "value": 500,
+                  "color": "yellow"
+                },
+                {
+                  "value": 2000,
+                  "color": "red"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 15,
+        "title": "Flight Tracker Cleanup Stats",
+        "type": "stat",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 6,
+          "y": 40
+        },
+        "targets": [
+          {
+            "expr": "flight_tracker_cleanup_removed_count",
+            "refId": "A",
+            "legendFormat": "Devices Cleaned Up"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "decimals": 0,
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "value": null,
+                  "color": "green"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 16,
+        "title": "Flight Tracker Cleanup Duration",
+        "type": "timeseries",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 40
+        },
+        "targets": [
+          {
+            "expr": "rate(flight_tracker_cleanup_duration_seconds_sum[5m]) / rate(flight_tracker_cleanup_duration_seconds_count[5m])",
+            "refId": "A",
+            "legendFormat": "Average Cleanup Time"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(flight_tracker_cleanup_duration_seconds_bucket[5m]))",
+            "refId": "B",
+            "legendFormat": "P95 Cleanup Time"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(flight_tracker_cleanup_duration_seconds_bucket[5m]))",
+            "refId": "C",
+            "legendFormat": "P99 Cleanup Time"
+          }
+        ],
+        "options": {
+          "tooltip": {
+            "mode": "multi",
+            "sort": "none"
+          },
+          "legend": {
+            "showLegend": true,
+            "displayMode": "table",
+            "placement": "bottom"
+          }
+        },
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "linear",
+              "lineWidth": 1,
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "spanNulls": false,
+              "showPoints": "auto",
+              "pointSize": 5
+            },
+            "color": {
+              "mode": "palette-classic"
+            },
+            "unit": "s",
+            "decimals": 4,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "value": null,
+                  "color": "green"
+                },
+                {
+                  "value": 0.1,
+                  "color": "yellow"
+                },
+                {
+                  "value": 1,
+                  "color": "red"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 17,
         "title": "NATS Publisher Queue Depth",
         "type": "timeseries",
         "gridPos": {
           "h": 8,
           "w": 12,
           "x": 0,
-          "y": 16
+          "y": 48
         },
         "targets": [
           {
@@ -294,14 +994,14 @@
         }
       },
       {
-        "id": 6,
+        "id": 18,
         "title": "NATS Publisher Throughput",
         "type": "timeseries",
         "gridPos": {
           "h": 8,
           "w": 12,
           "x": 12,
-          "y": 16
+          "y": 48
         },
         "targets": [
           {
@@ -364,14 +1064,14 @@
         }
       },
       {
-        "id": 7,
+        "id": 19,
         "title": "NATS Publisher Stats",
         "type": "stat",
         "gridPos": {
           "h": 8,
           "w": 6,
           "x": 0,
-          "y": 24
+          "y": 56
         },
         "targets": [
           {
@@ -421,14 +1121,14 @@
         }
       },
       {
-        "id": 8,
+        "id": 20,
         "title": "NATS Publisher Error Rate",
         "type": "timeseries",
         "gridPos": {
           "h": 8,
           "w": 6,
           "x": 6,
-          "y": 24
+          "y": 56
         },
         "targets": [
           {
@@ -470,14 +1170,14 @@
         }
       },
       {
-        "id": 9,
+        "id": 21,
         "title": "WebSocket Active Connections",
         "type": "stat",
         "gridPos": {
           "h": 8,
           "w": 6,
           "x": 12,
-          "y": 24
+          "y": 56
         },
         "targets": [
           {
@@ -525,14 +1225,14 @@
         }
       },
       {
-        "id": 10,
+        "id": 22,
         "title": "WebSocket Active Subscriptions",
         "type": "stat",
         "gridPos": {
           "h": 8,
           "w": 6,
           "x": 18,
-          "y": 24
+          "y": 56
         },
         "targets": [
           {
@@ -580,14 +1280,14 @@
         }
       },
       {
-        "id": 11,
+        "id": 23,
         "title": "WebSocket Queue Depth",
         "type": "timeseries",
         "gridPos": {
           "h": 8,
           "w": 12,
           "x": 0,
-          "y": 32
+          "y": 64
         },
         "targets": [
           {
@@ -645,14 +1345,14 @@
         }
       },
       {
-        "id": 12,
+        "id": 24,
         "title": "WebSocket Message Throughput",
         "type": "timeseries",
         "gridPos": {
           "h": 8,
           "w": 12,
           "x": 12,
-          "y": 32
+          "y": 64
         },
         "targets": [
           {
@@ -693,14 +1393,14 @@
         }
       },
       {
-        "id": 13,
+        "id": 25,
         "title": "WebSocket Subscription Activity",
         "type": "timeseries",
         "gridPos": {
           "h": 8,
           "w": 12,
           "x": 0,
-          "y": 40
+          "y": 72
         },
         "targets": [
           {
@@ -756,14 +1456,14 @@
         }
       },
       {
-        "id": 14,
+        "id": 26,
         "title": "WebSocket Errors",
         "type": "timeseries",
         "gridPos": {
           "h": 8,
           "w": 12,
           "x": 12,
-          "y": 40
+          "y": 72
         },
         "targets": [
           {
