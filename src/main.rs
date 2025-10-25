@@ -520,8 +520,36 @@ async fn handle_run(
         archive_dir, nats_url
     );
 
-    // Create and start APRS client with PacketRouter
-    let mut client = AprsClient::new(config, packet_router);
+    // Create bounded channel for APRS messages (capacity: 1000)
+    let (message_tx, mut message_rx) =
+        tokio::sync::mpsc::channel::<soar::aprs_client::AprsMessage>(1000);
+
+    info!("Created bounded message queue with capacity 1000");
+
+    // Create processing task that reads from queue and dispatches to router
+    let packet_router = std::sync::Arc::new(packet_router);
+    let router_clone = packet_router.clone();
+    tokio::spawn(async move {
+        while let Some(message) = message_rx.recv().await {
+            // Track queue size
+            metrics::gauge!("aprs.queue.size").set(message_rx.len() as f64);
+
+            let start = std::time::Instant::now();
+            match message {
+                soar::aprs_client::AprsMessage::Packet { packet, raw } => {
+                    router_clone.process_packet(*packet, &raw).await;
+                }
+                soar::aprs_client::AprsMessage::ServerMessage(msg) => {
+                    router_clone.process_server_message(&msg).await;
+                }
+            }
+            let duration = start.elapsed();
+            metrics::histogram!("aprs.processing.duration_ms").record(duration.as_millis() as f64);
+        }
+    });
+
+    // Create and start APRS client with message sender
+    let mut client = AprsClient::new(config, message_tx);
 
     info!("Starting APRS client...");
     client.start().await?;

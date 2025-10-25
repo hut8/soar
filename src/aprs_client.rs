@@ -1,5 +1,28 @@
-use crate::packet_processors::PacketRouter;
 use anyhow::Result;
+use ogn_parser::AprsPacket;
+use std::time::Duration;
+use tokio::fs::OpenOptions;
+use tokio::io::{AsyncWriteExt, BufReader};
+use tokio::net::TcpStream;
+use tokio::sync::mpsc;
+use tokio::time::{sleep, timeout};
+use tracing::Instrument;
+use tracing::trace;
+use tracing::{error, info, warn};
+
+/// Message types that can be sent from APRS client to packet router
+#[derive(Debug)]
+pub enum AprsMessage {
+    /// A parsed APRS packet with its raw string representation
+    Packet {
+        /// The parsed packet (boxed to reduce enum size)
+        packet: Box<AprsPacket>,
+        /// The raw packet string
+        raw: String,
+    },
+    /// A server status message (lines starting with #)
+    ServerMessage(String),
+}
 
 /// Result type for connection attempts
 enum ConnectionResult {
@@ -10,17 +33,6 @@ enum ConnectionResult {
     /// Connection was established but failed during operation
     OperationFailed(anyhow::Error),
 }
-use ogn_parser::{AprsData, AprsPacket};
-use std::sync::Arc;
-use std::time::Duration;
-use tokio::fs::OpenOptions;
-use tokio::io::{AsyncWriteExt, BufReader};
-use tokio::net::TcpStream;
-use tokio::sync::mpsc;
-use tokio::time::{sleep, timeout};
-use tracing::Instrument;
-use tracing::trace;
-use tracing::{error, info, warn};
 
 /// Configuration for the APRS client
 #[derive(Debug, Clone)]
@@ -64,16 +76,16 @@ impl Default for AprsClientConfig {
 /// APRS client that connects to an APRS-IS server via TCP
 pub struct AprsClient {
     config: AprsClientConfig,
-    router: Arc<PacketRouter>,
+    message_tx: mpsc::Sender<AprsMessage>,
     shutdown_tx: Option<mpsc::Sender<()>>,
 }
 
 impl AprsClient {
-    /// Create a new APRS client with a PacketRouter
-    pub fn new(config: AprsClientConfig, router: PacketRouter) -> Self {
+    /// Create a new APRS client with a message sender
+    pub fn new(config: AprsClientConfig, message_tx: mpsc::Sender<AprsMessage>) -> Self {
         Self {
             config,
-            router: Arc::new(router),
+            message_tx,
             shutdown_tx: None,
         }
     }
@@ -86,7 +98,7 @@ impl AprsClient {
         self.shutdown_tx = Some(shutdown_tx);
 
         let config = self.config.clone();
-        let router = self.router.clone();
+        let message_tx = self.message_tx.clone();
 
         tokio::spawn(
             async move {
@@ -99,7 +111,7 @@ impl AprsClient {
                         break;
                     }
 
-                    match Self::connect_and_run(&config, router.clone()).await {
+                    match Self::connect_and_run(&config, message_tx.clone()).await {
                         ConnectionResult::Success => {
                             info!("APRS client connection ended normally");
                             metrics::counter!("aprs.connection.ended").increment(1);
@@ -157,10 +169,10 @@ impl AprsClient {
     }
 
     /// Connect to the APRS server and run the message processing loop
-    #[tracing::instrument(skip(config, router), fields(server = %config.server, port = %config.port))]
+    #[tracing::instrument(skip(config, message_tx), fields(server = %config.server, port = %config.port))]
     async fn connect_and_run(
         config: &AprsClientConfig,
-        router: Arc<PacketRouter>,
+        message_tx: mpsc::Sender<AprsMessage>,
     ) -> ConnectionResult {
         info!(
             "Connecting to APRS server {}:{}",
@@ -257,9 +269,9 @@ impl AprsClient {
                                 }
                                 // Route server messages (lines starting with #) and regular APRS messages differently
                                 if !trimmed_line.starts_with('#') {
-                                    Self::process_message(trimmed_line, &router, config).await;
+                                    Self::process_message(trimmed_line, &message_tx, config).await;
                                 } else {
-                                    Self::process_server_message(trimmed_line, &router).await;
+                                    Self::process_server_message(trimmed_line, &message_tx).await;
                                 }
                             }
                         }
@@ -350,25 +362,36 @@ impl AprsClient {
     }
 
     /// Process a server message (line starting with #)
-    async fn process_server_message(message: &str, router: &Arc<PacketRouter>) {
+    async fn process_server_message(message: &str, message_tx: &mpsc::Sender<AprsMessage>) {
         // First log the server message for backward compatibility
         info!("Server message: {}", message);
 
-        // Process with PacketRouter
-        router.process_server_message(message).await;
+        // Send to processing queue
+        let aprs_message = AprsMessage::ServerMessage(message.to_string());
+        if let Err(e) = message_tx.try_send(aprs_message) {
+            error!("Failed to send server message to processing queue: {:?}", e);
+            metrics::counter!("aprs.queue.full").increment(1);
+        }
     }
 
     /// Process a received APRS message
-    async fn process_message(message: &str, router: &Arc<PacketRouter>, config: &AprsClientConfig) {
+    async fn process_message(
+        message: &str,
+        message_tx: &mpsc::Sender<AprsMessage>,
+        config: &AprsClientConfig,
+    ) {
         // Try to parse the message using ogn-parser
         match ogn_parser::parse(message) {
             Ok(parsed) => {
-                // Log unparsed fragments if present and configured
-                Self::log_unparsed_fragments_if_configured(&parsed, message, config).await;
-
-                // Dispatch the packet to the packet router
-                // The router will handle archiving and generic processing before type-specific routing
-                router.process_packet(parsed, message).await;
+                // Send parsed packet to processing queue
+                let aprs_message = AprsMessage::Packet {
+                    packet: Box::new(parsed),
+                    raw: message.to_string(),
+                };
+                if let Err(e) = message_tx.try_send(aprs_message) {
+                    error!("Failed to send packet to processing queue: {:?}", e);
+                    metrics::counter!("aprs.queue.full").increment(1);
+                }
             }
             Err(e) => {
                 // For OGNFNT sources with invalid lat/lon, log as trace instead of error
@@ -390,37 +413,6 @@ impl AprsClient {
                             });
                     }
                 }
-            }
-        }
-    }
-
-    /// Handle unparsed fragment logging if configured
-    async fn log_unparsed_fragments_if_configured(
-        packet: &AprsPacket,
-        message: &str,
-        config: &AprsClientConfig,
-    ) {
-        if let Some(log_path) = &config.unparsed_log_path {
-            match &packet.data {
-                AprsData::Position(pos) => {
-                    if let Some(unparsed) = &pos.comment.unparsed {
-                        Self::log_unparsed_to_csv(log_path, "position", unparsed, message)
-                            .await
-                            .unwrap_or_else(|e| {
-                                warn!("Failed to write to unparsed log: {}", e);
-                            });
-                    }
-                }
-                AprsData::Status(status) => {
-                    if let Some(unparsed) = &status.comment.unparsed {
-                        Self::log_unparsed_to_csv(log_path, "status", unparsed, message)
-                            .await
-                            .unwrap_or_else(|e| {
-                                warn!("Failed to write to unparsed log: {}", e);
-                            })
-                    }
-                }
-                _ => {}
             }
         }
     }

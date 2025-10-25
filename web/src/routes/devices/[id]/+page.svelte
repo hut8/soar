@@ -29,9 +29,11 @@
 	import { toaster } from '$lib/toaster';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
+	import utc from 'dayjs/plugin/utc';
 
-	// Extend dayjs with relative time plugin
+	// Extend dayjs with plugins
 	dayjs.extend(relativeTime);
+	dayjs.extend(utc);
 
 	interface FixesResponse {
 		fixes: Fix[];
