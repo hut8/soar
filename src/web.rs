@@ -482,6 +482,10 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
             "/receivers/{id}/statistics",
             get(actions::get_receiver_statistics),
         )
+        .route(
+            "/receivers/{id}/raw-messages",
+            get(actions::get_receiver_raw_messages),
+        )
         // Authentication routes
         .route("/auth/register", post(actions::register_user))
         .route("/auth/login", post(actions::login_user))
