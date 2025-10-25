@@ -150,6 +150,7 @@ pub(crate) async fn complete_flight(
     runways_repo: &RunwaysRepository,
     fixes_repo: &FixesRepository,
     elevation_db: &ElevationDB,
+    active_flights: &ActiveFlightsMap,
     flight_id: Uuid,
     fix: &Fix,
 ) -> Result<()> {
@@ -262,16 +263,49 @@ pub(crate) async fn complete_flight(
             || has_excessive_speed;
 
         if is_spurious {
+            // Determine the specific reason(s) for spurious classification
+            let mut reasons = Vec::new();
+            if duration_seconds < 120 {
+                reasons.push(format!("duration too short ({}s < 120s)", duration_seconds));
+            }
+            if altitude_range.map(|range| range < 50).unwrap_or(false) {
+                reasons.push(format!(
+                    "altitude range too small ({:?}ft < 50ft)",
+                    altitude_range
+                ));
+            }
+            if max_agl_altitude.map(|agl| agl < 100).unwrap_or(false) {
+                reasons.push(format!(
+                    "max AGL too low ({:?}ft < 100ft)",
+                    max_agl_altitude
+                ));
+            }
+            if has_excessive_altitude {
+                reasons.push("excessive altitude (>100,000ft)".to_string());
+            }
+            if has_excessive_speed {
+                reasons.push(format!(
+                    "excessive speed ({:?}mph > 1000mph)",
+                    average_speed_mph
+                ));
+            }
+
             warn!(
-                "Detected spurious flight {}: duration={}s, altitude_range={:?}ft, max_agl={:?}ft, excessive_altitude={}, avg_speed={:?}mph, excessive_speed={}. Deleting flight.",
+                "Spurious flight {} detected - reasons: [{}]. Duration={}s, altitude_range={:?}ft, max_agl={:?}ft, avg_speed={:?}mph. Deleting.",
                 flight_id,
+                reasons.join(", "),
                 duration_seconds,
                 altitude_range,
                 max_agl_altitude,
-                has_excessive_altitude,
-                average_speed_mph,
-                has_excessive_speed
+                average_speed_mph
             );
+
+            // CRITICAL: Remove from active_flights FIRST to prevent race condition
+            // where new fixes arrive and get assigned this flight_id while we're deleting it
+            {
+                let mut flights = active_flights.write().await;
+                flights.remove(&fix.device_id);
+            }
 
             // Clear flight_id from all associated fixes
             if let Err(e) = fixes_repo.clear_flight_id(flight_id).await {

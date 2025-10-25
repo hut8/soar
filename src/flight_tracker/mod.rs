@@ -333,8 +333,13 @@ impl FlightTracker {
             }
             Err(e) => {
                 error!(
-                    "Failed to save fix to database for fix: {:?}\ncause:{:?}",
-                    updated_fix, e
+                    "Failed to save fix: device={}, flight_id={:?}, speed={:?}kts, alt_msl={:?}ft, aircraft_type={:?}, error={}",
+                    updated_fix.device_id,
+                    updated_fix.flight_id,
+                    updated_fix.ground_speed_knots,
+                    updated_fix.altitude_msl_feet,
+                    updated_fix.aircraft_type_ogn,
+                    e
                 );
                 None
             }
