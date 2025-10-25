@@ -19,7 +19,7 @@
 		ChevronRight,
 		FileText
 	} from '@lucide/svelte';
-	import { ProgressRing, Tab, TabGroup } from '@skeletonlabs/skeleton-svelte';
+	import { ProgressRing, Tabs } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall } from '$lib/api/server';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
@@ -128,7 +128,7 @@
 
 	// Display options
 	let showRawData = $state(false);
-	let activeTab = $state(0); // 0 = Status Reports, 1 = Raw Messages
+	let activeTab = $state('status-reports'); // 'status-reports' or 'raw-messages'
 
 	let receiverId = $derived($page.params.id || '');
 
@@ -143,7 +143,12 @@
 
 	// Load raw messages when switching to that tab
 	$effect(() => {
-		if (activeTab === 1 && receiverId && rawMessages.length === 0 && !loadingRawMessages) {
+		if (
+			activeTab === 'raw-messages' &&
+			receiverId &&
+			rawMessages.length === 0 &&
+			!loadingRawMessages
+		) {
 			loadRawMessages();
 		}
 	});
@@ -664,229 +669,236 @@
 					Receiver Data (Last 24 Hours)
 				</h2>
 
-				<TabGroup bind:value={activeTab}>
-					<Tab value={0}>
-						<Signal class="mr-2 h-4 w-4" />
-						Status Reports
-					</Tab>
-					<Tab value={1}>
-						<FileText class="mr-2 h-4 w-4" />
-						Raw Messages
-					</Tab>
-				</TabGroup>
+				<Tabs value={activeTab}>
+					{#snippet list()}
+						<Tabs.Control value="status-reports">
+							<Signal class="mr-2 h-4 w-4" />
+							Status Reports
+						</Tabs.Control>
+						<Tabs.Control value="raw-messages">
+							<FileText class="mr-2 h-4 w-4" />
+							Raw Messages
+						</Tabs.Control>
+					{/snippet}
 
-				<!-- Status Reports Tab Content -->
-				{#if activeTab === 0}
-				<div class="mt-4">
-					<div class="mb-4 flex items-center justify-end">
-						<label class="flex cursor-pointer items-center gap-2">
-							<input type="checkbox" class="checkbox" bind:checked={showRawData} />
-							<span class="text-sm">Show raw</span>
-						</label>
-					</div>
+					{#snippet content()}
+						<!-- Status Reports Tab Content -->
+						<Tabs.Panel value="status-reports">
+							<div class="mt-4">
+								<div class="mb-4 flex items-center justify-end">
+									<label class="flex cursor-pointer items-center gap-2">
+										<input type="checkbox" class="checkbox" bind:checked={showRawData} />
+										<span class="text-sm">Show raw</span>
+									</label>
+								</div>
 
-				{#if loadingStatuses}
-					<div class="flex items-center justify-center space-x-4 p-8">
-						<ProgressRing size="w-6 h-6" />
-						<span>Loading statuses...</span>
-					</div>
-				{:else if statusesError}
-					<div class="alert preset-filled-error-500">
-						<p>{statusesError}</p>
-					</div>
-				{:else if statuses.length === 0}
-					<p class="text-surface-500-400-token p-4 text-center">
-						No status reports in the last 24 hours
-					</p>
-				{:else}
-					<div class="table-container">
-						<table class="table-hover table">
-							<thead>
-								<tr>
-									<th>Timestamp</th>
-									<th>Version</th>
-									<th>Platform</th>
-									<th>CPU</th>
-									<th>RAM</th>
-									<th>Senders</th>
-									<th>Voltage</th>
-									<th>Lag</th>
-								</tr>
-							</thead>
-							<tbody>
-								{#each statuses as status, index (status.id)}
-									<tr
-										class="border-b border-gray-200 hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800 {index %
-											2 ===
-										0
-											? 'bg-gray-50 dark:bg-gray-900'
-											: ''}"
-									>
-										<td class="text-xs">
-											<div>{formatDateTime(status.received_at)}</div>
-											<div class="text-surface-500-400-token">
-												{formatRelativeTime(status.received_at)}
-											</div>
-										</td>
-										<td class="font-mono text-xs">{status.version || '—'}</td>
-										<td class="text-xs">{status.platform || '—'}</td>
-										<td class="text-sm">
-											{#if status.cpu_load !== null}
-												{(Number(status.cpu_load) * 100).toFixed(0)}%
-												{#if status.cpu_temperature !== null}
-													<span class="text-surface-500-400-token text-xs">
-														({Number(status.cpu_temperature).toFixed(1)}°C)
-													</span>
-												{/if}
-											{:else}
-												—
-											{/if}
-										</td>
-										<td class="text-xs">
-											{formatRamUsage(status.ram_free, status.ram_total)}
-										</td>
-										<td>
-											{#if status.visible_senders !== null}
-												{status.visible_senders}
-												{#if status.senders !== null}
-													<span class="text-surface-500-400-token">/ {status.senders}</span>
-												{/if}
-											{:else}
-												—
-											{/if}
-										</td>
-										<td>
-											{#if status.voltage !== null}
-												{Number(status.voltage).toFixed(2)}V
-												{#if status.amperage !== null}
-													<span class="text-surface-500-400-token text-xs">
-														({Number(status.amperage).toFixed(2)}A)
-													</span>
-												{/if}
-											{:else}
-												—
-											{/if}
-										</td>
-										<td>{status.lag !== null ? `${status.lag}ms` : '—'}</td>
-									</tr>
-									{#if showRawData}
-										<tr
-											class="border-b border-gray-200 dark:border-gray-700 {index % 2 === 0
-												? 'bg-gray-100 dark:bg-gray-800'
-												: ''}"
-										>
-											<td colspan="8" class="px-3 py-2 font-mono text-sm">
-												{status.raw_data}
-											</td>
-										</tr>
+								{#if loadingStatuses}
+									<div class="flex items-center justify-center space-x-4 p-8">
+										<ProgressRing size="w-6 h-6" />
+										<span>Loading statuses...</span>
+									</div>
+								{:else if statusesError}
+									<div class="alert preset-filled-error-500">
+										<p>{statusesError}</p>
+									</div>
+								{:else if statuses.length === 0}
+									<p class="text-surface-500-400-token p-4 text-center">
+										No status reports in the last 24 hours
+									</p>
+								{:else}
+									<div class="table-container">
+										<table class="table-hover table">
+											<thead>
+												<tr>
+													<th>Timestamp</th>
+													<th>Version</th>
+													<th>Platform</th>
+													<th>CPU</th>
+													<th>RAM</th>
+													<th>Senders</th>
+													<th>Voltage</th>
+													<th>Lag</th>
+												</tr>
+											</thead>
+											<tbody>
+												{#each statuses as status, index (status.id)}
+													<tr
+														class="border-b border-gray-200 hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800 {index %
+															2 ===
+														0
+															? 'bg-gray-50 dark:bg-gray-900'
+															: ''}"
+													>
+														<td class="text-xs">
+															<div>{formatDateTime(status.received_at)}</div>
+															<div class="text-surface-500-400-token">
+																{formatRelativeTime(status.received_at)}
+															</div>
+														</td>
+														<td class="font-mono text-xs">{status.version || '—'}</td>
+														<td class="text-xs">{status.platform || '—'}</td>
+														<td class="text-sm">
+															{#if status.cpu_load !== null}
+																{(Number(status.cpu_load) * 100).toFixed(0)}%
+																{#if status.cpu_temperature !== null}
+																	<span class="text-surface-500-400-token text-xs">
+																		({Number(status.cpu_temperature).toFixed(1)}°C)
+																	</span>
+																{/if}
+															{:else}
+																—
+															{/if}
+														</td>
+														<td class="text-xs">
+															{formatRamUsage(status.ram_free, status.ram_total)}
+														</td>
+														<td>
+															{#if status.visible_senders !== null}
+																{status.visible_senders}
+																{#if status.senders !== null}
+																	<span class="text-surface-500-400-token">/ {status.senders}</span>
+																{/if}
+															{:else}
+																—
+															{/if}
+														</td>
+														<td>
+															{#if status.voltage !== null}
+																{Number(status.voltage).toFixed(2)}V
+																{#if status.amperage !== null}
+																	<span class="text-surface-500-400-token text-xs">
+																		({Number(status.amperage).toFixed(2)}A)
+																	</span>
+																{/if}
+															{:else}
+																—
+															{/if}
+														</td>
+														<td>{status.lag !== null ? `${status.lag}ms` : '—'}</td>
+													</tr>
+													{#if showRawData}
+														<tr
+															class="border-b border-gray-200 dark:border-gray-700 {index % 2 === 0
+																? 'bg-gray-100 dark:bg-gray-800'
+																: ''}"
+														>
+															<td colspan="8" class="px-3 py-2 font-mono text-sm">
+																{status.raw_data}
+															</td>
+														</tr>
+													{/if}
+												{/each}
+											</tbody>
+										</table>
+									</div>
+
+									<!-- Pagination Controls -->
+									{#if statusesTotalPages > 1}
+										<div class="mt-4 flex items-center justify-between">
+											<button
+												class="btn preset-tonal btn-sm"
+												disabled={statusesPage === 1}
+												onclick={prevStatusesPage}
+											>
+												<ChevronLeft class="h-4 w-4" />
+												Previous
+											</button>
+											<span class="text-sm">
+												Page {statusesPage} of {statusesTotalPages}
+											</span>
+											<button
+												class="btn preset-tonal btn-sm"
+												disabled={statusesPage === statusesTotalPages}
+												onclick={nextStatusesPage}
+											>
+												Next
+												<ChevronRight class="h-4 w-4" />
+											</button>
+										</div>
 									{/if}
-								{/each}
-							</tbody>
-						</table>
-					</div>
+								{/if}
+							</div>
+						</Tabs.Panel>
 
-					<!-- Pagination Controls -->
-					{#if statusesTotalPages > 1}
-						<div class="mt-4 flex items-center justify-between">
-							<button
-								class="btn preset-tonal btn-sm"
-								disabled={statusesPage === 1}
-								onclick={prevStatusesPage}
-							>
-								<ChevronLeft class="h-4 w-4" />
-								Previous
-							</button>
-							<span class="text-sm">
-								Page {statusesPage} of {statusesTotalPages}
-							</span>
-							<button
-								class="btn preset-tonal btn-sm"
-								disabled={statusesPage === statusesTotalPages}
-								onclick={nextStatusesPage}
-							>
-								Next
-								<ChevronRight class="h-4 w-4" />
-							</button>
-						</div>
-					{/if}
-				{/if}
-				</div>
-				{/if}
+						<!-- Raw Messages Tab Content -->
+						<Tabs.Panel value="raw-messages">
+							<div class="mt-4">
+								{#if loadingRawMessages}
+									<div class="flex items-center justify-center space-x-4 p-8">
+										<ProgressRing size="w-6 h-6" />
+										<span>Loading raw messages...</span>
+									</div>
+								{:else if rawMessagesError}
+									<div class="alert preset-filled-error-500">
+										<p>{rawMessagesError}</p>
+									</div>
+								{:else if rawMessages.length === 0}
+									<p class="text-surface-500-400-token p-4 text-center">
+										No raw messages received in the last 24 hours
+									</p>
+								{:else}
+									<div class="table-container">
+										<table class="table-hover table">
+											<thead>
+												<tr>
+													<th>Timestamp</th>
+													<th>Raw Message</th>
+													<th>Unparsed Data</th>
+												</tr>
+											</thead>
+											<tbody>
+												{#each rawMessages as message (message.id)}
+													<tr>
+														<td class="text-xs" style="min-width: 150px;">
+															<div>{formatDateTime(message.received_at)}</div>
+															<div class="text-surface-500-400-token">
+																{formatRelativeTime(message.received_at)}
+															</div>
+														</td>
+														<td
+															class="font-mono text-xs"
+															style="max-width: 600px; word-break: break-all;"
+														>
+															{message.raw_message}
+														</td>
+														<td class="font-mono text-xs">
+															{message.unparsed || '—'}
+														</td>
+													</tr>
+												{/each}
+											</tbody>
+										</table>
+									</div>
 
-				<!-- Raw Messages Tab Content -->
-				{#if activeTab === 1}
-				<div class="mt-4">
-				{#if loadingRawMessages}
-					<div class="flex items-center justify-center space-x-4 p-8">
-						<ProgressRing size="w-6 h-6" />
-						<span>Loading raw messages...</span>
-					</div>
-				{:else if rawMessagesError}
-					<div class="alert preset-filled-error-500">
-						<p>{rawMessagesError}</p>
-					</div>
-				{:else if rawMessages.length === 0}
-					<p class="text-surface-500-400-token p-4 text-center">
-						No raw messages received in the last 24 hours
-					</p>
-				{:else}
-					<div class="table-container">
-						<table class="table-hover table">
-							<thead>
-								<tr>
-									<th>Timestamp</th>
-									<th>Raw Message</th>
-									<th>Unparsed Data</th>
-								</tr>
-							</thead>
-							<tbody>
-								{#each rawMessages as message (message.id)}
-									<tr>
-										<td class="text-xs" style="min-width: 150px;">
-											<div>{formatDateTime(message.received_at)}</div>
-											<div class="text-surface-500-400-token">
-												{formatRelativeTime(message.received_at)}
-											</div>
-										</td>
-										<td class="font-mono text-xs" style="max-width: 600px; word-break: break-all;">
-											{message.raw_message}
-										</td>
-										<td class="font-mono text-xs">
-											{message.unparsed || '—'}
-										</td>
-									</tr>
-								{/each}
-							</tbody>
-						</table>
-					</div>
-
-					<!-- Pagination Controls -->
-					{#if rawMessagesTotalPages > 1}
-						<div class="mt-4 flex items-center justify-between">
-							<button
-								class="btn preset-tonal btn-sm"
-								disabled={rawMessagesPage === 1}
-								onclick={prevRawMessagesPage}
-							>
-								<ChevronLeft class="h-4 w-4" />
-								Previous
-							</button>
-							<span class="text-sm">
-								Page {rawMessagesPage} of {rawMessagesTotalPages}
-							</span>
-							<button
-								class="btn preset-tonal btn-sm"
-								disabled={rawMessagesPage === rawMessagesTotalPages}
-								onclick={nextRawMessagesPage}
-							>
-								Next
-								<ChevronRight class="h-4 w-4" />
-							</button>
-						</div>
-					{/if}
-				{/if}
-				</div>
-				{/if}
+									<!-- Pagination Controls -->
+									{#if rawMessagesTotalPages > 1}
+										<div class="mt-4 flex items-center justify-between">
+											<button
+												class="btn preset-tonal btn-sm"
+												disabled={rawMessagesPage === 1}
+												onclick={prevRawMessagesPage}
+											>
+												<ChevronLeft class="h-4 w-4" />
+												Previous
+											</button>
+											<span class="text-sm">
+												Page {rawMessagesPage} of {rawMessagesTotalPages}
+											</span>
+											<button
+												class="btn preset-tonal btn-sm"
+												disabled={rawMessagesPage === rawMessagesTotalPages}
+												onclick={nextRawMessagesPage}
+											>
+												Next
+												<ChevronRight class="h-4 w-4" />
+											</button>
+										</div>
+									{/if}
+								{/if}
+							</div>
+						</Tabs.Panel>
+					{/snippet}
+				</Tabs>
 			</div>
 
 			<!-- Map Section -->
