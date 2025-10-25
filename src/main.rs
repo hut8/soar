@@ -433,6 +433,13 @@ async fn handle_run(
     // Start flight timeout checker (every 60 seconds)
     flight_tracker.start_timeout_checker(60);
 
+    // Create separate bounded channel for elevation/AGL calculations (capacity: 1000)
+    // This prevents elevation lookups (which can be slow) from blocking the main processing queue
+    let (elevation_tx, elevation_rx) =
+        tokio::sync::mpsc::channel::<soar::elevation::ElevationTask>(1000);
+
+    info!("Created bounded elevation processing queue with capacity 1,000");
+
     // Create database fix processor to save all valid fixes to the database
     // Try to create with NATS first, fall back to without NATS if connection fails
     let fix_processor = match FixProcessor::with_flight_tracker_and_nats(
@@ -444,7 +451,7 @@ async fn handle_run(
     {
         Ok(processor_with_nats) => {
             info!("Created FixProcessor with NATS publisher and state persistence");
-            processor_with_nats
+            processor_with_nats.with_elevation_channel(elevation_tx.clone())
         }
         Err(e) => {
             warn!(
@@ -452,6 +459,7 @@ async fn handle_run(
                 e
             );
             FixProcessor::with_flight_tracker(diesel_pool.clone(), flight_tracker.clone())
+                .with_elevation_channel(elevation_tx.clone())
         }
     };
 
@@ -536,6 +544,32 @@ async fn handle_run(
     // Wrap receiver in Arc<Mutex> to share among workers
     let shared_rx = std::sync::Arc::new(tokio::sync::Mutex::new(message_rx));
 
+    // Spawn dedicated elevation processing worker
+    // This worker handles AGL calculations separately to prevent them from blocking main processing
+    let elevation_db = flight_tracker.elevation_db().clone();
+    tokio::spawn(
+        async move {
+            let mut elevation_rx = elevation_rx;
+            while let Some(task) = elevation_rx.recv().await {
+                let start = std::time::Instant::now();
+                soar::flight_tracker::altitude::calculate_and_update_agl_async(
+                    &elevation_db,
+                    task.fix_id,
+                    &task.fix,
+                    task.fixes_repo,
+                )
+                .await;
+                let duration = start.elapsed();
+                metrics::histogram!("aprs.elevation.duration_ms")
+                    .record(duration.as_millis() as f64);
+                metrics::counter!("aprs.elevation.processed").increment(1);
+            }
+        }
+        .instrument(tracing::info_span!("elevation_worker")),
+    );
+
+    info!("Spawned dedicated elevation processing worker");
+
     info!(
         "Spawning {} worker tasks to process APRS messages in parallel",
         num_workers
@@ -583,6 +617,36 @@ async fn handle_run(
 
     info!("Starting APRS client...");
     client.start().await?;
+
+    // Spawn periodic performance metrics logger
+    // This helps diagnose what's slowing down processing
+    tokio::spawn(
+        async move {
+            use std::time::{Duration, Instant};
+            let mut last_log = Instant::now();
+            let log_interval = Duration::from_secs(30); // Log every 30 seconds
+
+            loop {
+                tokio::time::sleep(log_interval).await;
+
+                let elapsed_secs = last_log.elapsed().as_secs_f64();
+                last_log = Instant::now();
+
+                // Log performance summary
+                // The metrics are tracked via the metrics crate and available in the metrics backend
+                info!(
+                    "=== PERFORMANCE METRICS (last {:.0}s) ===", elapsed_secs
+                );
+                info!(
+                    "Processing workers: {} active | Check metrics backend for detailed stats", num_workers
+                );
+                info!(
+                    "Metrics: aprs.processing.duration_ms, aprs.elevation.duration_ms, aprs.elevation.queued, aprs.elevation.dropped"
+                );
+            }
+        }
+        .instrument(tracing::info_span!("performance_metrics_logger")),
+    );
 
     // Keep the main thread alive
     // In a real application, you might want to handle shutdown signals here

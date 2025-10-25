@@ -6,7 +6,18 @@ use metrics::{counter, gauge, histogram};
 use std::{env, num::NonZeroUsize, path::PathBuf, sync::Arc, time::Instant};
 use tokio::sync::Mutex;
 
+use crate::Fix;
+use crate::fixes_repo::FixesRepository;
 use crate::tile_downloader::TileDownloader;
+use uuid::Uuid;
+
+/// Task for calculating elevation/AGL for a fix
+/// Sent through a separate bounded channel to prevent blocking main processing
+pub struct ElevationTask {
+    pub fix_id: Uuid,
+    pub fix: Fix,
+    pub fixes_repo: FixesRepository,
+}
 
 /// Round coordinates to ~100m grid (0.001 degrees ≈ 111m)
 /// This creates a cache key that groups nearby lookups together
