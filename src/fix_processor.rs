@@ -3,12 +3,13 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::Instrument;
-use tracing::{debug, error, trace};
+use tracing::{debug, error, trace, warn};
 use uuid::Uuid;
 
 use crate::Fix;
 use crate::aircraft_registrations_repo::AircraftRegistrationsRepository;
 use crate::device_repo::DeviceRepository;
+use crate::elevation::ElevationTask;
 use crate::fixes_repo::{AircraftTypeOgn, FixesRepository};
 use crate::flight_tracker::FlightTracker;
 use crate::nats_publisher::NatsFixPublisher;
@@ -17,6 +18,7 @@ use crate::receiver_repo::ReceiverRepository;
 use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
 use ogn_parser::AprsPacket;
+use tokio::sync::mpsc;
 
 /// Database fix processor that saves valid fixes to the database and performs flight tracking
 #[derive(Clone)]
@@ -27,6 +29,8 @@ pub struct FixProcessor {
     receiver_repo: ReceiverRepository,
     flight_detection_processor: FlightTracker,
     nats_publisher: Option<NatsFixPublisher>,
+    /// Sender for elevation processing tasks (bounded channel to prevent queue overflow)
+    elevation_tx: Option<mpsc::Sender<ElevationTask>>,
     /// Cache to track tow plane status updates to avoid unnecessary database calls
     /// Maps device_id -> (aircraft_type, is_tow_plane_in_db)
     tow_plane_cache: Arc<RwLock<HashMap<Uuid, (AircraftTypeOgn, bool)>>>,
@@ -41,8 +45,15 @@ impl FixProcessor {
             receiver_repo: ReceiverRepository::new(diesel_pool.clone()),
             flight_detection_processor: FlightTracker::new(&diesel_pool),
             nats_publisher: None,
+            elevation_tx: None,
             tow_plane_cache: Arc::new(RwLock::new(HashMap::new())),
         }
+    }
+
+    /// Add elevation channel sender to the processor
+    pub fn with_elevation_channel(mut self, elevation_tx: mpsc::Sender<ElevationTask>) -> Self {
+        self.elevation_tx = Some(elevation_tx);
+        self
     }
 
     /// Create a new FixProcessor with NATS publisher
@@ -59,6 +70,7 @@ impl FixProcessor {
             receiver_repo: ReceiverRepository::new(diesel_pool.clone()),
             flight_detection_processor: FlightTracker::new(&diesel_pool),
             nats_publisher: Some(nats_publisher),
+            elevation_tx: None,
             tow_plane_cache: Arc::new(RwLock::new(HashMap::new())),
         })
     }
@@ -75,6 +87,7 @@ impl FixProcessor {
             receiver_repo: ReceiverRepository::new(diesel_pool.clone()),
             flight_detection_processor: flight_tracker,
             nats_publisher: None,
+            elevation_tx: None,
             tow_plane_cache: Arc::new(RwLock::new(HashMap::new())),
         }
     }
@@ -94,6 +107,7 @@ impl FixProcessor {
             receiver_repo: ReceiverRepository::new(diesel_pool.clone()),
             flight_detection_processor: flight_tracker,
             nats_publisher: Some(nats_publisher),
+            elevation_tx: None,
             tow_plane_cache: Arc::new(RwLock::new(HashMap::new())),
         })
     }
@@ -323,20 +337,38 @@ impl FixProcessor {
             ),
         );
 
-        // Step 2.5: Calculate and update altitude_agl asynchronously (non-blocking)
-        let flight_tracker = self.flight_detection_processor.clone();
-        let fixes_repo = self.fixes_repo.clone();
-        let fix_id = updated_fix.id;
-        let fix_for_agl = updated_fix.clone();
+        // Step 2.5: Calculate and update altitude_agl via dedicated elevation channel
+        // This prevents slow elevation lookups from blocking the main processing queue
+        if let Some(elevation_tx) = &self.elevation_tx {
+            let task = ElevationTask {
+                fix_id: updated_fix.id,
+                fix: updated_fix.clone(),
+                fixes_repo: self.fixes_repo.clone(),
+            };
 
-        tokio::spawn(
-            async move {
-                flight_tracker
-                    .calculate_and_update_agl_async(fix_id, &fix_for_agl, fixes_repo)
-                    .await;
+            // Try to send with timeout to detect channel backlog
+            match elevation_tx.try_send(task) {
+                Ok(()) => {
+                    // Successfully queued for elevation processing
+                    metrics::counter!("aprs.elevation.queued").increment(1);
+                }
+                Err(mpsc::error::TrySendError::Full(_)) => {
+                    // Channel is full - elevation processing is backed up
+                    warn!(
+                        "Elevation processing queue is FULL (1000 tasks buffered) - dropping elevation calculation for fix {}. \
+                         This indicates elevation lookups are slower than incoming fix rate.",
+                        updated_fix.id
+                    );
+                    metrics::counter!("aprs.elevation.dropped").increment(1);
+                }
+                Err(mpsc::error::TrySendError::Closed(_)) => {
+                    error!(
+                        "Elevation processing channel is closed - cannot queue elevation calculation"
+                    );
+                    metrics::counter!("aprs.elevation.channel_closed").increment(1);
+                }
             }
-            .instrument(tracing::debug_span!("calculate_altitude_agl", fix_id = %fix_id)),
-        );
+        }
 
         // Step 3: Publish to NATS with updated fix (including flight_id)
         if let Some(nats_publisher) = self.nats_publisher.as_ref() {

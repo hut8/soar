@@ -1,11 +1,9 @@
-mod altitude;
+pub mod altitude;
 mod flight_lifecycle;
 mod geometry;
 mod location;
 mod runway;
 mod state_transitions;
-
-pub use altitude::calculate_and_update_agl_async;
 
 use crate::Fix;
 use crate::airports_repo::AirportsRepository;
@@ -139,6 +137,11 @@ impl FlightTracker {
     /// Start periodic state saving - now a no-op
     pub fn start_periodic_state_saving(&self, _interval_secs: u64) {
         // State persistence removed
+    }
+
+    /// Get a reference to the elevation database
+    pub fn elevation_db(&self) -> &ElevationDB {
+        &self.elevation_db
     }
 
     /// Start a background task to periodically check for timed-out flights
