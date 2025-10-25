@@ -501,6 +501,36 @@ impl ClubsRepository {
         Ok(result.into_iter().map(|cwl| cwl.into()).collect())
     }
 
+    /// Get clubs based at a specific airport
+    pub async fn get_clubs_by_airport(&self, airport_id: i32) -> Result<Vec<Club>> {
+        let pool = self.pool.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            let sql = r#"
+                SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, c.location_id,
+                       l.street1, l.street2, l.city, l.state, l.zip_code, l.region_code,
+                       l.country_mail_code,
+                       (l.geolocation)[0]::numeric as longitude,
+                       (l.geolocation)[1]::numeric as latitude,
+                       c.created_at, c.updated_at
+                FROM clubs c
+                LEFT JOIN locations l ON c.location_id = l.id
+                WHERE c.home_base_airport_id = $1
+                ORDER BY c.name
+            "#;
+
+            let clubs: Vec<ClubWithLocation> = diesel::sql_query(sql)
+                .bind::<diesel::sql_types::Integer, _>(airport_id)
+                .load::<ClubWithLocation>(&mut conn)?;
+
+            Ok::<Vec<ClubWithLocation>, anyhow::Error>(clubs)
+        })
+        .await??;
+
+        Ok(result.into_iter().map(|cwl| cwl.into()).collect())
+    }
+
     /// Update the home base airport ID for a club
     pub async fn update_home_base_airport(&self, club_id: Uuid, airport_id: i32) -> Result<bool> {
         use crate::schema::clubs::dsl::*;

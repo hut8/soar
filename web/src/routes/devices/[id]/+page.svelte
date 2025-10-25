@@ -28,12 +28,12 @@
 	} from '$lib/formatters';
 	import { toaster } from '$lib/toaster';
 	import dayjs from 'dayjs';
-	import relativeTime from 'dayjs/plugin/relativeTime';
 	import utc from 'dayjs/plugin/utc';
+	import relativeTime from 'dayjs/plugin/relativeTime';
 
 	// Extend dayjs with plugins
-	dayjs.extend(relativeTime);
 	dayjs.extend(utc);
+	dayjs.extend(relativeTime);
 
 	interface FixesResponse {
 		fixes: Fix[];
