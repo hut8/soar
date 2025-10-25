@@ -271,14 +271,11 @@ pub(crate) async fn process_state_transition(
                             fix.altitude_agl = Some(altitude_agl);
                         }
 
-                        // Remove from active flights map immediately
-                        {
-                            let mut flights = active_flights.write().await;
-                            flights.remove(&fix.device_id);
-                        }
-
-                        // Complete flight in background (includes airport/runway lookup for landing)
+                        // Complete flight (includes airport/runway lookup for landing)
                         // Note: complete_flight will update both landing fields AND last_fix_at in a single UPDATE
+                        // IMPORTANT: Do NOT remove from active_flights until AFTER complete_flight finishes
+                        // to prevent race condition where new fixes arrive and try to create a new flight
+                        // while the old flight is being deleted as spurious
                         if let Err(e) = complete_flight(
                             flights_repo,
                             airports_repo,
@@ -292,6 +289,13 @@ pub(crate) async fn process_state_transition(
                         .await
                         {
                             warn!("Failed to complete flight {}: {}", flight_id, e);
+                        }
+
+                        // Remove from active flights map AFTER complete_flight finishes
+                        // This prevents new fixes from creating a new flight while the old one is being deleted
+                        {
+                            let mut flights = active_flights.write().await;
+                            flights.remove(&fix.device_id);
                         }
 
                         // Clean up the device lock after flight completion
