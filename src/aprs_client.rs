@@ -179,6 +179,9 @@ impl AprsClient {
             config.server, config.port
         );
 
+        // Track connection start time for duration reporting
+        let connection_start = std::time::Instant::now();
+
         // Connect to the APRS server
         let stream = match TcpStream::connect(format!("{}:{}", config.server, config.port)).await {
             Ok(stream) => {
@@ -198,10 +201,20 @@ impl AprsClient {
         let login_cmd = Self::build_login_command(config);
         info!("Sending login command: {}", login_cmd.trim());
         if let Err(e) = writer.write_all(login_cmd.as_bytes()).await {
-            return ConnectionResult::OperationFailed(e.into());
+            let duration = connection_start.elapsed();
+            return ConnectionResult::OperationFailed(anyhow::anyhow!(
+                "Failed to send login command after {:.1}s: {}",
+                duration.as_secs_f64(),
+                e
+            ));
         }
         if let Err(e) = writer.flush().await {
-            return ConnectionResult::OperationFailed(e.into());
+            let duration = connection_start.elapsed();
+            return ConnectionResult::OperationFailed(anyhow::anyhow!(
+                "Failed to flush login command after {:.1}s: {}",
+                duration.as_secs_f64(),
+                e
+            ));
         }
         info!("Login command sent successfully");
 
@@ -220,12 +233,30 @@ impl AprsClient {
                 // Send a comment as keepalive (APRS-IS servers expect periodic activity)
                 let keepalive_msg = "# soar keepalive\r\n";
                 if let Err(e) = writer.write_all(keepalive_msg.as_bytes()).await {
-                    warn!("Failed to send keepalive: {}", e);
-                    return ConnectionResult::OperationFailed(e.into());
+                    let duration = connection_start.elapsed();
+                    warn!(
+                        "Failed to send keepalive after {:.1}s: {}",
+                        duration.as_secs_f64(),
+                        e
+                    );
+                    return ConnectionResult::OperationFailed(anyhow::anyhow!(
+                        "Failed to send keepalive after {:.1}s: {}",
+                        duration.as_secs_f64(),
+                        e
+                    ));
                 }
                 if let Err(e) = writer.flush().await {
-                    warn!("Failed to flush keepalive: {}", e);
-                    return ConnectionResult::OperationFailed(e.into());
+                    let duration = connection_start.elapsed();
+                    warn!(
+                        "Failed to flush keepalive after {:.1}s: {}",
+                        duration.as_secs_f64(),
+                        e
+                    );
+                    return ConnectionResult::OperationFailed(anyhow::anyhow!(
+                        "Failed to flush keepalive after {:.1}s: {}",
+                        duration.as_secs_f64(),
+                        e
+                    ));
                 }
                 trace!("Sent keepalive to APRS server");
                 metrics::counter!("aprs.keepalive.sent").increment(1);
@@ -242,7 +273,11 @@ impl AprsClient {
                 Ok(read_result) => {
                     match read_result {
                         Ok(0) => {
-                            warn!("Connection closed by server");
+                            let duration = connection_start.elapsed();
+                            warn!(
+                                "Connection closed by server after {:.1}s",
+                                duration.as_secs_f64()
+                            );
                             break;
                         }
                         Ok(_) => {
@@ -276,17 +311,25 @@ impl AprsClient {
                             }
                         }
                         Err(e) => {
-                            return ConnectionResult::OperationFailed(e);
+                            let duration = connection_start.elapsed();
+                            return ConnectionResult::OperationFailed(anyhow::anyhow!(
+                                "Connection error after {:.1}s: {}",
+                                duration.as_secs_f64(),
+                                e
+                            ));
                         }
                     }
                 }
                 Err(_) => {
                     // Timeout occurred - no message received for 5 minutes
+                    let duration = connection_start.elapsed();
                     error!(
-                        "No message received from APRS server for 5 minutes, disconnecting and reconnecting"
+                        "No message received from APRS server for 5 minutes (total connection time: {:.1}s), disconnecting and reconnecting",
+                        duration.as_secs_f64()
                     );
                     return ConnectionResult::OperationFailed(anyhow::anyhow!(
-                        "Message timeout - no data received for 5 minutes"
+                        "Message timeout after {:.1}s - no data received for 5 minutes",
+                        duration.as_secs_f64()
                     ));
                 }
             }
@@ -366,24 +409,24 @@ impl AprsClient {
         // First log the server message for backward compatibility
         info!("Server message: {}", message);
 
-        // Send to processing queue with timeout
+        // Send to processing queue - fail immediately if full
         let aprs_message = AprsMessage::ServerMessage(message.to_string());
-        match timeout(Duration::from_secs(1), message_tx.send(aprs_message)).await {
-            Ok(Ok(())) => {
+        match message_tx.try_send(aprs_message) {
+            Ok(()) => {
                 // Successfully sent
             }
-            Ok(Err(_)) => {
-                // Channel closed
-                error!("Processing queue channel closed - cannot send server message");
-                metrics::counter!("aprs.queue.closed").increment(1);
-            }
-            Err(_) => {
-                // Timeout - queue is backed up
+            Err(mpsc::error::TrySendError::Full(_)) => {
+                // Queue is full - drop message immediately
                 warn!(
-                    "Processing queue full for 1 second - dropping server message. \
+                    "Processing queue is FULL - dropping server message immediately. \
                      This indicates packet processing is slower than incoming rate."
                 );
                 metrics::counter!("aprs.queue.full").increment(1);
+            }
+            Err(mpsc::error::TrySendError::Closed(_)) => {
+                // Channel closed
+                error!("Processing queue channel closed - cannot send server message");
+                metrics::counter!("aprs.queue.closed").increment(1);
             }
         }
     }
@@ -397,27 +440,27 @@ impl AprsClient {
         // Try to parse the message using ogn-parser
         match ogn_parser::parse(message) {
             Ok(parsed) => {
-                // Send parsed packet to processing queue with timeout
+                // Send parsed packet to processing queue - fail immediately if full
                 let aprs_message = AprsMessage::Packet {
                     packet: Box::new(parsed),
                     raw: message.to_string(),
                 };
-                match timeout(Duration::from_secs(1), message_tx.send(aprs_message)).await {
-                    Ok(Ok(())) => {
+                match message_tx.try_send(aprs_message) {
+                    Ok(()) => {
                         // Successfully sent
                     }
-                    Ok(Err(_)) => {
-                        // Channel closed
-                        error!("Processing queue channel closed - cannot send packet");
-                        metrics::counter!("aprs.queue.closed").increment(1);
-                    }
-                    Err(_) => {
-                        // Timeout - queue is backed up
+                    Err(mpsc::error::TrySendError::Full(_)) => {
+                        // Queue is full - drop packet immediately
                         warn!(
-                            "Processing queue full for 1 second - dropping packet. \
+                            "Processing queue is FULL - dropping packet immediately. \
                              This indicates packet processing is slower than incoming rate."
                         );
                         metrics::counter!("aprs.queue.full").increment(1);
+                    }
+                    Err(mpsc::error::TrySendError::Closed(_)) => {
+                        // Channel closed
+                        error!("Processing queue channel closed - cannot send packet");
+                        metrics::counter!("aprs.queue.closed").increment(1);
                     }
                 }
             }
