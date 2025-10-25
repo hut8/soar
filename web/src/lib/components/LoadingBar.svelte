@@ -28,7 +28,9 @@
 		background: linear-gradient(90deg, #3b82f6 0%, #f97316 50%, #3b82f6 100%);
 		background-size: 200% 100%;
 		animation: slide 1.5s ease-in-out infinite;
-		box-shadow: 0 0 8px rgba(59, 130, 246, 0.6), 0 0 16px rgba(249, 115, 22, 0.4);
+		box-shadow:
+			0 0 8px rgba(59, 130, 246, 0.6),
+			0 0 16px rgba(249, 115, 22, 0.4);
 	}
 
 	@keyframes slide {
