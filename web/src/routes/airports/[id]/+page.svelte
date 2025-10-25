@@ -607,7 +607,7 @@
 							{#each clubs as club (club.id)}
 								<a
 									href={resolve(`/clubs/${club.id}`)}
-									class="card preset-tonal hover:preset-filled-primary-500 p-4 transition-all"
+									class="card preset-tonal p-4 transition-all hover:preset-filled-primary-500"
 								>
 									<div class="flex items-center gap-3">
 										<Users class="h-5 w-5 text-primary-500" />
