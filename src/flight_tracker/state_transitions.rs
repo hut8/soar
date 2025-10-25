@@ -273,9 +273,9 @@ pub(crate) async fn process_state_transition(
 
                         // Complete flight (includes airport/runway lookup for landing)
                         // Note: complete_flight will update both landing fields AND last_fix_at in a single UPDATE
-                        // IMPORTANT: Do NOT remove from active_flights until AFTER complete_flight finishes
-                        // to prevent race condition where new fixes arrive and try to create a new flight
-                        // while the old flight is being deleted as spurious
+                        // IMPORTANT: For spurious flights, complete_flight will remove from active_flights BEFORE deleting
+                        // to prevent race condition where new fixes arrive and get assigned the spurious flight_id
+                        // For normal landings, we remove from active_flights AFTER complete_flight finishes
                         if let Err(e) = complete_flight(
                             flights_repo,
                             airports_repo,
@@ -283,6 +283,7 @@ pub(crate) async fn process_state_transition(
                             runways_repo,
                             fixes_repo,
                             elevation_db,
+                            active_flights,
                             flight_id,
                             &fix,
                         )
@@ -291,8 +292,8 @@ pub(crate) async fn process_state_transition(
                             warn!("Failed to complete flight {}: {}", flight_id, e);
                         }
 
-                        // Remove from active flights map AFTER complete_flight finishes
-                        // This prevents new fixes from creating a new flight while the old one is being deleted
+                        // Remove from active flights map AFTER complete_flight finishes (for normal landings)
+                        // Note: For spurious flights, this was already done inside complete_flight
                         {
                             let mut flights = active_flights.write().await;
                             flights.remove(&fix.device_id);
