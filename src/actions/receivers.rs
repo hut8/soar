@@ -42,7 +42,7 @@ pub async fn get_receiver_by_id(
 ) -> impl IntoResponse {
     let receiver_repo = ReceiverRepository::new(state.pool);
 
-    match receiver_repo.get_receiver_by_id(id).await {
+    match receiver_repo.get_receiver_view_by_id(id).await {
         Ok(Some(receiver)) => Json(receiver).into_response(),
         Ok(None) => json_error(StatusCode::NOT_FOUND, "Receiver not found").into_response(),
         Err(e) => {
@@ -450,6 +450,56 @@ pub async fn get_receiver_statistics(
     .into_response()
 }
 
+/// Get raw messages for a specific receiver (last 24 hours only)
+pub async fn get_receiver_raw_messages(
+    Path(id): Path<Uuid>,
+    Query(params): Query<ReceiverRawMessagesQuery>,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    use crate::aprs_messages_repo::AprsMessagesRepository;
+
+    let receiver_repo = ReceiverRepository::new(state.pool.clone());
+    let messages_repo = AprsMessagesRepository::new(state.pool.clone());
+
+    // First verify the receiver exists
+    match receiver_repo.get_receiver_by_id(id).await {
+        Ok(Some(_)) => {}
+        Ok(None) => return json_error(StatusCode::NOT_FOUND, "Receiver not found").into_response(),
+        Err(e) => {
+            tracing::error!("Failed to get receiver {}: {}", id, e);
+            return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get receiver")
+                .into_response();
+        }
+    };
+
+    let page = params.page.unwrap_or(1).max(1);
+    let per_page = params.per_page.unwrap_or(100).clamp(1, 100);
+
+    // Get raw messages for this receiver (last 24 hours only)
+    match messages_repo
+        .get_messages_by_receiver_paginated(id, page, per_page)
+        .await
+    {
+        Ok((messages, total_count)) => {
+            let total_pages = ((total_count as f64) / (per_page as f64)).ceil() as i64;
+            Json(ReceiverRawMessagesResponse {
+                messages,
+                page,
+                total_pages,
+            })
+            .into_response()
+        }
+        Err(e) => {
+            tracing::error!("Failed to get raw messages for receiver {}: {}", id, e);
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to get receiver raw messages",
+            )
+            .into_response()
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct ReceiverStatisticsQuery {
     /// Number of days to include in statistics (defaults to all time if not specified)
@@ -461,4 +511,17 @@ pub struct ReceiverStatisticsResponse {
     pub average_update_interval_seconds: Option<f64>,
     pub total_status_count: i64,
     pub days_included: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ReceiverRawMessagesQuery {
+    pub page: Option<i64>,
+    pub per_page: Option<i64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ReceiverRawMessagesResponse {
+    pub messages: Vec<crate::aprs_messages_repo::AprsMessage>,
+    pub page: i64,
+    pub total_pages: i64,
 }

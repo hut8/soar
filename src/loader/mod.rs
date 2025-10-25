@@ -1,6 +1,7 @@
 mod aircraft_models;
 mod aircraft_registrations;
 mod airports_runways;
+mod device_linking;
 mod devices_receivers;
 mod home_base_linking;
 
@@ -129,6 +130,39 @@ pub async fn handle_load_data(
     if let Some(metrics) =
         devices_receivers::load_devices_with_metrics(diesel_pool.clone(), devices_path).await
     {
+        if !metrics.success
+            && let Some(ref config) = email_config
+        {
+            let _ = send_failure_email(
+                config,
+                &metrics.name,
+                metrics.error_message.as_deref().unwrap_or("Unknown error"),
+            );
+        }
+        report.add_entity(metrics);
+    }
+
+    // Link aircraft to devices by registration number (after both are loaded)
+    {
+        let metrics =
+            device_linking::link_aircraft_to_devices_with_metrics(diesel_pool.clone()).await;
+
+        if !metrics.success
+            && let Some(ref config) = email_config
+        {
+            let _ = send_failure_email(
+                config,
+                &metrics.name,
+                metrics.error_message.as_deref().unwrap_or("Unknown error"),
+            );
+        }
+        report.add_entity(metrics);
+    }
+
+    // Link devices to clubs from aircraft (after aircraft are linked to devices)
+    {
+        let metrics = device_linking::link_devices_to_clubs_with_metrics(diesel_pool.clone()).await;
+
         if !metrics.success
             && let Some(ref config) = email_config
         {
