@@ -142,6 +142,7 @@ pub(crate) async fn timeout_flight(
 }
 
 /// Update flight with landing information
+/// Returns Ok(true) if flight was completed normally, Ok(false) if flight was deleted as spurious
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn complete_flight(
     flights_repo: &FlightsRepository,
@@ -153,7 +154,7 @@ pub(crate) async fn complete_flight(
     active_flights: &ActiveFlightsMap,
     flight_id: Uuid,
     fix: &Fix,
-) -> Result<()> {
+) -> Result<bool> {
     let arrival_airport_id = find_nearby_airport(airports_repo, fix.latitude, fix.longitude).await;
 
     let landing_location_id = create_or_find_location(
@@ -316,7 +317,7 @@ pub(crate) async fn complete_flight(
             match flights_repo.delete_flight(flight_id).await {
                 Ok(_) => {
                     info!("Deleted spurious flight {}", flight_id);
-                    return Ok(());
+                    return Ok(false); // Return false to indicate flight was deleted
                 }
                 Err(e) => {
                     error!("Failed to delete spurious flight {}: {}", flight_id, e);
@@ -356,5 +357,5 @@ pub(crate) async fn complete_flight(
         flight_id, fix.latitude, fix.longitude
     );
 
-    Ok(())
+    Ok(true) // Return true to indicate flight was completed normally
 }
