@@ -150,7 +150,7 @@ export interface Device {
 	device_address: string; // Formatted like "FLARM-A0B380"
 	address_type: string; // F, O, I, or empty string
 	address: string; // Hex format like "ABCDEF"
-	aircraft_model: string;
+	aircraft_model: string | AircraftModel; // Can be string or full object from API
 	registration: string;
 	competition_number: string;
 	tracked: boolean;
