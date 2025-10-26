@@ -150,7 +150,7 @@ export interface Device {
 	device_address: string; // Formatted like "FLARM-A0B380"
 	address_type: string; // F, O, I, or empty string
 	address: string; // Hex format like "ABCDEF"
-	aircraft_model: string;
+	aircraft_model: string; // Short string from device database (e.g., "Cessna 172")
 	registration: string;
 	competition_number: string;
 	tracked: boolean;
@@ -167,11 +167,11 @@ export interface Device {
 	fixes?: Fix[];
 }
 
-// Aircraft extends Device with optional aircraft registration and model
-// This matches the backend Aircraft (formerly DeviceWithFixes)
-// Note: Device.aircraft_model is a string, but we add optional detailed aircraft_model here
+// Aircraft extends Device with optional aircraft registration and detailed model information
+// This matches the backend Aircraft struct
 export interface Aircraft extends Device {
 	aircraft_registration?: AircraftRegistration;
+	// Detailed aircraft model information from FAA database
 	aircraft_model_details?: AircraftModel;
 }
 
