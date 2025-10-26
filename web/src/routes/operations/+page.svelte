@@ -961,11 +961,8 @@
 		// Use proper device registration, fallback to address
 		const tailNumber = device.registration || device.address || 'Unknown';
 		const { altitudeText, isOld } = formatAltitudeWithTime(fix.altitude_msl_feet, fix.timestamp);
-		// Handle aircraft_model - it could be a string or an AircraftModel object
-		const aircraftModel =
-			typeof device.aircraft_model === 'string'
-				? device.aircraft_model
-				: device.aircraft_model?.model_name || null;
+		// Use aircraft_model string from device, or detailed model name if available
+		const aircraftModel = device.aircraft_model || null;
 
 		console.log('[MARKER] Aircraft info:', {
 			tailNumber,
@@ -1082,11 +1079,8 @@
 					fix.altitude_msl_feet,
 					fix.timestamp
 				);
-				// Handle aircraft_model - it could be a string or an AircraftModel object
-				const aircraftModel =
-					typeof device.aircraft_model === 'string'
-						? device.aircraft_model
-						: device.aircraft_model?.model_name || null;
+				// Use aircraft_model string from device
+				const aircraftModel = device.aircraft_model || null;
 
 				// Include aircraft model after tail number if available
 				tailDiv.textContent = aircraftModel ? `${tailNumber} (${aircraftModel})` : tailNumber;

@@ -229,6 +229,8 @@ pub struct Aircraft {
     pub device: DeviceView,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub aircraft_registration: Option<crate::aircraft_registrations::AircraftRegistrationModel>,
+    /// Detailed aircraft model information from FAA database
+    /// Renamed from aircraft_model to aircraft_model_details to avoid conflict with DeviceView.aircraft_model string
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub aircraft_model: Option<crate::faa::aircraft_models::AircraftModel>,
+    pub aircraft_model_details: Option<crate::faa::aircraft_models::AircraftModel>,
 }

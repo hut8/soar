@@ -477,7 +477,7 @@ pub(crate) async fn enrich_devices_with_aircraft_data(
         enriched.push(Aircraft {
             device: device_view,
             aircraft_registration,
-            aircraft_model,
+            aircraft_model_details: aircraft_model,
         });
     }
 
