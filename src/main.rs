@@ -544,31 +544,58 @@ async fn handle_run(
     // Wrap receiver in Arc<Mutex> to share among workers
     let shared_rx = std::sync::Arc::new(tokio::sync::Mutex::new(message_rx));
 
-    // Spawn dedicated elevation processing worker
-    // This worker handles AGL calculations separately to prevent them from blocking main processing
+    // Spawn multiple dedicated elevation processing workers
+    // These workers handle AGL calculations separately to prevent them from blocking main processing
+    // Using multiple workers allows parallel elevation lookups, which can be I/O intensive
+    let num_elevation_workers = 4;
     let elevation_db = flight_tracker.elevation_db().clone();
-    tokio::spawn(
-        async move {
-            let mut elevation_rx = elevation_rx;
-            while let Some(task) = elevation_rx.recv().await {
-                let start = std::time::Instant::now();
-                soar::flight_tracker::altitude::calculate_and_update_agl_async(
-                    &elevation_db,
-                    task.fix_id,
-                    &task.fix,
-                    task.fixes_repo,
-                )
-                .await;
-                let duration = start.elapsed();
-                metrics::histogram!("aprs.elevation.duration_ms")
-                    .record(duration.as_millis() as f64);
-                metrics::counter!("aprs.elevation.processed").increment(1);
-            }
-        }
-        .instrument(tracing::info_span!("elevation_worker")),
-    );
 
-    info!("Spawned dedicated elevation processing worker");
+    // Wrap elevation receiver in Arc<Mutex> to share among elevation workers
+    let shared_elevation_rx = std::sync::Arc::new(tokio::sync::Mutex::new(elevation_rx));
+
+    for elevation_worker_id in 0..num_elevation_workers {
+        let worker_elevation_rx = shared_elevation_rx.clone();
+        let worker_elevation_db = elevation_db.clone();
+
+        tokio::spawn(
+            async move {
+                loop {
+                    // Lock the receiver and try to get an elevation task
+                    let task = {
+                        let mut rx = worker_elevation_rx.lock().await;
+                        rx.recv().await
+                    };
+
+                    match task {
+                        Some(task) => {
+                            let start = std::time::Instant::now();
+                            soar::flight_tracker::altitude::calculate_and_update_agl_async(
+                                &worker_elevation_db,
+                                task.fix_id,
+                                &task.fix,
+                                task.fixes_repo,
+                            )
+                            .await;
+                            let duration = start.elapsed();
+                            metrics::histogram!("aprs.elevation.duration_ms")
+                                .record(duration.as_millis() as f64);
+                            metrics::counter!("aprs.elevation.processed", "worker_id" => elevation_worker_id.to_string()).increment(1);
+                        }
+                        None => {
+                            // Channel closed, exit worker
+                            break;
+                        }
+                    }
+                }
+            }
+            .instrument(tracing::info_span!("elevation_worker", worker_id = elevation_worker_id)),
+        );
+    }
+
+    info!(
+        "Spawned {} dedicated elevation processing workers",
+        num_elevation_workers
+    );
 
     info!(
         "Spawning {} worker tasks to process APRS messages in parallel",
