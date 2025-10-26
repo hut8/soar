@@ -547,7 +547,8 @@ async fn handle_run(
     // Spawn multiple dedicated elevation processing workers
     // These workers handle AGL calculations separately to prevent them from blocking main processing
     // Using multiple workers allows parallel elevation lookups, which can be I/O intensive
-    let num_elevation_workers = 4;
+    // The ElevationDB uses Arc<Mutex<LruCache>> internally, so all workers share the same cache
+    let num_elevation_workers = 8;
     let elevation_db = flight_tracker.elevation_db().clone();
 
     // Wrap elevation receiver in Arc<Mutex> to share among elevation workers
@@ -593,7 +594,7 @@ async fn handle_run(
     }
 
     info!(
-        "Spawned {} dedicated elevation processing workers",
+        "Spawned {} dedicated elevation processing workers (sharing elevation and dataset caches)",
         num_elevation_workers
     );
 
