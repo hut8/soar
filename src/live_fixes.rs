@@ -36,7 +36,7 @@ use crate::actions::views::Aircraft;
 #[serde(tag = "type")]
 pub enum WebSocketMessage {
     #[serde(rename = "fix")]
-    Fix(LiveFix),
+    Fix(Box<crate::fixes::FixWithFlightInfo>),
 
     #[serde(rename = "device")]
     Device(Box<Aircraft>),
@@ -191,8 +191,8 @@ impl LiveFixService {
 
         while let Some(msg) = subscriber.next().await {
             match Self::process_fix_message(msg, &device_id).await {
-                Ok(live_fix) => {
-                    let websocket_message = WebSocketMessage::Fix(live_fix);
+                Ok(fix_with_flight) => {
+                    let websocket_message = WebSocketMessage::Fix(Box::new(fix_with_flight));
                     match broadcaster.send(websocket_message) {
                         Ok(receiver_count) => {
                             consecutive_no_receivers = 0; // Reset counter on successful send
@@ -243,8 +243,8 @@ impl LiveFixService {
 
         while let Some(msg) = subscriber.next().await {
             match Self::process_area_fix_message(msg, &area_key).await {
-                Ok(live_fix) => {
-                    let websocket_message = WebSocketMessage::Fix(live_fix);
+                Ok(fix_with_flight) => {
+                    let websocket_message = WebSocketMessage::Fix(Box::new(fix_with_flight));
                     match broadcaster.send(websocket_message) {
                         Ok(receiver_count) => {
                             consecutive_no_receivers = 0; // Reset counter on successful send
@@ -284,56 +284,41 @@ impl LiveFixService {
     async fn process_fix_message(
         msg: async_nats::Message,
         expected_device_id: &str,
-    ) -> Result<LiveFix> {
-        // Parse the full Fix data from NATS
-        let fix: crate::Fix = serde_json::from_slice(&msg.payload)?;
-
-        // Convert Fix to LiveFix for WebSocket clients
-        let live_fix = LiveFix {
-            id: fix.id.to_string(),
-            device_id: expected_device_id.to_string(),
-            timestamp: fix.timestamp.to_rfc3339(),
-            latitude: fix.latitude,
-            longitude: fix.longitude,
-            altitude: fix.altitude_msl_feet.unwrap_or(0) as f64,
-            track: fix.track_degrees.unwrap_or(0.0) as f64,
-            ground_speed: fix.ground_speed_knots.unwrap_or(0.0) as f64,
-            climb_rate: fix.climb_fpm.unwrap_or(0) as f64,
-        };
+    ) -> Result<crate::fixes::FixWithFlightInfo> {
+        // Parse the full FixWithFlightInfo data from NATS
+        let fix_with_flight: crate::fixes::FixWithFlightInfo =
+            serde_json::from_slice(&msg.payload)?;
 
         info!(
             "Processing live fix for device {} at ({}, {}) alt={}ft",
-            expected_device_id, live_fix.latitude, live_fix.longitude, live_fix.altitude
+            expected_device_id,
+            fix_with_flight.latitude,
+            fix_with_flight.longitude,
+            fix_with_flight.altitude_msl_feet.unwrap_or(0)
         );
 
-        Ok(live_fix)
+        Ok(fix_with_flight)
     }
 
     // Process a single fix message from area subscription
-    async fn process_area_fix_message(msg: async_nats::Message, area_key: &str) -> Result<LiveFix> {
-        // Parse the full Fix data from NATS
-        let fix: crate::Fix = serde_json::from_slice(&msg.payload)?;
-
-        // Convert Fix to LiveFix for WebSocket clients
-        // For area subscriptions, we use the actual device_id from the fix
-        let live_fix = LiveFix {
-            id: fix.id.to_string(),
-            device_id: fix.device_id.to_string(),
-            timestamp: fix.timestamp.to_rfc3339(),
-            latitude: fix.latitude,
-            longitude: fix.longitude,
-            altitude: fix.altitude_msl_feet.unwrap_or(0) as f64,
-            track: fix.track_degrees.unwrap_or(0.0) as f64,
-            ground_speed: fix.ground_speed_knots.unwrap_or(0.0) as f64,
-            climb_rate: fix.climb_fpm.unwrap_or(0) as f64,
-        };
+    async fn process_area_fix_message(
+        msg: async_nats::Message,
+        area_key: &str,
+    ) -> Result<crate::fixes::FixWithFlightInfo> {
+        // Parse the full FixWithFlightInfo data from NATS
+        let fix_with_flight: crate::fixes::FixWithFlightInfo =
+            serde_json::from_slice(&msg.payload)?;
 
         info!(
             "Processing live fix from area {} for device {} at ({}, {}) alt={}ft",
-            area_key, live_fix.device_id, live_fix.latitude, live_fix.longitude, live_fix.altitude
+            area_key,
+            fix_with_flight.device_id,
+            fix_with_flight.latitude,
+            fix_with_flight.longitude,
+            fix_with_flight.altitude_msl_feet.unwrap_or(0)
         );
 
-        Ok(live_fix)
+        Ok(fix_with_flight)
     }
 
     // Unsubscribe from a device - removes NATS subscription when no more clients

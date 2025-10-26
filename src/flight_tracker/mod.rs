@@ -345,4 +345,12 @@ impl FlightTracker {
             }
         }
     }
+
+    /// Get a flight by its ID
+    pub async fn get_flight_by_id(
+        &self,
+        flight_id: Uuid,
+    ) -> Result<Option<crate::flights::Flight>> {
+        self.flights_repo.get_flight_by_id(flight_id).await
+    }
 }

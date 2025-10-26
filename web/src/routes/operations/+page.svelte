@@ -837,7 +837,7 @@
 
 		// Calculate scale based on zoom level
 		// Zoom levels typically range from 1 (world) to 20+ (street level)
-		// We want markers to be very small at low zoom and normal size at high zoom
+		// Keep markers small even when zoomed in to avoid clutter
 		let scale: number;
 
 		if (zoom <= 4) {
@@ -845,13 +845,13 @@
 			scale = 0.3;
 		} else if (zoom <= 8) {
 			// Country/state level - small size
-			scale = 0.4 + (zoom - 4) * 0.15; // 0.4 to 1.0
+			scale = 0.4 + (zoom - 4) * 0.1; // 0.4 to 0.8
 		} else if (zoom <= 12) {
-			// Regional level - medium size
-			scale = 1.0 + (zoom - 8) * 0.1; // 1.0 to 1.4
+			// Regional level - keep compact
+			scale = 0.8 + (zoom - 8) * 0.025; // 0.8 to 0.9
 		} else {
-			// City/street level - full size
-			scale = 1.4 + Math.min(zoom - 12, 6) * 0.05; // 1.4 to 1.7 max
+			// City/street level - maximum but still compact
+			scale = 0.9 + Math.min(zoom - 12, 6) * 0.0167; // 0.9 to 1.0 max
 		}
 
 		// Apply transform to the entire marker content

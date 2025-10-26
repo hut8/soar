@@ -192,6 +192,7 @@ export interface Fix {
 	flight_id?: string;
 	active: boolean;
 	raw_packet?: string; // Raw APRS packet data (joined from aprs_messages table)
+	flight?: Flight; // Full flight information if part of an active flight (from websocket)
 }
 
 // User authentication and profile

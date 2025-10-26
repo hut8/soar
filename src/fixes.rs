@@ -121,6 +121,18 @@ pub struct FixWithRawPacket {
     pub raw_packet: Option<String>,
 }
 
+/// Extended Fix struct that includes flight metadata for WebSocket streaming
+/// Used when streaming fixes to include current flight information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FixWithFlightInfo {
+    #[serde(flatten)]
+    pub fix: Fix,
+
+    /// Current flight information (if fix is part of an active flight)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub flight: Option<crate::flights::Flight>,
+}
+
 impl FixWithRawPacket {
     /// Create a FixWithRawPacket from a Fix and optional raw packet string
     pub fn new(fix: Fix, raw_packet: Option<String>) -> Self {
@@ -137,6 +149,27 @@ impl std::ops::Deref for FixWithRawPacket {
 }
 
 impl std::ops::DerefMut for FixWithRawPacket {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.fix
+    }
+}
+
+impl FixWithFlightInfo {
+    /// Create a FixWithFlightInfo from a Fix and optional Flight
+    pub fn new(fix: Fix, flight: Option<crate::flights::Flight>) -> Self {
+        Self { fix, flight }
+    }
+}
+
+impl std::ops::Deref for FixWithFlightInfo {
+    type Target = Fix;
+
+    fn deref(&self) -> &Self::Target {
+        &self.fix
+    }
+}
+
+impl std::ops::DerefMut for FixWithFlightInfo {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.fix
     }
