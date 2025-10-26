@@ -276,7 +276,7 @@ pub(crate) async fn process_state_transition(
                         // IMPORTANT: For spurious flights, complete_flight will remove from active_flights BEFORE deleting
                         // to prevent race condition where new fixes arrive and get assigned the spurious flight_id
                         // For normal landings, we remove from active_flights AFTER complete_flight finishes
-                        if let Err(e) = complete_flight(
+                        let flight_completed = match complete_flight(
                             flights_repo,
                             airports_repo,
                             locations_repo,
@@ -289,7 +289,20 @@ pub(crate) async fn process_state_transition(
                         )
                         .await
                         {
-                            warn!("Failed to complete flight {}: {}", flight_id, e);
+                            Ok(completed) => completed,
+                            Err(e) => {
+                                warn!("Failed to complete flight {}: {}", flight_id, e);
+                                true // Assume completed on error to proceed with cleanup
+                            }
+                        };
+
+                        // If flight was deleted as spurious, clear the flight_id from the fix
+                        if !flight_completed {
+                            info!(
+                                "Flight {} was spurious - clearing flight_id from landing fix for device {}",
+                                flight_id, fix.device_id
+                            );
+                            fix.flight_id = None;
                         }
 
                         // Remove from active flights map AFTER complete_flight finishes (for normal landings)
