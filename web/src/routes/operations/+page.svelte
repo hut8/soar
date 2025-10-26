@@ -796,17 +796,19 @@
 	function handleOrientationChange(event: DeviceOrientationEvent): void {
 		if (event.alpha !== null) {
 			isCompassActive = true;
-			// Normalize the heading to ensure it's always between 0 and 360
+			// Store the raw device heading
 			deviceHeading = event.alpha;
 			displayHeading = Math.round(deviceHeading);
 
-			// Calculate the new compass heading (inverted to keep north arrow pointing north)
-			let newHeading = -deviceHeading;
+			// Use deviceHeading directly (not inverted) to keep north arrow pointing north
+			// When phone rotates clockwise (alpha increases), we rotate compass counter-clockwise
+			// by using the heading value directly in the CSS transform
+			let newHeading = deviceHeading;
 
 			// Normalize to 0-360 range
 			newHeading = ((newHeading % 360) + 360) % 360;
 
-			// Calculate the shortest rotation path
+			// Calculate the shortest rotation path to avoid spinning around unnecessarily
 			// If the difference is greater than 180°, we should wrap around
 			let delta = newHeading - previousCompassHeading;
 

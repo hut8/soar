@@ -176,7 +176,7 @@
 			return;
 		}
 
-		// Calculate bearing from user to aircraft
+		// Calculate bearing from user to aircraft (absolute bearing from north)
 		const bearing = calculateBearing(
 			userLocation.lat,
 			userLocation.lng,
@@ -184,11 +184,11 @@
 			latestFix.longitude
 		);
 
-		// The arrow should point toward the aircraft
-		// Subtract device heading to compensate for phone rotation
-		// When phone points north (deviceHeading = 0), arrow rotation = bearing
-		// When phone rotates, arrow counter-rotates to keep pointing at aircraft
-		directionToAircraft = (bearing - deviceHeading + 360) % 360;
+		// The arrow should point toward the aircraft and stay pointing there as phone rotates
+		// Add device heading to rotate arrow opposite to phone rotation
+		// When phone points north (deviceHeading = 0), arrow shows absolute bearing
+		// When phone rotates clockwise, arrow rotates counter-clockwise to keep pointing at aircraft
+		directionToAircraft = (bearing + deviceHeading) % 360;
 	}
 
 	// Handle device orientation changes
