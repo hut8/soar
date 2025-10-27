@@ -16,6 +16,23 @@ export function formatTitleCase(value: string | null | undefined): string {
 }
 
 /**
+ * Get human-readable label for address type
+ * O -> OGN, F -> FLARM, I -> ICAO
+ */
+export function getAddressTypeLabel(addressType: string): string {
+	switch (addressType.toUpperCase()) {
+		case 'O':
+			return 'OGN';
+		case 'F':
+			return 'FLARM';
+		case 'I':
+			return 'ICAO';
+		default:
+			return 'Unknown';
+	}
+}
+
+/**
  * Format device address with appropriate prefix based on type
  * O -> OGN-XXXXXX, F -> FLARM-XXXXXX, I -> ICAO-XXXXXX
  */

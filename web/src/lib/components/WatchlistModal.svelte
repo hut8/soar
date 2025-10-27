@@ -1,11 +1,12 @@
 <script lang="ts">
 	import { Switch, Segment } from '@skeletonlabs/skeleton-svelte';
-	import { Plus, X, Plane, Antenna, Eye, Building2 } from '@lucide/svelte';
+	import { Plus, X, Plane, Radio, Eye, Building2 } from '@lucide/svelte';
 	import { browser } from '$app/environment';
 	import { serverCall } from '$lib/api/server';
 	import { watchlist } from '$lib/stores/watchlist';
 	import { DeviceRegistry } from '$lib/services/DeviceRegistry';
 	import ClubSelector from '$lib/components/ClubSelector.svelte';
+	import { getAddressTypeLabel } from '$lib/formatters';
 	import type { Device } from '$lib/types';
 	let { showModal = $bindable() } = $props();
 
@@ -24,6 +25,9 @@
 	let clubDevices = $state<Device[]>([]);
 	let clubSearchInProgress = $state(false);
 	let clubErrorMessage = $state('');
+
+	// Club names cache for watchlist entries
+	let clubNames = $state(new Map<string, string>());
 
 	// Clear error message when user interacts with form
 	function clearError() {
@@ -218,6 +222,37 @@
 			};
 		})
 	);
+
+	// Fetch club name for a device
+	async function fetchClubName(clubId: string): Promise<void> {
+		if (clubNames.has(clubId)) {
+			return; // Already fetched
+		}
+
+		try {
+			const club = await serverCall<{ name: string }>(`/clubs/${clubId}`);
+			clubNames.set(clubId, club.name);
+		} catch (error) {
+			console.warn(`Failed to fetch club name for ${clubId}:`, error);
+			clubNames.set(clubId, 'Unknown Club');
+		}
+	}
+
+	// Effect to fetch club names when entries change
+	$effect(() => {
+		// Get unique club IDs from all devices
+		const clubIds: string[] = [];
+		for (const entry of entriesWithDevices) {
+			if (entry.device.club_id && !clubIds.includes(entry.device.club_id)) {
+				clubIds.push(entry.device.club_id);
+			}
+		}
+
+		// Fetch club names for each unique club ID
+		for (const clubId of clubIds) {
+			void fetchClubName(clubId);
+		}
+	});
 </script>
 
 <!-- Watchlist Modal -->
@@ -230,7 +265,7 @@
 		tabindex="-1"
 	>
 		<div
-			class="flex h-full max-h-[calc(90vh-5rem)] w-full max-w-9/10 flex-col card bg-white text-gray-900 shadow-xl"
+			class="flex h-full max-h-[calc(90vh-5rem)] w-full max-w-9/10 flex-col card bg-surface-50 text-surface-900 shadow-xl dark:bg-surface-900 dark:text-surface-50"
 			onclick={(e) => e.stopPropagation()}
 			onkeydown={(e) => e.key === 'Escape' && (showModal = false)}
 			role="dialog"
@@ -275,7 +310,7 @@
 								</Segment.Item>
 								<Segment.Item value="device">
 									<div class="flex flex-row items-center">
-										<Antenna size={16} />
+										<Radio size={16} />
 										<span class="ml-1">Device</span>
 									</div>
 								</Segment.Item>
@@ -333,11 +368,11 @@
 									{#if clubDevices.length > 0}
 										<div class="space-y-2">
 											<div class="flex items-center justify-between">
-												<span class="text-sm font-medium text-gray-700">
+												<span class="text-sm font-medium text-surface-700 dark:text-surface-200">
 													Club Aircraft ({clubDevices.length})
 												</span>
 												<button
-													class="preset-filled-primary btn btn-sm"
+													class="btn preset-filled-primary-500 btn-sm"
 													onclick={addAllClubDevices}
 													disabled={clubSearchInProgress}
 												>
@@ -346,17 +381,21 @@
 												</button>
 											</div>
 
-											<div class="max-h-48 overflow-y-auto rounded border bg-gray-50 p-2">
+											<div
+												class="max-h-48 overflow-y-auto rounded border border-surface-300 bg-surface-100 p-2 dark:border-surface-600 dark:bg-surface-800"
+											>
 												<div class="grid gap-2">
 													{#each clubDevices as device (device.id)}
 														<div
-															class="flex items-center justify-between rounded bg-white p-2 shadow-sm"
+															class="flex items-center justify-between rounded bg-surface-50 p-2 shadow-sm dark:bg-surface-700"
 														>
 															<div class="min-w-0 flex-1">
 																<div class="truncate text-sm font-medium">
 																	{device.registration || 'Unknown Registration'}
 																</div>
-																<div class="truncate text-xs text-gray-500">
+																<div
+																	class="truncate text-xs text-surface-600 dark:text-surface-400"
+																>
 																	{device.aircraft_model || 'Unknown Model'}
 																</div>
 															</div>
@@ -368,7 +407,7 @@
 																</span>
 															{:else}
 																<button
-																	class="preset-filled-primary btn btn-sm"
+																	class="btn preset-filled-primary-500 btn-sm"
 																	onclick={() => addDeviceToWatchlist(device)}
 																>
 																	<Plus size={14} />
@@ -381,14 +420,14 @@
 											</div>
 										</div>
 									{:else if clubSearchInProgress}
-										<div class="py-4 text-center text-sm text-gray-500">
+										<div class="py-4 text-center text-sm text-surface-600 dark:text-surface-400">
 											<div
-												class="mx-auto mb-2 h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"
+												class="mx-auto mb-2 h-4 w-4 animate-spin rounded-full border-2 border-surface-300 border-t-primary-500 dark:border-surface-600"
 											></div>
 											Loading club aircraft...
 										</div>
 									{:else if selectedClub.length > 0}
-										<div class="py-4 text-center text-sm text-gray-500">
+										<div class="py-4 text-center text-sm text-surface-600 dark:text-surface-400">
 											No aircraft found for this club.
 										</div>
 									{/if}
@@ -427,7 +466,7 @@
 									</Segment.Item>
 									<Segment.Item value="device">
 										<div class="flex flex-row items-center">
-											<Antenna size={16} />
+											<Radio size={16} />
 											<span class="ml-1">Device</span>
 										</div>
 									</Segment.Item>
@@ -487,11 +526,13 @@
 											{#if clubDevices.length > 0}
 												<div class="space-y-2">
 													<div class="flex items-center justify-between">
-														<span class="text-sm font-medium text-gray-700">
+														<span
+															class="text-sm font-medium text-surface-700 dark:text-surface-200"
+														>
 															Club Aircraft ({clubDevices.length})
 														</span>
 														<button
-															class="preset-filled-primary btn btn-sm"
+															class="btn preset-filled-primary-500 btn-sm"
 															onclick={addAllClubDevices}
 															disabled={clubSearchInProgress}
 														>
@@ -500,17 +541,21 @@
 														</button>
 													</div>
 
-													<div class="max-h-48 overflow-y-auto rounded border bg-gray-50 p-2">
+													<div
+														class="max-h-48 overflow-y-auto rounded border border-surface-300 bg-surface-100 p-2 dark:border-surface-600 dark:bg-surface-800"
+													>
 														<div class="grid gap-2">
 															{#each clubDevices as device (device.id)}
 																<div
-																	class="flex items-center justify-between rounded bg-white p-2 shadow-sm"
+																	class="flex items-center justify-between rounded bg-surface-50 p-2 shadow-sm dark:bg-surface-700"
 																>
 																	<div class="min-w-0 flex-1">
 																		<div class="truncate text-sm font-medium">
 																			{device.registration || 'Unknown Registration'}
 																		</div>
-																		<div class="truncate text-xs text-gray-500">
+																		<div
+																			class="truncate text-xs text-surface-600 dark:text-surface-400"
+																		>
 																			{device.aircraft_model || 'Unknown Model'}
 																		</div>
 																	</div>
@@ -522,7 +567,7 @@
 																		</span>
 																	{:else}
 																		<button
-																			class="preset-filled-primary btn btn-sm"
+																			class="btn preset-filled-primary-500 btn-sm"
 																			onclick={() => addDeviceToWatchlist(device)}
 																		>
 																			<Plus size={14} />
@@ -535,14 +580,18 @@
 													</div>
 												</div>
 											{:else if clubSearchInProgress}
-												<div class="py-4 text-center text-sm text-gray-500">
+												<div
+													class="py-4 text-center text-sm text-surface-600 dark:text-surface-400"
+												>
 													<div
-														class="mx-auto mb-2 h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"
+														class="mx-auto mb-2 h-4 w-4 animate-spin rounded-full border-2 border-surface-300 border-t-primary-500 dark:border-surface-600"
 													></div>
 													Loading club aircraft...
 												</div>
 											{:else if selectedClub.length > 0}
-												<div class="py-4 text-center text-sm text-gray-500">
+												<div
+													class="py-4 text-center text-sm text-surface-600 dark:text-surface-400"
+												>
 													No aircraft found for this club.
 												</div>
 											{/if}
@@ -563,7 +612,7 @@
 
 						{#if newWatchlistEntry.type !== 'club'}
 							<button
-								class="preset-filled-primary btn w-full btn-sm"
+								class="btn w-full preset-filled-primary-500 btn-sm"
 								onclick={addWatchlistEntry}
 								disabled={searchInProgress}
 							>
@@ -619,12 +668,18 @@
 																>
 															{/if}
 														</div>
-														<div class="truncate text-sm text-gray-600">
+														<div class="truncate text-sm text-surface-700 dark:text-surface-300">
 															{entry.device.aircraft_model || 'Unknown Aircraft Model'}
 														</div>
-														<div class="text-xs text-gray-500">
+														{#if entry.device.club_id}
+															<div class="truncate text-xs text-surface-600 dark:text-surface-400">
+																Club: {clubNames.get(entry.device.club_id) || 'Loading...'}
+															</div>
+														{/if}
+														<div class="text-xs text-surface-600 dark:text-surface-400">
 															<div class="truncate">
-																{entry.device.address_type}: {entry.device.address}
+																{getAddressTypeLabel(entry.device.address_type)}: {entry.device
+																	.address}
 															</div>
 															<div class="mt-1 flex flex-wrap gap-1">
 																{#if entry.device.tracked}
@@ -658,7 +713,9 @@
 						</div>
 					{:else}
 						<div class="flex flex-1 items-center justify-center">
-							<p class="text-center text-sm text-gray-500">No aircraft in watchlist</p>
+							<p class="text-center text-sm text-surface-600 dark:text-surface-400">
+								No aircraft in watchlist
+							</p>
 						</div>
 					{/if}
 				</section>
