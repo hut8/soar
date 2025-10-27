@@ -88,9 +88,7 @@ impl ElevationDB {
             Ok(path) => PathBuf::from(path),
             Err(_) => {
                 let base = BaseDirs::new().context("no home directory")?;
-                base.cache_dir()
-                    .join("elevation")
-                    .join("copernicus-dem-30m")
+                base.cache_dir().join("elevation")
             }
         };
 
@@ -147,9 +145,7 @@ impl ElevationDB {
             Ok(path) => PathBuf::from(path),
             Err(_) => {
                 let base = BaseDirs::new().context("no home directory")?;
-                base.cache_dir()
-                    .join("elevation")
-                    .join("copernicus-dem-30m")
+                base.cache_dir().join("elevation")
             }
         };
 

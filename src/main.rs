@@ -393,10 +393,7 @@ async fn handle_run(
         Err(_) => {
             use directories::BaseDirs;
             let base = BaseDirs::new().context("no home directory")?;
-            let default_path = base
-                .cache_dir()
-                .join("elevation")
-                .join("copernicus-dem-30m");
+            let default_path = base.cache_dir().join("elevation");
             info!("Elevation data path (default): {}", default_path.display());
             default_path
         }
