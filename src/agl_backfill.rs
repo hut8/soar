@@ -20,32 +20,42 @@ pub async fn agl_backfill_task(fixes_repo: FixesRepository, elevation_db: Elevat
         // 4. is_active = true (only backfill active aircraft)
         let one_hour_ago = Utc::now() - Duration::hours(1);
 
+        // First, get the actual count of all pending fixes (not just the batch)
+        let total_pending = match fixes_repo.count_fixes_needing_backfill(one_hour_ago).await {
+            Ok(count) => count,
+            Err(e) => {
+                warn!("Failed to count pending fixes: {}", e);
+                counter!("agl_backfill_fetch_errors_total").increment(1);
+                sleep(tokio::time::Duration::from_secs(60)).await;
+                continue;
+            }
+        };
+
+        // Update metric with actual count
+        gauge!("agl_backfill_pending_fixes").set(total_pending as f64);
+
+        if total_pending == 0 {
+            // Caught up! Sleep for an hour before checking again
+            info!("AGL backfill caught up - no more fixes need backfilling. Sleeping for 1 hour.");
+            sleep(tokio::time::Duration::from_secs(3600)).await;
+            continue;
+        }
+
+        // Fetch a batch of fixes to process
         match fixes_repo
             .get_fixes_needing_backfill(one_hour_ago, 1000)
             .await
         {
             Ok(fixes) => {
-                if fixes.is_empty() {
-                    // Caught up! Sleep for an hour before checking again
-                    info!(
-                        "AGL backfill caught up - no more fixes need backfilling. Sleeping for 1 hour."
-                    );
-                    gauge!("agl_backfill_pending_fixes").set(0.0);
-                    sleep(tokio::time::Duration::from_secs(3600)).await;
-                    continue;
-                }
-
                 info!(
-                    "Found {} fixes needing AGL backfill (oldest: {})",
+                    "Found {} total fixes needing AGL backfill, processing batch of {} (oldest: {})",
+                    total_pending,
                     fixes.len(),
                     fixes
                         .first()
                         .map(|f| f.timestamp.to_rfc3339())
                         .unwrap_or_default()
                 );
-
-                // Record number of pending fixes
-                gauge!("agl_backfill_pending_fixes").set(fixes.len() as f64);
 
                 // Process each fix
                 let mut processed_count = 0;

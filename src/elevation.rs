@@ -88,9 +88,7 @@ impl ElevationDB {
             Ok(path) => PathBuf::from(path),
             Err(_) => {
                 let base = BaseDirs::new().context("no home directory")?;
-                base.cache_dir()
-                    .join("elevation")
-                    .join("copernicus-dem-30m")
+                base.cache_dir().join("elevation")
             }
         };
 
@@ -130,6 +128,43 @@ impl ElevationDB {
                 NonZeroUsize::new(500_000).unwrap(),
             ))),
             dataset_cache: Arc::new(Mutex::new(LruCache::new(NonZeroUsize::new(100).unwrap()))),
+        })
+    }
+
+    /// Create a new ElevationDB with custom cache sizes for specialized workloads
+    /// Used by AGL backfill which needs a larger dataset cache to avoid blocking real-time processing
+    pub fn with_custom_cache_sizes(
+        elevation_cache_size: usize,
+        dataset_cache_size: usize,
+    ) -> Result<Self> {
+        // Configure GDAL with larger cache settings before opening any datasets
+        gdal::config::set_config_option("GDAL_MAX_DATASET_POOL_SIZE", "512")?;
+        gdal::config::set_config_option("GDAL_CACHEMAX", "512")?; // MB
+
+        let storage_path = match env::var("ELEVATION_DATA_PATH") {
+            Ok(path) => PathBuf::from(path),
+            Err(_) => {
+                let base = BaseDirs::new().context("no home directory")?;
+                base.cache_dir().join("elevation")
+            }
+        };
+
+        std::fs::create_dir_all(&storage_path).with_context(|| {
+            format!(
+                "Failed to create elevation storage directory: {:?}",
+                storage_path
+            )
+        })?;
+
+        Ok(Self {
+            tile_downloader: TileDownloader::new(storage_path.clone()),
+            storage_path,
+            elevation_cache: Arc::new(Mutex::new(LruCache::new(
+                NonZeroUsize::new(elevation_cache_size).unwrap(),
+            ))),
+            dataset_cache: Arc::new(Mutex::new(LruCache::new(
+                NonZeroUsize::new(dataset_cache_size).unwrap(),
+            ))),
         })
     }
 

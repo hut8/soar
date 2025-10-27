@@ -11,6 +11,7 @@ use tracing::Instrument;
 use tracing::{info, warn};
 
 use soar::aprs_client::{AprsClient, AprsClientConfigBuilder};
+use soar::elevation::ElevationDB;
 use soar::fix_processor::FixProcessor;
 use soar::fixes_repo::FixesRepository;
 use soar::flight_tracker::FlightTracker;
@@ -392,10 +393,7 @@ async fn handle_run(
         Err(_) => {
             use directories::BaseDirs;
             let base = BaseDirs::new().context("no home directory")?;
-            let default_path = base
-                .cache_dir()
-                .join("elevation")
-                .join("copernicus-dem-30m");
+            let default_path = base.cache_dir().join("elevation");
             info!("Elevation data path (default): {}", default_path.display());
             default_path
         }
@@ -601,15 +599,21 @@ async fn handle_run(
 
     // Spawn AGL backfill background task
     // This task runs continuously, backfilling AGL altitudes for old fixes that were missed
+    // It gets its own dedicated ElevationDB with a larger GDAL dataset cache (1000 vs 100)
+    // to avoid contention with real-time elevation processing
     let backfill_fixes_repo = FixesRepository::new(diesel_pool.clone());
-    let backfill_elevation_db = elevation_db.clone();
+    let backfill_elevation_db = ElevationDB::with_custom_cache_sizes(500_000, 1000)
+        .context("Failed to create dedicated ElevationDB for AGL backfill")?;
+    info!(
+        "Created dedicated ElevationDB for AGL backfill (dataset cache: 1000, elevation cache: 500,000)"
+    );
     tokio::spawn(
         async move {
             soar::agl_backfill::agl_backfill_task(backfill_fixes_repo, backfill_elevation_db).await;
         }
         .instrument(tracing::info_span!("agl_backfill")),
     );
-    info!("Spawned AGL backfill background task");
+    info!("Spawned AGL backfill background task with dedicated elevation database");
 
     info!(
         "Spawning {} worker tasks to process APRS messages in parallel",
