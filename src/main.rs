@@ -353,37 +353,6 @@ async fn handle_run(
     // Set up database connection
     let diesel_pool = setup_diesel_database().await?;
 
-    // Determine flight tracker state file path
-    let state_file_path = match env::var("FLIGHT_STATE_PATH") {
-        Ok(path) => std::path::PathBuf::from(path),
-        Err(_) => {
-            // Use XDG state directory or fallback to ~/.local/state
-            let state_dir = if let Ok(xdg_state_home) = env::var("XDG_STATE_HOME") {
-                std::path::PathBuf::from(xdg_state_home)
-            } else if let Ok(home) = env::var("HOME") {
-                std::path::PathBuf::from(home).join(".local/state")
-            } else {
-                std::path::PathBuf::from("/tmp")
-            };
-
-            let env_suffix = if is_production { "production" } else { "dev" };
-
-            state_dir
-                .join("soar")
-                .join(format!("flight-tracker-state-{}.json", env_suffix))
-        }
-    };
-
-    // Ensure parent directory exists
-    if let Some(parent) = state_file_path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-
-    info!(
-        "Flight tracker state will be saved to: {}",
-        state_file_path.display()
-    );
-
     // Determine and log elevation data storage path
     let _elevation_data_path = match env::var("ELEVATION_DATA_PATH") {
         Ok(path) => {
@@ -418,16 +387,27 @@ async fn handle_run(
         .unparsed_log_path(unparsed_log)
         .build();
 
-    // Create FlightTracker with state persistence
-    let flight_tracker = FlightTracker::with_state_persistence(&diesel_pool, state_file_path);
+    // Create FlightTracker
+    let flight_tracker = FlightTracker::new(&diesel_pool);
 
-    // Load saved state (if exists and < 24 hours old)
-    if let Err(e) = flight_tracker.load_state().await {
-        warn!("Failed to load flight tracker state: {}", e);
+    // Initialize flight tracker from database:
+    // 1. Timeout old incomplete flights (older than 8 hours)
+    // 2. Load recent active flights into memory
+    let timeout_duration = chrono::Duration::hours(8);
+    match flight_tracker
+        .initialize_from_database(timeout_duration)
+        .await
+    {
+        Ok((timed_out, loaded)) => {
+            info!(
+                "Flight tracker initialized: {} flights timed out, {} flights loaded",
+                timed_out, loaded
+            );
+        }
+        Err(e) => {
+            warn!("Failed to initialize flight tracker from database: {}", e);
+        }
     }
-
-    // Start periodic state saving (every 30 seconds)
-    flight_tracker.start_periodic_state_saving(30);
 
     // Start flight timeout checker (every 60 seconds)
     flight_tracker.start_timeout_checker(60);
@@ -449,7 +429,7 @@ async fn handle_run(
     .await
     {
         Ok(processor_with_nats) => {
-            info!("Created FixProcessor with NATS publisher and state persistence");
+            info!("Created FixProcessor with NATS publisher");
             processor_with_nats.with_elevation_channel(elevation_tx.clone())
         }
         Err(e) => {
