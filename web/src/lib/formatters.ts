@@ -173,3 +173,14 @@ export function getAircraftTypeColor(aircraftType: string | undefined | null): s
 
 	return colorMap[aircraftType] || 'preset-filled-surface-500';
 }
+
+/**
+ * Format transponder code (Mode S code) from decimal to 6-digit uppercase hex
+ * Example: 10853596 -> "A59CDC"
+ */
+export function formatTransponderCode(transponderCode: number | null | undefined): string {
+	if (transponderCode === null || transponderCode === undefined) return 'N/A';
+
+	// Convert to hex and pad to 6 digits
+	return transponderCode.toString(16).toUpperCase().padStart(6, '0');
+}

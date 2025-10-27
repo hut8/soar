@@ -6,7 +6,8 @@
 		formatDeviceAddress,
 		getStatusCodeDescription,
 		getAircraftTypeOgnDescription,
-		getAircraftTypeColor
+		getAircraftTypeColor,
+		formatTransponderCode
 	} from '$lib/formatters';
 	import {
 		calculateDistance,
@@ -492,7 +493,9 @@
 										<dt class="font-medium text-surface-600 dark:text-surface-400">
 											Transponder Code
 										</dt>
-										<dd class="font-mono">{aircraftRegistration.mode_s_code_hex || 'N/A'}</dd>
+										<dd class="font-mono">
+											{formatTransponderCode(aircraftRegistration.transponder_code)}
+										</dd>
 									</div>
 									<div>
 										<dt class="font-medium text-surface-600 dark:text-surface-400">Year</dt>

@@ -24,7 +24,8 @@
 		formatDeviceAddress,
 		getStatusCodeDescription,
 		getAircraftTypeOgnDescription,
-		getAircraftTypeColor
+		getAircraftTypeColor,
+		formatTransponderCode
 	} from '$lib/formatters';
 	import { toaster } from '$lib/toaster';
 	import dayjs from 'dayjs';
@@ -463,7 +464,9 @@
 								<Info class="mt-1 h-4 w-4 text-surface-500" />
 								<div>
 									<p class="text-surface-600-300-token mb-1 text-sm">Transponder Code</p>
-									<p class="font-mono">{aircraftRegistration.mode_s_code_hex || 'N/A'}</p>
+									<p class="font-mono">
+										{formatTransponderCode(aircraftRegistration.transponder_code)}
+									</p>
 								</div>
 							</div>
 
