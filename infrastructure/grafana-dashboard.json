@@ -2100,7 +2100,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, rate(elevation_dataset_open_duration_seconds_bucket[5m]))",
+          "expr": "elevation_dataset_open_duration_seconds{quantile=\"0.95\"}",
           "legendFormat": "P95 Dataset Open Time",
           "range": true,
           "refId": "A"
@@ -2111,7 +2111,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, rate(elevation_gdal_read_duration_seconds_bucket[5m]))",
+          "expr": "elevation_gdal_read_duration_seconds{quantile=\"0.95\"}",
           "legendFormat": "P95 GDAL Read Time",
           "range": true,
           "refId": "B"
@@ -2122,7 +2122,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, rate(elevation_lookup_duration_seconds_bucket[5m]))",
+          "expr": "elevation_lookup_duration_seconds{quantile=\"0.95\"}",
           "legendFormat": "P95 Total Lookup Time",
           "range": true,
           "refId": "C"
