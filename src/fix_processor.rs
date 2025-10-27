@@ -370,9 +370,37 @@ impl FixProcessor {
             }
         }
 
-        // Step 3: Publish to NATS with updated fix (including flight_id)
+        // Step 3: Publish to NATS with updated fix (including flight_id and flight info)
         if let Some(nats_publisher) = self.nats_publisher.as_ref() {
-            nats_publisher.process_fix(updated_fix.clone(), raw_message);
+            // Look up flight information if this fix is part of a flight
+            let flight = if let Some(flight_id) = updated_fix.flight_id {
+                match self
+                    .flight_detection_processor
+                    .get_flight_by_id(flight_id)
+                    .await
+                {
+                    Ok(Some(flight)) => Some(flight),
+                    Ok(None) => {
+                        warn!(
+                            "Fix {} has flight_id {} but flight not found",
+                            updated_fix.id, flight_id
+                        );
+                        None
+                    }
+                    Err(e) => {
+                        error!(
+                            "Failed to fetch flight {} for fix {}: {}",
+                            flight_id, updated_fix.id, e
+                        );
+                        None
+                    }
+                }
+            } else {
+                None
+            };
+
+            let fix_with_flight = crate::fixes::FixWithFlightInfo::new(updated_fix.clone(), flight);
+            nats_publisher.process_fix(fix_with_flight, raw_message);
         }
 
         // Step 4: Update tow plane status based on aircraft type from fix

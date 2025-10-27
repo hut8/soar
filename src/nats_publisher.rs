@@ -6,7 +6,7 @@ use tokio::sync::mpsc;
 use tracing::Instrument;
 use tracing::{error, info, warn};
 
-use crate::Fix;
+use crate::fixes::FixWithFlightInfo;
 
 /// Get the topic prefix based on the environment
 fn get_topic_prefix() -> &'static str {
@@ -16,13 +16,17 @@ fn get_topic_prefix() -> &'static str {
     }
 }
 
-/// Publish Fix to NATS (both device and area topics)
-#[tracing::instrument(skip(nats_client, fix), fields(device_id = %device_id))]
-async fn publish_to_nats(nats_client: &Client, device_id: &str, fix: &Fix) -> Result<()> {
+/// Publish FixWithFlightInfo to NATS (both device and area topics)
+#[tracing::instrument(skip(nats_client, fix_with_flight), fields(device_id = %device_id))]
+async fn publish_to_nats(
+    nats_client: &Client,
+    device_id: &str,
+    fix_with_flight: &FixWithFlightInfo,
+) -> Result<()> {
     let topic_prefix = get_topic_prefix();
 
-    // Serialize the Fix to JSON once
-    let payload = serde_json::to_vec(fix)?;
+    // Serialize the FixWithFlightInfo to JSON once
+    let payload = serde_json::to_vec(fix_with_flight)?;
 
     // Publish by device
     let device_subject = format!("{}.fix.{}", topic_prefix, device_id);
@@ -31,7 +35,11 @@ async fn publish_to_nats(nats_client: &Client, device_id: &str, fix: &Fix) -> Re
         .await?;
 
     // Publish by area
-    let area_subject = get_area_subject(topic_prefix, fix.latitude, fix.longitude);
+    let area_subject = get_area_subject(
+        topic_prefix,
+        fix_with_flight.latitude,
+        fix_with_flight.longitude,
+    );
     nats_client
         .publish(area_subject.clone(), payload.into())
         .await?;
@@ -53,7 +61,7 @@ pub struct NatsFixPublisher {
     // Even though we don't use it directly after initialization,
     // dropping it would close the connection
     _nats_client: Arc<Client>,
-    fix_sender: mpsc::Sender<Fix>,
+    fix_sender: mpsc::Sender<FixWithFlightInfo>,
 }
 
 impl NatsFixPublisher {
@@ -73,7 +81,7 @@ impl NatsFixPublisher {
         let nats_client = Arc::new(nats_client);
 
         // Create bounded channel for fixes (capacity: 1000 fixes ~= 2MB buffer)
-        let (fix_sender, mut fix_receiver) = mpsc::channel::<Fix>(1000);
+        let (fix_sender, mut fix_receiver) = mpsc::channel::<FixWithFlightInfo>(1000);
 
         info!(
             "NATS publisher initialized with bounded channel (capacity: 1000 fixes, ~2MB buffer)"
@@ -87,10 +95,10 @@ impl NatsFixPublisher {
                 let mut fixes_published = 0u64;
                 let mut last_stats_log = std::time::Instant::now();
 
-            while let Some(fix) = fix_receiver.recv().await {
-                let device_id = fix.device_id.to_string();
+            while let Some(fix_with_flight) = fix_receiver.recv().await {
+                let device_id = fix_with_flight.device_id.to_string();
 
-                match publish_to_nats(&client_clone, &device_id, &fix).await {
+                match publish_to_nats(&client_clone, &device_id, &fix_with_flight).await {
                     Ok(()) => {
                         fixes_published += 1;
                         metrics::counter!("nats_publisher_fixes_published").increment(1);
@@ -137,10 +145,10 @@ impl NatsFixPublisher {
 impl NatsFixPublisher {
     /// Process a fix and publish it to NATS
     /// Uses try_send to avoid blocking - provides backpressure if NATS publishing is slow
-    pub fn process_fix(&self, fix: Fix, _raw_message: &str) {
+    pub fn process_fix(&self, fix_with_flight: FixWithFlightInfo, _raw_message: &str) {
         // Use try_send to avoid blocking the caller
         // This provides backpressure if the NATS publisher can't keep up
-        match self.fix_sender.try_send(fix) {
+        match self.fix_sender.try_send(fix_with_flight) {
             Ok(_) => {
                 // Fix successfully queued for publishing
             }

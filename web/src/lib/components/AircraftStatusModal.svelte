@@ -33,6 +33,7 @@
 	let deviceHeading: number = $state(0);
 	let isCompassActive: boolean = $state(false);
 	let directionToAircraft: number = $state(0);
+	let previousDirectionToAircraft: number = $state(0);
 
 	// Update data when device changes
 	$effect(() => {
@@ -188,7 +189,31 @@
 		// Add device heading to rotate arrow opposite to phone rotation
 		// When phone points north (deviceHeading = 0), arrow shows absolute bearing
 		// When phone rotates clockwise, arrow rotates counter-clockwise to keep pointing at aircraft
-		directionToAircraft = (bearing + deviceHeading) % 360;
+		let newDirection = (bearing + deviceHeading) % 360;
+
+		// Normalize to 0-360 range
+		newDirection = ((newDirection % 360) + 360) % 360;
+
+		// Calculate the shortest rotation path to avoid spinning around unnecessarily
+		// If the difference is greater than 180°, we should wrap around
+		let delta = newDirection - previousDirectionToAircraft;
+
+		// Adjust for boundary crossing to take the shortest path
+		if (delta > 180) {
+			// Crossed from high to low (e.g., 350° to 10°)
+			// Add a full rotation to previousDirectionToAircraft conceptually
+			directionToAircraft = newDirection - 360;
+		} else if (delta < -180) {
+			// Crossed from low to high (e.g., 10° to 350°)
+			// Subtract a full rotation from newDirection conceptually
+			directionToAircraft = newDirection + 360;
+		} else {
+			// No boundary crossing, use the new direction directly
+			directionToAircraft = newDirection;
+		}
+
+		// Save the normalized direction for the next comparison
+		previousDirectionToAircraft = newDirection;
 	}
 
 	// Handle device orientation changes
