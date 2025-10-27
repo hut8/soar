@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { X, Plane, MapPin, Clock, RotateCcw, ExternalLink } from '@lucide/svelte';
+	import { X, Plane, MapPin, Clock, RotateCcw, ExternalLink, Navigation } from '@lucide/svelte';
 	import type { Device, Aircraft, Fix, AircraftRegistration, AircraftModel } from '$lib/types';
 	import {
 		formatTitleCase,
@@ -8,6 +8,12 @@
 		getAircraftTypeOgnDescription,
 		getAircraftTypeColor
 	} from '$lib/formatters';
+	import {
+		calculateDistance,
+		calculateBearing,
+		formatDistance,
+		formatBearing
+	} from '$lib/geography';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
 	import { onMount } from 'svelte';
@@ -34,6 +40,7 @@
 	let isCompassActive: boolean = $state(false);
 	let directionToAircraft: number = $state(0);
 	let previousDirectionToAircraft: number = $state(0);
+	let locationPermissionDenied: boolean = $state(false);
 
 	// Update data when device changes
 	$effect(() => {
@@ -145,26 +152,6 @@
 		return typeMap[typeAircraft] || `Type ${typeAircraft}`;
 	}
 
-	// Calculate bearing from user to aircraft
-	function calculateBearing(lat1: number, lng1: number, lat2: number, lng2: number): number {
-		const toRadians = (deg: number) => (deg * Math.PI) / 180;
-		const toDegrees = (rad: number) => (rad * 180) / Math.PI;
-
-		const dLng = toRadians(lng2 - lng1);
-		const lat1Rad = toRadians(lat1);
-		const lat2Rad = toRadians(lat2);
-
-		const y = Math.sin(dLng) * Math.cos(lat2Rad);
-		const x =
-			Math.cos(lat1Rad) * Math.sin(lat2Rad) -
-			Math.sin(lat1Rad) * Math.cos(lat2Rad) * Math.cos(dLng);
-
-		let bearing = toDegrees(Math.atan2(y, x));
-		bearing = (bearing + 360) % 360; // Normalize to 0-360
-
-		return bearing;
-	}
-
 	// Update direction to aircraft
 	function updateDirectionToAircraft() {
 		if (!userLocation || !selectedDevice) {
@@ -228,6 +215,7 @@
 	// Get user location
 	async function getUserLocation() {
 		if (!navigator.geolocation) {
+			locationPermissionDenied = true;
 			return;
 		}
 
@@ -244,11 +232,18 @@
 				lat: position.coords.latitude,
 				lng: position.coords.longitude
 			};
+			locationPermissionDenied = false;
 
 			updateDirectionToAircraft();
 		} catch (error) {
 			console.warn('Failed to get user location:', error);
+			locationPermissionDenied = true;
 		}
+	}
+
+	// Request location permission
+	function requestLocationPermission() {
+		void getUserLocation();
 	}
 
 	// Initialize compass on mount
@@ -407,36 +402,30 @@
 									</div>
 								</div>
 
-								<div class="grid grid-cols-2 gap-4">
+								<div class="grid grid-cols-3 gap-4">
 									<div>
-										<dt class="text-sm font-medium text-gray-600">Tracked</dt>
 										<dd class="text-sm">
 											<span
 												class="badge preset-filled-{selectedDevice.tracked
 													? 'success-500'
 													: 'warning-500'}"
 											>
-												{selectedDevice.tracked ? 'Yes' : 'No'}
+												{selectedDevice.tracked ? 'Tracked' : 'Not tracked'}
 											</span>
 										</dd>
 									</div>
 									<div>
-										<dt class="text-sm font-medium text-gray-600">Identified</dt>
 										<dd class="text-sm">
 											<span
 												class="badge preset-filled-{selectedDevice.identified
 													? 'success-500'
 													: 'warning-500'}"
 											>
-												{selectedDevice.identified ? 'Yes' : 'No'}
+												{selectedDevice.identified ? 'Identified' : 'Not identified'}
 											</span>
 										</dd>
 									</div>
-								</div>
-
-								<div class="grid grid-cols-1 gap-4">
 									<div>
-										<dt class="text-sm font-medium text-gray-600">OGN Database</dt>
 										<dd class="text-sm">
 											<span
 												class="badge {selectedDevice.from_ddb
@@ -570,11 +559,11 @@
 						{/if}
 					</div>
 
-					<!-- Recent Activity -->
+					<!-- Current Fix -->
 					<div class="space-y-4">
 						<h3 class="flex items-center gap-2 text-lg font-semibold">
-							<Clock size={20} />
-							Recent Activity
+							<Navigation size={20} />
+							Current Fix
 							<span class="text-sm font-normal text-gray-600">
 								({recentFixes.length} fixes in last 24h)
 							</span>
@@ -592,8 +581,18 @@
 								<h4 class="mb-3 font-medium text-gray-900">Latest Position</h4>
 								<dl class="grid grid-cols-2 gap-4 text-sm">
 									<div>
-										<dt class="font-medium text-gray-600">Altitude</dt>
+										<dt class="font-medium text-gray-600">Altitude MSL</dt>
 										<dd>{formatAltitude(latestFix.altitude_msl_feet)}</dd>
+									</div>
+									<div>
+										<dt class="font-medium text-gray-600">Altitude AGL</dt>
+										<dd>
+											{#if latestFix.altitude_agl_feet !== undefined && latestFix.altitude_agl_feet !== null}
+												{formatAltitude(latestFix.altitude_agl_feet)}
+											{:else}
+												<span class="font-semibold text-red-600">Unknown</span>
+											{/if}
+										</dd>
 									</div>
 									<div>
 										<dt class="font-medium text-gray-600">Ground Speed</dt>
@@ -607,6 +606,47 @@
 										<dt class="font-medium text-gray-600">Climb Rate</dt>
 										<dd>{formatClimbRate(latestFix.climb_fpm)}</dd>
 									</div>
+
+									<!-- Bearing and Distance to Aircraft -->
+									{#if userLocation}
+										{@const distanceNm = calculateDistance(
+											userLocation.lat,
+											userLocation.lng,
+											latestFix.latitude,
+											latestFix.longitude,
+											'nm'
+										)}
+										{@const bearing = calculateBearing(
+											userLocation.lat,
+											userLocation.lng,
+											latestFix.latitude,
+											latestFix.longitude
+										)}
+										{@const distances = formatDistance(distanceNm)}
+										<div>
+											<dt class="font-medium text-gray-600">Distance</dt>
+											<dd>{distances.nm} nm / {distances.mi} mi</dd>
+										</div>
+										<div>
+											<dt class="font-medium text-gray-600">Bearing</dt>
+											<dd>{formatBearing(bearing)}</dd>
+										</div>
+									{:else}
+										<div class="col-span-2">
+											<dt class="font-medium text-gray-600">Distance & Bearing</dt>
+											<dd>
+												<button
+													onclick={requestLocationPermission}
+													class="btn preset-filled-primary-500 btn-sm"
+													disabled={!locationPermissionDenied && userLocation === null}
+												>
+													<Navigation size={14} />
+													Permit Location Access
+												</button>
+											</dd>
+										</div>
+									{/if}
+
 									<div class="col-span-2">
 										<dt class="font-medium text-gray-600">Coordinates</dt>
 										<dd class="font-mono">
@@ -642,8 +682,8 @@
 								<thead class="border-b border-gray-200 bg-gray-50">
 									<tr>
 										<th class="px-3 py-2 text-left font-medium text-gray-600">Time</th>
-										<th class="px-3 py-2 text-left font-medium text-gray-600">Altitude MSL</th>
-										<th class="px-3 py-2 text-left font-medium text-gray-600">Altitude AGL</th>
+										<th class="px-3 py-2 text-left font-medium text-gray-600">Altitude (ft)</th>
+										<th class="px-3 py-2 text-left font-medium text-gray-600">Climb Rate</th>
 										<th class="px-3 py-2 text-left font-medium text-gray-600">Speed</th>
 										<th class="px-3 py-2 text-left font-medium text-gray-600">Track</th>
 									</tr>
@@ -655,10 +695,25 @@
 												{formatTimestamp(fix.timestamp).relative}
 											</td>
 											<td class="px-3 py-2">
-												{formatAltitude(fix.altitude_msl_feet)}
+												{#if fix.altitude_msl_feet !== undefined && fix.altitude_msl_feet !== null}
+													{fix.altitude_msl_feet.toLocaleString()} MSL
+													{#if fix.altitude_agl_feet !== undefined && fix.altitude_agl_feet !== null}
+														/ {fix.altitude_agl_feet.toLocaleString()} AGL
+													{/if}
+												{:else}
+													Unknown
+												{/if}
 											</td>
 											<td class="px-3 py-2">
-												{formatAltitude(fix.altitude_agl_feet)}
+												<span
+													class="{fix.climb_fpm !== undefined &&
+													fix.climb_fpm !== null &&
+													fix.climb_fpm < 0
+														? 'text-red-600'
+														: 'text-green-600'} font-semibold"
+												>
+													{formatClimbRate(fix.climb_fpm)}
+												</span>
 											</td>
 											<td class="px-3 py-2">
 												{formatSpeed(fix.ground_speed_knots)}
