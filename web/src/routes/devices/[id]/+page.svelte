@@ -676,7 +676,21 @@
 											{#if flight.takeoff_time}
 												<div>{dayjs(flight.takeoff_time).format('MM-DD HH:mm')}</div>
 												<div class="text-xs text-surface-500">
-													{flight.departure_airport || 'Unknown'}
+													{#if flight.departure_airport && flight.departure_airport_id}
+														<a
+															href="/airports/{flight.departure_airport_id}"
+															target="_blank"
+															rel="noopener noreferrer"
+															class="text-primary-500 underline hover:text-primary-700"
+														>
+															{flight.departure_airport}
+														</a>
+														{#if flight.takeoff_runway_ident}
+															({flight.takeoff_runway_ident})
+														{/if}
+													{:else}
+														{flight.departure_airport || 'Unknown'}
+													{/if}
 												</div>
 											{:else}
 												Unknown
@@ -686,7 +700,21 @@
 											{#if flight.landing_time}
 												<div>{dayjs(flight.landing_time).format('MM-DD HH:mm')}</div>
 												<div class="text-xs text-surface-500">
-													{flight.arrival_airport || 'Unknown'}
+													{#if flight.arrival_airport && flight.arrival_airport_id}
+														<a
+															href="/airports/{flight.arrival_airport_id}"
+															target="_blank"
+															rel="noopener noreferrer"
+															class="text-primary-500 underline hover:text-primary-700"
+														>
+															{flight.arrival_airport}
+														</a>
+														{#if flight.landing_runway_ident}
+															({flight.landing_runway_ident})
+														{/if}
+													{:else}
+														{flight.arrival_airport || 'Unknown'}
+													{/if}
 												</div>
 											{:else}
 												-
@@ -724,7 +752,7 @@
 												href="/flights/{flight.id}"
 												target="_blank"
 												rel="noopener noreferrer"
-												class="text-primary-500 underline hover:text-primary-700"
+												class="btn preset-filled-primary-500 btn-sm"
 											>
 												View Flight
 											</a>

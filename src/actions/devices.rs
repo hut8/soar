@@ -9,7 +9,8 @@ use tracing::{info, instrument};
 use uuid::Uuid;
 
 use crate::actions::json_error;
-use crate::actions::views::{Aircraft, DeviceView, FlightView};
+use crate::actions::views::{Aircraft, AirportInfo, DeviceView, FlightView};
+use crate::airports_repo::AirportsRepository;
 use crate::auth::AdminUser;
 use crate::device_repo::DeviceRepository;
 use crate::fixes::Fix;
@@ -527,7 +528,8 @@ pub async fn get_device_flights(
     Query(query): Query<FlightsQuery>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    let flights_repo = FlightsRepository::new(state.pool);
+    let flights_repo = FlightsRepository::new(state.pool.clone());
+    let airports_repo = AirportsRepository::new(state.pool.clone());
 
     let page = query.page.unwrap_or(1).max(1);
     let per_page = query.per_page.unwrap_or(100).clamp(1, 100);
@@ -540,7 +542,37 @@ pub async fn get_device_flights(
             let mut flight_views = Vec::new();
 
             for flight in flights {
-                let flight_view = FlightView::from_flight(flight, None, None, None);
+                // Look up airport identifiers and country codes if airport IDs are present
+                let departure_airport = if let Some(dep_id) = flight.departure_airport_id {
+                    airports_repo
+                        .get_airport_by_id(dep_id)
+                        .await
+                        .ok()
+                        .flatten()
+                        .map(|a| AirportInfo {
+                            ident: Some(a.ident),
+                            country: a.iso_country,
+                        })
+                } else {
+                    None
+                };
+
+                let arrival_airport = if let Some(arr_id) = flight.arrival_airport_id {
+                    airports_repo
+                        .get_airport_by_id(arr_id)
+                        .await
+                        .ok()
+                        .flatten()
+                        .map(|a| AirportInfo {
+                            ident: Some(a.ident),
+                            country: a.iso_country,
+                        })
+                } else {
+                    None
+                };
+
+                let flight_view =
+                    FlightView::from_flight(flight, departure_airport, arrival_airport, None);
                 flight_views.push(flight_view);
             }
 
