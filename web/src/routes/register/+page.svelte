@@ -76,7 +76,6 @@
 <div class="mx-auto max-w-md space-y-6 py-8">
 	<div class="text-center">
 		<h1 class="text-3xl font-bold">Create Account</h1>
-		<p class="text-surface-600-300-token mt-2">Join the soaring community</p>
 	</div>
 
 	<div class="card p-6">
@@ -160,7 +159,7 @@
 				/>
 			</label>
 
-			<button type="submit" class="preset-filled-primary btn w-full" disabled={loading}>
+			<button type="submit" class="btn w-full preset-filled-primary-500" disabled={loading}>
 				{loading ? 'Creating Account...' : 'Create Account'}
 			</button>
 		</form>
