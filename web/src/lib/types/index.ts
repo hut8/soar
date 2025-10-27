@@ -121,6 +121,7 @@ export interface AircraftRegistration {
 	kit_mfr: string;
 	kit_model: string;
 	mode_s_code_hex: string;
+	transponder_code: number | null; // Mode S code as decimal number
 	created_at: string;
 	updated_at: string;
 }

@@ -1,16 +1,11 @@
 use num_traits::AsPrimitive;
-use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::RwLock;
 use tracing::Instrument;
 use tracing::{debug, error, trace, warn};
-use uuid::Uuid;
 
 use crate::Fix;
-use crate::aircraft_registrations_repo::AircraftRegistrationsRepository;
 use crate::device_repo::DeviceRepository;
 use crate::elevation::ElevationTask;
-use crate::fixes_repo::{AircraftTypeOgn, FixesRepository};
+use crate::fixes_repo::FixesRepository;
 use crate::flight_tracker::FlightTracker;
 use crate::nats_publisher::NatsFixPublisher;
 use crate::packet_processors::generic::PacketContext;
@@ -25,15 +20,11 @@ use tokio::sync::mpsc;
 pub struct FixProcessor {
     fixes_repo: FixesRepository,
     device_repo: DeviceRepository,
-    aircraft_registrations_repo: AircraftRegistrationsRepository,
     receiver_repo: ReceiverRepository,
     flight_detection_processor: FlightTracker,
     nats_publisher: Option<NatsFixPublisher>,
     /// Sender for elevation processing tasks (bounded channel to prevent queue overflow)
     elevation_tx: Option<mpsc::Sender<ElevationTask>>,
-    /// Cache to track tow plane status updates to avoid unnecessary database calls
-    /// Maps device_id -> (aircraft_type, is_tow_plane_in_db)
-    tow_plane_cache: Arc<RwLock<HashMap<Uuid, (AircraftTypeOgn, bool)>>>,
 }
 
 impl FixProcessor {
@@ -41,12 +32,10 @@ impl FixProcessor {
         Self {
             fixes_repo: FixesRepository::new(diesel_pool.clone()),
             device_repo: DeviceRepository::new(diesel_pool.clone()),
-            aircraft_registrations_repo: AircraftRegistrationsRepository::new(diesel_pool.clone()),
             receiver_repo: ReceiverRepository::new(diesel_pool.clone()),
             flight_detection_processor: FlightTracker::new(&diesel_pool),
             nats_publisher: None,
             elevation_tx: None,
-            tow_plane_cache: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -66,12 +55,10 @@ impl FixProcessor {
         Ok(Self {
             fixes_repo: FixesRepository::new(diesel_pool.clone()),
             device_repo: DeviceRepository::new(diesel_pool.clone()),
-            aircraft_registrations_repo: AircraftRegistrationsRepository::new(diesel_pool.clone()),
             receiver_repo: ReceiverRepository::new(diesel_pool.clone()),
             flight_detection_processor: FlightTracker::new(&diesel_pool),
             nats_publisher: Some(nats_publisher),
             elevation_tx: None,
-            tow_plane_cache: Arc::new(RwLock::new(HashMap::new())),
         })
     }
 
@@ -83,12 +70,10 @@ impl FixProcessor {
         Self {
             fixes_repo: FixesRepository::new(diesel_pool.clone()),
             device_repo: DeviceRepository::new(diesel_pool.clone()),
-            aircraft_registrations_repo: AircraftRegistrationsRepository::new(diesel_pool.clone()),
             receiver_repo: ReceiverRepository::new(diesel_pool.clone()),
             flight_detection_processor: flight_tracker,
             nats_publisher: None,
             elevation_tx: None,
-            tow_plane_cache: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -103,69 +88,16 @@ impl FixProcessor {
         Ok(Self {
             fixes_repo: FixesRepository::new(diesel_pool.clone()),
             device_repo: DeviceRepository::new(diesel_pool.clone()),
-            aircraft_registrations_repo: AircraftRegistrationsRepository::new(diesel_pool.clone()),
             receiver_repo: ReceiverRepository::new(diesel_pool.clone()),
             flight_detection_processor: flight_tracker,
             nats_publisher: Some(nats_publisher),
             elevation_tx: None,
-            tow_plane_cache: Arc::new(RwLock::new(HashMap::new())),
         })
     }
 
     /// Get a reference to the flight tracker for state management
     pub fn flight_tracker(&self) -> &FlightTracker {
         &self.flight_detection_processor
-    }
-
-    /// Update tow plane status based on aircraft type from fix (static version for use in async spawned task)
-    async fn update_tow_plane_status_static(
-        aircraft_registrations_repo: AircraftRegistrationsRepository,
-        tow_plane_cache: Arc<RwLock<HashMap<Uuid, (AircraftTypeOgn, bool)>>>,
-        device_id: Uuid,
-        aircraft_type: AircraftTypeOgn,
-    ) {
-        let should_be_tow_plane = aircraft_type == AircraftTypeOgn::TowTug;
-
-        // Check cache first
-        {
-            let cache = tow_plane_cache.read().await;
-            if let Some(&(cached_type, cached_is_tow_plane)) = cache.get(&device_id) {
-                // If the aircraft type hasn't changed and we know the current DB state, skip
-                if cached_type == aircraft_type && cached_is_tow_plane == should_be_tow_plane {
-                    return;
-                }
-            }
-        }
-
-        // Update the database
-        match aircraft_registrations_repo
-            .update_tow_plane_status_by_device_id(device_id, should_be_tow_plane)
-            .await
-        {
-            Ok(was_updated) => {
-                if was_updated {
-                    debug!(
-                        "Updated tow plane status for device {} to {} (aircraft type: {:?})",
-                        device_id, should_be_tow_plane, aircraft_type
-                    );
-                } else {
-                    trace!(
-                        "Tow plane status already correct for device {} (aircraft type: {:?})",
-                        device_id, aircraft_type
-                    );
-                }
-
-                // Update cache with the new state
-                let mut cache = tow_plane_cache.write().await;
-                cache.insert(device_id, (aircraft_type, should_be_tow_plane));
-            }
-            Err(e) => {
-                error!(
-                    "Failed to update tow plane status for device {}: {}",
-                    device_id, e
-                );
-            }
-        }
     }
 }
 
@@ -411,23 +343,6 @@ impl FixProcessor {
 
             let fix_with_flight = crate::fixes::FixWithFlightInfo::new(updated_fix.clone(), flight);
             nats_publisher.process_fix(fix_with_flight, raw_message);
-        }
-
-        // Step 4: Update tow plane status based on aircraft type from fix
-        if let Some(foreign_aircraft_type) = updated_fix.aircraft_type_ogn {
-            let aircraft_type = AircraftTypeOgn::from(foreign_aircraft_type);
-            let device_id = updated_fix.device_id;
-
-            let aircraft_registrations_repo = self.aircraft_registrations_repo.clone();
-            let tow_plane_cache = self.tow_plane_cache.clone();
-
-            Self::update_tow_plane_status_static(
-                aircraft_registrations_repo,
-                tow_plane_cache,
-                device_id,
-                aircraft_type,
-            )
-            .await;
         }
     }
 }

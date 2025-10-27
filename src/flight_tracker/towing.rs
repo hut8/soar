@@ -1,214 +1,285 @@
 use crate::Fix;
 use crate::fixes_repo::FixesRepository;
 use crate::flights_repo::FlightsRepository;
+use crate::ogn_aprs_aircraft::AircraftType;
 use anyhow::Result;
-use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::RwLock;
+use serde::{Deserialize, Serialize};
+use tokio::time::{Duration, sleep};
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
-use super::aircraft_tracker::{AircraftState, AircraftTracker};
-use super::geometry::angular_difference;
+use super::AircraftTrackersMap;
+use super::aircraft_tracker;
 use super::geometry::haversine_distance;
 
-/// Detect if a glider taking off is being towed by a nearby towplane
-/// Returns the towplane's (device_id, flight_id, current_altitude) if found
-pub(crate) async fn detect_towing_at_takeoff(
-    aircraft_trackers: &Arc<RwLock<HashMap<Uuid, AircraftTracker>>>,
+const VICINITY_RADIUS_METERS: f64 = 500.0; // 0.5 km
+const INITIAL_SEARCH_DELAY_SECS: u64 = 10;
+const RETRY_SEARCH_DELAY_SECS: u64 = 10;
+
+/// Information about a towing operation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TowingInfo {
+    pub glider_device_id: Uuid,
+    pub glider_flight_id: Uuid,
+    pub tow_started: chrono::DateTime<chrono::Utc>,
+}
+
+/// Spawn a task to detect towing after a towplane takes off
+/// This waits 10 seconds, then looks for gliders in the vicinity
+pub fn spawn_towing_detection_task(
+    towplane_device_id: Uuid,
+    towplane_flight_id: Uuid,
+    fixes_repo: FixesRepository,
+    flights_repo: FlightsRepository,
+    aircraft_trackers: AircraftTrackersMap,
+) {
+    tokio::spawn(async move {
+        // Wait 10 seconds for towplane to get airborne and for glider to appear
+        sleep(Duration::from_secs(INITIAL_SEARCH_DELAY_SECS)).await;
+
+        // Try to find a glider being towed
+        match find_towed_glider(
+            towplane_device_id,
+            &fixes_repo,
+            &flights_repo,
+            &aircraft_trackers,
+        )
+        .await
+        {
+            Ok(Some(towing_info)) => {
+                info!(
+                    "Towing detected: towplane {} (flight {}) is towing glider {} (flight {})",
+                    towplane_device_id,
+                    towplane_flight_id,
+                    towing_info.glider_device_id,
+                    towing_info.glider_flight_id
+                );
+
+                // Update the towplane's tracker with towing info
+                {
+                    let mut trackers = aircraft_trackers.write().await;
+                    if let Some(tracker) = trackers.get_mut(&towplane_device_id) {
+                        tracker.towing_info = Some(towing_info);
+                    }
+                }
+            }
+            Ok(None) => {
+                debug!(
+                    "No glider found for towplane {} - may be repositioning",
+                    towplane_device_id
+                );
+            }
+            Err(e) => {
+                warn!(
+                    "Error detecting towing for towplane {}: {}",
+                    towplane_device_id, e
+                );
+            }
+        }
+    });
+}
+
+/// Find a glider being towed by the given towplane
+/// Returns None if no glider found or multiple gliders found (after retries)
+async fn find_towed_glider(
+    towplane_device_id: Uuid,
     fixes_repo: &FixesRepository,
-    glider_device_id: &Uuid,
-    glider_fix: &Fix,
-) -> Option<(Uuid, Uuid, i32)> {
-    // Only check for towing if this is a glider
-    use crate::ogn_aprs_aircraft::AircraftType;
-    if glider_fix.aircraft_type_ogn != Some(AircraftType::Glider) {
-        return None;
+    flights_repo: &FlightsRepository,
+    aircraft_trackers: &AircraftTrackersMap,
+) -> Result<Option<TowingInfo>> {
+    // Get the latest fix for the towplane
+    let towplane_fix = match fixes_repo
+        .get_latest_fix_for_device(
+            towplane_device_id,
+            chrono::Utc::now() - chrono::Duration::seconds(30),
+        )
+        .await?
+    {
+        Some(fix) => fix,
+        None => {
+            debug!(
+                "No recent fix found for towplane {} - cannot detect towing",
+                towplane_device_id
+            );
+            return Ok(None);
+        }
+    };
+
+    // Retry up to 3 times if multiple gliders detected
+    for attempt in 0..3 {
+        if attempt > 0 {
+            debug!(
+                "Multiple gliders detected for towplane {} - waiting {} seconds (attempt {}/3)",
+                towplane_device_id, RETRY_SEARCH_DELAY_SECS, attempt
+            );
+            sleep(Duration::from_secs(RETRY_SEARCH_DELAY_SECS)).await;
+        }
+
+        let candidate_gliders = find_nearby_gliders(
+            &towplane_fix,
+            towplane_device_id,
+            aircraft_trackers,
+            fixes_repo,
+        )
+        .await?;
+
+        match candidate_gliders.len() {
+            0 => {
+                debug!(
+                    "No gliders found near towplane {} - not towing",
+                    towplane_device_id
+                );
+                return Ok(None);
+            }
+            1 => {
+                let (glider_device_id, glider_flight_id) = candidate_gliders[0];
+
+                // Update the database to link glider to towplane
+                if let Err(e) = flights_repo
+                    .update_towing_info(
+                        glider_flight_id,
+                        towplane_device_id,
+                        towplane_fix
+                            .flight_id
+                            .expect("Towplane must have flight_id"),
+                    )
+                    .await
+                {
+                    warn!(
+                        "Failed to update towing info in database for glider {}: {}",
+                        glider_device_id, e
+                    );
+                }
+
+                return Ok(Some(TowingInfo {
+                    glider_device_id,
+                    glider_flight_id,
+                    tow_started: towplane_fix.timestamp,
+                }));
+            }
+            n => {
+                warn!(
+                    "Multiple gliders ({}) found near towplane {} - waiting to disambiguate",
+                    n, towplane_device_id
+                );
+                // Continue to next attempt
+            }
+        }
     }
 
-    // Get all currently active aircraft trackers
-    let active_flights = {
+    // After 3 attempts, still multiple gliders - give up
+    warn!(
+        "Could not disambiguate multiple gliders for towplane {} after 3 attempts",
+        towplane_device_id
+    );
+    Ok(None)
+}
+
+/// Find gliders with active flights near the towplane
+async fn find_nearby_gliders(
+    towplane_fix: &Fix,
+    towplane_device_id: Uuid,
+    aircraft_trackers: &AircraftTrackersMap,
+    fixes_repo: &FixesRepository,
+) -> Result<Vec<(Uuid, Uuid)>> {
+    let mut candidate_gliders = Vec::new();
+
+    // Get all active aircraft with flights
+    let active_aircraft: Vec<(Uuid, Uuid)> = {
         let trackers = aircraft_trackers.read().await;
         trackers
             .iter()
             .filter_map(|(device_id, tracker)| {
-                // Skip ourselves and aircraft without active flights
-                if device_id == glider_device_id || tracker.current_flight_id.is_none() {
+                // Skip the towplane itself
+                if *device_id == towplane_device_id {
                     return None;
                 }
-                // Only consider aircraft that are active (flying)
-                if tracker.state != AircraftState::Active {
-                    return None;
-                }
-                Some((*device_id, tracker.current_flight_id.unwrap()))
+                // Only consider aircraft with active flights
+                tracker
+                    .current_flight_id
+                    .map(|flight_id| (*device_id, flight_id))
             })
-            .collect::<Vec<_>>()
+            .collect()
     };
 
-    if active_flights.is_empty() {
-        return None;
-    }
-
-    // Get recent fixes for potential towplanes (within last 30 seconds)
-    let time_window_start = glider_fix.timestamp - chrono::Duration::seconds(30);
-
-    for (towplane_device_id, towplane_flight_id) in active_flights {
-        // Get the most recent fix for this potential towplane
-        match fixes_repo
-            .get_latest_fix_for_device(towplane_device_id, time_window_start)
-            .await
+    // Check each aircraft to see if it's a glider near the towplane
+    for (device_id, flight_id) in active_aircraft {
+        // Get the latest fix for this device
+        let device_fix = match fixes_repo
+            .get_latest_fix_for_device(
+                device_id,
+                chrono::Utc::now() - chrono::Duration::seconds(30),
+            )
+            .await?
         {
-            Ok(Some(towplane_fix)) => {
-                // Check if aircraft type suggests it's a towplane
-                let is_likely_towplane = match towplane_fix.aircraft_type_ogn {
-                    Some(AircraftType::TowTug) => true,
-                    Some(AircraftType::RecipEngine) => true,
-                    Some(AircraftType::JetTurboprop) => false,
-                    Some(AircraftType::Glider) => false, // Gliders don't tow gliders
-                    _ => true,                           // Unknown types could be towplanes
-                };
+            Some(fix) => fix,
+            None => continue,
+        };
 
-                if !is_likely_towplane {
-                    continue;
-                }
-
-                // Calculate distance between glider and potential towplane
-                let distance_meters = haversine_distance(
-                    glider_fix.latitude,
-                    glider_fix.longitude,
-                    towplane_fix.latitude,
-                    towplane_fix.longitude,
-                );
-
-                // Check if they're close enough to be towing (within 200 meters / ~650 feet)
-                if distance_meters <= 200.0 {
-                    // Check altitude difference (should be similar, within 200 feet)
-                    if let (Some(glider_alt), Some(towplane_alt)) =
-                        (glider_fix.altitude_msl_feet, towplane_fix.altitude_msl_feet)
-                    {
-                        let altitude_diff = (glider_alt - towplane_alt).abs();
-                        if altitude_diff <= 200 {
-                            info!(
-                                "Detected towing: glider {} is being towed by towplane {} (distance: {:.0}m, alt diff: {}ft)",
-                                glider_device_id,
-                                towplane_device_id,
-                                distance_meters,
-                                altitude_diff
-                            );
-                            return Some((towplane_device_id, towplane_flight_id, towplane_alt));
-                        }
-                    }
-                }
-            }
-            Ok(None) => continue,
-            Err(e) => {
-                debug!(
-                    "Failed to get latest fix for potential towplane {}: {}",
-                    towplane_device_id, e
-                );
-                continue;
-            }
+        // Check if this is a glider
+        if device_fix.aircraft_type_ogn != Some(AircraftType::Glider) {
+            continue;
         }
-    }
 
-    None
-}
-
-/// Check if a glider flight has been released from tow
-/// This is called periodically during active flight to detect separation
-pub(crate) async fn check_tow_release(
-    fixes_repo: &FixesRepository,
-    glider_device_id: &Uuid,
-    _glider_flight_id: &Uuid,
-    glider_fix: &Fix,
-    towplane_device_id: &Uuid,
-) -> bool {
-    // Get recent fix for towplane (within last 10 seconds)
-    let time_window = glider_fix.timestamp - chrono::Duration::seconds(10);
-
-    match fixes_repo
-        .get_latest_fix_for_device(*towplane_device_id, time_window)
-        .await
-    {
-        Ok(Some(towplane_fix)) => {
-            // Calculate horizontal distance
-            let distance_meters = haversine_distance(
-                glider_fix.latitude,
-                glider_fix.longitude,
-                towplane_fix.latitude,
-                towplane_fix.longitude,
-            );
-
-            // Calculate 3D distance if we have altitudes
-            let separation_feet = if let (Some(glider_alt), Some(towplane_alt)) =
-                (glider_fix.altitude_msl_feet, towplane_fix.altitude_msl_feet)
-            {
-                let horizontal_feet = distance_meters * 3.28084; // meters to feet
-                let vertical_feet = (glider_alt - towplane_alt).abs() as f64;
-                (horizontal_feet.powi(2) + vertical_feet.powi(2)).sqrt()
-            } else {
-                distance_meters * 3.28084 // Just horizontal distance in feet
-            };
-
-            // Release detected if separation > 500 feet
-            if separation_feet > 500.0 {
-                info!(
-                    "Tow release detected for glider {}: separated {:.0} feet from towplane {}",
-                    glider_device_id, separation_feet, towplane_device_id
-                );
-                return true;
-            }
-
-            // Also check for diverging headings (one or both turned significantly)
-            if let (Some(glider_track), Some(towplane_track)) =
-                (glider_fix.track_degrees, towplane_fix.track_degrees)
-            {
-                let heading_diff = angular_difference(glider_track as f64, towplane_track as f64);
-                if heading_diff > 45.0 && distance_meters > 100.0 {
-                    info!(
-                        "Tow release detected for glider {}: diverged {:.0}° from towplane {} (distance: {:.0}m)",
-                        glider_device_id, heading_diff, towplane_device_id, distance_meters
-                    );
-                    return true;
-                }
-            }
-
-            false
-        }
-        Ok(None) => {
-            // No recent fix from towplane - might have landed or lost signal
-            // Consider this a release if we haven't seen them for 30+ seconds
-            warn!(
-                "Lost contact with towplane {} for glider {} - assuming release",
-                towplane_device_id, glider_device_id
-            );
-            true
-        }
-        Err(e) => {
-            debug!(
-                "Error checking tow release for glider {}: {}",
-                glider_device_id, e
-            );
-            false
-        }
-    }
-}
-
-/// Record tow release in the database
-pub(crate) async fn record_tow_release(
-    flights_repo: &FlightsRepository,
-    glider_flight_id: &Uuid,
-    release_fix: &Fix,
-) -> Result<()> {
-    if let Some(altitude_ft) = release_fix.altitude_msl_feet {
-        info!(
-            "Recording tow release for flight {} at {}ft MSL",
-            glider_flight_id, altitude_ft
+        // Calculate distance
+        let distance = haversine_distance(
+            towplane_fix.latitude,
+            towplane_fix.longitude,
+            device_fix.latitude,
+            device_fix.longitude,
         );
 
-        flights_repo
-            .update_tow_release(*glider_flight_id, altitude_ft, release_fix.timestamp)
-            .await?;
+        if distance <= VICINITY_RADIUS_METERS {
+            debug!(
+                "Found glider {} at {:.0}m from towplane {}",
+                device_id, distance, towplane_device_id
+            );
+            candidate_gliders.push((device_id, flight_id));
+        }
     }
-    Ok(())
+
+    Ok(candidate_gliders)
+}
+
+/// Check if a towplane has released its tow based on climb rate transition
+/// Returns true if release detected
+#[allow(dead_code)]
+pub fn check_tow_release(
+    tracker: &aircraft_tracker::AircraftTracker,
+    current_climb_fpm: Option<f32>,
+) -> bool {
+    // Only check if we have towing info and climb rate history
+    let _towing_info = match &tracker.towing_info {
+        Some(info) => info,
+        None => return false,
+    };
+
+    // Need at least 5 samples for moving average
+    if tracker.climb_rate_history.len() < 5 {
+        return false;
+    }
+
+    // Calculate moving average of last 5 climb rates
+    let avg_climb_rate: f32 =
+        tracker.climb_rate_history.iter().sum::<f32>() / tracker.climb_rate_history.len() as f32;
+
+    // Was climbing (avg > 100 fpm) and now descending (current < -100 fpm)
+    // This indicates the towplane has released the glider and is descending back
+    let was_climbing = avg_climb_rate > 100.0;
+    let now_descending = current_climb_fpm.map(|rate| rate < -100.0).unwrap_or(false);
+
+    if was_climbing && now_descending {
+        info!(
+            "Tow release detected: towplane {} was climbing (avg: {:.0} fpm) now descending ({:.0} fpm)",
+            tracker
+                .current_flight_id
+                .map(|id| id.to_string())
+                .unwrap_or_else(|| "unknown".to_string()),
+            avg_climb_rate,
+            current_climb_fpm.unwrap_or(0.0)
+        );
+        return true;
+    }
+
+    false
 }

@@ -637,7 +637,6 @@ pub struct AircraftRegistrationModel {
     pub kit_model_name: Option<String>,
     pub approved_operations_raw: Option<String>,
     pub home_base_airport_id: Option<i32>,
-    pub is_tow_plane: Option<bool>,
     pub location_id: Option<Uuid>,
     pub airworthiness_class: Option<AirworthinessClass>,
     pub device_id: Option<Uuid>,

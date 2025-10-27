@@ -1,9 +1,10 @@
 use crate::Fix;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
 use uuid::Uuid;
 
-use super::geometry::haversine_distance;
+use super::towing::TowingInfo;
 
 /// Simplified aircraft state - either idle or active
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -21,12 +22,15 @@ pub struct AircraftTracker {
     pub last_position: Option<(f64, f64)>, // (lat, lon) for calculating speed
     pub last_position_time: Option<DateTime<Utc>>,
     pub last_fix_timestamp: Option<DateTime<Utc>>, // Track last processed fix to avoid duplicates
-    pub towed_by_device_id: Option<Uuid>, // For gliders: device_id of towplane (if being towed)
-    pub tow_released: bool, // For gliders: whether tow release has been detected/recorded
     pub takeoff_runway_inferred: Option<bool>, // Track whether takeoff runway was inferred (for determining runways_inferred field)
+    /// For towplanes: information about the glider being towed (if any)
+    pub towing_info: Option<TowingInfo>,
+    /// For towplanes: moving window of last 5 climb rates (in fpm) to detect release
+    pub climb_rate_history: VecDeque<f32>,
 }
 
 impl AircraftTracker {
+    #[allow(dead_code)]
     pub fn new(initial_state: AircraftState) -> Self {
         Self {
             state: initial_state,
@@ -35,12 +39,13 @@ impl AircraftTracker {
             last_position: None,
             last_position_time: None,
             last_fix_timestamp: None,
-            towed_by_device_id: None,
-            tow_released: false,
             takeoff_runway_inferred: None,
+            towing_info: None,
+            climb_rate_history: VecDeque::with_capacity(5),
         }
     }
 
+    #[allow(dead_code)]
     pub fn update_position(&mut self, fix: &Fix) {
         self.last_position = Some((fix.latitude, fix.longitude));
         self.last_position_time = Some(fix.timestamp);
@@ -49,6 +54,7 @@ impl AircraftTracker {
     }
 
     /// Check if this fix is a duplicate (within 1 second of the last processed fix)
+    #[allow(dead_code)]
     pub fn is_duplicate_fix(&self, fix: &Fix) -> bool {
         if let Some(last_timestamp) = self.last_fix_timestamp {
             let time_diff = fix.timestamp.signed_duration_since(last_timestamp);
@@ -56,6 +62,16 @@ impl AircraftTracker {
         } else {
             false
         }
+    }
+
+    /// Update climb rate history for towplane tow release detection
+    /// Maintains a moving window of the last 5 climb rates
+    #[allow(dead_code)]
+    pub fn update_climb_rate(&mut self, climb_fpm: f32) {
+        if self.climb_rate_history.len() >= 5 {
+            self.climb_rate_history.pop_front();
+        }
+        self.climb_rate_history.push_back(climb_fpm);
     }
 }
 
@@ -82,7 +98,8 @@ mod tests {
             latitude: 40.0,
             longitude: -74.0,
             altitude_msl_feet: Some(1000),
-            altitude_agl: None,
+            altitude_agl_feet: None,
+            altitude_agl_valid: false,
             device_address: 0x123456,
             address_type: AddressType::Icao,
             aircraft_type_ogn: None,
@@ -99,7 +116,6 @@ mod tests {
             freq_offset_khz: None,
             gnss_horizontal_resolution: None,
             gnss_vertical_resolution: None,
-            unparsed_data: None,
             device_id: uuid::Uuid::new_v4(),
             is_active: true, // 50 knots is active
             receiver_id: None,

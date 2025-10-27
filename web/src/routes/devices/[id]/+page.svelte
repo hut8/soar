@@ -11,9 +11,9 @@
 		Calendar,
 		Info,
 		Activity,
-		Settings,
 		Building2,
-		Save
+		Save,
+		Clock
 	} from '@lucide/svelte';
 	import { ProgressRing } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall } from '$lib/api/server';
@@ -24,7 +24,8 @@
 		formatDeviceAddress,
 		getStatusCodeDescription,
 		getAircraftTypeOgnDescription,
-		getAircraftTypeColor
+		getAircraftTypeColor,
+		formatTransponderCode
 	} from '$lib/formatters';
 	import { toaster } from '$lib/toaster';
 	import dayjs from 'dayjs';
@@ -305,7 +306,15 @@
 						<div class="mb-2 flex items-center gap-3">
 							<Radio class="h-8 w-8 text-primary-500" />
 							<div>
-								<h1 class="h1">{device.registration || 'Unknown'}</h1>
+								<h1 class="h1">
+									{device.registration || 'Unknown'}
+									{#if device.competition_number}
+										<span class="text-surface-600-300-token">({device.competition_number})</span>
+									{/if}
+								</h1>
+								{#if device.aircraft_model}
+									<p class="text-lg">{device.aircraft_model}</p>
+								{/if}
 								<p class="text-surface-600-300-token font-mono text-sm">
 									Address: {formatDeviceAddress(device.address_type, device.address)}
 								</p>
@@ -346,44 +355,6 @@
 
 			<!-- Main Content Grid -->
 			<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
-				<!-- Device Information -->
-				<div class="space-y-4 card p-6">
-					<h2 class="flex items-center gap-2 h2">
-						<Settings class="h-6 w-6" />
-						Device Information
-					</h2>
-
-					<div class="space-y-3">
-						<div class="flex items-start gap-3">
-							<Radio class="mt-1 h-4 w-4 text-surface-500" />
-							<div>
-								<p class="text-surface-600-300-token mb-1 text-sm">Device Address</p>
-								<p class="font-mono">
-									{formatDeviceAddress(device.address_type, device.address)}
-								</p>
-							</div>
-						</div>
-
-						<div class="flex items-start gap-3">
-							<Plane class="mt-1 h-4 w-4 text-surface-500" />
-							<div>
-								<p class="text-surface-600-300-token mb-1 text-sm">Aircraft Model</p>
-								<p>{device.aircraft_model}</p>
-							</div>
-						</div>
-
-						{#if device.competition_number}
-							<div class="flex items-start gap-3">
-								<Activity class="mt-1 h-4 w-4 text-surface-500" />
-								<div>
-									<p class="text-surface-600-300-token mb-1 text-sm">Competition Number</p>
-									<p class="font-mono">{device.competition_number}</p>
-								</div>
-							</div>
-						{/if}
-					</div>
-				</div>
-
 				<!-- Club Assignment (Admin Only) -->
 				{#if isAdmin}
 					<div class="space-y-4 card p-6">
@@ -463,7 +434,9 @@
 								<Info class="mt-1 h-4 w-4 text-surface-500" />
 								<div>
 									<p class="text-surface-600-300-token mb-1 text-sm">Transponder Code</p>
-									<p class="font-mono">{aircraftRegistration.mode_s_code_hex || 'N/A'}</p>
+									<p class="font-mono">
+										{formatTransponderCode(aircraftRegistration.transponder_code)}
+									</p>
 								</div>
 							</div>
 
@@ -501,6 +474,38 @@
 											>({aircraftRegistration.status_code})</span
 										>
 									</p>
+								</div>
+							</div>
+
+							<div class="flex items-start gap-3">
+								<Calendar class="mt-1 h-4 w-4 text-surface-500" />
+								<div>
+									<p class="text-surface-600-300-token mb-1 text-sm">Certificate Issue Date</p>
+									<p>{dayjs(aircraftRegistration.cert_issue_date).format('YYYY-MM-DD')}</p>
+								</div>
+							</div>
+
+							<div class="flex items-start gap-3">
+								<Calendar class="mt-1 h-4 w-4 text-surface-500" />
+								<div>
+									<p class="text-surface-600-300-token mb-1 text-sm">Expiration Date</p>
+									<p>{dayjs(aircraftRegistration.expiration_date).format('YYYY-MM-DD')}</p>
+								</div>
+							</div>
+
+							<div class="flex items-start gap-3">
+								<Calendar class="mt-1 h-4 w-4 text-surface-500" />
+								<div>
+									<p class="text-surface-600-300-token mb-1 text-sm">Airworthiness Date</p>
+									<p>{dayjs(aircraftRegistration.air_worth_date).format('YYYY-MM-DD')}</p>
+								</div>
+							</div>
+
+							<div class="flex items-start gap-3">
+								<Calendar class="mt-1 h-4 w-4 text-surface-500" />
+								<div>
+									<p class="text-surface-600-300-token mb-1 text-sm">Last Action Date</p>
+									<p>{dayjs(aircraftRegistration.last_action_date).format('YYYY-MM-DD')}</p>
 								</div>
 							</div>
 						</div>
@@ -655,8 +660,6 @@
 									<th class="px-3 py-2 text-left text-sm font-medium">Takeoff</th>
 									<th class="px-3 py-2 text-left text-sm font-medium">Landing</th>
 									<th class="px-3 py-2 text-left text-sm font-medium">Duration</th>
-									<th class="px-3 py-2 text-left text-sm font-medium">Takeoff Airport</th>
-									<th class="px-3 py-2 text-left text-sm font-medium">Landing Airport</th>
 									<th class="px-3 py-2 text-left text-sm font-medium">Actions</th>
 								</tr>
 							</thead>
@@ -670,31 +673,86 @@
 											: ''}"
 									>
 										<td class="px-3 py-2 text-sm">
-											{flight.takeoff_time ? formatDate(flight.takeoff_time) : 'Unknown'}
+											{#if flight.takeoff_time}
+												<div>{dayjs(flight.takeoff_time).format('MM-DD HH:mm')}</div>
+												<div class="text-xs text-surface-500">
+													{#if flight.departure_airport && flight.departure_airport_id}
+														<a
+															href="/airports/{flight.departure_airport_id}"
+															target="_blank"
+															rel="noopener noreferrer"
+															class="text-primary-500 underline hover:text-primary-700"
+														>
+															{flight.departure_airport}
+														</a>
+														{#if flight.takeoff_runway_ident}
+															({flight.takeoff_runway_ident})
+														{/if}
+													{:else}
+														{flight.departure_airport || 'Unknown'}
+													{/if}
+												</div>
+											{:else}
+												Unknown
+											{/if}
 										</td>
 										<td class="px-3 py-2 text-sm">
-											{flight.landing_time ? formatDate(flight.landing_time) : 'In Progress'}
+											{#if flight.landing_time}
+												<div>{dayjs(flight.landing_time).format('MM-DD HH:mm')}</div>
+												<div class="text-xs text-surface-500">
+													{#if flight.arrival_airport && flight.arrival_airport_id}
+														<a
+															href="/airports/{flight.arrival_airport_id}"
+															target="_blank"
+															rel="noopener noreferrer"
+															class="text-primary-500 underline hover:text-primary-700"
+														>
+															{flight.arrival_airport}
+														</a>
+														{#if flight.landing_runway_ident}
+															({flight.landing_runway_ident})
+														{/if}
+													{:else}
+														{flight.arrival_airport || 'Unknown'}
+													{/if}
+												</div>
+											{:else}
+												-
+											{/if}
 										</td>
 										<td class="px-3 py-2 text-sm">
 											{#if flight.takeoff_time && flight.landing_time}
 												{@const start = new Date(flight.takeoff_time)}
 												{@const end = new Date(flight.landing_time)}
 												{@const diffMs = end.getTime() - start.getTime()}
-												{@const hours = Math.floor(diffMs / (1000 * 60 * 60))}
+												{@const totalHours = diffMs / (1000 * 60 * 60)}
+												{@const hours = Math.floor(totalHours)}
 												{@const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60))}
-												{hours}h {minutes}m
+												<div class="flex items-center gap-1">
+													<span
+														>{String(hours).padStart(2, '0')}:{String(minutes).padStart(2, '0')} ({totalHours.toFixed(
+															2
+														)}h)</span
+													>
+													{#if flight.timed_out_at}
+														<span
+															class="badge preset-filled-warning-500 text-xs"
+															title="Flight timed out"
+														>
+															<Clock class="h-3 w-3" />
+														</span>
+													{/if}
+												</div>
 											{:else}
 												-
 											{/if}
 										</td>
-										<td class="px-3 py-2 text-sm">{flight.departure_airport || 'Unknown'}</td>
-										<td class="px-3 py-2 text-sm">{flight.arrival_airport || 'Unknown'}</td>
 										<td class="px-3 py-2 text-sm">
 											<a
 												href="/flights/{flight.id}"
 												target="_blank"
 												rel="noopener noreferrer"
-												class="text-primary-500 underline hover:text-primary-700"
+												class="btn preset-filled-primary-500 btn-sm"
 											>
 												View Flight
 											</a>
