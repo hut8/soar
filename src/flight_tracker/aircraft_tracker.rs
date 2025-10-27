@@ -21,8 +21,6 @@ pub struct AircraftTracker {
     pub last_position: Option<(f64, f64)>, // (lat, lon) for calculating speed
     pub last_position_time: Option<DateTime<Utc>>,
     pub last_fix_timestamp: Option<DateTime<Utc>>, // Track last processed fix to avoid duplicates
-    pub towed_by_device_id: Option<Uuid>, // For gliders: device_id of towplane (if being towed)
-    pub tow_released: bool, // For gliders: whether tow release has been detected/recorded
     pub takeoff_runway_inferred: Option<bool>, // Track whether takeoff runway was inferred (for determining runways_inferred field)
 }
 
@@ -35,8 +33,6 @@ impl AircraftTracker {
             last_position: None,
             last_position_time: None,
             last_fix_timestamp: None,
-            towed_by_device_id: None,
-            tow_released: false,
             takeoff_runway_inferred: None,
         }
     }
