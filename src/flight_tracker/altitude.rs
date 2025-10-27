@@ -74,23 +74,32 @@ pub(crate) async fn calculate_altitude_agl(elevation_db: &ElevationDB, fix: &Fix
 
 /// Calculate altitude AGL and update the fix in the database asynchronously
 /// This method is designed to be called in a background task after the fix is inserted
+/// Sets altitude_agl_valid=true even if altitude_agl_feet is NULL (no elevation data available)
 pub async fn calculate_and_update_agl_async(
     elevation_db: &ElevationDB,
     fix_id: uuid::Uuid,
     fix: &Fix,
     fixes_repo: FixesRepository,
 ) {
-    match calculate_altitude_agl(elevation_db, fix).await {
-        Some(agl) => {
-            if let Err(e) = fixes_repo.update_altitude_agl(fix_id, agl).await {
-                debug!("Failed to update altitude_agl for fix {}: {}", fix_id, e);
-            }
-        }
-        None => {
-            trace!(
-                "No altitude or elevation data for fix {}, altitude_agl remains NULL",
-                fix_id
-            );
-        }
+    let agl = calculate_altitude_agl(elevation_db, fix).await;
+
+    // Update both altitude_agl_feet and altitude_agl_valid
+    // altitude_agl_valid is set to true even if agl is None (indicating we looked it up but no data available)
+    if let Err(e) = fixes_repo.update_altitude_agl(fix_id, agl).await {
+        debug!(
+            "Failed to update altitude_agl_feet for fix {}: {}",
+            fix_id, e
+        );
+    } else if agl.is_some() {
+        trace!(
+            "Updated altitude_agl_feet for fix {} to {} ft",
+            fix_id,
+            agl.unwrap()
+        );
+    } else {
+        trace!(
+            "No elevation data for fix {}, altitude_agl_feet remains NULL but altitude_agl_valid set to true",
+            fix_id
+        );
     }
 }

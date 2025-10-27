@@ -64,7 +64,7 @@ pub struct Fix {
     #[serde(rename = "altitude_msl_feet")]
     pub altitude_msl_feet: Option<i32>,
     #[serde(rename = "altitude_agl_feet")]
-    pub altitude_agl: Option<i32>,
+    pub altitude_agl_feet: Option<i32>,
 
     /// Aircraft identification - canonically a 24-bit unsigned integer stored as i32 in DB
     pub device_address: i32,
@@ -93,7 +93,6 @@ pub struct Fix {
 
     /// Associations
     pub flight_id: Option<Uuid>,
-    pub unparsed_data: Option<String>,
     pub device_id: Uuid,
 
     /// Timestamp when we received/processed the packet
@@ -108,6 +107,9 @@ pub struct Fix {
 
     /// Reference to the APRS message that contains the raw packet data
     pub aprs_message_id: Option<Uuid>,
+
+    /// Whether altitude_agl_feet has been looked up (true even if NULL due to no data)
+    pub altitude_agl_valid: bool,
 }
 
 /// Extended Fix struct that includes raw packet data from aprs_messages table
@@ -271,7 +273,7 @@ impl Fix {
                     latitude,
                     longitude,
                     altitude_msl_feet: altitude_feet,
-                    altitude_agl: None, // Will be calculated by processors
+                    altitude_agl_feet: None, // Will be calculated by processors
                     device_address,
                     address_type,
                     aircraft_type_ogn,
@@ -288,12 +290,12 @@ impl Fix {
                     gnss_horizontal_resolution,
                     gnss_vertical_resolution,
                     flight_id: None, // Will be set by flight detection processor
-                    unparsed_data: pos_packet.comment.unparsed.clone(),
                     device_id,
                     received_at,
                     is_active,
-                    receiver_id: None,     // Will be set during fix insertion
-                    aprs_message_id: None, // Will be populated during fix processing
+                    receiver_id: None,         // Will be set during fix insertion
+                    aprs_message_id: None,     // Will be populated during fix processing
+                    altitude_agl_valid: false, // Will be set to true when elevation is looked up
                 }))
             }
             _ => {

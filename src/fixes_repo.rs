@@ -112,7 +112,7 @@ struct FixDslRow {
     latitude: f64,
     longitude: f64,
     altitude_msl_feet: Option<i32>,
-    altitude_agl: Option<i32>,
+    altitude_agl_feet: Option<i32>,
     device_address: i32,
     address_type: AddressType,
     aircraft_type_ogn: Option<AircraftTypeOgn>,
@@ -129,12 +129,12 @@ struct FixDslRow {
     gnss_horizontal_resolution: Option<i16>,
     gnss_vertical_resolution: Option<i16>,
     flight_id: Option<Uuid>,
-    unparsed_data: Option<String>,
     device_id: Uuid,
     received_at: DateTime<Utc>,
     is_active: bool,
     receiver_id: Option<Uuid>,
     aprs_message_id: Option<Uuid>,
+    altitude_agl_valid: bool,
 }
 
 impl From<FixDslRow> for Fix {
@@ -149,7 +149,7 @@ impl From<FixDslRow> for Fix {
             latitude: row.latitude,
             longitude: row.longitude,
             altitude_msl_feet: row.altitude_msl_feet,
-            altitude_agl: row.altitude_agl,
+            altitude_agl_feet: row.altitude_agl_feet,
             device_address: row.device_address,
             address_type: row.address_type,
             aircraft_type_ogn: row.aircraft_type_ogn.map(|t| t.into()),
@@ -166,11 +166,11 @@ impl From<FixDslRow> for Fix {
             freq_offset_khz: row.freq_offset_khz,
             gnss_horizontal_resolution: row.gnss_horizontal_resolution,
             gnss_vertical_resolution: row.gnss_vertical_resolution,
-            unparsed_data: row.unparsed_data,
             device_id: row.device_id, // Now directly a Uuid
             is_active: row.is_active,
             receiver_id: row.receiver_id,
             aprs_message_id: row.aprs_message_id,
+            altitude_agl_valid: row.altitude_agl_valid,
         }
     }
 }
@@ -286,16 +286,51 @@ impl FixesRepository {
     }
 
     /// Update the altitude_agl field for a specific fix
-    pub async fn update_altitude_agl(&self, fix_id: Uuid, altitude_agl_value: i32) -> Result<()> {
+    pub async fn update_altitude_agl(
+        &self,
+        fix_id: Uuid,
+        altitude_agl_value: Option<i32>,
+    ) -> Result<()> {
         use crate::schema::fixes::dsl::*;
         let pool = self.pool.clone();
 
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
             diesel::update(fixes.filter(id.eq(fix_id)))
-                .set(altitude_agl.eq(Some(altitude_agl_value)))
+                .set((
+                    altitude_agl_feet.eq(altitude_agl_value),
+                    altitude_agl_valid.eq(true), // Mark as valid even if NULL (no elevation data)
+                ))
                 .execute(&mut conn)?;
             Ok::<(), anyhow::Error>(())
+        })
+        .await?
+    }
+
+    /// Get fixes that need AGL backfilling
+    /// Returns fixes that are old enough, have MSL altitude, but don't have AGL calculated yet
+    pub async fn get_fixes_needing_backfill(
+        &self,
+        before_timestamp: DateTime<Utc>,
+        limit: i64,
+    ) -> Result<Vec<Fix>> {
+        use crate::schema::fixes::dsl::*;
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            let results = fixes
+                .filter(timestamp.lt(before_timestamp))
+                .filter(altitude_msl_feet.is_not_null())
+                .filter(altitude_agl_valid.eq(false))
+                .filter(is_active.eq(true))
+                .order(timestamp.asc()) // Oldest first
+                .limit(limit)
+                .select(Fix::as_select())
+                .load::<Fix>(&mut conn)?;
+
+            Ok::<Vec<Fix>, anyhow::Error>(results)
         })
         .await?
     }
@@ -674,7 +709,7 @@ impl FixesRepository {
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Int4>)]
                 altitude_msl_feet: Option<i32>,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Int4>)]
-                altitude_agl: Option<i32>,
+                altitude_agl_feet: Option<i32>,
                 #[diesel(sql_type = diesel::sql_types::Int4)]
                 device_address: i32,
                 #[diesel(sql_type = crate::schema::sql_types::AddressType)]
@@ -707,8 +742,6 @@ impl FixesRepository {
                 gnss_vertical_resolution: Option<i16>,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
                 flight_id: Option<uuid::Uuid>,
-                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
-                unparsed_data: Option<String>,
                 #[diesel(sql_type = diesel::sql_types::Uuid)]
                 device_id: uuid::Uuid,
                 #[diesel(sql_type = diesel::sql_types::Timestamptz)]
@@ -719,6 +752,8 @@ impl FixesRepository {
                 receiver_id: Option<uuid::Uuid>,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
                 aprs_message_id: Option<uuid::Uuid>,
+                #[diesel(sql_type = diesel::sql_types::Bool)]
+                altitude_agl_valid: bool,
             }
 
             let fix_rows: Vec<FixRow> = diesel::sql_query(fixes_sql)
@@ -744,7 +779,7 @@ impl FixesRepository {
                     latitude: fix_row.latitude,
                     longitude: fix_row.longitude,
                     altitude_msl_feet: fix_row.altitude_msl_feet,
-                    altitude_agl: fix_row.altitude_agl,
+                    altitude_agl_feet: fix_row.altitude_agl_feet,
                     device_address: fix_row.device_address,
                     address_type: fix_row.address_type,
                     aircraft_type_ogn: fix_row.aircraft_type_ogn.map(|t| t.into()),
@@ -761,11 +796,11 @@ impl FixesRepository {
                     freq_offset_khz: fix_row.freq_offset_khz,
                     gnss_horizontal_resolution: fix_row.gnss_horizontal_resolution,
                     gnss_vertical_resolution: fix_row.gnss_vertical_resolution,
-                    unparsed_data: fix_row.unparsed_data,
                     device_id: fix_row.device_id,
                     is_active: fix_row.is_active,
                     receiver_id: fix_row.receiver_id,
                     aprs_message_id: fix_row.aprs_message_id,
+                    altitude_agl_valid: fix_row.altitude_agl_valid,
                 };
                 fixes_by_device
                     .entry(device_id)

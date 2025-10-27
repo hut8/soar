@@ -34,7 +34,7 @@ async fn update_flight_timestamp(
 pub(crate) fn should_be_active(fix: &Fix) -> bool {
     // Special case: If no altitude data and speed < 80 knots, consider inactive
     // This handles cases where altitude data is missing but we can still infer ground state from speed
-    if fix.altitude_agl.is_none() && fix.altitude_msl_feet.is_none() {
+    if fix.altitude_agl_feet.is_none() && fix.altitude_msl_feet.is_none() {
         let speed_knots = fix.ground_speed_knots.unwrap_or(0.0);
         if speed_knots < 80.0 {
             // No altitude data and slow speed - likely on ground
@@ -53,7 +53,7 @@ pub(crate) fn should_be_active(fix: &Fix) -> bool {
 
     // Speed is low - check altitude to see if still airborne
     // Don't register landing if AGL altitude is >= 250 feet (hovering helicopter, slow glider)
-    if let Some(altitude_agl) = fix.altitude_agl
+    if let Some(altitude_agl) = fix.altitude_agl_feet
         && altitude_agl >= 250
     {
         // Still too high to land - remain active
@@ -242,8 +242,8 @@ pub(crate) async fn process_state_transition(
                     // Update last_fix_at in database
                     update_flight_timestamp(flights_repo, flight_id, fix.timestamp).await;
 
-                    // Update altitude_agl on the fix
-                    fix.altitude_agl = Some(altitude_agl);
+                    // Update altitude_agl_feet on the fix
+                    fix.altitude_agl_feet = Some(altitude_agl);
 
                     // Update state (still treat as active even though speed is low)
                     state.update(fix.timestamp, true); // Force active since airborne
@@ -266,9 +266,9 @@ pub(crate) async fn process_state_transition(
                         // Assign flight_id to this landing fix
                         fix.flight_id = Some(flight_id);
 
-                        // Update altitude_agl if we have it
+                        // Update altitude_agl_feet if we have it
                         if let Some(altitude_agl) = agl {
-                            fix.altitude_agl = Some(altitude_agl);
+                            fix.altitude_agl_feet = Some(altitude_agl);
                         }
 
                         // Complete flight (includes airport/runway lookup for landing)
@@ -342,9 +342,9 @@ pub(crate) async fn process_state_transition(
                         // Update last_fix_at in database
                         update_flight_timestamp(flights_repo, flight_id, fix.timestamp).await;
 
-                        // Update altitude_agl if we have it
+                        // Update altitude_agl_feet if we have it
                         if let Some(altitude_agl) = agl {
-                            fix.altitude_agl = Some(altitude_agl);
+                            fix.altitude_agl_feet = Some(altitude_agl);
                         }
 
                         // Keep the updated state in the map

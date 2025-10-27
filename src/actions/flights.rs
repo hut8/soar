@@ -329,7 +329,7 @@ pub async fn search_flights(
                                 .get_latest_fix_for_device(device_id, start_time)
                                 .await
                             {
-                                Ok(Some(fix)) => (fix.altitude_msl_feet, fix.altitude_agl),
+                                Ok(Some(fix)) => (fix.altitude_msl_feet, fix.altitude_agl_feet),
                                 _ => (None, None),
                             }
                         } else {

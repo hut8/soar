@@ -4,6 +4,7 @@
 //! and optionally archive all incoming messages to daily log files.
 
 pub mod actions;
+pub mod agl_backfill;
 pub mod aircraft_registrations;
 pub mod aircraft_registrations_repo;
 pub mod aircraft_types;
