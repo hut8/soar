@@ -514,6 +514,26 @@
 											>
 										</dd>
 									</div>
+									<div>
+										<dt class="font-medium text-surface-600 dark:text-surface-400">
+											Certificate Issue
+										</dt>
+										<dd>{dayjs(aircraftRegistration.cert_issue_date).format('YYYY-MM-DD')}</dd>
+									</div>
+									<div>
+										<dt class="font-medium text-surface-600 dark:text-surface-400">Expiration</dt>
+										<dd>{dayjs(aircraftRegistration.expiration_date).format('YYYY-MM-DD')}</dd>
+									</div>
+									<div>
+										<dt class="font-medium text-surface-600 dark:text-surface-400">
+											Airworthiness
+										</dt>
+										<dd>{dayjs(aircraftRegistration.air_worth_date).format('YYYY-MM-DD')}</dd>
+									</div>
+									<div>
+										<dt class="font-medium text-surface-600 dark:text-surface-400">Last Action</dt>
+										<dd>{dayjs(aircraftRegistration.last_action_date).format('YYYY-MM-DD')}</dd>
+									</div>
 								</dl>
 							</div>
 						{/if}

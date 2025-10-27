@@ -506,6 +506,38 @@
 									</p>
 								</div>
 							</div>
+
+							<div class="flex items-start gap-3">
+								<Calendar class="mt-1 h-4 w-4 text-surface-500" />
+								<div>
+									<p class="text-surface-600-300-token mb-1 text-sm">Certificate Issue Date</p>
+									<p>{dayjs(aircraftRegistration.cert_issue_date).format('YYYY-MM-DD')}</p>
+								</div>
+							</div>
+
+							<div class="flex items-start gap-3">
+								<Calendar class="mt-1 h-4 w-4 text-surface-500" />
+								<div>
+									<p class="text-surface-600-300-token mb-1 text-sm">Expiration Date</p>
+									<p>{dayjs(aircraftRegistration.expiration_date).format('YYYY-MM-DD')}</p>
+								</div>
+							</div>
+
+							<div class="flex items-start gap-3">
+								<Calendar class="mt-1 h-4 w-4 text-surface-500" />
+								<div>
+									<p class="text-surface-600-300-token mb-1 text-sm">Airworthiness Date</p>
+									<p>{dayjs(aircraftRegistration.air_worth_date).format('YYYY-MM-DD')}</p>
+								</div>
+							</div>
+
+							<div class="flex items-start gap-3">
+								<Calendar class="mt-1 h-4 w-4 text-surface-500" />
+								<div>
+									<p class="text-surface-600-300-token mb-1 text-sm">Last Action Date</p>
+									<p>{dayjs(aircraftRegistration.last_action_date).format('YYYY-MM-DD')}</p>
+								</div>
+							</div>
 						</div>
 					{:else}
 						<div class="text-surface-600-300-token py-8 text-center">
