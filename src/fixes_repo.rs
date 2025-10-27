@@ -592,6 +592,16 @@ impl FixesRepository {
                 pilot_name: Option<String>,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
                 home_base_airport_ident: Option<String>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<crate::schema::sql_types::AircraftTypeOgn>)]
+                aircraft_type_ogn: Option<AircraftTypeOgn>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Timestamptz>)]
+                last_fix_at: Option<DateTime<Utc>>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
+                club_id: Option<uuid::Uuid>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+                icao_model_code: Option<String>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<crate::schema::sql_types::AdsbEmitterCategory>)]
+                adsb_emitter_category: Option<crate::ogn_aprs_aircraft::AdsbEmitterCategory>,
             }
 
             let device_rows: Vec<DeviceRow> = diesel::sql_query(devices_sql)
@@ -629,11 +639,11 @@ impl FixesRepository {
                     frequency_mhz: row.frequency_mhz,
                     pilot_name: row.pilot_name,
                     home_base_airport_ident: row.home_base_airport_ident,
-                    aircraft_type_ogn: None,        // Not loaded in this query
-                    last_fix_at: None,              // Not loaded in this query
-                    club_id: None,                  // Not loaded in this query
-                    icao_model_code: None,          // Not loaded in this query
-                    adsb_emitter_category: None,    // Not loaded in this query
+                    aircraft_type_ogn: row.aircraft_type_ogn.map(|t| t.into()),
+                    last_fix_at: row.last_fix_at,
+                    club_id: row.club_id,
+                    icao_model_code: row.icao_model_code,
+                    adsb_emitter_category: row.adsb_emitter_category,
                 })
                 .collect();
 
