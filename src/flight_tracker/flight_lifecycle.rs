@@ -215,7 +215,10 @@ pub(crate) async fn complete_flight(
         };
 
         let max_agl_altitude = if !flight_fixes.is_empty() {
-            flight_fixes.iter().filter_map(|f| f.altitude_agl).max()
+            flight_fixes
+                .iter()
+                .filter_map(|f| f.altitude_agl_feet)
+                .max()
         } else {
             None
         };

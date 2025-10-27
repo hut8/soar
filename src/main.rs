@@ -12,6 +12,7 @@ use tracing::{info, warn};
 
 use soar::aprs_client::{AprsClient, AprsClientConfigBuilder};
 use soar::fix_processor::FixProcessor;
+use soar::fixes_repo::FixesRepository;
 use soar::flight_tracker::FlightTracker;
 use soar::instance_lock::InstanceLock;
 use soar::packet_processors::{
@@ -597,6 +598,18 @@ async fn handle_run(
         "Spawned {} dedicated elevation processing workers (sharing elevation and dataset caches)",
         num_elevation_workers
     );
+
+    // Spawn AGL backfill background task
+    // This task runs continuously, backfilling AGL altitudes for old fixes that were missed
+    let backfill_fixes_repo = FixesRepository::new(diesel_pool.clone());
+    let backfill_elevation_db = elevation_db.clone();
+    tokio::spawn(
+        async move {
+            soar::agl_backfill::agl_backfill_task(backfill_fixes_repo, backfill_elevation_db).await;
+        }
+        .instrument(tracing::info_span!("agl_backfill")),
+    );
+    info!("Spawned AGL backfill background task");
 
     info!(
         "Spawning {} worker tasks to process APRS messages in parallel",

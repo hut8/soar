@@ -268,16 +268,16 @@ diesel::table! {
         bit_errors_corrected -> Nullable<Int4>,
         freq_offset_khz -> Nullable<Float4>,
         flight_id -> Nullable<Uuid>,
-        unparsed_data -> Nullable<Varchar>,
         device_id -> Uuid,
         received_at -> Timestamptz,
         device_address -> Int4,
         is_active -> Bool,
-        altitude_agl -> Nullable<Int4>,
+        altitude_agl_feet -> Nullable<Int4>,
         receiver_id -> Nullable<Uuid>,
         gnss_horizontal_resolution -> Nullable<Int2>,
         gnss_vertical_resolution -> Nullable<Int2>,
         aprs_message_id -> Nullable<Uuid>,
+        altitude_agl_valid -> Bool,
     }
 }
 
