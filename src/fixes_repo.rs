@@ -637,6 +637,8 @@ impl FixesRepository {
                 icao_model_code: Option<String>,
                 #[diesel(sql_type = diesel::sql_types::Nullable<crate::schema::sql_types::AdsbEmitterCategory>)]
                 adsb_emitter_category: Option<crate::ogn_aprs_aircraft::AdsbEmitterCategory>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+                tracker_device_type: Option<String>,
             }
 
             let device_rows: Vec<DeviceRow> = diesel::sql_query(devices_sql)
@@ -679,6 +681,7 @@ impl FixesRepository {
                     club_id: row.club_id,
                     icao_model_code: row.icao_model_code,
                     adsb_emitter_category: row.adsb_emitter_category,
+                    tracker_device_type: row.tracker_device_type,
                 })
                 .collect();
 
