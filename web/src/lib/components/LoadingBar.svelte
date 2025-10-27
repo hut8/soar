@@ -6,31 +6,44 @@
 </script>
 
 {#if isLoading}
-	<div class="loading-bar-container">
-		<div class="loading-bar"></div>
-	</div>
+	<div class="loading-bar-overlay"></div>
 {/if}
 
 <style>
-	.loading-bar-container {
+	.loading-bar-overlay {
 		position: absolute;
-		bottom: 0;
+		top: 0;
 		left: 0;
 		right: 0;
-		height: 6px;
-		overflow: hidden;
+		bottom: 0;
+		pointer-events: none;
 		animation: fadeIn 150ms ease-in;
+		z-index: -1;
 	}
 
-	.loading-bar {
-		width: 100%;
-		height: 100%;
-		background: linear-gradient(90deg, #3b82f6 0%, #f97316 50%, #3b82f6 100%);
+	/* Light mode - soft blue gradient */
+	.loading-bar-overlay {
+		background: linear-gradient(
+			90deg,
+			rgba(96, 165, 250, 0.15) 0%,
+			rgba(147, 197, 253, 0.25) 50%,
+			rgba(96, 165, 250, 0.15) 100%
+		);
 		background-size: 200% 100%;
-		animation: slide 1.5s ease-in-out infinite;
-		box-shadow:
-			0 0 8px rgba(59, 130, 246, 0.6),
-			0 0 16px rgba(249, 115, 22, 0.4);
+		animation:
+			slide 2s ease-in-out infinite,
+			fadeIn 150ms ease-in;
+	}
+
+	/* Dark mode - subtle cyan/blue gradient */
+	:global(.dark) .loading-bar-overlay {
+		background: linear-gradient(
+			90deg,
+			rgba(34, 211, 238, 0.08) 0%,
+			rgba(56, 189, 248, 0.12) 50%,
+			rgba(34, 211, 238, 0.08) 100%
+		);
+		background-size: 200% 100%;
 	}
 
 	@keyframes slide {
@@ -50,6 +63,4 @@
 			opacity: 1;
 		}
 	}
-
-	/* Svelte's transition will handle fade out */
 </style>

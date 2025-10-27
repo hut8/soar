@@ -125,4 +125,40 @@
 	.club-selector {
 		width: 100%;
 	}
+
+	/* Fix dark mode colors for combobox dropdown */
+	:global(.club-selector [data-popover-content]) {
+		background-color: var(--color-surface-50);
+		color: var(--color-surface-900);
+	}
+
+	:global(.dark .club-selector [data-popover-content]) {
+		background-color: var(--color-surface-800);
+		color: var(--color-surface-50);
+	}
+
+	:global(.club-selector [data-combobox-item]) {
+		color: var(--color-surface-900);
+	}
+
+	:global(.dark .club-selector [data-combobox-item]) {
+		color: var(--color-surface-100);
+	}
+
+	:global(.club-selector [data-combobox-item][data-selected]) {
+		background-color: var(--color-primary-500);
+		color: white;
+	}
+
+	:global(.club-selector [data-combobox-item]:hover) {
+		background-color: var(--color-surface-200);
+	}
+
+	:global(.dark .club-selector [data-combobox-item]:hover) {
+		background-color: var(--color-surface-700);
+	}
+
+	:global(.dark .club-selector [data-combobox-item][data-selected]:hover) {
+		background-color: var(--color-primary-600);
+	}
 </style>

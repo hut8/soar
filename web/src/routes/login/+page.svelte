@@ -107,7 +107,7 @@
 				/>
 			</label>
 
-			<button type="submit" class="preset-filled-primary btn w-full" disabled={loading}>
+			<button type="submit" class="btn w-full preset-filled-primary-500" disabled={loading}>
 				{loading ? 'Signing in...' : 'Sign In'}
 			</button>
 		</form>
