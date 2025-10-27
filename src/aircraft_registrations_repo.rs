@@ -534,39 +534,6 @@ impl AircraftRegistrationsRepository {
     // - get_aircraft_models_by_club_id
     // - get_aircraft_with_models_by_club_id
 
-    /// Update is_tow_plane field for an aircraft based on device_id
-    /// Only updates if the current value is different to avoid updating the updated_at column unnecessarily
-    pub async fn update_tow_plane_status_by_device_id(
-        &self,
-        device_id: Uuid,
-        is_tow_plane: bool,
-    ) -> Result<bool> {
-        let mut conn = self.get_connection()?;
-
-        // First check current value to avoid unnecessary updates
-        let current_value = aircraft_registrations::table
-            .filter(aircraft_registrations::device_id.eq(device_id))
-            .select(aircraft_registrations::is_tow_plane)
-            .first::<Option<bool>>(&mut conn)
-            .optional()?;
-
-        match current_value {
-            Some(Some(current)) if current == is_tow_plane => {
-                // Value is already correct, no update needed
-                Ok(false)
-            }
-            Some(_) | None => {
-                // Value is different or row doesn't exist, perform update
-                let updated_count = diesel::update(aircraft_registrations::table)
-                    .filter(aircraft_registrations::device_id.eq(device_id))
-                    .set(aircraft_registrations::is_tow_plane.eq(Some(is_tow_plane)))
-                    .execute(&mut conn)?;
-
-                Ok(updated_count > 0)
-            }
-        }
-    }
-
     /// Get aircraft registration by device ID
     pub async fn get_aircraft_registration_by_device_id(
         &self,
