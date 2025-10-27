@@ -12,7 +12,8 @@
 		Info,
 		Activity,
 		Building2,
-		Save
+		Save,
+		Clock
 	} from '@lucide/svelte';
 	import { ProgressRing } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall } from '$lib/api/server';
@@ -659,8 +660,6 @@
 									<th class="px-3 py-2 text-left text-sm font-medium">Takeoff</th>
 									<th class="px-3 py-2 text-left text-sm font-medium">Landing</th>
 									<th class="px-3 py-2 text-left text-sm font-medium">Duration</th>
-									<th class="px-3 py-2 text-left text-sm font-medium">Takeoff Airport</th>
-									<th class="px-3 py-2 text-left text-sm font-medium">Landing Airport</th>
 									<th class="px-3 py-2 text-left text-sm font-medium">Actions</th>
 								</tr>
 							</thead>
@@ -674,25 +673,52 @@
 											: ''}"
 									>
 										<td class="px-3 py-2 text-sm">
-											{flight.takeoff_time ? formatDate(flight.takeoff_time) : 'Unknown'}
+											{#if flight.takeoff_time}
+												<div>{dayjs(flight.takeoff_time).format('MM-DD HH:mm')}</div>
+												<div class="text-xs text-surface-500">
+													{flight.departure_airport || 'Unknown'}
+												</div>
+											{:else}
+												Unknown
+											{/if}
 										</td>
 										<td class="px-3 py-2 text-sm">
-											{flight.landing_time ? formatDate(flight.landing_time) : 'In Progress'}
+											{#if flight.landing_time}
+												<div>{dayjs(flight.landing_time).format('MM-DD HH:mm')}</div>
+												<div class="text-xs text-surface-500">
+													{flight.arrival_airport || 'Unknown'}
+												</div>
+											{:else}
+												-
+											{/if}
 										</td>
 										<td class="px-3 py-2 text-sm">
 											{#if flight.takeoff_time && flight.landing_time}
 												{@const start = new Date(flight.takeoff_time)}
 												{@const end = new Date(flight.landing_time)}
 												{@const diffMs = end.getTime() - start.getTime()}
-												{@const hours = Math.floor(diffMs / (1000 * 60 * 60))}
+												{@const totalHours = diffMs / (1000 * 60 * 60)}
+												{@const hours = Math.floor(totalHours)}
 												{@const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60))}
-												{hours}h {minutes}m
+												<div class="flex items-center gap-1">
+													<span
+														>{String(hours).padStart(2, '0')}:{String(minutes).padStart(2, '0')} ({totalHours.toFixed(
+															2
+														)}h)</span
+													>
+													{#if flight.timed_out_at}
+														<span
+															class="badge preset-filled-warning-500 text-xs"
+															title="Flight timed out"
+														>
+															<Clock class="h-3 w-3" />
+														</span>
+													{/if}
+												</div>
 											{:else}
 												-
 											{/if}
 										</td>
-										<td class="px-3 py-2 text-sm">{flight.departure_airport || 'Unknown'}</td>
-										<td class="px-3 py-2 text-sm">{flight.arrival_airport || 'Unknown'}</td>
 										<td class="px-3 py-2 text-sm">
 											<a
 												href="/flights/{flight.id}"
