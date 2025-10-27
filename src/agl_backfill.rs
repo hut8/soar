@@ -1,10 +1,8 @@
-use anyhow::Result;
-use chrono::{DateTime, Duration, Utc};
+use chrono::{Duration, Utc};
 use metrics::{counter, gauge, histogram};
 use tokio::time::sleep;
 use tracing::{debug, info, warn};
 
-use crate::Fix;
 use crate::elevation::ElevationDB;
 use crate::fixes_repo::FixesRepository;
 use crate::flight_tracker::altitude::calculate_altitude_agl;
@@ -22,7 +20,10 @@ pub async fn agl_backfill_task(fixes_repo: FixesRepository, elevation_db: Elevat
         // 4. is_active = true (only backfill active aircraft)
         let one_hour_ago = Utc::now() - Duration::hours(1);
 
-        match fetch_fixes_needing_backfill(&fixes_repo, one_hour_ago, 1000).await {
+        match fixes_repo
+            .get_fixes_needing_backfill(one_hour_ago, 1000)
+            .await
+        {
             Ok(fixes) => {
                 if fixes.is_empty() {
                     // Caught up! Sleep for an hour before checking again
@@ -123,17 +124,4 @@ pub async fn agl_backfill_task(fixes_repo: FixesRepository, elevation_db: Elevat
             }
         }
     }
-}
-
-/// Fetch fixes that need AGL backfilling
-/// Returns fixes ordered by timestamp (oldest first)
-async fn fetch_fixes_needing_backfill(
-    fixes_repo: &FixesRepository,
-    before_timestamp: DateTime<Utc>,
-    limit: i64,
-) -> Result<Vec<Fix>> {
-    // Use the public method instead of accessing private pool field
-    fixes_repo
-        .get_fixes_needing_backfill(before_timestamp, limit)
-        .await
 }
