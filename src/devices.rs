@@ -194,6 +194,7 @@ pub struct DeviceModel {
     pub club_id: Option<uuid::Uuid>,
     pub icao_model_code: Option<String>,
     pub adsb_emitter_category: Option<AdsbEmitterCategory>,
+    pub tracker_device_type: Option<String>,
 }
 
 // For inserting new devices (without timestamps which are set by DB)
@@ -216,6 +217,7 @@ pub struct NewDevice {
     pub club_id: Option<uuid::Uuid>,
     pub icao_model_code: Option<String>,
     pub adsb_emitter_category: Option<AdsbEmitterCategory>,
+    pub tracker_device_type: Option<String>,
 }
 
 impl From<Device> for NewDevice {
@@ -239,6 +241,7 @@ impl From<Device> for NewDevice {
             club_id: device.club_id,
             icao_model_code: device.icao_model_code,
             adsb_emitter_category: device.adsb_emitter_category,
+            tracker_device_type: None, // Not provided by DDB
         }
     }
 }

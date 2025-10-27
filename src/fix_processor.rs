@@ -200,17 +200,17 @@ impl FixProcessor {
                     };
                 }
 
-                // When creating devices spontaneously (not from DDB), determine address_type from aprs_type
-                // aprs_type is the packet destination (e.g., "OGFLR", "OGADSB")
-                let aprs_type = packet.to.to_string();
-                let spontaneous_address_type = match aprs_type.as_str() {
+                // When creating devices spontaneously (not from DDB), determine address_type from tracker_device_type
+                // tracker_device_type is the packet destination (e.g., "OGFLR", "OGADSB")
+                let tracker_device_type = packet.to.to_string();
+                let spontaneous_address_type = match tracker_device_type.as_str() {
                     "OGFLR" => crate::devices::AddressType::Flarm,
                     "OGADSB" => crate::devices::AddressType::Icao,
                     _ => crate::devices::AddressType::Unknown,
                 };
 
                 // Look up or create device based on device_address
-                // When creating spontaneously, use address_type derived from aprs_type
+                // When creating spontaneously, use address_type derived from tracker_device_type
                 match self
                     .device_repo
                     .get_or_insert_device_by_address(device_address, spontaneous_address_type)
@@ -228,10 +228,19 @@ impl FixProcessor {
                             .adsb_emitter_category
                             .and_then(|cat| cat.to_string().parse().ok());
 
-                        // Update device fields if we have new information
-                        if icao_model_code.is_some() || adsb_emitter_category.is_some() {
+                        // Check if we have new/different information to update
+                        let icao_changed = icao_model_code.is_some()
+                            && icao_model_code != device_model.icao_model_code;
+                        let adsb_changed = adsb_emitter_category.is_some()
+                            && adsb_emitter_category != device_model.adsb_emitter_category;
+                        let tracker_type_changed =
+                            Some(&tracker_device_type) != device_model.tracker_device_type.as_ref();
+
+                        // Update device fields only if we have new/different information
+                        if icao_changed || adsb_changed || tracker_type_changed {
                             let device_repo = self.device_repo.clone();
                             let device_id = device_model.id;
+                            let tracker_type_to_update = Some(tracker_device_type.clone());
                             tokio::spawn(
                                 async move {
                                     if let Err(e) = device_repo
@@ -239,6 +248,7 @@ impl FixProcessor {
                                             device_id,
                                             icao_model_code,
                                             adsb_emitter_category,
+                                            tracker_type_to_update,
                                         )
                                         .await
                                     {

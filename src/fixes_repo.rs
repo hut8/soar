@@ -599,16 +599,14 @@ impl FixesRepository {
 
             #[derive(QueryableByName)]
             struct DeviceRow {
-                #[diesel(sql_type = diesel::sql_types::Uuid)]
-                id: uuid::Uuid,
-                #[diesel(sql_type = diesel::sql_types::Text)]
-                registration: String,
                 #[diesel(sql_type = diesel::sql_types::Int4)]
                 address: i32,
                 #[diesel(sql_type = crate::schema::sql_types::AddressType)]
                 address_type: crate::devices::AddressType,
                 #[diesel(sql_type = diesel::sql_types::Text)]
                 aircraft_model: String,
+                #[diesel(sql_type = diesel::sql_types::Text)]
+                registration: String,
                 #[diesel(sql_type = diesel::sql_types::Text)]
                 competition_number: String,
                 #[diesel(sql_type = diesel::sql_types::Bool)]
@@ -619,6 +617,8 @@ impl FixesRepository {
                 created_at: DateTime<Utc>,
                 #[diesel(sql_type = diesel::sql_types::Timestamptz)]
                 updated_at: DateTime<Utc>,
+                #[diesel(sql_type = diesel::sql_types::Uuid)]
+                id: uuid::Uuid,
                 #[diesel(sql_type = diesel::sql_types::Bool)]
                 from_ddb: bool,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Numeric>)]
@@ -637,6 +637,8 @@ impl FixesRepository {
                 icao_model_code: Option<String>,
                 #[diesel(sql_type = diesel::sql_types::Nullable<crate::schema::sql_types::AdsbEmitterCategory>)]
                 adsb_emitter_category: Option<crate::ogn_aprs_aircraft::AdsbEmitterCategory>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+                tracker_device_type: Option<String>,
             }
 
             let device_rows: Vec<DeviceRow> = diesel::sql_query(devices_sql)
@@ -660,16 +662,16 @@ impl FixesRepository {
             let device_models: Vec<crate::devices::DeviceModel> = device_rows
                 .into_iter()
                 .map(|row| crate::devices::DeviceModel {
-                    id: row.id,
-                    registration: row.registration,
                     address: row.address,
                     address_type: row.address_type,
                     aircraft_model: row.aircraft_model,
+                    registration: row.registration,
                     competition_number: row.competition_number,
                     tracked: row.tracked,
                     identified: row.identified,
                     created_at: row.created_at,
                     updated_at: row.updated_at,
+                    id: row.id,
                     from_ddb: row.from_ddb,
                     frequency_mhz: row.frequency_mhz,
                     pilot_name: row.pilot_name,
@@ -679,6 +681,7 @@ impl FixesRepository {
                     club_id: row.club_id,
                     icao_model_code: row.icao_model_code,
                     adsb_emitter_category: row.adsb_emitter_category,
+                    tracker_device_type: row.tracker_device_type,
                 })
                 .collect();
 

@@ -231,6 +231,7 @@ diesel::table! {
         club_id -> Nullable<Uuid>,
         icao_model_code -> Nullable<Text>,
         adsb_emitter_category -> Nullable<AdsbEmitterCategory>,
+        tracker_device_type -> Nullable<Text>,
     }
 }
 

@@ -128,6 +128,7 @@ impl DeviceRepository {
             club_id: None,
             icao_model_code: None,
             adsb_emitter_category: None,
+            tracker_device_type: None,
         };
 
         // Use INSERT ... ON CONFLICT ... DO UPDATE RETURNING to atomically handle race conditions
@@ -255,13 +256,14 @@ impl DeviceRepository {
         }
     }
 
-    /// Update ICAO model code and/or ADS-B emitter category for a device
+    /// Update ICAO model code, ADS-B emitter category, and/or tracker device type for a device
     /// Only updates fields that are Some (allows partial updates)
     pub async fn update_adsb_fields(
         &self,
         device_id: Uuid,
         icao_model_code: Option<String>,
         adsb_emitter_category: Option<AdsbEmitterCategory>,
+        tracker_device_type: Option<String>,
     ) -> Result<()> {
         let pool = self.pool.clone();
 
@@ -269,21 +271,62 @@ impl DeviceRepository {
             let mut conn = pool.get()?;
 
             // Build dynamic update based on which fields are provided
-            if icao_model_code.is_some() && adsb_emitter_category.is_some() {
-                diesel::update(devices::table.filter(devices::id.eq(device_id)))
-                    .set((
-                        devices::icao_model_code.eq(icao_model_code),
-                        devices::adsb_emitter_category.eq(adsb_emitter_category),
-                    ))
-                    .execute(&mut conn)?;
-            } else if let Some(code) = icao_model_code {
-                diesel::update(devices::table.filter(devices::id.eq(device_id)))
-                    .set(devices::icao_model_code.eq(code))
-                    .execute(&mut conn)?;
-            } else if let Some(category) = adsb_emitter_category {
-                diesel::update(devices::table.filter(devices::id.eq(device_id)))
-                    .set(devices::adsb_emitter_category.eq(category))
-                    .execute(&mut conn)?;
+            match (
+                icao_model_code.as_ref(),
+                adsb_emitter_category.as_ref(),
+                tracker_device_type.as_ref(),
+            ) {
+                (Some(_), Some(_), Some(_)) => {
+                    diesel::update(devices::table.filter(devices::id.eq(device_id)))
+                        .set((
+                            devices::icao_model_code.eq(icao_model_code),
+                            devices::adsb_emitter_category.eq(adsb_emitter_category),
+                            devices::tracker_device_type.eq(tracker_device_type),
+                        ))
+                        .execute(&mut conn)?;
+                }
+                (Some(_), Some(_), None) => {
+                    diesel::update(devices::table.filter(devices::id.eq(device_id)))
+                        .set((
+                            devices::icao_model_code.eq(icao_model_code),
+                            devices::adsb_emitter_category.eq(adsb_emitter_category),
+                        ))
+                        .execute(&mut conn)?;
+                }
+                (Some(_), None, Some(_)) => {
+                    diesel::update(devices::table.filter(devices::id.eq(device_id)))
+                        .set((
+                            devices::icao_model_code.eq(icao_model_code),
+                            devices::tracker_device_type.eq(tracker_device_type),
+                        ))
+                        .execute(&mut conn)?;
+                }
+                (None, Some(_), Some(_)) => {
+                    diesel::update(devices::table.filter(devices::id.eq(device_id)))
+                        .set((
+                            devices::adsb_emitter_category.eq(adsb_emitter_category),
+                            devices::tracker_device_type.eq(tracker_device_type),
+                        ))
+                        .execute(&mut conn)?;
+                }
+                (Some(code), None, None) => {
+                    diesel::update(devices::table.filter(devices::id.eq(device_id)))
+                        .set(devices::icao_model_code.eq(code))
+                        .execute(&mut conn)?;
+                }
+                (None, Some(category), None) => {
+                    diesel::update(devices::table.filter(devices::id.eq(device_id)))
+                        .set(devices::adsb_emitter_category.eq(category))
+                        .execute(&mut conn)?;
+                }
+                (None, None, Some(tracker_type)) => {
+                    diesel::update(devices::table.filter(devices::id.eq(device_id)))
+                        .set(devices::tracker_device_type.eq(tracker_type))
+                        .execute(&mut conn)?;
+                }
+                (None, None, None) => {
+                    // No fields to update, do nothing
+                }
             }
 
             Ok::<(), anyhow::Error>(())
