@@ -3,6 +3,7 @@
 	import { AppBar, Toaster } from '@skeletonlabs/skeleton-svelte';
 	import { toaster } from '$lib/toaster';
 	import favicon from '$lib/assets/favicon.svg';
+	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { auth } from '$lib/stores/auth';
@@ -60,6 +61,7 @@
 	function handleLogout() {
 		auth.logout();
 		showUserMenu = false;
+		goto(base);
 	}
 
 	// Close menus when clicking outside
@@ -84,7 +86,7 @@
 	<AppBar background="bg-orange-400 dark:bg-orange-900" classes="relative z-[70]">
 		{#snippet lead()}
 			<a href={base} class="btn flex items-center space-x-2 preset-filled-primary-500">
-				<div class="flex items-center gap-3 text-xl font-bold">
+				<div class="flex items-center gap-3 font-bold">
 					<Plane />
 					Glider.flights
 				</div>
@@ -131,13 +133,11 @@
 				{#if $auth.isAuthenticated && $auth.user}
 					<div class="user-menu relative">
 						<button
-							class="btn preset-filled-primary-500 btn-sm"
+							class="btn hidden preset-filled-primary-500 btn-sm sm:inline-flex"
 							onclick={() => (showUserMenu = !showUserMenu)}
 						>
-							<span class="hidden sm:inline">
-								<User size={16} />
-								{$auth.user.first_name}
-							</span>
+							<User size={16} />
+							{$auth.user.first_name}
 						</button>
 
 						{#if showUserMenu}

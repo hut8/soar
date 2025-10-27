@@ -10,10 +10,11 @@ export type DeviceRegistryEvent =
 
 export type DeviceRegistrySubscriber = (event: DeviceRegistryEvent) => void;
 
-// Internal type to store device with its fixes
+// Internal type to store device with its fixes and cache metadata
 interface DeviceWithFixesCache {
 	device: Device;
 	fixes: Fix[];
+	cached_at: number; // Timestamp when this device was last fetched/updated
 }
 
 export class DeviceRegistry {
@@ -22,9 +23,15 @@ export class DeviceRegistry {
 	private subscribers = new Set<DeviceRegistrySubscriber>();
 	private readonly storageKeyPrefix = 'device.';
 	private readonly maxFixAge = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+	private readonly deviceCacheExpiration = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+	private refreshIntervalId: number | null = null;
 
 	private constructor() {
 		// Private constructor for singleton pattern
+		// Start periodic refresh check when registry is created
+		if (browser) {
+			this.startPeriodicRefresh();
+		}
 	}
 
 	// Singleton instance getter
@@ -92,9 +99,10 @@ export class DeviceRegistry {
 	public setDevice(device: Device): void {
 		// Get existing fixes if any, or use the ones from the device, or empty array
 		const existingFixes = this.devices.get(device.id)?.fixes || device.fixes || [];
+		const cached_at = Date.now();
 
-		this.devices.set(device.id, { device, fixes: existingFixes });
-		this.saveDeviceToStorage({ device, fixes: existingFixes });
+		this.devices.set(device.id, { device, fixes: existingFixes, cached_at });
+		this.saveDeviceToStorage({ device, fixes: existingFixes, cached_at });
 
 		// Notify subscribers
 		this.notifySubscribers({
@@ -300,6 +308,7 @@ export class DeviceRegistry {
 	// Clear all devices (for cleanup)
 	public clear(): void {
 		this.devices.clear();
+		this.stopPeriodicRefresh();
 
 		// Clear localStorage
 		if (browser) {
@@ -340,6 +349,10 @@ export class DeviceRegistry {
 		if (stored) {
 			try {
 				const data = JSON.parse(stored) as DeviceWithFixesCache;
+				// Handle backward compatibility: if cached_at is missing, set it to 0 (will be refreshed)
+				if (!data.cached_at) {
+					data.cached_at = 0;
+				}
 				return data;
 			} catch (e) {
 				console.warn(`Failed to parse stored device ${deviceId}:`, e);
@@ -349,6 +362,92 @@ export class DeviceRegistry {
 		}
 
 		return null;
+	}
+
+	// Check if a device cache entry is stale
+	private isDeviceStale(cached: DeviceWithFixesCache): boolean {
+		const now = Date.now();
+		const age = now - cached.cached_at;
+		return age > this.deviceCacheExpiration;
+	}
+
+	// Get all stale devices that need refreshing
+	private getStaleDevices(): string[] {
+		const staleDeviceIds: string[] = [];
+
+		for (const [deviceId, cached] of this.devices.entries()) {
+			if (this.isDeviceStale(cached)) {
+				staleDeviceIds.push(deviceId);
+			}
+		}
+
+		return staleDeviceIds;
+	}
+
+	// Refresh all stale devices from the API
+	public async refreshStaleDevices(): Promise<void> {
+		const staleDeviceIds = this.getStaleDevices();
+
+		if (staleDeviceIds.length === 0) {
+			console.log('[REGISTRY] No stale devices to refresh');
+			return;
+		}
+
+		console.log(`[REGISTRY] Refreshing ${staleDeviceIds.length} stale device(s)`);
+
+		// Refresh devices in parallel with rate limiting (max 5 at a time)
+		const batchSize = 5;
+		for (let i = 0; i < staleDeviceIds.length; i += batchSize) {
+			const batch = staleDeviceIds.slice(i, i + batchSize);
+			await Promise.allSettled(batch.map((deviceId) => this.updateDeviceFromAPI(deviceId)));
+		}
+
+		console.log('[REGISTRY] Finished refreshing stale devices');
+	}
+
+	// Start periodic refresh of stale devices
+	private startPeriodicRefresh(): void {
+		// Initial refresh on load
+		this.loadAllDevicesFromStorage();
+		void this.refreshStaleDevices();
+
+		// Set up periodic refresh every hour
+		this.refreshIntervalId = window.setInterval(
+			() => {
+				void this.refreshStaleDevices();
+			},
+			60 * 60 * 1000
+		); // Every hour
+	}
+
+	// Stop periodic refresh (for cleanup)
+	public stopPeriodicRefresh(): void {
+		if (this.refreshIntervalId !== null) {
+			window.clearInterval(this.refreshIntervalId);
+			this.refreshIntervalId = null;
+		}
+	}
+
+	// Load all devices from localStorage into memory
+	private loadAllDevicesFromStorage(): void {
+		if (!browser) return;
+
+		console.log('[REGISTRY] Loading devices from localStorage');
+		let count = 0;
+
+		for (let i = 0; i < localStorage.length; i++) {
+			const key = localStorage.key(i);
+			if (key && key.startsWith(this.storageKeyPrefix)) {
+				const deviceId = key.substring(this.storageKeyPrefix.length);
+				const cached = this.loadDeviceFromStorage(deviceId);
+				if (cached) {
+					this.devices.set(deviceId, cached);
+					count++;
+				}
+			}
+		}
+
+		console.log(`[REGISTRY] Loaded ${count} device(s) from localStorage`);
 	}
 
 	// Batch load recent fixes for a device from API
