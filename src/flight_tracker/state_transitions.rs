@@ -4,15 +4,18 @@ use crate::elevation::ElevationDB;
 use crate::fixes_repo::FixesRepository;
 use crate::flights_repo::FlightsRepository;
 use crate::locations_repo::LocationsRepository;
+use crate::ogn_aprs_aircraft::AircraftType;
 use crate::runways_repo::RunwaysRepository;
 use anyhow::Result;
+use std::sync::Arc;
 use tracing::{error, info, trace, warn};
 use uuid::Uuid;
 
 use super::altitude::calculate_altitude_agl;
 use super::altitude::calculate_altitude_offset_ft;
 use super::flight_lifecycle::{complete_flight, create_flight};
-use super::{ActiveFlightsMap, CurrentFlightState, DeviceLocksMap};
+use super::towing;
+use super::{ActiveFlightsMap, AircraftTrackersMap, CurrentFlightState, DeviceLocksMap};
 
 /// Helper function to update last_fix_at timestamp in database
 /// Logs error if update fails but doesn't propagate the error
@@ -75,6 +78,7 @@ pub(crate) async fn process_state_transition(
     elevation_db: &ElevationDB,
     active_flights: &ActiveFlightsMap,
     device_locks: &DeviceLocksMap,
+    aircraft_trackers: &AircraftTrackersMap,
     mut fix: Fix,
 ) -> Result<Fix> {
     let is_active = should_be_active(&fix);
@@ -164,6 +168,21 @@ pub(crate) async fn process_state_transition(
                     Ok(_) => {
                         fix.flight_id = Some(flight_id);
                         // Note: last_fix_at is already set during flight creation
+
+                        // If this is a towplane taking off, spawn towing detection task
+                        if fix.aircraft_type_ogn == Some(AircraftType::TowTug) {
+                            info!(
+                                "Towplane {} taking off - spawning towing detection task",
+                                fix.device_id
+                            );
+                            towing::spawn_towing_detection_task(
+                                fix.device_id,
+                                flight_id,
+                                fixes_repo.clone(),
+                                flights_repo.clone(),
+                                Arc::clone(aircraft_trackers),
+                            );
+                        }
                     }
                     Err(e) => {
                         warn!("Failed to create flight: {}", e);
