@@ -11,7 +11,6 @@
 		Calendar,
 		Info,
 		Activity,
-		Settings,
 		Building2,
 		Save
 	} from '@lucide/svelte';
@@ -306,7 +305,15 @@
 						<div class="mb-2 flex items-center gap-3">
 							<Radio class="h-8 w-8 text-primary-500" />
 							<div>
-								<h1 class="h1">{device.registration || 'Unknown'}</h1>
+								<h1 class="h1">
+									{device.registration || 'Unknown'}
+									{#if device.competition_number}
+										<span class="text-surface-600-300-token">({device.competition_number})</span>
+									{/if}
+								</h1>
+								{#if device.aircraft_model}
+									<p class="text-lg">{device.aircraft_model}</p>
+								{/if}
 								<p class="text-surface-600-300-token font-mono text-sm">
 									Address: {formatDeviceAddress(device.address_type, device.address)}
 								</p>
@@ -347,44 +354,6 @@
 
 			<!-- Main Content Grid -->
 			<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
-				<!-- Device Information -->
-				<div class="space-y-4 card p-6">
-					<h2 class="flex items-center gap-2 h2">
-						<Settings class="h-6 w-6" />
-						Device Information
-					</h2>
-
-					<div class="space-y-3">
-						<div class="flex items-start gap-3">
-							<Radio class="mt-1 h-4 w-4 text-surface-500" />
-							<div>
-								<p class="text-surface-600-300-token mb-1 text-sm">Device Address</p>
-								<p class="font-mono">
-									{formatDeviceAddress(device.address_type, device.address)}
-								</p>
-							</div>
-						</div>
-
-						<div class="flex items-start gap-3">
-							<Plane class="mt-1 h-4 w-4 text-surface-500" />
-							<div>
-								<p class="text-surface-600-300-token mb-1 text-sm">Aircraft Model</p>
-								<p>{device.aircraft_model}</p>
-							</div>
-						</div>
-
-						{#if device.competition_number}
-							<div class="flex items-start gap-3">
-								<Activity class="mt-1 h-4 w-4 text-surface-500" />
-								<div>
-									<p class="text-surface-600-300-token mb-1 text-sm">Competition Number</p>
-									<p class="font-mono">{device.competition_number}</p>
-								</div>
-							</div>
-						{/if}
-					</div>
-				</div>
-
 				<!-- Club Assignment (Admin Only) -->
 				{#if isAdmin}
 					<div class="space-y-4 card p-6">
