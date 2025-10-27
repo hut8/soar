@@ -87,6 +87,13 @@ if [ "$SOURCED" = true ]; then
     echo -e "${YELLOW}Changing directory to worktree...${NC}"
     cd "$WORKTREE_DIR"
     echo -e "${GREEN}✓ Now in: ${CYAN}$(pwd)${NC}"
+
+    # Run mise trust if mise is installed
+    if command -v mise &> /dev/null; then
+        echo -e "${BLUE}Running mise trust...${NC}"
+        mise trust
+        echo -e "${GREEN}✓ mise trust complete${NC}"
+    fi
 else
     echo -e "${YELLOW}To start working:${NC}"
     echo -e "  ${CYAN}cd $WORKTREE_DIR${NC}"

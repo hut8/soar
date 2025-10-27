@@ -18,10 +18,9 @@ END $$;
 ALTER TABLE fixes
 ADD COLUMN IF NOT EXISTS altitude_agl_valid BOOLEAN NOT NULL DEFAULT false;
 
--- Set altitude_agl_valid to true for all existing rows where altitude_agl_feet is not null
-UPDATE fixes
-SET altitude_agl_valid = true
-WHERE altitude_agl_feet IS NOT NULL AND altitude_agl_valid = false;
+-- NOTE: The following UPDATE has been removed as it would block on large tables.
+-- Run manually after migration if needed:
+-- UPDATE fixes SET altitude_agl_valid = true WHERE altitude_agl_feet IS NOT NULL AND altitude_agl_valid = false;
 
 -- Rename the index to match the new column name (idempotent)
 DO $$
