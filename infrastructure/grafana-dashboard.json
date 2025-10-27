@@ -1157,7 +1157,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.50, rate(aprs_processing_duration_ms_bucket[5m]))",
+          "expr": "aprs_processing_duration_ms{quantile=\"0.5\"}",
           "legendFormat": "P50",
           "range": true,
           "refId": "A"
@@ -1168,7 +1168,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, rate(aprs_processing_duration_ms_bucket[5m]))",
+          "expr": "aprs_processing_duration_ms{quantile=\"0.95\"}",
           "legendFormat": "P95",
           "range": true,
           "refId": "B"
@@ -1179,7 +1179,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.99, rate(aprs_processing_duration_ms_bucket[5m]))",
+          "expr": "aprs_processing_duration_ms{quantile=\"0.99\"}",
           "legendFormat": "P99",
           "range": true,
           "refId": "C"
@@ -1481,7 +1481,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.50, rate(aprs_elevation_duration_ms_bucket[5m]))",
+          "expr": "aprs_elevation_duration_ms{quantile=\"0.5\"}",
           "legendFormat": "P50",
           "range": true,
           "refId": "A"
@@ -1492,7 +1492,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, rate(aprs_elevation_duration_ms_bucket[5m]))",
+          "expr": "aprs_elevation_duration_ms{quantile=\"0.95\"}",
           "legendFormat": "P95",
           "range": true,
           "refId": "B"
@@ -1503,7 +1503,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.99, rate(aprs_elevation_duration_ms_bucket[5m]))",
+          "expr": "aprs_elevation_duration_ms{quantile=\"0.99\"}",
           "legendFormat": "P99",
           "range": true,
           "refId": "C"
