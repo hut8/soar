@@ -1,0 +1,45 @@
+#!/bin/bash
+
+set -e  # Exit on error
+
+# Check if branch name is provided
+if [ -z "$1" ]; then
+    echo "Error: Branch name is required"
+    echo "Usage: make-worktree <branch-name>"
+    echo "Example: make-worktree feat/ogn-tracker-type"
+    exit 1
+fi
+
+BRANCH_NAME="$1"
+WORKTREE_DIR="$HOME/soar-worktrees/$BRANCH_NAME"
+
+# Check for .env file
+ENV_FILE=""
+if [ -f ".env" ]; then
+    ENV_FILE=".env"
+elif [ -f "$HOME/soar/.env" ]; then
+    ENV_FILE="$HOME/soar/.env"
+else
+    echo "Error: .env file not found in current directory or $HOME/soar/.env"
+    exit 1
+fi
+
+echo "Creating worktree for branch: $BRANCH_NAME"
+echo "Location: $WORKTREE_DIR"
+
+# Create the worktree
+git worktree add -b "$BRANCH_NAME" "$WORKTREE_DIR" main
+
+# Copy .env file
+echo "Copying .env file..."
+cp "$ENV_FILE" "$WORKTREE_DIR/.env"
+
+# Run npm install in the web directory
+echo "Installing npm dependencies..."
+cd "$WORKTREE_DIR/web"
+npm install
+
+echo ""
+echo "✓ Worktree setup complete!"
+echo "To start working:"
+echo "  cd $WORKTREE_DIR"
