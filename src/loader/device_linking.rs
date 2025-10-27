@@ -21,7 +21,17 @@ pub async fn link_aircraft_to_devices_with_metrics(pool: PgPool) -> EntityMetric
         Ok(count) => {
             info!("Successfully linked {} aircraft to devices", count);
             metrics.records_loaded = count;
-            metrics.records_in_db = Some(count as i64);
+
+            // Get total count of aircraft_registrations with device_id set
+            match get_aircraft_with_device_count(&pool).await {
+                Ok(total) => {
+                    metrics.records_in_db = Some(total);
+                }
+                Err(e) => {
+                    info!("Failed to get aircraft device count: {}", e);
+                    metrics.records_in_db = None;
+                }
+            }
             metrics.success = true;
         }
         Err(e) => {
@@ -46,7 +56,17 @@ pub async fn link_devices_to_clubs_with_metrics(pool: PgPool) -> EntityMetrics {
         Ok(count) => {
             info!("Successfully linked {} devices to clubs", count);
             metrics.records_loaded = count;
-            metrics.records_in_db = Some(count as i64);
+
+            // Get total count of devices with club_id set
+            match get_devices_with_club_count(&pool).await {
+                Ok(total) => {
+                    metrics.records_in_db = Some(total);
+                }
+                Err(e) => {
+                    info!("Failed to get device club count: {}", e);
+                    metrics.records_in_db = None;
+                }
+            }
             metrics.success = true;
         }
         Err(e) => {
@@ -103,6 +123,48 @@ async fn link_devices_to_clubs(pool: &PgPool) -> Result<usize> {
             "#,
         )
         .execute(&mut conn)?;
+
+        Ok(count)
+    })
+    .await?
+}
+
+/// Get count of devices with club_id set
+async fn get_devices_with_club_count(pool: &PgPool) -> Result<i64> {
+    let pool = pool.clone();
+
+    tokio::task::spawn_blocking(move || {
+        use diesel::RunQueryDsl;
+        use diesel::dsl::sql;
+        use diesel::sql_types::BigInt;
+
+        let mut conn = pool.get()?;
+
+        let count: i64 = diesel::select(sql::<BigInt>(
+            "SELECT COUNT(*) FROM devices WHERE club_id IS NOT NULL",
+        ))
+        .get_result(&mut conn)?;
+
+        Ok(count)
+    })
+    .await?
+}
+
+/// Get count of aircraft_registrations with device_id set
+async fn get_aircraft_with_device_count(pool: &PgPool) -> Result<i64> {
+    let pool = pool.clone();
+
+    tokio::task::spawn_blocking(move || {
+        use diesel::RunQueryDsl;
+        use diesel::dsl::sql;
+        use diesel::sql_types::BigInt;
+
+        let mut conn = pool.get()?;
+
+        let count: i64 = diesel::select(sql::<BigInt>(
+            "SELECT COUNT(*) FROM aircraft_registrations WHERE device_id IS NOT NULL",
+        ))
+        .get_result(&mut conn)?;
 
         Ok(count)
     })
