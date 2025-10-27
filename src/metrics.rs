@@ -11,6 +11,15 @@ static METRICS_HANDLE: OnceLock<PrometheusHandle> = OnceLock::new();
 /// Returns a handle that can be used to render metrics for scraping
 pub fn init_metrics() -> PrometheusHandle {
     PrometheusBuilder::new()
+        // Configure HTTP request duration as histogram with appropriate buckets
+        // Buckets: 1ms, 5ms, 10ms, 25ms, 50ms, 100ms, 250ms, 500ms, 1s, 2.5s, 5s, 10s
+        .set_buckets_for_metric(
+            metrics_exporter_prometheus::Matcher::Full("http_request_duration_seconds".to_string()),
+            &[
+                0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
+            ],
+        )
+        .expect("failed to set buckets for http_request_duration_seconds")
         .install_recorder()
         .expect("failed to install Prometheus recorder")
 }

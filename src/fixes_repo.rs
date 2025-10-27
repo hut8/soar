@@ -307,6 +307,32 @@ impl FixesRepository {
         .await?
     }
 
+    /// Count fixes that need AGL backfilling
+    /// Returns count of fixes that are old enough, have MSL altitude, but don't have AGL calculated yet
+    pub async fn count_fixes_needing_backfill(
+        &self,
+        before_timestamp: DateTime<Utc>,
+    ) -> Result<i64> {
+        use crate::schema::fixes::dsl::*;
+        use diesel::dsl::count_star;
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            let count = fixes
+                .filter(timestamp.lt(before_timestamp))
+                .filter(altitude_msl_feet.is_not_null())
+                .filter(altitude_agl_valid.eq(false))
+                .filter(is_active.eq(true))
+                .select(count_star())
+                .first::<i64>(&mut conn)?;
+
+            Ok::<i64, anyhow::Error>(count)
+        })
+        .await?
+    }
+
     /// Get fixes that need AGL backfilling
     /// Returns fixes that are old enough, have MSL altitude, but don't have AGL calculated yet
     pub async fn get_fixes_needing_backfill(
