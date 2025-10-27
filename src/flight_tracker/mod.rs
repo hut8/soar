@@ -1,9 +1,11 @@
+mod aircraft_tracker;
 pub mod altitude;
 mod flight_lifecycle;
 mod geometry;
 mod location;
 mod runway;
 mod state_transitions;
+mod towing;
 pub(crate) mod utils;
 
 use crate::Fix;
@@ -75,6 +77,9 @@ pub(crate) type ActiveFlightsMap = Arc<RwLock<HashMap<Uuid, CurrentFlightState>>
 /// Type alias for device locks map: device_id -> Arc<Mutex<()>>
 pub(crate) type DeviceLocksMap = Arc<RwLock<HashMap<Uuid, Arc<Mutex<()>>>>>;
 
+/// Type alias for aircraft trackers map: device_id -> AircraftTracker
+pub(crate) type AircraftTrackersMap = Arc<RwLock<HashMap<Uuid, aircraft_tracker::AircraftTracker>>>;
+
 /// Simple flight tracker - just tracks which device is currently on which flight
 pub struct FlightTracker {
     flights_repo: FlightsRepository,
@@ -87,6 +92,8 @@ pub struct FlightTracker {
     active_flights: ActiveFlightsMap,
     // Per-device mutexes to ensure sequential processing per device
     device_locks: DeviceLocksMap,
+    // Aircraft trackers for towplane towing detection
+    aircraft_trackers: AircraftTrackersMap,
 }
 
 impl Clone for FlightTracker {
@@ -100,6 +107,7 @@ impl Clone for FlightTracker {
             elevation_db: self.elevation_db.clone(),
             active_flights: Arc::clone(&self.active_flights),
             device_locks: Arc::clone(&self.device_locks),
+            aircraft_trackers: Arc::clone(&self.aircraft_trackers),
         }
     }
 }
@@ -116,6 +124,7 @@ impl FlightTracker {
             elevation_db,
             active_flights: Arc::new(RwLock::new(HashMap::new())),
             device_locks: Arc::new(RwLock::new(HashMap::new())),
+            aircraft_trackers: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -326,6 +335,7 @@ impl FlightTracker {
             &self.elevation_db,
             &self.active_flights,
             &self.device_locks,
+            &self.aircraft_trackers,
             fix,
         )
         .await

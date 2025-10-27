@@ -105,7 +105,7 @@ impl ElevationDB {
             elevation_cache: Arc::new(Mutex::new(LruCache::new(
                 NonZeroUsize::new(500_000).unwrap(),
             ))),
-            dataset_cache: Arc::new(Mutex::new(LruCache::new(NonZeroUsize::new(100).unwrap()))),
+            dataset_cache: Arc::new(Mutex::new(LruCache::new(NonZeroUsize::new(1000).unwrap()))),
         })
     }
 
@@ -127,7 +127,7 @@ impl ElevationDB {
             elevation_cache: Arc::new(Mutex::new(LruCache::new(
                 NonZeroUsize::new(500_000).unwrap(),
             ))),
-            dataset_cache: Arc::new(Mutex::new(LruCache::new(NonZeroUsize::new(100).unwrap()))),
+            dataset_cache: Arc::new(Mutex::new(LruCache::new(NonZeroUsize::new(1000).unwrap()))),
         })
     }
 

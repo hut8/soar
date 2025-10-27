@@ -111,7 +111,6 @@ diesel::table! {
         #[max_length = 9]
         approved_operations_raw -> Nullable<Varchar>,
         home_base_airport_id -> Nullable<Int4>,
-        is_tow_plane -> Nullable<Bool>,
         location_id -> Nullable<Uuid>,
         airworthiness_class -> Nullable<AirworthinessClass>,
         device_id -> Nullable<Uuid>,
