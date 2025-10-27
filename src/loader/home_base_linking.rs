@@ -146,10 +146,20 @@ pub async fn link_home_bases_with_metrics(
     let start = Instant::now();
     let mut metrics = EntityMetrics::new("Home Base Linking");
 
-    match link_home_bases(diesel_pool).await {
+    match link_home_bases(diesel_pool.clone()).await {
         Ok((linked, failed)) => {
             metrics.records_loaded = linked + failed;
-            metrics.records_in_db = Some(linked as i64);
+
+            // Get total count of clubs with home_base_airport_id set
+            match get_clubs_with_home_base_count(diesel_pool).await {
+                Ok(total) => {
+                    metrics.records_in_db = Some(total);
+                }
+                Err(e) => {
+                    info!("Failed to get clubs home base count: {}", e);
+                    metrics.records_in_db = None;
+                }
+            }
             metrics.success = true;
 
             if failed > 0 {
@@ -169,4 +179,25 @@ pub async fn link_home_bases_with_metrics(
 
     metrics.duration_secs = start.elapsed().as_secs_f64();
     metrics
+}
+
+/// Get count of clubs with home_base_airport_id set
+async fn get_clubs_with_home_base_count(
+    diesel_pool: Pool<ConnectionManager<PgConnection>>,
+) -> Result<i64> {
+    tokio::task::spawn_blocking(move || {
+        use diesel::RunQueryDsl;
+        use diesel::dsl::sql;
+        use diesel::sql_types::BigInt;
+
+        let mut conn = diesel_pool.get()?;
+
+        let count: i64 = diesel::select(sql::<BigInt>(
+            "SELECT COUNT(*) FROM clubs WHERE home_base_airport_id IS NOT NULL",
+        ))
+        .get_result(&mut conn)?;
+
+        Ok(count)
+    })
+    .await?
 }

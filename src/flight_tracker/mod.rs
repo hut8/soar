@@ -4,6 +4,7 @@ mod geometry;
 mod location;
 mod runway;
 mod state_transitions;
+pub(crate) mod utils;
 
 use crate::Fix;
 use crate::airports_repo::AirportsRepository;
@@ -214,6 +215,14 @@ impl FlightTracker {
                 .collect()
         };
 
+        // Update continuous metrics before processing timeouts
+        {
+            let active_flights = self.active_flights.read().await;
+            crate::flight_tracker::utils::update_flight_tracker_metrics(&active_flights);
+        }
+
+        let timeout_count = flights_to_timeout.len();
+
         // Timeout each stale flight
         for (flight_id, device_id) in flights_to_timeout {
             // Double-check that the flight still exists in the map before timing it out
@@ -246,7 +255,13 @@ impl FlightTracker {
             } else {
                 // Clean up the device lock after successful timeout
                 self.cleanup_device_lock(device_id).await;
+                // Increment timeout counter
+                metrics::counter!("flight_tracker_timeouts_detected").increment(1);
             }
+        }
+
+        if timeout_count > 0 {
+            info!("Timed out {} flights", timeout_count);
         }
     }
 
