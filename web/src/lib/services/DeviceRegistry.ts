@@ -157,6 +157,9 @@ export class DeviceRegistry {
 	// Update device from Aircraft data (from WebSocket or bbox search)
 	public async updateDeviceFromAircraft(aircraft: Aircraft): Promise<Device | null> {
 		try {
+			// Check if this is a new device (not already in cache)
+			const isNewDevice = !this.devices.has(aircraft.id);
+
 			// Extract the device portion
 			const device: Device = {
 				id: aircraft.id,
@@ -181,6 +184,19 @@ export class DeviceRegistry {
 			};
 
 			this.setDevice(device);
+
+			// If this is a new device, automatically load 8 hours of historical fixes
+			if (isNewDevice) {
+				console.log(`[REGISTRY] New device encountered: ${aircraft.id}, loading 8 hours of fixes`);
+				// Don't await - load in background to avoid blocking
+				this.loadRecentFixesFromAPI(aircraft.id, 8).catch((error) => {
+					console.warn(
+						`[REGISTRY] Failed to load historical fixes for new device ${aircraft.id}:`,
+						error
+					);
+				});
+			}
+
 			return this.getDevice(device.id);
 		} catch (error) {
 			console.warn(`Failed to update device from aircraft data:`, error);
@@ -334,7 +350,12 @@ export class DeviceRegistry {
 
 		try {
 			const key = this.storageKeyPrefix + cached.device.id;
-			localStorage.setItem(key, JSON.stringify(cached));
+			// Strip fixes entirely before saving to localStorage - they should never be cached
+			const cacheWithoutFixes = {
+				device: cached.device,
+				cached_at: cached.cached_at
+			};
+			localStorage.setItem(key, JSON.stringify(cacheWithoutFixes));
 		} catch (error) {
 			console.warn('Failed to save device to localStorage:', error);
 		}
@@ -451,15 +472,25 @@ export class DeviceRegistry {
 	}
 
 	// Batch load recent fixes for a device from API
-	public async loadRecentFixesFromAPI(deviceId: string, limit: number = 100): Promise<Fix[]> {
+	// Fetches fixes from the last 8 hours by default
+	public async loadRecentFixesFromAPI(deviceId: string, hoursBack: number = 8): Promise<Fix[]> {
 		try {
+			// Calculate timestamp for N hours ago in YYYYMMDDHHMMSS UTC format
+			const now = new Date();
+			const hoursAgo = new Date(now.getTime() - hoursBack * 60 * 60 * 1000);
+			const after = hoursAgo
+				.toISOString()
+				.replace(/[-:]/g, '')
+				.replace(/\.\d{3}Z$/, '')
+				.substring(0, 14); // Format: YYYYMMDDHHMMSS
+
 			const response = await serverCall<{ fixes: Fix[] }>(
-				`/fixes?device_id=${deviceId}&limit=${limit}`
+				`/devices/${deviceId}/fixes?after=${after}&per_page=1000`
 			);
 			if (response.fixes) {
 				// Add fixes to device
 				for (const fix of response.fixes) {
-					await this.addFixToDevice(fix);
+					await this.addFixToDevice(fix, false);
 				}
 				return response.fixes;
 			}

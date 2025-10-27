@@ -18,7 +18,7 @@
 		bottom: 0;
 		pointer-events: none;
 		animation: fadeIn 150ms ease-in;
-		z-index: -1;
+		z-index: 1;
 	}
 
 	/* Light mode - soft blue gradient */
