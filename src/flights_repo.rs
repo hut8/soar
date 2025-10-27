@@ -755,45 +755,40 @@ impl FlightsRepository {
         &self,
         timeout_duration: chrono::Duration,
     ) -> Result<usize> {
-        use crate::schema::flights::dsl::*;
+        use diesel::sql_types::Timestamptz;
 
         let pool = self.pool.clone();
         let cutoff_time = Utc::now() - timeout_duration;
 
+        // Convert chrono::Duration to PostgreSQL interval string
+        // PostgreSQL interval format: 'X hours' or 'X seconds'
+        let interval_str = format!("{} seconds", timeout_duration.num_seconds());
+
         let rows_affected = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            // Update flights where:
-            // - timed_out_at is NULL (not already timed out)
-            // - landing_time is NULL (not already landed)
-            // - last_fix_at is older than cutoff_time
-            // Set timed_out_at to last_fix_at + timeout_duration (when it was considered timed out)
+            // Use raw SQL to perform the update with PostgreSQL interval arithmetic
+            // UPDATE flights
+            // SET timed_out_at = last_fix_at + INTERVAL 'X seconds',
+            //     updated_at = NOW()
+            // WHERE timed_out_at IS NULL
+            //   AND landing_time IS NULL
+            //   AND last_fix_at < $1
+            let query = format!(
+                "UPDATE flights \
+                 SET timed_out_at = last_fix_at + INTERVAL '{}', \
+                     updated_at = NOW() \
+                 WHERE timed_out_at IS NULL \
+                   AND landing_time IS NULL \
+                   AND last_fix_at < $1",
+                interval_str
+            );
 
-            // First, get the IDs and last_fix_at values of flights to update
-            let flights_to_update: Vec<(Uuid, DateTime<Utc>)> = flights
-                .filter(timed_out_at.is_null())
-                .filter(landing_time.is_null())
-                .filter(last_fix_at.lt(cutoff_time))
-                .select((id, last_fix_at))
-                .load(&mut conn)?;
+            let rows = diesel::sql_query(query)
+                .bind::<Timestamptz, _>(cutoff_time)
+                .execute(&mut conn)?;
 
-            let mut total_rows = 0;
-
-            // Update each flight individually
-            for (flight_id, last_fix_time) in flights_to_update {
-                // Calculate the timeout time: last_fix_at + timeout_duration
-                let timeout_time = last_fix_time + timeout_duration;
-
-                let rows = diesel::update(flights.filter(id.eq(flight_id)))
-                    .set((
-                        timed_out_at.eq(Some(timeout_time)),
-                        updated_at.eq(Utc::now()),
-                    ))
-                    .execute(&mut conn)?;
-                total_rows += rows;
-            }
-
-            Ok::<usize, anyhow::Error>(total_rows)
+            Ok::<usize, anyhow::Error>(rows)
         })
         .await??;
 
