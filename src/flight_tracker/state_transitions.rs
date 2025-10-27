@@ -11,6 +11,7 @@ use std::sync::Arc;
 use tracing::{error, info, trace, warn};
 use uuid::Uuid;
 
+use super::aircraft_tracker;
 use super::altitude::calculate_altitude_agl;
 use super::altitude::calculate_altitude_offset_ft;
 use super::flight_lifecycle::{complete_flight, create_flight};
@@ -102,6 +103,52 @@ pub(crate) async fn process_state_transition(
 
             // Update last_fix_at in database
             update_flight_timestamp(flights_repo, state.flight_id, fix.timestamp).await;
+
+            // For towplanes: track climb rate and check for tow release
+            if fix.aircraft_type_ogn == Some(AircraftType::TowTug)
+                && let Some(climb_fpm) = fix.climb_fpm
+            {
+                // Update aircraft tracker with climb rate and check for release
+                let mut trackers = aircraft_trackers.write().await;
+                let tracker = trackers.entry(fix.device_id).or_insert_with(|| {
+                    aircraft_tracker::AircraftTracker::new(aircraft_tracker::AircraftState::Active)
+                });
+
+                let climb_fpm_f32 = climb_fpm as f32;
+                tracker.update_climb_rate(climb_fpm_f32);
+                tracker.current_flight_id = Some(state.flight_id);
+
+                // Check if tow has been released
+                if towing::check_tow_release(tracker, Some(climb_fpm_f32)) {
+                    // Record the release
+                    if let Some(towing_info) = &tracker.towing_info {
+                        if let Some(altitude_ft) = fix.altitude_msl_feet {
+                            info!(
+                                "Recording tow release for glider {} at {}ft MSL",
+                                towing_info.glider_device_id, altitude_ft
+                            );
+
+                            if let Err(e) = flights_repo
+                                .update_tow_release(
+                                    towing_info.glider_flight_id,
+                                    altitude_ft,
+                                    fix.timestamp,
+                                )
+                                .await
+                            {
+                                error!(
+                                    "Failed to record tow release for glider {}: {}",
+                                    towing_info.glider_device_id, e
+                                );
+                            }
+                        }
+
+                        // Clear towing info after release
+                        tracker.towing_info = None;
+                        tracker.climb_rate_history.clear();
+                    }
+                }
+            }
 
             // Update the state with this fix
             state.update(fix.timestamp, is_active);
