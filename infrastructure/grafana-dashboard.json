@@ -2474,12 +2474,80 @@
           },
           "editorMode": "code",
           "expr": "flight_tracker_active_devices",
-          "legendFormat": "__auto",
+          "legendFormat": "Active",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Active Aircraft Devices",
+      "title": "Active Aircraft (All Flights)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 10
+              },
+              {
+                "color": "red",
+                "value": 50
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 116
+      },
+      "id": 604,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "flight_tracker_stale_devices",
+          "legendFormat": "Stale",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Stale Aircraft (No Updates >2hr)",
       "type": "stat"
     },
     {
@@ -2539,7 +2607,7 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 6,
+        "x": 12,
         "y": 116
       },
       "id": 602,
@@ -2651,13 +2719,24 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "flight_tracker_cleanup_removed_count",
-          "legendFormat": "Devices Removed",
+          "expr": "rate(flight_tracker_timeouts_detected[5m])",
+          "legendFormat": "Timeouts/sec",
           "range": true,
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "flight_tracker_cleanup_removed_count",
+          "legendFormat": "Cleanup Removed (last run)",
+          "range": true,
+          "refId": "B"
         }
       ],
-      "title": "Flight Tracker Cleanup - Devices Removed",
+      "title": "Flight Tracker - Timeouts and Cleanup",
       "type": "timeseries"
     },
     {
