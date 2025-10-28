@@ -37,6 +37,11 @@ impl From<Fix> for BackfillTask {
 async fn producer_task(fixes_repo: FixesRepository, tx: mpsc::Sender<BackfillTask>) {
     info!("Starting AGL backfill producer task");
 
+    // Track when we last updated the pending count metric (expensive query)
+    let mut last_count_update = std::time::Instant::now();
+    let count_update_interval = tokio::time::Duration::from_secs(60); // Update count every 60 seconds
+    let mut cached_total_pending: Option<i64> = None;
+
     loop {
         // Find fixes that are:
         // 1. At least one hour old
@@ -45,25 +50,32 @@ async fn producer_task(fixes_repo: FixesRepository, tx: mpsc::Sender<BackfillTas
         // 4. is_active = true (only backfill active aircraft)
         let one_hour_ago = Utc::now() - Duration::hours(1);
 
-        // First, get the actual count of all pending fixes (not just the batch)
-        let total_pending = match fixes_repo.count_fixes_needing_backfill(one_hour_ago).await {
-            Ok(count) => count,
-            Err(e) => {
-                warn!("Failed to count pending fixes: {}", e);
-                counter!("agl_backfill_fetch_errors_total").increment(1);
-                sleep(tokio::time::Duration::from_secs(60)).await;
+        // Only run the expensive count query periodically (every 60 seconds)
+        // This query can be expensive on large databases, so we don't run it on every iteration
+        if last_count_update.elapsed() >= count_update_interval {
+            let total_pending = match fixes_repo.count_fixes_needing_backfill(one_hour_ago).await {
+                Ok(count) => count,
+                Err(e) => {
+                    warn!("Failed to count pending fixes: {}", e);
+                    counter!("agl_backfill_fetch_errors_total").increment(1);
+                    sleep(tokio::time::Duration::from_secs(60)).await;
+                    continue;
+                }
+            };
+
+            // Update metric with actual count
+            gauge!("agl_backfill_pending_fixes").set(total_pending as f64);
+            last_count_update = std::time::Instant::now();
+            cached_total_pending = Some(total_pending);
+
+            if total_pending == 0 {
+                // Caught up! Sleep for an hour before checking again
+                info!(
+                    "AGL backfill caught up - no more fixes need backfilling. Sleeping for 1 hour."
+                );
+                sleep(tokio::time::Duration::from_secs(3600)).await;
                 continue;
             }
-        };
-
-        // Update metric with actual count
-        gauge!("agl_backfill_pending_fixes").set(total_pending as f64);
-
-        if total_pending == 0 {
-            // Caught up! Sleep for an hour before checking again
-            info!("AGL backfill caught up - no more fixes need backfilling. Sleeping for 1 hour.");
-            sleep(tokio::time::Duration::from_secs(3600)).await;
-            continue;
         }
 
         // Fetch a batch of fixes to process
@@ -73,15 +85,26 @@ async fn producer_task(fixes_repo: FixesRepository, tx: mpsc::Sender<BackfillTas
         {
             Ok(fixes) => {
                 let batch_size = fixes.len();
-                info!(
-                    "Producer: Found {} total fixes needing AGL backfill, processing batch of {} (oldest: {})",
-                    total_pending,
-                    batch_size,
-                    fixes
-                        .first()
-                        .map(|f| f.timestamp.to_rfc3339())
-                        .unwrap_or_default()
-                );
+                if let Some(total) = cached_total_pending {
+                    info!(
+                        "Producer: Found {} total fixes needing AGL backfill, processing batch of {} (oldest: {})",
+                        total,
+                        batch_size,
+                        fixes
+                            .first()
+                            .map(|f| f.timestamp.to_rfc3339())
+                            .unwrap_or_default()
+                    );
+                } else {
+                    info!(
+                        "Producer: Processing batch of {} fixes (oldest: {})",
+                        batch_size,
+                        fixes
+                            .first()
+                            .map(|f| f.timestamp.to_rfc3339())
+                            .unwrap_or_default()
+                    );
+                }
 
                 // Send fixes to workers
                 let mut sent_count = 0;
