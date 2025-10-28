@@ -1,7 +1,7 @@
 use anyhow::Result;
 use chrono::{DateTime, Duration, Utc};
 use diesel::prelude::*;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::web::PgPool;
@@ -19,7 +19,7 @@ pub struct NewAprsMessage {
 }
 
 // Diesel model for querying APRS messages
-#[derive(Queryable, Selectable, Serialize, Debug)]
+#[derive(Queryable, Selectable, Serialize, Deserialize, Debug)]
 #[diesel(table_name = crate::schema::aprs_messages)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct AprsMessage {

@@ -145,18 +145,39 @@ enum Commands {
         #[arg(long, default_value = "localhost")]
         interface: String,
     },
-    /// Archive old fixes data to compressed CSV files and delete from database
+    /// Archive old data to compressed CSV files and delete from database
     ///
-    /// Archives fixes data one day at a time, starting from the oldest day in the database
-    /// and working forward until the specified 'before' date (exclusive).
-    /// Each day's data is written to a file named YYYYMMDD-fixes.csv.zst
+    /// Archives data one day at a time in order to respect foreign key constraints:
+    /// 1. Flights (8+ days old)
+    /// 2. Fixes and ReceiverStatuses (9+ days old)
+    /// 3. AprsMessages (10+ days old)
+    ///
+    /// Each day's data is written to files named YYYYMMDD-{table}.csv.zst
     Archive {
-        /// Archive fixes before this date (YYYY-MM-DD format, exclusive, UTC)
+        /// Archive data before this date (YYYY-MM-DD format, exclusive, UTC)
         /// Cannot be a future date. If today's date is used, archives all data up to (but not including) today.
         #[arg(value_name = "BEFORE_DATE")]
         before: String,
 
         /// Directory where archive files will be stored
+        #[arg(long)]
+        archive_path: String,
+    },
+    /// Resurrect archived data from compressed CSV files back into the database
+    ///
+    /// Restores data from archive files in the reverse order of archival to respect foreign key constraints:
+    /// 1. AprsMessages (must be restored first)
+    /// 2. Fixes and ReceiverStatuses (depend on aprs_messages)
+    /// 3. Flights (depend on fixes)
+    ///
+    /// Reads files named YYYYMMDD-{table}.csv.zst for the specified date
+    Resurrect {
+        /// Date to resurrect (YYYY-MM-DD format, UTC)
+        /// Will look for archive files for this specific date
+        #[arg(value_name = "DATE")]
+        date: String,
+
+        /// Directory where archive files are stored
         #[arg(long)]
         archive_path: String,
     },
@@ -1041,6 +1062,9 @@ async fn main() -> Result<()> {
             before,
             archive_path,
         } => soar::archive::handle_archive(diesel_pool, before, archive_path).await,
+        Commands::Resurrect { date, archive_path } => {
+            soar::archive::handle_resurrect(diesel_pool, date, archive_path).await
+        }
         Commands::VerifyRuntime {} => {
             // This should never be reached due to early return above
             unreachable!("VerifyRuntime should be handled before database setup")
