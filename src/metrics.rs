@@ -3,6 +3,7 @@ use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use pprof::protos::Message;
 use std::net::SocketAddr;
 use std::sync::OnceLock;
+use std::time::{Duration, Instant};
 use tracing::{info, warn};
 
 static METRICS_HANDLE: OnceLock<PrometheusHandle> = OnceLock::new();
@@ -125,6 +126,43 @@ async fn heap_profile_handler() -> impl IntoResponse {
     }
 }
 
+/// Background task to update process metrics
+/// Updates uptime and memory usage metrics every 5 seconds
+pub async fn process_metrics_task() {
+    let start_time = Instant::now();
+
+    loop {
+        // Update uptime (in seconds)
+        let uptime_seconds = start_time.elapsed().as_secs() as f64;
+        metrics::gauge!("process.uptime.seconds").set(uptime_seconds);
+
+        // Set "is up" metric to 1 (binary indicator)
+        metrics::gauge!("process.is_up").set(1.0);
+
+        // Get memory usage using procfs (Linux-specific)
+        #[cfg(target_os = "linux")]
+        {
+            if let Ok(status) = std::fs::read_to_string("/proc/self/status") {
+                for line in status.lines() {
+                    if line.starts_with("VmRSS:") {
+                        // Parse RSS memory in kB
+                        if let Some(kb_str) = line.split_whitespace().nth(1)
+                            && let Ok(kb) = kb_str.parse::<f64>()
+                        {
+                            let bytes = kb * 1024.0;
+                            metrics::gauge!("process.memory.bytes").set(bytes);
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Sleep for 5 seconds before next update
+        tokio::time::sleep(Duration::from_secs(5)).await;
+    }
+}
+
 /// Start a standalone metrics server on the specified port
 /// This is used by the "run" subcommand to expose metrics independently
 pub async fn start_metrics_server(port: u16) {
@@ -132,6 +170,9 @@ pub async fn start_metrics_server(port: u16) {
     METRICS_HANDLE
         .set(handle)
         .expect("Metrics handle already initialized");
+
+    // Start process metrics background task
+    tokio::spawn(process_metrics_task());
 
     let app = Router::new()
         .route(

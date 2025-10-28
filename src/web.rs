@@ -396,6 +396,9 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         .expect("Metrics handle already initialized");
     info!("Prometheus metrics exporter initialized");
 
+    // Start process metrics background task
+    tokio::spawn(crate::metrics::process_metrics_task());
+
     info!("Starting web server on {}:{}", interface, port);
 
     // Initialize live fix service if NATS_URL is configured

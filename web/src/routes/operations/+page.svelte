@@ -1728,6 +1728,7 @@
 		align-items: center;
 		justify-content: center;
 		font-size: 12px;
+		color: white;
 		box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
 	}
 

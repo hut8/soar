@@ -954,6 +954,23 @@
 					<div class="text-surface-600-300-token text-sm">When flight was first detected</div>
 				</div>
 			</div>
+
+			<!-- Latest fix (for active flights) -->
+			{#if data.flight.state === 'active' && data.fixes.length > 0}
+				<div class="flex items-start gap-3">
+					<Clock class="mt-1 h-5 w-5 text-primary-500" />
+					<div>
+						<div class="text-surface-600-300-token text-sm">Latest fix</div>
+						<div class="font-semibold">
+							<!-- Mobile: relative time only -->
+							<span class="md:hidden">{formatDateTimeMobile(data.fixes[0].timestamp)}</span>
+							<!-- Desktop: relative time with full datetime -->
+							<span class="hidden md:inline">{formatDateTime(data.fixes[0].timestamp)}</span>
+						</div>
+						<div class="text-surface-600-300-token text-sm">Most recent position update</div>
+					</div>
+				</div>
+			{/if}
 		</div>
 	</div>
 
