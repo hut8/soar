@@ -26,6 +26,7 @@ SOAR is a comprehensive aircraft tracking and club management system built with:
 - **NEVER add Co-Authored-By lines** - Do not include Claude Code attribution in commits
 - **AVOID raw SQL in Diesel** - Only use raw SQL if absolutely necessary, and ask first before using it
 - Always prefer Diesel's query builder and type-safe methods over raw SQL
+- **NEVER use CREATE INDEX CONCURRENTLY in Diesel migrations** - Diesel migrations run in transactions, which don't support CONCURRENTLY. Use regular CREATE INDEX instead
 
 ### Frontend Development Standards
 
