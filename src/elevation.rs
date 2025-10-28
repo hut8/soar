@@ -1,9 +1,9 @@
 use anyhow::{Context, Result, bail};
 use directories::BaseDirs;
 use gdal::{Dataset, raster::ResampleAlg};
-use lru::LruCache;
 use metrics::{counter, gauge, histogram};
-use std::{env, num::NonZeroUsize, path::PathBuf, sync::Arc, time::Instant};
+use moka::future::Cache;
+use std::{env, path::PathBuf, sync::Arc, time::Instant};
 use tokio::sync::Mutex;
 
 use crate::Fix;
@@ -74,12 +74,14 @@ pub struct ElevationDB {
     storage_path: PathBuf,
     /// Manages tile downloads with deduplication
     tile_downloader: TileDownloader,
-    /// LRU cache for elevation results: (rounded_lat, rounded_lon) -> elevation_meters
+    /// Concurrent cache for elevation results: (rounded_lat, rounded_lon) -> elevation_meters
     /// 500,000 entries ≈ 28MB of memory, provides excellent hit rate for multi-aircraft operations
-    elevation_cache: Arc<Mutex<LruCache<CacheKey, Option<f64>>>>,
-    /// LRU cache for open GDAL Datasets: tile_path -> CachedDataset
-    /// 100 entries ≈ 1-2GB memory (10-20MB per TIFF), eliminates repeated Dataset::open() calls
-    dataset_cache: Arc<Mutex<LruCache<PathBuf, Arc<CachedDataset>>>>,
+    /// Uses moka for lock-free concurrent access across multiple workers
+    elevation_cache: Cache<CacheKey, Option<f64>>,
+    /// Concurrent cache for open GDAL Datasets: tile_path -> CachedDataset
+    /// 1000 entries ≈ 10-20GB memory (10-20MB per TIFF), eliminates repeated Dataset::open() calls
+    /// Uses moka for lock-free concurrent access across multiple workers
+    dataset_cache: Cache<PathBuf, Arc<CachedDataset>>,
 }
 
 impl ElevationDB {
@@ -107,10 +109,8 @@ impl ElevationDB {
         Ok(Self {
             tile_downloader: TileDownloader::new(storage_path.clone()),
             storage_path,
-            elevation_cache: Arc::new(Mutex::new(LruCache::new(
-                NonZeroUsize::new(500_000).unwrap(),
-            ))),
-            dataset_cache: Arc::new(Mutex::new(LruCache::new(NonZeroUsize::new(1000).unwrap()))),
+            elevation_cache: Cache::builder().max_capacity(500_000).build(),
+            dataset_cache: Cache::builder().max_capacity(1000).build(),
         })
     }
 
@@ -129,10 +129,8 @@ impl ElevationDB {
         Ok(Self {
             tile_downloader: TileDownloader::new(storage_path.clone()),
             storage_path,
-            elevation_cache: Arc::new(Mutex::new(LruCache::new(
-                NonZeroUsize::new(500_000).unwrap(),
-            ))),
-            dataset_cache: Arc::new(Mutex::new(LruCache::new(NonZeroUsize::new(1000).unwrap()))),
+            elevation_cache: Cache::builder().max_capacity(500_000).build(),
+            dataset_cache: Cache::builder().max_capacity(1000).build(),
         })
     }
 
@@ -164,12 +162,12 @@ impl ElevationDB {
         Ok(Self {
             tile_downloader: TileDownloader::new(storage_path.clone()),
             storage_path,
-            elevation_cache: Arc::new(Mutex::new(LruCache::new(
-                NonZeroUsize::new(elevation_cache_size).unwrap(),
-            ))),
-            dataset_cache: Arc::new(Mutex::new(LruCache::new(
-                NonZeroUsize::new(dataset_cache_size).unwrap(),
-            ))),
+            elevation_cache: Cache::builder()
+                .max_capacity(elevation_cache_size as u64)
+                .build(),
+            dataset_cache: Cache::builder()
+                .max_capacity(dataset_cache_size as u64)
+                .build(),
         })
     }
 
@@ -191,21 +189,14 @@ impl ElevationDB {
         let cache_key = (round_coord_for_cache(lat), round_coord_for_cache(lon));
 
         // Check elevation cache first (fastest path)
-        {
-            let mut cache = self.elevation_cache.lock().await;
-            if let Some(cached_elevation) = cache.get(&cache_key) {
-                counter!("elevation_cache_hits").increment(1);
+        if let Some(cached_elevation) = self.elevation_cache.get(&cache_key).await {
+            counter!("elevation_cache_hits").increment(1);
 
-                // Copy the elevation value before releasing the cache lock
-                let elevation = *cached_elevation;
+            // Update cache size metric
+            gauge!("elevation_cache_entries").set(self.elevation_cache.entry_count() as f64);
 
-                // Update cache size metric
-                gauge!("elevation_cache_entries").set(cache.len() as f64);
-
-                histogram!("elevation_lookup_duration_seconds")
-                    .record(start.elapsed().as_secs_f64());
-                return Ok(elevation);
-            }
+            histogram!("elevation_lookup_duration_seconds").record(start.elapsed().as_secs_f64());
+            return Ok(cached_elevation);
         }
 
         // Elevation cache miss - need to look up from GDAL dataset
@@ -218,31 +209,30 @@ impl ElevationDB {
             .await?;
 
         // Check if we have this dataset cached, or load it
-        let dataset_open_start = Instant::now();
-        let cached_ds = {
-            let mut ds_cache = self.dataset_cache.lock().await;
+        let cached_ds = if let Some(cached) = self.dataset_cache.get(&path).await {
+            counter!("elevation_dataset_cache_hits").increment(1);
+            cached
+        } else {
+            // Dataset cache miss - need to open the file
+            counter!("elevation_dataset_cache_misses").increment(1);
 
-            if let Some(cached) = ds_cache.get(&path) {
-                counter!("elevation_dataset_cache_hits").increment(1);
-                cached.clone()
-            } else {
-                // Dataset cache miss - need to open the file
-                counter!("elevation_dataset_cache_misses").increment(1);
+            let dataset_open_start = Instant::now();
+            let ds = Dataset::open(&path)?;
+            let cached = Arc::new(CachedDataset::new(ds)?);
 
-                let ds = Dataset::open(&path)?;
-                let cached = Arc::new(CachedDataset::new(ds)?);
-                ds_cache.put(path.clone(), cached.clone());
+            // Record dataset open time
+            histogram!("elevation_dataset_open_duration_seconds")
+                .record(dataset_open_start.elapsed().as_secs_f64());
 
-                // Record dataset open time
-                histogram!("elevation_dataset_open_duration_seconds")
-                    .record(dataset_open_start.elapsed().as_secs_f64());
+            self.dataset_cache
+                .insert(path.clone(), cached.clone())
+                .await;
 
-                // Update dataset cache size metric
-                gauge!("elevation_dataset_cache_size").set(ds_cache.len() as f64);
+            // Update dataset cache size metric
+            gauge!("elevation_dataset_cache_size").set(self.dataset_cache.entry_count() as f64);
 
-                cached
-            }
-        }; // Release dataset cache lock
+            cached
+        };
 
         // Perform GDAL read operation using the cached dataset
         let gdal_read_start = Instant::now();
@@ -287,13 +277,10 @@ impl ElevationDB {
             .record(gdal_read_start.elapsed().as_secs_f64());
 
         // Store in elevation cache for future lookups
-        {
-            let mut cache = self.elevation_cache.lock().await;
-            cache.put(cache_key, elevation);
+        self.elevation_cache.insert(cache_key, elevation).await;
 
-            // Update cache size metric
-            gauge!("elevation_cache_entries").set(cache.len() as f64);
-        }
+        // Update cache size metric
+        gauge!("elevation_cache_entries").set(self.elevation_cache.entry_count() as f64);
 
         // Record total elevation lookup duration
         histogram!("elevation_lookup_duration_seconds").record(start.elapsed().as_secs_f64());
