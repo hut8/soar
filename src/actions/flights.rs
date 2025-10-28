@@ -117,19 +117,12 @@ pub async fn get_flight_by_id(
                 }
             }
 
-            // Get previous and next flights for navigation (if device_id is present)
+            // Get previous and next flights for navigation in a single query (if device_id is present)
             let (previous_flight_id, next_flight_id) = if let Some(device_id) = flight.device_id {
-                let prev = flights_repo
-                    .get_previous_flight_for_device(id, device_id, flight.takeoff_time)
+                flights_repo
+                    .get_adjacent_flights_for_device(id, device_id, flight.takeoff_time)
                     .await
-                    .ok()
-                    .flatten();
-                let next = flights_repo
-                    .get_next_flight_for_device(id, device_id, flight.takeoff_time)
-                    .await
-                    .ok()
-                    .flatten();
-                (prev, next)
+                    .unwrap_or((None, None))
             } else {
                 (None, None)
             };

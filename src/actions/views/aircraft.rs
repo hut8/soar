@@ -156,7 +156,7 @@ impl DeviceView {
             home_base_airport_ident: device.home_base_airport_ident,
             aircraft_type_ogn: device.aircraft_type_ogn,
             last_fix_at: device.last_fix_at.map(|dt| dt.to_rfc3339()),
-            tracker_device_type: None, // Not available from Device (only DeviceModel has this)
+            tracker_device_type: device.tracker_device_type,
             fixes: None,
         }
     }
