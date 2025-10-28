@@ -34,11 +34,7 @@ impl From<Fix> for BackfillTask {
 }
 
 /// Producer task that loads batches of fixes needing backfill and sends them to workers
-async fn producer_task(
-    fixes_repo: FixesRepository,
-    tx: mpsc::Sender<BackfillTask>,
-    num_workers: usize,
-) {
+async fn producer_task(fixes_repo: FixesRepository, tx: mpsc::Sender<BackfillTask>) {
     info!("Starting AGL backfill producer task");
 
     loop {
@@ -98,10 +94,7 @@ async fn producer_task(
                     sent_count += 1;
                 }
 
-                info!(
-                    "Producer: Sent {} tasks to {} workers",
-                    sent_count, num_workers
-                );
+                info!("Producer: Sent {} tasks to workers", sent_count);
 
                 // Small delay before next batch
                 sleep(tokio::time::Duration::from_secs(1)).await;
@@ -250,7 +243,7 @@ pub async fn agl_backfill_task(fixes_repo: FixesRepository, elevation_db: Elevat
     // Spawn producer task
     let producer_fixes_repo = fixes_repo.clone();
     let producer_handle = tokio::spawn(async move {
-        producer_task(producer_fixes_repo, tx, NUM_WORKERS).await;
+        producer_task(producer_fixes_repo, tx).await;
     });
 
     // Spawn consumer workers
