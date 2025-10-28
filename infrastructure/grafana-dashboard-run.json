@@ -29,6 +29,275 @@
         "x": 0,
         "y": 0
       },
+      "id": 50,
+      "panels": [],
+      "title": "SOAR Run - Process Metrics",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 86400
+              },
+              {
+                "color": "green",
+                "value": 604800
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 1
+      },
+      "id": 51,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "process_uptime_seconds",
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Process Uptime",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "max": 1.1,
+          "min": -0.1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 6,
+        "y": 1
+      },
+      "id": 52,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "process_is_up",
+          "legendFormat": "Process Status (1=up, 0=down)",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Process Status",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 5
+      },
+      "id": 53,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "process_memory_bytes",
+          "legendFormat": "Memory Usage (RSS)",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Process Memory Usage",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 13
+      },
       "id": 100,
       "panels": [],
       "title": "SOAR Run - APRS Connection Metrics",
@@ -92,7 +361,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 1
+        "y": 14
       },
       "id": 101,
       "options": {
@@ -218,7 +487,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 1
+        "y": 14
       },
       "id": 102,
       "options": {
@@ -311,7 +580,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 9
+        "y": 22
       },
       "id": 103,
       "options": {
@@ -363,7 +632,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 17
+        "y": 30
       },
       "id": 200,
       "panels": [],
@@ -428,7 +697,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 18
+        "y": 31
       },
       "id": 201,
       "options": {
@@ -543,7 +812,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 18
+        "y": 31
       },
       "id": 202,
       "options": {
@@ -584,7 +853,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 26
+        "y": 39
       },
       "id": 300,
       "panels": [],
@@ -649,7 +918,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 27
+        "y": 40
       },
       "id": 301,
       "options": {
@@ -764,7 +1033,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 27
+        "y": 40
       },
       "id": 302,
       "options": {
@@ -879,7 +1148,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 35
+        "y": 48
       },
       "id": 303,
       "options": {
@@ -920,7 +1189,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 43
+        "y": 56
       },
       "id": 400,
       "panels": [],
@@ -985,7 +1254,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 44
+        "y": 57
       },
       "id": 401,
       "options": {
@@ -1069,7 +1338,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 44
+        "y": 57
       },
       "id": 402,
       "options": {
@@ -1137,7 +1406,7 @@
         "h": 4,
         "w": 6,
         "x": 0,
-        "y": 52
+        "y": 65
       },
       "id": 403,
       "options": {
@@ -1229,7 +1498,7 @@
         "h": 8,
         "w": 12,
         "x": 6,
-        "y": 52
+        "y": 65
       },
       "id": 404,
       "options": {
@@ -1313,7 +1582,7 @@
         "h": 4,
         "w": 6,
         "x": 18,
-        "y": 52
+        "y": 65
       },
       "id": 405,
       "options": {
@@ -1405,7 +1674,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 60
+        "y": 73
       },
       "id": 406,
       "options": {
@@ -1468,7 +1737,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 68
+        "y": 81
       },
       "id": 500,
       "panels": [],
@@ -1533,7 +1802,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 69
+        "y": 82
       },
       "id": 501,
       "options": {
@@ -1615,7 +1884,7 @@
         "h": 4,
         "w": 6,
         "x": 12,
-        "y": 69
+        "y": 82
       },
       "id": 502,
       "options": {
@@ -1707,7 +1976,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 77
+        "y": 90
       },
       "id": 503,
       "options": {
@@ -1748,7 +2017,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 85
+        "y": 98
       },
       "id": 600,
       "panels": [],
@@ -1791,7 +2060,7 @@
         "h": 4,
         "w": 6,
         "x": 0,
-        "y": 86
+        "y": 99
       },
       "id": 601,
       "options": {
@@ -1861,7 +2130,7 @@
         "h": 4,
         "w": 6,
         "x": 6,
-        "y": 86
+        "y": 99
       },
       "id": 604,
       "options": {
@@ -1953,7 +2222,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 86
+        "y": 99
       },
       "id": 602,
       "options": {
@@ -2046,7 +2315,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 90
+        "y": 103
       },
       "id": 603,
       "options": {
@@ -2098,7 +2367,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 98
+        "y": 111
       },
       "id": 700,
       "panels": [],
@@ -2163,7 +2432,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 99
+        "y": 112
       },
       "id": 701,
       "options": {
@@ -2204,7 +2473,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 108
+        "y": 121
       },
       "id": 400,
       "panels": [],
@@ -2269,7 +2538,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 109
+        "y": 122
       },
       "id": 401,
       "options": {
@@ -2362,7 +2631,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 109
+        "y": 122
       },
       "id": 402,
       "options": {
@@ -2455,7 +2724,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 117
+        "y": 130
       },
       "id": 403,
       "options": {
@@ -2583,7 +2852,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 117
+        "y": 130
       },
       "id": 404,
       "options": {
