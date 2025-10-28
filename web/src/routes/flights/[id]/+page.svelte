@@ -714,14 +714,50 @@
 					{/if}
 				</div>
 			</div>
-			<button
-				onclick={downloadKML}
-				class="btn flex items-center gap-2 self-start preset-filled-primary-500 md:self-auto"
-				type="button"
-			>
-				<Download class="h-4 w-4" />
-				KML
-			</button>
+			<div class="flex items-center gap-2">
+				{#if data.flight.previous_flight_id || data.flight.next_flight_id}
+					<div class="flex items-center gap-1">
+						{#if data.flight.previous_flight_id}
+							<a
+								href="/flights/{data.flight.previous_flight_id}"
+								class="btn preset-tonal btn-sm"
+								title="Previous flight for this device"
+							>
+								<ChevronLeft class="h-4 w-4" />
+								Previous
+							</a>
+						{:else}
+							<button class="btn preset-tonal btn-sm" disabled title="No previous flight">
+								<ChevronLeft class="h-4 w-4" />
+								Previous
+							</button>
+						{/if}
+						{#if data.flight.next_flight_id}
+							<a
+								href="/flights/{data.flight.next_flight_id}"
+								class="btn preset-tonal btn-sm"
+								title="Next flight for this device"
+							>
+								Next
+								<ChevronRight class="h-4 w-4" />
+							</a>
+						{:else}
+							<button class="btn preset-tonal btn-sm" disabled title="No next flight">
+								Next
+								<ChevronRight class="h-4 w-4" />
+							</button>
+						{/if}
+					</div>
+				{/if}
+				<button
+					onclick={downloadKML}
+					class="btn flex items-center gap-2 preset-filled-primary-500"
+					type="button"
+				>
+					<Download class="h-4 w-4" />
+					KML
+				</button>
+			</div>
 		</div>
 
 		<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">

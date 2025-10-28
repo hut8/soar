@@ -748,6 +748,115 @@ impl FlightsRepository {
         Ok(results)
     }
 
+    /// Get both the previous and next flights for the same device in a single database query
+    /// Returns (previous_flight_id, next_flight_id) tuple
+    /// More efficient than calling get_previous_flight_for_device and get_next_flight_for_device separately
+    pub async fn get_adjacent_flights_for_device(
+        &self,
+        flight_id: Uuid,
+        device_id_val: Uuid,
+        current_takeoff_time: Option<DateTime<Utc>>,
+    ) -> Result<(Option<Uuid>, Option<Uuid>)> {
+        use diesel::sql_types::{Timestamptz, Uuid as UuidType};
+
+        let pool = self.pool.clone();
+
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            // If there's no takeoff time, use current time as fallback
+            let reference_time = current_takeoff_time.unwrap_or_else(chrono::Utc::now);
+
+            // Use a single query with UNION ALL to get both previous and next flights
+            // This is more efficient than two separate queries
+            let query = r#"
+                SELECT 'prev' as direction, id
+                FROM flights
+                WHERE device_id = $1
+                  AND id != $2
+                  AND (
+                    takeoff_time < $3
+                    OR (takeoff_time IS NULL AND created_at < $3)
+                  )
+                ORDER BY COALESCE(takeoff_time, created_at) DESC
+                LIMIT 1
+
+                UNION ALL
+
+                SELECT 'next' as direction, id
+                FROM flights
+                WHERE device_id = $1
+                  AND id != $2
+                  AND (
+                    takeoff_time > $3
+                    OR (takeoff_time IS NULL AND created_at > $3)
+                  )
+                ORDER BY COALESCE(takeoff_time, created_at) ASC
+                LIMIT 1
+            "#;
+
+            #[derive(QueryableByName)]
+            struct AdjacentFlight {
+                #[diesel(sql_type = diesel::sql_types::Text)]
+                direction: String,
+                #[diesel(sql_type = UuidType)]
+                id: Uuid,
+            }
+
+            let results: Vec<AdjacentFlight> = diesel::sql_query(query)
+                .bind::<UuidType, _>(device_id_val)
+                .bind::<UuidType, _>(flight_id)
+                .bind::<Timestamptz, _>(reference_time)
+                .load(&mut conn)?;
+
+            let mut prev_flight = None;
+            let mut next_flight = None;
+
+            for result in results {
+                match result.direction.as_str() {
+                    "prev" => prev_flight = Some(result.id),
+                    "next" => next_flight = Some(result.id),
+                    _ => {}
+                }
+            }
+
+            Ok::<(Option<Uuid>, Option<Uuid>), anyhow::Error>((prev_flight, next_flight))
+        })
+        .await??;
+
+        Ok(result)
+    }
+
+    /// Get the previous flight for the same device (chronologically earlier by takeoff time)
+    /// Returns None if there is no previous flight
+    /// Note: For better performance when getting both previous and next, use get_adjacent_flights_for_device
+    pub async fn get_previous_flight_for_device(
+        &self,
+        flight_id: Uuid,
+        device_id_val: Uuid,
+        current_takeoff_time: Option<DateTime<Utc>>,
+    ) -> Result<Option<Uuid>> {
+        let (prev, _) = self
+            .get_adjacent_flights_for_device(flight_id, device_id_val, current_takeoff_time)
+            .await?;
+        Ok(prev)
+    }
+
+    /// Get the next flight for the same device (chronologically later by takeoff time)
+    /// Returns None if there is no next flight
+    /// Note: For better performance when getting both previous and next, use get_adjacent_flights_for_device
+    pub async fn get_next_flight_for_device(
+        &self,
+        flight_id: Uuid,
+        device_id_val: Uuid,
+        current_takeoff_time: Option<DateTime<Utc>>,
+    ) -> Result<Option<Uuid>> {
+        let (_, next) = self
+            .get_adjacent_flights_for_device(flight_id, device_id_val, current_takeoff_time)
+            .await?;
+        Ok(next)
+    }
+
     /// Timeout all incomplete flights where last_fix_at is older than the specified duration
     /// Sets timed_out_at to last_fix_at + timeout_duration for these flights
     /// Returns the number of flights that were timed out

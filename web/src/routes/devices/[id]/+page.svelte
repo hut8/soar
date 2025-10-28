@@ -348,6 +348,11 @@
 									{getAircraftTypeOgnDescription(device.aircraft_type_ogn)}
 								</span>
 							{/if}
+							{#if device.tracker_device_type}
+								<span class="preset-tonal-primary-500 badge text-xs">
+									{device.tracker_device_type}
+								</span>
+							{/if}
 						</div>
 					</div>
 				</div>
