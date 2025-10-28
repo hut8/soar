@@ -8,7 +8,6 @@ use uuid::Uuid;
 use crate::elevation::ElevationDB;
 use crate::fixes::Fix;
 use crate::fixes_repo::FixesRepository;
-use crate::flight_tracker::altitude::calculate_altitude_agl;
 
 /// Lightweight struct containing only the data needed for AGL backfill processing
 #[derive(Debug, Clone)]
@@ -113,6 +112,35 @@ async fn producer_task(
     }
 }
 
+/// Calculate AGL altitude directly from BackfillTask data
+/// This is a simplified version of calculate_altitude_agl that works with our task struct
+async fn calculate_agl_from_task(elevation_db: &ElevationDB, task: &BackfillTask) -> Option<i32> {
+    // Get reported altitude (in feet)
+    let reported_altitude_ft = task.altitude_msl_feet?;
+
+    // Run blocking elevation lookup in a separate thread
+    let elevation_result = elevation_db
+        .elevation_egm2008(task.latitude, task.longitude)
+        .await
+        .ok()?;
+
+    // Get true elevation at this location (in meters)
+    match elevation_result {
+        Some(elevation_m) => {
+            // Convert elevation from meters to feet (1 meter = 3.28084 feet)
+            let elevation_ft = elevation_m * 3.28084;
+            // Calculate AGL (Above Ground Level)
+            let agl = reported_altitude_ft as f64 - elevation_ft;
+
+            Some(agl.round() as i32)
+        }
+        None => {
+            // No elevation data available (e.g., ocean)
+            None
+        }
+    }
+}
+
 /// Consumer task that processes backfill tasks from the queue
 async fn consumer_task(
     worker_id: usize,
@@ -141,44 +169,9 @@ async fn consumer_task(
                 break;
             }
         };
-        // Create a minimal Fix struct for AGL calculation
-        let fix = Fix {
-            id: task.id,
-            latitude: task.latitude,
-            longitude: task.longitude,
-            altitude_msl_feet: task.altitude_msl_feet,
-            // Other fields are not used in calculate_altitude_agl
-            source: String::new(),
-            aprs_type: String::new(),
-            via: vec![],
-            timestamp: Utc::now(),
-            altitude_agl_feet: None,
-            device_address: 0,
-            address_type: crate::devices::AddressType::Icao,
-            aircraft_type_ogn: None,
-            flight_number: None,
-            registration: None,
-            squawk: None,
-            ground_speed_knots: None,
-            track_degrees: None,
-            climb_fpm: None,
-            turn_rate_rot: None,
-            snr_db: None,
-            bit_errors_corrected: None,
-            freq_offset_khz: None,
-            gnss_horizontal_resolution: None,
-            gnss_vertical_resolution: None,
-            flight_id: None,
-            device_id: Uuid::nil(),
-            received_at: Utc::now(),
-            is_active: true,
-            receiver_id: None,
-            aprs_message_id: None,
-            altitude_agl_valid: false,
-        };
 
-        // Calculate AGL
-        let agl = calculate_altitude_agl(&elevation_db, &fix).await;
+        // Calculate AGL directly from task data
+        let agl = calculate_agl_from_task(&elevation_db, &task).await;
 
         // Update the database (sets both altitude_agl_feet and altitude_agl_valid=true)
         match fixes_repo.update_altitude_agl(task.id, agl).await {
