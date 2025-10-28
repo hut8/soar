@@ -194,9 +194,8 @@ impl ElevationDB {
                 // Copy the elevation value before releasing the cache lock
                 let elevation = *cached_elevation;
 
-                // Update cache size metric (each entry ≈ 56 bytes: 8 for key + 16 for value + 32 LRU overhead)
-                let size_mb = (cache.len() * 56) as f64 / 1_048_576.0;
-                gauge!("elevation_cache_size_mb").set(size_mb);
+                // Update cache size metric
+                gauge!("elevation_cache_entries").set(cache.len() as f64);
 
                 histogram!("elevation_lookup_duration_seconds")
                     .record(start.elapsed().as_secs_f64());
@@ -287,9 +286,8 @@ impl ElevationDB {
             let mut cache = self.elevation_cache.lock().await;
             cache.put(cache_key, elevation);
 
-            // Update cache size metric (each entry ≈ 56 bytes: 8 for key + 16 for value + 32 LRU overhead)
-            let size_mb = (cache.len() * 56) as f64 / 1_048_576.0;
-            gauge!("elevation_cache_size_mb").set(size_mb);
+            // Update cache size metric
+            gauge!("elevation_cache_entries").set(cache.len() as f64);
         }
 
         // Record total elevation lookup duration
