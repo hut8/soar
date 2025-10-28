@@ -307,6 +307,51 @@ impl FixesRepository {
         .await?
     }
 
+    /// Batch update AGL values for multiple fixes in a single query
+    /// This is much more efficient than individual updates when processing many fixes
+    /// Returns the number of fixes updated
+    pub async fn batch_update_altitude_agl(
+        &self,
+        tasks: &[crate::elevation::AglDatabaseTask],
+    ) -> Result<usize> {
+        if tasks.is_empty() {
+            return Ok(0);
+        }
+
+        use crate::schema::fixes::dsl::*;
+        let pool = self.pool.clone();
+
+        // Clone the task data for the blocking task
+        let tasks_data: Vec<(Uuid, Option<i32>)> = tasks
+            .iter()
+            .map(|task| (task.fix_id, task.altitude_agl_feet))
+            .collect();
+
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            // Build a batch UPDATE using a VALUES clause
+            // UPDATE fixes SET altitude_agl_feet = data.agl, altitude_agl_valid = true
+            // FROM (VALUES (uuid1, agl1), (uuid2, agl2), ...) AS data(id, agl)
+            // WHERE fixes.id = data.id
+            let mut updated_count = 0;
+
+            // Use a transaction for atomicity
+            conn.transaction::<_, anyhow::Error, _>(|conn| {
+                for (fix_id, agl_value) in tasks_data {
+                    let count = diesel::update(fixes.filter(id.eq(fix_id)))
+                        .set((altitude_agl_feet.eq(agl_value), altitude_agl_valid.eq(true)))
+                        .execute(conn)?;
+                    updated_count += count;
+                }
+                Ok(())
+            })?;
+
+            Ok::<usize, anyhow::Error>(updated_count)
+        })
+        .await?
+    }
+
     /// Count fixes that need AGL backfilling
     /// Returns count of fixes that are old enough, have MSL altitude, but don't have AGL calculated yet
     pub async fn count_fixes_needing_backfill(

@@ -285,7 +285,6 @@ impl FixProcessor {
             let task = ElevationTask {
                 fix_id: updated_fix.id,
                 fix: updated_fix.clone(),
-                fixes_repo: self.fixes_repo.clone(),
             };
 
             // Try to send with timeout to detect channel backlog
