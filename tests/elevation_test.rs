@@ -153,9 +153,10 @@ async fn test_elevation_ocean() {
     // Ocean tiles might not exist or might return None for NoData
     // Either case is acceptable
     if let Ok(Some(elev_m)) = result {
-        // If tile exists and has elevation data, it should be close to sea level
+        // If tile exists and has elevation data, ocean depths can be quite deep
+        // Mariana Trench is ~-11,000m, but most ocean is shallower
         assert!(
-            elev_m > -1000.0 && elev_m < 100.0,
+            elev_m > -12000.0 && elev_m < 100.0,
             "Ocean elevation {} is outside expected range",
             elev_m
         );

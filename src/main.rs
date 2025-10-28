@@ -380,20 +380,12 @@ async fn handle_run(
     // Set up database connection
     let diesel_pool = setup_diesel_database().await?;
 
-    // Determine and log elevation data storage path
-    let _elevation_data_path = match env::var("ELEVATION_DATA_PATH") {
-        Ok(path) => {
-            info!("Elevation data path from ELEVATION_DATA_PATH: {}", path);
-            std::path::PathBuf::from(path)
-        }
-        Err(_) => {
-            use directories::BaseDirs;
-            let base = BaseDirs::new().context("no home directory")?;
-            let default_path = base.cache_dir().join("elevation");
-            info!("Elevation data path (default): {}", default_path.display());
-            default_path
-        }
-    };
+    // Log elevation data storage path
+    if let Ok(path) = env::var("ELEVATION_DATA_PATH") {
+        info!("Elevation data path: {}", path);
+    } else {
+        warn!("ELEVATION_DATA_PATH not set - elevation lookups will fail");
+    }
 
     // Use port 10152 (full feed) if no filter is specified, otherwise use specified port
     let actual_port = if filter.is_none() {
