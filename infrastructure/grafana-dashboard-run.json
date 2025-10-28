@@ -29,751 +29,6 @@
         "x": 0,
         "y": 0
       },
-      "id": 1,
-      "panels": [],
-      "title": "SOAR Web - HTTP Metrics",
-      "type": "row"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "tooltip": false,
-              "viz": false,
-              "legend": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "s"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 1
-      },
-      "id": 2,
-      "options": {
-        "legend": {
-          "calcs": [
-            "mean",
-            "lastNotNull",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by(endpoint, le) (rate(http_request_duration_seconds_bucket[5m])))",
-          "legendFormat": "{{endpoint}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "HTTP Request P95 Duration by Endpoint",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "tooltip": false,
-              "viz": false,
-              "legend": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "reqps"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 1
-      },
-      "id": 3,
-      "options": {
-        "legend": {
-          "calcs": [
-            "mean",
-            "lastNotNull",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "expr": "sum by(endpoint) (rate(http_requests_total[5m]))",
-          "legendFormat": "{{endpoint}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "HTTP Request Rate by Endpoint",
-      "type": "timeseries"
-    },
-    {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 9
-      },
-      "id": 4,
-      "panels": [],
-      "title": "SOAR Web - WebSocket Metrics",
-      "type": "row"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 50
-              },
-              {
-                "color": "red",
-                "value": 100
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 0,
-        "y": 10
-      },
-      "id": 5,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": ""
-        },
-        "textMode": "auto"
-      },
-      "pluginVersion": "10.0.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "expr": "websocket_connections",
-          "legendFormat": "__auto",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "WebSocket Connections",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 100
-              },
-              {
-                "color": "red",
-                "value": 500
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 6,
-        "y": 10
-      },
-      "id": 6,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": ""
-        },
-        "textMode": "auto"
-      },
-      "pluginVersion": "10.0.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "expr": "websocket_active_subscriptions",
-          "legendFormat": "__auto",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "WebSocket Active Subscriptions",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 50
-              },
-              {
-                "color": "red",
-                "value": 100
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 12,
-        "y": 10
-      },
-      "id": 7,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": ""
-        },
-        "textMode": "auto"
-      },
-      "pluginVersion": "10.0.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "expr": "websocket_queue_depth",
-          "legendFormat": "__auto",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "WebSocket Queue Depth",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "tooltip": false,
-              "viz": false,
-              "legend": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 18,
-        "x": 0,
-        "y": 14
-      },
-      "id": 8,
-      "options": {
-        "legend": {
-          "calcs": [
-            "mean",
-            "lastNotNull",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "expr": "rate(websocket_messages_sent[5m])",
-          "legendFormat": "Messages Sent/sec",
-          "range": true,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "expr": "rate(websocket_send_errors[5m])",
-          "legendFormat": "Send Errors/sec",
-          "range": true,
-          "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "expr": "rate(websocket_serialization_errors[5m])",
-          "legendFormat": "Serialization Errors/sec",
-          "range": true,
-          "refId": "C"
-        }
-      ],
-      "title": "WebSocket Message Metrics",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "tooltip": false,
-              "viz": false,
-              "legend": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 22
-      },
-      "id": 9,
-      "options": {
-        "legend": {
-          "calcs": [
-            "mean",
-            "lastNotNull",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "expr": "rate(websocket_device_subscribes[5m])",
-          "legendFormat": "Device Subscribes/sec",
-          "range": true,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "expr": "rate(websocket_device_unsubscribes[5m])",
-          "legendFormat": "Device Unsubscribes/sec",
-          "range": true,
-          "refId": "B"
-        }
-      ],
-      "title": "WebSocket Device Subscription Activity",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "tooltip": false,
-              "viz": false,
-              "legend": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 22
-      },
-      "id": 10,
-      "options": {
-        "legend": {
-          "calcs": [
-            "mean",
-            "lastNotNull",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "expr": "rate(websocket_area_subscribes[5m])",
-          "legendFormat": "Area Subscribes/sec",
-          "range": true,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "expr": "rate(websocket_area_unsubscribes[5m])",
-          "legendFormat": "Area Unsubscribes/sec",
-          "range": true,
-          "refId": "B"
-        }
-      ],
-      "title": "WebSocket Area Subscription Activity",
-      "type": "timeseries"
-    },
-    {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 30
-      },
       "id": 100,
       "panels": [],
       "title": "SOAR Run - APRS Connection Metrics",
@@ -837,7 +92,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 31
+        "y": 1
       },
       "id": 101,
       "options": {
@@ -963,7 +218,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 31
+        "y": 1
       },
       "id": 102,
       "options": {
@@ -1056,7 +311,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 39
+        "y": 9
       },
       "id": 103,
       "options": {
@@ -1108,7 +363,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 47
+        "y": 17
       },
       "id": 200,
       "panels": [],
@@ -1173,7 +428,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 48
+        "y": 18
       },
       "id": 201,
       "options": {
@@ -1288,7 +543,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 48
+        "y": 18
       },
       "id": 202,
       "options": {
@@ -1314,13 +569,13 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum by(worker_id) (rate(aprs_worker_processed[5m]))",
-          "legendFormat": "Worker {{worker_id}}",
+          "expr": "sum(rate(aprs_worker_processed[5m]))",
+          "legendFormat": "Total Processing Rate",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "APRS Worker Processing Rate (5 workers)",
+      "title": "APRS Worker Processing Rate",
       "type": "timeseries"
     },
     {
@@ -1329,7 +584,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 56
+        "y": 26
       },
       "id": 300,
       "panels": [],
@@ -1394,7 +649,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 57
+        "y": 27
       },
       "id": 301,
       "options": {
@@ -1509,7 +764,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 57
+        "y": 27
       },
       "id": 302,
       "options": {
@@ -1624,7 +879,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 65
+        "y": 35
       },
       "id": 303,
       "options": {
@@ -1650,13 +905,13 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum by(worker_id) (rate(aprs_elevation_processed[5m]))",
-          "legendFormat": "Worker {{worker_id}}",
+          "expr": "sum(rate(aprs_elevation_processed[5m]))",
+          "legendFormat": "Total Processing Rate",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Elevation Worker Processing Rate (8 workers)",
+      "title": "Elevation Worker Processing Rate",
       "type": "timeseries"
     },
     {
@@ -1665,7 +920,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 73
+        "y": 43
       },
       "id": 400,
       "panels": [],
@@ -1730,7 +985,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 74
+        "y": 44
       },
       "id": 401,
       "options": {
@@ -1814,7 +1069,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 74
+        "y": 44
       },
       "id": 402,
       "options": {
@@ -1882,7 +1137,7 @@
         "h": 4,
         "w": 6,
         "x": 0,
-        "y": 82
+        "y": 52
       },
       "id": 403,
       "options": {
@@ -1974,7 +1229,7 @@
         "h": 8,
         "w": 12,
         "x": 6,
-        "y": 82
+        "y": 52
       },
       "id": 404,
       "options": {
@@ -2058,7 +1313,7 @@
         "h": 4,
         "w": 6,
         "x": 18,
-        "y": 82
+        "y": 52
       },
       "id": 405,
       "options": {
@@ -2150,7 +1405,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 90
+        "y": 60
       },
       "id": 406,
       "options": {
@@ -2213,7 +1468,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 98
+        "y": 68
       },
       "id": 500,
       "panels": [],
@@ -2278,7 +1533,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 99
+        "y": 69
       },
       "id": 501,
       "options": {
@@ -2360,7 +1615,7 @@
         "h": 4,
         "w": 6,
         "x": 12,
-        "y": 99
+        "y": 69
       },
       "id": 502,
       "options": {
@@ -2452,7 +1707,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 107
+        "y": 77
       },
       "id": 503,
       "options": {
@@ -2493,7 +1748,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 115
+        "y": 85
       },
       "id": 600,
       "panels": [],
@@ -2536,7 +1791,7 @@
         "h": 4,
         "w": 6,
         "x": 0,
-        "y": 116
+        "y": 86
       },
       "id": 601,
       "options": {
@@ -2606,7 +1861,7 @@
         "h": 4,
         "w": 6,
         "x": 6,
-        "y": 116
+        "y": 86
       },
       "id": 604,
       "options": {
@@ -2698,7 +1953,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 116
+        "y": 86
       },
       "id": 602,
       "options": {
@@ -2791,7 +2046,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 120
+        "y": 90
       },
       "id": 603,
       "options": {
@@ -2843,7 +2098,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 128
+        "y": 98
       },
       "id": 700,
       "panels": [],
@@ -2908,7 +2163,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 129
+        "y": 99
       },
       "id": 701,
       "options": {
@@ -2949,7 +2204,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 138
+        "y": 108
       },
       "id": 400,
       "panels": [],
@@ -3014,7 +2269,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 139
+        "y": 109
       },
       "id": 401,
       "options": {
@@ -3107,7 +2362,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 139
+        "y": 109
       },
       "id": 402,
       "options": {
@@ -3200,7 +2455,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 147
+        "y": 117
       },
       "id": 403,
       "options": {
@@ -3328,7 +2583,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 147
+        "y": 117
       },
       "id": 404,
       "options": {
@@ -3379,8 +2634,9 @@
   "schemaVersion": 38,
   "tags": [
     "soar",
-    "monitoring",
-    "performance"
+    "run",
+    "aprs",
+    "monitoring"
   ],
   "templating": {
     "list": [
@@ -3410,8 +2666,8 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "SOAR Performance Dashboard",
-  "uid": "soar-performance",
+  "title": "SOAR Run Performance Dashboard",
+  "uid": "soar-run-performance",
   "version": 3,
   "weekStart": ""
 }
