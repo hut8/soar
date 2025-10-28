@@ -240,6 +240,9 @@ export interface Flight {
 	aircraft_model?: string;
 	registration?: string;
 	aircraft_type_ogn?: string;
+	// Navigation to previous/next flights for the same device (chronologically by takeoff time)
+	previous_flight_id?: string;
+	next_flight_id?: string;
 }
 
 export interface WatchlistEntry {

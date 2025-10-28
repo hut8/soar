@@ -64,6 +64,10 @@ pub struct FlightView {
     // Latest altitude information (for active flights)
     pub latest_altitude_msl_feet: Option<i32>,
     pub latest_altitude_agl_feet: Option<i32>,
+
+    // Navigation to previous/next flights for the same device (chronologically by takeoff time)
+    pub previous_flight_id: Option<Uuid>,
+    pub next_flight_id: Option<Uuid>,
 }
 
 impl FlightView {
@@ -84,14 +88,17 @@ impl FlightView {
         )
     }
 
-    /// Create a FlightView from a Flight with optional airport, device info, and altitude info
-    pub fn from_flight_with_altitude(
+    /// Create a FlightView from a Flight with all optional fields
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_flight_full(
         flight: Flight,
         departure_airport: Option<AirportInfo>,
         arrival_airport: Option<AirportInfo>,
         device_info: Option<DeviceInfo>,
         latest_altitude_msl_feet: Option<i32>,
         latest_altitude_agl_feet: Option<i32>,
+        previous_flight_id: Option<Uuid>,
+        next_flight_id: Option<Uuid>,
     ) -> Self {
         // Calculate state before moving any fields
         let state = flight.state();
@@ -138,7 +145,30 @@ impl FlightView {
             aircraft_type_ogn: device_info.aircraft_type_ogn,
             latest_altitude_msl_feet,
             latest_altitude_agl_feet,
+            previous_flight_id,
+            next_flight_id,
         }
+    }
+
+    /// Create a FlightView from a Flight with optional airport, device info, and altitude info
+    pub fn from_flight_with_altitude(
+        flight: Flight,
+        departure_airport: Option<AirportInfo>,
+        arrival_airport: Option<AirportInfo>,
+        device_info: Option<DeviceInfo>,
+        latest_altitude_msl_feet: Option<i32>,
+        latest_altitude_agl_feet: Option<i32>,
+    ) -> Self {
+        Self::from_flight_full(
+            flight,
+            departure_airport,
+            arrival_airport,
+            device_info,
+            latest_altitude_msl_feet,
+            latest_altitude_agl_feet,
+            None,
+            None,
+        )
     }
 }
 

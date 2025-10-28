@@ -747,6 +747,84 @@ impl FlightsRepository {
 
         Ok(results)
     }
+
+    /// Get the previous flight for the same device (chronologically earlier by takeoff time)
+    /// Returns None if there is no previous flight
+    pub async fn get_previous_flight_for_device(
+        &self,
+        flight_id: Uuid,
+        device_id_val: Uuid,
+        current_takeoff_time: Option<DateTime<Utc>>,
+    ) -> Result<Option<Uuid>> {
+        use crate::schema::flights::dsl::*;
+
+        let pool = self.pool.clone();
+
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            // If there's no takeoff time, use created_at as fallback
+            let reference_time = current_takeoff_time.unwrap_or_else(chrono::Utc::now);
+
+            // Find the most recent flight before this one for the same device
+            let prev_flight: Option<Uuid> = flights
+                .filter(device_id.eq(device_id_val))
+                .filter(id.ne(flight_id))
+                .filter(
+                    takeoff_time
+                        .lt(reference_time)
+                        .or(takeoff_time.is_null().and(created_at.lt(reference_time))),
+                )
+                .order((takeoff_time.desc().nulls_last(), created_at.desc()))
+                .select(id)
+                .first(&mut conn)
+                .optional()?;
+
+            Ok::<Option<Uuid>, anyhow::Error>(prev_flight)
+        })
+        .await??;
+
+        Ok(result)
+    }
+
+    /// Get the next flight for the same device (chronologically later by takeoff time)
+    /// Returns None if there is no next flight
+    pub async fn get_next_flight_for_device(
+        &self,
+        flight_id: Uuid,
+        device_id_val: Uuid,
+        current_takeoff_time: Option<DateTime<Utc>>,
+    ) -> Result<Option<Uuid>> {
+        use crate::schema::flights::dsl::*;
+
+        let pool = self.pool.clone();
+
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            // If there's no takeoff time, use created_at as fallback
+            let reference_time = current_takeoff_time.unwrap_or_else(chrono::Utc::now);
+
+            // Find the next flight after this one for the same device
+            let next_flight: Option<Uuid> = flights
+                .filter(device_id.eq(device_id_val))
+                .filter(id.ne(flight_id))
+                .filter(
+                    takeoff_time
+                        .gt(reference_time)
+                        .or(takeoff_time.is_null().and(created_at.gt(reference_time))),
+                )
+                .order((takeoff_time.asc().nulls_last(), created_at.asc()))
+                .select(id)
+                .first(&mut conn)
+                .optional()?;
+
+            Ok::<Option<Uuid>, anyhow::Error>(next_flight)
+        })
+        .await??;
+
+        Ok(result)
+    }
 }
 
 #[derive(QueryableByName)]

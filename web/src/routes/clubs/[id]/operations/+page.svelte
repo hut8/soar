@@ -122,13 +122,15 @@
 		try {
 			// TODO: Replace with actual API endpoints for club-specific flights
 			// For now, fetch all flights and filter by date
-			const allCompleted = await serverCall<Flight[]>('/flights?completed=true&limit=100');
+			const response = await serverCall<{ flights: Flight[]; total_count: number }>(
+				'/flights?completed=true&limit=100'
+			);
 
 			// Filter flights for the selected date
 			const selectedDateStart = dayjs(selectedDate).startOf('day');
 			const selectedDateEnd = dayjs(selectedDate).endOf('day');
 
-			completedFlights = (allCompleted || []).filter((flight) => {
+			completedFlights = (response?.flights || []).filter((flight) => {
 				if (!flight.takeoff_time) return false;
 				const takeoffDate = dayjs(flight.takeoff_time);
 				return takeoffDate.isAfter(selectedDateStart) && takeoffDate.isBefore(selectedDateEnd);
