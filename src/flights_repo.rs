@@ -825,6 +825,87 @@ impl FlightsRepository {
 
         Ok(result)
     }
+
+    /// Timeout all incomplete flights where last_fix_at is older than the specified duration
+    /// Sets timed_out_at to last_fix_at + timeout_duration for these flights
+    /// Returns the number of flights that were timed out
+    pub async fn timeout_old_incomplete_flights(
+        &self,
+        timeout_duration: chrono::Duration,
+    ) -> Result<usize> {
+        use diesel::sql_types::Timestamptz;
+
+        let pool = self.pool.clone();
+        let cutoff_time = Utc::now() - timeout_duration;
+
+        // Convert chrono::Duration to PostgreSQL interval string
+        // PostgreSQL interval format: 'X hours' or 'X seconds'
+        let interval_str = format!("{} seconds", timeout_duration.num_seconds());
+
+        let rows_affected = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            // Use raw SQL to perform the update with PostgreSQL interval arithmetic
+            // UPDATE flights
+            // SET timed_out_at = last_fix_at + INTERVAL 'X seconds',
+            //     updated_at = NOW()
+            // WHERE timed_out_at IS NULL
+            //   AND landing_time IS NULL
+            //   AND last_fix_at < $1
+            let query = format!(
+                "UPDATE flights \
+                 SET timed_out_at = last_fix_at + INTERVAL '{}', \
+                     updated_at = NOW() \
+                 WHERE timed_out_at IS NULL \
+                   AND landing_time IS NULL \
+                   AND last_fix_at < $1",
+                interval_str
+            );
+
+            let rows = diesel::sql_query(query)
+                .bind::<Timestamptz, _>(cutoff_time)
+                .execute(&mut conn)?;
+
+            Ok::<usize, anyhow::Error>(rows)
+        })
+        .await??;
+
+        Ok(rows_affected)
+    }
+
+    /// Get all active flights (no landing_time, no timed_out_at, last_fix_at within timeout_duration)
+    /// Returns flights that should be loaded into the flight tracker on startup
+    pub async fn get_active_flights_for_tracker(
+        &self,
+        timeout_duration: chrono::Duration,
+    ) -> Result<Vec<Flight>> {
+        use crate::schema::flights::dsl::*;
+
+        let pool = self.pool.clone();
+        let cutoff_time = Utc::now() - timeout_duration;
+
+        let results = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            // Get flights where:
+            // - timed_out_at is NULL (not timed out)
+            // - landing_time is NULL (not landed)
+            // - last_fix_at is within the timeout window (recent enough to be active)
+            let flight_models: Vec<FlightModel> = flights
+                .filter(timed_out_at.is_null())
+                .filter(landing_time.is_null())
+                .filter(last_fix_at.ge(cutoff_time))
+                .order(last_fix_at.desc())
+                .load(&mut conn)?;
+
+            let result_flights: Vec<Flight> = flight_models.into_iter().map(|f| f.into()).collect();
+
+            Ok::<Vec<Flight>, anyhow::Error>(result_flights)
+        })
+        .await??;
+
+        Ok(results)
+    }
 }
 
 #[derive(QueryableByName)]

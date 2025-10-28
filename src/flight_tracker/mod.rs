@@ -1,9 +1,11 @@
+mod aircraft_tracker;
 pub mod altitude;
 mod flight_lifecycle;
 mod geometry;
 mod location;
 mod runway;
 mod state_transitions;
+mod towing;
 pub(crate) mod utils;
 
 use crate::Fix;
@@ -75,6 +77,9 @@ pub(crate) type ActiveFlightsMap = Arc<RwLock<HashMap<Uuid, CurrentFlightState>>
 /// Type alias for device locks map: device_id -> Arc<Mutex<()>>
 pub(crate) type DeviceLocksMap = Arc<RwLock<HashMap<Uuid, Arc<Mutex<()>>>>>;
 
+/// Type alias for aircraft trackers map: device_id -> AircraftTracker
+pub(crate) type AircraftTrackersMap = Arc<RwLock<HashMap<Uuid, aircraft_tracker::AircraftTracker>>>;
+
 /// Simple flight tracker - just tracks which device is currently on which flight
 pub struct FlightTracker {
     flights_repo: FlightsRepository,
@@ -87,6 +92,8 @@ pub struct FlightTracker {
     active_flights: ActiveFlightsMap,
     // Per-device mutexes to ensure sequential processing per device
     device_locks: DeviceLocksMap,
+    // Aircraft trackers for towplane towing detection
+    aircraft_trackers: AircraftTrackersMap,
 }
 
 impl Clone for FlightTracker {
@@ -100,6 +107,7 @@ impl Clone for FlightTracker {
             elevation_db: self.elevation_db.clone(),
             active_flights: Arc::clone(&self.active_flights),
             device_locks: Arc::clone(&self.device_locks),
+            aircraft_trackers: Arc::clone(&self.aircraft_trackers),
         }
     }
 }
@@ -116,28 +124,93 @@ impl FlightTracker {
             elevation_db,
             active_flights: Arc::new(RwLock::new(HashMap::new())),
             device_locks: Arc::new(RwLock::new(HashMap::new())),
+            aircraft_trackers: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
-    /// Create a new FlightTracker with state persistence enabled
-    /// Note: State persistence has been removed for simplicity
-    pub fn with_state_persistence(
-        pool: &Pool<ConnectionManager<PgConnection>>,
-        _state_path: std::path::PathBuf,
-    ) -> Self {
-        // Just create a normal FlightTracker - state persistence removed
-        Self::new(pool)
-    }
+    /// Initialize the flight tracker on startup:
+    /// 1. Timeout old incomplete flights (where last_fix_at is older than timeout_duration)
+    /// 2. Load active flights from the database into the in-memory tracker
+    ///
+    /// Returns (number of flights timed out, number of flights loaded)
+    pub async fn initialize_from_database(
+        &self,
+        timeout_duration: chrono::Duration,
+    ) -> Result<(usize, usize)> {
+        // Phase 1: Timeout old incomplete flights
+        info!(
+            "Timing out incomplete flights older than {} hours...",
+            timeout_duration.num_hours()
+        );
+        let timed_out_count = self
+            .flights_repo
+            .timeout_old_incomplete_flights(timeout_duration)
+            .await?;
 
-    /// Load state from disk - now a no-op
-    pub async fn load_state(&self) -> Result<()> {
-        // State persistence removed
-        Ok(())
-    }
+        if timed_out_count > 0 {
+            info!(
+                "Timed out {} old incomplete flights on startup",
+                timed_out_count
+            );
+        } else {
+            info!("No old incomplete flights to timeout");
+        }
 
-    /// Start periodic state saving - now a no-op
-    pub fn start_periodic_state_saving(&self, _interval_secs: u64) {
-        // State persistence removed
+        // Phase 2: Load active flights into the tracker
+        info!(
+            "Loading active flights from the last {} hours into tracker...",
+            timeout_duration.num_hours()
+        );
+        let active_flights_from_db = self
+            .flights_repo
+            .get_active_flights_for_tracker(timeout_duration)
+            .await?;
+
+        let loaded_count = active_flights_from_db.len();
+
+        // Populate the active_flights map
+        if !active_flights_from_db.is_empty() {
+            let mut active_flights = self.active_flights.write().await;
+
+            for flight in active_flights_from_db {
+                // We need the device_id to populate the map
+                if let Some(device_id) = flight.device_id {
+                    // Create a CurrentFlightState from the database flight
+                    // Initialize with empty history - it will be populated as new fixes arrive
+                    let mut history = VecDeque::with_capacity(5);
+                    // Assume the flight was active (since it's in our active flights list)
+                    history.push_back(true);
+
+                    let state = CurrentFlightState {
+                        flight_id: flight.id,
+                        last_fix_timestamp: flight.last_fix_at,
+                        last_update_time: Utc::now(),
+                        recent_fix_history: history,
+                    };
+
+                    active_flights.insert(device_id, state);
+                    trace!(
+                        "Loaded flight {} for device {} into tracker (last fix: {})",
+                        flight.id, device_id, flight.last_fix_at
+                    );
+                }
+            }
+
+            info!(
+                "Loaded {} active flights into tracker from database",
+                loaded_count
+            );
+        } else {
+            info!("No active flights to load into tracker");
+        }
+
+        // Update metrics
+        {
+            let active_flights = self.active_flights.read().await;
+            utils::update_flight_tracker_metrics(&active_flights);
+        }
+
+        Ok((timed_out_count, loaded_count))
     }
 
     /// Get a reference to the elevation database
@@ -326,6 +399,7 @@ impl FlightTracker {
             &self.elevation_db,
             &self.active_flights,
             &self.device_locks,
+            &self.aircraft_trackers,
             fix,
         )
         .await
