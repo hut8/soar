@@ -117,8 +117,26 @@ pub async fn get_flight_by_id(
                 }
             }
 
-            let flight_view =
-                FlightView::from_flight(flight, departure_airport, arrival_airport, device_info);
+            // Get previous and next flights for navigation in a single query (if device_id is present)
+            let (previous_flight_id, next_flight_id) = if let Some(device_id) = flight.device_id {
+                flights_repo
+                    .get_adjacent_flights_for_device(id, device_id, flight.takeoff_time)
+                    .await
+                    .unwrap_or((None, None))
+            } else {
+                (None, None)
+            };
+
+            let flight_view = FlightView::from_flight_full(
+                flight,
+                departure_airport,
+                arrival_airport,
+                device_info,
+                None,
+                None,
+                previous_flight_id,
+                next_flight_id,
+            );
             Json(FlightResponse {
                 flight: flight_view,
                 device,

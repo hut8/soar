@@ -158,6 +158,8 @@ pub struct Device {
     pub icao_model_code: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub adsb_emitter_category: Option<AdsbEmitterCategory>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tracker_device_type: Option<String>,
 }
 
 // Diesel database model for devices table
@@ -267,6 +269,7 @@ impl From<DeviceModel> for Device {
             club_id: model.club_id,
             icao_model_code: model.icao_model_code,
             adsb_emitter_category: model.adsb_emitter_category,
+            tracker_device_type: model.tracker_device_type,
         }
     }
 }
@@ -443,6 +446,7 @@ pub fn read_flarmnet_file(path: &str) -> Result<Vec<Device>> {
                                 club_id: None,
                                 icao_model_code: None,
                                 adsb_emitter_category: None,
+                                tracker_device_type: None,
                             })
                         }
                         Err(e) => {
@@ -613,6 +617,7 @@ impl DeviceFetcher {
                                     club_id: None,
                                     icao_model_code: None,
                                     adsb_emitter_category: None,
+                                    tracker_device_type: None,
                                 })
                             }
                             Err(e) => {
@@ -770,6 +775,7 @@ impl DeviceFetcher {
                         club_id: None,
                         icao_model_code: None,
                         adsb_emitter_category: None,
+                        tracker_device_type: None,
                     };
                     device_map.insert(
                         glidernet_device.address,
@@ -855,6 +861,7 @@ mod tests {
             club_id: None,
             icao_model_code: None,
             adsb_emitter_category: None,
+            tracker_device_type: None,
         };
 
         // Test that the device can be serialized/deserialized
@@ -1133,6 +1140,7 @@ mod tests {
             club_id: None,
             icao_model_code: None,
             adsb_emitter_category: None,
+            tracker_device_type: None,
         }
     }
 }
