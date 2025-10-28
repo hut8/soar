@@ -176,13 +176,19 @@ async fn setup_diesel_database() -> Result<Pool<ConnectionManager<PgConnection>>
     let database_url =
         env::var("DATABASE_URL").expect("DATABASE_URL must be set in environment variables");
 
-    // Create a Diesel connection pool
+    // Create a Diesel connection pool with increased capacity for batched AGL updates
+    // Increased from default (10) to 50 to handle:
+    // - 5 APRS workers
+    // - 8 elevation workers
+    // - 1 batch writer
+    // - Various background tasks and web requests
     let manager = ConnectionManager::<PgConnection>::new(database_url);
     let pool = Pool::builder()
+        .max_size(50)
         .build(manager)
         .map_err(|e| anyhow::anyhow!("Failed to create Diesel connection pool: {e}"))?;
 
-    info!("Successfully created Diesel connection pool");
+    info!("Successfully created Diesel connection pool (max connections: 50)");
 
     // Run embedded migrations with a PostgreSQL advisory lock
     info!("Running database migrations...");
@@ -419,6 +425,14 @@ async fn handle_run(
 
     info!("Created bounded elevation processing queue with capacity 1,000");
 
+    // Create separate bounded channel for AGL database updates (capacity: 10,000)
+    // This separates the fast elevation calculation from the slower database updates
+    // and allows batching of database writes for much better throughput
+    let (agl_db_tx, agl_db_rx) =
+        tokio::sync::mpsc::channel::<soar::elevation::AglDatabaseTask>(10_000);
+
+    info!("Created bounded AGL database update queue with capacity 10,000");
+
     // Create database fix processor to save all valid fixes to the database
     // Try to create with NATS first, fall back to without NATS if connection fails
     let fix_processor = match FixProcessor::with_flight_tracker_and_nats(
@@ -523,6 +537,18 @@ async fn handle_run(
     // Wrap receiver in Arc<Mutex> to share among workers
     let shared_rx = std::sync::Arc::new(tokio::sync::Mutex::new(message_rx));
 
+    // Spawn AGL batch database writer
+    // This worker receives calculated AGL values and writes them to database in batches
+    // Batching dramatically reduces database load (100+ individual UPDATEs become 1 batch UPDATE)
+    let batch_writer_fixes_repo = FixesRepository::new(diesel_pool.clone());
+    tokio::spawn(
+        async move {
+            soar::agl_batch_writer::batch_writer_task(agl_db_rx, batch_writer_fixes_repo).await;
+        }
+        .instrument(tracing::info_span!("agl_batch_writer")),
+    );
+    info!("Spawned AGL batch database writer (batch size: 100, timeout: 5s)");
+
     // Spawn multiple dedicated elevation processing workers
     // These workers handle AGL calculations separately to prevent them from blocking main processing
     // Using multiple workers allows parallel elevation lookups, which can be I/O intensive
@@ -536,6 +562,7 @@ async fn handle_run(
     for elevation_worker_id in 0..num_elevation_workers {
         let worker_elevation_rx = shared_elevation_rx.clone();
         let worker_elevation_db = elevation_db.clone();
+        let worker_agl_db_tx = agl_db_tx.clone();
 
         tokio::spawn(
             async move {
@@ -549,17 +576,36 @@ async fn handle_run(
                     match task {
                         Some(task) => {
                             let start = std::time::Instant::now();
-                            soar::flight_tracker::altitude::calculate_and_update_agl_async(
+
+                            // Calculate AGL (no database update here, just calculation)
+                            let agl = soar::flight_tracker::altitude::calculate_altitude_agl(
                                 &worker_elevation_db,
-                                task.fix_id,
                                 &task.fix,
-                                task.fixes_repo,
                             )
                             .await;
+
                             let duration = start.elapsed();
                             metrics::histogram!("aprs.elevation.duration_ms")
                                 .record(duration.as_millis() as f64);
                             metrics::counter!("aprs.elevation.processed", "worker_id" => elevation_worker_id.to_string()).increment(1);
+
+                            // Send calculated AGL to database batch writer
+                            let agl_task = soar::elevation::AglDatabaseTask {
+                                fix_id: task.fix_id,
+                                altitude_agl_feet: agl,
+                            };
+
+                            if let Err(e) = worker_agl_db_tx.try_send(agl_task) {
+                                match e {
+                                    tokio::sync::mpsc::error::TrySendError::Full(_) => {
+                                        warn!("AGL database queue is FULL (10,000 tasks) - dropping database update for fix {}", task.fix_id);
+                                        metrics::counter!("agl_db_queue.dropped_total").increment(1);
+                                    }
+                                    tokio::sync::mpsc::error::TrySendError::Closed(_) => {
+                                        warn!("AGL database queue is closed");
+                                    }
+                                }
+                            }
                         }
                         None => {
                             // Channel closed, exit worker

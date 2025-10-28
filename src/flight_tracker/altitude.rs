@@ -45,7 +45,7 @@ pub(crate) async fn calculate_altitude_offset_ft(
     }
 }
 
-pub(crate) async fn calculate_altitude_agl(elevation_db: &ElevationDB, fix: &Fix) -> Option<i32> {
+pub async fn calculate_altitude_agl(elevation_db: &ElevationDB, fix: &Fix) -> Option<i32> {
     // Get reported altitude from fix (in feet)
     let reported_altitude_ft = fix.altitude_msl_feet?;
 

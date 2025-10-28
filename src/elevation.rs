@@ -7,7 +7,6 @@ use std::{env, num::NonZeroUsize, path::PathBuf, sync::Arc, time::Instant};
 use tokio::sync::Mutex;
 
 use crate::Fix;
-use crate::fixes_repo::FixesRepository;
 use crate::tile_downloader::TileDownloader;
 use uuid::Uuid;
 
@@ -16,7 +15,13 @@ use uuid::Uuid;
 pub struct ElevationTask {
     pub fix_id: Uuid,
     pub fix: Fix,
-    pub fixes_repo: FixesRepository,
+}
+
+/// Task for batch updating AGL values in database
+/// Sent from elevation workers to the batch database writer
+pub struct AglDatabaseTask {
+    pub fix_id: Uuid,
+    pub altitude_agl_feet: Option<i32>,
 }
 
 /// Round coordinates to ~100m grid (0.001 degrees ≈ 111m)
