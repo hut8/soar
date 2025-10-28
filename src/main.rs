@@ -522,11 +522,13 @@ async fn handle_run(
     );
 
     // Create bounded channel for APRS messages (capacity: 10000)
-    // Increased from 1000 to handle bursts of incoming APRS traffic
+    // Increased from 1000 to 10,000, then to 50,000 to handle periodic processing spikes
+    // Note: Queue fills during periodic spikes in processing duration (not incoming rate)
+    // TODO: Investigate root cause of 10-minute processing duration spikes
     let (message_tx, message_rx) =
-        tokio::sync::mpsc::channel::<soar::aprs_client::AprsMessage>(10_000);
+        tokio::sync::mpsc::channel::<soar::aprs_client::AprsMessage>(50_000);
 
-    info!("Created bounded message queue with capacity 10,000");
+    info!("Created bounded message queue with capacity 50,000");
 
     // Create multiple processing workers to consume queue in parallel
     // Using 5 workers allows parallel processing of different devices while maintaining
