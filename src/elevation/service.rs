@@ -51,9 +51,10 @@ pub struct ElevationService {
 
 impl ElevationService {
     /// Create a new ElevationService using ELEVATION_DATA_PATH env var
+    /// Defaults to /var/soar/elevation if not specified
     pub fn new() -> Result<Self> {
-        let storage_path = env::var("ELEVATION_DATA_PATH")
-            .context("ELEVATION_DATA_PATH environment variable not set")?;
+        let storage_path =
+            env::var("ELEVATION_DATA_PATH").unwrap_or_else(|_| "/var/soar/elevation".to_string());
         let storage_path = PathBuf::from(storage_path);
 
         if !storage_path.exists() {
@@ -88,12 +89,13 @@ impl ElevationService {
 
     /// Create a new ElevationService with custom cache sizes for specialized workloads
     /// Used by AGL backfill which needs a larger tile cache to avoid blocking real-time processing
+    /// Defaults to /var/soar/elevation if ELEVATION_DATA_PATH is not specified
     pub fn with_custom_cache_sizes(
         elevation_cache_size: u64,
         tile_cache_size: u64,
     ) -> Result<Self> {
-        let storage_path = env::var("ELEVATION_DATA_PATH")
-            .context("ELEVATION_DATA_PATH environment variable not set")?;
+        let storage_path =
+            env::var("ELEVATION_DATA_PATH").unwrap_or_else(|_| "/var/soar/elevation".to_string());
         let storage_path = PathBuf::from(storage_path);
 
         if !storage_path.exists() {
