@@ -14,6 +14,29 @@ use crate::web::PgPool;
 // Import the main AddressType from devices module
 use crate::devices::AddressType;
 
+/// Lightweight struct for backfill queries - only contains the fields needed for elevation lookup
+/// Note: altitude_msl_feet is Option<i32> in the schema, but the query filters for IS NOT NULL
+#[derive(Debug, Clone)]
+pub struct BackfillFix {
+    pub id: Uuid,
+    pub latitude: f64,
+    pub longitude: f64,
+    pub altitude_msl_feet: i32,
+}
+
+impl From<(Uuid, f64, f64, Option<i32>)> for BackfillFix {
+    fn from((id, latitude, longitude, altitude_msl_feet): (Uuid, f64, f64, Option<i32>)) -> Self {
+        Self {
+            id,
+            latitude,
+            longitude,
+            // Safe to unwrap because we only query fixes with altitude_msl_feet IS NOT NULL
+            altitude_msl_feet: altitude_msl_feet
+                .expect("BackfillFix requires altitude_msl_feet to be present"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, DbEnum)]
 #[db_enum(existing_type_path = "crate::schema::sql_types::AircraftTypeOgn")]
 pub enum AircraftTypeOgn {
@@ -380,28 +403,31 @@ impl FixesRepository {
 
     /// Get fixes that need AGL backfilling
     /// Returns fixes that are old enough, have MSL altitude, but don't have AGL calculated yet
+    /// Returns only the minimal fields needed for elevation lookup (id, lat, lon, altitude_msl)
     pub async fn get_fixes_needing_backfill(
         &self,
         before_timestamp: DateTime<Utc>,
         limit: i64,
-    ) -> Result<Vec<Fix>> {
+    ) -> Result<Vec<BackfillFix>> {
         use crate::schema::fixes::dsl::*;
         let pool = self.pool.clone();
 
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            let results = fixes
+            let results: Vec<(Uuid, f64, f64, Option<i32>)> = fixes
                 .filter(timestamp.lt(before_timestamp))
                 .filter(altitude_msl_feet.is_not_null())
                 .filter(altitude_agl_valid.eq(false))
                 .filter(is_active.eq(true))
                 .order(timestamp.asc()) // Oldest first
                 .limit(limit)
-                .select(Fix::as_select())
-                .load::<Fix>(&mut conn)?;
+                .select((id, latitude, longitude, altitude_msl_feet))
+                .load(&mut conn)?;
 
-            Ok::<Vec<Fix>, anyhow::Error>(results)
+            let backfill_fixes = results.into_iter().map(BackfillFix::from).collect();
+
+            Ok::<Vec<BackfillFix>, anyhow::Error>(backfill_fixes)
         })
         .await?
     }

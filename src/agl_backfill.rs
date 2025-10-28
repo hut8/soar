@@ -6,8 +6,7 @@ use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 use crate::elevation::ElevationDB;
-use crate::fixes::Fix;
-use crate::fixes_repo::FixesRepository;
+use crate::fixes_repo::{BackfillFix, FixesRepository};
 
 /// Lightweight struct containing only the data needed for AGL backfill processing
 /// Note: altitude_msl_feet is non-optional because we only backfill fixes that have this value
@@ -19,16 +18,14 @@ struct BackfillTask {
     altitude_msl_feet: i32,
 }
 
-impl From<Fix> for BackfillTask {
-    fn from(fix: Fix) -> Self {
+impl From<BackfillFix> for BackfillTask {
+    fn from(fix: BackfillFix) -> Self {
         Self {
             id: fix.id,
             latitude: fix.latitude,
             longitude: fix.longitude,
-            // Safe to unwrap because we only query fixes with altitude_msl_feet IS NOT NULL
-            altitude_msl_feet: fix
-                .altitude_msl_feet
-                .expect("BackfillTask requires altitude_msl_feet to be present"),
+            // No need to unwrap - BackfillFix.altitude_msl_feet is guaranteed non-null
+            altitude_msl_feet: fix.altitude_msl_feet,
         }
     }
 }
@@ -87,23 +84,11 @@ async fn producer_task(fixes_repo: FixesRepository, tx: mpsc::Sender<BackfillTas
                 let batch_size = fixes.len();
                 if let Some(total) = cached_total_pending {
                     info!(
-                        "Producer: Found {} total fixes needing AGL backfill, processing batch of {} (oldest: {})",
-                        total,
-                        batch_size,
-                        fixes
-                            .first()
-                            .map(|f| f.timestamp.to_rfc3339())
-                            .unwrap_or_default()
+                        "Producer: Found {} total fixes needing AGL backfill, processing batch of {}",
+                        total, batch_size
                     );
                 } else {
-                    info!(
-                        "Producer: Processing batch of {} fixes (oldest: {})",
-                        batch_size,
-                        fixes
-                            .first()
-                            .map(|f| f.timestamp.to_rfc3339())
-                            .unwrap_or_default()
-                    );
+                    info!("Producer: Processing batch of {} fixes", batch_size);
                 }
 
                 // Send fixes to workers
