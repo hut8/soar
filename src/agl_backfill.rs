@@ -5,7 +5,8 @@ use tokio::time::sleep;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
-use crate::elevation::ElevationDB;
+use crate::agl_batch_writer::batch_writer_task;
+use crate::elevation::{AglDatabaseTask, ElevationDB};
 use crate::fixes_repo::{BackfillFix, FixesRepository};
 
 /// Lightweight struct containing only the data needed for AGL backfill processing
@@ -146,14 +147,13 @@ async fn calculate_agl_from_task(elevation_db: &ElevationDB, task: &BackfillTask
 /// Consumer task that processes backfill tasks from the queue
 async fn consumer_task(
     worker_id: usize,
-    fixes_repo: FixesRepository,
     elevation_db: ElevationDB,
     rx: std::sync::Arc<tokio::sync::Mutex<mpsc::Receiver<BackfillTask>>>,
+    db_tx: mpsc::Sender<AglDatabaseTask>,
 ) {
     info!("Starting AGL backfill consumer worker {}", worker_id);
 
     let mut processed_count = 0;
-    let mut success_count = 0;
     let mut agl_computed_count = 0;
     let worker_start = std::time::Instant::now();
 
@@ -175,34 +175,36 @@ async fn consumer_task(
         // Calculate AGL directly from task data
         let agl = calculate_agl_from_task(&elevation_db, &task).await;
 
-        // Update the database (sets both altitude_agl_feet and altitude_agl_valid=true)
-        match fixes_repo.update_altitude_agl(task.id, agl).await {
-            Ok(_) => {
-                success_count += 1;
-                counter!("agl_backfill_fixes_processed_total").increment(1);
+        // Send to batch writer for database update
+        let db_task = AglDatabaseTask {
+            fix_id: task.id,
+            altitude_agl_feet: agl,
+        };
 
-                if let Some(agl_val) = agl {
-                    agl_computed_count += 1;
-                    counter!("agl_backfill_altitudes_computed_total").increment(1);
-                    debug!(
-                        "Worker {}: Backfilled AGL for fix {} ({} MSL -> {} AGL)",
-                        worker_id, task.id, task.altitude_msl_feet, agl_val
-                    );
-                } else {
-                    counter!("agl_backfill_no_elevation_data_total").increment(1);
-                    debug!(
-                        "Worker {}: Backfilled AGL for fix {} (no elevation data available)",
-                        worker_id, task.id
-                    );
-                }
-            }
-            Err(e) => {
-                counter!("agl_backfill_errors_total").increment(1);
-                warn!(
-                    "Worker {}: Failed to update AGL for fix {}: {}",
-                    worker_id, task.id, e
-                );
-            }
+        if db_tx.send(db_task).await.is_err() {
+            warn!(
+                "Worker {}: Failed to send database task (channel closed)",
+                worker_id
+            );
+            break;
+        }
+
+        // Update metrics
+        counter!("agl_backfill_fixes_processed_total").increment(1);
+
+        if let Some(agl_val) = agl {
+            agl_computed_count += 1;
+            counter!("agl_backfill_altitudes_computed_total").increment(1);
+            debug!(
+                "Worker {}: Computed AGL for fix {} ({} MSL -> {} AGL)",
+                worker_id, task.id, task.altitude_msl_feet, agl_val
+            );
+        } else {
+            counter!("agl_backfill_no_elevation_data_total").increment(1);
+            debug!(
+                "Worker {}: Computed AGL for fix {} (no elevation data available)",
+                worker_id, task.id
+            );
         }
 
         processed_count += 1;
@@ -223,8 +225,8 @@ async fn consumer_task(
     }
 
     info!(
-        "Worker {}: Shutting down after processing {} fixes ({} successful, {} AGL computed)",
-        worker_id, processed_count, success_count, agl_computed_count
+        "Worker {}: Shutting down after processing {} fixes ({} AGL computed)",
+        worker_id, processed_count, agl_computed_count
     );
 }
 
@@ -232,21 +234,31 @@ async fn consumer_task(
 /// due to elevation processor queue overflow or system restarts
 ///
 /// This uses a producer/consumer pattern with multiple workers to parallelize
-/// the elevation lookups and database updates.
+/// the elevation lookups, and a batch writer for efficient database updates.
 pub async fn agl_backfill_task(fixes_repo: FixesRepository, elevation_db: ElevationDB) {
     const NUM_WORKERS: usize = 5;
     const CHANNEL_CAPACITY: usize = 2000; // Buffer for 2 batches
+    const DB_CHANNEL_CAPACITY: usize = 10000; // Match real-time processor capacity
 
     info!(
-        "Starting AGL backfill with {} workers (channel capacity: {})",
-        NUM_WORKERS, CHANNEL_CAPACITY
+        "Starting AGL backfill with {} workers (task channel: {}, db channel: {})",
+        NUM_WORKERS, CHANNEL_CAPACITY, DB_CHANNEL_CAPACITY
     );
 
     // Create channel for communication between producer and consumers
     let (tx, rx) = mpsc::channel::<BackfillTask>(CHANNEL_CAPACITY);
 
+    // Create channel for database updates (consumers -> batch writer)
+    let (db_tx, db_rx) = mpsc::channel::<AglDatabaseTask>(DB_CHANNEL_CAPACITY);
+
     // Wrap receiver in Arc<Mutex> to share among workers
     let rx = std::sync::Arc::new(tokio::sync::Mutex::new(rx));
+
+    // Spawn batch writer task
+    let batch_writer_fixes_repo = fixes_repo.clone();
+    let batch_writer_handle = tokio::spawn(async move {
+        batch_writer_task(db_rx, batch_writer_fixes_repo).await;
+    });
 
     // Spawn producer task
     let producer_fixes_repo = fixes_repo.clone();
@@ -257,18 +269,21 @@ pub async fn agl_backfill_task(fixes_repo: FixesRepository, elevation_db: Elevat
     // Spawn consumer workers
     let mut consumer_handles = vec![];
     for worker_id in 0..NUM_WORKERS {
-        let worker_fixes_repo = fixes_repo.clone();
         let worker_elevation_db = elevation_db.clone();
         let worker_rx = rx.clone();
+        let worker_db_tx = db_tx.clone();
 
         let handle = tokio::spawn(async move {
-            consumer_task(worker_id, worker_fixes_repo, worker_elevation_db, worker_rx).await;
+            consumer_task(worker_id, worker_elevation_db, worker_rx, worker_db_tx).await;
         });
         consumer_handles.push(handle);
     }
 
+    // Drop the original db_tx so batch writer knows when all workers are done
+    drop(db_tx);
+
     // Wait for all tasks (they run forever)
-    let _ = tokio::join!(producer_handle);
+    let _ = tokio::join!(producer_handle, batch_writer_handle);
     for handle in consumer_handles {
         let _ = handle.await;
     }
