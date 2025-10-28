@@ -105,6 +105,7 @@ pub struct DeviceView {
     pub home_base_airport_ident: Option<String>,
     pub aircraft_type_ogn: Option<crate::ogn_aprs_aircraft::AircraftType>,
     pub last_fix_at: Option<String>,
+    pub tracker_device_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fixes: Option<Vec<crate::fixes::Fix>>,
 }
@@ -155,6 +156,7 @@ impl DeviceView {
             home_base_airport_ident: device.home_base_airport_ident,
             aircraft_type_ogn: device.aircraft_type_ogn,
             last_fix_at: device.last_fix_at.map(|dt| dt.to_rfc3339()),
+            tracker_device_type: None, // Not available from Device (only DeviceModel has this)
             fixes: None,
         }
     }
@@ -204,6 +206,7 @@ impl DeviceView {
             home_base_airport_ident: device_model.home_base_airport_ident,
             aircraft_type_ogn: device_model.aircraft_type_ogn,
             last_fix_at: device_model.last_fix_at.map(|dt| dt.to_rfc3339()),
+            tracker_device_type: device_model.tracker_device_type,
             fixes: None,
         }
     }

@@ -165,6 +165,7 @@ export interface Device {
 	home_base_airport_ident?: string | null;
 	aircraft_type_ogn?: string | null;
 	last_fix_at?: string | null;
+	tracker_device_type?: string | null;
 	fixes?: Fix[];
 }
 
