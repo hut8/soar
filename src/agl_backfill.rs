@@ -10,12 +10,13 @@ use crate::fixes::Fix;
 use crate::fixes_repo::FixesRepository;
 
 /// Lightweight struct containing only the data needed for AGL backfill processing
+/// Note: altitude_msl_feet is non-optional because we only backfill fixes that have this value
 #[derive(Debug, Clone)]
 struct BackfillTask {
     id: Uuid,
     latitude: f64,
     longitude: f64,
-    altitude_msl_feet: Option<i32>,
+    altitude_msl_feet: i32,
 }
 
 impl From<Fix> for BackfillTask {
@@ -24,7 +25,10 @@ impl From<Fix> for BackfillTask {
             id: fix.id,
             latitude: fix.latitude,
             longitude: fix.longitude,
-            altitude_msl_feet: fix.altitude_msl_feet,
+            // Safe to unwrap because we only query fixes with altitude_msl_feet IS NOT NULL
+            altitude_msl_feet: fix
+                .altitude_msl_feet
+                .expect("BackfillTask requires altitude_msl_feet to be present"),
         }
     }
 }
@@ -115,9 +119,6 @@ async fn producer_task(
 /// Calculate AGL altitude directly from BackfillTask data
 /// This is a simplified version of calculate_altitude_agl that works with our task struct
 async fn calculate_agl_from_task(elevation_db: &ElevationDB, task: &BackfillTask) -> Option<i32> {
-    // Get reported altitude (in feet)
-    let reported_altitude_ft = task.altitude_msl_feet?;
-
     // Run blocking elevation lookup in a separate thread
     let elevation_result = elevation_db
         .elevation_egm2008(task.latitude, task.longitude)
@@ -130,7 +131,7 @@ async fn calculate_agl_from_task(elevation_db: &ElevationDB, task: &BackfillTask
             // Convert elevation from meters to feet (1 meter = 3.28084 feet)
             let elevation_ft = elevation_m * 3.28084;
             // Calculate AGL (Above Ground Level)
-            let agl = reported_altitude_ft as f64 - elevation_ft;
+            let agl = task.altitude_msl_feet as f64 - elevation_ft;
 
             Some(agl.round() as i32)
         }
@@ -184,10 +185,7 @@ async fn consumer_task(
                     counter!("agl_backfill_altitudes_computed_total").increment(1);
                     debug!(
                         "Worker {}: Backfilled AGL for fix {} ({} MSL -> {} AGL)",
-                        worker_id,
-                        task.id,
-                        task.altitude_msl_feet.unwrap_or(0),
-                        agl_val
+                        worker_id, task.id, task.altitude_msl_feet, agl_val
                     );
                 } else {
                     counter!("agl_backfill_no_elevation_data_total").increment(1);
