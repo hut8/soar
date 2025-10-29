@@ -414,18 +414,6 @@ impl FlightsRepository {
         Ok(results.into_iter().map(|model| model.into()).collect())
     }
 
-    /// Get flights that used a specific tow aircraft
-    /// DEPRECATED: tow_aircraft_id column has been removed, use towed_by_device_id instead
-    #[allow(dead_code)]
-    pub async fn get_flights_by_tow_aircraft(
-        &self,
-        _tow_aircraft_id_param: &str,
-    ) -> Result<Vec<Flight>> {
-        // This method is deprecated and no longer functional
-        // Use get_flights_by_device instead with towed_by_device_id
-        Ok(vec![])
-    }
-
     /// Get the total count of flights in the database
     pub async fn get_flight_count(&self) -> Result<i64> {
         use crate::schema::flights::dsl::*;
