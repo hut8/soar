@@ -243,16 +243,12 @@ export interface Flight {
 	registration?: string;
 	aircraft_type_ogn?: string;
 	// Latest fix information (for active flights)
-	latest_altitude_msl_feet?: number | null;
-	latest_altitude_agl_feet?: number | null;
-	latest_fix_timestamp?: string | null;
+	latest_altitude_msl_feet: number | null;
+	latest_altitude_agl_feet: number | null;
+	latest_fix_timestamp: string | null;
 	// Navigation to previous/next flights for the same device (chronologically by takeoff time)
 	previous_flight_id?: string;
 	next_flight_id?: string;
-	// Latest position data (for active flights)
-	latest_altitude_msl_feet?: number;
-	latest_altitude_agl_feet?: number;
-	latest_fix_timestamp?: string;
 }
 
 export interface WatchlistEntry {

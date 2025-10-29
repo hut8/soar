@@ -403,10 +403,10 @@
 							{getAircraftTypeOgnDescription(flight.aircraft_type_ogn)}
 						</span>
 					{/if}
-					{#if flight.tow_aircraft_id}
+					{#if flight.towed_by_device_id}
 						<span
 							class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
-							title="This aircraft was towed by {flight.tow_aircraft_id}"
+							title="This aircraft was towed"
 						>
 							<MoveUp class="h-3 w-3" />
 							Towed
