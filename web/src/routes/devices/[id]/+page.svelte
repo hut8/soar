@@ -67,6 +67,7 @@
 	let flightsPage = 1;
 	let fixesTotalPages = 1;
 	let flightsTotalPages = 1;
+	let hideInactiveFixes = false;
 	let clubs: Club[] = [];
 	let selectedClubId: string = '';
 	let savingClub = false;
@@ -142,8 +143,9 @@
 			const twentyFourHoursAgo = dayjs().utc().subtract(24, 'hour');
 			const afterParam = twentyFourHoursAgo.format('YYYYMMDDHHmmss');
 
+			const activeParam = hideInactiveFixes ? '&active=true' : '';
 			const response = await serverCall<FixesResponse>(
-				`/devices/${deviceId}/fixes?page=${page}&per_page=50&after=${afterParam}`
+				`/devices/${deviceId}/fixes?page=${page}&per_page=50&after=${afterParam}${activeParam}`
 			);
 			fixes = response.fixes;
 			fixesPage = response.page;
@@ -153,6 +155,11 @@
 		} finally {
 			loadingFixes = false;
 		}
+	}
+
+	function handleHideInactiveChange(value: boolean) {
+		hideInactiveFixes = value;
+		loadFixes(1); // Reset to page 1 when filter changes
 	}
 
 	async function loadFlights(page: number = 1) {
@@ -659,6 +666,8 @@
 					showHideInactive={true}
 					showRaw={true}
 					emptyMessage="No position fixes found in the last 24 hours"
+					hideInactiveValue={hideInactiveFixes}
+					onHideInactiveChange={handleHideInactiveChange}
 				/>
 
 				<!-- Pagination for fixes -->
