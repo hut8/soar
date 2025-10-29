@@ -1632,7 +1632,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(elevation_dataset_cache_hits[5m])",
+          "expr": "rate(elevation_tile_cache_hits[5m])",
           "legendFormat": "Hits/sec",
           "range": true,
           "refId": "A"
@@ -1643,13 +1643,13 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(elevation_dataset_cache_misses[5m])",
+          "expr": "rate(elevation_tile_cache_misses[5m])",
           "legendFormat": "Misses/sec",
           "range": true,
           "refId": "B"
         }
       ],
-      "title": "GDAL Dataset Cache Hit/Miss Rate",
+      "title": "Elevation Tile Cache Hit/Miss Rate",
       "type": "timeseries"
     },
     {
@@ -1716,13 +1716,13 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(elevation_dataset_cache_hits[5m]) / (rate(elevation_dataset_cache_hits[5m]) + rate(elevation_dataset_cache_misses[5m]))",
+          "expr": "rate(elevation_tile_cache_hits[5m]) / (rate(elevation_tile_cache_hits[5m]) + rate(elevation_tile_cache_misses[5m]))",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "GDAL Dataset Cache Hit Rate",
+      "title": "Elevation Tile Cache Hit Rate",
       "type": "gauge"
     },
     {
@@ -1791,13 +1791,13 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "elevation_dataset_cache_size",
+          "expr": "elevation_tile_cache_entries",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Open GDAL Datasets (max 100)",
+      "title": "Open HGT Tiles (max 1000)",
       "type": "stat"
     },
     {
@@ -1890,8 +1890,8 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "elevation_dataset_open_duration_seconds{quantile=\"0.95\"}",
-          "legendFormat": "P95 Dataset Open Time",
+          "expr": "elevation_tile_load_duration_seconds{quantile=\"0.95\"}",
+          "legendFormat": "P95 Tile Load Time",
           "range": true,
           "refId": "A"
         },
@@ -1901,8 +1901,8 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "elevation_gdal_read_duration_seconds{quantile=\"0.95\"}",
-          "legendFormat": "P95 GDAL Read Time",
+          "expr": "elevation_interpolation_duration_seconds{quantile=\"0.95\"}",
+          "legendFormat": "P95 Interpolation Time",
           "range": true,
           "refId": "B"
         },
