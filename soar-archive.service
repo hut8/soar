@@ -1,5 +1,5 @@
 [Unit]
-Description=SOAR Archive - Archive Old Fixes Data
+Description=SOAR Archive - Archive Old Data (Flights, Fixes, ReceiverStatuses, AprsMessages)
 Documentation=https://github.com/hut8/soar
 After=network-online.target postgresql.service
 Wants=network-online.target
@@ -12,7 +12,11 @@ Group=soar
 WorkingDirectory=/var/soar
 
 # Calculate date 7 days ago (UTC) and run archive command
-# Archives all fixes older than 7 days to /var/soar/archive
+# Archives data with staggered retention:
+#   - Flights: 8+ days old
+#   - Fixes and ReceiverStatuses: 9+ days old
+#   - AprsMessages: 10+ days old
+# Using "7 days ago" as the base date ensures the oldest data (10 days from today) gets archived
 ExecStart=/bin/sh -c '/usr/local/bin/soar archive "$(date -u -d "7 days ago" "+%%Y-%%m-%%d")" --archive-path /var/soar/archive'
 
 # Environment variables

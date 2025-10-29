@@ -1,8 +1,13 @@
 # SOAR Archive Timer
 #
 # This systemd timer automatically runs the `soar archive` command once daily at 2:00 AM.
-# It archives fixes data older than 7 days to compressed CSV files in /var/soar/archive
+# It archives data older than specified retention periods to compressed CSV files in /var/soar/archive
 # and deletes the archived data from the database.
+#
+# Retention periods (staggered to prevent foreign key violations):
+#   - Flights: 8+ days old
+#   - Fixes and ReceiverStatuses: 9+ days old
+#   - AprsMessages: 10+ days old
 #
 # Installation:
 #   sudo cp soar-archive.service soar-archive.timer /etc/systemd/system/
