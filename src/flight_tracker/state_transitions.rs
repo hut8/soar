@@ -48,8 +48,8 @@ pub(crate) fn should_be_active(fix: &Fix) -> bool {
         return true;
     }
 
-    // Check ground speed - >= 20 knots means active
-    let speed_indicates_active = fix.ground_speed_knots.map(|s| s >= 20.0).unwrap_or(false);
+    // Check ground speed - >= 25 knots means active
+    let speed_indicates_active = fix.ground_speed_knots.map(|s| s >= 25.0).unwrap_or(false);
 
     if speed_indicates_active {
         return true;

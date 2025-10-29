@@ -9,8 +9,8 @@ use super::towing::TowingInfo;
 /// Simplified aircraft state - either idle or active
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum AircraftState {
-    Idle,   // Stationary or moving slowly (< 20 knots)
-    Active, // Moving fast (>= 20 knots) on ground or airborne
+    Idle,   // Stationary or moving slowly (< 25 knots)
+    Active, // Moving fast (>= 25 knots) on ground or airborne
 }
 
 /// Aircraft tracker with simplified state management
@@ -125,7 +125,7 @@ mod tests {
         assert!(should_be_active(&fix));
 
         // Test with low speed
-        fix.ground_speed_knots = Some(15.0); // 15 knots - should be idle (below 20 knot threshold)
+        fix.ground_speed_knots = Some(15.0); // 15 knots - should be idle (below 25 knot threshold)
         assert!(!should_be_active(&fix));
     }
 }
