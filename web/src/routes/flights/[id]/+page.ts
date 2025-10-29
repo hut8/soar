@@ -18,8 +18,8 @@ export const load: PageLoad = async ({ params, fetch }) => {
 
 	try {
 		const [flightResponse, fixesResponse] = await Promise.all([
-			serverCall<FlightResponse>(`/flights/${id}`, {}, undefined, fetch),
-			serverCall<FlightFixesResponse>(`/flights/${id}/fixes`, {}, undefined, fetch)
+			serverCall<FlightResponse>(`/flights/${id}`, { fetch }),
+			serverCall<FlightFixesResponse>(`/flights/${id}/fixes`, { fetch })
 		]);
 
 		return {

@@ -14,6 +14,9 @@
 		useRelativeTimes?: boolean; // Use relative time formatting
 		showClimb?: boolean; // Show climb column
 		emptyMessage?: string;
+		hideInactiveValue?: boolean; // Controlled value for hide inactive
+		showRawValue?: boolean; // Controlled value for show raw
+		onHideInactiveChange?: (value: boolean) => void; // Callback when hide inactive changes
 	}
 
 	let {
@@ -23,15 +26,21 @@
 		showRaw = true,
 		useRelativeTimes = false,
 		showClimb = false,
-		emptyMessage = 'No position fixes found'
+		emptyMessage = 'No position fixes found',
+		hideInactiveValue = false,
+		showRawValue = false,
+		onHideInactiveChange
 	}: Props = $props();
 
-	let hideInactiveFixes = $state(false);
-	let showRawData = $state(false);
+	let showRawData = $state(showRawValue);
 	let useRelativeTime = $state(useRelativeTimes);
 
-	// Filtered fixes based on hideInactiveFixes
-	const filteredFixes = $derived(hideInactiveFixes ? fixes.filter((fix) => fix.active) : fixes);
+	function handleHideInactiveChange(event: Event) {
+		const target = event.target as HTMLInputElement;
+		if (onHideInactiveChange) {
+			onHideInactiveChange(target.checked);
+		}
+	}
 
 	function formatRelativeTime(dateString: string): string {
 		return dayjs(dateString).fromNow();
@@ -83,11 +92,16 @@
 
 <div class="space-y-4">
 	<!-- Controls -->
-	{#if filteredFixes.length > 0 && (showHideInactive || showRaw || useRelativeTimes)}
+	{#if fixes.length > 0 && (showHideInactive || showRaw || useRelativeTimes)}
 		<div class="flex flex-wrap gap-4">
 			{#if showHideInactive}
 				<label class="flex items-center gap-2 text-sm">
-					<input type="checkbox" class="checkbox" bind:checked={hideInactiveFixes} />
+					<input
+						type="checkbox"
+						class="checkbox"
+						checked={hideInactiveValue}
+						onchange={handleHideInactiveChange}
+					/>
 					<span>Hide inactive fixes</span>
 				</label>
 			{/if}
@@ -114,13 +128,11 @@
 			></div>
 			<span class="ml-2">Loading position fixes...</span>
 		</div>
-	{:else if filteredFixes.length === 0}
+	{:else if fixes.length === 0}
 		<!-- Empty State -->
 		<div class="text-surface-600-300-token py-8 text-center">
 			<Activity class="mx-auto mb-4 h-12 w-12 text-surface-400" />
-			<p>
-				{hideInactiveFixes && fixes.length > 0 ? 'No active fixes found' : emptyMessage}
-			</p>
+			<p>{emptyMessage}</p>
 		</div>
 	{:else}
 		<!-- Table -->
@@ -140,7 +152,7 @@
 					</tr>
 				</thead>
 				<tbody>
-					{#each filteredFixes as fix, index (fix.id)}
+					{#each fixes as fix, index (fix.id)}
 						<tr
 							class="border-surface-200-700-token hover:bg-surface-100-800-token border-b {index %
 								2 ===

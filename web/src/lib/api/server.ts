@@ -18,25 +18,41 @@ export class ServerError extends Error {
 	}
 }
 
-type FromJSON<T> = { fromJSON(data: unknown): T };
+export interface ServerCallOptions extends RequestInit {
+	params?: Record<string, string | number | boolean | null | undefined>;
+	fetch?: typeof fetch;
+}
 
-export async function serverCall<T>(
-	endpoint: string,
-	options: RequestInit = {},
-	cls?: FromJSON<T>,
-	customFetch?: typeof fetch
-): Promise<T> {
+export async function serverCall<T>(endpoint: string, options?: ServerCallOptions): Promise<T> {
 	loading.startRequest();
+
+	// Extract custom options
+	const { params, fetch: customFetch, ...requestOptions } = options || {};
+
+	// Build query string from params
+	let url = `${API_BASE}${endpoint}`;
+	if (params) {
+		const searchParams = new URLSearchParams();
+		Object.entries(params).forEach(([key, value]) => {
+			if (value !== null && value !== undefined) {
+				searchParams.append(key, String(value));
+			}
+		});
+		const queryString = searchParams.toString();
+		if (queryString) {
+			url += (endpoint.includes('?') ? '&' : '?') + queryString;
+		}
+	}
 
 	// Use provided fetch (from SvelteKit load function) or fall back to global fetch
 	const fetchFn = customFetch || fetch;
 
 	try {
-		const response = await fetchFn(`${API_BASE}${endpoint}`, {
-			...options,
+		const response = await fetchFn(url, {
+			...requestOptions,
 			headers: {
 				'Content-Type': 'application/json',
-				...options.headers
+				...requestOptions.headers
 			}
 		});
 
@@ -58,15 +74,7 @@ export async function serverCall<T>(
 		}
 
 		const data = await response.json();
-
-		if (!cls) return data as T;
-
-		// handle arrays or single objects
-		if (Array.isArray(data)) {
-			return data.map((item) => cls.fromJSON(item)) as T;
-		}
-
-		return cls.fromJSON(data);
+		return data as T;
 	} finally {
 		loading.endRequest();
 	}
