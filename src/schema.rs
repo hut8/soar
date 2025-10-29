@@ -326,7 +326,6 @@ diesel::table! {
         landing_location_id -> Nullable<Uuid>,
         timed_out_at -> Nullable<Timestamptz>,
         last_fix_at -> Timestamptz,
-        callsign -> Nullable<Text>,
         tow_release_height_delta_ft -> Nullable<Int4>,
     }
 }
