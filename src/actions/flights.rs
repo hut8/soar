@@ -134,6 +134,7 @@ pub async fn get_flight_by_id(
                 device_info,
                 None,
                 None,
+                None,
                 previous_flight_id,
                 next_flight_id,
             );
@@ -339,19 +340,23 @@ pub async fn search_flights(
                         None
                     };
 
-                    // Get latest altitude information for active flights
-                    let (latest_altitude_msl, latest_altitude_agl) =
+                    // Get latest altitude and timestamp information for active flights
+                    let (latest_altitude_msl, latest_altitude_agl, latest_fix_timestamp) =
                         if let Some(device_id) = flight.device_id {
                             let start_time = flight.takeoff_time.unwrap_or(flight.created_at);
                             match fixes_repo
                                 .get_latest_fix_for_device(device_id, start_time)
                                 .await
                             {
-                                Ok(Some(fix)) => (fix.altitude_msl_feet, fix.altitude_agl_feet),
-                                _ => (None, None),
+                                Ok(Some(fix)) => (
+                                    fix.altitude_msl_feet,
+                                    fix.altitude_agl_feet,
+                                    Some(fix.timestamp),
+                                ),
+                                _ => (None, None, None),
                             }
                         } else {
-                            (None, None)
+                            (None, None, None)
                         };
 
                     let flight_view = FlightView::from_flight_with_altitude(
@@ -361,6 +366,7 @@ pub async fn search_flights(
                         device_info,
                         latest_altitude_msl,
                         latest_altitude_agl,
+                        latest_fix_timestamp,
                     );
                     flight_views.push(flight_view);
                 }

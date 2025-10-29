@@ -44,6 +44,7 @@
 		updated_at: string;
 		latest_altitude_msl_feet: number | null;
 		latest_altitude_agl_feet: number | null;
+		latest_fix_timestamp: string | null;
 		duration_seconds: number | null;
 	}
 
@@ -250,6 +251,7 @@
 								<th>Duration</th>
 								<th>Distance</th>
 								<th>Altitude</th>
+								<th>Latest Fix</th>
 								<th>Tow</th>
 								<th></th>
 							</tr>
@@ -397,6 +399,12 @@
 												flight.latest_altitude_msl_feet,
 												flight.latest_altitude_agl_feet
 											)}
+										</div>
+									</td>
+									<td>
+										<div class="flex items-center gap-1 text-sm">
+											<Clock class="h-3 w-3" />
+											{formatRelativeTime(flight.latest_fix_timestamp)}
 										</div>
 									</td>
 									<td>
@@ -802,6 +810,12 @@
 								<div>
 									<span class="text-surface-500-400-token text-xs">Altitude:</span>
 									{formatAltitude(flight.latest_altitude_msl_feet, flight.latest_altitude_agl_feet)}
+								</div>
+							{/if}
+							{#if flight.latest_fix_timestamp}
+								<div>
+									<span class="text-surface-500-400-token text-xs">Latest fix:</span>
+									{formatRelativeTime(flight.latest_fix_timestamp)}
 								</div>
 							{/if}
 						</div>
