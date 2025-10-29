@@ -34,6 +34,7 @@
 	import { serverCall } from '$lib/api/server';
 	import FlightStateBadge from '$lib/components/FlightStateBadge.svelte';
 	import RadarLoader from '$lib/components/RadarLoader.svelte';
+	import FixesList from '$lib/components/FixesList.svelte';
 	import { theme } from '$lib/stores/theme';
 
 	dayjs.extend(relativeTime);
@@ -53,8 +54,6 @@
 	let pageSize = 50;
 
 	// Display options
-	let showRawData = $state(false);
-	let useRelativeTimes = $state(false);
 	let includeNearbyFlights = $state(false);
 
 	// Nearby flights data - type includes aircraft_model and registration from device
@@ -154,14 +153,6 @@
 	function formatDateTimeMobile(dateString: string | undefined): string {
 		if (!dateString) return 'N/A';
 		return dayjs(dateString).fromNow();
-	}
-
-	// Format timestamp for fixes table (relative or absolute based on checkbox)
-	function formatFixTime(timestamp: string): string {
-		if (useRelativeTimes) {
-			return dayjs(timestamp).fromNow();
-		}
-		return new Date(timestamp).toLocaleTimeString();
 	}
 
 	// Format altitude
@@ -1177,16 +1168,6 @@
 					</span>
 				{/if}
 			</h2>
-			<div class="flex gap-4">
-				<label class="flex cursor-pointer items-center gap-2">
-					<input type="checkbox" class="checkbox" bind:checked={showRawData} />
-					<span class="text-sm">Display Raw</span>
-				</label>
-				<label class="flex cursor-pointer items-center gap-2">
-					<input type="checkbox" class="checkbox" bind:checked={useRelativeTimes} />
-					<span class="text-sm">Relative Times</span>
-				</label>
-			</div>
 		</div>
 
 		{#if data.fixes.length === 0}
@@ -1195,66 +1176,14 @@
 				<p>No position data available for this flight.</p>
 			</div>
 		{:else}
-			<div class="overflow-x-auto">
-				<table class="w-full table-auto">
-					<thead class="bg-surface-100-800-token border-surface-300-600-token border-b">
-						<tr>
-							<th class="px-2 py-1.5 text-left text-xs font-medium">Time</th>
-							<th class="px-2 py-1.5 text-left text-xs font-medium">Location</th>
-							<th class="px-2 py-1.5 text-left text-xs font-medium">Alt MSL</th>
-							<th class="px-2 py-1.5 text-left text-xs font-medium">AGL</th>
-							<th class="px-2 py-1.5 text-left text-xs font-medium">Speed</th>
-							<th class="px-2 py-1.5 text-left text-xs font-medium">Track</th>
-							<th class="px-2 py-1.5 text-left text-xs font-medium">Climb</th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each paginatedFixes as fix, index (fix.id)}
-							<tr
-								class="border-b border-gray-200 hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800 {index %
-									2 ===
-								0
-									? 'bg-gray-50 dark:bg-gray-900'
-									: ''}"
-							>
-								<td class="px-2 py-1.5 text-xs">{formatFixTime(fix.timestamp)}</td>
-								<td class="px-2 py-1.5 text-xs">
-									<a
-										href="https://www.google.com/maps?q={fix.latitude},{fix.longitude}"
-										target="_blank"
-										rel="noopener noreferrer"
-										class="anchor text-primary-500 hover:text-primary-600"
-									>
-										{fix.latitude.toFixed(4)}, {fix.longitude.toFixed(4)}
-									</a>
-								</td>
-								<td class="px-2 py-1.5 text-xs">{formatAltitude(fix.altitude_msl_feet)}</td>
-								<td class="px-2 py-1.5 text-xs">{formatAltitude(fix.altitude_agl_feet)}</td>
-								<td class="px-2 py-1.5 text-xs"
-									>{fix.ground_speed_knots ? `${fix.ground_speed_knots.toFixed(1)} kt` : 'N/A'}</td
-								>
-								<td class="px-2 py-1.5 text-xs"
-									>{fix.track_degrees ? `${fix.track_degrees.toFixed(0)}°` : 'N/A'}</td
-								>
-								<td class="px-2 py-1.5 text-xs"
-									>{fix.climb_fpm ? `${fix.climb_fpm.toFixed(0)} fpm` : 'N/A'}</td
-								>
-							</tr>
-							{#if showRawData && fix.raw_packet}
-								<tr
-									class="border-b border-gray-200 dark:border-gray-700 {index % 2 === 0
-										? 'bg-gray-100 dark:bg-gray-800'
-										: ''}"
-								>
-									<td colspan="7" class="px-2 py-1.5 font-mono text-xs">
-										{fix.raw_packet}
-									</td>
-								</tr>
-							{/if}
-						{/each}
-					</tbody>
-				</table>
-			</div>
+			<FixesList
+				fixes={paginatedFixes}
+				showHideInactive={false}
+				showRaw={true}
+				useRelativeTimes={true}
+				showClimb={true}
+				emptyMessage="No position data available for this flight."
+			/>
 
 			<!-- Pagination -->
 			{#if totalPages > 1}
