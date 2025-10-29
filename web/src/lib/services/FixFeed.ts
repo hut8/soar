@@ -406,20 +406,17 @@ export class FixFeed {
 	): Promise<Aircraft[]> {
 		if (!browser) return [];
 
-		const params = new URLSearchParams({
-			latitude_min: latMin.toString(),
-			latitude_max: latMax.toString(),
-			longitude_min: lonMin.toString(),
-			longitude_max: lonMax.toString()
-		});
-
-		if (after) {
-			params.set('after', after.toISOString());
-		}
-
 		try {
 			const { serverCall } = await import('$lib/api/server');
-			const response = await serverCall(`/devices?${params}`);
+			const response = await serverCall('/devices', {
+				params: {
+					latitude_min: latMin,
+					latitude_max: latMax,
+					longitude_min: lonMin,
+					longitude_max: lonMax,
+					...(after && { after: after.toISOString() })
+				}
+			});
 			return response as Aircraft[];
 		} catch (error) {
 			console.error('Failed to fetch devices in bounding box:', error);
