@@ -3,7 +3,7 @@
 	import { resolve } from '$app/paths';
 	import { serverCall } from '$lib/api/server';
 	import { GOOGLE_MAPS_API_KEY } from '$lib/config';
-	import { Loader } from '@googlemaps/js-api-loader';
+	import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
 	import { onMount } from 'svelte';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
@@ -161,13 +161,13 @@
 	}
 
 	async function loadGoogleMapsScript(): Promise<void> {
-		const loader = new Loader({
-			apiKey: GOOGLE_MAPS_API_KEY,
-			version: 'weekly'
+		setOptions({
+			key: GOOGLE_MAPS_API_KEY,
+			v: 'weekly'
 		});
 
 		// Import the places library for autocomplete
-		await loader.importLibrary('places');
+		await importLibrary('places');
 	}
 
 	async function loadRecentReceivers() {

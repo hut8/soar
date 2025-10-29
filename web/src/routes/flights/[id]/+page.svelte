@@ -1,7 +1,7 @@
 <script lang="ts">
 	/// <reference types="@types/google.maps" />
 	import { onMount, onDestroy } from 'svelte';
-	import { Loader } from '@googlemaps/js-api-loader';
+	import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
 	import Plotly from 'plotly.js-dist-min';
 	import {
 		Download,
@@ -493,13 +493,13 @@
 		if (data.fixes.length === 0 || !mapContainer) return;
 
 		try {
-			const loader = new Loader({
-				apiKey: GOOGLE_MAPS_API_KEY,
-				version: 'weekly'
+			setOptions({
+				key: GOOGLE_MAPS_API_KEY,
+				v: 'weekly'
 			});
 
-			await loader.importLibrary('maps');
-			await loader.importLibrary('marker');
+			await importLibrary('maps');
+			await importLibrary('marker');
 
 			// Use reversed fixes for chronological order (earliest to latest)
 			const fixesInOrder = [...data.fixes].reverse();
