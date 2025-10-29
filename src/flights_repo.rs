@@ -262,6 +262,60 @@ impl FlightsRepository {
         Ok(results.into_iter().map(|model| model.into()).collect())
     }
 
+    /// Find the most recent timed-out flight for a device that timed out within the last 12 hours.
+    ///
+    /// This is used for "flight coalescing" to handle aircraft that temporarily go out of receiver range.
+    /// Scenario: An aircraft is tracked, flies out of range (e.g., trans-atlantic flight), then comes
+    /// back into range. Without coalescing, this would create two separate flights (the first timed out,
+    /// the second starting mid-flight). With coalescing, we resume tracking the original flight.
+    ///
+    /// The 12-hour window distinguishes between:
+    /// - "Temporarily out of receiver range" (< 12 hours) → resume the same flight
+    /// - "Out of range for so long they likely landed and took off again" (> 12 hours) → create new flight
+    ///
+    /// Returns Some(flight) if:
+    /// - The most recent flight for this device has timed_out_at set
+    /// - AND timed_out_at is within the last 12 hours
+    ///
+    /// Otherwise returns None.
+    pub async fn find_recent_timed_out_flight(
+        &self,
+        device_id_val: Uuid,
+    ) -> Result<Option<Flight>> {
+        use crate::schema::flights::dsl::*;
+
+        let pool = self.pool.clone();
+
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            // Get the most recent flight for this device (by last_fix_at, which is always set)
+            let most_recent_flight: Option<FlightModel> = flights
+                .filter(device_id.eq(device_id_val))
+                .order(last_fix_at.desc())
+                .first(&mut conn)
+                .optional()?;
+
+            // Check if it's timed out and within 12 hours
+            if let Some(flight_model) = most_recent_flight
+                && let Some(timed_out_time) = flight_model.timed_out_at
+            {
+                let now = Utc::now();
+                let elapsed = now.signed_duration_since(timed_out_time);
+                let twelve_hours = chrono::Duration::hours(12);
+
+                if elapsed < twelve_hours {
+                    return Ok::<Option<FlightModel>, anyhow::Error>(Some(flight_model));
+                }
+            }
+
+            Ok(None)
+        })
+        .await??;
+
+        Ok(result.map(|model| model.into()))
+    }
+
     /// Get recent completed flights (with landing time OR timeout) ordered by completion time descending
     /// Completed means either landed (landing_time is set) or timed out (timed_out_at is set)
     pub async fn get_completed_flights(&self, limit: i64, offset: i64) -> Result<Vec<Flight>> {
@@ -583,7 +637,7 @@ impl FlightsRepository {
         Ok(results)
     }
 
-    /// Mark a flight as timed out (no beacons received for 8+ hours)
+    /// Mark a flight as timed out (no beacons received for the timeout duration, currently 1 hour)
     /// Does NOT set landing fields - this is a timeout, not a landing
     /// The timeout_time should be set to the last_fix_at value
     pub async fn timeout_flight(
@@ -601,6 +655,30 @@ impl FlightsRepository {
             let rows = diesel::update(flights.filter(id.eq(flight_id)))
                 .set((
                     timed_out_at.eq(Some(timeout_time)),
+                    updated_at.eq(Utc::now()),
+                ))
+                .execute(&mut conn)?;
+
+            Ok::<usize, anyhow::Error>(rows)
+        })
+        .await??;
+
+        Ok(rows_affected > 0)
+    }
+
+    /// Clear the timed_out_at field for a flight (set it to NULL).
+    /// This is used for flight coalescing when resuming tracking of a timed-out flight.
+    pub async fn clear_timeout(&self, flight_id: Uuid) -> Result<bool> {
+        use crate::schema::flights::dsl::*;
+
+        let pool = self.pool.clone();
+
+        let rows_affected = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            let rows = diesel::update(flights.filter(id.eq(flight_id)))
+                .set((
+                    timed_out_at.eq(None::<DateTime<Utc>>),
                     updated_at.eq(Utc::now()),
                 ))
                 .execute(&mut conn)?;

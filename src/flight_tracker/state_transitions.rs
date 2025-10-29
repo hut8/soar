@@ -160,6 +160,57 @@ pub(crate) async fn process_state_transition(
 
         // Case 2: No flight and fix is active - need to create a flight
         (None, true) => {
+            // First, check if we should resume a recently timed-out flight (flight coalescing).
+            // This handles the case where an aircraft temporarily goes out of receiver range
+            // (e.g., trans-atlantic flight) and then comes back into range. Without coalescing,
+            // we would create two separate flights. With coalescing, we resume the original flight.
+            if let Ok(Some(timed_out_flight)) = flights_repo
+                .find_recent_timed_out_flight(fix.device_id)
+                .await
+            {
+                // Resume the timed-out flight
+                let flight_id = timed_out_flight.id;
+                info!(
+                    "Device {} came back into range - resuming timed-out flight {} (was timed out at {})",
+                    fix.device_id,
+                    flight_id,
+                    timed_out_flight
+                        .timed_out_at
+                        .map(|t| t.to_rfc3339())
+                        .unwrap_or_else(|| "unknown".to_string())
+                );
+
+                // Clear the timeout in the database
+                if let Err(e) = flights_repo.clear_timeout(flight_id).await {
+                    warn!("Failed to clear timeout for flight {}: {}", flight_id, e);
+                }
+
+                // Update last_fix_at to current fix timestamp
+                if let Err(e) = flights_repo
+                    .update_last_fix_at(flight_id, fix.timestamp)
+                    .await
+                {
+                    warn!(
+                        "Failed to update last_fix_at for resumed flight {}: {}",
+                        flight_id, e
+                    );
+                }
+
+                // Add flight back to active_flights map
+                let state = CurrentFlightState::new(flight_id, fix.timestamp, is_active);
+                {
+                    let mut flights = active_flights.write().await;
+                    flights.insert(fix.device_id, state);
+                }
+
+                // Assign fix to the resumed flight
+                fix.flight_id = Some(flight_id);
+
+                // Return the fix with the resumed flight_id
+                return Ok(fix);
+            }
+
+            // No recent timed-out flight to resume, so create a new flight
             // Check if this is a takeoff or mid-flight appearance
             // We need to query recent fixes to determine this
             let recent_fixes = fixes_repo
