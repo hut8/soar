@@ -6,6 +6,7 @@ use std::sync::Arc;
 use tracing::warn;
 
 /// Processor for handling aircraft position packets
+#[derive(Clone)]
 pub struct AircraftPositionProcessor {
     /// Fix processor for database storage
     fix_processor: Option<FixProcessor>,

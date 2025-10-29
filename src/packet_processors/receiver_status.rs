@@ -7,6 +7,7 @@ use ogn_parser::{AprsData, AprsPacket};
 use tracing::{error, trace, warn};
 
 /// Processor for handling receiver status packets
+#[derive(Clone)]
 pub struct ReceiverStatusProcessor {
     /// Repository for storing receiver status data
     status_repo: ReceiverStatusRepository,

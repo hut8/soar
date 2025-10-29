@@ -1,104 +1,103 @@
-use super::generic::GenericProcessor;
-use super::position::PositionPacketProcessor;
-use super::receiver_status::ReceiverStatusProcessor;
-use super::server_status::ServerStatusProcessor;
-use crate::aprs_client::ArchiveService;
-use anyhow::Result;
-use ogn_parser::{AprsData, AprsPacket};
+use super::generic::{GenericProcessor, PacketContext};
+use ogn_parser::{AprsData, AprsPacket, PositionSourceType};
+use tokio::sync::mpsc;
 use tracing::{debug, trace, warn};
 
-/// PacketRouter routes packets to appropriate specialized processors
-/// This is the main router that the AprsClient should use
+/// PacketRouter routes packets to appropriate specialized processor queues
+/// This is the main router that the AprsClient calls directly (no queue between them)
+#[derive(Clone)]
 pub struct PacketRouter {
-    /// Optional archive service for message archival
-    archive_service: Option<ArchiveService>,
-    /// Generic processor for receiver identification and APRS message insertion (required)
+    /// Generic processor for archiving, receiver identification, and APRS message insertion (required, runs inline)
     generic_processor: GenericProcessor,
-    /// Position packet processor for handling position data
-    position_processor: Option<PositionPacketProcessor>,
-    /// Receiver status processor for handling status data from receivers
-    receiver_status_processor: Option<ReceiverStatusProcessor>,
-    /// Server status processor for handling server comment messages
-    server_status_processor: Option<ServerStatusProcessor>,
+    /// Optional channel sender for aircraft position packets
+    aircraft_position_tx: Option<mpsc::Sender<(AprsPacket, PacketContext)>>,
+    /// Optional channel sender for receiver status packets
+    receiver_status_tx: Option<mpsc::Sender<(AprsPacket, PacketContext)>>,
+    /// Optional channel sender for receiver position packets
+    receiver_position_tx: Option<mpsc::Sender<(AprsPacket, PacketContext)>>,
+    /// Optional channel sender for server status messages
+    server_status_tx: Option<mpsc::Sender<String>>,
 }
 
 impl PacketRouter {
     /// Create a new PacketRouter with a generic processor (required)
     pub fn new(generic_processor: GenericProcessor) -> Self {
         Self {
-            archive_service: None,
             generic_processor,
-            position_processor: None,
-            receiver_status_processor: None,
-            server_status_processor: None,
+            aircraft_position_tx: None,
+            receiver_status_tx: None,
+            receiver_position_tx: None,
+            server_status_tx: None,
         }
     }
 
-    /// Create a new PacketRouter with archival enabled
-    pub async fn with_archive(
-        generic_processor: GenericProcessor,
-        base_dir: String,
-    ) -> Result<Self> {
-        let archive_service = ArchiveService::new(base_dir).await?;
-        Ok(Self {
-            archive_service: Some(archive_service),
-            generic_processor,
-            position_processor: None,
-            receiver_status_processor: None,
-            server_status_processor: None,
-        })
-    }
-
-    /// Add archive service to the router
-    pub fn with_archive_service(mut self, archive_service: ArchiveService) -> Self {
-        self.archive_service = Some(archive_service);
+    /// Add aircraft position queue sender
+    pub fn with_aircraft_position_queue(
+        mut self,
+        sender: mpsc::Sender<(AprsPacket, PacketContext)>,
+    ) -> Self {
+        self.aircraft_position_tx = Some(sender);
         self
     }
 
-    /// Add a position processor to the router
-    pub fn with_position_processor(mut self, processor: PositionPacketProcessor) -> Self {
-        self.position_processor = Some(processor);
+    /// Add receiver status queue sender
+    pub fn with_receiver_status_queue(
+        mut self,
+        sender: mpsc::Sender<(AprsPacket, PacketContext)>,
+    ) -> Self {
+        self.receiver_status_tx = Some(sender);
         self
     }
 
-    /// Add a receiver status processor to the router
-    pub fn with_receiver_status_processor(mut self, processor: ReceiverStatusProcessor) -> Self {
-        self.receiver_status_processor = Some(processor);
+    /// Add receiver position queue sender
+    pub fn with_receiver_position_queue(
+        mut self,
+        sender: mpsc::Sender<(AprsPacket, PacketContext)>,
+    ) -> Self {
+        self.receiver_position_tx = Some(sender);
         self
     }
 
-    /// Add a server status processor to the router
-    pub fn with_server_status_processor(mut self, processor: ServerStatusProcessor) -> Self {
-        self.server_status_processor = Some(processor);
+    /// Add server status queue sender
+    pub fn with_server_status_queue(mut self, sender: mpsc::Sender<String>) -> Self {
+        self.server_status_tx = Some(sender);
         self
     }
 }
 
 impl PacketRouter {
     /// Process a server message (line starting with #)
-    pub async fn process_server_message(&self, raw_message: &str) {
-        if let Some(server_proc) = &self.server_status_processor {
-            trace!("PacketRouter processing server message with ServerStatusProcessor");
-            server_proc.process_server_message(raw_message).await;
+    /// 1. GenericProcessor archives it
+    /// 2. Route to server status queue (or drop if full)
+    pub fn process_server_message(&self, raw_message: &str) {
+        // Step 1: Archive via GenericProcessor
+        self.generic_processor.process_server_message(raw_message);
+
+        // Step 2: Route to server status queue if configured
+        if let Some(tx) = &self.server_status_tx {
+            match tx.try_send(raw_message.to_string()) {
+                Ok(()) => {
+                    trace!("Routed server message to queue");
+                }
+                Err(mpsc::error::TrySendError::Full(_)) => {
+                    warn!("Server status queue FULL - dropping server message");
+                    metrics::counter!("aprs.server_status_queue.full").increment(1);
+                }
+                Err(mpsc::error::TrySendError::Closed(_)) => {
+                    warn!("Server status queue CLOSED - cannot route server message");
+                    metrics::counter!("aprs.server_status_queue.closed").increment(1);
+                }
+            }
         } else {
-            trace!(
-                "No server status processor configured, logging server message: {}",
-                raw_message
-            );
+            trace!("No server status queue configured, server message archived only");
         }
     }
 
     /// Process an APRS packet through the complete pipeline
-    /// 1. Archive (if configured)
-    /// 2. Generic processing (identify receiver, insert APRS message)
-    /// 3. Route to type-specific processor with context
+    /// 1. GenericProcessor archives and inserts to database (inline)
+    /// 2. Route to appropriate queue based on packet type (or drop if full)
     pub async fn process_packet(&self, packet: AprsPacket, raw_message: &str) {
-        // Step 1: Archive if configured
-        if let Some(archive) = &self.archive_service {
-            archive.archive(raw_message);
-        }
-
-        // Step 2: Generic processing - identify receiver and insert APRS message
+        // Step 1: Generic processing (inline) - archives, identifies receiver, inserts APRS message
         let context = match self
             .generic_processor
             .process_packet(&packet, raw_message)
@@ -107,40 +106,114 @@ impl PacketRouter {
             Some(ctx) => ctx,
             None => {
                 warn!(
-                    "Generic processing failed for packet from {}, skipping type-specific processing",
+                    "Generic processing failed for packet from {}, skipping routing",
                     packet.from
                 );
                 return;
             }
         };
 
-        // Step 3: Route to type-specific processor with context
+        // Step 2: Route to appropriate queue based on packet type
+        // Capture packet.from before moving packet (needed for error messages)
+        let packet_from = packet.from.clone();
+        let position_source = packet.position_source_type();
+
         match &packet.data {
             AprsData::Position(_) => {
-                if let Some(pos_proc) = &self.position_processor {
-                    pos_proc.process_position_packet(&packet, context).await;
-                } else {
-                    trace!("No position processor configured, skipping position packet");
+                // Route based on position source type
+                match position_source {
+                    PositionSourceType::Aircraft => {
+                        // Route to aircraft position queue
+                        if let Some(tx) = &self.aircraft_position_tx {
+                            match tx.try_send((packet, context)) {
+                                Ok(()) => {
+                                    trace!("Routed aircraft position to queue");
+                                }
+                                Err(mpsc::error::TrySendError::Full(_)) => {
+                                    warn!(
+                                        "Aircraft position queue FULL - dropping packet from {}",
+                                        packet_from
+                                    );
+                                    metrics::counter!("aprs.aircraft_queue.full").increment(1);
+                                }
+                                Err(mpsc::error::TrySendError::Closed(_)) => {
+                                    warn!("Aircraft position queue CLOSED - cannot route packet");
+                                    metrics::counter!("aprs.aircraft_queue.closed").increment(1);
+                                }
+                            }
+                        } else {
+                            trace!("No aircraft position queue configured, packet archived only");
+                        }
+                    }
+                    PositionSourceType::Receiver => {
+                        // Route to receiver position queue
+                        if let Some(tx) = &self.receiver_position_tx {
+                            match tx.try_send((packet, context)) {
+                                Ok(()) => {
+                                    trace!("Routed receiver position to queue");
+                                }
+                                Err(mpsc::error::TrySendError::Full(_)) => {
+                                    warn!(
+                                        "Receiver position queue FULL - dropping packet from {}",
+                                        packet_from
+                                    );
+                                    metrics::counter!("aprs.receiver_position_queue.full")
+                                        .increment(1);
+                                }
+                                Err(mpsc::error::TrySendError::Closed(_)) => {
+                                    warn!("Receiver position queue CLOSED - cannot route packet");
+                                    metrics::counter!("aprs.receiver_position_queue.closed")
+                                        .increment(1);
+                                }
+                            }
+                        } else {
+                            trace!("No receiver position queue configured, packet archived only");
+                        }
+                    }
+                    PositionSourceType::WeatherStation => {
+                        trace!(
+                            "Position from weather station {} - archived only",
+                            packet_from
+                        );
+                    }
+                    source_type => {
+                        trace!(
+                            "Position from unknown source type {:?} from {} - archived only",
+                            source_type, packet_from
+                        );
+                    }
                 }
             }
             AprsData::Status(_) => {
+                // Route to receiver status queue
                 trace!(
                     "Received status packet from {} (source type: {:?})",
-                    packet.from,
-                    packet.position_source_type()
+                    packet_from, position_source
                 );
-                if let Some(status_proc) = &self.receiver_status_processor {
-                    status_proc.process_status_packet(&packet, context).await;
+                if let Some(tx) = &self.receiver_status_tx {
+                    match tx.try_send((packet, context)) {
+                        Ok(()) => {
+                            trace!("Routed receiver status to queue");
+                        }
+                        Err(mpsc::error::TrySendError::Full(_)) => {
+                            warn!(
+                                "Receiver status queue FULL - dropping packet from {}",
+                                packet_from
+                            );
+                            metrics::counter!("aprs.receiver_status_queue.full").increment(1);
+                        }
+                        Err(mpsc::error::TrySendError::Closed(_)) => {
+                            warn!("Receiver status queue CLOSED - cannot route packet");
+                            metrics::counter!("aprs.receiver_status_queue.closed").increment(1);
+                        }
+                    }
                 } else {
-                    warn!(
-                        "No receiver status processor configured, skipping status packet from {}",
-                        packet.from
-                    );
+                    trace!("No receiver status queue configured, packet archived only");
                 }
             }
             _ => {
                 debug!(
-                    "Received packet of type {:?}, no specific handler",
+                    "Received packet of type {:?}, no specific handler - archived only",
                     std::mem::discriminant(&packet.data)
                 );
             }

@@ -5,6 +5,7 @@ use ogn_parser::{AprsData, AprsPacket};
 use tracing::{error, trace, warn};
 
 /// Processor for handling receiver position packets
+#[derive(Clone)]
 pub struct ReceiverPositionProcessor {
     /// Repository for updating receiver locations
     receiver_repo: ReceiverRepository,

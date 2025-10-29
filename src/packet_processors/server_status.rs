@@ -4,6 +4,7 @@ use chrono::{DateTime, NaiveDateTime, Utc};
 use tracing::{debug, trace};
 
 /// Processor for handling APRS server comment/status messages
+#[derive(Clone)]
 pub struct ServerStatusProcessor {
     /// Repository for storing server messages
     server_messages_repo: ServerMessagesRepository,

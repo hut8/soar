@@ -1,3 +1,4 @@
+use crate::aprs_client::ArchiveService;
 use crate::aprs_messages_repo::{AprsMessagesRepository, NewAprsMessage};
 use crate::receiver_repo::ReceiverRepository;
 use ogn_parser::{AprsData, AprsPacket};
@@ -14,12 +15,13 @@ pub struct PacketContext {
     pub receiver_id: Uuid,
 }
 
-/// Generic processor that handles receiver identification and APRS message insertion
+/// Generic processor that handles archiving, receiver identification, and APRS message insertion
 /// This runs before packet-type-specific processing to ensure all packets are properly recorded
 #[derive(Clone)]
 pub struct GenericProcessor {
     receiver_repo: ReceiverRepository,
     aprs_messages_repo: AprsMessagesRepository,
+    archive_service: Option<ArchiveService>,
 }
 
 impl GenericProcessor {
@@ -31,19 +33,31 @@ impl GenericProcessor {
         Self {
             receiver_repo,
             aprs_messages_repo,
+            archive_service: None,
         }
     }
 
-    /// Process a packet generically: identify receiver, insert APRS message, return context
+    /// Create a new GenericProcessor with archiving enabled
+    pub fn with_archive_service(mut self, archive_service: ArchiveService) -> Self {
+        self.archive_service = Some(archive_service);
+        self
+    }
+
+    /// Process a packet generically: archive, identify receiver, insert APRS message, return context
     pub async fn process_packet(
         &self,
         packet: &AprsPacket,
         raw_message: &str,
     ) -> Option<PacketContext> {
-        // Step 1: Identify the receiver callsign
+        // Step 1: Archive the raw message if archiving is enabled
+        if let Some(archive) = &self.archive_service {
+            archive.archive(raw_message);
+        }
+
+        // Step 2: Identify the receiver callsign
         let receiver_callsign = self.identify_receiver(packet);
 
-        // Step 2: Ensure receiver exists in database (insert if needed)
+        // Step 3: Ensure receiver exists in database (insert if needed)
         let receiver_id = match self
             .receiver_repo
             .insert_minimal_receiver(&receiver_callsign)
@@ -59,14 +73,14 @@ impl GenericProcessor {
             }
         };
 
-        // Step 3: Extract unparsed data from packet
+        // Step 4: Extract unparsed data from packet
         let unparsed = match &packet.data {
             AprsData::Position(pos) => pos.comment.unparsed.clone(),
             AprsData::Status(status) => status.comment.unparsed.clone(),
             _ => None,
         };
 
-        // Step 4: Insert APRS message
+        // Step 5: Insert APRS message
         let aprs_message_id = Uuid::new_v4();
         let new_aprs_message = NewAprsMessage {
             id: aprs_message_id,
@@ -142,5 +156,15 @@ impl GenericProcessor {
         }
 
         callsign
+    }
+
+    /// Process a server message (lines starting with #) - archives only, no database insertion
+    pub fn process_server_message(&self, raw_message: &str) {
+        // Archive the server message if archiving is enabled
+        if let Some(archive) = &self.archive_service {
+            archive.archive(raw_message);
+        }
+        // Server messages are just archived, not processed further in GenericProcessor
+        // They will be routed to ServerStatusProcessor for database insertion
     }
 }
