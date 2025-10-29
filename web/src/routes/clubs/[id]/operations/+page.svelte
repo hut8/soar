@@ -35,7 +35,6 @@
 		takeoff_runway_ident: string | null;
 		landing_runway_ident: string | null;
 		tow_aircraft_id: string | null;
-		tow_release_height_msl: number | null;
 		takeoff_altitude_offset_ft: number | null;
 		landing_altitude_offset_ft: number | null;
 		total_distance_meters: number | null;
@@ -577,14 +576,7 @@
 									</td>
 									<td>
 										{#if flight.tow_aircraft_id}
-											<div class="flex flex-col gap-1">
-												<span class="text-xs">{flight.tow_aircraft_id}</span>
-												{#if flight.tow_release_height_msl}
-													<span class="text-surface-500-400-token text-xs">
-														{flight.tow_release_height_msl}m MSL
-													</span>
-												{/if}
-											</div>
+											<span class="text-xs">{flight.tow_aircraft_id}</span>
 										{:else}
 											<span class="text-surface-500">—</span>
 										{/if}

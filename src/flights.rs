@@ -66,10 +66,6 @@ pub struct Flight {
     /// Arrival airport ID (foreign key to airports table - may be same as departure for local flights)
     pub arrival_airport_id: Option<i32>,
 
-    /// Tow release height in meters MSL (Mean Sea Level)
-    /// DEPRECATED: Use tow_release_altitude_msl_ft instead
-    pub tow_release_height_msl: Option<i32>,
-
     /// Device ID of the towplane that towed this glider (if this is a glider flight)
     pub towed_by_device_id: Option<Uuid>,
 
@@ -163,7 +159,6 @@ impl Flight {
             landing_time: None,
             departure_airport_id: None,
             arrival_airport_id: None,
-            tow_release_height_msl: None,
             towed_by_device_id: None,
             towed_by_flight_id: None,
             tow_release_altitude_msl_ft: None,
@@ -204,7 +199,6 @@ impl Flight {
             landing_time: None,
             departure_airport_id: None,
             arrival_airport_id: None,
-            tow_release_height_msl: None,
             towed_by_device_id: None,
             towed_by_flight_id: None,
             tow_release_altitude_msl_ft: None,
@@ -244,7 +238,6 @@ impl Flight {
             landing_time: None,
             departure_airport_id: None,
             arrival_airport_id: None,
-            tow_release_height_msl: None,
             towed_by_device_id: None,
             towed_by_flight_id: None,
             tow_release_altitude_msl_ft: None,
@@ -292,7 +285,6 @@ impl Flight {
             landing_time: None,
             departure_airport_id: None,
             arrival_airport_id: None,
-            tow_release_height_msl: None,
             towed_by_device_id: None,
             towed_by_flight_id: None,
             tow_release_altitude_msl_ft: None,
@@ -606,7 +598,6 @@ pub struct FlightModel {
     pub device_address: String,
     pub takeoff_time: Option<DateTime<Utc>>,
     pub landing_time: Option<DateTime<Utc>>,
-    pub tow_release_height_msl: Option<i32>,
     pub club_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -639,7 +630,6 @@ pub struct NewFlightModel {
     pub device_address: String,
     pub takeoff_time: Option<DateTime<Utc>>,
     pub landing_time: Option<DateTime<Utc>>,
-    pub tow_release_height_msl: Option<i32>,
     pub club_id: Option<Uuid>,
     pub device_address_type: AddressType,
     pub device_id: Option<Uuid>,
@@ -671,7 +661,6 @@ impl From<Flight> for FlightModel {
             device_address_type: flight.device_address_type,
             takeoff_time: flight.takeoff_time,
             landing_time: flight.landing_time,
-            tow_release_height_msl: flight.tow_release_height_msl,
             club_id: flight.club_id,
             created_at: flight.created_at,
             updated_at: flight.updated_at,
@@ -706,7 +695,6 @@ impl From<Flight> for NewFlightModel {
             device_address_type: flight.device_address_type,
             takeoff_time: flight.takeoff_time,
             landing_time: flight.landing_time,
-            tow_release_height_msl: flight.tow_release_height_msl,
             club_id: flight.club_id,
             device_id: flight.device_id,
             takeoff_altitude_offset_ft: flight.takeoff_altitude_offset_ft,
@@ -742,7 +730,6 @@ impl From<FlightModel> for Flight {
             landing_time: model.landing_time,
             departure_airport_id: model.departure_airport_id,
             arrival_airport_id: model.arrival_airport_id,
-            tow_release_height_msl: model.tow_release_height_msl,
             club_id: model.club_id,
             takeoff_altitude_offset_ft: model.takeoff_altitude_offset_ft,
             landing_altitude_offset_ft: model.landing_altitude_offset_ft,

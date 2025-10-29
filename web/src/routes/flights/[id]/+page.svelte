@@ -1015,11 +1015,6 @@
 								{data.flight.tow_aircraft_id}
 							</a>
 						</div>
-						{#if data.flight.tow_release_height_msl}
-							<div class="text-surface-600-300-token text-sm">
-								Release: {data.flight.tow_release_height_msl} ft MSL
-							</div>
-						{/if}
 					</div>
 				</div>
 			{/if}

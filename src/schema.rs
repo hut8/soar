@@ -304,7 +304,6 @@ diesel::table! {
         device_address -> Varchar,
         takeoff_time -> Nullable<Timestamptz>,
         landing_time -> Nullable<Timestamptz>,
-        tow_release_height_msl -> Nullable<Int4>,
         club_id -> Nullable<Uuid>,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,

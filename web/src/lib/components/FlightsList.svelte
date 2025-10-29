@@ -331,14 +331,7 @@
 						{/if}
 						<td>
 							{#if flight.tow_aircraft_id}
-								<div class="flex flex-col gap-1">
-									<span class="text-xs">{flight.tow_aircraft_id}</span>
-									{#if flight.tow_release_height_msl}
-										<span class="text-surface-500-400-token text-xs">
-											{flight.tow_release_height_msl}m MSL
-										</span>
-									{/if}
-								</div>
+								<span class="text-xs">{flight.tow_aircraft_id}</span>
 							{:else}
 								<span class="text-surface-500">—</span>
 							{/if}

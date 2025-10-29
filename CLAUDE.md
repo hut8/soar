@@ -28,6 +28,15 @@ SOAR is a comprehensive aircraft tracking and club management system built with:
 - Always prefer Diesel's query builder and type-safe methods over raw SQL
 - **NEVER use CREATE INDEX CONCURRENTLY in Diesel migrations** - Diesel migrations run in transactions, which don't support CONCURRENTLY. Use regular CREATE INDEX instead
 
+### DATABASE SAFETY RULES (CRITICAL)
+- **Development Database**: `soar_dev` - This is where you work
+- **Production Database**: `soar` - This is read-only for development purposes
+- **NEVER run UPDATE, INSERT, or DELETE on production database (`soar`)** - Only run these via Diesel migrations
+- **ONLY DDL queries (CREATE, ALTER, DROP) via migrations** - Never run DDL queries manually on production
+- **SELECT queries are allowed on both databases** - For investigation and analysis
+- **All data modifications must go through migrations** - This ensures they're tracked and reproducible
+- **Deleting data before adding constraints** - You can include DELETE statements in the same migration before constraint creation. The constraint validates against the final state of the transaction, so the DELETE will complete first.
+
 ### Frontend Development Standards
 
 #### Svelte 5 Syntax (REQUIRED)

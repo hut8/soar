@@ -227,7 +227,6 @@ export interface Flight {
 	arrival_airport_id?: number; // Airport ID in database
 	arrival_airport_country?: string; // Country code
 	tow_aircraft_id?: string; // Registration number of tow aircraft
-	tow_release_height_msl?: number; // Tow release height in meters MSL
 	club_id?: string; // UUID of club that owns the aircraft
 	takeoff_altitude_offset_ft?: number; // Altitude offset at takeoff
 	landing_altitude_offset_ft?: number; // Altitude offset at landing
