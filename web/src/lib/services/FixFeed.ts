@@ -11,7 +11,7 @@ export type FixFeedEvent =
 	| { type: 'device_received'; device: Aircraft }
 	| { type: 'subscription_added'; deviceId: string }
 	| { type: 'subscription_removed'; deviceId: string }
-	| { type: 'reconnecting'; attempt: number; maxAttempts: number };
+	| { type: 'reconnecting'; attempt: number };
 
 export type FixFeedSubscriber = (event: FixFeedEvent) => void;
 
@@ -37,8 +37,7 @@ export class FixFeed {
 	private subscribers = new Set<FixFeedSubscriber>();
 	private subscribedDevices = new Set<string>();
 	private reconnectAttempts = 0;
-	private readonly maxReconnectAttempts = 5;
-	private readonly reconnectDelay = 1000; // Start with 1 second
+	private readonly reconnectDelay = 5000; // Fixed 5 second delay
 	private operationsPageActive = false;
 	private deviceRegistry: DeviceRegistry;
 
@@ -196,8 +195,8 @@ export class FixFeed {
 					reason: event.reason
 				});
 
-				// Attempt to reconnect if it wasn't a clean close
-				if (event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts) {
+				// Attempt to reconnect if it wasn't a clean close (always retry)
+				if (event.code !== 1000) {
 					this.attemptReconnect();
 				}
 			};
@@ -226,31 +225,24 @@ export class FixFeed {
 		this.operationsPageActive = false;
 	}
 
-	// Attempt to reconnect with exponential backoff
+	// Attempt to reconnect with fixed delay (keeps retrying indefinitely)
 	private attemptReconnect(): void {
-		if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-			console.log('Max reconnection attempts reached');
-			return;
-		}
-
 		this.reconnectAttempts++;
-		const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
 
 		console.log(
-			`Attempting to reconnect in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`
+			`Attempting to reconnect in ${this.reconnectDelay}ms (attempt ${this.reconnectAttempts})`
 		);
 
 		this.notifySubscribers({
 			type: 'reconnecting',
-			attempt: this.reconnectAttempts,
-			maxAttempts: this.maxReconnectAttempts
+			attempt: this.reconnectAttempts
 		});
 
 		setTimeout(() => {
 			if (!this.websocket || this.websocket.readyState === WebSocket.CLOSED) {
 				this.connect();
 			}
-		}, delay);
+		}, this.reconnectDelay);
 	}
 
 	// Wait for WebSocket connection to be open
