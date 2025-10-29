@@ -149,7 +149,7 @@ impl FixProcessor {
                     .await
                 {
                     Ok(device_model) => {
-                        // Extract ICAO model code and ADS-B emitter category from packet for device update
+                        // Extract ICAO model code, ADS-B emitter category, and registration from packet for device update
                         let icao_model_code: Option<String> = pos_packet
                             .comment
                             .model
@@ -159,6 +159,11 @@ impl FixProcessor {
                             .comment
                             .adsb_emitter_category
                             .and_then(|cat| cat.to_string().parse().ok());
+                        let registration: Option<String> = pos_packet
+                            .comment
+                            .registration
+                            .as_ref()
+                            .map(|reg| reg.to_string());
 
                         // Check if we have new/different information to update
                         let icao_changed = icao_model_code.is_some()
@@ -167,12 +172,24 @@ impl FixProcessor {
                             && adsb_emitter_category != device_model.adsb_emitter_category;
                         let tracker_type_changed =
                             Some(&tracker_device_type) != device_model.tracker_device_type.as_ref();
+                        let registration_changed = registration.is_some()
+                            && registration.as_deref() != Some(device_model.registration.as_str())
+                            && !device_model.registration.is_empty();
 
                         // Update device fields only if we have new/different information
-                        if icao_changed || adsb_changed || tracker_type_changed {
+                        if icao_changed
+                            || adsb_changed
+                            || tracker_type_changed
+                            || registration_changed
+                        {
                             let device_repo = self.device_repo.clone();
                             let device_id = device_model.id;
                             let tracker_type_to_update = Some(tracker_device_type.clone());
+                            let registration_to_update = if registration_changed {
+                                registration.clone()
+                            } else {
+                                None
+                            };
                             tokio::spawn(
                                 async move {
                                     if let Err(e) = device_repo
@@ -181,6 +198,7 @@ impl FixProcessor {
                                             icao_model_code,
                                             adsb_emitter_category,
                                             tracker_type_to_update,
+                                            registration_to_update,
                                         )
                                         .await
                                     {
@@ -309,6 +327,45 @@ impl FixProcessor {
                     metrics::counter!("aprs.elevation.channel_closed").increment(1);
                 }
             }
+        }
+
+        // Step 4.5: Update flight callsign if this fix has a flight_id and flight_number (callsign)
+        if let (Some(flight_id), Some(flight_number)) =
+            (updated_fix.flight_id, &updated_fix.flight_number)
+            && !flight_number.is_empty()
+        {
+            let flight_tracker = self.flight_detection_processor.clone();
+            let callsign_to_update = flight_number.clone();
+            tokio::spawn(
+                async move {
+                    // Get the current flight to check if callsign needs updating
+                    match flight_tracker.get_flight_by_id(flight_id).await {
+                        Ok(Some(flight)) => {
+                            // Only update if callsign is different
+                            if flight.callsign.as_deref() != Some(&callsign_to_update)
+                                && let Err(e) = flight_tracker
+                                    .update_flight_callsign(flight_id, Some(callsign_to_update))
+                                    .await
+                            {
+                                debug!("Failed to update callsign for flight {}: {}", flight_id, e);
+                            }
+                        }
+                        Ok(None) => {
+                            trace!(
+                                "Flight {} not found when trying to update callsign",
+                                flight_id
+                            );
+                        }
+                        Err(e) => {
+                            debug!(
+                                "Failed to fetch flight {} for callsign update: {}",
+                                flight_id, e
+                            );
+                        }
+                    }
+                }
+                .instrument(tracing::debug_span!("update_flight_callsign", flight_id = %flight_id)),
+            );
         }
 
         // Step 3: Publish to NATS with updated fix (including flight_id and flight info)

@@ -442,4 +442,13 @@ impl FlightTracker {
     ) -> Result<Option<crate::flights::Flight>> {
         self.flights_repo.get_flight_by_id(flight_id).await
     }
+
+    /// Update the callsign for a flight
+    pub async fn update_flight_callsign(
+        &self,
+        flight_id: Uuid,
+        callsign: Option<String>,
+    ) -> Result<bool> {
+        self.flights_repo.update_callsign(flight_id, callsign).await
+    }
 }

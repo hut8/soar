@@ -474,6 +474,39 @@ impl FlightsRepository {
         Ok(count)
     }
 
+    /// Update flight details (departure/arrival airports, tow info)
+    /// DEPRECATED: tow_aircraft_id parameter removed
+    #[allow(dead_code)]
+    pub async fn update_flight_details(
+        &self,
+        flight_id: Uuid,
+        departure_airport_id_param: Option<i32>,
+        arrival_airport_id_param: Option<i32>,
+        _tow_aircraft_id_param: Option<String>,
+        _tow_release_height_msl_param: Option<i32>,
+    ) -> Result<bool> {
+        use crate::schema::flights::dsl::*;
+
+        let pool = self.pool.clone();
+
+        let rows_affected = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            let rows = diesel::update(flights.filter(id.eq(flight_id)))
+                .set((
+                    departure_airport_id.eq(&departure_airport_id_param),
+                    arrival_airport_id.eq(&arrival_airport_id_param),
+                    updated_at.eq(Utc::now()),
+                ))
+                .execute(&mut conn)?;
+
+            Ok::<usize, anyhow::Error>(rows)
+        })
+        .await??;
+
+        Ok(rows_affected > 0)
+    }
+
     /// Update towing information for a glider flight
     pub async fn update_towing_info(
         &self,
@@ -688,6 +721,31 @@ impl FlightsRepository {
 
             let rows = diesel::update(flights.filter(id.eq(flight_id)))
                 .set((last_fix_at.eq(fix_timestamp), updated_at.eq(Utc::now())))
+                .execute(&mut conn)?;
+
+            Ok::<usize, anyhow::Error>(rows)
+        })
+        .await??;
+
+        Ok(rows_affected > 0)
+    }
+
+    /// Update the callsign for a flight
+    /// Only updates if the provided callsign is different from the current one
+    pub async fn update_callsign(
+        &self,
+        flight_id: Uuid,
+        new_callsign: Option<String>,
+    ) -> Result<bool> {
+        use crate::schema::flights::dsl::*;
+
+        let pool = self.pool.clone();
+
+        let rows_affected = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            let rows = diesel::update(flights.filter(id.eq(flight_id)))
+                .set((callsign.eq(new_callsign), updated_at.eq(Utc::now())))
                 .execute(&mut conn)?;
 
             Ok::<usize, anyhow::Error>(rows)
