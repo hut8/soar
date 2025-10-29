@@ -484,9 +484,9 @@ export class DeviceRegistry {
 				.replace(/\.\d{3}Z$/, '')
 				.substring(0, 14); // Format: YYYYMMDDHHMMSS
 
-			const response = await serverCall<{ fixes: Fix[] }>(
-				`/devices/${deviceId}/fixes?after=${after}&per_page=1000`
-			);
+			const response = await serverCall<{ fixes: Fix[] }>(`/devices/${deviceId}/fixes`, {
+				params: { after, per_page: 1000 }
+			});
 			if (response.fixes) {
 				// Add fixes to device
 				for (const fix of response.fixes) {
