@@ -78,6 +78,9 @@ pub struct Flight {
     /// Timestamp when tow release occurred
     pub tow_release_time: Option<DateTime<Utc>>,
 
+    /// Altitude gain during tow in feet (tow_release_altitude_msl_ft - towplane takeoff altitude MSL)
+    pub tow_release_height_delta_ft: Option<i32>,
+
     /// Club that owns the aircraft for this flight
     pub club_id: Option<Uuid>,
 
@@ -163,6 +166,7 @@ impl Flight {
             towed_by_flight_id: None,
             tow_release_altitude_msl_ft: None,
             tow_release_time: None,
+            tow_release_height_delta_ft: None,
             club_id: None,
             takeoff_altitude_offset_ft: None,
             landing_altitude_offset_ft: None,
@@ -203,6 +207,7 @@ impl Flight {
             towed_by_flight_id: None,
             tow_release_altitude_msl_ft: None,
             tow_release_time: None,
+            tow_release_height_delta_ft: None,
             club_id: None, // Will be populated from device
             takeoff_altitude_offset_ft: None,
             landing_altitude_offset_ft: None,
@@ -242,6 +247,7 @@ impl Flight {
             towed_by_flight_id: None,
             tow_release_altitude_msl_ft: None,
             tow_release_time: None,
+            tow_release_height_delta_ft: None,
             club_id: None,
             takeoff_altitude_offset_ft: None,
             landing_altitude_offset_ft: None,
@@ -289,6 +295,7 @@ impl Flight {
             towed_by_flight_id: None,
             tow_release_altitude_msl_ft: None,
             tow_release_time: None,
+            tow_release_height_delta_ft: None,
             club_id: None,
             takeoff_altitude_offset_ft: None,
             landing_altitude_offset_ft: None,
@@ -620,6 +627,8 @@ pub struct FlightModel {
     pub landing_location_id: Option<Uuid>,
     pub timed_out_at: Option<DateTime<Utc>>,
     pub last_fix_at: DateTime<Utc>,
+    pub callsign: Option<String>,
+    pub tow_release_height_delta_ft: Option<i32>,
 }
 
 /// Insert model for new flights
@@ -650,6 +659,8 @@ pub struct NewFlightModel {
     pub landing_location_id: Option<Uuid>,
     pub timed_out_at: Option<DateTime<Utc>>,
     pub last_fix_at: DateTime<Utc>,
+    pub callsign: Option<String>,
+    pub tow_release_height_delta_ft: Option<i32>,
 }
 
 /// Conversion from Flight (API model) to FlightModel (database model)
@@ -682,6 +693,8 @@ impl From<Flight> for FlightModel {
             landing_location_id: flight.landing_location_id,
             timed_out_at: flight.timed_out_at,
             last_fix_at: flight.last_fix_at,
+            callsign: None,
+            tow_release_height_delta_ft: flight.tow_release_height_delta_ft,
         }
     }
 }
@@ -714,6 +727,8 @@ impl From<Flight> for NewFlightModel {
             landing_location_id: flight.landing_location_id,
             timed_out_at: flight.timed_out_at,
             last_fix_at: flight.last_fix_at,
+            callsign: None,
+            tow_release_height_delta_ft: flight.tow_release_height_delta_ft,
         }
     }
 }
@@ -746,6 +761,7 @@ impl From<FlightModel> for Flight {
             landing_location_id: model.landing_location_id,
             timed_out_at: model.timed_out_at,
             last_fix_at: model.last_fix_at,
+            tow_release_height_delta_ft: model.tow_release_height_delta_ft,
             created_at: model.created_at,
             updated_at: model.updated_at,
         }
