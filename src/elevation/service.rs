@@ -239,7 +239,12 @@ mod tests {
 
     #[test]
     fn test_get_tile_path() {
-        let service = ElevationService::with_path(PathBuf::from("/var/soar/elevation")).unwrap();
+        // Create a test service with a dummy path (directory doesn't need to exist for this test)
+        let service = ElevationService {
+            storage_path: PathBuf::from("/var/soar/elevation"),
+            elevation_cache: Cache::builder().max_capacity(100).build(),
+            tile_cache: Cache::builder().max_capacity(10).build(),
+        };
 
         // Northern hemisphere, eastern
         let path = service.get_tile_path(45, 9);
