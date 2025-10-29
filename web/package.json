@@ -44,7 +44,7 @@
 		"vite-plugin-devtools-json": "^1.0.0"
 	},
 	"dependencies": {
-		"@googlemaps/js-api-loader": "^1.16.10",
+		"@googlemaps/js-api-loader": "^2.0.2",
 		"@lucide/svelte": "^0.545.0",
 		"@sentry/sveltekit": "^10.22.0",
 		"@skeletonlabs/skeleton": "^3.2",

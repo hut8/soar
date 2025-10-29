@@ -3,7 +3,7 @@
 	import { onMount } from 'svelte';
 	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { serverCall } from '$lib/api/server';
-	import { Loader } from '@googlemaps/js-api-loader';
+	import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
 	import { Settings, ListChecks, MapPlus, MapMinus } from '@lucide/svelte';
 	import WatchlistModal from '$lib/components/WatchlistModal.svelte';
 	import SettingsModal from '$lib/components/SettingsModal.svelte';
@@ -398,15 +398,15 @@
 	});
 
 	async function loadGoogleMapsScript(): Promise<void> {
-		const loader = new Loader({
-			apiKey: GOOGLE_MAPS_API_KEY,
-			version: 'weekly'
+		setOptions({
+			key: GOOGLE_MAPS_API_KEY,
+			v: 'weekly'
 		});
 
 		// Import the required libraries
-		await loader.importLibrary('maps');
-		await loader.importLibrary('geometry');
-		await loader.importLibrary('marker');
+		await importLibrary('maps');
+		await importLibrary('geometry');
+		await importLibrary('marker');
 	}
 
 	function initializeMap(): void {
