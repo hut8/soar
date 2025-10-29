@@ -239,7 +239,7 @@ async fn geocode_soaring_clubs(
 
     info!("Geocoding soaring club locations...");
 
-    let locations_repo = LocationsRepository::new(diesel_pool);
+    let locations_repo = LocationsRepository::new(diesel_pool.clone());
 
     match locations_repo.get_locations_for_geocoding(Some(1000)).await {
         Ok(locations) => {
@@ -291,7 +291,17 @@ async fn geocode_soaring_clubs(
                 "Successfully geocoded {} out of {} locations",
                 geocoded_count, total_locations
             );
-            metrics.records_in_db = Some(geocoded_count as i64);
+
+            // Get total count of clubs with geocoded locations
+            match get_geocoded_clubs_count(&diesel_pool).await {
+                Ok(total) => {
+                    metrics.records_in_db = Some(total);
+                }
+                Err(e) => {
+                    warn!("Failed to get geocoded clubs count: {}", e);
+                    metrics.records_in_db = None;
+                }
+            }
             metrics.success = true;
         }
         Err(e) => {
@@ -303,4 +313,28 @@ async fn geocode_soaring_clubs(
 
     metrics.duration_secs = start.elapsed().as_secs_f64();
     Some(metrics)
+}
+
+/// Get count of clubs with geocoded locations (via join with locations table)
+async fn get_geocoded_clubs_count(
+    diesel_pool: &Pool<ConnectionManager<PgConnection>>,
+) -> Result<i64> {
+    use crate::schema::{clubs, locations};
+    use diesel::dsl::count_star;
+    use diesel::prelude::*;
+
+    let pool = diesel_pool.clone();
+
+    tokio::task::spawn_blocking(move || {
+        let mut conn = pool.get()?;
+
+        let result: i64 = clubs::table
+            .inner_join(locations::table.on(clubs::location_id.eq(locations::id.nullable())))
+            .filter(locations::geolocation.is_not_null())
+            .select(count_star())
+            .get_result(&mut conn)?;
+
+        Ok(result)
+    })
+    .await?
 }
