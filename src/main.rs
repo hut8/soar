@@ -521,19 +521,19 @@ async fn handle_run(
 
     // Create bounded channels for per-processor queues
     // Aircraft positions: highest capacity due to high volume and heavy processing
-    let (aircraft_tx, aircraft_rx) = tokio::sync::mpsc::channel(10_000);
-    info!("Created aircraft position queue with capacity 10,000");
+    let (aircraft_tx, aircraft_rx) = tokio::sync::mpsc::channel(50_000);
+    info!("Created aircraft position queue with capacity 50,000");
 
-    // Receiver status: medium capacity
-    let (receiver_status_tx, receiver_status_rx) = tokio::sync::mpsc::channel(5_000);
-    info!("Created receiver status queue with capacity 5,000");
+    // Receiver status: high capacity
+    let (receiver_status_tx, receiver_status_rx) = tokio::sync::mpsc::channel(10_000);
+    info!("Created receiver status queue with capacity 10,000");
 
     // Receiver position: medium capacity
     let (receiver_position_tx, receiver_position_rx) = tokio::sync::mpsc::channel(5_000);
     info!("Created receiver position queue with capacity 5,000");
 
     // Server status: low capacity (rare messages)
-    let (server_status_tx, mut server_status_rx) = tokio::sync::mpsc::channel(1_000);
+    let (server_status_tx, server_status_rx) = tokio::sync::mpsc::channel(1_000);
     info!("Created server status queue with capacity 1,000");
 
     // Create PacketRouter with per-processor queues
@@ -650,8 +650,8 @@ async fn handle_run(
     info!("Spawned AGL backfill background task with dedicated elevation database");
 
     // Spawn dedicated worker pools for each processor type
-    // Aircraft position workers (10 workers - heaviest processing due to FixProcessor + flight tracking)
-    let num_aircraft_workers = 10;
+    // Aircraft position workers (20 workers - heaviest processing due to FixProcessor + flight tracking)
+    let num_aircraft_workers = 20;
     info!(
         "Spawning {} aircraft position workers",
         num_aircraft_workers
@@ -684,8 +684,8 @@ async fn handle_run(
         );
     }
 
-    // Receiver status workers (3 workers - medium processing)
-    let num_receiver_status_workers = 3;
+    // Receiver status workers (6 workers - medium processing)
+    let num_receiver_status_workers = 6;
     info!(
         "Spawning {} receiver status workers",
         num_receiver_status_workers
@@ -719,8 +719,8 @@ async fn handle_run(
         );
     }
 
-    // Receiver position workers (2 workers - light processing)
-    let num_receiver_position_workers = 2;
+    // Receiver position workers (4 workers - light processing)
+    let num_receiver_position_workers = 4;
     info!(
         "Spawning {} receiver position workers",
         num_receiver_position_workers
@@ -754,23 +754,35 @@ async fn handle_run(
         );
     }
 
-    // Server status workers (1 worker - very light processing)
-    info!("Spawning 1 server status worker");
-    tokio::spawn(
-        async move {
-            while let Some(message) = server_status_rx.recv().await {
-                let start = std::time::Instant::now();
-                server_status_processor
-                    .process_server_message(&message)
-                    .await;
-                let duration = start.elapsed();
-                metrics::histogram!("aprs.server_status.duration_ms")
-                    .record(duration.as_millis() as f64);
-                metrics::counter!("aprs.server_status.processed").increment(1);
+    // Server status workers (2 workers - very light processing)
+    info!("Spawning 2 server status workers");
+    let shared_server_status_rx = std::sync::Arc::new(tokio::sync::Mutex::new(server_status_rx));
+    for worker_id in 0..2 {
+        let worker_rx = shared_server_status_rx.clone();
+        let processor = server_status_processor.clone();
+        tokio::spawn(
+            async move {
+                loop {
+                    let task = {
+                        let mut rx = worker_rx.lock().await;
+                        rx.recv().await
+                    };
+                    match task {
+                        Some(message) => {
+                            let start = std::time::Instant::now();
+                            processor.process_server_message(&message).await;
+                            let duration = start.elapsed();
+                            metrics::histogram!("aprs.server_status.duration_ms")
+                                .record(duration.as_millis() as f64);
+                            metrics::counter!("aprs.server_status.processed").increment(1);
+                        }
+                        None => break,
+                    }
+                }
             }
-        }
-        .instrument(tracing::info_span!("server_status_worker")),
-    );
+            .instrument(tracing::info_span!("server_status_worker", worker_id)),
+        );
+    }
 
     // Create and start APRS client - it will call PacketRouter directly (no queue between them)
     let mut client = AprsClient::new(config);
@@ -799,7 +811,7 @@ async fn handle_run(
                     elapsed_secs
                 );
                 info!(
-                    "Worker pools: {} aircraft, {} receiver_status, {} receiver_position, 1 server_status",
+                    "Worker pools: {} aircraft, {} receiver_status, {} receiver_position, 2 server_status",
                     num_aircraft_workers, num_receiver_status_workers, num_receiver_position_workers
                 );
                 info!(
