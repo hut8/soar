@@ -659,8 +659,8 @@ pub struct NewFlightModel {
     pub landing_location_id: Option<Uuid>,
     pub timed_out_at: Option<DateTime<Utc>>,
     pub last_fix_at: DateTime<Utc>,
-    pub callsign: Option<String>,
-    pub tow_release_height_delta_ft: Option<i32>,
+    // Note: callsign and tow_release_height_delta_ft are not included in NewFlightModel
+    // as they are not set during initial flight creation
 }
 
 /// Conversion from Flight (API model) to FlightModel (database model)
@@ -727,8 +727,6 @@ impl From<Flight> for NewFlightModel {
             landing_location_id: flight.landing_location_id,
             timed_out_at: flight.timed_out_at,
             last_fix_at: flight.last_fix_at,
-            callsign: None,
-            tow_release_height_delta_ft: flight.tow_release_height_delta_ft,
         }
     }
 }
