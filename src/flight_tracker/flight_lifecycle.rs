@@ -30,14 +30,13 @@ pub(crate) async fn create_flight(
     flight_id: Uuid,
     skip_airport_runway_lookup: bool,
 ) -> Result<Uuid> {
-    // Calculate takeoff altitude offset
-    let takeoff_altitude_offset_ft = calculate_altitude_offset_ft(elevation_db, fix).await;
-
-    // Look up airport and runway if altitude data is reliable
-    let (departure_airport_id, takeoff_location_id, takeoff_runway) = if skip_airport_runway_lookup
-    {
-        (None, None, None)
+    let mut flight = if skip_airport_runway_lookup {
+        // Mid-flight appearance - no takeoff observed
+        Flight::new_airborne_from_fix_with_id(fix, flight_id)
     } else {
+        // Actual takeoff - calculate altitude offset and look up airport/runway
+        let takeoff_altitude_offset_ft = calculate_altitude_offset_ft(elevation_db, fix).await;
+
         let departure_airport_id =
             find_nearby_airport(airports_repo, fix.latitude, fix.longitude).await;
 
@@ -63,15 +62,15 @@ pub(crate) async fn create_flight(
 
         let takeoff_runway = takeoff_runway_info.map(|(runway, _)| runway);
 
-        (departure_airport_id, takeoff_location_id, takeoff_runway)
+        let mut flight = Flight::new_with_takeoff_from_fix_with_id(fix, flight_id, fix.timestamp);
+        flight.departure_airport_id = departure_airport_id;
+        flight.takeoff_location_id = takeoff_location_id;
+        flight.takeoff_runway_ident = takeoff_runway;
+        flight.takeoff_altitude_offset_ft = takeoff_altitude_offset_ft;
+        flight
     };
 
-    let mut flight = Flight::new_with_takeoff_from_fix_with_id(fix, flight_id, fix.timestamp);
     flight.device_address_type = fix.address_type;
-    flight.departure_airport_id = departure_airport_id;
-    flight.takeoff_location_id = takeoff_location_id;
-    flight.takeoff_runway_ident = takeoff_runway;
-    flight.takeoff_altitude_offset_ft = takeoff_altitude_offset_ft;
 
     flights_repo.create_flight(flight).await?;
 
