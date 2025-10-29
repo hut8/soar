@@ -166,6 +166,7 @@ export interface Device {
 	aircraft_type_ogn?: string | null;
 	last_fix_at?: string | null;
 	tracker_device_type?: string | null;
+	icao_model_code?: string | null;
 	fixes?: Fix[];
 }
 
@@ -244,6 +245,10 @@ export interface Flight {
 	// Navigation to previous/next flights for the same device (chronologically by takeoff time)
 	previous_flight_id?: string;
 	next_flight_id?: string;
+	// Latest position data (for active flights)
+	latest_altitude_msl_feet?: number;
+	latest_altitude_agl_feet?: number;
+	latest_fix_timestamp?: string;
 }
 
 export interface WatchlistEntry {

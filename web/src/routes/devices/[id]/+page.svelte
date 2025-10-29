@@ -12,13 +12,14 @@
 		Info,
 		Activity,
 		Building2,
-		Save,
-		Clock
+		Save
 	} from '@lucide/svelte';
 	import { ProgressRing } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall } from '$lib/api/server';
 	import { auth } from '$lib/stores/auth';
 	import type { Device, AircraftRegistration, AircraftModel, Fix, Flight, Club } from '$lib/types';
+	import FlightsList from '$lib/components/FlightsList.svelte';
+	import FixesList from '$lib/components/FixesList.svelte';
 	import {
 		formatTitleCase,
 		formatDeviceAddress,
@@ -66,7 +67,6 @@
 	let flightsPage = 1;
 	let fixesTotalPages = 1;
 	let flightsTotalPages = 1;
-	let hideInactiveFixes = false;
 	let clubs: Club[] = [];
 	let selectedClubId: string = '';
 	let savingClub = false;
@@ -74,10 +74,6 @@
 	$: deviceId = $page.params.id || '';
 	$: isAdmin = $auth.user?.access_level === 'admin';
 	$: userClubId = $auth.user?.club_id;
-
-	function handleFilterChange() {
-		loadFixes(1);
-	}
 
 	function extractErrorMessage(err: unknown): string {
 		if (err instanceof Error) {
@@ -146,9 +142,8 @@
 			const twentyFourHoursAgo = dayjs().utc().subtract(24, 'hour');
 			const afterParam = twentyFourHoursAgo.format('YYYYMMDDHHmmss');
 
-			const activeParam = hideInactiveFixes ? '&active=true' : '';
 			const response = await serverCall<FixesResponse>(
-				`/devices/${deviceId}/fixes?page=${page}&per_page=50&after=${afterParam}${activeParam}`
+				`/devices/${deviceId}/fixes?page=${page}&per_page=50&after=${afterParam}`
 			);
 			fixes = response.fixes;
 			fixesPage = response.page;
@@ -175,46 +170,6 @@
 		} finally {
 			loadingFlights = false;
 		}
-	}
-
-	function formatDate(dateString: string): string {
-		const date = new Date(dateString);
-		const year = date.getFullYear();
-		const month = String(date.getMonth() + 1).padStart(2, '0');
-		const day = String(date.getDate()).padStart(2, '0');
-		const hours = String(date.getHours()).padStart(2, '0');
-		const minutes = String(date.getMinutes()).padStart(2, '0');
-		const seconds = String(date.getSeconds()).padStart(2, '0');
-		return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
-	}
-
-	function formatRelativeTime(dateString: string): string {
-		return dayjs(dateString).fromNow();
-	}
-
-	function formatAltitude(altitude_msl_feet: number | undefined): string {
-		if (altitude_msl_feet === undefined || altitude_msl_feet === null) return 'Unknown';
-		return `${altitude_msl_feet.toLocaleString()} ft`;
-	}
-
-	function formatSpeed(speed_knots: number | undefined): string {
-		if (speed_knots === undefined || speed_knots === null) return 'Unknown';
-		return `${Math.round(speed_knots)} kts`;
-	}
-
-	function formatTrack(track_degrees: number | undefined): string {
-		if (track_degrees === undefined || track_degrees === null) return 'Unknown';
-		return `${Math.round(track_degrees)}°`;
-	}
-
-	function formatCoordinates(lat: number, lng: number): string {
-		const latDir = lat >= 0 ? 'N' : 'S';
-		const lngDir = lng >= 0 ? 'E' : 'W';
-		return `${Math.abs(lat).toFixed(4)}°${latDir}, ${Math.abs(lng).toFixed(4)}°${lngDir}`;
-	}
-
-	function getGoogleMapsUrl(lat: number, lng: number): string {
-		return `https://www.google.com/maps?q=${lat},${lng}`;
 	}
 
 	function goBack() {
@@ -314,6 +269,11 @@
 								</h1>
 								{#if device.aircraft_model}
 									<p class="text-lg">{device.aircraft_model}</p>
+								{/if}
+								{#if device.icao_model_code}
+									<p class="text-surface-600-300-token text-sm">
+										ICAO Model Code: <span class="font-mono">{device.icao_model_code}</span>
+									</p>
 								{/if}
 								<p class="text-surface-600-300-token font-mono text-sm">
 									Address: {formatDeviceAddress(device.address_type, device.address)}
@@ -658,115 +618,7 @@
 						<p>No flights found for this aircraft</p>
 					</div>
 				{:else}
-					<div class="overflow-x-auto">
-						<table class="w-full table-auto">
-							<thead class="bg-surface-100-800-token border-surface-300-600-token border-b">
-								<tr>
-									<th class="px-3 py-2 text-left text-sm font-medium">Takeoff</th>
-									<th class="px-3 py-2 text-left text-sm font-medium">Landing</th>
-									<th class="px-3 py-2 text-left text-sm font-medium">Duration</th>
-									<th class="px-3 py-2 text-left text-sm font-medium">Actions</th>
-								</tr>
-							</thead>
-							<tbody>
-								{#each flights as flight, index (flight.id)}
-									<tr
-										class="border-surface-200-700-token hover:bg-surface-100-800-token border-b {index %
-											2 ===
-										0
-											? 'bg-surface-50-900-token'
-											: ''}"
-									>
-										<td class="px-3 py-2 text-sm">
-											{#if flight.takeoff_time}
-												<div>{dayjs(flight.takeoff_time).format('MM-DD HH:mm')}</div>
-												<div class="text-xs text-surface-500">
-													{#if flight.departure_airport && flight.departure_airport_id}
-														<a
-															href="/airports/{flight.departure_airport_id}"
-															target="_blank"
-															rel="noopener noreferrer"
-															class="text-primary-500 underline hover:text-primary-700"
-														>
-															{flight.departure_airport}
-														</a>
-														{#if flight.takeoff_runway_ident}
-															({flight.takeoff_runway_ident})
-														{/if}
-													{:else}
-														{flight.departure_airport || 'Unknown'}
-													{/if}
-												</div>
-											{:else}
-												Unknown
-											{/if}
-										</td>
-										<td class="px-3 py-2 text-sm">
-											{#if flight.landing_time}
-												<div>{dayjs(flight.landing_time).format('MM-DD HH:mm')}</div>
-												<div class="text-xs text-surface-500">
-													{#if flight.arrival_airport && flight.arrival_airport_id}
-														<a
-															href="/airports/{flight.arrival_airport_id}"
-															target="_blank"
-															rel="noopener noreferrer"
-															class="text-primary-500 underline hover:text-primary-700"
-														>
-															{flight.arrival_airport}
-														</a>
-														{#if flight.landing_runway_ident}
-															({flight.landing_runway_ident})
-														{/if}
-													{:else}
-														{flight.arrival_airport || 'Unknown'}
-													{/if}
-												</div>
-											{:else}
-												-
-											{/if}
-										</td>
-										<td class="px-3 py-2 text-sm">
-											{#if flight.takeoff_time && flight.landing_time}
-												{@const start = new Date(flight.takeoff_time)}
-												{@const end = new Date(flight.landing_time)}
-												{@const diffMs = end.getTime() - start.getTime()}
-												{@const totalHours = diffMs / (1000 * 60 * 60)}
-												{@const hours = Math.floor(totalHours)}
-												{@const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60))}
-												<div class="flex items-center gap-1">
-													<span
-														>{String(hours).padStart(2, '0')}:{String(minutes).padStart(2, '0')} ({totalHours.toFixed(
-															2
-														)}h)</span
-													>
-													{#if flight.timed_out_at}
-														<span
-															class="badge preset-filled-warning-500 text-xs"
-															title="Flight timed out"
-														>
-															<Clock class="h-3 w-3" />
-														</span>
-													{/if}
-												</div>
-											{:else}
-												-
-											{/if}
-										</td>
-										<td class="px-3 py-2 text-sm">
-											<a
-												href="/flights/{flight.id}"
-												target="_blank"
-												rel="noopener noreferrer"
-												class="btn preset-filled-primary-500 btn-sm"
-											>
-												View Flight
-											</a>
-										</td>
-									</tr>
-								{/each}
-							</tbody>
-						</table>
-					</div>
+					<FlightsList {flights} showEnd={true} showAircraft={false} />
 
 					<!-- Pagination for flights -->
 					{#if flightsTotalPages > 1}
@@ -796,107 +648,42 @@
 			</div>
 			<!-- Position Fixes Section -->
 			<div class="space-y-4 card p-6">
-				<div class="flex items-center justify-between">
-					<h2 class="flex items-center gap-2 h2">
-						<Activity class="h-6 w-6" />
-						Recent Position Fixes (Last 24 Hours)
-					</h2>
-					{#if fixes.length > 0}
-						<label class="flex items-center gap-2 text-sm">
-							<input
-								type="checkbox"
-								class="checkbox"
-								bind:checked={hideInactiveFixes}
-								onchange={handleFilterChange}
-							/>
-							<span>Hide inactive fixes</span>
-						</label>
-					{/if}
-				</div>
+				<h2 class="flex items-center gap-2 h2">
+					<Activity class="h-6 w-6" />
+					Recent Position Fixes (Last 24 Hours)
+				</h2>
 
-				{#if loadingFixes}
-					<div class="flex items-center justify-center py-8">
-						<ProgressRing size="w-6 h-6" />
-						<span class="ml-2">Loading position fixes...</span>
-					</div>
-				{:else if fixes.length === 0}
-					<div class="text-surface-600-300-token py-8 text-center">
-						<Activity class="mx-auto mb-4 h-12 w-12 text-surface-400" />
-						<p>
-							{hideInactiveFixes
-								? 'No active fixes found'
-								: 'No position fixes found in the last 24 hours'}
+				<FixesList
+					{fixes}
+					loading={loadingFixes}
+					showHideInactive={true}
+					showRaw={true}
+					emptyMessage="No position fixes found in the last 24 hours"
+				/>
+
+				<!-- Pagination for fixes -->
+				{#if fixesTotalPages > 1}
+					<div class="flex items-center justify-between pt-4">
+						<p class="text-surface-600-300-token text-sm">
+							Page {fixesPage} of {fixesTotalPages}
 						</p>
-					</div>
-				{:else}
-					<div class="overflow-x-auto">
-						<table class="w-full table-auto">
-							<thead class="bg-surface-100-800-token border-surface-300-600-token border-b">
-								<tr>
-									<th class="px-3 py-2 text-left text-sm font-medium">Time</th>
-									<th class="px-3 py-2 text-left text-sm font-medium">Coordinates</th>
-									<th class="px-3 py-2 text-left text-sm font-medium">Altitude MSL</th>
-									<th class="px-3 py-2 text-left text-sm font-medium">Altitude AGL</th>
-									<th class="px-3 py-2 text-left text-sm font-medium">Speed</th>
-									<th class="px-3 py-2 text-left text-sm font-medium">Track</th>
-								</tr>
-							</thead>
-							<tbody>
-								{#each fixes as fix, index (fix.id)}
-									<tr
-										class="border-surface-200-700-token hover:bg-surface-100-800-token border-b {index %
-											2 ===
-										0
-											? 'bg-surface-50-900-token'
-											: ''} {!fix.active ? 'opacity-50' : ''}"
-									>
-										<td class="px-3 py-2 text-sm" title={formatDate(fix.timestamp)}>
-											{formatRelativeTime(fix.timestamp)}
-										</td>
-										<td class="px-3 py-2 font-mono text-sm">
-											<a
-												href={getGoogleMapsUrl(fix.latitude, fix.longitude)}
-												target="_blank"
-												rel="noopener noreferrer"
-												class="text-primary-500 hover:text-primary-600 hover:underline"
-											>
-												{formatCoordinates(fix.latitude, fix.longitude)}
-											</a>
-										</td>
-										<td class="px-3 py-2 text-sm">{formatAltitude(fix.altitude_msl_feet)}</td>
-										<td class="px-3 py-2 text-sm">{formatAltitude(fix.altitude_agl_feet)}</td>
-										<td class="px-3 py-2 text-sm">{formatSpeed(fix.ground_speed_knots)}</td>
-										<td class="px-3 py-2 text-sm">{formatTrack(fix.track_degrees)}</td>
-									</tr>
-								{/each}
-							</tbody>
-						</table>
-					</div>
-
-					<!-- Pagination for fixes -->
-					{#if fixesTotalPages > 1}
-						<div class="flex items-center justify-between pt-4">
-							<p class="text-surface-600-300-token text-sm">
-								Page {fixesPage} of {fixesTotalPages}
-							</p>
-							<div class="flex gap-2">
-								<button
-									class="btn preset-tonal btn-sm"
-									disabled={fixesPage <= 1}
-									onclick={() => loadFixes(fixesPage - 1)}
-								>
-									Previous
-								</button>
-								<button
-									class="btn preset-tonal btn-sm"
-									disabled={fixesPage >= fixesTotalPages}
-									onclick={() => loadFixes(fixesPage + 1)}
-								>
-									Next
-								</button>
-							</div>
+						<div class="flex gap-2">
+							<button
+								class="btn preset-tonal btn-sm"
+								disabled={fixesPage <= 1}
+								onclick={() => loadFixes(fixesPage - 1)}
+							>
+								Previous
+							</button>
+							<button
+								class="btn preset-tonal btn-sm"
+								disabled={fixesPage >= fixesTotalPages}
+								onclick={() => loadFixes(fixesPage + 1)}
+							>
+								Next
+							</button>
 						</div>
-					{/if}
+					</div>
 				{/if}
 			</div>
 		</div>
