@@ -12,13 +12,13 @@
 		Info,
 		Activity,
 		Building2,
-		Save,
-		Clock
+		Save
 	} from '@lucide/svelte';
 	import { ProgressRing } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall } from '$lib/api/server';
 	import { auth } from '$lib/stores/auth';
 	import type { Device, AircraftRegistration, AircraftModel, Fix, Flight, Club } from '$lib/types';
+	import FlightsList from '$lib/components/FlightsList.svelte';
 	import {
 		formatTitleCase,
 		formatDeviceAddress,
@@ -67,6 +67,7 @@
 	let fixesTotalPages = 1;
 	let flightsTotalPages = 1;
 	let hideInactiveFixes = false;
+	let showRawData = false;
 	let clubs: Club[] = [];
 	let selectedClubId: string = '';
 	let savingClub = false;
@@ -314,6 +315,11 @@
 								</h1>
 								{#if device.aircraft_model}
 									<p class="text-lg">{device.aircraft_model}</p>
+								{/if}
+								{#if device.icao_model_code}
+									<p class="text-surface-600-300-token text-sm">
+										ICAO Model Code: <span class="font-mono">{device.icao_model_code}</span>
+									</p>
 								{/if}
 								<p class="text-surface-600-300-token font-mono text-sm">
 									Address: {formatDeviceAddress(device.address_type, device.address)}
@@ -658,115 +664,7 @@
 						<p>No flights found for this aircraft</p>
 					</div>
 				{:else}
-					<div class="overflow-x-auto">
-						<table class="w-full table-auto">
-							<thead class="bg-surface-100-800-token border-surface-300-600-token border-b">
-								<tr>
-									<th class="px-3 py-2 text-left text-sm font-medium">Takeoff</th>
-									<th class="px-3 py-2 text-left text-sm font-medium">Landing</th>
-									<th class="px-3 py-2 text-left text-sm font-medium">Duration</th>
-									<th class="px-3 py-2 text-left text-sm font-medium">Actions</th>
-								</tr>
-							</thead>
-							<tbody>
-								{#each flights as flight, index (flight.id)}
-									<tr
-										class="border-surface-200-700-token hover:bg-surface-100-800-token border-b {index %
-											2 ===
-										0
-											? 'bg-surface-50-900-token'
-											: ''}"
-									>
-										<td class="px-3 py-2 text-sm">
-											{#if flight.takeoff_time}
-												<div>{dayjs(flight.takeoff_time).format('MM-DD HH:mm')}</div>
-												<div class="text-xs text-surface-500">
-													{#if flight.departure_airport && flight.departure_airport_id}
-														<a
-															href="/airports/{flight.departure_airport_id}"
-															target="_blank"
-															rel="noopener noreferrer"
-															class="text-primary-500 underline hover:text-primary-700"
-														>
-															{flight.departure_airport}
-														</a>
-														{#if flight.takeoff_runway_ident}
-															({flight.takeoff_runway_ident})
-														{/if}
-													{:else}
-														{flight.departure_airport || 'Unknown'}
-													{/if}
-												</div>
-											{:else}
-												Unknown
-											{/if}
-										</td>
-										<td class="px-3 py-2 text-sm">
-											{#if flight.landing_time}
-												<div>{dayjs(flight.landing_time).format('MM-DD HH:mm')}</div>
-												<div class="text-xs text-surface-500">
-													{#if flight.arrival_airport && flight.arrival_airport_id}
-														<a
-															href="/airports/{flight.arrival_airport_id}"
-															target="_blank"
-															rel="noopener noreferrer"
-															class="text-primary-500 underline hover:text-primary-700"
-														>
-															{flight.arrival_airport}
-														</a>
-														{#if flight.landing_runway_ident}
-															({flight.landing_runway_ident})
-														{/if}
-													{:else}
-														{flight.arrival_airport || 'Unknown'}
-													{/if}
-												</div>
-											{:else}
-												-
-											{/if}
-										</td>
-										<td class="px-3 py-2 text-sm">
-											{#if flight.takeoff_time && flight.landing_time}
-												{@const start = new Date(flight.takeoff_time)}
-												{@const end = new Date(flight.landing_time)}
-												{@const diffMs = end.getTime() - start.getTime()}
-												{@const totalHours = diffMs / (1000 * 60 * 60)}
-												{@const hours = Math.floor(totalHours)}
-												{@const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60))}
-												<div class="flex items-center gap-1">
-													<span
-														>{String(hours).padStart(2, '0')}:{String(minutes).padStart(2, '0')} ({totalHours.toFixed(
-															2
-														)}h)</span
-													>
-													{#if flight.timed_out_at}
-														<span
-															class="badge preset-filled-warning-500 text-xs"
-															title="Flight timed out"
-														>
-															<Clock class="h-3 w-3" />
-														</span>
-													{/if}
-												</div>
-											{:else}
-												-
-											{/if}
-										</td>
-										<td class="px-3 py-2 text-sm">
-											<a
-												href="/flights/{flight.id}"
-												target="_blank"
-												rel="noopener noreferrer"
-												class="btn preset-filled-primary-500 btn-sm"
-											>
-												View Flight
-											</a>
-										</td>
-									</tr>
-								{/each}
-							</tbody>
-						</table>
-					</div>
+					<FlightsList {flights} showEnd={true} showAircraft={false} />
 
 					<!-- Pagination for flights -->
 					{#if flightsTotalPages > 1}
@@ -802,15 +700,21 @@
 						Recent Position Fixes (Last 24 Hours)
 					</h2>
 					{#if fixes.length > 0}
-						<label class="flex items-center gap-2 text-sm">
-							<input
-								type="checkbox"
-								class="checkbox"
-								bind:checked={hideInactiveFixes}
-								onchange={handleFilterChange}
-							/>
-							<span>Hide inactive fixes</span>
-						</label>
+						<div class="flex gap-4">
+							<label class="flex items-center gap-2 text-sm">
+								<input
+									type="checkbox"
+									class="checkbox"
+									bind:checked={hideInactiveFixes}
+									onchange={handleFilterChange}
+								/>
+								<span>Hide inactive fixes</span>
+							</label>
+							<label class="flex items-center gap-2 text-sm">
+								<input type="checkbox" class="checkbox" bind:checked={showRawData} />
+								<span>Show raw</span>
+							</label>
+						</div>
 					{/if}
 				</div>
 
@@ -868,6 +772,17 @@
 										<td class="px-3 py-2 text-sm">{formatSpeed(fix.ground_speed_knots)}</td>
 										<td class="px-3 py-2 text-sm">{formatTrack(fix.track_degrees)}</td>
 									</tr>
+									{#if showRawData && fix.raw_packet}
+										<tr
+											class="border-surface-200-700-token border-b {index % 2 === 0
+												? 'bg-surface-100-800-token'
+												: ''}"
+										>
+											<td colspan="6" class="px-3 py-2 font-mono text-sm">
+												{fix.raw_packet}
+											</td>
+										</tr>
+									{/if}
 								{/each}
 							</tbody>
 						</table>
