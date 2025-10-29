@@ -380,20 +380,10 @@ async fn handle_run(
     // Set up database connection
     let diesel_pool = setup_diesel_database().await?;
 
-    // Determine and log elevation data storage path
-    let _elevation_data_path = match env::var("ELEVATION_DATA_PATH") {
-        Ok(path) => {
-            info!("Elevation data path from ELEVATION_DATA_PATH: {}", path);
-            std::path::PathBuf::from(path)
-        }
-        Err(_) => {
-            use directories::BaseDirs;
-            let base = BaseDirs::new().context("no home directory")?;
-            let default_path = base.cache_dir().join("elevation");
-            info!("Elevation data path (default): {}", default_path.display());
-            default_path
-        }
-    };
+    // Log elevation data storage path
+    let elevation_path =
+        env::var("ELEVATION_DATA_PATH").unwrap_or_else(|_| "/var/soar/elevation".to_string());
+    info!("Elevation data path: {}", elevation_path);
 
     // Use port 10152 (full feed) if no filter is specified, otherwise use specified port
     let actual_port = if filter.is_none() {
@@ -871,10 +861,14 @@ async fn main() -> Result<()> {
 
     match &cli.command {
         Commands::Run { .. } => {
-            // Run subcommand uses tokio-console on port 6669 (default)
+            // Run subcommand uses tokio-console on a random port in development
+            // Note: With port 0, the OS assigns a random available port, but we can't
+            // reliably get the actual port from console-subscriber without patching it.
+            // For now, we'll use a fixed random-ish port based on PID
+            let console_port = (std::process::id() % 10000) + 50000; // Port range 50000-59999
             let console_layer = filter::Filtered::new(
                 console_subscriber::ConsoleLayer::builder()
-                    .server_addr(([0, 0, 0, 0], 6669))
+                    .server_addr(([0, 0, 0, 0], console_port as u16))
                     .spawn(),
                 console_filter.clone(),
             );
@@ -893,7 +887,8 @@ async fn main() -> Result<()> {
             }
 
             info!(
-                "tokio-console subscriber initialized on port 6669 - connect with `tokio-console`"
+                "tokio-console subscriber initialized on port {} - connect with `tokio-console http://localhost:{}`",
+                console_port, console_port
             );
         }
         Commands::VerifyRuntime { .. } => {

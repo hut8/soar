@@ -47,6 +47,7 @@ diesel = { version = "2.3", features = [
 diesel_migrations = "2.2"
 diesel-derive-enum = { version = "3.0.0-beta.1", features = ["postgres"] }
 r2d2 = "0.8"
+flate2 = "1.1"
 tokio = { version = "1.0", features = ["rt-multi-thread", "macros", "fs", "sync", "time", "signal", "tracing"] }
 console-subscriber = "0.4"
 tower = "0.5"
@@ -62,8 +63,6 @@ sentry = { version = "0.45.0", features = ["tracing", "logs"] }
 postgis_diesel = { version = "3.0.2", features = ["serde", "serde_geojson"] }
 rust_decimal = "1.39"
 zip = "6"
-directories = "6.0.0"
-gdal = "0.18.0"
 flydent = ">= 0.4"
 sitemap-rs = "0.4.0"
 metrics = "0.24"
