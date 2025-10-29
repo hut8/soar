@@ -144,7 +144,7 @@ pub async fn link_home_bases_with_metrics(
     diesel_pool: Pool<ConnectionManager<PgConnection>>,
 ) -> EntityMetrics {
     let start = Instant::now();
-    let mut metrics = EntityMetrics::new("Home Base Linking");
+    let mut metrics = EntityMetrics::new("Club airport linking");
 
     match link_home_bases(diesel_pool.clone()).await {
         Ok((linked, failed)) => {

@@ -10,7 +10,7 @@
 	import { theme } from '$lib/stores/theme';
 	import { websocketStatus, debugStatus } from '$lib/stores/watchlist';
 	import { onMount } from 'svelte';
-	import LoadingBar from '$lib/components/LoadingBar.svelte';
+	import RadarLoader from '$lib/components/RadarLoader.svelte';
 	import {
 		Radar,
 		Users,
@@ -204,6 +204,7 @@
 				>
 					<Wifi size={16} />
 					<span class="text-xs font-medium">Live</span>
+					<RadarLoader />
 					{#if $debugStatus.activeWatchlistEntries.length > 0 || $debugStatus.activeAreaSubscriptions > 0}
 						<span class="text-xs font-medium">
 							({#if $debugStatus.activeWatchlistEntries.length > 0}{$debugStatus
@@ -237,7 +238,6 @@
 				</div>
 			{/if}
 		</div>
-		<LoadingBar />
 	</AppBar>
 
 	<!-- Mobile Menu Overlay -->

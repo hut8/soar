@@ -142,9 +142,10 @@
 		lng: -98.5795
 	};
 
-	// Map persistence key for localStorage
+	// Map persistence keys for localStorage
 	const MAP_STATE_KEY = 'operations-map-state';
 	const AREA_TRACKER_KEY = 'operations-area-tracker';
+	const MAP_TYPE_KEY = 'operations-map-type';
 
 	// Interface for stored map state
 	interface MapState {
@@ -276,6 +277,48 @@
 		return false;
 	}
 
+	// Save map type to localStorage
+	function saveMapType(): void {
+		if (!browser) return;
+
+		try {
+			localStorage.setItem(MAP_TYPE_KEY, mapType);
+			console.log('[MAP TYPE] Saved map type:', mapType);
+		} catch (e) {
+			console.warn('[MAP TYPE] Failed to save map type to localStorage:', e);
+		}
+	}
+
+	// Load map type from localStorage
+	function loadMapType(): 'satellite' | 'roadmap' {
+		if (!browser) return 'satellite';
+
+		try {
+			const saved = localStorage.getItem(MAP_TYPE_KEY);
+			if (saved === 'satellite' || saved === 'roadmap') {
+				console.log('[MAP TYPE] Loaded saved map type:', saved);
+				return saved;
+			}
+		} catch (e) {
+			console.warn('[MAP TYPE] Failed to load map type from localStorage:', e);
+		}
+
+		console.log('[MAP TYPE] Using default: satellite');
+		return 'satellite';
+	}
+
+	// Toggle between map types
+	function toggleMapType(): void {
+		if (!map) return;
+
+		mapType = mapType === 'satellite' ? 'roadmap' : 'satellite';
+		map.setMapTypeId(
+			mapType === 'satellite' ? google.maps.MapTypeId.SATELLITE : google.maps.MapTypeId.ROADMAP
+		);
+		saveMapType();
+		console.log('[MAP TYPE] Toggled to:', mapType);
+	}
+
 	// Reactive effects for settings changes
 	$effect(() => {
 		if (!currentSettings.showAirportMarkers && shouldShowAirports) {
@@ -311,6 +354,9 @@
 	let areaTrackerActive = $state(false);
 	let areaTrackerAvailable = $state(true); // Whether area tracker can be enabled (based on map area)
 	let currentAreaSubscriptions = new SvelteSet<string>(); // Track subscribed areas
+
+	// Map type state
+	let mapType = $state<'satellite' | 'roadmap'>('satellite');
 
 	$effect(() => {
 		const unsubscribeRegistry = deviceRegistry.subscribe((event: DeviceRegistryEvent) => {
@@ -423,13 +469,19 @@
 		// Load saved map state or use continental US as fallback
 		const mapState = loadMapState();
 
+		// Load saved map type preference
+		mapType = loadMapType();
+
 		// Initialize map with saved or default state
 		map = new google.maps.Map(mapContainer, {
 			mapId: 'SOAR_MAP', // Required for AdvancedMarkerElement
 			center: mapState.center,
 			zoom: mapState.zoom,
-			mapTypeId: window.google.maps.MapTypeId.SATELLITE,
-			mapTypeControl: false, // Hide map type control (only satellite view allowed)
+			mapTypeId:
+				mapType === 'satellite'
+					? window.google.maps.MapTypeId.SATELLITE
+					: window.google.maps.MapTypeId.ROADMAP,
+			mapTypeControl: false, // We'll use a custom toggle button
 			zoomControl: false,
 			scaleControl: true,
 			streetViewControl: false,
@@ -1495,6 +1547,13 @@
 		<!-- Settings Button -->
 		<button class="location-btn" onclick={() => (showSettingsModal = true)} title="Settings">
 			<Settings size={20} />
+		</button>
+	</div>
+
+	<!-- Map Type Toggle Button -->
+	<div class="absolute bottom-4 left-4 z-10">
+		<button class="location-btn" onclick={toggleMapType} title="Toggle Map Type">
+			<span class="text-sm font-medium">{mapType === 'satellite' ? 'Map' : 'Satellite'}</span>
 		</button>
 	</div>
 

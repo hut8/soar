@@ -25,10 +25,16 @@
 	import type { PageData } from './$types';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
-	import { getAircraftTypeOgnDescription, formatDeviceAddress } from '$lib/formatters';
+	import {
+		getAircraftTypeOgnDescription,
+		formatDeviceAddress,
+		getAircraftTypeColor
+	} from '$lib/formatters';
 	import { GOOGLE_MAPS_API_KEY } from '$lib/config';
 	import { serverCall } from '$lib/api/server';
 	import FlightStateBadge from '$lib/components/FlightStateBadge.svelte';
+	import RadarLoader from '$lib/components/RadarLoader.svelte';
+	import { theme } from '$lib/stores/theme';
 
 	dayjs.extend(relativeTime);
 
@@ -65,6 +71,11 @@
 	let nearbyFlights = $state<NearbyFlight[]>([]);
 	let nearbyFlightPaths = $state<google.maps.Polyline[]>([]);
 	let isLoadingNearbyFlights = $state(false);
+
+	// Standalone nearby flights section (not tied to map)
+	let standaloneNearbyFlights = $state<NearbyFlight[]>([]);
+	let isLoadingStandaloneNearby = $state(false);
+	let showStandaloneNearby = $state(false);
 
 	// Reverse fixes to show chronologically (earliest first, landing last)
 	const reversedFixes = $derived([...data.fixes].reverse());
@@ -191,6 +202,20 @@
 		}
 	}
 
+	// Fetch nearby flights for standalone section (no map paths)
+	async function fetchStandaloneNearbyFlights() {
+		isLoadingStandaloneNearby = true;
+		showStandaloneNearby = true;
+		try {
+			const flights = await serverCall<NearbyFlight[]>(`/flights/${data.flight.id}/nearby`);
+			standaloneNearbyFlights = flights;
+		} catch (err) {
+			console.error('Failed to fetch nearby flights:', err);
+		} finally {
+			isLoadingStandaloneNearby = false;
+		}
+	}
+
 	// Fetch nearby flights and their fixes
 	async function fetchNearbyFlights() {
 		isLoadingNearbyFlights = true;
@@ -296,6 +321,54 @@
 			clearInterval(pollingInterval);
 			pollingInterval = null;
 		}
+	}
+
+	// Get Plotly layout configuration based on theme
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	function getPlotlyLayout(isDark: boolean): any {
+		return {
+			title: {
+				text: 'Altitude Profile',
+				font: {
+					color: isDark ? '#e5e7eb' : '#111827'
+				}
+			},
+			xaxis: {
+				title: {
+					text: 'Time',
+					font: {
+						color: isDark ? '#e5e7eb' : '#111827'
+					}
+				},
+				type: 'date',
+				color: isDark ? '#9ca3af' : '#6b7280',
+				gridcolor: isDark ? '#374151' : '#e5e7eb'
+			},
+			yaxis: {
+				title: {
+					text: 'Altitude (ft)',
+					font: {
+						color: isDark ? '#e5e7eb' : '#111827'
+					}
+				},
+				rangemode: 'tozero',
+				color: isDark ? '#9ca3af' : '#6b7280',
+				gridcolor: isDark ? '#374151' : '#e5e7eb'
+			},
+			hovermode: 'x unified',
+			showlegend: true,
+			legend: {
+				x: 0.01,
+				y: 0.99,
+				bgcolor: isDark ? 'rgba(31, 41, 55, 0.8)' : 'rgba(255, 255, 255, 0.8)',
+				font: {
+					color: isDark ? '#e5e7eb' : '#111827'
+				}
+			},
+			margin: { l: 60, r: 20, t: 40, b: 60 },
+			paper_bgcolor: isDark ? '#1f2937' : '#ffffff',
+			plot_bgcolor: isDark ? '#111827' : '#f9fafb'
+		};
 	}
 
 	// Update map and altitude chart with new data
@@ -411,25 +484,7 @@
 				});
 			}
 
-			Plotly.react(altitudeChartContainer, traces, {
-				title: { text: 'Altitude Profile' },
-				xaxis: {
-					title: { text: 'Time' },
-					type: 'date'
-				},
-				yaxis: {
-					title: { text: 'Altitude (ft)' },
-					rangemode: 'tozero'
-				},
-				hovermode: 'x unified',
-				showlegend: true,
-				legend: {
-					x: 0.01,
-					y: 0.99,
-					bgcolor: 'rgba(255, 255, 255, 0.8)'
-				},
-				margin: { l: 60, r: 20, t: 40, b: 60 }
-			});
+			Plotly.react(altitudeChartContainer, traces, getPlotlyLayout($theme === 'dark'));
 		}
 	}
 
@@ -595,25 +650,7 @@
 				}
 
 				// eslint-disable-next-line @typescript-eslint/no-explicit-any
-				const layout: any = {
-					title: { text: 'Altitude Profile' },
-					xaxis: {
-						title: { text: 'Time' },
-						type: 'date'
-					},
-					yaxis: {
-						title: { text: 'Altitude (ft)' },
-						rangemode: 'tozero'
-					},
-					hovermode: 'x unified',
-					showlegend: true,
-					legend: {
-						x: 0.01,
-						y: 0.99,
-						bgcolor: 'rgba(255, 255, 255, 0.8)'
-					},
-					margin: { l: 60, r: 20, t: 40, b: 60 }
-				};
+				const layout: any = getPlotlyLayout($theme === 'dark');
 
 				// eslint-disable-next-line @typescript-eslint/no-explicit-any
 				const config: any = {
@@ -670,6 +707,18 @@
 		startPolling();
 	});
 
+	// Update chart when theme changes
+	$effect(() => {
+		// Access theme to make this effect reactive
+		const currentTheme = $theme;
+
+		// Update chart if it exists
+		if (altitudeChartContainer && Plotly && data.fixes.length > 0) {
+			const isDark = currentTheme === 'dark';
+			Plotly.relayout(altitudeChartContainer, getPlotlyLayout(isDark));
+		}
+	});
+
 	// Cleanup on component unmount
 	onDestroy(() => {
 		stopPolling();
@@ -697,22 +746,66 @@
 	<!-- Flight Header -->
 	<div class="card p-6">
 		<div class="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-			<div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
-				<h1 class="flex items-center gap-2 h1">
-					<Plane class="h-8 w-8" />
-					Flight
-				</h1>
-				<div class="flex items-center gap-2">
-					<FlightStateBadge state={data.flight.state} />
-					{#if isOutlanding}
-						<span
-							class="chip flex items-center gap-2 preset-filled-warning-500 text-base font-semibold"
-						>
-							<MapPinMinus class="h-5 w-5" />
-							Outlanding
-						</span>
-					{/if}
+			<div class="flex flex-col gap-2">
+				<div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+					<h1 class="flex items-center gap-2 h1">
+						<Plane class="h-8 w-8" />
+						Flight
+					</h1>
+					<div class="flex flex-wrap items-center gap-2">
+						<FlightStateBadge state={data.flight.state} />
+						{#if isOutlanding}
+							<span
+								class="chip flex items-center gap-2 preset-filled-warning-500 text-base font-semibold"
+							>
+								<MapPinMinus class="h-5 w-5" />
+								Outlanding
+							</span>
+						{/if}
+					</div>
 				</div>
+				{#if data.device}
+					<div class="flex flex-wrap items-center gap-2 text-sm">
+						{#if data.device.registration}
+							<span class="font-mono font-semibold">
+								{data.device.registration}
+								{#if data.device.competition_number}
+									<span class="text-surface-500-400-token ml-1"
+										>({data.device.competition_number})</span
+									>
+								{/if}
+							</span>
+							<span class="text-surface-400-500-token">•</span>
+						{/if}
+						{#if data.device.aircraft_model}
+							<span class="font-semibold">{data.device.aircraft_model}</span>
+							<span class="text-surface-400-500-token">•</span>
+						{/if}
+						{#if data.device.aircraft_type_ogn}
+							<span
+								class="chip {getAircraftTypeColor(
+									data.device.aircraft_type_ogn
+								)} text-xs font-semibold"
+							>
+								{getAircraftTypeOgnDescription(data.device.aircraft_type_ogn)}
+							</span>
+							<span class="text-surface-400-500-token">•</span>
+						{/if}
+						{#if data.flight.device_id && data.flight.device_address && data.flight.device_address_type}
+							<a
+								href="/devices/{data.flight.device_id}"
+								target="_blank"
+								rel="noopener noreferrer"
+								class="btn flex items-center gap-1 preset-filled-primary-500 btn-sm"
+							>
+								<span class="font-mono text-xs">
+									{formatDeviceAddress(data.flight.device_address_type, data.flight.device_address)}
+								</span>
+								<ExternalLink class="h-3 w-3" />
+							</a>
+						{/if}
+					</div>
+				{/if}
 			</div>
 			<div class="flex items-center gap-2">
 				{#if data.flight.previous_flight_id || data.flight.next_flight_id}
@@ -974,52 +1067,6 @@
 		</div>
 	</div>
 
-	<!-- Aircraft Information -->
-	{#if data.device}
-		<div class="card p-4">
-			<div class="mb-3 flex items-center justify-between gap-3">
-				<h2 class="h3">Aircraft Information</h2>
-				{#if data.flight.device_id && data.flight.device_address && data.flight.device_address_type}
-					<a
-						href="/devices/{data.flight.device_id}"
-						target="_blank"
-						rel="noopener noreferrer"
-						class="btn flex items-center gap-2 preset-filled-primary-500 btn-sm"
-					>
-						<span class="font-mono">
-							{formatDeviceAddress(data.flight.device_address_type, data.flight.device_address)}
-						</span>
-						<ExternalLink class="h-4 w-4" />
-					</a>
-				{/if}
-			</div>
-			<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
-				<div>
-					<div class="text-surface-600-300-token text-sm">Registration</div>
-					<div class="font-mono text-sm font-semibold">
-						{data.device.registration || 'Unknown'}
-						{#if data.device.competition_number}
-							<span class="text-surface-500-400-token ml-1">({data.device.competition_number})</span
-							>
-						{/if}
-					</div>
-				</div>
-				<div>
-					<div class="text-surface-600-300-token text-sm">Model</div>
-					<div class="text-sm font-semibold">
-						{data.device.aircraft_model || 'Unknown'}
-					</div>
-				</div>
-				<div>
-					<div class="text-surface-600-300-token text-sm">Aircraft Type</div>
-					<div class="text-sm font-semibold">
-						{getAircraftTypeOgnDescription(data.device.aircraft_type_ogn)}
-					</div>
-				</div>
-			</div>
-		</div>
-	{/if}
-
 	<!-- Map -->
 	{#if data.fixes.length > 0}
 		<div class="card p-4">
@@ -1047,6 +1094,77 @@
 			<div bind:this={altitudeChartContainer} class="h-80 w-full"></div>
 		</div>
 	{/if}
+
+	<!-- Nearby Flights Section -->
+	<div class="card p-6">
+		<h2 class="mb-4 h2">Nearby Flights</h2>
+
+		{#if !showStandaloneNearby}
+			<button
+				onclick={fetchStandaloneNearbyFlights}
+				class="btn preset-filled-primary-500"
+				type="button"
+			>
+				Find nearby flights
+			</button>
+		{:else if isLoadingStandaloneNearby}
+			<div class="flex flex-col items-center gap-4 py-8">
+				<div class="flex items-center gap-3">
+					<RadarLoader />
+					<span class="text-lg font-semibold">Searching for nearby flights...</span>
+				</div>
+				<div class="text-surface-600-300-token max-w-2xl text-center text-sm">
+					<p class="mb-2">This may take a minute.</p>
+					<p>
+						Finding flights that were in the air within <strong>15 minutes</strong> of this flight
+						and within <strong>50 miles</strong> of the departure airport.
+					</p>
+				</div>
+			</div>
+		{:else if standaloneNearbyFlights.length === 0}
+			<div class="text-surface-600-300-token py-8 text-center">
+				<Plane class="mx-auto mb-4 h-12 w-12 text-surface-400" />
+				<p>No nearby flights found.</p>
+			</div>
+		{:else}
+			<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+				{#each standaloneNearbyFlights as flight (flight.id)}
+					<a href="/flights/{flight.id}" class="card p-4 hover:ring-2 hover:ring-primary-500">
+						<div class="space-y-2">
+							{#if flight.registration}
+								<div>
+									<div class="text-surface-600-300-token text-xs">Registration</div>
+									<div class="font-mono text-sm font-semibold">{flight.registration}</div>
+								</div>
+							{/if}
+							{#if flight.aircraft_model}
+								<div>
+									<div class="text-surface-600-300-token text-xs">Model</div>
+									<div class="text-sm font-semibold">{flight.aircraft_model}</div>
+								</div>
+							{/if}
+							<div>
+								<div class="text-surface-600-300-token text-xs">Takeoff</div>
+								<div class="text-sm">{formatDateTimeMobile(flight.takeoff_time)}</div>
+								{#if flight.departure_airport}
+									<div class="text-surface-600-300-token text-xs">{flight.departure_airport}</div>
+								{/if}
+							</div>
+							{#if flight.landing_time}
+								<div>
+									<div class="text-surface-600-300-token text-xs">Landing</div>
+									<div class="text-sm">{formatDateTimeMobile(flight.landing_time)}</div>
+									{#if flight.arrival_airport}
+										<div class="text-surface-600-300-token text-xs">{flight.arrival_airport}</div>
+									{/if}
+								</div>
+							{/if}
+						</div>
+					</a>
+				{/each}
+			</div>
+		{/if}
+	</div>
 
 	<!-- Fixes Table -->
 	<div class="card p-6" id="fixes-table">
