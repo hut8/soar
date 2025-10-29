@@ -32,12 +32,7 @@ export async function serverCall<T>(
 	const fetchFn = customFetch || fetch;
 
 	try {
-		// Properly join API_BASE and endpoint, avoiding duplicate slashes
-		const base = API_BASE.endsWith('/') ? API_BASE.slice(0, -1) : API_BASE;
-		const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-		const url = `${base}${path}`;
-
-		const response = await fetchFn(url, {
+		const response = await fetchFn(`${API_BASE}${endpoint}`, {
 			...options,
 			headers: {
 				'Content-Type': 'application/json',
