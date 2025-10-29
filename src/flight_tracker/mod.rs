@@ -261,10 +261,10 @@ impl FlightTracker {
         }
     }
 
-    /// Check all active flights and timeout any that haven't received beacons for 8+ hours
+    /// Check all active flights and timeout any that haven't received beacons for 1+ hours
     #[tracing::instrument(skip(self))]
     pub async fn check_and_timeout_stale_flights(&self) {
-        let timeout_threshold = chrono::Duration::hours(8);
+        let timeout_threshold = chrono::Duration::hours(1);
         let now = chrono::Utc::now();
 
         // Collect flights that need to be timed out

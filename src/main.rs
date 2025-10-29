@@ -408,9 +408,9 @@ async fn handle_run(
     let flight_tracker = FlightTracker::new(&diesel_pool);
 
     // Initialize flight tracker from database:
-    // 1. Timeout old incomplete flights (older than 8 hours)
+    // 1. Timeout old incomplete flights (older than 1 hour)
     // 2. Load recent active flights into memory
-    let timeout_duration = chrono::Duration::hours(8);
+    let timeout_duration = chrono::Duration::hours(1);
     match flight_tracker
         .initialize_from_database(timeout_duration)
         .await

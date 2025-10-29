@@ -98,7 +98,7 @@ pub struct Fix {
     /// Timestamp when we received/processed the packet
     pub received_at: DateTime<Utc>,
 
-    /// Whether the aircraft is considered active (ground_speed >= 20 knots)
+    /// Whether the aircraft is considered active (ground_speed >= 25 knots)
     #[serde(rename = "active")]
     pub is_active: bool,
 
