@@ -226,7 +226,9 @@ export interface Flight {
 	arrival_airport?: string; // Airport identifier
 	arrival_airport_id?: number; // Airport ID in database
 	arrival_airport_country?: string; // Country code
-	tow_aircraft_id?: string; // Registration number of tow aircraft
+	tow_aircraft_id?: string; // DEPRECATED: Old string field, use towed_by_device_id instead
+	towed_by_device_id?: string; // UUID of towplane device that towed this glider
+	towed_by_flight_id?: string; // UUID of towplane flight that towed this glider
 	club_id?: string; // UUID of club that owns the aircraft
 	takeoff_altitude_offset_ft?: number; // Altitude offset at takeoff
 	landing_altitude_offset_ft?: number; // Altitude offset at landing

@@ -35,6 +35,7 @@
 	import FlightStateBadge from '$lib/components/FlightStateBadge.svelte';
 	import RadarLoader from '$lib/components/RadarLoader.svelte';
 	import FixesList from '$lib/components/FixesList.svelte';
+	import TowAircraftLink from '$lib/components/TowAircraftLink.svelte';
 	import { theme } from '$lib/stores/theme';
 
 	dayjs.extend(relativeTime);
@@ -1005,15 +1006,13 @@
 			{/if}
 
 			<!-- Tow Aircraft -->
-			{#if data.flight.tow_aircraft_id}
+			{#if data.flight.towed_by_device_id}
 				<div class="flex items-start gap-3">
 					<TrendingUp class="mt-1 h-5 w-5 text-primary-500" />
 					<div>
 						<div class="text-surface-600-300-token text-sm">Tow Aircraft</div>
 						<div class="font-semibold">
-							<a href="/devices/{data.flight.tow_aircraft_id}" class="anchor">
-								{data.flight.tow_aircraft_id}
-							</a>
+							<TowAircraftLink deviceId={data.flight.towed_by_device_id} size="md" />
 						</div>
 					</div>
 				</div>
