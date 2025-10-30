@@ -20,25 +20,17 @@ use soar::packet_processors::{
     AircraftPositionProcessor, GenericProcessor, PacketRouter, ReceiverPositionProcessor,
     ReceiverStatusProcessor, ServerStatusProcessor,
 };
+use soar::queue_config::{
+    AGL_DATABASE_QUEUE_SIZE, AIRCRAFT_QUEUE_SIZE, ELEVATION_QUEUE_SIZE,
+    RECEIVER_POSITION_QUEUE_SIZE, RECEIVER_STATUS_QUEUE_SIZE, SERVER_STATUS_QUEUE_SIZE,
+    queue_warning_threshold,
+};
 use soar::receiver_repo::ReceiverRepository;
 use soar::receiver_status_repo::ReceiverStatusRepository;
 use soar::server_messages_repo::ServerMessagesRepository;
 
 // Embed migrations at compile time
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/");
-
-// Queue size constants - centralized configuration for all processing queues
-const AIRCRAFT_QUEUE_SIZE: usize = 50_000;
-const RECEIVER_STATUS_QUEUE_SIZE: usize = 10_000;
-const RECEIVER_POSITION_QUEUE_SIZE: usize = 5_000;
-const SERVER_STATUS_QUEUE_SIZE: usize = 1_000;
-const ELEVATION_QUEUE_SIZE: usize = 1_000;
-const AGL_DATABASE_QUEUE_SIZE: usize = 10_000;
-
-// Queue warning thresholds (50% full)
-const fn queue_warning_threshold(size: usize) -> usize {
-    size / 2
-}
 
 #[derive(QueryableByName)]
 struct LockResult {
@@ -138,14 +130,6 @@ enum Commands {
         /// NATS server URL for JetStream
         #[arg(long, default_value = "nats://localhost:4222")]
         nats_url: String,
-
-        /// JetStream stream name for raw APRS messages
-        #[arg(long, default_value = "APRS_RAW")]
-        stream_name: String,
-
-        /// JetStream subject for raw APRS messages
-        #[arg(long, default_value = "aprs.raw")]
-        subject: String,
     },
     /// Run the main APRS processing service (consumes from JetStream durable queue)
     Run {
@@ -160,18 +144,6 @@ enum Commands {
         /// NATS server URL for JetStream consumer and pub/sub
         #[arg(long, default_value = "nats://localhost:4222")]
         nats_url: String,
-
-        /// JetStream stream name for raw APRS messages
-        #[arg(long, default_value = "APRS_RAW")]
-        stream_name: String,
-
-        /// JetStream subject for raw APRS messages
-        #[arg(long, default_value = "aprs.raw")]
-        subject: String,
-
-        /// JetStream consumer name (defaults to environment-based: soar-run-dev or soar-run-production)
-        #[arg(long)]
-        consumer_name: Option<String>,
     },
     /// Start the web server
     Web {
@@ -371,7 +343,6 @@ fn determine_archive_dir() -> Result<String> {
     Ok(home_archive)
 }
 /// Handle the ingest-aprs subcommand - connect to APRS-IS and publish to NATS JetStream
-#[allow(clippy::too_many_arguments)]
 #[tracing::instrument(skip_all)]
 async fn handle_ingest_aprs(
     server: String,
@@ -381,32 +352,35 @@ async fn handle_ingest_aprs(
     max_retries: u32,
     retry_delay: u64,
     nats_url: String,
-    stream_name: String,
-    subject: String,
 ) -> Result<()> {
+    use soar::queue_config::{
+        APRS_RAW_STREAM, APRS_RAW_STREAM_STAGING, APRS_RAW_SUBJECT, APRS_RAW_SUBJECT_STAGING,
+    };
+
     sentry::configure_scope(|scope| {
         scope.set_tag("operation", "ingest-aprs");
     });
-    info!(
-        "Starting APRS ingestion service - server: {}:{}, NATS: {}, stream: {}, subject: {}",
-        server, port, nats_url, stream_name, subject
-    );
 
-    // Determine environment and add prefix to stream/subject names to match NATS topic pattern
+    // Determine environment and use appropriate stream/subject names
     // Production: "APRS_RAW" and "aprs.raw"
-    // Staging: "staging.APRS_RAW" and "staging.aprs.raw"
+    // Staging: "STAGING_APRS_RAW" and "staging.aprs.raw"
     let is_production = env::var("SOAR_ENV")
         .map(|env| env == "production")
         .unwrap_or(false);
 
     let (final_stream_name, final_subject) = if is_production {
-        (stream_name.clone(), subject.clone())
+        (APRS_RAW_STREAM.to_string(), APRS_RAW_SUBJECT.to_string())
     } else {
         (
-            format!("staging.{}", stream_name),
-            format!("staging.{}", subject),
+            APRS_RAW_STREAM_STAGING.to_string(),
+            APRS_RAW_SUBJECT_STAGING.to_string(),
         )
     };
+
+    info!(
+        "Starting APRS ingestion service - server: {}:{}, NATS: {}, stream: {}, subject: {}",
+        server, port, nats_url, final_stream_name, final_subject
+    );
 
     info!(
         "Environment: {}, using stream '{}' and subject '{}'",
@@ -502,25 +476,39 @@ async fn handle_ingest_aprs(
 
 #[allow(clippy::too_many_arguments)]
 #[tracing::instrument(skip_all)]
-async fn handle_run(
-    archive_dir: Option<String>,
-    nats_url: String,
-    stream_name: String,
-    subject: String,
-    consumer_name: Option<String>,
-) -> Result<()> {
+async fn handle_run(archive_dir: Option<String>, nats_url: String) -> Result<()> {
+    use soar::queue_config::{
+        APRS_RAW_STREAM, APRS_RAW_STREAM_STAGING, APRS_RAW_SUBJECT, APRS_RAW_SUBJECT_STAGING,
+        SOAR_RUN_CONSUMER, SOAR_RUN_CONSUMER_STAGING,
+    };
+
     sentry::configure_scope(|scope| {
         scope.set_tag("operation", "run");
     });
-    info!(
-        "Starting APRS processing service consuming from JetStream stream: {}, subject: {}",
-        stream_name, subject
-    );
 
-    // Acquire instance lock to prevent multiple instances from running
+    // Determine environment and use appropriate stream/subject/consumer names
     let is_production = env::var("SOAR_ENV")
         .map(|env| env == "production")
         .unwrap_or(false);
+
+    let (final_stream_name, final_subject, final_consumer_name) = if is_production {
+        (
+            APRS_RAW_STREAM.to_string(),
+            APRS_RAW_SUBJECT.to_string(),
+            SOAR_RUN_CONSUMER.to_string(),
+        )
+    } else {
+        (
+            APRS_RAW_STREAM_STAGING.to_string(),
+            APRS_RAW_SUBJECT_STAGING.to_string(),
+            SOAR_RUN_CONSUMER_STAGING.to_string(),
+        )
+    };
+
+    info!(
+        "Starting APRS processing service consuming from JetStream stream: {}, subject: {}, consumer: {}",
+        final_stream_name, final_subject, final_consumer_name
+    );
 
     // Start metrics server in the background
     if is_production {
@@ -532,6 +520,7 @@ async fn handle_run(
             .instrument(tracing::info_span!("metrics_server")),
         );
     }
+
     let lock_name = if is_production {
         "soar-run-production"
     } else {
@@ -550,28 +539,6 @@ async fn handle_run(
     let elevation_path =
         env::var("ELEVATION_DATA_PATH").unwrap_or_else(|_| "/var/soar/elevation".to_string());
     info!("Elevation data path: {}", elevation_path);
-
-    // Determine environment and add prefix to stream/subject names to match NATS topic pattern
-    // Production: "APRS_RAW" and "aprs.raw"
-    // Staging: "staging.APRS_RAW" and "staging.aprs.raw"
-    let (final_stream_name, final_subject) = if is_production {
-        (stream_name.clone(), subject.clone())
-    } else {
-        (
-            format!("staging.{}", stream_name),
-            format!("staging.{}", subject),
-        )
-    };
-
-    // Determine consumer name based on environment if not specified
-    let final_consumer_name = consumer_name.unwrap_or_else(|| {
-        let env_name = if is_production {
-            "soar-run-production"
-        } else {
-            "soar-run-staging"
-        };
-        env_name.to_string()
-    });
 
     info!(
         "Environment: {}, using stream '{}', subject '{}', consumer '{}'",
@@ -1442,8 +1409,6 @@ async fn main() -> Result<()> {
             max_retries,
             retry_delay,
             nats_url,
-            stream_name,
-            subject,
         } => {
             handle_ingest_aprs(
                 server,
@@ -1453,8 +1418,6 @@ async fn main() -> Result<()> {
                 max_retries,
                 retry_delay,
                 nats_url,
-                stream_name,
-                subject,
             )
             .await
         }
@@ -1462,9 +1425,6 @@ async fn main() -> Result<()> {
             archive_dir,
             archive,
             nats_url,
-            stream_name,
-            subject,
-            consumer_name,
         } => {
             // Determine archive directory if --archive flag is used
             let final_archive_dir = if archive {
@@ -1473,14 +1433,7 @@ async fn main() -> Result<()> {
                 archive_dir
             };
 
-            handle_run(
-                final_archive_dir,
-                nats_url,
-                stream_name,
-                subject,
-                consumer_name,
-            )
-            .await
+            handle_run(final_archive_dir, nats_url).await
         }
         Commands::Web { interface, port } => {
             // Check SOAR_ENV and override port if not production

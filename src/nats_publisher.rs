@@ -1,3 +1,4 @@
+use crate::queue_config::NATS_PUBLISH_QUEUE_SIZE;
 use anyhow::Result;
 use async_nats::Client;
 use serde_json;
@@ -7,9 +8,6 @@ use tracing::Instrument;
 use tracing::{error, info, warn};
 
 use crate::fixes::FixWithFlightInfo;
-
-// Queue size constants
-const NATS_PUBLISH_QUEUE_SIZE: usize = 1_000;
 
 /// Get the topic prefix based on the environment
 fn get_topic_prefix() -> &'static str {

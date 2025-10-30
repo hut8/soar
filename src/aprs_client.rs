@@ -1,3 +1,4 @@
+use crate::queue_config::{ARCHIVE_QUEUE_SIZE, RAW_MESSAGE_QUEUE_SIZE, queue_warning_threshold};
 use anyhow::Result;
 use std::time::Duration;
 use tokio::io::{AsyncWriteExt, BufReader};
@@ -7,17 +8,6 @@ use tokio::time::{sleep, timeout};
 use tracing::Instrument;
 use tracing::trace;
 use tracing::{error, info, warn};
-
-// Queue size constants
-// Raw message queue is small since messages are quickly published to durable JetStream
-// Only 50 messages could be lost during a restart (< 10ms of messages at peak)
-const RAW_MESSAGE_QUEUE_SIZE: usize = 50;
-const ARCHIVE_QUEUE_SIZE: usize = 10_000;
-
-// Queue warning threshold (50% full)
-const fn queue_warning_threshold(size: usize) -> usize {
-    size / 2
-}
 
 // AprsMessage enum removed - AprsClient now calls PacketRouter directly instead of using a queue
 

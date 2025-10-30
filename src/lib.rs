@@ -47,6 +47,7 @@ pub mod packet_processors;
 pub mod pilots;
 pub mod pilots_repo;
 pub mod pull;
+pub mod queue_config;
 pub mod receiver_repo;
 pub mod receiver_status_repo;
 pub mod receiver_statuses;
