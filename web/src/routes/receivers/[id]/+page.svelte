@@ -128,16 +128,16 @@
 
 	// Display options
 	let showRawData = $state(false);
-	let activeTab = $state('status-reports'); // 'status-reports' or 'raw-messages'
+	let activeTab = $state('status-reports'); // 'status-reports', 'raw-messages', or 'received-fixes'
 
 	let receiverId = $derived($page.params.id || '');
 
 	onMount(async () => {
 		if (receiverId) {
 			await loadReceiver();
-			await loadFixes();
-			await loadStatuses();
+			await loadStatuses(); // Load status reports by default (first tab)
 			await loadStatistics();
+			// Fixes and raw messages are loaded lazily when their tabs are clicked
 		}
 	});
 
@@ -150,6 +150,13 @@
 			!loadingRawMessages
 		) {
 			loadRawMessages();
+		}
+	});
+
+	// Load fixes when switching to that tab (if not already loaded)
+	$effect(() => {
+		if (activeTab === 'received-fixes' && receiverId && fixes.length === 0 && !loadingFixes) {
+			loadFixes();
 		}
 	});
 
@@ -564,112 +571,14 @@
 				{/if}
 			</div>
 
-			<!-- Fixes Section -->
-			<div class="card p-6">
-				<h2 class="mb-4 flex items-center gap-2 h2">
-					<Signal class="h-6 w-6" />
-					Received Fixes (Last 24 Hours)
-				</h2>
-
-				{#if loadingFixes}
-					<div class="flex items-center justify-center space-x-4 p-8">
-						<ProgressRing size="w-6 h-6" />
-						<span>Loading fixes...</span>
-					</div>
-				{:else if fixesError}
-					<div class="alert preset-filled-error-500">
-						<p>{fixesError}</p>
-					</div>
-				{:else if fixes.length === 0}
-					<p class="text-surface-500-400-token p-4 text-center">
-						No fixes received in the last 24 hours
-					</p>
-				{:else}
-					<div class="table-container">
-						<table class="table-hover table">
-							<thead>
-								<tr>
-									<th>Timestamp</th>
-									<th>Device</th>
-									<th>Registration</th>
-									<th>Position</th>
-									<th>Altitude</th>
-									<th>Speed</th>
-									<th>SNR</th>
-								</tr>
-							</thead>
-							<tbody>
-								{#each fixes as fix (fix.id)}
-									<tr>
-										<td class="text-xs">
-											<div>{formatDateTime(fix.timestamp)}</div>
-											<div class="text-surface-500-400-token">
-												{formatRelativeTime(fix.timestamp)}
-											</div>
-										</td>
-										<td class="font-mono text-xs">
-											{fix.device_address.toString(16).toUpperCase().padStart(6, '0')}
-										</td>
-										<td class="font-mono text-sm">{fix.registration || '—'}</td>
-										<td class="font-mono text-xs">
-											{fix.latitude?.toFixed(4) ?? '—'}, {fix.longitude?.toFixed(4) ?? '—'}
-										</td>
-										<td
-											>{fix.altitude_msl_feet !== null && fix.altitude_msl_feet !== undefined
-												? `${fix.altitude_msl_feet} ft`
-												: '—'}</td
-										>
-										<td
-											>{fix.ground_speed_knots !== null && fix.ground_speed_knots !== undefined
-												? `${fix.ground_speed_knots.toFixed(0)} kt`
-												: '—'}</td
-										>
-										<td
-											>{fix.snr_db !== null && fix.snr_db !== undefined
-												? `${fix.snr_db.toFixed(1)} dB`
-												: '—'}</td
-										>
-									</tr>
-								{/each}
-							</tbody>
-						</table>
-					</div>
-
-					<!-- Pagination Controls -->
-					{#if fixesTotalPages > 1}
-						<div class="mt-4 flex items-center justify-between">
-							<button
-								class="btn preset-tonal btn-sm"
-								disabled={fixesPage === 1}
-								onclick={prevFixesPage}
-							>
-								<ChevronLeft class="h-4 w-4" />
-								Previous
-							</button>
-							<span class="text-sm">
-								Page {fixesPage} of {fixesTotalPages}
-							</span>
-							<button
-								class="btn preset-tonal btn-sm"
-								disabled={fixesPage === fixesTotalPages}
-								onclick={nextFixesPage}
-							>
-								Next
-								<ChevronRight class="h-4 w-4" />
-							</button>
-						</div>
-					{/if}
-				{/if}
-			</div>
-
-			<!-- Status Reports and Raw Messages Section with Tabs -->
+			<!-- Status Reports, Raw Messages, and Received Fixes Section with Tabs -->
 			<div class="card p-6">
 				<h2 class="mb-4 flex items-center gap-2 h2">
 					<Info class="h-6 w-6" />
 					Receiver Data (Last 24 Hours)
 				</h2>
 
-				<Tabs value={activeTab}>
+				<Tabs value={activeTab} onValueChange={(details) => (activeTab = details.value)}>
 					{#snippet list()}
 						<Tabs.Control value="status-reports">
 							<Signal class="mr-2 h-4 w-4" />
@@ -678,6 +587,10 @@
 						<Tabs.Control value="raw-messages">
 							<FileText class="mr-2 h-4 w-4" />
 							Raw Messages
+						</Tabs.Control>
+						<Tabs.Control value="received-fixes">
+							<Signal class="mr-2 h-4 w-4" />
+							Received Fixes
 						</Tabs.Control>
 					{/snippet}
 
@@ -888,6 +801,103 @@
 												class="btn preset-tonal btn-sm"
 												disabled={rawMessagesPage === rawMessagesTotalPages}
 												onclick={nextRawMessagesPage}
+											>
+												Next
+												<ChevronRight class="h-4 w-4" />
+											</button>
+										</div>
+									{/if}
+								{/if}
+							</div>
+						</Tabs.Panel>
+
+						<!-- Received Fixes Tab Content -->
+						<Tabs.Panel value="received-fixes">
+							<div class="mt-4">
+								{#if loadingFixes}
+									<div class="flex items-center justify-center space-x-4 p-8">
+										<ProgressRing size="w-6 h-6" />
+										<span>Loading fixes...</span>
+									</div>
+								{:else if fixesError}
+									<div class="alert preset-filled-error-500">
+										<p>{fixesError}</p>
+									</div>
+								{:else if fixes.length === 0}
+									<p class="text-surface-500-400-token p-4 text-center">
+										No fixes received in the last 24 hours
+									</p>
+								{:else}
+									<div class="table-container">
+										<table class="table-hover table">
+											<thead>
+												<tr>
+													<th>Timestamp</th>
+													<th>Device</th>
+													<th>Registration</th>
+													<th>Position</th>
+													<th>Altitude</th>
+													<th>Speed</th>
+													<th>SNR</th>
+												</tr>
+											</thead>
+											<tbody>
+												{#each fixes as fix (fix.id)}
+													<tr>
+														<td class="text-xs">
+															<div>{formatDateTime(fix.timestamp)}</div>
+															<div class="text-surface-500-400-token">
+																{formatRelativeTime(fix.timestamp)}
+															</div>
+														</td>
+														<td class="font-mono text-xs">
+															{fix.device_address.toString(16).toUpperCase().padStart(6, '0')}
+														</td>
+														<td class="font-mono text-sm">{fix.registration || '—'}</td>
+														<td class="font-mono text-xs">
+															{fix.latitude?.toFixed(4) ?? '—'}, {fix.longitude?.toFixed(4) ?? '—'}
+														</td>
+														<td
+															>{fix.altitude_msl_feet !== null &&
+															fix.altitude_msl_feet !== undefined
+																? `${fix.altitude_msl_feet} ft`
+																: '—'}</td
+														>
+														<td
+															>{fix.ground_speed_knots !== null &&
+															fix.ground_speed_knots !== undefined
+																? `${fix.ground_speed_knots.toFixed(0)} kt`
+																: '—'}</td
+														>
+														<td
+															>{fix.snr_db !== null && fix.snr_db !== undefined
+																? `${fix.snr_db.toFixed(1)} dB`
+																: '—'}</td
+														>
+													</tr>
+												{/each}
+											</tbody>
+										</table>
+									</div>
+
+									<!-- Pagination Controls -->
+									{#if fixesTotalPages > 1}
+										<div class="mt-4 flex items-center justify-between">
+											<button
+												class="btn preset-tonal btn-sm"
+												disabled={fixesPage === 1}
+												onclick={prevFixesPage}
+											>
+												<ChevronLeft class="h-4 w-4" />
+												Previous
+											</button>
+											<span class="text-sm">
+												Page {fixesPage} of {fixesTotalPages}
+											</span>
+											<button
+												class="btn preset-tonal btn-sm"
+												disabled={fixesPage === fixesTotalPages}
+												onclick={nextFixesPage}
 											>
 												Next
 												<ChevronRight class="h-4 w-4" />
