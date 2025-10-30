@@ -185,17 +185,17 @@ pub async fn link_home_bases_with_metrics(
 async fn get_clubs_with_home_base_count(
     diesel_pool: Pool<ConnectionManager<PgConnection>>,
 ) -> Result<i64> {
-    tokio::task::spawn_blocking(move || {
-        use diesel::RunQueryDsl;
-        use diesel::dsl::sql;
-        use diesel::sql_types::BigInt;
+    use crate::schema::clubs::dsl::*;
+    use diesel::dsl::count_star;
+    use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
 
+    tokio::task::spawn_blocking(move || {
         let mut conn = diesel_pool.get()?;
 
-        let count: i64 = diesel::select(sql::<BigInt>(
-            "COUNT(*) FROM clubs WHERE home_base_airport_id IS NOT NULL",
-        ))
-        .get_result(&mut conn)?;
+        let count = clubs
+            .filter(home_base_airport_id.is_not_null())
+            .select(count_star())
+            .first::<i64>(&mut conn)?;
 
         Ok(count)
     })
