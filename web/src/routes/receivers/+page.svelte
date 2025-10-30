@@ -267,14 +267,15 @@
 			<!-- Location Search -->
 			<div class="space-y-3 rounded-lg border p-3">
 				<div class="flex gap-2">
-					<gmp-place-autocomplete
-						bind:this={autocompleteElement}
-						class="flex-1"
-						placeholder="Enter a city or location"
-						ongmp-placeselect={handlePlaceSelect}
-					></gmp-place-autocomplete>
+					<div class="min-w-0 flex-1">
+						<gmp-place-autocomplete
+							bind:this={autocompleteElement}
+							placeholder="Enter a city or location"
+							ongmpplaceselect={handlePlaceSelect}
+						></gmp-place-autocomplete>
+					</div>
 					<button
-						class="preset-tonal-primary-500 btn"
+						class="preset-tonal-primary-500 btn flex-shrink-0"
 						onclick={useMyLocation}
 						disabled={gettingLocation || loading}
 						title="Use my current location"
