@@ -1,4 +1,5 @@
-use anyhow::Result;
+use crate::queue_config::{ARCHIVE_QUEUE_SIZE, RAW_MESSAGE_QUEUE_SIZE, queue_warning_threshold};
+use anyhow::{Context, Result};
 use std::time::Duration;
 use tokio::io::{AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
@@ -88,43 +89,79 @@ impl AprsClient {
 
         let config = self.config.clone();
 
-        // Create bounded channel for raw APRS messages from TCP socket (capacity: 10,000)
+        // Create bounded channel for raw APRS messages from TCP socket
         // This prevents slow processing from blocking TCP reads and causing server disconnects
-        let (raw_message_tx, mut raw_message_rx) = mpsc::channel::<String>(10_000);
-        info!("Created raw message queue with capacity 10,000 to prevent TCP read blocking");
+        let (raw_message_tx, raw_message_rx) = mpsc::channel::<String>(RAW_MESSAGE_QUEUE_SIZE);
+        info!(
+            "Created raw message queue with capacity {} to prevent TCP read blocking",
+            RAW_MESSAGE_QUEUE_SIZE
+        );
 
-        // Spawn message processing task
-        let processor_router = packet_router.clone();
+        // Spawn pool of message processing workers for parallel processing
+        // This allows multiple database operations to execute concurrently
+        let num_processors = 8;
+        info!(
+            "Spawning {} raw message processors for parallel processing",
+            num_processors
+        );
+        let shared_rx = std::sync::Arc::new(tokio::sync::Mutex::new(raw_message_rx));
+
+        for worker_id in 0..num_processors {
+            let worker_rx = shared_rx.clone();
+            let processor_router = packet_router.clone();
+            tokio::spawn(
+                async move {
+                    loop {
+                        let message = {
+                            let mut rx = worker_rx.lock().await;
+                            rx.recv().await
+                        };
+
+                        match message {
+                            Some(msg) => {
+                                let start = std::time::Instant::now();
+                                // Route server messages (lines starting with #) and regular APRS messages differently
+                                if msg.starts_with('#') {
+                                    Self::process_server_message(&msg, &processor_router);
+                                } else {
+                                    Self::process_message(&msg, &processor_router).await;
+                                }
+                                let duration = start.elapsed();
+                                metrics::histogram!("aprs.raw_message.processing_duration_ms")
+                                    .record(duration.as_millis() as f64);
+                                metrics::counter!("aprs.raw_message.processed").increment(1);
+                            }
+                            None => break,
+                        }
+                    }
+                }
+                .instrument(tracing::info_span!("raw_message_worker", worker_id)),
+            );
+        }
+
+        // Spawn separate task for queue depth monitoring
+        let stats_rx = shared_rx.clone();
         tokio::spawn(
             async move {
                 let mut stats_timer = tokio::time::interval(Duration::from_secs(10));
                 stats_timer.tick().await; // First tick completes immediately
 
                 loop {
-                    tokio::select! {
-                        Some(message) = raw_message_rx.recv() => {
-                            // Route server messages (lines starting with #) and regular APRS messages differently
-                            if message.starts_with('#') {
-                                Self::process_server_message(&message, &processor_router);
-                            } else {
-                                Self::process_message(&message, &processor_router).await;
-                            }
-                        }
-                        _ = stats_timer.tick() => {
-                            // Report raw message queue depth every 10 seconds
-                            let queue_depth = raw_message_rx.len();
-                            metrics::gauge!("aprs.raw_message_queue.depth").set(queue_depth as f64);
-                            if queue_depth > 5000 {
-                                warn!(
-                                    "Raw message queue building up: {} messages (50% full) - processing may be too slow",
-                                    queue_depth
-                                );
-                            }
-                        }
+                    stats_timer.tick().await;
+                    let queue_depth = {
+                        let rx = stats_rx.lock().await;
+                        rx.len()
+                    };
+                    metrics::gauge!("aprs.raw_message_queue.depth").set(queue_depth as f64);
+                    if queue_depth > queue_warning_threshold(RAW_MESSAGE_QUEUE_SIZE) {
+                        warn!(
+                            "Raw message queue building up: {} messages (50% full) - processing may be too slow",
+                            queue_depth
+                        );
                     }
                 }
             }
-            .instrument(tracing::info_span!("aprs_message_processor")),
+            .instrument(tracing::info_span!("raw_message_stats")),
         );
 
         // Spawn connection management task
@@ -204,6 +241,132 @@ impl AprsClient {
             }
             .instrument(tracing::info_span!("aprs_client_connection_loop")),
         );
+
+        Ok(())
+    }
+
+    /// Start the APRS client with JetStream publisher (for ingestion service)
+    /// This connects to APRS-IS and publishes all messages to a durable NATS JetStream queue
+    #[tracing::instrument(skip(self, jetstream_publisher))]
+    pub async fn start_jetstream(
+        &mut self,
+        jetstream_publisher: crate::aprs_jetstream_publisher::JetStreamPublisher,
+    ) -> Result<()> {
+        let (shutdown_tx, mut shutdown_rx) = mpsc::channel::<()>(1);
+        self.shutdown_tx = Some(shutdown_tx);
+
+        let config = self.config.clone();
+
+        // Create bounded channel for raw APRS messages from TCP socket
+        let (raw_message_tx, mut raw_message_rx) = mpsc::channel::<String>(RAW_MESSAGE_QUEUE_SIZE);
+        info!(
+            "Created raw message queue with capacity {} for JetStream publishing",
+            RAW_MESSAGE_QUEUE_SIZE
+        );
+
+        // Spawn message publishing task
+        let publisher = jetstream_publisher.clone();
+        let publisher_handle = tokio::spawn(
+            async move {
+                let mut stats_timer = tokio::time::interval(Duration::from_secs(10));
+                stats_timer.tick().await; // First tick completes immediately
+
+                loop {
+                    tokio::select! {
+                        Some(message) = raw_message_rx.recv() => {
+                            // Publish all messages to JetStream (both server messages and APRS messages)
+                            publisher.publish_with_retry(&message).await;
+                        }
+                        _ = stats_timer.tick() => {
+                            // Report raw message queue depth every 10 seconds
+                            let queue_depth = raw_message_rx.len();
+                            metrics::gauge!("aprs.jetstream.queue_depth").set(queue_depth as f64);
+                            if queue_depth > queue_warning_threshold(RAW_MESSAGE_QUEUE_SIZE) {
+                                warn!(
+                                    "JetStream publish queue building up: {} messages (50% full)",
+                                    queue_depth
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+            .instrument(tracing::info_span!("jetstream_publisher")),
+        );
+
+        // Spawn connection management task (same as regular start)
+        let connection_handle = tokio::spawn(
+            async move {
+                let mut retry_count = 0;
+                let mut current_delay = config.retry_delay_seconds;
+
+                loop {
+                    // Check if shutdown was requested
+                    if shutdown_rx.try_recv().is_ok() {
+                        info!("Shutdown requested, stopping APRS JetStream ingestion");
+                        break;
+                    }
+
+                    info!(
+                        "Connecting to APRS server at {}:{} (attempt {}/{})",
+                        config.server,
+                        config.port,
+                        retry_count + 1,
+                        config.max_retries
+                    );
+
+                    match Self::connect_and_run(&config, raw_message_tx.clone()).await {
+                        ConnectionResult::Success => {
+                            info!("Connection ended normally");
+                            retry_count = 0; // Reset retry count on successful connection
+                            current_delay = config.retry_delay_seconds;
+                        }
+                        ConnectionResult::ConnectionFailed(e) => {
+                            error!("Failed to connect to APRS server: {}", e);
+                            retry_count += 1;
+                        }
+                        ConnectionResult::OperationFailed(e) => {
+                            warn!("Connection operation failed: {}", e);
+                            retry_count += 1;
+                        }
+                    }
+
+                    // Check if we should retry
+                    if retry_count >= config.max_retries && config.max_retries > 0 {
+                        error!(
+                            "Maximum retry attempts ({}) reached. Stopping.",
+                            config.max_retries
+                        );
+                        break;
+                    }
+
+                    // Wait before retrying with exponential backoff
+                    if retry_count > 0 {
+                        info!(
+                            "Waiting {} seconds before reconnecting... (attempt {}/{})",
+                            current_delay,
+                            retry_count + 1,
+                            config.max_retries
+                        );
+                        sleep(Duration::from_secs(current_delay)).await;
+
+                        // Exponential backoff with maximum cap
+                        current_delay =
+                            std::cmp::min(current_delay * 2, config.max_retry_delay_seconds);
+                    }
+                }
+            }
+            .instrument(tracing::info_span!("jetstream_connection_loop")),
+        );
+
+        // Wait for both tasks to complete (they run until shutdown or fatal error)
+        // If either task panics, we'll get an error here
+        let (publisher_result, connection_result) =
+            tokio::join!(publisher_handle, connection_handle);
+
+        // Check if either task panicked
+        publisher_result.context("JetStream publisher task panicked")?;
+        connection_result.context("Connection management task panicked or stopped")?;
 
         Ok(())
     }
@@ -491,7 +654,7 @@ impl AprsClient {
     }
 
     /// Process a received APRS message by calling PacketRouter directly
-    async fn process_message(
+    pub async fn process_message(
         message: &str,
         packet_router: &crate::packet_processors::PacketRouter,
     ) {
@@ -617,12 +780,12 @@ impl ArchiveService {
         }
 
         // Use bounded channel to prevent unbounded memory growth
-        // Capacity of 10,000 messages should handle bursts while limiting memory to ~1.5MB
-        // (assuming ~150 bytes per APRS message)
-        let (sender, mut receiver) = mpsc::channel::<String>(10_000);
+        // Should handle bursts while limiting memory to ~1.5MB (assuming ~150 bytes per APRS message)
+        let (sender, mut receiver) = mpsc::channel::<String>(ARCHIVE_QUEUE_SIZE);
 
         info!(
-            "Archive service initialized with bounded channel (capacity: 10,000 messages, ~1.5MB buffer)"
+            "Archive service initialized with bounded channel (capacity: {} messages, ~1.5MB buffer)",
+            ARCHIVE_QUEUE_SIZE
         );
 
         // Spawn background task for file writing and management

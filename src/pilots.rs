@@ -36,7 +36,7 @@ impl Pilot {
     ) -> Self {
         let now = Utc::now();
         Self {
-            id: Uuid::new_v4(),
+            id: Uuid::now_v7(),
             first_name,
             last_name,
             is_licensed,
@@ -157,7 +157,7 @@ impl FlightPilot {
     ) -> Self {
         let now = Utc::now();
         Self {
-            id: Uuid::new_v4(),
+            id: Uuid::now_v7(),
             flight_id,
             pilot_id,
             is_tow_pilot,

@@ -164,7 +164,7 @@ mod tests {
     #[test]
     fn test_is_soaring_related() {
         let mut club = Club {
-            id: Uuid::new_v4(),
+            id: Uuid::now_v7(),
             name: "Mountain Soaring Club".to_string(),
             is_soaring: None,
             home_base_airport_id: None,
@@ -199,7 +199,7 @@ mod tests {
     #[test]
     fn test_address_string() {
         let club = Club {
-            id: Uuid::new_v4(),
+            id: Uuid::now_v7(),
             name: "Test Club".to_string(),
             is_soaring: None,
             home_base_airport_id: None,
@@ -225,7 +225,7 @@ mod tests {
     #[test]
     fn test_empty_address_string() {
         let club = Club {
-            id: Uuid::new_v4(),
+            id: Uuid::now_v7(),
             name: "Test Club".to_string(),
             is_soaring: None,
             home_base_airport_id: None,

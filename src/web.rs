@@ -180,7 +180,7 @@ async fn request_logging_middleware(request: Request<Body>, next: Next) -> Respo
     let method = request.method().clone();
     let path = request.uri().path().to_string();
     let query_string = request.uri().query().unwrap_or("");
-    let request_id = Uuid::new_v4().to_string()[..8].to_string();
+    let request_id = Uuid::now_v7().to_string()[..8].to_string();
     let start_time = Instant::now();
 
     // Skip logging for metrics endpoint to reduce noise

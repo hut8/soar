@@ -1,0 +1,13 @@
+# SOAR Pull-Data scrape targets
+# File-based service discovery configuration for Prometheus
+#
+# This file defines the target endpoints for the SOAR pull-data job.
+# Note: pull-data only runs during execution (not persistent).
+# Prometheus will automatically reload this file every 30 seconds.
+
+- targets:
+    - 'localhost:9092'
+  labels:
+    instance: 'soar-pull-data'
+    component: 'pull-data'
+    environment: 'production'

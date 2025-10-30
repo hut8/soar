@@ -1,11 +1,14 @@
 [Unit]
-Description=NATS Server
+Description=NATS Server with JetStream
 After=network-online.target
 
 [Service]
 PrivateTmp=true
 Type=simple
-ExecStart=/usr/local/bin/nats-server
+# Enable JetStream with file-based storage for durable message queues
+# Note: Create /var/lib/nats/jetstream directory and set ownership to daemon:daemon
+# mkdir -p /var/lib/nats/jetstream && chown daemon:daemon /var/lib/nats/jetstream
+ExecStart=/usr/local/bin/nats-server --jetstream --store_dir=/var/lib/nats/jetstream
 ExecReload=/bin/kill -s HUP $MAINPID
 
 # The nats-server uses SIGUSR2 to trigger Lame Duck Mode (LDM) shutdown

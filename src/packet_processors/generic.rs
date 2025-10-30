@@ -1,8 +1,10 @@
 use crate::aprs_client::ArchiveService;
 use crate::aprs_messages_repo::{AprsMessagesRepository, NewAprsMessage};
 use crate::receiver_repo::ReceiverRepository;
+use moka::sync::Cache;
 use ogn_parser::{AprsData, AprsPacket};
-use tracing::{error, trace, warn};
+use std::sync::Arc;
+use tracing::{debug, error, trace, warn};
 use uuid::Uuid;
 
 /// Context containing IDs from generic packet processing
@@ -22,6 +24,9 @@ pub struct GenericProcessor {
     receiver_repo: ReceiverRepository,
     aprs_messages_repo: AprsMessagesRepository,
     archive_service: Option<ArchiveService>,
+    /// Cache mapping receiver callsign to receiver ID
+    /// This avoids repeated database lookups for the same receiver
+    receiver_cache: Arc<Cache<String, Uuid>>,
 }
 
 impl GenericProcessor {
@@ -30,10 +35,18 @@ impl GenericProcessor {
         receiver_repo: ReceiverRepository,
         aprs_messages_repo: AprsMessagesRepository,
     ) -> Self {
+        // Create a cache with 10,000 entry capacity and 1 hour TTL
+        // This should cover most receivers we see in a typical session
+        let receiver_cache = Cache::builder()
+            .max_capacity(10_000)
+            .time_to_live(std::time::Duration::from_secs(3600))
+            .build();
+
         Self {
             receiver_repo,
             aprs_messages_repo,
             archive_service: None,
+            receiver_cache: Arc::new(receiver_cache),
         }
     }
 
@@ -57,19 +70,38 @@ impl GenericProcessor {
         // Step 2: Identify the receiver callsign
         let receiver_callsign = self.identify_receiver(packet);
 
-        // Step 3: Ensure receiver exists in database (insert if needed)
-        let receiver_id = match self
-            .receiver_repo
-            .insert_minimal_receiver(&receiver_callsign)
-            .await
-        {
-            Ok(id) => id,
-            Err(e) => {
-                error!(
-                    "Failed to insert/lookup receiver {}: {}",
-                    receiver_callsign, e
-                );
-                return None;
+        // Step 3: Get receiver ID from cache or database
+        let receiver_id = if let Some(cached_id) = self.receiver_cache.get(&receiver_callsign) {
+            // Cache hit - use cached receiver ID
+            trace!("Receiver {} found in cache", receiver_callsign);
+            metrics::counter!("generic_processor.receiver_cache.hit").increment(1);
+            cached_id
+        } else {
+            // Cache miss - lookup/insert in database
+            debug!(
+                "Receiver {} not in cache, querying database",
+                receiver_callsign
+            );
+            metrics::counter!("generic_processor.receiver_cache.miss").increment(1);
+
+            match self
+                .receiver_repo
+                .insert_minimal_receiver(&receiver_callsign)
+                .await
+            {
+                Ok(id) => {
+                    // Store in cache for future lookups
+                    self.receiver_cache.insert(receiver_callsign.clone(), id);
+                    debug!("Cached receiver {} with ID {}", receiver_callsign, id);
+                    id
+                }
+                Err(e) => {
+                    error!(
+                        "Failed to insert/lookup receiver {}: {}",
+                        receiver_callsign, e
+                    );
+                    return None;
+                }
             }
         };
 
@@ -81,7 +113,7 @@ impl GenericProcessor {
         };
 
         // Step 5: Insert APRS message
-        let aprs_message_id = Uuid::new_v4();
+        let aprs_message_id = Uuid::now_v7();
         let new_aprs_message = NewAprsMessage {
             id: aprs_message_id,
             raw_message: raw_message.to_string(),

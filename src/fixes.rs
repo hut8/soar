@@ -265,7 +265,7 @@ impl Fix {
                 let is_active = ground_speed_knots.is_none_or(|speed| speed >= 20.0);
 
                 Ok(Some(Fix {
-                    id: Uuid::new_v4(),
+                    id: Uuid::now_v7(),
                     source,
                     aprs_type,
                     via,
