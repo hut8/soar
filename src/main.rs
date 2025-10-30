@@ -1092,22 +1092,9 @@ async fn handle_run(archive_dir: Option<String>, nats_url: String) -> Result<()>
 
     info!("JetStream consumer ready, starting message processing...");
 
-    // Start consuming messages from JetStream
-    // Each message will be parsed and routed through PacketRouter
-    consumer
-        .consume(move |message| {
-            let packet_router = packet_router.clone();
-            async move {
-                // Parse the APRS message using the same parser as the APRS client
-                AprsClient::process_message(&message, &packet_router).await;
-                Ok(())
-            }
-        })
-        .await?;
-
-    // Spawn periodic performance metrics logger
+    // Spawn periodic performance metrics logger before starting consumption
     // This helps diagnose what's slowing down processing
-    tokio::spawn(
+    let _metrics_handle = tokio::spawn(
         async move {
             use std::time::{Duration, Instant};
             let mut last_log = Instant::now();
@@ -1143,14 +1130,25 @@ async fn handle_run(archive_dir: Option<String>, nats_url: String) -> Result<()>
         .instrument(tracing::info_span!("performance_metrics_logger")),
     );
 
-    // Keep the main thread alive
-    // In a real application, you might want to handle shutdown signals here
     info!("APRS client started. Press Ctrl+C to stop.");
 
-    // Wait indefinitely (in practice, you'd handle shutdown signals)
-    loop {
-        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-    }
+    // Start consuming messages from JetStream
+    // This runs indefinitely until the stream ends or an error occurs
+    // Each message will be parsed and routed through PacketRouter
+    consumer
+        .consume(move |message| {
+            let packet_router = packet_router.clone();
+            async move {
+                // Parse the APRS message using the same parser as the APRS client
+                AprsClient::process_message(&message, &packet_router).await;
+                Ok(())
+            }
+        })
+        .await?;
+
+    // If we reach here, the consumer stream ended unexpectedly
+    warn!("JetStream consumer stopped unexpectedly");
+    Ok(())
 }
 
 #[tokio::main]
