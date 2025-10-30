@@ -35,8 +35,10 @@ pub struct AprsClientConfig {
     pub password: Option<String>,
     /// APRS filter string (optional)
     pub filter: Option<String>,
-    /// Delay between reconnection attempts in seconds
+    /// Initial delay between reconnection attempts in seconds (will use exponential backoff)
     pub retry_delay_seconds: u64,
+    /// Maximum delay between reconnection attempts in seconds (cap for exponential backoff)
+    pub max_retry_delay_seconds: u64,
     /// Base directory for message archive (optional)
     pub archive_base_dir: Option<String>,
 }
@@ -50,7 +52,8 @@ impl Default for AprsClientConfig {
             callsign: "N0CALL".to_string(),
             password: None,
             filter: None,
-            retry_delay_seconds: 5,
+            retry_delay_seconds: 0, // Reconnect immediately on first failure
+            max_retry_delay_seconds: 60, // Cap at 60 seconds
             archive_base_dir: None,
         }
     }
@@ -74,7 +77,7 @@ impl AprsClient {
 
     /// Start the APRS client with a packet router
     /// This will connect to the server and begin processing messages
-    /// PacketRouter will be called directly (synchronously) for each parsed message
+    /// Messages are first queued in a bounded channel to prevent blocking TCP reads
     #[tracing::instrument(skip(self, packet_router))]
     pub async fn start(
         &mut self,
@@ -85,9 +88,50 @@ impl AprsClient {
 
         let config = self.config.clone();
 
+        // Create bounded channel for raw APRS messages from TCP socket (capacity: 10,000)
+        // This prevents slow processing from blocking TCP reads and causing server disconnects
+        let (raw_message_tx, mut raw_message_rx) = mpsc::channel::<String>(10_000);
+        info!("Created raw message queue with capacity 10,000 to prevent TCP read blocking");
+
+        // Spawn message processing task
+        let processor_router = packet_router.clone();
+        tokio::spawn(
+            async move {
+                let mut stats_timer = tokio::time::interval(Duration::from_secs(10));
+                stats_timer.tick().await; // First tick completes immediately
+
+                loop {
+                    tokio::select! {
+                        Some(message) = raw_message_rx.recv() => {
+                            // Route server messages (lines starting with #) and regular APRS messages differently
+                            if message.starts_with('#') {
+                                Self::process_server_message(&message, &processor_router);
+                            } else {
+                                Self::process_message(&message, &processor_router).await;
+                            }
+                        }
+                        _ = stats_timer.tick() => {
+                            // Report raw message queue depth every 10 seconds
+                            let queue_depth = raw_message_rx.len();
+                            metrics::gauge!("aprs.raw_message_queue.depth").set(queue_depth as f64);
+                            if queue_depth > 5000 {
+                                warn!(
+                                    "Raw message queue building up: {} messages (50% full) - processing may be too slow",
+                                    queue_depth
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+            .instrument(tracing::info_span!("aprs_message_processor")),
+        );
+
+        // Spawn connection management task
         tokio::spawn(
             async move {
                 let mut retry_count = 0;
+                let mut current_delay = config.retry_delay_seconds;
 
                 loop {
                     // Check if shutdown was requested
@@ -96,11 +140,12 @@ impl AprsClient {
                         break;
                     }
 
-                    match Self::connect_and_run(&config, packet_router.clone()).await {
+                    match Self::connect_and_run(&config, raw_message_tx.clone()).await {
                         ConnectionResult::Success => {
                             info!("APRS client connection ended normally");
                             metrics::counter!("aprs.connection.ended").increment(1);
                             retry_count = 0; // Reset retry count on successful connection
+                            current_delay = config.retry_delay_seconds; // Reset delay
                         }
                         ConnectionResult::ConnectionFailed(e) => {
                             error!("APRS client connection failed: {}", e);
@@ -115,11 +160,26 @@ impl AprsClient {
                                 break;
                             }
 
-                            warn!(
-                                "Retrying connection in {} seconds (attempt {}/{})",
-                                config.retry_delay_seconds, retry_count, config.max_retries
-                            );
-                            sleep(Duration::from_secs(config.retry_delay_seconds)).await;
+                            if current_delay == 0 {
+                                info!(
+                                    "Reconnecting immediately (attempt {}/{})",
+                                    retry_count, config.max_retries
+                                );
+                            } else {
+                                warn!(
+                                    "Retrying connection in {} seconds (attempt {}/{})",
+                                    current_delay, retry_count, config.max_retries
+                                );
+                            }
+                            sleep(Duration::from_secs(current_delay)).await;
+
+                            // Exponential backoff: double the delay for next time, capped at max
+                            if current_delay == 0 {
+                                current_delay = 1; // Start at 1 second after first immediate retry
+                            } else {
+                                current_delay =
+                                    (current_delay * 2).min(config.max_retry_delay_seconds);
+                            }
                         }
                         ConnectionResult::OperationFailed(e) => {
                             error!(
@@ -127,14 +187,14 @@ impl AprsClient {
                                 e
                             );
                             metrics::counter!("aprs.connection.operation_failed").increment(1);
-                            // Reset retry count since connection was initially successful
+                            // Reset retry count and delay since connection was initially successful
                             retry_count = 0;
+                            current_delay = config.retry_delay_seconds;
 
-                            warn!(
-                                "Retrying connection in {} seconds (connection was successful)",
-                                config.retry_delay_seconds
+                            info!(
+                                "Reconnecting immediately (connection was previously successful)"
                             );
-                            sleep(Duration::from_secs(config.retry_delay_seconds)).await;
+                            // No delay for operation failures - reconnect immediately
                         }
                     }
                 }
@@ -154,10 +214,11 @@ impl AprsClient {
     }
 
     /// Connect to the APRS server and run the message processing loop
-    #[tracing::instrument(skip(config, packet_router), fields(server = %config.server, port = %config.port))]
+    /// Messages are sent to raw_message_tx channel for processing
+    #[tracing::instrument(skip(config, raw_message_tx), fields(server = %config.server, port = %config.port))]
     async fn connect_and_run(
         config: &AprsClientConfig,
-        packet_router: crate::packet_processors::PacketRouter,
+        raw_message_tx: mpsc::Sender<String>,
     ) -> ConnectionResult {
         info!(
             "Connecting to APRS server {}:{}",
@@ -169,15 +230,19 @@ impl AprsClient {
 
         // Connect to the APRS server
         let stream = match TcpStream::connect(format!("{}:{}", config.server, config.port)).await {
-            Ok(stream) => {
-                info!("Connected to APRS server");
-                metrics::counter!("aprs.connection.established").increment(1);
-                stream
-            }
+            Ok(stream) => stream,
             Err(e) => {
                 return ConnectionResult::ConnectionFailed(e.into());
             }
         };
+
+        // Log the resolved IP address we're actually connected to
+        let peer_addr = stream.peer_addr().ok();
+        let peer_addr_str = peer_addr
+            .map(|a| a.to_string())
+            .unwrap_or_else(|| "unknown".to_string());
+        info!("Connected to APRS server (resolved IP: {})", peer_addr_str);
+        metrics::counter!("aprs.connection.established").increment(1);
 
         let (reader, mut writer) = stream.into_split();
         let mut buf_reader = BufReader::new(reader);
@@ -260,7 +325,8 @@ impl AprsClient {
                         Ok(0) => {
                             let duration = connection_start.elapsed();
                             warn!(
-                                "Connection closed by server after {:.1}s",
+                                "Connection closed by server (IP: {}) after {:.1}s",
+                                peer_addr_str,
                                 duration.as_secs_f64()
                             );
                             break;
@@ -287,11 +353,26 @@ impl AprsClient {
                                 } else {
                                     trace!("Received: {}", trimmed_line);
                                 }
-                                // Route server messages (lines starting with #) and regular APRS messages differently
-                                if !trimmed_line.starts_with('#') {
-                                    Self::process_message(trimmed_line, &packet_router).await;
-                                } else {
-                                    Self::process_server_message(trimmed_line, &packet_router);
+                                // Send message to channel for processing (non-blocking)
+                                match raw_message_tx.try_send(trimmed_line.to_string()) {
+                                    Ok(()) => {
+                                        trace!("Queued message for processing");
+                                    }
+                                    Err(mpsc::error::TrySendError::Full(_)) => {
+                                        warn!(
+                                            "Raw message queue FULL (10,000 messages buffered) - dropping message. \
+                                             This indicates processing is slower than APRS message rate."
+                                        );
+                                        metrics::counter!("aprs.raw_message_queue.full")
+                                            .increment(1);
+                                        // Message is dropped to prevent blocking TCP reads
+                                    }
+                                    Err(mpsc::error::TrySendError::Closed(_)) => {
+                                        error!("Raw message queue is closed - stopping connection");
+                                        return ConnectionResult::OperationFailed(anyhow::anyhow!(
+                                            "Raw message queue closed"
+                                        ));
+                                    }
                                 }
                             }
                         }
@@ -473,6 +554,11 @@ impl AprsClientConfigBuilder {
 
     pub fn retry_delay_seconds(mut self, seconds: u64) -> Self {
         self.config.retry_delay_seconds = seconds;
+        self
+    }
+
+    pub fn max_retry_delay_seconds(mut self, seconds: u64) -> Self {
+        self.config.max_retry_delay_seconds = seconds;
         self
     }
 
@@ -780,6 +866,7 @@ mod tests {
             filter: Some("r/47.0/-122.0/100".to_string()),
             max_retries: 3,
             retry_delay_seconds: 5,
+            max_retry_delay_seconds: 60,
             archive_base_dir: None,
         };
 
@@ -800,6 +887,7 @@ mod tests {
             filter: None,
             max_retries: 3,
             retry_delay_seconds: 5,
+            max_retry_delay_seconds: 60,
             archive_base_dir: None,
         };
 

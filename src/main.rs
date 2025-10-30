@@ -539,6 +539,18 @@ async fn handle_run(
 
     info!("Created PacketRouter with per-processor queues");
 
+    // Initialize queue drop counters so they're always exported to Prometheus
+    // even when queues are healthy and not dropping packets
+    metrics::counter!("aprs.raw_message_queue.full").absolute(0);
+    metrics::counter!("aprs.aircraft_queue.full").absolute(0);
+    metrics::counter!("aprs.aircraft_queue.closed").absolute(0);
+    metrics::counter!("aprs.receiver_status_queue.full").absolute(0);
+    metrics::counter!("aprs.receiver_status_queue.closed").absolute(0);
+    metrics::counter!("aprs.receiver_position_queue.full").absolute(0);
+    metrics::counter!("aprs.receiver_position_queue.closed").absolute(0);
+    metrics::counter!("aprs.server_status_queue.full").absolute(0);
+    metrics::counter!("aprs.server_status_queue.closed").absolute(0);
+
     // Spawn AGL batch database writer
     // This worker receives calculated AGL values and writes them to database in batches
     // Batching dramatically reduces database load (100+ individual UPDATEs become 1 batch UPDATE)
@@ -777,6 +789,98 @@ async fn handle_run(
             .instrument(tracing::info_span!("server_status_worker", worker_id)),
         );
     }
+
+    // Spawn queue depth metrics reporter
+    // Reports the depth of all processing queues to Prometheus every 10 seconds
+    let metrics_aircraft_rx = shared_aircraft_rx.clone();
+    let metrics_receiver_status_rx = shared_receiver_status_rx.clone();
+    let metrics_receiver_position_rx = shared_receiver_position_rx.clone();
+    let metrics_server_status_rx = shared_server_status_rx.clone();
+    let metrics_elevation_rx = shared_elevation_rx.clone();
+    tokio::spawn(
+        async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(10));
+            interval.tick().await; // First tick completes immediately
+
+            loop {
+                interval.tick().await;
+
+                // Sample queue depths (non-blocking reads)
+                let aircraft_depth = {
+                    if let Ok(rx) = metrics_aircraft_rx.try_lock() {
+                        rx.len()
+                    } else {
+                        0 // Skip if locked
+                    }
+                };
+                let receiver_status_depth = {
+                    if let Ok(rx) = metrics_receiver_status_rx.try_lock() {
+                        rx.len()
+                    } else {
+                        0
+                    }
+                };
+                let receiver_position_depth = {
+                    if let Ok(rx) = metrics_receiver_position_rx.try_lock() {
+                        rx.len()
+                    } else {
+                        0
+                    }
+                };
+                let server_status_depth = {
+                    if let Ok(rx) = metrics_server_status_rx.try_lock() {
+                        rx.len()
+                    } else {
+                        0
+                    }
+                };
+                let elevation_depth = {
+                    if let Ok(rx) = metrics_elevation_rx.try_lock() {
+                        rx.len()
+                    } else {
+                        0
+                    }
+                };
+
+                // Report to Prometheus
+                metrics::gauge!("aprs.aircraft_queue.depth").set(aircraft_depth as f64);
+                metrics::gauge!("aprs.receiver_status_queue.depth")
+                    .set(receiver_status_depth as f64);
+                metrics::gauge!("aprs.receiver_position_queue.depth")
+                    .set(receiver_position_depth as f64);
+                metrics::gauge!("aprs.server_status_queue.depth").set(server_status_depth as f64);
+                metrics::gauge!("aprs.elevation_queue.depth").set(elevation_depth as f64);
+
+                // Warn if queues are building up
+                if aircraft_depth > 25000 {
+                    warn!(
+                        "Aircraft position queue building up: {} messages (50% full)",
+                        aircraft_depth
+                    );
+                }
+                if receiver_status_depth > 5000 {
+                    warn!(
+                        "Receiver status queue building up: {} messages (50% full)",
+                        receiver_status_depth
+                    );
+                }
+                if receiver_position_depth > 2500 {
+                    warn!(
+                        "Receiver position queue building up: {} messages (50% full)",
+                        receiver_position_depth
+                    );
+                }
+                if elevation_depth > 500 {
+                    warn!(
+                        "Elevation queue building up: {} tasks (50% full)",
+                        elevation_depth
+                    );
+                }
+            }
+        }
+        .instrument(tracing::info_span!("queue_metrics_reporter")),
+    );
+    info!("Spawned queue depth metrics reporter (reports every 10 seconds to Prometheus)");
 
     // Create and start APRS client - it will call PacketRouter directly (no queue between them)
     let mut client = AprsClient::new(config);
