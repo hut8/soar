@@ -393,6 +393,17 @@ async fn handle_ingest_aprs(
         final_subject
     );
 
+    // Start metrics server in production mode
+    if is_production {
+        info!("Starting metrics server on port 9093");
+        tokio::spawn(
+            async {
+                soar::metrics::start_metrics_server(9093).await;
+            }
+            .instrument(tracing::info_span!("metrics_server")),
+        );
+    }
+
     // Acquire instance lock to prevent multiple ingest instances from running
     let lock_name = if is_production {
         "aprs-ingest-production"
