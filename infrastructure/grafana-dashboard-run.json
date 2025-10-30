@@ -3464,8 +3464,8 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, rate(agl_backfill_batch_duration_seconds_bucket[5m]))",
-          "legendFormat": "P95 Batch Duration",
+          "expr": "rate(agl_backfill_batch_duration_seconds_sum[5m]) / rate(agl_backfill_batch_duration_seconds_count[5m])",
+          "legendFormat": "Avg Batch Duration (s)",
           "range": true,
           "refId": "A"
         },
@@ -3475,7 +3475,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(agl_backfill_errors_total[5m]) * 60",
+          "expr": "rate(agl_backfill_fetch_errors_total[5m]) * 60",
           "legendFormat": "Errors/min",
           "range": true,
           "refId": "B"
