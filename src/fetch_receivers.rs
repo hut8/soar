@@ -122,7 +122,7 @@ struct Receiver {
     links: Vec<Link>,
     contact: String,
     email: String,
-    country: String,
+    country: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -344,7 +344,7 @@ fn parse_receiver_list(page: &str) -> Vec<Receiver> {
                     links,
                     contact,
                     email,
-                    country: country_name.clone(),
+                    country: Some(country_name.clone()),
                 });
             }
         }
@@ -370,12 +370,23 @@ pub async fn fetch_receivers(out_file: &str) -> anyhow::Result<()> {
         if *country_key != "others" {
             let iso = normalize_country_section(country_key);
             for r in &mut receivers {
-                r.country = iso.to_string();
+                // Convert "ZZ" (unknown country) to None
+                r.country = if iso == "ZZ" {
+                    None
+                } else {
+                    Some(iso.to_string())
+                };
             }
         } else {
             // For non-forced sections, try to map country headings (normalize) if possible
             for r in &mut receivers {
-                r.country = normalize_country_section(&r.country).to_string();
+                let normalized = normalize_country_section(r.country.as_deref().unwrap_or(""));
+                // Convert "ZZ" (unknown country) to None
+                r.country = if normalized == "ZZ" {
+                    None
+                } else {
+                    Some(normalized.to_string())
+                };
             }
         }
 
@@ -414,7 +425,10 @@ mod tests {
         for (i, receiver) in receivers.iter().take(5).enumerate() {
             eprintln!(
                 "Receiver {}: callsign='{}', description='{}', country='{}'",
-                i, receiver.callsign, receiver.description, receiver.country
+                i,
+                receiver.callsign,
+                receiver.description,
+                receiver.country.as_deref().unwrap_or("None")
             );
         }
 
