@@ -183,8 +183,8 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "up{job=\"soar-aprs-ingest\"}",
-          "legendFormat": "__auto",
+          "expr": "process_is_up{component=\"aprs-ingest\"}",
+          "legendFormat": "SOAR APRS Ingest",
           "range": true,
           "refId": "A"
         }
@@ -256,8 +256,8 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "process_resident_memory_bytes",
-          "legendFormat": "__auto",
+          "expr": "process_memory_bytes{component=\"aprs-ingest\"}",
+          "legendFormat": "SOAR APRS Ingest",
           "range": true,
           "refId": "A"
         }
