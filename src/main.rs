@@ -17,8 +17,8 @@ use soar::fixes_repo::FixesRepository;
 use soar::flight_tracker::FlightTracker;
 use soar::instance_lock::InstanceLock;
 use soar::packet_processors::{
-    AircraftPositionProcessor, GenericProcessor, PacketRouter, PositionPacketProcessor,
-    ReceiverPositionProcessor, ReceiverStatusProcessor, ServerStatusProcessor,
+    AircraftPositionProcessor, GenericProcessor, PacketRouter, ReceiverPositionProcessor,
+    ReceiverStatusProcessor, ServerStatusProcessor,
 };
 use soar::receiver_repo::ReceiverRepository;
 use soar::receiver_status_repo::ReceiverStatusRepository;
@@ -493,8 +493,14 @@ async fn handle_run(
     let aprs_messages_repo =
         soar::aprs_messages_repo::AprsMessagesRepository::new(diesel_pool.clone());
 
-    // Create GenericProcessor for receiver identification and APRS message insertion
-    let generic_processor = GenericProcessor::new(receiver_repo.clone(), aprs_messages_repo);
+    // Create GenericProcessor for archiving, receiver identification, and APRS message insertion
+    let generic_processor = if let Some(archive_path) = archive_dir.clone() {
+        let archive_service = soar::aprs_client::ArchiveService::new(archive_path).await?;
+        GenericProcessor::new(receiver_repo.clone(), aprs_messages_repo)
+            .with_archive_service(archive_service)
+    } else {
+        GenericProcessor::new(receiver_repo.clone(), aprs_messages_repo)
+    };
 
     // Create receiver status processor for receiver status messages
     let receiver_status_processor =
@@ -508,47 +514,36 @@ async fn handle_run(
     let aircraft_position_processor =
         AircraftPositionProcessor::new().with_fix_processor(fix_processor.clone());
 
-    // Create position packet processor with BOTH aircraft and receiver processors
-    let position_processor = PositionPacketProcessor::new()
-        .with_aircraft_processor(aircraft_position_processor)
-        .with_receiver_processor(receiver_position_processor);
-
-    // Create PacketRouter with all processors
-    let packet_router = if let Some(archive_path) = archive_dir.clone() {
-        PacketRouter::with_archive(generic_processor, archive_path)
-            .await?
-            .with_position_processor(position_processor)
-            .with_receiver_status_processor(receiver_status_processor)
-            .with_server_status_processor(server_status_processor)
-    } else {
-        PacketRouter::new(generic_processor)
-            .with_position_processor(position_processor)
-            .with_receiver_status_processor(receiver_status_processor)
-            .with_server_status_processor(server_status_processor)
-    };
-
     info!(
         "Setting up APRS client with PacketRouter - archive directory: {:?}, NATS URL: {}",
         archive_dir, nats_url
     );
 
-    // Create bounded channel for APRS messages (capacity: 10000)
-    // Increased from 1000 to 10,000, then to 50,000 to handle periodic processing spikes
-    // Note: Queue fills during periodic spikes in processing duration (not incoming rate)
-    // TODO: Investigate root cause of 10-minute processing duration spikes
-    let (message_tx, message_rx) =
-        tokio::sync::mpsc::channel::<soar::aprs_client::AprsMessage>(50_000);
+    // Create bounded channels for per-processor queues
+    // Aircraft positions: highest capacity due to high volume and heavy processing
+    let (aircraft_tx, aircraft_rx) = tokio::sync::mpsc::channel(50_000);
+    info!("Created aircraft position queue with capacity 50,000");
 
-    info!("Created bounded message queue with capacity 50,000");
+    // Receiver status: high capacity
+    let (receiver_status_tx, receiver_status_rx) = tokio::sync::mpsc::channel(10_000);
+    info!("Created receiver status queue with capacity 10,000");
 
-    // Create multiple processing workers to consume queue in parallel
-    // Using 5 workers allows parallel processing of different devices while maintaining
-    // correct ordering per device (FlightTracker uses per-device locks internally)
-    let packet_router = std::sync::Arc::new(packet_router);
-    let num_workers = 5;
+    // Receiver position: medium capacity
+    let (receiver_position_tx, receiver_position_rx) = tokio::sync::mpsc::channel(5_000);
+    info!("Created receiver position queue with capacity 5,000");
 
-    // Wrap receiver in Arc<Mutex> to share among workers
-    let shared_rx = std::sync::Arc::new(tokio::sync::Mutex::new(message_rx));
+    // Server status: low capacity (rare messages)
+    let (server_status_tx, server_status_rx) = tokio::sync::mpsc::channel(1_000);
+    info!("Created server status queue with capacity 1,000");
+
+    // Create PacketRouter with per-processor queues
+    let packet_router = PacketRouter::new(generic_processor)
+        .with_aircraft_position_queue(aircraft_tx)
+        .with_receiver_status_queue(receiver_status_tx)
+        .with_receiver_position_queue(receiver_position_tx)
+        .with_server_status_queue(server_status_tx);
+
+    info!("Created PacketRouter with per-processor queues");
 
     // Spawn AGL batch database writer
     // This worker receives calculated AGL values and writes them to database in batches
@@ -654,53 +649,146 @@ async fn handle_run(
     );
     info!("Spawned AGL backfill background task with dedicated elevation database");
 
+    // Spawn dedicated worker pools for each processor type
+    // Aircraft position workers (20 workers - heaviest processing due to FixProcessor + flight tracking)
+    let num_aircraft_workers = 20;
     info!(
-        "Spawning {} worker tasks to process APRS messages in parallel",
-        num_workers
+        "Spawning {} aircraft position workers",
+        num_aircraft_workers
     );
-
-    for worker_id in 0..num_workers {
-        let worker_rx = shared_rx.clone();
-        let router_clone = packet_router.clone();
-
-        tokio::spawn(async move {
-            loop {
-                // Lock the receiver and try to get a message
-                let message = {
-                    let mut rx = worker_rx.lock().await;
-                    rx.recv().await
-                };
-
-                match message {
-                    Some(msg) => {
-                        let start = std::time::Instant::now();
-                        match msg {
-                            soar::aprs_client::AprsMessage::Packet { packet, raw } => {
-                                router_clone.process_packet(*packet, &raw).await;
-                            }
-                            soar::aprs_client::AprsMessage::ServerMessage(msg) => {
-                                router_clone.process_server_message(&msg).await;
-                            }
+    let shared_aircraft_rx = std::sync::Arc::new(tokio::sync::Mutex::new(aircraft_rx));
+    for worker_id in 0..num_aircraft_workers {
+        let worker_rx = shared_aircraft_rx.clone();
+        let processor = aircraft_position_processor.clone();
+        tokio::spawn(
+            async move {
+                loop {
+                    let task = {
+                        let mut rx = worker_rx.lock().await;
+                        rx.recv().await
+                    };
+                    match task {
+                        Some((packet, context)) => {
+                            let start = std::time::Instant::now();
+                            processor.process_aircraft_position(&packet, context).await;
+                            let duration = start.elapsed();
+                            metrics::histogram!("aprs.aircraft.duration_ms")
+                                .record(duration.as_millis() as f64);
+                            metrics::counter!("aprs.aircraft.processed").increment(1);
                         }
-                        let duration = start.elapsed();
-                        metrics::histogram!("aprs.processing.duration_ms")
-                            .record(duration.as_millis() as f64);
-                        metrics::counter!("aprs.worker.processed", "worker_id" => worker_id.to_string()).increment(1);
-                    }
-                    None => {
-                        // Channel closed, exit worker
-                        break;
+                        None => break,
                     }
                 }
             }
-        });
+            .instrument(tracing::info_span!("aircraft_worker", worker_id)),
+        );
     }
 
-    // Create and start APRS client with message sender
-    let mut client = AprsClient::new(config, message_tx);
+    // Receiver status workers (6 workers - medium processing)
+    let num_receiver_status_workers = 6;
+    info!(
+        "Spawning {} receiver status workers",
+        num_receiver_status_workers
+    );
+    let shared_receiver_status_rx =
+        std::sync::Arc::new(tokio::sync::Mutex::new(receiver_status_rx));
+    for worker_id in 0..num_receiver_status_workers {
+        let worker_rx = shared_receiver_status_rx.clone();
+        let processor = receiver_status_processor.clone();
+        tokio::spawn(
+            async move {
+                loop {
+                    let task = {
+                        let mut rx = worker_rx.lock().await;
+                        rx.recv().await
+                    };
+                    match task {
+                        Some((packet, context)) => {
+                            let start = std::time::Instant::now();
+                            processor.process_status_packet(&packet, context).await;
+                            let duration = start.elapsed();
+                            metrics::histogram!("aprs.receiver_status.duration_ms")
+                                .record(duration.as_millis() as f64);
+                            metrics::counter!("aprs.receiver_status.processed").increment(1);
+                        }
+                        None => break,
+                    }
+                }
+            }
+            .instrument(tracing::info_span!("receiver_status_worker", worker_id)),
+        );
+    }
 
-    info!("Starting APRS client...");
-    client.start().await?;
+    // Receiver position workers (4 workers - light processing)
+    let num_receiver_position_workers = 4;
+    info!(
+        "Spawning {} receiver position workers",
+        num_receiver_position_workers
+    );
+    let shared_receiver_position_rx =
+        std::sync::Arc::new(tokio::sync::Mutex::new(receiver_position_rx));
+    for worker_id in 0..num_receiver_position_workers {
+        let worker_rx = shared_receiver_position_rx.clone();
+        let processor = receiver_position_processor.clone();
+        tokio::spawn(
+            async move {
+                loop {
+                    let task = {
+                        let mut rx = worker_rx.lock().await;
+                        rx.recv().await
+                    };
+                    match task {
+                        Some((packet, context)) => {
+                            let start = std::time::Instant::now();
+                            processor.process_receiver_position(&packet, context).await;
+                            let duration = start.elapsed();
+                            metrics::histogram!("aprs.receiver_position.duration_ms")
+                                .record(duration.as_millis() as f64);
+                            metrics::counter!("aprs.receiver_position.processed").increment(1);
+                        }
+                        None => break,
+                    }
+                }
+            }
+            .instrument(tracing::info_span!("receiver_position_worker", worker_id)),
+        );
+    }
+
+    // Server status workers (2 workers - very light processing)
+    info!("Spawning 2 server status workers");
+    let shared_server_status_rx = std::sync::Arc::new(tokio::sync::Mutex::new(server_status_rx));
+    for worker_id in 0..2 {
+        let worker_rx = shared_server_status_rx.clone();
+        let processor = server_status_processor.clone();
+        tokio::spawn(
+            async move {
+                loop {
+                    let task = {
+                        let mut rx = worker_rx.lock().await;
+                        rx.recv().await
+                    };
+                    match task {
+                        Some(message) => {
+                            let start = std::time::Instant::now();
+                            processor.process_server_message(&message).await;
+                            let duration = start.elapsed();
+                            metrics::histogram!("aprs.server_status.duration_ms")
+                                .record(duration.as_millis() as f64);
+                            metrics::counter!("aprs.server_status.processed").increment(1);
+                        }
+                        None => break,
+                    }
+                }
+            }
+            .instrument(tracing::info_span!("server_status_worker", worker_id)),
+        );
+    }
+
+    // Create and start APRS client - it will call PacketRouter directly (no queue between them)
+    let mut client = AprsClient::new(config);
+
+    info!("Starting APRS client with direct PacketRouter calls (no queue)...");
+    client.start(packet_router).await?;
 
     // Spawn periodic performance metrics logger
     // This helps diagnose what's slowing down processing
@@ -719,13 +807,21 @@ async fn handle_run(
                 // Log performance summary
                 // The metrics are tracked via the metrics crate and available in the metrics backend
                 info!(
-                    "=== PERFORMANCE METRICS (last {:.0}s) ===", elapsed_secs
+                    "=== PERFORMANCE METRICS (last {:.0}s) ===",
+                    elapsed_secs
                 );
                 info!(
-                    "Processing workers: {} active | Check metrics backend for detailed stats", num_workers
+                    "Worker pools: {} aircraft, {} receiver_status, {} receiver_position, 2 server_status",
+                    num_aircraft_workers, num_receiver_status_workers, num_receiver_position_workers
                 );
                 info!(
-                    "Metrics: aprs.processing.duration_ms, aprs.elevation.duration_ms, aprs.elevation.queued, aprs.elevation.dropped"
+                    "Per-processor metrics: aprs.aircraft.duration_ms, aprs.receiver_status.duration_ms, aprs.receiver_position.duration_ms, aprs.server_status.duration_ms"
+                );
+                info!(
+                    "Queue drops: aprs.aircraft_queue.full, aprs.receiver_status_queue.full, aprs.receiver_position_queue.full, aprs.server_status_queue.full"
+                );
+                info!(
+                    "Elevation metrics: aprs.elevation.duration_ms, aprs.elevation.queued, aprs.elevation.dropped"
                 );
             }
         }

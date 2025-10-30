@@ -1,5 +1,4 @@
 use anyhow::Result;
-use ogn_parser::AprsPacket;
 use std::time::Duration;
 use tokio::fs::OpenOptions;
 use tokio::io::{AsyncWriteExt, BufReader};
@@ -10,19 +9,7 @@ use tracing::Instrument;
 use tracing::trace;
 use tracing::{error, info, warn};
 
-/// Message types that can be sent from APRS client to packet router
-#[derive(Debug)]
-pub enum AprsMessage {
-    /// A parsed APRS packet with its raw string representation
-    Packet {
-        /// The parsed packet (boxed to reduce enum size)
-        packet: Box<AprsPacket>,
-        /// The raw packet string
-        raw: String,
-    },
-    /// A server status message (lines starting with #)
-    ServerMessage(String),
-}
+// AprsMessage enum removed - AprsClient now calls PacketRouter directly instead of using a queue
 
 /// Result type for connection attempts
 enum ConnectionResult {
@@ -74,31 +61,33 @@ impl Default for AprsClientConfig {
 }
 
 /// APRS client that connects to an APRS-IS server via TCP
+/// Calls PacketRouter directly without a queue
 pub struct AprsClient {
     config: AprsClientConfig,
-    message_tx: mpsc::Sender<AprsMessage>,
     shutdown_tx: Option<mpsc::Sender<()>>,
 }
 
 impl AprsClient {
-    /// Create a new APRS client with a message sender
-    pub fn new(config: AprsClientConfig, message_tx: mpsc::Sender<AprsMessage>) -> Self {
+    /// Create a new APRS client
+    pub fn new(config: AprsClientConfig) -> Self {
         Self {
             config,
-            message_tx,
             shutdown_tx: None,
         }
     }
 
-    /// Start the APRS client
+    /// Start the APRS client with a packet router
     /// This will connect to the server and begin processing messages
-    #[tracing::instrument(skip(self))]
-    pub async fn start(&mut self) -> Result<()> {
+    /// PacketRouter will be called directly (synchronously) for each parsed message
+    #[tracing::instrument(skip(self, packet_router))]
+    pub async fn start(
+        &mut self,
+        packet_router: crate::packet_processors::PacketRouter,
+    ) -> Result<()> {
         let (shutdown_tx, mut shutdown_rx) = mpsc::channel::<()>(1);
         self.shutdown_tx = Some(shutdown_tx);
 
         let config = self.config.clone();
-        let message_tx = self.message_tx.clone();
 
         tokio::spawn(
             async move {
@@ -111,7 +100,7 @@ impl AprsClient {
                         break;
                     }
 
-                    match Self::connect_and_run(&config, message_tx.clone()).await {
+                    match Self::connect_and_run(&config, packet_router.clone()).await {
                         ConnectionResult::Success => {
                             info!("APRS client connection ended normally");
                             metrics::counter!("aprs.connection.ended").increment(1);
@@ -169,10 +158,10 @@ impl AprsClient {
     }
 
     /// Connect to the APRS server and run the message processing loop
-    #[tracing::instrument(skip(config, message_tx), fields(server = %config.server, port = %config.port))]
+    #[tracing::instrument(skip(config, packet_router), fields(server = %config.server, port = %config.port))]
     async fn connect_and_run(
         config: &AprsClientConfig,
-        message_tx: mpsc::Sender<AprsMessage>,
+        packet_router: crate::packet_processors::PacketRouter,
     ) -> ConnectionResult {
         info!(
             "Connecting to APRS server {}:{}",
@@ -304,9 +293,10 @@ impl AprsClient {
                                 }
                                 // Route server messages (lines starting with #) and regular APRS messages differently
                                 if !trimmed_line.starts_with('#') {
-                                    Self::process_message(trimmed_line, &message_tx, config).await;
+                                    Self::process_message(trimmed_line, &packet_router, config)
+                                        .await;
                                 } else {
-                                    Self::process_server_message(trimmed_line, &message_tx).await;
+                                    Self::process_server_message(trimmed_line, &packet_router);
                                 }
                             }
                         }
@@ -404,65 +394,29 @@ impl AprsClient {
         login_cmd
     }
 
-    /// Process a server message (line starting with #)
-    async fn process_server_message(message: &str, message_tx: &mpsc::Sender<AprsMessage>) {
-        // First log the server message for backward compatibility
+    /// Process a server message (line starting with #) by calling PacketRouter directly
+    fn process_server_message(
+        message: &str,
+        packet_router: &crate::packet_processors::PacketRouter,
+    ) {
+        // Log the server message for backward compatibility
         info!("Server message: {}", message);
 
-        // Send to processing queue - fail immediately if full
-        let aprs_message = AprsMessage::ServerMessage(message.to_string());
-        match message_tx.try_send(aprs_message) {
-            Ok(()) => {
-                // Successfully sent
-            }
-            Err(mpsc::error::TrySendError::Full(_)) => {
-                // Queue is full - drop message immediately
-                warn!(
-                    "Processing queue is FULL - dropping server message immediately. \
-                     This indicates packet processing is slower than incoming rate."
-                );
-                metrics::counter!("aprs.queue.full").increment(1);
-            }
-            Err(mpsc::error::TrySendError::Closed(_)) => {
-                // Channel closed
-                error!("Processing queue channel closed - cannot send server message");
-                metrics::counter!("aprs.queue.closed").increment(1);
-            }
-        }
+        // Call PacketRouter directly (no queue) - it will archive and route to processor
+        packet_router.process_server_message(message);
     }
 
-    /// Process a received APRS message
+    /// Process a received APRS message by calling PacketRouter directly
     async fn process_message(
         message: &str,
-        message_tx: &mpsc::Sender<AprsMessage>,
+        packet_router: &crate::packet_processors::PacketRouter,
         config: &AprsClientConfig,
     ) {
         // Try to parse the message using ogn-parser
         match ogn_parser::parse(message) {
             Ok(parsed) => {
-                // Send parsed packet to processing queue - fail immediately if full
-                let aprs_message = AprsMessage::Packet {
-                    packet: Box::new(parsed),
-                    raw: message.to_string(),
-                };
-                match message_tx.try_send(aprs_message) {
-                    Ok(()) => {
-                        // Successfully sent
-                    }
-                    Err(mpsc::error::TrySendError::Full(_)) => {
-                        // Queue is full - drop packet immediately
-                        warn!(
-                            "Processing queue is FULL - dropping packet immediately. \
-                             This indicates packet processing is slower than incoming rate."
-                        );
-                        metrics::counter!("aprs.queue.full").increment(1);
-                    }
-                    Err(mpsc::error::TrySendError::Closed(_)) => {
-                        // Channel closed
-                        error!("Processing queue channel closed - cannot send packet");
-                        metrics::counter!("aprs.queue.closed").increment(1);
-                    }
-                }
+                // Call PacketRouter directly (no queue) - it will archive, process, and route to queues
+                packet_router.process_packet(parsed, message).await;
             }
             Err(e) => {
                 // For OGNFNT sources with invalid lat/lon, log as trace instead of error

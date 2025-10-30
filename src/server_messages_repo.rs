@@ -71,6 +71,7 @@ impl From<ServerMessageRow> for ServerMessage {
     }
 }
 
+#[derive(Clone)]
 pub struct ServerMessagesRepository {
     pool: PgPool,
 }
