@@ -295,7 +295,7 @@ pub(crate) async fn complete_flight(
 
             warn!(
                 "Spurious flight {} detected - reasons: [{}]. Duration={}s, altitude_range={:?}ft, max_agl={:?}ft, avg_speed={:?}mph. Deleting.",
-                flight_id,
+                fix.device_id,
                 reasons.join(", "),
                 duration_seconds,
                 altitude_range,

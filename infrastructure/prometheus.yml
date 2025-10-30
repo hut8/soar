@@ -67,6 +67,22 @@ scrape_configs:
         target_label: source
         replacement: 'soar-run'
 
+  # SOAR Pull-Data Metrics (pull-data subcommand - data loading)
+  - job_name: 'soar-pull-data'
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+    scrape_timeout: 3s
+
+    file_sd_configs:
+      - files:
+          - '/etc/prometheus/scrape-configs/soar-pull-data.yml'
+        refresh_interval: 30s
+
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        target_label: source
+        replacement: 'soar-pull-data'
+
 # Alerting configuration (optional)
 # alerting:
 #   alertmanagers:

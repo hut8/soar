@@ -168,46 +168,61 @@ pub(crate) async fn process_state_transition(
                 .find_recent_timed_out_flight(fix.device_id)
                 .await
             {
-                // Resume the timed-out flight
-                let flight_id = timed_out_flight.id;
-                info!(
-                    "Device {} came back into range - resuming timed-out flight {} (was timed out at {})",
-                    fix.device_id,
-                    flight_id,
-                    timed_out_flight
-                        .timed_out_at
-                        .map(|t| t.to_rfc3339())
-                        .unwrap_or_else(|| "unknown".to_string())
-                );
+                // Check if callsigns differ - if both flights have callsigns and they differ,
+                // do NOT coalesce (this indicates a different aircraft/flight)
+                let should_coalesce = match (&timed_out_flight.callsign, &fix.flight_number) {
+                    (Some(prev_callsign), Some(new_callsign)) if prev_callsign != new_callsign => {
+                        info!(
+                            "Device {} came back into range but callsigns differ (previous: '{}', new: '{}') - NOT coalescing, will create new flight",
+                            fix.device_id, prev_callsign, new_callsign
+                        );
+                        false
+                    }
+                    _ => true, // Coalesce if either has no callsign, or callsigns match
+                };
 
-                // Clear the timeout in the database
-                if let Err(e) = flights_repo.clear_timeout(flight_id).await {
-                    warn!("Failed to clear timeout for flight {}: {}", flight_id, e);
-                }
-
-                // Update last_fix_at to current fix timestamp
-                if let Err(e) = flights_repo
-                    .update_last_fix_at(flight_id, fix.timestamp)
-                    .await
-                {
-                    warn!(
-                        "Failed to update last_fix_at for resumed flight {}: {}",
-                        flight_id, e
+                if should_coalesce {
+                    // Resume the timed-out flight
+                    let flight_id = timed_out_flight.id;
+                    info!(
+                        "Device {} came back into range - resuming timed-out flight {} (was timed out at {})",
+                        fix.device_id,
+                        flight_id,
+                        timed_out_flight
+                            .timed_out_at
+                            .map(|t| t.to_rfc3339())
+                            .unwrap_or_else(|| "unknown".to_string())
                     );
+
+                    // Clear the timeout in the database
+                    if let Err(e) = flights_repo.clear_timeout(flight_id).await {
+                        warn!("Failed to clear timeout for flight {}: {}", flight_id, e);
+                    }
+
+                    // Update last_fix_at to current fix timestamp
+                    if let Err(e) = flights_repo
+                        .update_last_fix_at(flight_id, fix.timestamp)
+                        .await
+                    {
+                        warn!(
+                            "Failed to update last_fix_at for resumed flight {}: {}",
+                            flight_id, e
+                        );
+                    }
+
+                    // Add flight back to active_flights map
+                    let state = CurrentFlightState::new(flight_id, fix.timestamp, is_active);
+                    {
+                        let mut flights = active_flights.write().await;
+                        flights.insert(fix.device_id, state);
+                    }
+
+                    // Assign fix to the resumed flight
+                    fix.flight_id = Some(flight_id);
+
+                    // Return the fix with the resumed flight_id
+                    return Ok(fix);
                 }
-
-                // Add flight back to active_flights map
-                let state = CurrentFlightState::new(flight_id, fix.timestamp, is_active);
-                {
-                    let mut flights = active_flights.write().await;
-                    flights.insert(fix.device_id, state);
-                }
-
-                // Assign fix to the resumed flight
-                fix.flight_id = Some(flight_id);
-
-                // Return the fix with the resumed flight_id
-                return Ok(fix);
             }
 
             // No recent timed-out flight to resume, so create a new flight
@@ -236,8 +251,8 @@ pub(crate) async fn process_state_transition(
                 if let Some(offset) = altitude_offset
                     && offset.abs() > 250
                 {
-                    warn!(
-                        "Large altitude offset at takeoff: {} ft for device {} at ({:.6}, {:.6}). Aircraft should be on ground at takeoff.",
+                    info!(
+                        "Flight is initialized while airborne: {} ft for device {} at ({:.6}, {:.6}). Aircraft should be on ground at takeoff.",
                         offset, fix.device_id, fix.latitude, fix.longitude
                     );
                 }
