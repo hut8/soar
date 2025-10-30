@@ -107,26 +107,19 @@ else
     fi
 fi
 
-# Stop main services only (NOT timer-controlled services or timers)
-log_info "Stopping main SOAR services..."
-systemctl stop ${APRS_INGEST_SERVICE}.service 2>/dev/null && log_info "${APRS_INGEST_SERVICE}.service stopped" || log_info "${APRS_INGEST_SERVICE}.service is not running"
-systemctl stop ${RUN_SERVICE}.service 2>/dev/null && log_info "${RUN_SERVICE}.service stopped" || log_info "${RUN_SERVICE}.service is not running"
-systemctl stop ${WEB_SERVICE}.service 2>/dev/null && log_info "${WEB_SERVICE}.service stopped" || log_info "${WEB_SERVICE}.service is not running"
+# NOTE: We don't stop services before deployment
+# Services will be restarted after the new binary is installed
+# This minimizes downtime and allows systemd to handle graceful restarts
 
-# NOTE: NOT stopping timer-controlled services (soar-pull-data, soar-sitemap, soar-archive)
-# They should only be started/stopped by their timers, not manually
-# If they're running, let them complete naturally
-
-# NOTE: NOT stopping or restarting timers
-# Timers will automatically use the new binary on their next scheduled run
-# This prevents interrupting currently running data pulls, sitemap generation, or archival
-log_info "Timer-controlled services and timers left untouched:"
-log_info "  - ${PULL_DATA_SERVICE}.service (will complete if running)"
-log_info "  - ${SITEMAP_SERVICE}.service (will complete if running)"
-log_info "  - ${ARCHIVE_SERVICE}.service (will complete if running)"
-log_info "  - ${PULL_DATA_TIMER}.timer (new binary used on next scheduled run)"
-log_info "  - ${SITEMAP_TIMER}.timer (new binary used on next scheduled run)"
-log_info "  - ${ARCHIVE_TIMER}.timer (new binary used on next scheduled run)"
+# NOTE: NOT stopping or restarting timer-controlled services (soar-pull-data, soar-sitemap, soar-archive)
+# Timer-controlled services should only be started/stopped by their timers
+# They will automatically use the new binary on their next scheduled run
+log_info "Deployment strategy:"
+log_info "  - Main services (aprs-ingest, run, web) will be restarted with new binary"
+log_info "  - Timer-controlled services will use new binary on next scheduled run:"
+log_info "    * ${PULL_DATA_SERVICE}.service"
+log_info "    * ${SITEMAP_SERVICE}.service"
+log_info "    * ${ARCHIVE_SERVICE}.service"
 
 # Create service user if it doesn't exist
 if ! id "${SERVICE_USER}" &>/dev/null; then
