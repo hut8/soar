@@ -734,7 +734,7 @@ impl From<Flight> for NewFlightModel {
             landing_location_id: flight.landing_location_id,
             timed_out_at: flight.timed_out_at,
             last_fix_at: flight.last_fix_at,
-            callsign: flight.callsign,
+            // Note: callsign and tow_release_height_delta_ft omitted - not set on creation
         }
     }
 }
@@ -751,7 +751,6 @@ impl From<FlightModel> for Flight {
             landing_time: model.landing_time,
             departure_airport_id: model.departure_airport_id,
             arrival_airport_id: model.arrival_airport_id,
-            tow_release_height_msl: None, // Deprecated field, kept for API compatibility
             club_id: model.club_id,
             takeoff_altitude_offset_ft: model.takeoff_altitude_offset_ft,
             landing_altitude_offset_ft: model.landing_altitude_offset_ft,
