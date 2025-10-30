@@ -1,5 +1,5 @@
 use crate::queue_config::{ARCHIVE_QUEUE_SIZE, RAW_MESSAGE_QUEUE_SIZE, queue_warning_threshold};
-use anyhow::Result;
+use anyhow::{Context, Result};
 use std::time::Duration;
 use tokio::io::{AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
@@ -266,7 +266,7 @@ impl AprsClient {
 
         // Spawn message publishing task
         let publisher = jetstream_publisher.clone();
-        tokio::spawn(
+        let publisher_handle = tokio::spawn(
             async move {
                 let mut stats_timer = tokio::time::interval(Duration::from_secs(10));
                 stats_timer.tick().await; // First tick completes immediately
@@ -295,7 +295,7 @@ impl AprsClient {
         );
 
         // Spawn connection management task (same as regular start)
-        tokio::spawn(
+        let connection_handle = tokio::spawn(
             async move {
                 let mut retry_count = 0;
                 let mut current_delay = config.retry_delay_seconds;
@@ -358,6 +358,15 @@ impl AprsClient {
             }
             .instrument(tracing::info_span!("jetstream_connection_loop")),
         );
+
+        // Wait for both tasks to complete (they run until shutdown or fatal error)
+        // If either task panics, we'll get an error here
+        let (publisher_result, connection_result) =
+            tokio::join!(publisher_handle, connection_handle);
+
+        // Check if either task panicked
+        publisher_result.context("JetStream publisher task panicked")?;
+        connection_result.context("Connection management task panicked or stopped")?;
 
         Ok(())
     }
