@@ -414,18 +414,6 @@ impl FlightsRepository {
         Ok(results.into_iter().map(|model| model.into()).collect())
     }
 
-    /// Get flights that used a specific tow aircraft
-    /// DEPRECATED: tow_aircraft_id column has been removed, use towed_by_device_id instead
-    #[allow(dead_code)]
-    pub async fn get_flights_by_tow_aircraft(
-        &self,
-        _tow_aircraft_id_param: &str,
-    ) -> Result<Vec<Flight>> {
-        // This method is deprecated and no longer functional
-        // Use get_flights_by_device instead with towed_by_device_id
-        Ok(vec![])
-    }
-
     /// Get the total count of flights in the database
     pub async fn get_flight_count(&self) -> Result<i64> {
         use crate::schema::flights::dsl::*;
@@ -486,40 +474,6 @@ impl FlightsRepository {
         Ok(count)
     }
 
-    /// Update flight details (departure/arrival airports, tow info)
-    /// DEPRECATED: tow_aircraft_id parameter removed
-    #[allow(dead_code)]
-    pub async fn update_flight_details(
-        &self,
-        flight_id: Uuid,
-        departure_airport_id_param: Option<i32>,
-        arrival_airport_id_param: Option<i32>,
-        _tow_aircraft_id_param: Option<String>,
-        tow_release_height_msl_param: Option<i32>,
-    ) -> Result<bool> {
-        use crate::schema::flights::dsl::*;
-
-        let pool = self.pool.clone();
-
-        let rows_affected = tokio::task::spawn_blocking(move || {
-            let mut conn = pool.get()?;
-
-            let rows = diesel::update(flights.filter(id.eq(flight_id)))
-                .set((
-                    departure_airport_id.eq(&departure_airport_id_param),
-                    arrival_airport_id.eq(&arrival_airport_id_param),
-                    tow_release_height_msl.eq(&tow_release_height_msl_param),
-                    updated_at.eq(Utc::now()),
-                ))
-                .execute(&mut conn)?;
-
-            Ok::<usize, anyhow::Error>(rows)
-        })
-        .await??;
-
-        Ok(rows_affected > 0)
-    }
-
     /// Update towing information for a glider flight
     pub async fn update_towing_info(
         &self,
@@ -550,12 +504,14 @@ impl FlightsRepository {
     }
 
     /// Update tow release information for a glider flight
+    /// Calculates tow_release_height_delta_ft by querying the towplane flight's first fix
     pub async fn update_tow_release(
         &self,
         glider_flight_id: Uuid,
         release_altitude_ft: i32,
         release_time: DateTime<Utc>,
     ) -> Result<bool> {
+        use crate::schema::fixes::dsl as fixes_dsl;
         use crate::schema::flights::dsl::*;
 
         let pool = self.pool.clone();
@@ -563,10 +519,36 @@ impl FlightsRepository {
         let rows_affected = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
+            // First, get the glider flight's towplane flight ID
+            let towplane_flight_id_opt: Option<Uuid> = flights
+                .filter(id.eq(glider_flight_id))
+                .select(towed_by_flight_id)
+                .first(&mut conn)?;
+
+            // Calculate tow release height delta if we have a towplane flight
+            let height_delta = if let Some(towplane_flight_id) = towplane_flight_id_opt {
+                // Get the first fix of the towplane flight (chronologically) - just need altitude
+                let first_fix_altitude: Option<Option<i32>> = fixes_dsl::fixes
+                    .filter(fixes_dsl::flight_id.eq(towplane_flight_id))
+                    .order_by(fixes_dsl::timestamp.asc())
+                    .select(fixes_dsl::altitude_msl_feet)
+                    .first(&mut conn)
+                    .optional()?;
+
+                // Calculate delta: release altitude - towplane takeoff altitude
+                first_fix_altitude.and_then(|alt_opt| {
+                    alt_opt.map(|takeoff_alt| release_altitude_ft - takeoff_alt)
+                })
+            } else {
+                None
+            };
+
+            // Update the glider flight with release info and calculated delta
             let rows = diesel::update(flights.filter(id.eq(glider_flight_id)))
                 .set((
                     tow_release_altitude_msl_ft.eq(Some(release_altitude_ft)),
                     tow_release_time.eq(Some(release_time)),
+                    tow_release_height_delta_ft.eq(height_delta),
                     updated_at.eq(Utc::now()),
                 ))
                 .execute(&mut conn)?;

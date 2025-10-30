@@ -19,33 +19,10 @@
 	import { getAircraftTypeOgnDescription, getAircraftTypeColor } from '$lib/formatters';
 	import { auth } from '$lib/stores/auth';
 	import PilotSelectionModal from '$lib/components/PilotSelectionModal.svelte';
+	import TowAircraftLink from '$lib/components/TowAircraftLink.svelte';
+	import type { Flight } from '$lib/types';
 
 	dayjs.extend(relativeTime);
-
-	interface Flight {
-		id: string;
-		device_address: string;
-		device_address_type: string;
-		takeoff_time: string | null;
-		landing_time: string | null;
-		departure_airport: string | null;
-		departure_airport_country: string | null;
-		arrival_airport: string | null;
-		arrival_airport_country: string | null;
-		takeoff_runway_ident: string | null;
-		landing_runway_ident: string | null;
-		tow_aircraft_id: string | null;
-		tow_release_height_msl: number | null;
-		takeoff_altitude_offset_ft: number | null;
-		landing_altitude_offset_ft: number | null;
-		total_distance_meters: number | null;
-		device_id: string | null;
-		aircraft_model: string | null;
-		registration: string | null;
-		aircraft_type_ogn: string | null;
-		created_at: string;
-		updated_at: string;
-	}
 
 	interface Club {
 		id: string;
@@ -152,17 +129,20 @@
 		return `${typePrefix}-${address}`;
 	}
 
-	function formatRelativeTime(dateString: string | null): string {
+	function formatRelativeTime(dateString: string | null | undefined): string {
 		if (!dateString) return '—';
 		return dayjs(dateString).fromNow();
 	}
 
-	function formatLocalTime(dateString: string | null): string {
+	function formatLocalTime(dateString: string | null | undefined): string {
 		if (!dateString) return '';
 		return dayjs(dateString).format('HH:mm');
 	}
 
-	function calculateFlightDuration(takeoff: string | null, landing: string | null): string {
+	function calculateFlightDuration(
+		takeoff: string | null | undefined,
+		landing: string | null | undefined
+	): string {
 		if (!takeoff || !landing) return '—';
 		const takeoffTime = new Date(takeoff).getTime();
 		const landingTime = new Date(landing).getTime();
@@ -172,7 +152,7 @@
 		return `${hours}h ${minutes}m`;
 	}
 
-	function formatDistance(meters: number | null): string {
+	function formatDistance(meters: number | null | undefined): string {
 		if (meters === null || meters === undefined) return '—';
 		const nm = meters / 1852;
 		const km = meters / 1000;
@@ -457,10 +437,10 @@
 															></span
 														>
 													{/if}
-													{#if flight.tow_aircraft_id}
+													{#if flight.towed_by_device_id}
 														<span
 															class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
-															title="This aircraft was towed by {flight.tow_aircraft_id}"
+															title="This aircraft was towed"
 														>
 															<MoveUp class="h-3 w-3" />
 															Towed
@@ -479,10 +459,10 @@
 													{:else}
 														<span class="font-medium">{flight.registration}</span>
 													{/if}
-													{#if flight.tow_aircraft_id}
+													{#if flight.towed_by_device_id}
 														<span
 															class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
-															title="This aircraft was towed by {flight.tow_aircraft_id}"
+															title="This aircraft was towed"
 														>
 															<MoveUp class="h-3 w-3" />
 															Towed
@@ -509,10 +489,10 @@
 															)}
 														</span>
 													{/if}
-													{#if flight.tow_aircraft_id}
+													{#if flight.towed_by_device_id}
 														<span
 															class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
-															title="This aircraft was towed by {flight.tow_aircraft_id}"
+															title="This aircraft was towed"
 														>
 															<MoveUp class="h-3 w-3" />
 															Towed
@@ -576,15 +556,8 @@
 										{formatDistance(flight.total_distance_meters)}
 									</td>
 									<td>
-										{#if flight.tow_aircraft_id}
-											<div class="flex flex-col gap-1">
-												<span class="text-xs">{flight.tow_aircraft_id}</span>
-												{#if flight.tow_release_height_msl}
-													<span class="text-surface-500-400-token text-xs">
-														{flight.tow_release_height_msl}m MSL
-													</span>
-												{/if}
-											</div>
+										{#if flight.towed_by_device_id}
+											<TowAircraftLink deviceId={flight.towed_by_device_id} size="sm" />
 										{:else}
 											<span class="text-surface-500">—</span>
 										{/if}

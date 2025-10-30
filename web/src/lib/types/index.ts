@@ -226,8 +226,8 @@ export interface Flight {
 	arrival_airport?: string; // Airport identifier
 	arrival_airport_id?: number; // Airport ID in database
 	arrival_airport_country?: string; // Country code
-	tow_aircraft_id?: string; // Registration number of tow aircraft
-	tow_release_height_msl?: number; // Tow release height in meters MSL
+	towed_by_device_id?: string; // UUID of towplane device that towed this glider
+	towed_by_flight_id?: string; // UUID of towplane flight that towed this glider
 	club_id?: string; // UUID of club that owns the aircraft
 	takeoff_altitude_offset_ft?: number; // Altitude offset at takeoff
 	landing_altitude_offset_ft?: number; // Altitude offset at landing
@@ -242,13 +242,13 @@ export interface Flight {
 	aircraft_model?: string;
 	registration?: string;
 	aircraft_type_ogn?: string;
+	// Latest fix information (for active flights)
+	latest_altitude_msl_feet: number | null;
+	latest_altitude_agl_feet: number | null;
+	latest_fix_timestamp: string | null;
 	// Navigation to previous/next flights for the same device (chronologically by takeoff time)
 	previous_flight_id?: string;
 	next_flight_id?: string;
-	// Latest position data (for active flights)
-	latest_altitude_msl_feet?: number;
-	latest_altitude_agl_feet?: number;
-	latest_fix_timestamp?: string;
 }
 
 export interface WatchlistEntry {

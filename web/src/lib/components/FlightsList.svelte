@@ -4,6 +4,7 @@
 	import relativeTime from 'dayjs/plugin/relativeTime';
 	import { getAircraftTypeOgnDescription, getAircraftTypeColor } from '$lib/formatters';
 	import type { Flight } from '$lib/types';
+	import TowAircraftLink from '$lib/components/TowAircraftLink.svelte';
 
 	dayjs.extend(relativeTime);
 
@@ -153,10 +154,10 @@
 													></span
 												>
 											{/if}
-											{#if flight.tow_aircraft_id}
+											{#if flight.towed_by_device_id}
 												<span
 													class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
-													title="This aircraft was towed by {flight.tow_aircraft_id}"
+													title="This aircraft was towed"
 												>
 													<MoveUp class="h-3 w-3" />
 													Towed
@@ -175,10 +176,10 @@
 											{:else}
 												<span class="font-medium">{flight.registration}</span>
 											{/if}
-											{#if flight.tow_aircraft_id}
+											{#if flight.towed_by_device_id}
 												<span
 													class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
-													title="This aircraft was towed by {flight.tow_aircraft_id}"
+													title="This aircraft was towed"
 												>
 													<MoveUp class="h-3 w-3" />
 													Towed
@@ -199,10 +200,10 @@
 													{formatDeviceAddress(flight.device_address, flight.device_address_type)}
 												</span>
 											{/if}
-											{#if flight.tow_aircraft_id}
+											{#if flight.towed_by_device_id}
 												<span
 													class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
-													title="This aircraft was towed by {flight.tow_aircraft_id}"
+													title="This aircraft was towed"
 												>
 													<MoveUp class="h-3 w-3" />
 													Towed
@@ -330,15 +331,8 @@
 							</td>
 						{/if}
 						<td>
-							{#if flight.tow_aircraft_id}
-								<div class="flex flex-col gap-1">
-									<span class="text-xs">{flight.tow_aircraft_id}</span>
-									{#if flight.tow_release_height_msl}
-										<span class="text-surface-500-400-token text-xs">
-											{flight.tow_release_height_msl}m MSL
-										</span>
-									{/if}
-								</div>
+							{#if flight.towed_by_device_id}
+								<TowAircraftLink deviceId={flight.towed_by_device_id} size="sm" />
 							{:else}
 								<span class="text-surface-500">—</span>
 							{/if}
@@ -409,10 +403,10 @@
 							{getAircraftTypeOgnDescription(flight.aircraft_type_ogn)}
 						</span>
 					{/if}
-					{#if flight.tow_aircraft_id}
+					{#if flight.towed_by_device_id}
 						<span
 							class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
-							title="This aircraft was towed by {flight.tow_aircraft_id}"
+							title="This aircraft was towed"
 						>
 							<MoveUp class="h-3 w-3" />
 							Towed
