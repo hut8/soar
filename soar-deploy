@@ -18,6 +18,7 @@ ARCHIVE_DIR="/var/soar/archive"
 SITEMAP_DIR="/var/soar/sitemap"
 
 # Services
+APRS_INGEST_SERVICE="soar-aprs-ingest"
 RUN_SERVICE="soar-run"
 WEB_SERVICE="soar-web"
 PULL_DATA_SERVICE="soar-pull-data"
@@ -108,6 +109,7 @@ fi
 
 # Stop main services only (NOT timer-controlled services or timers)
 log_info "Stopping main SOAR services..."
+systemctl stop ${APRS_INGEST_SERVICE}.service 2>/dev/null && log_info "${APRS_INGEST_SERVICE}.service stopped" || log_info "${APRS_INGEST_SERVICE}.service is not running"
 systemctl stop ${RUN_SERVICE}.service 2>/dev/null && log_info "${RUN_SERVICE}.service stopped" || log_info "${RUN_SERVICE}.service is not running"
 systemctl stop ${WEB_SERVICE}.service 2>/dev/null && log_info "${WEB_SERVICE}.service stopped" || log_info "${WEB_SERVICE}.service is not running"
 
@@ -222,6 +224,12 @@ systemctl daemon-reload
 # Enable and start main services
 log_info "Enabling and starting main SOAR services..."
 
+# soar-aprs-ingest (durable message queue service)
+log_info "Enabling ${APRS_INGEST_SERVICE}.service..."
+systemctl enable ${APRS_INGEST_SERVICE}.service
+log_info "Starting ${APRS_INGEST_SERVICE}.service..."
+systemctl restart ${APRS_INGEST_SERVICE}.service || log_warn "Failed to start ${APRS_INGEST_SERVICE}.service"
+
 # soar-run
 log_info "Enabling ${RUN_SERVICE}.service..."
 systemctl enable ${RUN_SERVICE}.service
@@ -290,6 +298,7 @@ check_service() {
 
 FAILED=0
 
+check_service ${APRS_INGEST_SERVICE}.service || FAILED=1
 check_service ${RUN_SERVICE}.service || FAILED=1
 check_service ${WEB_SERVICE}.service || FAILED=1
 check_service ${PULL_DATA_TIMER}.timer || FAILED=1
@@ -321,9 +330,10 @@ rm -rf "$DEPLOY_DIR"
 log_info "🚀 Deployment completed successfully!"
 log_info ""
 log_info "Service Management:"
-log_info "  Status: systemctl status ${RUN_SERVICE} ${WEB_SERVICE}"
+log_info "  Status: systemctl status ${APRS_INGEST_SERVICE} ${RUN_SERVICE} ${WEB_SERVICE}"
 log_info "  Timer Status: systemctl list-timers ${PULL_DATA_TIMER}.timer ${SITEMAP_TIMER}.timer ${ARCHIVE_TIMER}.timer"
-log_info "  Logs: journalctl -u ${RUN_SERVICE} -f"
+log_info "  APRS Ingest logs: journalctl -u ${APRS_INGEST_SERVICE} -f"
+log_info "  Run logs: journalctl -u ${RUN_SERVICE} -f"
 log_info "  Web logs: journalctl -u ${WEB_SERVICE} -f"
 log_info "  Pull-data logs: journalctl -u ${PULL_DATA_SERVICE} -f"
 log_info "  Sitemap logs: journalctl -u ${SITEMAP_SERVICE} -f"

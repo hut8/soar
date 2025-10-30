@@ -13,6 +13,7 @@ pub mod airports;
 pub mod airports_repo;
 pub mod aprs_client;
 pub mod aprs_filters;
+pub mod aprs_jetstream_publisher;
 pub mod aprs_messages_repo;
 pub mod archive;
 pub mod auth;

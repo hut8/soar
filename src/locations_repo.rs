@@ -267,7 +267,7 @@ mod tests {
 
     fn create_test_location() -> Location {
         Location {
-            id: Uuid::new_v4(),
+            id: Uuid::now_v7(),
             street1: Some("123 Main St".to_string()),
             street2: Some("Suite 100".to_string()),
             city: Some("Anytown".to_string()),

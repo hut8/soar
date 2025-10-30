@@ -81,7 +81,7 @@ impl GenericProcessor {
         };
 
         // Step 5: Insert APRS message
-        let aprs_message_id = Uuid::new_v4();
+        let aprs_message_id = Uuid::now_v7();
         let new_aprs_message = NewAprsMessage {
             id: aprs_message_id,
             raw_message: raw_message.to_string(),
