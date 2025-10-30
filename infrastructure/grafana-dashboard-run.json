@@ -608,16 +608,39 @@
         "overrides": [
           {
             "matcher": {
-              "id": "byName",
-              "options": "Queue Full/sec"
+              "id": "byRegexp",
+              "options": ".*Dropped.*"
             },
             "properties": [
               {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "custom.axisLabel",
+                "value": "Dropped/sec"
+              },
+              {
                 "id": "color",
                 "value": {
-                  "fixedColor": "red",
-                  "mode": "fixed"
+                  "mode": "palette-classic"
                 }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*Enqueued.*"
+            },
+            "properties": [
+              {
+                "id": "custom.axisPlacement",
+                "value": "left"
+              },
+              {
+                "id": "custom.axisLabel",
+                "value": "Enqueued/sec"
               }
             ]
           }
@@ -655,8 +678,8 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_aircraft_queue_full[1m])",
-          "legendFormat": "Aircraft Queue Full/sec",
+          "expr": "rate(aprs_aircraft_processed[1m])",
+          "legendFormat": "Aircraft Enqueued",
           "range": true,
           "refId": "A"
         },
@@ -666,8 +689,8 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_receiver_status_queue_full[1m])",
-          "legendFormat": "Receiver Status Queue Full/sec",
+          "expr": "rate(aprs_receiver_status_processed[1m])",
+          "legendFormat": "Receiver Status Enqueued",
           "range": true,
           "refId": "B"
         },
@@ -677,8 +700,8 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_receiver_position_queue_full[1m])",
-          "legendFormat": "Receiver Position Queue Full/sec",
+          "expr": "rate(aprs_receiver_position_processed[1m])",
+          "legendFormat": "Receiver Position Enqueued",
           "range": true,
           "refId": "C"
         },
@@ -688,13 +711,68 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_server_status_queue_full[1m])",
-          "legendFormat": "Server Status Queue Full/sec",
+          "expr": "rate(aprs_server_status_processed[1m])",
+          "legendFormat": "Server Status Enqueued",
           "range": true,
           "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "rate(aprs_aircraft_queue_full[1m]) + rate(aprs_receiver_status_queue_full[1m]) + rate(aprs_receiver_position_queue_full[1m]) + rate(aprs_server_status_queue_full[1m])",
+          "legendFormat": "Total Dropped",
+          "range": true,
+          "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "rate(aprs_aircraft_queue_full[1m])",
+          "legendFormat": "Aircraft Dropped",
+          "range": true,
+          "refId": "F"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "rate(aprs_receiver_status_queue_full[1m])",
+          "legendFormat": "Receiver Status Dropped",
+          "range": true,
+          "refId": "G"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "rate(aprs_receiver_position_queue_full[1m])",
+          "legendFormat": "Receiver Position Dropped",
+          "range": true,
+          "refId": "H"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "rate(aprs_server_status_queue_full[1m])",
+          "legendFormat": "Server Status Dropped",
+          "range": true,
+          "refId": "I"
         }
       ],
-      "title": "APRS Queue Drops by Processor",
+      "title": "Packet Queue",
       "type": "timeseries"
     },
     {
@@ -1057,6 +1135,17 @@
           "legendFormat": "Server Status/sec",
           "range": true,
           "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "rate(aprs_aircraft_processed[5m]) + rate(aprs_receiver_status_processed[5m]) + rate(aprs_receiver_position_processed[5m]) + rate(aprs_server_status_processed[5m])",
+          "legendFormat": "Total/sec",
+          "range": true,
+          "refId": "E"
         }
       ],
       "title": "APRS Processing Rate by Type",
