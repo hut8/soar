@@ -401,9 +401,7 @@
           },
           "editorMode": "code",
           "expr": "aprs_connection_connected",
-          "instant": false,
           "legendFormat": "APRS Connection",
-          "range": false,
           "refId": "A"
         }
       ],
