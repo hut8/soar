@@ -1,3 +1,4 @@
+use crate::queue_config::NATS_PUBLISH_QUEUE_SIZE;
 use anyhow::Result;
 use async_nats::Client;
 use serde_json;
@@ -80,11 +81,13 @@ impl NatsFixPublisher {
 
         let nats_client = Arc::new(nats_client);
 
-        // Create bounded channel for fixes (capacity: 1000 fixes ~= 2MB buffer)
-        let (fix_sender, mut fix_receiver) = mpsc::channel::<FixWithFlightInfo>(1000);
+        // Create bounded channel for fixes (~2MB buffer)
+        let (fix_sender, mut fix_receiver) =
+            mpsc::channel::<FixWithFlightInfo>(NATS_PUBLISH_QUEUE_SIZE);
 
         info!(
-            "NATS publisher initialized with bounded channel (capacity: 1000 fixes, ~2MB buffer)"
+            "NATS publisher initialized with bounded channel (capacity: {} fixes, ~2MB buffer)",
+            NATS_PUBLISH_QUEUE_SIZE
         );
 
         // Spawn SINGLE background task to publish all fixes

@@ -76,7 +76,7 @@ impl Receiver {
         let country = self.country.clone().filter(|c| c != "ZZ");
 
         let receiver_record = ReceiverRecord {
-            id: uuid::Uuid::new_v4(), // Generate a new UUID
+            id: uuid::Uuid::now_v7(), // Generate a new UUID
             callsign: self.callsign.clone().unwrap_or_default(),
             description: self.description.clone(),
             contact: self.contact.clone(),

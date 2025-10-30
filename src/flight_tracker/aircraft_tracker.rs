@@ -89,7 +89,7 @@ mod tests {
 
         // Create a fix with high ground speed
         let mut fix = Fix {
-            id: uuid::Uuid::new_v4(),
+            id: uuid::Uuid::now_v7(),
             source: "TEST".to_string(),
             aprs_type: "APRS".to_string(),
             via: vec![],
@@ -116,7 +116,7 @@ mod tests {
             freq_offset_khz: None,
             gnss_horizontal_resolution: None,
             gnss_vertical_resolution: None,
-            device_id: uuid::Uuid::new_v4(),
+            device_id: uuid::Uuid::now_v7(),
             is_active: true, // 50 knots is active
             receiver_id: None,
             aprs_message_id: None,

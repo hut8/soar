@@ -157,7 +157,7 @@ impl Flight {
     pub fn new(device_address: String, takeoff_time: Option<DateTime<Utc>>) -> Self {
         let now = Utc::now();
         Self {
-            id: Uuid::new_v4(),
+            id: Uuid::now_v7(),
             device_id: None,
             device_address,
             device_address_type: AddressType::Unknown,
@@ -199,7 +199,7 @@ impl Flight {
             fix.ground_speed_knots
         );
         Self {
-            id: Uuid::new_v4(),
+            id: Uuid::now_v7(),
             device_id: fix.device_id.into(),
             device_address: fix.device_address_hex(),
             device_address_type: fix.address_type,

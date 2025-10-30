@@ -557,7 +557,7 @@ impl ClubsRepository {
     pub async fn create_simple_club(&self, club_name: &str) -> Result<Club> {
         use crate::schema::clubs::dsl::*;
 
-        let club_id = Uuid::new_v4();
+        let club_id = Uuid::now_v7();
         let new_club = NewClubModel {
             id: club_id,
             name: club_name.to_string(),
@@ -606,7 +606,7 @@ impl ClubsRepository {
             .await?;
 
         // Create the club with the location_id
-        let club_id = Uuid::new_v4();
+        let club_id = Uuid::now_v7();
         let new_club = NewClubModel {
             id: club_id,
             name: club_name.to_string(),
@@ -698,7 +698,7 @@ mod tests {
 
     fn create_test_club() -> Club {
         Club {
-            id: Uuid::new_v4(),
+            id: Uuid::now_v7(),
             name: "Adirondack Soaring Club".to_string(),
             is_soaring: Some(true),
             home_base_airport_id: None,

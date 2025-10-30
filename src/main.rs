@@ -20,6 +20,11 @@ use soar::packet_processors::{
     AircraftPositionProcessor, GenericProcessor, PacketRouter, ReceiverPositionProcessor,
     ReceiverStatusProcessor, ServerStatusProcessor,
 };
+use soar::queue_config::{
+    AGL_DATABASE_QUEUE_SIZE, AIRCRAFT_QUEUE_SIZE, ELEVATION_QUEUE_SIZE,
+    RECEIVER_POSITION_QUEUE_SIZE, RECEIVER_STATUS_QUEUE_SIZE, SERVER_STATUS_QUEUE_SIZE,
+    queue_warning_threshold,
+};
 use soar::receiver_repo::ReceiverRepository;
 use soar::receiver_status_repo::ReceiverStatusRepository;
 use soar::server_messages_repo::ServerMessagesRepository;
@@ -93,8 +98,11 @@ enum Commands {
     /// Downloads airports and runways data from ourairports-data, creates a temporary directory,
     /// and then invokes the same procedures as load-data.
     PullData {},
-    /// Run the main APRS client
-    Run {
+    /// Ingest APRS messages into NATS JetStream (durable queue service)
+    ///
+    /// This service connects to APRS-IS and publishes all messages to a durable NATS JetStream queue.
+    /// It is designed to run independently and survive restarts without dropping messages.
+    IngestAprs {
         /// APRS server hostname
         #[arg(long, default_value = "aprs.glidernet.org")]
         server: String,
@@ -119,6 +127,12 @@ enum Commands {
         #[arg(long, default_value = "5")]
         retry_delay: u64,
 
+        /// NATS server URL for JetStream
+        #[arg(long, default_value = "nats://localhost:4222")]
+        nats_url: String,
+    },
+    /// Run the main APRS processing service (consumes from JetStream durable queue)
+    Run {
         /// Base directory for message archive (optional)
         #[arg(long)]
         archive_dir: Option<String>,
@@ -127,7 +141,7 @@ enum Commands {
         #[arg(long)]
         archive: bool,
 
-        /// NATS server URL for pub/sub
+        /// NATS server URL for JetStream consumer and pub/sub
         #[arg(long, default_value = "nats://localhost:4222")]
         nats_url: String,
     },
@@ -328,28 +342,184 @@ fn determine_archive_dir() -> Result<String> {
     info!("Using archive directory: {}", home_archive);
     Ok(home_archive)
 }
-
-#[allow(clippy::too_many_arguments)]
+/// Handle the ingest-aprs subcommand - connect to APRS-IS and publish to NATS JetStream
 #[tracing::instrument(skip_all)]
-async fn handle_run(
+async fn handle_ingest_aprs(
     server: String,
     port: u16,
     callsign: String,
     filter: Option<String>,
     max_retries: u32,
     retry_delay: u64,
-    archive_dir: Option<String>,
     nats_url: String,
 ) -> Result<()> {
-    sentry::configure_scope(|scope| {
-        scope.set_tag("operation", "run");
-    });
-    info!("Starting APRS client with server: {}:{}", server, port);
+    use soar::queue_config::{
+        APRS_RAW_STREAM, APRS_RAW_STREAM_STAGING, APRS_RAW_SUBJECT, APRS_RAW_SUBJECT_STAGING,
+    };
 
-    // Acquire instance lock to prevent multiple instances from running
+    sentry::configure_scope(|scope| {
+        scope.set_tag("operation", "ingest-aprs");
+    });
+
+    // Determine environment and use appropriate stream/subject names
+    // Production: "APRS_RAW" and "aprs.raw"
+    // Staging: "STAGING_APRS_RAW" and "staging.aprs.raw"
     let is_production = env::var("SOAR_ENV")
         .map(|env| env == "production")
         .unwrap_or(false);
+
+    let (final_stream_name, final_subject) = if is_production {
+        (APRS_RAW_STREAM.to_string(), APRS_RAW_SUBJECT.to_string())
+    } else {
+        (
+            APRS_RAW_STREAM_STAGING.to_string(),
+            APRS_RAW_SUBJECT_STAGING.to_string(),
+        )
+    };
+
+    info!(
+        "Starting APRS ingestion service - server: {}:{}, NATS: {}, stream: {}, subject: {}",
+        server, port, nats_url, final_stream_name, final_subject
+    );
+
+    info!(
+        "Environment: {}, using stream '{}' and subject '{}'",
+        if is_production {
+            "production"
+        } else {
+            "staging"
+        },
+        final_stream_name,
+        final_subject
+    );
+
+    // Start metrics server in production mode
+    if is_production {
+        info!("Starting metrics server on port 9093");
+        tokio::spawn(
+            async {
+                soar::metrics::start_metrics_server(9093).await;
+            }
+            .instrument(tracing::info_span!("metrics_server")),
+        );
+    }
+
+    // Acquire instance lock to prevent multiple ingest instances from running
+    let lock_name = if is_production {
+        "aprs-ingest-production"
+    } else {
+        "aprs-ingest-dev"
+    };
+    let _lock = InstanceLock::new(lock_name)
+        .context("Failed to acquire instance lock - is another aprs-ingest instance running?")?;
+    info!("Instance lock acquired for {}", lock_name);
+
+    // Connect to NATS and set up JetStream
+    info!("Connecting to NATS at {}...", nats_url);
+    let nats_client = async_nats::connect(&nats_url)
+        .await
+        .context("Failed to connect to NATS")?;
+    info!("Connected to NATS successfully");
+
+    let jetstream = async_nats::jetstream::new(nats_client);
+
+    // Create or get the stream for raw APRS messages
+    info!(
+        "Setting up JetStream stream '{}' for subject '{}'...",
+        final_stream_name, final_subject
+    );
+
+    let stream = match jetstream.get_stream(&final_stream_name).await {
+        Ok(stream) => {
+            info!("JetStream stream '{}' already exists", final_stream_name);
+            stream
+        }
+        Err(_) => {
+            info!("Creating new JetStream stream '{}'...", final_stream_name);
+            jetstream
+                .create_stream(async_nats::jetstream::stream::Config {
+                    name: final_stream_name.clone(),
+                    subjects: vec![final_subject.clone()],
+                    max_messages: 10_000_000, // Store up to 10M messages
+                    max_bytes: 10 * 1024 * 1024 * 1024, // 10GB max
+                    max_age: std::time::Duration::from_secs(24 * 60 * 60), // 24 hours retention
+                    storage: async_nats::jetstream::stream::StorageType::File,
+                    num_replicas: 1,
+                    ..Default::default()
+                })
+                .await
+                .context("Failed to create JetStream stream")?
+        }
+    };
+
+    info!(
+        "JetStream stream ready - will publish to subject '{}'",
+        final_subject
+    );
+
+    // Create a simplified APRS client that publishes to JetStream
+    let config = AprsClientConfigBuilder::new()
+        .server(server)
+        .port(port)
+        .callsign(callsign)
+        .filter(filter)
+        .max_retries(max_retries)
+        .retry_delay_seconds(retry_delay)
+        .build();
+
+    // Create a custom "router" that just publishes to JetStream
+    let jetstream_publisher = soar::aprs_jetstream_publisher::JetStreamPublisher::new(
+        jetstream,
+        final_subject.clone(),
+        stream,
+    );
+
+    let mut client = AprsClient::new(config);
+
+    info!("Starting APRS client for ingestion...");
+    client
+        .start_jetstream(jetstream_publisher)
+        .await
+        .context("APRS ingestion client failed")?;
+
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+#[tracing::instrument(skip_all)]
+async fn handle_run(archive_dir: Option<String>, nats_url: String) -> Result<()> {
+    use soar::queue_config::{
+        APRS_RAW_STREAM, APRS_RAW_STREAM_STAGING, APRS_RAW_SUBJECT, APRS_RAW_SUBJECT_STAGING,
+        SOAR_RUN_CONSUMER, SOAR_RUN_CONSUMER_STAGING,
+    };
+
+    sentry::configure_scope(|scope| {
+        scope.set_tag("operation", "run");
+    });
+
+    // Determine environment and use appropriate stream/subject/consumer names
+    let is_production = env::var("SOAR_ENV")
+        .map(|env| env == "production")
+        .unwrap_or(false);
+
+    let (final_stream_name, final_subject, final_consumer_name) = if is_production {
+        (
+            APRS_RAW_STREAM.to_string(),
+            APRS_RAW_SUBJECT.to_string(),
+            SOAR_RUN_CONSUMER.to_string(),
+        )
+    } else {
+        (
+            APRS_RAW_STREAM_STAGING.to_string(),
+            APRS_RAW_SUBJECT_STAGING.to_string(),
+            SOAR_RUN_CONSUMER_STAGING.to_string(),
+        )
+    };
+
+    info!(
+        "Starting APRS processing service consuming from JetStream stream: {}, subject: {}, consumer: {}",
+        final_stream_name, final_subject, final_consumer_name
+    );
 
     // Start metrics server in the background
     if is_production {
@@ -361,6 +531,7 @@ async fn handle_run(
             .instrument(tracing::info_span!("metrics_server")),
         );
     }
+
     let lock_name = if is_production {
         "soar-run-production"
     } else {
@@ -380,23 +551,17 @@ async fn handle_run(
         env::var("ELEVATION_DATA_PATH").unwrap_or_else(|_| "/var/soar/elevation".to_string());
     info!("Elevation data path: {}", elevation_path);
 
-    // Use port 10152 (full feed) if no filter is specified, otherwise use specified port
-    let actual_port = if filter.is_none() {
-        info!("No filter specified, using full feed port 10152");
-        10152
-    } else {
-        port
-    };
-
-    // Create APRS client configuration
-    let config = AprsClientConfigBuilder::new()
-        .server(server)
-        .port(actual_port)
-        .callsign(callsign)
-        .filter(filter)
-        .max_retries(max_retries)
-        .retry_delay_seconds(retry_delay)
-        .build();
+    info!(
+        "Environment: {}, using stream '{}', subject '{}', consumer '{}'",
+        if is_production {
+            "production"
+        } else {
+            "staging"
+        },
+        final_stream_name,
+        final_subject,
+        final_consumer_name
+    );
 
     // Create FlightTracker
     let flight_tracker = FlightTracker::new(&diesel_pool);
@@ -423,18 +588,18 @@ async fn handle_run(
     // Start flight timeout checker (every 60 seconds)
     flight_tracker.start_timeout_checker(60);
 
-    // Create separate bounded channel for elevation/AGL calculations (capacity: 1000)
+    // Create separate bounded channel for elevation/AGL calculations
     // This prevents elevation lookups (which can be slow) from blocking the main processing queue
     let (elevation_tx, elevation_rx) =
-        tokio::sync::mpsc::channel::<soar::elevation::ElevationTask>(1000);
+        tokio::sync::mpsc::channel::<soar::elevation::ElevationTask>(ELEVATION_QUEUE_SIZE);
 
     info!("Created bounded elevation processing queue with capacity 1,000");
 
-    // Create separate bounded channel for AGL database updates (capacity: 10,000)
+    // Create separate bounded channel for AGL database updates
     // This separates the fast elevation calculation from the slower database updates
     // and allows batching of database writes for much better throughput
     let (agl_db_tx, agl_db_rx) =
-        tokio::sync::mpsc::channel::<soar::elevation::AglDatabaseTask>(10_000);
+        tokio::sync::mpsc::channel::<soar::elevation::AglDatabaseTask>(AGL_DATABASE_QUEUE_SIZE);
 
     info!("Created bounded AGL database update queue with capacity 10,000");
 
@@ -515,20 +680,34 @@ async fn handle_run(
 
     // Create bounded channels for per-processor queues
     // Aircraft positions: highest capacity due to high volume and heavy processing
-    let (aircraft_tx, aircraft_rx) = tokio::sync::mpsc::channel(50_000);
-    info!("Created aircraft position queue with capacity 50,000");
+    let (aircraft_tx, aircraft_rx) = tokio::sync::mpsc::channel(AIRCRAFT_QUEUE_SIZE);
+    info!(
+        "Created aircraft position queue with capacity {}",
+        AIRCRAFT_QUEUE_SIZE
+    );
 
     // Receiver status: high capacity
-    let (receiver_status_tx, receiver_status_rx) = tokio::sync::mpsc::channel(10_000);
-    info!("Created receiver status queue with capacity 10,000");
+    let (receiver_status_tx, receiver_status_rx) =
+        tokio::sync::mpsc::channel(RECEIVER_STATUS_QUEUE_SIZE);
+    info!(
+        "Created receiver status queue with capacity {}",
+        RECEIVER_STATUS_QUEUE_SIZE
+    );
 
     // Receiver position: medium capacity
-    let (receiver_position_tx, receiver_position_rx) = tokio::sync::mpsc::channel(5_000);
-    info!("Created receiver position queue with capacity 5,000");
+    let (receiver_position_tx, receiver_position_rx) =
+        tokio::sync::mpsc::channel(RECEIVER_POSITION_QUEUE_SIZE);
+    info!(
+        "Created receiver position queue with capacity {}",
+        RECEIVER_POSITION_QUEUE_SIZE
+    );
 
     // Server status: low capacity (rare messages)
-    let (server_status_tx, server_status_rx) = tokio::sync::mpsc::channel(1_000);
-    info!("Created server status queue with capacity 1,000");
+    let (server_status_tx, server_status_rx) = tokio::sync::mpsc::channel(SERVER_STATUS_QUEUE_SIZE);
+    info!(
+        "Created server status queue with capacity {}",
+        SERVER_STATUS_QUEUE_SIZE
+    );
 
     // Create PacketRouter with per-processor queues
     let packet_router = PacketRouter::new(generic_processor)
@@ -857,26 +1036,26 @@ async fn handle_run(
                 metrics::gauge!("aprs.server_status_queue.depth").set(server_status_depth as f64);
                 metrics::gauge!("aprs.elevation_queue.depth").set(elevation_depth as f64);
 
-                // Warn if queues are building up
-                if aircraft_depth > 25000 {
+                // Warn if queues are building up (50% full)
+                if aircraft_depth > queue_warning_threshold(AIRCRAFT_QUEUE_SIZE) {
                     warn!(
                         "Aircraft position queue building up: {} messages (50% full)",
                         aircraft_depth
                     );
                 }
-                if receiver_status_depth > 5000 {
+                if receiver_status_depth > queue_warning_threshold(RECEIVER_STATUS_QUEUE_SIZE) {
                     warn!(
                         "Receiver status queue building up: {} messages (50% full)",
                         receiver_status_depth
                     );
                 }
-                if receiver_position_depth > 2500 {
+                if receiver_position_depth > queue_warning_threshold(RECEIVER_POSITION_QUEUE_SIZE) {
                     warn!(
                         "Receiver position queue building up: {} messages (50% full)",
                         receiver_position_depth
                     );
                 }
-                if elevation_depth > 500 {
+                if elevation_depth > queue_warning_threshold(ELEVATION_QUEUE_SIZE) {
                     warn!(
                         "Elevation queue building up: {} tasks (50% full)",
                         elevation_depth
@@ -888,11 +1067,43 @@ async fn handle_run(
     );
     info!("Spawned queue depth metrics reporter (reports every 10 seconds to Prometheus)");
 
-    // Create and start APRS client - it will call PacketRouter directly (no queue between them)
-    let mut client = AprsClient::new(config);
+    // Set up JetStream consumer to read from durable queue
+    info!("Connecting to NATS at {}...", nats_url);
+    let nats_client = async_nats::connect(&nats_url)
+        .await
+        .context("Failed to connect to NATS")?;
+    info!("Connected to NATS successfully");
 
-    info!("Starting APRS client with direct PacketRouter calls (no queue)...");
-    client.start(packet_router).await?;
+    let jetstream = async_nats::jetstream::new(nats_client);
+
+    // Create JetStream consumer
+    info!(
+        "Creating JetStream consumer '{}' for stream '{}', subject '{}'...",
+        final_consumer_name, final_stream_name, final_subject
+    );
+    let consumer = soar::aprs_jetstream_consumer::JetStreamConsumer::new(
+        jetstream,
+        final_stream_name.clone(),
+        final_subject.clone(),
+        final_consumer_name.clone(),
+    )
+    .await
+    .context("Failed to create JetStream consumer")?;
+
+    info!("JetStream consumer ready, starting message processing...");
+
+    // Start consuming messages from JetStream
+    // Each message will be parsed and routed through PacketRouter
+    consumer
+        .consume(move |message| {
+            let packet_router = packet_router.clone();
+            async move {
+                // Parse the APRS message using the same parser as the APRS client
+                AprsClient::process_message(&message, &packet_router).await;
+                Ok(())
+            }
+        })
+        .await?;
 
     // Spawn periodic performance metrics logger
     // This helps diagnose what's slowing down processing
@@ -1201,13 +1412,27 @@ async fn main() -> Result<()> {
             .await
         }
         Commands::PullData {} => pull::handle_pull_data(diesel_pool).await,
-        Commands::Run {
+        Commands::IngestAprs {
             server,
             port,
             callsign,
             filter,
             max_retries,
             retry_delay,
+            nats_url,
+        } => {
+            handle_ingest_aprs(
+                server,
+                port,
+                callsign,
+                filter,
+                max_retries,
+                retry_delay,
+                nats_url,
+            )
+            .await
+        }
+        Commands::Run {
             archive_dir,
             archive,
             nats_url,
@@ -1219,17 +1444,7 @@ async fn main() -> Result<()> {
                 archive_dir
             };
 
-            handle_run(
-                server,
-                port,
-                callsign,
-                filter,
-                max_retries,
-                retry_delay,
-                final_archive_dir,
-                nats_url,
-            )
-            .await
+            handle_run(final_archive_dir, nats_url).await
         }
         Commands::Web { interface, port } => {
             // Check SOAR_ENV and override port if not production

@@ -158,7 +158,7 @@ impl UsersRepository {
     pub async fn create_user(&self, request: &CreateUserRequest) -> Result<User> {
         // Hash password
         let password_hash = self.hash_password(&request.password)?;
-        let user_id = Uuid::new_v4();
+        let user_id = Uuid::now_v7();
 
         let pool = self.pool.clone();
         let new_user = NewUser {

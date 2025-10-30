@@ -47,7 +47,7 @@ impl ServerMessage {
         let now = Utc::now();
 
         Self {
-            id: Uuid::new_v4(),
+            id: Uuid::now_v7(),
             software,
             server_timestamp,
             received_at,

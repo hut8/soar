@@ -222,7 +222,7 @@ pub(crate) async fn process_state_transition(
             let is_takeoff =
                 recent_fixes.len() >= 3 && recent_fixes.iter().all(|f| !should_be_active(f));
 
-            let flight_id = Uuid::new_v4();
+            let flight_id = Uuid::now_v7();
 
             if is_takeoff {
                 // Case 2a: Taking off - last fixes were inactive
