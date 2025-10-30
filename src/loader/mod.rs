@@ -12,10 +12,27 @@ use r2d2::Pool;
 use std::time::Instant;
 use tracing::{info, warn};
 
-use crate::email_reporter::{DataLoadReport, EmailConfig, send_email_report, send_failure_email};
+use crate::email_reporter::{
+    DataLoadReport, EmailConfig, EntityMetrics, send_email_report, send_failure_email,
+};
 use crate::geocoding::geocode_components;
 use crate::locations::Point;
 use crate::locations_repo::LocationsRepository;
+
+/// Helper function to record Prometheus metrics for a data load stage
+fn record_stage_metrics(metrics: &EntityMetrics, stage_name: &str) {
+    let stage_name = stage_name.to_string();
+    metrics::histogram!("data_load.stage.duration_seconds", "stage" => stage_name.clone())
+        .record(metrics.duration_secs);
+    metrics::counter!("data_load.stage.records_loaded", "stage" => stage_name.clone())
+        .increment(metrics.records_loaded as u64);
+    metrics::gauge!("data_load.stage.success", "stage" => stage_name.clone())
+        .set(if metrics.success { 1.0 } else { 0.0 });
+    if let Some(records_in_db) = metrics.records_in_db {
+        metrics::gauge!("data_load.stage.records_in_db", "stage" => stage_name)
+            .set(records_in_db as f64);
+    }
+}
 
 /// Main entry point for loading all data types with email reporting
 #[allow(clippy::too_many_arguments)]
@@ -51,6 +68,8 @@ pub async fn handle_load_data(
     )
     .await
     {
+        record_stage_metrics(&metrics, "aircraft_models");
+
         // Send immediate failure email if configured
         if !metrics.success
             && let Some(ref config) = email_config
@@ -70,6 +89,7 @@ pub async fn handle_load_data(
     )
     .await
     {
+        record_stage_metrics(&metrics, "aircraft_registrations");
         if !metrics.success
             && let Some(ref config) = email_config
         {
@@ -85,6 +105,7 @@ pub async fn handle_load_data(
     if let Some(metrics) =
         airports_runways::load_airports_with_metrics(diesel_pool.clone(), airports_path).await
     {
+        record_stage_metrics(&metrics, "airports");
         if !metrics.success
             && let Some(ref config) = email_config
         {
@@ -100,6 +121,7 @@ pub async fn handle_load_data(
     if let Some(metrics) =
         airports_runways::load_runways_with_metrics(diesel_pool.clone(), runways_path).await
     {
+        record_stage_metrics(&metrics, "runways");
         if !metrics.success
             && let Some(ref config) = email_config
         {
@@ -115,6 +137,7 @@ pub async fn handle_load_data(
     if let Some(metrics) =
         devices_receivers::load_receivers_with_metrics(diesel_pool.clone(), receivers_path).await
     {
+        record_stage_metrics(&metrics, "receivers");
         if !metrics.success
             && let Some(ref config) = email_config
         {
@@ -130,6 +153,7 @@ pub async fn handle_load_data(
     if let Some(metrics) =
         devices_receivers::load_devices_with_metrics(diesel_pool.clone(), devices_path).await
     {
+        record_stage_metrics(&metrics, "devices");
         if !metrics.success
             && let Some(ref config) = email_config
         {
@@ -146,6 +170,7 @@ pub async fn handle_load_data(
     {
         let metrics =
             device_linking::link_aircraft_to_devices_with_metrics(diesel_pool.clone()).await;
+        record_stage_metrics(&metrics, "link_aircraft_to_devices");
 
         if !metrics.success
             && let Some(ref config) = email_config
@@ -162,6 +187,7 @@ pub async fn handle_load_data(
     // Link devices to clubs from aircraft (after aircraft are linked to devices)
     {
         let metrics = device_linking::link_devices_to_clubs_with_metrics(diesel_pool.clone()).await;
+        record_stage_metrics(&metrics, "link_devices_to_clubs");
 
         if !metrics.success
             && let Some(ref config) = email_config
@@ -177,6 +203,7 @@ pub async fn handle_load_data(
 
     // Geocoding (if requested)
     if geocode && let Some(metrics) = geocode_soaring_clubs(diesel_pool.clone()).await {
+        record_stage_metrics(&metrics, "geocoding");
         if !metrics.success
             && let Some(ref config) = email_config
         {
@@ -192,6 +219,7 @@ pub async fn handle_load_data(
     // Link home bases (if requested)
     if link_home_bases {
         let metrics = home_base_linking::link_home_bases_with_metrics(diesel_pool.clone()).await;
+        record_stage_metrics(&metrics, "link_home_bases");
 
         if !metrics.success
             && let Some(ref config) = email_config
@@ -206,6 +234,20 @@ pub async fn handle_load_data(
     }
 
     report.total_duration_secs = overall_start.elapsed().as_secs_f64();
+
+    // Record overall metrics
+    metrics::histogram!("data_load.total_duration_seconds").record(report.total_duration_secs);
+    metrics::gauge!("data_load.overall_success").set(if report.overall_success {
+        1.0
+    } else {
+        0.0
+    });
+    metrics::gauge!("data_load.last_run_timestamp").set(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as f64,
+    );
 
     // Send final summary email report if config is available
     if let Some(config) = email_config

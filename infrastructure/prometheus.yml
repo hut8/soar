@@ -9,6 +9,11 @@ global:
     environment: 'production'
     service: 'soar'
 
+# Load additional scrape configurations from files
+# Add new scrape configs by creating prometheus-scrape-*.yml files
+scrape_config_files:
+  - 'prometheus-scrape-*.yml'
+
 # Scrape configurations
 scrape_configs:
   # SOAR Web Server Metrics (HTTP API endpoints)
