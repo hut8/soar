@@ -655,8 +655,8 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(aprs_worker_processed[1m]))",
-          "legendFormat": "Enqueued/sec",
+          "expr": "rate(aprs_aircraft_queue_full[1m])",
+          "legendFormat": "Aircraft Queue Full/sec",
           "range": true,
           "refId": "A"
         },
@@ -666,8 +666,8 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_queue_full[1m])",
-          "legendFormat": "Queue Full/sec",
+          "expr": "rate(aprs_receiver_status_queue_full[1m])",
+          "legendFormat": "Receiver Status Queue Full/sec",
           "range": true,
           "refId": "B"
         },
@@ -677,13 +677,24 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_queue_closed[1m])",
-          "legendFormat": "Queue Closed/sec",
+          "expr": "rate(aprs_receiver_position_queue_full[1m])",
+          "legendFormat": "Receiver Position Queue Full/sec",
           "range": true,
           "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "rate(aprs_server_status_queue_full[1m])",
+          "legendFormat": "Server Status Queue Full/sec",
+          "range": true,
+          "refId": "D"
         }
       ],
-      "title": "APRS Queue",
+      "title": "APRS Queue Drops by Processor",
       "type": "timeseries"
     },
     {
@@ -789,8 +800,8 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "aprs_processing_duration_ms{quantile=\"0.5\"}",
-          "legendFormat": "P50",
+          "expr": "aprs_aircraft_duration_ms{quantile=\"0.5\"}",
+          "legendFormat": "Aircraft P50",
           "range": true,
           "refId": "A"
         },
@@ -800,8 +811,8 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "aprs_processing_duration_ms{quantile=\"0.95\"}",
-          "legendFormat": "P95",
+          "expr": "aprs_aircraft_duration_ms{quantile=\"0.95\"}",
+          "legendFormat": "Aircraft P95",
           "range": true,
           "refId": "B"
         },
@@ -811,10 +822,109 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "aprs_processing_duration_ms{quantile=\"0.99\"}",
-          "legendFormat": "P99",
+          "expr": "aprs_aircraft_duration_ms{quantile=\"0.99\"}",
+          "legendFormat": "Aircraft P99",
           "range": true,
           "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "aprs_receiver_status_duration_ms{quantile=\"0.5\"}",
+          "legendFormat": "Receiver Status P50",
+          "range": true,
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "aprs_receiver_status_duration_ms{quantile=\"0.95\"}",
+          "legendFormat": "Receiver Status P95",
+          "range": true,
+          "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "aprs_receiver_status_duration_ms{quantile=\"0.99\"}",
+          "legendFormat": "Receiver Status P99",
+          "range": true,
+          "refId": "F"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "aprs_receiver_position_duration_ms{quantile=\"0.5\"}",
+          "legendFormat": "Receiver Position P50",
+          "range": true,
+          "refId": "G"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "aprs_receiver_position_duration_ms{quantile=\"0.95\"}",
+          "legendFormat": "Receiver Position P95",
+          "range": true,
+          "refId": "H"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "aprs_receiver_position_duration_ms{quantile=\"0.99\"}",
+          "legendFormat": "Receiver Position P99",
+          "range": true,
+          "refId": "I"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "aprs_server_status_duration_ms{quantile=\"0.5\"}",
+          "legendFormat": "Server Status P50",
+          "range": true,
+          "refId": "J"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "aprs_server_status_duration_ms{quantile=\"0.95\"}",
+          "legendFormat": "Server Status P95",
+          "range": true,
+          "refId": "K"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "aprs_server_status_duration_ms{quantile=\"0.99\"}",
+          "legendFormat": "Server Status P99",
+          "range": true,
+          "refId": "L"
         }
       ],
       "title": "APRS Packet Processing Duration",
@@ -910,13 +1020,46 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(aprs_worker_processed[5m]))",
-          "legendFormat": "Total Processing Rate",
+          "expr": "rate(aprs_aircraft_processed[5m])",
+          "legendFormat": "Aircraft/sec",
           "range": true,
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "rate(aprs_receiver_status_processed[5m])",
+          "legendFormat": "Receiver Status/sec",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "rate(aprs_receiver_position_processed[5m])",
+          "legendFormat": "Receiver Position/sec",
+          "range": true,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "rate(aprs_server_status_processed[5m])",
+          "legendFormat": "Server Status/sec",
+          "range": true,
+          "refId": "D"
         }
       ],
-      "title": "APRS Worker Processing Rate",
+      "title": "APRS Processing Rate by Type",
       "type": "timeseries"
     },
     {
