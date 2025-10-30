@@ -122,6 +122,9 @@ pub struct Flight {
     /// Updated whenever a fix is assigned to this flight
     pub last_fix_at: DateTime<Utc>,
 
+    /// Callsign / flight number (e.g., "KLM33K") from APRS packets
+    pub callsign: Option<String>,
+
     /// Database timestamps
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -179,6 +182,7 @@ impl Flight {
             landing_location_id: None,
             timed_out_at: None,
             last_fix_at: now,
+            callsign: None,
             created_at: now,
             updated_at: now,
         }
@@ -220,6 +224,7 @@ impl Flight {
             landing_location_id: None,
             timed_out_at: None,
             last_fix_at: fix.timestamp,
+            callsign: None,
             created_at: now,
             updated_at: now,
         }
@@ -260,6 +265,7 @@ impl Flight {
             landing_location_id: None,
             timed_out_at: None,
             last_fix_at: fix.timestamp,
+            callsign: None,
             created_at: now,
             updated_at: now,
         }
@@ -308,6 +314,7 @@ impl Flight {
             landing_location_id: None,
             timed_out_at: None,
             last_fix_at: fix.timestamp,
+            callsign: None,
             created_at: now,
             updated_at: now,
         }
@@ -627,6 +634,7 @@ pub struct FlightModel {
     pub landing_location_id: Option<Uuid>,
     pub timed_out_at: Option<DateTime<Utc>>,
     pub last_fix_at: DateTime<Utc>,
+    pub callsign: Option<String>,
     pub tow_release_height_delta_ft: Option<i32>,
 }
 
@@ -692,6 +700,7 @@ impl From<Flight> for FlightModel {
             landing_location_id: flight.landing_location_id,
             timed_out_at: flight.timed_out_at,
             last_fix_at: flight.last_fix_at,
+            callsign: flight.callsign,
             tow_release_height_delta_ft: flight.tow_release_height_delta_ft,
         }
     }
@@ -725,6 +734,7 @@ impl From<Flight> for NewFlightModel {
             landing_location_id: flight.landing_location_id,
             timed_out_at: flight.timed_out_at,
             last_fix_at: flight.last_fix_at,
+            // Note: callsign and tow_release_height_delta_ft omitted - not set on creation
         }
     }
 }
@@ -757,6 +767,7 @@ impl From<FlightModel> for Flight {
             landing_location_id: model.landing_location_id,
             timed_out_at: model.timed_out_at,
             last_fix_at: model.last_fix_at,
+            callsign: model.callsign,
             tow_release_height_delta_ft: model.tow_release_height_delta_ft,
             created_at: model.created_at,
             updated_at: model.updated_at,

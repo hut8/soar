@@ -149,7 +149,7 @@ impl FixProcessor {
                     .await
                 {
                     Ok(device_model) => {
-                        // Extract ICAO model code and ADS-B emitter category from packet for device update
+                        // Extract ICAO model code, ADS-B emitter category, and registration from packet for device update
                         let icao_model_code: Option<String> = pos_packet
                             .comment
                             .model
@@ -159,6 +159,11 @@ impl FixProcessor {
                             .comment
                             .adsb_emitter_category
                             .and_then(|cat| cat.to_string().parse().ok());
+                        let registration: Option<String> = pos_packet
+                            .comment
+                            .registration
+                            .as_ref()
+                            .map(|reg| reg.to_string());
 
                         // Check if we have new/different information to update
                         let icao_changed = icao_model_code.is_some()
@@ -167,12 +172,24 @@ impl FixProcessor {
                             && adsb_emitter_category != device_model.adsb_emitter_category;
                         let tracker_type_changed =
                             Some(&tracker_device_type) != device_model.tracker_device_type.as_ref();
+                        let registration_changed = registration.is_some()
+                            && registration.as_deref() != Some(device_model.registration.as_str())
+                            && !device_model.registration.is_empty();
 
                         // Update device fields only if we have new/different information
-                        if icao_changed || adsb_changed || tracker_type_changed {
+                        if icao_changed
+                            || adsb_changed
+                            || tracker_type_changed
+                            || registration_changed
+                        {
                             let device_repo = self.device_repo.clone();
                             let device_id = device_model.id;
                             let tracker_type_to_update = Some(tracker_device_type.clone());
+                            let registration_to_update = if registration_changed {
+                                registration.clone()
+                            } else {
+                                None
+                            };
                             tokio::spawn(
                                 async move {
                                     if let Err(e) = device_repo
@@ -181,6 +198,7 @@ impl FixProcessor {
                                             icao_model_code,
                                             adsb_emitter_category,
                                             tracker_type_to_update,
+                                            registration_to_update,
                                         )
                                         .await
                                     {
@@ -228,7 +246,7 @@ impl FixProcessor {
     /// Internal method to process a fix through the complete pipeline
     #[tracing::instrument(skip(self, fix, raw_message), fields(device_id = %fix.device_id))]
     async fn process_fix_internal(&self, fix: Fix, raw_message: &str) {
-        // Step 1 & 2: Process through flight detection AND save to database
+        // Step 1: Process through flight detection AND save to database
         // This is done atomically while holding a per-device lock to prevent race conditions
         let updated_fix = match self
             .flight_detection_processor
@@ -239,7 +257,7 @@ impl FixProcessor {
             None => return, // Fix was discarded (duplicate, error, etc.)
         };
 
-        // Step 3: Update receiver's latest_packet_at if this fix has a receiver_id
+        // Step 2: Update receiver's latest_packet_at if this fix has a receiver_id
         if let Some(receiver_id) = updated_fix.receiver_id {
             let receiver_repo = self.receiver_repo.clone();
             tokio::spawn(
@@ -257,7 +275,7 @@ impl FixProcessor {
             );
         }
 
-        // Step 4: Update device cached fields (aircraft_type_ogn and last_fix_at)
+        // Step 3: Update device cached fields (aircraft_type_ogn and last_fix_at)
         let device_repo = self.device_repo.clone();
         let device_id = updated_fix.device_id;
         let aircraft_type = updated_fix.aircraft_type_ogn;
@@ -279,7 +297,44 @@ impl FixProcessor {
             ),
         );
 
-        // Step 2.5: Calculate and update altitude_agl via dedicated elevation channel
+        // Step 4: Update flight callsign if this fix has a flight_id and flight_number
+        if let (Some(flight_id), Some(flight_number)) =
+            (updated_fix.flight_id, &updated_fix.flight_number)
+            && !flight_number.is_empty()
+        {
+            // Get the current flight to check if callsign needs updating
+            match self
+                .flight_detection_processor
+                .get_flight_by_id(flight_id)
+                .await
+            {
+                Ok(Some(flight)) => {
+                    // Only update if callsign is different
+                    if flight.callsign.as_deref() != Some(flight_number)
+                        && let Err(e) = self
+                            .flight_detection_processor
+                            .update_flight_callsign(flight_id, Some(flight_number.clone()))
+                            .await
+                    {
+                        debug!("Failed to update callsign for flight {}: {}", flight_id, e);
+                    }
+                }
+                Ok(None) => {
+                    trace!(
+                        "Flight {} not found when trying to update callsign",
+                        flight_id
+                    );
+                }
+                Err(e) => {
+                    debug!(
+                        "Failed to fetch flight {} for callsign update: {}",
+                        flight_id, e
+                    );
+                }
+            }
+        }
+
+        // Step 5: Calculate and update altitude_agl via dedicated elevation channel
         // This prevents slow elevation lookups from blocking the main processing queue
         if let Some(elevation_tx) = &self.elevation_tx {
             let task = ElevationTask {
@@ -311,7 +366,7 @@ impl FixProcessor {
             }
         }
 
-        // Step 3: Publish to NATS with updated fix (including flight_id and flight info)
+        // Step 6: Publish to NATS with updated fix (including flight_id and flight info)
         if let Some(nats_publisher) = self.nats_publisher.as_ref() {
             // Look up flight information if this fix is part of a flight
             let flight = if let Some(flight_id) = updated_fix.flight_id {

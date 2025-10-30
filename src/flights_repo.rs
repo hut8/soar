@@ -697,6 +697,31 @@ impl FlightsRepository {
         Ok(rows_affected > 0)
     }
 
+    /// Update the callsign for a flight
+    /// Only updates if the provided callsign is different from the current one
+    pub async fn update_callsign(
+        &self,
+        flight_id: Uuid,
+        new_callsign: Option<String>,
+    ) -> Result<bool> {
+        use crate::schema::flights::dsl::*;
+
+        let pool = self.pool.clone();
+
+        let rows_affected = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            let rows = diesel::update(flights.filter(id.eq(flight_id)))
+                .set((callsign.eq(new_callsign), updated_at.eq(Utc::now())))
+                .execute(&mut conn)?;
+
+            Ok::<usize, anyhow::Error>(rows)
+        })
+        .await??;
+
+        Ok(rows_affected > 0)
+    }
+
     /// Get nearby flights that occurred within the same time frame and bounding box as a given flight
     /// Returns flights without fixes (lightweight response)
     pub async fn get_nearby_flights(&self, flight_id: Uuid) -> Result<Vec<Flight>> {
