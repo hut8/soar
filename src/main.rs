@@ -130,10 +130,6 @@ enum Commands {
         /// NATS server URL for pub/sub
         #[arg(long, default_value = "nats://localhost:4222")]
         nats_url: String,
-
-        /// Path to CSV log file for unparsed APRS fragments (optional)
-        #[arg(long)]
-        unparsed_log: Option<String>,
     },
     /// Start the web server
     Web {
@@ -344,7 +340,6 @@ async fn handle_run(
     retry_delay: u64,
     archive_dir: Option<String>,
     nats_url: String,
-    unparsed_log: Option<String>,
 ) -> Result<()> {
     sentry::configure_scope(|scope| {
         scope.set_tag("operation", "run");
@@ -401,7 +396,6 @@ async fn handle_run(
         .filter(filter)
         .max_retries(max_retries)
         .retry_delay_seconds(retry_delay)
-        .unparsed_log_path(unparsed_log)
         .build();
 
     // Create FlightTracker
@@ -1107,7 +1101,6 @@ async fn main() -> Result<()> {
             archive_dir,
             archive,
             nats_url,
-            unparsed_log,
         } => {
             // Determine archive directory if --archive flag is used
             let final_archive_dir = if archive {
@@ -1125,7 +1118,6 @@ async fn main() -> Result<()> {
                 retry_delay,
                 final_archive_dir,
                 nats_url,
-                unparsed_log,
             )
             .await
         }

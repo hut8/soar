@@ -1,6 +1,5 @@
 use anyhow::Result;
 use std::time::Duration;
-use tokio::fs::OpenOptions;
 use tokio::io::{AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
@@ -40,8 +39,6 @@ pub struct AprsClientConfig {
     pub retry_delay_seconds: u64,
     /// Base directory for message archive (optional)
     pub archive_base_dir: Option<String>,
-    /// Path to CSV log file for unparsed APRS fragments (optional)
-    pub unparsed_log_path: Option<String>,
 }
 
 impl Default for AprsClientConfig {
@@ -55,7 +52,6 @@ impl Default for AprsClientConfig {
             filter: None,
             retry_delay_seconds: 5,
             archive_base_dir: None,
-            unparsed_log_path: None,
         }
     }
 }
@@ -293,8 +289,7 @@ impl AprsClient {
                                 }
                                 // Route server messages (lines starting with #) and regular APRS messages differently
                                 if !trimmed_line.starts_with('#') {
-                                    Self::process_message(trimmed_line, &packet_router, config)
-                                        .await;
+                                    Self::process_message(trimmed_line, &packet_router).await;
                                 } else {
                                     Self::process_server_message(trimmed_line, &packet_router);
                                 }
@@ -410,7 +405,6 @@ impl AprsClient {
     async fn process_message(
         message: &str,
         packet_router: &crate::packet_processors::PacketRouter,
-        config: &AprsClientConfig,
     ) {
         // Try to parse the message using ogn-parser
         match ogn_parser::parse(message) {
@@ -429,45 +423,9 @@ impl AprsClient {
                     trace!("Failed to parse APRS message '{message}': {e}");
                 } else {
                     info!("Failed to parse APRS message '{message}': {e}");
-                    // Log entire message to unparsed log if configured
-                    if let Some(log_path) = &config.unparsed_log_path {
-                        Self::log_unparsed_to_csv(log_path, "unparsed", message, message)
-                            .await
-                            .unwrap_or_else(|e| {
-                                warn!("Failed to write to unparsed log: {}", e);
-                            });
-                    }
                 }
             }
         }
-    }
-
-    /// Log unparsed APRS fragments to CSV file
-    async fn log_unparsed_to_csv(
-        log_path: &str,
-        fragment_type: &str,
-        unparsed_fragment: &str,
-        whole_message: &str,
-    ) -> Result<()> {
-        // Escape CSV fields by wrapping in quotes and escaping internal quotes
-        let escaped_fragment = unparsed_fragment.replace('"', "\"\"");
-        let escaped_message = whole_message.replace('"', "\"\"");
-
-        let csv_line = format!(
-            "{},\"{}\",\"{}\"\n",
-            fragment_type, escaped_fragment, escaped_message
-        );
-
-        let mut file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(log_path)
-            .await?;
-
-        file.write_all(csv_line.as_bytes()).await?;
-        file.flush().await?;
-
-        Ok(())
     }
 }
 
@@ -523,11 +481,6 @@ impl AprsClientConfigBuilder {
         self
     }
 
-    pub fn unparsed_log_path<S: Into<String>>(mut self, unparsed_log_path: Option<S>) -> Self {
-        self.config.unparsed_log_path = unparsed_log_path.map(|p| p.into());
-        self
-    }
-
     pub fn build(self) -> AprsClientConfig {
         self.config
     }
@@ -580,10 +533,12 @@ impl ArchiveService {
 
         // Spawn background task for file writing and management
         tokio::spawn(async move {
-            let mut current_file: Option<std::fs::File> = None;
+            let mut current_file: Option<std::io::BufWriter<std::fs::File>> = None;
             let mut current_date: Option<chrono::NaiveDate> = None;
             let mut messages_written = 0u64;
+            let mut messages_since_flush = 0u64;
             let mut last_stats_log = std::time::Instant::now();
+            let mut last_flush = std::time::Instant::now();
 
             while let Some(message) = receiver.recv().await {
                 let now = Local::now();
@@ -619,8 +574,12 @@ impl ArchiveService {
                     {
                         Ok(file) => {
                             info!("Opened new archive file: {:?}", log_path);
-                            current_file = Some(file);
+                            // Wrap file in BufWriter with 1MB buffer for efficient writes
+                            current_file =
+                                Some(std::io::BufWriter::with_capacity(1024 * 1024, file));
                             current_date = Some(today);
+                            messages_since_flush = 0;
+                            last_flush = std::time::Instant::now();
                         }
                         Err(e) => {
                             error!("Failed to open archive file {:?}: {}", log_path, e);
@@ -631,7 +590,6 @@ impl ArchiveService {
 
                 // Write message to current file
                 if let Some(file) = &mut current_file {
-                    let write_start = std::time::Instant::now();
                     if let Err(e) = writeln!(file, "{}", message) {
                         error!(
                             "Failed to write to archive file: {} - this may cause message backlog",
@@ -639,15 +597,33 @@ impl ArchiveService {
                         );
                     } else {
                         messages_written += 1;
-                        let write_duration = write_start.elapsed();
+                        messages_since_flush += 1;
+                    }
+                }
 
-                        // Warn if a single write takes more than 100ms (indicates I/O issues)
-                        if write_duration.as_millis() > 100 {
+                // Flush buffer periodically to ensure data durability
+                // Flush every 1000 messages OR every 30 seconds, whichever comes first
+                let should_flush =
+                    messages_since_flush >= 1000 || last_flush.elapsed().as_secs() >= 30;
+
+                if should_flush && let Some(file) = &mut current_file {
+                    let flush_start = std::time::Instant::now();
+                    if let Err(e) = file.flush() {
+                        error!("Failed to flush archive buffer: {}", e);
+                    } else {
+                        let flush_duration = flush_start.elapsed();
+
+                        // Warn if flush takes more than 100ms (indicates I/O issues)
+                        if flush_duration.as_millis() > 100 {
                             warn!(
-                                "Slow archive write detected: {}ms - disk I/O may be bottleneck",
-                                write_duration.as_millis()
+                                "Slow archive flush detected: {}ms for {} messages - disk I/O may be bottleneck",
+                                flush_duration.as_millis(),
+                                messages_since_flush
                             );
                         }
+
+                        messages_since_flush = 0;
+                        last_flush = std::time::Instant::now();
                     }
                 }
 
@@ -805,7 +781,6 @@ mod tests {
             max_retries: 3,
             retry_delay_seconds: 5,
             archive_base_dir: None,
-            unparsed_log_path: None,
         };
 
         let login_cmd = AprsClient::build_login_command(&config);
@@ -826,7 +801,6 @@ mod tests {
             max_retries: 3,
             retry_delay_seconds: 5,
             archive_base_dir: None,
-            unparsed_log_path: None,
         };
 
         let login_cmd = AprsClient::build_login_command(&config);
