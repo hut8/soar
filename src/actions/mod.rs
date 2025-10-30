@@ -1,5 +1,6 @@
 pub mod aircraft;
 pub mod airports;
+pub mod aprs_messages;
 pub mod auth;
 pub mod clubs;
 pub mod devices;
@@ -13,6 +14,7 @@ pub mod views;
 
 pub use aircraft::*;
 pub use airports::*;
+pub use aprs_messages::*;
 pub use auth::*;
 pub use clubs::*;
 pub use devices::*;
