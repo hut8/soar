@@ -148,7 +148,7 @@ pub async fn link_home_bases_with_metrics(
 
     match link_home_bases(diesel_pool.clone()).await {
         Ok((linked, failed)) => {
-            metrics.records_loaded = linked + failed;
+            metrics.records_loaded = linked;
 
             // Get total count of clubs with home_base_airport_id set
             match get_clubs_with_home_base_count(diesel_pool).await {
@@ -193,7 +193,7 @@ async fn get_clubs_with_home_base_count(
         let mut conn = diesel_pool.get()?;
 
         let count: i64 = diesel::select(sql::<BigInt>(
-            "SELECT COUNT(*) FROM clubs WHERE home_base_airport_id IS NOT NULL",
+            "COUNT(*) FROM clubs WHERE home_base_airport_id IS NOT NULL",
         ))
         .get_result(&mut conn)?;
 
