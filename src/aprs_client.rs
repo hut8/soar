@@ -289,8 +289,7 @@ impl AprsClient {
                                 }
                                 // Route server messages (lines starting with #) and regular APRS messages differently
                                 if !trimmed_line.starts_with('#') {
-                                    Self::process_message(trimmed_line, &packet_router, config)
-                                        .await;
+                                    Self::process_message(trimmed_line, &packet_router).await;
                                 } else {
                                     Self::process_server_message(trimmed_line, &packet_router);
                                 }
@@ -406,7 +405,6 @@ impl AprsClient {
     async fn process_message(
         message: &str,
         packet_router: &crate::packet_processors::PacketRouter,
-        _config: &AprsClientConfig,
     ) {
         // Try to parse the message using ogn-parser
         match ogn_parser::parse(message) {
