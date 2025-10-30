@@ -655,7 +655,7 @@ impl AprsClient {
     }
 
     /// Process a received APRS message by calling PacketRouter directly
-    async fn process_message(
+    pub async fn process_message(
         message: &str,
         packet_router: &crate::packet_processors::PacketRouter,
     ) {

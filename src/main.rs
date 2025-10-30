@@ -147,32 +147,8 @@ enum Commands {
         #[arg(long, default_value = "aprs.raw")]
         subject: String,
     },
-    /// Run the main APRS client
+    /// Run the main APRS processing service (consumes from JetStream durable queue)
     Run {
-        /// APRS server hostname
-        #[arg(long, default_value = "aprs.glidernet.org")]
-        server: String,
-
-        /// APRS server port (automatically switches to 10152 for full feed if no filter specified)
-        #[arg(long, default_value = "14580")]
-        port: u16,
-
-        /// Callsign for APRS authentication
-        #[arg(long, default_value = "N0CALL")]
-        callsign: String,
-
-        /// APRS filter string (omit for full global feed via port 10152, or specify filter for port 14580)
-        #[arg(long)]
-        filter: Option<String>,
-
-        /// Maximum number of connection retry attempts
-        #[arg(long, default_value = "5")]
-        max_retries: u32,
-
-        /// Delay between reconnection attempts in seconds
-        #[arg(long, default_value = "5")]
-        retry_delay: u64,
-
         /// Base directory for message archive (optional)
         #[arg(long)]
         archive_dir: Option<String>,
@@ -181,9 +157,21 @@ enum Commands {
         #[arg(long)]
         archive: bool,
 
-        /// NATS server URL for pub/sub
+        /// NATS server URL for JetStream consumer and pub/sub
         #[arg(long, default_value = "nats://localhost:4222")]
         nats_url: String,
+
+        /// JetStream stream name for raw APRS messages
+        #[arg(long, default_value = "APRS_RAW")]
+        stream_name: String,
+
+        /// JetStream subject for raw APRS messages
+        #[arg(long, default_value = "aprs.raw")]
+        subject: String,
+
+        /// JetStream consumer name (defaults to environment-based: soar-run-dev or soar-run-production)
+        #[arg(long)]
+        consumer_name: Option<String>,
     },
     /// Start the web server
     Web {
@@ -404,10 +392,42 @@ async fn handle_ingest_aprs(
         server, port, nats_url, stream_name, subject
     );
 
+    // Determine environment and add prefix to stream/subject names to match NATS topic pattern
+    // Production: "APRS_RAW" and "aprs.raw"
+    // Staging: "staging.APRS_RAW" and "staging.aprs.raw"
+    let is_production = env::var("SOAR_ENV")
+        .map(|env| env == "production")
+        .unwrap_or(false);
+
+    let (final_stream_name, final_subject) = if is_production {
+        (stream_name.clone(), subject.clone())
+    } else {
+        (
+            format!("staging.{}", stream_name),
+            format!("staging.{}", subject),
+        )
+    };
+
+    info!(
+        "Environment: {}, using stream '{}' and subject '{}'",
+        if is_production {
+            "production"
+        } else {
+            "staging"
+        },
+        final_stream_name,
+        final_subject
+    );
+
     // Acquire instance lock to prevent multiple ingest instances from running
-    let _lock = InstanceLock::new("aprs-ingest")
+    let lock_name = if is_production {
+        "aprs-ingest-production"
+    } else {
+        "aprs-ingest-dev"
+    };
+    let _lock = InstanceLock::new(lock_name)
         .context("Failed to acquire instance lock - is another aprs-ingest instance running?")?;
-    info!("Instance lock acquired for aprs-ingest");
+    info!("Instance lock acquired for {}", lock_name);
 
     // Connect to NATS and set up JetStream
     info!("Connecting to NATS at {}...", nats_url);
@@ -421,20 +441,20 @@ async fn handle_ingest_aprs(
     // Create or get the stream for raw APRS messages
     info!(
         "Setting up JetStream stream '{}' for subject '{}'...",
-        stream_name, subject
+        final_stream_name, final_subject
     );
 
-    let stream = match jetstream.get_stream(&stream_name).await {
+    let stream = match jetstream.get_stream(&final_stream_name).await {
         Ok(stream) => {
-            info!("JetStream stream '{}' already exists", stream_name);
+            info!("JetStream stream '{}' already exists", final_stream_name);
             stream
         }
         Err(_) => {
-            info!("Creating new JetStream stream '{}'...", stream_name);
+            info!("Creating new JetStream stream '{}'...", final_stream_name);
             jetstream
                 .create_stream(async_nats::jetstream::stream::Config {
-                    name: stream_name.clone(),
-                    subjects: vec![subject.clone()],
+                    name: final_stream_name.clone(),
+                    subjects: vec![final_subject.clone()],
                     max_messages: 10_000_000, // Store up to 10M messages
                     max_bytes: 10 * 1024 * 1024 * 1024, // 10GB max
                     max_age: std::time::Duration::from_secs(24 * 60 * 60), // 24 hours retention
@@ -449,7 +469,7 @@ async fn handle_ingest_aprs(
 
     info!(
         "JetStream stream ready - will publish to subject '{}'",
-        subject
+        final_subject
     );
 
     // Create a simplified APRS client that publishes to JetStream
@@ -463,8 +483,11 @@ async fn handle_ingest_aprs(
         .build();
 
     // Create a custom "router" that just publishes to JetStream
-    let jetstream_publisher =
-        soar::aprs_jetstream_publisher::JetStreamPublisher::new(jetstream, subject.clone(), stream);
+    let jetstream_publisher = soar::aprs_jetstream_publisher::JetStreamPublisher::new(
+        jetstream,
+        final_subject.clone(),
+        stream,
+    );
 
     let mut client = AprsClient::new(config);
 
@@ -480,19 +503,19 @@ async fn handle_ingest_aprs(
 #[allow(clippy::too_many_arguments)]
 #[tracing::instrument(skip_all)]
 async fn handle_run(
-    server: String,
-    port: u16,
-    callsign: String,
-    filter: Option<String>,
-    max_retries: u32,
-    retry_delay: u64,
     archive_dir: Option<String>,
     nats_url: String,
+    stream_name: String,
+    subject: String,
+    consumer_name: Option<String>,
 ) -> Result<()> {
     sentry::configure_scope(|scope| {
         scope.set_tag("operation", "run");
     });
-    info!("Starting APRS client with server: {}:{}", server, port);
+    info!(
+        "Starting APRS processing service consuming from JetStream stream: {}, subject: {}",
+        stream_name, subject
+    );
 
     // Acquire instance lock to prevent multiple instances from running
     let is_production = env::var("SOAR_ENV")
@@ -528,23 +551,39 @@ async fn handle_run(
         env::var("ELEVATION_DATA_PATH").unwrap_or_else(|_| "/var/soar/elevation".to_string());
     info!("Elevation data path: {}", elevation_path);
 
-    // Use port 10152 (full feed) if no filter is specified, otherwise use specified port
-    let actual_port = if filter.is_none() {
-        info!("No filter specified, using full feed port 10152");
-        10152
+    // Determine environment and add prefix to stream/subject names to match NATS topic pattern
+    // Production: "APRS_RAW" and "aprs.raw"
+    // Staging: "staging.APRS_RAW" and "staging.aprs.raw"
+    let (final_stream_name, final_subject) = if is_production {
+        (stream_name.clone(), subject.clone())
     } else {
-        port
+        (
+            format!("staging.{}", stream_name),
+            format!("staging.{}", subject),
+        )
     };
 
-    // Create APRS client configuration
-    let config = AprsClientConfigBuilder::new()
-        .server(server)
-        .port(actual_port)
-        .callsign(callsign)
-        .filter(filter)
-        .max_retries(max_retries)
-        .retry_delay_seconds(retry_delay)
-        .build();
+    // Determine consumer name based on environment if not specified
+    let final_consumer_name = consumer_name.unwrap_or_else(|| {
+        let env_name = if is_production {
+            "soar-run-production"
+        } else {
+            "soar-run-staging"
+        };
+        env_name.to_string()
+    });
+
+    info!(
+        "Environment: {}, using stream '{}', subject '{}', consumer '{}'",
+        if is_production {
+            "production"
+        } else {
+            "staging"
+        },
+        final_stream_name,
+        final_subject,
+        final_consumer_name
+    );
 
     // Create FlightTracker
     let flight_tracker = FlightTracker::new(&diesel_pool);
@@ -1050,11 +1089,43 @@ async fn handle_run(
     );
     info!("Spawned queue depth metrics reporter (reports every 10 seconds to Prometheus)");
 
-    // Create and start APRS client - it will call PacketRouter directly (no queue between them)
-    let mut client = AprsClient::new(config);
+    // Set up JetStream consumer to read from durable queue
+    info!("Connecting to NATS at {}...", nats_url);
+    let nats_client = async_nats::connect(&nats_url)
+        .await
+        .context("Failed to connect to NATS")?;
+    info!("Connected to NATS successfully");
 
-    info!("Starting APRS client with direct PacketRouter calls (no queue)...");
-    client.start(packet_router).await?;
+    let jetstream = async_nats::jetstream::new(nats_client);
+
+    // Create JetStream consumer
+    info!(
+        "Creating JetStream consumer '{}' for stream '{}', subject '{}'...",
+        final_consumer_name, final_stream_name, final_subject
+    );
+    let consumer = soar::aprs_jetstream_consumer::JetStreamConsumer::new(
+        jetstream,
+        final_stream_name.clone(),
+        final_subject.clone(),
+        final_consumer_name.clone(),
+    )
+    .await
+    .context("Failed to create JetStream consumer")?;
+
+    info!("JetStream consumer ready, starting message processing...");
+
+    // Start consuming messages from JetStream
+    // Each message will be parsed and routed through PacketRouter
+    consumer
+        .consume(move |message| {
+            let packet_router = packet_router.clone();
+            async move {
+                // Parse the APRS message using the same parser as the APRS client
+                AprsClient::process_message(&message, &packet_router).await;
+                Ok(())
+            }
+        })
+        .await?;
 
     // Spawn periodic performance metrics logger
     // This helps diagnose what's slowing down processing
@@ -1388,15 +1459,12 @@ async fn main() -> Result<()> {
             .await
         }
         Commands::Run {
-            server,
-            port,
-            callsign,
-            filter,
-            max_retries,
-            retry_delay,
             archive_dir,
             archive,
             nats_url,
+            stream_name,
+            subject,
+            consumer_name,
         } => {
             // Determine archive directory if --archive flag is used
             let final_archive_dir = if archive {
@@ -1406,14 +1474,11 @@ async fn main() -> Result<()> {
             };
 
             handle_run(
-                server,
-                port,
-                callsign,
-                filter,
-                max_retries,
-                retry_delay,
                 final_archive_dir,
                 nats_url,
+                stream_name,
+                subject,
+                consumer_name,
             )
             .await
         }
