@@ -551,6 +551,9 @@ async fn handle_run(
     metrics::counter!("aprs.server_status_queue.full").absolute(0);
     metrics::counter!("aprs.server_status_queue.closed").absolute(0);
 
+    // Initialize connection state gauge (0 = disconnected, 1 = connected)
+    metrics::gauge!("aprs.connection.connected").set(0.0);
+
     // Spawn AGL batch database writer
     // This worker receives calculated AGL values and writes them to database in batches
     // Batching dramatically reduces database load (100+ individual UPDATEs become 1 batch UPDATE)

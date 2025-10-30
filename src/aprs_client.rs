@@ -144,12 +144,14 @@ impl AprsClient {
                         ConnectionResult::Success => {
                             info!("APRS client connection ended normally");
                             metrics::counter!("aprs.connection.ended").increment(1);
+                            metrics::gauge!("aprs.connection.connected").set(0.0);
                             retry_count = 0; // Reset retry count on successful connection
                             current_delay = config.retry_delay_seconds; // Reset delay
                         }
                         ConnectionResult::ConnectionFailed(e) => {
                             error!("APRS client connection failed: {}", e);
                             metrics::counter!("aprs.connection.failed").increment(1);
+                            metrics::gauge!("aprs.connection.connected").set(0.0);
                             retry_count += 1;
 
                             if retry_count >= config.max_retries {
@@ -187,6 +189,7 @@ impl AprsClient {
                                 e
                             );
                             metrics::counter!("aprs.connection.operation_failed").increment(1);
+                            metrics::gauge!("aprs.connection.connected").set(0.0);
                             // Reset retry count and delay since connection was initially successful
                             retry_count = 0;
                             current_delay = config.retry_delay_seconds;
@@ -230,7 +233,12 @@ impl AprsClient {
 
         // Connect to the APRS server
         let stream = match TcpStream::connect(format!("{}:{}", config.server, config.port)).await {
-            Ok(stream) => stream,
+            Ok(stream) => {
+                info!("Connected to APRS server");
+                metrics::counter!("aprs.connection.established").increment(1);
+                metrics::gauge!("aprs.connection.connected").set(1.0);
+                stream
+            }
             Err(e) => {
                 return ConnectionResult::ConnectionFailed(e.into());
             }
