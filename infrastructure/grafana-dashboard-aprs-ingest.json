@@ -98,7 +98,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "process_uptime_seconds",
+          "expr": "process_uptime_seconds{component=\"aprs-ingest\"}",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -354,7 +354,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "aprs_connection_connected",
+          "expr": "aprs_connection_connected{component=\"aprs-ingest\"}",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -451,7 +451,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "aprs_connection_established_total",
+          "expr": "aprs_connection_established_total{component=\"aprs-ingest\"}",
           "legendFormat": "Established",
           "range": true,
           "refId": "A"
@@ -462,7 +462,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "aprs_connection_failed_total",
+          "expr": "aprs_connection_failed_total{component=\"aprs-ingest\"}",
           "legendFormat": "Failed",
           "range": true,
           "refId": "B"
@@ -473,7 +473,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "aprs_connection_ended_total",
+          "expr": "aprs_connection_ended_total{component=\"aprs-ingest\"}",
           "legendFormat": "Ended",
           "range": true,
           "refId": "C"
@@ -570,7 +570,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "aprs_keepalive_sent_total",
+          "expr": "aprs_keepalive_sent_total{component=\"aprs-ingest\"}",
           "legendFormat": "Keepalive Messages",
           "range": true,
           "refId": "A"
@@ -680,7 +680,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_jetstream_published_total[1m]) * 60",
+          "expr": "rate(aprs_jetstream_published_total{component=\"aprs-ingest\"}[1m]) * 60",
           "legendFormat": "Messages/min",
           "range": true,
           "refId": "A"
@@ -751,7 +751,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "aprs_jetstream_queue_depth",
+          "expr": "aprs_jetstream_queue_depth{component=\"aprs-ingest\"}",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -848,7 +848,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "aprs_jetstream_publish_error_total",
+          "expr": "aprs_jetstream_publish_error_total{component=\"aprs-ingest\"}",
           "legendFormat": "Publish Errors",
           "range": true,
           "refId": "A"

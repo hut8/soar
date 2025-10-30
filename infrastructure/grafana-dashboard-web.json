@@ -95,7 +95,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "process_uptime_seconds",
+          "expr": "process_uptime_seconds{component=\"web\"}",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -387,7 +387,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by(endpoint, le) (rate(http_request_duration_seconds_bucket[5m])))",
+          "expr": "histogram_quantile{component=\"web\"}(0.95, sum by(endpoint{component=\"web\"}, le{component=\"web\"}) (rate(http_request_duration_seconds_bucket{component=\"web\"}[5m])))",
           "legendFormat": "{{endpoint}}",
           "range": true,
           "refId": "A"
@@ -480,7 +480,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum by(endpoint) (rate(http_requests_total[5m]))",
+          "expr": "sum by(endpoint{component=\"web\"}) (rate(http_requests_total{component=\"web\"}[5m]))",
           "legendFormat": "{{endpoint}}",
           "range": true,
           "refId": "A"
@@ -563,7 +563,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "websocket_connections",
+          "expr": "websocket_connections{component=\"web\"}",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -633,7 +633,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "websocket_active_subscriptions",
+          "expr": "websocket_active_subscriptions{component=\"web\"}",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -703,7 +703,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "websocket_queue_depth",
+          "expr": "websocket_queue_depth{component=\"web\"}",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -796,7 +796,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(websocket_messages_sent[5m])",
+          "expr": "rate(websocket_messages_sent{component=\"web\"}[5m])",
           "legendFormat": "Messages Sent/sec",
           "range": true,
           "refId": "A"
@@ -807,7 +807,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(websocket_send_errors[5m])",
+          "expr": "rate(websocket_send_errors{component=\"web\"}[5m])",
           "legendFormat": "Send Errors/sec",
           "range": true,
           "refId": "B"
@@ -818,7 +818,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(websocket_serialization_errors[5m])",
+          "expr": "rate(websocket_serialization_errors{component=\"web\"}[5m])",
           "legendFormat": "Serialization Errors/sec",
           "range": true,
           "refId": "C"
@@ -911,7 +911,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(websocket_device_subscribes[5m])",
+          "expr": "rate(websocket_device_subscribes{component=\"web\"}[5m])",
           "legendFormat": "Device Subscribes/sec",
           "range": true,
           "refId": "A"
@@ -922,7 +922,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(websocket_device_unsubscribes[5m])",
+          "expr": "rate(websocket_device_unsubscribes{component=\"web\"}[5m])",
           "legendFormat": "Device Unsubscribes/sec",
           "range": true,
           "refId": "B"
@@ -1015,7 +1015,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(websocket_area_subscribes[5m])",
+          "expr": "rate(websocket_area_subscribes{component=\"web\"}[5m])",
           "legendFormat": "Area Subscribes/sec",
           "range": true,
           "refId": "A"
@@ -1026,7 +1026,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(websocket_area_unsubscribes[5m])",
+          "expr": "rate(websocket_area_unsubscribes{component=\"web\"}[5m])",
           "legendFormat": "Area Unsubscribes/sec",
           "range": true,
           "refId": "B"
