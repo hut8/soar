@@ -198,7 +198,7 @@
           },
           "editorMode": "code",
           "expr": "process_is_up",
-          "legendFormat": "Process Status (1=up, 0=down)",
+          "legendFormat": "{{component}} ({{instance}})",
           "range": true,
           "refId": "A"
         }
@@ -297,7 +297,7 @@
           },
           "editorMode": "code",
           "expr": "process_memory_bytes",
-          "legendFormat": "Memory Usage (RSS)",
+          "legendFormat": "{{component}} ({{instance}})",
           "range": true,
           "refId": "A"
         }
