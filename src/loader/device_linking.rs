@@ -131,19 +131,19 @@ async fn link_devices_to_clubs(pool: &PgPool) -> Result<usize> {
 
 /// Get count of devices with club_id set
 async fn get_devices_with_club_count(pool: &PgPool) -> Result<i64> {
+    use crate::schema::devices::dsl::*;
+    use diesel::dsl::count_star;
+    use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
+
     let pool = pool.clone();
 
     tokio::task::spawn_blocking(move || {
-        use diesel::RunQueryDsl;
-        use diesel::dsl::sql;
-        use diesel::sql_types::BigInt;
-
         let mut conn = pool.get()?;
 
-        let count: i64 = diesel::select(sql::<BigInt>(
-            "SELECT COUNT(*) FROM devices WHERE club_id IS NOT NULL",
-        ))
-        .get_result(&mut conn)?;
+        let count = devices
+            .filter(club_id.is_not_null())
+            .select(count_star())
+            .first::<i64>(&mut conn)?;
 
         Ok(count)
     })
@@ -152,19 +152,19 @@ async fn get_devices_with_club_count(pool: &PgPool) -> Result<i64> {
 
 /// Get count of aircraft_registrations with device_id set
 async fn get_aircraft_with_device_count(pool: &PgPool) -> Result<i64> {
+    use crate::schema::aircraft_registrations::dsl::*;
+    use diesel::dsl::count_star;
+    use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
+
     let pool = pool.clone();
 
     tokio::task::spawn_blocking(move || {
-        use diesel::RunQueryDsl;
-        use diesel::dsl::sql;
-        use diesel::sql_types::BigInt;
-
         let mut conn = pool.get()?;
 
-        let count: i64 = diesel::select(sql::<BigInt>(
-            "SELECT COUNT(*) FROM aircraft_registrations WHERE device_id IS NOT NULL",
-        ))
-        .get_result(&mut conn)?;
+        let count = aircraft_registrations
+            .filter(device_id.is_not_null())
+            .select(count_star())
+            .first::<i64>(&mut conn)?;
 
         Ok(count)
     })
