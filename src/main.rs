@@ -554,6 +554,9 @@ async fn handle_run(
     // Initialize connection state gauge (0 = disconnected, 1 = connected)
     metrics::gauge!("aprs.connection.connected").set(0.0);
 
+    // Initialize NATS publisher error counter
+    metrics::counter!("nats_publisher_errors").absolute(0);
+
     // Spawn AGL batch database writer
     // This worker receives calculated AGL values and writes them to database in batches
     // Batching dramatically reduces database load (100+ individual UPDATEs become 1 batch UPDATE)
