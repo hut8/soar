@@ -580,10 +580,12 @@ impl ArchiveService {
 
         // Spawn background task for file writing and management
         tokio::spawn(async move {
-            let mut current_file: Option<std::fs::File> = None;
+            let mut current_file: Option<std::io::BufWriter<std::fs::File>> = None;
             let mut current_date: Option<chrono::NaiveDate> = None;
             let mut messages_written = 0u64;
+            let mut messages_since_flush = 0u64;
             let mut last_stats_log = std::time::Instant::now();
+            let mut last_flush = std::time::Instant::now();
 
             while let Some(message) = receiver.recv().await {
                 let now = Local::now();
@@ -619,8 +621,12 @@ impl ArchiveService {
                     {
                         Ok(file) => {
                             info!("Opened new archive file: {:?}", log_path);
-                            current_file = Some(file);
+                            // Wrap file in BufWriter with 1MB buffer for efficient writes
+                            current_file =
+                                Some(std::io::BufWriter::with_capacity(1024 * 1024, file));
                             current_date = Some(today);
+                            messages_since_flush = 0;
+                            last_flush = std::time::Instant::now();
                         }
                         Err(e) => {
                             error!("Failed to open archive file {:?}: {}", log_path, e);
@@ -631,7 +637,6 @@ impl ArchiveService {
 
                 // Write message to current file
                 if let Some(file) = &mut current_file {
-                    let write_start = std::time::Instant::now();
                     if let Err(e) = writeln!(file, "{}", message) {
                         error!(
                             "Failed to write to archive file: {} - this may cause message backlog",
@@ -639,15 +644,33 @@ impl ArchiveService {
                         );
                     } else {
                         messages_written += 1;
-                        let write_duration = write_start.elapsed();
+                        messages_since_flush += 1;
+                    }
+                }
 
-                        // Warn if a single write takes more than 100ms (indicates I/O issues)
-                        if write_duration.as_millis() > 100 {
+                // Flush buffer periodically to ensure data durability
+                // Flush every 1000 messages OR every 30 seconds, whichever comes first
+                let should_flush =
+                    messages_since_flush >= 1000 || last_flush.elapsed().as_secs() >= 30;
+
+                if should_flush && let Some(file) = &mut current_file {
+                    let flush_start = std::time::Instant::now();
+                    if let Err(e) = file.flush() {
+                        error!("Failed to flush archive buffer: {}", e);
+                    } else {
+                        let flush_duration = flush_start.elapsed();
+
+                        // Warn if flush takes more than 100ms (indicates I/O issues)
+                        if flush_duration.as_millis() > 100 {
                             warn!(
-                                "Slow archive write detected: {}ms - disk I/O may be bottleneck",
-                                write_duration.as_millis()
+                                "Slow archive flush detected: {}ms for {} messages - disk I/O may be bottleneck",
+                                flush_duration.as_millis(),
+                                messages_since_flush
                             );
                         }
+
+                        messages_since_flush = 0;
+                        last_flush = std::time::Instant::now();
                     }
                 }
 
