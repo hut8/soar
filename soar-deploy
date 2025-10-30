@@ -24,6 +24,8 @@ PULL_DATA_SERVICE="soar-pull-data"
 PULL_DATA_TIMER="soar-pull-data"
 SITEMAP_SERVICE="soar-sitemap"
 SITEMAP_TIMER="soar-sitemap"
+ARCHIVE_SERVICE="soar-archive"
+ARCHIVE_TIMER="soar-archive"
 
 # Colors for output
 RED='\033[0;31m'
@@ -109,18 +111,20 @@ log_info "Stopping main SOAR services..."
 systemctl stop ${RUN_SERVICE}.service 2>/dev/null && log_info "${RUN_SERVICE}.service stopped" || log_info "${RUN_SERVICE}.service is not running"
 systemctl stop ${WEB_SERVICE}.service 2>/dev/null && log_info "${WEB_SERVICE}.service stopped" || log_info "${WEB_SERVICE}.service is not running"
 
-# NOTE: NOT stopping timer-controlled services (soar-pull-data, soar-sitemap)
+# NOTE: NOT stopping timer-controlled services (soar-pull-data, soar-sitemap, soar-archive)
 # They should only be started/stopped by their timers, not manually
 # If they're running, let them complete naturally
 
 # NOTE: NOT stopping or restarting timers
 # Timers will automatically use the new binary on their next scheduled run
-# This prevents interrupting currently running data pulls or sitemap generation
+# This prevents interrupting currently running data pulls, sitemap generation, or archival
 log_info "Timer-controlled services and timers left untouched:"
 log_info "  - ${PULL_DATA_SERVICE}.service (will complete if running)"
 log_info "  - ${SITEMAP_SERVICE}.service (will complete if running)"
+log_info "  - ${ARCHIVE_SERVICE}.service (will complete if running)"
 log_info "  - ${PULL_DATA_TIMER}.timer (new binary used on next scheduled run)"
 log_info "  - ${SITEMAP_TIMER}.timer (new binary used on next scheduled run)"
+log_info "  - ${ARCHIVE_TIMER}.timer (new binary used on next scheduled run)"
 
 # Create service user if it doesn't exist
 if ! id "${SERVICE_USER}" &>/dev/null; then
@@ -234,6 +238,7 @@ systemctl restart ${WEB_SERVICE}.service || log_warn "Failed to start ${WEB_SERV
 log_info "Ensuring timer-controlled services are disabled (timer-managed only)..."
 systemctl disable ${PULL_DATA_SERVICE}.service 2>/dev/null || true
 systemctl disable ${SITEMAP_SERVICE}.service 2>/dev/null || true
+systemctl disable ${ARCHIVE_SERVICE}.service 2>/dev/null || true
 
 # Ensure timers are enabled (but don't restart them to avoid interrupting scheduled runs)
 log_info "Ensuring timers are enabled (not restarting to preserve schedule)..."
@@ -251,6 +256,14 @@ systemctl is-enabled ${SITEMAP_TIMER}.timer >/dev/null 2>&1 || {
     # Start timer only if it wasn't already enabled (first-time setup)
     log_info "Starting ${SITEMAP_TIMER}.timer for the first time..."
     systemctl start ${SITEMAP_TIMER}.timer
+}
+
+systemctl is-enabled ${ARCHIVE_TIMER}.timer >/dev/null 2>&1 || {
+    log_info "Enabling ${ARCHIVE_TIMER}.timer..."
+    systemctl enable ${ARCHIVE_TIMER}.timer
+    # Start timer only if it wasn't already enabled (first-time setup)
+    log_info "Starting ${ARCHIVE_TIMER}.timer for the first time..."
+    systemctl start ${ARCHIVE_TIMER}.timer
 }
 
 log_info "Timers will automatically use new binary on next scheduled run"
@@ -281,6 +294,7 @@ check_service ${RUN_SERVICE}.service || FAILED=1
 check_service ${WEB_SERVICE}.service || FAILED=1
 check_service ${PULL_DATA_TIMER}.timer || FAILED=1
 check_service ${SITEMAP_TIMER}.timer || FAILED=1
+check_service ${ARCHIVE_TIMER}.timer || FAILED=1
 
 # Show recent logs if any service failed
 if [ $FAILED -eq 1 ]; then
@@ -297,7 +311,7 @@ fi
 # Show timer status
 log_info ""
 log_info "Timer schedule status:"
-systemctl list-timers ${PULL_DATA_TIMER}.timer ${SITEMAP_TIMER}.timer --no-pager
+systemctl list-timers ${PULL_DATA_TIMER}.timer ${SITEMAP_TIMER}.timer ${ARCHIVE_TIMER}.timer --no-pager
 
 # Cleanup deployment directory
 log_info ""
@@ -308,12 +322,13 @@ log_info "🚀 Deployment completed successfully!"
 log_info ""
 log_info "Service Management:"
 log_info "  Status: systemctl status ${RUN_SERVICE} ${WEB_SERVICE}"
-log_info "  Timer Status: systemctl list-timers ${PULL_DATA_TIMER}.timer ${SITEMAP_TIMER}.timer"
+log_info "  Timer Status: systemctl list-timers ${PULL_DATA_TIMER}.timer ${SITEMAP_TIMER}.timer ${ARCHIVE_TIMER}.timer"
 log_info "  Logs: journalctl -u ${RUN_SERVICE} -f"
 log_info "  Web logs: journalctl -u ${WEB_SERVICE} -f"
 log_info "  Pull-data logs: journalctl -u ${PULL_DATA_SERVICE} -f"
 log_info "  Sitemap logs: journalctl -u ${SITEMAP_SERVICE} -f"
+log_info "  Archive logs: journalctl -u ${ARCHIVE_SERVICE} -f"
 log_info ""
-log_info "Note: Timer-controlled services (${PULL_DATA_SERVICE}, ${SITEMAP_SERVICE})"
+log_info "Note: Timer-controlled services (${PULL_DATA_SERVICE}, ${SITEMAP_SERVICE}, ${ARCHIVE_SERVICE})"
 log_info "      will use the new binary on their next scheduled run"
 log_info "      Currently running instances will complete normally without interruption"
