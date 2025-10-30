@@ -188,8 +188,8 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "process_is_up",
-          "legendFormat": "{{component}} ({{instance}})",
+          "expr": "process_is_up{component=\"web\"}",
+          "legendFormat": "SOAR Web",
           "range": true,
           "refId": "A"
         }
@@ -281,8 +281,8 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "process_memory_bytes",
-          "legendFormat": "{{component}} ({{instance}})",
+          "expr": "process_memory_bytes{component=\"web\"}",
+          "legendFormat": "SOAR Web",
           "range": true,
           "refId": "A"
         }
