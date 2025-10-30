@@ -493,7 +493,7 @@ impl ReceiverRepository {
                 #[diesel(check_for_backend(diesel::pg::Pg))]
                 struct ReceiverWithCoords {
                     #[diesel(sql_type = SqlUuid)]
-                    id: Uuid,
+                    id: uuid::Uuid,
                     #[diesel(sql_type = Text)]
                     callsign: String,
                     #[diesel(sql_type = Nullable<Text>)]
@@ -553,6 +553,367 @@ impl ReceiverRepository {
                     latest_packet_at: r.latest_packet_at,
                     from_ogn_db: r.from_ogn_db,
                 }))
+            },
+        )
+        .await?
+    }
+
+    /// Search receivers by text query with coordinates extracted
+    pub async fn search_by_query_with_coords(
+        &self,
+        query_param: &str,
+    ) -> Result<Vec<crate::actions::views::ReceiverView>> {
+        use diesel::sql_types::*;
+        let pool = self.pool.clone();
+        let search_pattern = format!("%{}%", query_param);
+
+        tokio::task::spawn_blocking(
+            move || -> Result<Vec<crate::actions::views::ReceiverView>> {
+                use diesel::sql_types::Uuid as SqlUuid;
+
+                #[derive(QueryableByName)]
+                #[diesel(check_for_backend(diesel::pg::Pg))]
+                struct ReceiverWithCoords {
+                    #[diesel(sql_type = SqlUuid)]
+                    id: uuid::Uuid,
+                    #[diesel(sql_type = Text)]
+                    callsign: String,
+                    #[diesel(sql_type = Nullable<Text>)]
+                    description: Option<String>,
+                    #[diesel(sql_type = Nullable<Text>)]
+                    contact: Option<String>,
+                    #[diesel(sql_type = Nullable<Text>)]
+                    email: Option<String>,
+                    #[diesel(sql_type = Nullable<Text>)]
+                    country: Option<String>,
+                    #[diesel(sql_type = Nullable<Double>)]
+                    latitude: Option<f64>,
+                    #[diesel(sql_type = Nullable<Double>)]
+                    longitude: Option<f64>,
+                    #[diesel(sql_type = Timestamptz)]
+                    created_at: chrono::DateTime<chrono::Utc>,
+                    #[diesel(sql_type = Timestamptz)]
+                    updated_at: chrono::DateTime<chrono::Utc>,
+                    #[diesel(sql_type = Nullable<Timestamptz>)]
+                    latest_packet_at: Option<chrono::DateTime<chrono::Utc>>,
+                    #[diesel(sql_type = Bool)]
+                    from_ogn_db: bool,
+                }
+
+                let mut conn = pool.get()?;
+                let results = diesel::sql_query(
+                    "SELECT
+                id,
+                callsign,
+                description,
+                contact,
+                email,
+                country,
+                ST_Y(location::geometry) as latitude,
+                ST_X(location::geometry) as longitude,
+                created_at,
+                updated_at,
+                latest_packet_at,
+                from_ogn_db
+            FROM receivers
+            WHERE callsign ILIKE $1
+                OR description ILIKE $1
+                OR country ILIKE $1
+                OR contact ILIKE $1
+                OR email ILIKE $1
+            ORDER BY callsign ASC",
+                )
+                .bind::<Text, _>(search_pattern)
+                .get_results::<ReceiverWithCoords>(&mut conn)?;
+
+                Ok(results
+                    .into_iter()
+                    .map(|r| crate::actions::views::ReceiverView {
+                        id: r.id,
+                        callsign: r.callsign,
+                        description: r.description,
+                        contact: r.contact,
+                        email: r.email,
+                        country: r.country,
+                        latitude: r.latitude,
+                        longitude: r.longitude,
+                        created_at: r.created_at,
+                        updated_at: r.updated_at,
+                        latest_packet_at: r.latest_packet_at,
+                        from_ogn_db: r.from_ogn_db,
+                    })
+                    .collect())
+            },
+        )
+        .await?
+    }
+
+    /// Get recently updated receivers with coordinates extracted
+    pub async fn get_recently_updated_receivers_with_coords(
+        &self,
+        limit: i64,
+    ) -> Result<Vec<crate::actions::views::ReceiverView>> {
+        use diesel::sql_types::*;
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(
+            move || -> Result<Vec<crate::actions::views::ReceiverView>> {
+                use diesel::sql_types::Uuid as SqlUuid;
+
+                #[derive(QueryableByName)]
+                #[diesel(check_for_backend(diesel::pg::Pg))]
+                struct ReceiverWithCoords {
+                    #[diesel(sql_type = SqlUuid)]
+                    id: uuid::Uuid,
+                    #[diesel(sql_type = Text)]
+                    callsign: String,
+                    #[diesel(sql_type = Nullable<Text>)]
+                    description: Option<String>,
+                    #[diesel(sql_type = Nullable<Text>)]
+                    contact: Option<String>,
+                    #[diesel(sql_type = Nullable<Text>)]
+                    email: Option<String>,
+                    #[diesel(sql_type = Nullable<Text>)]
+                    country: Option<String>,
+                    #[diesel(sql_type = Nullable<Double>)]
+                    latitude: Option<f64>,
+                    #[diesel(sql_type = Nullable<Double>)]
+                    longitude: Option<f64>,
+                    #[diesel(sql_type = Timestamptz)]
+                    created_at: chrono::DateTime<chrono::Utc>,
+                    #[diesel(sql_type = Timestamptz)]
+                    updated_at: chrono::DateTime<chrono::Utc>,
+                    #[diesel(sql_type = Nullable<Timestamptz>)]
+                    latest_packet_at: Option<chrono::DateTime<chrono::Utc>>,
+                    #[diesel(sql_type = Bool)]
+                    from_ogn_db: bool,
+                }
+
+                let mut conn = pool.get()?;
+                let results = diesel::sql_query(
+                    "SELECT
+                id,
+                callsign,
+                description,
+                contact,
+                email,
+                country,
+                ST_Y(location::geometry) as latitude,
+                ST_X(location::geometry) as longitude,
+                created_at,
+                updated_at,
+                latest_packet_at,
+                from_ogn_db
+            FROM receivers
+            ORDER BY updated_at DESC
+            LIMIT $1",
+                )
+                .bind::<BigInt, _>(limit)
+                .get_results::<ReceiverWithCoords>(&mut conn)?;
+
+                Ok(results
+                    .into_iter()
+                    .map(|r| crate::actions::views::ReceiverView {
+                        id: r.id,
+                        callsign: r.callsign,
+                        description: r.description,
+                        contact: r.contact,
+                        email: r.email,
+                        country: r.country,
+                        latitude: r.latitude,
+                        longitude: r.longitude,
+                        created_at: r.created_at,
+                        updated_at: r.updated_at,
+                        latest_packet_at: r.latest_packet_at,
+                        from_ogn_db: r.from_ogn_db,
+                    })
+                    .collect())
+            },
+        )
+        .await?
+    }
+
+    /// Get receivers within a radius with coordinates extracted
+    pub async fn get_receivers_within_radius_with_coords(
+        &self,
+        latitude: f64,
+        longitude: f64,
+        radius_miles: f64,
+    ) -> Result<Vec<crate::actions::views::ReceiverView>> {
+        use diesel::sql_types::*;
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(
+            move || -> Result<Vec<crate::actions::views::ReceiverView>> {
+                use diesel::sql_types::Uuid as SqlUuid;
+
+                #[derive(QueryableByName)]
+                #[diesel(check_for_backend(diesel::pg::Pg))]
+                struct ReceiverWithCoords {
+                    #[diesel(sql_type = SqlUuid)]
+                    id: uuid::Uuid,
+                    #[diesel(sql_type = Text)]
+                    callsign: String,
+                    #[diesel(sql_type = Nullable<Text>)]
+                    description: Option<String>,
+                    #[diesel(sql_type = Nullable<Text>)]
+                    contact: Option<String>,
+                    #[diesel(sql_type = Nullable<Text>)]
+                    email: Option<String>,
+                    #[diesel(sql_type = Nullable<Text>)]
+                    country: Option<String>,
+                    #[diesel(sql_type = Nullable<Double>)]
+                    latitude: Option<f64>,
+                    #[diesel(sql_type = Nullable<Double>)]
+                    longitude: Option<f64>,
+                    #[diesel(sql_type = Timestamptz)]
+                    created_at: chrono::DateTime<chrono::Utc>,
+                    #[diesel(sql_type = Timestamptz)]
+                    updated_at: chrono::DateTime<chrono::Utc>,
+                    #[diesel(sql_type = Nullable<Timestamptz>)]
+                    latest_packet_at: Option<chrono::DateTime<chrono::Utc>>,
+                    #[diesel(sql_type = Bool)]
+                    from_ogn_db: bool,
+                }
+
+                // Convert miles to meters for PostGIS ST_DWithin (1 mile = 1609.34 meters)
+                let radius_meters = radius_miles * 1609.34;
+
+                let mut conn = pool.get()?;
+                let results = diesel::sql_query(
+                    "SELECT
+                id,
+                callsign,
+                description,
+                contact,
+                email,
+                country,
+                ST_Y(location::geometry) as latitude,
+                ST_X(location::geometry) as longitude,
+                created_at,
+                updated_at,
+                latest_packet_at,
+                from_ogn_db
+            FROM receivers
+            WHERE location IS NOT NULL
+                AND ST_DWithin(location, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, $3)
+            ORDER BY callsign ASC",
+                )
+                .bind::<Double, _>(longitude)
+                .bind::<Double, _>(latitude)
+                .bind::<Double, _>(radius_meters)
+                .get_results::<ReceiverWithCoords>(&mut conn)?;
+
+                Ok(results
+                    .into_iter()
+                    .map(|r| crate::actions::views::ReceiverView {
+                        id: r.id,
+                        callsign: r.callsign,
+                        description: r.description,
+                        contact: r.contact,
+                        email: r.email,
+                        country: r.country,
+                        latitude: r.latitude,
+                        longitude: r.longitude,
+                        created_at: r.created_at,
+                        updated_at: r.updated_at,
+                        latest_packet_at: r.latest_packet_at,
+                        from_ogn_db: r.from_ogn_db,
+                    })
+                    .collect())
+            },
+        )
+        .await?
+    }
+
+    /// Get receivers in a bounding box with coordinates extracted
+    pub async fn get_receivers_in_bounding_box_with_coords(
+        &self,
+        nw_lat: f64,
+        nw_lng: f64,
+        se_lat: f64,
+        se_lng: f64,
+    ) -> Result<Vec<crate::actions::views::ReceiverView>> {
+        use diesel::sql_types::*;
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(
+            move || -> Result<Vec<crate::actions::views::ReceiverView>> {
+                use diesel::sql_types::Uuid as SqlUuid;
+
+                #[derive(QueryableByName)]
+                #[diesel(check_for_backend(diesel::pg::Pg))]
+                struct ReceiverWithCoords {
+                    #[diesel(sql_type = SqlUuid)]
+                    id: uuid::Uuid,
+                    #[diesel(sql_type = Text)]
+                    callsign: String,
+                    #[diesel(sql_type = Nullable<Text>)]
+                    description: Option<String>,
+                    #[diesel(sql_type = Nullable<Text>)]
+                    contact: Option<String>,
+                    #[diesel(sql_type = Nullable<Text>)]
+                    email: Option<String>,
+                    #[diesel(sql_type = Nullable<Text>)]
+                    country: Option<String>,
+                    #[diesel(sql_type = Nullable<Double>)]
+                    latitude: Option<f64>,
+                    #[diesel(sql_type = Nullable<Double>)]
+                    longitude: Option<f64>,
+                    #[diesel(sql_type = Timestamptz)]
+                    created_at: chrono::DateTime<chrono::Utc>,
+                    #[diesel(sql_type = Timestamptz)]
+                    updated_at: chrono::DateTime<chrono::Utc>,
+                    #[diesel(sql_type = Nullable<Timestamptz>)]
+                    latest_packet_at: Option<chrono::DateTime<chrono::Utc>>,
+                    #[diesel(sql_type = Bool)]
+                    from_ogn_db: bool,
+                }
+
+                let mut conn = pool.get()?;
+                let results = diesel::sql_query(
+                    "SELECT
+                    id,
+                    callsign,
+                    description,
+                    contact,
+                    email,
+                    country,
+                    ST_Y(location::geometry) as latitude,
+                    ST_X(location::geometry) as longitude,
+                    created_at,
+                    updated_at,
+                    latest_packet_at,
+                    from_ogn_db
+                FROM receivers
+                WHERE location IS NOT NULL
+                    AND ST_Within(location::geometry, ST_MakeEnvelope($1, $2, $3, $4, 4326))
+                ORDER BY callsign ASC
+                LIMIT 1000",
+                )
+                .bind::<Double, _>(nw_lng)
+                .bind::<Double, _>(se_lat)
+                .bind::<Double, _>(se_lng)
+                .bind::<Double, _>(nw_lat)
+                .get_results::<ReceiverWithCoords>(&mut conn)?;
+
+                Ok(results
+                    .into_iter()
+                    .map(|r| crate::actions::views::ReceiverView {
+                        id: r.id,
+                        callsign: r.callsign,
+                        description: r.description,
+                        contact: r.contact,
+                        email: r.email,
+                        country: r.country,
+                        latitude: r.latitude,
+                        longitude: r.longitude,
+                        created_at: r.created_at,
+                        updated_at: r.updated_at,
+                        latest_packet_at: r.latest_packet_at,
+                        from_ogn_db: r.from_ogn_db,
+                    })
+                    .collect())
             },
         )
         .await?

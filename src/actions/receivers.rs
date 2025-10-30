@@ -9,7 +9,6 @@ use uuid::Uuid;
 
 use crate::actions::json_error;
 use crate::receiver_repo::ReceiverRepository;
-use crate::receivers::ReceiverModel;
 use crate::web::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -32,7 +31,7 @@ pub struct ReceiverSearchQuery {
 
 #[derive(Debug, Serialize)]
 pub struct ReceiverSearchResponse {
-    pub receivers: Vec<ReceiverModel>,
+    pub receivers: Vec<crate::actions::views::ReceiverView>,
 }
 
 /// Get a receiver by its ID
@@ -68,7 +67,10 @@ pub async fn search_receivers(
     // Priority 1: General text query search
     if let Some(search_query) = query.query {
         info!("Performing query search: {}", search_query);
-        match receiver_repo.search_by_query(&search_query).await {
+        match receiver_repo
+            .search_by_query_with_coords(&search_query)
+            .await
+        {
             Ok(receivers) => {
                 info!("Found {} receivers matching query", receivers.len());
                 return Json(ReceiverSearchResponse { receivers }).into_response();
@@ -115,7 +117,7 @@ pub async fn search_receivers(
         );
 
         match receiver_repo
-            .get_receivers_within_radius(lat, lon, radius)
+            .get_receivers_within_radius_with_coords(lat, lon, radius)
             .await
         {
             Ok(receivers) => {
@@ -187,7 +189,7 @@ pub async fn search_receivers(
 
                 // Perform bounding box search
                 match receiver_repo
-                    .get_receivers_in_bounding_box(lat_max, lon_min, lat_min, lon_max)
+                    .get_receivers_in_bounding_box_with_coords(lat_max, lon_min, lat_min, lon_max)
                     .await
                 {
                     Ok(receivers) => {
@@ -211,15 +213,12 @@ pub async fn search_receivers(
             .into_response(),
         }
     } else if let Some(callsign) = query.callsign {
-        // Search by callsign
-        match receiver_repo.search_by_callsign(&callsign).await {
+        // Search by callsign - Note: this uses text search which includes coordinates
+        info!("Performing callsign search: {}", callsign);
+        match receiver_repo.search_by_query_with_coords(&callsign).await {
             Ok(receivers) => {
-                let receiver_models: Vec<ReceiverModel> =
-                    receivers.into_iter().map(|r| r.into()).collect();
-                Json(ReceiverSearchResponse {
-                    receivers: receiver_models,
-                })
-                .into_response()
+                info!("Found {} receivers matching callsign", receivers.len());
+                Json(ReceiverSearchResponse { receivers }).into_response()
             }
             Err(e) => {
                 tracing::error!("Failed to search receivers by callsign {}: {}", callsign, e);
@@ -233,15 +232,13 @@ pub async fn search_receivers(
     } else {
         // No search parameters provided - return recently updated receivers
         info!("No search parameters provided, returning recently updated receivers");
-        match receiver_repo.get_recently_updated_receivers(10).await {
+        match receiver_repo
+            .get_recently_updated_receivers_with_coords(10)
+            .await
+        {
             Ok(receivers) => {
                 info!("Returning {} recently updated receivers", receivers.len());
-                let receiver_models: Vec<ReceiverModel> =
-                    receivers.into_iter().map(|r| r.into()).collect();
-                Json(ReceiverSearchResponse {
-                    receivers: receiver_models,
-                })
-                .into_response()
+                Json(ReceiverSearchResponse { receivers }).into_response()
             }
             Err(e) => {
                 tracing::error!("Failed to get recently updated receivers: {}", e);
