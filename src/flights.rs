@@ -634,8 +634,8 @@ pub struct FlightModel {
     pub landing_location_id: Option<Uuid>,
     pub timed_out_at: Option<DateTime<Utc>>,
     pub last_fix_at: DateTime<Utc>,
-    pub callsign: Option<String>,
     pub tow_release_height_delta_ft: Option<i32>,
+    pub callsign: Option<String>,
 }
 
 /// Insert model for new flights
