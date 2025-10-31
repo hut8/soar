@@ -163,6 +163,53 @@ pub async fn process_metrics_task() {
     }
 }
 
+/// Initialize all metrics to zero/default values
+/// This ensures metrics always appear in Prometheus queries even if no events have occurred
+pub fn initialize_run_metrics() {
+    // Flight tracker metrics
+    metrics::counter!("flight_tracker_timeouts_detected").absolute(0);
+    metrics::gauge!("flight_tracker_active_devices").set(0.0);
+
+    // Receiver status metrics
+    metrics::counter!("receiver_status_updates_total").absolute(0);
+
+    // AGL backfill metrics
+    metrics::counter!("agl_backfill_altitudes_computed_total").absolute(0);
+    metrics::counter!("agl_backfill_fixes_processed_total").absolute(0);
+    metrics::gauge!("agl_backfill_pending_fixes").set(0.0);
+
+    // Elevation cache metrics
+    metrics::counter!("elevation_cache_hits").absolute(0);
+    metrics::counter!("elevation_cache_misses").absolute(0);
+    metrics::gauge!("elevation_cache_entries").set(0.0);
+    metrics::counter!("elevation_tile_cache_hits").absolute(0);
+    metrics::counter!("elevation_tile_cache_misses").absolute(0);
+    metrics::gauge!("elevation_tile_cache_entries").set(0.0);
+
+    // Receiver cache metrics
+    metrics::counter!("generic_processor_receiver_cache_hit_total").absolute(0);
+    metrics::counter!("generic_processor_receiver_cache_miss_total").absolute(0);
+
+    // JetStream connection status
+    metrics::gauge!("jetstream_connected").set(0.0);
+
+    // NATS publisher metrics
+    metrics::counter!("nats_publisher_fixes_published").absolute(0);
+    metrics::gauge!("nats_publisher_queue_depth").set(0.0);
+
+    // APRS processing metrics
+    metrics::counter!("aprs_aircraft_processed").absolute(0);
+    metrics::gauge!("aprs_raw_message_queue_depth").set(0.0);
+
+    // JetStream consumer metrics
+    metrics::counter!("aprs_jetstream_consumed_total").absolute(0);
+    metrics::counter!("aprs_jetstream_process_error_total").absolute(0);
+    metrics::gauge!("aprs_jetstream_queue_depth").set(0.0);
+
+    // Elevation processing metrics
+    metrics::counter!("aprs_elevation_processed").absolute(0);
+}
+
 /// Start a standalone metrics server on the specified port
 /// This is used by the "run" subcommand to expose metrics independently
 pub async fn start_metrics_server(port: u16) {

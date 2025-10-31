@@ -530,6 +530,10 @@ async fn handle_run(archive_dir: Option<String>, nats_url: String) -> Result<()>
             }
             .instrument(tracing::info_span!("metrics_server")),
         );
+
+        // Initialize all metrics to zero so they appear in Prometheus even if no events occur
+        soar::metrics::initialize_run_metrics();
+        info!("Initialized metrics to default values");
     }
 
     let lock_name = if is_production {
@@ -1091,6 +1095,11 @@ async fn handle_run(archive_dir: Option<String>, nats_url: String) -> Result<()>
 
     let jetstream = async_nats::jetstream::new(nats_client);
 
+    // Update JetStream connection status metric
+    if is_production {
+        metrics::gauge!("jetstream_connected").set(1.0);
+    }
+
     // Create JetStream consumer
     info!(
         "Creating JetStream consumer '{}' for stream '{}', subject '{}'...",
@@ -1111,34 +1120,17 @@ async fn handle_run(archive_dir: Option<String>, nats_url: String) -> Result<()>
     // This helps diagnose what's slowing down processing
     let _metrics_handle = tokio::spawn(
         async move {
-            use std::time::{Duration, Instant};
-            let mut last_log = Instant::now();
+            use std::time::Duration;
             let log_interval = Duration::from_secs(30); // Log every 30 seconds
 
             loop {
                 tokio::time::sleep(log_interval).await;
 
-                let elapsed_secs = last_log.elapsed().as_secs_f64();
-                last_log = Instant::now();
-
                 // Log performance summary
-                // The metrics are tracked via the metrics crate and available in the metrics backend
+                // Note: Detailed metrics are available at http://localhost:9091/metrics
                 info!(
-                    "=== PERFORMANCE METRICS (last {:.0}s) ===",
-                    elapsed_secs
-                );
-                info!(
-                    "Worker pools: {} aircraft, {} receiver_status, {} receiver_position, 2 server_status",
+                    "Worker pools active: {} aircraft, {} receiver_status, {} receiver_position, 2 server_status workers",
                     num_aircraft_workers, num_receiver_status_workers, num_receiver_position_workers
-                );
-                info!(
-                    "Per-processor metrics: aprs.aircraft.duration_ms, aprs.receiver_status.duration_ms, aprs.receiver_position.duration_ms, aprs.server_status.duration_ms"
-                );
-                info!(
-                    "Queue drops: aprs.aircraft_queue.full, aprs.receiver_status_queue.full, aprs.receiver_position_queue.full, aprs.server_status_queue.full"
-                );
-                info!(
-                    "Elevation metrics: aprs.elevation.duration_ms, aprs.elevation.queued, aprs.elevation.dropped"
                 );
             }
         }
