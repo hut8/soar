@@ -1119,28 +1119,6 @@ async fn handle_run(archive_dir: Option<String>, nats_url: String) -> Result<()>
     .context("Failed to create JetStream consumer")?;
 
     info!("JetStream consumer ready, starting message processing...");
-
-    // Spawn periodic performance metrics logger before starting consumption
-    // This helps diagnose what's slowing down processing
-    let _metrics_handle = tokio::spawn(
-        async move {
-            use std::time::Duration;
-            let log_interval = Duration::from_secs(30); // Log every 30 seconds
-
-            loop {
-                tokio::time::sleep(log_interval).await;
-
-                // Log performance summary
-                // Note: Detailed metrics are available at http://localhost:9091/metrics
-                info!(
-                    "Worker pools active: {} aircraft, {} receiver_status, {} receiver_position, 2 server_status workers",
-                    num_aircraft_workers, num_receiver_status_workers, num_receiver_position_workers
-                );
-            }
-        }
-        .instrument(tracing::info_span!("performance_metrics_logger")),
-    );
-
     info!("APRS client started. Press Ctrl+C to stop.");
 
     // Start consuming messages from JetStream
