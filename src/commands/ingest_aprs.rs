@@ -7,7 +7,7 @@ use tracing::info;
 
 pub async fn handle_ingest_aprs(
     server: String,
-    port: u16,
+    mut port: u16,
     callsign: String,
     filter: Option<String>,
     max_retries: u32,
@@ -21,6 +21,13 @@ pub async fn handle_ingest_aprs(
     sentry::configure_scope(|scope| {
         scope.set_tag("operation", "ingest-aprs");
     });
+
+    // Automatically switch to port 10152 for full feed if no filter specified
+    // Port 14580 requires a filter, port 10152 provides the full global feed
+    if filter.is_none() && port == 14580 {
+        info!("No filter specified, switching from port 14580 to 10152 for full feed");
+        port = 10152;
+    }
 
     // Determine environment and use appropriate stream/subject names
     // Production: "APRS_RAW" and "aprs.raw"
