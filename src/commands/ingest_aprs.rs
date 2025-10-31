@@ -83,8 +83,16 @@ pub async fn handle_ingest_aprs(
     metrics::counter!("aprs.raw_message_queue.full").absolute(0);
     metrics::gauge!("aprs.raw_message_queue.depth").set(0.0);
 
+    // Message type tracking (received from APRS-IS)
+    metrics::counter!("aprs.raw_message.received.server").absolute(0);
+    metrics::counter!("aprs.raw_message.received.aprs").absolute(0);
+    metrics::counter!("aprs.raw_message.queued.server").absolute(0);
+    metrics::counter!("aprs.raw_message.queued.aprs").absolute(0);
+
     // JetStream publishing metrics
     metrics::counter!("aprs.jetstream.published").absolute(0);
+    metrics::counter!("aprs.jetstream.published.server").absolute(0);
+    metrics::counter!("aprs.jetstream.published.aprs").absolute(0);
     metrics::counter!("aprs.jetstream.publish_error").absolute(0);
     metrics::gauge!("aprs.jetstream.queue_depth").set(0.0);
 

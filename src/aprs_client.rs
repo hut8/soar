@@ -101,16 +101,30 @@ impl AprsClient {
                 let mut stats_timer = tokio::time::interval(Duration::from_secs(10));
                 stats_timer.tick().await; // First tick completes immediately
 
+                let mut published_count = 0u64;
+                let mut last_log_time = std::time::Instant::now();
+
                 loop {
                     tokio::select! {
                         Some(message) = raw_message_rx.recv() => {
                             // Publish all messages to JetStream (both server messages and APRS messages)
                             publisher.publish_with_retry(&message).await;
+                            published_count += 1;
                         }
                         _ = stats_timer.tick() => {
                             // Report raw message queue depth every 10 seconds
                             let queue_depth = raw_message_rx.len();
                             metrics::gauge!("aprs.jetstream.queue_depth").set(queue_depth as f64);
+
+                            // Log publishing rate
+                            let elapsed = last_log_time.elapsed().as_secs_f64();
+                            if elapsed > 0.0 {
+                                let rate = published_count as f64 / elapsed;
+                                info!("JetStream publishing rate: {:.1} msg/s (queue depth: {})", rate, queue_depth);
+                                published_count = 0;
+                                last_log_time = std::time::Instant::now();
+                            }
+
                             if queue_depth > queue_warning_threshold(RAW_MESSAGE_QUEUE_SIZE) {
                                 warn!(
                                     "JetStream publish queue building up: {} messages (50% full)",
@@ -348,16 +362,35 @@ impl AprsClient {
 
                             let trimmed_line = line.trim();
                             if !trimmed_line.is_empty() {
+                                // Track message types for debugging
+                                let is_server_message = trimmed_line.starts_with('#');
+                                if is_server_message {
+                                    metrics::counter!("aprs.raw_message.received.server")
+                                        .increment(1);
+                                } else {
+                                    metrics::counter!("aprs.raw_message.received.aprs")
+                                        .increment(1);
+                                }
+
                                 if first_message {
                                     info!("First message from server: {}", trimmed_line);
                                     first_message = false;
                                 } else {
                                     trace!("Received: {}", trimmed_line);
                                 }
+
                                 // Send message to channel for processing (non-blocking)
                                 match raw_message_tx.try_send(trimmed_line.to_string()) {
                                     Ok(()) => {
-                                        trace!("Queued message for processing");
+                                        if is_server_message {
+                                            trace!("Queued server message for JetStream");
+                                            metrics::counter!("aprs.raw_message.queued.server")
+                                                .increment(1);
+                                        } else {
+                                            trace!("Queued APRS message for JetStream");
+                                            metrics::counter!("aprs.raw_message.queued.aprs")
+                                                .increment(1);
+                                        }
                                     }
                                     Err(mpsc::error::TrySendError::Full(_)) => {
                                         warn!(
