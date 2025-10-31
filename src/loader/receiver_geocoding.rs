@@ -10,19 +10,19 @@ use crate::geocoding::Geocoder;
 use crate::receiver_repo::ReceiverRepository;
 
 /// Geocode receivers that haven't been geocoded yet
-/// Processes receivers where geocoded=false and lat/lng are not null
+/// Processes ALL receivers where geocoded=false and lat/lng are not null
+/// Rate limited to 1 request per second to respect Nominatim usage policy
 pub async fn geocode_receivers(
     diesel_pool: Pool<ConnectionManager<PgConnection>>,
-    batch_size: i64,
 ) -> Result<(usize, usize, usize)> {
     info!("Starting receiver reverse geocoding task...");
 
     let receiver_repo = ReceiverRepository::new(diesel_pool);
     let geocoder = Geocoder::new();
 
-    // Get receivers that need geocoding
+    // Get ALL receivers that need geocoding
     let receivers = receiver_repo
-        .get_receivers_needing_geocoding(batch_size)
+        .get_receivers_needing_geocoding(i64::MAX)
         .await?;
 
     if receivers.is_empty() {
@@ -30,11 +30,7 @@ pub async fn geocode_receivers(
         return Ok((0, 0, 0));
     }
 
-    info!(
-        "Found {} receivers needing geocoding (limited to {})",
-        receivers.len(),
-        batch_size
-    );
+    info!("Found {} receivers needing geocoding", receivers.len());
 
     let mut success_count = 0;
     let mut failure_count = 0;
@@ -106,9 +102,8 @@ pub async fn geocode_receivers(
         }
 
         // Rate limiting: Nominatim allows 1 request per second
-        // Be conservative with 1.1 seconds between requests
         if index < receivers.len() - 1 {
-            tokio::time::sleep(Duration::from_millis(1100)).await;
+            tokio::time::sleep(Duration::from_secs(1)).await;
         }
     }
 
@@ -125,12 +120,11 @@ pub async fn geocode_receivers(
 /// Geocode receivers with metrics for email reporting
 pub async fn geocode_receivers_with_metrics(
     diesel_pool: Pool<ConnectionManager<PgConnection>>,
-    batch_size: i64,
 ) -> EntityMetrics {
     let start = Instant::now();
     let mut metrics = EntityMetrics::new("Receiver Geocoding");
 
-    match geocode_receivers(diesel_pool, batch_size).await {
+    match geocode_receivers(diesel_pool).await {
         Ok((total_processed, success, failures)) => {
             metrics.records_loaded = success;
             metrics.records_in_db = Some(total_processed as i64);

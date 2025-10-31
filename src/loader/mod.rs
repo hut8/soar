@@ -151,10 +151,9 @@ pub async fn handle_load_data(
         report.add_entity(metrics);
     }
 
-    // Geocode receivers after they're loaded (batch size of 50 per run to avoid rate limits)
+    // Geocode receivers after they're loaded (1 second between requests to respect Nominatim rate limit)
     {
-        let metrics =
-            receiver_geocoding::geocode_receivers_with_metrics(diesel_pool.clone(), 50).await;
+        let metrics = receiver_geocoding::geocode_receivers_with_metrics(diesel_pool.clone()).await;
         record_stage_metrics(&metrics, "receiver_geocoding");
 
         if !metrics.success
