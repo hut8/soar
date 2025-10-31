@@ -396,6 +396,19 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         .expect("Metrics handle already initialized");
     info!("Prometheus metrics exporter initialized");
 
+    // Initialize WebSocket metrics to zero so they're always exported to Prometheus
+    // even when there are no active connections
+    metrics::gauge!("websocket_connections").set(0.0);
+    metrics::gauge!("websocket_active_subscriptions").set(0.0);
+    metrics::gauge!("websocket_queue_depth").set(0.0);
+    metrics::counter!("websocket_messages_sent").absolute(0);
+    metrics::counter!("websocket_send_errors").absolute(0);
+    metrics::counter!("websocket_serialization_errors").absolute(0);
+    metrics::counter!("websocket_device_subscribes").absolute(0);
+    metrics::counter!("websocket_device_unsubscribes").absolute(0);
+    metrics::counter!("websocket_area_subscribes").absolute(0);
+    metrics::counter!("websocket_area_unsubscribes").absolute(0);
+
     // Start process metrics background task
     tokio::spawn(crate::metrics::process_metrics_task());
 

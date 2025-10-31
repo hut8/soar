@@ -173,12 +173,11 @@ All metrics are aggregated by endpoint pattern (e.g., `/data/devices/{id}` rathe
 
 2. **Configure Prometheus** to scrape SOAR metrics:
    ```bash
-   # Copy the SOAR Prometheus configuration
+   # Copy the SOAR Prometheus base configuration (one-time setup)
    sudo cp infrastructure/prometheus.yml /etc/prometheus/prometheus.yml
-
-   # Or append to existing configuration
-   sudo nano /etc/prometheus/prometheus.yml
    ```
+
+   **Note:** The Prometheus job files are automatically deployed by the `soar-deploy` script when you deploy SOAR. The deployment process creates `/etc/prometheus/jobs/` and copies all job configuration files from `infrastructure/prometheus-jobs/`. You only need to manually copy `prometheus.yml` once during initial setup.
 
 3. **Restart Prometheus**:
    ```bash
@@ -189,8 +188,21 @@ All metrics are aggregated by endpoint pattern (e.g., `/data/devices/{id}` rathe
 4. **Verify metrics are being collected**:
    - Open Prometheus UI: `http://your-prometheus-server:9090`
    - Navigate to Status → Targets
-   - Verify `soar-web` target is "UP"
+   - Verify all SOAR targets are "UP": `soar-web`, `soar-aprs-ingest`, `soar-run`, `soar-pull-data`
    - Query metrics: `elevation_lookup_duration_seconds`
+
+5. **Adding new scrape jobs** (optional):
+   To add a new SOAR service or other service to monitor:
+   ```bash
+   # Create a new job file
+   sudo nano /etc/prometheus/jobs/my-new-service.yml
+
+   # Prometheus will automatically load it within ~1 minute
+   # Or force reload:
+   sudo systemctl reload prometheus
+   ```
+
+   See `infrastructure/prometheus-jobs/README.md` for job configuration examples.
 
 #### Accessing Metrics Directly
 

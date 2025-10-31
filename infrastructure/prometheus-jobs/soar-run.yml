@@ -1,0 +1,16 @@
+# SOAR Run Metrics (run subcommand - APRS processing)
+# This file defines a complete scrape job configuration for the SOAR APRS processing service.
+# Prometheus will automatically load this file when using scrape_config_files.
+
+job_name: 'soar-run'
+metrics_path: '/metrics'
+scrape_interval: 10s
+scrape_timeout: 5s
+
+static_configs:
+  - targets:
+      - 'localhost:9091'
+    labels:
+      instance: 'soar'
+      component: 'run'
+      environment: 'production'

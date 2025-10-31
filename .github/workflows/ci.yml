@@ -330,9 +330,15 @@ jobs:
           # Create local deployment directory
           mkdir -p deploy-pkg
           cp soar deploy-pkg/
-          cp soar-deploy deploy-pkg/
+          cp infrastructure/soar-deploy deploy-pkg/
           cp *.service deploy-pkg/ || echo "No service files found in root"
           cp *.timer deploy-pkg/ || echo "No timer files found in root"
+
+          # Copy Prometheus job configuration files
+          if [ -d infrastructure/prometheus-jobs ]; then
+            cp -r infrastructure/prometheus-jobs deploy-pkg/
+            echo "Prometheus job files included in deployment package"
+          fi
 
           # Create version file with commit SHA (short form for Sentry)
           echo "${GITHUB_SHA:0:7}" > deploy-pkg/VERSION
@@ -340,6 +346,10 @@ jobs:
           echo "Deployment package prepared for timestamp: $TIMESTAMP"
           echo "Commit SHA (short): ${GITHUB_SHA:0:7}"
           ls -lh deploy-pkg/
+          if [ -d deploy-pkg/prometheus-jobs ]; then
+            echo "Prometheus jobs:"
+            ls -lh deploy-pkg/prometheus-jobs/
+          fi
 
       - name: Upload deployment package
         run: |

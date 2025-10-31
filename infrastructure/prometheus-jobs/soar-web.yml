@@ -1,0 +1,16 @@
+# SOAR Web Server Metrics (HTTP API endpoints)
+# This file defines a complete scrape job configuration for the SOAR web server.
+# Prometheus will automatically load this file when using scrape_config_files.
+
+job_name: 'soar-web'
+metrics_path: '/data/metrics'
+scrape_interval: 10s
+scrape_timeout: 5s
+
+static_configs:
+  - targets:
+      - 'localhost:61225'
+    labels:
+      instance: 'soar-web-prod'
+      component: 'web'
+      environment: 'production'

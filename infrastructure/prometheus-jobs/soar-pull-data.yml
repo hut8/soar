@@ -1,0 +1,17 @@
+# SOAR Pull-Data Metrics (pull-data subcommand - data loading)
+# This file defines a complete scrape job configuration for the SOAR pull-data job.
+# Note: pull-data only runs during execution (not persistent).
+# Prometheus will automatically load this file when using scrape_config_files.
+
+job_name: 'soar-pull-data'
+metrics_path: '/metrics'
+scrape_interval: 5s
+scrape_timeout: 3s
+
+static_configs:
+  - targets:
+      - 'localhost:9092'
+    labels:
+      instance: 'soar-pull-data'
+      component: 'pull-data'
+      environment: 'production'
