@@ -173,17 +173,11 @@ All metrics are aggregated by endpoint pattern (e.g., `/data/devices/{id}` rathe
 
 2. **Configure Prometheus** to scrape SOAR metrics:
    ```bash
-   # Copy the SOAR Prometheus base configuration
+   # Copy the SOAR Prometheus base configuration (one-time setup)
    sudo cp infrastructure/prometheus.yml /etc/prometheus/prometheus.yml
-
-   # Create the jobs directory and copy all job configurations
-   sudo mkdir -p /etc/prometheus/jobs
-   sudo cp infrastructure/prometheus-jobs/*.yml /etc/prometheus/jobs/
-   sudo chown -R prometheus:prometheus /etc/prometheus/jobs
-   sudo chmod 644 /etc/prometheus/jobs/*.yml
    ```
 
-   **Note:** The new configuration uses `scrape_config_files` with a glob pattern. You only need to edit `prometheus.yml` to change global settings. Individual scrape jobs are managed in separate files in `/etc/prometheus/jobs/`.
+   **Note:** The Prometheus job files are automatically deployed by the `soar-deploy` script when you deploy SOAR. The deployment process creates `/etc/prometheus/jobs/` and copies all job configuration files from `infrastructure/prometheus-jobs/`. You only need to manually copy `prometheus.yml` once during initial setup.
 
 3. **Restart Prometheus**:
    ```bash

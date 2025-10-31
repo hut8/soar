@@ -11,6 +11,7 @@
 #   - soar (the binary)
 #   - *.service files
 #   - *.timer files
+#   - prometheus-jobs/ directory (optional, contains Prometheus job configs)
 #
 
 set -e
@@ -134,6 +135,25 @@ for timer in "${TIMERS[@]}"; do
         log_warn "$timer not found in deployment directory, skipping"
     fi
 done
+
+# Install Prometheus job configuration files
+if [ -d "$DEPLOY_DIR/prometheus-jobs" ]; then
+    log_info "Installing Prometheus job configuration files..."
+    mkdir -p /etc/prometheus/jobs
+    cp "$DEPLOY_DIR/prometheus-jobs"/*.yml /etc/prometheus/jobs/
+    chmod 644 /etc/prometheus/jobs/*.yml
+
+    # Set ownership to prometheus user if it exists
+    if id "prometheus" &>/dev/null; then
+        chown -R prometheus:prometheus /etc/prometheus/jobs
+        log_info "Prometheus job files installed and ownership set to prometheus:prometheus"
+    else
+        log_warn "prometheus user not found, skipping ownership change"
+        log_info "Prometheus job files installed"
+    fi
+else
+    log_warn "prometheus-jobs directory not found in deployment, skipping Prometheus configuration"
+fi
 
 # Reload systemd daemon
 log_info "Reloading systemd daemon..."
