@@ -470,6 +470,7 @@ impl ReceiverRepository {
     }
 
     /// Update receiver location by callsign using raw SQL
+    /// Updates both the PostGIS location field and the separate latitude/longitude columns
     pub async fn update_receiver_location(
         &self,
         callsign: &str,
@@ -484,10 +485,16 @@ impl ReceiverRepository {
 
             let mut conn = pool.get()?;
 
-            // Use raw SQL to update the geography column
+            // Use raw SQL to update the geography column and lat/lng columns
             // ST_SetSRID(ST_MakePoint(lng, lat), 4326)::geography creates a PostGIS geography point
+            // Also update the separate latitude and longitude columns for easier access
             let rows_affected = sql_query(
-                "UPDATE receivers SET location = ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, updated_at = NOW() WHERE callsign = $3"
+                "UPDATE receivers SET
+                    location = ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
+                    latitude = $2,
+                    longitude = $1,
+                    updated_at = NOW()
+                WHERE callsign = $3",
             )
             .bind::<diesel::sql_types::Double, _>(longitude)
             .bind::<diesel::sql_types::Double, _>(latitude)
