@@ -122,6 +122,10 @@ impl AprsClient {
                                 let start = std::time::Instant::now();
                                 // Route server messages (lines starting with #) and regular APRS messages differently
                                 if msg.starts_with('#') {
+                                    trace!(
+                                        "Routing server message (starts with #): first 50 chars = '{}'",
+                                        msg.chars().take(50).collect::<String>()
+                                    );
                                     Self::process_server_message(&msg, &processor_router);
                                 } else {
                                     Self::process_message(&msg, &processor_router).await;
@@ -674,7 +678,17 @@ impl AprsClient {
                 {
                     trace!("Failed to parse APRS message '{message}': {e}");
                 } else {
-                    info!("Failed to parse APRS message '{message}': {e}");
+                    // Check if this looks like a server message that wasn't properly routed
+                    if message.starts_with('#') {
+                        error!(
+                            "SERVER MESSAGE ROUTED TO PARSER! Message: '{}', bytes: {:?}, error: {}",
+                            message,
+                            message.as_bytes().iter().take(50).collect::<Vec<_>>(),
+                            e
+                        );
+                    } else {
+                        info!("Failed to parse APRS message '{message}': {e}");
+                    }
                 }
             }
         }

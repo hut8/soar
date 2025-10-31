@@ -445,7 +445,9 @@ async fn handle_ingest_aprs(
 
     // Connect to NATS and set up JetStream
     info!("Connecting to NATS at {}...", nats_url);
-    let nats_client = async_nats::connect(&nats_url)
+    let nats_client = async_nats::ConnectOptions::new()
+        .name("soar-aprs-ingester")
+        .connect(&nats_url)
         .await
         .context("Failed to connect to NATS")?;
     info!("Connected to NATS successfully");
@@ -1133,7 +1135,9 @@ async fn handle_run(archive_dir: Option<String>, nats_url: String) -> Result<()>
 
     // Set up JetStream consumer to read from durable queue
     info!("Connecting to NATS at {}...", nats_url);
-    let nats_client = async_nats::connect(&nats_url)
+    let nats_client = async_nats::ConnectOptions::new()
+        .name("soar-run")
+        .connect(&nats_url)
         .await
         .context("Failed to connect to NATS")?;
     info!("Connected to NATS successfully");
