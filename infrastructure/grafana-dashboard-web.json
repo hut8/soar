@@ -387,7 +387,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile{component=\"web\"}(0.95, sum by(endpoint{component=\"web\"}, le{component=\"web\"}) (rate(http_request_duration_seconds_bucket{component=\"web\"}[5m])))",
+          "expr": "histogram_quantile(0.95, sum by(endpoint, le) (rate(http_request_duration_seconds_bucket{component=\"web\"}[5m])))",
           "legendFormat": "{{endpoint}}",
           "range": true,
           "refId": "A"
@@ -480,7 +480,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum by(endpoint{component=\"web\"}) (rate(http_requests_total{component=\"web\"}[5m]))",
+          "expr": "sum by(endpoint) (rate(http_requests_total{component=\"web\"}[5m]))",
           "legendFormat": "{{endpoint}}",
           "range": true,
           "refId": "A"

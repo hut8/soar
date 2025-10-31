@@ -730,8 +730,23 @@ async fn handle_run(archive_dir: Option<String>, nats_url: String) -> Result<()>
     metrics::counter!("aprs.server_status_queue.full").absolute(0);
     metrics::counter!("aprs.server_status_queue.closed").absolute(0);
 
-    // Initialize connection state gauge (0 = disconnected, 1 = connected)
+    // Initialize APRS connection metrics
     metrics::gauge!("aprs.connection.connected").set(0.0);
+    metrics::counter!("aprs.connection.established").absolute(0);
+    metrics::counter!("aprs.connection.ended").absolute(0);
+    metrics::counter!("aprs.connection.failed").absolute(0);
+    metrics::counter!("aprs.connection.operation_failed").absolute(0);
+    metrics::counter!("aprs.keepalive.sent").absolute(0);
+
+    // Initialize JetStream metrics
+    metrics::gauge!("aprs.jetstream.queue_depth").set(0.0);
+    metrics::counter!("aprs.jetstream.published").absolute(0);
+    metrics::counter!("aprs.jetstream.publish_error").absolute(0);
+    metrics::counter!("aprs.jetstream.consumed").absolute(0);
+    metrics::counter!("aprs.jetstream.decode_error").absolute(0);
+    metrics::counter!("aprs.jetstream.ack_error").absolute(0);
+    metrics::counter!("aprs.jetstream.process_error").absolute(0);
+    metrics::counter!("aprs.jetstream.receive_error").absolute(0);
 
     // Initialize NATS publisher error counter
     metrics::counter!("nats_publisher_errors").absolute(0);

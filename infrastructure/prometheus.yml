@@ -1,15 +1,14 @@
 # Prometheus configuration for SOAR metrics scraping
 #
-# This file uses file-based service discovery to load scrape targets from separate files.
-# This allows you to manage SOAR service targets independently from other services.
+# This file uses scrape_config_files to load complete scrape job configurations.
+# This allows you to manage SOAR service scrape jobs in separate files.
 #
 # To use this configuration:
-# 1. Copy infrastructure/prometheus-scrape-configs/*.yml to your Prometheus config directory
-# 2. Update the file_sd_configs path below to point to your scrape configs directory
-# 3. Add your own service scrape configs to the same directory
+# 1. Copy infrastructure/prometheus-jobs/*.yml to /etc/prometheus/jobs/
+# 2. That's it! Prometheus will automatically load all .yml files from that directory
 
 global:
-  scrape_interval: 15s      # Scrape targets every 15 seconds
+  scrape_interval: 15s      # Default scrape interval (can be overridden per job)
   evaluation_interval: 15s  # Evaluate rules every 15 seconds
 
   # Attach these labels to all metrics scraped by this Prometheus instance
@@ -17,71 +16,9 @@ global:
     environment: 'production'
     service: 'soar'
 
-# Scrape configurations using file-based service discovery
-scrape_configs:
-  # SOAR Web Server Metrics (HTTP API endpoints)
-  - job_name: 'soar-web'
-    metrics_path: '/data/metrics'
-    scrape_interval: 10s
-    scrape_timeout: 5s
-
-    file_sd_configs:
-      - files:
-          - '/etc/prometheus/scrape-configs/soar-web.yml'
-        refresh_interval: 30s
-
-    metric_relabel_configs:
-      - source_labels: [__name__]
-        target_label: source
-        replacement: 'soar'
-
-  # SOAR APRS Ingest Metrics (ingest-aprs subcommand)
-  - job_name: 'soar-aprs-ingest'
-    metrics_path: '/metrics'
-    scrape_interval: 10s
-    scrape_timeout: 5s
-
-    file_sd_configs:
-      - files:
-          - '/etc/prometheus/scrape-configs/soar-aprs-ingest.yml'
-        refresh_interval: 30s
-
-    metric_relabel_configs:
-      - source_labels: [__name__]
-        target_label: source
-        replacement: 'soar-aprs-ingest'
-
-  # SOAR Run Metrics (run subcommand - APRS processing)
-  - job_name: 'soar-run'
-    metrics_path: '/metrics'
-    scrape_interval: 10s
-    scrape_timeout: 5s
-
-    file_sd_configs:
-      - files:
-          - '/etc/prometheus/scrape-configs/soar-run.yml'
-        refresh_interval: 30s
-
-    metric_relabel_configs:
-      - source_labels: [__name__]
-        target_label: source
-        replacement: 'soar-run'
-
-  # SOAR Pull-Data Metrics (pull-data subcommand - data loading)
-  - job_name: 'soar-pull-data'
-    metrics_path: '/metrics'
-    scrape_interval: 5s
-    scrape_timeout: 3s
-
-    file_sd_configs:
-      - files:
-          - '/etc/prometheus/scrape-configs/soar-pull-data.yml'
-        refresh_interval: 30s
-
-    metric_relabel_configs:
-      - source_labels: [__name__]
-        target_label: source
-        replacement: 'soar-pull-data'
+# Load all scrape job configurations from separate files
+scrape_config_files:
+  - '/etc/prometheus/jobs/*.yml'
 
 # Alerting configuration (optional)
 # alerting:
