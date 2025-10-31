@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use async_nats::jetstream::{context::Context as JetStreamContext, stream::Stream};
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 /// Publisher that sends raw APRS messages to NATS JetStream for durable queuing
 ///
@@ -28,6 +28,19 @@ impl JetStreamPublisher {
     /// This is called by the APRS client for each message received from APRS-IS
     #[tracing::instrument(skip(self, message), fields(message_len = message.len()))]
     pub async fn publish(&self, message: &str) -> Result<()> {
+        // Track message type for debugging
+        let is_server_message = message.starts_with('#');
+        if is_server_message {
+            debug!("Publishing server message to JetStream: {}", message);
+            metrics::counter!("aprs.jetstream.published.server").increment(1);
+        } else {
+            debug!(
+                "Publishing APRS message to JetStream (first 50 chars): {}",
+                &message.chars().take(50).collect::<String>()
+            );
+            metrics::counter!("aprs.jetstream.published.aprs").increment(1);
+        }
+
         // Convert message to owned bytes for JetStream
         let bytes = message.as_bytes().to_vec();
 

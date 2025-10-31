@@ -5,7 +5,7 @@ use r2d2::Pool;
 use std::time::Instant;
 use tracing::info;
 
-use crate::email_reporter::EntityMetrics;
+use soar::email_reporter::EntityMetrics;
 
 type PgPool = Pool<ConnectionManager<PgConnection>>;
 
@@ -131,9 +131,9 @@ async fn link_devices_to_clubs(pool: &PgPool) -> Result<usize> {
 
 /// Get count of devices with club_id set
 async fn get_devices_with_club_count(pool: &PgPool) -> Result<i64> {
-    use crate::schema::devices::dsl::*;
     use diesel::dsl::count_star;
     use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
+    use soar::schema::devices::dsl::*;
 
     let pool = pool.clone();
 
@@ -152,9 +152,9 @@ async fn get_devices_with_club_count(pool: &PgPool) -> Result<i64> {
 
 /// Get count of aircraft_registrations with device_id set
 async fn get_aircraft_with_device_count(pool: &PgPool) -> Result<i64> {
-    use crate::schema::aircraft_registrations::dsl::*;
     use diesel::dsl::count_star;
     use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
+    use soar::schema::aircraft_registrations::dsl::*;
 
     let pool = pool.clone();
 

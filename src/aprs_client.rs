@@ -6,10 +6,9 @@ use tokio::net::TcpStream;
 use tokio::sync::mpsc;
 use tokio::time::{sleep, timeout};
 use tracing::Instrument;
-use tracing::trace;
-use tracing::{error, info, warn};
+use tracing::{error, info, trace, warn};
 
-// AprsMessage enum removed - AprsClient now calls PacketRouter directly instead of using a queue
+// AprsClient only publishes raw messages to JetStream - all parsing happens in the consumer
 
 /// Result type for connection attempts
 enum ConnectionResult {
@@ -76,176 +75,7 @@ impl AprsClient {
         }
     }
 
-    /// Start the APRS client with a packet router
-    /// This will connect to the server and begin processing messages
-    /// Messages are first queued in a bounded channel to prevent blocking TCP reads
-    #[tracing::instrument(skip(self, packet_router))]
-    pub async fn start(
-        &mut self,
-        packet_router: crate::packet_processors::PacketRouter,
-    ) -> Result<()> {
-        let (shutdown_tx, mut shutdown_rx) = mpsc::channel::<()>(1);
-        self.shutdown_tx = Some(shutdown_tx);
-
-        let config = self.config.clone();
-
-        // Create bounded channel for raw APRS messages from TCP socket
-        // This prevents slow processing from blocking TCP reads and causing server disconnects
-        let (raw_message_tx, raw_message_rx) = mpsc::channel::<String>(RAW_MESSAGE_QUEUE_SIZE);
-        info!(
-            "Created raw message queue with capacity {} to prevent TCP read blocking",
-            RAW_MESSAGE_QUEUE_SIZE
-        );
-
-        // Spawn pool of message processing workers for parallel processing
-        // This allows multiple database operations to execute concurrently
-        let num_processors = 8;
-        info!(
-            "Spawning {} raw message processors for parallel processing",
-            num_processors
-        );
-        let shared_rx = std::sync::Arc::new(tokio::sync::Mutex::new(raw_message_rx));
-
-        for worker_id in 0..num_processors {
-            let worker_rx = shared_rx.clone();
-            let processor_router = packet_router.clone();
-            tokio::spawn(
-                async move {
-                    loop {
-                        let message = {
-                            let mut rx = worker_rx.lock().await;
-                            rx.recv().await
-                        };
-
-                        match message {
-                            Some(msg) => {
-                                let start = std::time::Instant::now();
-                                // Route server messages (lines starting with #) and regular APRS messages differently
-                                if msg.starts_with('#') {
-                                    Self::process_server_message(&msg, &processor_router);
-                                } else {
-                                    Self::process_message(&msg, &processor_router).await;
-                                }
-                                let duration = start.elapsed();
-                                metrics::histogram!("aprs.raw_message.processing_duration_ms")
-                                    .record(duration.as_millis() as f64);
-                                metrics::counter!("aprs.raw_message.processed").increment(1);
-                            }
-                            None => break,
-                        }
-                    }
-                }
-                .instrument(tracing::info_span!("raw_message_worker", worker_id)),
-            );
-        }
-
-        // Spawn separate task for queue depth monitoring
-        let stats_rx = shared_rx.clone();
-        tokio::spawn(
-            async move {
-                let mut stats_timer = tokio::time::interval(Duration::from_secs(10));
-                stats_timer.tick().await; // First tick completes immediately
-
-                loop {
-                    stats_timer.tick().await;
-                    let queue_depth = {
-                        let rx = stats_rx.lock().await;
-                        rx.len()
-                    };
-                    metrics::gauge!("aprs.raw_message_queue.depth").set(queue_depth as f64);
-                    if queue_depth > queue_warning_threshold(RAW_MESSAGE_QUEUE_SIZE) {
-                        warn!(
-                            "Raw message queue building up: {} messages (50% full) - processing may be too slow",
-                            queue_depth
-                        );
-                    }
-                }
-            }
-            .instrument(tracing::info_span!("raw_message_stats")),
-        );
-
-        // Spawn connection management task
-        tokio::spawn(
-            async move {
-                let mut retry_count = 0;
-                let mut current_delay = config.retry_delay_seconds;
-
-                loop {
-                    // Check if shutdown was requested
-                    if shutdown_rx.try_recv().is_ok() {
-                        info!("Shutdown requested, stopping APRS client");
-                        break;
-                    }
-
-                    match Self::connect_and_run(&config, raw_message_tx.clone()).await {
-                        ConnectionResult::Success => {
-                            info!("APRS client connection ended normally");
-                            metrics::counter!("aprs.connection.ended").increment(1);
-                            metrics::gauge!("aprs.connection.connected").set(0.0);
-                            retry_count = 0; // Reset retry count on successful connection
-                            current_delay = config.retry_delay_seconds; // Reset delay
-                        }
-                        ConnectionResult::ConnectionFailed(e) => {
-                            error!("APRS client connection failed: {}", e);
-                            metrics::counter!("aprs.connection.failed").increment(1);
-                            metrics::gauge!("aprs.connection.connected").set(0.0);
-                            retry_count += 1;
-
-                            if retry_count >= config.max_retries {
-                                error!(
-                                    "Maximum retry attempts ({}) reached, stopping client",
-                                    config.max_retries
-                                );
-                                break;
-                            }
-
-                            if current_delay == 0 {
-                                info!(
-                                    "Reconnecting immediately (attempt {}/{})",
-                                    retry_count, config.max_retries
-                                );
-                            } else {
-                                warn!(
-                                    "Retrying connection in {} seconds (attempt {}/{})",
-                                    current_delay, retry_count, config.max_retries
-                                );
-                            }
-                            sleep(Duration::from_secs(current_delay)).await;
-
-                            // Exponential backoff: double the delay for next time, capped at max
-                            if current_delay == 0 {
-                                current_delay = 1; // Start at 1 second after first immediate retry
-                            } else {
-                                current_delay =
-                                    (current_delay * 2).min(config.max_retry_delay_seconds);
-                            }
-                        }
-                        ConnectionResult::OperationFailed(e) => {
-                            error!(
-                                "APRS client operation failed after successful connection: {}",
-                                e
-                            );
-                            metrics::counter!("aprs.connection.operation_failed").increment(1);
-                            metrics::gauge!("aprs.connection.connected").set(0.0);
-                            // Reset retry count and delay since connection was initially successful
-                            retry_count = 0;
-                            current_delay = config.retry_delay_seconds;
-
-                            info!(
-                                "Reconnecting immediately (connection was previously successful)"
-                            );
-                            // No delay for operation failures - reconnect immediately
-                        }
-                    }
-                }
-            }
-            .instrument(tracing::info_span!("aprs_client_connection_loop")),
-        );
-
-        Ok(())
-    }
-
-    /// Start the APRS client with JetStream publisher (for ingestion service)
+    /// Start the APRS client with JetStream publisher
     /// This connects to APRS-IS and publishes all messages to a durable NATS JetStream queue
     #[tracing::instrument(skip(self, jetstream_publisher))]
     pub async fn start_jetstream(
@@ -271,16 +101,30 @@ impl AprsClient {
                 let mut stats_timer = tokio::time::interval(Duration::from_secs(10));
                 stats_timer.tick().await; // First tick completes immediately
 
+                let mut published_count = 0u64;
+                let mut last_log_time = std::time::Instant::now();
+
                 loop {
                     tokio::select! {
                         Some(message) = raw_message_rx.recv() => {
                             // Publish all messages to JetStream (both server messages and APRS messages)
                             publisher.publish_with_retry(&message).await;
+                            published_count += 1;
                         }
                         _ = stats_timer.tick() => {
                             // Report raw message queue depth every 10 seconds
                             let queue_depth = raw_message_rx.len();
                             metrics::gauge!("aprs.jetstream.queue_depth").set(queue_depth as f64);
+
+                            // Log publishing rate
+                            let elapsed = last_log_time.elapsed().as_secs_f64();
+                            if elapsed > 0.0 {
+                                let rate = published_count as f64 / elapsed;
+                                info!("JetStream publishing rate: {:.1} msg/s (queue depth: {})", rate, queue_depth);
+                                published_count = 0;
+                                last_log_time = std::time::Instant::now();
+                            }
+
                             if queue_depth > queue_warning_threshold(RAW_MESSAGE_QUEUE_SIZE) {
                                 warn!(
                                     "JetStream publish queue building up: {} messages (50% full)",
@@ -518,16 +362,35 @@ impl AprsClient {
 
                             let trimmed_line = line.trim();
                             if !trimmed_line.is_empty() {
+                                // Track message types for debugging
+                                let is_server_message = trimmed_line.starts_with('#');
+                                if is_server_message {
+                                    metrics::counter!("aprs.raw_message.received.server")
+                                        .increment(1);
+                                } else {
+                                    metrics::counter!("aprs.raw_message.received.aprs")
+                                        .increment(1);
+                                }
+
                                 if first_message {
                                     info!("First message from server: {}", trimmed_line);
                                     first_message = false;
                                 } else {
                                     trace!("Received: {}", trimmed_line);
                                 }
+
                                 // Send message to channel for processing (non-blocking)
                                 match raw_message_tx.try_send(trimmed_line.to_string()) {
                                     Ok(()) => {
-                                        trace!("Queued message for processing");
+                                        if is_server_message {
+                                            trace!("Queued server message for JetStream");
+                                            metrics::counter!("aprs.raw_message.queued.server")
+                                                .increment(1);
+                                        } else {
+                                            trace!("Queued APRS message for JetStream");
+                                            metrics::counter!("aprs.raw_message.queued.aprs")
+                                                .increment(1);
+                                        }
                                     }
                                     Err(mpsc::error::TrySendError::Full(_)) => {
                                         warn!(
@@ -639,45 +502,6 @@ impl AprsClient {
 
         login_cmd.push_str("\r\n");
         login_cmd
-    }
-
-    /// Process a server message (line starting with #) by calling PacketRouter directly
-    fn process_server_message(
-        message: &str,
-        packet_router: &crate::packet_processors::PacketRouter,
-    ) {
-        // Log the server message for backward compatibility
-        info!("Server message: {}", message);
-
-        // Call PacketRouter directly (no queue) - it will archive and route to processor
-        packet_router.process_server_message(message);
-    }
-
-    /// Process a received APRS message by calling PacketRouter directly
-    pub async fn process_message(
-        message: &str,
-        packet_router: &crate::packet_processors::PacketRouter,
-    ) {
-        // Try to parse the message using ogn-parser
-        match ogn_parser::parse(message) {
-            Ok(parsed) => {
-                // Call PacketRouter directly (no queue) - it will archive, process, and route to queues
-                packet_router.process_packet(parsed, message).await;
-            }
-            Err(e) => {
-                // For OGNFNT sources with invalid lat/lon, log as trace instead of error
-                // These are common and expected issues with this data source
-                let error_str = e.to_string();
-                if message.contains("OGNFNT")
-                    && (error_str.contains("Invalid Latitude")
-                        || error_str.contains("Invalid Longitude"))
-                {
-                    trace!("Failed to parse APRS message '{message}': {e}");
-                } else {
-                    info!("Failed to parse APRS message '{message}': {e}");
-                }
-            }
-        }
     }
 }
 
