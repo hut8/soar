@@ -3,14 +3,16 @@ use clap::{Parser, Subcommand};
 use diesel::r2d2::{ConnectionManager, Pool};
 use diesel::{PgConnection, QueryableByName, RunQueryDsl};
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
-use soar::pull;
 use std::env;
 use std::fs;
 use std::path::Path;
 use tracing::{info, warn};
 
 mod commands;
-use commands::{handle_ingest_aprs, handle_run};
+use commands::{
+    handle_archive, handle_ingest_aprs, handle_load_data, handle_pull_data, handle_resurrect,
+    handle_run, handle_sitemap_generation,
+};
 
 // Embed migrations at compile time
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/");
@@ -559,7 +561,7 @@ async fn main() -> Result<()> {
             let sitemap_path = static_root.unwrap_or_else(|| {
                 env::var("SITEMAP_ROOT").unwrap_or_else(|_| "/var/soar/sitemap".to_string())
             });
-            soar::sitemap::handle_sitemap_generation(diesel_pool, sitemap_path).await
+            handle_sitemap_generation(diesel_pool, sitemap_path).await
         }
         Commands::LoadData {
             aircraft_models,
@@ -571,7 +573,7 @@ async fn main() -> Result<()> {
             geocode,
             link_home_bases,
         } => {
-            soar::loader::handle_load_data(
+            handle_load_data(
                 diesel_pool,
                 aircraft_models,
                 aircraft_registrations,
@@ -584,7 +586,7 @@ async fn main() -> Result<()> {
             )
             .await
         }
-        Commands::PullData {} => pull::handle_pull_data(diesel_pool).await,
+        Commands::PullData {} => handle_pull_data(diesel_pool).await,
         Commands::IngestAprs {
             server,
             port,
@@ -642,9 +644,9 @@ async fn main() -> Result<()> {
         Commands::Archive {
             before,
             archive_path,
-        } => soar::archive::handle_archive(diesel_pool, before, archive_path).await,
+        } => handle_archive(diesel_pool, before, archive_path).await,
         Commands::Resurrect { date, archive_path } => {
-            soar::archive::handle_resurrect(diesel_pool, date, archive_path).await
+            handle_resurrect(diesel_pool, date, archive_path).await
         }
         Commands::VerifyRuntime {} => {
             // This should never be reached due to early return above

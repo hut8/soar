@@ -5,11 +5,11 @@ use r2d2::Pool;
 use std::time::Instant;
 use tracing::{error, info};
 
-use crate::device_repo::DeviceRepository;
-use crate::devices::read_flarmnet_file;
-use crate::email_reporter::EntityMetrics;
-use crate::receiver_repo::ReceiverRepository;
-use crate::receivers::read_receivers_file;
+use soar::device_repo::DeviceRepository;
+use soar::devices::read_flarmnet_file;
+use soar::email_reporter::EntityMetrics;
+use soar::receiver_repo::ReceiverRepository;
+use soar::receivers::read_receivers_file;
 
 pub async fn load_receivers(
     diesel_pool: Pool<ConnectionManager<PgConnection>>,

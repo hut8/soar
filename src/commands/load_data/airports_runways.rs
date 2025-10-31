@@ -5,11 +5,11 @@ use r2d2::Pool;
 use std::time::Instant;
 use tracing::{error, info};
 
-use crate::airports::read_airports_csv_file;
-use crate::airports_repo::AirportsRepository;
-use crate::email_reporter::EntityMetrics;
-use crate::runways::read_runways_csv_file;
-use crate::runways_repo::RunwaysRepository;
+use soar::airports::read_airports_csv_file;
+use soar::airports_repo::AirportsRepository;
+use soar::email_reporter::EntityMetrics;
+use soar::runways::read_runways_csv_file;
+use soar::runways_repo::RunwaysRepository;
 
 pub async fn load_airports(
     diesel_pool: Pool<ConnectionManager<PgConnection>>,

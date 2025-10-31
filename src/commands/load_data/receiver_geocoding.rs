@@ -5,9 +5,9 @@ use r2d2::Pool;
 use std::time::{Duration, Instant};
 use tracing::{error, info, warn};
 
-use crate::email_reporter::EntityMetrics;
-use crate::geocoding::Geocoder;
-use crate::receiver_repo::ReceiverRepository;
+use soar::email_reporter::EntityMetrics;
+use soar::geocoding::Geocoder;
+use soar::receiver_repo::ReceiverRepository;
 
 /// Geocode receivers that haven't been geocoded yet
 /// Processes ALL receivers where geocoded=false and lat/lng are not null

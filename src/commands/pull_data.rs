@@ -157,7 +157,7 @@ pub async fn handle_pull_data(diesel_pool: Pool<ConnectionManager<PgConnection>>
 
     // Start metrics server on port 9092 for profiling during data pull
     tokio::spawn(async {
-        crate::metrics::start_metrics_server(9092).await;
+        soar::metrics::start_metrics_server(9092).await;
     });
 
     // Create temporary directory with date only (no time)
@@ -174,7 +174,7 @@ pub async fn handle_pull_data(diesel_pool: Pool<ConnectionManager<PgConnection>>
     let receivers_path = format!("{}/receivers.json", temp_dir);
     info!("Pulling receiver data from OGN RDB...");
     if !std::path::Path::new(&receivers_path).exists() {
-        crate::fetch_receivers::fetch_receivers(&receivers_path).await?;
+        soar::fetch_receivers::fetch_receivers(&receivers_path).await?;
         info!("Receivers data saved to: {}", receivers_path);
     } else {
         info!(
@@ -231,7 +231,7 @@ pub async fn handle_pull_data(diesel_pool: Pool<ConnectionManager<PgConnection>>
 
     // Invoke handle_load_data with all downloaded files
     info!("Invoking load data procedures...");
-    crate::loader::handle_load_data(
+    super::load_data::handle_load_data(
         diesel_pool,
         Some(acftref_path), // aircraft_models
         Some(master_path),  // aircraft_registrations

@@ -10,11 +10,11 @@ use tracing::info;
 use zstd::stream::read::Decoder as ZstdDecoder;
 use zstd::stream::write::Encoder as ZstdEncoder;
 
-use crate::aprs_messages_repo::AprsMessage;
-use crate::fixes::Fix;
-use crate::flights::FlightModel;
-use crate::receiver_statuses::ReceiverStatus;
-use crate::schema::{aprs_messages, fixes, flights, receiver_statuses};
+use soar::aprs_messages_repo::AprsMessage;
+use soar::fixes::Fix;
+use soar::flights::FlightModel;
+use soar::receiver_statuses::ReceiverStatus;
+use soar::schema::{aprs_messages, fixes, flights, receiver_statuses};
 
 type PgPool = Pool<ConnectionManager<PgConnection>>;
 
@@ -895,8 +895,8 @@ async fn resurrect_aprs_messages(pool: &PgPool, date: NaiveDate, archive_dir: &P
 }
 
 fn insert_aprs_messages_batch(conn: &mut PgConnection, batch: &[AprsMessage]) -> Result<()> {
-    use crate::aprs_messages_repo::NewAprsMessage;
-    use crate::schema::aprs_messages;
+    use soar::aprs_messages_repo::NewAprsMessage;
+    use soar::schema::aprs_messages;
 
     conn.transaction::<_, anyhow::Error, _>(|conn| {
         for message in batch {
@@ -973,7 +973,7 @@ async fn resurrect_fixes(pool: &PgPool, date: NaiveDate, archive_dir: &Path) -> 
 }
 
 fn insert_fixes_batch(conn: &mut PgConnection, batch: &[Fix]) -> Result<()> {
-    use crate::schema::fixes;
+    use soar::schema::fixes;
 
     conn.transaction::<_, anyhow::Error, _>(|conn| {
         for fix in batch {
@@ -1049,7 +1049,7 @@ async fn resurrect_receiver_statuses(
 }
 
 fn insert_receiver_statuses_batch(conn: &mut PgConnection, batch: &[ReceiverStatus]) -> Result<()> {
-    use crate::schema::receiver_statuses;
+    use soar::schema::receiver_statuses;
 
     conn.transaction::<_, anyhow::Error, _>(|conn| {
         for status in batch {
@@ -1118,7 +1118,7 @@ async fn resurrect_flights(pool: &PgPool, date: NaiveDate, archive_dir: &Path) -
 }
 
 fn insert_flights_batch(conn: &mut PgConnection, batch: &[FlightModel]) -> Result<()> {
-    use crate::schema::flights;
+    use soar::schema::flights;
 
     conn.transaction::<_, anyhow::Error, _>(|conn| {
         for flight in batch {

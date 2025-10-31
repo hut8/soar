@@ -13,12 +13,12 @@ use r2d2::Pool;
 use std::time::Instant;
 use tracing::{info, warn};
 
-use crate::email_reporter::{
+use soar::email_reporter::{
     DataLoadReport, EmailConfig, EntityMetrics, send_email_report, send_failure_email,
 };
-use crate::geocoding::geocode_components;
-use crate::locations::Point;
-use crate::locations_repo::LocationsRepository;
+use soar::geocoding::geocode_components;
+use soar::locations::Point;
+use soar::locations_repo::LocationsRepository;
 
 /// Helper function to record Prometheus metrics for a data load stage
 fn record_stage_metrics(metrics: &EntityMetrics, stage_name: &str) {
@@ -290,8 +290,8 @@ pub async fn handle_load_data(
 
 async fn geocode_soaring_clubs(
     diesel_pool: Pool<ConnectionManager<PgConnection>>,
-) -> Option<crate::email_reporter::EntityMetrics> {
-    use crate::email_reporter::EntityMetrics;
+) -> Option<soar::email_reporter::EntityMetrics> {
+    use soar::email_reporter::EntityMetrics;
     use tracing::error;
 
     let start = Instant::now();
@@ -379,9 +379,9 @@ async fn geocode_soaring_clubs(
 async fn get_geocoded_clubs_count(
     diesel_pool: &Pool<ConnectionManager<PgConnection>>,
 ) -> Result<i64> {
-    use crate::schema::{clubs, locations};
     use diesel::dsl::count_star;
     use diesel::prelude::*;
+    use soar::schema::{clubs, locations};
 
     let pool = diesel_pool.clone();
 

@@ -8,7 +8,7 @@ use std::path::Path;
 use tracing::info;
 use uuid::Uuid;
 
-use crate::web::PgPool;
+use soar::web::PgPool;
 
 /// Maximum number of URLs per sitemap file (Google recommends 50,000)
 const MAX_URLS_PER_SITEMAP: usize = 50000;
@@ -121,7 +121,7 @@ fn generate_club_urls(club_ids: &[Uuid]) -> Result<Vec<Url>> {
 /// Get all club IDs from the database
 async fn get_all_club_ids(pool: PgPool) -> Result<Vec<Uuid>> {
     let result = tokio::task::spawn_blocking(move || {
-        use crate::schema::clubs::dsl::*;
+        use soar::schema::clubs::dsl::*;
 
         let mut conn = pool.get()?;
 
@@ -154,7 +154,7 @@ fn generate_device_urls(device_ids: &[Uuid]) -> Result<Vec<Url>> {
 /// Get all device IDs from the database
 async fn get_all_device_ids(pool: PgPool) -> Result<Vec<Uuid>> {
     let result = tokio::task::spawn_blocking(move || {
-        use crate::schema::devices::dsl::*;
+        use soar::schema::devices::dsl::*;
 
         let mut conn = pool.get()?;
 

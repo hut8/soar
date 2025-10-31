@@ -5,9 +5,9 @@ use r2d2::Pool;
 use std::time::Instant;
 use tracing::{error, info, warn};
 
-use crate::airports_repo::AirportsRepository;
-use crate::clubs_repo::ClubsRepository;
-use crate::email_reporter::EntityMetrics;
+use soar::airports_repo::AirportsRepository;
+use soar::clubs_repo::ClubsRepository;
+use soar::email_reporter::EntityMetrics;
 
 /// Link soaring clubs to their nearest suitable airports as home bases
 pub async fn link_home_bases(
@@ -185,9 +185,9 @@ pub async fn link_home_bases_with_metrics(
 async fn get_clubs_with_home_base_count(
     diesel_pool: Pool<ConnectionManager<PgConnection>>,
 ) -> Result<i64> {
-    use crate::schema::clubs::dsl::*;
     use diesel::dsl::count_star;
     use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
+    use soar::schema::clubs::dsl::*;
 
     tokio::task::spawn_blocking(move || {
         let mut conn = diesel_pool.get()?;

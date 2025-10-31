@@ -5,9 +5,9 @@ use r2d2::Pool;
 use std::time::Instant;
 use tracing::{error, info};
 
-use crate::email_reporter::EntityMetrics;
-use crate::faa::aircraft_model_repo::AircraftModelRepository;
-use crate::faa::aircraft_models::read_aircraft_models_file;
+use soar::email_reporter::EntityMetrics;
+use soar::faa::aircraft_model_repo::AircraftModelRepository;
+use soar::faa::aircraft_models::read_aircraft_models_file;
 
 pub async fn load_aircraft_models(
     diesel_pool: Pool<ConnectionManager<PgConnection>>,
