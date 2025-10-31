@@ -745,6 +745,60 @@ impl ReceiverRepository {
         .await?
     }
 
+    /// Get receivers that need geocoding (geocoded=false and have lat/lng)
+    pub async fn get_receivers_needing_geocoding(&self, limit: i64) -> Result<Vec<ReceiverModel>> {
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || -> Result<Vec<ReceiverModel>> {
+            let mut conn = pool.get()?;
+
+            let receiver_models = receivers::table
+                .filter(receivers::geocoded.eq(false))
+                .filter(receivers::latitude.is_not_null())
+                .filter(receivers::longitude.is_not_null())
+                .order(receivers::updated_at.asc()) // Process oldest first
+                .limit(limit)
+                .select(ReceiverModel::as_select())
+                .load::<ReceiverModel>(&mut conn)?;
+
+            Ok(receiver_models)
+        })
+        .await?
+    }
+
+    /// Update receiver address fields from reverse geocoding and mark as geocoded
+    pub async fn update_receiver_address(
+        &self,
+        receiver_id: Uuid,
+        street_address: Option<String>,
+        city: Option<String>,
+        region: Option<String>,
+        country: Option<String>,
+        postal_code: Option<String>,
+    ) -> Result<bool> {
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || -> Result<bool> {
+            let mut conn = pool.get()?;
+
+            let rows_affected =
+                diesel::update(receivers::table.filter(receivers::id.eq(receiver_id)))
+                    .set((
+                        receivers::street_address.eq(street_address),
+                        receivers::city.eq(city),
+                        receivers::region.eq(region),
+                        receivers::country.eq(country),
+                        receivers::postal_code.eq(postal_code),
+                        receivers::geocoded.eq(true),
+                        receivers::updated_at.eq(Utc::now()),
+                    ))
+                    .execute(&mut conn)?;
+
+            Ok(rows_affected > 0)
+        })
+        .await?
+    }
+
     /// Update receiver position by directly storing coordinates
     /// No longer uses the locations table - stores coordinates directly in receivers.location
     pub async fn update_receiver_position(
