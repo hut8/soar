@@ -163,7 +163,31 @@ pub async fn process_metrics_task() {
     }
 }
 
-/// Initialize all metrics to zero/default values
+/// Initialize APRS ingest metrics to zero/default values
+/// This ensures metrics always appear in Prometheus queries even if no events have occurred
+pub fn initialize_aprs_ingest_metrics() {
+    // APRS connection metrics
+    metrics::counter!("aprs.connection.established").absolute(0);
+    metrics::counter!("aprs.connection.failed").absolute(0);
+    metrics::counter!("aprs.connection.ended").absolute(0);
+    metrics::counter!("aprs.connection.operation_failed").absolute(0);
+    metrics::gauge!("aprs.connection.connected").set(0.0);
+
+    // APRS keepalive metrics
+    metrics::counter!("aprs.keepalive.sent").absolute(0);
+
+    // APRS raw message metrics
+    metrics::counter!("aprs.raw_message.processed").absolute(0);
+    metrics::counter!("aprs.raw_message_queue.full").absolute(0);
+    metrics::gauge!("aprs.raw_message_queue.depth").set(0.0);
+
+    // JetStream publishing metrics
+    metrics::counter!("aprs.jetstream.published").absolute(0);
+    metrics::counter!("aprs.jetstream.publish_error").absolute(0);
+    metrics::gauge!("aprs.jetstream.queue_depth").set(0.0);
+}
+
+/// Initialize SOAR run metrics to zero/default values
 /// This ensures metrics always appear in Prometheus queries even if no events have occurred
 pub fn initialize_run_metrics() {
     // Flight tracker metrics

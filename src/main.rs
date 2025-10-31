@@ -402,6 +402,10 @@ async fn handle_ingest_aprs(
             }
             .instrument(tracing::info_span!("metrics_server")),
         );
+
+        // Initialize all metrics to zero so they appear in Prometheus even if no events occur
+        soar::metrics::initialize_aprs_ingest_metrics();
+        info!("Initialized APRS ingest metrics to default values");
     }
 
     // Acquire instance lock to prevent multiple ingest instances from running

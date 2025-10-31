@@ -60,6 +60,7 @@ fi
 
 # Define services and timers
 SERVICES=(
+    "soar-aprs-ingest.service"
     "soar-run.service"
     "soar-web.service"
     "soar-pull-data.service"
