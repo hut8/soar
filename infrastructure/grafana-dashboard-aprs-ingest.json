@@ -451,7 +451,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "aprs_connection_established_total{component=\"aprs-ingest\"}",
+          "expr": "aprs_connection_established{component=\"aprs-ingest\"}",
           "legendFormat": "Established",
           "range": true,
           "refId": "A"
@@ -462,7 +462,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "aprs_connection_failed_total{component=\"aprs-ingest\"}",
+          "expr": "aprs_connection_failed{component=\"aprs-ingest\"}",
           "legendFormat": "Failed",
           "range": true,
           "refId": "B"
@@ -473,7 +473,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "aprs_connection_ended_total{component=\"aprs-ingest\"}",
+          "expr": "aprs_connection_ended{component=\"aprs-ingest\"}",
           "legendFormat": "Ended",
           "range": true,
           "refId": "C"
@@ -570,7 +570,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "aprs_keepalive_sent_total{component=\"aprs-ingest\"}",
+          "expr": "aprs_keepalive_sent{component=\"aprs-ingest\"}",
           "legendFormat": "Keepalive Messages",
           "range": true,
           "refId": "A"
@@ -680,7 +680,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_jetstream_published_total{component=\"aprs-ingest\"}[1m]) * 60",
+          "expr": "rate(aprs_jetstream_published{component=\"aprs-ingest\"}[1m]) * 60",
           "legendFormat": "Messages/min",
           "range": true,
           "refId": "A"
@@ -848,7 +848,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "aprs_jetstream_publish_error_total{component=\"aprs-ingest\"}",
+          "expr": "aprs_jetstream_publish_error{component=\"aprs-ingest\"}",
           "legendFormat": "Publish Errors",
           "range": true,
           "refId": "A"
