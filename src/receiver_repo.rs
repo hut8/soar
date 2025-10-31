@@ -523,100 +523,32 @@ impl ReceiverRepository {
         .await?
     }
 
-    /// Get a receiver by ID with coordinates extracted from location
+    /// Get a receiver by ID for API view
     pub async fn get_receiver_view_by_id(
         &self,
         id: Uuid,
     ) -> Result<Option<crate::actions::views::ReceiverView>> {
-        use diesel::sql_types::{Bool, Double, Nullable, Text, Timestamptz, Uuid as SqlUuid};
-
         let pool = self.pool.clone();
 
         tokio::task::spawn_blocking(
             move || -> Result<Option<crate::actions::views::ReceiverView>> {
                 let mut conn = pool.get()?;
 
-                #[derive(QueryableByName)]
-                #[diesel(check_for_backend(diesel::pg::Pg))]
-                struct ReceiverWithCoords {
-                    #[diesel(sql_type = SqlUuid)]
-                    id: Uuid,
-                    #[diesel(sql_type = Text)]
-                    callsign: String,
-                    #[diesel(sql_type = Nullable<Text>)]
-                    description: Option<String>,
-                    #[diesel(sql_type = Nullable<Text>)]
-                    contact: Option<String>,
-                    #[diesel(sql_type = Nullable<Text>)]
-                    email: Option<String>,
-                    #[diesel(sql_type = Nullable<Text>)]
-                    ogn_db_country: Option<String>,
-                    #[diesel(sql_type = Nullable<Double>)]
-                    location_latitude: Option<f64>,
-                    #[diesel(sql_type = Nullable<Double>)]
-                    location_longitude: Option<f64>,
-                    #[diesel(sql_type = Nullable<Double>)]
-                    latitude: Option<f64>,
-                    #[diesel(sql_type = Nullable<Double>)]
-                    longitude: Option<f64>,
-                    #[diesel(sql_type = Nullable<Text>)]
-                    street_address: Option<String>,
-                    #[diesel(sql_type = Nullable<Text>)]
-                    city: Option<String>,
-                    #[diesel(sql_type = Nullable<Text>)]
-                    region: Option<String>,
-                    #[diesel(sql_type = Nullable<Text>)]
-                    country: Option<String>,
-                    #[diesel(sql_type = Nullable<Text>)]
-                    postal_code: Option<String>,
-                    #[diesel(sql_type = Timestamptz)]
-                    created_at: chrono::DateTime<chrono::Utc>,
-                    #[diesel(sql_type = Timestamptz)]
-                    updated_at: chrono::DateTime<chrono::Utc>,
-                    #[diesel(sql_type = Nullable<Timestamptz>)]
-                    latest_packet_at: Option<chrono::DateTime<chrono::Utc>>,
-                    #[diesel(sql_type = Bool)]
-                    from_ogn_db: bool,
-                }
+                let receiver_model = receivers::table
+                    .filter(receivers::id.eq(id))
+                    .select(ReceiverModel::as_select())
+                    .first::<ReceiverModel>(&mut conn)
+                    .optional()?;
 
-                let result = diesel::sql_query(
-                    "SELECT
-                    id,
-                    callsign,
-                    description,
-                    contact,
-                    email,
-                    ogn_db_country,
-                    ST_Y(location::geometry) as location_latitude,
-                    ST_X(location::geometry) as location_longitude,
-                    latitude,
-                    longitude,
-                    street_address,
-                    city,
-                    region,
-                    country,
-                    postal_code,
-                    created_at,
-                    updated_at,
-                    latest_packet_at,
-                    from_ogn_db
-                FROM receivers
-                WHERE id = $1",
-                )
-                .bind::<SqlUuid, _>(id)
-                .get_result::<ReceiverWithCoords>(&mut conn)
-                .optional()?;
-
-                Ok(result.map(|r| crate::actions::views::ReceiverView {
+                Ok(receiver_model.map(|r| crate::actions::views::ReceiverView {
                     id: r.id,
                     callsign: r.callsign,
                     description: r.description,
                     contact: r.contact,
                     email: r.email,
                     ogn_db_country: r.ogn_db_country,
-                    // Prefer the structured lat/lng fields, fall back to location field extraction
-                    latitude: r.latitude.or(r.location_latitude),
-                    longitude: r.longitude.or(r.location_longitude),
+                    latitude: r.latitude,
+                    longitude: r.longitude,
                     street_address: r.street_address,
                     city: r.city,
                     region: r.region,
