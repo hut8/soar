@@ -91,81 +91,38 @@ impl AprsClient {
 
         // Create bounded channel for raw APRS messages from TCP socket
         // This prevents slow processing from blocking TCP reads and causing server disconnects
-        let (raw_message_tx, raw_message_rx) = mpsc::channel::<String>(RAW_MESSAGE_QUEUE_SIZE);
+        let (raw_message_tx, mut raw_message_rx) = mpsc::channel::<String>(RAW_MESSAGE_QUEUE_SIZE);
         info!(
             "Created raw message queue with capacity {} to prevent TCP read blocking",
             RAW_MESSAGE_QUEUE_SIZE
         );
 
-        // Spawn pool of message processing workers for parallel processing
-        // This allows multiple database operations to execute concurrently
-        let num_processors = 8;
-        info!(
-            "Spawning {} raw message processors for parallel processing",
-            num_processors
-        );
-        let shared_rx = std::sync::Arc::new(tokio::sync::Mutex::new(raw_message_rx));
+        // Spawn single message processing worker
+        // This worker processes messages sequentially and routes them through the packet processor
+        info!("Spawning raw message processor worker");
 
-        for worker_id in 0..num_processors {
-            let worker_rx = shared_rx.clone();
-            let processor_router = packet_router.clone();
-            tokio::spawn(
-                async move {
-                    loop {
-                        let message = {
-                            let mut rx = worker_rx.lock().await;
-                            rx.recv().await
-                        };
-
-                        match message {
-                            Some(msg) => {
-                                let start = std::time::Instant::now();
-                                // Route server messages (lines starting with #) and regular APRS messages differently
-                                if msg.starts_with('#') {
-                                    trace!(
-                                        "Routing server message (starts with #): first 50 chars = '{}'",
-                                        msg.chars().take(50).collect::<String>()
-                                    );
-                                    Self::process_server_message(&msg, &processor_router);
-                                } else {
-                                    Self::process_message(&msg, &processor_router).await;
-                                }
-                                let duration = start.elapsed();
-                                metrics::histogram!("aprs.raw_message.processing_duration_ms")
-                                    .record(duration.as_millis() as f64);
-                                metrics::counter!("aprs.raw_message.processed").increment(1);
-                            }
-                            None => break,
-                        }
-                    }
-                }
-                .instrument(tracing::info_span!("raw_message_worker", worker_id)),
-            );
-        }
-
-        // Spawn separate task for queue depth monitoring
-        let stats_rx = shared_rx.clone();
-        tokio::spawn(
+        let router = packet_router.clone();
+        let _processor_handle = tokio::spawn(
             async move {
-                let mut stats_timer = tokio::time::interval(Duration::from_secs(10));
-                stats_timer.tick().await; // First tick completes immediately
-
-                loop {
-                    stats_timer.tick().await;
-                    let queue_depth = {
-                        let rx = stats_rx.lock().await;
-                        rx.len()
-                    };
-                    metrics::gauge!("aprs.raw_message_queue.depth").set(queue_depth as f64);
-                    if queue_depth > queue_warning_threshold(RAW_MESSAGE_QUEUE_SIZE) {
-                        warn!(
-                            "Raw message queue building up: {} messages (50% full) - processing may be too slow",
-                            queue_depth
+                while let Some(msg) = raw_message_rx.recv().await {
+                    let start = std::time::Instant::now();
+                    // Route server messages (lines starting with #) and regular APRS messages differently
+                    if msg.starts_with('#') {
+                        trace!(
+                            "Routing server message (starts with #): first 50 chars = '{}'",
+                            msg.chars().take(50).collect::<String>()
                         );
+                        Self::process_server_message(&msg, &router);
+                    } else {
+                        Self::process_message(&msg, &router).await;
                     }
+                    let duration = start.elapsed();
+                    metrics::histogram!("aprs.raw_message.processing_duration_ms")
+                        .record(duration.as_millis() as f64);
+                    metrics::counter!("aprs.raw_message.processed").increment(1);
                 }
             }
-            .instrument(tracing::info_span!("raw_message_stats")),
+            .instrument(tracing::info_span!("raw_message_worker")),
         );
 
         // Spawn connection management task
