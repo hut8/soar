@@ -326,8 +326,8 @@ diesel::table! {
         landing_location_id -> Nullable<Uuid>,
         timed_out_at -> Nullable<Timestamptz>,
         last_fix_at -> Timestamptz,
-        callsign -> Nullable<Text>,
         tow_release_height_delta_ft -> Nullable<Int4>,
+        callsign -> Nullable<Text>,
     }
 }
 
@@ -407,13 +407,21 @@ diesel::table! {
         description -> Nullable<Text>,
         contact -> Nullable<Text>,
         email -> Nullable<Text>,
-        country -> Nullable<Text>,
+        ogn_db_country -> Nullable<Text>,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
         id -> Uuid,
         latest_packet_at -> Nullable<Timestamptz>,
         from_ogn_db -> Bool,
         location -> Nullable<Geography>,
+        latitude -> Nullable<Float8>,
+        longitude -> Nullable<Float8>,
+        street_address -> Nullable<Text>,
+        city -> Nullable<Text>,
+        region -> Nullable<Text>,
+        country -> Nullable<Text>,
+        postal_code -> Nullable<Text>,
+        geocoded -> Bool,
     }
 }
 

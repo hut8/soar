@@ -75,45 +75,6 @@ static RECEIVER_LIST_PAGE_IDS: Lazy<HashMap<&'static str, i64>> = Lazy::new(|| {
     ])
 });
 
-static COUNTRIES: Lazy<HashMap<&'static str, &'static str>> = Lazy::new(|| {
-    HashMap::from([
-        ("argentina", "AR"),
-        ("australia", "AU"),
-        ("austria", "AT"),
-        ("belgium", "BE"),
-        ("canada", "CA"),
-        ("chile", "CL"),
-        ("czech republic", "CZ"),
-        ("denmark", "DK"),
-        ("finland", "FI"),
-        ("france", "FR"),
-        ("germany", "DE"),
-        ("hungary", "HU"),
-        ("israel", "IL"),
-        ("italy", "IT"),
-        ("luxembourg", "LU"),
-        ("namibia", "NA"),
-        ("netherlands", "NL"),
-        ("new zealand", "NZ"),
-        ("poland", "PL"),
-        ("slovakia", "SK"),
-        ("slovenia", "SI"),
-        ("south-africa", "ZA"),
-        ("spain", "ES"),
-        ("sweden", "SE"),
-        ("switzerland", "CH"),
-        ("uk", "GB"),
-        ("united states", "US"),
-    ])
-});
-
-fn normalize_country_section(name: &str) -> &'static str {
-    COUNTRIES
-        .get(&name.to_ascii_lowercase()[..])
-        .copied()
-        .unwrap_or("ZZ")
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Receiver {
     callsign: String,
@@ -364,32 +325,10 @@ pub async fn fetch_receivers(out_file: &str) -> anyhow::Result<()> {
     for (country_key, page_id) in RECEIVER_LIST_PAGE_IDS.iter() {
         debug!(country_key, page_id);
         let page = fetch_page(&client, WIKI_URL, *page_id).await?;
-        let mut receivers = parse_receiver_list(&page);
+        let receivers = parse_receiver_list(&page);
 
-        // If the section key is a named country (not 'others'), force ISO-3166 override
-        if *country_key != "others" {
-            let iso = normalize_country_section(country_key);
-            for r in &mut receivers {
-                // Convert "ZZ" (unknown country) to None
-                r.country = if iso == "ZZ" {
-                    None
-                } else {
-                    Some(iso.to_string())
-                };
-            }
-        } else {
-            // For non-forced sections, try to map country headings (normalize) if possible
-            for r in &mut receivers {
-                let normalized = normalize_country_section(r.country.as_deref().unwrap_or(""));
-                // Convert "ZZ" (unknown country) to None
-                r.country = if normalized == "ZZ" {
-                    None
-                } else {
-                    Some(normalized.to_string())
-                };
-            }
-        }
-
+        // Country names are now stored verbatim from the wiki headings
+        // No normalization to ISO codes is performed
         all.extend(receivers);
     }
 

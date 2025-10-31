@@ -69,8 +69,16 @@ impl ReceiverRepository {
                         description: receiver.description.clone(),
                         contact: receiver.contact.clone(),
                         email: receiver.email.clone(),
-                        country: receiver.country.clone(),
+                        ogn_db_country: receiver.country.clone(),
                         from_ogn_db: true, // These come from OGN database
+                        latitude: None,
+                        longitude: None,
+                        street_address: None,
+                        city: None,
+                        region: None,
+                        country: None,
+                        postal_code: None,
+                        geocoded: false,
                     };
 
                     let receiver_result = diesel::insert_into(receivers::table)
@@ -81,7 +89,7 @@ impl ReceiverRepository {
                             receivers::description.eq(&new_receiver.description),
                             receivers::contact.eq(&new_receiver.contact),
                             receivers::email.eq(&new_receiver.email),
-                            receivers::country.eq(&new_receiver.country),
+                            receivers::ogn_db_country.eq(&new_receiver.ogn_db_country),
                             receivers::updated_at.eq(Utc::now()),
                         ))
                         .returning(receivers::id)
@@ -188,8 +196,16 @@ impl ReceiverRepository {
                 description: None,
                 contact: None,
                 email: None,
-                country: None,
+                ogn_db_country: None,
                 from_ogn_db: false, // Auto-discovered, not from OGN database
+                latitude: None,
+                longitude: None,
+                street_address: None,
+                city: None,
+                region: None,
+                country: None,
+                postal_code: None,
+                geocoded: false,
             };
 
             let receiver_id = diesel::insert_into(receivers::table)
@@ -319,7 +335,31 @@ impl ReceiverRepository {
         .await?
     }
 
-    /// Search receivers by country
+    /// Search receivers by OGN DB country
+    pub async fn search_by_ogn_db_country(
+        &self,
+        country_param: &str,
+    ) -> Result<Vec<ReceiverRecord>> {
+        let pool = self.pool.clone();
+        let country_param = country_param.to_string();
+
+        tokio::task::spawn_blocking(move || -> Result<Vec<ReceiverRecord>> {
+            let mut conn = pool.get()?;
+            let receiver_models = receivers::table
+                .filter(receivers::ogn_db_country.eq(&country_param))
+                .order(receivers::callsign.asc())
+                .select(ReceiverModel::as_select())
+                .load::<ReceiverModel>(&mut conn)?;
+
+            Ok(receiver_models
+                .into_iter()
+                .map(ReceiverRecord::from)
+                .collect())
+        })
+        .await?
+    }
+
+    /// Search receivers by country (structured location field)
     pub async fn search_by_country(&self, country_param: &str) -> Result<Vec<ReceiverRecord>> {
         let pool = self.pool.clone();
         let country_param = country_param.to_string();
@@ -503,11 +543,25 @@ impl ReceiverRepository {
                     #[diesel(sql_type = Nullable<Text>)]
                     email: Option<String>,
                     #[diesel(sql_type = Nullable<Text>)]
-                    country: Option<String>,
+                    ogn_db_country: Option<String>,
+                    #[diesel(sql_type = Nullable<Double>)]
+                    location_latitude: Option<f64>,
+                    #[diesel(sql_type = Nullable<Double>)]
+                    location_longitude: Option<f64>,
                     #[diesel(sql_type = Nullable<Double>)]
                     latitude: Option<f64>,
                     #[diesel(sql_type = Nullable<Double>)]
                     longitude: Option<f64>,
+                    #[diesel(sql_type = Nullable<Text>)]
+                    street_address: Option<String>,
+                    #[diesel(sql_type = Nullable<Text>)]
+                    city: Option<String>,
+                    #[diesel(sql_type = Nullable<Text>)]
+                    region: Option<String>,
+                    #[diesel(sql_type = Nullable<Text>)]
+                    country: Option<String>,
+                    #[diesel(sql_type = Nullable<Text>)]
+                    postal_code: Option<String>,
                     #[diesel(sql_type = Timestamptz)]
                     created_at: chrono::DateTime<chrono::Utc>,
                     #[diesel(sql_type = Timestamptz)]
@@ -525,9 +579,16 @@ impl ReceiverRepository {
                     description,
                     contact,
                     email,
+                    ogn_db_country,
+                    ST_Y(location::geometry) as location_latitude,
+                    ST_X(location::geometry) as location_longitude,
+                    latitude,
+                    longitude,
+                    street_address,
+                    city,
+                    region,
                     country,
-                    ST_Y(location::geometry) as latitude,
-                    ST_X(location::geometry) as longitude,
+                    postal_code,
                     created_at,
                     updated_at,
                     latest_packet_at,
@@ -545,9 +606,15 @@ impl ReceiverRepository {
                     description: r.description,
                     contact: r.contact,
                     email: r.email,
+                    ogn_db_country: r.ogn_db_country,
+                    // Prefer the structured lat/lng fields, fall back to location field extraction
+                    latitude: r.latitude.or(r.location_latitude),
+                    longitude: r.longitude.or(r.location_longitude),
+                    street_address: r.street_address,
+                    city: r.city,
+                    region: r.region,
                     country: r.country,
-                    latitude: r.latitude,
-                    longitude: r.longitude,
+                    postal_code: r.postal_code,
                     created_at: r.created_at,
                     updated_at: r.updated_at,
                     latest_packet_at: r.latest_packet_at,
@@ -591,7 +658,7 @@ impl ReceiverRepository {
         .await?
     }
 
-    /// Search receivers by text query (searches across callsign, description, country, contact, email)
+    /// Search receivers by text query (searches across callsign, description, country, contact, email, city, region)
     pub async fn search_by_query(&self, query_param: &str) -> Result<Vec<ReceiverModel>> {
         let pool = self.pool.clone();
         let search_pattern = format!("%{}%", query_param);
@@ -603,9 +670,12 @@ impl ReceiverRepository {
                     receivers::callsign
                         .ilike(&search_pattern)
                         .or(receivers::description.ilike(&search_pattern))
+                        .or(receivers::ogn_db_country.ilike(&search_pattern))
                         .or(receivers::country.ilike(&search_pattern))
                         .or(receivers::contact.ilike(&search_pattern))
-                        .or(receivers::email.ilike(&search_pattern)),
+                        .or(receivers::email.ilike(&search_pattern))
+                        .or(receivers::city.ilike(&search_pattern))
+                        .or(receivers::region.ilike(&search_pattern)),
                 )
                 .order(receivers::callsign.asc())
                 .select(ReceiverModel::as_select())
