@@ -4,6 +4,7 @@ mod airports_runways;
 mod device_linking;
 mod devices_receivers;
 mod home_base_linking;
+mod receiver_geocoding;
 
 use anyhow::Result;
 use diesel::PgConnection;
@@ -138,6 +139,23 @@ pub async fn handle_load_data(
         devices_receivers::load_receivers_with_metrics(diesel_pool.clone(), receivers_path).await
     {
         record_stage_metrics(&metrics, "receivers");
+        if !metrics.success
+            && let Some(ref config) = email_config
+        {
+            let _ = send_failure_email(
+                config,
+                &metrics.name,
+                metrics.error_message.as_deref().unwrap_or("Unknown error"),
+            );
+        }
+        report.add_entity(metrics);
+    }
+
+    // Geocode receivers after they're loaded (1 second between requests to respect Nominatim rate limit)
+    {
+        let metrics = receiver_geocoding::geocode_receivers_with_metrics(diesel_pool.clone()).await;
+        record_stage_metrics(&metrics, "receiver_geocoding");
+
         if !metrics.success
             && let Some(ref config) = email_config
         {

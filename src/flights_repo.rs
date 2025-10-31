@@ -293,6 +293,7 @@ impl FlightsRepository {
             let most_recent_flight: Option<FlightModel> = flights
                 .filter(device_id.eq(device_id_val))
                 .order(last_fix_at.desc())
+                .select(FlightModel::as_select())
                 .first(&mut conn)
                 .optional()?;
 
@@ -608,6 +609,7 @@ impl FlightsRepository {
                 )
                 .filter(takeoff_time.ge(Some(since)))
                 .order(takeoff_time.desc())
+                .select(FlightModel::as_select())
                 .load::<FlightModel>(&mut conn)?;
 
             let result_flights: Vec<Flight> = flight_models.into_iter().map(|f| f.into()).collect();
@@ -1012,6 +1014,7 @@ impl FlightsRepository {
                 .filter(landing_time.is_null())
                 .filter(last_fix_at.ge(cutoff_time))
                 .order(last_fix_at.desc())
+                .select(FlightModel::as_select())
                 .load(&mut conn)?;
 
             let result_flights: Vec<Flight> = flight_models.into_iter().map(|f| f.into()).collect();

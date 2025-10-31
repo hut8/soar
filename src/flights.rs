@@ -604,6 +604,7 @@ impl Flight {
 }
 
 /// Diesel model for the flights table - used for database operations
+/// IMPORTANT: Field order MUST match the database schema exactly for Queryable to work
 #[derive(Debug, Clone, Queryable, Selectable, Insertable, AsChangeset, Serialize, Deserialize)]
 #[diesel(table_name = crate::schema::flights)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
@@ -634,8 +635,8 @@ pub struct FlightModel {
     pub landing_location_id: Option<Uuid>,
     pub timed_out_at: Option<DateTime<Utc>>,
     pub last_fix_at: DateTime<Utc>,
-    pub callsign: Option<String>,
     pub tow_release_height_delta_ft: Option<i32>,
+    pub callsign: Option<String>,
 }
 
 /// Insert model for new flights

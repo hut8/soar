@@ -40,11 +40,20 @@ pub struct ReceiverRecord {
     pub description: Option<String>,
     pub contact: Option<String>,
     pub email: Option<String>,
-    pub country: Option<String>,
+    pub ogn_db_country: Option<String>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
     pub from_ogn_db: bool,
-    // Note: location field omitted - use raw SQL queries to access receivers.location when needed
+    // New location fields
+    pub latitude: Option<f64>,
+    pub longitude: Option<f64>,
+    pub street_address: Option<String>,
+    pub city: Option<String>,
+    pub region: Option<String>,
+    pub country: Option<String>,
+    pub postal_code: Option<String>,
+    pub geocoded: bool,
+    // Note: location (PostGIS geography) field omitted - use raw SQL queries to access receivers.location when needed
 }
 
 /// Database representation of a receiver photo
@@ -72,19 +81,25 @@ impl Receiver {
         let photos = self.photos.clone().unwrap_or_default();
         let links = self.links.clone().unwrap_or_default();
 
-        // Filter out "ZZ" country codes (unknown/invalid)
-        let country = self.country.clone().filter(|c| c != "ZZ");
-
         let receiver_record = ReceiverRecord {
             id: uuid::Uuid::now_v7(), // Generate a new UUID
             callsign: self.callsign.clone().unwrap_or_default(),
             description: self.description.clone(),
             contact: self.contact.clone(),
             email: self.email.clone(),
-            country,
+            ogn_db_country: self.country.clone(),
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
             from_ogn_db: true, // These come from the OGN database
+            // New location fields - initially null, to be populated later
+            latitude: None,
+            longitude: None,
+            street_address: None,
+            city: None,
+            region: None,
+            country: None,
+            postal_code: None,
+            geocoded: false,
         };
 
         (receiver_record, photos, links)
@@ -100,7 +115,7 @@ pub struct ReceiverModel {
     pub description: Option<String>,
     pub contact: Option<String>,
     pub email: Option<String>,
-    pub country: Option<String>,
+    pub ogn_db_country: Option<String>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
     pub id: uuid::Uuid,
@@ -108,6 +123,14 @@ pub struct ReceiverModel {
     pub from_ogn_db: bool,
     // Note: location field is skipped - Geography type not easily deserializable
     // Use raw SQL queries to access receivers.location when needed
+    pub latitude: Option<f64>,
+    pub longitude: Option<f64>,
+    pub street_address: Option<String>,
+    pub city: Option<String>,
+    pub region: Option<String>,
+    pub country: Option<String>,
+    pub postal_code: Option<String>,
+    pub geocoded: bool,
 }
 
 /// Insert model for new receivers
@@ -119,9 +142,18 @@ pub struct NewReceiverModel {
     pub description: Option<String>,
     pub contact: Option<String>,
     pub email: Option<String>,
-    pub country: Option<String>,
+    pub ogn_db_country: Option<String>,
     pub from_ogn_db: bool,
     // Note: location field is skipped for inserts - use separate update method to set location
+    // New location fields can be set during insert
+    pub latitude: Option<f64>,
+    pub longitude: Option<f64>,
+    pub street_address: Option<String>,
+    pub city: Option<String>,
+    pub region: Option<String>,
+    pub country: Option<String>,
+    pub postal_code: Option<String>,
+    pub geocoded: bool,
 }
 
 // Note: UpdateReceiverModel removed - location updates are handled via raw SQL in ReceiverRepository
@@ -175,11 +207,19 @@ impl From<ReceiverRecord> for ReceiverModel {
             description: record.description,
             contact: record.contact,
             email: record.email,
-            country: record.country,
+            ogn_db_country: record.ogn_db_country,
             created_at: record.created_at,
             updated_at: record.updated_at,
             latest_packet_at: None,
             from_ogn_db: record.from_ogn_db,
+            latitude: record.latitude,
+            longitude: record.longitude,
+            street_address: record.street_address,
+            city: record.city,
+            region: record.region,
+            country: record.country,
+            postal_code: record.postal_code,
+            geocoded: record.geocoded,
         }
     }
 }
@@ -187,19 +227,24 @@ impl From<ReceiverRecord> for ReceiverModel {
 /// Conversion from ReceiverModel (database model) to ReceiverRecord (API model)
 impl From<ReceiverModel> for ReceiverRecord {
     fn from(model: ReceiverModel) -> Self {
-        // Filter out "ZZ" country codes (unknown/invalid)
-        let country = model.country.filter(|c| c != "ZZ");
-
         Self {
             id: model.id,
             callsign: model.callsign,
             description: model.description,
             contact: model.contact,
             email: model.email,
-            country,
+            ogn_db_country: model.ogn_db_country,
             created_at: model.created_at,
             updated_at: model.updated_at,
             from_ogn_db: model.from_ogn_db,
+            latitude: model.latitude,
+            longitude: model.longitude,
+            street_address: model.street_address,
+            city: model.city,
+            region: model.region,
+            country: model.country,
+            postal_code: model.postal_code,
+            geocoded: model.geocoded,
         }
     }
 }
@@ -352,7 +397,12 @@ mod tests {
         assert_eq!(record.description, Some("Test receiver".to_string()));
         assert_eq!(record.contact, Some("Test Contact".to_string()));
         assert_eq!(record.email, Some("test@example.com".to_string()));
-        assert_eq!(record.country, Some("US".to_string()));
+        assert_eq!(record.ogn_db_country, Some("US".to_string()));
+        // New location fields should be None until geocoded
+        assert_eq!(record.country, None);
+        assert_eq!(record.latitude, None);
+        assert_eq!(record.longitude, None);
+        assert!(!record.geocoded);
 
         assert_eq!(photos.len(), 2);
         assert_eq!(photos[0], "photo1.jpg");

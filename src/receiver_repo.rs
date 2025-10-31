@@ -69,8 +69,16 @@ impl ReceiverRepository {
                         description: receiver.description.clone(),
                         contact: receiver.contact.clone(),
                         email: receiver.email.clone(),
-                        country: receiver.country.clone(),
+                        ogn_db_country: receiver.country.clone(),
                         from_ogn_db: true, // These come from OGN database
+                        latitude: None,
+                        longitude: None,
+                        street_address: None,
+                        city: None,
+                        region: None,
+                        country: None,
+                        postal_code: None,
+                        geocoded: false,
                     };
 
                     let receiver_result = diesel::insert_into(receivers::table)
@@ -81,7 +89,7 @@ impl ReceiverRepository {
                             receivers::description.eq(&new_receiver.description),
                             receivers::contact.eq(&new_receiver.contact),
                             receivers::email.eq(&new_receiver.email),
-                            receivers::country.eq(&new_receiver.country),
+                            receivers::ogn_db_country.eq(&new_receiver.ogn_db_country),
                             receivers::updated_at.eq(Utc::now()),
                         ))
                         .returning(receivers::id)
@@ -188,8 +196,16 @@ impl ReceiverRepository {
                 description: None,
                 contact: None,
                 email: None,
-                country: None,
+                ogn_db_country: None,
                 from_ogn_db: false, // Auto-discovered, not from OGN database
+                latitude: None,
+                longitude: None,
+                street_address: None,
+                city: None,
+                region: None,
+                country: None,
+                postal_code: None,
+                geocoded: false,
             };
 
             let receiver_id = diesel::insert_into(receivers::table)
@@ -319,7 +335,31 @@ impl ReceiverRepository {
         .await?
     }
 
-    /// Search receivers by country
+    /// Search receivers by OGN DB country
+    pub async fn search_by_ogn_db_country(
+        &self,
+        country_param: &str,
+    ) -> Result<Vec<ReceiverRecord>> {
+        let pool = self.pool.clone();
+        let country_param = country_param.to_string();
+
+        tokio::task::spawn_blocking(move || -> Result<Vec<ReceiverRecord>> {
+            let mut conn = pool.get()?;
+            let receiver_models = receivers::table
+                .filter(receivers::ogn_db_country.eq(&country_param))
+                .order(receivers::callsign.asc())
+                .select(ReceiverModel::as_select())
+                .load::<ReceiverModel>(&mut conn)?;
+
+            Ok(receiver_models
+                .into_iter()
+                .map(ReceiverRecord::from)
+                .collect())
+        })
+        .await?
+    }
+
+    /// Search receivers by country (structured location field)
     pub async fn search_by_country(&self, country_param: &str) -> Result<Vec<ReceiverRecord>> {
         let pool = self.pool.clone();
         let country_param = country_param.to_string();
@@ -430,6 +470,7 @@ impl ReceiverRepository {
     }
 
     /// Update receiver location by callsign using raw SQL
+    /// Updates both the PostGIS location field and the separate latitude/longitude columns
     pub async fn update_receiver_location(
         &self,
         callsign: &str,
@@ -444,10 +485,16 @@ impl ReceiverRepository {
 
             let mut conn = pool.get()?;
 
-            // Use raw SQL to update the geography column
+            // Use raw SQL to update the geography column and lat/lng columns
             // ST_SetSRID(ST_MakePoint(lng, lat), 4326)::geography creates a PostGIS geography point
+            // Also update the separate latitude and longitude columns for easier access
             let rows_affected = sql_query(
-                "UPDATE receivers SET location = ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, updated_at = NOW() WHERE callsign = $3"
+                "UPDATE receivers SET
+                    location = ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
+                    latitude = $2,
+                    longitude = $1,
+                    updated_at = NOW()
+                WHERE callsign = $3",
             )
             .bind::<diesel::sql_types::Double, _>(longitude)
             .bind::<diesel::sql_types::Double, _>(latitude)
@@ -476,78 +523,37 @@ impl ReceiverRepository {
         .await?
     }
 
-    /// Get a receiver by ID with coordinates extracted from location
+    /// Get a receiver by ID for API view
     pub async fn get_receiver_view_by_id(
         &self,
         id: Uuid,
     ) -> Result<Option<crate::actions::views::ReceiverView>> {
-        use diesel::sql_types::{Bool, Double, Nullable, Text, Timestamptz, Uuid as SqlUuid};
-
         let pool = self.pool.clone();
 
         tokio::task::spawn_blocking(
             move || -> Result<Option<crate::actions::views::ReceiverView>> {
                 let mut conn = pool.get()?;
 
-                #[derive(QueryableByName)]
-                #[diesel(check_for_backend(diesel::pg::Pg))]
-                struct ReceiverWithCoords {
-                    #[diesel(sql_type = SqlUuid)]
-                    id: Uuid,
-                    #[diesel(sql_type = Text)]
-                    callsign: String,
-                    #[diesel(sql_type = Nullable<Text>)]
-                    description: Option<String>,
-                    #[diesel(sql_type = Nullable<Text>)]
-                    contact: Option<String>,
-                    #[diesel(sql_type = Nullable<Text>)]
-                    email: Option<String>,
-                    #[diesel(sql_type = Nullable<Text>)]
-                    country: Option<String>,
-                    #[diesel(sql_type = Nullable<Double>)]
-                    latitude: Option<f64>,
-                    #[diesel(sql_type = Nullable<Double>)]
-                    longitude: Option<f64>,
-                    #[diesel(sql_type = Timestamptz)]
-                    created_at: chrono::DateTime<chrono::Utc>,
-                    #[diesel(sql_type = Timestamptz)]
-                    updated_at: chrono::DateTime<chrono::Utc>,
-                    #[diesel(sql_type = Nullable<Timestamptz>)]
-                    latest_packet_at: Option<chrono::DateTime<chrono::Utc>>,
-                    #[diesel(sql_type = Bool)]
-                    from_ogn_db: bool,
-                }
+                let receiver_model = receivers::table
+                    .filter(receivers::id.eq(id))
+                    .select(ReceiverModel::as_select())
+                    .first::<ReceiverModel>(&mut conn)
+                    .optional()?;
 
-                let result = diesel::sql_query(
-                    "SELECT
-                    id,
-                    callsign,
-                    description,
-                    contact,
-                    email,
-                    country,
-                    ST_Y(location::geometry) as latitude,
-                    ST_X(location::geometry) as longitude,
-                    created_at,
-                    updated_at,
-                    latest_packet_at,
-                    from_ogn_db
-                FROM receivers
-                WHERE id = $1",
-                )
-                .bind::<SqlUuid, _>(id)
-                .get_result::<ReceiverWithCoords>(&mut conn)
-                .optional()?;
-
-                Ok(result.map(|r| crate::actions::views::ReceiverView {
+                Ok(receiver_model.map(|r| crate::actions::views::ReceiverView {
                     id: r.id,
                     callsign: r.callsign,
                     description: r.description,
                     contact: r.contact,
                     email: r.email,
-                    country: r.country,
+                    ogn_db_country: r.ogn_db_country,
                     latitude: r.latitude,
                     longitude: r.longitude,
+                    street_address: r.street_address,
+                    city: r.city,
+                    region: r.region,
+                    country: r.country,
+                    postal_code: r.postal_code,
                     created_at: r.created_at,
                     updated_at: r.updated_at,
                     latest_packet_at: r.latest_packet_at,
@@ -591,7 +597,7 @@ impl ReceiverRepository {
         .await?
     }
 
-    /// Search receivers by text query (searches across callsign, description, country, contact, email)
+    /// Search receivers by text query (searches across callsign, description, country, contact, email, city, region)
     pub async fn search_by_query(&self, query_param: &str) -> Result<Vec<ReceiverModel>> {
         let pool = self.pool.clone();
         let search_pattern = format!("%{}%", query_param);
@@ -603,9 +609,12 @@ impl ReceiverRepository {
                     receivers::callsign
                         .ilike(&search_pattern)
                         .or(receivers::description.ilike(&search_pattern))
+                        .or(receivers::ogn_db_country.ilike(&search_pattern))
                         .or(receivers::country.ilike(&search_pattern))
                         .or(receivers::contact.ilike(&search_pattern))
-                        .or(receivers::email.ilike(&search_pattern)),
+                        .or(receivers::email.ilike(&search_pattern))
+                        .or(receivers::city.ilike(&search_pattern))
+                        .or(receivers::region.ilike(&search_pattern)),
                 )
                 .order(receivers::callsign.asc())
                 .select(ReceiverModel::as_select())
@@ -661,6 +670,60 @@ impl ReceiverRepository {
             let rows_affected =
                 diesel::update(receivers::table.filter(receivers::id.eq(receiver_id)))
                     .set(receivers::latest_packet_at.eq(Utc::now()))
+                    .execute(&mut conn)?;
+
+            Ok(rows_affected > 0)
+        })
+        .await?
+    }
+
+    /// Get receivers that need geocoding (geocoded=false and have lat/lng)
+    pub async fn get_receivers_needing_geocoding(&self, limit: i64) -> Result<Vec<ReceiverModel>> {
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || -> Result<Vec<ReceiverModel>> {
+            let mut conn = pool.get()?;
+
+            let receiver_models = receivers::table
+                .filter(receivers::geocoded.eq(false))
+                .filter(receivers::latitude.is_not_null())
+                .filter(receivers::longitude.is_not_null())
+                .order(receivers::updated_at.asc()) // Process oldest first
+                .limit(limit)
+                .select(ReceiverModel::as_select())
+                .load::<ReceiverModel>(&mut conn)?;
+
+            Ok(receiver_models)
+        })
+        .await?
+    }
+
+    /// Update receiver address fields from reverse geocoding and mark as geocoded
+    pub async fn update_receiver_address(
+        &self,
+        receiver_id: Uuid,
+        street_address: Option<String>,
+        city: Option<String>,
+        region: Option<String>,
+        country: Option<String>,
+        postal_code: Option<String>,
+    ) -> Result<bool> {
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || -> Result<bool> {
+            let mut conn = pool.get()?;
+
+            let rows_affected =
+                diesel::update(receivers::table.filter(receivers::id.eq(receiver_id)))
+                    .set((
+                        receivers::street_address.eq(street_address),
+                        receivers::city.eq(city),
+                        receivers::region.eq(region),
+                        receivers::country.eq(country),
+                        receivers::postal_code.eq(postal_code),
+                        receivers::geocoded.eq(true),
+                        receivers::updated_at.eq(Utc::now()),
+                    ))
                     .execute(&mut conn)?;
 
             Ok(rows_affected > 0)
