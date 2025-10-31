@@ -397,7 +397,12 @@ mod tests {
         assert_eq!(record.description, Some("Test receiver".to_string()));
         assert_eq!(record.contact, Some("Test Contact".to_string()));
         assert_eq!(record.email, Some("test@example.com".to_string()));
-        assert_eq!(record.country, Some("US".to_string()));
+        assert_eq!(record.ogn_db_country, Some("US".to_string()));
+        // New location fields should be None until geocoded
+        assert_eq!(record.country, None);
+        assert_eq!(record.latitude, None);
+        assert_eq!(record.longitude, None);
+        assert!(!record.geocoded);
 
         assert_eq!(photos.len(), 2);
         assert_eq!(photos[0], "photo1.jpg");
