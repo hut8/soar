@@ -604,6 +604,7 @@ impl Flight {
 }
 
 /// Diesel model for the flights table - used for database operations
+/// IMPORTANT: Field order MUST match the database schema exactly for Queryable to work
 #[derive(Debug, Clone, Queryable, Selectable, Insertable, AsChangeset, Serialize, Deserialize)]
 #[diesel(table_name = crate::schema::flights)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
