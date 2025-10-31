@@ -404,6 +404,31 @@ async fn handle_ingest_aprs(
         );
     }
 
+    // Initialize all APRS ingester metrics to zero so they appear in Grafana even before events occur
+    info!("Initializing APRS ingester metrics...");
+
+    // Connection metrics
+    metrics::counter!("aprs.connection.established").absolute(0);
+    metrics::counter!("aprs.connection.ended").absolute(0);
+    metrics::counter!("aprs.connection.failed").absolute(0);
+    metrics::counter!("aprs.connection.operation_failed").absolute(0);
+    metrics::gauge!("aprs.connection.connected").set(0.0);
+
+    // Keepalive metrics
+    metrics::counter!("aprs.keepalive.sent").absolute(0);
+
+    // Message processing metrics
+    metrics::counter!("aprs.raw_message.processed").absolute(0);
+    metrics::counter!("aprs.raw_message_queue.full").absolute(0);
+    metrics::gauge!("aprs.raw_message_queue.depth").set(0.0);
+
+    // JetStream publishing metrics
+    metrics::counter!("aprs.jetstream.published").absolute(0);
+    metrics::counter!("aprs.jetstream.publish_error").absolute(0);
+    metrics::gauge!("aprs.jetstream.queue_depth").set(0.0);
+
+    info!("APRS ingester metrics initialized");
+
     // Acquire instance lock to prevent multiple ingest instances from running
     let lock_name = if is_production {
         "aprs-ingest-production"
@@ -531,6 +556,22 @@ async fn handle_run(archive_dir: Option<String>, nats_url: String) -> Result<()>
             .instrument(tracing::info_span!("metrics_server")),
         );
     }
+
+    // Initialize all soar-run metrics to zero so they appear in Grafana even before events occur
+    info!("Initializing soar-run metrics...");
+
+    // JetStream consumer metrics
+    metrics::counter!("aprs.jetstream.consumed").absolute(0);
+    metrics::counter!("aprs.jetstream.consumer_error").absolute(0);
+
+    // Receiver cache metrics
+    metrics::counter!("generic_processor.receiver_cache.hit").absolute(0);
+    metrics::counter!("generic_processor.receiver_cache.miss").absolute(0);
+
+    // Flight tracker metrics
+    metrics::counter!("flight_tracker_timeouts_detected").absolute(0);
+
+    info!("soar-run metrics initialized");
 
     let lock_name = if is_production {
         "soar-run-production"

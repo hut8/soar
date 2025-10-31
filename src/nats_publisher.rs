@@ -70,9 +70,9 @@ impl NatsFixPublisher {
     pub async fn new(nats_url: &str) -> Result<Self> {
         info!("Connecting to NATS server at {}", nats_url);
         let nats_client_name = if std::env::var("SOAR_ENV") == Ok("production".into()) {
-            "soar-run"
+            "soar-aprs-ingester"
         } else {
-            "soar-run-dev"
+            "soar-aprs-ingester-staging"
         };
         let nats_client = async_nats::ConnectOptions::new()
             .name(nats_client_name)
