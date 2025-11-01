@@ -1,6 +1,7 @@
 import { browser, dev } from '$app/environment';
 import type { Aircraft, Fix } from '$lib/types';
 import { DeviceRegistry } from './DeviceRegistry';
+import { FORCE_PRODUCTION_BACKEND } from '$lib/api/server';
 
 // Event types for subscribers
 export type FixFeedEvent =
@@ -79,7 +80,7 @@ export class FixFeed {
 		if (!browser) return;
 
 		const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-		const host = dev ? 'localhost:1337' : window.location.host;
+		const host = dev && !FORCE_PRODUCTION_BACKEND ? 'localhost:1337' : window.location.host;
 		this.websocketUrl = `${protocol}//${host}/data/fixes/live`;
 	}
 
