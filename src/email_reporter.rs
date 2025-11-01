@@ -48,6 +48,7 @@ pub struct EntityMetrics {
     pub records_in_db: Option<i64>,
     pub success: bool,
     pub error_message: Option<String>,
+    pub failed_items: Option<Vec<String>>, // For tracking specific items that failed (e.g., receiver callsigns)
 }
 
 impl EntityMetrics {
@@ -59,6 +60,7 @@ impl EntityMetrics {
             records_in_db: None,
             success: true,
             error_message: None,
+            failed_items: None,
         }
     }
 
@@ -70,6 +72,7 @@ impl EntityMetrics {
             records_in_db: None,
             success: false,
             error_message: Some(error),
+            failed_items: None,
         }
     }
 }
@@ -205,6 +208,24 @@ impl DataLoadReport {
                 </td>
             </tr>"#,
                     error
+                ));
+            }
+
+            if let Some(failed_items) = &entity.failed_items
+                && !failed_items.is_empty()
+            {
+                let items_list = failed_items.join(", ");
+                html.push_str(&format!(
+                    r#"
+            <tr>
+                <td colspan="5">
+                    <div class="error-box">
+                        <strong>Failed Items ({}):</strong> {}
+                    </div>
+                </td>
+            </tr>"#,
+                    failed_items.len(),
+                    items_list
                 ));
             }
         }
