@@ -12,6 +12,8 @@
 #   - *.service files
 #   - *.timer files
 #   - prometheus-jobs/ directory (optional, contains Prometheus job configs)
+#   - grafana-provisioning/ directory (optional, contains Grafana provisioning configs)
+#   - grafana-dashboard-*.json files (optional, Grafana dashboards)
 #
 
 set -e
@@ -154,6 +156,57 @@ if [ -d "$DEPLOY_DIR/prometheus-jobs" ]; then
     fi
 else
     log_warn "prometheus-jobs directory not found in deployment, skipping Prometheus configuration"
+fi
+
+# Install Grafana dashboards and provisioning configuration
+GRAFANA_NEEDS_RESTART=false
+
+if [ -d "$DEPLOY_DIR/grafana-provisioning" ]; then
+    log_info "Installing Grafana provisioning configuration..."
+    mkdir -p /etc/grafana/provisioning/dashboards
+    cp -r "$DEPLOY_DIR/grafana-provisioning/dashboards"/*.yml /etc/grafana/provisioning/dashboards/
+    chmod 644 /etc/grafana/provisioning/dashboards/*.yml
+
+    # Set ownership to grafana user if it exists
+    if id "grafana" &>/dev/null; then
+        chown -R grafana:grafana /etc/grafana/provisioning/dashboards
+        log_info "Grafana provisioning configuration installed"
+        GRAFANA_NEEDS_RESTART=true
+    else
+        log_warn "grafana user not found, skipping ownership change"
+    fi
+fi
+
+# Install Grafana dashboard JSON files
+DASHBOARD_COUNT=0
+if compgen -G "$DEPLOY_DIR/grafana-dashboard-*.json" > /dev/null; then
+    log_info "Installing Grafana dashboard files..."
+    mkdir -p /etc/grafana/dashboards
+    cp "$DEPLOY_DIR"/grafana-dashboard-*.json /etc/grafana/dashboards/
+    chmod 644 /etc/grafana/dashboards/*.json
+
+    # Set ownership to grafana user if it exists
+    if id "grafana" &>/dev/null; then
+        chown -R grafana:grafana /etc/grafana/dashboards
+        DASHBOARD_COUNT=$(ls -1 "$DEPLOY_DIR"/grafana-dashboard-*.json | wc -l)
+        log_info "Installed $DASHBOARD_COUNT Grafana dashboard(s)"
+        GRAFANA_NEEDS_RESTART=true
+    else
+        log_warn "grafana user not found, skipping ownership change"
+    fi
+else
+    log_warn "No Grafana dashboard files found in deployment, skipping dashboard installation"
+fi
+
+# Restart Grafana if dashboards or provisioning was updated
+if [ "$GRAFANA_NEEDS_RESTART" = true ]; then
+    if systemctl is-active --quiet grafana-server; then
+        log_info "Restarting Grafana to load new dashboards..."
+        systemctl restart grafana-server || log_warn "Failed to restart Grafana"
+        log_info "Grafana restarted successfully"
+    else
+        log_warn "Grafana is not running, skipping restart"
+    fi
 fi
 
 # Reload systemd daemon
