@@ -102,7 +102,10 @@
 	<AppBar background="bg-orange-400 dark:bg-orange-900" classes="relative z-[70]">
 		<LoadingBar />
 		{#snippet lead()}
-			<a href={base} class="btn flex items-center space-x-2 preset-filled-primary-500">
+			<a
+				href={base}
+				class="relative z-10 btn flex items-center space-x-2 preset-filled-primary-500"
+			>
 				<div class="flex items-center gap-3 font-bold">
 					<Plane />
 					Glider.flights
@@ -110,106 +113,110 @@
 			</a>
 		{/snippet}
 		{#snippet trail()}
-			<!-- Desktop Navigation -->
-			<nav class="hidden space-x-4 md:flex">
-				<a href={clubsPath} class="btn preset-filled-primary-500 btn-sm">
-					<Users /> Clubs
-				</a>
-				<a href={operationsPath} class="btn preset-filled-primary-500 btn-sm">
-					<Radar /> Operations
-				</a>
-				<a href={devicesPath} class="btn preset-filled-primary-500 btn-sm">
-					<Radio /> Devices
-				</a>
-				<a href={receiversPath} class="btn preset-filled-primary-500 btn-sm">
-					<Antenna /> Receivers
-				</a>
-				<a href={airportsPath} class="btn preset-filled-primary-500 btn-sm">
-					<MapPin /> Airports
-				</a>
-				<a href={flightsPath} class="btn preset-filled-primary-500 btn-sm">
-					<Plane /> Flights
-				</a>
-			</nav>
+			<div class="relative z-10 flex items-center gap-4">
+				<!-- Desktop Navigation -->
+				<nav class="hidden space-x-4 md:flex">
+					<a href={clubsPath} class="btn preset-filled-primary-500 btn-sm">
+						<Users /> Clubs
+					</a>
+					<a href={operationsPath} class="btn preset-filled-primary-500 btn-sm">
+						<Radar /> Operations
+					</a>
+					<a href={devicesPath} class="btn preset-filled-primary-500 btn-sm">
+						<Radio /> Devices
+					</a>
+					<a href={receiversPath} class="btn preset-filled-primary-500 btn-sm">
+						<Antenna /> Receivers
+					</a>
+					<a href={airportsPath} class="btn preset-filled-primary-500 btn-sm">
+						<MapPin /> Airports
+					</a>
+					<a href={flightsPath} class="btn preset-filled-primary-500 btn-sm">
+						<Plane /> Flights
+					</a>
+				</nav>
 
-			<!-- Theme Toggle -->
-			<button
-				class="preset-tonal-surface-500 btn btn-sm"
-				onclick={() => theme.toggle()}
-				title={$theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-			>
-				{#if $theme === 'dark'}
-					<Sun size={18} />
-				{:else}
-					<Moon size={18} />
-				{/if}
-			</button>
-
-			<!-- Desktop Auth -->
-			<div class="hidden md:flex">
-				{#if $auth.isAuthenticated && $auth.user}
-					<div class="user-menu relative">
-						<button
-							class="btn hidden preset-filled-primary-500 btn-sm sm:inline-flex"
-							onclick={() => (showUserMenu = !showUserMenu)}
-						>
-							<User size={16} />
-							{$auth.user.first_name}
-						</button>
-
-						{#if showUserMenu}
-							<div class="absolute top-12 right-0 z-10 w-48 card preset-filled-primary-50-950 p-2">
-								<div class="space-y-1">
-									<div class="px-3 py-2 text-sm">
-										<div class="font-medium">{$auth.user.first_name} {$auth.user.last_name}</div>
-										<div class="text-surface-600-300-token">{$auth.user.email}</div>
-									</div>
-									<hr class="!my-2" />
-									<a
-										href={profilePath}
-										class="btn w-full justify-start preset-filled-primary-500 btn-sm"
-									>
-										<User size={16} /> Profile
-									</a>
-									<button
-										class="btn w-full justify-start preset-filled-primary-500 btn-sm"
-										onclick={handleLogout}
-									>
-										Sign out
-									</button>
-								</div>
-							</div>
-						{/if}
-					</div>
-				{:else}
-					<div class="flex space-x-2">
-						<a href={loginPath} class="btn preset-filled-primary-500 btn-sm"><LogIn /> Login</a>
-						<a href={registerPath} class="btn preset-filled-primary-500 btn-sm"
-							><SignUp /> Sign Up</a
-						>
-					</div>
-				{/if}
-			</div>
-
-			<!-- Mobile Hamburger Menu -->
-			<div class="md:hidden">
+				<!-- Theme Toggle -->
 				<button
-					class="mobile-menu-button preset-tonal-surface-500 btn p-2 btn-sm"
-					onclick={(e) => {
-						e.stopPropagation();
-						showMobileMenu = !showMobileMenu;
-					}}
+					class="preset-tonal-surface-500 btn btn-sm"
+					onclick={() => theme.toggle()}
+					title={$theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
 				>
-					{#if showMobileMenu}
-						<X size={20} />
+					{#if $theme === 'dark'}
+						<Sun size={18} />
 					{:else}
-						<Menu size={20} />
+						<Moon size={18} />
 					{/if}
 				</button>
+
+				<!-- Desktop Auth -->
+				<div class="hidden md:flex">
+					{#if $auth.isAuthenticated && $auth.user}
+						<div class="user-menu relative">
+							<button
+								class="btn hidden preset-filled-primary-500 btn-sm sm:inline-flex"
+								onclick={() => (showUserMenu = !showUserMenu)}
+							>
+								<User size={16} />
+								{$auth.user.first_name}
+							</button>
+
+							{#if showUserMenu}
+								<div
+									class="absolute top-12 right-0 z-10 w-48 card preset-filled-primary-50-950 p-2"
+								>
+									<div class="space-y-1">
+										<div class="px-3 py-2 text-sm">
+											<div class="font-medium">{$auth.user.first_name} {$auth.user.last_name}</div>
+											<div class="text-surface-600-300-token">{$auth.user.email}</div>
+										</div>
+										<hr class="!my-2" />
+										<a
+											href={profilePath}
+											class="btn w-full justify-start preset-filled-primary-500 btn-sm"
+										>
+											<User size={16} /> Profile
+										</a>
+										<button
+											class="btn w-full justify-start preset-filled-primary-500 btn-sm"
+											onclick={handleLogout}
+										>
+											Sign out
+										</button>
+									</div>
+								</div>
+							{/if}
+						</div>
+					{:else}
+						<div class="flex space-x-2">
+							<a href={loginPath} class="btn preset-filled-primary-500 btn-sm"><LogIn /> Login</a>
+							<a href={registerPath} class="btn preset-filled-primary-500 btn-sm"
+								><SignUp /> Sign Up</a
+							>
+						</div>
+					{/if}
+				</div>
+
+				<!-- Mobile Hamburger Menu -->
+				<div class="md:hidden">
+					<button
+						class="mobile-menu-button preset-tonal-surface-500 btn p-2 btn-sm"
+						onclick={(e) => {
+							e.stopPropagation();
+							showMobileMenu = !showMobileMenu;
+						}}
+					>
+						{#if showMobileMenu}
+							<X size={20} />
+						{:else}
+							<Menu size={20} />
+						{/if}
+					</button>
+				</div>
 			</div>
 		{/snippet}
 		<!-- WebSocket Status Indicator for larger screens -->
-		<div class="hidden w-full items-center justify-center lg:flex">
+		<div class="relative z-10 hidden w-full items-center justify-center lg:flex">
 			{#if $websocketStatus.connected}
 				<div
 					class="flex items-center space-x-1 rounded bg-white/90 px-2 py-1 text-success-700 shadow-sm dark:bg-success-500/20 dark:text-success-400"
