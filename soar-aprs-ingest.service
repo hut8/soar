@@ -21,6 +21,13 @@ EnvironmentFile=/etc/soar/env
 # Security settings
 NoNewPrivileges=yes
 
+# Graceful shutdown configuration
+# Allow 30 seconds for graceful shutdown (queue flush + connection cleanup)
+TimeoutStopSec=30
+# Send SIGTERM first, then SIGKILL after timeout
+KillMode=mixed
+KillSignal=SIGTERM
+
 # Restart configuration
 # Restart aggressively to minimize message loss during failures
 Restart=on-failure

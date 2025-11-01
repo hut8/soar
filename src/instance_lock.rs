@@ -92,6 +92,52 @@ impl InstanceLock {
     pub fn path(&self) -> &Path {
         &self.lock_path
     }
+
+    /// Check if a lock with the given name is currently held by another process
+    /// Returns true if the lock is held, false otherwise
+    pub fn is_locked(name: &str) -> Result<bool> {
+        let lock_path = Self::get_lock_path(name)?;
+
+        if !lock_path.exists() {
+            return Ok(false);
+        }
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::io::AsRawFd;
+
+            // Try to open the lock file
+            let lock_file = match OpenOptions::new().read(true).open(&lock_path) {
+                Ok(file) => file,
+                Err(_) => return Ok(false), // File doesn't exist or can't be opened
+            };
+
+            // Try to acquire a non-blocking exclusive lock
+            let fd = lock_file.as_raw_fd();
+            let result = unsafe { libc::flock(fd, libc::LOCK_EX | libc::LOCK_NB) };
+
+            if result != 0 {
+                let err = io::Error::last_os_error();
+                if err.kind() == io::ErrorKind::WouldBlock {
+                    // Lock is held by another process
+                    return Ok(true);
+                }
+            }
+
+            // We acquired the lock, release it immediately
+            unsafe {
+                libc::flock(fd, libc::LOCK_UN);
+            }
+
+            Ok(false)
+        }
+
+        #[cfg(not(unix))]
+        {
+            // On non-Unix systems, just check if the file exists
+            Ok(lock_path.exists())
+        }
+    }
 }
 
 impl Drop for InstanceLock {
