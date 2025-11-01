@@ -340,6 +340,19 @@ jobs:
             echo "Prometheus job files included in deployment package"
           fi
 
+          # Copy Grafana provisioning configuration
+          if [ -d infrastructure/grafana-provisioning ]; then
+            cp -r infrastructure/grafana-provisioning deploy-pkg/
+            echo "Grafana provisioning configuration included in deployment package"
+          fi
+
+          # Copy Grafana dashboard files
+          if compgen -G "infrastructure/grafana-dashboard-*.json" > /dev/null; then
+            cp infrastructure/grafana-dashboard-*.json deploy-pkg/
+            DASHBOARD_COUNT=$(ls -1 infrastructure/grafana-dashboard-*.json | wc -l)
+            echo "Grafana dashboards included in deployment package: $DASHBOARD_COUNT"
+          fi
+
           # Create version file with commit SHA (short form for Sentry)
           echo "${GITHUB_SHA:0:7}" > deploy-pkg/VERSION
 
@@ -349,6 +362,10 @@ jobs:
           if [ -d deploy-pkg/prometheus-jobs ]; then
             echo "Prometheus jobs:"
             ls -lh deploy-pkg/prometheus-jobs/
+          fi
+          if [ -d deploy-pkg/grafana-provisioning ]; then
+            echo "Grafana provisioning:"
+            ls -lh deploy-pkg/grafana-provisioning/dashboards/
           fi
 
       - name: Upload deployment package

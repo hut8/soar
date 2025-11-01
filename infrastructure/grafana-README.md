@@ -1,6 +1,31 @@
-# SOAR Grafana Dashboard
+# SOAR Grafana Dashboards
 
 This directory contains Grafana dashboard configurations for monitoring SOAR metrics.
+
+## Dashboards
+
+- **grafana-dashboard-web.json** - Web server metrics (HTTP requests, elevation lookups)
+- **grafana-dashboard-run.json** - APRS processing service metrics
+- **grafana-dashboard-pull-data.json** - Data loading job metrics
+- **grafana-dashboard-aprs-ingest.json** - APRS ingest service metrics
+
+## Automated Deployment (Recommended)
+
+Dashboards are **automatically deployed** as part of the standard SOAR deployment process. When you run `soar-deploy`, the script will:
+
+1. Copy all dashboard JSON files to `/etc/grafana/dashboards/`
+2. Install Grafana provisioning configuration to `/etc/grafana/provisioning/dashboards/`
+3. Restart Grafana to load the updated dashboards
+
+**No manual action required!** Dashboards will be available in Grafana under the "SOAR" folder after deployment.
+
+### Deployment Details
+
+The deployment process uses Grafana's built-in provisioning system:
+- Dashboard files are loaded from `/etc/grafana/dashboards/`
+- Provisioning configuration is in `/etc/grafana/provisioning/dashboards/dashboards.yml`
+- Dashboards update automatically when files change (10-second check interval)
+- You can still edit dashboards in the UI (changes are allowed)
 
 ## Metrics Endpoint
 
@@ -23,14 +48,16 @@ The SOAR dashboard (`soar-dashboard.json`) includes:
 3. **Receiver Status Updates Rate (1h)** - Current rate over 1-hour window
 4. **Receiver Status Updates Timeline** - Timeline showing increase in updates over 5-minute windows
 
-## Importing the Dashboard
+## Manual Import (For Reference/Troubleshooting)
+
+If you need to manually import dashboards (e.g., for testing or troubleshooting), you can use these methods:
 
 ### Using Grafana UI
 
 1. Open Grafana in your browser
 2. Go to Dashboards → Import
 3. Click "Upload JSON file"
-4. Select `soar-dashboard.json`
+4. Select the desired `grafana-dashboard-*.json` file
 5. Select your Prometheus data source
 6. Click "Import"
 
@@ -40,35 +67,31 @@ The SOAR dashboard (`soar-dashboard.json`) includes:
 # Replace with your Grafana URL and API key
 GRAFANA_URL="http://localhost:3000"
 GRAFANA_API_KEY="your-api-key"
+DASHBOARD_FILE="grafana-dashboard-web.json"
 
 curl -X POST \
   -H "Authorization: Bearer $GRAFANA_API_KEY" \
   -H "Content-Type: application/json" \
-  -d @soar-dashboard.json \
+  -d @"$DASHBOARD_FILE" \
   "$GRAFANA_URL/api/dashboards/db"
 ```
 
-### Using Grafana Provisioning
+### Manual Provisioning Setup
 
-1. Copy `soar-dashboard.json` to your Grafana provisioning directory:
+If you're setting up provisioning manually (not using soar-deploy):
+
+1. Copy dashboard files:
    ```bash
-   sudo cp soar-dashboard.json /etc/grafana/provisioning/dashboards/
+   sudo mkdir -p /etc/grafana/dashboards
+   sudo cp grafana-dashboard-*.json /etc/grafana/dashboards/
+   sudo chown -R grafana:grafana /etc/grafana/dashboards
    ```
 
-2. Create a provisioning config file at `/etc/grafana/provisioning/dashboards/soar.yaml`:
-   ```yaml
-   apiVersion: 1
-
-   providers:
-     - name: 'SOAR'
-       orgId: 1
-       folder: ''
-       type: file
-       disableDeletion: false
-       updateIntervalSeconds: 10
-       allowUiUpdates: true
-       options:
-         path: /etc/grafana/provisioning/dashboards
+2. Copy provisioning config:
+   ```bash
+   sudo mkdir -p /etc/grafana/provisioning/dashboards
+   sudo cp grafana-provisioning/dashboards/dashboards.yml /etc/grafana/provisioning/dashboards/
+   sudo chown -R grafana:grafana /etc/grafana/provisioning/dashboards
    ```
 
 3. Restart Grafana:
@@ -78,15 +101,21 @@ curl -X POST \
 
 ## Prometheus Configuration
 
-Make sure your Prometheus is configured to scrape the SOAR metrics endpoint:
+SOAR metrics are automatically configured via the Prometheus job files in `/etc/prometheus/jobs/` (deployed by `soar-deploy`):
+
+- **soar-web.yml** - Web server metrics (localhost:61225/data/metrics)
+- **soar-run.yml** - APRS processing service (localhost:9091/metrics)
+- **soar-pull-data.yml** - Data loading job (localhost:9092/metrics)
+- **soar-aprs-ingest.yml** - APRS ingest service (localhost:9093/metrics)
+
+Your Prometheus configuration should include:
 
 ```yaml
-scrape_configs:
-  - job_name: 'soar'
-    static_configs:
-      - targets: ['localhost:9091']
-    scrape_interval: 15s
+scrape_config_files:
+  - /etc/prometheus/jobs/*.yml
 ```
+
+This allows job configurations to be updated without modifying the main Prometheus config file.
 
 ## Queries Used
 
