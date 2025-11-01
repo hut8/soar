@@ -111,6 +111,9 @@ impl DeviceRepository {
     ) -> Result<DeviceModel> {
         let mut conn = self.get_connection()?;
 
+        // Extract country code from ICAO address if applicable
+        let country_code = Device::extract_country_code_from_icao(address as u32, address_type);
+
         let new_device = NewDevice {
             address,
             address_type,
@@ -129,6 +132,7 @@ impl DeviceRepository {
             icao_model_code: None,
             adsb_emitter_category: None,
             tracker_device_type: None,
+            country_code,
         };
 
         // Use INSERT ... ON CONFLICT ... DO UPDATE RETURNING to atomically handle race conditions

@@ -231,6 +231,8 @@ diesel::table! {
         icao_model_code -> Nullable<Text>,
         adsb_emitter_category -> Nullable<AdsbEmitterCategory>,
         tracker_device_type -> Nullable<Text>,
+        #[max_length = 2]
+        country_code -> Nullable<Bpchar>,
     }
 }
 

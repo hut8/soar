@@ -160,6 +160,8 @@ pub struct Device {
     pub adsb_emitter_category: Option<AdsbEmitterCategory>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tracker_device_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub country_code: Option<String>,
 }
 
 // Diesel database model for devices table
@@ -197,6 +199,7 @@ pub struct DeviceModel {
     pub icao_model_code: Option<String>,
     pub adsb_emitter_category: Option<AdsbEmitterCategory>,
     pub tracker_device_type: Option<String>,
+    pub country_code: Option<String>,
 }
 
 // For inserting new devices (without timestamps which are set by DB)
@@ -220,10 +223,16 @@ pub struct NewDevice {
     pub icao_model_code: Option<String>,
     pub adsb_emitter_category: Option<AdsbEmitterCategory>,
     pub tracker_device_type: Option<String>,
+    pub country_code: Option<String>,
 }
 
 impl From<Device> for NewDevice {
     fn from(device: Device) -> Self {
+        // Extract country code from ICAO address if not already present
+        let country_code = device.country_code.or_else(|| {
+            Device::extract_country_code_from_icao(device.address, device.address_type)
+        });
+
         Self {
             address: device.address as i32,
             address_type: device.address_type,
@@ -244,6 +253,7 @@ impl From<Device> for NewDevice {
             icao_model_code: device.icao_model_code,
             adsb_emitter_category: device.adsb_emitter_category,
             tracker_device_type: None, // Not provided by DDB
+            country_code,
         }
     }
 }
@@ -270,6 +280,7 @@ impl From<DeviceModel> for Device {
             icao_model_code: model.icao_model_code,
             adsb_emitter_category: model.adsb_emitter_category,
             tracker_device_type: model.tracker_device_type,
+            country_code: model.country_code,
         }
     }
 }
@@ -291,6 +302,31 @@ pub struct DeviceWithSource {
 pub struct DeviceFetcher;
 
 impl Device {
+    /// Extracts the two-letter country code from an ICAO address
+    /// Returns Some(country_code) if the address is ICAO and a country can be identified
+    /// Returns None for non-ICAO addresses (FLARM, OGN) or if parsing fails
+    pub fn extract_country_code_from_icao(
+        address: u32,
+        address_type: AddressType,
+    ) -> Option<String> {
+        // Only extract country codes from ICAO addresses
+        if address_type != AddressType::Icao {
+            return None;
+        }
+
+        // Convert ICAO address to hex string (6 digits)
+        let icao_str = format!("{:06X}", address);
+
+        // Parse using flydent with icao24bit=true
+        let parser = flydent::Parser::new();
+        parser.parse(&icao_str, false, true).and_then(|entity| {
+            match entity {
+                flydent::EntityResult::Country { iso2, .. } => Some(iso2),
+                flydent::EntityResult::Organization { .. } => None, // Don't extract for organizations
+            }
+        })
+    }
+
     /// Determines the registration country based on the registration format
     /// Returns UnitedStates if the registration follows U.S. N-number format, otherwise Other
     pub fn registration_country(&self) -> RegistrationCountry {
@@ -447,6 +483,7 @@ pub fn read_flarmnet_file(path: &str) -> Result<Vec<Device>> {
                                 icao_model_code: None,
                                 adsb_emitter_category: None,
                                 tracker_device_type: None,
+                                country_code: None, // Not extracted from FLARM addresses
                             })
                         }
                         Err(e) => {
@@ -618,6 +655,7 @@ impl DeviceFetcher {
                                     icao_model_code: None,
                                     adsb_emitter_category: None,
                                     tracker_device_type: None,
+                                    country_code: None, // Not extracted from FLARM addresses
                                 })
                             }
                             Err(e) => {
@@ -776,6 +814,9 @@ impl DeviceFetcher {
                         icao_model_code: None,
                         adsb_emitter_category: None,
                         tracker_device_type: None,
+                        country_code: glidernet_device
+                            .country_code
+                            .or(flarmnet_device.country_code),
                     };
                     device_map.insert(
                         glidernet_device.address,
@@ -862,6 +903,7 @@ mod tests {
             icao_model_code: None,
             adsb_emitter_category: None,
             tracker_device_type: None,
+            country_code: None,
         };
 
         // Test that the device can be serialized/deserialized
@@ -1121,6 +1163,33 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_extract_country_code_from_icao() {
+        // Test US ICAO address
+        let us_code = Device::extract_country_code_from_icao(0xA00001, AddressType::Icao);
+        assert_eq!(us_code, Some("US".to_string()));
+
+        // Test German ICAO address
+        let de_code = Device::extract_country_code_from_icao(0x3C0001, AddressType::Icao);
+        assert_eq!(de_code, Some("DE".to_string()));
+
+        // Test UK ICAO address
+        let gb_code = Device::extract_country_code_from_icao(0x400001, AddressType::Icao);
+        assert_eq!(gb_code, Some("GB".to_string()));
+
+        // Test Canadian ICAO address
+        let ca_code = Device::extract_country_code_from_icao(0xC00001, AddressType::Icao);
+        assert_eq!(ca_code, Some("CA".to_string()));
+
+        // Test FLARM address (should return None)
+        let flarm_code = Device::extract_country_code_from_icao(0x123456, AddressType::Flarm);
+        assert_eq!(flarm_code, None);
+
+        // Test OGN address (should return None)
+        let ogn_code = Device::extract_country_code_from_icao(0x123456, AddressType::Ogn);
+        assert_eq!(ogn_code, None);
+    }
+
     // Helper function to create a test device with a specific registration
     fn create_test_device(registration: &str) -> Device {
         Device {
@@ -1141,6 +1210,7 @@ mod tests {
             icao_model_code: None,
             adsb_emitter_category: None,
             tracker_device_type: None,
+            country_code: None,
         }
     }
 }
