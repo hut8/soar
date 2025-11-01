@@ -6,7 +6,12 @@ import { loading } from '$lib/stores/loading';
 export const FORCE_PRODUCTION_BACKEND = true;
 
 // Detect development mode and set appropriate API base URL
-export const API_BASE = dev && !FORCE_PRODUCTION_BACKEND ? 'http://localhost:1337/data' : '/data';
+export const API_BASE =
+	dev && !FORCE_PRODUCTION_BACKEND
+		? 'http://localhost:1337/data'
+		: dev && FORCE_PRODUCTION_BACKEND
+			? 'https://glider.flights/data'
+			: '/data';
 
 export class ServerError extends Error {
 	constructor(
