@@ -11,6 +11,7 @@
 	import { websocketStatus, debugStatus } from '$lib/stores/watchlist';
 	import { onMount } from 'svelte';
 	import RadarLoader from '$lib/components/RadarLoader.svelte';
+	import LoadingBar from '$lib/components/LoadingBar.svelte';
 	import {
 		Radar,
 		Users,
@@ -99,6 +100,7 @@
 
 <div class="flex h-full min-h-screen flex-col">
 	<AppBar background="bg-orange-400 dark:bg-orange-900" classes="relative z-[70]">
+		<LoadingBar />
 		{#snippet lead()}
 			<a href={base} class="btn flex items-center space-x-2 preset-filled-primary-500">
 				<div class="flex items-center gap-3 font-bold">

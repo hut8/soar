@@ -1,12 +1,13 @@
 <script lang="ts">
 	import { loading } from '$lib/stores/loading';
+	import { fade } from 'svelte/transition';
 
 	// Reactive subscription to loading state
 	let isLoading = $derived($loading.activeRequests > 0);
 </script>
 
 {#if isLoading}
-	<div class="loading-bar-overlay"></div>
+	<div class="loading-bar-overlay" transition:fade={{ duration: 300 }}></div>
 {/if}
 
 <style>
@@ -17,50 +18,41 @@
 		right: 0;
 		bottom: 0;
 		pointer-events: none;
-		animation: fadeIn 150ms ease-in;
 		z-index: 1;
+		animation: slide 2.5s ease-in-out infinite;
 	}
 
-	/* Light mode - soft blue gradient */
+	/* Light mode - blue to orange gradient */
 	.loading-bar-overlay {
 		background: linear-gradient(
 			90deg,
-			rgba(96, 165, 250, 0.15) 0%,
-			rgba(147, 197, 253, 0.25) 50%,
-			rgba(96, 165, 250, 0.15) 100%
+			rgba(59, 130, 246, 0.3) 0%,
+			rgba(251, 146, 60, 0.3) 50%,
+			rgba(59, 130, 246, 0.3) 100%
 		);
 		background-size: 200% 100%;
-		animation:
-			slide 2s ease-in-out infinite,
-			fadeIn 150ms ease-in;
 	}
 
-	/* Dark mode - subtle cyan/blue gradient */
+	/* Dark mode - blue to orange gradient with adjusted opacity */
 	:global(.dark) .loading-bar-overlay {
 		background: linear-gradient(
 			90deg,
-			rgba(34, 211, 238, 0.08) 0%,
-			rgba(56, 189, 248, 0.12) 50%,
-			rgba(34, 211, 238, 0.08) 100%
+			rgba(59, 130, 246, 0.25) 0%,
+			rgba(251, 146, 60, 0.25) 50%,
+			rgba(59, 130, 246, 0.25) 100%
 		);
 		background-size: 200% 100%;
 	}
 
 	@keyframes slide {
 		0% {
+			background-position: 0% 0;
+		}
+		50% {
 			background-position: 100% 0;
 		}
 		100% {
-			background-position: -100% 0;
-		}
-	}
-
-	@keyframes fadeIn {
-		from {
-			opacity: 0;
-		}
-		to {
-			opacity: 1;
+			background-position: 0% 0;
 		}
 	}
 </style>
