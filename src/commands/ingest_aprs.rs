@@ -61,12 +61,22 @@ pub async fn handle_ingest_aprs(
         final_subject
     );
 
+    // Initialize health state for this ingester
+    let health_state = soar::metrics::init_aprs_health();
+    soar::metrics::set_aprs_health(health_state.clone());
+
     // Start metrics server in production mode
     if is_production {
-        info!("Starting metrics server on port 9093");
+        // Allow overriding metrics port via METRICS_PORT env var (for blue-green deployment)
+        let metrics_port = env::var("METRICS_PORT")
+            .ok()
+            .and_then(|p| p.parse::<u16>().ok())
+            .unwrap_or(9093);
+
+        info!("Starting metrics server on port {}", metrics_port);
         tokio::spawn(
-            async {
-                soar::metrics::start_metrics_server(9093).await;
+            async move {
+                soar::metrics::start_metrics_server(metrics_port).await;
             }
             .instrument(tracing::info_span!("metrics_server")),
         );
@@ -179,9 +189,57 @@ pub async fn handle_ingest_aprs(
 
     let mut client = AprsClient::new(config);
 
+    // Set up signal handling for graceful shutdown
+    info!("Setting up graceful shutdown handlers...");
+    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
+
+    // Spawn signal handler task for both SIGINT and SIGTERM
+    tokio::spawn(async move {
+        #[cfg(unix)]
+        {
+            use tokio::signal::unix::{SignalKind, signal};
+
+            let mut sigterm =
+                signal(SignalKind::terminate()).expect("Failed to register SIGTERM handler");
+            let mut sigint =
+                signal(SignalKind::interrupt()).expect("Failed to register SIGINT handler");
+
+            tokio::select! {
+                _ = sigterm.recv() => {
+                    info!("Received SIGTERM, initiating graceful shutdown...");
+                }
+                _ = sigint.recv() => {
+                    info!("Received SIGINT (Ctrl+C), initiating graceful shutdown...");
+                }
+            }
+        }
+
+        #[cfg(not(unix))]
+        {
+            match tokio::signal::ctrl_c().await {
+                Ok(()) => {
+                    info!("Received SIGINT (Ctrl+C), initiating graceful shutdown...");
+                }
+                Err(err) => {
+                    error!("Failed to listen for SIGINT signal: {}", err);
+                    return;
+                }
+            }
+        }
+
+        let _ = shutdown_tx.send(());
+    });
+
     info!("Starting APRS client for ingestion...");
+
+    // Mark JetStream as connected in health state
+    {
+        let mut health = health_state.write().await;
+        health.jetstream_connected = true;
+    }
+
     client
-        .start_jetstream(jetstream_publisher)
+        .start_jetstream_with_shutdown(jetstream_publisher, shutdown_rx, health_state)
         .await
         .context("APRS ingestion client failed")?;
 

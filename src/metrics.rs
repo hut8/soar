@@ -2,11 +2,38 @@ use axum::{Router, http::StatusCode, response::IntoResponse, routing::get};
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use pprof::protos::Message;
 use std::net::SocketAddr;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
+use tokio::sync::RwLock;
 use tracing::{info, warn};
 
 static METRICS_HANDLE: OnceLock<PrometheusHandle> = OnceLock::new();
+
+/// Global health state for APRS ingestion service
+/// Used by the /health endpoint to determine readiness
+#[derive(Clone, Debug, Default)]
+pub struct AprsIngestHealth {
+    pub aprs_connected: bool,
+    pub jetstream_connected: bool,
+    pub last_message_time: Option<Instant>,
+}
+
+static APRS_HEALTH: OnceLock<Arc<RwLock<AprsIngestHealth>>> = OnceLock::new();
+
+/// Initialize the global APRS health state
+pub fn init_aprs_health() -> Arc<RwLock<AprsIngestHealth>> {
+    Arc::new(RwLock::new(AprsIngestHealth::default()))
+}
+
+/// Get the global APRS health state
+pub fn get_aprs_health() -> Option<Arc<RwLock<AprsIngestHealth>>> {
+    APRS_HEALTH.get().cloned()
+}
+
+/// Set the global APRS health state (should be called once during initialization)
+pub fn set_aprs_health(health: Arc<RwLock<AprsIngestHealth>>) {
+    let _ = APRS_HEALTH.set(health);
+}
 
 /// Initialize Prometheus metrics exporter
 /// Returns a handle that can be used to render metrics for scraping
@@ -234,6 +261,84 @@ pub fn initialize_run_metrics() {
     metrics::counter!("aprs_elevation_processed").absolute(0);
 }
 
+/// Health check handler for APRS ingestion service
+/// Returns 200 OK if service is healthy and ready to receive traffic
+/// Returns 503 Service Unavailable if not ready
+async fn health_check_handler() -> impl IntoResponse {
+    if let Some(health) = get_aprs_health() {
+        let health_state = health.read().await;
+
+        // Service is healthy if both APRS and JetStream are connected
+        let is_healthy = health_state.aprs_connected && health_state.jetstream_connected;
+
+        // Check if we've received messages recently (within last 60 seconds)
+        let has_recent_messages = health_state
+            .last_message_time
+            .map(|t| t.elapsed() < Duration::from_secs(60))
+            .unwrap_or(false);
+
+        if is_healthy {
+            let status_msg = if has_recent_messages {
+                "healthy - receiving messages".to_string()
+            } else {
+                "healthy - connected but no recent messages".to_string()
+            };
+
+            info!("Health check: {}", status_msg);
+            (StatusCode::OK, status_msg)
+        } else {
+            let status_msg = format!(
+                "unhealthy - aprs_connected: {}, jetstream_connected: {}",
+                health_state.aprs_connected, health_state.jetstream_connected
+            );
+            warn!("Health check failed: {}", status_msg);
+            (StatusCode::SERVICE_UNAVAILABLE, status_msg)
+        }
+    } else {
+        // Health state not initialized (shouldn't happen in production)
+        warn!("Health check failed: health state not initialized");
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "health state not initialized".to_string(),
+        )
+    }
+}
+
+/// Readiness check handler for APRS ingestion service
+/// Similar to health check but more strict - requires recent messages
+async fn readiness_check_handler() -> impl IntoResponse {
+    if let Some(health) = get_aprs_health() {
+        let health_state = health.read().await;
+
+        // Service is ready if connected AND has received messages in last 30 seconds
+        let has_recent_messages = health_state
+            .last_message_time
+            .map(|t| t.elapsed() < Duration::from_secs(30))
+            .unwrap_or(false);
+
+        let is_ready =
+            health_state.aprs_connected && health_state.jetstream_connected && has_recent_messages;
+
+        if is_ready {
+            info!("Readiness check: ready");
+            (StatusCode::OK, "ready".to_string())
+        } else {
+            let status_msg = format!(
+                "not ready - aprs: {}, jetstream: {}, recent_messages: {}",
+                health_state.aprs_connected, health_state.jetstream_connected, has_recent_messages
+            );
+            warn!("Readiness check failed: {}", status_msg);
+            (StatusCode::SERVICE_UNAVAILABLE, status_msg)
+        }
+    } else {
+        warn!("Readiness check failed: health state not initialized");
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "health state not initialized".to_string(),
+        )
+    }
+}
+
 /// Start a standalone metrics server on the specified port
 /// This is used by the "run" subcommand to expose metrics independently
 pub async fn start_metrics_server(port: u16) {
@@ -255,11 +360,15 @@ pub async fn start_metrics_server(port: u16) {
                 handle.render()
             }),
         )
+        .route("/health", get(health_check_handler))
+        .route("/ready", get(readiness_check_handler))
         .route("/debug/pprof/profile", get(profile_handler))
         .route("/debug/pprof/heap", get(heap_profile_handler));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     info!("Starting metrics server on http://{}/metrics", addr);
+    info!("Health check available at http://{}/health", addr);
+    info!("Readiness check available at http://{}/ready", addr);
     info!(
         "CPU profiling available at http://{}/debug/pprof/profile (30s flamegraph)",
         addr
