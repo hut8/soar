@@ -47,6 +47,12 @@
 	let showUserMenu = $state(false);
 	let showMobileMenu = $state(false);
 
+	// Reactive club operations path
+	let clubOpsPath = $derived(
+		$auth.user?.club_id ? resolve(`/clubs/${$auth.user.club_id}/operations`) : ''
+	);
+	let hasClub = $derived($auth.isAuthenticated && !!$auth.user?.club_id);
+
 	// Initialize auth and theme from localStorage on mount
 	onMount(() => {
 		auth.initFromStorage();
@@ -116,6 +122,11 @@
 			<div class="relative z-10 flex items-center gap-4">
 				<!-- Desktop Navigation -->
 				<nav class="hidden space-x-4 md:flex">
+					{#if hasClub}
+						<a href={clubOpsPath} class="btn preset-filled-success-500 btn-sm">
+							<Radar /> Club Ops
+						</a>
+					{/if}
 					<a href={clubsPath} class="btn preset-filled-primary-500 btn-sm">
 						<Users /> Clubs
 					</a>
@@ -270,6 +281,15 @@
 			class="mobile-menu bg-surface-50-900-token border-surface-200-700-token bg-opacity-95 dark:bg-opacity-95 fixed inset-x-0 top-0 z-[60] min-h-screen border-b pt-16 shadow-lg backdrop-blur-sm md:hidden"
 		>
 			<nav class="flex flex-col space-y-4 p-6">
+				{#if hasClub}
+					<a
+						href={clubOpsPath}
+						class="btn w-full justify-start preset-filled-success-500"
+						onclick={() => (showMobileMenu = false)}
+					>
+						<Radar size={16} /> Club Ops
+					</a>
+				{/if}
 				<a
 					href={clubsPath}
 					class="btn w-full justify-start preset-filled-primary-500"
