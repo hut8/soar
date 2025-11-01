@@ -82,8 +82,22 @@ impl AprsClient {
         &mut self,
         jetstream_publisher: crate::aprs_jetstream_publisher::JetStreamPublisher,
     ) -> Result<()> {
-        let (shutdown_tx, mut shutdown_rx) = mpsc::channel::<()>(1);
-        self.shutdown_tx = Some(shutdown_tx);
+        let (_shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+        self.start_jetstream_with_shutdown(jetstream_publisher, shutdown_rx)
+            .await
+    }
+
+    /// Start the APRS client with JetStream publisher and external shutdown signal
+    /// This connects to APRS-IS and publishes all messages to a durable NATS JetStream queue
+    /// Supports graceful shutdown when shutdown_rx receives a signal
+    #[tracing::instrument(skip(self, jetstream_publisher, shutdown_rx))]
+    pub async fn start_jetstream_with_shutdown(
+        &mut self,
+        jetstream_publisher: crate::aprs_jetstream_publisher::JetStreamPublisher,
+        shutdown_rx: tokio::sync::oneshot::Receiver<()>,
+    ) -> Result<()> {
+        let (internal_shutdown_tx, mut internal_shutdown_rx) = mpsc::channel::<()>(1);
+        self.shutdown_tx = Some(internal_shutdown_tx);
 
         let config = self.config.clone();
 
@@ -96,6 +110,7 @@ impl AprsClient {
 
         // Spawn message publishing task
         let publisher = jetstream_publisher.clone();
+        let mut shutdown_rx_for_publisher = shutdown_rx;
         let publisher_handle = tokio::spawn(
             async move {
                 let mut stats_timer = tokio::time::interval(Duration::from_secs(10));
@@ -132,8 +147,41 @@ impl AprsClient {
                                 );
                             }
                         }
+                        Ok(_) = &mut shutdown_rx_for_publisher => {
+                            info!("Shutdown signal received by publisher, flushing queue...");
+
+                            // Start graceful shutdown - flush remaining messages with timeout
+                            let queue_depth = raw_message_rx.len();
+                            info!("Flushing {} remaining messages from queue...", queue_depth);
+                            metrics::counter!("aprs.shutdown.queue_depth_at_shutdown").increment(queue_depth as u64);
+
+                            let flush_start = std::time::Instant::now();
+                            let flush_timeout = Duration::from_secs(10);
+                            let mut flushed_count = 0u64;
+
+                            while let Ok(Some(message)) = tokio::time::timeout(
+                                flush_timeout.saturating_sub(flush_start.elapsed()),
+                                raw_message_rx.recv()
+                            ).await {
+                                publisher.publish_with_retry(&message).await;
+                                flushed_count += 1;
+                            }
+
+                            let flush_duration = flush_start.elapsed();
+                            info!(
+                                "Queue flush complete: {} messages published in {:.2}s",
+                                flushed_count,
+                                flush_duration.as_secs_f64()
+                            );
+                            metrics::counter!("aprs.shutdown.messages_flushed").increment(flushed_count);
+                            metrics::histogram!("aprs.shutdown.flush_duration_seconds").record(flush_duration.as_secs_f64());
+
+                            break;
+                        }
                     }
                 }
+
+                info!("Publisher task shutting down gracefully");
             }
             .instrument(tracing::info_span!("jetstream_publisher")),
         );
@@ -146,7 +194,7 @@ impl AprsClient {
 
                 loop {
                     // Check if shutdown was requested
-                    if shutdown_rx.try_recv().is_ok() {
+                    if internal_shutdown_rx.try_recv().is_ok() {
                         info!("Shutdown requested, stopping APRS JetStream ingestion");
                         break;
                     }

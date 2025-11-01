@@ -179,9 +179,50 @@ pub async fn handle_ingest_aprs(
 
     let mut client = AprsClient::new(config);
 
+    // Set up signal handling for graceful shutdown
+    info!("Setting up graceful shutdown handlers...");
+    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
+
+    // Spawn signal handler task for both SIGINT and SIGTERM
+    tokio::spawn(async move {
+        #[cfg(unix)]
+        {
+            use tokio::signal::unix::{SignalKind, signal};
+
+            let mut sigterm =
+                signal(SignalKind::terminate()).expect("Failed to register SIGTERM handler");
+            let mut sigint =
+                signal(SignalKind::interrupt()).expect("Failed to register SIGINT handler");
+
+            tokio::select! {
+                _ = sigterm.recv() => {
+                    info!("Received SIGTERM, initiating graceful shutdown...");
+                }
+                _ = sigint.recv() => {
+                    info!("Received SIGINT (Ctrl+C), initiating graceful shutdown...");
+                }
+            }
+        }
+
+        #[cfg(not(unix))]
+        {
+            match tokio::signal::ctrl_c().await {
+                Ok(()) => {
+                    info!("Received SIGINT (Ctrl+C), initiating graceful shutdown...");
+                }
+                Err(err) => {
+                    error!("Failed to listen for SIGINT signal: {}", err);
+                    return;
+                }
+            }
+        }
+
+        let _ = shutdown_tx.send(());
+    });
+
     info!("Starting APRS client for ingestion...");
     client
-        .start_jetstream(jetstream_publisher)
+        .start_jetstream_with_shutdown(jetstream_publisher, shutdown_rx)
         .await
         .context("APRS ingestion client failed")?;
 
