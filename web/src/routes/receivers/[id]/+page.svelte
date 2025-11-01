@@ -104,9 +104,9 @@
 	}
 
 	let receiver = $state<Receiver | null>(null);
-	let fixes = $state<Fix[]>([]);
+	let fixes = $state<Fix[] | null>(null);
 	let statuses = $state<ReceiverStatus[]>([]);
-	let rawMessages = $state<RawMessage[]>([]);
+	let rawMessages = $state<RawMessage[] | null>(null);
 	let statistics = $state<ReceiverStatistics | null>(null);
 	let loading = $state(true);
 	let loadingFixes = $state(false);
@@ -143,19 +143,14 @@
 
 	// Load raw messages when switching to that tab
 	$effect(() => {
-		if (
-			activeTab === 'raw-messages' &&
-			receiverId &&
-			rawMessages.length === 0 &&
-			!loadingRawMessages
-		) {
+		if (activeTab === 'raw-messages' && receiverId && rawMessages === null && !loadingRawMessages) {
 			loadRawMessages();
 		}
 	});
 
 	// Load fixes when switching to that tab (if not already loaded)
 	$effect(() => {
-		if (activeTab === 'received-fixes' && receiverId && fixes.length === 0 && !loadingFixes) {
+		if (activeTab === 'received-fixes' && receiverId && fixes === null && !loadingFixes) {
 			loadFixes();
 		}
 	});
@@ -189,6 +184,7 @@
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			fixesError = `Failed to load fixes: ${errorMessage}`;
 			console.error('Error loading fixes:', err);
+			fixes = []; // Set to empty array on error to prevent retry loop
 		} finally {
 			loadingFixes = false;
 		}
@@ -243,6 +239,7 @@
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			rawMessagesError = `Failed to load raw messages: ${errorMessage}`;
 			console.error('Error loading raw messages:', err);
+			rawMessages = []; // Set to empty array on error to prevent retry loop
 		} finally {
 			loadingRawMessages = false;
 		}
@@ -745,11 +742,11 @@
 									<div class="alert preset-filled-error-500">
 										<p>{rawMessagesError}</p>
 									</div>
-								{:else if rawMessages.length === 0}
+								{:else if rawMessages !== null && rawMessages.length === 0}
 									<p class="text-surface-500-400-token p-4 text-center">
 										No raw messages received in the last 24 hours
 									</p>
-								{:else}
+								{:else if rawMessages !== null}
 									<div class="table-container">
 										<table class="table-hover table">
 											<thead>
@@ -823,11 +820,11 @@
 									<div class="alert preset-filled-error-500">
 										<p>{fixesError}</p>
 									</div>
-								{:else if fixes.length === 0}
+								{:else if fixes !== null && fixes.length === 0}
 									<p class="text-surface-500-400-token p-4 text-center">
 										No fixes received in the last 24 hours
 									</p>
-								{:else}
+								{:else if fixes !== null}
 									<div class="table-container">
 										<table class="table-hover table">
 											<thead>

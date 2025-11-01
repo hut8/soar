@@ -9,7 +9,10 @@ const config = {
 	kit: {
 		adapter: adapter({
 			fallback: 'index.html'
-		})
+		}),
+		serviceWorker: {
+			register: false // We'll handle registration manually
+		}
 	}
 };
 
