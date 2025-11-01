@@ -61,12 +61,22 @@ pub async fn handle_ingest_aprs(
         final_subject
     );
 
+    // Initialize health state for this ingester
+    let health_state = soar::metrics::init_aprs_health();
+    soar::metrics::set_aprs_health(health_state.clone());
+
     // Start metrics server in production mode
     if is_production {
-        info!("Starting metrics server on port 9093");
+        // Allow overriding metrics port via METRICS_PORT env var (for blue-green deployment)
+        let metrics_port = env::var("METRICS_PORT")
+            .ok()
+            .and_then(|p| p.parse::<u16>().ok())
+            .unwrap_or(9093);
+
+        info!("Starting metrics server on port {}", metrics_port);
         tokio::spawn(
-            async {
-                soar::metrics::start_metrics_server(9093).await;
+            async move {
+                soar::metrics::start_metrics_server(metrics_port).await;
             }
             .instrument(tracing::info_span!("metrics_server")),
         );
@@ -221,8 +231,15 @@ pub async fn handle_ingest_aprs(
     });
 
     info!("Starting APRS client for ingestion...");
+
+    // Mark JetStream as connected in health state
+    {
+        let mut health = health_state.write().await;
+        health.jetstream_connected = true;
+    }
+
     client
-        .start_jetstream_with_shutdown(jetstream_publisher, shutdown_rx)
+        .start_jetstream_with_shutdown(jetstream_publisher, shutdown_rx, health_state)
         .await
         .context("APRS ingestion client failed")?;
 

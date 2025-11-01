@@ -234,32 +234,79 @@ if [ "$APRS_INGEST_RUNNING" = true ]; then
     # Start secondary instance with new binary (uses systemd-run to avoid lock conflict)
     log_info "Starting secondary APRS ingester instance..."
     SECONDARY_UNIT="soar-aprs-ingest-secondary"
+    SECONDARY_HEALTH_PORT=9094  # Different port from primary (9093)
+
     systemd-run --unit="$SECONDARY_UNIT" \
         --working-directory=/var/soar \
         --uid=soar --gid=soar \
         --setenv=SOAR_ENV=production \
+        --setenv=METRICS_PORT="$SECONDARY_HEALTH_PORT" \
         --property=EnvironmentFile=/etc/soar/env \
         /usr/local/bin/soar ingest-aprs \
         || { log_error "Failed to start secondary APRS ingester"; APRS_INGEST_RUNNING=false; }
 
     if [ "$APRS_INGEST_RUNNING" = true ]; then
-        # Wait for secondary to establish APRS connection
-        log_info "Waiting for secondary ingester to establish connection..."
-        sleep 5
+        # Wait for secondary to establish APRS connection with health checks
+        log_info "Waiting for secondary ingester to become ready (checking /ready endpoint)..."
+        HEALTH_CHECK_ATTEMPTS=0
+        MAX_HEALTH_CHECK_ATTEMPTS=30  # 30 attempts x 1 second = 30 seconds max wait
+        SECONDARY_READY=false
 
-        # Stop primary instance gracefully
-        log_info "Stopping primary soar-aprs-ingest.service gracefully..."
-        systemctl stop soar-aprs-ingest.service || log_warn "Failed to stop primary ingester"
+        while [ $HEALTH_CHECK_ATTEMPTS -lt $MAX_HEALTH_CHECK_ATTEMPTS ]; do
+            # Check if secondary is ready (connected and receiving messages)
+            if curl -sf "http://localhost:$SECONDARY_HEALTH_PORT/ready" >/dev/null 2>&1; then
+                log_info "Secondary ingester is ready (attempt $((HEALTH_CHECK_ATTEMPTS + 1)))"
+                SECONDARY_READY=true
+                break
+            fi
 
-        # Wait for graceful shutdown
-        log_info "Waiting for primary ingester to flush queue..."
-        sleep 3
+            HEALTH_CHECK_ATTEMPTS=$((HEALTH_CHECK_ATTEMPTS + 1))
 
-        # Stop secondary instance
-        log_info "Stopping secondary ingester..."
-        systemctl stop "$SECONDARY_UNIT" || log_warn "Failed to stop secondary ingester"
+            # Check if secondary service is still running
+            if ! systemctl is-active --quiet "$SECONDARY_UNIT"; then
+                log_error "Secondary ingester crashed during startup"
+                break
+            fi
 
-        log_info "Blue-green deployment for APRS ingester complete"
+            sleep 1
+        done
+
+        if [ "$SECONDARY_READY" = true ]; then
+            log_info "Secondary ingester verified ready - proceeding with graceful handoff"
+
+            # Stop primary instance gracefully
+            log_info "Stopping primary soar-aprs-ingest.service gracefully..."
+            systemctl stop soar-aprs-ingest.service || log_warn "Failed to stop primary ingester"
+
+            # Wait for graceful shutdown
+            log_info "Waiting for primary ingester to flush queue..."
+            sleep 3
+
+            # Stop secondary instance
+            log_info "Stopping secondary ingester..."
+            systemctl stop "$SECONDARY_UNIT" || log_warn "Failed to stop secondary ingester"
+
+            log_info "Blue-green deployment for APRS ingester complete"
+        else
+            log_error "Secondary ingester failed to become ready within 30 seconds"
+            log_error "Rolling back - stopping secondary and keeping primary running"
+
+            # Stop secondary instance
+            systemctl stop "$SECONDARY_UNIT" || log_warn "Failed to stop secondary ingester"
+
+            # Restore backup binary if it exists
+            if [ -f "$BACKUP_FILE" ]; then
+                log_warn "Restoring previous binary from backup..."
+                cp "$BACKUP_FILE" /usr/local/bin/soar
+                chmod +x /usr/local/bin/soar
+                chown root:root /usr/local/bin/soar
+                log_info "Previous binary restored"
+            fi
+
+            # Exit with error to indicate deployment failure
+            log_error "Deployment failed - primary ingester still running with old version"
+            exit 1
+        fi
     fi
 fi
 

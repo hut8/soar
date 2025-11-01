@@ -83,18 +83,21 @@ impl AprsClient {
         jetstream_publisher: crate::aprs_jetstream_publisher::JetStreamPublisher,
     ) -> Result<()> {
         let (_shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
-        self.start_jetstream_with_shutdown(jetstream_publisher, shutdown_rx)
+        let health_state = crate::metrics::init_aprs_health();
+        self.start_jetstream_with_shutdown(jetstream_publisher, shutdown_rx, health_state)
             .await
     }
 
     /// Start the APRS client with JetStream publisher and external shutdown signal
     /// This connects to APRS-IS and publishes all messages to a durable NATS JetStream queue
     /// Supports graceful shutdown when shutdown_rx receives a signal
-    #[tracing::instrument(skip(self, jetstream_publisher, shutdown_rx))]
+    /// Updates health_state with connection status for health checks
+    #[tracing::instrument(skip(self, jetstream_publisher, shutdown_rx, health_state))]
     pub async fn start_jetstream_with_shutdown(
         &mut self,
         jetstream_publisher: crate::aprs_jetstream_publisher::JetStreamPublisher,
         shutdown_rx: tokio::sync::oneshot::Receiver<()>,
+        health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::AprsIngestHealth>>,
     ) -> Result<()> {
         let (internal_shutdown_tx, mut internal_shutdown_rx) = mpsc::channel::<()>(1);
         self.shutdown_tx = Some(internal_shutdown_tx);
@@ -187,6 +190,7 @@ impl AprsClient {
         );
 
         // Spawn connection management task (same as regular start)
+        let health_for_connection = health_state.clone();
         let connection_handle = tokio::spawn(
             async move {
                 let mut retry_count = 0;
@@ -196,6 +200,11 @@ impl AprsClient {
                     // Check if shutdown was requested
                     if internal_shutdown_rx.try_recv().is_ok() {
                         info!("Shutdown requested, stopping APRS JetStream ingestion");
+                        // Mark as disconnected in health state
+                        {
+                            let mut health = health_for_connection.write().await;
+                            health.aprs_connected = false;
+                        }
                         break;
                     }
 
@@ -207,18 +216,39 @@ impl AprsClient {
                         config.max_retries
                     );
 
-                    match Self::connect_and_run(&config, raw_message_tx.clone()).await {
+                    match Self::connect_and_run(
+                        &config,
+                        raw_message_tx.clone(),
+                        health_for_connection.clone(),
+                    )
+                    .await
+                    {
                         ConnectionResult::Success => {
                             info!("Connection ended normally");
+                            // Mark as disconnected in health state
+                            {
+                                let mut health = health_for_connection.write().await;
+                                health.aprs_connected = false;
+                            }
                             retry_count = 0; // Reset retry count on successful connection
                             current_delay = config.retry_delay_seconds;
                         }
                         ConnectionResult::ConnectionFailed(e) => {
                             error!("Failed to connect to APRS server: {}", e);
+                            // Mark as disconnected in health state
+                            {
+                                let mut health = health_for_connection.write().await;
+                                health.aprs_connected = false;
+                            }
                             retry_count += 1;
                         }
                         ConnectionResult::OperationFailed(e) => {
                             warn!("Connection operation failed: {}", e);
+                            // Mark as disconnected in health state
+                            {
+                                let mut health = health_for_connection.write().await;
+                                health.aprs_connected = false;
+                            }
                             retry_count += 1;
                         }
                     }
@@ -273,10 +303,11 @@ impl AprsClient {
 
     /// Connect to the APRS server and run the message processing loop
     /// Messages are sent to raw_message_tx channel for processing
-    #[tracing::instrument(skip(config, raw_message_tx), fields(server = %config.server, port = %config.port))]
+    #[tracing::instrument(skip(config, raw_message_tx, health_state), fields(server = %config.server, port = %config.port))]
     async fn connect_and_run(
         config: &AprsClientConfig,
         raw_message_tx: mpsc::Sender<String>,
+        health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::AprsIngestHealth>>,
     ) -> ConnectionResult {
         info!(
             "Connecting to APRS server {}:{}",
@@ -292,6 +323,13 @@ impl AprsClient {
                 info!("Connected to APRS server");
                 metrics::counter!("aprs.connection.established").increment(1);
                 metrics::gauge!("aprs.connection.connected").set(1.0);
+
+                // Mark as connected in health state
+                {
+                    let mut health = health_state.write().await;
+                    health.aprs_connected = true;
+                }
+
                 stream
             }
             Err(e) => {
@@ -438,6 +476,13 @@ impl AprsClient {
                                             trace!("Queued APRS message for JetStream");
                                             metrics::counter!("aprs.raw_message.queued.aprs")
                                                 .increment(1);
+
+                                            // Update last message time in health state for APRS messages (not server messages)
+                                            {
+                                                let mut health = health_state.write().await;
+                                                health.last_message_time =
+                                                    Some(std::time::Instant::now());
+                                            }
                                         }
                                     }
                                     Err(mpsc::error::TrySendError::Full(_)) => {
