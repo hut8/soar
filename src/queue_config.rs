@@ -33,10 +33,10 @@ pub const SOAR_RUN_CONSUMER_STAGING: &str = "soar-run-staging";
 // ============================================================================
 
 /// Raw APRS message queue from APRS-IS connection to JetStream publisher
-/// Small queue (50 messages) since messages are immediately published to durable JetStream
-/// At ~500 msg/s, this represents ~100ms of buffering
-/// Intentionally small to minimize message loss during crashes (JetStream provides durability)
-pub const RAW_MESSAGE_QUEUE_SIZE: usize = 50;
+/// Medium queue (1000 messages) to buffer during JetStream publish latency
+/// At ~500 msg/s, this represents ~2 seconds of buffering
+/// Provides headroom for network latency while JetStream provides durability
+pub const RAW_MESSAGE_QUEUE_SIZE: usize = 1000;
 
 /// Archive queue for writing raw APRS messages to compressed files
 /// Large queue (10,000 messages) since file I/O is slower and batched
