@@ -97,4 +97,45 @@ impl JetStreamPublisher {
             }
         }
     }
+
+    /// Publish a message in fire-and-forget mode
+    ///
+    /// This version sends the message to JetStream but does not wait for acknowledgment.
+    /// This maximizes throughput at the cost of not knowing if the message was persisted.
+    /// Acceptable for high-volume streaming data where message loss during crashes is tolerable.
+    pub async fn publish_fire_and_forget(&self, message: &str) {
+        // Track message type for debugging
+        let is_server_message = message.starts_with('#');
+        if is_server_message {
+            debug!("Publishing server message to JetStream: {}", message);
+            metrics::counter!("aprs.jetstream.published.server").increment(1);
+        } else {
+            debug!(
+                "Publishing APRS message to JetStream (first 50 chars): {}",
+                &message.chars().take(50).collect::<String>()
+            );
+            metrics::counter!("aprs.jetstream.published.aprs").increment(1);
+        }
+
+        // Convert message to owned bytes for JetStream
+        let bytes = message.as_bytes().to_vec();
+
+        // Publish to JetStream - fire and forget
+        // Only await the first future (sends the message), skip the second (acknowledgment)
+        match self
+            .jetstream
+            .publish(self.subject.clone(), bytes.into())
+            .await
+        {
+            Ok(_ack_future) => {
+                // Message sent successfully, but we don't wait for the ack
+                metrics::counter!("aprs.jetstream.published").increment(1);
+            }
+            Err(e) => {
+                // Failed to even send the message
+                error!("Failed to send message to JetStream: {}", e);
+                metrics::counter!("aprs.jetstream.publish_error").increment(1);
+            }
+        }
+    }
 }

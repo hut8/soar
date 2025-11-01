@@ -107,8 +107,12 @@ impl AprsClient {
                 loop {
                     tokio::select! {
                         Some(message) = raw_message_rx.recv() => {
-                            // Publish all messages to JetStream (both server messages and APRS messages)
-                            publisher.publish_with_retry(&message).await;
+                            // Publish in fire-and-forget mode for maximum throughput
+                            // We accept the risk of message loss during crashes since:
+                            // 1. APRS is a continuous stream - we'll get new data
+                            // 2. Process restarts lose queued messages anyway
+                            // 3. JetStream persists messages once received
+                            publisher.publish_fire_and_forget(&message).await;
                             published_count += 1;
                         }
                         _ = stats_timer.tick() => {
@@ -127,7 +131,7 @@ impl AprsClient {
 
                             if queue_depth > queue_warning_threshold(RAW_MESSAGE_QUEUE_SIZE) {
                                 warn!(
-                                    "JetStream publish queue building up: {} messages (50% full)",
+                                    "JetStream publish queue building up: {} messages (80% full)",
                                     queue_depth
                                 );
                             }
@@ -394,8 +398,9 @@ impl AprsClient {
                                     }
                                     Err(mpsc::error::TrySendError::Full(_)) => {
                                         warn!(
-                                            "Raw message queue FULL (10,000 messages buffered) - dropping message. \
-                                             This indicates processing is slower than APRS message rate."
+                                            "Raw message queue FULL ({} messages buffered) - dropping message. \
+                                             This indicates JetStream publishing is slower than APRS message rate.",
+                                            RAW_MESSAGE_QUEUE_SIZE
                                         );
                                         metrics::counter!("aprs.raw_message_queue.full")
                                             .increment(1);
