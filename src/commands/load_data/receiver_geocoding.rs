@@ -14,7 +14,7 @@ use soar::receiver_repo::ReceiverRepository;
 /// Rate limited to 1 request per second to respect Nominatim usage policy
 pub async fn geocode_receivers(
     diesel_pool: Pool<ConnectionManager<PgConnection>>,
-) -> Result<(usize, usize, usize)> {
+) -> Result<(usize, usize, usize, Vec<String>)> {
     info!("Starting receiver reverse geocoding task...");
 
     let receiver_repo = ReceiverRepository::new(diesel_pool);
@@ -27,13 +27,14 @@ pub async fn geocode_receivers(
 
     if receivers.is_empty() {
         info!("No receivers need geocoding");
-        return Ok((0, 0, 0));
+        return Ok((0, 0, 0, Vec::new()));
     }
 
     info!("Found {} receivers needing geocoding", receivers.len());
 
     let mut success_count = 0;
     let mut failure_count = 0;
+    let mut failed_callsigns = Vec::new();
 
     for (index, receiver) in receivers.iter().enumerate() {
         let lat = receiver.latitude.unwrap(); // Safe because we filtered for not null
@@ -81,6 +82,7 @@ pub async fn geocode_receivers(
                                 receiver.callsign
                             );
                             failure_count += 1;
+                            failed_callsigns.push(receiver.callsign.clone());
                         }
                     }
                     Err(e) => {
@@ -89,6 +91,7 @@ pub async fn geocode_receivers(
                             receiver.callsign, e
                         );
                         failure_count += 1;
+                        failed_callsigns.push(receiver.callsign.clone());
                     }
                 }
             }
@@ -98,6 +101,7 @@ pub async fn geocode_receivers(
                     receiver.callsign, lat, lng, e
                 );
                 failure_count += 1;
+                failed_callsigns.push(receiver.callsign.clone());
             }
         }
 
@@ -114,10 +118,17 @@ pub async fn geocode_receivers(
         receivers.len()
     );
 
-    Ok((receivers.len(), success_count, failure_count))
+    Ok((
+        receivers.len(),
+        success_count,
+        failure_count,
+        failed_callsigns,
+    ))
 }
 
 /// Geocode receivers with metrics for email reporting
+/// Note: Failures to geocode individual receivers are considered normal and don't mark the stage as failed.
+/// Failed receivers are tracked and included in the summary email for visibility.
 pub async fn geocode_receivers_with_metrics(
     diesel_pool: Pool<ConnectionManager<PgConnection>>,
 ) -> EntityMetrics {
@@ -125,15 +136,20 @@ pub async fn geocode_receivers_with_metrics(
     let mut metrics = EntityMetrics::new("Receiver Geocoding");
 
     match geocode_receivers(diesel_pool).await {
-        Ok((total_processed, success, failures)) => {
+        Ok((total_processed, success, failures, failed_callsigns)) => {
             metrics.records_loaded = success;
             metrics.records_in_db = Some(total_processed as i64);
-            metrics.success = failures == 0; // Only fully successful if no failures
+            // Don't mark the stage as failed - geocoding failures are normal
+            metrics.success = true;
+
+            // Track failed receivers for the summary email
             if failures > 0 {
-                metrics.error_message = Some(format!("{} receivers failed to geocode", failures));
+                metrics.failed_items = Some(failed_callsigns);
+                info!("{} receivers failed to geocode (this is normal)", failures);
             }
         }
         Err(e) => {
+            // Only mark as failed if there's a critical error (e.g., database connection issue)
             error!("Failed to geocode receivers: {}", e);
             metrics.success = false;
             metrics.error_message = Some(e.to_string());
