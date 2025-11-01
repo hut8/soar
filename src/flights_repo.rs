@@ -212,7 +212,7 @@ impl FlightsRepository {
         ))
     }
 
-    /// Get flights in progress (no landing time) ordered by takeoff time descending
+    /// Get flights in progress (no landing time and not timed out) ordered by latest fix time descending
     /// Limited to the specified number of flights with optional offset
     pub async fn get_flights_in_progress(&self, limit: i64, offset: i64) -> Result<Vec<Flight>> {
         use crate::schema::flights::dsl::*;
@@ -223,8 +223,8 @@ impl FlightsRepository {
             let mut conn = pool.get()?;
 
             let flight_models: Vec<FlightModel> = flights
-                .filter(landing_time.is_null())
-                .order(takeoff_time.desc())
+                .filter(landing_time.is_null().and(timed_out_at.is_null()))
+                .order(last_fix_at.desc())
                 .limit(limit)
                 .offset(offset)
                 .select(FlightModel::as_select())
@@ -433,7 +433,7 @@ impl FlightsRepository {
         Ok(count)
     }
 
-    /// Get the count of flights in progress
+    /// Get the count of flights in progress (no landing time and not timed out)
     pub async fn get_flights_in_progress_count(&self) -> Result<i64> {
         use crate::schema::flights::dsl::*;
 
@@ -443,7 +443,7 @@ impl FlightsRepository {
             let mut conn = pool.get()?;
 
             let count = flights
-                .filter(landing_time.is_null())
+                .filter(landing_time.is_null().and(timed_out_at.is_null()))
                 .count()
                 .get_result::<i64>(&mut conn)?;
 

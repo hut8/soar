@@ -27,6 +27,19 @@
 		receivers: Receiver[];
 	}
 
+	interface PlaceLocation {
+		lat(): number;
+		lng(): number;
+	}
+
+	interface PlaceResult {
+		location?: PlaceLocation;
+	}
+
+	interface PlaceAutocompleteElement extends HTMLElement {
+		value?: PlaceResult;
+	}
+
 	let receivers = $state<Receiver[]>([]);
 	let loading = $state(false);
 	let error = $state('');
@@ -44,12 +57,36 @@
 
 	// Handle place selection from autocomplete
 	function handlePlaceSelect(event: Event) {
-		const placeEvent = event as CustomEvent;
-		const place = placeEvent.detail.place;
+		console.log('Place select event:', event);
+
+		// The gmp-place-autocomplete element provides the place through multiple methods
+		// Try event.target first, then autocompleteElement
+		const target = event.target as PlaceAutocompleteElement;
+		let place: PlaceResult | null | undefined = null;
+
+		// Method 1: Check if place is on the event itself
+		const eventWithPlace = event as Event & { place?: PlaceResult };
+		if (eventWithPlace.place) {
+			place = eventWithPlace.place;
+			console.log('Place from event:', place);
+		}
+		// Method 2: Check the target's value property
+		else if (target?.value) {
+			place = target.value;
+			console.log('Place from target.value:', place);
+		}
+		// Method 3: Check autocompleteElement
+		else if (autocompleteElement) {
+			place = (autocompleteElement as PlaceAutocompleteElement).value;
+			console.log('Place from autocompleteElement:', place);
+		}
 
 		if (place?.location) {
 			selectedLatitude = place.location.lat();
 			selectedLongitude = place.location.lng();
+			console.log('Coordinates set:', selectedLatitude, selectedLongitude);
+		} else {
+			console.warn('No location found in place object:', place);
 		}
 	}
 

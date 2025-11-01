@@ -79,7 +79,22 @@
 <svelte:head>
 	<title>Glider Flights - Soaring Club Directory</title>
 	<meta name="description" content="Find soaring clubs and airports near you" />
+
+	<!-- Favicons -->
 	<link rel="icon" href={favicon} />
+	<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+	<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+	<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+
+	<!-- PWA Manifest -->
+	<link rel="manifest" href="/manifest.json" />
+
+	<!-- PWA Meta Tags -->
+	<meta name="mobile-web-app-capable" content="yes" />
+	<meta name="apple-mobile-web-app-capable" content="yes" />
+	<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+	<meta name="apple-mobile-web-app-title" content="SOAR" />
+	<meta name="theme-color" content="#0ea5e9" />
 </svelte:head>
 
 <div class="flex h-full min-h-screen flex-col">

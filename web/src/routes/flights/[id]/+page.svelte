@@ -384,40 +384,59 @@
 			});
 			fixMarkers = [];
 
-			// Re-add fix markers
-			fixesInOrder.forEach((fix) => {
-				const fixDot = document.createElement('div');
-				fixDot.innerHTML = `
-					<div style="background-color: white; width: 6px; height: 6px; border-radius: 50%; border: 1px solid rgba(0,0,0,0.3); box-shadow: 0 0 2px rgba(0,0,0,0.5); cursor: pointer;"></div>
-				`;
-
-				const marker = new google.maps.marker.AdvancedMarkerElement({
-					map,
-					position: { lat: fix.latitude, lng: fix.longitude },
-					content: fixDot
-				});
-
-				marker.addListener('click', () => {
-					const mslAlt = fix.altitude_msl_feet ? Math.round(fix.altitude_msl_feet) : 'N/A';
-					const aglAlt = fix.altitude_agl_feet ? Math.round(fix.altitude_agl_feet) : 'N/A';
-					const timestamp = dayjs(fix.timestamp).format('h:mm:ss A');
-
-					const content = `
-						<div style="padding: 8px; min-width: 180px;">
-							<div style="font-weight: bold; margin-bottom: 6px;">${timestamp}</div>
-							<div style="display: flex; flex-direction: column; gap: 4px;">
-								<div><span style="color: #3b82f6; font-weight: 600;">MSL:</span> ${mslAlt} ft</div>
-								<div><span style="color: #10b981; font-weight: 600;">AGL:</span> ${aglAlt} ft</div>
-							</div>
-						</div>
+			// Wait for map to be ready before adding markers
+			google.maps.event.addListenerOnce(map, 'idle', () => {
+				// Re-add fix markers
+				fixesInOrder.forEach((fix) => {
+					const fixDot = document.createElement('div');
+					fixDot.innerHTML = `
+						<div style="background-color: white; width: 6px; height: 6px; border-radius: 50%; border: 1px solid rgba(0,0,0,0.3); box-shadow: 0 0 2px rgba(0,0,0,0.5); cursor: pointer;"></div>
 					`;
 
-					altitudeInfoWindow?.setContent(content);
-					altitudeInfoWindow?.setPosition({ lat: fix.latitude, lng: fix.longitude });
-					altitudeInfoWindow?.open(map);
+					const marker = new google.maps.marker.AdvancedMarkerElement({
+						map,
+						position: { lat: fix.latitude, lng: fix.longitude },
+						content: fixDot
+					});
+
+					marker.addListener('click', () => {
+						const mslAlt = fix.altitude_msl_feet ? Math.round(fix.altitude_msl_feet) : 'N/A';
+						const aglAlt = fix.altitude_agl_feet ? Math.round(fix.altitude_agl_feet) : 'N/A';
+						const timestamp = dayjs(fix.timestamp).format('h:mm:ss A');
+
+						const content = `
+							<div style="padding: 8px; min-width: 180px;">
+								<div style="font-weight: bold; margin-bottom: 6px;">${timestamp}</div>
+								<div style="display: flex; flex-direction: column; gap: 4px;">
+									<div><span style="color: #3b82f6; font-weight: 600;">MSL:</span> ${mslAlt} ft</div>
+									<div><span style="color: #10b981; font-weight: 600;">AGL:</span> ${aglAlt} ft</div>
+								</div>
+							</div>
+						`;
+
+						altitudeInfoWindow?.setContent(content);
+						altitudeInfoWindow?.setPosition({ lat: fix.latitude, lng: fix.longitude });
+						altitudeInfoWindow?.open(map);
+					});
+
+					fixMarkers.push(marker);
 				});
 
-				fixMarkers.push(marker);
+				// Add landing marker if flight is complete
+				if (data.flight.landing_time && fixesInOrder.length > 0) {
+					const last = fixesInOrder[fixesInOrder.length - 1];
+					const landingPin = document.createElement('div');
+					landingPin.innerHTML = `
+						<div style="background-color: #ef4444; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white;"></div>
+					`;
+
+					new google.maps.marker.AdvancedMarkerElement({
+						map,
+						position: { lat: last.latitude, lng: last.longitude },
+						content: landingPin,
+						title: 'Landing'
+					});
+				}
 			});
 
 			// Update bounds to show all fixes
@@ -426,22 +445,6 @@
 				bounds.extend({ lat: fix.latitude, lng: fix.longitude });
 			});
 			map.fitBounds(bounds);
-
-			// Add landing marker if flight is complete
-			if (data.flight.landing_time && fixesInOrder.length > 0) {
-				const last = fixesInOrder[fixesInOrder.length - 1];
-				const landingPin = document.createElement('div');
-				landingPin.innerHTML = `
-					<div style="background-color: #ef4444; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white;"></div>
-				`;
-
-				new google.maps.marker.AdvancedMarkerElement({
-					map,
-					position: { lat: last.latitude, lng: last.longitude },
-					content: landingPin,
-					title: 'Landing'
-				});
-			}
 		}
 
 		// Update altitude chart
@@ -534,26 +537,28 @@
 			// Create info window for altitude display
 			altitudeInfoWindow = new google.maps.InfoWindow();
 
-			// Add small markers for each fix (white dots) with click/touch handlers
-			fixesInOrder.forEach((fix) => {
-				const fixDot = document.createElement('div');
-				fixDot.innerHTML = `
-					<div style="background-color: white; width: 6px; height: 6px; border-radius: 50%; border: 1px solid rgba(0,0,0,0.3); box-shadow: 0 0 2px rgba(0,0,0,0.5); cursor: pointer;"></div>
-				`;
+			// Wait for map to be fully initialized before adding advanced markers
+			google.maps.event.addListenerOnce(map, 'idle', () => {
+				// Add small markers for each fix (white dots) with click/touch handlers
+				fixesInOrder.forEach((fix) => {
+					const fixDot = document.createElement('div');
+					fixDot.innerHTML = `
+						<div style="background-color: white; width: 6px; height: 6px; border-radius: 50%; border: 1px solid rgba(0,0,0,0.3); box-shadow: 0 0 2px rgba(0,0,0,0.5); cursor: pointer;"></div>
+					`;
 
-				const marker = new google.maps.marker.AdvancedMarkerElement({
-					map,
-					position: { lat: fix.latitude, lng: fix.longitude },
-					content: fixDot
-				});
+					const marker = new google.maps.marker.AdvancedMarkerElement({
+						map,
+						position: { lat: fix.latitude, lng: fix.longitude },
+						content: fixDot
+					});
 
-				// Add click/touch handler to show altitude info
-				marker.addListener('click', () => {
-					const mslAlt = fix.altitude_msl_feet ? Math.round(fix.altitude_msl_feet) : 'N/A';
-					const aglAlt = fix.altitude_agl_feet ? Math.round(fix.altitude_agl_feet) : 'N/A';
-					const timestamp = dayjs(fix.timestamp).format('h:mm:ss A');
+					// Add click/touch handler to show altitude info
+					marker.addListener('click', () => {
+						const mslAlt = fix.altitude_msl_feet ? Math.round(fix.altitude_msl_feet) : 'N/A';
+						const aglAlt = fix.altitude_agl_feet ? Math.round(fix.altitude_agl_feet) : 'N/A';
+						const timestamp = dayjs(fix.timestamp).format('h:mm:ss A');
 
-					const content = `
+						const content = `
 						<div style="padding: 8px; min-width: 180px;">
 							<div style="font-weight: bold; margin-bottom: 6px;">${timestamp}</div>
 							<div style="display: flex; flex-direction: column; gap: 4px;">
@@ -563,45 +568,46 @@
 						</div>
 					`;
 
-					altitudeInfoWindow?.setContent(content);
-					altitudeInfoWindow?.setPosition({ lat: fix.latitude, lng: fix.longitude });
-					altitudeInfoWindow?.open(map);
+						altitudeInfoWindow?.setContent(content);
+						altitudeInfoWindow?.setPosition({ lat: fix.latitude, lng: fix.longitude });
+						altitudeInfoWindow?.open(map);
+					});
+
+					fixMarkers.push(marker);
 				});
 
-				fixMarkers.push(marker);
+				// Add takeoff marker (green) - first fix chronologically
+				if (fixesInOrder.length > 0) {
+					const first = fixesInOrder[0];
+					const takeoffPin = document.createElement('div');
+					takeoffPin.innerHTML = `
+						<div style="background-color: #10b981; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white;"></div>
+					`;
+
+					new google.maps.marker.AdvancedMarkerElement({
+						map,
+						position: { lat: first.latitude, lng: first.longitude },
+						content: takeoffPin,
+						title: 'Takeoff'
+					});
+				}
+
+				// Add landing marker (red) if flight is complete - last fix chronologically
+				if (data.flight.landing_time && fixesInOrder.length > 0) {
+					const last = fixesInOrder[fixesInOrder.length - 1];
+					const landingPin = document.createElement('div');
+					landingPin.innerHTML = `
+						<div style="background-color: #ef4444; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white;"></div>
+					`;
+
+					new google.maps.marker.AdvancedMarkerElement({
+						map,
+						position: { lat: last.latitude, lng: last.longitude },
+						content: landingPin,
+						title: 'Landing'
+					});
+				}
 			});
-
-			// Add takeoff marker (green) - first fix chronologically
-			if (fixesInOrder.length > 0) {
-				const first = fixesInOrder[0];
-				const takeoffPin = document.createElement('div');
-				takeoffPin.innerHTML = `
-					<div style="background-color: #10b981; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white;"></div>
-				`;
-
-				new google.maps.marker.AdvancedMarkerElement({
-					map,
-					position: { lat: first.latitude, lng: first.longitude },
-					content: takeoffPin,
-					title: 'Takeoff'
-				});
-			}
-
-			// Add landing marker (red) if flight is complete - last fix chronologically
-			if (data.flight.landing_time && fixesInOrder.length > 0) {
-				const last = fixesInOrder[fixesInOrder.length - 1];
-				const landingPin = document.createElement('div');
-				landingPin.innerHTML = `
-					<div style="background-color: #ef4444; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white;"></div>
-				`;
-
-				new google.maps.marker.AdvancedMarkerElement({
-					map,
-					position: { lat: last.latitude, lng: last.longitude },
-					content: landingPin,
-					title: 'Landing'
-				});
-			}
 		} catch (error) {
 			console.error('Failed to load Google Maps:', error);
 		}
