@@ -15,6 +15,7 @@ use crate::fixes::FixWithRawPacket;
 use crate::fixes_repo::FixesRepository;
 use crate::flights::Flight;
 use crate::flights_repo::FlightsRepository;
+use crate::geometry::spline::{GeoPoint, generate_spline_path};
 use crate::web::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -34,6 +35,19 @@ pub struct FlightResponse {
 #[derive(Debug, Serialize)]
 pub struct FlightFixesResponse {
     pub fixes: Vec<FixWithRawPacket>,
+    pub count: usize,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SplinePoint {
+    pub latitude: f64,
+    pub longitude: f64,
+    pub altitude_meters: Option<f64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct FlightSplinePathResponse {
+    pub points: Vec<SplinePoint>,
     pub count: usize,
 }
 
@@ -243,6 +257,89 @@ pub async fn get_flight_fixes(
             .into_response()
         }
     }
+}
+
+/// Get spline-interpolated path for a flight
+/// Returns smoothed coordinates suitable for rendering polylines
+pub async fn get_flight_spline_path(
+    Path(id): Path<Uuid>,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let flights_repo = FlightsRepository::new(state.pool.clone());
+    let fixes_repo = FixesRepository::new(state.pool.clone());
+
+    // First verify the flight exists
+    let flight = match flights_repo.get_flight_by_id(id).await {
+        Ok(Some(flight)) => flight,
+        Ok(None) => return json_error(StatusCode::NOT_FOUND, "Flight not found").into_response(),
+        Err(e) => {
+            tracing::error!("Failed to get flight by ID {}: {}", id, e);
+            return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get flight")
+                .into_response();
+        }
+    };
+
+    // Get fixes for the flight
+    let start_time = flight.takeoff_time.unwrap_or(flight.created_at);
+    let end_time = flight.landing_time.unwrap_or(flight.last_fix_at);
+
+    let fixes = match fixes_repo
+        .get_fixes_for_aircraft_with_time_range(
+            &flight.device_id.unwrap_or(Uuid::nil()),
+            start_time,
+            end_time,
+            None,
+        )
+        .await
+    {
+        Ok(fixes) => fixes,
+        Err(e) => {
+            tracing::error!("Failed to get fixes for flight {}: {}", id, e);
+            return json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to get flight fixes",
+            )
+            .into_response();
+        }
+    };
+
+    if fixes.len() < 2 {
+        // Not enough points for spline interpolation, return empty
+        return Json(FlightSplinePathResponse {
+            points: vec![],
+            count: 0,
+        })
+        .into_response();
+    }
+
+    // Convert fixes to GeoPoints with altitude
+    let fix_points: Vec<GeoPoint> = fixes
+        .iter()
+        .map(|fix| {
+            let altitude_meters = fix.altitude_msl_feet.map(|alt| alt as f64 * 0.3048);
+            if let Some(alt) = altitude_meters {
+                GeoPoint::new_with_altitude(fix.latitude, fix.longitude, alt)
+            } else {
+                GeoPoint::new(fix.latitude, fix.longitude)
+            }
+        })
+        .collect();
+
+    // Generate spline path with 100m spacing
+    let path = generate_spline_path(&fix_points, 100.0);
+
+    // Convert to response format
+    let points: Vec<SplinePoint> = path
+        .iter()
+        .map(|p| SplinePoint {
+            latitude: p.latitude,
+            longitude: p.longitude,
+            altitude_meters: p.altitude_meters,
+        })
+        .collect();
+
+    let count = points.len();
+    Json(FlightSplinePathResponse { points, count }).into_response()
 }
 
 /// Generate an appropriate filename for the KML download

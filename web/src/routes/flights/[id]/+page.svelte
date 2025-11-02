@@ -69,6 +69,17 @@
 		registration?: string;
 	}
 	let nearbyFlights = $state<NearbyFlight[]>([]);
+
+	// Spline path response type
+	interface SplinePoint {
+		latitude: number;
+		longitude: number;
+		altitude_meters: number | null;
+	}
+	interface SplinePathResponse {
+		points: SplinePoint[];
+		count: number;
+	}
 	let nearbyFlightPaths = $state<google.maps.Polyline[]>([]);
 	let isLoadingNearbyFlights = $state(false);
 
@@ -363,19 +374,42 @@
 		};
 	}
 
+	// Helper function to fetch and apply spline path to map
+	async function updateFlightPath(
+		fixesInOrder: typeof data.fixes
+	): Promise<google.maps.LatLngLiteral[]> {
+		try {
+			const splineResponse = await serverCall<SplinePathResponse>(
+				`/flights/${data.flight.id}/spline-path`
+			);
+
+			if (splineResponse.points.length > 0) {
+				return splineResponse.points.map((point) => ({
+					lat: point.latitude,
+					lng: point.longitude
+				}));
+			}
+		} catch (error) {
+			console.error('Failed to fetch spline path, using raw fixes:', error);
+		}
+
+		// Fallback to raw fixes
+		return fixesInOrder.map((fix) => ({
+			lat: fix.latitude,
+			lng: fix.longitude
+		}));
+	}
+
 	// Update map and altitude chart with new data
-	function updateMapAndChart() {
+	async function updateMapAndChart() {
 		if (data.fixes.length === 0) return;
 
 		// Update map
 		if (map && flightPath) {
 			const fixesInOrder = [...data.fixes].reverse();
 
-			// Update flight path
-			const pathCoordinates = fixesInOrder.map((fix) => ({
-				lat: fix.latitude,
-				lng: fix.longitude
-			}));
+			// Update flight path with spline interpolation
+			const pathCoordinates = await updateFlightPath(fixesInOrder);
 			flightPath.setPath(pathCoordinates);
 
 			// Clear existing fix markers
@@ -518,11 +552,8 @@
 			// Fit bounds
 			map.fitBounds(bounds);
 
-			// Create flight path (in chronological order)
-			const pathCoordinates = fixesInOrder.map((fix) => ({
-				lat: fix.latitude,
-				lng: fix.longitude
-			}));
+			// Create flight path with spline interpolation
+			const pathCoordinates = await updateFlightPath(fixesInOrder);
 
 			flightPath = new google.maps.Polyline({
 				path: pathCoordinates,
