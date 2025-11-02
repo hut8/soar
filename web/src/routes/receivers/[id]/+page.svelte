@@ -103,21 +103,33 @@
 		total_pages: number;
 	}
 
+	interface AprsTypeCount {
+		aprs_type: string;
+		count: number;
+	}
+
+	interface FixCountsByAprsTypeResponse {
+		counts: AprsTypeCount[];
+	}
+
 	let receiver = $state<Receiver | null>(null);
 	let fixes = $state<Fix[] | null>(null);
 	let statuses = $state<ReceiverStatus[]>([]);
 	let rawMessages = $state<RawMessage[] | null>(null);
 	let statistics = $state<ReceiverStatistics | null>(null);
+	let fixCountsByAprsType = $state<AprsTypeCount[] | null>(null);
 	let loading = $state(true);
 	let loadingFixes = $state(false);
 	let loadingStatuses = $state(false);
 	let loadingRawMessages = $state(false);
 	let loadingStatistics = $state(false);
+	let loadingFixCounts = $state(false);
 	let error = $state('');
 	let fixesError = $state('');
 	let statusesError = $state('');
 	let rawMessagesError = $state('');
 	let statisticsError = $state('');
+	let fixCountsError = $state('');
 
 	let fixesPage = $state(1);
 	let fixesTotalPages = $state(1);
@@ -128,7 +140,7 @@
 
 	// Display options
 	let showRawData = $state(false);
-	let activeTab = $state('status-reports'); // 'status-reports', 'raw-messages', or 'received-fixes'
+	let activeTab = $state('status-reports'); // 'status-reports', 'raw-messages', 'received-fixes', or 'aggregate-stats'
 
 	let receiverId = $derived($page.params.id || '');
 
@@ -152,6 +164,18 @@
 	$effect(() => {
 		if (activeTab === 'received-fixes' && receiverId && fixes === null && !loadingFixes) {
 			loadFixes();
+		}
+	});
+
+	// Load fix counts when switching to aggregate stats tab
+	$effect(() => {
+		if (
+			activeTab === 'aggregate-stats' &&
+			receiverId &&
+			fixCountsByAprsType === null &&
+			!loadingFixCounts
+		) {
+			loadFixCounts();
 		}
 	});
 
@@ -242,6 +266,25 @@
 			rawMessages = []; // Set to empty array on error to prevent retry loop
 		} finally {
 			loadingRawMessages = false;
+		}
+	}
+
+	async function loadFixCounts() {
+		loadingFixCounts = true;
+		fixCountsError = '';
+
+		try {
+			const response = await serverCall<FixCountsByAprsTypeResponse>(
+				`/receivers/${receiverId}/fix-counts-by-aprs-type`
+			);
+			fixCountsByAprsType = response.counts || [];
+		} catch (err) {
+			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+			fixCountsError = `Failed to load fix counts: ${errorMessage}`;
+			console.error('Error loading fix counts:', err);
+			fixCountsByAprsType = []; // Set to empty array on error to prevent retry loop
+		} finally {
+			loadingFixCounts = false;
 		}
 	}
 
@@ -589,6 +632,10 @@
 							<Signal class="mr-2 h-4 w-4" />
 							Received Fixes
 						</Tabs.Control>
+						<Tabs.Control value="aggregate-stats">
+							<Signal class="mr-2 h-4 w-4" />
+							Aggregate Statistics
+						</Tabs.Control>
 					{/snippet}
 
 					{#snippet content()}
@@ -901,6 +948,50 @@
 											</button>
 										</div>
 									{/if}
+								{/if}
+							</div>
+						</Tabs.Panel>
+
+						<!-- Aggregate Statistics Tab Content -->
+						<Tabs.Panel value="aggregate-stats">
+							<div class="mt-4">
+								{#if loadingFixCounts}
+									<div class="flex items-center justify-center space-x-4 p-8">
+										<ProgressRing size="w-6 h-6" />
+										<span>Loading aggregate statistics...</span>
+									</div>
+								{:else if fixCountsError}
+									<div class="alert preset-filled-error-500">
+										<p>{fixCountsError}</p>
+									</div>
+								{:else if fixCountsByAprsType !== null && fixCountsByAprsType.length === 0}
+									<p class="text-surface-500-400-token p-4 text-center">
+										No fix data available for this receiver
+									</p>
+								{:else if fixCountsByAprsType !== null}
+									<div class="space-y-4">
+										<h3 class="h3">Fixes Received by APRS Type</h3>
+										<div class="table-container">
+											<table class="table-hover table">
+												<thead>
+													<tr>
+														<th>APRS Type</th>
+														<th class="text-right">Count</th>
+													</tr>
+												</thead>
+												<tbody>
+													{#each fixCountsByAprsType as typeCount (typeCount.aprs_type)}
+														<tr>
+															<td class="font-mono">{typeCount.aprs_type}</td>
+															<td class="text-right font-semibold">
+																{typeCount.count.toLocaleString()}
+															</td>
+														</tr>
+													{/each}
+												</tbody>
+											</table>
+										</div>
+									</div>
 								{/if}
 							</div>
 						</Tabs.Panel>

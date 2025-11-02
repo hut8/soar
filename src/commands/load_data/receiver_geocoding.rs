@@ -82,7 +82,7 @@ pub async fn geocode_receivers(
                                 receiver.callsign
                             );
                             failure_count += 1;
-                            failed_callsigns.push(receiver.callsign.clone());
+                            failed_callsigns.push(format!("{}|{},{}", receiver.callsign, lat, lng));
                         }
                     }
                     Err(e) => {
@@ -91,7 +91,7 @@ pub async fn geocode_receivers(
                             receiver.callsign, e
                         );
                         failure_count += 1;
-                        failed_callsigns.push(receiver.callsign.clone());
+                        failed_callsigns.push(format!("{}|{},{}", receiver.callsign, lat, lng));
                     }
                 }
             }
@@ -101,7 +101,7 @@ pub async fn geocode_receivers(
                     receiver.callsign, lat, lng, e
                 );
                 failure_count += 1;
-                failed_callsigns.push(receiver.callsign.clone());
+                failed_callsigns.push(format!("{}|{},{}", receiver.callsign, lat, lng));
             }
         }
 

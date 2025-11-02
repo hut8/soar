@@ -510,6 +510,10 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
             "/receivers/{id}/raw-messages",
             get(actions::get_receiver_raw_messages),
         )
+        .route(
+            "/receivers/{id}/fix-counts-by-aprs-type",
+            get(actions::get_receiver_fix_counts_by_aprs_type),
+        )
         // APRS messages routes
         .route("/aprs-messages", post(actions::get_aprs_messages_bulk))
         .route("/aprs-messages/{id}", get(actions::get_aprs_message))

@@ -238,8 +238,8 @@ pub fn initialize_run_metrics() {
     metrics::gauge!("elevation_tile_cache_entries").set(0.0);
 
     // Receiver cache metrics
-    metrics::counter!("generic_processor_receiver_cache_hit_total").absolute(0);
-    metrics::counter!("generic_processor_receiver_cache_miss_total").absolute(0);
+    metrics::counter!("generic_processor.receiver_cache.hit").absolute(0);
+    metrics::counter!("generic_processor.receiver_cache.miss").absolute(0);
 
     // JetStream connection status
     metrics::gauge!("jetstream_connected").set(0.0);
@@ -253,9 +253,11 @@ pub fn initialize_run_metrics() {
     metrics::gauge!("aprs_raw_message_queue_depth").set(0.0);
 
     // JetStream consumer metrics
-    metrics::counter!("aprs_jetstream_consumed_total").absolute(0);
-    metrics::counter!("aprs_jetstream_process_error_total").absolute(0);
-    metrics::gauge!("aprs_jetstream_queue_depth").set(0.0);
+    metrics::counter!("aprs.jetstream.consumed").absolute(0);
+    metrics::counter!("aprs.jetstream.process_error").absolute(0);
+    metrics::counter!("aprs.jetstream.decode_error").absolute(0);
+    metrics::counter!("aprs.jetstream.ack_error").absolute(0);
+    metrics::counter!("aprs.jetstream.receive_error").absolute(0);
 
     // Elevation processing metrics
     metrics::counter!("aprs_elevation_processed").absolute(0);
