@@ -374,6 +374,32 @@
 		};
 	}
 
+	// Helper function to fetch and apply spline path to map
+	async function updateFlightPath(
+		fixesInOrder: typeof data.fixes
+	): Promise<google.maps.LatLngLiteral[]> {
+		try {
+			const splineResponse = await serverCall<SplinePathResponse>(
+				`/flights/${data.flight.id}/spline-path`
+			);
+
+			if (splineResponse.points.length > 0) {
+				return splineResponse.points.map((point) => ({
+					lat: point.latitude,
+					lng: point.longitude
+				}));
+			}
+		} catch (error) {
+			console.error('Failed to fetch spline path, using raw fixes:', error);
+		}
+
+		// Fallback to raw fixes
+		return fixesInOrder.map((fix) => ({
+			lat: fix.latitude,
+			lng: fix.longitude
+		}));
+	}
+
 	// Update map and altitude chart with new data
 	async function updateMapAndChart() {
 		if (data.fixes.length === 0) return;
@@ -383,34 +409,8 @@
 			const fixesInOrder = [...data.fixes].reverse();
 
 			// Update flight path with spline interpolation
-			try {
-				const splineResponse = await serverCall<SplinePathResponse>(
-					`/flights/${data.flight.id}/spline-path`
-				);
-
-				if (splineResponse.points.length > 0) {
-					const pathCoordinates = splineResponse.points.map((point) => ({
-						lat: point.latitude,
-						lng: point.longitude
-					}));
-					flightPath.setPath(pathCoordinates);
-				} else {
-					// Fallback to raw fixes
-					const pathCoordinates = fixesInOrder.map((fix) => ({
-						lat: fix.latitude,
-						lng: fix.longitude
-					}));
-					flightPath.setPath(pathCoordinates);
-				}
-			} catch (error) {
-				console.error('Failed to fetch spline path for update, using raw fixes:', error);
-				// Fallback to raw fixes
-				const pathCoordinates = fixesInOrder.map((fix) => ({
-					lat: fix.latitude,
-					lng: fix.longitude
-				}));
-				flightPath.setPath(pathCoordinates);
-			}
+			const pathCoordinates = await updateFlightPath(fixesInOrder);
+			flightPath.setPath(pathCoordinates);
 
 			// Clear existing fix markers
 			fixMarkers.forEach((marker) => {
@@ -552,57 +552,16 @@
 			// Fit bounds
 			map.fitBounds(bounds);
 
-			// Fetch spline-interpolated path for smooth flight track
-			try {
-				const splineResponse = await serverCall<SplinePathResponse>(
-					`/flights/${data.flight.id}/spline-path`
-				);
+			// Create flight path with spline interpolation
+			const pathCoordinates = await updateFlightPath(fixesInOrder);
 
-				if (splineResponse.points.length > 0) {
-					// Use spline-interpolated smooth path
-					const pathCoordinates = splineResponse.points.map((point) => ({
-						lat: point.latitude,
-						lng: point.longitude
-					}));
-
-					flightPath = new google.maps.Polyline({
-						path: pathCoordinates,
-						geodesic: true,
-						strokeColor: '#FF0000',
-						strokeOpacity: 1.0,
-						strokeWeight: 3
-					});
-				} else {
-					// Fallback to raw fixes if spline fails
-					const pathCoordinates = fixesInOrder.map((fix) => ({
-						lat: fix.latitude,
-						lng: fix.longitude
-					}));
-
-					flightPath = new google.maps.Polyline({
-						path: pathCoordinates,
-						geodesic: true,
-						strokeColor: '#FF0000',
-						strokeOpacity: 1.0,
-						strokeWeight: 3
-					});
-				}
-			} catch (error) {
-				console.error('Failed to fetch spline path, falling back to raw fixes:', error);
-				// Fallback to raw fixes
-				const pathCoordinates = fixesInOrder.map((fix) => ({
-					lat: fix.latitude,
-					lng: fix.longitude
-				}));
-
-				flightPath = new google.maps.Polyline({
-					path: pathCoordinates,
-					geodesic: true,
-					strokeColor: '#FF0000',
-					strokeOpacity: 1.0,
-					strokeWeight: 3
-				});
-			}
+			flightPath = new google.maps.Polyline({
+				path: pathCoordinates,
+				geodesic: true,
+				strokeColor: '#FF0000',
+				strokeOpacity: 1.0,
+				strokeWeight: 3
+			});
 
 			flightPath.setMap(map);
 
