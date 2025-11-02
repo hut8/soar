@@ -76,23 +76,11 @@ TIMERS=(
     "soar-archive.timer"
 )
 
-# Implement zero-downtime deployment for soar-aprs-ingest using blue-green strategy
-log_info "Checking if soar-aprs-ingest.service is running..."
-APRS_INGEST_RUNNING=false
-if systemctl is-active --quiet "soar-aprs-ingest.service"; then
-    log_info "soar-aprs-ingest.service is running, will use blue-green deployment"
-    APRS_INGEST_RUNNING=true
-fi
-
-# Stop all services before deployment (except soar-aprs-ingest if using blue-green)
+# Stop ALL services before deployment
+# We must stop all services (including soar-aprs-ingest) to replace the binary
+# without "Text file busy" errors. Brief downtime is acceptable for deployments.
 log_info "Stopping SOAR services..."
 for service in "${SERVICES[@]}"; do
-    # Skip soar-aprs-ingest.service if it's running - we'll handle it specially
-    if [ "$service" = "soar-aprs-ingest.service" ] && [ "$APRS_INGEST_RUNNING" = true ]; then
-        log_info "Skipping stop of $service (will use blue-green deployment)"
-        continue
-    fi
-
     if systemctl is-active --quiet "$service"; then
         log_info "Stopping $service..."
         systemctl stop "$service" || log_warn "Failed to stop $service"
@@ -123,13 +111,25 @@ else
 fi
 
 # Install new binary
-# Copy to temp location first, then atomically move to avoid "Text file busy" errors
+# All services are now stopped, so we can safely replace the binary
 log_info "Installing new binary..."
-TEMP_BINARY="/usr/local/bin/soar.new.$$"
-cp "$DEPLOY_DIR/soar" "$TEMP_BINARY"
-chmod +x "$TEMP_BINARY"
-chown root:root "$TEMP_BINARY"
-mv -f "$TEMP_BINARY" /usr/local/bin/soar
+
+# Wait a moment for any lingering file handles to be released
+sleep 2
+
+# Verify no processes are still using the binary
+if command -v lsof >/dev/null 2>&1; then
+    PROCESSES_USING_BINARY=$(lsof /usr/local/bin/soar 2>/dev/null | tail -n +2 || true)
+    if [ -n "$PROCESSES_USING_BINARY" ]; then
+        log_warn "WARNING: Processes still using the binary after service stop:"
+        echo "$PROCESSES_USING_BINARY"
+        log_info "Waiting additional 5 seconds for cleanup..."
+        sleep 5
+    fi
+fi
+
+# Install the new binary (use install command for proper permissions)
+install -m 755 -o root -g root "$DEPLOY_DIR/soar" /usr/local/bin/soar
 log_info "Binary installed successfully"
 
 # Install service files
@@ -229,89 +229,6 @@ fi
 # Reload systemd daemon
 log_info "Reloading systemd daemon..."
 systemctl daemon-reload
-
-# Handle blue-green deployment for soar-aprs-ingest if it was running
-if [ "$APRS_INGEST_RUNNING" = true ]; then
-    log_info "Starting blue-green deployment for soar-aprs-ingest.service..."
-
-    # Start secondary instance with new binary (uses systemd-run to avoid lock conflict)
-    log_info "Starting secondary APRS ingester instance..."
-    SECONDARY_UNIT="soar-aprs-ingest-secondary"
-    SECONDARY_HEALTH_PORT=9094  # Different port from primary (9093)
-
-    systemd-run --unit="$SECONDARY_UNIT" \
-        --working-directory=/var/soar \
-        --uid=soar --gid=soar \
-        --setenv=SOAR_ENV=production \
-        --setenv=METRICS_PORT="$SECONDARY_HEALTH_PORT" \
-        --property=EnvironmentFile=/etc/soar/env \
-        /usr/local/bin/soar ingest-aprs \
-        || { log_error "Failed to start secondary APRS ingester"; APRS_INGEST_RUNNING=false; }
-
-    if [ "$APRS_INGEST_RUNNING" = true ]; then
-        # Wait for secondary to establish APRS connection with health checks
-        log_info "Waiting for secondary ingester to become ready (checking /ready endpoint)..."
-        HEALTH_CHECK_ATTEMPTS=0
-        MAX_HEALTH_CHECK_ATTEMPTS=30  # 30 attempts x 1 second = 30 seconds max wait
-        SECONDARY_READY=false
-
-        while [ $HEALTH_CHECK_ATTEMPTS -lt $MAX_HEALTH_CHECK_ATTEMPTS ]; do
-            # Check if secondary is ready (connected and receiving messages)
-            if curl -sf "http://localhost:$SECONDARY_HEALTH_PORT/ready" >/dev/null 2>&1; then
-                log_info "Secondary ingester is ready (attempt $((HEALTH_CHECK_ATTEMPTS + 1)))"
-                SECONDARY_READY=true
-                break
-            fi
-
-            HEALTH_CHECK_ATTEMPTS=$((HEALTH_CHECK_ATTEMPTS + 1))
-
-            # Check if secondary service is still running
-            if ! systemctl is-active --quiet "$SECONDARY_UNIT"; then
-                log_error "Secondary ingester crashed during startup"
-                break
-            fi
-
-            sleep 1
-        done
-
-        if [ "$SECONDARY_READY" = true ]; then
-            log_info "Secondary ingester verified ready - proceeding with graceful handoff"
-
-            # Stop primary instance gracefully
-            log_info "Stopping primary soar-aprs-ingest.service gracefully..."
-            systemctl stop soar-aprs-ingest.service || log_warn "Failed to stop primary ingester"
-
-            # Wait for graceful shutdown
-            log_info "Waiting for primary ingester to flush queue..."
-            sleep 3
-
-            # Stop secondary instance
-            log_info "Stopping secondary ingester..."
-            systemctl stop "$SECONDARY_UNIT" || log_warn "Failed to stop secondary ingester"
-
-            log_info "Blue-green deployment for APRS ingester complete"
-        else
-            log_error "Secondary ingester failed to become ready within 30 seconds"
-            log_error "Rolling back - stopping secondary and keeping primary running"
-
-            # Stop secondary instance
-            systemctl stop "$SECONDARY_UNIT" || log_warn "Failed to stop secondary ingester"
-
-            # Restore backup binary if it exists
-            if [ -f "$BACKUP_FILE" ]; then
-                log_warn "Restoring previous binary from backup..."
-                cp "$BACKUP_FILE" /usr/local/bin/soar
-                chmod +x /usr/local/bin/soar
-                chown root:root /usr/local/bin/soar
-                log_info "Previous binary restored"
-            fi
-
-            # Exit with error to indicate deployment failure
-            log_error "Deployment failed - primary ingester still running with old version"
-            exit 1
-        fi
-    fi
-fi
 
 # Enable and start services
 log_info "Enabling and starting SOAR services..."
