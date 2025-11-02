@@ -18,12 +18,27 @@ pub struct Pilot {
     /// Whether the pilot is licensed
     pub is_licensed: bool,
 
+    /// Whether the pilot is an instructor
+    pub is_instructor: bool,
+
+    /// Whether the pilot is a tow pilot
+    pub is_tow_pilot: bool,
+
+    /// Whether the pilot is an examiner
+    pub is_examiner: bool,
+
     /// Club that the pilot belongs to
     pub club_id: Option<Uuid>,
+
+    /// User account associated with this pilot (if any)
+    pub user_id: Option<Uuid>,
 
     /// Database timestamps
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+
+    /// Soft delete timestamp
+    pub deleted_at: Option<DateTime<Utc>>,
 }
 
 impl Pilot {
@@ -32,6 +47,9 @@ impl Pilot {
         first_name: String,
         last_name: String,
         is_licensed: bool,
+        is_instructor: bool,
+        is_tow_pilot: bool,
+        is_examiner: bool,
         club_id: Option<Uuid>,
     ) -> Self {
         let now = Utc::now();
@@ -40,15 +58,25 @@ impl Pilot {
             first_name,
             last_name,
             is_licensed,
+            is_instructor,
+            is_tow_pilot,
+            is_examiner,
             club_id,
+            user_id: None,
             created_at: now,
             updated_at: now,
+            deleted_at: None,
         }
     }
 
     /// Get the full name of the pilot
     pub fn full_name(&self) -> String {
         format!("{} {}", self.first_name, self.last_name)
+    }
+
+    /// Check if pilot is deleted
+    pub fn is_deleted(&self) -> bool {
+        self.deleted_at.is_some()
     }
 }
 
@@ -64,6 +92,11 @@ pub struct PilotModel {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub club_id: Option<Uuid>,
+    pub is_instructor: bool,
+    pub is_tow_pilot: bool,
+    pub is_examiner: bool,
+    pub deleted_at: Option<DateTime<Utc>>,
+    pub user_id: Option<Uuid>,
 }
 
 /// Insert model for new pilots
@@ -75,6 +108,10 @@ pub struct NewPilotModel {
     pub last_name: String,
     pub is_licensed: bool,
     pub club_id: Option<Uuid>,
+    pub is_instructor: bool,
+    pub is_tow_pilot: bool,
+    pub is_examiner: bool,
+    pub user_id: Option<Uuid>,
 }
 
 /// Conversion from Pilot (API model) to PilotModel (database model)
@@ -88,6 +125,11 @@ impl From<Pilot> for PilotModel {
             created_at: pilot.created_at,
             updated_at: pilot.updated_at,
             club_id: pilot.club_id,
+            is_instructor: pilot.is_instructor,
+            is_tow_pilot: pilot.is_tow_pilot,
+            is_examiner: pilot.is_examiner,
+            deleted_at: pilot.deleted_at,
+            user_id: pilot.user_id,
         }
     }
 }
@@ -101,6 +143,10 @@ impl From<Pilot> for NewPilotModel {
             last_name: pilot.last_name,
             is_licensed: pilot.is_licensed,
             club_id: pilot.club_id,
+            is_instructor: pilot.is_instructor,
+            is_tow_pilot: pilot.is_tow_pilot,
+            is_examiner: pilot.is_examiner,
+            user_id: pilot.user_id,
         }
     }
 }
@@ -114,8 +160,13 @@ impl From<PilotModel> for Pilot {
             last_name: model.last_name,
             is_licensed: model.is_licensed,
             club_id: model.club_id,
+            is_instructor: model.is_instructor,
+            is_tow_pilot: model.is_tow_pilot,
+            is_examiner: model.is_examiner,
+            user_id: model.user_id,
             created_at: model.created_at,
             updated_at: model.updated_at,
+            deleted_at: model.deleted_at,
         }
     }
 }

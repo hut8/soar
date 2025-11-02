@@ -361,6 +361,11 @@ diesel::table! {
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
         club_id -> Nullable<Uuid>,
+        is_instructor -> Bool,
+        is_tow_pilot -> Bool,
+        is_examiner -> Bool,
+        deleted_at -> Nullable<Timestamptz>,
+        user_id -> Nullable<Uuid>,
     }
 }
 
@@ -598,6 +603,7 @@ diesel::joinable!(flight_pilots -> flights (flight_id));
 diesel::joinable!(flight_pilots -> pilots (pilot_id));
 diesel::joinable!(flights -> clubs (club_id));
 diesel::joinable!(pilots -> clubs (club_id));
+diesel::joinable!(pilots -> users (user_id));
 diesel::joinable!(receiver_statuses -> aprs_messages (aprs_message_id));
 diesel::joinable!(receiver_statuses -> receivers (receiver_id));
 diesel::joinable!(receivers_links -> receivers (receiver_id));

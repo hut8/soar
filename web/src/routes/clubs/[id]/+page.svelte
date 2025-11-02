@@ -12,7 +12,8 @@
 		UserCheck,
 		ExternalLink,
 		Image,
-		ClipboardList
+		ClipboardList,
+		Users
 	} from '@lucide/svelte';
 	import { ProgressRing } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall } from '$lib/api/server';
@@ -279,6 +280,13 @@
 							>
 								<ClipboardList class="mr-2 h-4 w-4" />
 								Club Operations
+							</a>
+							<a
+								href={resolve(`/clubs/${clubId}/pilots`)}
+								class="btn preset-filled-secondary-500 btn-sm"
+							>
+								<Users class="mr-2 h-4 w-4" />
+								Pilots
 							</a>
 						</div>
 					{/if}

@@ -10,6 +10,7 @@ pub(crate) mod utils;
 
 use crate::Fix;
 use crate::airports_repo::AirportsRepository;
+use crate::device_repo::DeviceRepository;
 use crate::elevation::ElevationDB;
 use crate::fixes_repo::FixesRepository;
 use crate::flights_repo::FlightsRepository;
@@ -83,6 +84,7 @@ pub(crate) type AircraftTrackersMap = Arc<RwLock<HashMap<Uuid, aircraft_tracker:
 /// Simple flight tracker - just tracks which device is currently on which flight
 pub struct FlightTracker {
     flights_repo: FlightsRepository,
+    device_repo: DeviceRepository,
     airports_repo: AirportsRepository,
     runways_repo: RunwaysRepository,
     fixes_repo: FixesRepository,
@@ -100,6 +102,7 @@ impl Clone for FlightTracker {
     fn clone(&self) -> Self {
         Self {
             flights_repo: self.flights_repo.clone(),
+            device_repo: self.device_repo.clone(),
             airports_repo: self.airports_repo.clone(),
             runways_repo: self.runways_repo.clone(),
             fixes_repo: self.fixes_repo.clone(),
@@ -117,6 +120,7 @@ impl FlightTracker {
         let elevation_db = ElevationDB::new().expect("Failed to initialize ElevationDB");
         Self {
             flights_repo: FlightsRepository::new(pool.clone()),
+            device_repo: DeviceRepository::new(pool.clone()),
             airports_repo: AirportsRepository::new(pool.clone()),
             runways_repo: RunwaysRepository::new(pool.clone()),
             fixes_repo: FixesRepository::new(pool.clone()),
@@ -392,6 +396,7 @@ impl FlightTracker {
         // Process state transition
         let updated_fix = match state_transitions::process_state_transition(
             &self.flights_repo,
+            &self.device_repo,
             &self.airports_repo,
             &self.locations_repo,
             &self.runways_repo,

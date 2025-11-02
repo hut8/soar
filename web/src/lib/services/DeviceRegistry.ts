@@ -1,6 +1,11 @@
 import { browser } from '$app/environment';
 import { serverCall } from '$lib/api/server';
 import type { Aircraft, Device, Fix } from '$lib/types';
+import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+
+// Initialize dayjs plugins
+dayjs.extend(utc);
 
 // Event types for subscribers
 export type DeviceRegistryEvent =
@@ -476,13 +481,7 @@ export class DeviceRegistry {
 	public async loadRecentFixesFromAPI(deviceId: string, hoursBack: number = 8): Promise<Fix[]> {
 		try {
 			// Calculate timestamp for N hours ago in YYYYMMDDHHMMSS UTC format
-			const now = new Date();
-			const hoursAgo = new Date(now.getTime() - hoursBack * 60 * 60 * 1000);
-			const after = hoursAgo
-				.toISOString()
-				.replace(/[-:]/g, '')
-				.replace(/\.\d{3}Z$/, '')
-				.substring(0, 14); // Format: YYYYMMDDHHMMSS
+			const after = dayjs().utc().subtract(hoursBack, 'hours').format('YYYYMMDDHHmmss');
 
 			const response = await serverCall<{ fixes: Fix[] }>(`/devices/${deviceId}/fixes`, {
 				params: { after, per_page: 1000 }

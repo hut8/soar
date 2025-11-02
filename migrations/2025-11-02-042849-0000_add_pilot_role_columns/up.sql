@@ -1,0 +1,4 @@
+-- Add role columns to pilots table
+ALTER TABLE pilots ADD COLUMN is_instructor BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE pilots ADD COLUMN is_tow_pilot BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE pilots ADD COLUMN is_examiner BOOLEAN NOT NULL DEFAULT FALSE;
