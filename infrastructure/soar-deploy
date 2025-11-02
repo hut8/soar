@@ -123,13 +123,10 @@ else
 fi
 
 # Install new binary
-# Copy to temp location first, then atomically move to avoid "Text file busy" errors
+# Use the `install` command which is designed to safely replace executables
+# even when they're in use. It uses a copy-and-rename strategy internally.
 log_info "Installing new binary..."
-TEMP_BINARY="/usr/local/bin/soar.new.$$"
-cp "$DEPLOY_DIR/soar" "$TEMP_BINARY"
-chmod +x "$TEMP_BINARY"
-chown root:root "$TEMP_BINARY"
-mv -f "$TEMP_BINARY" /usr/local/bin/soar
+install -m 755 -o root -g root "$DEPLOY_DIR/soar" /usr/local/bin/soar
 log_info "Binary installed successfully"
 
 # Install service files
