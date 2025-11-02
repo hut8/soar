@@ -123,10 +123,13 @@ else
 fi
 
 # Install new binary
+# Copy to temp location first, then atomically move to avoid "Text file busy" errors
 log_info "Installing new binary..."
-cp "$DEPLOY_DIR/soar" /usr/local/bin/soar
-chmod +x /usr/local/bin/soar
-chown root:root /usr/local/bin/soar
+TEMP_BINARY="/usr/local/bin/soar.new.$$"
+cp "$DEPLOY_DIR/soar" "$TEMP_BINARY"
+chmod +x "$TEMP_BINARY"
+chown root:root "$TEMP_BINARY"
+mv -f "$TEMP_BINARY" /usr/local/bin/soar
 log_info "Binary installed successfully"
 
 # Install service files
