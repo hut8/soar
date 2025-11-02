@@ -11,7 +11,9 @@
 		MoveUp,
 		ArrowLeft,
 		Calendar,
-		UserPlus
+		UserPlus,
+		ChevronLeft,
+		ChevronRight
 	} from '@lucide/svelte';
 	import { serverCall } from '$lib/api/server';
 	import dayjs from 'dayjs';
@@ -97,24 +99,20 @@
 		flightsError = '';
 
 		try {
-			// TODO: Replace with actual API endpoints for club-specific flights
-			// For now, fetch all flights and filter by date
-			const response = await serverCall<{ flights: Flight[]; total_count: number }>(
-				'/flights?completed=true&limit=100'
+			// Format date as YYYYMMDD for the API
+			const dateParam = dayjs(selectedDate).format('YYYYMMDD');
+
+			// Fetch completed flights for this club and date
+			const completedResponse = await serverCall<Flight[]>(
+				`/clubs/${clubId}/flights?date=${dateParam}&completed=true`
 			);
+			completedFlights = completedResponse || [];
 
-			// Filter flights for the selected date
-			const selectedDateStart = dayjs(selectedDate).startOf('day');
-			const selectedDateEnd = dayjs(selectedDate).endOf('day');
-
-			completedFlights = (response?.flights || []).filter((flight) => {
-				if (!flight.takeoff_time) return false;
-				const takeoffDate = dayjs(flight.takeoff_time);
-				return takeoffDate.isAfter(selectedDateStart) && takeoffDate.isBefore(selectedDateEnd);
-			});
-
-			// TODO: Add API endpoint for flights in progress
-			flightsInProgress = [];
+			// Fetch flights in progress for this club (no date filter for in-progress)
+			const inProgressResponse = await serverCall<Flight[]>(
+				`/clubs/${clubId}/flights?completed=false`
+			);
+			flightsInProgress = inProgressResponse || [];
 		} catch (err) {
 			const errorMessage = extractErrorMessage(err);
 			flightsError = `Failed to load flights: ${errorMessage}`;
@@ -176,6 +174,19 @@
 		// Reload flights to show updated pilot information
 		loadFlights();
 	}
+
+	function goToPreviousDay() {
+		selectedDate = dayjs(selectedDate).subtract(1, 'day').format('YYYY-MM-DD');
+	}
+
+	function goToNextDay() {
+		const today = dayjs().format('YYYY-MM-DD');
+		const nextDate = dayjs(selectedDate).add(1, 'day').format('YYYY-MM-DD');
+		// Don't allow going beyond today
+		if (nextDate <= today) {
+			selectedDate = nextDate;
+		}
+	}
 </script>
 
 <svelte:head>
@@ -213,12 +224,29 @@
 				<Calendar class="h-5 w-5 text-surface-500" />
 				<label class="flex items-center gap-2">
 					<span class="text-surface-600-300-token text-sm font-medium">Date:</span>
-					<input
-						type="date"
-						bind:value={selectedDate}
-						class="input px-3 py-2"
-						max={dayjs().format('YYYY-MM-DD')}
-					/>
+					<div class="flex items-center gap-1">
+						<button
+							onclick={goToPreviousDay}
+							class="preset-tonal-surface-500 btn p-2 btn-sm"
+							title="Previous day"
+						>
+							<ChevronLeft class="h-4 w-4" />
+						</button>
+						<input
+							type="date"
+							bind:value={selectedDate}
+							class="input px-3 py-2"
+							max={dayjs().format('YYYY-MM-DD')}
+						/>
+						<button
+							onclick={goToNextDay}
+							class="preset-tonal-surface-500 btn p-2 btn-sm"
+							title="Next day"
+							disabled={selectedDate >= dayjs().format('YYYY-MM-DD')}
+						>
+							<ChevronRight class="h-4 w-4" />
+						</button>
+					</div>
 				</label>
 			</div>
 		</div>

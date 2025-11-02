@@ -621,6 +621,63 @@ impl FlightsRepository {
         Ok(results)
     }
 
+    /// Get flights for a specific club with optional date and completion filters
+    /// If date is provided (YYYYMMDD format), filters flights to that specific date
+    /// If completed is Some(true), returns only completed flights (with landing_time OR timed_out_at)
+    /// If completed is Some(false), returns only in-progress flights (no landing_time and no timed_out_at)
+    /// If completed is None, returns all flights
+    /// Always returns flights in most recent first order (by takeoff_time descending)
+    pub async fn get_flights_by_club(
+        &self,
+        club_id_val: Uuid,
+        date: Option<chrono::NaiveDate>,
+        completed: Option<bool>,
+    ) -> Result<Vec<Flight>> {
+        use crate::schema::flights::dsl::*;
+
+        let pool = self.pool.clone();
+
+        let results = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            // Start with base query filtering by club_id
+            let mut query = flights.filter(club_id.eq(Some(club_id_val))).into_boxed();
+
+            // Apply date filter if provided
+            if let Some(date_val) = date {
+                let start_of_day = date_val.and_hms_opt(0, 0, 0).unwrap().and_utc();
+                let end_of_day = date_val.and_hms_opt(23, 59, 59).unwrap().and_utc();
+                query = query
+                    .filter(takeoff_time.ge(start_of_day))
+                    .filter(takeoff_time.le(end_of_day));
+            }
+
+            // Apply completion filter if provided
+            if let Some(completed_val) = completed {
+                if completed_val {
+                    // Completed flights: has landing_time OR timed_out_at
+                    query = query.filter(landing_time.is_not_null().or(timed_out_at.is_not_null()));
+                } else {
+                    // In-progress flights: no landing_time AND no timed_out_at
+                    query = query.filter(landing_time.is_null().and(timed_out_at.is_null()));
+                }
+            }
+
+            // Order by most recent first
+            let flight_models = query
+                .order(takeoff_time.desc())
+                .select(FlightModel::as_select())
+                .load::<FlightModel>(&mut conn)?;
+
+            let result_flights: Vec<Flight> = flight_models.into_iter().map(|f| f.into()).collect();
+
+            Ok::<Vec<Flight>, anyhow::Error>(result_flights)
+        })
+        .await??;
+
+        Ok(results)
+    }
+
     /// Mark a flight as timed out (no beacons received for the timeout duration, currently 1 hour)
     /// Does NOT set landing fields - this is a timeout, not a landing
     /// The timeout_time should be set to the last_fix_at value

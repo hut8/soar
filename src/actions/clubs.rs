@@ -8,9 +8,14 @@ use tracing::error;
 use uuid::Uuid;
 
 use crate::clubs_repo::ClubsRepository;
+use crate::device_repo::DeviceRepository;
+use crate::flights_repo::FlightsRepository;
 use crate::web::AppState;
 
-use super::{json_error, views::ClubView};
+use super::{
+    json_error,
+    views::{ClubView, DeviceInfo, FlightView},
+};
 
 #[derive(Debug, Deserialize)]
 pub struct ClubSearchParams {
@@ -134,6 +139,77 @@ pub async fn search_clubs(
                 error!("Failed to get clubs: {}", e);
                 json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get clubs").into_response()
             }
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ClubFlightsQueryParams {
+    pub date: Option<String>, // YYYYMMDD format
+    pub completed: Option<bool>,
+}
+
+/// Get flights for a specific club with optional date and completion filters
+pub async fn get_club_flights(
+    Path(club_id): Path<Uuid>,
+    State(state): State<AppState>,
+    Query(params): Query<ClubFlightsQueryParams>,
+) -> impl IntoResponse {
+    let flights_repo = FlightsRepository::new(state.pool.clone());
+    let device_repo = DeviceRepository::new(state.pool);
+
+    // Parse date if provided
+    let date = if let Some(date_str) = params.date {
+        match chrono::NaiveDate::parse_from_str(&date_str, "%Y%m%d") {
+            Ok(d) => Some(d),
+            Err(_) => {
+                return json_error(
+                    StatusCode::BAD_REQUEST,
+                    "Invalid date format. Use YYYYMMDD (e.g., 20250102)",
+                )
+                .into_response();
+            }
+        }
+    } else {
+        None
+    };
+
+    // Get flights for the club
+    match flights_repo
+        .get_flights_by_club(club_id, date, params.completed)
+        .await
+    {
+        Ok(flights) => {
+            let mut flight_views = Vec::new();
+
+            for flight in flights {
+                // Look up device information if device_id is present
+                let device_info = if let Some(device_id) = flight.device_id {
+                    match device_repo.get_device_by_uuid(device_id).await {
+                        Ok(Some(device)) => Some(DeviceInfo {
+                            aircraft_model: Some(device.aircraft_model),
+                            registration: Some(device.registration),
+                            aircraft_type_ogn: device.aircraft_type_ogn,
+                        }),
+                        _ => None,
+                    }
+                } else {
+                    None
+                };
+
+                let flight_view = FlightView::from_flight(flight, None, None, device_info);
+                flight_views.push(flight_view);
+            }
+
+            Json(flight_views).into_response()
+        }
+        Err(e) => {
+            error!("Failed to get flights for club {}: {}", club_id, e);
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to get club flights",
+            )
+            .into_response()
         }
     }
 }
