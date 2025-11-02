@@ -7,6 +7,7 @@ use uuid::Uuid;
 
 use crate::Fix;
 use crate::devices::AddressType;
+use crate::geometry::spline::{GeoPoint, calculate_spline_distance, generate_spline_path};
 
 /// Flight state enum representing the current status of a flight
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -24,7 +25,7 @@ pub enum FlightState {
 
 /// Calculate the distance between two points using the Haversine formula
 /// Returns distance in meters
-fn haversine_distance(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
+pub(crate) fn haversine_distance(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
     const EARTH_RADIUS_M: f64 = 6_371_000.0; // Earth's radius in meters
 
     let lat1_rad = lat1.to_radians();
@@ -342,8 +343,9 @@ impl Flight {
     }
 
     /// Calculate the total distance flown during this flight
-    /// Returns the sum of distances between consecutive fixes in meters
-    /// Returns None if there are insufficient fixes or no fixes available
+    /// Uses centripetal Catmull-Rom spline interpolation to account for aircraft
+    /// turning behavior, providing more accurate distance than straight-line segments.
+    /// Returns the distance in meters, or None if there are insufficient fixes.
     pub async fn total_distance(
         &self,
         fixes_repo: &crate::fixes_repo::FixesRepository,
@@ -364,19 +366,21 @@ impl Flight {
             return Ok(None);
         }
 
-        let mut total = 0.0;
-        for i in 1..fixes.len() {
-            let prev = &fixes[i - 1];
-            let curr = &fixes[i];
-            total +=
-                haversine_distance(prev.latitude, prev.longitude, curr.latitude, curr.longitude);
-        }
+        // Convert fixes to GeoPoints for spline calculation
+        let points: Vec<GeoPoint> = fixes
+            .iter()
+            .map(|fix| GeoPoint::new(fix.latitude, fix.longitude))
+            .collect();
 
-        Ok(Some(total))
+        // Use 100m sample distance for accurate distance calculation
+        let distance = calculate_spline_distance(&points, 100.0);
+
+        Ok(Some(distance))
     }
 
     /// Calculate the maximum displacement from the departure airport
     /// Only applicable if the departure and arrival airports are the same (i.e., a local flight)
+    /// Uses spline interpolation to check the entire flight path, not just the GPS fix points.
     /// Returns the maximum distance in meters from the departure airport, or None if not applicable
     pub async fn maximum_displacement(
         &self,
@@ -422,9 +426,21 @@ impl Flight {
             return Ok(None);
         }
 
-        let max_distance = fixes
+        // Convert fixes to GeoPoints and generate spline-interpolated path
+        let fix_points: Vec<GeoPoint> = fixes
             .iter()
-            .map(|fix| haversine_distance(airport_lat, airport_lon, fix.latitude, fix.longitude))
+            .map(|fix| GeoPoint::new(fix.latitude, fix.longitude))
+            .collect();
+
+        // Generate interpolated path with 100m spacing
+        let path_points = generate_spline_path(&fix_points, 100.0);
+
+        // Find maximum distance along the interpolated path
+        let max_distance = path_points
+            .iter()
+            .map(|point| {
+                haversine_distance(airport_lat, airport_lon, point.latitude, point.longitude)
+            })
             .fold(0.0_f64, |acc, d| acc.max(d));
 
         Ok(Some(max_distance))
@@ -499,7 +515,7 @@ impl Flight {
         kml.push_str("      </IconStyle>\n");
         kml.push_str("    </Style>\n");
 
-        // Flight track as LineString
+        // Flight track as LineString using spline interpolation
         kml.push_str("    <Placemark>\n");
         kml.push_str(&format!(
             "      <name>Flight Track - {}</name>\n",
@@ -512,15 +528,28 @@ impl Flight {
         kml.push_str("        <altitudeMode>absolute</altitudeMode>\n");
         kml.push_str("        <coordinates>\n");
 
-        // Add coordinates for flight track (longitude,latitude,altitude_meters)
-        for fix in &fixes {
-            let altitude_meters = fix
-                .altitude_msl_feet
-                .map(|alt| alt as f64 * 0.3048)
-                .unwrap_or(0.0);
+        // Convert fixes to GeoPoints with altitude
+        let fix_points: Vec<GeoPoint> = fixes
+            .iter()
+            .map(|fix| {
+                let altitude_meters = fix
+                    .altitude_msl_feet
+                    .map(|alt| alt as f64 * 0.3048)
+                    .unwrap_or(0.0);
+                GeoPoint::new_with_altitude(fix.latitude, fix.longitude, altitude_meters)
+            })
+            .collect();
+
+        // Generate smooth spline path with 100m spacing
+        let path_points = generate_spline_path(&fix_points, 100.0);
+
+        // Add interpolated coordinates for flight track (longitude,latitude,altitude_meters)
+        for point in &path_points {
             kml.push_str(&format!(
                 "          {},{},{}\n",
-                fix.longitude, fix.latitude, altitude_meters
+                point.longitude,
+                point.latitude,
+                point.altitude_meters.unwrap_or(0.0)
             ));
         }
 

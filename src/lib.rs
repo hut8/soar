@@ -33,6 +33,7 @@ pub mod flight_tracker;
 pub mod flights;
 pub mod flights_repo;
 pub mod geocoding;
+pub mod geometry;
 pub mod icao;
 pub mod instance_lock;
 pub mod live_fixes;
