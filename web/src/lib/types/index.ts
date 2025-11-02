@@ -256,3 +256,16 @@ export interface WatchlistEntry {
 	deviceId: string; // Only store device ID, not full device object
 	active: boolean;
 }
+
+export interface Pilot {
+	id: string;
+	first_name: string;
+	last_name: string;
+	is_licensed: boolean;
+	is_instructor: boolean;
+	is_tow_pilot: boolean;
+	is_examiner: boolean;
+	club_id?: string;
+	created_at: string;
+	updated_at: string;
+}
