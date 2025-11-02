@@ -578,3 +578,106 @@ pub struct AprsTypeCount {
 pub struct ReceiverFixCountsByAprsTypeResponse {
     pub counts: Vec<AprsTypeCount>,
 }
+
+/// Get aggregate statistics for a specific receiver (combines statistics and fix counts)
+pub async fn get_receiver_aggregate_stats(
+    Path(id): Path<Uuid>,
+    Query(params): Query<ReceiverStatisticsQuery>,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    use crate::fixes_repo::FixesRepository;
+    use crate::receiver_status_repo::ReceiverStatusRepository;
+
+    let receiver_repo = ReceiverRepository::new(state.pool.clone());
+    let status_repo = ReceiverStatusRepository::new(state.pool.clone());
+    let fixes_repo = FixesRepository::new(state.pool.clone());
+
+    // First verify the receiver exists and get its callsign
+    let receiver = match receiver_repo.get_receiver_by_id(id).await {
+        Ok(Some(r)) => r,
+        Ok(None) => return json_error(StatusCode::NOT_FOUND, "Receiver not found").into_response(),
+        Err(e) => {
+            tracing::error!("Failed to get receiver {}: {}", id, e);
+            return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get receiver")
+                .into_response();
+        }
+    };
+
+    // Determine time range for statistics
+    let (start_time, end_time) = if let Some(days) = params.days {
+        let end = chrono::Utc::now();
+        let start = end - chrono::Duration::days(days);
+        (Some(start), Some(end))
+    } else {
+        (None, None)
+    };
+
+    // Get average update interval
+    let avg_interval_seconds = match status_repo
+        .get_average_update_interval(id, start_time, end_time)
+        .await
+    {
+        Ok(interval) => interval,
+        Err(e) => {
+            tracing::error!(
+                "Failed to get average update interval for receiver {}: {}",
+                id,
+                e
+            );
+            return json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to calculate statistics",
+            )
+            .into_response();
+        }
+    };
+
+    // Get total status count
+    let total_count = match status_repo.count_for_receiver(id).await {
+        Ok(count) => count,
+        Err(e) => {
+            tracing::error!("Failed to count statuses for receiver {}: {}", id, e);
+            return json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to calculate statistics",
+            )
+            .into_response();
+        }
+    };
+
+    // Get fix counts grouped by APRS type
+    let fix_counts = match fixes_repo
+        .get_fix_counts_by_aprs_type_for_source(&receiver.callsign)
+        .await
+    {
+        Ok(counts) => counts,
+        Err(e) => {
+            tracing::error!(
+                "Failed to get fix counts by APRS type for receiver {}: {}",
+                id,
+                e
+            );
+            return json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to get fix counts by APRS type",
+            )
+            .into_response();
+        }
+    };
+
+    Json(ReceiverAggregateStatsResponse {
+        average_update_interval_seconds: avg_interval_seconds,
+        total_status_count: total_count,
+        days_included: params.days,
+        fix_counts_by_aprs_type: fix_counts,
+    })
+    .into_response()
+}
+
+#[derive(Debug, Serialize)]
+pub struct ReceiverAggregateStatsResponse {
+    pub average_update_interval_seconds: Option<f64>,
+    pub total_status_count: i64,
+    pub days_included: Option<i64>,
+    pub fix_counts_by_aprs_type: Vec<AprsTypeCount>,
+}

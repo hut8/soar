@@ -178,7 +178,8 @@ impl ReceiverStatusRepository {
     }
 
     /// Get average statistics for a receiver over a time period
-    /// Note: Uses raw SQL because Diesel's tuple size limit (12) is exceeded by the 13 aggregate fields
+    /// This method is not currently used but kept for potential future use
+    #[allow(dead_code)]
     pub async fn get_receiver_averages(
         &self,
         receiver_id: Uuid,

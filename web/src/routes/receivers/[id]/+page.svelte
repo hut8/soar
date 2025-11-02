@@ -83,12 +83,6 @@
 		total_pages: number;
 	}
 
-	interface ReceiverStatistics {
-		average_update_interval_seconds: number | null;
-		total_status_count: number;
-		days_included: number | null;
-	}
-
 	interface RawMessage {
 		id: string;
 		raw_message: string;
@@ -108,28 +102,28 @@
 		count: number;
 	}
 
-	interface FixCountsByAprsTypeResponse {
-		counts: AprsTypeCount[];
+	interface AggregateStatsResponse {
+		average_update_interval_seconds: number | null;
+		total_status_count: number;
+		days_included: number | null;
+		fix_counts_by_aprs_type: AprsTypeCount[];
 	}
 
 	let receiver = $state<Receiver | null>(null);
 	let fixes = $state<Fix[] | null>(null);
 	let statuses = $state<ReceiverStatus[]>([]);
 	let rawMessages = $state<RawMessage[] | null>(null);
-	let statistics = $state<ReceiverStatistics | null>(null);
-	let fixCountsByAprsType = $state<AprsTypeCount[] | null>(null);
+	let aggregateStats = $state<AggregateStatsResponse | null>(null);
 	let loading = $state(true);
 	let loadingFixes = $state(false);
 	let loadingStatuses = $state(false);
 	let loadingRawMessages = $state(false);
-	let loadingStatistics = $state(false);
-	let loadingFixCounts = $state(false);
+	let loadingAggregateStats = $state(false);
 	let error = $state('');
 	let fixesError = $state('');
 	let statusesError = $state('');
 	let rawMessagesError = $state('');
-	let statisticsError = $state('');
-	let fixCountsError = $state('');
+	let aggregateStatsError = $state('');
 
 	let fixesPage = $state(1);
 	let fixesTotalPages = $state(1);
@@ -148,8 +142,7 @@
 		if (receiverId) {
 			await loadReceiver();
 			await loadStatuses(); // Load status reports by default (first tab)
-			await loadStatistics();
-			// Fixes and raw messages are loaded lazily when their tabs are clicked
+			// Aggregate stats, fixes, and raw messages are loaded lazily when their tabs are clicked
 		}
 	});
 
@@ -167,15 +160,15 @@
 		}
 	});
 
-	// Load fix counts when switching to aggregate stats tab
+	// Load aggregate stats when switching to aggregate stats tab
 	$effect(() => {
 		if (
 			activeTab === 'aggregate-stats' &&
 			receiverId &&
-			fixCountsByAprsType === null &&
-			!loadingFixCounts
+			aggregateStats === null &&
+			!loadingAggregateStats
 		) {
-			loadFixCounts();
+			loadAggregateStats();
 		}
 	});
 
@@ -233,19 +226,27 @@
 		}
 	}
 
-	async function loadStatistics() {
-		loadingStatistics = true;
-		statisticsError = '';
+	async function loadAggregateStats() {
+		loadingAggregateStats = true;
+		aggregateStatsError = '';
 
 		try {
-			const response = await serverCall<ReceiverStatistics>(`/receivers/${receiverId}/statistics`);
-			statistics = response;
+			const response = await serverCall<AggregateStatsResponse>(
+				`/receivers/${receiverId}/aggregate-stats`
+			);
+			aggregateStats = response;
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-			statisticsError = `Failed to load statistics: ${errorMessage}`;
-			console.error('Error loading statistics:', err);
+			aggregateStatsError = `Failed to load aggregate statistics: ${errorMessage}`;
+			console.error('Error loading aggregate statistics:', err);
+			aggregateStats = {
+				average_update_interval_seconds: null,
+				total_status_count: 0,
+				days_included: null,
+				fix_counts_by_aprs_type: []
+			}; // Set to default on error to prevent retry loop
 		} finally {
-			loadingStatistics = false;
+			loadingAggregateStats = false;
 		}
 	}
 
@@ -266,25 +267,6 @@
 			rawMessages = []; // Set to empty array on error to prevent retry loop
 		} finally {
 			loadingRawMessages = false;
-		}
-	}
-
-	async function loadFixCounts() {
-		loadingFixCounts = true;
-		fixCountsError = '';
-
-		try {
-			const response = await serverCall<FixCountsByAprsTypeResponse>(
-				`/receivers/${receiverId}/fix-counts-by-aprs-type`
-			);
-			fixCountsByAprsType = response.counts || [];
-		} catch (err) {
-			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-			fixCountsError = `Failed to load fix counts: ${errorMessage}`;
-			console.error('Error loading fix counts:', err);
-			fixCountsByAprsType = []; // Set to empty array on error to prevent retry loop
-		} finally {
-			loadingFixCounts = false;
 		}
 	}
 
@@ -560,55 +542,6 @@
 						</div>
 					</div>
 				</div>
-			</div>
-
-			<!-- Statistics Section -->
-			<div class="card p-6">
-				<h2 class="mb-4 flex items-center gap-2 h2">
-					<Signal class="h-6 w-6" />
-					Statistics
-				</h2>
-
-				{#if loadingStatistics}
-					<div class="flex items-center justify-center space-x-4 p-8">
-						<ProgressRing size="w-6 h-6" />
-						<span>Loading statistics...</span>
-					</div>
-				{:else if statisticsError}
-					<div class="alert preset-filled-error-500">
-						<p>{statisticsError}</p>
-					</div>
-				{:else if statistics}
-					<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-						<!-- Average Update Interval -->
-						<div class="space-y-2 card p-4">
-							<p class="text-surface-600-300-token text-sm">Average Time Between Updates</p>
-							<p class="text-2xl font-semibold">
-								{formatDuration(statistics.average_update_interval_seconds)}
-							</p>
-						</div>
-
-						<!-- Total Status Count -->
-						<div class="space-y-2 card p-4">
-							<p class="text-surface-600-300-token text-sm">Total Status Updates</p>
-							<p class="text-2xl font-semibold">
-								{statistics.total_status_count.toLocaleString()}
-							</p>
-						</div>
-
-						<!-- Time Period -->
-						<div class="space-y-2 card p-4">
-							<p class="text-surface-600-300-token text-sm">Time Period</p>
-							<p class="text-2xl font-semibold">
-								{#if statistics.days_included}
-									Last {statistics.days_included} days
-								{:else}
-									All time
-								{/if}
-							</p>
-						</div>
-					</div>
-				{/if}
 			</div>
 
 			<!-- Status Reports, Raw Messages, and Received Fixes Section with Tabs -->
@@ -955,42 +888,80 @@
 						<!-- Aggregate Statistics Tab Content -->
 						<Tabs.Panel value="aggregate-stats">
 							<div class="mt-4">
-								{#if loadingFixCounts}
+								{#if loadingAggregateStats}
 									<div class="flex items-center justify-center space-x-4 p-8">
 										<ProgressRing size="w-6 h-6" />
 										<span>Loading aggregate statistics...</span>
 									</div>
-								{:else if fixCountsError}
+								{:else if aggregateStatsError}
 									<div class="alert preset-filled-error-500">
-										<p>{fixCountsError}</p>
+										<p>{aggregateStatsError}</p>
 									</div>
-								{:else if fixCountsByAprsType !== null && fixCountsByAprsType.length === 0}
-									<p class="text-surface-500-400-token p-4 text-center">
-										No fix data available for this receiver
-									</p>
-								{:else if fixCountsByAprsType !== null}
-									<div class="space-y-4">
-										<h3 class="h3">Fixes Received by APRS Type</h3>
-										<div class="table-container">
-											<table class="table-hover table">
-												<thead>
-													<tr>
-														<th>APRS Type</th>
-														<th class="text-right">Count</th>
-													</tr>
-												</thead>
-												<tbody>
-													{#each fixCountsByAprsType as typeCount (typeCount.aprs_type)}
-														<tr>
-															<td class="font-mono">{typeCount.aprs_type}</td>
-															<td class="text-right font-semibold">
-																{typeCount.count.toLocaleString()}
-															</td>
-														</tr>
-													{/each}
-												</tbody>
-											</table>
+								{:else if aggregateStats !== null}
+									<div class="space-y-6">
+										<!-- Statistics Summary Cards -->
+										<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+											<!-- Average Update Interval -->
+											<div class="space-y-2 card p-4">
+												<p class="text-surface-600-300-token text-sm">
+													Average Time Between Updates
+												</p>
+												<p class="text-2xl font-semibold">
+													{formatDuration(aggregateStats.average_update_interval_seconds)}
+												</p>
+											</div>
+
+											<!-- Total Status Count -->
+											<div class="space-y-2 card p-4">
+												<p class="text-surface-600-300-token text-sm">Total Status Updates</p>
+												<p class="text-2xl font-semibold">
+													{aggregateStats.total_status_count.toLocaleString()}
+												</p>
+											</div>
+
+											<!-- Time Period -->
+											<div class="space-y-2 card p-4">
+												<p class="text-surface-600-300-token text-sm">Time Period</p>
+												<p class="text-2xl font-semibold">
+													{#if aggregateStats.days_included}
+														Last {aggregateStats.days_included} days
+													{:else}
+														All time
+													{/if}
+												</p>
+											</div>
 										</div>
+
+										<!-- Fixes by APRS Type -->
+										{#if aggregateStats.fix_counts_by_aprs_type.length === 0}
+											<p class="text-surface-500-400-token p-4 text-center">
+												No fix data available for this receiver
+											</p>
+										{:else}
+											<div class="space-y-4">
+												<h3 class="h3">Fixes Received by APRS Type</h3>
+												<div class="table-container">
+													<table class="table-hover table">
+														<thead>
+															<tr>
+																<th>APRS Type</th>
+																<th class="text-right">Count</th>
+															</tr>
+														</thead>
+														<tbody>
+															{#each aggregateStats.fix_counts_by_aprs_type as typeCount (typeCount.aprs_type)}
+																<tr>
+																	<td class="font-mono">{typeCount.aprs_type}</td>
+																	<td class="text-right font-semibold">
+																		{typeCount.count.toLocaleString()}
+																	</td>
+																</tr>
+															{/each}
+														</tbody>
+													</table>
+												</div>
+											</div>
+										{/if}
 									</div>
 								{/if}
 							</div>
