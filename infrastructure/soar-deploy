@@ -129,9 +129,41 @@ for timer in "${TIMERS[@]}"; do
     fi
 done
 
+# Wait for services to fully terminate and release file handles
+log_info "Waiting for services to fully terminate..."
+sleep 3
+
 # Update /usr/local/bin/soar symlink to point to new version
 # This allows non-APRS services to use the new binary when they restart
 log_info "Updating /usr/local/bin/soar symlink to point to new version..."
+
+# If /usr/local/bin/soar is a regular file (not a symlink), we need to handle it specially
+if [ -f /usr/local/bin/soar ] && [ ! -L /usr/local/bin/soar ]; then
+    log_warn "/usr/local/bin/soar is a regular file, not a symlink. Converting to symlink..."
+
+    # Check if any process is using it
+    if command -v lsof >/dev/null 2>&1; then
+        PROCESSES_USING_BINARY=$(lsof /usr/local/bin/soar 2>/dev/null | tail -n +2 || true)
+        if [ -n "$PROCESSES_USING_BINARY" ]; then
+            log_warn "Processes still using /usr/local/bin/soar:"
+            echo "$PROCESSES_USING_BINARY"
+            log_warn "Force-killing processes to allow symlink creation..."
+            lsof -t /usr/local/bin/soar 2>/dev/null | xargs -r kill -9 || true
+            sleep 2
+        fi
+    fi
+
+    # Remove the old file and create symlink
+    rm -f /usr/local/bin/soar || {
+        log_error "Cannot remove /usr/local/bin/soar - still in use"
+        log_error "Trying one more time with force kill..."
+        pkill -9 -f /usr/local/bin/soar || true
+        sleep 2
+        rm -f /usr/local/bin/soar
+    }
+fi
+
+# Create or update the symlink
 ln -sf "${VERSIONED_BINARY}" /usr/local/bin/soar
 log_info "Symlink updated successfully"
 
