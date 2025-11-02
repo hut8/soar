@@ -177,46 +177,6 @@ impl ReceiverStatusRepository {
         Ok(count)
     }
 
-    /// Get average statistics for a receiver over a time period
-    /// This method is not currently used but kept for potential future use
-    #[allow(dead_code)]
-    pub async fn get_receiver_averages(
-        &self,
-        receiver_id: Uuid,
-        start_time: DateTime<Utc>,
-        end_time: DateTime<Utc>,
-    ) -> Result<Option<ReceiverAverages>> {
-        let mut conn = self.get_connection()?;
-
-        let sql = r#"
-            SELECT
-                AVG(cpu_load) as avg_cpu_load,
-                AVG(ram_free) as avg_ram_free,
-                AVG(ram_total) as avg_ram_total,
-                AVG(voltage) as avg_voltage,
-                AVG(amperage) as avg_amperage,
-                AVG(cpu_temperature) as avg_cpu_temperature,
-                AVG(visible_senders) as avg_visible_senders,
-                AVG(latency) as avg_latency,
-                AVG(senders) as avg_senders,
-                AVG(noise) as avg_noise,
-                AVG(senders_signal_quality) as avg_senders_signal_quality,
-                AVG(lag) as avg_lag,
-                COUNT(*) as sample_count
-            FROM receiver_statuses
-            WHERE receiver_id = $1 AND received_at BETWEEN $2 AND $3
-        "#;
-
-        let result = diesel::sql_query(sql)
-            .bind::<diesel::sql_types::Uuid, _>(receiver_id)
-            .bind::<diesel::sql_types::Timestamptz, _>(start_time)
-            .bind::<diesel::sql_types::Timestamptz, _>(end_time)
-            .get_result::<ReceiverAverages>(&mut conn)
-            .optional()?;
-
-        Ok(result)
-    }
-
     /// Get statuses for a receiver with pagination
     pub async fn get_statuses_by_receiver_paginated(
         &self,
@@ -305,37 +265,6 @@ impl ReceiverStatusRepository {
 struct AverageIntervalResult {
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Double>)]
     avg_interval: Option<f64>,
-}
-
-/// Statistics summary for a receiver over a time period
-#[derive(Debug, Clone, QueryableByName)]
-pub struct ReceiverAverages {
-    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Numeric>)]
-    pub avg_cpu_load: Option<bigdecimal::BigDecimal>,
-    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Numeric>)]
-    pub avg_ram_free: Option<bigdecimal::BigDecimal>,
-    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Numeric>)]
-    pub avg_ram_total: Option<bigdecimal::BigDecimal>,
-    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Numeric>)]
-    pub avg_voltage: Option<bigdecimal::BigDecimal>,
-    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Numeric>)]
-    pub avg_amperage: Option<bigdecimal::BigDecimal>,
-    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Numeric>)]
-    pub avg_cpu_temperature: Option<bigdecimal::BigDecimal>,
-    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Double>)]
-    pub avg_visible_senders: Option<f64>,
-    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Numeric>)]
-    pub avg_latency: Option<bigdecimal::BigDecimal>,
-    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Double>)]
-    pub avg_senders: Option<f64>,
-    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Numeric>)]
-    pub avg_noise: Option<bigdecimal::BigDecimal>,
-    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Numeric>)]
-    pub avg_senders_signal_quality: Option<bigdecimal::BigDecimal>,
-    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Double>)]
-    pub avg_lag: Option<f64>,
-    #[diesel(sql_type = diesel::sql_types::BigInt)]
-    pub sample_count: i64,
 }
 
 #[cfg(test)]
