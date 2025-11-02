@@ -48,6 +48,22 @@ The SOAR dashboard (`soar-dashboard.json`) includes:
 3. **Receiver Status Updates Rate (1h)** - Current rate over 1-hour window
 4. **Receiver Status Updates Timeline** - Timeline showing increase in updates over 5-minute windows
 
+## Quick Manual Installation (On Server)
+
+If you're working directly on the server and need to update dashboards without doing a full deployment:
+
+```bash
+cd /path/to/soar
+sudo ./infrastructure/install-grafana-dashboards
+```
+
+This script will:
+- Install all dashboard JSON files to `/etc/grafana/dashboards/`
+- Update the provisioning configuration
+- Restart Grafana to load the dashboards
+
+**Requirements**: Must be run from the SOAR repository root with sudo.
+
 ## Manual Import (For Reference/Troubleshooting)
 
 If you need to manually import dashboards (e.g., for testing or troubleshooting), you can use these methods:
