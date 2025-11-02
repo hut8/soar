@@ -214,7 +214,28 @@ impl DataLoadReport {
             if let Some(failed_items) = &entity.failed_items
                 && !failed_items.is_empty()
             {
-                let items_list = failed_items.join(", ");
+                // Parse failed items which may contain lat/lon coordinates in format: "callsign|lat,lon"
+                let mut items_html = String::new();
+                for (i, item) in failed_items.iter().enumerate() {
+                    if i > 0 {
+                        items_html.push_str(", ");
+                    }
+
+                    // Check if item contains coordinates (format: "callsign|lat,lon")
+                    if let Some((callsign, coords)) = item.split_once('|') {
+                        // Create a Google Maps link for the coordinates
+                        let maps_url =
+                            format!("https://www.google.com/maps/search/?api=1&query={}", coords);
+                        items_html.push_str(&format!(
+                            r#"{} (<a href="{}" target="_blank" style="color: #721c24; text-decoration: underline;">{}</a>)"#,
+                            callsign, maps_url, coords
+                        ));
+                    } else {
+                        // No coordinates, just display the item as-is
+                        items_html.push_str(item);
+                    }
+                }
+
                 html.push_str(&format!(
                     r#"
             <tr>
@@ -225,7 +246,7 @@ impl DataLoadReport {
                 </td>
             </tr>"#,
                     failed_items.len(),
-                    items_list
+                    items_html
                 ));
             }
         }
