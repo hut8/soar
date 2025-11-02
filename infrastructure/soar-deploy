@@ -76,20 +76,37 @@ TIMERS=(
     "soar-archive.timer"
 )
 
-# Implement zero-downtime deployment for soar-aprs-ingest using blue-green strategy
+# Determine deployment version/timestamp for versioned binary
+if [ -f "${DEPLOY_DIR}/VERSION" ]; then
+    DEPLOY_VERSION=$(cat "${DEPLOY_DIR}/VERSION" | tr -d '\n' | tr '/' '-')
+    log_info "Deploying version: ${DEPLOY_VERSION}"
+else
+    DEPLOY_VERSION=$(date +%Y%m%d-%H%M%S)
+    log_info "No VERSION file found, using timestamp: ${DEPLOY_VERSION}"
+fi
+
+# Install binary to versioned location (key for zero-downtime: different path!)
+VERSIONED_BINARY="/usr/local/bin/soar-${DEPLOY_VERSION}"
+log_info "Installing new binary to ${VERSIONED_BINARY}..."
+install -m 755 -o root -g root "$DEPLOY_DIR/soar" "${VERSIONED_BINARY}"
+log_info "Versioned binary installed successfully"
+
+# Check if soar-aprs-ingest is running - it needs zero-downtime deployment
 log_info "Checking if soar-aprs-ingest.service is running..."
 APRS_INGEST_RUNNING=false
 if systemctl is-active --quiet "soar-aprs-ingest.service"; then
-    log_info "soar-aprs-ingest.service is running, will use blue-green deployment"
+    log_info "soar-aprs-ingest.service is running, will use zero-downtime blue-green deployment"
     APRS_INGEST_RUNNING=true
 fi
 
-# Stop all services before deployment (except soar-aprs-ingest if using blue-green)
-log_info "Stopping SOAR services..."
+# Stop non-APRS services (they don't need zero-downtime)
+log_info "Stopping SOAR services (except APRS ingester)..."
 for service in "${SERVICES[@]}"; do
-    # Skip soar-aprs-ingest.service if it's running - we'll handle it specially
-    if [ "$service" = "soar-aprs-ingest.service" ] && [ "$APRS_INGEST_RUNNING" = true ]; then
-        log_info "Skipping stop of $service (will use blue-green deployment)"
+    # Skip soar-aprs-ingest - we'll handle it with blue-green deployment
+    if [ "$service" = "soar-aprs-ingest.service" ]; then
+        if [ "$APRS_INGEST_RUNNING" = true ]; then
+            log_info "Keeping $service running for zero-downtime deployment"
+        fi
         continue
     fi
 
@@ -112,25 +129,11 @@ for timer in "${TIMERS[@]}"; do
     fi
 done
 
-# Backup current binary
-if [ -f /usr/local/bin/soar ]; then
-    BACKUP_FILE="/home/soar/soar.backup.$(date +%s)"
-    log_info "Backing up current binary to $BACKUP_FILE..."
-    cp /usr/local/bin/soar "$BACKUP_FILE"
-    chown soar:soar "$BACKUP_FILE"
-else
-    log_warn "No existing binary to backup"
-fi
-
-# Install new binary
-# Copy to temp location first, then atomically move to avoid "Text file busy" errors
-log_info "Installing new binary..."
-TEMP_BINARY="/usr/local/bin/soar.new.$$"
-cp "$DEPLOY_DIR/soar" "$TEMP_BINARY"
-chmod +x "$TEMP_BINARY"
-chown root:root "$TEMP_BINARY"
-mv -f "$TEMP_BINARY" /usr/local/bin/soar
-log_info "Binary installed successfully"
+# Update /usr/local/bin/soar symlink to point to new version
+# This allows non-APRS services to use the new binary when they restart
+log_info "Updating /usr/local/bin/soar symlink to point to new version..."
+ln -sf "${VERSIONED_BINARY}" /usr/local/bin/soar
+log_info "Symlink updated successfully"
 
 # Install service files
 log_info "Installing service files..."
@@ -232,10 +235,11 @@ systemctl daemon-reload
 
 # Handle blue-green deployment for soar-aprs-ingest if it was running
 if [ "$APRS_INGEST_RUNNING" = true ]; then
-    log_info "Starting blue-green deployment for soar-aprs-ingest.service..."
+    log_info "Starting zero-downtime blue-green deployment for soar-aprs-ingest.service..."
+    log_info "Primary is running old binary, secondary will use: ${VERSIONED_BINARY}"
 
-    # Start secondary instance with new binary (uses systemd-run to avoid lock conflict)
-    log_info "Starting secondary APRS ingester instance..."
+    # Start secondary instance with NEW VERSIONED BINARY (key fix: different binary path!)
+    log_info "Starting secondary APRS ingester instance with new binary..."
     SECONDARY_UNIT="soar-aprs-ingest-secondary"
     SECONDARY_HEALTH_PORT=9094  # Different port from primary (9093)
 
@@ -245,7 +249,7 @@ if [ "$APRS_INGEST_RUNNING" = true ]; then
         --setenv=SOAR_ENV=production \
         --setenv=METRICS_PORT="$SECONDARY_HEALTH_PORT" \
         --property=EnvironmentFile=/etc/soar/env \
-        /usr/local/bin/soar ingest-aprs \
+        "${VERSIONED_BINARY}" ingest-aprs \
         || { log_error "Failed to start secondary APRS ingester"; APRS_INGEST_RUNNING=false; }
 
     if [ "$APRS_INGEST_RUNNING" = true ]; then
@@ -297,13 +301,15 @@ if [ "$APRS_INGEST_RUNNING" = true ]; then
             # Stop secondary instance
             systemctl stop "$SECONDARY_UNIT" || log_warn "Failed to stop secondary ingester"
 
-            # Restore backup binary if it exists
-            if [ -f "$BACKUP_FILE" ]; then
-                log_warn "Restoring previous binary from backup..."
-                cp "$BACKUP_FILE" /usr/local/bin/soar
-                chmod +x /usr/local/bin/soar
-                chown root:root /usr/local/bin/soar
-                log_info "Previous binary restored"
+            # Remove the new versioned binary since deployment failed
+            log_warn "Removing failed binary: ${VERSIONED_BINARY}"
+            rm -f "${VERSIONED_BINARY}"
+
+            # Restore symlink to previous version (if one exists)
+            PREVIOUS_BINARY=$(ls -t /usr/local/bin/soar-* 2>/dev/null | head -n 1 || echo "")
+            if [ -n "$PREVIOUS_BINARY" ]; then
+                log_info "Restoring symlink to previous binary: ${PREVIOUS_BINARY}"
+                ln -sf "${PREVIOUS_BINARY}" /usr/local/bin/soar
             fi
 
             # Exit with error to indicate deployment failure
@@ -312,6 +318,11 @@ if [ "$APRS_INGEST_RUNNING" = true ]; then
         fi
     fi
 fi
+
+# Clean up old versioned binaries (keep last 5)
+log_info "Cleaning up old versioned binaries (keeping 5 most recent)..."
+ls -t /usr/local/bin/soar-* 2>/dev/null | tail -n +6 | xargs -r rm -f
+log_info "Cleanup complete"
 
 # Enable and start services
 log_info "Enabling and starting SOAR services..."
