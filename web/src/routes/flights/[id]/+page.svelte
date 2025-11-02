@@ -46,6 +46,7 @@
 	let map = $state<google.maps.Map>();
 	let flightPath = $state<google.maps.Polyline | null>(null);
 	let altitudeChartContainer = $state<HTMLElement>();
+	let altitudeChartInitialized = $state(false);
 	let altitudeInfoWindow = $state<google.maps.InfoWindow | null>(null);
 	let fixMarkers: google.maps.marker.AdvancedMarkerElement[] = [];
 	let pollingInterval: ReturnType<typeof setInterval> | null = null;
@@ -514,6 +515,7 @@
 			}
 
 			Plotly.react(altitudeChartContainer, traces, getPlotlyLayout($theme === 'dark'));
+			altitudeChartInitialized = true;
 		}
 	}
 
@@ -741,8 +743,8 @@
 		// Access theme to make this effect reactive
 		const currentTheme = $theme;
 
-		// Update chart if it exists
-		if (altitudeChartContainer && Plotly && data.fixes.length > 0) {
+		// Update chart if it exists and has been initialized
+		if (altitudeChartInitialized && altitudeChartContainer && Plotly && data.fixes.length > 0) {
 			const isDark = currentTheme === 'dark';
 			Plotly.relayout(altitudeChartContainer, getPlotlyLayout(isDark));
 		}

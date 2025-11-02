@@ -83,12 +83,6 @@
 		total_pages: number;
 	}
 
-	interface ReceiverStatistics {
-		average_update_interval_seconds: number | null;
-		total_status_count: number;
-		days_included: number | null;
-	}
-
 	interface RawMessage {
 		id: string;
 		raw_message: string;
@@ -108,8 +102,20 @@
 		count: number;
 	}
 
-	interface FixCountsByAprsTypeResponse {
-		counts: AprsTypeCount[];
+	interface DeviceFixCount {
+		device_id: string;
+		count: number;
+	}
+
+	interface ReceiverStatistics {
+		average_update_interval_seconds: number | null;
+		total_status_count: number;
+		days_included: number | null;
+	}
+
+	interface AggregateStatsResponse {
+		fix_counts_by_aprs_type: AprsTypeCount[];
+		fix_counts_by_device: DeviceFixCount[];
 	}
 
 	let receiver = $state<Receiver | null>(null);
@@ -117,19 +123,19 @@
 	let statuses = $state<ReceiverStatus[]>([]);
 	let rawMessages = $state<RawMessage[] | null>(null);
 	let statistics = $state<ReceiverStatistics | null>(null);
-	let fixCountsByAprsType = $state<AprsTypeCount[] | null>(null);
+	let aggregateStats = $state<AggregateStatsResponse | null>(null);
 	let loading = $state(true);
 	let loadingFixes = $state(false);
 	let loadingStatuses = $state(false);
 	let loadingRawMessages = $state(false);
 	let loadingStatistics = $state(false);
-	let loadingFixCounts = $state(false);
+	let loadingAggregateStats = $state(false);
 	let error = $state('');
 	let fixesError = $state('');
 	let statusesError = $state('');
 	let rawMessagesError = $state('');
 	let statisticsError = $state('');
-	let fixCountsError = $state('');
+	let aggregateStatsError = $state('');
 
 	let fixesPage = $state(1);
 	let fixesTotalPages = $state(1);
@@ -148,8 +154,8 @@
 		if (receiverId) {
 			await loadReceiver();
 			await loadStatuses(); // Load status reports by default (first tab)
-			await loadStatistics();
-			// Fixes and raw messages are loaded lazily when their tabs are clicked
+			await loadStatistics(); // Load statistics (cheap and important)
+			// Aggregate stats, fixes, and raw messages are loaded lazily when their tabs are clicked
 		}
 	});
 
@@ -167,15 +173,15 @@
 		}
 	});
 
-	// Load fix counts when switching to aggregate stats tab
+	// Load aggregate stats when switching to aggregate stats tab
 	$effect(() => {
 		if (
 			activeTab === 'aggregate-stats' &&
 			receiverId &&
-			fixCountsByAprsType === null &&
-			!loadingFixCounts
+			aggregateStats === null &&
+			!loadingAggregateStats
 		) {
-			loadFixCounts();
+			loadAggregateStats();
 		}
 	});
 
@@ -249,6 +255,28 @@
 		}
 	}
 
+	async function loadAggregateStats() {
+		loadingAggregateStats = true;
+		aggregateStatsError = '';
+
+		try {
+			const response = await serverCall<AggregateStatsResponse>(
+				`/receivers/${receiverId}/aggregate-stats`
+			);
+			aggregateStats = response;
+		} catch (err) {
+			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+			aggregateStatsError = `Failed to load aggregate statistics: ${errorMessage}`;
+			console.error('Error loading aggregate statistics:', err);
+			aggregateStats = {
+				fix_counts_by_aprs_type: [],
+				fix_counts_by_device: []
+			}; // Set to default on error to prevent retry loop
+		} finally {
+			loadingAggregateStats = false;
+		}
+	}
+
 	async function loadRawMessages() {
 		loadingRawMessages = true;
 		rawMessagesError = '';
@@ -266,25 +294,6 @@
 			rawMessages = []; // Set to empty array on error to prevent retry loop
 		} finally {
 			loadingRawMessages = false;
-		}
-	}
-
-	async function loadFixCounts() {
-		loadingFixCounts = true;
-		fixCountsError = '';
-
-		try {
-			const response = await serverCall<FixCountsByAprsTypeResponse>(
-				`/receivers/${receiverId}/fix-counts-by-aprs-type`
-			);
-			fixCountsByAprsType = response.counts || [];
-		} catch (err) {
-			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-			fixCountsError = `Failed to load fix counts: ${errorMessage}`;
-			console.error('Error loading fix counts:', err);
-			fixCountsByAprsType = []; // Set to empty array on error to prevent retry loop
-		} finally {
-			loadingFixCounts = false;
 		}
 	}
 
@@ -955,42 +964,86 @@
 						<!-- Aggregate Statistics Tab Content -->
 						<Tabs.Panel value="aggregate-stats">
 							<div class="mt-4">
-								{#if loadingFixCounts}
+								{#if loadingAggregateStats}
 									<div class="flex items-center justify-center space-x-4 p-8">
 										<ProgressRing size="w-6 h-6" />
 										<span>Loading aggregate statistics...</span>
 									</div>
-								{:else if fixCountsError}
+								{:else if aggregateStatsError}
 									<div class="alert preset-filled-error-500">
-										<p>{fixCountsError}</p>
+										<p>{aggregateStatsError}</p>
 									</div>
-								{:else if fixCountsByAprsType !== null && fixCountsByAprsType.length === 0}
-									<p class="text-surface-500-400-token p-4 text-center">
-										No fix data available for this receiver
-									</p>
-								{:else if fixCountsByAprsType !== null}
-									<div class="space-y-4">
-										<h3 class="h3">Fixes Received by APRS Type</h3>
-										<div class="table-container">
-											<table class="table-hover table">
-												<thead>
-													<tr>
-														<th>APRS Type</th>
-														<th class="text-right">Count</th>
-													</tr>
-												</thead>
-												<tbody>
-													{#each fixCountsByAprsType as typeCount (typeCount.aprs_type)}
-														<tr>
-															<td class="font-mono">{typeCount.aprs_type}</td>
-															<td class="text-right font-semibold">
-																{typeCount.count.toLocaleString()}
-															</td>
-														</tr>
-													{/each}
-												</tbody>
-											</table>
-										</div>
+								{:else if aggregateStats !== null}
+									<div class="space-y-6">
+										<!-- Fixes by APRS Type -->
+										{#if aggregateStats.fix_counts_by_aprs_type.length === 0 && aggregateStats.fix_counts_by_device.length === 0}
+											<p class="text-surface-500-400-token p-4 text-center">
+												No fix data available for this receiver
+											</p>
+										{:else}
+											<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+												<!-- Fixes by APRS Type -->
+												{#if aggregateStats.fix_counts_by_aprs_type.length > 0}
+													<div class="space-y-4">
+														<h3 class="h3">Fixes Received by APRS Type</h3>
+														<div class="table-container">
+															<table class="table-hover table">
+																<thead>
+																	<tr>
+																		<th>APRS Type</th>
+																		<th class="text-right">Count</th>
+																	</tr>
+																</thead>
+																<tbody>
+																	{#each aggregateStats.fix_counts_by_aprs_type as typeCount (typeCount.aprs_type)}
+																		<tr>
+																			<td class="font-mono">{typeCount.aprs_type}</td>
+																			<td class="text-right font-semibold">
+																				{typeCount.count.toLocaleString()}
+																			</td>
+																		</tr>
+																	{/each}
+																</tbody>
+															</table>
+														</div>
+													</div>
+												{/if}
+
+												<!-- Fixes by Device -->
+												{#if aggregateStats.fix_counts_by_device.length > 0}
+													<div class="space-y-4">
+														<h3 class="h3">Fixes Received by Device</h3>
+														<div class="table-container">
+															<table class="table-hover table">
+																<thead>
+																	<tr>
+																		<th>Device</th>
+																		<th class="text-right">Count</th>
+																	</tr>
+																</thead>
+																<tbody>
+																	{#each aggregateStats.fix_counts_by_device as deviceCount (deviceCount.device_id)}
+																		<tr>
+																			<td>
+																				<a
+																					href={resolve(`/devices/${deviceCount.device_id}`)}
+																					class="font-mono text-primary-500 hover:text-primary-600"
+																				>
+																					{deviceCount.device_id}
+																				</a>
+																			</td>
+																			<td class="text-right font-semibold">
+																				{deviceCount.count.toLocaleString()}
+																			</td>
+																		</tr>
+																	{/each}
+																</tbody>
+															</table>
+														</div>
+													</div>
+												{/if}
+											</div>
+										{/if}
 									</div>
 								{/if}
 							</div>
