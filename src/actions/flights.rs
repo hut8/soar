@@ -281,7 +281,7 @@ pub async fn get_flight_spline_path(
 
     // Get fixes for the flight
     let start_time = flight.takeoff_time.unwrap_or(flight.created_at);
-    let end_time = flight.landing_time.unwrap_or_else(chrono::Utc::now);
+    let end_time = flight.landing_time.unwrap_or(flight.last_fix_at);
 
     let fixes = match fixes_repo
         .get_fixes_for_aircraft_with_time_range(

@@ -351,7 +351,7 @@ impl Flight {
         fixes_repo: &crate::fixes_repo::FixesRepository,
     ) -> Result<Option<f64>> {
         let start_time = self.takeoff_time.unwrap_or(self.created_at);
-        let end_time = self.landing_time.unwrap_or_else(Utc::now);
+        let end_time = self.landing_time.unwrap_or(self.last_fix_at);
 
         let fixes = fixes_repo
             .get_fixes_for_aircraft_with_time_range(
@@ -411,7 +411,7 @@ impl Flight {
         };
 
         let start_time = self.takeoff_time.unwrap_or(self.created_at);
-        let end_time = self.landing_time.unwrap_or_else(Utc::now);
+        let end_time = self.landing_time.unwrap_or(self.last_fix_at);
 
         let fixes = fixes_repo
             .get_fixes_for_aircraft_with_time_range(
@@ -454,7 +454,7 @@ impl Flight {
     ) -> Result<String> {
         // Get all fixes for this flight based on aircraft ID and time range
         let start_time = self.takeoff_time.unwrap_or(self.created_at);
-        let end_time = self.landing_time.unwrap_or_else(Utc::now);
+        let end_time = self.landing_time.unwrap_or(self.last_fix_at);
 
         let fixes = fixes_repo
             .get_fixes_for_aircraft_with_time_range(
