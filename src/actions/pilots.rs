@@ -36,6 +36,17 @@ pub struct FlightPilotsResponse {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct CreatePilotRequest {
+    pub first_name: String,
+    pub last_name: String,
+    pub is_licensed: bool,
+    pub is_instructor: bool,
+    pub is_tow_pilot: bool,
+    pub is_examiner: bool,
+    pub club_id: Option<Uuid>,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct LinkPilotRequest {
     pub pilot_id: Uuid,
     pub is_tow_pilot: bool,
@@ -76,6 +87,32 @@ pub async fn get_pilots_by_club(
                 "Failed to get pilots for club",
             )
             .into_response()
+        }
+    }
+}
+
+/// Create a new pilot
+pub async fn create_pilot(
+    State(state): State<AppState>,
+    Json(request): Json<CreatePilotRequest>,
+) -> impl IntoResponse {
+    let pilots_repo = PilotsRepository::new(state.pool.clone());
+
+    let pilot = Pilot::new(
+        request.first_name,
+        request.last_name,
+        request.is_licensed,
+        request.is_instructor,
+        request.is_tow_pilot,
+        request.is_examiner,
+        request.club_id,
+    );
+
+    match pilots_repo.create_pilot(pilot.clone()).await {
+        Ok(()) => Json(PilotResponse { pilot }).into_response(),
+        Err(e) => {
+            tracing::error!("Failed to create pilot: {}", e);
+            json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to create pilot").into_response()
         }
     }
 }

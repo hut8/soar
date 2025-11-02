@@ -361,6 +361,9 @@ diesel::table! {
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
         club_id -> Nullable<Uuid>,
+        is_instructor -> Bool,
+        is_tow_pilot -> Bool,
+        is_examiner -> Bool,
     }
 }
 

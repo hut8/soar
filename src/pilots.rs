@@ -18,6 +18,15 @@ pub struct Pilot {
     /// Whether the pilot is licensed
     pub is_licensed: bool,
 
+    /// Whether the pilot is an instructor
+    pub is_instructor: bool,
+
+    /// Whether the pilot is a tow pilot
+    pub is_tow_pilot: bool,
+
+    /// Whether the pilot is an examiner
+    pub is_examiner: bool,
+
     /// Club that the pilot belongs to
     pub club_id: Option<Uuid>,
 
@@ -32,6 +41,9 @@ impl Pilot {
         first_name: String,
         last_name: String,
         is_licensed: bool,
+        is_instructor: bool,
+        is_tow_pilot: bool,
+        is_examiner: bool,
         club_id: Option<Uuid>,
     ) -> Self {
         let now = Utc::now();
@@ -40,6 +52,9 @@ impl Pilot {
             first_name,
             last_name,
             is_licensed,
+            is_instructor,
+            is_tow_pilot,
+            is_examiner,
             club_id,
             created_at: now,
             updated_at: now,
@@ -64,6 +79,9 @@ pub struct PilotModel {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub club_id: Option<Uuid>,
+    pub is_instructor: bool,
+    pub is_tow_pilot: bool,
+    pub is_examiner: bool,
 }
 
 /// Insert model for new pilots
@@ -75,6 +93,9 @@ pub struct NewPilotModel {
     pub last_name: String,
     pub is_licensed: bool,
     pub club_id: Option<Uuid>,
+    pub is_instructor: bool,
+    pub is_tow_pilot: bool,
+    pub is_examiner: bool,
 }
 
 /// Conversion from Pilot (API model) to PilotModel (database model)
@@ -88,6 +109,9 @@ impl From<Pilot> for PilotModel {
             created_at: pilot.created_at,
             updated_at: pilot.updated_at,
             club_id: pilot.club_id,
+            is_instructor: pilot.is_instructor,
+            is_tow_pilot: pilot.is_tow_pilot,
+            is_examiner: pilot.is_examiner,
         }
     }
 }
@@ -101,6 +125,9 @@ impl From<Pilot> for NewPilotModel {
             last_name: pilot.last_name,
             is_licensed: pilot.is_licensed,
             club_id: pilot.club_id,
+            is_instructor: pilot.is_instructor,
+            is_tow_pilot: pilot.is_tow_pilot,
+            is_examiner: pilot.is_examiner,
         }
     }
 }
@@ -114,6 +141,9 @@ impl From<PilotModel> for Pilot {
             last_name: model.last_name,
             is_licensed: model.is_licensed,
             club_id: model.club_id,
+            is_instructor: model.is_instructor,
+            is_tow_pilot: model.is_tow_pilot,
+            is_examiner: model.is_examiner,
             created_at: model.created_at,
             updated_at: model.updated_at,
         }
