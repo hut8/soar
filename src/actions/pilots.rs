@@ -213,3 +213,20 @@ pub async fn unlink_pilot_from_flight(
         }
     }
 }
+
+/// Soft delete a pilot by ID
+pub async fn delete_pilot(
+    Path(pilot_id): Path<Uuid>,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let pilots_repo = PilotsRepository::new(state.pool.clone());
+
+    match pilots_repo.delete_pilot(pilot_id).await {
+        Ok(true) => StatusCode::NO_CONTENT.into_response(),
+        Ok(false) => json_error(StatusCode::NOT_FOUND, "Pilot not found").into_response(),
+        Err(e) => {
+            tracing::error!("Failed to delete pilot {}: {}", pilot_id, e);
+            json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to delete pilot").into_response()
+        }
+    }
+}

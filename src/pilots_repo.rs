@@ -74,6 +74,7 @@ impl PilotsRepository {
 
             let pilot_models: Vec<PilotModel> = pilots
                 .filter(club_id.eq(Some(club_id_val)))
+                .filter(deleted_at.is_null()) // Exclude soft-deleted pilots
                 .order((last_name.asc(), first_name.asc()))
                 .select(PilotModel::as_select())
                 .load(&mut conn)?;
@@ -106,16 +107,20 @@ impl PilotsRepository {
         Ok(rows_affected > 0)
     }
 
-    /// Delete a pilot by ID
+    /// Soft delete a pilot by ID (sets deleted_at timestamp)
     pub async fn delete_pilot(&self, pilot_id: Uuid) -> Result<bool> {
         use crate::schema::pilots::dsl::*;
+        use chrono::Utc;
 
         let pool = self.pool.clone();
+        let now = Utc::now();
 
         let rows_affected = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            let rows = diesel::delete(pilots.filter(id.eq(pilot_id))).execute(&mut conn)?;
+            let rows = diesel::update(pilots.filter(id.eq(pilot_id)))
+                .set(deleted_at.eq(Some(now)))
+                .execute(&mut conn)?;
 
             Ok::<usize, anyhow::Error>(rows)
         })

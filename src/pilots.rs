@@ -30,9 +30,15 @@ pub struct Pilot {
     /// Club that the pilot belongs to
     pub club_id: Option<Uuid>,
 
+    /// User account associated with this pilot (if any)
+    pub user_id: Option<Uuid>,
+
     /// Database timestamps
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+
+    /// Soft delete timestamp
+    pub deleted_at: Option<DateTime<Utc>>,
 }
 
 impl Pilot {
@@ -56,14 +62,21 @@ impl Pilot {
             is_tow_pilot,
             is_examiner,
             club_id,
+            user_id: None,
             created_at: now,
             updated_at: now,
+            deleted_at: None,
         }
     }
 
     /// Get the full name of the pilot
     pub fn full_name(&self) -> String {
         format!("{} {}", self.first_name, self.last_name)
+    }
+
+    /// Check if pilot is deleted
+    pub fn is_deleted(&self) -> bool {
+        self.deleted_at.is_some()
     }
 }
 
@@ -82,6 +95,8 @@ pub struct PilotModel {
     pub is_instructor: bool,
     pub is_tow_pilot: bool,
     pub is_examiner: bool,
+    pub deleted_at: Option<DateTime<Utc>>,
+    pub user_id: Option<Uuid>,
 }
 
 /// Insert model for new pilots
@@ -96,6 +111,7 @@ pub struct NewPilotModel {
     pub is_instructor: bool,
     pub is_tow_pilot: bool,
     pub is_examiner: bool,
+    pub user_id: Option<Uuid>,
 }
 
 /// Conversion from Pilot (API model) to PilotModel (database model)
@@ -112,6 +128,8 @@ impl From<Pilot> for PilotModel {
             is_instructor: pilot.is_instructor,
             is_tow_pilot: pilot.is_tow_pilot,
             is_examiner: pilot.is_examiner,
+            deleted_at: pilot.deleted_at,
+            user_id: pilot.user_id,
         }
     }
 }
@@ -128,6 +146,7 @@ impl From<Pilot> for NewPilotModel {
             is_instructor: pilot.is_instructor,
             is_tow_pilot: pilot.is_tow_pilot,
             is_examiner: pilot.is_examiner,
+            user_id: pilot.user_id,
         }
     }
 }
@@ -144,8 +163,10 @@ impl From<PilotModel> for Pilot {
             is_instructor: model.is_instructor,
             is_tow_pilot: model.is_tow_pilot,
             is_examiner: model.is_examiner,
+            user_id: model.user_id,
             created_at: model.created_at,
             updated_at: model.updated_at,
+            deleted_at: model.deleted_at,
         }
     }
 }
