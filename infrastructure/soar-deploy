@@ -123,10 +123,40 @@ else
 fi
 
 # Install new binary
-# Use the `install` command which is designed to safely replace executables
-# even when they're in use. It uses a copy-and-rename strategy internally.
+# First, verify no processes are using the old binary
+log_info "Checking for processes using /usr/local/bin/soar..."
+PROCESSES_USING_BINARY=$(lsof /usr/local/bin/soar 2>/dev/null | tail -n +2 || true)
+if [ -n "$PROCESSES_USING_BINARY" ]; then
+    log_warn "Processes still using the binary:"
+    echo "$PROCESSES_USING_BINARY"
+    log_info "Waiting for processes to fully stop (10 seconds)..."
+    sleep 10
+
+    # Check again
+    PROCESSES_USING_BINARY=$(lsof /usr/local/bin/soar 2>/dev/null | tail -n +2 || true)
+    if [ -n "$PROCESSES_USING_BINARY" ]; then
+        log_error "Processes still using the binary after wait:"
+        echo "$PROCESSES_USING_BINARY"
+        log_error "Force-killing processes..."
+        lsof -t /usr/local/bin/soar 2>/dev/null | xargs -r kill -9 || true
+        sleep 2
+    fi
+fi
+
 log_info "Installing new binary..."
-install -m 755 -o root -g root "$DEPLOY_DIR/soar" /usr/local/bin/soar
+# Remove old binary first to ensure clean install
+rm -f /usr/local/bin/soar || {
+    log_error "Cannot remove old binary - still in use. Attempting unlink trick..."
+    # Create new name, install there, then swap with symlink
+    install -m 755 -o root -g root "$DEPLOY_DIR/soar" /usr/local/bin/soar.new
+    ln -sf /usr/local/bin/soar.new /usr/local/bin/soar
+}
+
+# If rm succeeded, do normal install
+if [ ! -f /usr/local/bin/soar ] && [ ! -L /usr/local/bin/soar ]; then
+    install -m 755 -o root -g root "$DEPLOY_DIR/soar" /usr/local/bin/soar
+fi
+
 log_info "Binary installed successfully"
 
 # Install service files
