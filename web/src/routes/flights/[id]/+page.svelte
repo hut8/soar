@@ -69,6 +69,17 @@
 		registration?: string;
 	}
 	let nearbyFlights = $state<NearbyFlight[]>([]);
+
+	// Spline path response type
+	interface SplinePoint {
+		latitude: number;
+		longitude: number;
+		altitude_meters: number | null;
+	}
+	interface SplinePathResponse {
+		points: SplinePoint[];
+		count: number;
+	}
 	let nearbyFlightPaths = $state<google.maps.Polyline[]>([]);
 	let isLoadingNearbyFlights = $state(false);
 
@@ -373,10 +384,9 @@
 
 			// Update flight path with spline interpolation
 			try {
-				const splineResponse = await serverCall<{
-					points: Array<{ latitude: number; longitude: number; altitude_meters: number | null }>;
-					count: number;
-				}>(`/flights/${data.flight.id}/spline-path`);
+				const splineResponse = await serverCall<SplinePathResponse>(
+					`/flights/${data.flight.id}/spline-path`
+				);
 
 				if (splineResponse.points.length > 0) {
 					const pathCoordinates = splineResponse.points.map((point) => ({
@@ -544,10 +554,9 @@
 
 			// Fetch spline-interpolated path for smooth flight track
 			try {
-				const splineResponse = await serverCall<{
-					points: Array<{ latitude: number; longitude: number; altitude_meters: number | null }>;
-					count: number;
-				}>(`/flights/${data.flight.id}/spline-path`);
+				const splineResponse = await serverCall<SplinePathResponse>(
+					`/flights/${data.flight.id}/spline-path`
+				);
 
 				if (splineResponse.points.length > 0) {
 					// Use spline-interpolated smooth path
