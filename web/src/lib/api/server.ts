@@ -3,10 +3,15 @@ import { loading } from '$lib/stores/loading';
 
 // Development-only flag to force using production backend
 // Set to true to use https://glider.flights/data even in dev mode
-const FORCE_PRODUCTION_BACKEND = true;
+export const FORCE_PRODUCTION_BACKEND = true;
 
 // Detect development mode and set appropriate API base URL
-export const API_BASE = dev && !FORCE_PRODUCTION_BACKEND ? 'http://localhost:1337/data' : '/data';
+export const API_BASE =
+	dev && !FORCE_PRODUCTION_BACKEND
+		? 'http://localhost:1337/data'
+		: dev && FORCE_PRODUCTION_BACKEND
+			? 'https://glider.flights/data'
+			: '/data';
 
 export class ServerError extends Error {
 	constructor(

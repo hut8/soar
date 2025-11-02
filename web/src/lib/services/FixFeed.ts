@@ -1,6 +1,7 @@
 import { browser, dev } from '$app/environment';
 import type { Aircraft, Fix } from '$lib/types';
 import { DeviceRegistry } from './DeviceRegistry';
+import { FORCE_PRODUCTION_BACKEND } from '$lib/api/server';
 
 // Event types for subscribers
 export type FixFeedEvent =
@@ -78,9 +79,17 @@ export class FixFeed {
 	private initializeWebSocketUrl(): void {
 		if (!browser) return;
 
-		const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-		const host = dev ? 'localhost:1337' : window.location.host;
-		this.websocketUrl = `${protocol}//${host}/data/fixes/live`;
+		if (dev && !FORCE_PRODUCTION_BACKEND) {
+			// Dev mode with local backend
+			this.websocketUrl = 'ws://localhost:1337/data/fixes/live';
+		} else if (dev && FORCE_PRODUCTION_BACKEND) {
+			// Dev mode forcing production backend
+			this.websocketUrl = 'wss://glider.flights/data/fixes/live';
+		} else {
+			// Production mode - use current host
+			const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+			this.websocketUrl = `${protocol}//${window.location.host}/data/fixes/live`;
+		}
 	}
 
 	// Connect to WebSocket

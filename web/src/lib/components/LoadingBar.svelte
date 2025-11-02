@@ -22,24 +22,24 @@
 		animation: slide 2.5s ease-in-out infinite;
 	}
 
-	/* Light mode - blue to orange gradient */
+	/* Light mode - dramatic blue to orange gradient */
 	.loading-bar-overlay {
 		background: linear-gradient(
 			90deg,
-			rgba(59, 130, 246, 0.3) 0%,
-			rgba(251, 146, 60, 0.3) 50%,
-			rgba(59, 130, 246, 0.3) 100%
+			rgba(59, 130, 246, 0.7) 0%,
+			rgba(251, 146, 60, 0.7) 50%,
+			rgba(59, 130, 246, 0.7) 100%
 		);
 		background-size: 200% 100%;
 	}
 
-	/* Dark mode - blue to orange gradient with adjusted opacity */
+	/* Dark mode - dramatic blue to orange gradient */
 	:global(.dark) .loading-bar-overlay {
 		background: linear-gradient(
 			90deg,
-			rgba(59, 130, 246, 0.25) 0%,
-			rgba(251, 146, 60, 0.25) 50%,
-			rgba(59, 130, 246, 0.25) 100%
+			rgba(59, 130, 246, 0.6) 0%,
+			rgba(251, 146, 60, 0.6) 50%,
+			rgba(59, 130, 246, 0.6) 100%
 		);
 		background-size: 200% 100%;
 	}
