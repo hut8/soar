@@ -782,19 +782,19 @@
       },
       "id": 114,
       "options": {
-        "minVizHeight": 75,
-        "minVizWidth": 75,
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
+        "alignValue": "left",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
         },
-        "showThresholdLabels": false,
-        "showThresholdMarkers": true,
-        "sizing": "auto"
+        "mergeValues": true,
+        "rowHeight": 0.9,
+        "showValue": "auto",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
       },
       "pluginVersion": "12.2.1",
       "targets": [
@@ -806,8 +806,9 @@
           "editorMode": "code",
           "expr": "jetstream_connected",
           "legendFormat": "JetStream",
-          "range": true,
-          "refId": "A"
+          "range": false,
+          "refId": "A",
+          "instant": false
         }
       ],
       "title": "JetStream Connection Status",
