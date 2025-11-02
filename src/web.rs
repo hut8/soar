@@ -503,6 +503,10 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
             get(actions::get_receiver_statuses),
         )
         .route(
+            "/receivers/{id}/statistics",
+            get(actions::get_receiver_statistics),
+        )
+        .route(
             "/receivers/{id}/raw-messages",
             get(actions::get_receiver_raw_messages),
         )
