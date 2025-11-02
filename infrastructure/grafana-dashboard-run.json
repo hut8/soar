@@ -790,8 +790,7 @@
           "expr": "jetstream_connected",
           "legendFormat": "JetStream",
           "range": false,
-          "refId": "A",
-          "instant": false
+          "refId": "A"
         }
       ],
       "title": "JetStream Connection Status",
