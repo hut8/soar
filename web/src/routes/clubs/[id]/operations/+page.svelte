@@ -13,7 +13,8 @@
 		Calendar,
 		UserPlus,
 		ChevronLeft,
-		ChevronRight
+		ChevronRight,
+		Users
 	} from '@lucide/svelte';
 	import { serverCall } from '$lib/api/server';
 	import dayjs from 'dayjs';
@@ -200,6 +201,12 @@
 			<ArrowLeft class="mr-2 h-4 w-4" />
 			Back to Club
 		</button>
+		{#if userBelongsToClub}
+			<a href={resolve(`/clubs/${clubId}/pilots`)} class="btn preset-filled-secondary-500 btn-sm">
+				<Users class="mr-2 h-4 w-4" />
+				Pilots
+			</a>
+		{/if}
 	</div>
 
 	<!-- Header -->
