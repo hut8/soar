@@ -1,5 +1,6 @@
 use crate::Fix;
 use crate::airports_repo::AirportsRepository;
+use crate::device_repo::DeviceRepository;
 use crate::elevation::ElevationDB;
 use crate::fixes_repo::FixesRepository;
 use crate::flights::Flight;
@@ -21,6 +22,7 @@ use super::runway::determine_runway_identifier;
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn create_flight(
     flights_repo: &FlightsRepository,
+    device_repo: &DeviceRepository,
     airports_repo: &AirportsRepository,
     locations_repo: &LocationsRepository,
     runways_repo: &RunwaysRepository,
@@ -71,6 +73,25 @@ pub(crate) async fn create_flight(
     };
 
     flight.device_address_type = fix.address_type;
+
+    // Look up the device's club_id and copy it to the flight
+    match device_repo.get_device_by_uuid(fix.device_id).await {
+        Ok(Some(device)) => {
+            flight.club_id = device.club_id;
+        }
+        Ok(None) => {
+            warn!(
+                "Device {} not found when creating flight {}",
+                fix.device_id, flight_id
+            );
+        }
+        Err(e) => {
+            warn!(
+                "Failed to fetch device {} when creating flight {}: {}",
+                fix.device_id, flight_id, e
+            );
+        }
+    }
 
     flights_repo.create_flight(flight).await?;
 

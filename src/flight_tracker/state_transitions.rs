@@ -1,5 +1,6 @@
 use crate::Fix;
 use crate::airports_repo::AirportsRepository;
+use crate::device_repo::DeviceRepository;
 use crate::elevation::ElevationDB;
 use crate::fixes_repo::FixesRepository;
 use crate::flights_repo::FlightsRepository;
@@ -72,6 +73,7 @@ pub(crate) fn should_be_active(fix: &Fix) -> bool {
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn process_state_transition(
     flights_repo: &FlightsRepository,
+    device_repo: &DeviceRepository,
     airports_repo: &AirportsRepository,
     locations_repo: &LocationsRepository,
     runways_repo: &RunwaysRepository,
@@ -267,6 +269,7 @@ pub(crate) async fn process_state_transition(
                 // Create flight WITH airport/runway lookup
                 match create_flight(
                     flights_repo,
+                    device_repo,
                     airports_repo,
                     locations_repo,
                     runways_repo,
@@ -320,6 +323,7 @@ pub(crate) async fn process_state_transition(
                 // Create flight WITHOUT airport/runway lookup (skip_airport_runway_lookup = true)
                 match create_flight(
                     flights_repo,
+                    device_repo,
                     airports_repo,
                     locations_repo,
                     runways_repo,
