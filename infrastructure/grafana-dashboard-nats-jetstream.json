@@ -100,7 +100,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "jetstream_consumer_num_pending{stream=\"APRS_RAW\",consumer=\"soar-run-production\"}",
+          "expr": "jetstream_consumer_num_pending{stream_name=\"APRS_RAW\",consumer_name=\"soar-run-production\"}",
           "legendFormat": "Queue Depth",
           "range": true,
           "refId": "A"
@@ -175,7 +175,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "jetstream_stream_last_seq{stream=\"APRS_RAW\"} - ignoring(consumer) jetstream_consumer_delivered_stream_seq{stream=\"APRS_RAW\",consumer=\"soar-run-production\"}",
+          "expr": "jetstream_stream_last_seq{stream_name=\"APRS_RAW\"} - ignoring(consumer_name, is_consumer_leader, consumer_desc, consumer_leader) jetstream_consumer_delivered_stream_seq{stream_name=\"APRS_RAW\",consumer_name=\"soar-run-production\"}",
           "legendFormat": "Consumer Lag",
           "range": true,
           "refId": "A"
@@ -246,7 +246,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "jetstream_consumer_num_ack_pending{stream=\"APRS_RAW\",consumer=\"soar-run-production\"}",
+          "expr": "jetstream_consumer_num_ack_pending{stream_name=\"APRS_RAW\",consumer_name=\"soar-run-production\"}",
           "legendFormat": "Ack Pending",
           "range": true,
           "refId": "A"
@@ -339,7 +339,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "jetstream_stream_total_messages{stream=\"APRS_RAW\"}",
+          "expr": "jetstream_stream_total_messages{stream_name=\"APRS_RAW\"}",
           "legendFormat": "Total Messages",
           "range": true,
           "refId": "A"
@@ -420,7 +420,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Published"
+              "options": "Publish Rate"
             },
             "properties": [
               {
@@ -435,7 +435,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Consumed"
+              "options": "Consume Rate"
             },
             "properties": [
               {
@@ -479,8 +479,8 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_jetstream_published{component=\"aprs-ingest\"}[1m])",
-          "legendFormat": "Published",
+          "expr": "rate(jetstream_stream_last_seq{stream_name=\"APRS_RAW\"}[1m])",
+          "legendFormat": "Publish Rate",
           "range": true,
           "refId": "A"
         },
@@ -490,8 +490,8 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_jetstream_consumed{component=\"run\"}[1m])",
-          "legendFormat": "Consumed",
+          "expr": "rate(jetstream_consumer_delivered_stream_seq{stream_name=\"APRS_RAW\",consumer_name=\"soar-run-production\"}[1m])",
+          "legendFormat": "Consume Rate",
           "range": true,
           "refId": "B"
         }
@@ -587,7 +587,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "jetstream_consumer_num_pending{stream=\"APRS_RAW\",consumer=\"soar-run-production\"}",
+          "expr": "jetstream_consumer_num_pending{stream_name=\"APRS_RAW\",consumer_name=\"soar-run-production\"}",
           "legendFormat": "Pending",
           "range": true,
           "refId": "A"
@@ -598,7 +598,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "jetstream_consumer_num_ack_pending{stream=\"APRS_RAW\",consumer=\"soar-run-production\"}",
+          "expr": "jetstream_consumer_num_ack_pending{stream_name=\"APRS_RAW\",consumer_name=\"soar-run-production\"}",
           "legendFormat": "Ack Pending",
           "range": true,
           "refId": "B"
@@ -728,248 +728,13 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(jetstream_consumer_num_redelivered{stream=\"APRS_RAW\",consumer=\"soar-run-production\"}[1m])",
+          "expr": "rate(jetstream_consumer_num_redelivered{stream_name=\"APRS_RAW\",consumer_name=\"soar-run-production\"}[1m])",
           "legendFormat": "Redeliveries",
           "range": true,
           "refId": "A"
         }
       ],
       "title": "Message Redelivery Rate",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "Errors/sec",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 20,
-            "gradientMode": "none",
-            "hideFrom": {
-              "tooltip": false,
-              "viz": false,
-              "legend": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "normal"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              },
-              {
-                "color": "red",
-                "value": 1
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 10,
-        "w": 8,
-        "x": 8,
-        "y": 21
-      },
-      "id": 22,
-      "options": {
-        "legend": {
-          "calcs": [
-            "mean",
-            "max",
-            "last"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.2.1",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "expr": "rate(aprs_jetstream_process_error{component=\"run\"}[1m])",
-          "legendFormat": "Process Errors",
-          "range": true,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "expr": "rate(aprs_jetstream_decode_error{component=\"run\"}[1m])",
-          "legendFormat": "Decode Errors",
-          "range": true,
-          "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "expr": "rate(aprs_jetstream_ack_error{component=\"run\"}[1m])",
-          "legendFormat": "Ack Errors",
-          "range": true,
-          "refId": "C"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "expr": "rate(aprs_jetstream_receive_error{component=\"run\"}[1m])",
-          "legendFormat": "Receive Errors",
-          "range": true,
-          "refId": "D"
-        }
-      ],
-      "title": "Consumer Error Rates",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "Errors/sec",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 20,
-            "gradientMode": "none",
-            "hideFrom": {
-              "tooltip": false,
-              "viz": false,
-              "legend": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              },
-              {
-                "color": "red",
-                "value": 1
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 10,
-        "w": 8,
-        "x": 16,
-        "y": 21
-      },
-      "id": 23,
-      "options": {
-        "legend": {
-          "calcs": [
-            "mean",
-            "max",
-            "last"
-          ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.2.1",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "expr": "rate(aprs_jetstream_publish_error{component=\"aprs-ingest\"}[1m])",
-          "legendFormat": "Publish Errors",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Publisher Error Rate",
       "type": "timeseries"
     },
     {
@@ -1073,7 +838,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "jetstream_stream_total_bytes{stream=\"APRS_RAW\"}",
+          "expr": "jetstream_stream_total_bytes{stream_name=\"APRS_RAW\"}",
           "legendFormat": "APRS_RAW Stream",
           "range": true,
           "refId": "A"
@@ -1221,7 +986,26 @@
     "queue"
   ],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "current": {
+          "selected": false,
+          "text": "Prometheus",
+          "value": "Prometheus"
+        },
+        "hide": 0,
+        "includeAll": false,
+        "label": "Datasource",
+        "multi": false,
+        "name": "DS_PROMETHEUS",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      }
+    ]
   },
   "time": {
     "from": "now-6h",
