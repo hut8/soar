@@ -19,9 +19,7 @@ impl ServerStatusProcessor {
     }
 
     /// Process a server status message (line starting with #)
-    pub async fn process_server_message(&self, raw_message: &str) {
-        let received_at = Utc::now();
-
+    pub async fn process_server_message(&self, raw_message: &str, received_at: DateTime<Utc>) {
         // Parse server message format: # aprsc 2.1.15-gc67551b 22 Sep 2025 21:51:55 GMT GLIDERN1 51.178.19.212:10152
         if let Some(parsed) = self.parse_server_message(raw_message, received_at) {
             if let Err(e) = self.server_messages_repo.insert(&parsed).await {

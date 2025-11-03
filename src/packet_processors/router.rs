@@ -15,8 +15,8 @@ pub struct PacketRouter {
     receiver_status_tx: Option<mpsc::Sender<(AprsPacket, PacketContext)>>,
     /// Optional channel sender for receiver position packets
     receiver_position_tx: Option<mpsc::Sender<(AprsPacket, PacketContext)>>,
-    /// Optional channel sender for server status messages
-    server_status_tx: Option<mpsc::Sender<String>>,
+    /// Optional channel sender for server status messages (message, received_at timestamp)
+    server_status_tx: Option<mpsc::Sender<(String, chrono::DateTime<chrono::Utc>)>>,
 }
 
 impl PacketRouter {
@@ -59,7 +59,10 @@ impl PacketRouter {
     }
 
     /// Add server status queue sender
-    pub fn with_server_status_queue(mut self, sender: mpsc::Sender<String>) -> Self {
+    pub fn with_server_status_queue(
+        mut self,
+        sender: mpsc::Sender<(String, chrono::DateTime<chrono::Utc>)>,
+    ) -> Self {
         self.server_status_tx = Some(sender);
         self
     }
@@ -69,13 +72,20 @@ impl PacketRouter {
     /// Process a server message (line starting with #)
     /// 1. GenericProcessor archives it
     /// 2. Route to server status queue (or drop if full)
-    pub fn process_server_message(&self, raw_message: &str) {
+    pub fn process_server_message(
+        &self,
+        raw_message: &str,
+        received_at: chrono::DateTime<chrono::Utc>,
+    ) {
         // Step 1: Archive via GenericProcessor
         self.generic_processor.process_server_message(raw_message);
 
         // Step 2: Route to server status queue if configured
+        // We need to include the timestamp in the queue data
         if let Some(tx) = &self.server_status_tx {
-            match tx.try_send(raw_message.to_string()) {
+            // Package the message with its timestamp
+            let message_with_timestamp = (raw_message.to_string(), received_at);
+            match tx.try_send(message_with_timestamp) {
                 Ok(()) => {
                     trace!("Routed server message to queue");
                 }
@@ -96,11 +106,16 @@ impl PacketRouter {
     /// Process an APRS packet through the complete pipeline
     /// 1. GenericProcessor archives and inserts to database (inline)
     /// 2. Route to appropriate queue based on packet type (or drop if full)
-    pub async fn process_packet(&self, packet: AprsPacket, raw_message: &str) {
+    pub async fn process_packet(
+        &self,
+        packet: AprsPacket,
+        raw_message: &str,
+        received_at: chrono::DateTime<chrono::Utc>,
+    ) {
         // Step 1: Generic processing (inline) - archives, identifies receiver, inserts APRS message
         let context = match self
             .generic_processor
-            .process_packet(&packet, raw_message)
+            .process_packet(&packet, raw_message, received_at)
             .await
         {
             Some(ctx) => ctx,

@@ -37,7 +37,8 @@ impl ReceiverStatusProcessor {
 
         if let AprsData::Status(status) = &packet.data {
             let status_comment = status.comment.clone();
-            let received_at = chrono::Utc::now();
+            // Use the received_at timestamp from context (captured at ingestion time)
+            let received_at = context.received_at;
 
             // Create NewReceiverStatus from status comment
             let mut new_status = NewReceiverStatus::from_status_comment(

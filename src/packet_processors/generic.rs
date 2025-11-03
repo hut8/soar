@@ -15,6 +15,9 @@ pub struct PacketContext {
     pub aprs_message_id: Uuid,
     /// ID of the receiver that sent/relayed this packet
     pub receiver_id: Uuid,
+    /// Timestamp when the message was received from APRS-IS
+    /// This is captured at ingestion time to prevent clock skew from queue processing delays
+    pub received_at: chrono::DateTime<chrono::Utc>,
 }
 
 /// Generic processor that handles archiving, receiver identification, and APRS message insertion
@@ -61,6 +64,7 @@ impl GenericProcessor {
         &self,
         packet: &AprsPacket,
         raw_message: &str,
+        received_at: chrono::DateTime<chrono::Utc>,
     ) -> Option<PacketContext> {
         // Step 1: Archive the raw message if archiving is enabled
         if let Some(archive) = &self.archive_service {
@@ -117,11 +121,12 @@ impl GenericProcessor {
         let new_aprs_message = NewAprsMessage {
             id: aprs_message_id,
             raw_message: raw_message.to_string(),
-            received_at: chrono::Utc::now(),
+            received_at,
             receiver_id,
             unparsed,
         };
 
+        let received_at_timestamp = new_aprs_message.received_at;
         match self.aprs_messages_repo.insert(new_aprs_message).await {
             Ok(id) => {
                 trace!(
@@ -131,6 +136,7 @@ impl GenericProcessor {
                 Some(PacketContext {
                     aprs_message_id: id,
                     receiver_id,
+                    received_at: received_at_timestamp,
                 })
             }
             Err(e) => {
