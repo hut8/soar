@@ -1,9 +1,6 @@
 # SOAR APRS Ingest Metrics (ingest-aprs subcommand)
 # This file defines a complete scrape job configuration for the SOAR APRS ingest service.
 # Prometheus will automatically load this file when using scrape_config_files.
-#
-# Note: Port 9094 is used during blue-green deployments for the secondary instance.
-# It will return connection refused errors when not in use, which is expected behavior.
 
 job_name: 'soar-aprs-ingest'
 metrics_path: '/metrics'
@@ -12,8 +9,7 @@ scrape_timeout: 5s
 
 static_configs:
   - targets:
-      - 'localhost:9093'  # Primary instance (always running)
-      - 'localhost:9094'  # Secondary instance (during deployments only)
+      - 'localhost:9093'
     labels:
       instance: 'soar'
       component: 'aprs-ingest'
