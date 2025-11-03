@@ -52,7 +52,9 @@ async fn process_aprs_message(
     // Route server messages (starting with #) differently
     if actual_message.starts_with('#') {
         info!("Server message: {}", actual_message);
-        packet_router.process_server_message(actual_message, received_at);
+        packet_router
+            .process_server_message(actual_message, received_at)
+            .await;
         return;
     }
 
@@ -320,16 +322,12 @@ pub async fn handle_run(
 
     info!("Created PacketRouter with per-processor queues");
 
-    // Initialize queue drop counters so they're always exported to Prometheus
-    // even when queues are healthy and not dropping packets
-    metrics::counter!("aprs.raw_message_queue.full").absolute(0);
-    metrics::counter!("aprs.aircraft_queue.full").absolute(0);
+    // Initialize queue close counters so they're always exported to Prometheus
+    // Note: We no longer track "full" metrics since we use blocking sends that wait for space
+    // Now that we consume from JetStream instead of APRS-IS, blocking won't cause disconnects
     metrics::counter!("aprs.aircraft_queue.closed").absolute(0);
-    metrics::counter!("aprs.receiver_status_queue.full").absolute(0);
     metrics::counter!("aprs.receiver_status_queue.closed").absolute(0);
-    metrics::counter!("aprs.receiver_position_queue.full").absolute(0);
     metrics::counter!("aprs.receiver_position_queue.closed").absolute(0);
-    metrics::counter!("aprs.server_status_queue.full").absolute(0);
     metrics::counter!("aprs.server_status_queue.closed").absolute(0);
 
     // Initialize APRS connection metrics

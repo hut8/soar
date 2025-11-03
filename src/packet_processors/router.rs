@@ -71,8 +71,8 @@ impl PacketRouter {
 impl PacketRouter {
     /// Process a server message (line starting with #)
     /// 1. GenericProcessor archives it
-    /// 2. Route to server status queue (or drop if full)
-    pub fn process_server_message(
+    /// 2. Route to server status queue (blocks if full since we consume from JetStream)
+    pub async fn process_server_message(
         &self,
         raw_message: &str,
         received_at: chrono::DateTime<chrono::Utc>,
@@ -85,18 +85,15 @@ impl PacketRouter {
         if let Some(tx) = &self.server_status_tx {
             // Package the message with its timestamp
             let message_with_timestamp = (raw_message.to_string(), received_at);
-            match tx.try_send(message_with_timestamp) {
-                Ok(()) => {
-                    trace!("Routed server message to queue");
-                }
-                Err(mpsc::error::TrySendError::Full(_)) => {
-                    warn!("Server status queue FULL - dropping server message");
-                    metrics::counter!("aprs.server_status_queue.full").increment(1);
-                }
-                Err(mpsc::error::TrySendError::Closed(_)) => {
-                    warn!("Server status queue CLOSED - cannot route server message");
-                    metrics::counter!("aprs.server_status_queue.closed").increment(1);
-                }
+            // Use blocking send - safe now that we consume from JetStream instead of APRS-IS
+            if let Err(e) = tx.send(message_with_timestamp).await {
+                warn!(
+                    "Server status queue CLOSED - cannot route server message: {}",
+                    e
+                );
+                metrics::counter!("aprs.server_status_queue.closed").increment(1);
+            } else {
+                trace!("Routed server message to queue");
             }
         } else {
             trace!("No server status queue configured, server message archived only");
@@ -105,7 +102,7 @@ impl PacketRouter {
 
     /// Process an APRS packet through the complete pipeline
     /// 1. GenericProcessor archives and inserts to database (inline)
-    /// 2. Route to appropriate queue based on packet type (or drop if full)
+    /// 2. Route to appropriate queue based on packet type (blocks if full since we consume from JetStream)
     pub async fn process_packet(
         &self,
         packet: AprsPacket,
@@ -129,7 +126,8 @@ impl PacketRouter {
         };
 
         // Step 2: Route to appropriate queue based on packet type
-        // Capture packet.from before moving packet (needed for error messages)
+        // Now that we consume from JetStream instead of APRS-IS, we can use blocking sends
+        // without worrying about disconnection from the APRS server
         let packet_from = packet.from.clone();
         let position_source = packet.position_source_type();
 
@@ -138,48 +136,33 @@ impl PacketRouter {
                 // Route based on position source type
                 match position_source {
                     PositionSourceType::Aircraft => {
-                        // Route to aircraft position queue
+                        // Route to aircraft position queue (blocks if full)
                         if let Some(tx) = &self.aircraft_position_tx {
-                            match tx.try_send((packet, context)) {
-                                Ok(()) => {
-                                    trace!("Routed aircraft position to queue");
-                                }
-                                Err(mpsc::error::TrySendError::Full(_)) => {
-                                    warn!(
-                                        "Aircraft position queue FULL - dropping packet from {}",
-                                        packet_from
-                                    );
-                                    metrics::counter!("aprs.aircraft_queue.full").increment(1);
-                                }
-                                Err(mpsc::error::TrySendError::Closed(_)) => {
-                                    warn!("Aircraft position queue CLOSED - cannot route packet");
-                                    metrics::counter!("aprs.aircraft_queue.closed").increment(1);
-                                }
+                            if let Err(e) = tx.send((packet, context)).await {
+                                warn!(
+                                    "Aircraft position queue CLOSED - cannot route packet from {}: {}",
+                                    packet_from, e
+                                );
+                                metrics::counter!("aprs.aircraft_queue.closed").increment(1);
+                            } else {
+                                trace!("Routed aircraft position to queue");
                             }
                         } else {
                             trace!("No aircraft position queue configured, packet archived only");
                         }
                     }
                     PositionSourceType::Receiver => {
-                        // Route to receiver position queue
+                        // Route to receiver position queue (blocks if full)
                         if let Some(tx) = &self.receiver_position_tx {
-                            match tx.try_send((packet, context)) {
-                                Ok(()) => {
-                                    trace!("Routed receiver position to queue");
-                                }
-                                Err(mpsc::error::TrySendError::Full(_)) => {
-                                    warn!(
-                                        "Receiver position queue FULL - dropping packet from {}",
-                                        packet_from
-                                    );
-                                    metrics::counter!("aprs.receiver_position_queue.full")
-                                        .increment(1);
-                                }
-                                Err(mpsc::error::TrySendError::Closed(_)) => {
-                                    warn!("Receiver position queue CLOSED - cannot route packet");
-                                    metrics::counter!("aprs.receiver_position_queue.closed")
-                                        .increment(1);
-                                }
+                            if let Err(e) = tx.send((packet, context)).await {
+                                warn!(
+                                    "Receiver position queue CLOSED - cannot route packet from {}: {}",
+                                    packet_from, e
+                                );
+                                metrics::counter!("aprs.receiver_position_queue.closed")
+                                    .increment(1);
+                            } else {
+                                trace!("Routed receiver position to queue");
                             }
                         } else {
                             trace!("No receiver position queue configured, packet archived only");
@@ -200,27 +183,20 @@ impl PacketRouter {
                 }
             }
             AprsData::Status(_) => {
-                // Route to receiver status queue
+                // Route to receiver status queue (blocks if full)
                 trace!(
                     "Received status packet from {} (source type: {:?})",
                     packet_from, position_source
                 );
                 if let Some(tx) = &self.receiver_status_tx {
-                    match tx.try_send((packet, context)) {
-                        Ok(()) => {
-                            trace!("Routed receiver status to queue");
-                        }
-                        Err(mpsc::error::TrySendError::Full(_)) => {
-                            warn!(
-                                "Receiver status queue FULL - dropping packet from {}",
-                                packet_from
-                            );
-                            metrics::counter!("aprs.receiver_status_queue.full").increment(1);
-                        }
-                        Err(mpsc::error::TrySendError::Closed(_)) => {
-                            warn!("Receiver status queue CLOSED - cannot route packet");
-                            metrics::counter!("aprs.receiver_status_queue.closed").increment(1);
-                        }
+                    if let Err(e) = tx.send((packet, context)).await {
+                        warn!(
+                            "Receiver status queue CLOSED - cannot route packet from {}: {}",
+                            packet_from, e
+                        );
+                        metrics::counter!("aprs.receiver_status_queue.closed").increment(1);
+                    } else {
+                        trace!("Routed receiver status to queue");
                     }
                 } else {
                     trace!("No receiver status queue configured, packet archived only");
