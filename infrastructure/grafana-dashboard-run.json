@@ -146,31 +146,34 @@
                 "value": 1
               }
             ]
-          }
+          },
+          "max": 1,
+          "min": 0,
+          "unit": "short"
         },
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
-        "w": 12,
+        "h": 4,
+        "w": 6,
         "x": 6,
         "y": 1
       },
       "id": 52,
       "options": {
-        "alignValue": "left",
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": false
+        "minVizHeight": 75,
+        "minVizWidth": 75,
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
         },
-        "mergeValues": true,
-        "rowHeight": 0.9,
-        "showValue": "auto",
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "sizing": "auto"
       },
       "pluginVersion": "12.2.1",
       "targets": [
@@ -182,12 +185,12 @@
           "editorMode": "code",
           "expr": "process_is_up{component=\"run\"}",
           "legendFormat": "SOAR Run",
-          "range": false,
+          "range": true,
           "refId": "A"
         }
       ],
       "title": "Process Status",
-      "type": "state-timeline"
+      "type": "gauge"
     },
     {
       "datasource": {

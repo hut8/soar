@@ -848,7 +848,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "aprs_jetstream_publish_error{component=\"aprs-ingest\"}",
+          "expr": "aprs_jetstream_publish_error{component=\"aprs-ingest\"} or on() vector(0)",
           "legendFormat": "Publish Errors",
           "range": true,
           "refId": "A"
