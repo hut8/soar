@@ -800,6 +800,12 @@
 							</span>
 							<span class="text-surface-400-500-token">•</span>
 						{/if}
+						{#if data.flight.callsign}
+							<span class="font-mono font-semibold">
+								{data.flight.callsign}
+							</span>
+							<span class="text-surface-400-500-token">•</span>
+						{/if}
 						{#if data.device.aircraft_model}
 							<span class="font-semibold">{data.device.aircraft_model}</span>
 							<span class="text-surface-400-500-token">•</span>

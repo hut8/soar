@@ -95,69 +95,161 @@ pub(crate) async fn process_state_transition(
     match (current_flight_state, is_active) {
         // Case 1: Active flight exists and current fix is active
         (Some(mut state), true) => {
-            trace!(
-                "Device {} has active flight {} - continuing flight",
-                fix.device_id, state.flight_id
-            );
-
-            // Assign existing flight_id to this fix
-            fix.flight_id = Some(state.flight_id);
-
-            // Update last_fix_at in database
-            update_flight_timestamp(flights_repo, state.flight_id, fix.timestamp).await;
-
-            // For towplanes: track climb rate and check for tow release
-            if fix.aircraft_type_ogn == Some(AircraftType::TowTug)
-                && let Some(climb_fpm) = fix.climb_fpm
-            {
-                // Update aircraft tracker with climb rate and check for release
-                let mut trackers = aircraft_trackers.write().await;
-                let tracker = trackers.entry(fix.device_id).or_insert_with(|| {
-                    aircraft_tracker::AircraftTracker::new(aircraft_tracker::AircraftState::Active)
-                });
-
-                let climb_fpm_f32 = climb_fpm as f32;
-                tracker.update_climb_rate(climb_fpm_f32);
-                tracker.current_flight_id = Some(state.flight_id);
-
-                // Check if tow has been released
-                if towing::check_tow_release(tracker, Some(climb_fpm_f32)) {
-                    // Record the release
-                    if let Some(towing_info) = &tracker.towing_info {
-                        if let Some(altitude_ft) = fix.altitude_msl_feet {
+            // Check if callsign has changed - if both current flight and new fix have callsigns
+            // and they differ, this indicates a different aircraft/flight. End current flight and create new one.
+            let should_end_flight = if let Some(new_callsign) = &fix.flight_number {
+                if let Ok(Some(current_flight)) =
+                    flights_repo.get_flight_by_id(state.flight_id).await
+                {
+                    if let Some(current_callsign) = &current_flight.callsign {
+                        if current_callsign != new_callsign {
                             info!(
-                                "Recording tow release for glider {} at {}ft MSL",
-                                towing_info.glider_device_id, altitude_ft
+                                "Device {} active flight {} has callsign '{}' but new fix has callsign '{}' - ending flight and creating new one",
+                                fix.device_id, state.flight_id, current_callsign, new_callsign
                             );
-
-                            if let Err(e) = flights_repo
-                                .update_tow_release(
-                                    towing_info.glider_flight_id,
-                                    altitude_ft,
-                                    fix.timestamp,
-                                )
-                                .await
-                            {
-                                error!(
-                                    "Failed to record tow release for glider {}: {}",
-                                    towing_info.glider_device_id, e
-                                );
-                            }
+                            true
+                        } else {
+                            false
                         }
+                    } else {
+                        false // Current flight has no callsign, OK to continue
+                    }
+                } else {
+                    false // Couldn't fetch flight, continue anyway
+                }
+            } else {
+                false // New fix has no callsign, OK to continue
+            };
 
-                        // Clear towing info after release
-                        tracker.towing_info = None;
-                        tracker.climb_rate_history.clear();
+            if should_end_flight {
+                // End the current flight
+                if let Err(e) = complete_flight(
+                    flights_repo,
+                    airports_repo,
+                    locations_repo,
+                    runways_repo,
+                    fixes_repo,
+                    elevation_db,
+                    active_flights,
+                    state.flight_id,
+                    &fix,
+                )
+                .await
+                {
+                    error!(
+                        "Failed to complete flight {} due to callsign change: {}",
+                        state.flight_id, e
+                    );
+                }
+
+                // Create a new flight for this fix
+                let new_flight_id = Uuid::new_v4();
+                match create_flight(
+                    flights_repo,
+                    device_repo,
+                    airports_repo,
+                    locations_repo,
+                    runways_repo,
+                    fixes_repo,
+                    elevation_db,
+                    &fix,
+                    new_flight_id,
+                    false, // Don't skip airport lookup - this is a new flight
+                )
+                .await
+                {
+                    Ok(flight_id) => {
+                        info!(
+                            "Created new flight {} for device {} with callsign {:?}",
+                            flight_id, fix.device_id, fix.flight_number
+                        );
+
+                        // Assign the new flight_id to this fix
+                        fix.flight_id = Some(flight_id);
+
+                        // Create new active flight state
+                        let new_state =
+                            CurrentFlightState::new(flight_id, fix.timestamp, is_active);
+
+                        // Add to active flights
+                        let mut flights = active_flights.write().await;
+                        flights.insert(fix.device_id, new_state);
+                    }
+                    Err(e) => {
+                        error!(
+                            "Failed to create new flight for device {} after callsign change: {}",
+                            fix.device_id, e
+                        );
                     }
                 }
+            } else {
+                // Callsign hasn't changed (or not applicable), continue existing flight
+                trace!(
+                    "Device {} has active flight {} - continuing flight",
+                    fix.device_id, state.flight_id
+                );
+
+                // Assign existing flight_id to this fix
+                fix.flight_id = Some(state.flight_id);
+
+                // Update last_fix_at in database
+                update_flight_timestamp(flights_repo, state.flight_id, fix.timestamp).await;
+
+                // For towplanes: track climb rate and check for tow release
+                if fix.aircraft_type_ogn == Some(AircraftType::TowTug)
+                    && let Some(climb_fpm) = fix.climb_fpm
+                {
+                    // Update aircraft tracker with climb rate and check for release
+                    let mut trackers = aircraft_trackers.write().await;
+                    let tracker = trackers.entry(fix.device_id).or_insert_with(|| {
+                        aircraft_tracker::AircraftTracker::new(
+                            aircraft_tracker::AircraftState::Active,
+                        )
+                    });
+
+                    let climb_fpm_f32 = climb_fpm as f32;
+                    tracker.update_climb_rate(climb_fpm_f32);
+                    tracker.current_flight_id = Some(state.flight_id);
+
+                    // Check if tow has been released
+                    if towing::check_tow_release(tracker, Some(climb_fpm_f32)) {
+                        // Record the release
+                        if let Some(towing_info) = &tracker.towing_info {
+                            if let Some(altitude_ft) = fix.altitude_msl_feet {
+                                info!(
+                                    "Recording tow release for glider {} at {}ft MSL",
+                                    towing_info.glider_device_id, altitude_ft
+                                );
+
+                                if let Err(e) = flights_repo
+                                    .update_tow_release(
+                                        towing_info.glider_flight_id,
+                                        altitude_ft,
+                                        fix.timestamp,
+                                    )
+                                    .await
+                                {
+                                    error!(
+                                        "Failed to record tow release for glider {}: {}",
+                                        towing_info.glider_device_id, e
+                                    );
+                                }
+                            }
+
+                            // Clear towing info after release
+                            tracker.towing_info = None;
+                            tracker.climb_rate_history.clear();
+                        }
+                    }
+                }
+
+                // Update the state with this fix
+                state.update(fix.timestamp, is_active);
+
+                // Write back updated state
+                let mut flights = active_flights.write().await;
+                flights.insert(fix.device_id, state);
             }
-
-            // Update the state with this fix
-            state.update(fix.timestamp, is_active);
-
-            // Write back updated state
-            let mut flights = active_flights.write().await;
-            flights.insert(fix.device_id, state);
         }
 
         // Case 2: No flight and fix is active - need to create a flight
