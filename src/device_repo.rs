@@ -114,11 +114,15 @@ impl DeviceRepository {
         // Extract country code from ICAO address if applicable
         let country_code = Device::extract_country_code_from_icao(address as u32, address_type);
 
+        // Extract tail number from ICAO address if it's a US aircraft
+        let registration =
+            Device::extract_tail_number_from_icao(address as u32, address_type).unwrap_or_default();
+
         let new_device = NewDevice {
             address,
             address_type,
             aircraft_model: String::new(),
-            registration: String::new(),
+            registration,
             competition_number: String::new(),
             tracked: true,
             identified: true,

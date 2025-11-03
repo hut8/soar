@@ -107,6 +107,7 @@ pub struct DeviceView {
     pub last_fix_at: Option<String>,
     pub tracker_device_type: Option<String>,
     pub icao_model_code: Option<String>,
+    pub country_code: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fixes: Option<Vec<crate::fixes::Fix>>,
 }
@@ -159,6 +160,7 @@ impl DeviceView {
             last_fix_at: device.last_fix_at.map(|dt| dt.to_rfc3339()),
             tracker_device_type: device.tracker_device_type,
             icao_model_code: device.icao_model_code,
+            country_code: device.country_code,
             fixes: None,
         }
     }
@@ -210,6 +212,7 @@ impl DeviceView {
             last_fix_at: device_model.last_fix_at.map(|dt| dt.to_rfc3339()),
             tracker_device_type: device_model.tracker_device_type,
             icao_model_code: device_model.icao_model_code,
+            country_code: device_model.country_code,
             fixes: None,
         }
     }

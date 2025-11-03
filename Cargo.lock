@@ -1633,9 +1633,9 @@ dependencies = [
 
 [[package]]
 name = "flydent"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a88021f1edd104876e3f57bb456ac61594966c0632a2450ebf9736f2c4121803"
+checksum = "0b58a2a4b82e40047a570838da81af4ec217c84a4a83b4bb65612dd59d3ece91"
 dependencies = [
  "once_cell",
  "regex",
