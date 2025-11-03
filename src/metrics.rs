@@ -195,8 +195,8 @@ pub async fn process_metrics_task() {
 pub fn initialize_aprs_ingest_metrics() {
     // APRS connection metrics
     metrics::counter!("aprs.connection.established").absolute(0);
-    metrics::counter!("aprs.connection.failed").absolute(0);
     metrics::counter!("aprs.connection.ended").absolute(0);
+    metrics::counter!("aprs.connection.failed").absolute(0);
     metrics::counter!("aprs.connection.operation_failed").absolute(0);
     metrics::gauge!("aprs.connection.connected").set(0.0);
 
@@ -208,8 +208,16 @@ pub fn initialize_aprs_ingest_metrics() {
     metrics::counter!("aprs.raw_message_queue.full").absolute(0);
     metrics::gauge!("aprs.raw_message_queue.depth").set(0.0);
 
-    // JetStream publishing metrics
+    // Message type tracking (received from APRS-IS)
+    metrics::counter!("aprs.raw_message.received.server").absolute(0);
+    metrics::counter!("aprs.raw_message.received.aprs").absolute(0);
+    metrics::counter!("aprs.raw_message.queued.server").absolute(0);
+    metrics::counter!("aprs.raw_message.queued.aprs").absolute(0);
+
+    // JetStream publishing metrics (ingest-aprs publishes to JetStream)
     metrics::counter!("aprs.jetstream.published").absolute(0);
+    metrics::counter!("aprs.jetstream.published.server").absolute(0);
+    metrics::counter!("aprs.jetstream.published.aprs").absolute(0);
     metrics::counter!("aprs.jetstream.publish_error").absolute(0);
     metrics::gauge!("aprs.jetstream.queue_depth").set(0.0);
 }
@@ -249,12 +257,25 @@ pub fn initialize_run_metrics() {
     // NATS publisher metrics
     metrics::counter!("nats_publisher_fixes_published").absolute(0);
     metrics::gauge!("nats_publisher_queue_depth").set(0.0);
+    metrics::counter!("nats_publisher_errors").absolute(0);
 
     // APRS processing metrics
     metrics::counter!("aprs_aircraft_processed").absolute(0);
     metrics::gauge!("aprs_raw_message_queue_depth").set(0.0);
 
-    // JetStream consumer metrics
+    // Queue drop/close counters
+    metrics::counter!("aprs.raw_message_queue.full").absolute(0);
+    metrics::counter!("aprs.aircraft_queue.full").absolute(0);
+    metrics::counter!("aprs.aircraft_queue.closed").absolute(0);
+    metrics::counter!("aprs.receiver_status_queue.full").absolute(0);
+    metrics::counter!("aprs.receiver_status_queue.closed").absolute(0);
+    metrics::counter!("aprs.receiver_position_queue.full").absolute(0);
+    metrics::counter!("aprs.receiver_position_queue.closed").absolute(0);
+    metrics::counter!("aprs.server_status_queue.full").absolute(0);
+    metrics::counter!("aprs.server_status_queue.closed").absolute(0);
+
+    // JetStream consumer metrics (soar-run consumes from JetStream, doesn't publish)
+    metrics::gauge!("aprs.jetstream.queue_depth").set(0.0);
     metrics::counter!("aprs.jetstream.consumed").absolute(0);
     metrics::counter!("aprs.jetstream.process_error").absolute(0);
     metrics::counter!("aprs.jetstream.decode_error").absolute(0);
