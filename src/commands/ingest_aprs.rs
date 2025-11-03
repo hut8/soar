@@ -65,24 +65,9 @@ pub async fn handle_ingest_aprs(
     let health_state = soar::metrics::init_aprs_health();
     soar::metrics::set_aprs_health(health_state.clone());
 
-    // Start metrics server in production mode
-    if is_production {
-        // Allow overriding metrics port via METRICS_PORT env var (for blue-green deployment)
-        let metrics_port = env::var("METRICS_PORT")
-            .ok()
-            .and_then(|p| p.parse::<u16>().ok())
-            .unwrap_or(9093);
-
-        info!("Starting metrics server on port {}", metrics_port);
-        tokio::spawn(
-            async move {
-                soar::metrics::start_metrics_server(metrics_port).await;
-            }
-            .instrument(tracing::info_span!("metrics_server")),
-        );
-    }
-
     // Initialize all APRS ingester metrics to zero so they appear in Grafana even before events occur
+    // This MUST happen before starting the metrics server to avoid race conditions where
+    // Prometheus scrapes before metrics are initialized
     info!("Initializing APRS ingester metrics...");
 
     // Connection metrics
@@ -114,6 +99,23 @@ pub async fn handle_ingest_aprs(
     metrics::gauge!("aprs.jetstream.queue_depth").set(0.0);
 
     info!("APRS ingester metrics initialized");
+
+    // Start metrics server in production mode (AFTER metrics are initialized)
+    if is_production {
+        // Allow overriding metrics port via METRICS_PORT env var (for blue-green deployment)
+        let metrics_port = env::var("METRICS_PORT")
+            .ok()
+            .and_then(|p| p.parse::<u16>().ok())
+            .unwrap_or(9093);
+
+        info!("Starting metrics server on port {}", metrics_port);
+        tokio::spawn(
+            async move {
+                soar::metrics::start_metrics_server(metrics_port).await;
+            }
+            .instrument(tracing::info_span!("metrics_server")),
+        );
+    }
 
     // Acquire instance lock to prevent multiple ingest instances from running
     let lock_name = if is_production {
