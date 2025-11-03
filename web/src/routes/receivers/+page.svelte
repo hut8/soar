@@ -492,25 +492,14 @@
 
 <style>
 	/* Dark mode support for Google Maps autocomplete */
+	/* The gmp-place-autocomplete component automatically respects color-scheme */
 	gmp-place-autocomplete {
-		--gmp-input-background-color: rgb(var(--color-surface-200));
-		--gmp-input-text-color: rgb(var(--color-surface-900));
-		--gmp-input-border-color: rgb(var(--color-surface-400));
-		--gmp-input-focus-border-color: rgb(var(--color-primary-500));
-		--gmp-dropdown-background-color: rgb(var(--color-surface-200));
-		--gmp-dropdown-text-color: rgb(var(--color-surface-900));
-		--gmp-hover-background-color: rgb(var(--color-surface-300));
 		width: 100%;
+		color-scheme: light;
 	}
 
-	/* Dark mode overrides */
+	/* Dark mode - component will automatically adapt to dark color scheme */
 	:global(.dark) gmp-place-autocomplete {
-		--gmp-input-background-color: rgb(var(--color-surface-800));
-		--gmp-input-text-color: rgb(var(--color-surface-50));
-		--gmp-input-border-color: rgb(var(--color-surface-600));
-		--gmp-input-focus-border-color: rgb(var(--color-primary-500));
-		--gmp-dropdown-background-color: rgb(var(--color-surface-800));
-		--gmp-dropdown-text-color: rgb(var(--color-surface-50));
-		--gmp-hover-background-color: rgb(var(--color-surface-700));
+		color-scheme: dark;
 	}
 </style>
