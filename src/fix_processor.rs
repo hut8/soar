@@ -301,6 +301,8 @@ impl FixProcessor {
         );
 
         // Step 4: Update flight callsign if this fix has a flight_id and flight_number
+        // IMPORTANT: Only update from NULL to a value, never from one non-null value to another.
+        // If callsign changes from one value to another, the flight tracker will create a new flight.
         if let (Some(flight_id), Some(flight_number)) =
             (updated_fix.flight_id, &updated_fix.flight_number)
             && !flight_number.is_empty()
@@ -312,14 +314,25 @@ impl FixProcessor {
                 .await
             {
                 Ok(Some(flight)) => {
-                    // Only update if callsign is different
-                    if flight.callsign.as_deref() != Some(flight_number)
-                        && let Err(e) = self
+                    // Only update if current callsign is None (NULL -> value update)
+                    // Do NOT update if callsign already has a different value (that would indicate a bug)
+                    if flight.callsign.is_none() {
+                        if let Err(e) = self
                             .flight_detection_processor
                             .update_flight_callsign(flight_id, Some(flight_number.clone()))
                             .await
-                    {
-                        debug!("Failed to update callsign for flight {}: {}", flight_id, e);
+                        {
+                            debug!("Failed to update callsign for flight {}: {}", flight_id, e);
+                        }
+                    } else if flight.callsign.as_deref() != Some(flight_number) {
+                        // Callsign changed from one value to another - this should not happen
+                        // because flight tracker should have created a new flight
+                        warn!(
+                            "Flight {} callsign mismatch: has '{}' but fix has '{}' - this indicates a bug in flight coalescing",
+                            flight_id,
+                            flight.callsign.as_ref().unwrap(),
+                            flight_number
+                        );
                     }
                 }
                 Ok(None) => {
