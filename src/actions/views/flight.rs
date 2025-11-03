@@ -70,6 +70,9 @@ pub struct FlightView {
     // Navigation to previous/next flights for the same device (chronologically by takeoff time)
     pub previous_flight_id: Option<Uuid>,
     pub next_flight_id: Option<Uuid>,
+
+    // Flight callsign (from APRS packets)
+    pub callsign: Option<String>,
 }
 
 impl FlightView {
@@ -151,6 +154,7 @@ impl FlightView {
             latest_fix_timestamp,
             previous_flight_id,
             next_flight_id,
+            callsign: flight.callsign,
         }
     }
 

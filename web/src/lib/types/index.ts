@@ -249,6 +249,8 @@ export interface Flight {
 	// Navigation to previous/next flights for the same device (chronologically by takeoff time)
 	previous_flight_id?: string;
 	next_flight_id?: string;
+	// Flight callsign (from APRS packets)
+	callsign?: string;
 }
 
 export interface WatchlistEntry {
