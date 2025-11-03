@@ -2834,7 +2834,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(agl_backfill_altitudes_computed[1m]) * 60",
+          "expr": "rate(agl_backfill_altitudes_computed_total[1m]) * 60",
           "legendFormat": "Altitudes/min",
           "range": true,
           "refId": "A"
@@ -3032,7 +3032,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(agl_backfill_fixes_processed[5m]) * 60",
+          "expr": "rate(agl_backfill_fixes_processed_total[5m]) * 60",
           "legendFormat": "Fixes Processed/min",
           "range": true,
           "refId": "A"
@@ -3043,7 +3043,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(agl_backfill_altitudes_computed[5m]) * 60",
+          "expr": "rate(agl_backfill_altitudes_computed_total[5m]) * 60",
           "legendFormat": "Altitudes Computed/min",
           "range": true,
           "refId": "B"
@@ -3054,7 +3054,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(agl_backfill_no_elevation_data[5m]) * 60",
+          "expr": "rate(agl_backfill_no_elevation_data_total[5m]) * 60",
           "legendFormat": "No Elevation Data/min",
           "range": true,
           "refId": "C"
