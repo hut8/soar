@@ -324,6 +324,11 @@
 									{device.tracker_device_type}
 								</span>
 							{/if}
+							{#if device.country_code}
+								<span class="preset-tonal-tertiary-500 badge text-xs">
+									{device.country_code}
+								</span>
+							{/if}
 						</div>
 					</div>
 				</div>

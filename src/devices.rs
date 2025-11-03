@@ -320,9 +320,38 @@ impl Device {
         // Parse using flydent with icao24bit=true
         let parser = flydent::Parser::new();
         parser.parse(&icao_str, false, true).and_then(|entity| {
+            // Extract ISO2 country code from the entity
             match entity {
                 flydent::EntityResult::Country { iso2, .. } => Some(iso2),
-                flydent::EntityResult::Organization { .. } => None, // Don't extract for organizations
+                flydent::EntityResult::Organization { .. } => None,
+            }
+        })
+    }
+
+    /// Extracts a US tail number (N-number) from an ICAO address if applicable
+    /// Returns Some(tail_number) if the address is ICAO and belongs to a US aircraft
+    /// Returns None for non-ICAO addresses, non-US addresses, or if parsing fails
+    pub fn extract_tail_number_from_icao(
+        address: u32,
+        address_type: AddressType,
+    ) -> Option<String> {
+        // Only extract tail numbers from ICAO addresses
+        if address_type != AddressType::Icao {
+            return None;
+        }
+
+        // Convert ICAO address to hex string (6 digits)
+        let icao_str = format!("{:06X}", address);
+
+        // Parse using flydent with icao24bit=true
+        let parser = flydent::Parser::new();
+        parser.parse(&icao_str, false, true).and_then(|entity| {
+            // Only return tail number for US aircraft
+            match entity {
+                flydent::EntityResult::Country { ref iso2, .. } if iso2 == "US" => {
+                    Some(entity.canonical_callsign().to_string())
+                }
+                _ => None,
             }
         })
     }

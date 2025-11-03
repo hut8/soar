@@ -167,6 +167,7 @@ export interface Device {
 	last_fix_at?: string | null;
 	tracker_device_type?: string | null;
 	icao_model_code?: string | null;
+	country_code?: string | null;
 	fixes?: Fix[];
 }
 

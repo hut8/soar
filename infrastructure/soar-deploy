@@ -257,15 +257,21 @@ done
 # Timer-invoked services are installed but not enabled or started
 log_info "Timer-invoked services (${TIMER_SERVICES[*]}) will only be invoked by their timers"
 
-# Enable and start timers
-log_info "Enabling and starting SOAR timers..."
+# Enable timers (but don't start them - they will activate on next boot or scheduled time)
+log_info "Enabling SOAR timers..."
 for timer in "${TIMERS[@]}"; do
     if [ -f "/etc/systemd/system/$timer" ]; then
         log_info "Enabling $timer..."
         systemctl enable "$timer" || log_warn "Failed to enable $timer"
 
-        log_info "Starting $timer..."
-        systemctl start "$timer" || log_warn "Failed to start $timer"
+        # Check if timer was already running before deployment
+        # If so, restart it to pick up any config changes
+        if systemctl is-active --quiet "$timer"; then
+            log_info "Restarting $timer (was already active)..."
+            systemctl restart "$timer" || log_warn "Failed to restart $timer"
+        else
+            log_info "$timer enabled (will activate on next boot or scheduled time)"
+        fi
     fi
 done
 
@@ -300,10 +306,14 @@ for service in "${TIMER_SERVICES[@]}"; do
 done
 
 for timer in "${TIMERS[@]}"; do
-    if systemctl is-active --quiet "$timer"; then
-        log_info "$timer: ${GREEN}ACTIVE${NC}"
+    if systemctl is-enabled --quiet "$timer" 2>/dev/null; then
+        if systemctl is-active --quiet "$timer"; then
+            log_info "$timer: ${GREEN}ENABLED and ACTIVE${NC}"
+        else
+            log_info "$timer: ${GREEN}ENABLED${NC} (will activate on next boot or scheduled time)"
+        fi
     else
-        log_warn "$timer: ${YELLOW}INACTIVE${NC}"
+        log_warn "$timer: ${YELLOW}NOT ENABLED${NC}"
     fi
 done
 
