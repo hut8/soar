@@ -23,6 +23,7 @@
 		Clock
 	} from '@lucide/svelte';
 	import type { PageData } from './$types';
+	import type { Flight } from '$lib/types';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
 	import {
@@ -60,7 +61,7 @@
 	let includeNearbyFlights = $state(false);
 
 	// Nearby flights data - using full Flight type
-	let nearbyFlights = $state<(typeof data.flight)[]>([]);
+	let nearbyFlights = $state<Flight[]>([]);
 
 	// Spline path response type
 	interface SplinePoint {
@@ -76,7 +77,7 @@
 	let isLoadingNearbyFlights = $state(false);
 
 	// Standalone nearby flights section (not tied to map)
-	let standaloneNearbyFlights = $state<(typeof data.flight)[]>([]);
+	let standaloneNearbyFlights = $state<Flight[]>([]);
 	let isLoadingStandaloneNearby = $state(false);
 	let showStandaloneNearby = $state(false);
 
@@ -202,7 +203,7 @@
 		isLoadingStandaloneNearby = true;
 		showStandaloneNearby = true;
 		try {
-			const flights = await serverCall<(typeof data.flight)[]>(`/flights/${data.flight.id}/nearby`);
+			const flights = await serverCall<Flight[]>(`/flights/${data.flight.id}/nearby`);
 			standaloneNearbyFlights = flights;
 		} catch (err) {
 			console.error('Failed to fetch nearby flights:', err);
@@ -216,7 +217,7 @@
 		isLoadingNearbyFlights = true;
 		try {
 			// Fetch nearby flights
-			const flights = await serverCall<(typeof data.flight)[]>(`/flights/${data.flight.id}/nearby`);
+			const flights = await serverCall<Flight[]>(`/flights/${data.flight.id}/nearby`);
 			nearbyFlights = flights;
 
 			// Fetch fixes for each nearby flight and add to map
