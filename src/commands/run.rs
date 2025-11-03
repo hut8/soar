@@ -92,7 +92,14 @@ pub async fn handle_run(
         final_stream_name, final_subject, final_consumer_name
     );
 
-    // Start metrics server in the background
+    // Initialize all soar-run metrics to zero so they appear in Grafana even before events occur
+    // This MUST happen before starting the metrics server to avoid race conditions where
+    // Prometheus scrapes before metrics are initialized
+    info!("Initializing soar-run metrics...");
+    soar::metrics::initialize_run_metrics();
+    info!("soar-run metrics initialized");
+
+    // Start metrics server in the background (AFTER metrics are initialized)
     if is_production {
         info!("Starting metrics server on port 9091");
         tokio::spawn(
@@ -102,22 +109,6 @@ pub async fn handle_run(
             .instrument(tracing::info_span!("metrics_server")),
         );
     }
-
-    // Initialize all soar-run metrics to zero so they appear in Grafana even before events occur
-    info!("Initializing soar-run metrics...");
-
-    // JetStream consumer metrics
-    metrics::counter!("aprs.jetstream.consumed").absolute(0);
-    metrics::counter!("aprs.jetstream.consumer_error").absolute(0);
-
-    // Receiver cache metrics
-    metrics::counter!("generic_processor.receiver_cache.hit").absolute(0);
-    metrics::counter!("generic_processor.receiver_cache.miss").absolute(0);
-
-    // Flight tracker metrics
-    metrics::counter!("flight_tracker_timeouts_detected").absolute(0);
-
-    info!("soar-run metrics initialized");
 
     let lock_name = if is_production {
         "soar-run-production"

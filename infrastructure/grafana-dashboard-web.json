@@ -114,11 +114,6 @@
           "color": {
             "mode": "thresholds"
           },
-          "custom": {
-            "fillOpacity": 70,
-            "lineWidth": 0,
-            "spanNulls": false
-          },
           "mappings": [
             {
               "options": {
@@ -148,31 +143,34 @@
                 "value": 1
               }
             ]
-          }
+          },
+          "max": 1,
+          "min": 0,
+          "unit": "short"
         },
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
-        "w": 12,
+        "h": 4,
+        "w": 6,
         "x": 6,
         "y": 1
       },
       "id": 52,
       "options": {
-        "alignValue": "left",
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
+        "minVizHeight": 75,
+        "minVizWidth": 75,
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
         },
-        "mergeValues": true,
-        "rowHeight": 0.9,
-        "showValue": "never",
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "sizing": "auto"
       },
       "targets": [
         {
@@ -188,7 +186,7 @@
         }
       ],
       "title": "Process Status",
-      "type": "state-timeline"
+      "type": "gauge"
     },
     {
       "datasource": {
