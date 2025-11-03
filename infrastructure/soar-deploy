@@ -61,14 +61,22 @@ if [ ! -f "$DEPLOY_DIR/soar" ]; then
 fi
 
 # Define services and timers
-SERVICES=(
+# Active services that should be enabled and started
+ACTIVE_SERVICES=(
     "soar-aprs-ingest.service"
     "soar-run.service"
     "soar-web.service"
+)
+
+# Timer-invoked services (only installed, not enabled or started)
+TIMER_SERVICES=(
     "soar-pull-data.service"
     "soar-sitemap.service"
     "soar-archive.service"
 )
+
+# All services (for stopping and installing)
+ALL_SERVICES=("${ACTIVE_SERVICES[@]}" "${TIMER_SERVICES[@]}")
 
 TIMERS=(
     "soar-pull-data.timer"
@@ -78,7 +86,7 @@ TIMERS=(
 
 # Stop ALL services before deployment
 log_info "Stopping SOAR services..."
-for service in "${SERVICES[@]}"; do
+for service in "${ALL_SERVICES[@]}"; do
     if systemctl is-active --quiet "$service"; then
         log_info "Stopping $service..."
         systemctl stop "$service" || log_warn "Failed to stop $service"
@@ -119,7 +127,7 @@ log_info "Binary installed successfully"
 
 # Install service files
 log_info "Installing service files..."
-for service in "${SERVICES[@]}"; do
+for service in "${ALL_SERVICES[@]}"; do
     if [ -f "$DEPLOY_DIR/$service" ]; then
         log_info "Installing $service..."
         cp "$DEPLOY_DIR/$service" /etc/systemd/system/
@@ -230,8 +238,8 @@ if [ -f "/etc/systemd/system/soar-aprs-ingest.service" ]; then
     sleep 2
 fi
 
-# Start the rest of the services
-for service in "${SERVICES[@]}"; do
+# Start the rest of the active services
+for service in "${ACTIVE_SERVICES[@]}"; do
     # Skip aprs-ingest since we already started it
     if [ "$service" = "soar-aprs-ingest.service" ]; then
         continue
@@ -245,6 +253,9 @@ for service in "${SERVICES[@]}"; do
         systemctl start "$service" || log_warn "Failed to start $service"
     fi
 done
+
+# Timer-invoked services are installed but not enabled or started
+log_info "Timer-invoked services (${TIMER_SERVICES[*]}) will only be invoked by their timers"
 
 # Enable and start timers
 log_info "Enabling and starting SOAR timers..."
@@ -266,7 +277,7 @@ sleep 5
 log_info "Checking service status..."
 ALL_HEALTHY=true
 
-for service in "${SERVICES[@]}"; do
+for service in "${ACTIVE_SERVICES[@]}"; do
     if systemctl is-active --quiet "$service"; then
         log_info "$service: ${GREEN}ACTIVE${NC}"
     else
@@ -276,6 +287,15 @@ for service in "${SERVICES[@]}"; do
         # Show recent logs for failed service
         log_info "Recent logs for $service:"
         journalctl -u "$service" --no-pager --lines=10 || true
+    fi
+done
+
+# Check timer-invoked services are not running (they should be stopped)
+for service in "${TIMER_SERVICES[@]}"; do
+    if systemctl is-active --quiet "$service"; then
+        log_warn "$service: ${YELLOW}RUNNING${NC} (should only run via timer)"
+    else
+        log_info "$service: ${GREEN}STOPPED${NC} (timer-invoked only)"
     fi
 done
 
