@@ -43,7 +43,7 @@
 	let receivers = $state<Receiver[]>([]);
 	let loading = $state(false);
 	let error = $state('');
-	let searchMode = $state<'query' | 'location'>('query');
+	let searchMode = $state<'query' | 'location' | 'nearme'>('query');
 
 	// Query search
 	let searchQuery = $state('');
@@ -105,10 +105,13 @@
 					return;
 				}
 				queryParams.push(`query=${encodeURIComponent(searchQuery.trim())}`);
-			} else {
-				// location search
+			} else if (searchMode === 'location' || searchMode === 'nearme') {
+				// location or near me search
 				if (selectedLatitude === null || selectedLongitude === null) {
-					error = 'Please select a location from the autocomplete';
+					error =
+						searchMode === 'nearme'
+							? 'Please allow location access'
+							: 'Please select a location from the autocomplete';
 					loading = false;
 					return;
 				}
@@ -254,7 +257,7 @@
 		</h3>
 
 		<!-- Search Mode Toggle -->
-		<div class="mb-4 flex gap-4">
+		<div class="mb-4 flex flex-wrap gap-2">
 			<button
 				class="btn {searchMode === 'query' ? 'preset-filled-primary-500' : 'preset-outlined'}"
 				onclick={() => {
@@ -274,6 +277,16 @@
 			>
 				<MapPin class="h-4 w-4" />
 				Location Search
+			</button>
+			<button
+				class="btn {searchMode === 'nearme' ? 'preset-filled-primary-500' : 'preset-outlined'}"
+				onclick={() => {
+					searchMode = 'nearme';
+					error = '';
+				}}
+			>
+				<Navigation class="h-4 w-4" />
+				Near Me
 			</button>
 		</div>
 
@@ -300,31 +313,16 @@
 					{/if}
 				</button>
 			</div>
-		{:else}
+		{:else if searchMode === 'location'}
 			<!-- Location Search -->
 			<div class="space-y-3 rounded-lg border p-3">
-				<div class="flex gap-2">
-					<div class="min-w-0 flex-1">
-						<gmp-place-autocomplete
-							bind:this={autocompleteElement}
-							placeholder="Enter a city or location"
-							ongmpplaceselect={handlePlaceSelect}
-						></gmp-place-autocomplete>
-					</div>
-					<button
-						class="preset-tonal-primary-500 btn flex-shrink-0"
-						onclick={useMyLocation}
-						disabled={gettingLocation || loading}
-						title="Use my current location"
-					>
-						{#if gettingLocation}
-							<div
-								class="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
-							></div>
-						{:else}
-							<Navigation class="h-4 w-4" />
-						{/if}
-					</button>
+				<div class="min-w-0 flex-1">
+					<gmp-place-autocomplete
+						bind:this={autocompleteElement}
+						placeholder="Enter a city or location"
+						ongmpplaceselect={handlePlaceSelect}
+						class="google-autocomplete"
+					></gmp-place-autocomplete>
 				</div>
 
 				<div class="flex items-center gap-3">
@@ -345,6 +343,52 @@
 						Search
 					{/if}
 				</button>
+			</div>
+		{:else if searchMode === 'nearme'}
+			<!-- Near Me Search -->
+			<div class="space-y-3 rounded-lg border p-3">
+				<button
+					class="preset-tonal-primary-500 btn w-full"
+					onclick={useMyLocation}
+					disabled={gettingLocation || loading}
+				>
+					{#if gettingLocation}
+						<div
+							class="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
+						></div>
+						Getting your location...
+					{:else}
+						<Navigation class="h-4 w-4" />
+						Use My Current Location
+					{/if}
+				</button>
+
+				{#if selectedLatitude !== null && selectedLongitude !== null}
+					<div class="text-surface-500-400-token bg-surface-100-800-token rounded p-2 text-sm">
+						Location: {selectedLatitude.toFixed(4)}, {selectedLongitude.toFixed(4)}
+					</div>
+				{/if}
+
+				<div class="flex items-center gap-3">
+					<label class="flex-1">
+						<span class="text-sm font-medium">Radius (miles)</span>
+						<input type="number" class="input" min="1" max="1000" bind:value={radiusMiles} />
+					</label>
+				</div>
+
+				{#if selectedLatitude !== null && selectedLongitude !== null}
+					<button
+						class="btn w-full preset-filled-primary-500"
+						onclick={searchReceivers}
+						disabled={loading}
+					>
+						{#if loading}
+							Searching...
+						{:else}
+							Search Nearby Receivers
+						{/if}
+					</button>
+				{/if}
 			</div>
 		{/if}
 
@@ -445,3 +489,17 @@
 		</div>
 	{/if}
 </div>
+
+<style>
+	/* Dark mode support for Google Maps autocomplete */
+	/* The gmp-place-autocomplete component automatically respects color-scheme */
+	gmp-place-autocomplete {
+		width: 100%;
+		color-scheme: light;
+	}
+
+	/* Dark mode - component will automatically adapt to dark color scheme */
+	:global(.dark) gmp-place-autocomplete {
+		color-scheme: dark;
+	}
+</style>

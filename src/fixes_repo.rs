@@ -623,6 +623,47 @@ impl FixesRepository {
         Ok(result)
     }
 
+    /// Get fixes by receiver ID with pagination (last 24 hours only)
+    pub async fn get_fixes_by_receiver_id_paginated(
+        &self,
+        receiver_uuid: Uuid,
+        page: i64,
+        per_page: i64,
+    ) -> Result<(Vec<Fix>, i64)> {
+        let pool = self.pool.clone();
+
+        let result = tokio::task::spawn_blocking(move || {
+            use crate::schema::fixes::dsl::*;
+            let mut conn = pool.get()?;
+
+            // Only get fixes from the last 24 hours
+            let cutoff_time = chrono::Utc::now() - chrono::Duration::hours(24);
+
+            // Get total count
+            let total_count = fixes
+                .filter(receiver_id.eq(receiver_uuid))
+                .filter(received_at.gt(cutoff_time))
+                .count()
+                .get_result::<i64>(&mut conn)?;
+
+            // Get paginated results (most recent first)
+            let offset = (page - 1) * per_page;
+            let results = fixes
+                .filter(receiver_id.eq(receiver_uuid))
+                .filter(received_at.gt(cutoff_time))
+                .order(timestamp.desc())
+                .limit(per_page)
+                .offset(offset)
+                .select(Fix::as_select())
+                .load::<Fix>(&mut conn)?;
+
+            Ok::<(Vec<Fix>, i64), anyhow::Error>((results, total_count))
+        })
+        .await??;
+
+        Ok(result)
+    }
+
     /// Get fixes by source (receiver callsign) with pagination
     pub async fn get_fixes_by_source_paginated(
         &self,
@@ -1036,6 +1077,48 @@ impl FixesRepository {
         Ok(result)
     }
 
+    /// Get fix counts grouped by APRS type for a specific receiver ID (last 24 hours only)
+    pub async fn get_fix_counts_by_aprs_type_for_receiver(
+        &self,
+        receiver_uuid: Uuid,
+    ) -> Result<Vec<crate::actions::receivers::AprsTypeCount>> {
+        let pool = self.pool.clone();
+
+        let result = tokio::task::spawn_blocking(move || {
+            use crate::schema::fixes::dsl::*;
+            use diesel::dsl::count_star;
+            let mut conn = pool.get()?;
+
+            // Only get fixes from the last 24 hours
+            let cutoff_time = chrono::Utc::now() - chrono::Duration::hours(24);
+
+            // Group by aprs_type and count
+            let counts = fixes
+                .filter(receiver_id.eq(receiver_uuid))
+                .filter(received_at.gt(cutoff_time))
+                .group_by(aprs_type)
+                .select((aprs_type, count_star()))
+                .order_by(count_star().desc())
+                .load::<(String, i64)>(&mut conn)?;
+
+            // Convert to AprsTypeCount structs
+            let result: Vec<crate::actions::receivers::AprsTypeCount> = counts
+                .into_iter()
+                .map(
+                    |(type_name, count)| crate::actions::receivers::AprsTypeCount {
+                        aprs_type: type_name,
+                        count,
+                    },
+                )
+                .collect();
+
+            Ok::<Vec<crate::actions::receivers::AprsTypeCount>, anyhow::Error>(result)
+        })
+        .await??;
+
+        Ok(result)
+    }
+
     /// Get fix counts grouped by APRS type for a specific source (receiver callsign)
     pub async fn get_fix_counts_by_aprs_type_for_source(
         &self,
@@ -1069,6 +1152,48 @@ impl FixesRepository {
                 .collect();
 
             Ok::<Vec<crate::actions::receivers::AprsTypeCount>, anyhow::Error>(result)
+        })
+        .await??;
+
+        Ok(result)
+    }
+
+    /// Get fix counts grouped by device for a specific receiver ID (last 24 hours only)
+    pub async fn get_fix_counts_by_device_for_receiver(
+        &self,
+        receiver_uuid: Uuid,
+    ) -> Result<Vec<crate::actions::receivers::DeviceFixCount>> {
+        let pool = self.pool.clone();
+
+        let result = tokio::task::spawn_blocking(move || {
+            use crate::schema::fixes::dsl::*;
+            use diesel::dsl::count_star;
+            let mut conn = pool.get()?;
+
+            // Only get fixes from the last 24 hours
+            let cutoff_time = chrono::Utc::now() - chrono::Duration::hours(24);
+
+            // Group by device_id and count
+            let counts = fixes
+                .filter(receiver_id.eq(receiver_uuid))
+                .filter(received_at.gt(cutoff_time))
+                .group_by(device_id)
+                .select((device_id, count_star()))
+                .order_by(count_star().desc())
+                .load::<(uuid::Uuid, i64)>(&mut conn)?;
+
+            // Convert to DeviceFixCount structs
+            let result: Vec<crate::actions::receivers::DeviceFixCount> = counts
+                .into_iter()
+                .map(
+                    |(dev_id, count)| crate::actions::receivers::DeviceFixCount {
+                        device_id: dev_id,
+                        count,
+                    },
+                )
+                .collect();
+
+            Ok::<Vec<crate::actions::receivers::DeviceFixCount>, anyhow::Error>(result)
         })
         .await??;
 

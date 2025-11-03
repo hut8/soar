@@ -678,7 +678,10 @@ impl ReceiverRepository {
     }
 
     /// Get receivers that need geocoding (geocoded=false and have lat/lng)
+    /// Excludes receivers with coordinates near (0,0) as these are effectively null
     pub async fn get_receivers_needing_geocoding(&self, limit: i64) -> Result<Vec<ReceiverModel>> {
+        use diesel::dsl::sql;
+
         let pool = self.pool.clone();
 
         tokio::task::spawn_blocking(move || -> Result<Vec<ReceiverModel>> {
@@ -688,6 +691,10 @@ impl ReceiverRepository {
                 .filter(receivers::geocoded.eq(false))
                 .filter(receivers::latitude.is_not_null())
                 .filter(receivers::longitude.is_not_null())
+                // Exclude coordinates near (0,0) - treat as invalid/null
+                .filter(sql::<diesel::sql_types::Bool>(
+                    "NOT (ABS(latitude) < 0.1 AND ABS(longitude) < 0.1)",
+                ))
                 .order(receivers::updated_at.asc()) // Process oldest first
                 .limit(limit)
                 .select(ReceiverModel::as_select())

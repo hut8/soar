@@ -252,7 +252,7 @@ pub async fn search_receivers(
     }
 }
 
-/// Get fixes received by a specific receiver
+/// Get fixes received by a specific receiver (last 24 hours only)
 pub async fn get_receiver_fixes(
     Path(id): Path<Uuid>,
     Query(params): Query<ReceiverFixesQuery>,
@@ -263,9 +263,9 @@ pub async fn get_receiver_fixes(
     let receiver_repo = ReceiverRepository::new(state.pool.clone());
     let fixes_repo = FixesRepository::new(state.pool.clone());
 
-    // First verify the receiver exists and get its callsign
-    let receiver = match receiver_repo.get_receiver_by_id(id).await {
-        Ok(Some(r)) => r,
+    // First verify the receiver exists
+    match receiver_repo.get_receiver_by_id(id).await {
+        Ok(Some(_)) => {}
         Ok(None) => return json_error(StatusCode::NOT_FOUND, "Receiver not found").into_response(),
         Err(e) => {
             tracing::error!("Failed to get receiver {}: {}", id, e);
@@ -277,9 +277,9 @@ pub async fn get_receiver_fixes(
     let page = params.page.unwrap_or(1).max(1);
     let per_page = params.per_page.unwrap_or(100).clamp(1, 100);
 
-    // Get fixes where source = receiver callsign
+    // Get fixes where receiver_id = id (last 24 hours only)
     match fixes_repo
-        .get_fixes_by_source_paginated(&receiver.callsign, page, per_page)
+        .get_fixes_by_receiver_id_paginated(id, page, per_page)
         .await
     {
         Ok((fixes, total_count)) => {
@@ -585,7 +585,7 @@ pub async fn get_receiver_statistics(
     .into_response()
 }
 
-/// Get aggregate statistics for a specific receiver (fix counts by type and device)
+/// Get aggregate statistics for a specific receiver (fix counts by type and device, last 24 hours only)
 pub async fn get_receiver_aggregate_stats(
     Path(id): Path<Uuid>,
     State(state): State<AppState>,
@@ -595,9 +595,9 @@ pub async fn get_receiver_aggregate_stats(
     let receiver_repo = ReceiverRepository::new(state.pool.clone());
     let fixes_repo = FixesRepository::new(state.pool.clone());
 
-    // First verify the receiver exists and get its callsign
-    let receiver = match receiver_repo.get_receiver_by_id(id).await {
-        Ok(Some(r)) => r,
+    // First verify the receiver exists
+    match receiver_repo.get_receiver_by_id(id).await {
+        Ok(Some(_)) => {}
         Ok(None) => return json_error(StatusCode::NOT_FOUND, "Receiver not found").into_response(),
         Err(e) => {
             tracing::error!("Failed to get receiver {}: {}", id, e);
@@ -606,9 +606,9 @@ pub async fn get_receiver_aggregate_stats(
         }
     };
 
-    // Get fix counts grouped by APRS type
+    // Get fix counts grouped by APRS type (last 24 hours only)
     let fix_counts = match fixes_repo
-        .get_fix_counts_by_aprs_type_for_source(&receiver.callsign)
+        .get_fix_counts_by_aprs_type_for_receiver(id)
         .await
     {
         Ok(counts) => counts,
@@ -626,11 +626,8 @@ pub async fn get_receiver_aggregate_stats(
         }
     };
 
-    // Get fix counts grouped by device
-    let device_fix_counts = match fixes_repo
-        .get_fix_counts_by_device_for_source(&receiver.callsign)
-        .await
-    {
+    // Get fix counts grouped by device (last 24 hours only)
+    let device_fix_counts = match fixes_repo.get_fix_counts_by_device_for_receiver(id).await {
         Ok(counts) => counts,
         Err(e) => {
             tracing::error!(
