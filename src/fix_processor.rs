@@ -175,8 +175,9 @@ impl FixProcessor {
                         let tracker_type_changed =
                             Some(&tracker_device_type) != device_model.tracker_device_type.as_ref();
                         let registration_changed = registration.is_some()
-                            && registration.as_deref() != Some(device_model.registration.as_str())
-                            && !device_model.registration.is_empty();
+                            && (device_model.registration.is_empty()
+                                || registration.as_deref()
+                                    != Some(device_model.registration.as_str()));
 
                         // Update device fields only if we have new/different information
                         if icao_changed
