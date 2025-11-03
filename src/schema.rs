@@ -330,6 +330,10 @@ diesel::table! {
         last_fix_at -> Timestamptz,
         tow_release_height_delta_ft -> Nullable<Int4>,
         callsign -> Nullable<Text>,
+        min_latitude -> Nullable<Float8>,
+        max_latitude -> Nullable<Float8>,
+        min_longitude -> Nullable<Float8>,
+        max_longitude -> Nullable<Float8>,
     }
 }
 

@@ -23,6 +23,7 @@
 		Clock
 	} from '@lucide/svelte';
 	import type { PageData } from './$types';
+	import type { Flight } from '$lib/types';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
 	import {
@@ -35,6 +36,7 @@
 	import FlightStateBadge from '$lib/components/FlightStateBadge.svelte';
 	import RadarLoader from '$lib/components/RadarLoader.svelte';
 	import FixesList from '$lib/components/FixesList.svelte';
+	import FlightsList from '$lib/components/FlightsList.svelte';
 	import TowAircraftLink from '$lib/components/TowAircraftLink.svelte';
 	import { theme } from '$lib/stores/theme';
 
@@ -58,18 +60,8 @@
 	// Display options
 	let includeNearbyFlights = $state(false);
 
-	// Nearby flights data - type includes aircraft_model and registration from device
-	interface NearbyFlight {
-		id: string;
-		device_address: string;
-		takeoff_time?: string;
-		landing_time?: string;
-		departure_airport?: string;
-		arrival_airport?: string;
-		aircraft_model?: string;
-		registration?: string;
-	}
-	let nearbyFlights = $state<NearbyFlight[]>([]);
+	// Nearby flights data - using full Flight type
+	let nearbyFlights = $state<Flight[]>([]);
 
 	// Spline path response type
 	interface SplinePoint {
@@ -85,7 +77,7 @@
 	let isLoadingNearbyFlights = $state(false);
 
 	// Standalone nearby flights section (not tied to map)
-	let standaloneNearbyFlights = $state<NearbyFlight[]>([]);
+	let standaloneNearbyFlights = $state<Flight[]>([]);
 	let isLoadingStandaloneNearby = $state(false);
 	let showStandaloneNearby = $state(false);
 
@@ -211,7 +203,7 @@
 		isLoadingStandaloneNearby = true;
 		showStandaloneNearby = true;
 		try {
-			const flights = await serverCall<NearbyFlight[]>(`/flights/${data.flight.id}/nearby`);
+			const flights = await serverCall<Flight[]>(`/flights/${data.flight.id}/nearby`);
 			standaloneNearbyFlights = flights;
 		} catch (err) {
 			console.error('Failed to fetch nearby flights:', err);
@@ -225,7 +217,7 @@
 		isLoadingNearbyFlights = true;
 		try {
 			// Fetch nearby flights
-			const flights = await serverCall<NearbyFlight[]>(`/flights/${data.flight.id}/nearby`);
+			const flights = await serverCall<Flight[]>(`/flights/${data.flight.id}/nearby`);
 			nearbyFlights = flights;
 
 			// Fetch fixes for each nearby flight and add to map
@@ -1151,42 +1143,7 @@
 				<p>No nearby flights found.</p>
 			</div>
 		{:else}
-			<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-				{#each standaloneNearbyFlights as flight (flight.id)}
-					<a href="/flights/{flight.id}" class="card p-4 hover:ring-2 hover:ring-primary-500">
-						<div class="space-y-2">
-							{#if flight.registration}
-								<div>
-									<div class="text-surface-600-300-token text-xs">Registration</div>
-									<div class="font-mono text-sm font-semibold">{flight.registration}</div>
-								</div>
-							{/if}
-							{#if flight.aircraft_model}
-								<div>
-									<div class="text-surface-600-300-token text-xs">Model</div>
-									<div class="text-sm font-semibold">{flight.aircraft_model}</div>
-								</div>
-							{/if}
-							<div>
-								<div class="text-surface-600-300-token text-xs">Takeoff</div>
-								<div class="text-sm">{formatDateTimeMobile(flight.takeoff_time)}</div>
-								{#if flight.departure_airport}
-									<div class="text-surface-600-300-token text-xs">{flight.departure_airport}</div>
-								{/if}
-							</div>
-							{#if flight.landing_time}
-								<div>
-									<div class="text-surface-600-300-token text-xs">Landing</div>
-									<div class="text-sm">{formatDateTimeMobile(flight.landing_time)}</div>
-									{#if flight.arrival_airport}
-										<div class="text-surface-600-300-token text-xs">{flight.arrival_airport}</div>
-									{/if}
-								</div>
-							{/if}
-						</div>
-					</a>
-				{/each}
-			</div>
+			<FlightsList flights={standaloneNearbyFlights} showEnd={true} showAircraft={true} />
 		{/if}
 	</div>
 
@@ -1269,55 +1226,15 @@
 		{/if}
 	</div>
 
-	<!-- Nearby Flights List -->
+	<!-- Nearby Flights List (shown on map) -->
 	{#if includeNearbyFlights && nearbyFlights.length > 0}
 		<div class="card p-6">
 			<h2 class="mb-4 h2">Nearby Flights ({nearbyFlights.length})</h2>
-			<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-				{#each nearbyFlights as flight, index (flight.id)}
-					{@const colorIndex = index % 6}
-					{@const colors = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4']}
-					{@const colorNames = ['Blue', 'Green', 'Orange', 'Purple', 'Pink', 'Cyan']}
-					<a href="/flights/{flight.id}" class="card p-4 hover:ring-2 hover:ring-primary-500">
-						<div class="mb-3 flex items-center justify-between">
-							<div class="flex items-center gap-2">
-								<div
-									class="h-3 w-8 rounded"
-									style="background-color: {colors[colorIndex]}; opacity: 0.6;"
-								></div>
-								<span class="text-surface-600-300-token text-xs">{colorNames[colorIndex]}</span>
-							</div>
-							{#if flight.aircraft_model}
-								<span class="text-surface-600-300-token text-xs">{flight.aircraft_model}</span>
-							{/if}
-						</div>
-						<div class="space-y-2">
-							{#if flight.registration}
-								<div>
-									<div class="text-surface-600-300-token text-xs">Registration</div>
-									<div class="font-mono text-sm font-semibold">{flight.registration}</div>
-								</div>
-							{/if}
-							<div>
-								<div class="text-surface-600-300-token text-xs">Takeoff</div>
-								<div class="text-sm">{formatDateTimeMobile(flight.takeoff_time)}</div>
-								{#if flight.departure_airport}
-									<div class="text-surface-600-300-token text-xs">{flight.departure_airport}</div>
-								{/if}
-							</div>
-							{#if flight.landing_time}
-								<div>
-									<div class="text-surface-600-300-token text-xs">Landing</div>
-									<div class="text-sm">{formatDateTimeMobile(flight.landing_time)}</div>
-									{#if flight.arrival_airport}
-										<div class="text-surface-600-300-token text-xs">{flight.arrival_airport}</div>
-									{/if}
-								</div>
-							{/if}
-						</div>
-					</a>
-				{/each}
+			<div class="text-surface-600-300-token mb-4 text-sm">
+				These flights are shown on the map in different colors (blue, green, orange, purple, pink,
+				cyan)
 			</div>
+			<FlightsList flights={nearbyFlights} showEnd={true} showAircraft={true} />
 		</div>
 	{/if}
 </div>

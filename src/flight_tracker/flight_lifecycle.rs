@@ -103,7 +103,7 @@ pub(crate) async fn create_flight(
     Ok(flight_id)
 }
 
-/// Timeout a flight that has not received beacons for 8+ hours
+/// Timeout a flight that has not received beacons for 1+ hour
 /// Does NOT set landing location - this is a timeout, not a landing
 /// Sets timed_out_at to the last_fix_at value from the flight
 pub(crate) async fn timeout_flight(
@@ -113,7 +113,7 @@ pub(crate) async fn timeout_flight(
     device_id: Uuid,
 ) -> Result<()> {
     info!(
-        "Timing out flight {} for device {} (no beacons for 8+ hours)",
+        "Timing out flight {} for device {} (no beacons for 1+ hour)",
         flight_id, device_id
     );
 
@@ -139,6 +139,11 @@ pub(crate) async fn timeout_flight(
                 "Successfully timed out flight {} at {}",
                 flight_id, timeout_time
             );
+
+            // Calculate and update bounding box now that flight is timed out
+            flights_repo
+                .calculate_and_update_bounding_box(flight_id)
+                .await?;
 
             // Remove from active flights
             let mut flights = active_flights.write().await;
@@ -373,6 +378,11 @@ pub(crate) async fn complete_flight(
             landing_runway_inferred, // Track whether runway was inferred from heading or looked up
             Some(fix.timestamp),     // last_fix_at - update in same query to avoid two UPDATEs
         )
+        .await?;
+
+    // Calculate and update bounding box now that flight is complete
+    flights_repo
+        .calculate_and_update_bounding_box(flight_id)
         .await?;
 
     info!(
