@@ -148,6 +148,10 @@ async fn archive_flights_day(pool: &PgPool, date: NaiveDate, archive_dir: &Path)
         final_path.display()
     ))?;
     info!("Successfully archived {} to {}", date, final_path.display());
+
+    // Run VACUUM ANALYZE on flights table after deletion
+    vacuum_analyze_table(pool, "flights").await?;
+
     Ok(())
 }
 
@@ -319,6 +323,10 @@ async fn archive_fixes_day(pool: &PgPool, date: NaiveDate, archive_dir: &Path) -
         final_path.display()
     ))?;
     info!("Successfully archived {} to {}", date, final_path.display());
+
+    // Run VACUUM ANALYZE on fixes table after deletion
+    vacuum_analyze_table(pool, "fixes").await?;
+
     Ok(())
 }
 
@@ -504,6 +512,10 @@ async fn archive_receiver_statuses_day(
         final_path.display()
     ))?;
     info!("Successfully archived {} to {}", date, final_path.display());
+
+    // Run VACUUM ANALYZE on receiver_statuses table after deletion
+    vacuum_analyze_table(pool, "receiver_statuses").await?;
+
     Ok(())
 }
 
@@ -689,6 +701,10 @@ async fn archive_aprs_messages_day(
         final_path.display()
     ))?;
     info!("Successfully archived {} to {}", date, final_path.display());
+
+    // Run VACUUM ANALYZE on aprs_messages table after deletion
+    vacuum_analyze_table(pool, "aprs_messages").await?;
+
     Ok(())
 }
 
@@ -1135,6 +1151,32 @@ fn insert_flights_batch(conn: &mut PgConnection, batch: &[FlightModel]) -> Resul
 // ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
+
+/// Run VACUUM ANALYZE on a table to reclaim space and update statistics
+/// This improves query performance and reduces table bloat after deletions
+async fn vacuum_analyze_table(pool: &PgPool, table_name: &str) -> Result<()> {
+    info!("Running VACUUM ANALYZE on table '{}'...", table_name);
+    let pool = pool.clone();
+    let table_name = table_name.to_string();
+
+    tokio::task::spawn_blocking(move || {
+        let mut conn = pool.get()?;
+        // VACUUM ANALYZE cannot run inside a transaction, so we use SimpleConnection
+        // which executes the command directly without a transaction
+        use diesel::connection::SimpleConnection;
+        let query = format!("VACUUM ANALYZE {}", table_name);
+        conn.batch_execute(&query)
+            .context(format!("Failed to VACUUM ANALYZE table '{}'", table_name))?;
+        info!(
+            "Successfully completed VACUUM ANALYZE on table '{}'",
+            table_name
+        );
+        Ok::<(), anyhow::Error>(())
+    })
+    .await??;
+
+    Ok(())
+}
 
 /// Get day boundaries (start and end) for a given date in UTC
 fn get_day_boundaries(date: NaiveDate) -> Result<(chrono::DateTime<Utc>, chrono::DateTime<Utc>)> {
