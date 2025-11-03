@@ -272,19 +272,23 @@
 								<div class="flex flex-col gap-1">
 									{#if isTimedOut(flight)}
 										<div class="flex items-center gap-1 text-sm">
-											<AlertCircle class="h-3 w-3" />
+											<Clock class="h-3 w-3" />
+											{formatRelativeTime(flight.latest_fix_timestamp)}
+										</div>
+										{#if flight.latest_fix_timestamp}
+											<div class="text-surface-500-400-token text-xs">
+												{formatLocalTime(flight.latest_fix_timestamp)}
+											</div>
+										{/if}
+										<div class="mt-1">
 											<span
 												class="badge preset-filled-warning-500 text-xs"
-												title="No beacons received for 5+ minutes"
+												title="No beacons received for 1+ hour"
 											>
+												<AlertCircle class="mr-1 inline h-3 w-3" />
 												Timed out
 											</span>
 										</div>
-										{#if flight.timed_out_at}
-											<div class="text-surface-500-400-token text-xs">
-												{formatLocalTime(flight.timed_out_at)}
-											</div>
-										{/if}
 									{:else if isActive(flight)}
 										<span class="text-surface-500-400-token text-sm">In progress</span>
 									{:else}
@@ -462,19 +466,19 @@
 					<div>
 						<span class="text-surface-500-400-token text-xs">End:</span>
 						{#if isTimedOut(flight)}
+							{#if flight.latest_fix_timestamp}
+								{formatLocalTime(flight.latest_fix_timestamp)}
+								<span class="text-surface-500-400-token text-xs">
+									({formatRelativeTime(flight.latest_fix_timestamp)})
+								</span>
+							{/if}
 							<span
 								class="badge preset-filled-warning-500 text-xs"
-								title="No beacons received for 5+ minutes"
+								title="No beacons received for 1+ hour"
 							>
 								<AlertCircle class="mr-1 inline h-3 w-3" />
 								Timed out
 							</span>
-							{#if flight.timed_out_at}
-								{formatLocalTime(flight.timed_out_at)}
-								<span class="text-surface-500-400-token text-xs">
-									({formatRelativeTime(flight.timed_out_at)})
-								</span>
-							{/if}
 						{:else if isActive(flight)}
 							<span class="text-surface-500-400-token">In progress</span>
 						{:else}

@@ -15,11 +15,11 @@ use crate::geometry::spline::{GeoPoint, calculate_spline_distance, generate_spli
 pub enum FlightState {
     /// Flight is currently active (no landing_time, no timed_out_at, last_fix_at within 10 minutes)
     Active,
-    /// Flight is stale (no beacons for 10+ minutes but less than 8 hours)
+    /// Flight is stale (no beacons for 10+ minutes but less than 1 hour)
     Stale,
     /// Flight completed with normal landing (has landing_time)
     Complete,
-    /// Flight timed out due to no beacons for 8+ hours (has timed_out_at)
+    /// Flight timed out due to no beacons for 1+ hour (has timed_out_at)
     TimedOut,
 }
 
@@ -115,7 +115,7 @@ pub struct Flight {
     /// Landing location ID (foreign key to locations table)
     pub landing_location_id: Option<Uuid>,
 
-    /// Timestamp when flight was timed out (no beacons for 8+ hours)
+    /// Timestamp when flight was timed out (no beacons for 1+ hour)
     /// Mutually exclusive with landing_time - a flight is either landed or timed out, not both
     pub timed_out_at: Option<DateTime<Utc>>,
 
