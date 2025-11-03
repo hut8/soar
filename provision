@@ -46,28 +46,39 @@ if ! sudo visudo -c -f /etc/sudoers.d/soar; then
     exit 1
 fi
 
-# Copy service files
-echo -e "${BLUE}Installing systemd service files...${NC}"
-sudo cp soar.target /etc/systemd/system/
-sudo cp soar-run.service /etc/systemd/system/
-sudo cp soar-web.service /etc/systemd/system/
-sudo cp soar-pull-data.service /etc/systemd/system/
-sudo cp soar-pull-data.timer /etc/systemd/system/
-sudo cp soar-sitemap.service /etc/systemd/system/
-sudo cp soar-sitemap.timer /etc/systemd/system/
+# Install prometheus-nats-exporter binary if not already installed
+if [ ! -f /usr/local/bin/prometheus-nats-exporter ]; then
+    echo -e "${BLUE}Installing prometheus-nats-exporter binary...${NC}"
+    EXPORTER_VERSION="0.17.3"
+    EXPORTER_URL="https://github.com/nats-io/prometheus-nats-exporter/releases/download/v${EXPORTER_VERSION}/prometheus-nats-exporter-v${EXPORTER_VERSION}-linux-x86_64.tar.gz"
+
+    (
+        cd /tmp
+        wget -q "$EXPORTER_URL" || { echo -e "${RED}Failed to download prometheus-nats-exporter${NC}"; exit 1; }
+        tar -xzf "prometheus-nats-exporter-v${EXPORTER_VERSION}-linux-x86_64.tar.gz"
+        sudo install -m 755 prometheus-nats-exporter /usr/local/bin/
+        rm -f "prometheus-nats-exporter-v${EXPORTER_VERSION}-linux-x86_64.tar.gz" prometheus-nats-exporter
+    )
+    echo -e "${GREEN}prometheus-nats-exporter installed successfully${NC}"
+else
+    echo -e "${BLUE}prometheus-nats-exporter already installed${NC}"
+fi
+
+# Copy infrastructure service files
+# Note: SOAR application service files (soar-run, soar-web, etc.) are installed by soar-deploy
+echo -e "${BLUE}Installing infrastructure systemd service files...${NC}"
 sudo cp infrastructure/nats-server.service /etc/systemd/system/
+sudo cp infrastructure/prometheus-nats-exporter.service /etc/systemd/system/
 
 # Reload systemd daemon
 echo "Reloading systemd daemon..."
 sudo systemctl daemon-reload
 
-# Enable services
-echo -e "${BLUE}Enabling services...${NC}"
-sudo systemctl enable soar.target
-sudo systemctl enable soar-run.service
-sudo systemctl enable soar-web.service
-sudo systemctl enable soar-pull-data.timer
+# Enable infrastructure services
+# Note: SOAR application services are enabled by soar-deploy
+echo -e "${BLUE}Enabling infrastructure services...${NC}"
 sudo systemctl enable nats-server.service
+sudo systemctl enable prometheus-nats-exporter.service
 
 # Create necessary directories
 echo -e "${BLUE}Creating directories...${NC}"
@@ -84,20 +95,16 @@ sudo chmod 755 /home/soar
 
 echo -e "${GREEN}Server provisioning complete!${NC}"
 echo
-echo -e "${YELLOW}Usage:${NC}"
-echo "  sudo systemctl start soar       # Start all SOAR services"
-echo "  sudo systemctl stop soar        # Stop all SOAR services"
-echo "  sudo systemctl restart soar     # Restart all SOAR services"
-echo "  sudo systemctl status soar      # Check status of all SOAR services"
+echo -e "${YELLOW}Next steps:${NC}"
+echo "  1. Run the first deployment with soar-deploy to install SOAR services"
+echo "  2. SOAR services will be managed by soar-deploy on each deployment"
 echo
-echo -e "${YELLOW}Individual service control:${NC}"
-echo "  sudo systemctl start soar-web.service"
-echo "  sudo systemctl stop soar-run.service"
-echo "  sudo systemctl restart soar-pull-data.timer"
+echo -e "${YELLOW}Infrastructure service control:${NC}"
 echo "  sudo systemctl start nats-server.service"
+echo "  sudo systemctl start prometheus-nats-exporter.service"
+echo "  sudo systemctl status nats-server.service"
+echo "  sudo systemctl status prometheus-nats-exporter.service"
 echo
-echo -e "${YELLOW}Check logs:${NC}"
-echo "  sudo journalctl -u soar-run.service -f"
-echo "  sudo journalctl -u soar-web.service -f"
-echo "  sudo journalctl -u soar-pull-data.service -f"
+echo -e "${YELLOW}Check infrastructure logs:${NC}"
 echo "  sudo journalctl -u nats-server.service -f"
+echo "  sudo journalctl -u prometheus-nats-exporter.service -f"

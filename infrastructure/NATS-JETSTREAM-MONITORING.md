@@ -25,10 +25,10 @@ Download and install the latest release:
 
 ```bash
 # Download the binary (check https://github.com/nats-io/prometheus-nats-exporter/releases for latest version)
-wget https://github.com/nats-io/prometheus-nats-exporter/releases/download/v0.15.0/prometheus-nats-exporter-v0.15.0-linux-amd64.tar.gz
+wget https://github.com/nats-io/prometheus-nats-exporter/releases/download/v0.17.3/prometheus-nats-exporter-v0.17.3-linux-x86_64.tar.gz
 
 # Extract
-tar -xzf prometheus-nats-exporter-v0.15.0-linux-amd64.tar.gz
+tar -xzf prometheus-nats-exporter-v0.17.3-linux-x86_64.tar.gz
 
 # Install to system location
 sudo mv prometheus-nats-exporter /usr/local/bin/
