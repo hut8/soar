@@ -29,7 +29,8 @@
 		UserPlus as SignUp,
 		User,
 		Sun,
-		Moon
+		Moon,
+		Info
 	} from '@lucide/svelte';
 
 	const base = resolve('/');
@@ -39,6 +40,7 @@
 	const receiversPath = resolve('/receivers');
 	const airportsPath = resolve('/airports');
 	const flightsPath = resolve('/flights');
+	const infoPath = resolve('/info');
 	const loginPath = resolve('/login');
 	const registerPath = resolve('/register');
 	const profilePath = resolve('/profile');
@@ -144,6 +146,13 @@
 					</a>
 					<a href={flightsPath} class="btn preset-filled-primary-500 btn-sm">
 						<Plane /> Flights
+					</a>
+					<a
+						href={infoPath}
+						class="btn preset-filled-primary-500 btn-sm"
+						title="System Information"
+					>
+						<Info />
 					</a>
 				</nav>
 
@@ -331,6 +340,13 @@
 					onclick={() => (showMobileMenu = false)}
 				>
 					<Plane size={16} /> Flights
+				</a>
+				<a
+					href={infoPath}
+					class="btn w-full justify-start preset-filled-primary-500"
+					onclick={() => (showMobileMenu = false)}
+				>
+					<Info size={16} /> System Info
 				</a>
 
 				{#if $auth.isAuthenticated && $auth.user}
