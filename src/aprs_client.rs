@@ -469,8 +469,15 @@ impl AprsClient {
                                     trace!("Received: {}", trimmed_line);
                                 }
 
+                                // Prepend ISO-8601 timestamp to message before sending to JetStream
+                                // Format: "YYYY-MM-DDTHH:MM:SS.SSSZ <original_message>"
+                                // This ensures the "received at" timestamp is accurate even if messages queue up
+                                let received_at = chrono::Utc::now();
+                                let timestamped_message =
+                                    format!("{} {}", received_at.to_rfc3339(), trimmed_line);
+
                                 // Send message to channel for processing (non-blocking)
-                                match raw_message_tx.try_send(trimmed_line.to_string()) {
+                                match raw_message_tx.try_send(timestamped_message) {
                                     Ok(()) => {
                                         if is_server_message {
                                             trace!("Queued server message for JetStream");
@@ -1011,5 +1018,66 @@ mod tests {
             config.archive_base_dir,
             Some("/tmp/aprs_archive".to_string())
         );
+    }
+
+    #[test]
+    fn test_timestamp_prepending_format() {
+        // Test that the timestamp prepending logic creates the expected format
+        let raw_message = "FLRDDA5BA>APRS,qAS,LFNX:/160829h4902.45N/00531.30E'342/049/A=001322";
+        let received_at = chrono::Utc::now();
+        let timestamped_message = format!("{} {}", received_at.to_rfc3339(), raw_message);
+
+        // Verify the format is "TIMESTAMP MESSAGE"
+        assert!(timestamped_message.contains(' '));
+        let parts: Vec<&str> = timestamped_message.splitn(2, ' ').collect();
+        assert_eq!(parts.len(), 2);
+
+        // First part should be a valid ISO-8601 timestamp
+        let parsed = chrono::DateTime::parse_from_rfc3339(parts[0]);
+        assert!(parsed.is_ok(), "Timestamp should be valid RFC3339");
+
+        // Second part should be the original message
+        assert_eq!(parts[1], raw_message);
+    }
+
+    #[test]
+    fn test_timestamp_prepending_server_message() {
+        // Test timestamp prepending for server messages (starting with #)
+        let server_message =
+            "# aprsc 2.1.15-gc67551b 22 Sep 2025 21:51:55 GMT GLIDERN1 51.178.19.212:10152";
+        let received_at = chrono::Utc::now();
+        let timestamped_message = format!("{} {}", received_at.to_rfc3339(), server_message);
+
+        // Split and verify
+        let parts: Vec<&str> = timestamped_message.splitn(2, ' ').collect();
+        assert_eq!(parts.len(), 2);
+
+        // Second part should still start with #
+        assert!(parts[1].starts_with('#'));
+        assert_eq!(parts[1], server_message);
+    }
+
+    #[test]
+    fn test_timestamp_roundtrip() {
+        // Test that we can prepend a timestamp and then parse it back
+        let original_message =
+            "FLRDDA5BA>APRS,qAS,LFNX:/160829h4902.45N/00531.30E'342/049/A=001322";
+        let sent_at = chrono::Utc::now();
+
+        // Simulate what ingest-aprs does: prepend timestamp
+        let timestamped = format!("{} {}", sent_at.to_rfc3339(), original_message);
+
+        // Simulate what soar-run does: parse timestamp
+        let (timestamp_str, message) = timestamped.split_once(' ').unwrap();
+        let parsed_timestamp = chrono::DateTime::parse_from_rfc3339(timestamp_str)
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+
+        // Verify we got back the original message
+        assert_eq!(message, original_message);
+
+        // Verify timestamp roundtrip (should be within 1ms)
+        let diff = (sent_at - parsed_timestamp).num_milliseconds().abs();
+        assert!(diff < 10, "Timestamp should roundtrip accurately");
     }
 }

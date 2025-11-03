@@ -112,7 +112,9 @@ impl FixProcessor {
         raw_message: &str,
         context: PacketContext,
     ) {
-        let received_at = chrono::Utc::now();
+        // Use the received_at timestamp from context (captured at ingestion time)
+        // This ensures accurate timestamps even if messages queue up during processing
+        let received_at = context.received_at;
 
         // Try to create a fix from the packet
         match packet.data {
