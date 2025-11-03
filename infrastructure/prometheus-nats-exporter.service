@@ -1,0 +1,28 @@
+[Unit]
+Description=Prometheus NATS Exporter
+After=network-online.target nats-server.service
+Requires=nats-server.service
+
+[Service]
+PrivateTmp=true
+Type=simple
+
+# Export NATS JetStream metrics, connection metrics, and health status to Prometheus format
+# Scrapes NATS HTTP monitoring endpoint at localhost:8222
+# Exposes Prometheus metrics on port 7777
+ExecStart=/usr/local/bin/prometheus-nats-exporter \
+  -port 7777 \
+  -jsz all \
+  -varz \
+  -connz \
+  -healthz \
+  http://localhost:8222
+
+ExecReload=/bin/kill -s HUP $MAINPID
+Restart=on-failure
+
+User=daemon
+Group=daemon
+
+[Install]
+WantedBy=multi-user.target

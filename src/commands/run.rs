@@ -322,35 +322,6 @@ pub async fn handle_run(
 
     info!("Created PacketRouter with per-processor queues");
 
-    // Initialize queue close counters so they're always exported to Prometheus
-    // Note: We no longer track "full" metrics since we use blocking sends that wait for space
-    // Now that we consume from JetStream instead of APRS-IS, blocking won't cause disconnects
-    metrics::counter!("aprs.aircraft_queue.closed").absolute(0);
-    metrics::counter!("aprs.receiver_status_queue.closed").absolute(0);
-    metrics::counter!("aprs.receiver_position_queue.closed").absolute(0);
-    metrics::counter!("aprs.server_status_queue.closed").absolute(0);
-
-    // Initialize APRS connection metrics
-    metrics::gauge!("aprs.connection.connected").set(0.0);
-    metrics::counter!("aprs.connection.established").absolute(0);
-    metrics::counter!("aprs.connection.ended").absolute(0);
-    metrics::counter!("aprs.connection.failed").absolute(0);
-    metrics::counter!("aprs.connection.operation_failed").absolute(0);
-    metrics::counter!("aprs.keepalive.sent").absolute(0);
-
-    // Initialize JetStream metrics
-    metrics::gauge!("aprs.jetstream.queue_depth").set(0.0);
-    metrics::counter!("aprs.jetstream.published").absolute(0);
-    metrics::counter!("aprs.jetstream.publish_error").absolute(0);
-    metrics::counter!("aprs.jetstream.consumed").absolute(0);
-    metrics::counter!("aprs.jetstream.decode_error").absolute(0);
-    metrics::counter!("aprs.jetstream.ack_error").absolute(0);
-    metrics::counter!("aprs.jetstream.process_error").absolute(0);
-    metrics::counter!("aprs.jetstream.receive_error").absolute(0);
-
-    // Initialize NATS publisher error counter
-    metrics::counter!("nats_publisher_errors").absolute(0);
-
     // Spawn AGL batch database writer
     // This worker receives calculated AGL values and writes them to database in batches
     // Batching dramatically reduces database load (100+ individual UPDATEs become 1 batch UPDATE)
