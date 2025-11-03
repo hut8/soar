@@ -1,6 +1,7 @@
 mod aircraft_models;
 mod aircraft_registrations;
 mod airports_runways;
+mod device_backfill;
 mod device_linking;
 mod devices_receivers;
 mod home_base_linking;
@@ -232,6 +233,42 @@ pub async fn handle_load_data(
     if link_home_bases {
         let metrics = home_base_linking::link_home_bases_with_metrics(diesel_pool.clone()).await;
         record_stage_metrics(&metrics, "link_home_bases");
+
+        if !metrics.success
+            && let Some(ref config) = email_config
+        {
+            let _ = send_failure_email(
+                config,
+                &metrics.name,
+                metrics.error_message.as_deref().unwrap_or("Unknown error"),
+            );
+        }
+        report.add_entity(metrics);
+    }
+
+    // Backfill country codes for ICAO devices
+    {
+        let metrics =
+            device_backfill::backfill_country_codes_with_metrics(diesel_pool.clone()).await;
+        record_stage_metrics(&metrics, "backfill_country_codes");
+
+        if !metrics.success
+            && let Some(ref config) = email_config
+        {
+            let _ = send_failure_email(
+                config,
+                &metrics.name,
+                metrics.error_message.as_deref().unwrap_or("Unknown error"),
+            );
+        }
+        report.add_entity(metrics);
+    }
+
+    // Backfill tail numbers for US ICAO devices
+    {
+        let metrics =
+            device_backfill::backfill_tail_numbers_with_metrics(diesel_pool.clone()).await;
+        record_stage_metrics(&metrics, "backfill_tail_numbers");
 
         if !metrics.success
             && let Some(ref config) = email_config
