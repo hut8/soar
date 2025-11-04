@@ -213,11 +213,6 @@ impl Instrumentation for QueryLogger {
 
 #[tracing::instrument]
 async fn setup_diesel_database() -> Result<Pool<ConnectionManager<PgConnection>>> {
-    // Enable SQL query logging via Diesel instrumentation
-    // This will log all SQL statements including migration SQL
-    set_default_instrumentation(|| Some(Box::new(QueryLogger)))
-        .expect("Failed to set default instrumentation");
-
     // Load environment variables from .env file
     dotenvy::dotenv().ok();
 
@@ -629,6 +624,12 @@ async fn main() -> Result<()> {
         _ => {
             // All other commands need database access
         }
+    }
+
+    // Enable SQL query logging only for the migrate command
+    if matches!(cli.command, Commands::Migrate {}) {
+        set_default_instrumentation(|| Some(Box::new(QueryLogger)))
+            .expect("Failed to set default instrumentation");
     }
 
     // Set up database connection for commands that need it
