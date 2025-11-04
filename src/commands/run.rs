@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
 use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
-use soar::elevation::ElevationDB;
 use soar::fix_processor::FixProcessor;
 use soar::fixes_repo::FixesRepository;
 use soar::flight_tracker::FlightTracker;
@@ -30,6 +29,8 @@ async fn process_aprs_message(
     message: &str,
     packet_router: &soar::packet_processors::PacketRouter,
 ) {
+    let start_time = std::time::Instant::now();
+
     // Extract timestamp from the beginning of the message
     // Format: "YYYY-MM-DDTHH:MM:SS.SSSZ <rest_of_message>"
     let (received_at, actual_message) = match message.split_once(' ') {
@@ -48,6 +49,11 @@ async fn process_aprs_message(
             (chrono::Utc::now(), message)
         }
     };
+
+    // Calculate and record lag (difference between now and packet timestamp)
+    let now = chrono::Utc::now();
+    let lag_seconds = (now - received_at).num_milliseconds() as f64 / 1000.0;
+    metrics::gauge!("aprs.jetstream.lag_seconds").set(lag_seconds);
 
     // Route server messages (starting with #) differently
     if actual_message.starts_with('#') {
@@ -80,6 +86,10 @@ async fn process_aprs_message(
             }
         }
     }
+
+    // Record processing latency
+    let elapsed_micros = start_time.elapsed().as_micros() as f64 / 1000.0; // Convert to milliseconds
+    metrics::histogram!("aprs.message_processing_latency_ms").record(elapsed_micros);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -408,24 +418,6 @@ pub async fn handle_run(
         num_elevation_workers
     );
 
-    // Spawn AGL backfill background task
-    // This task runs continuously, backfilling AGL altitudes for old fixes that were missed
-    // It gets its own dedicated ElevationDB with a larger GDAL dataset cache (1000 vs 100)
-    // to avoid contention with real-time elevation processing
-    let backfill_fixes_repo = FixesRepository::new(diesel_pool.clone());
-    let backfill_elevation_db = ElevationDB::with_custom_cache_sizes(500_000, 1000)
-        .context("Failed to create dedicated ElevationDB for AGL backfill")?;
-    info!(
-        "Created dedicated ElevationDB for AGL backfill (dataset cache: 1000, elevation cache: 500,000)"
-    );
-    tokio::spawn(
-        async move {
-            soar::agl_backfill::agl_backfill_task(backfill_fixes_repo, backfill_elevation_db).await;
-        }
-        .instrument(tracing::info_span!("agl_backfill")),
-    );
-    info!("Spawned AGL backfill background task with dedicated elevation database");
-
     // Spawn dedicated worker pools for each processor type
     // Aircraft position workers (20 workers - heaviest processing due to FixProcessor + flight tracking)
     let num_aircraft_workers = 20;
@@ -563,13 +555,14 @@ pub async fn handle_run(
         );
     }
 
-    // Spawn queue depth metrics reporter
-    // Reports the depth of all processing queues to Prometheus every 10 seconds
+    // Spawn queue depth and system metrics reporter
+    // Reports the depth of all processing queues and DB pool state to Prometheus every 10 seconds
     let metrics_aircraft_rx = shared_aircraft_rx.clone();
     let metrics_receiver_status_rx = shared_receiver_status_rx.clone();
     let metrics_receiver_position_rx = shared_receiver_position_rx.clone();
     let metrics_server_status_rx = shared_server_status_rx.clone();
     let metrics_elevation_rx = shared_elevation_rx.clone();
+    let metrics_db_pool = diesel_pool.clone();
     tokio::spawn(
         async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(10));
@@ -578,44 +571,18 @@ pub async fn handle_run(
             loop {
                 interval.tick().await;
 
-                // Sample queue depths (non-blocking reads)
-                let aircraft_depth = {
-                    if let Ok(rx) = metrics_aircraft_rx.try_lock() {
-                        rx.len()
-                    } else {
-                        0 // Skip if locked
-                    }
-                };
-                let receiver_status_depth = {
-                    if let Ok(rx) = metrics_receiver_status_rx.try_lock() {
-                        rx.len()
-                    } else {
-                        0
-                    }
-                };
-                let receiver_position_depth = {
-                    if let Ok(rx) = metrics_receiver_position_rx.try_lock() {
-                        rx.len()
-                    } else {
-                        0
-                    }
-                };
-                let server_status_depth = {
-                    if let Ok(rx) = metrics_server_status_rx.try_lock() {
-                        rx.len()
-                    } else {
-                        0
-                    }
-                };
-                let elevation_depth = {
-                    if let Ok(rx) = metrics_elevation_rx.try_lock() {
-                        rx.len()
-                    } else {
-                        0
-                    }
-                };
+                // Sample queue depths (properly waiting for lock to get accurate counts)
+                let aircraft_depth = metrics_aircraft_rx.lock().await.len();
+                let receiver_status_depth = metrics_receiver_status_rx.lock().await.len();
+                let receiver_position_depth = metrics_receiver_position_rx.lock().await.len();
+                let server_status_depth = metrics_server_status_rx.lock().await.len();
+                let elevation_depth = metrics_elevation_rx.lock().await.len();
 
-                // Report to Prometheus
+                // Get database pool state
+                let pool_state = metrics_db_pool.state();
+                let active_connections = pool_state.connections - pool_state.idle_connections;
+
+                // Report queue depths to Prometheus
                 metrics::gauge!("aprs.aircraft_queue.depth").set(aircraft_depth as f64);
                 metrics::gauge!("aprs.receiver_status_queue.depth")
                     .set(receiver_status_depth as f64);
@@ -623,6 +590,13 @@ pub async fn handle_run(
                     .set(receiver_position_depth as f64);
                 metrics::gauge!("aprs.server_status_queue.depth").set(server_status_depth as f64);
                 metrics::gauge!("aprs.elevation_queue.depth").set(elevation_depth as f64);
+
+                // Report database pool state to Prometheus
+                metrics::gauge!("aprs.db_pool.total_connections")
+                    .set(pool_state.connections as f64);
+                metrics::gauge!("aprs.db_pool.active_connections").set(active_connections as f64);
+                metrics::gauge!("aprs.db_pool.idle_connections")
+                    .set(pool_state.idle_connections as f64);
 
                 // Warn if queues are building up (50% full)
                 if aircraft_depth > queue_warning_threshold(AIRCRAFT_QUEUE_SIZE) {

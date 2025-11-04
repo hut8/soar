@@ -368,27 +368,18 @@ impl FixProcessor {
                 fix: updated_fix.clone(),
             };
 
-            // Try to send with timeout to detect channel backlog
-            match elevation_tx.try_send(task) {
-                Ok(()) => {
-                    // Successfully queued for elevation processing
-                    metrics::counter!("aprs.elevation.queued").increment(1);
-                }
-                Err(mpsc::error::TrySendError::Full(_)) => {
-                    // Channel is full - elevation processing is backed up
-                    warn!(
-                        "Elevation processing queue is FULL (1000 tasks buffered) - dropping elevation calculation for fix {}. \
-                         This indicates elevation lookups are slower than incoming fix rate.",
-                        updated_fix.id
-                    );
-                    metrics::counter!("aprs.elevation.dropped").increment(1);
-                }
-                Err(mpsc::error::TrySendError::Closed(_)) => {
-                    error!(
-                        "Elevation processing channel is closed - cannot queue elevation calculation"
-                    );
-                    metrics::counter!("aprs.elevation.channel_closed").increment(1);
-                }
+            // Send to elevation queue, blocking if full to apply backpressure
+            // This ensures we never drop elevation calculations
+            // With durable JetStream queue, backpressure is safe and correct
+            if let Err(e) = elevation_tx.send(task).await {
+                error!(
+                    "Elevation processing channel is closed - cannot queue elevation calculation: {}",
+                    e
+                );
+                metrics::counter!("aprs.elevation.channel_closed").increment(1);
+            } else {
+                // Successfully queued for elevation processing
+                metrics::counter!("aprs.elevation.queued").increment(1);
             }
         }
 
