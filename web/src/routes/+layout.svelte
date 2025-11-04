@@ -12,6 +12,7 @@
 	import { onMount } from 'svelte';
 	import RadarLoader from '$lib/components/RadarLoader.svelte';
 	import LoadingBar from '$lib/components/LoadingBar.svelte';
+	import BottomLoadingBar from '$lib/components/BottomLoadingBar.svelte';
 	import {
 		Radar,
 		Users,
@@ -413,3 +414,4 @@
 </div>
 
 <Toaster {toaster}></Toaster>
+<BottomLoadingBar />
