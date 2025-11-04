@@ -11,7 +11,6 @@
 #   - soar (the binary)
 #   - *.service files
 #   - *.timer files
-#   - migrations/ directory (optional, for displaying pending migration SQL)
 #   - prometheus-jobs/ directory (optional, contains Prometheus job configs)
 #   - grafana-provisioning/ directory (optional, contains Grafana provisioning configs)
 #   - grafana-dashboard-*.json files (optional, Grafana dashboards)
@@ -114,47 +113,6 @@ sleep 2
 # Check current migration status before running migrations
 log_info "Checking current database migration status..."
 sudo -u soar bash -c "set -a; source /etc/soar/env; set +a; psql \"\$DATABASE_URL\" -c \"SELECT version FROM __diesel_schema_migrations ORDER BY version DESC LIMIT 5;\"" 2>/dev/null || log_warn "Could not query migration status"
-
-# Check for pending migrations and display their SQL content
-log_info "Checking for pending migrations..."
-MIGRATIONS_DIR="$DEPLOY_DIR/migrations"
-if [ -d "$MIGRATIONS_DIR" ]; then
-    # Get list of applied migrations from database
-    APPLIED_MIGRATIONS=$(sudo -u soar bash -c "set -a; source /etc/soar/env; set +a; psql \"\$DATABASE_URL\" -t -c \"SELECT version FROM __diesel_schema_migrations;\"" 2>/dev/null | tr -d ' ')
-
-    # Find pending migrations
-    PENDING_COUNT=0
-    for migration_dir in "$MIGRATIONS_DIR"/*/; do
-        if [ -d "$migration_dir" ]; then
-            migration_name=$(basename "$migration_dir")
-            # Check if this migration has been applied
-            if ! echo "$APPLIED_MIGRATIONS" | grep -q "^${migration_name}$"; then
-                PENDING_COUNT=$((PENDING_COUNT + 1))
-                log_info "${YELLOW}Pending migration #${PENDING_COUNT}: ${migration_name}${NC}"
-
-                # Display the up.sql content
-                UP_SQL="${migration_dir}up.sql"
-                if [ -f "$UP_SQL" ]; then
-                    log_info "SQL to be executed:"
-                    echo -e "${GREEN}---BEGIN SQL---${NC}"
-                    cat "$UP_SQL"
-                    echo -e "${GREEN}---END SQL---${NC}"
-                else
-                    log_warn "up.sql not found for migration: ${migration_name}"
-                fi
-                echo ""
-            fi
-        fi
-    done
-
-    if [ "$PENDING_COUNT" -eq 0 ]; then
-        log_info "No pending migrations found"
-    else
-        log_info "Total pending migrations: ${PENDING_COUNT}"
-    fi
-else
-    log_warn "Migrations directory not found at $MIGRATIONS_DIR"
-fi
 
 # Run database migrations from temporary binary (not /usr/local/bin to avoid "text file busy")
 log_info "Running database migrations from temporary binary..."
