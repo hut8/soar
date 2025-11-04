@@ -16,6 +16,8 @@
 		showCompassRose?: boolean;
 		showAirportMarkers?: boolean;
 		showRunwayOverlays?: boolean;
+		positionFixWindow?: number;
+		// Legacy support for old settings
 		trailLength?: number[];
 	}
 
@@ -23,24 +25,7 @@
 	let showCompassRose = $state(true);
 	let showAirportMarkers = $state(true);
 	let showRunwayOverlays = $state(false);
-	let trailLength = $state([0]); // Hours - logarithmic scale
-	let trailLengthSlider = $state([0]); // Linear slider position (0-100)
-
-	// Logarithmic trail length conversion
-	// 0 = 0 hours, 50 = ~5 hours, 100 = 24 hours
-	function sliderToHours(sliderValue: number): number {
-		if (sliderValue === 0) return 0;
-		// Logarithmic scale: slider 50 = 5 hours, slider 100 = 24 hours
-		const exponent = (sliderValue / 100) * Math.log(24);
-		return Math.exp(exponent) * (5 / Math.exp(Math.log(24) * 0.5));
-	}
-
-	function hoursToSlider(hours: number): number {
-		if (hours === 0) return 0;
-		// Reverse of the logarithmic conversion
-		const normalized = hours / (5 / Math.exp(Math.log(24) * 0.5));
-		return (Math.log(normalized) / Math.log(24)) * 100;
-	}
+	let positionFixWindow = $state(8); // Hours - default 8 hours
 
 	// Settings persistence functions
 	async function loadSettings() {
@@ -60,8 +45,10 @@
 					showCompassRose = backendSettings.showCompassRose ?? true;
 					showAirportMarkers = backendSettings.showAirportMarkers ?? true;
 					showRunwayOverlays = backendSettings.showRunwayOverlays ?? false;
-					trailLength = backendSettings.trailLength ?? [0];
-					trailLengthSlider = [hoursToSlider(trailLength[0])];
+					// Use positionFixWindow, or fallback to trailLength for legacy support
+					positionFixWindow =
+						backendSettings.positionFixWindow ??
+						(backendSettings.trailLength ? backendSettings.trailLength[0] : 8);
 					return;
 				}
 			} catch (e) {
@@ -77,14 +64,15 @@
 				showCompassRose = settings.showCompassRose ?? true;
 				showAirportMarkers = settings.showAirportMarkers ?? true;
 				showRunwayOverlays = settings.showRunwayOverlays ?? false;
-				trailLength = settings.trailLength ?? [0];
-				trailLengthSlider = [hoursToSlider(trailLength[0])];
+				// Use positionFixWindow, or fallback to trailLength for legacy support
+				positionFixWindow =
+					settings.positionFixWindow ?? (settings.trailLength ? settings.trailLength[0] : 8);
 			} catch (e) {
 				console.warn('Failed to load settings from localStorage:', e);
-				trailLengthSlider = [0];
+				positionFixWindow = 8;
 			}
 		} else {
-			trailLengthSlider = [0];
+			positionFixWindow = 8;
 		}
 	}
 
@@ -95,7 +83,7 @@
 			showCompassRose,
 			showAirportMarkers,
 			showRunwayOverlays,
-			trailLength
+			positionFixWindow
 		};
 
 		// Always save to localStorage for offline support
@@ -125,7 +113,7 @@
 				showCompassRose,
 				showAirportMarkers,
 				showRunwayOverlays,
-				trailLength: trailLength[0]
+				positionFixWindow
 			});
 		}
 	}
@@ -139,7 +127,7 @@
 					showCompassRose,
 					showAirportMarkers,
 					showRunwayOverlays,
-					trailLength: trailLength[0]
+					positionFixWindow
 				});
 			}
 		}
@@ -230,31 +218,33 @@
 					</div>
 				</section>
 
-				<!-- Trail Length -->
+				<!-- Position Fix Window -->
 				<section>
-					<h3 class="mb-3 text-lg font-semibold">Trail Length</h3>
+					<h3 class="mb-3 text-lg font-semibold">Position Fix Window</h3>
+					<p class="mb-3 text-sm text-gray-600">
+						Only show devices that have been seen within this time window
+					</p>
 					<div class="space-y-4">
 						<div class="text-sm font-medium">
-							Duration: {trailLength[0] === 0
+							Duration: {positionFixWindow === 0
 								? 'None'
-								: trailLength[0] < 1
-									? `${Math.round(trailLength[0] * 60)} minutes`
-									: `${Math.round(trailLength[0] * 10) / 10} hours`}
+								: positionFixWindow < 1
+									? `${Math.round(positionFixWindow * 60)} minutes`
+									: `${positionFixWindow} hours`}
 						</div>
 						<Slider
-							value={trailLengthSlider}
+							value={[positionFixWindow]}
 							onValueChange={(e) => {
-								trailLengthSlider = e.value;
-								trailLength = [sliderToHours(e.value[0])];
+								positionFixWindow = e.value[0];
 								saveSettings();
 							}}
 							min={0}
-							max={100}
+							max={24}
 							step={1}
 						/>
 						<div class="flex justify-between text-xs text-gray-500">
 							<span>None</span>
-							<span>~5h</span>
+							<span>12h</span>
 							<span>24h</span>
 						</div>
 					</div>
