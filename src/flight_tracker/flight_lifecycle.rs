@@ -1,6 +1,7 @@
 use crate::Fix;
 use crate::airports_repo::AirportsRepository;
 use crate::device_repo::DeviceRepository;
+use crate::devices::Device;
 use crate::elevation::ElevationDB;
 use crate::fixes_repo::FixesRepository;
 use crate::flights::Flight;
@@ -32,9 +33,28 @@ pub(crate) async fn create_flight(
     flight_id: Uuid,
     skip_airport_runway_lookup: bool,
 ) -> Result<Uuid> {
+    // Fetch device first as we need it for Flight creation
+    let device = match device_repo.get_device_by_uuid(fix.device_id).await {
+        Ok(Some(device)) => device,
+        Ok(None) => {
+            warn!(
+                "Device {} not found when creating flight {}",
+                fix.device_id, flight_id
+            );
+            return Err(anyhow::anyhow!("Device not found"));
+        }
+        Err(e) => {
+            error!(
+                "Error fetching device {} for flight {}: {}",
+                fix.device_id, flight_id, e
+            );
+            return Err(anyhow::anyhow!("Failed to fetch device: {}", e));
+        }
+    };
+
     let mut flight = if skip_airport_runway_lookup {
         // Mid-flight appearance - no takeoff observed
-        Flight::new_airborne_from_fix_with_id(fix, flight_id)
+        Flight::new_airborne_from_fix_with_id(fix, &device, flight_id)
     } else {
         // Actual takeoff - calculate altitude offset and look up airport/runway
         let takeoff_altitude_offset_ft = calculate_altitude_offset_ft(elevation_db, fix).await;
@@ -54,7 +74,7 @@ pub(crate) async fn create_flight(
         let takeoff_runway_info = determine_runway_identifier(
             fixes_repo,
             runways_repo,
-            &fix.device_id,
+            &device,
             fix.timestamp,
             fix.latitude,
             fix.longitude,
@@ -64,7 +84,8 @@ pub(crate) async fn create_flight(
 
         let takeoff_runway = takeoff_runway_info.map(|(runway, _)| runway);
 
-        let mut flight = Flight::new_with_takeoff_from_fix_with_id(fix, flight_id, fix.timestamp);
+        let mut flight =
+            Flight::new_with_takeoff_from_fix_with_id(fix, &device, flight_id, fix.timestamp);
         flight.departure_airport_id = departure_airport_id;
         flight.takeoff_location_id = takeoff_location_id;
         flight.takeoff_runway_ident = takeoff_runway;
@@ -72,26 +93,8 @@ pub(crate) async fn create_flight(
         flight
     };
 
-    flight.device_address_type = fix.address_type;
-
-    // Look up the device's club_id and copy it to the flight
-    match device_repo.get_device_by_uuid(fix.device_id).await {
-        Ok(Some(device)) => {
-            flight.club_id = device.club_id;
-        }
-        Ok(None) => {
-            warn!(
-                "Device {} not found when creating flight {}",
-                fix.device_id, flight_id
-            );
-        }
-        Err(e) => {
-            warn!(
-                "Failed to fetch device {} when creating flight {}: {}",
-                fix.device_id, flight_id, e
-            );
-        }
-    }
+    // Copy device's club_id to the flight
+    flight.club_id = device.club_id;
 
     flights_repo.create_flight(flight).await?;
 
@@ -177,6 +180,7 @@ pub(crate) async fn complete_flight(
     fixes_repo: &FixesRepository,
     elevation_db: &ElevationDB,
     active_flights: &ActiveFlightsMap,
+    device: &Device,
     flight_id: Uuid,
     fix: &Fix,
 ) -> Result<bool> {
@@ -194,7 +198,7 @@ pub(crate) async fn complete_flight(
     let landing_runway_info = determine_runway_identifier(
         fixes_repo,
         runways_repo,
-        &fix.device_id,
+        device,
         fix.timestamp,
         fix.latitude,
         fix.longitude,

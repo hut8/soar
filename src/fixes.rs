@@ -6,9 +6,6 @@ use ogn_parser::AprsPacket;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use uuid::Uuid;
 
-use crate::devices::AddressType;
-use crate::ogn_aprs_aircraft::AircraftType;
-
 /// Custom serializer for via field to convert Vec to comma-separated string
 fn serialize_via<S>(via: &[Option<String>], serializer: S) -> Result<S::Ok, S::Error>
 where
@@ -60,20 +57,14 @@ pub struct Fix {
     /// Aircraft position
     pub latitude: f64,
     pub longitude: f64,
-    // Note: location field is skipped as it's computed from lat/lng
+    // Note: location and geom fields are skipped as they're computed from lat/lng
     #[serde(rename = "altitude_msl_feet")]
     pub altitude_msl_feet: Option<i32>,
     #[serde(rename = "altitude_agl_feet")]
     pub altitude_agl_feet: Option<i32>,
 
-    /// Aircraft identification - canonically a 24-bit unsigned integer stored as i32 in DB
-    pub device_address: i32,
-    pub address_type: AddressType,
-    pub aircraft_type_ogn: Option<AircraftType>,
-
     /// Flight information
     pub flight_number: Option<String>,
-    pub registration: Option<String>,
     pub squawk: Option<String>,
 
     /// Performance data
@@ -209,12 +200,7 @@ impl Fix {
                     .filter(|&c| c < 360)
                     .map(|c| c as f32);
 
-                // Initialize OGN-related fields
-                let mut device_address = 0i32;
-                let mut address_type = AddressType::Unknown;
-                let mut aircraft_type_ogn = None;
                 let flight_number = pos_packet.comment.flight_number.clone();
-                let registration = None;
                 let squawk = pos_packet.comment.squawk.clone();
                 let climb_fpm = pos_packet.comment.climb_rate.map(|c| c as i32);
                 let turn_rate_rot = pos_packet
@@ -231,20 +217,8 @@ impl Fix {
                     .frequency_offset
                     .and_then(|f| f.to_string().parse::<f32>().ok());
 
-                // Try to parse OGN parameters from comment
-                if let Some(ref id) = pos_packet.comment.id {
-                    // Use pre-parsed ID information
-                    device_address = id.address.as_();
-                    address_type = match id.address_type {
-                        0 => AddressType::Unknown,
-                        1 => AddressType::Icao,
-                        2 => AddressType::Flarm,
-                        3 => AddressType::Ogn,
-                        _ => AddressType::Unknown,
-                    };
-                    // Extract aircraft type from the OGN parameters
-                    aircraft_type_ogn = Some(AircraftType::from(id.aircraft_type));
-                }
+                // Note: OGN parameters (device_address, address_type, aircraft_type) are now
+                // parsed and stored on the Device record by fix_processor, not on individual fixes
 
                 // Parse GPS quality field (format: "AxB" where A=horizontal_resolution, B=vertical_resolution, in meters)
                 let (gnss_horizontal_resolution, gnss_vertical_resolution) =
@@ -274,11 +248,7 @@ impl Fix {
                     longitude,
                     altitude_msl_feet: altitude_feet,
                     altitude_agl_feet: None, // Will be calculated by processors
-                    device_address,
-                    address_type,
-                    aircraft_type_ogn,
                     flight_number,
-                    registration,
                     squawk,
                     ground_speed_knots,
                     track_degrees,
@@ -302,28 +272,6 @@ impl Fix {
                 // Non-position packets (status, comment, etc.) return None
                 Ok(None)
             }
-        }
-    }
-
-    /// Convert device address string to canonical 6-character uppercase hex format
-    /// The device address is canonically a 24-bit unsigned integer, but stored as hex string
-    pub fn device_address_hex(&self) -> String {
-        format!("{:06X}", self.device_address)
-    }
-
-    /// Get a human-readable aircraft identifier
-    /// Uses registration if available, otherwise falls back to aircraft ID with type prefix
-    pub fn get_aircraft_identifier(&self) -> Option<String> {
-        if let Some(ref reg) = self.registration {
-            Some(reg.clone())
-        } else {
-            let type_prefix = match self.address_type {
-                AddressType::Icao => "ICAO",
-                AddressType::Flarm => "FLARM",
-                AddressType::Ogn => "OGN",
-                AddressType::Unknown => "Unknown",
-            };
-            Some(format!("{}-{:06X}", type_prefix, self.device_address))
         }
     }
 }

@@ -420,19 +420,18 @@ impl FlightTracker {
         match fixes_repo.insert(&updated_fix).await {
             Ok(_) => {
                 trace!(
-                    "Successfully saved fix to database for aircraft {}",
-                    updated_fix.device_address_hex()
+                    "Successfully saved fix to database for device {}",
+                    updated_fix.device_id
                 );
                 Some(updated_fix)
             }
             Err(e) => {
                 error!(
-                    "Failed to save fix: device={}, flight_id={:?}, speed={:?}kts, alt_msl={:?}ft, aircraft_type={:?}, error={}",
+                    "Failed to save fix: device={}, flight_id={:?}, speed={:?}kts, alt_msl={:?}ft, error={}",
                     updated_fix.device_id,
                     updated_fix.flight_id,
                     updated_fix.ground_speed_knots,
                     updated_fix.altitude_msl_feet,
-                    updated_fix.aircraft_type_ogn,
                     e
                 );
                 None

@@ -78,7 +78,6 @@ impl AircraftTracker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::devices::AddressType;
     use crate::flight_tracker::state_transitions::should_be_active;
     use chrono::Utc;
 
@@ -99,13 +98,8 @@ mod tests {
             longitude: -74.0,
             altitude_msl_feet: Some(1000),
             altitude_agl_feet: None,
-            altitude_agl_valid: false,
-            device_address: 0x123456,
-            address_type: AddressType::Icao,
-            aircraft_type_ogn: None,
             flight_id: None,
             flight_number: None,
-            registration: None,
             squawk: None,
             ground_speed_knots: Some(50.0), // 50 knots - should be active
             track_degrees: None,
@@ -120,6 +114,7 @@ mod tests {
             is_active: true, // 50 knots is active
             receiver_id: None,
             aprs_message_id: None,
+            altitude_agl_valid: false,
         };
 
         assert!(should_be_active(&fix));

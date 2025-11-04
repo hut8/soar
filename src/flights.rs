@@ -6,7 +6,7 @@ use tracing::info;
 use uuid::Uuid;
 
 use crate::Fix;
-use crate::devices::AddressType;
+use crate::devices::{AddressType, Device};
 use crate::geometry::spline::{GeoPoint, calculate_spline_distance, generate_spline_path};
 
 /// Flight state enum representing the current status of a flight
@@ -189,11 +189,11 @@ impl Flight {
         }
     }
 
-    pub fn new_from_fix(fix: &Fix, takeoff_time: Option<DateTime<Utc>>) -> Self {
+    pub fn new_from_fix(fix: &Fix, device: &Device, takeoff_time: Option<DateTime<Utc>>) -> Self {
         let now = Utc::now();
         info!(
             "Creating flight for {} from fix {} with climb: {:?} alt: {:?} speed: {:?}",
-            fix.device_address_hex(),
+            device.device_address_hex(),
             fix.id,
             fix.climb_fpm,
             fix.altitude_msl_feet,
@@ -202,8 +202,8 @@ impl Flight {
         Self {
             id: Uuid::now_v7(),
             device_id: fix.device_id.into(),
-            device_address: fix.device_address_hex(),
-            device_address_type: fix.address_type,
+            device_address: device.device_address_hex(),
+            device_address_type: device.address_type,
             takeoff_time,
             landing_time: None,
             departure_airport_id: None,
@@ -231,20 +231,20 @@ impl Flight {
         }
     }
     /// Create a new flight for device already airborne (no takeoff time)
-    pub fn new_airborne_from_fix(fix: &Fix) -> Self {
-        Self::new_from_fix(fix, None)
+    pub fn new_airborne_from_fix(fix: &Fix, device: &Device) -> Self {
+        Self::new_from_fix(fix, device, None)
     }
 
     /// Create a new flight for device already airborne with a pre-generated UUID
     /// This is used to prevent race conditions when creating flights asynchronously
-    pub fn new_airborne_from_fix_with_id(fix: &Fix, flight_id: Uuid) -> Self {
+    pub fn new_airborne_from_fix_with_id(fix: &Fix, device: &Device, flight_id: Uuid) -> Self {
         let now = Utc::now();
         info!("Creating airborne flight {} from fix: {:?}", flight_id, fix);
         Self {
             id: flight_id,
             device_id: fix.device_id.into(),
-            device_address: fix.device_address_hex(),
-            device_address_type: fix.address_type,
+            device_address: device.device_address_hex(),
+            device_address_type: device.address_type,
             takeoff_time: None,
             landing_time: None,
             departure_airport_id: None,
@@ -273,14 +273,19 @@ impl Flight {
     }
 
     /// Create a new flight with known takeoff time
-    pub fn new_with_takeoff_from_fix(fix: &Fix, takeoff_time: DateTime<Utc>) -> Self {
-        Self::new_from_fix(fix, Some(takeoff_time))
+    pub fn new_with_takeoff_from_fix(
+        fix: &Fix,
+        device: &Device,
+        takeoff_time: DateTime<Utc>,
+    ) -> Self {
+        Self::new_from_fix(fix, device, Some(takeoff_time))
     }
 
     /// Create a new flight with known takeoff time and pre-generated UUID
     /// This is used to prevent race conditions when creating flights asynchronously
     pub fn new_with_takeoff_from_fix_with_id(
         fix: &Fix,
+        device: &Device,
         flight_id: Uuid,
         takeoff_time: DateTime<Utc>,
     ) -> Self {
@@ -292,8 +297,8 @@ impl Flight {
         Self {
             id: flight_id,
             device_id: fix.device_id.into(),
-            device_address: fix.device_address_hex(),
-            device_address_type: fix.address_type,
+            device_address: device.device_address_hex(),
+            device_address_type: device.address_type,
             takeoff_time: Some(takeoff_time),
             landing_time: None,
             departure_airport_id: None,
@@ -478,10 +483,9 @@ impl Flight {
 
         // Flight name and description
         let flight_name = format!("Flight {}", self.device_address);
-        let aircraft_reg = fixes
-            .first()
-            .and_then(|f| f.registration.as_ref())
-            .unwrap_or(&self.device_address);
+        // Note: Registration is stored on the device, not individual fixes
+        // For KML export, we use the device address as the identifier
+        let aircraft_reg = &self.device_address;
 
         kml.push_str(&format!("    <name>{}</name>\n", flight_name));
         kml.push_str(&format!(

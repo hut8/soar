@@ -124,7 +124,7 @@ impl From<AircraftTypeOgn> for ForeignAircraftType {
     }
 }
 
-// Queryable struct for Diesel DSL queries (excluding geography column)
+// Queryable struct for Diesel DSL queries (excluding geography and geom columns)
 #[derive(Queryable, Debug)]
 struct FixDslRow {
     id: Uuid,
@@ -135,12 +135,7 @@ struct FixDslRow {
     latitude: f64,
     longitude: f64,
     altitude_msl_feet: Option<i32>,
-    altitude_agl_feet: Option<i32>,
-    device_address: i32,
-    address_type: AddressType,
-    aircraft_type_ogn: Option<AircraftTypeOgn>,
     flight_number: Option<String>,
-    registration: Option<String>,
     squawk: Option<String>,
     ground_speed_knots: Option<f32>,
     track_degrees: Option<f32>,
@@ -149,13 +144,14 @@ struct FixDslRow {
     snr_db: Option<f32>,
     bit_errors_corrected: Option<i32>,
     freq_offset_khz: Option<f32>,
-    gnss_horizontal_resolution: Option<i16>,
-    gnss_vertical_resolution: Option<i16>,
     flight_id: Option<Uuid>,
     device_id: Uuid,
     received_at: DateTime<Utc>,
     is_active: bool,
+    altitude_agl_feet: Option<i32>,
     receiver_id: Option<Uuid>,
+    gnss_horizontal_resolution: Option<i16>,
+    gnss_vertical_resolution: Option<i16>,
     aprs_message_id: Option<Uuid>,
     altitude_agl_valid: bool,
 }
@@ -173,12 +169,8 @@ impl From<FixDslRow> for Fix {
             longitude: row.longitude,
             altitude_msl_feet: row.altitude_msl_feet,
             altitude_agl_feet: row.altitude_agl_feet,
-            device_address: row.device_address,
-            address_type: row.address_type,
-            aircraft_type_ogn: row.aircraft_type_ogn.map(|t| t.into()),
             flight_id: row.flight_id,
             flight_number: row.flight_number,
-            registration: row.registration,
             squawk: row.squawk,
             ground_speed_knots: row.ground_speed_knots,
             track_degrees: row.track_degrees,
@@ -208,33 +200,6 @@ impl FixesRepository {
         Self { pool }
     }
 
-    /// Look up device UUID by device_address (hex string)
-    fn lookup_device_uuid_by_address(
-        conn: &mut diesel::PgConnection,
-        device_address: &str,
-    ) -> Result<Uuid> {
-        // Convert hex string to integer for database lookup
-        let device_address_int = u32::from_str_radix(device_address, 16)?;
-        let opt_uuid = Self::lookup_device_uuid(conn, device_address_int)?;
-        opt_uuid.ok_or_else(|| anyhow::anyhow!("Device not found"))
-    }
-
-    /// Look up device UUID by raw device_id
-    fn lookup_device_uuid(
-        conn: &mut diesel::PgConnection,
-        raw_device_id: u32,
-    ) -> Result<Option<Uuid>> {
-        use crate::schema::devices::dsl::*;
-
-        let device_uuid = devices
-            .filter(address.eq(raw_device_id as i32))
-            .select(id)
-            .first::<Uuid>(conn)
-            .optional()?;
-
-        Ok(device_uuid)
-    }
-
     /// Look up receiver UUID by callsign
     fn lookup_receiver_uuid_by_callsign(
         conn: &mut diesel::PgConnection,
@@ -259,10 +224,7 @@ impl FixesRepository {
         let mut new_fix = fix.clone();
         let pool = self.pool.clone();
 
-        // Look up device UUID if we have device address
-        let dev_address = fix.device_address_hex();
-        let dev_address_owned = dev_address.to_string();
-
+        // Note: device_id is already populated in the Fix (from get_or_insert_device_by_address)
         // Get the receiver callsign from the via array (last entry)
         let receiver_callsign = fix
             .via
@@ -272,12 +234,6 @@ impl FixesRepository {
 
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-
-            // Look up the device UUID using device address
-            new_fix.device_id = Self::lookup_device_uuid_by_address(
-                &mut conn,
-                    &dev_address_owned,
-                )?;
 
             // Look up the receiver UUID using receiver callsign
             if let Some(ref callsign) = receiver_callsign {
@@ -292,10 +248,8 @@ impl FixesRepository {
                 .execute(&mut conn)?;
 
             trace!(
-                "Inserted fix | Device: {:?} ({:?}-{:?}) | {:.6},{:.6} @ {}ft | https://maps.google.com/maps?q={:.6},{:.6}",
+                "Inserted fix | Device: {:?} | {:.6},{:.6} @ {}ft | https://maps.google.com/maps?q={:.6},{:.6}",
                 new_fix.device_id,
-                new_fix.address_type,
-                new_fix.device_address,
                 new_fix.latitude,
                 new_fix.longitude,
                 new_fix.altitude_msl_feet.map_or("Unknown".to_string(), |a| a.to_string()),
@@ -723,16 +677,44 @@ impl FixesRepository {
             info!("Got database connection, executing first query for devices");
 
             // First query: Get devices with fixes in the bounding box
+            // Optimized with EXISTS + LIMIT 1 pattern and geometry casting for performance
+            // Handles antimeridian (international date line) crossing by splitting into two boxes
             let devices_sql = r#"
-                WITH bbox AS (
-                    SELECT ST_MakeEnvelope($1, $2, $3, $4, 4326)::geography AS g
+                WITH params AS (
+                    SELECT
+                        $1::double precision AS left_lng,
+                        $2::double precision AS bottom_lat,
+                        $3::double precision AS right_lng,
+                        $4::double precision AS top_lat,
+                        $5::timestamptz AS since_ts
+                ),
+                parts AS (
+                    SELECT
+                        CASE WHEN left_lng <= right_lng THEN
+                            ARRAY[
+                                ST_MakeEnvelope(left_lng, bottom_lat, right_lng, top_lat, 4326)::geometry
+                            ]
+                        ELSE
+                            ARRAY[
+                                ST_MakeEnvelope(left_lng, bottom_lat, 180, top_lat, 4326)::geometry,
+                                ST_MakeEnvelope(-180, bottom_lat, right_lng, top_lat, 4326)::geometry
+                            ]
+                        END AS boxes
+                    FROM params
                 )
-                SELECT DISTINCT d.*
-                FROM fixes f
-                JOIN devices d ON d.id = f.device_id
-                CROSS JOIN bbox
-                WHERE f.received_at >= $5
-                  AND ST_Intersects(f.location, bbox.g)
+                SELECT d.*
+                FROM devices d
+                WHERE EXISTS (
+                    SELECT 1
+                    FROM fixes f, params p, parts
+                    WHERE f.device_id = d.id
+                      AND f.received_at >= p.since_ts
+                      AND (
+                          f.location_geom && parts.boxes[1]
+                          OR (array_length(parts.boxes, 1) = 2 AND f.location_geom && parts.boxes[2])
+                      )
+                    LIMIT 1
+                )
             "#;
 
             #[derive(QueryableByName)]
@@ -844,6 +826,7 @@ impl FixesRepository {
             "#;
 
             // QueryableByName version of FixDslRow for raw SQL query
+            // Note: Excludes location and geom geography/geometry columns
             #[derive(QueryableByName)]
             struct FixRow {
                 #[diesel(sql_type = diesel::sql_types::Uuid)]
@@ -862,18 +845,8 @@ impl FixesRepository {
                 longitude: f64,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Int4>)]
                 altitude_msl_feet: Option<i32>,
-                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Int4>)]
-                altitude_agl_feet: Option<i32>,
-                #[diesel(sql_type = diesel::sql_types::Int4)]
-                device_address: i32,
-                #[diesel(sql_type = crate::schema::sql_types::AddressType)]
-                address_type: AddressType,
-                #[diesel(sql_type = diesel::sql_types::Nullable<crate::schema::sql_types::AircraftTypeOgn>)]
-                aircraft_type_ogn: Option<AircraftTypeOgn>,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
                 flight_number: Option<String>,
-                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
-                registration: Option<String>,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
                 squawk: Option<String>,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float4>)]
@@ -890,10 +863,6 @@ impl FixesRepository {
                 bit_errors_corrected: Option<i32>,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float4>)]
                 freq_offset_khz: Option<f32>,
-                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Int2>)]
-                gnss_horizontal_resolution: Option<i16>,
-                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Int2>)]
-                gnss_vertical_resolution: Option<i16>,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
                 flight_id: Option<uuid::Uuid>,
                 #[diesel(sql_type = diesel::sql_types::Uuid)]
@@ -902,8 +871,14 @@ impl FixesRepository {
                 received_at: DateTime<Utc>,
                 #[diesel(sql_type = diesel::sql_types::Bool)]
                 is_active: bool,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Int4>)]
+                altitude_agl_feet: Option<i32>,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
                 receiver_id: Option<uuid::Uuid>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Int2>)]
+                gnss_horizontal_resolution: Option<i16>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Int2>)]
+                gnss_vertical_resolution: Option<i16>,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
                 aprs_message_id: Option<uuid::Uuid>,
                 #[diesel(sql_type = diesel::sql_types::Bool)]
@@ -934,12 +909,8 @@ impl FixesRepository {
                     longitude: fix_row.longitude,
                     altitude_msl_feet: fix_row.altitude_msl_feet,
                     altitude_agl_feet: fix_row.altitude_agl_feet,
-                    device_address: fix_row.device_address,
-                    address_type: fix_row.address_type,
-                    aircraft_type_ogn: fix_row.aircraft_type_ogn.map(|t| t.into()),
                     flight_id: fix_row.flight_id,
                     flight_number: fix_row.flight_number,
-                    registration: fix_row.registration,
                     squawk: fix_row.squawk,
                     ground_speed_knots: fix_row.ground_speed_knots,
                     track_degrees: fix_row.track_degrees,
