@@ -109,7 +109,7 @@
 <div class="flex h-full min-h-screen flex-col">
 	<AppBar class="relative z-[70] bg-orange-400 dark:bg-orange-900">
 		<LoadingBar />
-		<AppBar.Toolbar class="grid-flow-col">
+		<AppBar.Toolbar class="!flex !flex-row !items-center !justify-between">
 			<AppBar.Lead>
 				<a
 					href={base}
