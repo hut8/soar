@@ -108,11 +108,12 @@ impl PacketRouter {
         packet: AprsPacket,
         raw_message: &str,
         received_at: chrono::DateTime<chrono::Utc>,
+        jetstream_msg: Option<std::sync::Arc<async_nats::jetstream::Message>>,
     ) {
         // Step 1: Generic processing (inline) - archives, identifies receiver, inserts APRS message
         let context = match self
             .generic_processor
-            .process_packet(&packet, raw_message, received_at)
+            .process_packet(&packet, raw_message, received_at, jetstream_msg)
             .await
         {
             Some(ctx) => ctx,

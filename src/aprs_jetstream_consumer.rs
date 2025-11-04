@@ -87,13 +87,17 @@ impl JetStreamConsumer {
     /// Start consuming messages and process them with the provided callback
     ///
     /// This will run indefinitely, processing messages as they arrive.
-    /// Messages are acknowledged after successful processing.
+    /// Messages are NOT acknowledged here - the callback must handle ACKing after processing.
+    ///
+    /// The callback receives:
+    /// - payload: String - the message content
+    /// - msg: Arc<Message> - the JetStream message handle for ACKing
     ///
     /// The callback should return Ok(()) if the message was processed successfully,
-    /// or Err if processing failed (the message will be retried).
+    /// or Err if processing failed (the message will be NAKed for retry).
     pub async fn consume<F, Fut>(&self, mut process_message: F) -> Result<()>
     where
-        F: FnMut(String) -> Fut,
+        F: FnMut(String, std::sync::Arc<async_nats::jetstream::Message>) -> Fut,
         Fut: std::future::Future<Output = Result<()>>,
     {
         info!(
@@ -145,26 +149,24 @@ impl JetStreamConsumer {
                         }
                     };
 
-                    // Process the message
-                    match process_message(payload).await {
-                        Ok(()) => {
-                            // Acknowledge successful processing
-                            if let Err(e) = msg.ack().await {
-                                error!("Failed to acknowledge message: {}", e);
-                                metrics::counter!("aprs.jetstream.ack_error").increment(1);
-                            } else {
-                                processed_count += 1;
-                                metrics::counter!("aprs.jetstream.consumed").increment(1);
+                    // Wrap message in Arc for sharing with workers
+                    let msg_arc = std::sync::Arc::new(msg);
 
-                                // Log progress every 1000 messages
-                                if processed_count.is_multiple_of(1000) {
-                                    let elapsed = start_time.elapsed().as_secs_f64();
-                                    let rate = processed_count as f64 / elapsed;
-                                    info!(
-                                        "Processed {} messages ({:.1} msg/s, {} errors)",
-                                        processed_count, rate, error_count
-                                    );
-                                }
+                    // Process the message - callback will handle ACKing after processing
+                    match process_message(payload, msg_arc.clone()).await {
+                        Ok(()) => {
+                            // Message processed successfully - worker will ACK
+                            processed_count += 1;
+                            metrics::counter!("aprs.jetstream.consumed").increment(1);
+
+                            // Log progress every 1000 messages
+                            if processed_count.is_multiple_of(1000) {
+                                let elapsed = start_time.elapsed().as_secs_f64();
+                                let rate = processed_count as f64 / elapsed;
+                                info!(
+                                    "Processed {} messages ({:.1} msg/s, {} errors)",
+                                    processed_count, rate, error_count
+                                );
                             }
                         }
                         Err(e) => {
@@ -173,7 +175,7 @@ impl JetStreamConsumer {
                             metrics::counter!("aprs.jetstream.process_error").increment(1);
 
                             // NAK the message so it will be redelivered
-                            if let Err(nak_err) = msg
+                            if let Err(nak_err) = msg_arc
                                 .ack_with(async_nats::jetstream::AckKind::Nak(None))
                                 .await
                             {
