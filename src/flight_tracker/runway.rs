@@ -1,3 +1,4 @@
+use crate::device_repo::DeviceRepository;
 use crate::fixes_repo::FixesRepository;
 use crate::runways_repo::RunwaysRepository;
 use chrono::{DateTime, Utc};
@@ -55,9 +56,11 @@ pub(crate) fn uses_runways(aircraft_type: &crate::ogn_aprs_aircraft::AircraftTyp
 /// - was_inferred: true if inferred from heading, false if looked up in database
 ///
 /// If airport_ref is provided, only searches for runways at that specific airport
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn determine_runway_identifier(
     fixes_repo: &FixesRepository,
     runways_repo: &RunwaysRepository,
+    device_repo: &DeviceRepository,
     device_id: &Uuid,
     event_time: DateTime<Utc>,
     latitude: f64,
@@ -98,15 +101,15 @@ pub(crate) async fn determine_runway_identifier(
         }
     };
 
-    // Check if this aircraft type uses runways
-    // Get aircraft type from the first fix (all fixes should have the same type for a device)
-    if let Some(first_fix) = fixes.first()
-        && let Some(aircraft_type) = first_fix.aircraft_type_ogn
+    // Check if this aircraft type uses runways (skip detection for helicopters, paragliders, etc.)
+    // Fetch device to check aircraft_type_ogn (now stored on device, not fix)
+    if let Ok(Some(device)) = device_repo.get_device_by_uuid(*device_id).await
+        && let Some(aircraft_type) = device.aircraft_type_ogn
         && !uses_runways(&aircraft_type)
     {
         debug!(
-            "Aircraft type {:?} does not use runways, skipping runway detection for device {}",
-            aircraft_type, device_id
+            "Device {} is type {:?} which doesn't use runways, skipping runway detection",
+            device_id, aircraft_type
         );
         return None;
     }

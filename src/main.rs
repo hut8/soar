@@ -181,6 +181,12 @@ enum Commands {
     /// Tests that the runtime can initialize without panicking. Used for CI/CD
     /// to catch configuration issues like missing tokio_unstable flag.
     VerifyRuntime {},
+    /// Run database migrations
+    ///
+    /// Runs all pending database migrations and exits. This is useful for deployment
+    /// scripts to ensure migrations are applied before starting services.
+    /// Migrations are also run automatically by other commands that need the database.
+    Migrate {},
 }
 
 #[tracing::instrument]
@@ -542,18 +548,45 @@ async fn main() -> Result<()> {
         }
     }
 
-    // Handle VerifyRuntime early - it doesn't need database access
-    if matches!(cli.command, Commands::VerifyRuntime {}) {
-        info!("Runtime verification successful:");
-        info!("  ✓ Sentry integration initialized");
-        info!("  ✓ Tracing subscriber initialized");
-        info!("  ✓ tokio-console layer initialized (port 7779)");
-        info!("  ✓ All runtime components ready");
-        info!("Runtime verification PASSED");
-        return Ok(());
+    // Handle commands that don't need database access early
+    match &cli.command {
+        Commands::VerifyRuntime {} => {
+            info!("Runtime verification successful:");
+            info!("  ✓ Sentry integration initialized");
+            info!("  ✓ Tracing subscriber initialized");
+            info!("  ✓ tokio-console layer initialized (port 7779)");
+            info!("  ✓ All runtime components ready");
+            info!("Runtime verification PASSED");
+            return Ok(());
+        }
+        Commands::IngestAprs {
+            server,
+            port,
+            callsign,
+            filter,
+            max_retries,
+            retry_delay,
+            nats_url,
+        } => {
+            // IngestAprs only uses NATS, doesn't need database
+            return handle_ingest_aprs(
+                server.clone(),
+                *port,
+                callsign.clone(),
+                filter.clone(),
+                *max_retries,
+                *retry_delay,
+                nats_url.clone(),
+            )
+            .await;
+        }
+        _ => {
+            // All other commands need database access
+        }
     }
 
-    // Set up database connection - Diesel for all repositories
+    // Set up database connection for commands that need it
+    // This also runs migrations automatically
     let diesel_pool = setup_diesel_database().await?;
 
     match cli.command {
@@ -587,25 +620,9 @@ async fn main() -> Result<()> {
             .await
         }
         Commands::PullData {} => handle_pull_data(diesel_pool).await,
-        Commands::IngestAprs {
-            server,
-            port,
-            callsign,
-            filter,
-            max_retries,
-            retry_delay,
-            nats_url,
-        } => {
-            handle_ingest_aprs(
-                server,
-                port,
-                callsign,
-                filter,
-                max_retries,
-                retry_delay,
-                nats_url,
-            )
-            .await
+        Commands::IngestAprs { .. } => {
+            // This should never be reached due to early return above
+            unreachable!("IngestAprs should be handled before database setup")
         }
         Commands::Run {
             archive_dir,
@@ -651,6 +668,12 @@ async fn main() -> Result<()> {
         Commands::VerifyRuntime {} => {
             // This should never be reached due to early return above
             unreachable!("VerifyRuntime should be handled before database setup")
+        }
+        Commands::Migrate {} => {
+            // Migrations are already run by setup_diesel_database()
+            info!("Database migrations completed successfully");
+            info!("All pending migrations have been applied");
+            Ok(())
         }
     }
 }

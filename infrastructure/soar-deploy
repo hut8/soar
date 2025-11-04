@@ -223,6 +223,15 @@ fi
 log_info "Reloading systemd daemon..."
 systemctl daemon-reload
 
+# Run database migrations before starting services
+log_info "Running database migrations..."
+if su - soar -c "/usr/local/bin/soar migrate"; then
+    log_info "Database migrations completed successfully"
+else
+    log_error "Database migrations failed"
+    exit 1
+fi
+
 # Enable and start services - start aprs-ingest first, then others
 log_info "Enabling and starting SOAR services..."
 

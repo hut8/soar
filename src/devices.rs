@@ -164,6 +164,29 @@ pub struct Device {
     pub country_code: Option<String>,
 }
 
+impl Device {
+    /// Convert device address to canonical 6-character uppercase hex format
+    pub fn device_address_hex(&self) -> String {
+        format!("{:06X}", self.address)
+    }
+
+    /// Get a human-readable aircraft identifier
+    /// Uses registration if not empty, otherwise falls back to aircraft ID with type prefix
+    pub fn get_aircraft_identifier(&self) -> String {
+        if !self.registration.is_empty() {
+            self.registration.clone()
+        } else {
+            let type_prefix = match self.address_type {
+                AddressType::Icao => "ICAO",
+                AddressType::Flarm => "FLARM",
+                AddressType::Ogn => "OGN",
+                AddressType::Unknown => "Unknown",
+            };
+            format!("{}-{:06X}", type_prefix, self.address)
+        }
+    }
+}
+
 // Diesel database model for devices table
 #[derive(
     Debug,
@@ -200,6 +223,29 @@ pub struct DeviceModel {
     pub adsb_emitter_category: Option<AdsbEmitterCategory>,
     pub tracker_device_type: Option<String>,
     pub country_code: Option<String>,
+}
+
+impl DeviceModel {
+    /// Convert device address to canonical 6-character uppercase hex format
+    pub fn device_address_hex(&self) -> String {
+        format!("{:06X}", self.address)
+    }
+
+    /// Get a human-readable aircraft identifier
+    /// Uses registration if not empty, otherwise falls back to aircraft ID with type prefix
+    pub fn get_aircraft_identifier(&self) -> String {
+        if !self.registration.is_empty() {
+            self.registration.clone()
+        } else {
+            let type_prefix = match self.address_type {
+                AddressType::Icao => "ICAO",
+                AddressType::Flarm => "FLARM",
+                AddressType::Ogn => "OGN",
+                AddressType::Unknown => "Unknown",
+            };
+            format!("{}-{:06X}", type_prefix, self.address)
+        }
+    }
 }
 
 // For inserting new devices (without timestamps which are set by DB)

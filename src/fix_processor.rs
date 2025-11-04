@@ -278,26 +278,25 @@ impl FixProcessor {
             );
         }
 
-        // Step 3: Update device cached fields (aircraft_type_ogn and last_fix_at)
+        // Step 3: Update device last_fix_at
+        // Note: aircraft_type_ogn is no longer stored on fixes, it's updated separately
+        // via update_adsb_fields when parsing the APRS packet
         let device_repo = self.device_repo.clone();
         let device_id = updated_fix.device_id;
-        let aircraft_type = updated_fix.aircraft_type_ogn;
         let fix_timestamp = updated_fix.timestamp;
         tokio::spawn(
             async move {
                 if let Err(e) = device_repo
-                    .update_cached_fields(device_id, aircraft_type, fix_timestamp)
+                    .update_last_fix_at(device_id, fix_timestamp)
                     .await
                 {
                     error!(
-                        "Failed to update cached fields for device {}: {}",
+                        "Failed to update last_fix_at for device {}: {}",
                         device_id, e
                     );
                 }
             }
-            .instrument(
-                tracing::debug_span!("update_device_cached_fields", device_id = %device_id),
-            ),
+            .instrument(tracing::debug_span!("update_device_last_fix_at", device_id = %device_id)),
         );
 
         // Step 4: Update flight callsign if this fix has a flight_id and flight_number

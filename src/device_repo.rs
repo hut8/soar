@@ -244,6 +244,28 @@ impl DeviceRepository {
         Ok(())
     }
 
+    /// Update last_fix_at timestamp for a device
+    pub async fn update_last_fix_at(
+        &self,
+        device_id: Uuid,
+        fix_timestamp: DateTime<Utc>,
+    ) -> Result<()> {
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            diesel::update(devices::table.filter(devices::id.eq(device_id)))
+                .set(devices::last_fix_at.eq(fix_timestamp))
+                .execute(&mut conn)?;
+
+            Ok::<(), anyhow::Error>(())
+        })
+        .await??;
+
+        Ok(())
+    }
+
     /// Update the club assignment for a device
     pub async fn update_club_id(&self, device_id: Uuid, club_id: Option<Uuid>) -> Result<bool> {
         let mut conn = self.get_connection()?;
