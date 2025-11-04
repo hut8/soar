@@ -20,6 +20,8 @@ struct ClubWithLocation {
     is_soaring: Option<bool>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Integer>)]
     home_base_airport_id: Option<i32>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    home_base_airport_ident: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
     location_id: Option<Uuid>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
@@ -56,6 +58,8 @@ pub struct ClubWithLocationAndSimilarity {
     pub is_soaring: Option<bool>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Integer>)]
     pub home_base_airport_id: Option<i32>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    pub home_base_airport_ident: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
     pub location_id: Option<Uuid>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
@@ -94,6 +98,8 @@ pub struct ClubWithLocationAndDistance {
     pub is_soaring: Option<bool>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Integer>)]
     pub home_base_airport_id: Option<i32>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
+    pub home_base_airport_ident: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
     pub location_id: Option<Uuid>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Varchar>)]
@@ -152,6 +158,7 @@ impl From<ClubWithLocationAndDistance> for Club {
             name: cwld.name,
             is_soaring: cwld.is_soaring,
             home_base_airport_id: cwld.home_base_airport_id,
+            home_base_airport_ident: cwld.home_base_airport_ident,
             location_id: cwld.location_id,
             street1: cwld.street1,
             street2: cwld.street2,
@@ -186,6 +193,7 @@ impl From<ClubWithLocationAndSimilarity> for Club {
             name: cwls.name,
             is_soaring: cwls.is_soaring,
             home_base_airport_id: cwls.home_base_airport_id,
+            home_base_airport_ident: cwls.home_base_airport_ident,
             location_id: cwls.location_id,
             street1: cwls.street1,
             street2: cwls.street2,
@@ -220,6 +228,7 @@ impl From<ClubWithLocation> for Club {
             name: cwl.name,
             is_soaring: cwl.is_soaring,
             home_base_airport_id: cwl.home_base_airport_id,
+            home_base_airport_ident: cwl.home_base_airport_ident,
             location_id: cwl.location_id,
             street1: cwl.street1,
             street2: cwl.street2,
@@ -271,7 +280,7 @@ impl ClubsRepository {
             let mut conn = pool.get()?;
 
             let sql = r#"
-                SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, c.location_id,
+                SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, a.ident as home_base_airport_ident, c.location_id,
                        l.street1, l.street2, l.city, l.state, l.zip_code, l.region_code,
                        l.country_mail_code,
                        CASE
@@ -285,6 +294,7 @@ impl ClubsRepository {
                        c.created_at, c.updated_at
                 FROM clubs c
                 LEFT JOIN locations l ON c.location_id = l.id
+                LEFT JOIN airports a ON c.home_base_airport_id = a.id
                 WHERE UPPER(c.name) = $1
                 LIMIT 1
             "#;
@@ -309,7 +319,7 @@ impl ClubsRepository {
 
             // Use raw SQL for complex join with locations table
             let sql = r#"
-                SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, c.location_id,
+                SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, a.ident as home_base_airport_ident, c.location_id,
                        l.street1, l.street2, l.city, l.state, l.zip_code, l.region_code,
                        l.country_mail_code,
                        CASE
@@ -323,6 +333,7 @@ impl ClubsRepository {
                        c.created_at, c.updated_at
                 FROM clubs c
                 LEFT JOIN locations l ON c.location_id = l.id
+                LEFT JOIN airports a ON c.home_base_airport_id = a.id
                 WHERE c.id = $1
             "#;
 
@@ -346,7 +357,7 @@ impl ClubsRepository {
 
             // Use raw SQL for complex join with locations table
             let sql = r#"
-                SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, c.location_id,
+                SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, a.ident as home_base_airport_ident, c.location_id,
                        l.street1, l.street2, l.city, l.state, l.zip_code, l.region_code,
                        l.country_mail_code,
                        CASE
@@ -360,6 +371,7 @@ impl ClubsRepository {
                        c.created_at, c.updated_at
                 FROM clubs c
                 LEFT JOIN locations l ON c.location_id = l.id
+                LEFT JOIN airports a ON c.home_base_airport_id = a.id
                 WHERE c.is_soaring = true
                 ORDER BY c.name
             "#;
@@ -385,7 +397,7 @@ impl ClubsRepository {
             let mut conn = pool.get()?;
 
             let sql = r#"
-                SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, c.location_id,
+                SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, a.ident as home_base_airport_ident, c.location_id,
                        l.street1, l.street2, l.city, l.state, l.zip_code, l.region_code,
                        l.country_mail_code,
                        CASE
@@ -400,6 +412,7 @@ impl ClubsRepository {
                        SIMILARITY(UPPER(c.name), $1) as similarity_score
                 FROM clubs c
                 LEFT JOIN locations l ON c.location_id = l.id
+                LEFT JOIN airports a ON c.home_base_airport_id = a.id
                 WHERE SIMILARITY(UPPER(c.name), $1) > 0.05
                 AND c.is_soaring = true
                 ORDER BY similarity_score DESC, c.name
@@ -442,7 +455,7 @@ impl ClubsRepository {
             let mut conn = pool.get()?;
 
             let sql = r#"
-                SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, c.location_id,
+                SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, a.ident as home_base_airport_ident, c.location_id,
                        l.street1, l.street2, l.city, l.state, l.zip_code, l.region_code,
                        l.country_mail_code,
                        NULL::float8 as longitude, NULL::float8 as latitude,
@@ -450,6 +463,7 @@ impl ClubsRepository {
                        ST_Distance(ST_SetSRID(l.geolocation::geometry, 4326)::geography, ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography) as distance_meters
                 FROM clubs c
                 INNER JOIN locations l ON c.location_id = l.id
+                LEFT JOIN airports a ON c.home_base_airport_id = a.id
                 WHERE l.geolocation IS NOT NULL
                 AND c.is_soaring = true
                 AND ST_DWithin(ST_SetSRID(l.geolocation::geometry, 4326)::geography, ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography, $3)
@@ -702,6 +716,7 @@ mod tests {
             name: "Adirondack Soaring Club".to_string(),
             is_soaring: Some(true),
             home_base_airport_id: None,
+            home_base_airport_ident: None,
             location_id: None,
             street1: Some("123 Mountain Rd".to_string()),
             street2: None,

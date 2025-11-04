@@ -103,6 +103,8 @@ pub struct ClubView {
     pub name: String,
     pub home_base_airport_id: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub home_base_airport_ident: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub location: Option<Location>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -133,6 +135,7 @@ impl From<Club> for ClubView {
             id: club.id,
             name: club.name,
             home_base_airport_id: club.home_base_airport_id,
+            home_base_airport_ident: club.home_base_airport_ident,
             location,
             created_at: club.created_at,
             updated_at: club.updated_at,
@@ -163,6 +166,7 @@ impl From<ClubWithLocationAndDistance> for ClubView {
             id: club.id,
             name: club.name,
             home_base_airport_id: club.home_base_airport_id,
+            home_base_airport_ident: club.home_base_airport_ident,
             location,
             created_at: club.created_at,
             updated_at: club.updated_at,
@@ -193,6 +197,7 @@ impl From<ClubWithLocationAndSimilarity> for ClubView {
             id: club.id,
             name: club.name,
             home_base_airport_id: club.home_base_airport_id,
+            home_base_airport_ident: club.home_base_airport_ident,
             location,
             created_at: club.created_at,
             updated_at: club.updated_at,
