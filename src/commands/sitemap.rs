@@ -38,16 +38,38 @@ pub async fn handle_sitemap_generation(pool: PgPool, static_root: String) -> Res
     let club_urls = generate_club_urls(&club_ids)?;
 
     // Get all device IDs from database
-    let device_ids = get_all_device_ids(pool).await?;
+    let device_ids = get_all_device_ids(pool.clone()).await?;
     info!("Found {} devices for sitemap generation", device_ids.len());
 
     // Generate device URLs
     let device_urls = generate_device_urls(&device_ids)?;
 
+    // Get all airport IDs from database
+    let airport_ids = get_all_airport_ids(pool.clone()).await?;
+    info!(
+        "Found {} airports for sitemap generation",
+        airport_ids.len()
+    );
+
+    // Generate airport URLs
+    let airport_urls = generate_airport_urls(&airport_ids)?;
+
+    // Get all receiver IDs from database
+    let receiver_ids = get_all_receiver_ids(pool).await?;
+    info!(
+        "Found {} receivers for sitemap generation",
+        receiver_ids.len()
+    );
+
+    // Generate receiver URLs
+    let receiver_urls = generate_receiver_urls(&receiver_ids)?;
+
     // Combine all URLs
     let mut all_urls = static_urls;
     all_urls.extend(club_urls);
     all_urls.extend(device_urls);
+    all_urls.extend(airport_urls);
+    all_urls.extend(receiver_urls);
 
     let total_urls = all_urls.len();
     info!("Total URLs to generate: {}", total_urls);
@@ -162,6 +184,67 @@ async fn get_all_device_ids(pool: PgPool) -> Result<Vec<Uuid>> {
         let device_ids: Vec<Uuid> = devices.order(id.asc()).select(id).load::<Uuid>(&mut conn)?;
 
         Ok::<Vec<Uuid>, anyhow::Error>(device_ids)
+    })
+    .await??;
+
+    Ok(result)
+}
+
+/// Generate airport page URLs
+fn generate_airport_urls(airport_ids: &[i32]) -> Result<Vec<Url>> {
+    let mut urls = Vec::new();
+
+    for airport_id in airport_ids {
+        let airport_url = format!("{}/airports/{}", BASE_URL, airport_id);
+        let url = Url::builder(airport_url).priority(0.6).build()?;
+        urls.push(url);
+    }
+
+    Ok(urls)
+}
+
+/// Get all airport IDs from the database
+async fn get_all_airport_ids(pool: PgPool) -> Result<Vec<i32>> {
+    let result = tokio::task::spawn_blocking(move || {
+        use soar::schema::airports::dsl::*;
+
+        let mut conn = pool.get()?;
+
+        let airport_ids: Vec<i32> = airports.order(id.asc()).select(id).load::<i32>(&mut conn)?;
+
+        Ok::<Vec<i32>, anyhow::Error>(airport_ids)
+    })
+    .await??;
+
+    Ok(result)
+}
+
+/// Generate receiver page URLs
+fn generate_receiver_urls(receiver_ids: &[Uuid]) -> Result<Vec<Url>> {
+    let mut urls = Vec::new();
+
+    for receiver_id in receiver_ids {
+        let receiver_url = format!("{}/receivers/{}", BASE_URL, receiver_id);
+        let url = Url::builder(receiver_url).priority(0.5).build()?;
+        urls.push(url);
+    }
+
+    Ok(urls)
+}
+
+/// Get all receiver IDs from the database
+async fn get_all_receiver_ids(pool: PgPool) -> Result<Vec<Uuid>> {
+    let result = tokio::task::spawn_blocking(move || {
+        use soar::schema::receivers::dsl::*;
+
+        let mut conn = pool.get()?;
+
+        let receiver_ids: Vec<Uuid> = receivers
+            .order(id.asc())
+            .select(id)
+            .load::<Uuid>(&mut conn)?;
+
+        Ok::<Vec<Uuid>, anyhow::Error>(receiver_ids)
     })
     .await??;
 
