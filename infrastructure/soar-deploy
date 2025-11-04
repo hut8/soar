@@ -84,9 +84,53 @@ TIMERS=(
     "soar-archive.timer"
 )
 
-# Stop ALL services before deployment
-log_info "Stopping SOAR services..."
+# Create temporary binary directory with timestamp
+TIMESTAMP=$(date +%s)
+TEMP_BIN_DIR="/var/soar/bin"
+TEMP_BIN_PATH="$TEMP_BIN_DIR/soar-$TIMESTAMP"
+
+log_info "Creating temporary binary directory: $TEMP_BIN_DIR"
+mkdir -p "$TEMP_BIN_DIR"
+chown soar:soar "$TEMP_BIN_DIR"
+
+# Deploy new binary to temporary location first (avoids "text file busy")
+log_info "Deploying new binary to temporary location: $TEMP_BIN_PATH"
+install -m 755 -o soar -g soar "$DEPLOY_DIR/soar" "$TEMP_BIN_PATH"
+log_info "Binary deployed to temporary location"
+
+# Stop soar-run service only (for migrations, keep others running)
+log_info "Stopping soar-run service for migrations..."
+if systemctl is-active --quiet "soar-run.service"; then
+    systemctl stop "soar-run.service" || log_warn "Failed to stop soar-run.service"
+    log_info "soar-run.service stopped"
+else
+    log_info "soar-run.service is not running"
+fi
+
+# Wait for service to fully terminate
+sleep 2
+
+# Run database migrations from temporary binary (not /usr/local/bin to avoid "text file busy")
+log_info "Running database migrations from temporary binary..."
+if "$TEMP_BIN_PATH" migrate; then
+    log_info "Database migrations completed successfully"
+else
+    log_error "Database migrations failed"
+    log_info "Cleaning up temporary binary: $TEMP_BIN_PATH"
+    rm -f "$TEMP_BIN_PATH"
+    # Restart soar-run since we stopped it
+    systemctl start "soar-run.service" || log_warn "Failed to restart soar-run.service"
+    exit 1
+fi
+
+# Now stop ALL remaining services (migrations are complete)
+log_info "Stopping remaining SOAR services..."
 for service in "${ALL_SERVICES[@]}"; do
+    # Skip soar-run since we already stopped it
+    if [ "$service" = "soar-run.service" ]; then
+        continue
+    fi
+
     if systemctl is-active --quiet "$service"; then
         log_info "Stopping $service..."
         systemctl stop "$service" || log_warn "Failed to stop $service"
@@ -120,10 +164,14 @@ else
     log_warn "No existing binary to backup"
 fi
 
-# Install new binary
-log_info "Installing new binary..."
-install -m 755 -o root -g root "$DEPLOY_DIR/soar" /usr/local/bin/soar
+# Install new binary to /usr/local/bin
+log_info "Installing new binary to /usr/local/bin..."
+install -m 755 -o root -g root "$TEMP_BIN_PATH" /usr/local/bin/soar
 log_info "Binary installed successfully"
+
+# Clean up temporary binary
+log_info "Cleaning up temporary binary: $TEMP_BIN_PATH"
+rm -f "$TEMP_BIN_PATH"
 
 # Install service files
 log_info "Installing service files..."

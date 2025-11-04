@@ -26,6 +26,10 @@ pub mod sql_types {
     pub struct Geography;
 
     #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
+    #[diesel(postgres_type(name = "geometry"))]
+    pub struct Geometry;
+
+    #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "light_sport_type"))]
     pub struct LightSportType;
 
@@ -239,8 +243,7 @@ diesel::table! {
 diesel::table! {
     use diesel::sql_types::*;
     use super::sql_types::Geography;
-    use super::sql_types::AddressType;
-    use super::sql_types::AircraftTypeOgn;
+    use super::sql_types::Geometry;
 
     fixes (id) {
         id -> Uuid,
@@ -253,13 +256,10 @@ diesel::table! {
         latitude -> Float8,
         longitude -> Float8,
         location -> Nullable<Geography>,
+        geom -> Nullable<Geometry>,
         altitude_msl_feet -> Nullable<Int4>,
-        address_type -> AddressType,
-        aircraft_type_ogn -> Nullable<AircraftTypeOgn>,
         #[max_length = 20]
         flight_number -> Nullable<Varchar>,
-        #[max_length = 10]
-        registration -> Nullable<Varchar>,
         #[max_length = 4]
         squawk -> Nullable<Varchar>,
         ground_speed_knots -> Nullable<Float4>,
@@ -272,7 +272,6 @@ diesel::table! {
         flight_id -> Nullable<Uuid>,
         device_id -> Uuid,
         received_at -> Timestamptz,
-        device_address -> Int4,
         is_active -> Bool,
         altitude_agl_feet -> Nullable<Int4>,
         receiver_id -> Nullable<Uuid>,

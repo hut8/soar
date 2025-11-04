@@ -121,6 +121,7 @@ impl FixProcessor {
             ogn_parser::AprsData::Position(ref pos_packet) => {
                 let mut device_address = 0i32;
                 let mut address_type = crate::devices::AddressType::Unknown;
+                let mut aircraft_type = None;
 
                 // Extract device info from OGN parameters
                 if let Some(ref id) = pos_packet.comment.id {
@@ -132,6 +133,10 @@ impl FixProcessor {
                         3 => crate::devices::AddressType::Ogn,
                         _ => crate::devices::AddressType::Unknown,
                     };
+                    // Extract aircraft type from OGN parameters
+                    aircraft_type = Some(crate::ogn_aprs_aircraft::AircraftType::from(
+                        id.aircraft_type,
+                    ));
                 }
 
                 // When creating devices spontaneously (not from DDB), determine address_type from tracker_device_type
@@ -221,7 +226,8 @@ impl FixProcessor {
                                 // Set the aprs_message_id and receiver_id from context
                                 fix.aprs_message_id = Some(context.aprs_message_id);
                                 fix.receiver_id = Some(context.receiver_id);
-                                self.process_fix_internal(fix, raw_message).await;
+                                self.process_fix_internal(fix, raw_message, aircraft_type)
+                                    .await;
                             }
                             Ok(None) => {
                                 trace!("No position fix in APRS position packet");
@@ -247,8 +253,13 @@ impl FixProcessor {
     }
 
     /// Internal method to process a fix through the complete pipeline
-    #[tracing::instrument(skip(self, fix, raw_message), fields(device_id = %fix.device_id))]
-    async fn process_fix_internal(&self, fix: Fix, raw_message: &str) {
+    #[tracing::instrument(skip(self, fix, raw_message, aircraft_type), fields(device_id = %fix.device_id))]
+    async fn process_fix_internal(
+        &self,
+        fix: Fix,
+        raw_message: &str,
+        aircraft_type: Option<crate::ogn_aprs_aircraft::AircraftType>,
+    ) {
         // Step 1: Process through flight detection AND save to database
         // This is done atomically while holding a per-device lock to prevent race conditions
         let updated_fix = match self
@@ -281,7 +292,6 @@ impl FixProcessor {
         // Step 3: Update device cached fields (aircraft_type_ogn and last_fix_at)
         let device_repo = self.device_repo.clone();
         let device_id = updated_fix.device_id;
-        let aircraft_type = updated_fix.aircraft_type_ogn;
         let fix_timestamp = updated_fix.timestamp;
         tokio::spawn(
             async move {

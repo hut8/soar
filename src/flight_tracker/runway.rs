@@ -1,8 +1,8 @@
+use crate::devices::Device;
 use crate::fixes_repo::FixesRepository;
 use crate::runways_repo::RunwaysRepository;
 use chrono::{DateTime, Utc};
 use tracing::{debug, warn};
-use uuid::Uuid;
 
 use super::geometry::angular_difference;
 
@@ -58,18 +58,34 @@ pub(crate) fn uses_runways(aircraft_type: &crate::ogn_aprs_aircraft::AircraftTyp
 pub(crate) async fn determine_runway_identifier(
     fixes_repo: &FixesRepository,
     runways_repo: &RunwaysRepository,
-    device_id: &Uuid,
+    device: &Device,
     event_time: DateTime<Utc>,
     latitude: f64,
     longitude: f64,
     airport_ref: Option<i32>,
 ) -> Option<(String, bool)> {
+    // Extract device ID (devices from database always have an ID)
+    let device_id = device
+        .id
+        .expect("Device fetched from database should have ID");
+
     // Get fixes from 20 seconds before to 20 seconds after the event
     let start_time = event_time - chrono::Duration::seconds(20);
     let end_time = event_time + chrono::Duration::seconds(20);
 
+    // Check if this aircraft type uses runways (skip detection for helicopters, paragliders, etc.)
+    if let Some(aircraft_type) = device.aircraft_type_ogn
+        && !uses_runways(&aircraft_type)
+    {
+        debug!(
+            "Device {} is type {:?} which doesn't use runways, skipping runway detection",
+            device_id, aircraft_type
+        );
+        return None;
+    }
+
     let fixes = match fixes_repo
-        .get_fixes_for_aircraft_with_time_range(device_id, start_time, end_time, None)
+        .get_fixes_for_aircraft_with_time_range(&device_id, start_time, end_time, None)
         .await
     {
         Ok(f) if !f.is_empty() => {
@@ -97,19 +113,6 @@ pub(crate) async fn determine_runway_identifier(
             return None;
         }
     };
-
-    // Check if this aircraft type uses runways
-    // Get aircraft type from the first fix (all fixes should have the same type for a device)
-    if let Some(first_fix) = fixes.first()
-        && let Some(aircraft_type) = first_fix.aircraft_type_ogn
-        && !uses_runways(&aircraft_type)
-    {
-        debug!(
-            "Aircraft type {:?} does not use runways, skipping runway detection for device {}",
-            aircraft_type, device_id
-        );
-        return None;
-    }
 
     // Calculate average course from fixes that have track_degrees
     let courses: Vec<f32> = fixes.iter().filter_map(|fix| fix.track_degrees).collect();

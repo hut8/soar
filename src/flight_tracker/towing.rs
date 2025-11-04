@@ -1,4 +1,5 @@
 use crate::Fix;
+use crate::device_repo::DeviceRepository;
 use crate::fixes_repo::FixesRepository;
 use crate::flights_repo::FlightsRepository;
 use crate::ogn_aprs_aircraft::AircraftType;
@@ -31,6 +32,7 @@ pub fn spawn_towing_detection_task(
     towplane_flight_id: Uuid,
     fixes_repo: FixesRepository,
     flights_repo: FlightsRepository,
+    device_repo: DeviceRepository,
     aircraft_trackers: AircraftTrackersMap,
 ) {
     tokio::spawn(async move {
@@ -42,6 +44,7 @@ pub fn spawn_towing_detection_task(
             towplane_device_id,
             &fixes_repo,
             &flights_repo,
+            &device_repo,
             &aircraft_trackers,
         )
         .await
@@ -85,6 +88,7 @@ async fn find_towed_glider(
     towplane_device_id: Uuid,
     fixes_repo: &FixesRepository,
     flights_repo: &FlightsRepository,
+    device_repo: &DeviceRepository,
     aircraft_trackers: &AircraftTrackersMap,
 ) -> Result<Option<TowingInfo>> {
     // Get the latest fix for the towplane
@@ -120,6 +124,7 @@ async fn find_towed_glider(
             towplane_device_id,
             aircraft_trackers,
             fixes_repo,
+            device_repo,
         )
         .await?;
 
@@ -181,6 +186,7 @@ async fn find_nearby_gliders(
     towplane_device_id: Uuid,
     aircraft_trackers: &AircraftTrackersMap,
     fixes_repo: &FixesRepository,
+    device_repo: &DeviceRepository,
 ) -> Result<Vec<(Uuid, Uuid)>> {
     let mut candidate_gliders = Vec::new();
 
@@ -216,8 +222,16 @@ async fn find_nearby_gliders(
             None => continue,
         };
 
-        // Check if this is a glider
-        if device_fix.aircraft_type_ogn != Some(AircraftType::Glider) {
+        // Check if this is a glider (aircraft_type_ogn is now on device, not fix)
+        let is_glider = device_repo
+            .get_device_by_uuid(device_id)
+            .await
+            .ok()
+            .flatten()
+            .and_then(|d| d.aircraft_type_ogn)
+            == Some(AircraftType::Glider);
+
+        if !is_glider {
             continue;
         }
 
