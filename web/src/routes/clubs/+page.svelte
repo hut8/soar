@@ -266,7 +266,7 @@
 	{#if loading}
 		<div class="card p-8">
 			<div class="flex items-center justify-center space-x-4">
-				<Progress class="w-8 h-8" />
+				<Progress class="h-8 w-8" />
 				<span class="text-lg">Searching clubs...</span>
 			</div>
 		</div>

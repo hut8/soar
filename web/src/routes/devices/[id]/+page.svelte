@@ -243,7 +243,7 @@
 	{#if loading}
 		<div class="card p-8">
 			<div class="flex items-center justify-center space-x-4">
-				<Progress class="w-8 h-8" />
+				<Progress class="h-8 w-8" />
 				<span class="text-lg">Loading device details...</span>
 			</div>
 		</div>
@@ -369,7 +369,7 @@
 									disabled={savingClub}
 								>
 									{#if savingClub}
-										<Progress class="w-4 h-4" />
+										<Progress class="h-4 w-4" />
 										<span>Saving...</span>
 									{:else}
 										<Save class="h-4 w-4" />
@@ -625,7 +625,7 @@
 
 				{#if loadingFlights}
 					<div class="flex items-center justify-center py-8">
-						<Progress class="w-6 h-6" />
+						<Progress class="h-6 w-6" />
 						<span class="ml-2">Loading flight history...</span>
 					</div>
 				{:else if flights.length === 0}

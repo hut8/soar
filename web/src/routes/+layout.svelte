@@ -107,9 +107,9 @@
 </svelte:head>
 
 <div class="flex h-full min-h-screen flex-col">
-	<AppBar class="bg-orange-400 dark:bg-orange-900 relative z-[70]">
+	<AppBar class="relative z-[70] bg-orange-400 dark:bg-orange-900">
 		<LoadingBar />
-		{#snippet lead()}
+		<AppBar.Lead>
 			<a
 				href={base}
 				class="relative z-10 btn flex items-center space-x-2 preset-filled-primary-500"
@@ -119,8 +119,8 @@
 					Glider.flights
 				</div>
 			</a>
-		{/snippet}
-		{#snippet trail()}
+		</AppBar.Lead>
+		<AppBar.Trail>
 			<div class="relative z-10 flex items-center gap-4">
 				<!-- Desktop Navigation -->
 				<nav class="hidden space-x-4 md:flex">
@@ -234,7 +234,7 @@
 					</button>
 				</div>
 			</div>
-		{/snippet}
+		</AppBar.Trail>
 		<!-- WebSocket Status Indicator for larger screens -->
 		<div class="relative z-10 hidden w-full items-center justify-center lg:flex">
 			{#if $websocketStatus.connected}

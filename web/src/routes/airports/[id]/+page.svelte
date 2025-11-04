@@ -245,7 +245,7 @@
 	{#if loading}
 		<div class="card p-8">
 			<div class="flex items-center justify-center space-x-4">
-				<Progress class="w-8 h-8" />
+				<Progress class="h-8 w-8" />
 				<span class="text-lg">Loading airport details...</span>
 			</div>
 		</div>
@@ -584,7 +584,7 @@
 				<!-- Clubs Loading State -->
 				{#if clubsLoading}
 					<div class="flex items-center justify-center space-x-4 p-8">
-						<Progress class="w-6 h-6" />
+						<Progress class="h-6 w-6" />
 						<span>Loading clubs...</span>
 					</div>
 				{/if}
@@ -632,7 +632,7 @@
 				<!-- Flights Loading State -->
 				{#if flightsLoading}
 					<div class="flex items-center justify-center space-x-4 p-8">
-						<Progress class="w-6 h-6" />
+						<Progress class="h-6 w-6" />
 						<span>Loading flights...</span>
 					</div>
 				{/if}

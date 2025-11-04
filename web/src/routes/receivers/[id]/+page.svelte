@@ -416,7 +416,7 @@
 	{#if loading}
 		<div class="card p-8">
 			<div class="flex items-center justify-center space-x-4">
-				<Progress class="w-8 h-8" />
+				<Progress class="h-8 w-8" />
 				<span class="text-lg">Loading receiver details...</span>
 			</div>
 		</div>
@@ -580,7 +580,7 @@
 
 				{#if loadingStatistics}
 					<div class="flex items-center justify-center space-x-4 p-8">
-						<Progress class="w-6 h-6" />
+						<Progress class="h-6 w-6" />
 						<span>Loading statistics...</span>
 					</div>
 				{:else if statisticsError}
@@ -649,404 +649,403 @@
 
 					<!-- Status Reports Tab Content -->
 					<Tabs.Content value="status-reports">
-							<div class="mt-4">
-								<div class="mb-4 flex items-center justify-end">
-									<label class="flex cursor-pointer items-center gap-2">
-										<input type="checkbox" class="checkbox" bind:checked={showRawData} />
-										<span class="text-sm">Show raw</span>
-									</label>
-								</div>
+						<div class="mt-4">
+							<div class="mb-4 flex items-center justify-end">
+								<label class="flex cursor-pointer items-center gap-2">
+									<input type="checkbox" class="checkbox" bind:checked={showRawData} />
+									<span class="text-sm">Show raw</span>
+								</label>
+							</div>
 
-								{#if loadingStatuses}
-									<div class="flex items-center justify-center space-x-4 p-8">
-										<Progress class="w-6 h-6" />
-										<span>Loading statuses...</span>
-									</div>
-								{:else if statusesError}
-									<div class="alert preset-filled-error-500">
-										<p>{statusesError}</p>
-									</div>
-								{:else if statuses.length === 0}
-									<p class="text-surface-500-400-token p-4 text-center">
-										No status reports in the last 24 hours
-									</p>
-								{:else}
-									<div class="table-container">
-										<table class="table-hover table">
-											<thead>
-												<tr>
-													<th>Timestamp</th>
-													<th>Version</th>
-													<th>Platform</th>
-													<th>CPU</th>
-													<th>RAM</th>
-													<th>Senders</th>
-													<th>Voltage</th>
-													<th>Lag</th>
+							{#if loadingStatuses}
+								<div class="flex items-center justify-center space-x-4 p-8">
+									<Progress class="h-6 w-6" />
+									<span>Loading statuses...</span>
+								</div>
+							{:else if statusesError}
+								<div class="alert preset-filled-error-500">
+									<p>{statusesError}</p>
+								</div>
+							{:else if statuses.length === 0}
+								<p class="text-surface-500-400-token p-4 text-center">
+									No status reports in the last 24 hours
+								</p>
+							{:else}
+								<div class="table-container">
+									<table class="table-hover table">
+										<thead>
+											<tr>
+												<th>Timestamp</th>
+												<th>Version</th>
+												<th>Platform</th>
+												<th>CPU</th>
+												<th>RAM</th>
+												<th>Senders</th>
+												<th>Voltage</th>
+												<th>Lag</th>
+											</tr>
+										</thead>
+										<tbody>
+											{#each statuses as status, index (status.id)}
+												<tr
+													class="border-b border-gray-200 hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800 {index %
+														2 ===
+													0
+														? 'bg-gray-50 dark:bg-gray-900'
+														: ''}"
+												>
+													<td class="text-xs">
+														<div>{formatDateTime(status.received_at)}</div>
+														<div class="text-surface-500-400-token">
+															{formatRelativeTime(status.received_at)}
+														</div>
+													</td>
+													<td class="font-mono text-xs">{status.version || '—'}</td>
+													<td class="text-xs">{status.platform || '—'}</td>
+													<td class="text-sm">
+														{#if status.cpu_load !== null}
+															{(Number(status.cpu_load) * 100).toFixed(0)}%
+															{#if status.cpu_temperature !== null}
+																<span class="text-surface-500-400-token text-xs">
+																	({Number(status.cpu_temperature).toFixed(1)}°C)
+																</span>
+															{/if}
+														{:else}
+															—
+														{/if}
+													</td>
+													<td class="text-xs">
+														{formatRamUsage(status.ram_free, status.ram_total)}
+													</td>
+													<td>
+														{#if status.visible_senders !== null}
+															{status.visible_senders}
+															{#if status.senders !== null}
+																<span class="text-surface-500-400-token">/ {status.senders}</span>
+															{/if}
+														{:else}
+															—
+														{/if}
+													</td>
+													<td>
+														{#if status.voltage !== null}
+															{Number(status.voltage).toFixed(2)}V
+															{#if status.amperage !== null}
+																<span class="text-surface-500-400-token text-xs">
+																	({Number(status.amperage).toFixed(2)}A)
+																</span>
+															{/if}
+														{:else}
+															—
+														{/if}
+													</td>
+													<td>{status.lag !== null ? `${status.lag}ms` : '—'}</td>
 												</tr>
-											</thead>
-											<tbody>
-												{#each statuses as status, index (status.id)}
+												{#if showRawData}
 													<tr
-														class="border-b border-gray-200 hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800 {index %
-															2 ===
-														0
-															? 'bg-gray-50 dark:bg-gray-900'
+														class="border-b border-gray-200 dark:border-gray-700 {index % 2 === 0
+															? 'bg-gray-100 dark:bg-gray-800'
 															: ''}"
 													>
-														<td class="text-xs">
-															<div>{formatDateTime(status.received_at)}</div>
-															<div class="text-surface-500-400-token">
-																{formatRelativeTime(status.received_at)}
-															</div>
-														</td>
-														<td class="font-mono text-xs">{status.version || '—'}</td>
-														<td class="text-xs">{status.platform || '—'}</td>
-														<td class="text-sm">
-															{#if status.cpu_load !== null}
-																{(Number(status.cpu_load) * 100).toFixed(0)}%
-																{#if status.cpu_temperature !== null}
-																	<span class="text-surface-500-400-token text-xs">
-																		({Number(status.cpu_temperature).toFixed(1)}°C)
-																	</span>
-																{/if}
-															{:else}
-																—
-															{/if}
-														</td>
-														<td class="text-xs">
-															{formatRamUsage(status.ram_free, status.ram_total)}
-														</td>
-														<td>
-															{#if status.visible_senders !== null}
-																{status.visible_senders}
-																{#if status.senders !== null}
-																	<span class="text-surface-500-400-token">/ {status.senders}</span>
-																{/if}
-															{:else}
-																—
-															{/if}
-														</td>
-														<td>
-															{#if status.voltage !== null}
-																{Number(status.voltage).toFixed(2)}V
-																{#if status.amperage !== null}
-																	<span class="text-surface-500-400-token text-xs">
-																		({Number(status.amperage).toFixed(2)}A)
-																	</span>
-																{/if}
-															{:else}
-																—
-															{/if}
-														</td>
-														<td>{status.lag !== null ? `${status.lag}ms` : '—'}</td>
-													</tr>
-													{#if showRawData}
-														<tr
-															class="border-b border-gray-200 dark:border-gray-700 {index % 2 === 0
-																? 'bg-gray-100 dark:bg-gray-800'
-																: ''}"
-														>
-															<td colspan="8" class="px-3 py-2 font-mono text-sm">
-																{status.raw_data}
-															</td>
-														</tr>
-													{/if}
-												{/each}
-											</tbody>
-										</table>
-									</div>
-
-									<!-- Pagination Controls -->
-									{#if statusesTotalPages > 1}
-										<div class="mt-4 flex items-center justify-between">
-											<button
-												class="btn preset-tonal btn-sm"
-												disabled={statusesPage === 1}
-												onclick={prevStatusesPage}
-											>
-												<ChevronLeft class="h-4 w-4" />
-												Previous
-											</button>
-											<span class="text-sm">
-												Page {statusesPage} of {statusesTotalPages}
-											</span>
-											<button
-												class="btn preset-tonal btn-sm"
-												disabled={statusesPage === statusesTotalPages}
-												onclick={nextStatusesPage}
-											>
-												Next
-												<ChevronRight class="h-4 w-4" />
-											</button>
-										</div>
-									{/if}
-								{/if}
-							</div>
-						</Tabs.Content>
-
-						<!-- Raw Messages Tab Content -->
-						<Tabs.Content value="raw-messages">
-							<div class="mt-4">
-								{#if loadingRawMessages}
-									<div class="flex items-center justify-center space-x-4 p-8">
-										<Progress class="w-6 h-6" />
-										<span>Loading raw messages...</span>
-									</div>
-								{:else if rawMessagesError}
-									<div class="alert preset-filled-error-500">
-										<p>{rawMessagesError}</p>
-									</div>
-								{:else if rawMessages !== null && rawMessages.length === 0}
-									<p class="text-surface-500-400-token p-4 text-center">
-										No raw messages received in the last 24 hours
-									</p>
-								{:else if rawMessages !== null}
-									<div class="table-container">
-										<table class="table-hover table">
-											<thead>
-												<tr>
-													<th>Timestamp</th>
-													<th>Raw Message</th>
-													<th>Unparsed Data</th>
-												</tr>
-											</thead>
-											<tbody>
-												{#each rawMessages as message (message.id)}
-													<tr>
-														<td class="text-xs" style="min-width: 150px;">
-															<div>{formatDateTime(message.received_at)}</div>
-															<div class="text-surface-500-400-token">
-																{formatRelativeTime(message.received_at)}
-															</div>
-														</td>
-														<td
-															class="font-mono text-xs"
-															style="max-width: 600px; word-break: break-all;"
-														>
-															{message.raw_message}
-														</td>
-														<td class="font-mono text-xs">
-															{message.unparsed || '—'}
+														<td colspan="8" class="px-3 py-2 font-mono text-sm">
+															{status.raw_data}
 														</td>
 													</tr>
-												{/each}
-											</tbody>
-										</table>
-									</div>
-
-									<!-- Pagination Controls -->
-									{#if rawMessagesTotalPages > 1}
-										<div class="mt-4 flex items-center justify-between">
-											<button
-												class="btn preset-tonal btn-sm"
-												disabled={rawMessagesPage === 1}
-												onclick={prevRawMessagesPage}
-											>
-												<ChevronLeft class="h-4 w-4" />
-												Previous
-											</button>
-											<span class="text-sm">
-												Page {rawMessagesPage} of {rawMessagesTotalPages}
-											</span>
-											<button
-												class="btn preset-tonal btn-sm"
-												disabled={rawMessagesPage === rawMessagesTotalPages}
-												onclick={nextRawMessagesPage}
-											>
-												Next
-												<ChevronRight class="h-4 w-4" />
-											</button>
-										</div>
-									{/if}
-								{/if}
-							</div>
-						</Tabs.Content>
-
-						<!-- Received Fixes Tab Content -->
-						<Tabs.Content value="received-fixes">
-							<div class="mt-4">
-								{#if loadingFixes}
-									<div class="flex items-center justify-center space-x-4 p-8">
-										<Progress class="w-6 h-6" />
-										<span>Loading fixes...</span>
-									</div>
-								{:else if fixesError}
-									<div class="alert preset-filled-error-500">
-										<p>{fixesError}</p>
-									</div>
-								{:else if fixes !== null && fixes.length === 0}
-									<p class="text-surface-500-400-token p-4 text-center">
-										No fixes received in the last 24 hours
-									</p>
-								{:else if fixes !== null}
-									<div class="table-container">
-										<table class="table-hover table">
-											<thead>
-												<tr>
-													<th>Timestamp</th>
-													<th>Device</th>
-													<th>Registration</th>
-													<th>Position</th>
-													<th>Altitude</th>
-													<th>Speed</th>
-													<th>SNR</th>
-												</tr>
-											</thead>
-											<tbody>
-												{#each fixes as fix (fix.id)}
-													<tr>
-														<td class="text-xs">
-															<div>{formatDateTime(fix.timestamp)}</div>
-															<div class="text-surface-500-400-token">
-																{formatRelativeTime(fix.timestamp)}
-															</div>
-														</td>
-														<td class="font-mono text-xs">
-															{fix.device_address.toString(16).toUpperCase().padStart(6, '0')}
-														</td>
-														<td class="font-mono text-sm">{fix.registration || '—'}</td>
-														<td class="font-mono text-xs">
-															{fix.latitude?.toFixed(4) ?? '—'}, {fix.longitude?.toFixed(4) ?? '—'}
-														</td>
-														<td
-															>{fix.altitude_msl_feet !== null &&
-															fix.altitude_msl_feet !== undefined
-																? `${fix.altitude_msl_feet} ft`
-																: '—'}</td
-														>
-														<td
-															>{fix.ground_speed_knots !== null &&
-															fix.ground_speed_knots !== undefined
-																? `${fix.ground_speed_knots.toFixed(0)} kt`
-																: '—'}</td
-														>
-														<td
-															>{fix.snr_db !== null && fix.snr_db !== undefined
-																? `${fix.snr_db.toFixed(1)} dB`
-																: '—'}</td
-														>
-													</tr>
-												{/each}
-											</tbody>
-										</table>
-									</div>
-
-									<!-- Pagination Controls -->
-									{#if fixesTotalPages > 1}
-										<div class="mt-4 flex items-center justify-between">
-											<button
-												class="btn preset-tonal btn-sm"
-												disabled={fixesPage === 1}
-												onclick={prevFixesPage}
-											>
-												<ChevronLeft class="h-4 w-4" />
-												Previous
-											</button>
-											<span class="text-sm">
-												Page {fixesPage} of {fixesTotalPages}
-											</span>
-											<button
-												class="btn preset-tonal btn-sm"
-												disabled={fixesPage === fixesTotalPages}
-												onclick={nextFixesPage}
-											>
-												Next
-												<ChevronRight class="h-4 w-4" />
-											</button>
-										</div>
-									{/if}
-								{/if}
-							</div>
-						</Tabs.Content>
-
-						<!-- Aggregate Statistics Tab Content -->
-						<Tabs.Content value="aggregate-stats">
-							<div class="mt-4">
-								{#if loadingAggregateStats}
-									<div class="flex items-center justify-center space-x-4 p-8">
-										<Progress class="w-6 h-6" />
-										<span>Loading aggregate statistics...</span>
-									</div>
-								{:else if aggregateStatsError}
-									<div class="alert preset-filled-error-500">
-										<p>{aggregateStatsError}</p>
-									</div>
-								{:else if aggregateStats !== null}
-									<div class="space-y-6">
-										<!-- Fixes by APRS Type -->
-										{#if aggregateStats.fix_counts_by_aprs_type.length === 0 && aggregateStats.fix_counts_by_device.length === 0}
-											<p class="text-surface-500-400-token p-4 text-center">
-												No fix data available for this receiver
-											</p>
-										{:else}
-											<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
-												<!-- Fixes by APRS Type -->
-												{#if aggregateStats.fix_counts_by_aprs_type.length > 0}
-													<div class="space-y-4">
-														<h3 class="h3">Fixes Received by APRS Type</h3>
-														<div class="table-container">
-															<table class="table-hover table">
-																<thead>
-																	<tr>
-																		<th>APRS Type</th>
-																		<th class="text-right">Count</th>
-																	</tr>
-																</thead>
-																<tbody>
-																	{#each aggregateStats.fix_counts_by_aprs_type as typeCount (typeCount.aprs_type)}
-																		<tr>
-																			<td class="font-mono">{typeCount.aprs_type}</td>
-																			<td class="text-right font-semibold">
-																				{typeCount.count.toLocaleString()}
-																			</td>
-																		</tr>
-																	{/each}
-																</tbody>
-															</table>
-														</div>
-													</div>
 												{/if}
+											{/each}
+										</tbody>
+									</table>
+								</div>
 
-												<!-- Fixes by Device -->
-												{#if aggregateStats.fix_counts_by_device.length > 0}
-													<div class="space-y-4">
-														<h3 class="h3">Fixes Received by Device</h3>
-														<div class="table-container">
-															<table class="table-hover table">
-																<thead>
-																	<tr>
-																		<th>Device</th>
-																		<th class="text-right">Count</th>
-																	</tr>
-																</thead>
-																<tbody>
-																	{#each aggregateStats.fix_counts_by_device as deviceCount (deviceCount.device_id)}
-																		<tr>
-																			<td>
-																				<a
-																					href={resolve(`/devices/${deviceCount.device_id}`)}
-																					class="font-mono text-primary-500 hover:text-primary-600"
-																				>
-																					{deviceCount.device_id}
-																				</a>
-																			</td>
-																			<td class="text-right font-semibold">
-																				{deviceCount.count.toLocaleString()}
-																			</td>
-																		</tr>
-																	{/each}
-																</tbody>
-															</table>
-														</div>
-													</div>
-												{/if}
-											</div>
-										{/if}
+								<!-- Pagination Controls -->
+								{#if statusesTotalPages > 1}
+									<div class="mt-4 flex items-center justify-between">
+										<button
+											class="btn preset-tonal btn-sm"
+											disabled={statusesPage === 1}
+											onclick={prevStatusesPage}
+										>
+											<ChevronLeft class="h-4 w-4" />
+											Previous
+										</button>
+										<span class="text-sm">
+											Page {statusesPage} of {statusesTotalPages}
+										</span>
+										<button
+											class="btn preset-tonal btn-sm"
+											disabled={statusesPage === statusesTotalPages}
+											onclick={nextStatusesPage}
+										>
+											Next
+											<ChevronRight class="h-4 w-4" />
+										</button>
 									</div>
 								{/if}
-							</div>
-						</Tabs.Content>
+							{/if}
+						</div>
+					</Tabs.Content>
+
+					<!-- Raw Messages Tab Content -->
+					<Tabs.Content value="raw-messages">
+						<div class="mt-4">
+							{#if loadingRawMessages}
+								<div class="flex items-center justify-center space-x-4 p-8">
+									<Progress class="h-6 w-6" />
+									<span>Loading raw messages...</span>
+								</div>
+							{:else if rawMessagesError}
+								<div class="alert preset-filled-error-500">
+									<p>{rawMessagesError}</p>
+								</div>
+							{:else if rawMessages !== null && rawMessages.length === 0}
+								<p class="text-surface-500-400-token p-4 text-center">
+									No raw messages received in the last 24 hours
+								</p>
+							{:else if rawMessages !== null}
+								<div class="table-container">
+									<table class="table-hover table">
+										<thead>
+											<tr>
+												<th>Timestamp</th>
+												<th>Raw Message</th>
+												<th>Unparsed Data</th>
+											</tr>
+										</thead>
+										<tbody>
+											{#each rawMessages as message (message.id)}
+												<tr>
+													<td class="text-xs" style="min-width: 150px;">
+														<div>{formatDateTime(message.received_at)}</div>
+														<div class="text-surface-500-400-token">
+															{formatRelativeTime(message.received_at)}
+														</div>
+													</td>
+													<td
+														class="font-mono text-xs"
+														style="max-width: 600px; word-break: break-all;"
+													>
+														{message.raw_message}
+													</td>
+													<td class="font-mono text-xs">
+														{message.unparsed || '—'}
+													</td>
+												</tr>
+											{/each}
+										</tbody>
+									</table>
+								</div>
+
+								<!-- Pagination Controls -->
+								{#if rawMessagesTotalPages > 1}
+									<div class="mt-4 flex items-center justify-between">
+										<button
+											class="btn preset-tonal btn-sm"
+											disabled={rawMessagesPage === 1}
+											onclick={prevRawMessagesPage}
+										>
+											<ChevronLeft class="h-4 w-4" />
+											Previous
+										</button>
+										<span class="text-sm">
+											Page {rawMessagesPage} of {rawMessagesTotalPages}
+										</span>
+										<button
+											class="btn preset-tonal btn-sm"
+											disabled={rawMessagesPage === rawMessagesTotalPages}
+											onclick={nextRawMessagesPage}
+										>
+											Next
+											<ChevronRight class="h-4 w-4" />
+										</button>
+									</div>
+								{/if}
+							{/if}
+						</div>
+					</Tabs.Content>
+
+					<!-- Received Fixes Tab Content -->
+					<Tabs.Content value="received-fixes">
+						<div class="mt-4">
+							{#if loadingFixes}
+								<div class="flex items-center justify-center space-x-4 p-8">
+									<Progress class="h-6 w-6" />
+									<span>Loading fixes...</span>
+								</div>
+							{:else if fixesError}
+								<div class="alert preset-filled-error-500">
+									<p>{fixesError}</p>
+								</div>
+							{:else if fixes !== null && fixes.length === 0}
+								<p class="text-surface-500-400-token p-4 text-center">
+									No fixes received in the last 24 hours
+								</p>
+							{:else if fixes !== null}
+								<div class="table-container">
+									<table class="table-hover table">
+										<thead>
+											<tr>
+												<th>Timestamp</th>
+												<th>Device</th>
+												<th>Registration</th>
+												<th>Position</th>
+												<th>Altitude</th>
+												<th>Speed</th>
+												<th>SNR</th>
+											</tr>
+										</thead>
+										<tbody>
+											{#each fixes as fix (fix.id)}
+												<tr>
+													<td class="text-xs">
+														<div>{formatDateTime(fix.timestamp)}</div>
+														<div class="text-surface-500-400-token">
+															{formatRelativeTime(fix.timestamp)}
+														</div>
+													</td>
+													<td class="font-mono text-xs">
+														{fix.device_address.toString(16).toUpperCase().padStart(6, '0')}
+													</td>
+													<td class="font-mono text-sm">{fix.registration || '—'}</td>
+													<td class="font-mono text-xs">
+														{fix.latitude?.toFixed(4) ?? '—'}, {fix.longitude?.toFixed(4) ?? '—'}
+													</td>
+													<td
+														>{fix.altitude_msl_feet !== null && fix.altitude_msl_feet !== undefined
+															? `${fix.altitude_msl_feet} ft`
+															: '—'}</td
+													>
+													<td
+														>{fix.ground_speed_knots !== null &&
+														fix.ground_speed_knots !== undefined
+															? `${fix.ground_speed_knots.toFixed(0)} kt`
+															: '—'}</td
+													>
+													<td
+														>{fix.snr_db !== null && fix.snr_db !== undefined
+															? `${fix.snr_db.toFixed(1)} dB`
+															: '—'}</td
+													>
+												</tr>
+											{/each}
+										</tbody>
+									</table>
+								</div>
+
+								<!-- Pagination Controls -->
+								{#if fixesTotalPages > 1}
+									<div class="mt-4 flex items-center justify-between">
+										<button
+											class="btn preset-tonal btn-sm"
+											disabled={fixesPage === 1}
+											onclick={prevFixesPage}
+										>
+											<ChevronLeft class="h-4 w-4" />
+											Previous
+										</button>
+										<span class="text-sm">
+											Page {fixesPage} of {fixesTotalPages}
+										</span>
+										<button
+											class="btn preset-tonal btn-sm"
+											disabled={fixesPage === fixesTotalPages}
+											onclick={nextFixesPage}
+										>
+											Next
+											<ChevronRight class="h-4 w-4" />
+										</button>
+									</div>
+								{/if}
+							{/if}
+						</div>
+					</Tabs.Content>
+
+					<!-- Aggregate Statistics Tab Content -->
+					<Tabs.Content value="aggregate-stats">
+						<div class="mt-4">
+							{#if loadingAggregateStats}
+								<div class="flex items-center justify-center space-x-4 p-8">
+									<Progress class="h-6 w-6" />
+									<span>Loading aggregate statistics...</span>
+								</div>
+							{:else if aggregateStatsError}
+								<div class="alert preset-filled-error-500">
+									<p>{aggregateStatsError}</p>
+								</div>
+							{:else if aggregateStats !== null}
+								<div class="space-y-6">
+									<!-- Fixes by APRS Type -->
+									{#if aggregateStats.fix_counts_by_aprs_type.length === 0 && aggregateStats.fix_counts_by_device.length === 0}
+										<p class="text-surface-500-400-token p-4 text-center">
+											No fix data available for this receiver
+										</p>
+									{:else}
+										<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+											<!-- Fixes by APRS Type -->
+											{#if aggregateStats.fix_counts_by_aprs_type.length > 0}
+												<div class="space-y-4">
+													<h3 class="h3">Fixes Received by APRS Type</h3>
+													<div class="table-container">
+														<table class="table-hover table">
+															<thead>
+																<tr>
+																	<th>APRS Type</th>
+																	<th class="text-right">Count</th>
+																</tr>
+															</thead>
+															<tbody>
+																{#each aggregateStats.fix_counts_by_aprs_type as typeCount (typeCount.aprs_type)}
+																	<tr>
+																		<td class="font-mono">{typeCount.aprs_type}</td>
+																		<td class="text-right font-semibold">
+																			{typeCount.count.toLocaleString()}
+																		</td>
+																	</tr>
+																{/each}
+															</tbody>
+														</table>
+													</div>
+												</div>
+											{/if}
+
+											<!-- Fixes by Device -->
+											{#if aggregateStats.fix_counts_by_device.length > 0}
+												<div class="space-y-4">
+													<h3 class="h3">Fixes Received by Device</h3>
+													<div class="table-container">
+														<table class="table-hover table">
+															<thead>
+																<tr>
+																	<th>Device</th>
+																	<th class="text-right">Count</th>
+																</tr>
+															</thead>
+															<tbody>
+																{#each aggregateStats.fix_counts_by_device as deviceCount (deviceCount.device_id)}
+																	<tr>
+																		<td>
+																			<a
+																				href={resolve(`/devices/${deviceCount.device_id}`)}
+																				class="font-mono text-primary-500 hover:text-primary-600"
+																			>
+																				{deviceCount.device_id}
+																			</a>
+																		</td>
+																		<td class="text-right font-semibold">
+																			{deviceCount.count.toLocaleString()}
+																		</td>
+																	</tr>
+																{/each}
+															</tbody>
+														</table>
+													</div>
+												</div>
+											{/if}
+										</div>
+									{/if}
+								</div>
+							{/if}
+						</div>
+					</Tabs.Content>
 				</Tabs>
 			</div>
 
