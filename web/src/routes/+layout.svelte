@@ -242,52 +242,54 @@
 		</AppBar.Toolbar>
 
 		<!-- WebSocket Status Indicator for larger screens -->
-		<div class="relative z-10 hidden w-full items-center justify-center py-1 lg:flex">
-			{#if $websocketStatus.connected}
-				<div
-					class="flex items-center space-x-1 rounded bg-white/90 px-2 py-1 text-success-700 shadow-sm dark:bg-success-500/20 dark:text-success-400"
-					title="Connected - Tracking {$debugStatus.activeWatchlistEntries
-						.length} from watchlist, {$debugStatus.subscribedDevices
-						.length} device subscriptions, {$debugStatus.activeAreaSubscriptions} area subscriptions{$debugStatus.operationsPageActive
-						? ', Operations page active'
-						: ''}"
-				>
-					<Wifi size={16} />
-					<span class="text-xs font-medium">Live</span>
-					<RadarLoader />
-					{#if $debugStatus.activeWatchlistEntries.length > 0 || $debugStatus.activeAreaSubscriptions > 0}
-						<span class="text-xs font-medium">
-							({#if $debugStatus.activeWatchlistEntries.length > 0}{$debugStatus
-									.activeWatchlistEntries
-									.length}{/if}{#if $debugStatus.activeWatchlistEntries.length > 0 && $debugStatus.activeAreaSubscriptions > 0}+{/if}{#if $debugStatus.activeAreaSubscriptions > 0}{$debugStatus.activeAreaSubscriptions}
-								area{/if})
-						</span>
-					{/if}
-				</div>
-			{:else if $websocketStatus.reconnecting}
-				<div
-					class="flex items-center space-x-1 rounded bg-white/90 px-2 py-1 text-warning-700 shadow-sm dark:bg-warning-500/20 dark:text-warning-400"
-				>
-					<RotateCcw size={16} class="animate-spin" />
-					<span class="text-xs font-medium">Reconnecting</span>
-				</div>
-			{:else if $websocketStatus.error}
-				<div
-					class="flex items-center space-x-1 rounded bg-white/90 px-2 py-1 text-error-700 shadow-sm dark:bg-error-500/20 dark:text-error-400"
-					title={$websocketStatus.error}
-				>
-					<AlertCircle size={16} />
-					<span class="text-xs font-medium">Offline</span>
-				</div>
-			{:else}
-				<div
-					class="flex items-center space-x-1 rounded bg-white/90 px-2 py-1 text-surface-700 shadow-sm dark:bg-surface-400/20 dark:text-surface-400"
-				>
-					<WifiOff size={16} />
-					<span class="text-xs font-medium">Disconnected</span>
-				</div>
-			{/if}
-		</div>
+		<AppBar.Headline>
+			<div class="relative z-10 hidden w-full items-center justify-center lg:flex">
+				{#if $websocketStatus.connected}
+					<div
+						class="flex items-center space-x-1 rounded bg-white/90 px-2 py-1 text-success-700 shadow-sm dark:bg-success-500/20 dark:text-success-400"
+						title="Connected - Tracking {$debugStatus.activeWatchlistEntries
+							.length} from watchlist, {$debugStatus.subscribedDevices
+							.length} device subscriptions, {$debugStatus.activeAreaSubscriptions} area subscriptions{$debugStatus.operationsPageActive
+							? ', Operations page active'
+							: ''}"
+					>
+						<Wifi size={16} />
+						<span class="text-xs font-medium">Live</span>
+						<RadarLoader />
+						{#if $debugStatus.activeWatchlistEntries.length > 0 || $debugStatus.activeAreaSubscriptions > 0}
+							<span class="text-xs font-medium">
+								({#if $debugStatus.activeWatchlistEntries.length > 0}{$debugStatus
+										.activeWatchlistEntries
+										.length}{/if}{#if $debugStatus.activeWatchlistEntries.length > 0 && $debugStatus.activeAreaSubscriptions > 0}+{/if}{#if $debugStatus.activeAreaSubscriptions > 0}{$debugStatus.activeAreaSubscriptions}
+									area{/if})
+							</span>
+						{/if}
+					</div>
+				{:else if $websocketStatus.reconnecting}
+					<div
+						class="flex items-center space-x-1 rounded bg-white/90 px-2 py-1 text-warning-700 shadow-sm dark:bg-warning-500/20 dark:text-warning-400"
+					>
+						<RotateCcw size={16} class="animate-spin" />
+						<span class="text-xs font-medium">Reconnecting</span>
+					</div>
+				{:else if $websocketStatus.error}
+					<div
+						class="flex items-center space-x-1 rounded bg-white/90 px-2 py-1 text-error-700 shadow-sm dark:bg-error-500/20 dark:text-error-400"
+						title={$websocketStatus.error}
+					>
+						<AlertCircle size={16} />
+						<span class="text-xs font-medium">Offline</span>
+					</div>
+				{:else}
+					<div
+						class="flex items-center space-x-1 rounded bg-white/90 px-2 py-1 text-surface-700 shadow-sm dark:bg-surface-400/20 dark:text-surface-400"
+					>
+						<WifiOff size={16} />
+						<span class="text-xs font-medium">Disconnected</span>
+					</div>
+				{/if}
+			</div>
+		</AppBar.Headline>
 	</AppBar>
 
 	<!-- Mobile Menu Overlay -->
