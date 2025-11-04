@@ -23,6 +23,12 @@
 	import { serverCall } from '$lib/api/server';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
+	import type { Device } from '$lib/types';
+	import {
+		formatDeviceAddress,
+		getAircraftTypeOgnDescription,
+		getAircraftTypeColor
+	} from '$lib/formatters';
 
 	dayjs.extend(relativeTime);
 
@@ -105,6 +111,7 @@
 	interface DeviceFixCount {
 		device_id: string;
 		count: number;
+		device?: Device | null; // Device details fetched separately
 	}
 
 	interface ReceiverStatistics {
@@ -264,6 +271,21 @@
 				`/receivers/${receiverId}/aggregate-stats`
 			);
 			aggregateStats = response;
+
+			// Fetch device details for each device
+			if (aggregateStats && aggregateStats.fix_counts_by_device.length > 0) {
+				await Promise.all(
+					aggregateStats.fix_counts_by_device.map(async (deviceCount) => {
+						try {
+							const device = await serverCall<Device>(`/devices/${deviceCount.device_id}`);
+							deviceCount.device = device;
+						} catch (err) {
+							console.warn(`Failed to load device details for ${deviceCount.device_id}:`, err);
+							deviceCount.device = null;
+						}
+					})
+				);
+			}
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			aggregateStatsError = `Failed to load aggregate statistics: ${errorMessage}`;
@@ -395,6 +417,34 @@
 			return `${minutes}m ${secs}s`;
 		} else {
 			return `${secs}s`;
+		}
+	}
+
+	/**
+	 * Format device label for display according to the pattern:
+	 * 1. Registration + Model (e.g., "N12345 - Cessna 182") if both available
+	 * 2. Registration only if just that is available
+	 * 3. Model only if just that is available
+	 * 4. Fallback: Address type + 24-bit code (e.g., "ICAO-A59CDC")
+	 */
+	function formatDeviceLabel(device: Device | null | undefined, deviceId: string): string {
+		if (!device) {
+			// Fallback to device ID if no device details
+			return deviceId;
+		}
+
+		const hasRegistration = device.registration && device.registration.trim() !== '';
+		const hasModel = device.aircraft_model && device.aircraft_model.trim() !== '';
+
+		if (hasRegistration && hasModel) {
+			return `${device.registration} - ${device.aircraft_model}`;
+		} else if (hasRegistration) {
+			return device.registration;
+		} else if (hasModel) {
+			return device.aircraft_model;
+		} else {
+			// Fallback to address type + 24-bit code
+			return formatDeviceAddress(device.address_type, device.address);
 		}
 	}
 </script>
@@ -1027,9 +1077,27 @@
 																			<td>
 																				<a
 																					href={resolve(`/devices/${deviceCount.device_id}`)}
-																					class="font-mono text-primary-500 hover:text-primary-600"
+																					class="text-primary-500 hover:text-primary-600"
 																				>
-																					{deviceCount.device_id}
+																					<div class="flex items-center gap-2">
+																						<span class="font-semibold">
+																							{formatDeviceLabel(
+																								deviceCount.device,
+																								deviceCount.device_id
+																							)}
+																						</span>
+																						{#if deviceCount.device?.aircraft_type_ogn}
+																							<span
+																								class="badge {getAircraftTypeColor(
+																									deviceCount.device.aircraft_type_ogn
+																								)} text-xs"
+																							>
+																								{getAircraftTypeOgnDescription(
+																									deviceCount.device.aircraft_type_ogn
+																								)}
+																							</span>
+																						{/if}
+																					</div>
 																				</a>
 																			</td>
 																			<td class="text-right font-semibold">
