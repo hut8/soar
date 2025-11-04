@@ -139,9 +139,9 @@
 	async function loadFixes(page: number = 1) {
 		loadingFixes = true;
 		try {
-			// Calculate timestamp for 24 hours ago in YYYYMMDDHHMMSS UTC format
+			// Calculate timestamp for 24 hours ago in ISO 8601 UTC format
 			const twentyFourHoursAgo = dayjs().utc().subtract(24, 'hour');
-			const after = twentyFourHoursAgo.format('YYYYMMDDHHmmss');
+			const after = twentyFourHoursAgo.toISOString();
 
 			const response = await serverCall<FixesResponse>(`/devices/${deviceId}/fixes`, {
 				params: {
@@ -689,6 +689,13 @@
 							<button
 								class="btn preset-tonal btn-sm"
 								disabled={fixesPage <= 1}
+								onclick={() => loadFixes(1)}
+							>
+								Newest
+							</button>
+							<button
+								class="btn preset-tonal btn-sm"
+								disabled={fixesPage <= 1}
 								onclick={() => loadFixes(fixesPage - 1)}
 							>
 								Previous
@@ -699,6 +706,13 @@
 								onclick={() => loadFixes(fixesPage + 1)}
 							>
 								Next
+							</button>
+							<button
+								class="btn preset-tonal btn-sm"
+								disabled={fixesPage >= fixesTotalPages}
+								onclick={() => loadFixes(fixesTotalPages)}
+							>
+								Oldest
 							</button>
 						</div>
 					</div>

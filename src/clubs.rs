@@ -10,6 +10,7 @@ pub struct Club {
     pub name: String,
     pub is_soaring: Option<bool>,
     pub home_base_airport_id: Option<i32>,
+    pub home_base_airport_ident: Option<String>,
 
     // Location normalization
     pub location_id: Option<Uuid>, // Foreign key to locations table
@@ -142,6 +143,7 @@ impl From<ClubModel> for Club {
             name: club_model.name,
             is_soaring: club_model.is_soaring,
             home_base_airport_id: club_model.home_base_airport_id,
+            home_base_airport_ident: None, // Not available from database model
             location_id: club_model.location_id,
             street1: None,
             street2: None,
@@ -168,6 +170,7 @@ mod tests {
             name: "Mountain Soaring Club".to_string(),
             is_soaring: None,
             home_base_airport_id: None,
+            home_base_airport_ident: None,
             location_id: None,
             street1: None,
             street2: None,
@@ -203,6 +206,7 @@ mod tests {
             name: "Test Club".to_string(),
             is_soaring: None,
             home_base_airport_id: None,
+            home_base_airport_ident: None,
             location_id: None,
             street1: Some("123 Main St".to_string()),
             street2: Some("Suite 100".to_string()),
@@ -229,6 +233,7 @@ mod tests {
             name: "Test Club".to_string(),
             is_soaring: None,
             home_base_airport_id: None,
+            home_base_airport_ident: None,
             location_id: None,
             street1: None,
             street2: None,

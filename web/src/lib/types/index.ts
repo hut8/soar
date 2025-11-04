@@ -23,6 +23,7 @@ export interface Club {
 	id: string;
 	name: string;
 	home_base_airport_id?: number;
+	home_base_airport_ident?: string;
 	location?: Location;
 	created_at: string;
 	updated_at: string;

@@ -3,7 +3,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Json},
 };
-use chrono::{DateTime, Duration, NaiveDateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use tracing::{info, instrument};
 use uuid::Uuid;
@@ -20,8 +20,8 @@ use crate::web::AppState;
 
 #[derive(Debug, Deserialize)]
 pub struct FixesQuery {
-    /// YYYYMMDDHHMMSS UTC format
-    pub after: Option<String>,
+    /// ISO 8601 UTC format
+    pub after: Option<DateTime<Utc>>,
     /// Page number (1-indexed)
     pub page: Option<i64>,
     /// Results per page
@@ -115,27 +115,12 @@ pub async fn get_device_fixes(
     match device_repo.get_device_by_uuid(id).await {
         Ok(Some(_device)) => {
             // Device exists, get fixes
-            let after_datetime = if let Some(after_str) = query.after {
-                match parse_datetime_string(&after_str) {
-                    Ok(dt) => Some(dt),
-                    Err(_) => {
-                        return json_error(
-                            StatusCode::BAD_REQUEST,
-                            "Invalid 'after' parameter format. Expected YYYYMMDDHHMMSS",
-                        )
-                        .into_response();
-                    }
-                }
-            } else {
-                None
-            };
-
             let page = query.page.unwrap_or(1).max(1);
             let per_page = query.per_page.unwrap_or(50).clamp(1, 100);
             let active_only = query.active;
 
             match fixes_repo
-                .get_fixes_by_device_paginated(id, after_datetime, page, per_page, active_only)
+                .get_fixes_by_device_paginated(id, query.after, page, per_page, active_only)
                 .await
             {
                 Ok((fixes, total_count)) => {
@@ -217,7 +202,8 @@ async fn search_devices_by_bbox(
 
     let fixes_repo = FixesRepository::new(pool.clone());
 
-    // Perform bounding box search
+    // Perform bounding box search - only fetch the most recent fix per device
+    // Additional fixes will be loaded on the frontend as needed
     match fixes_repo
         .get_devices_with_fixes_in_bounding_box(
             lat_max,
@@ -225,7 +211,7 @@ async fn search_devices_by_bbox(
             lat_min,
             lon_max,
             cutoff_time,
-            None,
+            Some(1),
         )
         .await
     {
@@ -485,17 +471,6 @@ pub(crate) async fn enrich_devices_with_aircraft_data(
     enriched
 }
 
-/// Parse YYYYMMDDHHMMSS format to DateTime<Utc>
-fn parse_datetime_string(datetime_str: &str) -> Result<DateTime<Utc>, &'static str> {
-    if datetime_str.len() != 14 {
-        return Err("Invalid length: expected 14 characters");
-    }
-
-    let naive_datetime = NaiveDateTime::parse_from_str(datetime_str, "%Y%m%d%H%M%S")
-        .map_err(|_| "Invalid datetime format")?;
-    Ok(DateTime::from_naive_utc_and_offset(naive_datetime, Utc))
-}
-
 /// Get all devices for a club by club ID
 pub async fn get_devices_by_club(
     Path(club_id): Path<Uuid>,
@@ -630,27 +605,5 @@ pub async fn update_device_club(
             )
             .into_response()
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use chrono::TimeZone;
-
-    #[test]
-    fn test_parse_datetime_string() {
-        // Test valid format
-        let result = parse_datetime_string("20231225143000").unwrap();
-        let expected = Utc.with_ymd_and_hms(2023, 12, 25, 14, 30, 0).unwrap();
-        assert_eq!(result, expected);
-
-        // Test invalid length
-        assert!(parse_datetime_string("2023122514300").is_err());
-        assert!(parse_datetime_string("202312251430000").is_err());
-
-        // Test invalid format
-        assert!(parse_datetime_string("20231325143000").is_err()); // Invalid month
-        assert!(parse_datetime_string("20231225253000").is_err()); // Invalid hour
     }
 }

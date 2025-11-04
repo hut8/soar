@@ -448,3 +448,4 @@ git checkout -b fix/first-fix a1a1a1a
 git checkout main
 ```
 - Any time that you have enter a filename in the shell, use quotes. We are using zsh, and shell expansion treats our Svelte pages incorrectly if you do not because "[]" has a special meaning.
+- Whenever you commit, you should also push with -u to set the upstream branch.
