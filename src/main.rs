@@ -225,12 +225,11 @@ async fn setup_diesel_database() -> Result<Pool<ConnectionManager<PgConnection>>
     // Use session-scoped advisory lock with retry logic
     info!("Attempting to acquire migration lock...");
 
-    // Try to acquire the lock with retries (total ~30 seconds)
+    // Try to acquire the lock with retries (indefinite, 5 second intervals)
     let mut attempts = 0;
-    let max_attempts = 30;
     let mut lock_acquired = false;
 
-    while attempts < max_attempts && !lock_acquired {
+    while !lock_acquired {
         let lock_result =
             diesel::sql_query(format!("SELECT pg_try_advisory_lock({migration_lock_id})"))
                 .get_result::<LockResult>(&mut connection)
@@ -245,27 +244,47 @@ async fn setup_diesel_database() -> Result<Pool<ConnectionManager<PgConnection>>
             info!("Migration lock acquired on attempt {}", attempts + 1);
         } else {
             attempts += 1;
-            if attempts < max_attempts {
-                info!(
-                    "Migration lock unavailable, retrying in 1 second... (attempt {}/{})",
-                    attempts, max_attempts
-                );
-                std::thread::sleep(std::time::Duration::from_secs(1));
-            }
+            info!(
+                "Migration lock unavailable, retrying in 5 seconds... (attempt {})",
+                attempts
+            );
+            std::thread::sleep(std::time::Duration::from_secs(5));
         }
-    }
-
-    if !lock_acquired {
-        return Err(anyhow::anyhow!(
-            "Failed to acquire migration lock after {max_attempts} attempts. Another migration process may be running."
-        ));
     }
 
     info!("Migration lock acquired successfully");
 
+    // Check for pending migrations before running them
+    match connection.pending_migrations(MIGRATIONS) {
+        Ok(pending) => {
+            if pending.is_empty() {
+                info!("No pending migrations found");
+            } else {
+                info!("Found {} pending migration(s) to apply:", pending.len());
+                for migration in &pending {
+                    info!("  - Will apply: {}", migration.name());
+                }
+            }
+        }
+        Err(e) => {
+            warn!("Could not list pending migrations: {}", e);
+        }
+    }
+
     // Run migrations while holding the lock and handle result immediately
     match connection.run_pending_migrations(MIGRATIONS) {
-        Ok(_) => {
+        Ok(applied_migrations) => {
+            if applied_migrations.is_empty() {
+                info!("No pending migrations to apply");
+            } else {
+                info!(
+                    "Successfully applied {} migration(s):",
+                    applied_migrations.len()
+                );
+                for migration in &applied_migrations {
+                    info!("  - Applied migration: {}", migration);
+                }
+            }
             info!("Database migrations completed successfully");
             // Release the advisory lock after successful migrations
             diesel::sql_query(format!("SELECT pg_advisory_unlock({migration_lock_id})"))
