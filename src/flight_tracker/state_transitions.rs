@@ -86,6 +86,14 @@ pub(crate) async fn process_state_transition(
 ) -> Result<Fix> {
     let is_active = should_be_active(&fix);
 
+    // Fetch device once for use throughout the function
+    let device = device_repo
+        .get_device_by_uuid(fix.device_id)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("Device {} not found", fix.device_id))?;
+
+    let is_towtug = device.aircraft_type_ogn == Some(AircraftType::TowTug);
+
     // Get current flight state
     let current_flight_state = {
         let flights = active_flights.read().await;
@@ -197,15 +205,6 @@ pub(crate) async fn process_state_transition(
                 update_flight_timestamp(flights_repo, state.flight_id, fix.timestamp).await;
 
                 // For towplanes: track climb rate and check for tow release
-                // Fetch device to check aircraft_type_ogn (now stored on device, not fix)
-                let is_towtug = device_repo
-                    .get_device_by_uuid(fix.device_id)
-                    .await
-                    .ok()
-                    .flatten()
-                    .and_then(|d| d.aircraft_type_ogn)
-                    == Some(AircraftType::TowTug);
-
                 if is_towtug && let Some(climb_fpm) = fix.climb_fpm {
                     // Update aircraft tracker with climb rate and check for release
                     let mut trackers = aircraft_trackers.write().await;
@@ -383,18 +382,8 @@ pub(crate) async fn process_state_transition(
                 {
                     Ok(_) => {
                         fix.flight_id = Some(flight_id);
-                        // Note: last_fix_at is already set during flight creation
 
                         // If this is a towplane taking off, spawn towing detection task
-                        // Fetch device to check aircraft_type_ogn (now stored on device, not fix)
-                        let is_towtug = device_repo
-                            .get_device_by_uuid(fix.device_id)
-                            .await
-                            .ok()
-                            .flatten()
-                            .and_then(|d| d.aircraft_type_ogn)
-                            == Some(AircraftType::TowTug);
-
                         if is_towtug {
                             info!(
                                 "Towplane {} taking off - spawning towing detection task",

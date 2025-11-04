@@ -200,7 +200,6 @@ impl Fix {
                     .filter(|&c| c < 360)
                     .map(|c| c as f32);
 
-                // Note: device_address, address_type, aircraft_type_ogn now stored on Device, not Fix
                 let flight_number = pos_packet.comment.flight_number.clone();
                 let squawk = pos_packet.comment.squawk.clone();
                 let climb_fpm = pos_packet.comment.climb_rate.map(|c| c as i32);

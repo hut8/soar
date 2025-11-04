@@ -73,8 +73,7 @@ pub(crate) async fn create_flight(
         let takeoff_runway_info = determine_runway_identifier(
             fixes_repo,
             runways_repo,
-            device_repo,
-            &fix.device_id,
+            &device,
             fix.timestamp,
             fix.latitude,
             fix.longitude,
@@ -184,6 +183,25 @@ pub(crate) async fn complete_flight(
     flight_id: Uuid,
     fix: &Fix,
 ) -> Result<bool> {
+    // Fetch device first as we need it for runway determination
+    let device = match device_repo.get_device_by_uuid(fix.device_id).await {
+        Ok(Some(device)) => device,
+        Ok(None) => {
+            warn!(
+                "Device {} not found when completing flight {}",
+                fix.device_id, flight_id
+            );
+            return Err(anyhow::anyhow!("Device not found"));
+        }
+        Err(e) => {
+            error!(
+                "Error fetching device {} for flight {}: {}",
+                fix.device_id, flight_id, e
+            );
+            return Err(anyhow::anyhow!("Failed to fetch device: {}", e));
+        }
+    };
+
     let arrival_airport_id = find_nearby_airport(airports_repo, fix.latitude, fix.longitude).await;
 
     let landing_location_id = create_or_find_location(
@@ -198,8 +216,7 @@ pub(crate) async fn complete_flight(
     let landing_runway_info = determine_runway_identifier(
         fixes_repo,
         runways_repo,
-        device_repo,
-        &fix.device_id,
+        &device,
         fix.timestamp,
         fix.latitude,
         fix.longitude,

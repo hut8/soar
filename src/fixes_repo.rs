@@ -678,18 +678,41 @@ impl FixesRepository {
 
             // First query: Get devices with fixes in the bounding box
             // Optimized with EXISTS + LIMIT 1 pattern and geometry casting for performance
+            // Handles antimeridian (international date line) crossing by splitting into two boxes
             let devices_sql = r#"
-                WITH bbox AS (
-                    SELECT ST_MakeEnvelope($1, $2, $3, $4, 4326)::geometry AS g
+                WITH params AS (
+                    SELECT
+                        $1::double precision AS left_lng,
+                        $2::double precision AS bottom_lat,
+                        $3::double precision AS right_lng,
+                        $4::double precision AS top_lat,
+                        $5::timestamptz AS since_ts
+                ),
+                parts AS (
+                    SELECT
+                        CASE WHEN left_lng <= right_lng THEN
+                            ARRAY[
+                                ST_MakeEnvelope(left_lng, bottom_lat, right_lng, top_lat, 4326)::geometry
+                            ]
+                        ELSE
+                            ARRAY[
+                                ST_MakeEnvelope(left_lng, bottom_lat, 180, top_lat, 4326)::geometry,
+                                ST_MakeEnvelope(-180, bottom_lat, right_lng, top_lat, 4326)::geometry
+                            ]
+                        END AS boxes
+                    FROM params
                 )
                 SELECT d.*
                 FROM devices d
                 WHERE EXISTS (
                     SELECT 1
-                    FROM fixes f, bbox
+                    FROM fixes f, params p, parts
                     WHERE f.device_id = d.id
-                      AND f.received_at >= $5
-                      AND f.location_geom && bbox.g
+                      AND f.received_at >= p.since_ts
+                      AND (
+                          f.location_geom && parts.boxes[1]
+                          OR (array_length(parts.boxes, 1) = 2 AND f.location_geom && parts.boxes[2])
+                      )
                     LIMIT 1
                 )
             "#;
