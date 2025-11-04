@@ -16,7 +16,7 @@
 		showCompassRose?: boolean;
 		showAirportMarkers?: boolean;
 		showRunwayOverlays?: boolean;
-		positionFixWindow?: number[];
+		positionFixWindow?: number;
 		// Legacy support for old settings
 		trailLength?: number[];
 	}
@@ -25,7 +25,7 @@
 	let showCompassRose = $state(true);
 	let showAirportMarkers = $state(true);
 	let showRunwayOverlays = $state(false);
-	let positionFixWindow = $state([8]); // Hours - default 8 hours
+	let positionFixWindow = $state(8); // Hours - default 8 hours
 
 	// Settings persistence functions
 	async function loadSettings() {
@@ -46,8 +46,9 @@
 					showAirportMarkers = backendSettings.showAirportMarkers ?? true;
 					showRunwayOverlays = backendSettings.showRunwayOverlays ?? false;
 					// Use positionFixWindow, or fallback to trailLength for legacy support
-					positionFixWindow = backendSettings.positionFixWindow ??
-						backendSettings.trailLength ?? [8];
+					positionFixWindow =
+						backendSettings.positionFixWindow ??
+						(backendSettings.trailLength ? backendSettings.trailLength[0] : 8);
 					return;
 				}
 			} catch (e) {
@@ -64,13 +65,14 @@
 				showAirportMarkers = settings.showAirportMarkers ?? true;
 				showRunwayOverlays = settings.showRunwayOverlays ?? false;
 				// Use positionFixWindow, or fallback to trailLength for legacy support
-				positionFixWindow = settings.positionFixWindow ?? settings.trailLength ?? [8];
+				positionFixWindow =
+					settings.positionFixWindow ?? (settings.trailLength ? settings.trailLength[0] : 8);
 			} catch (e) {
 				console.warn('Failed to load settings from localStorage:', e);
-				positionFixWindow = [8];
+				positionFixWindow = 8;
 			}
 		} else {
-			positionFixWindow = [8];
+			positionFixWindow = 8;
 		}
 	}
 
@@ -111,7 +113,7 @@
 				showCompassRose,
 				showAirportMarkers,
 				showRunwayOverlays,
-				positionFixWindow: positionFixWindow[0]
+				positionFixWindow
 			});
 		}
 	}
@@ -125,7 +127,7 @@
 					showCompassRose,
 					showAirportMarkers,
 					showRunwayOverlays,
-					positionFixWindow: positionFixWindow[0]
+					positionFixWindow
 				});
 			}
 		}
@@ -224,16 +226,16 @@
 					</p>
 					<div class="space-y-4">
 						<div class="text-sm font-medium">
-							Duration: {positionFixWindow[0] === 0
+							Duration: {positionFixWindow === 0
 								? 'None'
-								: positionFixWindow[0] < 1
-									? `${Math.round(positionFixWindow[0] * 60)} minutes`
-									: `${positionFixWindow[0]} hours`}
+								: positionFixWindow < 1
+									? `${Math.round(positionFixWindow * 60)} minutes`
+									: `${positionFixWindow} hours`}
 						</div>
 						<Slider
-							value={positionFixWindow}
+							value={[positionFixWindow]}
 							onValueChange={(e) => {
-								positionFixWindow = e.value;
+								positionFixWindow = e.value[0];
 								saveSettings();
 							}}
 							min={0}
