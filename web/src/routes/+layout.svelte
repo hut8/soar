@@ -121,7 +121,7 @@
 					</div>
 				</a>
 			</AppBar.Lead>
-			<AppBar.Trail>
+			<AppBar.Trail class="col-start-3">
 				<div class="relative z-10 flex items-center gap-4">
 					<!-- Desktop Navigation -->
 					<nav class="hidden space-x-4 md:flex">
