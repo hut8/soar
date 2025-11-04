@@ -689,6 +689,13 @@
 							<button
 								class="btn preset-tonal btn-sm"
 								disabled={fixesPage <= 1}
+								onclick={() => loadFixes(1)}
+							>
+								Newest
+							</button>
+							<button
+								class="btn preset-tonal btn-sm"
+								disabled={fixesPage <= 1}
 								onclick={() => loadFixes(fixesPage - 1)}
 							>
 								Previous
@@ -699,6 +706,13 @@
 								onclick={() => loadFixes(fixesPage + 1)}
 							>
 								Next
+							</button>
+							<button
+								class="btn preset-tonal btn-sm"
+								disabled={fixesPage >= fixesTotalPages}
+								onclick={() => loadFixes(fixesTotalPages)}
+							>
+								Oldest
 							</button>
 						</div>
 					</div>

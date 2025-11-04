@@ -115,7 +115,7 @@
 		showCompassRose: true,
 		showAirportMarkers: true,
 		showRunwayOverlays: false,
-		trailLength: 0
+		positionFixWindow: 8
 	});
 
 	// Handle settings changes from SettingsModal
@@ -123,7 +123,7 @@
 		showCompassRose: boolean;
 		showAirportMarkers: boolean;
 		showRunwayOverlays: boolean;
-		trailLength: number;
+		positionFixWindow: number;
 	}) {
 		// Replace entire object to ensure Svelte 5 reactivity triggers
 		currentSettings = { ...newSettings };
@@ -171,6 +171,16 @@
 		const b = Math.round(68 + (246 - 68) * factor);
 
 		return `rgb(${r}, ${g}, ${b})`;
+	}
+
+	// Helper function to get marker color based on active status and altitude
+	function getMarkerColor(fix: Fix): string {
+		// Use gray for inactive fixes (no current flight)
+		if (!fix.active) {
+			return 'rgb(156, 163, 175)'; // Gray-400
+		}
+		// Use altitude-based color for active fixes
+		return getAltitudeColor(fix.altitude_msl_feet);
 	}
 
 	// Helper function to format altitude with relative time and check if fix is old
@@ -331,13 +341,13 @@
 		}
 	});
 
-	// Reactive effect for trail length settings
+	// Reactive effect for position fix window settings
 	$effect(() => {
-		// Access trailLength to make this effect reactive to changes
+		// Access positionFixWindow to make this effect reactive to changes
 		// eslint-disable-next-line @typescript-eslint/no-unused-vars
-		const _trailLength = currentSettings.trailLength;
+		const _positionFixWindow = currentSettings.positionFixWindow;
 		if (map) {
-			// Update all aircraft trails when trail length changes
+			// Update all aircraft trails when position fix window changes
 			updateAllAircraftTrails();
 		}
 	});
@@ -990,9 +1000,9 @@
 		const aircraftIcon = document.createElement('div');
 		aircraftIcon.className = 'aircraft-icon';
 
-		// Calculate color based on altitude
-		const altitudeColor = getAltitudeColor(fix.altitude_msl_feet);
-		aircraftIcon.style.background = altitudeColor;
+		// Calculate color based on active status and altitude
+		const markerColor = getMarkerColor(fix);
+		aircraftIcon.style.background = markerColor;
 
 		// Create SVG airplane icon that's more visible and oriented correctly
 		aircraftIcon.innerHTML = `
@@ -1009,8 +1019,8 @@
 		// Info label below the icon - show proper aircraft information
 		const infoLabel = document.createElement('div');
 		infoLabel.className = 'aircraft-label';
-		infoLabel.style.background = altitudeColor.replace('rgb', 'rgba').replace(')', ', 0.75)'); // 75% opacity
-		infoLabel.style.borderColor = altitudeColor;
+		infoLabel.style.background = markerColor.replace('rgb', 'rgba').replace(')', ', 0.75)'); // 75% opacity
+		infoLabel.style.borderColor = markerColor;
 
 		// Use proper device registration, fallback to address
 		const tailNumber = device.registration || device.address || 'Unknown';
@@ -1111,19 +1121,19 @@
 			const tailDiv = markerContent.querySelector('.aircraft-tail') as HTMLElement;
 			const altDiv = markerContent.querySelector('.aircraft-altitude') as HTMLElement;
 
-			// Calculate color based on altitude
-			const altitudeColor = getAltitudeColor(fix.altitude_msl_feet);
+			// Calculate color based on active status and altitude
+			const markerColor = getMarkerColor(fix);
 
 			if (aircraftIcon) {
 				const track = fix.track_degrees || 0;
 				aircraftIcon.style.transform = `rotate(${track}deg)`;
-				aircraftIcon.style.background = altitudeColor;
+				aircraftIcon.style.background = markerColor;
 				console.log('[MARKER] Updated icon rotation to:', track, 'degrees');
 			}
 
 			if (infoLabel) {
-				infoLabel.style.background = altitudeColor.replace('rgb', 'rgba').replace(')', ', 0.75)');
-				infoLabel.style.borderColor = altitudeColor;
+				infoLabel.style.background = markerColor.replace('rgb', 'rgba').replace(')', ', 0.75)');
+				infoLabel.style.borderColor = markerColor;
 			}
 
 			if (tailDiv && altDiv) {
@@ -1191,23 +1201,23 @@
 
 	// Aircraft trail functions
 	function updateAircraftTrail(device: Device): void {
-		if (!map || currentSettings.trailLength === 0) {
+		if (!map || currentSettings.positionFixWindow === 0) {
 			// Remove trail if disabled
 			clearTrailForDevice(device.id);
 			return;
 		}
 
 		const fixes = device.fixes || []; // Get all fixes from device
-		const trailFixCount = Math.min(fixes.length, currentSettings.trailLength);
 
-		if (trailFixCount < 2) {
+		// Filter fixes to those within the position fix window
+		const cutoffTime = dayjs().subtract(currentSettings.positionFixWindow, 'hour');
+		const trailFixes = fixes.filter((fix) => dayjs(fix.timestamp).isAfter(cutoffTime));
+
+		if (trailFixes.length < 2) {
 			// Need at least 2 points to draw a trail
 			clearTrailForDevice(device.id);
 			return;
 		}
-
-		// Get the fixes to display (most recent N fixes)
-		const trailFixes = fixes.slice(0, trailFixCount);
 
 		// Clear existing trail
 		clearTrailForDevice(device.id);
@@ -1218,8 +1228,8 @@
 			// Calculate opacity: newest segment (i=0) = 0.7, oldest = 0.2
 			const segmentOpacity = 0.7 - (i / (trailFixes.length - 2)) * 0.5;
 
-			// Use altitude-based color from the newer fix in the segment
-			const segmentColor = getAltitudeColor(trailFixes[i].altitude_msl_feet);
+			// Use color based on active status and altitude from the newer fix in the segment
+			const segmentColor = getMarkerColor(trailFixes[i]);
 
 			const segment = new google.maps.Polyline({
 				path: [
@@ -1240,10 +1250,10 @@
 		const dots: google.maps.Circle[] = [];
 		trailFixes.forEach((fix, index) => {
 			// Calculate opacity: newest (index 0) = 0.7, oldest = 0.2
-			const opacity = 0.7 - (index / (trailFixCount - 1)) * 0.5;
+			const opacity = 0.7 - (index / (trailFixes.length - 1)) * 0.5;
 
-			// Use altitude-based color for each dot
-			const dotColor = getAltitudeColor(fix.altitude_msl_feet);
+			// Use color based on active status and altitude for each dot
+			const dotColor = getMarkerColor(fix);
 
 			const dot = new google.maps.Circle({
 				center: { lat: fix.latitude, lng: fix.longitude },
@@ -1466,26 +1476,39 @@
 		try {
 			console.log('[REST] Fetching devices in viewport...');
 
+			// Calculate "after" timestamp based on position fix window
+			const afterTime = dayjs().utc().subtract(currentSettings.positionFixWindow, 'hour');
+			const afterTimestamp = afterTime.format('YYYYMMDDHHmmss');
+
 			// Fetch from REST endpoint
 			const devicesWithFixes = await fixFeed.fetchDevicesInBoundingBox(
 				sw.lat(), // latMin
 				ne.lat(), // latMax
 				sw.lng(), // lonMin
-				ne.lng() // lonMax
+				ne.lng(), // lonMax
+				afterTimestamp
 			);
 
 			console.log(`[REST] Received ${devicesWithFixes.length} devices`);
 
 			// Process each device and add to registry
 			for (const aircraft of devicesWithFixes) {
-				// First, register the aircraft (includes device info)
+				// First, register the aircraft (includes device info and most recent fix)
 				// This prevents individual API calls when adding fixes
 				await deviceRegistry.updateDeviceFromAircraft(aircraft);
 
-				// Fixes are already included in aircraft.fixes, no need to add them separately
+				// Now load additional fixes within the position fix window for trail display
+				// This is done asynchronously after initial device display
+				if (aircraft.id && currentSettings.positionFixWindow > 0) {
+					deviceRegistry
+						.loadRecentFixesFromAPI(aircraft.id, currentSettings.positionFixWindow)
+						.catch((error) => {
+							console.warn(`[REST] Failed to load fixes for device ${aircraft.id}:`, error);
+						});
+				}
 			}
 
-			console.log('[REST] Devices loaded, WebSocket subscriptions will provide live updates');
+			console.log('[REST] Devices loaded, loading additional fixes for trails...');
 		} catch (error) {
 			console.error('[REST] Failed to fetch devices in viewport:', error);
 		}
@@ -1787,7 +1810,7 @@
 		align-items: center;
 		justify-content: center;
 		font-size: 12px;
-		color: white;
+		color: #fb923c;
 		box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
 	}
 

@@ -66,8 +66,8 @@ pub struct DeviceSearchQuery {
     pub latitude_max: Option<f64>,
     pub longitude_min: Option<f64>,
     pub longitude_max: Option<f64>,
-    /// Optional cutoff time for fixes (ISO 8601 format)
-    pub after: Option<DateTime<Utc>>,
+    /// Optional cutoff time for fixes (YYYYMMDDHHMMSS format)
+    pub after: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -171,7 +171,7 @@ async fn search_devices_by_bbox(
     lat_min: f64,
     lon_max: f64,
     lon_min: f64,
-    after: Option<DateTime<Utc>>,
+    after_str: Option<String>,
     pool: crate::web::PgPool,
 ) -> impl IntoResponse {
     // Validate coordinates
@@ -207,8 +207,21 @@ async fn search_devices_by_bbox(
         .into_response();
     }
 
-    // Set default cutoff time to 24 hours ago if not provided
-    let cutoff_time = after.unwrap_or_else(|| Utc::now() - Duration::hours(24));
+    // Parse after parameter or default to 24 hours ago
+    let cutoff_time = if let Some(after_str) = after_str {
+        match parse_datetime_string(&after_str) {
+            Ok(dt) => dt,
+            Err(_) => {
+                return json_error(
+                    StatusCode::BAD_REQUEST,
+                    "Invalid 'after' parameter format. Expected YYYYMMDDHHMMSS",
+                )
+                .into_response();
+            }
+        }
+    } else {
+        Utc::now() - Duration::hours(24)
+    };
 
     info!(
         "Performing bounding box search with cutoff_time: {}",
@@ -217,7 +230,8 @@ async fn search_devices_by_bbox(
 
     let fixes_repo = FixesRepository::new(pool.clone());
 
-    // Perform bounding box search
+    // Perform bounding box search - only fetch the most recent fix per device
+    // Additional fixes will be loaded on the frontend as needed
     match fixes_repo
         .get_devices_with_fixes_in_bounding_box(
             lat_max,
@@ -225,7 +239,7 @@ async fn search_devices_by_bbox(
             lat_min,
             lon_max,
             cutoff_time,
-            None,
+            Some(1),
         )
         .await
     {
