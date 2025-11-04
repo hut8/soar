@@ -689,7 +689,7 @@ impl FixesRepository {
                     FROM fixes f, bbox
                     WHERE f.device_id = d.id
                       AND f.received_at >= $5
-                      AND f.geom && bbox.g
+                      AND f.location_geom && bbox.g
                     LIMIT 1
                 )
             "#;

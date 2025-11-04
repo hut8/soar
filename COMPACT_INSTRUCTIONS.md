@@ -15,10 +15,10 @@ This branch (`feat/optimize-bbox-query`) optimizes the "device in bounding box" 
 **Rationale**: These fields were redundant - they're already stored on the `devices` table which has a foreign key relationship with `fixes`. This reduces the fixes table from 32 columns to 28 columns (we're now safely under PostgreSQL's 32-column soft limit).
 
 #### Added Column to `fixes` table:
-- `geom geometry(Point, 4326) GENERATED ALWAYS AS (ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)) STORED`
-- Created GIST index: `CREATE INDEX fixes_geom_idx ON fixes USING GIST (geom)`
+- `location_geom geometry(Point, 4326) GENERATED ALWAYS AS (ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)) STORED`
+- Created GIST index: `CREATE INDEX fixes_location_geom_idx ON fixes USING GIST (location_geom)`
 
-**Rationale**: The `geom` column is a PostGIS geometry type (planar coordinates) generated from latitude/longitude. This allows us to use the fast `&&` (bounding box overlaps) operator for spatial queries instead of the slower `ST_Intersects` on geography types.
+**Rationale**: The `location_geom` column is a PostGIS geometry type (planar coordinates) generated from latitude/longitude. This allows us to use the fast `&&` (bounding box overlaps) operator for spatial queries instead of the slower `ST_Intersects` on geography types.
 
 ### Query Optimization
 
@@ -47,7 +47,7 @@ WHERE EXISTS (
     FROM fixes f, bbox
     WHERE f.device_id = d.id
       AND f.received_at >= $5
-      AND f.geom && bbox.g
+      AND f.location_geom && bbox.g
     LIMIT 1
 )
 ```
@@ -82,10 +82,10 @@ WHERE EXISTS (
 
 **Migration 1** (`2025-11-04-040220-0000_optimize_fixes_table_drop_redundant_add_geom`):
 - Drops 4 columns (fast, requires ACCESS EXCLUSIVE lock briefly)
-- Adds geom GENERATED column (moderate, computes geometry for all rows)
+- Adds location_geom GENERATED column (moderate, computes geometry for all rows)
 
 **Migration 2** (`2025-11-04-042950-0000_create_fixes_geom_index`):
-- Creates GIST index on geom column (**SLOW** - could take hours for large tables)
+- Creates GIST index on location_geom column (**SLOW** - could take hours for large tables)
 - Requires SHARE lock (blocks writes during index build)
 
 ### Estimated Duration:
@@ -113,14 +113,14 @@ After running the migration in production:
 -- Check dropped columns are gone
 \d fixes
 
--- Verify geom column exists and is populated
+-- Verify location_geom column exists and is populated
 SELECT COUNT(*) as total,
-       COUNT(geom) as with_geom,
-       COUNT(*) - COUNT(geom) as missing_geom
+       COUNT(location_geom) as with_geom,
+       COUNT(*) - COUNT(location_geom) as missing_geom
 FROM fixes;
 
 -- Check index exists
-\di fixes_geom_idx
+\di fixes_location_geom_idx
 ```
 
 ### 2. Test Query Performance
@@ -137,12 +137,12 @@ WHERE EXISTS (
     FROM fixes f, bbox
     WHERE f.device_id = d.id
       AND f.received_at >= NOW() - INTERVAL '24 hours'
-      AND f.geom && bbox.g
+      AND f.location_geom && bbox.g
     LIMIT 1
 );
 ```
 
-Expected: Should use `fixes_geom_idx` GIST index and complete quickly.
+Expected: Should use `fixes_location_geom_idx` GIST index and complete quickly.
 
 ### 3. Verify Application Functionality
 - Test device search by location in web UI
@@ -170,7 +170,7 @@ After deployment, monitor:
 -- Check index usage
 SELECT schemaname, tablename, indexname, idx_scan, idx_tup_read, idx_tup_fetch
 FROM pg_stat_user_indexes
-WHERE indexname = 'fixes_geom_idx';
+WHERE indexname = 'fixes_location_geom_idx';
 
 -- Check table size
 SELECT pg_size_pretty(pg_total_relation_size('fixes'));

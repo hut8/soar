@@ -4,7 +4,7 @@
 -- Note: The geometry index is dropped in a separate migration (2025-11-04-042950-0000_create_fixes_geom_index)
 
 ALTER TABLE fixes
-    DROP COLUMN IF EXISTS geom;
+    DROP COLUMN IF EXISTS location_geom;
 
 -- Restore the dropped columns
 -- Note: We can't restore the data that was in these columns, they will be NULL/default values

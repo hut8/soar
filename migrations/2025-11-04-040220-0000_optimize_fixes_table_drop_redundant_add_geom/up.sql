@@ -13,10 +13,10 @@ ALTER TABLE fixes
 -- Add generated geometry column for fast spatial queries
 -- This allows using the && operator which is much faster than ST_Intersects with geography
 ALTER TABLE fixes
-    ADD COLUMN geom geometry(Point, 4326)
+    ADD COLUMN location_geom geometry(Point, 4326)
         GENERATED ALWAYS AS (
             ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)
         ) STORED;
 
--- Note: GIST index on geom column is created in a separate migration (2025-11-04-042950-0000_create_fixes_geom_index)
+-- Note: GIST index on location_geom column is created in a separate migration (2025-11-04-042950-0000_create_fixes_geom_index)
 -- to separate the fast schema changes from the slow index build
