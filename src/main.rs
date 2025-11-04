@@ -1,5 +1,6 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use diesel::connection::{Instrumentation, InstrumentationEvent, set_default_instrumentation};
 use diesel::r2d2::{ConnectionManager, Pool};
 use diesel::{PgConnection, QueryableByName, RunQueryDsl};
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
@@ -189,8 +190,34 @@ enum Commands {
     Migrate {},
 }
 
+// Query logger that logs SQL statements to tracing
+struct QueryLogger;
+
+impl Instrumentation for QueryLogger {
+    fn on_connection_event(&mut self, event: InstrumentationEvent<'_>) {
+        match event {
+            InstrumentationEvent::StartQuery { query, .. } => {
+                info!("Executing SQL: {}", query);
+            }
+            InstrumentationEvent::FinishQuery {
+                query,
+                error: Some(err),
+                ..
+            } => {
+                warn!("Query failed: {} - Error: {}", query, err);
+            }
+            _ => {} // Ignore other events
+        }
+    }
+}
+
 #[tracing::instrument]
 async fn setup_diesel_database() -> Result<Pool<ConnectionManager<PgConnection>>> {
+    // Enable SQL query logging via Diesel instrumentation
+    // This will log all SQL statements including migration SQL
+    set_default_instrumentation(|| Some(Box::new(QueryLogger)))
+        .expect("Failed to set default instrumentation");
+
     // Load environment variables from .env file
     dotenvy::dotenv().ok();
 
