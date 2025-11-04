@@ -71,6 +71,7 @@ flarmnet = { version = "0.5.0", features = ["xcsoar"] }
 pprof = { version = "0.15", features = ["flamegraph", "protobuf-codec"] }
 lru = "0.16"
 moka = { version = "0.12", features = ["future", "sync"] }
+sha2 = "0.10.9"
 
 # Optimized development profile with light optimization
 # Use with: cargo build --profile dev-fast

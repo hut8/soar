@@ -4545,6 +4545,7 @@ dependencies = [
  "sentry",
  "serde",
  "serde_json",
+ "sha2",
  "sitemap-rs",
  "tokio",
  "tower",

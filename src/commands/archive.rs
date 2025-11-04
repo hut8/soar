@@ -916,13 +916,14 @@ fn insert_aprs_messages_batch(conn: &mut PgConnection, batch: &[AprsMessage]) ->
 
     conn.transaction::<_, anyhow::Error, _>(|conn| {
         for message in batch {
-            let new_message = NewAprsMessage {
-                id: message.id,
-                raw_message: message.raw_message.clone(),
-                received_at: message.received_at,
-                receiver_id: message.receiver_id,
-                unparsed: message.unparsed.clone(),
-            };
+            let mut new_message = NewAprsMessage::new(
+                message.raw_message.clone(),
+                message.received_at,
+                message.receiver_id,
+                message.unparsed.clone(),
+            );
+            // Preserve the original message ID from archive
+            new_message.id = message.id;
 
             diesel::insert_into(aprs_messages::table)
                 .values(&new_message)

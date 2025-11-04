@@ -117,14 +117,8 @@ impl GenericProcessor {
         };
 
         // Step 5: Insert APRS message
-        let aprs_message_id = Uuid::now_v7();
-        let new_aprs_message = NewAprsMessage {
-            id: aprs_message_id,
-            raw_message: raw_message.to_string(),
-            received_at,
-            receiver_id,
-            unparsed,
-        };
+        let new_aprs_message =
+            NewAprsMessage::new(raw_message.to_string(), received_at, receiver_id, unparsed);
 
         let received_at_timestamp = new_aprs_message.received_at;
         match self.aprs_messages_repo.insert(new_aprs_message).await {
