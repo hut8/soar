@@ -1,6 +1,6 @@
 <script lang="ts">
 	import '../app.css';
-	import { AppBar, Toaster } from '@skeletonlabs/skeleton-svelte';
+	import { AppBar, Toast } from '@skeletonlabs/skeleton-svelte';
 	import { toaster } from '$lib/toaster';
 	import favicon from '$lib/assets/favicon.svg';
 	import { goto } from '$app/navigation';
@@ -107,7 +107,7 @@
 </svelte:head>
 
 <div class="flex h-full min-h-screen flex-col">
-	<AppBar background="bg-orange-400 dark:bg-orange-900" classes="relative z-[70]">
+	<AppBar class="bg-orange-400 dark:bg-orange-900 relative z-[70]">
 		<LoadingBar />
 		{#snippet lead()}
 			<a
@@ -412,4 +412,4 @@
 	{/if}
 </div>
 
-<Toaster {toaster}></Toaster>
+<Toast.Group {toaster}></Toast.Group>

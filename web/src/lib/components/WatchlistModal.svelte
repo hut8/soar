@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Switch, Segment } from '@skeletonlabs/skeleton-svelte';
+	import { Switch, SegmentedControl } from '@skeletonlabs/skeleton-svelte';
 	import { Plus, X, Plane, Radio, Eye, Building2 } from '@lucide/svelte';
 	import { browser } from '$app/environment';
 	import { serverCall } from '$lib/api/server';
@@ -290,7 +290,7 @@
 						<!-- Mobile: Vertical layout (segment above inputs) -->
 						<div class="space-y-3 md:hidden">
 							<!-- Search type selector -->
-							<Segment
+							<SegmentedControl
 								name="watchlist-type-mobile"
 								value={newWatchlistEntry.type}
 								orientation="vertical"
@@ -302,25 +302,25 @@
 									}
 								}}
 							>
-								<Segment.Item value="registration">
+								<SegmentedControl.Item value="registration">
 									<div class="flex flex-row items-center">
 										<Plane size={16} />
 										<span class="ml-1">Registration</span>
 									</div>
-								</Segment.Item>
-								<Segment.Item value="device">
+								</SegmentedControl.Item>
+								<SegmentedControl.Item value="device">
 									<div class="flex flex-row items-center">
 										<Radio size={16} />
 										<span class="ml-1">Device</span>
 									</div>
-								</Segment.Item>
-								<Segment.Item value="club">
+								</SegmentedControl.Item>
+								<SegmentedControl.Item value="club">
 									<div class="flex flex-row items-center">
 										<Building2 size={16} />
 										<span class="ml-1">Club</span>
 									</div>
-								</Segment.Item>
-							</Segment>
+								</SegmentedControl.Item>
+							</SegmentedControl>
 
 							{#if newWatchlistEntry.type === 'registration'}
 								<input
@@ -333,7 +333,7 @@
 								/>
 							{:else if newWatchlistEntry.type === 'device'}
 								<div class="space-y-3">
-									<Segment
+									<SegmentedControl
 										name="address-type-mobile"
 										value={newWatchlistEntry.deviceAddressType}
 										orientation="vertical"
@@ -344,10 +344,10 @@
 											}
 										}}
 									>
-										<Segment.Item value="I">ICAO</Segment.Item>
-										<Segment.Item value="O">OGN</Segment.Item>
-										<Segment.Item value="F">FLARM</Segment.Item>
-									</Segment>
+										<SegmentedControl.Item value="I">ICAO</SegmentedControl.Item>
+										<SegmentedControl.Item value="O">OGN</SegmentedControl.Item>
+										<SegmentedControl.Item value="F">FLARM</SegmentedControl.Item>
+									</SegmentedControl>
 									<input
 										class="input"
 										placeholder="Device address"
@@ -446,7 +446,7 @@
 						<div class="hidden md:block">
 							<div class="grid grid-cols-[200px_1fr] items-start gap-4">
 								<!-- Search type selector -->
-								<Segment
+								<SegmentedControl
 									name="watchlist-type-desktop"
 									value={newWatchlistEntry.type}
 									orientation="vertical"
@@ -458,25 +458,25 @@
 										}
 									}}
 								>
-									<Segment.Item value="registration">
+									<SegmentedControl.Item value="registration">
 										<div class="flex flex-row items-center">
 											<Plane size={16} />
 											<span class="ml-1">Registration</span>
 										</div>
-									</Segment.Item>
-									<Segment.Item value="device">
+									</SegmentedControl.Item>
+									<SegmentedControl.Item value="device">
 										<div class="flex flex-row items-center">
 											<Radio size={16} />
 											<span class="ml-1">Device</span>
 										</div>
-									</Segment.Item>
-									<Segment.Item value="club">
+									</SegmentedControl.Item>
+									<SegmentedControl.Item value="club">
 										<div class="flex flex-row items-center">
 											<Building2 size={16} />
 											<span class="ml-1">Club</span>
 										</div>
-									</Segment.Item>
-								</Segment>
+									</SegmentedControl.Item>
+								</SegmentedControl>
 
 								<!-- Input area -->
 								<div>
@@ -491,7 +491,7 @@
 										/>
 									{:else if newWatchlistEntry.type === 'device'}
 										<div class="space-y-3">
-											<Segment
+											<SegmentedControl
 												name="address-type-desktop"
 												value={newWatchlistEntry.deviceAddressType}
 												orientation="vertical"
@@ -502,10 +502,10 @@
 													}
 												}}
 											>
-												<Segment.Item value="I">ICAO</Segment.Item>
-												<Segment.Item value="O">OGN</Segment.Item>
-												<Segment.Item value="F">FLARM</Segment.Item>
-											</Segment>
+												<SegmentedControl.Item value="I">ICAO</SegmentedControl.Item>
+												<SegmentedControl.Item value="O">OGN</SegmentedControl.Item>
+												<SegmentedControl.Item value="F">FLARM</SegmentedControl.Item>
+											</SegmentedControl>
 											<input
 												class="input"
 												placeholder="Device address"

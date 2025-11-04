@@ -101,7 +101,7 @@
 	{/if}
 
 	<Combobox
-		data={comboboxData}
+		collection={comboboxData}
 		{value}
 		onValueChange={handleValueChange}
 		onInputValueChange={handleInputValueChange}

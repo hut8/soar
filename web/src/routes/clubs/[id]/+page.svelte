@@ -15,7 +15,7 @@
 		ClipboardList,
 		Users
 	} from '@lucide/svelte';
-	import { ProgressRing } from '@skeletonlabs/skeleton-svelte';
+	import { Progress } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall } from '$lib/api/server';
 	import { auth } from '$lib/stores/auth';
 	import type { ClubWithSoaring, User } from '$lib/types';
@@ -210,7 +210,7 @@
 	{#if loading}
 		<div class="card p-8">
 			<div class="flex items-center justify-center space-x-4">
-				<ProgressRing size="w-8 h-8" />
+				<Progress class="w-8 h-8" />
 				<span class="text-lg">Loading club details...</span>
 			</div>
 		</div>
@@ -259,7 +259,7 @@
 								disabled={settingClub}
 							>
 								{#if settingClub}
-									<ProgressRing size="w-4 h-4" />
+									<Progress class="w-4 h-4" />
 								{:else}
 									<UserCheck class="mr-2 h-4 w-4" />
 								{/if}
@@ -307,7 +307,7 @@
 							<p class="text-surface-600-300-token mb-2 text-sm">Home Base Airport</p>
 							{#if loadingAirport}
 								<div class="flex items-center gap-2">
-									<ProgressRing size="w-4 h-4" />
+									<Progress class="w-4 h-4" />
 									<span class="text-sm">Loading airport...</span>
 								</div>
 							{:else if airportError}
@@ -380,7 +380,7 @@
 
 				{#if loadingAircraft}
 					<div class="flex items-center justify-center space-x-4 py-8">
-						<ProgressRing size="w-6 h-6" />
+						<Progress class="w-6 h-6" />
 						<span>Loading aircraft...</span>
 					</div>
 				{:else if aircraftError}

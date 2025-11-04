@@ -14,7 +14,7 @@
 		Building2,
 		Save
 	} from '@lucide/svelte';
-	import { ProgressRing } from '@skeletonlabs/skeleton-svelte';
+	import { Progress } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall } from '$lib/api/server';
 	import { auth } from '$lib/stores/auth';
 	import type { Device, AircraftRegistration, AircraftModel, Fix, Flight, Club } from '$lib/types';
@@ -243,7 +243,7 @@
 	{#if loading}
 		<div class="card p-8">
 			<div class="flex items-center justify-center space-x-4">
-				<ProgressRing size="w-8 h-8" />
+				<Progress class="w-8 h-8" />
 				<span class="text-lg">Loading device details...</span>
 			</div>
 		</div>
@@ -369,7 +369,7 @@
 									disabled={savingClub}
 								>
 									{#if savingClub}
-										<ProgressRing size="w-4 h-4" />
+										<Progress class="w-4 h-4" />
 										<span>Saving...</span>
 									{:else}
 										<Save class="h-4 w-4" />
@@ -625,7 +625,7 @@
 
 				{#if loadingFlights}
 					<div class="flex items-center justify-center py-8">
-						<ProgressRing size="w-6 h-6" />
+						<Progress class="w-6 h-6" />
 						<span class="ml-2">Loading flight history...</span>
 					</div>
 				{:else if flights.length === 0}

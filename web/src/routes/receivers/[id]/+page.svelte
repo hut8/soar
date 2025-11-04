@@ -19,7 +19,7 @@
 		ChevronRight,
 		FileText
 	} from '@lucide/svelte';
-	import { ProgressRing, Tabs } from '@skeletonlabs/skeleton-svelte';
+	import { Progress, Tabs } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall } from '$lib/api/server';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
@@ -416,7 +416,7 @@
 	{#if loading}
 		<div class="card p-8">
 			<div class="flex items-center justify-center space-x-4">
-				<ProgressRing size="w-8 h-8" />
+				<Progress class="w-8 h-8" />
 				<span class="text-lg">Loading receiver details...</span>
 			</div>
 		</div>
@@ -580,7 +580,7 @@
 
 				{#if loadingStatistics}
 					<div class="flex items-center justify-center space-x-4 p-8">
-						<ProgressRing size="w-6 h-6" />
+						<Progress class="w-6 h-6" />
 						<span>Loading statistics...</span>
 					</div>
 				{:else if statisticsError}
@@ -628,28 +628,27 @@
 				</h2>
 
 				<Tabs value={activeTab} onValueChange={(details) => (activeTab = details.value)}>
-					{#snippet list()}
-						<Tabs.Control value="status-reports">
+					<Tabs.List>
+						<Tabs.Trigger value="status-reports">
 							<Signal class="mr-2 h-4 w-4" />
 							Status Reports
-						</Tabs.Control>
-						<Tabs.Control value="raw-messages">
+						</Tabs.Trigger>
+						<Tabs.Trigger value="raw-messages">
 							<FileText class="mr-2 h-4 w-4" />
 							Raw Messages
-						</Tabs.Control>
-						<Tabs.Control value="received-fixes">
+						</Tabs.Trigger>
+						<Tabs.Trigger value="received-fixes">
 							<Signal class="mr-2 h-4 w-4" />
 							Received Fixes
-						</Tabs.Control>
-						<Tabs.Control value="aggregate-stats">
+						</Tabs.Trigger>
+						<Tabs.Trigger value="aggregate-stats">
 							<Signal class="mr-2 h-4 w-4" />
 							Aggregate Statistics
-						</Tabs.Control>
-					{/snippet}
+						</Tabs.Trigger>
+					</Tabs.List>
 
-					{#snippet content()}
-						<!-- Status Reports Tab Content -->
-						<Tabs.Panel value="status-reports">
+					<!-- Status Reports Tab Content -->
+					<Tabs.Content value="status-reports">
 							<div class="mt-4">
 								<div class="mb-4 flex items-center justify-end">
 									<label class="flex cursor-pointer items-center gap-2">
@@ -660,7 +659,7 @@
 
 								{#if loadingStatuses}
 									<div class="flex items-center justify-center space-x-4 p-8">
-										<ProgressRing size="w-6 h-6" />
+										<Progress class="w-6 h-6" />
 										<span>Loading statuses...</span>
 									</div>
 								{:else if statusesError}
@@ -784,14 +783,14 @@
 									{/if}
 								{/if}
 							</div>
-						</Tabs.Panel>
+						</Tabs.Content>
 
 						<!-- Raw Messages Tab Content -->
-						<Tabs.Panel value="raw-messages">
+						<Tabs.Content value="raw-messages">
 							<div class="mt-4">
 								{#if loadingRawMessages}
 									<div class="flex items-center justify-center space-x-4 p-8">
-										<ProgressRing size="w-6 h-6" />
+										<Progress class="w-6 h-6" />
 										<span>Loading raw messages...</span>
 									</div>
 								{:else if rawMessagesError}
@@ -862,14 +861,14 @@
 									{/if}
 								{/if}
 							</div>
-						</Tabs.Panel>
+						</Tabs.Content>
 
 						<!-- Received Fixes Tab Content -->
-						<Tabs.Panel value="received-fixes">
+						<Tabs.Content value="received-fixes">
 							<div class="mt-4">
 								{#if loadingFixes}
 									<div class="flex items-center justify-center space-x-4 p-8">
-										<ProgressRing size="w-6 h-6" />
+										<Progress class="w-6 h-6" />
 										<span>Loading fixes...</span>
 									</div>
 								{:else if fixesError}
@@ -959,14 +958,14 @@
 									{/if}
 								{/if}
 							</div>
-						</Tabs.Panel>
+						</Tabs.Content>
 
 						<!-- Aggregate Statistics Tab Content -->
-						<Tabs.Panel value="aggregate-stats">
+						<Tabs.Content value="aggregate-stats">
 							<div class="mt-4">
 								{#if loadingAggregateStats}
 									<div class="flex items-center justify-center space-x-4 p-8">
-										<ProgressRing size="w-6 h-6" />
+										<Progress class="w-6 h-6" />
 										<span>Loading aggregate statistics...</span>
 									</div>
 								{:else if aggregateStatsError}
@@ -1047,8 +1046,7 @@
 									</div>
 								{/if}
 							</div>
-						</Tabs.Panel>
-					{/snippet}
+						</Tabs.Content>
 				</Tabs>
 			</div>
 
