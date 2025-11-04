@@ -118,6 +118,19 @@
 		positionFixWindow: 8
 	});
 
+	// Debounced update for aircraft trails
+	let updateTrailsTimeout: ReturnType<typeof setTimeout> | null = null;
+	function debouncedUpdateAircraftTrails() {
+		if (updateTrailsTimeout) {
+			clearTimeout(updateTrailsTimeout);
+		}
+		updateTrailsTimeout = setTimeout(() => {
+			if (map) {
+				updateAllAircraftTrails();
+			}
+		}, 300); // 300ms debounce
+	}
+
 	// Handle settings changes from SettingsModal
 	function handleSettingsChange(newSettings: {
 		showCompassRose: boolean;
@@ -125,8 +138,15 @@
 		showRunwayOverlays: boolean;
 		positionFixWindow: number;
 	}) {
+		const previousFixWindow = currentSettings.positionFixWindow;
+
 		// Replace entire object to ensure Svelte 5 reactivity triggers
 		currentSettings = { ...newSettings };
+
+		// Update aircraft trails when position fix window changes
+		if (previousFixWindow !== newSettings.positionFixWindow) {
+			debouncedUpdateAircraftTrails();
+		}
 	}
 
 	// Handle aircraft marker click
@@ -338,17 +358,6 @@
 		} else if (currentSettings.showAirportMarkers && map) {
 			// Re-check if we should show airports
 			checkAndUpdateAirports();
-		}
-	});
-
-	// Reactive effect for position fix window settings
-	$effect(() => {
-		// Access positionFixWindow to make this effect reactive to changes
-		// eslint-disable-next-line @typescript-eslint/no-unused-vars
-		const _positionFixWindow = currentSettings.positionFixWindow;
-		if (map) {
-			// Update all aircraft trails when position fix window changes
-			updateAllAircraftTrails();
 		}
 	});
 
@@ -1478,7 +1487,7 @@
 
 			// Calculate "after" timestamp based on position fix window
 			const afterTime = dayjs().utc().subtract(currentSettings.positionFixWindow, 'hour');
-			const afterTimestamp = afterTime.format('YYYYMMDDHHmmss');
+			const afterTimestamp = afterTime.toISOString();
 
 			// Fetch from REST endpoint
 			const devicesWithFixes = await fixFeed.fetchDevicesInBoundingBox(

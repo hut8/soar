@@ -411,7 +411,7 @@ export class FixFeed {
 		latMax: number,
 		lonMin: number,
 		lonMax: number,
-		afterTimestamp?: string // Expected in YYYYMMDDHHMMSS format
+		afterTimestamp?: string // Expected in ISO 8601 format
 	): Promise<Aircraft[]> {
 		if (!browser) return [];
 

@@ -480,8 +480,8 @@ export class DeviceRegistry {
 	// Fetches fixes from the last 8 hours by default
 	public async loadRecentFixesFromAPI(deviceId: string, hoursBack: number = 8): Promise<Fix[]> {
 		try {
-			// Calculate timestamp for N hours ago in YYYYMMDDHHMMSS UTC format
-			const after = dayjs().utc().subtract(hoursBack, 'hours').format('YYYYMMDDHHmmss');
+			// Calculate timestamp for N hours ago in ISO 8601 UTC format
+			const after = dayjs().utc().subtract(hoursBack, 'hours').toISOString();
 
 			const response = await serverCall<{ fixes: Fix[] }>(`/devices/${deviceId}/fixes`, {
 				params: { after, per_page: 1000 }
