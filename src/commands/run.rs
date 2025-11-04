@@ -50,6 +50,11 @@ async fn process_aprs_message(
         }
     };
 
+    // Calculate and record lag (difference between now and packet timestamp)
+    let now = chrono::Utc::now();
+    let lag_seconds = (now - received_at).num_milliseconds() as f64 / 1000.0;
+    metrics::gauge!("aprs.jetstream.lag_seconds").set(lag_seconds);
+
     // Route server messages (starting with #) differently
     if actual_message.starts_with('#') {
         info!("Server message: {}", actual_message);
