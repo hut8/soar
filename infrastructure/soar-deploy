@@ -112,7 +112,7 @@ sleep 2
 
 # Run database migrations from temporary binary (not /usr/local/bin to avoid "text file busy")
 log_info "Running database migrations from temporary binary..."
-if "$TEMP_BIN_PATH" migrate; then
+if sudo -u soar "$TEMP_BIN_PATH" migrate; then
     log_info "Database migrations completed successfully"
 else
     log_error "Database migrations failed"
