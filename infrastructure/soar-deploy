@@ -110,9 +110,13 @@ fi
 # Wait for service to fully terminate
 sleep 2
 
+# Check current migration status before running migrations
+log_info "Checking current database migration status..."
+sudo -u soar bash -c "set -a; source /etc/soar/env; set +a; psql \"\$DATABASE_URL\" -c \"SELECT version FROM __diesel_schema_migrations ORDER BY version DESC LIMIT 5;\"" 2>/dev/null || log_warn "Could not query migration status"
+
 # Run database migrations from temporary binary (not /usr/local/bin to avoid "text file busy")
 log_info "Running database migrations from temporary binary..."
-if "$TEMP_BIN_PATH" migrate; then
+if sudo -u soar bash -c "set -a; source /etc/soar/env; set +a; exec '$TEMP_BIN_PATH' migrate"; then
     log_info "Database migrations completed successfully"
 else
     log_error "Database migrations failed"
