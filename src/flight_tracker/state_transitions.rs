@@ -133,13 +133,13 @@ pub(crate) async fn process_state_transition(
                 // End the current flight
                 if let Err(e) = complete_flight(
                     flights_repo,
-                    device_repo,
                     airports_repo,
                     locations_repo,
                     runways_repo,
                     fixes_repo,
                     elevation_db,
                     active_flights,
+                    &device,
                     state.flight_id,
                     &fix,
                 )
@@ -513,13 +513,13 @@ pub(crate) async fn process_state_transition(
                         // For normal landings, we remove from active_flights AFTER complete_flight finishes
                         let flight_completed = match complete_flight(
                             flights_repo,
-                            device_repo,
                             airports_repo,
                             locations_repo,
                             runways_repo,
                             fixes_repo,
                             elevation_db,
                             active_flights,
+                            &device,
                             flight_id,
                             &fix,
                         )

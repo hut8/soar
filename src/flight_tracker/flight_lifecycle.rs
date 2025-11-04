@@ -1,6 +1,7 @@
 use crate::Fix;
 use crate::airports_repo::AirportsRepository;
 use crate::device_repo::DeviceRepository;
+use crate::devices::Device;
 use crate::elevation::ElevationDB;
 use crate::fixes_repo::FixesRepository;
 use crate::flights::Flight;
@@ -173,35 +174,16 @@ pub(crate) async fn timeout_flight(
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn complete_flight(
     flights_repo: &FlightsRepository,
-    device_repo: &DeviceRepository,
     airports_repo: &AirportsRepository,
     locations_repo: &LocationsRepository,
     runways_repo: &RunwaysRepository,
     fixes_repo: &FixesRepository,
     elevation_db: &ElevationDB,
     active_flights: &ActiveFlightsMap,
+    device: &Device,
     flight_id: Uuid,
     fix: &Fix,
 ) -> Result<bool> {
-    // Fetch device first as we need it for runway determination
-    let device = match device_repo.get_device_by_uuid(fix.device_id).await {
-        Ok(Some(device)) => device,
-        Ok(None) => {
-            warn!(
-                "Device {} not found when completing flight {}",
-                fix.device_id, flight_id
-            );
-            return Err(anyhow::anyhow!("Device not found"));
-        }
-        Err(e) => {
-            error!(
-                "Error fetching device {} for flight {}: {}",
-                fix.device_id, flight_id, e
-            );
-            return Err(anyhow::anyhow!("Failed to fetch device: {}", e));
-        }
-    };
-
     let arrival_airport_id = find_nearby_airport(airports_repo, fix.latitude, fix.longitude).await;
 
     let landing_location_id = create_or_find_location(
@@ -216,7 +198,7 @@ pub(crate) async fn complete_flight(
     let landing_runway_info = determine_runway_identifier(
         fixes_repo,
         runways_repo,
-        &device,
+        device,
         fix.timestamp,
         fix.latitude,
         fix.longitude,
