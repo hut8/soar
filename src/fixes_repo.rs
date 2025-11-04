@@ -14,29 +14,6 @@ use crate::web::PgPool;
 // Import the main AddressType from devices module
 use crate::devices::AddressType;
 
-/// Lightweight struct for backfill queries - only contains the fields needed for elevation lookup
-/// Note: altitude_msl_feet is Option<i32> in the schema, but the query filters for IS NOT NULL
-#[derive(Debug, Clone)]
-pub struct BackfillFix {
-    pub id: Uuid,
-    pub latitude: f64,
-    pub longitude: f64,
-    pub altitude_msl_feet: i32,
-}
-
-impl From<(Uuid, f64, f64, Option<i32>)> for BackfillFix {
-    fn from((id, latitude, longitude, altitude_msl_feet): (Uuid, f64, f64, Option<i32>)) -> Self {
-        Self {
-            id,
-            latitude,
-            longitude,
-            // Safe to unwrap because we only query fixes with altitude_msl_feet IS NOT NULL
-            altitude_msl_feet: altitude_msl_feet
-                .expect("BackfillFix requires altitude_msl_feet to be present"),
-        }
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, DbEnum)]
 #[db_enum(existing_type_path = "crate::schema::sql_types::AircraftTypeOgn")]
 pub enum AircraftTypeOgn {
@@ -295,7 +272,6 @@ impl FixesRepository {
             return Ok(0);
         }
 
-        use crate::schema::fixes::dsl::*;
         let pool = self.pool.clone();
 
         // Clone the task data for the blocking task
@@ -307,81 +283,37 @@ impl FixesRepository {
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            // Build a batch UPDATE using a VALUES clause
+            // Build a true batch UPDATE using a VALUES clause for efficiency
+            // This is 10-100x faster than individual UPDATEs in a loop
             // UPDATE fixes SET altitude_agl_feet = data.agl, altitude_agl_valid = true
             // FROM (VALUES (uuid1, agl1), (uuid2, agl2), ...) AS data(id, agl)
             // WHERE fixes.id = data.id
-            let mut updated_count = 0;
 
-            // Use a transaction for atomicity
-            conn.transaction::<_, anyhow::Error, _>(|conn| {
-                for (fix_id, agl_value) in tasks_data {
-                    let count = diesel::update(fixes.filter(id.eq(fix_id)))
-                        .set((altitude_agl_feet.eq(agl_value), altitude_agl_valid.eq(true)))
-                        .execute(conn)?;
-                    updated_count += count;
-                }
-                Ok(())
-            })?;
+            // Build the VALUES clause
+            // Safe to use format! here since UUIDs are validated by Uuid type
+            // and agl values are Option<i32> from our own code
+            let mut value_clauses = Vec::new();
+
+            for (fix_id, agl_value) in &tasks_data {
+                let agl_str = match agl_value {
+                    Some(v) => v.to_string(),
+                    None => "NULL".to_string(),
+                };
+                value_clauses.push(format!("('{}'::uuid, {}::int4)", fix_id, agl_str));
+            }
+
+            let values_clause = value_clauses.join(", ");
+            let sql = format!(
+                "UPDATE fixes SET altitude_agl_feet = data.agl, altitude_agl_valid = true \
+                 FROM (VALUES {}) AS data(id, agl) \
+                 WHERE fixes.id = data.id",
+                values_clause
+            );
+
+            // Execute the batch UPDATE
+            let updated_count = diesel::sql_query(sql).execute(&mut conn)?;
 
             Ok::<usize, anyhow::Error>(updated_count)
-        })
-        .await?
-    }
-
-    /// Count fixes that need AGL backfilling
-    /// Returns count of fixes that are old enough, have MSL altitude, but don't have AGL calculated yet
-    pub async fn count_fixes_needing_backfill(
-        &self,
-        before_timestamp: DateTime<Utc>,
-    ) -> Result<i64> {
-        use crate::schema::fixes::dsl::*;
-        use diesel::dsl::count_star;
-        let pool = self.pool.clone();
-
-        tokio::task::spawn_blocking(move || {
-            let mut conn = pool.get()?;
-
-            let count = fixes
-                .filter(timestamp.lt(before_timestamp))
-                .filter(altitude_msl_feet.is_not_null())
-                .filter(altitude_agl_valid.eq(false))
-                .filter(is_active.eq(true))
-                .select(count_star())
-                .first::<i64>(&mut conn)?;
-
-            Ok::<i64, anyhow::Error>(count)
-        })
-        .await?
-    }
-
-    /// Get fixes that need AGL backfilling
-    /// Returns fixes that are old enough, have MSL altitude, but don't have AGL calculated yet
-    /// Returns only the minimal fields needed for elevation lookup (id, lat, lon, altitude_msl)
-    pub async fn get_fixes_needing_backfill(
-        &self,
-        before_timestamp: DateTime<Utc>,
-        limit: i64,
-    ) -> Result<Vec<BackfillFix>> {
-        use crate::schema::fixes::dsl::*;
-        let pool = self.pool.clone();
-
-        tokio::task::spawn_blocking(move || {
-            let mut conn = pool.get()?;
-
-            let results: Vec<(Uuid, f64, f64, Option<i32>)> = fixes
-                .filter(timestamp.lt(before_timestamp))
-                .filter(altitude_msl_feet.is_not_null())
-                .filter(altitude_agl_valid.eq(false))
-                .filter(is_active.eq(true))
-                .order(timestamp.asc()) // Oldest first
-                .limit(limit)
-                .select((id, latitude, longitude, altitude_msl_feet))
-                .load(&mut conn)?;
-
-            let backfill_fixes = results.into_iter().map(BackfillFix::from).collect();
-
-            Ok::<Vec<BackfillFix>, anyhow::Error>(backfill_fixes)
         })
         .await?
     }
