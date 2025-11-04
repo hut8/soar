@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Search, Radio, Plane, Antenna, Building2, Check, X, Activity } from '@lucide/svelte';
-	import { Segment } from '@skeletonlabs/skeleton-svelte';
+	import { SegmentedControl } from '@skeletonlabs/skeleton-svelte';
 	import { resolve } from '$app/paths';
 	import { serverCall } from '$lib/api/server';
 	import ClubSelector from '$lib/components/ClubSelector.svelte';
@@ -166,7 +166,7 @@
 			<!-- Mobile: Vertical layout (segment above inputs) -->
 			<div class="space-y-3 md:hidden">
 				<!-- Search type selector -->
-				<Segment
+				<SegmentedControl
 					name="search-type"
 					value={searchType}
 					orientation="vertical"
@@ -181,25 +181,25 @@
 						}
 					}}
 				>
-					<Segment.Item value="registration">
+					<SegmentedControl.Item value="registration">
 						<div class="flex flex-row items-center">
 							<Plane size={16} />
 							<span class="ml-1">Registration</span>
 						</div>
-					</Segment.Item>
-					<Segment.Item value="device">
+					</SegmentedControl.Item>
+					<SegmentedControl.Item value="device">
 						<div class="flex flex-row items-center">
 							<Antenna size={16} />
 							<span class="ml-1">Device Address</span>
 						</div>
-					</Segment.Item>
-					<Segment.Item value="club">
+					</SegmentedControl.Item>
+					<SegmentedControl.Item value="club">
 						<div class="flex flex-row items-center">
 							<Building2 size={16} />
 							<span class="ml-1">Club</span>
 						</div>
-					</Segment.Item>
-				</Segment>
+					</SegmentedControl.Item>
+				</SegmentedControl>
 
 				{#if searchType === 'registration'}
 					<input
@@ -211,7 +211,7 @@
 					/>
 				{:else if searchType === 'device'}
 					<div class="space-y-3">
-						<Segment
+						<SegmentedControl
 							name="address-type"
 							value={deviceAddressType}
 							orientation="vertical"
@@ -222,10 +222,10 @@
 								}
 							}}
 						>
-							<Segment.Item value="I">ICAO</Segment.Item>
-							<Segment.Item value="O">OGN</Segment.Item>
-							<Segment.Item value="F">FLARM</Segment.Item>
-						</Segment>
+							<SegmentedControl.Item value="I">ICAO</SegmentedControl.Item>
+							<SegmentedControl.Item value="O">OGN</SegmentedControl.Item>
+							<SegmentedControl.Item value="F">FLARM</SegmentedControl.Item>
+						</SegmentedControl>
 						<input
 							class="input"
 							placeholder="Device address"
@@ -256,7 +256,7 @@
 			<div class="hidden md:block">
 				<div class="grid grid-cols-[200px_1fr] items-start gap-4">
 					<!-- Search type selector -->
-					<Segment
+					<SegmentedControl
 						name="search-type-desktop"
 						value={searchType}
 						orientation="vertical"
@@ -273,25 +273,25 @@
 							}
 						}}
 					>
-						<Segment.Item value="registration">
+						<SegmentedControl.Item value="registration">
 							<div class="flex flex-row items-center">
 								<Plane size={16} />
 								<span class="ml-1">Registration</span>
 							</div>
-						</Segment.Item>
-						<Segment.Item value="device">
+						</SegmentedControl.Item>
+						<SegmentedControl.Item value="device">
 							<div class="flex flex-row items-center">
 								<Antenna size={16} />
 								<span class="ml-1">Device Address</span>
 							</div>
-						</Segment.Item>
-						<Segment.Item value="club">
+						</SegmentedControl.Item>
+						<SegmentedControl.Item value="club">
 							<div class="flex flex-row items-center">
 								<Building2 size={16} />
 								<span class="ml-1">Club</span>
 							</div>
-						</Segment.Item>
-					</Segment>
+						</SegmentedControl.Item>
+					</SegmentedControl>
 
 					<!-- Input area -->
 					<div>
@@ -305,7 +305,7 @@
 							/>
 						{:else if searchType === 'device'}
 							<div class="flex items-start gap-3">
-								<Segment
+								<SegmentedControl
 									name="address-type-desktop"
 									value={deviceAddressType}
 									orientation="vertical"
@@ -316,10 +316,10 @@
 										}
 									}}
 								>
-									<Segment.Item value="I">ICAO</Segment.Item>
-									<Segment.Item value="O">OGN</Segment.Item>
-									<Segment.Item value="F">FLARM</Segment.Item>
-								</Segment>
+									<SegmentedControl.Item value="I">ICAO</SegmentedControl.Item>
+									<SegmentedControl.Item value="O">OGN</SegmentedControl.Item>
+									<SegmentedControl.Item value="F">FLARM</SegmentedControl.Item>
+								</SegmentedControl>
 								<input
 									class="input flex-1"
 									placeholder="Device address"

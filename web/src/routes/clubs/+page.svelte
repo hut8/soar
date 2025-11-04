@@ -4,7 +4,7 @@
 	import { resolve } from '$app/paths';
 	import { goto } from '$app/navigation';
 	import { Users, Search, MapPinHouse, ExternalLink, Plane } from '@lucide/svelte';
-	import { ProgressRing } from '@skeletonlabs/skeleton-svelte';
+	import { Progress } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall } from '$lib/api/server';
 	import type { ClubWithSoaring } from '$lib/types';
 
@@ -246,7 +246,7 @@
 	{#if loading}
 		<div class="card p-8">
 			<div class="flex items-center justify-center space-x-4">
-				<ProgressRing size="w-8 h-8" />
+				<Progress class="h-8 w-8" />
 				<span class="text-lg">Searching clubs...</span>
 			</div>
 		</div>

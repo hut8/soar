@@ -101,23 +101,30 @@
 	{/if}
 
 	<Combobox
-		data={comboboxData}
 		{value}
 		onValueChange={handleValueChange}
 		onInputValueChange={handleInputValueChange}
-		{label}
-		{placeholder}
 		{disabled}
-		{required}
 	>
-		{#snippet item(item)}
-			<div class="flex w-full items-center space-x-2">
-				<span class="flex-1 text-left">{item.label}</span>
-				{#if item.club.is_soaring}
-					<span class="rounded-full bg-primary-500 px-2 py-1 text-xs text-white">Soaring</span>
-				{/if}
-			</div>
-		{/snippet}
+		<Combobox.Label>{label}</Combobox.Label>
+		<Combobox.Control>
+			<Combobox.Input {placeholder} {required} />
+		</Combobox.Control>
+		<Combobox.Positioner>
+			<Combobox.Content>
+				{#each comboboxData as clubItem (clubItem.value)}
+					<Combobox.Item item={{ label: clubItem.label, value: clubItem.value }}>
+						<div class="flex w-full items-center space-x-2">
+							<span class="flex-1 text-left">{clubItem.label}</span>
+							{#if clubItem.club.is_soaring}
+								<span class="rounded-full bg-primary-500 px-2 py-1 text-xs text-white">Soaring</span
+								>
+							{/if}
+						</div>
+					</Combobox.Item>
+				{/each}
+			</Combobox.Content>
+		</Combobox.Positioner>
 	</Combobox>
 </div>
 
