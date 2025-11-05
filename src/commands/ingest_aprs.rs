@@ -127,9 +127,7 @@ pub async fn handle_ingest_aprs(
                 .create_stream(async_nats::jetstream::stream::Config {
                     name: final_stream_name.clone(),
                     subjects: vec![final_subject.clone()],
-                    max_messages: 10_000_000, // Store up to 10M messages
-                    max_bytes: 10 * 1024 * 1024 * 1024, // 10GB max
-                    max_age: std::time::Duration::from_secs(24 * 60 * 60), // 24 hours retention
+                    max_messages: 100_000_000, // Store up to 100M messages
                     storage: async_nats::jetstream::stream::StorageType::File,
                     num_replicas: 1,
                     ..Default::default()
