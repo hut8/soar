@@ -452,8 +452,10 @@ pub async fn handle_run(
     }
 
     // Spawn dedicated worker pools for each processor type
-    // Aircraft position workers (20 workers - heaviest processing due to FixProcessor + flight tracking)
-    let num_aircraft_workers = 20;
+    // Aircraft position workers (80 workers - heaviest processing due to FixProcessor + flight tracking)
+    // Increased from 20 to 80 because aircraft queue was constantly full at 1,000 capacity
+    // Most APRS messages (~80-90%) are aircraft positions, so this queue needs the most workers
+    let num_aircraft_workers = 80;
     info!(
         "Spawning {} aircraft position workers",
         num_aircraft_workers
