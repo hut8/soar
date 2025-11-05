@@ -105,7 +105,7 @@
 
 {#if isOpen}
 	<div
-		class="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-black"
+		class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 dark:bg-black/70"
 		onclick={(e) => {
 			if (e.target === e.currentTarget) handleClose();
 		}}
@@ -117,7 +117,7 @@
 		tabindex="-1"
 	>
 		<div
-			class="w-full max-w-2xl card p-6"
+			class="w-full max-w-2xl card bg-surface-50 p-6 text-surface-900 shadow-xl dark:bg-surface-900 dark:text-surface-50"
 			onclick={(e) => e.stopPropagation()}
 			onkeydown={(e) => e.stopPropagation()}
 			role="presentation"
@@ -144,7 +144,9 @@
 					<p class="text-surface-500-400-token">Loading pilots...</p>
 				</div>
 			{:else if error}
-				<div class="mb-4 rounded border border-red-200 bg-red-50 p-4 text-red-600">
+				<div
+					class="mb-4 rounded border border-red-200 bg-red-50 p-4 text-red-600 dark:border-red-800 dark:bg-red-950 dark:text-red-400"
+				>
 					{error}
 				</div>
 			{/if}
@@ -180,7 +182,9 @@
 					<span class="label font-medium">Role</span>
 					<div class="space-y-2">
 						{#each roleOptions as option (option.value)}
-							<label class="flex items-center gap-3 rounded p-3 hover:bg-surface-100">
+							<label
+								class="flex items-center gap-3 rounded p-3 hover:bg-surface-100 dark:hover:bg-surface-800"
+							>
 								<input
 									type="radio"
 									name="role"
@@ -190,7 +194,9 @@
 								/>
 								<div class="flex flex-col">
 									<span class="font-medium">{option.label}</span>
-									<span class="text-surface-500-400-token text-sm">{option.description}</span>
+									<span class="text-sm text-surface-600 dark:text-surface-400"
+										>{option.description}</span
+									>
 								</div>
 							</label>
 						{/each}
