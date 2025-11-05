@@ -157,14 +157,14 @@
 <!-- Settings Modal -->
 {#if showModal}
 	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-surface-950-50/50"
+		class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 dark:bg-black/70"
 		onclick={() => (showModal = false)}
 		onkeydown={(e) => e.key === 'Escape' && (showModal = false)}
 		tabindex="-1"
 		role="dialog"
 	>
 		<div
-			class="max-h-[80vh] w-full max-w-lg overflow-y-auto card bg-white p-4 text-gray-900 shadow-xl"
+			class="max-h-[80vh] w-full max-w-lg overflow-y-auto card bg-surface-50 p-4 text-surface-900 shadow-xl dark:bg-surface-900 dark:text-surface-50"
 			onclick={(e) => e.stopPropagation()}
 			onkeydown={(e) => e.key === 'Escape' && (showModal = false)}
 			role="dialog"
@@ -185,35 +185,47 @@
 						<div class="flex items-center justify-between">
 							<label for="compass-toggle" class="text-sm font-medium">Show Compass Rose</label>
 							<Switch
-								name="compass-toggle"
 								checked={showCompassRose}
 								onCheckedChange={(e) => {
 									showCompassRose = e.checked;
 									saveSettings();
 								}}
-							/>
+							>
+								<Switch.Control>
+									<Switch.Thumb />
+								</Switch.Control>
+								<Switch.HiddenInput name="compass-toggle" />
+							</Switch>
 						</div>
 						<div class="flex items-center justify-between">
 							<label for="airports-toggle" class="text-sm font-medium">Show Airport Markers</label>
 							<Switch
-								name="airports-toggle"
 								checked={showAirportMarkers}
 								onCheckedChange={(e) => {
 									showAirportMarkers = e.checked;
 									saveSettings();
 								}}
-							/>
+							>
+								<Switch.Control>
+									<Switch.Thumb />
+								</Switch.Control>
+								<Switch.HiddenInput name="airports-toggle" />
+							</Switch>
 						</div>
 						<div class="flex items-center justify-between">
 							<label for="runways-toggle" class="text-sm font-medium">Show Runway Overlays</label>
 							<Switch
-								name="runways-toggle"
 								checked={showRunwayOverlays}
 								onCheckedChange={(e) => {
 									showRunwayOverlays = e.checked;
 									saveSettings();
 								}}
-							/>
+							>
+								<Switch.Control>
+									<Switch.Thumb />
+								</Switch.Control>
+								<Switch.HiddenInput name="runways-toggle" />
+							</Switch>
 						</div>
 					</div>
 				</section>
@@ -221,7 +233,7 @@
 				<!-- Position Fix Window -->
 				<section>
 					<h3 class="mb-3 text-lg font-semibold">Position Fix Window</h3>
-					<p class="mb-3 text-sm text-gray-600">
+					<p class="mb-3 text-sm text-surface-600 dark:text-surface-400">
 						Only show devices that have been seen within this time window
 					</p>
 					<div class="space-y-4">
@@ -241,8 +253,17 @@
 							min={0}
 							max={24}
 							step={1}
-						/>
-						<div class="flex justify-between text-xs text-gray-500">
+						>
+							<Slider.Control>
+								<Slider.Track>
+									<Slider.Range />
+								</Slider.Track>
+								<Slider.Thumb index={0}>
+									<Slider.HiddenInput />
+								</Slider.Thumb>
+							</Slider.Control>
+						</Slider>
+						<div class="flex justify-between text-xs text-surface-500 dark:text-surface-400">
 							<span>None</span>
 							<span>12h</span>
 							<span>24h</span>
@@ -254,7 +275,7 @@
 				<section>
 					<h3 class="mb-3 text-lg font-semibold">Cache Management</h3>
 					<div class="space-y-3">
-						<p class="text-sm text-gray-600">
+						<p class="text-sm text-surface-600 dark:text-surface-400">
 							Clear all cached device data from your browser's local storage.
 						</p>
 						<button

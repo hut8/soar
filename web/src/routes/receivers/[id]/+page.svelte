@@ -678,7 +678,7 @@
 				</h2>
 
 				<Tabs value={activeTab} onValueChange={(details) => (activeTab = details.value)}>
-					<Tabs.List>
+					<Tabs.List class="border-b border-surface-300 dark:border-surface-600">
 						<Tabs.Trigger value="status-reports">
 							<Signal class="mr-2 h-4 w-4" />
 							Status Reports
@@ -695,6 +695,7 @@
 							<Signal class="mr-2 h-4 w-4" />
 							Aggregate Statistics
 						</Tabs.Trigger>
+						<Tabs.Indicator />
 					</Tabs.List>
 
 					<!-- Status Reports Tab Content -->

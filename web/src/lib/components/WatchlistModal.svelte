@@ -258,7 +258,7 @@
 <!-- Watchlist Modal -->
 {#if showModal}
 	<div
-		class="fixed inset-0 z-50 flex items-start justify-center bg-surface-950-50/50 pt-20"
+		class="fixed inset-0 z-50 flex items-start justify-center bg-black/50 pt-20 dark:bg-black/70"
 		role="dialog"
 		onclick={() => (showModal = false)}
 		onkeydown={(e) => e.key === 'Escape' && (showModal = false)}
@@ -286,7 +286,9 @@
 				<!-- Add new entry -->
 				<section class="flex-shrink-0">
 					<h3 class="mb-3 text-lg font-semibold">Add Aircraft</h3>
-					<div class="mb-3 space-y-3 rounded-lg border p-3">
+					<div
+						class="mb-3 space-y-3 rounded-lg border border-surface-300 p-3 dark:border-surface-600"
+					>
 						<!-- Mobile: Vertical layout (segment above inputs) -->
 						<div class="space-y-3 md:hidden">
 							<!-- Search type selector -->
@@ -401,7 +403,7 @@
 															</div>
 															{#if isDeviceInWatchlist(device.id)}
 																<span
-																	class="rounded bg-green-100 px-2 py-1 text-xs font-medium text-green-800"
+																	class="rounded bg-green-100 px-2 py-1 text-xs font-medium text-green-800 dark:bg-green-900 dark:text-green-100"
 																>
 																	Watched
 																</span>
@@ -434,7 +436,9 @@
 
 									<!-- Club error message display -->
 									{#if clubErrorMessage}
-										<div class="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-600">
+										<div
+											class="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-600 dark:border-red-800 dark:bg-red-950 dark:text-red-400"
+										>
 											{clubErrorMessage}
 										</div>
 									{/if}
@@ -561,7 +565,7 @@
 																	</div>
 																	{#if isDeviceInWatchlist(device.id)}
 																		<span
-																			class="rounded bg-green-100 px-2 py-1 text-xs font-medium text-green-800"
+																			class="rounded bg-green-100 px-2 py-1 text-xs font-medium text-green-800 dark:bg-green-900 dark:text-green-100"
 																		>
 																			Watched
 																		</span>
@@ -599,7 +603,7 @@
 											<!-- Club error message display -->
 											{#if clubErrorMessage}
 												<div
-													class="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-600"
+													class="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-600 dark:border-red-800 dark:bg-red-950 dark:text-red-400"
 												>
 													{clubErrorMessage}
 												</div>
@@ -630,7 +634,9 @@
 
 						<!-- Error message display -->
 						{#if errorMessage}
-							<div class="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-600">
+							<div
+								class="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-600 dark:border-red-800 dark:bg-red-950 dark:text-red-400"
+							>
 								{errorMessage}
 							</div>
 						{/if}
@@ -649,9 +655,9 @@
 							<div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
 								{#each entriesWithDevices as entry (entry.deviceId)}
 									<div
-										class="rounded border p-3 {entry.active
-											? 'bg-gray-50'
-											: 'bg-gray-100 opacity-75'}"
+										class="rounded border border-surface-300 p-3 dark:border-surface-600 {entry.active
+											? 'bg-surface-50 dark:bg-surface-800'
+											: 'bg-surface-100 opacity-75 dark:bg-surface-700'}"
 									>
 										<div class="flex flex-col space-y-2">
 											<div class="flex items-start justify-between">
@@ -663,7 +669,7 @@
 															>
 															{#if entry.device.competition_number}
 																<span
-																	class="flex-shrink-0 rounded bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800"
+																	class="flex-shrink-0 rounded bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800 dark:bg-blue-900 dark:text-blue-100"
 																	>{entry.device.competition_number}</span
 																>
 															{/if}
@@ -695,10 +701,14 @@
 											</div>
 											<div class="flex items-center justify-between pt-1">
 												<Switch
-													name="watchlist-{entry.id}"
 													checked={entry.active}
 													onCheckedChange={() => toggleWatchlistEntry(entry.id)}
-												/>
+												>
+													<Switch.Control>
+														<Switch.Thumb />
+													</Switch.Control>
+													<Switch.HiddenInput name="watchlist-{entry.id}" />
+												</Switch>
 												<button
 													class="preset-tonal-error-500 btn btn-sm"
 													onclick={() => removeWatchlistEntry(entry.id)}
