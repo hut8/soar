@@ -348,7 +348,7 @@
 			<!-- Near Me Search -->
 			<div class="space-y-3 rounded-lg border p-3">
 				<button
-					class="preset-tonal-primary-500 btn w-full"
+					class="btn w-full preset-filled-primary-500"
 					onclick={useMyLocation}
 					disabled={gettingLocation || loading}
 				>
@@ -375,20 +375,6 @@
 						<input type="number" class="input" min="1" max="1000" bind:value={radiusMiles} />
 					</label>
 				</div>
-
-				{#if selectedLatitude !== null && selectedLongitude !== null}
-					<button
-						class="btn w-full preset-filled-primary-500"
-						onclick={searchReceivers}
-						disabled={loading}
-					>
-						{#if loading}
-							Searching...
-						{:else}
-							Search Nearby Receivers
-						{/if}
-					</button>
-				{/if}
 			</div>
 		{/if}
 

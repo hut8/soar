@@ -644,13 +644,17 @@ impl ReceiverRepository {
 
             // Filter receivers by distance using PostGIS on receivers.location
             // Cast both the stored point and the search point to geography for accurate distance calculations
+            // Order by distance from the search point
             let receiver_models = receivers::table
                 .filter(receivers::location.is_not_null())
                 .filter(sql::<diesel::sql_types::Bool>(&format!(
                     "ST_DWithin(receivers.location, ST_SetSRID(ST_MakePoint({}, {}), 4326)::geography, {})",
                     longitude, latitude, radius_meters
                 )))
-                .order(receivers::callsign.asc())
+                .order(sql::<diesel::sql_types::Double>(&format!(
+                    "ST_Distance(receivers.location, ST_SetSRID(ST_MakePoint({}, {}), 4326)::geography)",
+                    longitude, latitude
+                )))
                 .limit(1000)
                 .select(ReceiverModel::as_select())
                 .load::<ReceiverModel>(&mut conn)?;
