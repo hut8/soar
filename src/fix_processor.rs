@@ -112,6 +112,8 @@ impl FixProcessor {
         raw_message: &str,
         context: PacketContext,
     ) {
+        let total_start = std::time::Instant::now();
+
         // Use the received_at timestamp from context (captured at ingestion time)
         // This ensures accurate timestamps even if messages queue up during processing
         let received_at = context.received_at;
@@ -150,12 +152,15 @@ impl FixProcessor {
 
                 // Look up or create device based on device_address
                 // When creating spontaneously, use address_type derived from tracker_device_type
+                let device_lookup_start = std::time::Instant::now();
                 match self
                     .device_repo
                     .get_or_insert_device_by_address(device_address, spontaneous_address_type)
                     .await
                 {
                     Ok(device_model) => {
+                        metrics::histogram!("aprs.aircraft.device_lookup_ms")
+                            .record(device_lookup_start.elapsed().as_micros() as f64 / 1000.0);
                         // Extract ICAO model code, ADS-B emitter category, and registration from packet for device update
                         let icao_model_code: Option<String> = pos_packet
                             .comment
@@ -221,13 +226,29 @@ impl FixProcessor {
                         }
 
                         // Device exists or was just created, create fix with proper device_id
+                        let fix_creation_start = std::time::Instant::now();
                         match Fix::from_aprs_packet(packet, received_at, device_model.id) {
                             Ok(Some(mut fix)) => {
+                                metrics::histogram!("aprs.aircraft.fix_creation_ms").record(
+                                    fix_creation_start.elapsed().as_micros() as f64 / 1000.0,
+                                );
+
                                 // Set the aprs_message_id and receiver_id from context
                                 fix.aprs_message_id = Some(context.aprs_message_id);
                                 fix.receiver_id = Some(context.receiver_id);
+
+                                let process_internal_start = std::time::Instant::now();
                                 self.process_fix_internal(fix, raw_message, aircraft_type)
                                     .await;
+                                metrics::histogram!("aprs.aircraft.process_fix_internal_ms")
+                                    .record(
+                                        process_internal_start.elapsed().as_micros() as f64
+                                            / 1000.0,
+                                    );
+
+                                // Record total processing time
+                                metrics::histogram!("aprs.aircraft.total_processing_ms")
+                                    .record(total_start.elapsed().as_micros() as f64 / 1000.0);
                             }
                             Ok(None) => {
                                 trace!("No position fix in APRS position packet");
@@ -262,6 +283,7 @@ impl FixProcessor {
     ) {
         // Step 1: Process through flight detection AND save to database
         // This is done atomically while holding a per-device lock to prevent race conditions
+        let flight_insert_start = std::time::Instant::now();
         let updated_fix = match self
             .flight_detection_processor
             .process_and_insert_fix(fix, &self.fixes_repo)
@@ -270,6 +292,8 @@ impl FixProcessor {
             Some(fix) => fix,
             None => return, // Fix was discarded (duplicate, error, etc.)
         };
+        metrics::histogram!("aprs.aircraft.flight_insert_ms")
+            .record(flight_insert_start.elapsed().as_micros() as f64 / 1000.0);
 
         // Step 2: Update receiver's latest_packet_at if this fix has a receiver_id
         if let Some(receiver_id) = updated_fix.receiver_id {
@@ -317,6 +341,7 @@ impl FixProcessor {
             (updated_fix.flight_id, &updated_fix.flight_number)
             && !flight_number.is_empty()
         {
+            let callsign_update_start = std::time::Instant::now();
             // Get the current flight to check if callsign needs updating
             match self
                 .flight_detection_processor
@@ -358,11 +383,14 @@ impl FixProcessor {
                     );
                 }
             }
+            metrics::histogram!("aprs.aircraft.callsign_update_ms")
+                .record(callsign_update_start.elapsed().as_micros() as f64 / 1000.0);
         }
 
         // Step 5: Calculate and update altitude_agl via dedicated elevation channel
         // This prevents slow elevation lookups from blocking the main processing queue
         if let Some(elevation_tx) = &self.elevation_tx {
+            let elevation_queue_start = std::time::Instant::now();
             let task = ElevationTask {
                 fix_id: updated_fix.id,
                 fix: updated_fix.clone(),
@@ -381,10 +409,13 @@ impl FixProcessor {
                 // Successfully queued for elevation processing
                 metrics::counter!("aprs.elevation.queued").increment(1);
             }
+            metrics::histogram!("aprs.aircraft.elevation_queue_ms")
+                .record(elevation_queue_start.elapsed().as_micros() as f64 / 1000.0);
         }
 
         // Step 6: Publish to NATS with updated fix (including flight_id and flight info)
         if let Some(nats_publisher) = self.nats_publisher.as_ref() {
+            let nats_publish_start = std::time::Instant::now();
             // Look up flight information if this fix is part of a flight
             let flight = if let Some(flight_id) = updated_fix.flight_id {
                 match self
@@ -414,6 +445,8 @@ impl FixProcessor {
 
             let fix_with_flight = crate::fixes::FixWithFlightInfo::new(updated_fix.clone(), flight);
             nats_publisher.process_fix(fix_with_flight, raw_message);
+            metrics::histogram!("aprs.aircraft.nats_publish_ms")
+                .record(nats_publish_start.elapsed().as_micros() as f64 / 1000.0);
         }
     }
 }
