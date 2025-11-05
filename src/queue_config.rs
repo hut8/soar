@@ -49,35 +49,39 @@ pub const ARCHIVE_QUEUE_SIZE: usize = 10_000;
 pub const NATS_PUBLISH_QUEUE_SIZE: usize = 1_000;
 
 /// Aircraft position processing queue (highest volume)
-/// Large queue (50,000 messages) to handle bursts of aircraft position updates
-/// At ~400 aircraft msgs/s, this provides ~125 seconds of buffering
-/// Largest queue because aircraft positions are the most frequent message type
-pub const AIRCRAFT_QUEUE_SIZE: usize = 50_000;
+/// Small queue (100 messages) - minimizes message loss during crashes
+/// With JetStream providing durable queuing, in-memory buffers are only
+/// for coordinating concurrent workers, not for resilience
+/// Reduced from 50K to limit crash loss to ~600 messages max across all queues
+pub const AIRCRAFT_QUEUE_SIZE: usize = 100;
 
 /// Receiver status queue (medium volume)
-/// Medium queue (10,000 messages) for receiver status updates
-/// At ~50 status msgs/s, this provides ~200 seconds of buffering
-pub const RECEIVER_STATUS_QUEUE_SIZE: usize = 10_000;
+/// Small queue (100 messages) - minimizes message loss during crashes
+/// JetStream handles durability, this is just for worker coordination
+/// Reduced from 10K to limit crash loss
+pub const RECEIVER_STATUS_QUEUE_SIZE: usize = 100;
 
 /// Receiver position queue (lower volume)
-/// Medium queue (5,000 messages) for receiver position updates
-/// At ~10 position msgs/s, this provides ~500 seconds of buffering
-pub const RECEIVER_POSITION_QUEUE_SIZE: usize = 5_000;
+/// Small queue (100 messages) - minimizes message loss during crashes
+/// JetStream handles durability, this is just for worker coordination
+/// Reduced from 5K to limit crash loss
+pub const RECEIVER_POSITION_QUEUE_SIZE: usize = 100;
 
 /// Server status queue (lowest volume)
-/// Small queue (1,000 messages) for OGN server status messages
-/// At ~1 msg/s, this provides ~1000 seconds of buffering
-pub const SERVER_STATUS_QUEUE_SIZE: usize = 1_000;
+/// Small queue (100 messages) - minimizes message loss during crashes
+/// JetStream handles durability, this is just for worker coordination
+/// Reduced from 1K to limit crash loss
+pub const SERVER_STATUS_QUEUE_SIZE: usize = 100;
 
 /// Elevation lookup queue for Google Maps API requests
-/// Small queue (1,000 tasks) since elevation lookups are API-rate-limited
-/// Prevents excessive queuing of API requests
+/// Medium queue (1,000 tasks) since elevation lookups are API-rate-limited
+/// Kept at 1K as elevation is async and doesn't block message ACKing
 pub const ELEVATION_QUEUE_SIZE: usize = 1_000;
 
-/// AGL database lookup queue for local terrain database queries
-/// Large queue (10,000 tasks) since database lookups are fast but frequent
-/// At ~100 lookups/s, this provides ~100 seconds of buffering
-pub const AGL_DATABASE_QUEUE_SIZE: usize = 10_000;
+/// AGL database lookup queue for batch writes to database
+/// Small queue (100 tasks) - minimizes message loss during crashes
+/// Reduced from 10K since AGL is optional data (can be recalculated)
+pub const AGL_DATABASE_QUEUE_SIZE: usize = 100;
 
 /// Calculate the warning threshold for queue depth monitoring
 ///

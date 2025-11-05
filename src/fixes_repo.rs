@@ -220,23 +220,40 @@ impl FixesRepository {
                 ).ok(); // Use ok() to convert Result to Option, ignoring errors
             }
 
-            diesel::insert_into(fixes)
+            match diesel::insert_into(fixes)
                 .values(&new_fix)
-                .execute(&mut conn)?;
-
-            trace!(
-                "Inserted fix | Device: {:?} | {:.6},{:.6} @ {}ft | https://maps.google.com/maps?q={:.6},{:.6}",
-                new_fix.device_id,
-                new_fix.latitude,
-                new_fix.longitude,
-                new_fix.altitude_msl_feet.map_or("Unknown".to_string(), |a| a.to_string()),
-                new_fix.latitude,
-                new_fix.longitude
-            );
-
-                Ok::<(), anyhow::Error>(())
-            })
-            .await?
+                .execute(&mut conn)
+            {
+                Ok(_) => {
+                    metrics::counter!("aprs.fixes.inserted").increment(1);
+                    trace!(
+                        "Inserted fix | Device: {:?} | {:.6},{:.6} @ {}ft | https://maps.google.com/maps?q={:.6},{:.6}",
+                        new_fix.device_id,
+                        new_fix.latitude,
+                        new_fix.longitude,
+                        new_fix.altitude_msl_feet.map_or("Unknown".to_string(), |a| a.to_string()),
+                        new_fix.latitude,
+                        new_fix.longitude
+                    );
+                    Ok(())
+                }
+                Err(diesel::result::Error::DatabaseError(
+                    diesel::result::DatabaseErrorKind::UniqueViolation,
+                    _,
+                )) => {
+                    // Duplicate fix on redelivery - this is expected after crashes
+                    debug!(
+                        "Duplicate fix detected for device {} at {}",
+                        new_fix.device_id, new_fix.timestamp
+                    );
+                    metrics::counter!("aprs.fixes.duplicate_on_redelivery").increment(1);
+                    // Not an error - just skip the duplicate
+                    Ok(())
+                }
+                Err(e) => Err(e.into()),
+            }
+        })
+        .await?
     }
 
     /// Update the altitude_agl field for a specific fix

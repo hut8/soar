@@ -28,6 +28,7 @@ use tracing::{info, trace, warn};
 async fn process_aprs_message(
     message: &str,
     packet_router: &soar::packet_processors::PacketRouter,
+    jetstream_msg: std::sync::Arc<async_nats::jetstream::Message>,
 ) {
     let start_time = std::time::Instant::now();
 
@@ -56,11 +57,20 @@ async fn process_aprs_message(
     metrics::gauge!("aprs.jetstream.lag_seconds").set(lag_seconds);
 
     // Route server messages (starting with #) differently
+    // Server messages don't create PacketContext, so we ACK them here directly
     if actual_message.starts_with('#') {
         info!("Server message: {}", actual_message);
         packet_router
             .process_server_message(actual_message, received_at)
             .await;
+
+        // ACK server message immediately since it doesn't flow through workers
+        if let Err(e) = jetstream_msg.ack().await {
+            tracing::error!("Failed to ACK server message: {}", e);
+            metrics::counter!("aprs.jetstream.ack_error").increment(1);
+        } else {
+            metrics::counter!("aprs.jetstream.acked_after_processing").increment(1);
+        }
         return;
     }
 
@@ -69,7 +79,7 @@ async fn process_aprs_message(
         Ok(parsed) => {
             // Call PacketRouter to archive, process, and route to queues
             packet_router
-                .process_packet(parsed, actual_message, received_at)
+                .process_packet(parsed, actual_message, received_at, Some(jetstream_msg))
                 .await;
         }
         Err(e) => {
@@ -211,7 +221,28 @@ pub async fn handle_run(
     let (agl_db_tx, agl_db_rx) =
         tokio::sync::mpsc::channel::<soar::elevation::AglDatabaseTask>(AGL_DATABASE_QUEUE_SIZE);
 
-    info!("Created bounded AGL database update queue with capacity 10,000");
+    info!("Created bounded AGL database update queue with capacity 100");
+
+    // Create ACK channel for acknowledging JetStream messages after processing
+    // Workers send messages here after successful processing, then dedicated task ACKs them
+    // This ensures messages are only ACKed after full processing (zero loss on crashes)
+    let (ack_tx, mut ack_rx) =
+        tokio::sync::mpsc::channel::<std::sync::Arc<async_nats::jetstream::Message>>(1000);
+
+    info!("Created ACK channel for JetStream message acknowledgments");
+
+    // Spawn dedicated ACK handler task
+    tokio::spawn(async move {
+        while let Some(msg) = ack_rx.recv().await {
+            if let Err(e) = msg.ack().await {
+                tracing::error!("Failed to ACK message after processing: {}", e);
+                metrics::counter!("aprs.jetstream.ack_error").increment(1);
+            } else {
+                metrics::counter!("aprs.jetstream.acked_after_processing").increment(1);
+            }
+        }
+        tracing::info!("ACK handler task shutting down");
+    });
 
     // Create database fix processor to save all valid fixes to the database
     // Try to create with NATS first, fall back to without NATS if connection fails
@@ -429,6 +460,7 @@ pub async fn handle_run(
     for worker_id in 0..num_aircraft_workers {
         let worker_rx = shared_aircraft_rx.clone();
         let processor = aircraft_position_processor.clone();
+        let ack_tx_clone = ack_tx.clone();
         tokio::spawn(
             async move {
                 loop {
@@ -438,12 +470,22 @@ pub async fn handle_run(
                     };
                     match task {
                         Some((packet, context)) => {
+                            // Extract jetstream_msg before moving context
+                            let jetstream_msg = context.jetstream_msg.clone();
+
                             let start = std::time::Instant::now();
                             processor.process_aircraft_position(&packet, context).await;
                             let duration = start.elapsed();
                             metrics::histogram!("aprs.aircraft.duration_ms")
                                 .record(duration.as_millis() as f64);
                             metrics::counter!("aprs.aircraft.processed").increment(1);
+
+                            // ACK the JetStream message after successful processing
+                            if let Some(msg) = jetstream_msg
+                                && let Err(e) = ack_tx_clone.send(msg).await
+                            {
+                                tracing::error!("Failed to send ACK (channel closed): {}", e);
+                            }
                         }
                         None => break,
                     }
@@ -464,6 +506,7 @@ pub async fn handle_run(
     for worker_id in 0..num_receiver_status_workers {
         let worker_rx = shared_receiver_status_rx.clone();
         let processor = receiver_status_processor.clone();
+        let ack_tx_clone = ack_tx.clone();
         tokio::spawn(
             async move {
                 loop {
@@ -473,12 +516,22 @@ pub async fn handle_run(
                     };
                     match task {
                         Some((packet, context)) => {
+                            // Extract jetstream_msg before moving context
+                            let jetstream_msg = context.jetstream_msg.clone();
+
                             let start = std::time::Instant::now();
                             processor.process_status_packet(&packet, context).await;
                             let duration = start.elapsed();
                             metrics::histogram!("aprs.receiver_status.duration_ms")
                                 .record(duration.as_millis() as f64);
                             metrics::counter!("aprs.receiver_status.processed").increment(1);
+
+                            // ACK the JetStream message after successful processing
+                            if let Some(msg) = jetstream_msg
+                                && let Err(e) = ack_tx_clone.send(msg).await
+                            {
+                                tracing::error!("Failed to send ACK (channel closed): {}", e);
+                            }
                         }
                         None => break,
                     }
@@ -499,6 +552,7 @@ pub async fn handle_run(
     for worker_id in 0..num_receiver_position_workers {
         let worker_rx = shared_receiver_position_rx.clone();
         let processor = receiver_position_processor.clone();
+        let ack_tx_clone = ack_tx.clone();
         tokio::spawn(
             async move {
                 loop {
@@ -508,12 +562,22 @@ pub async fn handle_run(
                     };
                     match task {
                         Some((packet, context)) => {
+                            // Extract jetstream_msg before moving context
+                            let jetstream_msg = context.jetstream_msg.clone();
+
                             let start = std::time::Instant::now();
                             processor.process_receiver_position(&packet, context).await;
                             let duration = start.elapsed();
                             metrics::histogram!("aprs.receiver_position.duration_ms")
                                 .record(duration.as_millis() as f64);
                             metrics::counter!("aprs.receiver_position.processed").increment(1);
+
+                            // ACK the JetStream message after successful processing
+                            if let Some(msg) = jetstream_msg
+                                && let Err(e) = ack_tx_clone.send(msg).await
+                            {
+                                tracing::error!("Failed to send ACK (channel closed): {}", e);
+                            }
                         }
                         None => break,
                     }
@@ -662,11 +726,11 @@ pub async fn handle_run(
     // This runs indefinitely until the stream ends or an error occurs
     // Each message will be parsed and routed through PacketRouter
     consumer
-        .consume(move |message| {
+        .consume(move |message, jetstream_msg| {
             let packet_router = packet_router.clone();
             async move {
                 // Process the APRS message: parse and route through PacketRouter
-                process_aprs_message(&message, &packet_router).await;
+                process_aprs_message(&message, &packet_router, jetstream_msg).await;
                 Ok(())
             }
         })

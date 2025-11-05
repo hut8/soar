@@ -184,6 +184,7 @@ diesel::table! {
         received_at -> Timestamptz,
         receiver_id -> Uuid,
         unparsed -> Nullable<Text>,
+        raw_message_hash -> Bytea,
     }
 }
 
@@ -256,7 +257,6 @@ diesel::table! {
         latitude -> Float8,
         longitude -> Float8,
         location -> Nullable<Geography>,
-        geom -> Nullable<Geometry>,
         altitude_msl_feet -> Nullable<Int4>,
         #[max_length = 20]
         flight_number -> Nullable<Varchar>,
@@ -279,6 +279,7 @@ diesel::table! {
         gnss_vertical_resolution -> Nullable<Int2>,
         aprs_message_id -> Nullable<Uuid>,
         altitude_agl_valid -> Bool,
+        location_geom -> Nullable<Geometry>,
     }
 }
 

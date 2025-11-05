@@ -2,6 +2,8 @@ use anyhow::Result;
 use chrono::{DateTime, Duration, Utc};
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use tracing::debug;
 use uuid::Uuid;
 
 use crate::web::PgPool;
@@ -16,6 +18,31 @@ pub struct NewAprsMessage {
     pub received_at: DateTime<Utc>,
     pub receiver_id: Uuid,
     pub unparsed: Option<String>,
+    pub raw_message_hash: Vec<u8>,
+}
+
+impl NewAprsMessage {
+    /// Create a new APRS message with computed hash
+    pub fn new(
+        raw_message: String,
+        received_at: DateTime<Utc>,
+        receiver_id: Uuid,
+        unparsed: Option<String>,
+    ) -> Self {
+        // Compute SHA-256 hash of raw message for deduplication
+        let mut hasher = Sha256::new();
+        hasher.update(raw_message.as_bytes());
+        let hash = hasher.finalize().to_vec();
+
+        Self {
+            id: Uuid::now_v7(),
+            raw_message,
+            received_at,
+            receiver_id,
+            unparsed,
+            raw_message_hash: hash,
+        }
+    }
 }
 
 // Diesel model for querying APRS messages
@@ -28,6 +55,7 @@ pub struct AprsMessage {
     pub received_at: DateTime<Utc>,
     pub receiver_id: Uuid,
     pub unparsed: Option<String>,
+    pub raw_message_hash: Vec<u8>,
 }
 
 #[derive(Clone)]
@@ -42,22 +70,51 @@ impl AprsMessagesRepository {
 
     /// Insert a new APRS message into the database
     /// Returns the ID of the inserted message
+    /// On duplicate (redelivery after crash), returns the existing message ID
     pub async fn insert(&self, new_message: NewAprsMessage) -> Result<Uuid> {
         use crate::schema::aprs_messages::dsl::*;
 
         let message_id = new_message.id;
         let pool = self.pool.clone();
+        let receiver = new_message.receiver_id;
+        let timestamp = new_message.received_at;
+        let hash = new_message.raw_message_hash.clone();
 
-        tokio::task::spawn_blocking(move || {
+        let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            diesel::insert_into(aprs_messages)
+
+            match diesel::insert_into(aprs_messages)
                 .values(&new_message)
-                .execute(&mut conn)?;
-            Ok::<Uuid, anyhow::Error>(message_id)
+                .execute(&mut conn)
+            {
+                Ok(_) => {
+                    metrics::counter!("aprs.messages.inserted").increment(1);
+                    Ok::<Uuid, anyhow::Error>(message_id)
+                }
+                Err(diesel::result::Error::DatabaseError(
+                    diesel::result::DatabaseErrorKind::UniqueViolation,
+                    _,
+                )) => {
+                    // Duplicate message on redelivery - this is expected after crashes
+                    debug!("Duplicate aprs_message detected on redelivery");
+                    metrics::counter!("aprs.messages.duplicate_on_redelivery").increment(1);
+
+                    // Find existing message ID by natural key
+                    let existing = aprs_messages
+                        .filter(receiver_id.eq(receiver))
+                        .filter(received_at.eq(timestamp))
+                        .filter(raw_message_hash.eq(hash))
+                        .select(id)
+                        .first::<Uuid>(&mut conn)?;
+
+                    Ok(existing)
+                }
+                Err(e) => Err(e.into()),
+            }
         })
         .await??;
 
-        Ok(message_id)
+        Ok(result)
     }
 
     /// Get paginated raw messages for a receiver from the last 24 hours
@@ -197,14 +254,13 @@ mod tests {
         }
 
         // Insert a test message
-        let message_id = Uuid::new_v4();
-        let new_message = NewAprsMessage {
-            id: message_id,
-            raw_message: "TEST>APRS:>Test message".to_string(),
-            received_at: Utc::now(),
+        let new_message = NewAprsMessage::new(
+            "TEST>APRS:>Test message".to_string(),
+            Utc::now(),
             receiver_id,
-            unparsed: None,
-        };
+            None,
+        );
+        let message_id = new_message.id;
 
         let inserted_id = repo.insert(new_message).await.expect("Failed to insert");
         assert_eq!(inserted_id, message_id);
@@ -258,16 +314,16 @@ mod tests {
         }
 
         // Insert multiple test messages
-        let message_ids: Vec<Uuid> = (0..3).map(|_| Uuid::new_v4()).collect();
+        let mut message_ids: Vec<Uuid> = Vec::new();
 
-        for (i, &id) in message_ids.iter().enumerate() {
-            let new_message = NewAprsMessage {
-                id,
-                raw_message: format!("TEST{}>APRS:>Test message {}", i, i),
-                received_at: Utc::now(),
+        for i in 0..3 {
+            let new_message = NewAprsMessage::new(
+                format!("TEST{}>APRS:>Test message {}", i, i),
+                Utc::now(),
                 receiver_id,
-                unparsed: None,
-            };
+                None,
+            );
+            message_ids.push(new_message.id);
             repo.insert(new_message).await.expect("Failed to insert");
         }
 
@@ -305,14 +361,13 @@ mod tests {
         }
 
         // Insert one message
-        let existing_id = Uuid::new_v4();
-        let new_message = NewAprsMessage {
-            id: existing_id,
-            raw_message: "TEST>APRS:>Existing message".to_string(),
-            received_at: Utc::now(),
+        let new_message = NewAprsMessage::new(
+            "TEST>APRS:>Existing message".to_string(),
+            Utc::now(),
             receiver_id,
-            unparsed: None,
-        };
+            None,
+        );
+        let existing_id = new_message.id;
         repo.insert(new_message).await.expect("Failed to insert");
 
         // Request both existing and non-existing IDs

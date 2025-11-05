@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 /// Context containing IDs from generic packet processing
 /// This is passed to specific packet processors so they don't need to duplicate receiver/message logic
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct PacketContext {
     /// ID of the APRS message record created for this packet
     pub aprs_message_id: Uuid,
@@ -18,6 +18,9 @@ pub struct PacketContext {
     /// Timestamp when the message was received from APRS-IS
     /// This is captured at ingestion time to prevent clock skew from queue processing delays
     pub received_at: chrono::DateTime<chrono::Utc>,
+    /// JetStream message handle for ACKing after processing
+    /// This is None for non-JetStream sources (e.g., archive replay)
+    pub jetstream_msg: Option<Arc<async_nats::jetstream::Message>>,
 }
 
 /// Generic processor that handles archiving, receiver identification, and APRS message insertion
@@ -65,6 +68,7 @@ impl GenericProcessor {
         packet: &AprsPacket,
         raw_message: &str,
         received_at: chrono::DateTime<chrono::Utc>,
+        jetstream_msg: Option<Arc<async_nats::jetstream::Message>>,
     ) -> Option<PacketContext> {
         // Step 1: Archive the raw message if archiving is enabled
         if let Some(archive) = &self.archive_service {
@@ -117,14 +121,8 @@ impl GenericProcessor {
         };
 
         // Step 5: Insert APRS message
-        let aprs_message_id = Uuid::now_v7();
-        let new_aprs_message = NewAprsMessage {
-            id: aprs_message_id,
-            raw_message: raw_message.to_string(),
-            received_at,
-            receiver_id,
-            unparsed,
-        };
+        let new_aprs_message =
+            NewAprsMessage::new(raw_message.to_string(), received_at, receiver_id, unparsed);
 
         let received_at_timestamp = new_aprs_message.received_at;
         match self.aprs_messages_repo.insert(new_aprs_message).await {
@@ -137,6 +135,7 @@ impl GenericProcessor {
                     aprs_message_id: id,
                     receiver_id,
                     received_at: received_at_timestamp,
+                    jetstream_msg,
                 })
             }
             Err(e) => {
