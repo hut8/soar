@@ -131,6 +131,8 @@ impl JetStreamConsumer {
         let mut processed_count = 0u64;
         let mut error_count = 0u64;
         let start_time = std::time::Instant::now();
+        let mut last_log_time = std::time::Instant::now();
+        let mut last_log_count = 0u64;
 
         // Process messages as they arrive
         while let Some(message) = messages.next().await {
@@ -162,12 +164,25 @@ impl JetStreamConsumer {
 
                             // Log progress every 1000 messages
                             if processed_count.is_multiple_of(1000) {
-                                let elapsed = start_time.elapsed().as_secs_f64();
-                                let rate = processed_count as f64 / elapsed;
+                                let elapsed_since_start = start_time.elapsed().as_secs_f64();
+                                let rate_since_start = processed_count as f64 / elapsed_since_start;
+
+                                let elapsed_since_last_log = last_log_time.elapsed().as_secs_f64();
+                                let messages_since_last_log = processed_count - last_log_count;
+                                let rate_since_last_log =
+                                    messages_since_last_log as f64 / elapsed_since_last_log;
+
                                 info!(
-                                    "Processed {} messages ({:.1} msg/s, {} errors)",
-                                    processed_count, rate, error_count
+                                    "Processed {} messages ({:.1} msg/s since start, {:.1} msg/s recent, {} errors)",
+                                    processed_count,
+                                    rate_since_start,
+                                    rate_since_last_log,
+                                    error_count
                                 );
+
+                                // Update last log tracking
+                                last_log_time = std::time::Instant::now();
+                                last_log_count = processed_count;
                             }
                         }
                         Err(e) => {

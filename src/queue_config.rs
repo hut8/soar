@@ -48,12 +48,17 @@ pub const ARCHIVE_QUEUE_SIZE: usize = 10_000;
 /// Balances memory usage with resilience to temporary NATS slowdowns
 pub const NATS_PUBLISH_QUEUE_SIZE: usize = 1_000;
 
+/// JetStream intake queue for raw messages as they're read from JetStream
+/// Medium queue (1,000 messages) - buffers messages between JetStream read and processing
+/// Messages are ACKed immediately when added to this queue for maximum throughput
+/// This decouples JetStream reading from message parsing/routing
+pub const JETSTREAM_INTAKE_QUEUE_SIZE: usize = 1_000;
+
 /// Aircraft position processing queue (highest volume)
-/// Small queue (100 messages) - minimizes message loss during crashes
-/// With JetStream providing durable queuing, in-memory buffers are only
-/// for coordinating concurrent workers, not for resilience
-/// Reduced from 50K to limit crash loss to ~600 messages max across all queues
-pub const AIRCRAFT_QUEUE_SIZE: usize = 100;
+/// Medium queue (1,000 messages) - balances throughput with crash loss
+/// JetStream provides durable queuing upstream of this queue
+/// Increased from 100 to 1,000 to improve throughput for high-volume processing
+pub const AIRCRAFT_QUEUE_SIZE: usize = 1_000;
 
 /// Receiver status queue (medium volume)
 /// Small queue (100 messages) - minimizes message loss during crashes

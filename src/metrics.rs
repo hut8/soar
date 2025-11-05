@@ -275,12 +275,14 @@ pub fn initialize_run_metrics() {
     metrics::counter!("aprs.server_status_queue.closed").absolute(0);
 
     // JetStream consumer metrics (soar-run consumes from JetStream, doesn't publish)
-    metrics::gauge!("aprs.jetstream.queue_depth").set(0.0);
+    metrics::gauge!("aprs.jetstream.intake_queue_depth").set(0.0);
     metrics::counter!("aprs.jetstream.consumed").absolute(0);
     metrics::counter!("aprs.jetstream.process_error").absolute(0);
     metrics::counter!("aprs.jetstream.decode_error").absolute(0);
     metrics::counter!("aprs.jetstream.ack_error").absolute(0);
     metrics::counter!("aprs.jetstream.receive_error").absolute(0);
+    metrics::counter!("aprs.jetstream.acked_immediately").absolute(0);
+    metrics::counter!("aprs.jetstream.intake_queue_full").absolute(0);
 
     // Elevation processing metrics
     metrics::counter!("aprs_elevation_processed").absolute(0);
