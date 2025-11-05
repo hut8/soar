@@ -479,6 +479,8 @@ pub async fn handle_run(
                             metrics::histogram!("aprs.aircraft.duration_ms")
                                 .record(duration.as_millis() as f64);
                             metrics::counter!("aprs.aircraft.processed").increment(1);
+                            metrics::counter!("aprs.messages.processed.aircraft").increment(1);
+                            metrics::counter!("aprs.messages.processed.total").increment(1);
                         }
                         None => break,
                     }
@@ -514,6 +516,9 @@ pub async fn handle_run(
                             metrics::histogram!("aprs.receiver_status.duration_ms")
                                 .record(duration.as_millis() as f64);
                             metrics::counter!("aprs.receiver_status.processed").increment(1);
+                            metrics::counter!("aprs.messages.processed.receiver_status")
+                                .increment(1);
+                            metrics::counter!("aprs.messages.processed.total").increment(1);
                         }
                         None => break,
                     }
@@ -549,6 +554,9 @@ pub async fn handle_run(
                             metrics::histogram!("aprs.receiver_position.duration_ms")
                                 .record(duration.as_millis() as f64);
                             metrics::counter!("aprs.receiver_position.processed").increment(1);
+                            metrics::counter!("aprs.messages.processed.receiver_position")
+                                .increment(1);
+                            metrics::counter!("aprs.messages.processed.total").increment(1);
                         }
                         None => break,
                     }
@@ -581,6 +589,8 @@ pub async fn handle_run(
                             metrics::histogram!("aprs.server_status.duration_ms")
                                 .record(duration.as_millis() as f64);
                             metrics::counter!("aprs.server_status.processed").increment(1);
+                            metrics::counter!("aprs.messages.processed.server").increment(1);
+                            metrics::counter!("aprs.messages.processed.total").increment(1);
                         }
                         None => break,
                     }

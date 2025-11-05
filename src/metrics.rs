@@ -284,6 +284,13 @@ pub fn initialize_run_metrics() {
     metrics::counter!("aprs.jetstream.acked_immediately").absolute(0);
     metrics::counter!("aprs.jetstream.intake_queue_full").absolute(0);
 
+    // Message processing counters by type
+    metrics::counter!("aprs.messages.processed.aircraft").absolute(0);
+    metrics::counter!("aprs.messages.processed.receiver_status").absolute(0);
+    metrics::counter!("aprs.messages.processed.receiver_position").absolute(0);
+    metrics::counter!("aprs.messages.processed.server").absolute(0);
+    metrics::counter!("aprs.messages.processed.total").absolute(0);
+
     // Elevation processing metrics
     metrics::counter!("aprs_elevation_processed").absolute(0);
 

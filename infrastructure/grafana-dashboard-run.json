@@ -958,6 +958,149 @@
       "fieldConfig": {
         "defaults": {
           "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "Messages/sec",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 38
+      },
+      "id": 950,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.2.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fe4qj1bybjncwc"
+          },
+          "editorMode": "code",
+          "expr": "rate(aprs_messages_processed_total[5m])",
+          "legendFormat": "Total",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fe4qj1bybjncwc"
+          },
+          "editorMode": "code",
+          "expr": "rate(aprs_messages_processed_aircraft[5m])",
+          "legendFormat": "Aircraft Positions",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fe4qj1bybjncwc"
+          },
+          "editorMode": "code",
+          "expr": "rate(aprs_messages_processed_server[5m])",
+          "legendFormat": "Server Messages",
+          "range": true,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fe4qj1bybjncwc"
+          },
+          "editorMode": "code",
+          "expr": "rate(aprs_messages_processed_receiver_status[5m])",
+          "legendFormat": "Receiver Status",
+          "range": true,
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fe4qj1bybjncwc"
+          },
+          "editorMode": "code",
+          "expr": "rate(aprs_messages_processed_receiver_position[5m])",
+          "legendFormat": "Receiver Position",
+          "range": true,
+          "refId": "E"
+        }
+      ],
+      "title": "Messages Processed Rate (by type)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "fe4qj1bybjncwc"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
 "mode": "palette-classic"
           },
           "custom": {
