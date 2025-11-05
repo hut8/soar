@@ -24,7 +24,7 @@
 			title: 'APRS Ingest Performance',
 			url: 'https://grafana.glider.flights/public-dashboards/6ad16fc10c5941b5b09a0ff086309bd8',
 			icon: Radio,
-			description: 'APRS-IS connection status and message publishing metrics'
+			description: 'OGN APRS-IS connection status and message publishing metrics'
 		}
 	];
 </script>
@@ -102,7 +102,8 @@
 				<p class="text-surface-600-300-token leading-relaxed">
 					Glider Flights is a real-time aircraft tracking and soaring club management platform built
 					with modern, scalable technologies. The system processes APRS (Automatic Packet Reporting
-					System) data to track gliders and provide live flight information.
+					System) data from the Open Glider Network to track gliders and provide live flight
+					information.
 				</p>
 			</div>
 
@@ -110,7 +111,7 @@
 				<h4 class="text-lg font-semibold">Data Flow</h4>
 				<ol class="text-surface-600-300-token list-inside list-decimal space-y-2">
 					<li>
-						<strong>APRS Ingest:</strong> Connects to APRS-IS servers and receives real-time position
+						<strong>APRS Ingest:</strong> Connects to OGN APRS-IS servers and receives real-time position
 						reports from aircraft equipped with APRS transmitters
 					</li>
 					<li>
@@ -156,18 +157,85 @@
 				<h4 class="text-lg font-semibold">Data Sources</h4>
 				<ul class="text-surface-600-300-token space-y-2">
 					<li>
-						<strong>APRS-IS Network:</strong> Real-time position reports from gliders and other aircraft
+						<strong
+							><a
+								href="https://www.glidernet.org/"
+								target="_blank"
+								rel="noopener noreferrer"
+								class="text-primary-500 hover:underline">OGN APRS-IS</a
+							>:</strong
+						>
+						Real-time position reports from gliders and other aircraft via the Open Glider Network (<a
+							href="http://wiki.glidernet.org/"
+							target="_blank"
+							rel="noopener noreferrer"
+							class="text-primary-500 hover:underline">documentation</a
+						>)
 					</li>
 					<li>
-						<strong>FAA Aircraft Registry:</strong> Aircraft registration data including N-numbers and
-						ownership
+						<strong
+							><a
+								href="https://davidmegginson.github.io/ourairports-data/"
+								target="_blank"
+								rel="noopener noreferrer"
+								class="text-primary-500 hover:underline">OurAirports</a
+							>:</strong
+						>
+						Comprehensive airport and runway data (<a
+							href="https://davidmegginson.github.io/ourairports-data/airports.csv"
+							target="_blank"
+							rel="noopener noreferrer"
+							class="text-primary-500 hover:underline">airports.csv</a
+						>,
+						<a
+							href="https://davidmegginson.github.io/ourairports-data/runways.csv"
+							target="_blank"
+							rel="noopener noreferrer"
+							class="text-primary-500 hover:underline">runways.csv</a
+						>)
 					</li>
 					<li>
-						<strong>Airport Databases:</strong> Comprehensive airport information including coordinates
-						and facilities
+						<strong
+							><a
+								href="https://registry.faa.gov/"
+								target="_blank"
+								rel="noopener noreferrer"
+								class="text-primary-500 hover:underline">FAA Aircraft Registry</a
+							>:</strong
+						>
+						Aircraft registration data including N-numbers and ownership (<a
+							href="https://registry.faa.gov/database/ReleasableAircraft.zip"
+							target="_blank"
+							rel="noopener noreferrer"
+							class="text-primary-500 hover:underline">ReleasableAircraft.zip</a
+						>)
 					</li>
 					<li>
-						<strong>Digital Elevation Models:</strong> Terrain data for calculating altitude above ground
+						<strong
+							><a
+								href="https://turbo87.github.io/united-flarmnet/"
+								target="_blank"
+								rel="noopener noreferrer"
+								class="text-primary-500 hover:underline">United FlarmNet</a
+							>:</strong
+						>
+						Unified FlarmNet database for aircraft identification (<a
+							href="https://turbo87.github.io/united-flarmnet/united.fln"
+							target="_blank"
+							rel="noopener noreferrer"
+							class="text-primary-500 hover:underline">united.fln</a
+						>)
+					</li>
+					<li>
+						<strong
+							><a
+								href="https://registry.opendata.aws/terrain-tiles/"
+								target="_blank"
+								rel="noopener noreferrer"
+								class="text-primary-500 hover:underline">Terrain Tiles</a
+							>:</strong
+						>
+						High-resolution digital elevation model from Mapzen for calculating altitude above ground
 						level (AGL)
 					</li>
 				</ul>
