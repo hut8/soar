@@ -51,6 +51,7 @@ impl JetStreamConsumer {
             ack_policy: AckPolicy::Explicit, // Require explicit ack after processing
             deliver_policy: DeliverPolicy::All, // Start from beginning for new consumers
             filter_subject: subject,
+            max_ack_pending: 50_000, // Allow 50K unACKed messages (default 1000 is too low for slow workers)
             ..Default::default()
         };
 

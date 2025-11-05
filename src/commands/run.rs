@@ -94,6 +94,15 @@ async fn process_aprs_message(
             } else {
                 info!("Failed to parse APRS message '{actual_message}': {e}");
             }
+
+            // ACK unparseable messages so they don't block the queue
+            // Without this, unparseable messages accumulate in max_ack_pending and stop delivery
+            if let Err(ack_err) = jetstream_msg.ack().await {
+                tracing::error!("Failed to ACK unparseable message: {}", ack_err);
+                metrics::counter!("aprs.jetstream.ack_error").increment(1);
+            } else {
+                metrics::counter!("aprs.jetstream.acked_unparseable").increment(1);
+            }
         }
     }
 
