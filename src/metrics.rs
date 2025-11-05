@@ -284,6 +284,16 @@ pub fn initialize_run_metrics() {
 
     // Elevation processing metrics
     metrics::counter!("aprs_elevation_processed").absolute(0);
+
+    // Aircraft position processing latency metrics
+    metrics::histogram!("aprs.aircraft.device_lookup_ms").record(0.0);
+    metrics::histogram!("aprs.aircraft.fix_creation_ms").record(0.0);
+    metrics::histogram!("aprs.aircraft.process_fix_internal_ms").record(0.0);
+    metrics::histogram!("aprs.aircraft.total_processing_ms").record(0.0);
+    metrics::histogram!("aprs.aircraft.flight_insert_ms").record(0.0);
+    metrics::histogram!("aprs.aircraft.callsign_update_ms").record(0.0);
+    metrics::histogram!("aprs.aircraft.elevation_queue_ms").record(0.0);
+    metrics::histogram!("aprs.aircraft.nats_publish_ms").record(0.0);
 }
 
 /// Health check handler for APRS ingestion service
