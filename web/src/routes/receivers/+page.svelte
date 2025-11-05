@@ -414,31 +414,38 @@
 				{#each receivers as receiver (receiver.id)}
 					<a
 						href={resolve(`/receivers/${receiver.id}`)}
-						class="card p-6 transition-all duration-200 hover:scale-[1.02] hover:shadow-lg"
+						class="block card border border-surface-300 bg-surface-50 p-4 transition-all duration-200 hover:scale-[1.01] hover:border-primary-500 hover:shadow-xl dark:border-surface-600 dark:bg-surface-800 dark:hover:border-primary-400"
 					>
-						<div class="space-y-2">
-							<h3 class="h4 font-bold">{receiver.callsign}</h3>
+						<div class="space-y-3">
+							<div class="flex items-start justify-between">
+								<h3 class="h4 text-lg font-bold">{receiver.callsign}</h3>
+								<Radio class="h-5 w-5 flex-shrink-0 text-primary-500" />
+							</div>
 
 							{#if receiver.description}
-								<p class="text-surface-600-300-token text-sm">{receiver.description}</p>
+								<p class="text-sm leading-relaxed text-surface-700 dark:text-surface-300">
+									{receiver.description}
+								</p>
 							{/if}
 
-							<div class="space-y-1 text-sm">
+							<div
+								class="space-y-2 border-t border-surface-200 pt-3 text-sm dark:border-surface-700"
+							>
 								{#if receiver.country}
-									<div class="flex items-center gap-2">
-										<MapPin class="h-4 w-4" />
+									<div class="flex items-center gap-2 text-surface-600 dark:text-surface-400">
+										<MapPin class="h-4 w-4 flex-shrink-0" />
 										<span>{receiver.country}</span>
 									</div>
 								{/if}
 
 								{#if receiver.latitude != null && receiver.longitude != null}
-									<div class="text-surface-500-400-token text-xs">
+									<div class="font-mono text-xs text-surface-500 dark:text-surface-400">
 										{formatCoordinates(receiver.latitude, receiver.longitude)}
 									</div>
 								{/if}
 
-								<div class="text-surface-500-400-token text-xs">
-									Last heard: {getLastHeard(receiver.updated_at)}
+								<div class="text-xs text-surface-500 dark:text-surface-400">
+									Last heard: <span class="font-medium">{getLastHeard(receiver.updated_at)}</span>
 								</div>
 							</div>
 						</div>
