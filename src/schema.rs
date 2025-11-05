@@ -184,7 +184,7 @@ diesel::table! {
         received_at -> Timestamptz,
         receiver_id -> Uuid,
         unparsed -> Nullable<Text>,
-        raw_message_hash -> Bytea,
+        raw_message_hash -> Nullable<Bytea>,
     }
 }
 
@@ -328,8 +328,8 @@ diesel::table! {
         landing_location_id -> Nullable<Uuid>,
         timed_out_at -> Nullable<Timestamptz>,
         last_fix_at -> Timestamptz,
-        tow_release_height_delta_ft -> Nullable<Int4>,
         callsign -> Nullable<Text>,
+        tow_release_height_delta_ft -> Nullable<Int4>,
         min_latitude -> Nullable<Float8>,
         max_latitude -> Nullable<Float8>,
         min_longitude -> Nullable<Float8>,

@@ -18,7 +18,7 @@ pub struct NewAprsMessage {
     pub received_at: DateTime<Utc>,
     pub receiver_id: Uuid,
     pub unparsed: Option<String>,
-    pub raw_message_hash: Vec<u8>,
+    pub raw_message_hash: Option<Vec<u8>>,
 }
 
 impl NewAprsMessage {
@@ -40,7 +40,7 @@ impl NewAprsMessage {
             received_at,
             receiver_id,
             unparsed,
-            raw_message_hash: hash,
+            raw_message_hash: Some(hash),
         }
     }
 }
@@ -55,7 +55,7 @@ pub struct AprsMessage {
     pub received_at: DateTime<Utc>,
     pub receiver_id: Uuid,
     pub unparsed: Option<String>,
-    pub raw_message_hash: Vec<u8>,
+    pub raw_message_hash: Option<Vec<u8>>,
 }
 
 #[derive(Clone)]
