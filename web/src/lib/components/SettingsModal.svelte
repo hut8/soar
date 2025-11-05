@@ -245,7 +245,7 @@
 									: `${positionFixWindow} hours`}
 						</div>
 						<Slider
-							defaultValue={[positionFixWindow]}
+							value={[positionFixWindow]}
 							onValueChange={(e) => {
 								positionFixWindow = e.value[0];
 								saveSettings();
