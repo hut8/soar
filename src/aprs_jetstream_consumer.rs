@@ -45,14 +45,14 @@ impl JetStreamConsumer {
         info!("JetStream stream '{}' found", stream_name);
 
         // Create or get the consumer
-        // This is a durable pull consumer with implicit ACK (messages are ACKed upon delivery)
-        // Once soar-run receives a message, it is fully responsible for it
+        // This is a durable pull consumer with explicit ACK (required for WorkQueue streams)
+        // Messages are ACKed after they're successfully queued for processing
         let consumer_config = PullConfig {
             durable_name: Some(consumer_name.clone()),
-            ack_policy: AckPolicy::None, // Implicit ACK - messages ACKed upon delivery
+            ack_policy: AckPolicy::Explicit, // Explicit ACK - required for WorkQueue retention
             deliver_policy: DeliverPolicy::All, // Start from beginning for new consumers
             filter_subject: subject,
-            // max_ack_pending not needed with AckPolicy::None
+            max_ack_pending: 1000, // Allow up to 1000 unacked messages
             ..Default::default()
         };
 
@@ -89,12 +89,12 @@ impl JetStreamConsumer {
     /// Start consuming messages and process them with the provided callback
     ///
     /// This will run indefinitely, processing messages as they arrive.
-    /// Messages are implicitly ACKed upon delivery (AckPolicy::None).
-    /// Once the message is delivered to soar-run, it is fully responsible for processing it.
+    /// Messages are explicitly ACKed after successful queueing (AckPolicy::Explicit).
+    /// If queueing fails, the message is NAKed and will be redelivered.
     ///
     /// The callback receives:
     /// - payload: String - the message content
-    /// - msg: Arc<Message> - the JetStream message handle (for reference only, no ACK needed)
+    /// - msg: Arc<Message> - the JetStream message handle (not needed by callback)
     ///
     /// The callback should return Ok(()) if the message was queued successfully,
     /// or Err if queueing failed.
@@ -146,8 +146,10 @@ impl JetStreamConsumer {
                         Err(e) => {
                             error!("Failed to decode message payload as UTF-8: {}", e);
                             metrics::counter!("aprs.jetstream.decode_error").increment(1);
-                            // With AckPolicy::None, message is already implicitly ACKed
-                            // Just skip this invalid message and continue
+                            // ACK invalid messages so they're removed from the queue
+                            if let Err(ack_err) = msg.ack().await {
+                                error!("Failed to ACK invalid message: {}", ack_err);
+                            }
                             continue;
                         }
                     };
@@ -155,46 +157,54 @@ impl JetStreamConsumer {
                     // Wrap message in Arc for sharing with workers
                     let msg_arc = std::sync::Arc::new(msg);
 
-                    // Process the message - with AckPolicy::None, message is already implicitly ACKed
-                    // No manual ACK/NAK needed - soar-run is fully responsible for the message
+                    // Process the message - ACK on success, NAK on failure
                     match process_message(payload, msg_arc.clone()).await {
                         Ok(()) => {
-                            // Message queued successfully
-                            processed_count += 1;
-                            metrics::counter!("aprs.jetstream.consumed").increment(1);
+                            // Message queued successfully - ACK it
+                            if let Err(e) = msg_arc.ack().await {
+                                error!("Failed to ACK message: {} - will be redelivered", e);
+                                metrics::counter!("aprs.jetstream.ack_error").increment(1);
+                            } else {
+                                processed_count += 1;
+                                metrics::counter!("aprs.jetstream.consumed").increment(1);
 
-                            // Log progress every 1000 messages
-                            if processed_count.is_multiple_of(1000) {
-                                let elapsed_since_start = start_time.elapsed().as_secs_f64();
-                                let rate_since_start = processed_count as f64 / elapsed_since_start;
+                                // Log progress every 1000 messages
+                                if processed_count.is_multiple_of(1000) {
+                                    let elapsed_since_start = start_time.elapsed().as_secs_f64();
+                                    let rate_since_start =
+                                        processed_count as f64 / elapsed_since_start;
 
-                                let elapsed_since_last_log = last_log_time.elapsed().as_secs_f64();
-                                let messages_since_last_log = processed_count - last_log_count;
-                                let rate_since_last_log =
-                                    messages_since_last_log as f64 / elapsed_since_last_log;
+                                    let elapsed_since_last_log =
+                                        last_log_time.elapsed().as_secs_f64();
+                                    let messages_since_last_log = processed_count - last_log_count;
+                                    let rate_since_last_log =
+                                        messages_since_last_log as f64 / elapsed_since_last_log;
 
-                                info!(
-                                    "Processed {} messages ({:.1} msg/s since start, {:.1} msg/s recent, {} errors)",
-                                    processed_count,
-                                    rate_since_start,
-                                    rate_since_last_log,
-                                    error_count
-                                );
+                                    info!(
+                                        "Processed {} messages ({:.1} msg/s since start, {:.1} msg/s recent, {} errors)",
+                                        processed_count,
+                                        rate_since_start,
+                                        rate_since_last_log,
+                                        error_count
+                                    );
 
-                                // Update last log tracking
-                                last_log_time = std::time::Instant::now();
-                                last_log_count = processed_count;
+                                    // Update last log tracking
+                                    last_log_time = std::time::Instant::now();
+                                    last_log_count = processed_count;
+                                }
                             }
                         }
                         Err(e) => {
                             error_count += 1;
-                            warn!(
-                                "Failed to queue message: {} - message will be lost (implicit ACK)",
-                                e
-                            );
+                            warn!("Failed to queue message: {} - NAKing for redelivery", e);
                             metrics::counter!("aprs.jetstream.queue_error").increment(1);
-                            // With AckPolicy::None, we cannot NAK - message is already ACKed
-                            // This message will be lost if we can't queue it
+                            // NAK the message so it will be redelivered
+                            if let Err(nak_err) = msg_arc
+                                .ack_with(async_nats::jetstream::AckKind::Nak(None))
+                                .await
+                            {
+                                error!("Failed to NAK message: {} - may be lost", nak_err);
+                            }
                         }
                     }
                 }
