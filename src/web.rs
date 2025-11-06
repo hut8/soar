@@ -8,12 +8,17 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{delete, get, post, put},
 };
+use bytes::Bytes;
 use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
+use http_body::Frame;
 use include_dir::{Dir, include_dir};
 use metrics_exporter_prometheus::PrometheusHandle;
 use mime_guess::from_path;
+use pin_project::pin_project;
+use std::pin::Pin;
 use std::sync::OnceLock;
+use std::task::{Context, Poll};
 use std::time::Instant;
 use uuid::Uuid;
 
@@ -147,6 +152,85 @@ async fn handle_static_file(uri: Uri, request: Request<Body>) -> Response {
     }
 
     (StatusCode::NOT_FOUND, "Not Found").into_response()
+}
+
+// Guard that records response size metric when dropped
+struct ResponseSizeGuard {
+    bytes_sent: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    method: String,
+    endpoint: String,
+    status: String,
+}
+
+impl Drop for ResponseSizeGuard {
+    fn drop(&mut self) {
+        let size = self.bytes_sent.load(std::sync::atomic::Ordering::Relaxed);
+        // Record response size histogram
+        metrics::histogram!(
+            "http_response_size_bytes",
+            "method" => self.method.clone(),
+            "endpoint" => self.endpoint.clone(),
+            "status" => self.status.clone()
+        )
+        .record(size as f64);
+    }
+}
+
+// Wrapper body that tracks the number of bytes sent
+#[pin_project]
+struct MetricsBody<B> {
+    #[pin]
+    inner: B,
+    bytes_sent: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    _guard: std::sync::Arc<ResponseSizeGuard>,
+}
+
+impl<B> MetricsBody<B> {
+    fn new(
+        inner: B,
+        bytes_sent: std::sync::Arc<std::sync::atomic::AtomicU64>,
+        guard: std::sync::Arc<ResponseSizeGuard>,
+    ) -> Self {
+        Self {
+            inner,
+            bytes_sent,
+            _guard: guard,
+        }
+    }
+}
+
+impl<B> http_body::Body for MetricsBody<B>
+where
+    B: http_body::Body<Data = Bytes>,
+    B::Error: std::error::Error + 'static,
+{
+    type Data = Bytes;
+    type Error = B::Error;
+
+    fn poll_frame(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
+        let this = self.project();
+        match this.inner.poll_frame(cx) {
+            Poll::Ready(Some(Ok(frame))) => {
+                if let Some(data) = frame.data_ref() {
+                    this.bytes_sent
+                        .fetch_add(data.len() as u64, std::sync::atomic::Ordering::Relaxed);
+                }
+                Poll::Ready(Some(Ok(frame)))
+            }
+            other => other,
+        }
+    }
+
+    fn is_end_stream(&self) -> bool {
+        self.inner.is_end_stream()
+    }
+
+    fn size_hint(&self) -> http_body::SizeHint {
+        self.inner.size_hint()
+    }
 }
 
 // Helper function to format query parameters for logging
@@ -363,11 +447,24 @@ async fn metrics_middleware(request: Request<Body>, next: Next) -> Response {
         // Record request count by endpoint, method, and status
         metrics::counter!(
             "http_requests_total",
-            "method" => method_str,
-            "endpoint" => path,
-            "status" => status_str
+            "method" => method_str.clone(),
+            "endpoint" => path.clone(),
+            "status" => status_str.clone()
         )
         .increment(1);
+
+        // Wrap response body to track size
+        let bytes_sent = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let guard = std::sync::Arc::new(ResponseSizeGuard {
+            bytes_sent: bytes_sent.clone(),
+            method: method_str,
+            endpoint: path,
+            status: status_str,
+        });
+
+        let (parts, body) = response.into_parts();
+        let wrapped_body = MetricsBody::new(body, bytes_sent, guard);
+        return Response::from_parts(parts, Body::new(wrapped_body));
     }
 
     response
