@@ -184,7 +184,7 @@ diesel::table! {
         received_at -> Timestamptz,
         receiver_id -> Uuid,
         unparsed -> Nullable<Text>,
-        raw_message_hash -> Nullable<Bytea>,
+        raw_message_hash -> Bytea,
     }
 }
 
