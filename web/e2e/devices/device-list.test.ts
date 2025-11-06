@@ -20,7 +20,7 @@ test.describe('Device List', () => {
 		).toBeVisible();
 
 		// Check search input is visible (default is registration search)
-		await expect(page.getByPlaceholder(/aircraft registration/i).first()).toBeVisible();
+		await expect(page.locator('input[placeholder*="Aircraft registration"]:visible')).toBeVisible();
 
 		// Check search button
 		await expect(page.getByRole('button', { name: /search devices/i })).toBeVisible();
@@ -42,13 +42,13 @@ test.describe('Device List', () => {
 		await goToDevices(page);
 
 		// Initially should show registration search
-		await expect(page.getByPlaceholder(/aircraft registration/i).first()).toBeVisible();
+		await expect(page.locator('input[placeholder*="Aircraft registration"]:visible')).toBeVisible();
 
 		// Click on Device Address search type
 		await page.getByRole('button', { name: /device address/i }).click();
 
 		// Should show device address input
-		await expect(page.getByPlaceholder('Device address').first()).toBeVisible();
+		await expect(page.locator('input[placeholder="Device address"]:visible')).toBeVisible();
 
 		// Should show address type selector (ICAO, OGN, FLARM)
 		await expect(page.getByText('ICAO')).toBeVisible();
@@ -63,7 +63,7 @@ test.describe('Device List', () => {
 
 		// Should show club selector
 		// Note: The actual club selector UI may vary
-		await expect(page.getByPlaceholder(/select a club/i).first()).toBeVisible();
+		await expect(page.locator('input[placeholder*="Select a club"]:visible')).toBeVisible();
 
 		// Take screenshot of club search
 		await expect(page).toHaveScreenshot('device-search-type-club.png');
