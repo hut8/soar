@@ -9,7 +9,7 @@ use crate::flights_repo::FlightsRepository;
 use crate::locations_repo::LocationsRepository;
 use crate::runways_repo::RunwaysRepository;
 use anyhow::Result;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use super::ActiveFlightsMap;
@@ -98,7 +98,7 @@ pub(crate) async fn create_flight(
 
     flights_repo.create_flight(flight).await?;
 
-    info!(
+    debug!(
         "Created flight {} for device {} (takeoff at {:.6}, {:.6})",
         flight_id, fix.device_id, fix.latitude, fix.longitude
     );

@@ -337,7 +337,8 @@ pub async fn handle_run(
                 metrics::counter!("aprs.intake.processed").increment(1);
 
                 // Update intake queue depth metric
-                metrics::gauge!("aprs.intake_queue.depth").set(jetstream_intake_rx.len() as f64);
+                metrics::gauge!("aprs.jetstream.intake_queue_depth")
+                    .set(jetstream_intake_rx.len() as f64);
             }
             info!(
                 "Intake queue processor stopped after processing {} messages",

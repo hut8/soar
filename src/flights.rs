@@ -2,7 +2,7 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
-use tracing::info;
+use tracing::{debug, info};
 use uuid::Uuid;
 
 use crate::Fix;
@@ -290,7 +290,7 @@ impl Flight {
         takeoff_time: DateTime<Utc>,
     ) -> Self {
         let now = Utc::now();
-        info!(
+        debug!(
             "Creating flight {} with takeoff from fix: {:?}",
             flight_id, fix
         );

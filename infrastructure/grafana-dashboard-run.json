@@ -626,10 +626,10 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "aprs_raw_message_queue_depth",
-          "legendFormat": "Raw Message Queue (cap: 10K)",
+          "expr": "aprs_jetstream_intake_queue_depth",
+          "legendFormat": "JetStream Intake Queue (cap: 1K)",
           "range": true,
-          "refId": "A"
+          "refId": "Z"
         },
         {
           "datasource": {
@@ -685,6 +685,17 @@
           "legendFormat": "Elevation Queue (cap: 1K)",
           "range": true,
           "refId": "F"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fe4qj1bybjncwc"
+          },
+          "editorMode": "code",
+          "expr": "agl_backfill_pending_fixes",
+          "legendFormat": "AGL Backfill Queue",
+          "range": true,
+          "refId": "G"
         }
       ],
       "title": "Queue Depths",
@@ -1101,7 +1112,7 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-"mode": "palette-classic"
+            "mode": "palette-classic"
           },
           "custom": {
             "axisBorderShow": false,
@@ -1305,6 +1316,138 @@
         }
       ],
       "title": "JetStream Processing Lag",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "fe4qj1bybjncwc"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "Latency (ms)",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "yellow",
+                "value": 100
+              },
+              {
+                "color": "red",
+                "value": 500
+              }
+            ]
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 46
+      },
+      "id": 800,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "lastNotNull",
+            "max",
+            "p50",
+            "p95",
+            "p99"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.2.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fe4qj1bybjncwc"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.50, rate(aprs_message_processing_latency_ms_bucket[5m]))",
+          "legendFormat": "P50 Overall Latency",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fe4qj1bybjncwc"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, rate(aprs_message_processing_latency_ms_bucket[5m]))",
+          "legendFormat": "P95 Overall Latency",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fe4qj1bybjncwc"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.99, rate(aprs_message_processing_latency_ms_bucket[5m]))",
+          "legendFormat": "P99 Overall Latency",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "Overall Message Processing Latency (JetStream \u2192 Done)",
       "type": "timeseries"
     },
     {
@@ -3333,6 +3476,276 @@
         }
       ],
       "title": "Receiver Status Updates",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 111
+      },
+      "id": 900,
+      "panels": [],
+      "title": "SOAR Run - Database Connection Pool",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "fe4qj1bybjncwc"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "Connections",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 112
+      },
+      "id": 901,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.2.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fe4qj1bybjncwc"
+          },
+          "editorMode": "code",
+          "expr": "aprs_db_pool_total_connections",
+          "legendFormat": "Total Connections",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fe4qj1bybjncwc"
+          },
+          "editorMode": "code",
+          "expr": "aprs_db_pool_active_connections",
+          "legendFormat": "Active Connections",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fe4qj1bybjncwc"
+          },
+          "editorMode": "code",
+          "expr": "aprs_db_pool_idle_connections",
+          "legendFormat": "Idle Connections",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "Database Connection Pool Stats",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "fe4qj1bybjncwc"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "Closed Events/sec",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 0.01
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 112
+      },
+      "id": 902,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.2.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fe4qj1bybjncwc"
+          },
+          "editorMode": "code",
+          "expr": "rate(aprs_aircraft_queue_closed[5m])",
+          "legendFormat": "Aircraft Queue Closed",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fe4qj1bybjncwc"
+          },
+          "editorMode": "code",
+          "expr": "rate(aprs_receiver_status_queue_closed[5m])",
+          "legendFormat": "Receiver Status Queue Closed",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fe4qj1bybjncwc"
+          },
+          "editorMode": "code",
+          "expr": "rate(aprs_receiver_position_queue_closed[5m])",
+          "legendFormat": "Receiver Position Queue Closed",
+          "range": true,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fe4qj1bybjncwc"
+          },
+          "editorMode": "code",
+          "expr": "rate(aprs_server_status_queue_closed[5m])",
+          "legendFormat": "Server Status Queue Closed",
+          "range": true,
+          "refId": "D"
+        }
+      ],
+      "title": "Queue Closed Errors (Permanent Failures)",
       "type": "timeseries"
     }
   ],
