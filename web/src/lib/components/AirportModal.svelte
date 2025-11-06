@@ -105,15 +105,16 @@
 		class="fixed inset-0 z-50 flex items-start justify-center bg-surface-950-50/50 pt-20"
 		onclick={closeModal}
 		onkeydown={(e) => e.key === 'Escape' && closeModal()}
-		tabindex="-1"
-		role="dialog"
+		role="presentation"
 	>
 		<div
 			class="max-h-[calc(90vh-5rem)] w-full max-w-4xl overflow-y-auto card bg-white text-gray-900 shadow-xl"
 			onclick={(e) => e.stopPropagation()}
 			onkeydown={(e) => e.key === 'Escape' && closeModal()}
 			role="dialog"
-			tabindex="0"
+			aria-modal="true"
+			aria-labelledby="airport-modal-title"
+			tabindex="-1"
 		>
 			<!-- Header -->
 			<div class="flex items-center justify-between border-b border-gray-200 p-6">
@@ -125,7 +126,7 @@
 					</div>
 					<div>
 						<div class="flex items-center gap-2">
-							<h2 class="text-xl font-bold">{selectedAirport.name}</h2>
+							<h2 id="airport-modal-title" class="text-xl font-bold">{selectedAirport.name}</h2>
 							<a
 								href={`/airports/${selectedAirport.id}`}
 								target="_blank"

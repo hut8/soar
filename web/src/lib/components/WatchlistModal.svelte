@@ -259,22 +259,23 @@
 {#if showModal}
 	<div
 		class="fixed inset-0 z-50 flex items-start justify-center bg-black/50 pt-20 dark:bg-black/70"
-		role="dialog"
+		role="presentation"
 		onclick={() => (showModal = false)}
 		onkeydown={(e) => e.key === 'Escape' && (showModal = false)}
-		tabindex="-1"
 	>
 		<div
 			class="flex h-full max-h-[calc(90vh-5rem)] w-full max-w-9/10 flex-col card bg-surface-50 text-surface-900 shadow-xl dark:bg-surface-900 dark:text-surface-50"
 			onclick={(e) => e.stopPropagation()}
 			onkeydown={(e) => e.key === 'Escape' && (showModal = false)}
 			role="dialog"
-			tabindex="0"
+			aria-modal="true"
+			aria-labelledby="watchlist-title"
+			tabindex="-1"
 		>
 			<!-- Header -->
 			<div class="flex-shrink-0 p-4 pb-0">
 				<div class="mb-4 flex items-center justify-between">
-					<h2 class="text-xl font-bold">Watchlist</h2>
+					<h2 id="watchlist-title" class="text-xl font-bold">Watchlist</h2>
 					<button class="preset-tonal-surface-500 btn btn-sm" onclick={() => (showModal = false)}>
 						<X size={20} />
 					</button>
