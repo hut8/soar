@@ -13,7 +13,6 @@ use crate::receiver_repo::ReceiverRepository;
 use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
 use ogn_parser::AprsPacket;
-use tokio::sync::mpsc;
 
 /// Database fix processor that saves valid fixes to the database and performs flight tracking
 #[derive(Clone)]
@@ -24,7 +23,7 @@ pub struct FixProcessor {
     flight_detection_processor: FlightTracker,
     nats_publisher: Option<NatsFixPublisher>,
     /// Sender for elevation processing tasks (bounded channel to prevent queue overflow)
-    elevation_tx: Option<mpsc::Sender<ElevationTask>>,
+    elevation_tx: Option<flume::Sender<ElevationTask>>,
 }
 
 impl FixProcessor {
@@ -40,7 +39,7 @@ impl FixProcessor {
     }
 
     /// Add elevation channel sender to the processor
-    pub fn with_elevation_channel(mut self, elevation_tx: mpsc::Sender<ElevationTask>) -> Self {
+    pub fn with_elevation_channel(mut self, elevation_tx: flume::Sender<ElevationTask>) -> Self {
         self.elevation_tx = Some(elevation_tx);
         self
     }
@@ -399,7 +398,7 @@ impl FixProcessor {
             // Send to elevation queue, blocking if full to apply backpressure
             // This ensures we never drop elevation calculations
             // With durable JetStream queue, backpressure is safe and correct
-            if let Err(e) = elevation_tx.send(task).await {
+            if let Err(e) = elevation_tx.send_async(task).await {
                 error!(
                     "Elevation processing channel is closed - cannot queue elevation calculation: {}",
                     e

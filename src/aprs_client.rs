@@ -3,7 +3,6 @@ use anyhow::{Context, Result};
 use std::time::Duration;
 use tokio::io::{AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
-use tokio::sync::mpsc;
 use tokio::time::{sleep, timeout};
 use tracing::Instrument;
 use tracing::{error, info, trace, warn};
@@ -63,7 +62,7 @@ impl Default for AprsClientConfig {
 /// Calls PacketRouter directly without a queue
 pub struct AprsClient {
     config: AprsClientConfig,
-    shutdown_tx: Option<mpsc::Sender<()>>,
+    shutdown_tx: Option<tokio::sync::oneshot::Sender<()>>,
 }
 
 impl AprsClient {
@@ -99,13 +98,14 @@ impl AprsClient {
         shutdown_rx: tokio::sync::oneshot::Receiver<()>,
         health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::AprsIngestHealth>>,
     ) -> Result<()> {
-        let (internal_shutdown_tx, mut internal_shutdown_rx) = mpsc::channel::<()>(1);
+        let (internal_shutdown_tx, mut internal_shutdown_rx) =
+            tokio::sync::oneshot::channel::<()>();
         self.shutdown_tx = Some(internal_shutdown_tx);
 
         let config = self.config.clone();
 
         // Create bounded channel for raw APRS messages from TCP socket
-        let (raw_message_tx, mut raw_message_rx) = mpsc::channel::<String>(RAW_MESSAGE_QUEUE_SIZE);
+        let (raw_message_tx, raw_message_rx) = flume::bounded::<String>(RAW_MESSAGE_QUEUE_SIZE);
         info!(
             "Created raw message queue with capacity {} for JetStream publishing",
             RAW_MESSAGE_QUEUE_SIZE
@@ -124,7 +124,7 @@ impl AprsClient {
 
                 loop {
                     tokio::select! {
-                        Some(message) = raw_message_rx.recv() => {
+                        Ok(message) = raw_message_rx.recv_async() => {
                             // Publish in fire-and-forget mode for maximum throughput
                             // We accept the risk of message loss during crashes since:
                             // 1. APRS is a continuous stream - we'll get new data
@@ -166,9 +166,9 @@ impl AprsClient {
                             let flush_timeout = Duration::from_secs(10);
                             let mut flushed_count = 0u64;
 
-                            while let Ok(Some(message)) = tokio::time::timeout(
+                            while let Ok(Ok(message)) = tokio::time::timeout(
                                 flush_timeout.saturating_sub(flush_start.elapsed()),
-                                raw_message_rx.recv()
+                                raw_message_rx.recv_async()
                             ).await {
                                 publisher.publish_with_retry(&message).await;
                                 flushed_count += 1;
@@ -301,7 +301,7 @@ impl AprsClient {
     #[tracing::instrument(skip(self))]
     pub async fn stop(&mut self) {
         if let Some(shutdown_tx) = self.shutdown_tx.take() {
-            let _ = shutdown_tx.send(()).await;
+            let _ = shutdown_tx.send(());
         }
     }
 
@@ -310,7 +310,7 @@ impl AprsClient {
     #[tracing::instrument(skip(config, raw_message_tx, health_state), fields(server = %config.server, port = %config.port))]
     async fn connect_and_run(
         config: &AprsClientConfig,
-        raw_message_tx: mpsc::Sender<String>,
+        raw_message_tx: flume::Sender<String>,
         health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::AprsIngestHealth>>,
     ) -> ConnectionResult {
         info!(
@@ -496,7 +496,7 @@ impl AprsClient {
                                             }
                                         }
                                     }
-                                    Err(mpsc::error::TrySendError::Full(_)) => {
+                                    Err(flume::TrySendError::Full(_)) => {
                                         warn!(
                                             "Raw message queue FULL ({} messages buffered) - dropping message. \
                                              This indicates JetStream publishing is slower than APRS message rate.",
@@ -506,7 +506,7 @@ impl AprsClient {
                                             .increment(1);
                                         // Message is dropped to prevent blocking TCP reads
                                     }
-                                    Err(mpsc::error::TrySendError::Closed(_)) => {
+                                    Err(flume::TrySendError::Disconnected(_)) => {
                                         error!("Raw message queue is closed - stopping connection");
                                         return ConnectionResult::OperationFailed(anyhow::anyhow!(
                                             "Raw message queue closed"
@@ -681,7 +681,7 @@ impl Default for AprsClientConfigBuilder {
 /// Archive service for managing daily log files and compression
 #[derive(Clone)]
 pub struct ArchiveService {
-    sender: mpsc::Sender<String>,
+    sender: flume::Sender<String>,
 }
 
 impl ArchiveService {
@@ -710,7 +710,7 @@ impl ArchiveService {
 
         // Use bounded channel to prevent unbounded memory growth
         // Should handle bursts while limiting memory to ~1.5MB (assuming ~150 bytes per APRS message)
-        let (sender, mut receiver) = mpsc::channel::<String>(ARCHIVE_QUEUE_SIZE);
+        let (sender, receiver) = flume::bounded::<String>(ARCHIVE_QUEUE_SIZE);
 
         info!(
             "Archive service initialized with bounded channel (capacity: {} messages, ~1.5MB buffer)",
@@ -726,7 +726,7 @@ impl ArchiveService {
             let mut last_stats_log = std::time::Instant::now();
             let mut last_flush = std::time::Instant::now();
 
-            while let Some(message) = receiver.recv().await {
+            while let Ok(message) = receiver.recv_async().await {
                 let now = Local::now();
                 let today = now.date_naive();
 
@@ -879,7 +879,7 @@ impl ArchiveService {
             Ok(_) => {
                 // Message successfully queued
             }
-            Err(mpsc::error::TrySendError::Full(_)) => {
+            Err(flume::TrySendError::Full(_)) => {
                 // Channel is full - indicates archive writer is falling behind
                 // This is a sign of disk I/O issues or excessive message rate
                 warn!(
@@ -889,7 +889,7 @@ impl ArchiveService {
                 );
                 // Message is dropped to prevent unbounded memory growth
             }
-            Err(mpsc::error::TrySendError::Closed(_)) => {
+            Err(flume::TrySendError::Disconnected(_)) => {
                 // Archive service has shut down
                 error!("Archive service channel is closed - cannot archive message");
             }

@@ -64,6 +64,7 @@ postgis_diesel = { version = "3.0.2", features = ["serde", "serde_geojson"] }
 rust_decimal = "1.39"
 zip = "6"
 flydent = "0.6.0"
+flume = { version = "0.11", features = ["async"] }
 sitemap-rs = "0.4.0"
 metrics = "0.24"
 metrics-exporter-prometheus = "0.17"

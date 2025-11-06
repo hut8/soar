@@ -1,6 +1,5 @@
 use super::generic::{GenericProcessor, PacketContext};
 use ogn_parser::{AprsData, AprsPacket, PositionSourceType};
-use tokio::sync::mpsc;
 use tracing::{debug, trace, warn};
 
 /// PacketRouter routes packets to appropriate specialized processor queues
@@ -10,13 +9,13 @@ pub struct PacketRouter {
     /// Generic processor for archiving, receiver identification, and APRS message insertion (required, runs inline)
     generic_processor: GenericProcessor,
     /// Optional channel sender for aircraft position packets
-    aircraft_position_tx: Option<mpsc::Sender<(AprsPacket, PacketContext)>>,
+    aircraft_position_tx: Option<flume::Sender<(AprsPacket, PacketContext)>>,
     /// Optional channel sender for receiver status packets
-    receiver_status_tx: Option<mpsc::Sender<(AprsPacket, PacketContext)>>,
+    receiver_status_tx: Option<flume::Sender<(AprsPacket, PacketContext)>>,
     /// Optional channel sender for receiver position packets
-    receiver_position_tx: Option<mpsc::Sender<(AprsPacket, PacketContext)>>,
+    receiver_position_tx: Option<flume::Sender<(AprsPacket, PacketContext)>>,
     /// Optional channel sender for server status messages (message, received_at timestamp)
-    server_status_tx: Option<mpsc::Sender<(String, chrono::DateTime<chrono::Utc>)>>,
+    server_status_tx: Option<flume::Sender<(String, chrono::DateTime<chrono::Utc>)>>,
 }
 
 impl PacketRouter {
@@ -34,7 +33,7 @@ impl PacketRouter {
     /// Add aircraft position queue sender
     pub fn with_aircraft_position_queue(
         mut self,
-        sender: mpsc::Sender<(AprsPacket, PacketContext)>,
+        sender: flume::Sender<(AprsPacket, PacketContext)>,
     ) -> Self {
         self.aircraft_position_tx = Some(sender);
         self
@@ -43,7 +42,7 @@ impl PacketRouter {
     /// Add receiver status queue sender
     pub fn with_receiver_status_queue(
         mut self,
-        sender: mpsc::Sender<(AprsPacket, PacketContext)>,
+        sender: flume::Sender<(AprsPacket, PacketContext)>,
     ) -> Self {
         self.receiver_status_tx = Some(sender);
         self
@@ -52,7 +51,7 @@ impl PacketRouter {
     /// Add receiver position queue sender
     pub fn with_receiver_position_queue(
         mut self,
-        sender: mpsc::Sender<(AprsPacket, PacketContext)>,
+        sender: flume::Sender<(AprsPacket, PacketContext)>,
     ) -> Self {
         self.receiver_position_tx = Some(sender);
         self
@@ -61,7 +60,7 @@ impl PacketRouter {
     /// Add server status queue sender
     pub fn with_server_status_queue(
         mut self,
-        sender: mpsc::Sender<(String, chrono::DateTime<chrono::Utc>)>,
+        sender: flume::Sender<(String, chrono::DateTime<chrono::Utc>)>,
     ) -> Self {
         self.server_status_tx = Some(sender);
         self
@@ -86,7 +85,7 @@ impl PacketRouter {
             // Package the message with its timestamp
             let message_with_timestamp = (raw_message.to_string(), received_at);
             // Use blocking send - safe now that we consume from JetStream instead of APRS-IS
-            if let Err(e) = tx.send(message_with_timestamp).await {
+            if let Err(e) = tx.send_async(message_with_timestamp).await {
                 warn!(
                     "Server status queue CLOSED - cannot route server message: {}",
                     e
@@ -139,7 +138,7 @@ impl PacketRouter {
                     PositionSourceType::Aircraft => {
                         // Route to aircraft position queue (blocks if full)
                         if let Some(tx) = &self.aircraft_position_tx {
-                            if let Err(e) = tx.send((packet, context)).await {
+                            if let Err(e) = tx.send_async((packet, context)).await {
                                 warn!(
                                     "Aircraft position queue CLOSED - cannot route packet from {}: {}",
                                     packet_from, e
@@ -155,7 +154,7 @@ impl PacketRouter {
                     PositionSourceType::Receiver => {
                         // Route to receiver position queue (blocks if full)
                         if let Some(tx) = &self.receiver_position_tx {
-                            if let Err(e) = tx.send((packet, context)).await {
+                            if let Err(e) = tx.send_async((packet, context)).await {
                                 warn!(
                                     "Receiver position queue CLOSED - cannot route packet from {}: {}",
                                     packet_from, e
@@ -190,7 +189,7 @@ impl PacketRouter {
                     packet_from, position_source
                 );
                 if let Some(tx) = &self.receiver_status_tx {
-                    if let Err(e) = tx.send((packet, context)).await {
+                    if let Err(e) = tx.send_async((packet, context)).await {
                         warn!(
                             "Receiver status queue CLOSED - cannot route packet from {}: {}",
                             packet_from, e

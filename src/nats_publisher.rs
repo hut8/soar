@@ -3,7 +3,6 @@ use anyhow::Result;
 use async_nats::Client;
 use serde_json;
 use std::sync::Arc;
-use tokio::sync::mpsc;
 use tracing::Instrument;
 use tracing::{error, info, warn};
 
@@ -62,7 +61,7 @@ pub struct NatsFixPublisher {
     // Even though we don't use it directly after initialization,
     // dropping it would close the connection
     _nats_client: Arc<Client>,
-    fix_sender: mpsc::Sender<FixWithFlightInfo>,
+    fix_sender: flume::Sender<FixWithFlightInfo>,
 }
 
 impl NatsFixPublisher {
@@ -82,8 +81,8 @@ impl NatsFixPublisher {
         let nats_client = Arc::new(nats_client);
 
         // Create bounded channel for fixes (~2MB buffer)
-        let (fix_sender, mut fix_receiver) =
-            mpsc::channel::<FixWithFlightInfo>(NATS_PUBLISH_QUEUE_SIZE);
+        let (fix_sender, fix_receiver) =
+            flume::bounded::<FixWithFlightInfo>(NATS_PUBLISH_QUEUE_SIZE);
 
         info!(
             "NATS publisher initialized with bounded channel (capacity: {} fixes, ~2MB buffer)",
@@ -98,7 +97,7 @@ impl NatsFixPublisher {
                 let mut fixes_published = 0u64;
                 let mut last_stats_log = std::time::Instant::now();
 
-            while let Some(fix_with_flight) = fix_receiver.recv().await {
+            while let Ok(fix_with_flight) = fix_receiver.recv_async().await {
                 let device_id = fix_with_flight.device_id.to_string();
 
                 match publish_to_nats(&client_clone, &device_id, &fix_with_flight).await {
@@ -155,7 +154,7 @@ impl NatsFixPublisher {
             Ok(_) => {
                 // Fix successfully queued for publishing
             }
-            Err(mpsc::error::TrySendError::Full(_)) => {
+            Err(flume::TrySendError::Full(_)) => {
                 // Channel is full - indicates NATS publisher is falling behind
                 warn!(
                     "NATS publisher channel is FULL (1000 fixes buffered) - dropping fix. \
@@ -165,7 +164,7 @@ impl NatsFixPublisher {
                 metrics::counter!("nats_publisher_dropped_fixes").increment(1);
                 // Fix is dropped to prevent unbounded memory growth
             }
-            Err(mpsc::error::TrySendError::Closed(_)) => {
+            Err(flume::TrySendError::Disconnected(_)) => {
                 // NATS publisher task has shut down
                 error!("NATS publisher channel is closed - cannot publish fix");
                 metrics::counter!("nats_publisher_errors").increment(1);
