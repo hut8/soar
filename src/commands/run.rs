@@ -60,9 +60,7 @@ async fn process_aprs_message(
     // Server messages don't create PacketContext
     if actual_message.starts_with('#') {
         info!("Server message: {}", actual_message);
-        packet_router
-            .process_server_message(actual_message, received_at)
-            .await;
+        packet_router.process_server_message(actual_message, received_at);
         return;
     }
 
@@ -70,9 +68,7 @@ async fn process_aprs_message(
     match ogn_parser::parse(actual_message) {
         Ok(parsed) => {
             // Call PacketRouter to archive, process, and route to queues
-            packet_router
-                .process_packet(parsed, actual_message, received_at, None)
-                .await;
+            packet_router.process_packet(parsed, actual_message, received_at);
         }
         Err(e) => {
             // For OGNFNT sources with invalid lat/lon, log as trace instead of error
@@ -314,14 +310,18 @@ pub async fn handle_run(
         JETSTREAM_INTAKE_QUEUE_SIZE
     );
 
-    // Create PacketRouter with per-processor queues
-    let packet_router = PacketRouter::new(generic_processor)
+    // Create PacketRouter with per-processor queues and internal worker pool
+    const PACKET_ROUTER_WORKERS: usize = 10;
+    let packet_router = PacketRouter::new(generic_processor, PACKET_ROUTER_WORKERS)
         .with_aircraft_position_queue(aircraft_tx)
         .with_receiver_status_queue(receiver_status_tx)
         .with_receiver_position_queue(receiver_position_tx)
         .with_server_status_queue(server_status_tx);
 
-    info!("Created PacketRouter with per-processor queues");
+    info!(
+        "Created PacketRouter with {} workers and per-processor queues",
+        PACKET_ROUTER_WORKERS
+    );
 
     // Spawn intake queue processor
     // This task reads raw APRS messages from the intake queue and processes them

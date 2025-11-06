@@ -1,13 +1,30 @@
 use super::generic::{GenericProcessor, PacketContext};
 use ogn_parser::{AprsData, AprsPacket, PositionSourceType};
-use tracing::{debug, trace, warn};
+use tracing::{Instrument, debug, trace, warn};
+
+/// Task representing a message to be processed by PacketRouter workers
+enum MessageTask {
+    /// APRS packet to process
+    Packet {
+        packet: Box<AprsPacket>,
+        raw_message: String,
+        received_at: chrono::DateTime<chrono::Utc>,
+    },
+    /// Server message to process
+    ServerMessage {
+        raw_message: String,
+        received_at: chrono::DateTime<chrono::Utc>,
+    },
+}
 
 /// PacketRouter routes packets to appropriate specialized processor queues
-/// This is the main router that the AprsClient calls directly (no queue between them)
+/// Contains an internal worker pool that processes messages in parallel
 #[derive(Clone)]
 pub struct PacketRouter {
-    /// Generic processor for archiving, receiver identification, and APRS message insertion (required, runs inline)
+    /// Generic processor for archiving, receiver identification, and APRS message insertion
     generic_processor: GenericProcessor,
+    /// Internal queue for message tasks (1000 capacity)
+    internal_queue_tx: flume::Sender<MessageTask>,
     /// Optional channel sender for aircraft position packets
     aircraft_position_tx: Option<flume::Sender<(AprsPacket, PacketContext)>>,
     /// Optional channel sender for receiver status packets
@@ -19,15 +36,70 @@ pub struct PacketRouter {
 }
 
 impl PacketRouter {
-    /// Create a new PacketRouter with a generic processor (required)
-    pub fn new(generic_processor: GenericProcessor) -> Self {
-        Self {
+    /// Create a new PacketRouter with a generic processor and spawn worker pool
+    ///
+    /// Creates an internal queue of 1000 message tasks and spawns 10 workers to process them
+    pub fn new(generic_processor: GenericProcessor, num_workers: usize) -> Self {
+        const INTERNAL_QUEUE_SIZE: usize = 1_000;
+
+        let (internal_queue_tx, internal_queue_rx) =
+            flume::bounded::<MessageTask>(INTERNAL_QUEUE_SIZE);
+
+        let router = Self {
             generic_processor,
+            internal_queue_tx,
             aircraft_position_tx: None,
             receiver_status_tx: None,
             receiver_position_tx: None,
             server_status_tx: None,
+        };
+
+        // Spawn workers
+        router.spawn_workers(internal_queue_rx, num_workers);
+
+        router
+    }
+
+    /// Spawn worker pool to process messages from internal queue
+    fn spawn_workers(&self, internal_queue_rx: flume::Receiver<MessageTask>, num_workers: usize) {
+        for worker_id in 0..num_workers {
+            let rx = internal_queue_rx.clone();
+            let router = self.clone();
+
+            tokio::spawn(
+                async move {
+                    tracing::info!("PacketRouter worker {} started", worker_id);
+                    while let Ok(task) = rx.recv_async().await {
+                        match task {
+                            MessageTask::Packet {
+                                packet,
+                                raw_message,
+                                received_at,
+                            } => {
+                                router
+                                    .process_packet_internal(*packet, &raw_message, received_at)
+                                    .await;
+                            }
+                            MessageTask::ServerMessage {
+                                raw_message,
+                                received_at,
+                            } => {
+                                router
+                                    .process_server_message_internal(&raw_message, received_at)
+                                    .await;
+                            }
+                        }
+
+                        // Update internal queue depth metric
+                        metrics::gauge!("aprs.router.internal_queue_depth").set(rx.len() as f64);
+                    }
+                    tracing::info!("PacketRouter worker {} stopped", worker_id);
+                }
+                .instrument(tracing::info_span!("router_worker", worker_id)),
+            );
         }
+
+        tracing::info!("Spawned {} PacketRouter workers", num_workers);
     }
 
     /// Add aircraft position queue sender
@@ -68,10 +140,30 @@ impl PacketRouter {
 }
 
 impl PacketRouter {
-    /// Process a server message (line starting with #)
-    /// 1. GenericProcessor archives it
-    /// 2. Route to server status queue (blocks if full since we consume from JetStream)
-    pub async fn process_server_message(
+    /// Enqueue a server message for processing (non-blocking)
+    ///
+    /// Messages are placed in internal queue and processed by worker pool
+    pub fn process_server_message(
+        &self,
+        raw_message: &str,
+        received_at: chrono::DateTime<chrono::Utc>,
+    ) {
+        let task = MessageTask::ServerMessage {
+            raw_message: raw_message.to_string(),
+            received_at,
+        };
+
+        if let Err(e) = self.internal_queue_tx.try_send(task) {
+            warn!(
+                "PacketRouter internal queue full, dropping server message: {}",
+                e
+            );
+            metrics::counter!("aprs.router.internal_queue_full").increment(1);
+        }
+    }
+
+    /// Internal worker method to process a server message
+    async fn process_server_message_internal(
         &self,
         raw_message: &str,
         received_at: chrono::DateTime<chrono::Utc>,
@@ -80,11 +172,8 @@ impl PacketRouter {
         self.generic_processor.process_server_message(raw_message);
 
         // Step 2: Route to server status queue if configured
-        // We need to include the timestamp in the queue data
         if let Some(tx) = &self.server_status_tx {
-            // Package the message with its timestamp
             let message_with_timestamp = (raw_message.to_string(), received_at);
-            // Use blocking send - safe now that we consume from JetStream instead of APRS-IS
             if let Err(e) = tx.send_async(message_with_timestamp).await {
                 warn!(
                     "Server status queue CLOSED - cannot route server message: {}",
@@ -99,20 +188,41 @@ impl PacketRouter {
         }
     }
 
-    /// Process an APRS packet through the complete pipeline
-    /// 1. GenericProcessor archives and inserts to database (inline)
-    /// 2. Route to appropriate queue based on packet type (blocks if full since we consume from JetStream)
-    pub async fn process_packet(
+    /// Enqueue an APRS packet for processing (non-blocking)
+    ///
+    /// Packets are placed in internal queue and processed by worker pool
+    pub fn process_packet(
         &self,
         packet: AprsPacket,
         raw_message: &str,
         received_at: chrono::DateTime<chrono::Utc>,
-        jetstream_msg: Option<std::sync::Arc<async_nats::jetstream::Message>>,
     ) {
-        // Step 1: Generic processing (inline) - archives, identifies receiver, inserts APRS message
+        let task = MessageTask::Packet {
+            packet: Box::new(packet),
+            raw_message: raw_message.to_string(),
+            received_at,
+        };
+
+        if let Err(e) = self.internal_queue_tx.try_send(task) {
+            warn!("PacketRouter internal queue full, dropping packet: {}", e);
+            metrics::counter!("aprs.router.internal_queue_full").increment(1);
+        }
+    }
+
+    /// Internal worker method to process an APRS packet
+    ///
+    /// 1. GenericProcessor archives and inserts to database
+    /// 2. Route to appropriate queue based on packet type
+    async fn process_packet_internal(
+        &self,
+        packet: AprsPacket,
+        raw_message: &str,
+        received_at: chrono::DateTime<chrono::Utc>,
+    ) {
+        // Step 1: Generic processing - archives, identifies receiver, inserts APRS message
         let context = match self
             .generic_processor
-            .process_packet(&packet, raw_message, received_at, jetstream_msg)
+            .process_packet(&packet, raw_message, received_at)
             .await
         {
             Some(ctx) => ctx,
@@ -126,8 +236,6 @@ impl PacketRouter {
         };
 
         // Step 2: Route to appropriate queue based on packet type
-        // Now that we consume from JetStream instead of APRS-IS, we can use blocking sends
-        // without worrying about disconnection from the APRS server
         let packet_from = packet.from.clone();
         let position_source = packet.position_source_type();
 
@@ -136,7 +244,7 @@ impl PacketRouter {
                 // Route based on position source type
                 match position_source {
                     PositionSourceType::Aircraft => {
-                        // Route to aircraft position queue (blocks if full)
+                        // Route to aircraft position queue
                         if let Some(tx) = &self.aircraft_position_tx {
                             if let Err(e) = tx.send_async((packet, context)).await {
                                 warn!(
@@ -152,7 +260,7 @@ impl PacketRouter {
                         }
                     }
                     PositionSourceType::Receiver => {
-                        // Route to receiver position queue (blocks if full)
+                        // Route to receiver position queue
                         if let Some(tx) = &self.receiver_position_tx {
                             if let Err(e) = tx.send_async((packet, context)).await {
                                 warn!(
@@ -183,7 +291,7 @@ impl PacketRouter {
                 }
             }
             AprsData::Status(_) => {
-                // Route to receiver status queue (blocks if full)
+                // Route to receiver status queue
                 trace!(
                     "Received status packet from {} (source type: {:?})",
                     packet_from, position_source
