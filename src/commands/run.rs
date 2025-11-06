@@ -32,6 +32,9 @@ async fn process_aprs_message(
 ) {
     let start_time = std::time::Instant::now();
 
+    // Track that we're processing a message
+    metrics::counter!("aprs.process_aprs_message.called").increment(1);
+
     // Extract timestamp from the beginning of the message
     // Format: "YYYY-MM-DDTHH:MM:SS.SSSZ <rest_of_message>"
     let (received_at, actual_message) = match message.split_once(' ') {
@@ -69,12 +72,18 @@ async fn process_aprs_message(
     // Try to parse the message using ogn-parser
     match ogn_parser::parse(actual_message) {
         Ok(parsed) => {
+            // Track successful parse
+            metrics::counter!("aprs.parse.success").increment(1);
+
             // Call PacketRouter to archive, process, and route to queues
             packet_router
                 .process_packet(parsed, actual_message, received_at)
                 .await;
+
+            metrics::counter!("aprs.router.process_packet.called").increment(1);
         }
         Err(e) => {
+            metrics::counter!("aprs.parse.failed").increment(1);
             // For OGNFNT sources with invalid lat/lon, log as trace instead of error
             // These are common and expected issues with this data source
             let error_str = e.to_string();
@@ -316,11 +325,12 @@ pub async fn handle_run(
 
     // Create PacketRouter with per-processor queues and internal worker pool
     const PACKET_ROUTER_WORKERS: usize = 10;
-    let packet_router = PacketRouter::new(generic_processor, PACKET_ROUTER_WORKERS)
+    let packet_router = PacketRouter::new(generic_processor)
         .with_aircraft_position_queue(aircraft_tx)
         .with_receiver_status_queue(receiver_status_tx)
         .with_receiver_position_queue(receiver_position_tx)
-        .with_server_status_queue(server_status_tx);
+        .with_server_status_queue(server_status_tx)
+        .start(PACKET_ROUTER_WORKERS); // Start workers AFTER configuration
 
     info!(
         "Created PacketRouter with {} workers and per-processor queues",

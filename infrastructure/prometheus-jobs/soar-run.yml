@@ -4,8 +4,8 @@
 
 job_name: 'soar-run'
 metrics_path: '/metrics'
-scrape_interval: 10s
-scrape_timeout: 5s
+scrape_interval: 1s
+scrape_timeout: 1s
 
 static_configs:
   - targets:
