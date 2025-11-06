@@ -160,18 +160,19 @@
 		class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 dark:bg-black/70"
 		onclick={() => (showModal = false)}
 		onkeydown={(e) => e.key === 'Escape' && (showModal = false)}
-		tabindex="-1"
-		role="dialog"
+		role="presentation"
 	>
 		<div
 			class="max-h-[80vh] w-full max-w-lg overflow-y-auto card bg-surface-50 p-4 text-surface-900 shadow-xl dark:bg-surface-900 dark:text-surface-50"
 			onclick={(e) => e.stopPropagation()}
 			onkeydown={(e) => e.key === 'Escape' && (showModal = false)}
 			role="dialog"
-			tabindex="0"
+			aria-modal="true"
+			aria-labelledby="settings-modal-title"
+			tabindex="-1"
 		>
 			<div class="mb-4 flex items-center justify-between">
-				<h2 class="text-xl font-bold">Map Settings</h2>
+				<h2 id="settings-modal-title" class="text-xl font-bold">Map Settings</h2>
 				<button class="preset-tonal-surface-500 btn btn-sm" onclick={() => (showModal = false)}>
 					<X size={20} />
 				</button>

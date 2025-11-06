@@ -286,15 +286,16 @@
 		class="fixed inset-0 z-50 flex items-start justify-center bg-surface-950-50/50 pt-20"
 		onclick={closeModal}
 		onkeydown={(e) => e.key === 'Escape' && closeModal()}
-		tabindex="-1"
-		role="dialog"
+		role="presentation"
 	>
 		<div
 			class="relative max-h-[calc(90vh-5rem)] w-full max-w-4xl overflow-y-auto card bg-surface-50 text-surface-900 shadow-xl dark:bg-surface-900 dark:text-surface-50"
 			onclick={(e) => e.stopPropagation()}
 			onkeydown={(e) => e.key === 'Escape' && closeModal()}
 			role="dialog"
-			tabindex="0"
+			aria-modal="true"
+			aria-labelledby="aircraft-status-title"
+			tabindex="-1"
 		>
 			<!-- Header -->
 			<div
@@ -332,7 +333,7 @@
 						</div>
 					{/if}
 					<div>
-						<h2 class="text-xl font-bold">Aircraft Status</h2>
+						<h2 id="aircraft-status-title" class="text-xl font-bold">Aircraft Status</h2>
 						<p class="text-sm text-surface-600 dark:text-surface-400">
 							{selectedDevice.registration ||
 								formatDeviceAddress(selectedDevice.address_type, selectedDevice.address)}

@@ -378,16 +378,106 @@ mod tests {
 }
 ```
 
-### Frontend Tests
+### Frontend E2E Tests (Playwright)
+
+#### Overview
+- **Framework**: Playwright v1.56+
+- **Test Directory**: `web/e2e/`
+- **Documentation**: See `web/e2e/README.md` for comprehensive guide
+
+#### Running Tests
+```bash
+cd web
+npm test              # Run all E2E tests
+npx playwright test --ui   # Interactive UI mode
+npx playwright test --debug # Debug mode
+```
+
+#### Test Structure
+```
+e2e/
+├── fixtures/           # Test fixtures and setup
+│   ├── auth.fixture.ts # Pre-authenticated contexts
+│   └── data.fixture.ts # Test data constants
+├── utils/              # Reusable utilities
+│   ├── auth.ts        # Login/logout helpers
+│   └── navigation.ts  # Navigation helpers
+├── auth/               # Authentication tests
+│   ├── login.test.ts
+│   ├── register.test.ts
+│   └── logout.test.ts
+└── devices/            # Device tests
+    ├── device-list.test.ts
+    └── device-detail.test.ts
+```
+
+#### Writing E2E Tests
+
+**Basic Test Pattern:**
 ```typescript
-// Playwright E2E tests
 import { test, expect } from '@playwright/test';
 
-test('device search functionality', async ({ page }) => {
-    await page.goto('/devices');
-    await expect(page.locator('h1')).toContainText('Aircraft Devices');
+test.describe('Feature Name', () => {
+    test('should do something', async ({ page }) => {
+        await page.goto('/page');
+        await expect(page.getByRole('heading')).toBeVisible();
+    });
 });
 ```
+
+**Using Authentication Fixture:**
+```typescript
+import { test, expect } from '../fixtures/auth.fixture';
+
+test('authenticated test', async ({ authenticatedPage }) => {
+    // Page is already logged in
+    await authenticatedPage.goto('/devices');
+});
+```
+
+**Using Helper Functions:**
+```typescript
+import { login } from '../utils/auth';
+import { searchDevicesByRegistration } from '../utils/navigation';
+
+test('search devices', async ({ page }) => {
+    await login(page, 'test@example.com', 'password');
+    await searchDevicesByRegistration(page, 'N12345');
+});
+```
+
+#### Visual Regression Testing
+
+Tests include screenshot comparison for visual regression detection:
+
+```typescript
+test('visual test', async ({ page }) => {
+    await page.goto('/devices');
+    // First run creates baseline, subsequent runs compare
+    await expect(page).toHaveScreenshot('devices-page.png');
+});
+```
+
+**Update Screenshots:**
+```bash
+npx playwright test --update-snapshots
+```
+
+#### Best Practices
+
+1. **Use Semantic Locators**: Prefer `getByRole()`, `getByPlaceholder()` over CSS selectors
+2. **Wait for Network**: Use `waitForLoadState('networkidle')` after navigation
+3. **Handle Dynamic Content**: Use thresholds for screenshot comparisons with variable data
+4. **Test Critical Paths**: Focus on user journeys, not implementation details
+5. **Keep Tests Independent**: Each test should be able to run in isolation
+
+#### Test Coverage Goals
+
+- ✅ **Authentication**: Login, registration, password reset
+- ✅ **Devices**: Search, list, detail views
+- 🚧 **Flights**: Flight tracking, details (TODO)
+- 🚧 **Clubs**: Club management (TODO)
+- 🚧 **Admin**: Administrative functions (TODO)
 
 ## Performance Guidelines
 

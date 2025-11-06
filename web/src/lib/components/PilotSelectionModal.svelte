@@ -112,20 +112,21 @@
 		onkeydown={(e) => {
 			if (e.key === 'Escape') handleClose();
 		}}
-		role="dialog"
-		aria-modal="true"
-		tabindex="-1"
+		role="presentation"
 	>
 		<div
 			class="w-full max-w-2xl card bg-surface-50 p-6 text-surface-900 shadow-xl dark:bg-surface-900 dark:text-surface-50"
 			onclick={(e) => e.stopPropagation()}
 			onkeydown={(e) => e.stopPropagation()}
-			role="presentation"
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="pilot-selection-title"
+			tabindex="-1"
 		>
 			<header class="mb-6 flex items-center justify-between">
 				<div class="flex items-center gap-3">
 					<User class="h-6 w-6 text-primary-500" />
-					<h2 class="h2">Add Pilot to Flight</h2>
+					<h2 id="pilot-selection-title" class="h2">Add Pilot to Flight</h2>
 				</div>
 				<button
 					onclick={handleClose}
