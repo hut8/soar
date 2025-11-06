@@ -119,74 +119,77 @@ impl AprsClient {
                 let mut stats_timer = tokio::time::interval(Duration::from_secs(10));
                 stats_timer.tick().await; // First tick completes immediately
 
-                // Batch publishing for better throughput
-                const BATCH_SIZE: usize = 50; // Publish up to 50 messages at a time
-                const BATCH_TIMEOUT_MS: u64 = 10; // Or publish after 10ms, whichever comes first
-
-                let mut batch = Vec::with_capacity(BATCH_SIZE);
-                let mut batch_timer = tokio::time::interval(Duration::from_millis(BATCH_TIMEOUT_MS));
-                batch_timer.tick().await; // First tick completes immediately
-
-                let mut published_count = 0u64;
+                let mut attempted_count = 0u64;
                 let mut last_log_time = std::time::Instant::now();
+                let mut last_receive_time = std::time::Instant::now();
+
+                // Limit concurrent publishes to prevent spawning too many tasks
+                let publish_semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(100));
 
                 loop {
                     tokio::select! {
                         Ok(message) = raw_message_rx.recv_async() => {
-                            batch.push(message);
+                            last_receive_time = std::time::Instant::now();
+                            attempted_count += 1;
 
-                            // Publish batch when it reaches target size
-                            if batch.len() >= BATCH_SIZE {
-                                // Publish all messages in batch concurrently
-                                let mut handles = Vec::new();
-                                for msg in batch.drain(..) {
-                                    let pub_clone = publisher.clone();
-                                    handles.push(tokio::spawn(async move {
-                                        pub_clone.publish_fire_and_forget(&msg).await;
-                                    }));
+                            // Use semaphore to limit concurrent publishes to 100
+                            let permit = publish_semaphore.clone().acquire_owned().await.unwrap();
+                            let pub_clone = publisher.clone();
+
+                            tokio::spawn(async move {
+                                let _permit = permit; // Hold permit until publish completes
+                                let publish_start = std::time::Instant::now();
+
+                                // Add 5-second timeout to prevent indefinite blocking
+                                match tokio::time::timeout(
+                                    Duration::from_secs(5),
+                                    pub_clone.publish_fire_and_forget(&message)
+                                ).await {
+                                    Ok(_) => {
+                                        let publish_duration = publish_start.elapsed();
+
+                                        // Warn if publish took more than 100ms
+                                        if publish_duration.as_millis() > 100 {
+                                            warn!(
+                                                "Slow JetStream publish: {}ms",
+                                                publish_duration.as_millis()
+                                            );
+                                            metrics::counter!("aprs.jetstream.slow_publish").increment(1);
+                                        }
+                                    }
+                                    Err(_) => {
+                                        error!("JetStream publish timed out after 5 seconds - NATS may be blocked");
+                                        metrics::counter!("aprs.jetstream.publish_timeout").increment(1);
+
+                                        // Report timeout to Sentry (throttled)
+                                        sentry::capture_message(
+                                            "JetStream publish timed out after 5 seconds",
+                                            sentry::Level::Error
+                                        );
+                                    }
                                 }
-
-                                // Wait for all publishes to complete
-                                for handle in handles {
-                                    let _ = handle.await;
-                                }
-
-                                published_count += BATCH_SIZE as u64;
-                            }
-                        }
-                        _ = batch_timer.tick() => {
-                            // Publish any pending messages on timeout
-                            if !batch.is_empty() {
-                                let batch_len = batch.len();
-
-                                // Publish all messages in batch concurrently
-                                let mut handles = Vec::new();
-                                for msg in batch.drain(..) {
-                                    let pub_clone = publisher.clone();
-                                    handles.push(tokio::spawn(async move {
-                                        pub_clone.publish_fire_and_forget(&msg).await;
-                                    }));
-                                }
-
-                                // Wait for all publishes to complete
-                                for handle in handles {
-                                    let _ = handle.await;
-                                }
-
-                                published_count += batch_len as u64;
-                            }
+                            });
                         }
                         _ = stats_timer.tick() => {
                             // Report raw message queue depth every 10 seconds
                             let queue_depth = raw_message_rx.len();
-                            metrics::gauge!("aprs.jetstream.queue_depth").set(queue_depth as f64);
+                            let available_permits = publish_semaphore.available_permits();
+                            let in_flight_publishes = 100 - available_permits;
 
-                            // Log publishing rate
+                            metrics::gauge!("aprs.jetstream.queue_depth").set(queue_depth as f64);
+                            metrics::gauge!("aprs.jetstream.in_flight").set(in_flight_publishes as f64);
+
+                            // Log publishing rate and queue status
                             let elapsed = last_log_time.elapsed().as_secs_f64();
+                            let time_since_last_receive = last_receive_time.elapsed().as_secs_f64();
+
                             if elapsed > 0.0 {
-                                let rate = published_count as f64 / elapsed;
-                                info!("JetStream publishing rate: {:.1} msg/s (queue depth: {})", rate, queue_depth);
-                                published_count = 0;
+                                let rate = attempted_count as f64 / elapsed;
+                                info!(
+                                    "JetStream stats: {:.1} msg/s attempted (queue: {}, in-flight: {}, last receive: {:.1}s ago)",
+                                    rate, queue_depth, in_flight_publishes, time_since_last_receive
+                                );
+                                attempted_count = 0;
                                 last_log_time = std::time::Instant::now();
                             }
 
@@ -205,24 +208,28 @@ impl AprsClient {
                                     sentry::Level::Warning
                                 );
                             }
+
+                            // Detect if we've stopped receiving messages (may indicate APRS connection issue)
+                            if time_since_last_receive > 60.0 {
+                                warn!(
+                                    "No messages received from APRS in {:.1}s - connection may be stalled",
+                                    time_since_last_receive
+                                );
+                            }
+
+                            // Detect if all publish permits are taken (publishing is completely blocked)
+                            if available_permits == 0 {
+                                error!(
+                                    "All 100 publish permits taken - JetStream publishing is completely blocked"
+                                );
+                                sentry::capture_message(
+                                    "All JetStream publish permits taken - publishing completely blocked",
+                                    sentry::Level::Error
+                                );
+                            }
                         }
                         Ok(_) = &mut shutdown_rx_for_publisher => {
                             info!("Shutdown signal received by publisher, flushing queue...");
-
-                            // First, publish any messages in the current batch
-                            if !batch.is_empty() {
-                                info!("Flushing {} messages from current batch...", batch.len());
-                                let mut handles = Vec::new();
-                                for msg in batch.drain(..) {
-                                    let pub_clone = publisher.clone();
-                                    handles.push(tokio::spawn(async move {
-                                        pub_clone.publish_with_retry(&msg).await;
-                                    }));
-                                }
-                                for handle in handles {
-                                    let _ = handle.await;
-                                }
-                            }
 
                             // Start graceful shutdown - flush remaining messages with timeout
                             let queue_depth = raw_message_rx.len();
