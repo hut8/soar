@@ -82,6 +82,12 @@ pub const ELEVATION_QUEUE_SIZE: usize = 1_000;
 /// Reduced from 10K since AGL is optional data (can be recalculated)
 pub const AGL_DATABASE_QUEUE_SIZE: usize = 100;
 
+/// JetStream intake queue for buffering raw APRS messages from JetStream
+/// Medium queue (1,000 messages) to buffer between JetStream consumer and processing
+/// Allows graceful shutdown by stopping JetStream reads and draining this queue
+/// At ~30 msg/s current rate, this provides ~33 seconds of buffering
+pub const JETSTREAM_INTAKE_QUEUE_SIZE: usize = 1_000;
+
 /// Calculate the warning threshold for queue depth monitoring
 ///
 /// Returns 80% of queue capacity as the warning threshold. When a queue

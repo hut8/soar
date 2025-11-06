@@ -11,9 +11,9 @@ use soar::packet_processors::{
 };
 use soar::queue_config::{
     AGL_DATABASE_QUEUE_SIZE, AIRCRAFT_QUEUE_SIZE, APRS_RAW_STREAM, APRS_RAW_STREAM_STAGING,
-    APRS_RAW_SUBJECT, APRS_RAW_SUBJECT_STAGING, ELEVATION_QUEUE_SIZE, RECEIVER_POSITION_QUEUE_SIZE,
-    RECEIVER_STATUS_QUEUE_SIZE, SERVER_STATUS_QUEUE_SIZE, SOAR_RUN_CONSUMER,
-    SOAR_RUN_CONSUMER_STAGING, queue_warning_threshold,
+    APRS_RAW_SUBJECT, APRS_RAW_SUBJECT_STAGING, ELEVATION_QUEUE_SIZE, JETSTREAM_INTAKE_QUEUE_SIZE,
+    RECEIVER_POSITION_QUEUE_SIZE, RECEIVER_STATUS_QUEUE_SIZE, SERVER_STATUS_QUEUE_SIZE,
+    SOAR_RUN_CONSUMER, SOAR_RUN_CONSUMER_STAGING, queue_warning_threshold,
 };
 use soar::receiver_repo::ReceiverRepository;
 use soar::receiver_status_repo::ReceiverStatusRepository;
@@ -305,6 +305,15 @@ pub async fn handle_run(
         SERVER_STATUS_QUEUE_SIZE
     );
 
+    // JetStream intake queue: buffers raw APRS messages from JetStream consumer
+    // This allows graceful shutdown by stopping JetStream reads and draining this queue
+    let (jetstream_intake_tx, jetstream_intake_rx) =
+        flume::bounded::<String>(JETSTREAM_INTAKE_QUEUE_SIZE);
+    info!(
+        "Created JetStream intake queue with capacity {}",
+        JETSTREAM_INTAKE_QUEUE_SIZE
+    );
+
     // Create PacketRouter with per-processor queues
     let packet_router = PacketRouter::new(generic_processor)
         .with_aircraft_position_queue(aircraft_tx)
@@ -313,6 +322,31 @@ pub async fn handle_run(
         .with_server_status_queue(server_status_tx);
 
     info!("Created PacketRouter with per-processor queues");
+
+    // Spawn intake queue processor
+    // This task reads raw APRS messages from the intake queue and processes them
+    // Separating JetStream consumption from processing allows graceful shutdown
+    let intake_router = packet_router.clone();
+    tokio::spawn(
+        async move {
+            info!("Intake queue processor started");
+            let mut messages_processed = 0u64;
+            while let Ok(message) = jetstream_intake_rx.recv_async().await {
+                process_aprs_message(&message, &intake_router).await;
+                messages_processed += 1;
+                metrics::counter!("aprs.intake.processed").increment(1);
+
+                // Update intake queue depth metric
+                metrics::gauge!("aprs.intake_queue.depth").set(jetstream_intake_rx.len() as f64);
+            }
+            info!(
+                "Intake queue processor stopped after processing {} messages",
+                messages_processed
+            );
+        }
+        .instrument(tracing::info_span!("intake_processor")),
+    );
+    info!("Spawned intake queue processor");
 
     // Spawn AGL batch database writer
     // This worker receives calculated AGL values and writes them to database in batches
@@ -568,22 +602,25 @@ pub async fn handle_run(
     let shutdown_receiver_position_rx = receiver_position_rx.clone();
     let shutdown_server_status_rx = server_status_rx.clone();
     let shutdown_elevation_rx = elevation_rx.clone();
+    let shutdown_intake_rx = jetstream_intake_tx.clone(); // Use tx to check queue depth
 
     tokio::spawn(
         async move {
             match tokio::signal::ctrl_c().await {
                 Ok(()) => {
                     info!("Received shutdown signal (Ctrl+C), initiating graceful shutdown...");
+                    info!("JetStream consumer will stop reading, allowing queues to drain...");
 
                     // Wait for queues to drain (check every second, max 10 minutes)
                     for i in 1..=600 {
+                        let intake_depth = shutdown_intake_rx.len();
                         let aircraft_depth = shutdown_aircraft_rx.len();
                         let receiver_status_depth = shutdown_receiver_status_rx.len();
                         let receiver_position_depth = shutdown_receiver_position_rx.len();
                         let server_status_depth = shutdown_server_status_rx.len();
                         let elevation_depth = shutdown_elevation_rx.len();
 
-                        let total_queued = aircraft_depth + receiver_status_depth + receiver_position_depth + server_status_depth + elevation_depth;
+                        let total_queued = intake_depth + aircraft_depth + receiver_status_depth + receiver_position_depth + server_status_depth + elevation_depth;
 
                         if total_queued == 0 {
                             info!("All queues drained, shutting down now");
@@ -591,8 +628,8 @@ pub async fn handle_run(
                         }
 
                         info!(
-                            "Waiting for queues to drain ({}/600s): {} aircraft, {} rx_status, {} rx_pos, {} server, {} elevation",
-                            i, aircraft_depth, receiver_status_depth, receiver_position_depth, server_status_depth, elevation_depth
+                            "Waiting for queues to drain ({}/600s): {} intake, {} aircraft, {} rx_status, {} rx_pos, {} server, {} elevation",
+                            i, intake_depth, aircraft_depth, receiver_status_depth, receiver_position_depth, server_status_depth, elevation_depth
                         );
 
                         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
@@ -639,20 +676,27 @@ pub async fn handle_run(
 
     info!("APRS client started. Press Ctrl+C to stop.");
 
-    // Start consuming messages from JetStream
+    // Start consuming messages from JetStream and sending them to the intake queue
     // Messages are implicitly ACKed when delivered (AckPolicy::None)
-    // Single-threaded processing ensures message ordering is preserved
-    // Blocking sends in PacketRouter provide natural backpressure to JetStream
+    // The intake queue processor will handle parsing and routing
+    // Blocking sends to the intake queue provide natural backpressure to JetStream
     consumer
         .consume(move |message, _jetstream_msg| {
-            let router = packet_router.clone();
+            let intake_tx = jetstream_intake_tx.clone();
             async move {
-                // Process the message directly (parse and route through PacketRouter)
-                // PacketRouter uses blocking sends, so when downstream queues are full,
-                // this will block and stop reading from JetStream (natural backpressure)
-                process_aprs_message(&message, &router).await;
-                metrics::counter!("aprs.jetstream.processed").increment(1);
-                Ok(())
+                // Send message to intake queue (blocking send for backpressure)
+                // When intake queue is full, this will block and stop reading from JetStream
+                match intake_tx.send_async(message).await {
+                    Ok(_) => {
+                        metrics::counter!("aprs.jetstream.received").increment(1);
+                        Ok(())
+                    }
+                    Err(e) => {
+                        warn!("Failed to send message to intake queue: {}", e);
+                        metrics::counter!("aprs.jetstream.send_errors").increment(1);
+                        Ok(()) // Still ack the message to JetStream
+                    }
+                }
             }
         })
         .await?;
