@@ -119,19 +119,62 @@ impl AprsClient {
                 let mut stats_timer = tokio::time::interval(Duration::from_secs(10));
                 stats_timer.tick().await; // First tick completes immediately
 
+                // Batch publishing for better throughput
+                const BATCH_SIZE: usize = 50; // Publish up to 50 messages at a time
+                const BATCH_TIMEOUT_MS: u64 = 10; // Or publish after 10ms, whichever comes first
+
+                let mut batch = Vec::with_capacity(BATCH_SIZE);
+                let mut batch_timer = tokio::time::interval(Duration::from_millis(BATCH_TIMEOUT_MS));
+                batch_timer.tick().await; // First tick completes immediately
+
                 let mut published_count = 0u64;
                 let mut last_log_time = std::time::Instant::now();
 
                 loop {
                     tokio::select! {
                         Ok(message) = raw_message_rx.recv_async() => {
-                            // Publish in fire-and-forget mode for maximum throughput
-                            // We accept the risk of message loss during crashes since:
-                            // 1. APRS is a continuous stream - we'll get new data
-                            // 2. Process restarts lose queued messages anyway
-                            // 3. JetStream persists messages once received
-                            publisher.publish_fire_and_forget(&message).await;
-                            published_count += 1;
+                            batch.push(message);
+
+                            // Publish batch when it reaches target size
+                            if batch.len() >= BATCH_SIZE {
+                                // Publish all messages in batch concurrently
+                                let mut handles = Vec::new();
+                                for msg in batch.drain(..) {
+                                    let pub_clone = publisher.clone();
+                                    handles.push(tokio::spawn(async move {
+                                        pub_clone.publish_fire_and_forget(&msg).await;
+                                    }));
+                                }
+
+                                // Wait for all publishes to complete
+                                for handle in handles {
+                                    let _ = handle.await;
+                                }
+
+                                published_count += BATCH_SIZE as u64;
+                            }
+                        }
+                        _ = batch_timer.tick() => {
+                            // Publish any pending messages on timeout
+                            if !batch.is_empty() {
+                                let batch_len = batch.len();
+
+                                // Publish all messages in batch concurrently
+                                let mut handles = Vec::new();
+                                for msg in batch.drain(..) {
+                                    let pub_clone = publisher.clone();
+                                    handles.push(tokio::spawn(async move {
+                                        pub_clone.publish_fire_and_forget(&msg).await;
+                                    }));
+                                }
+
+                                // Wait for all publishes to complete
+                                for handle in handles {
+                                    let _ = handle.await;
+                                }
+
+                                published_count += batch_len as u64;
+                            }
                         }
                         _ = stats_timer.tick() => {
                             // Report raw message queue depth every 10 seconds
@@ -152,10 +195,34 @@ impl AprsClient {
                                     "JetStream publish queue building up: {} messages (80% full)",
                                     queue_depth
                                 );
+
+                                // Report queue buildup to Sentry
+                                sentry::capture_message(
+                                    &format!(
+                                        "JetStream publish queue is 80% full ({} messages out of {})",
+                                        queue_depth, RAW_MESSAGE_QUEUE_SIZE
+                                    ),
+                                    sentry::Level::Warning
+                                );
                             }
                         }
                         Ok(_) = &mut shutdown_rx_for_publisher => {
                             info!("Shutdown signal received by publisher, flushing queue...");
+
+                            // First, publish any messages in the current batch
+                            if !batch.is_empty() {
+                                info!("Flushing {} messages from current batch...", batch.len());
+                                let mut handles = Vec::new();
+                                for msg in batch.drain(..) {
+                                    let pub_clone = publisher.clone();
+                                    handles.push(tokio::spawn(async move {
+                                        pub_clone.publish_with_retry(&msg).await;
+                                    }));
+                                }
+                                for handle in handles {
+                                    let _ = handle.await;
+                                }
+                            }
 
                             // Start graceful shutdown - flush remaining messages with timeout
                             let queue_depth = raw_message_rx.len();
@@ -212,13 +279,17 @@ impl AprsClient {
                         break;
                     }
 
-                    info!(
-                        "Connecting to APRS server at {}:{} (attempt {}/{})",
-                        config.server,
-                        config.port,
-                        retry_count + 1,
-                        config.max_retries
-                    );
+                    if retry_count == 0 {
+                        info!(
+                            "Connecting to APRS server at {}:{}",
+                            config.server, config.port
+                        );
+                    } else {
+                        info!(
+                            "Reconnecting to APRS server at {}:{} (retry attempt {})",
+                            config.server, config.port, retry_count
+                        );
+                    }
 
                     match Self::connect_and_run(
                         &config,
@@ -234,11 +305,25 @@ impl AprsClient {
                                 let mut health = health_for_connection.write().await;
                                 health.aprs_connected = false;
                             }
+
+                            // Report disconnection to Sentry
+                            sentry::capture_message(
+                                &format!(
+                                    "APRS connection ended normally after {} retries",
+                                    retry_count
+                                ),
+                                sentry::Level::Info,
+                            );
+
                             retry_count = 0; // Reset retry count on successful connection
                             current_delay = config.retry_delay_seconds;
                         }
                         ConnectionResult::ConnectionFailed(e) => {
                             error!("Failed to connect to APRS server: {}", e);
+
+                            // Report connection failure to Sentry
+                            sentry::capture_error(&*e);
+
                             // Mark as disconnected in health state
                             {
                                 let mut health = health_for_connection.write().await;
@@ -248,6 +333,10 @@ impl AprsClient {
                         }
                         ConnectionResult::OperationFailed(e) => {
                             warn!("Connection operation failed: {}", e);
+
+                            // Report operation failure to Sentry (connection was established but dropped)
+                            sentry::capture_error(&*e);
+
                             // Mark as disconnected in health state
                             {
                                 let mut health = health_for_connection.write().await;
@@ -257,28 +346,24 @@ impl AprsClient {
                         }
                     }
 
-                    // Check if we should retry
-                    if retry_count >= config.max_retries && config.max_retries > 0 {
-                        error!(
-                            "Maximum retry attempts ({}) reached. Stopping.",
-                            config.max_retries
-                        );
-                        break;
-                    }
-
-                    // Wait before retrying with exponential backoff
+                    // Always retry indefinitely with exponential backoff
+                    // Wait before retrying if we had a failure
                     if retry_count > 0 {
-                        info!(
-                            "Waiting {} seconds before reconnecting... (attempt {}/{})",
-                            current_delay,
-                            retry_count + 1,
-                            config.max_retries
-                        );
-                        sleep(Duration::from_secs(current_delay)).await;
+                        // Clamp delay between 1 second and 60 seconds
+                        let delay = current_delay.clamp(1, 60);
 
-                        // Exponential backoff with maximum cap
-                        current_delay =
-                            std::cmp::min(current_delay * 2, config.max_retry_delay_seconds);
+                        info!(
+                            "Waiting {} seconds before reconnecting... (retry attempt {})",
+                            delay, retry_count
+                        );
+                        sleep(Duration::from_secs(delay)).await;
+
+                        // Exponential backoff: start at 1 second, double each time, cap at 60 seconds
+                        if current_delay == 0 {
+                            current_delay = 1;
+                        } else {
+                            current_delay = std::cmp::min(current_delay * 2, 60);
+                        }
                     }
                 }
             }
@@ -321,33 +406,88 @@ impl AprsClient {
         // Track connection start time for duration reporting
         let connection_start = std::time::Instant::now();
 
-        // Connect to the APRS server
-        let stream = match TcpStream::connect(format!("{}:{}", config.server, config.port)).await {
-            Ok(stream) => {
-                info!("Connected to APRS server");
-                metrics::counter!("aprs.connection.established").increment(1);
-                metrics::gauge!("aprs.connection.connected").set(1.0);
-
-                // Mark as connected in health state
-                {
-                    let mut health = health_state.write().await;
-                    health.aprs_connected = true;
+        // Perform explicit DNS lookup for load balancing
+        // This ensures fresh DNS resolution on each reconnect
+        let server_address = format!("{}:{}", config.server, config.port);
+        let socket_addrs = match tokio::net::lookup_host(&server_address).await {
+            Ok(addrs) => {
+                let addrs_vec: Vec<_> = addrs.collect();
+                if addrs_vec.is_empty() {
+                    return ConnectionResult::ConnectionFailed(anyhow::anyhow!(
+                        "DNS resolution returned no addresses for {}",
+                        server_address
+                    ));
                 }
-
-                stream
+                info!(
+                    "DNS resolved {} to {} address(es): {:?}",
+                    server_address,
+                    addrs_vec.len(),
+                    addrs_vec
+                );
+                addrs_vec
             }
             Err(e) => {
-                return ConnectionResult::ConnectionFailed(e.into());
+                return ConnectionResult::ConnectionFailed(anyhow::anyhow!(
+                    "DNS resolution failed for {}: {}",
+                    server_address,
+                    e
+                ));
             }
         };
 
-        // Log the resolved IP address we're actually connected to
-        let peer_addr = stream.peer_addr().ok();
-        let peer_addr_str = peer_addr
-            .map(|a| a.to_string())
-            .unwrap_or_else(|| "unknown".to_string());
-        info!("Connected to APRS server (resolved IP: {})", peer_addr_str);
-        metrics::counter!("aprs.connection.established").increment(1);
+        // Try each resolved address until one succeeds
+        let mut last_error = None;
+        for addr in &socket_addrs {
+            match TcpStream::connect(addr).await {
+                Ok(stream) => {
+                    info!("Connected to APRS server at {}", addr);
+                    metrics::counter!("aprs.connection.established").increment(1);
+                    metrics::gauge!("aprs.connection.connected").set(1.0);
+
+                    // Mark as connected in health state
+                    {
+                        let mut health = health_state.write().await;
+                        health.aprs_connected = true;
+                    }
+
+                    // Continue with message processing using this stream
+                    return Self::process_connection(
+                        stream,
+                        config,
+                        raw_message_tx,
+                        health_state,
+                        connection_start,
+                        addr.to_string(),
+                    )
+                    .await;
+                }
+                Err(e) => {
+                    warn!("Failed to connect to {}: {}", addr, e);
+                    last_error = Some(e);
+                    continue;
+                }
+            }
+        }
+
+        // If we get here, all addresses failed
+        ConnectionResult::ConnectionFailed(anyhow::anyhow!(
+            "Failed to connect to any resolved address for {}: {:?}",
+            server_address,
+            last_error
+        ))
+    }
+
+    /// Process an established APRS connection
+    #[tracing::instrument(skip(stream, config, raw_message_tx, health_state, connection_start), fields(peer_addr = %peer_addr_str))]
+    async fn process_connection(
+        stream: TcpStream,
+        config: &AprsClientConfig,
+        raw_message_tx: flume::Sender<String>,
+        health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::AprsIngestHealth>>,
+        connection_start: std::time::Instant,
+        peer_addr_str: String,
+    ) -> ConnectionResult {
+        info!("Processing connection to APRS server at {}", peer_addr_str);
 
         let (reader, mut writer) = stream.into_split();
         let mut buf_reader = BufReader::new(reader);
@@ -358,7 +498,8 @@ impl AprsClient {
         if let Err(e) = writer.write_all(login_cmd.as_bytes()).await {
             let duration = connection_start.elapsed();
             return ConnectionResult::OperationFailed(anyhow::anyhow!(
-                "Failed to send login command after {:.1}s: {}",
+                "Failed to send login command to {} after {:.1}s: {}",
+                peer_addr_str,
                 duration.as_secs_f64(),
                 e
             ));
@@ -366,7 +507,8 @@ impl AprsClient {
         if let Err(e) = writer.flush().await {
             let duration = connection_start.elapsed();
             return ConnectionResult::OperationFailed(anyhow::anyhow!(
-                "Failed to flush login command after {:.1}s: {}",
+                "Failed to flush login command to {} after {:.1}s: {}",
+                peer_addr_str,
                 duration.as_secs_f64(),
                 e
             ));
