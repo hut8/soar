@@ -57,7 +57,7 @@ jobs:
 
     services:
       postgres:
-        image: postgis/postgis:15-3.4
+        image: postgis/postgis:17-3.5
         env:
           POSTGRES_PASSWORD: postgres
           POSTGRES_USER: postgres
@@ -90,10 +90,17 @@ jobs:
       - name: Install Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
 
-      - name: Install PostgreSQL client and GDAL
+      - name: Install PostgreSQL 17 client and GDAL
         run: |
           sudo apt-get update
-          sudo apt-get install -y postgresql-client libgdal-dev mold clang
+          # Add PostgreSQL apt repository for version 17
+          sudo apt-get install -y curl ca-certificates
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          sudo sh -c 'echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          sudo apt-get update
+          # Install PostgreSQL 17 client, GDAL, and build tools
+          sudo apt-get install -y postgresql-client-17 libgdal-dev mold clang
 
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
@@ -163,7 +170,7 @@ jobs:
 
     services:
       postgres:
-        image: postgis/postgis:15-3.4
+        image: postgis/postgis:17-3.5
         env:
           POSTGRES_PASSWORD: postgres
           POSTGRES_USER: postgres
@@ -196,10 +203,17 @@ jobs:
         with:
           components: clippy, rustfmt
 
-      - name: Install PostgreSQL client, GDAL, and mold linker
+      - name: Install PostgreSQL 17 client, GDAL, and mold linker
         run: |
           sudo apt-get update
-          sudo apt-get install -y postgresql-client libgdal-dev mold clang
+          # Add PostgreSQL apt repository for version 17
+          sudo apt-get install -y curl ca-certificates
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          sudo sh -c 'echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          sudo apt-get update
+          # Install PostgreSQL 17 client, GDAL, and build tools
+          sudo apt-get install -y postgresql-client-17 libgdal-dev mold clang
 
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2

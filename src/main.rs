@@ -229,15 +229,23 @@ impl Instrumentation for QueryLogger {
     }
 }
 
-/// Dump database schema to schema.sql if not in production
+/// Dump database schema to schema.sql if not in production or CI
 fn dump_schema_if_non_production(database_url: &str) -> Result<()> {
     // Check if we're in production
     let is_production = env::var("SOAR_ENV")
         .map(|env| env == "production")
         .unwrap_or(false);
 
+    // Check if we're in CI environment
+    let is_ci = env::var("CI").is_ok();
+
     if is_production {
         info!("Skipping schema dump in production environment");
+        return Ok(());
+    }
+
+    if is_ci {
+        info!("Skipping schema dump in CI environment");
         return Ok(());
     }
 
