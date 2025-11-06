@@ -77,8 +77,10 @@ pub async fn handle_seed_test_data(pool: &PgPool) -> Result<()> {
 fn create_test_clubs(conn: &mut PgConnection, count: usize) -> Result<Uuid> {
     use soar::schema::clubs::dsl::*;
 
-    // Create the primary test club
-    let test_club_id = Uuid::new_v4();
+    // Create the primary test club with a deterministic UUID
+    // This ensures E2E tests can rely on a known club ID
+    let test_club_id = Uuid::parse_str("00000000-0000-0000-0000-000000000001")
+        .expect("Failed to parse test club UUID");
     let test_club_name = "Test Soaring Club";
 
     diesel::insert_into(clubs)
@@ -89,9 +91,13 @@ fn create_test_clubs(conn: &mut PgConnection, count: usize) -> Result<Uuid> {
             created_at.eq(chrono::Utc::now()),
             updated_at.eq(chrono::Utc::now()),
         ))
-        .on_conflict(name)
+        .on_conflict(id)
         .do_update()
-        .set((is_soaring.eq(Some(true)), updated_at.eq(chrono::Utc::now())))
+        .set((
+            name.eq(test_club_name),
+            is_soaring.eq(Some(true)),
+            updated_at.eq(chrono::Utc::now()),
+        ))
         .execute(conn)
         .context("Failed to create test club")?;
 

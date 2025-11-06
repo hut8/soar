@@ -1,3 +1,7 @@
 /target
 .env
 .vscode/settings.json
+
+# Playwright E2E test artifacts
+web/playwright-report/
+web/test-results/
