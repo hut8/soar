@@ -131,7 +131,6 @@ impl JetStreamConsumer {
 
         // Track stats for logging
         let mut processed_count = 0u64;
-        let mut error_count = 0u64;
         let start_time = std::time::Instant::now();
         let mut last_log_time = std::time::Instant::now();
         let mut last_log_count = 0u64;
@@ -157,10 +156,14 @@ impl JetStreamConsumer {
                     // Wrap message in Arc for sharing with workers
                     let msg_arc = std::sync::Arc::new(msg);
 
-                    // Process the message - ACK on success, NAK on failure
+                    // Process the message - ALWAYS ACK (never NAK)
+                    // The callback uses blocking send which provides backpressure:
+                    // - When queue is full, send_async() blocks, which prevents ACK, which stops JetStream delivery
+                    // - The only error case is channel closed (shutdown), in which case we ACK to clean up
                     match process_message(payload, msg_arc.clone()).await {
-                        Ok(()) => {
-                            // Message queued successfully - ACK it
+                        Ok(()) | Err(_) => {
+                            // Always ACK - either successfully queued or shutting down
+                            // Backpressure comes from blocking send, not from NAK/redelivery
                             if let Err(e) = msg_arc.ack().await {
                                 error!("Failed to ACK message: {} - will be redelivered", e);
                                 metrics::counter!("aprs.jetstream.ack_error").increment(1);
@@ -181,29 +184,14 @@ impl JetStreamConsumer {
                                         messages_since_last_log as f64 / elapsed_since_last_log;
 
                                     info!(
-                                        "Processed {} messages ({:.1} msg/s since start, {:.1} msg/s recent, {} errors)",
-                                        processed_count,
-                                        rate_since_start,
-                                        rate_since_last_log,
-                                        error_count
+                                        "Processed {} messages ({:.1} msg/s since start, {:.1} msg/s recent)",
+                                        processed_count, rate_since_start, rate_since_last_log
                                     );
 
                                     // Update last log tracking
                                     last_log_time = std::time::Instant::now();
                                     last_log_count = processed_count;
                                 }
-                            }
-                        }
-                        Err(e) => {
-                            error_count += 1;
-                            warn!("Failed to queue message: {} - NAKing for redelivery", e);
-                            metrics::counter!("aprs.jetstream.queue_error").increment(1);
-                            // NAK the message so it will be redelivered
-                            if let Err(nak_err) = msg_arc
-                                .ack_with(async_nats::jetstream::AckKind::Nak(None))
-                                .await
-                            {
-                                error!("Failed to NAK message: {} - may be lost", nak_err);
                             }
                         }
                     }
