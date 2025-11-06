@@ -8,12 +8,17 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{delete, get, post, put},
 };
+use bytes::Bytes;
 use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
+use http_body::Frame;
 use include_dir::{Dir, include_dir};
 use metrics_exporter_prometheus::PrometheusHandle;
 use mime_guess::from_path;
+use pin_project::pin_project;
+use std::pin::Pin;
 use std::sync::OnceLock;
+use std::task::{Context, Poll};
 use std::time::Instant;
 use uuid::Uuid;
 
@@ -149,6 +154,85 @@ async fn handle_static_file(uri: Uri, request: Request<Body>) -> Response {
     (StatusCode::NOT_FOUND, "Not Found").into_response()
 }
 
+// Guard that records response size metric when dropped
+struct ResponseSizeGuard {
+    bytes_sent: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    method: String,
+    endpoint: String,
+    status: String,
+}
+
+impl Drop for ResponseSizeGuard {
+    fn drop(&mut self) {
+        let size = self.bytes_sent.load(std::sync::atomic::Ordering::Relaxed);
+        // Record response size histogram
+        metrics::histogram!(
+            "http_response_size_bytes",
+            "method" => self.method.clone(),
+            "endpoint" => self.endpoint.clone(),
+            "status" => self.status.clone()
+        )
+        .record(size as f64);
+    }
+}
+
+// Wrapper body that tracks the number of bytes sent
+#[pin_project]
+struct MetricsBody<B> {
+    #[pin]
+    inner: B,
+    bytes_sent: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    _guard: std::sync::Arc<ResponseSizeGuard>,
+}
+
+impl<B> MetricsBody<B> {
+    fn new(
+        inner: B,
+        bytes_sent: std::sync::Arc<std::sync::atomic::AtomicU64>,
+        guard: std::sync::Arc<ResponseSizeGuard>,
+    ) -> Self {
+        Self {
+            inner,
+            bytes_sent,
+            _guard: guard,
+        }
+    }
+}
+
+impl<B> http_body::Body for MetricsBody<B>
+where
+    B: http_body::Body<Data = Bytes>,
+    B::Error: std::error::Error + 'static,
+{
+    type Data = Bytes;
+    type Error = B::Error;
+
+    fn poll_frame(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
+        let this = self.project();
+        match this.inner.poll_frame(cx) {
+            Poll::Ready(Some(Ok(frame))) => {
+                if let Some(data) = frame.data_ref() {
+                    this.bytes_sent
+                        .fetch_add(data.len() as u64, std::sync::atomic::Ordering::Relaxed);
+                }
+                Poll::Ready(Some(Ok(frame)))
+            }
+            other => other,
+        }
+    }
+
+    fn is_end_stream(&self) -> bool {
+        self.inner.is_end_stream()
+    }
+
+    fn size_hint(&self) -> http_body::SizeHint {
+        self.inner.size_hint()
+    }
+}
+
 // Helper function to format query parameters for logging
 fn format_query_params(query_string: &str) -> String {
     if query_string.is_empty() {
@@ -175,6 +259,50 @@ fn format_query_params(query_string: &str) -> String {
     }
 }
 
+// Helper function to extract the real remote IP address
+fn extract_remote_ip(headers: &HeaderMap, remote_addr: Option<std::net::SocketAddr>) -> String {
+    // First, try X-Real-IP header (set by Caddy and other reverse proxies)
+    if let Some(real_ip) = headers.get("x-real-ip")
+        && let Ok(ip_str) = real_ip.to_str()
+    {
+        return ip_str.to_string();
+    }
+
+    // Second, try X-Forwarded-For header (comma-separated list, take the first/leftmost IP)
+    if let Some(forwarded_for) = headers.get("x-forwarded-for")
+        && let Ok(ip_str) = forwarded_for.to_str()
+    {
+        // Take the first IP in the comma-separated list (the original client IP)
+        if let Some(first_ip) = ip_str.split(',').next() {
+            return first_ip.trim().to_string();
+        }
+    }
+
+    // Third, try the Forwarded header (RFC 7239)
+    if let Some(forwarded) = headers.get("forwarded")
+        && let Ok(forwarded_str) = forwarded.to_str()
+    {
+        // Parse "for=..." from the Forwarded header
+        for part in forwarded_str.split(';') {
+            let part = part.trim();
+            if let Some(for_value) = part.strip_prefix("for=") {
+                // Remove quotes and extract IP (may include port)
+                let ip = for_value
+                    .trim_matches('"')
+                    .split(':')
+                    .next()
+                    .unwrap_or(for_value);
+                return ip.to_string();
+            }
+        }
+    }
+
+    // Fallback to actual socket address if no proxy headers found
+    remote_addr
+        .map(|addr| addr.ip().to_string())
+        .unwrap_or_else(|| "unknown".to_string())
+}
+
 // Middleware for request logging with correlation ID
 async fn request_logging_middleware(request: Request<Body>, next: Next) -> Response {
     let method = request.method().clone();
@@ -182,6 +310,15 @@ async fn request_logging_middleware(request: Request<Body>, next: Next) -> Respo
     let query_string = request.uri().query().unwrap_or("");
     let request_id = Uuid::now_v7().to_string()[..8].to_string();
     let start_time = Instant::now();
+
+    // Extract remote IP from headers or connection info
+    let remote_ip = extract_remote_ip(
+        request.headers(),
+        request
+            .extensions()
+            .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
+            .map(|ci| ci.0),
+    );
 
     // Skip logging for metrics endpoint to reduce noise
     let should_log = path != "/data/metrics";
@@ -195,8 +332,8 @@ async fn request_logging_middleware(request: Request<Body>, next: Next) -> Respo
 
     if should_log {
         info!(
-            "Started {} {} [{}{}]",
-            method, path, request_id, query_params_formatted
+            "Started {} {} [{}{}] from {}",
+            method, path, request_id, query_params_formatted, remote_ip
         );
     }
 
@@ -206,13 +343,14 @@ async fn request_logging_middleware(request: Request<Body>, next: Next) -> Respo
 
     if should_log {
         info!(
-            "Completed {} {} [{}{}] {} in {:.2}ms",
+            "Completed {} {} [{}{}] {} in {:.2}ms from {}",
             method,
             path,
             request_id,
             query_params_formatted,
             status.as_u16(),
-            duration.as_secs_f64() * 1000.0
+            duration.as_secs_f64() * 1000.0,
+            remote_ip
         );
     }
 
@@ -309,11 +447,24 @@ async fn metrics_middleware(request: Request<Body>, next: Next) -> Response {
         // Record request count by endpoint, method, and status
         metrics::counter!(
             "http_requests_total",
-            "method" => method_str,
-            "endpoint" => path,
-            "status" => status_str
+            "method" => method_str.clone(),
+            "endpoint" => path.clone(),
+            "status" => status_str.clone()
         )
         .increment(1);
+
+        // Wrap response body to track size
+        let bytes_sent = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let guard = std::sync::Arc::new(ResponseSizeGuard {
+            bytes_sent: bytes_sent.clone(),
+            method: method_str,
+            endpoint: path,
+            status: status_str,
+        });
+
+        let (parts, body) = response.into_parts();
+        let wrapped_body = MetricsBody::new(body, bytes_sent, guard);
+        return Response::from_parts(parts, Body::new(wrapped_body));
     }
 
     response
@@ -562,8 +713,12 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
     let listener = tokio::net::TcpListener::bind(format!("{}:{}", interface, port)).await?;
     info!("Web server listening on http://{}:{}", interface, port);
 
-    // Start the server
-    axum::serve(listener, app).await?;
+    // Start the server with ConnectInfo to track remote addresses
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .await?;
 
     Ok(())
 }
