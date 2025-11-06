@@ -36,7 +36,11 @@ flowchart TB
     %% Processing Process (soar-run)
     subgraph Processing ["Message Processing (soar-run)"]
         JetStreamCon[JetStream Consumer<br/>soar-run-production]
-        Router[Packet Router]
+
+        subgraph RouterBox ["Packet Router"]
+            Router[Router Logic]
+            GenericProc[Generic Processor<br/>Archiving & Recording]
+        end
 
         %% Processing Queues
         subgraph Queues ["Processing Queues"]
@@ -59,56 +63,66 @@ flowchart TB
         FlightTracker[Flight Tracker]
     end
 
-    %% Archive Process (soar-archive)
-    subgraph Archive ["Archive (soar-archive)"]
-        ArchiveQueue["Archive Queue<br/>(10,000 messages)"]
-        ArchiveWriter[Archive Writer<br/>Compressed Files]
-    end
-
     %% Real-time Broadcasting
     subgraph Broadcast ["Real-time Broadcasting"]
         NatsQueue["NATS Publish Queue<br/>(1,000 messages)"]
         NatsPublisher[NATS Publisher]
     end
 
+    %% Batch Processes
+    subgraph Batch ["Batch Processes"]
+        Sitemap[Sitemap Generator<br/>soar sitemap]
+    end
+
     %% Storage
     Database[(PostgreSQL + PostGIS<br/>Database)]
     ArchiveFiles[(Daily Archive Files<br/>.log.zst)]
 
-    %% Data Flow
+    %% Data Flow - Ingestion
     APRS --> AprsClient
     AprsClient --> RawQueue
     RawQueue --> JetStreamPub
     JetStreamPub --> JetStream
 
+    %% Data Flow - Processing Entry
     JetStream --> JetStreamCon
     JetStreamCon --> Router
 
+    %% Data Flow - Router & Generic Processing
+    Router --> GenericProc
+    GenericProc -->|Archives all<br/>messages| ArchiveFiles
+    GenericProc -->|Records in<br/>aprs_messages| Database
+
+    %% Data Flow - Type-specific Routing
     Router -->|Aircraft Position| AircraftQueue
     Router -->|Receiver Status| RecvStatusQueue
     Router -->|Receiver Position| RecvPosQueue
     Router -->|Server Messages| ServerQueue
-    Router -->|All Messages| ArchiveQueue
 
+    %% Data Flow - Worker Processing
     AircraftQueue --> AircraftProc
     RecvStatusQueue --> RecvStatusProc
     RecvPosQueue --> RecvPosProc
     ServerQueue --> ServerProc
 
+    %% Data Flow - Aircraft Processing Chain
     AircraftProc --> FixProc
     FixProc --> FlightTracker
     FlightTracker --> Database
 
+    %% Data Flow - Other Processors to Database
     RecvStatusProc --> Database
     RecvPosProc --> Database
     ServerProc --> Database
 
+    %% Data Flow - Real-time Broadcasting
     AircraftProc --> NatsQueue
     NatsQueue --> NatsPublisher
     NatsPublisher --> WebClients
 
-    ArchiveQueue --> ArchiveWriter
-    ArchiveWriter --> ArchiveFiles
+    %% Data Flow - Batch Processes
+    Database --> Sitemap
+    Sitemap -->|Generates| SitemapFiles[(sitemap.xml)]
 
     %% Styling
     classDef queueStyle fill:#e1f5ff,stroke:#01579b,stroke-width:2px
@@ -116,33 +130,43 @@ flowchart TB
     classDef storageStyle fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
     classDef externalStyle fill:#c8e6c9,stroke:#1b5e20,stroke-width:2px
 
-    class RawQueue,AircraftQueue,RecvStatusQueue,RecvPosQueue,ServerQueue,ArchiveQueue,NatsQueue queueStyle
-    class AprsClient,JetStreamPub,JetStreamCon,Router,AircraftProc,RecvStatusProc,RecvPosProc,ServerProc,FixProc,FlightTracker,ArchiveWriter,NatsPublisher procStyle
-    class Database,JetStream,ArchiveFiles storageStyle
+    class RawQueue,AircraftQueue,RecvStatusQueue,RecvPosQueue,ServerQueue,NatsQueue queueStyle
+    class AprsClient,JetStreamPub,JetStreamCon,Router,GenericProc,AircraftProc,RecvStatusProc,RecvPosProc,ServerProc,FixProc,FlightTracker,NatsPublisher,Sitemap procStyle
+    class Database,JetStream,ArchiveFiles,SitemapFiles storageStyle
     class APRS,WebClients externalStyle
 ```
 
 ### Key Components
 
 **Ingestion (`soar-aprs-ingest`)**
-- Connects to OGN APRS-IS network
+- Connects to OGN APRS-IS network (~500 messages/sec)
 - Buffers messages in 1,000-message queue
-- Publishes to durable NATS JetStream
+- Publishes to durable NATS JetStream for reliable delivery
 
 **Processing (`soar-run`)**
-- Consumes from JetStream with automatic retry
-- Routes to specialized processors via small queues (100 messages each)
-- Processes aircraft positions, receiver status, and server messages
-- Tracks flights and publishes real-time updates
+- **JetStream Consumer**: Consumes from APRS_RAW stream with automatic retry
+- **Packet Router**: Routes messages based on type
+- **Generic Processor**: Runs inline for every message
+  - Archives all raw messages to compressed daily log files (.log.zst)
+  - Inserts message records into `aprs_messages` table
+  - Identifies and caches receiver information
+- **Type-specific Queues**: Small buffers (100 messages each) for specialized processing
+- **Worker Processors**: Process aircraft positions, receiver status/position, and server messages
+- **Flight Tracking**: Fix Processor and Flight Tracker analyze aircraft movement patterns
 
 **Storage**
-- PostgreSQL database for all processed data
-- JetStream provides durable message queuing
-- Daily archive files for raw APRS messages
+- **PostgreSQL + PostGIS**: All processed data (devices, fixes, flights, receivers, airports)
+- **NATS JetStream**: Durable message queue (APRS_RAW stream)
+- **Daily Archive Files**: Compressed raw APRS messages (.log.zst) with UTC-based rotation
 
-**Broadcasting**
-- Real-time position updates via NATS to web clients
-- 1,000-message buffer for WebSocket delivery
+**Real-time Broadcasting**
+- Aircraft position updates published to NATS
+- 1,000-message buffer for WebSocket delivery to web clients
+
+**Batch Processes**
+- **Sitemap Generator**: Runs via `soar sitemap` command
+- Generates sitemap.xml from database for SEO
+- Includes devices, clubs, airports, receivers, and static pages
 
 ## Provisioning
 
