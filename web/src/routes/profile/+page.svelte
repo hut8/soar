@@ -309,6 +309,8 @@
 	<div
 		class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
 		onclick={closeChangeEmailModal}
+		onkeydown={(e) => e.key === 'Escape' && closeChangeEmailModal()}
+		role="presentation"
 	>
 		<div class="m-4 w-full max-w-md space-y-4 card p-6" onclick={(e) => e.stopPropagation()}>
 			<div class="flex items-center justify-between">
@@ -379,6 +381,8 @@
 	<div
 		class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
 		onclick={closeDeleteAccountModal}
+		onkeydown={(e) => e.key === 'Escape' && closeDeleteAccountModal()}
+		role="presentation"
 	>
 		<div class="m-4 w-full max-w-md space-y-4 card p-6" onclick={(e) => e.stopPropagation()}>
 			<div class="flex items-center justify-between">
