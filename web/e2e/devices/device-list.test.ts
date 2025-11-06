@@ -74,8 +74,7 @@ test.describe('Device List', () => {
 
 		// Fill in registration
 		await page
-			.getByPlaceholder(/aircraft registration/i)
-			.first()
+			.locator('input[placeholder*="Aircraft registration"]:visible')
 			.fill(testDevices.validRegistration);
 
 		// Click search
@@ -117,8 +116,7 @@ test.describe('Device List', () => {
 
 		// Search for a registration that definitely doesn't exist
 		await page
-			.getByPlaceholder(/aircraft registration/i)
-			.first()
+			.locator('input[placeholder*="Aircraft registration"]:visible')
 			.fill(testDevices.invalidRegistration);
 
 		// Click search
@@ -196,8 +194,7 @@ test.describe('Device List', () => {
 
 		// Fill in registration
 		await page
-			.getByPlaceholder(/aircraft registration/i)
-			.first()
+			.locator('input[placeholder*="Aircraft registration"]:visible')
 			.fill(testDevices.validRegistration);
 
 		// Start search (don't await - we want to check loading state)
@@ -217,10 +214,7 @@ test.describe('Device List', () => {
 
 		// Search for a query likely to return many results
 		// Note: This depends on having sufficient test data
-		await page
-			.getByPlaceholder(/aircraft registration/i)
-			.first()
-			.fill('N');
+		await page.locator('input[placeholder*="Aircraft registration"]:visible').fill('N');
 		await page.getByRole('button', { name: /search devices/i }).click();
 
 		await page.waitForLoadState('networkidle');
