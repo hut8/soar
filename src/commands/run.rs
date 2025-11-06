@@ -11,9 +11,9 @@ use soar::packet_processors::{
 };
 use soar::queue_config::{
     AGL_DATABASE_QUEUE_SIZE, AIRCRAFT_QUEUE_SIZE, APRS_RAW_STREAM, APRS_RAW_STREAM_STAGING,
-    APRS_RAW_SUBJECT, APRS_RAW_SUBJECT_STAGING, ELEVATION_QUEUE_SIZE, JETSTREAM_INTAKE_QUEUE_SIZE,
-    RECEIVER_POSITION_QUEUE_SIZE, RECEIVER_STATUS_QUEUE_SIZE, SERVER_STATUS_QUEUE_SIZE,
-    SOAR_RUN_CONSUMER, SOAR_RUN_CONSUMER_STAGING, queue_warning_threshold,
+    APRS_RAW_SUBJECT, APRS_RAW_SUBJECT_STAGING, ELEVATION_QUEUE_SIZE, RECEIVER_POSITION_QUEUE_SIZE,
+    RECEIVER_STATUS_QUEUE_SIZE, SERVER_STATUS_QUEUE_SIZE, SOAR_RUN_CONSUMER,
+    SOAR_RUN_CONSUMER_STAGING, queue_warning_threshold,
 };
 use soar::receiver_repo::ReceiverRepository;
 use soar::receiver_status_repo::ReceiverStatusRepository;
@@ -25,7 +25,7 @@ use tracing::{info, trace, warn};
 /// Process a received APRS message by parsing and routing through PacketRouter
 /// The message format is: "YYYY-MM-DDTHH:MM:SS.SSSZ <original_message>"
 /// We extract the timestamp and pass it through the processing pipeline
-/// NOTE: This function does NOT handle ACKing - messages must be ACKed before calling this
+/// NOTE: With AckPolicy::None, messages are implicitly ACKed when delivered from JetStream
 async fn process_aprs_message(
     message: &str,
     packet_router: &soar::packet_processors::PacketRouter,
@@ -86,7 +86,6 @@ async fn process_aprs_message(
             } else {
                 info!("Failed to parse APRS message '{actual_message}': {e}");
             }
-            // Note: Message was already ACKed when added to intake queue
         }
     }
 
@@ -319,19 +318,6 @@ pub async fn handle_run(
 
     info!("Created PacketRouter with per-processor queues");
 
-    // Create JetStream intake queue
-    // This queue buffers raw messages as they're read from JetStream
-    // Messages are implicitly ACKed when delivered from JetStream (AckPolicy::None)
-    // This decouples JetStream reading from message parsing/routing for maximum throughput
-    let (jetstream_intake_tx, jetstream_intake_rx) = tokio::sync::mpsc::channel::<(
-        String,
-        std::sync::Arc<async_nats::jetstream::Message>,
-    )>(JETSTREAM_INTAKE_QUEUE_SIZE);
-    info!(
-        "Created JetStream intake queue with capacity {}",
-        JETSTREAM_INTAKE_QUEUE_SIZE
-    );
-
     // Spawn AGL batch database writer
     // This worker receives calculated AGL values and writes them to database in batches
     // Batching dramatically reduces database load (100+ individual UPDATEs become 1 batch UPDATE)
@@ -417,39 +403,6 @@ pub async fn handle_run(
         "Spawned {} dedicated elevation processing workers (sharing elevation and dataset caches)",
         num_elevation_workers
     );
-
-    // Spawn JetStream intake queue workers
-    // These workers read from the intake queue and call process_aprs_message()
-    // This decouples JetStream reading (with implicit ACK) from message processing
-    let num_intake_workers = 40;
-    info!(
-        "Spawning {} JetStream intake queue workers",
-        num_intake_workers
-    );
-    let shared_intake_rx = std::sync::Arc::new(tokio::sync::Mutex::new(jetstream_intake_rx));
-    for worker_id in 0..num_intake_workers {
-        let worker_rx = shared_intake_rx.clone();
-        let worker_packet_router = packet_router.clone();
-        tokio::spawn(
-            async move {
-                loop {
-                    let task = {
-                        let mut rx = worker_rx.lock().await;
-                        rx.recv().await
-                    };
-                    match task {
-                        Some((message, _jetstream_msg)) => {
-                            // Process the APRS message (parse and route through PacketRouter)
-                            // Note: Message was already ACKed when added to intake queue
-                            process_aprs_message(&message, &worker_packet_router).await;
-                        }
-                        None => break,
-                    }
-                }
-            }
-            .instrument(tracing::info_span!("intake_worker", worker_id)),
-        );
-    }
 
     // Spawn dedicated worker pools for each processor type
     // Aircraft position workers (80 workers - heaviest processing due to FixProcessor + flight tracking)
@@ -743,37 +696,17 @@ pub async fn handle_run(
 
     // Start consuming messages from JetStream
     // Messages are implicitly ACKed when delivered (AckPolicy::None)
-    // Intake workers process from the queue, decoupling JetStream reading from processing
+    // Single-threaded processing ensures message ordering is preserved
+    // Blocking sends in PacketRouter provide natural backpressure to JetStream
     consumer
-        .consume(move |message, jetstream_msg| {
-            let intake_tx = jetstream_intake_tx.clone();
+        .consume(move |message, _jetstream_msg| {
+            let router = packet_router.clone();
             async move {
-                // Try to add message to intake queue
-                // With AckPolicy::None, messages are already implicitly ACKed
-                // If we can't queue it, it will be lost (no NAK possible)
-                match intake_tx.try_send((message, jetstream_msg.clone())) {
-                    Ok(()) => {
-                        // Successfully added to intake queue
-                        metrics::counter!("aprs.jetstream.queued").increment(1);
-
-                        // Track intake queue depth
-                        let queue_depth = intake_tx.max_capacity() - intake_tx.capacity();
-                        metrics::gauge!("aprs.jetstream.intake_queue_depth")
-                            .set(queue_depth as f64);
-                    }
-                    Err(tokio::sync::mpsc::error::TrySendError::Full(_)) => {
-                        tracing::warn!(
-                            "Intake queue is FULL - dropping message (implicit ACK, cannot retry)"
-                        );
-                        metrics::counter!("aprs.jetstream.intake_queue_full_dropped").increment(1);
-                        // With AckPolicy::None, we cannot NAK - message is already ACKed
-                        // This message will be lost
-                    }
-                    Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => {
-                        tracing::error!("Intake queue is closed - shutting down");
-                        return Err(anyhow::anyhow!("Intake queue closed"));
-                    }
-                }
+                // Process the message directly (parse and route through PacketRouter)
+                // PacketRouter uses blocking sends, so when downstream queues are full,
+                // this will block and stop reading from JetStream (natural backpressure)
+                process_aprs_message(&message, &router).await;
+                metrics::counter!("aprs.jetstream.processed").increment(1);
                 Ok(())
             }
         })
