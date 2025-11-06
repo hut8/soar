@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use diesel::connection::{Instrumentation, InstrumentationEvent, set_default_instrumentation};
 use diesel::r2d2::{ConnectionManager, Pool};
@@ -211,6 +211,44 @@ impl Instrumentation for QueryLogger {
     }
 }
 
+/// Dump database schema to schema.sql if not in production
+fn dump_schema_if_non_production(database_url: &str) -> Result<()> {
+    // Check if we're in production
+    let is_production = env::var("SOAR_ENV")
+        .map(|env| env == "production")
+        .unwrap_or(false);
+
+    if is_production {
+        info!("Skipping schema dump in production environment");
+        return Ok(());
+    }
+
+    info!("Dumping database schema to schema.sql...");
+
+    // Run pg_dump with flags to ensure deterministic output
+    let output = std::process::Command::new("pg_dump")
+        .arg("--schema-only") // Only dump schema, not data
+        .arg("--no-owner") // Don't include ownership commands
+        .arg("--no-privileges") // Don't include GRANT/REVOKE
+        .arg("--no-tablespaces") // Don't include tablespace assignments
+        .arg("--no-comments") // Don't include comments (may contain timestamps)
+        .arg(database_url)
+        .output()
+        .context("Failed to execute pg_dump - is PostgreSQL client installed?")?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(anyhow::anyhow!("pg_dump failed: {}", stderr));
+    }
+
+    // Write output to schema.sql in repository root
+    let schema_path = "schema.sql";
+    std::fs::write(schema_path, &output.stdout).context("Failed to write schema.sql")?;
+
+    info!("Successfully dumped schema to {}", schema_path);
+    Ok(())
+}
+
 #[tracing::instrument]
 async fn setup_diesel_database() -> Result<Pool<ConnectionManager<PgConnection>>> {
     // Load environment variables from .env file
@@ -219,6 +257,9 @@ async fn setup_diesel_database() -> Result<Pool<ConnectionManager<PgConnection>>
     // Get the database URL from environment variables
     let database_url =
         env::var("DATABASE_URL").expect("DATABASE_URL must be set in environment variables");
+
+    // Clone for schema dump later (database_url will be moved into ConnectionManager)
+    let database_url_for_dump = database_url.clone();
 
     // Create a Diesel connection pool with increased capacity for batched AGL updates
     // Increased from default (10) to 50 to handle:
@@ -308,6 +349,10 @@ async fn setup_diesel_database() -> Result<Pool<ConnectionManager<PgConnection>>
                 }
             }
             info!("Database migrations completed successfully");
+
+            // Dump schema to schema.sql (non-production only)
+            dump_schema_if_non_production(&database_url_for_dump)?;
+
             // Release the advisory lock after successful migrations
             diesel::sql_query(format!("SELECT pg_advisory_unlock({migration_lock_id})"))
                 .execute(&mut connection)
