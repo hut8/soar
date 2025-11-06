@@ -443,7 +443,9 @@ impl FixProcessor {
             };
 
             let fix_with_flight = crate::fixes::FixWithFlightInfo::new(updated_fix.clone(), flight);
-            nats_publisher.process_fix(fix_with_flight, raw_message);
+            nats_publisher
+                .process_fix(fix_with_flight, raw_message)
+                .await;
             metrics::histogram!("aprs.aircraft.nats_publish_ms")
                 .record(nats_publish_start.elapsed().as_micros() as f64 / 1000.0);
         }

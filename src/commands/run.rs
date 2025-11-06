@@ -394,22 +394,15 @@ pub async fn handle_run(
                                 .record(duration.as_millis() as f64);
                             metrics::counter!("aprs.elevation.processed", "worker_id" => elevation_worker_id.to_string()).increment(1);
 
-                            // Send calculated AGL to database batch writer
+                            // Send calculated AGL to database batch writer (blocking)
                             let agl_task = soar::elevation::AglDatabaseTask {
                                 fix_id: task.fix_id,
                                 altitude_agl_feet: agl,
                             };
 
-                            if let Err(e) = worker_agl_db_tx.try_send(agl_task) {
-                                match e {
-                                    flume::TrySendError::Full(_) => {
-                                        warn!("AGL database queue is FULL (10,000 tasks) - dropping database update for fix {}", task.fix_id);
-                                        metrics::counter!("agl_db_queue.dropped_total").increment(1);
-                                    }
-                                    flume::TrySendError::Disconnected(_) => {
-                                        warn!("AGL database queue is closed");
-                                    }
-                                }
+                            // Block until space is available - never drop AGL updates
+                            if let Err(e) = worker_agl_db_tx.send_async(agl_task).await {
+                                warn!("AGL database queue is closed: {}", e);
                             }
                 }
             }

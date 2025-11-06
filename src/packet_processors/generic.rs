@@ -68,7 +68,7 @@ impl GenericProcessor {
     ) -> Option<PacketContext> {
         // Step 1: Archive the raw message if archiving is enabled
         if let Some(archive) = &self.archive_service {
-            archive.archive(raw_message);
+            archive.archive(raw_message).await;
         }
 
         // Step 2: Identify the receiver callsign
@@ -191,10 +191,10 @@ impl GenericProcessor {
     }
 
     /// Process a server message (lines starting with #) - archives only, no database insertion
-    pub fn process_server_message(&self, raw_message: &str) {
+    pub async fn process_server_message(&self, raw_message: &str) {
         // Archive the server message if archiving is enabled
         if let Some(archive) = &self.archive_service {
-            archive.archive(raw_message);
+            archive.archive(raw_message).await;
         }
         // Server messages are just archived, not processed further in GenericProcessor
         // They will be routed to ServerStatusProcessor for database insertion
