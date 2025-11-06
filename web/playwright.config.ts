@@ -50,12 +50,27 @@ export default defineConfig({
 	],
 
 	// Web server configuration
-	webServer: {
-		command: 'npm run build && npm run preview',
-		port: 4173,
-		timeout: 180000, // 3 minutes for build + server startup
-		reuseExistingServer: !process.env.CI
-	},
+	// Start both the Rust backend and SvelteKit preview server for E2E tests
+	webServer: [
+		{
+			// Start Rust backend server with test database
+			command:
+				'DATABASE_URL=postgres://postgres:postgres@localhost:5432/soar_test ../target/release/soar web --port 61225 --interface localhost',
+			port: 61225,
+			timeout: 60000, // 1 minute for backend startup
+			reuseExistingServer: !process.env.CI,
+			env: {
+				DATABASE_URL: 'postgres://postgres:postgres@localhost:5432/soar_test'
+			}
+		},
+		{
+			// Start SvelteKit preview server (proxies /data/* to Rust backend)
+			command: 'npm run build && npm run preview',
+			port: 4173,
+			timeout: 180000, // 3 minutes for build + server startup
+			reuseExistingServer: !process.env.CI
+		}
+	],
 
 	// Screenshot comparison settings
 	expect: {
