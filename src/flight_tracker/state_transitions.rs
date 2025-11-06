@@ -9,7 +9,7 @@ use crate::ogn_aprs_aircraft::AircraftType;
 use crate::runways_repo::RunwaysRepository;
 use anyhow::Result;
 use std::sync::Arc;
-use tracing::{error, info, trace, warn};
+use tracing::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
 use super::aircraft_tracker;
@@ -385,7 +385,7 @@ pub(crate) async fn process_state_transition(
 
                         // If this is a towplane taking off, spawn towing detection task
                         if is_towtug {
-                            info!(
+                            debug!(
                                 "Towplane {} taking off - spawning towing detection task",
                                 fix.device_id
                             );
