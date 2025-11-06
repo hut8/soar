@@ -145,26 +145,15 @@ impl NatsFixPublisher {
 }
 
 impl NatsFixPublisher {
-    /// Process a fix and publish it to NATS
-    /// Uses try_send to avoid blocking - provides backpressure if NATS publishing is slow
-    pub fn process_fix(&self, fix_with_flight: FixWithFlightInfo, _raw_message: &str) {
-        // Use try_send to avoid blocking the caller
-        // This provides backpressure if the NATS publisher can't keep up
-        match self.fix_sender.try_send(fix_with_flight) {
+    /// Process a fix and publish it to NATS (blocking)
+    /// This will block if the queue is full, applying backpressure to the caller
+    pub async fn process_fix(&self, fix_with_flight: FixWithFlightInfo, _raw_message: &str) {
+        // Use send_async to block until space is available - never drop fixes
+        match self.fix_sender.send_async(fix_with_flight).await {
             Ok(_) => {
                 // Fix successfully queued for publishing
             }
-            Err(flume::TrySendError::Full(_)) => {
-                // Channel is full - indicates NATS publisher is falling behind
-                warn!(
-                    "NATS publisher channel is FULL (1000 fixes buffered) - dropping fix. \
-                     This indicates NATS publishing is slower than incoming fix rate. \
-                     Check NATS server performance or increase channel capacity."
-                );
-                metrics::counter!("nats_publisher_dropped_fixes").increment(1);
-                // Fix is dropped to prevent unbounded memory growth
-            }
-            Err(flume::TrySendError::Disconnected(_)) => {
+            Err(flume::SendError(_)) => {
                 // NATS publisher task has shut down
                 error!("NATS publisher channel is closed - cannot publish fix");
                 metrics::counter!("nats_publisher_errors").increment(1);

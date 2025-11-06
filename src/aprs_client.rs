@@ -476,8 +476,9 @@ impl AprsClient {
                                 let timestamped_message =
                                     format!("{} {}", received_at.to_rfc3339(), trimmed_line);
 
-                                // Send message to channel for processing (non-blocking)
-                                match raw_message_tx.try_send(timestamped_message) {
+                                // Send message to channel for processing (blocking)
+                                // This will block if queue is full, applying backpressure to APRS-IS stream
+                                match raw_message_tx.send_async(timestamped_message).await {
                                     Ok(()) => {
                                         if is_server_message {
                                             trace!("Queued server message for JetStream");
@@ -496,17 +497,7 @@ impl AprsClient {
                                             }
                                         }
                                     }
-                                    Err(flume::TrySendError::Full(_)) => {
-                                        warn!(
-                                            "Raw message queue FULL ({} messages buffered) - dropping message. \
-                                             This indicates JetStream publishing is slower than APRS message rate.",
-                                            RAW_MESSAGE_QUEUE_SIZE
-                                        );
-                                        metrics::counter!("aprs.raw_message_queue.full")
-                                            .increment(1);
-                                        // Message is dropped to prevent blocking TCP reads
-                                    }
-                                    Err(flume::TrySendError::Disconnected(_)) => {
+                                    Err(flume::SendError(_)) => {
                                         error!("Raw message queue is closed - stopping connection");
                                         return ConnectionResult::OperationFailed(anyhow::anyhow!(
                                             "Raw message queue closed"
@@ -871,25 +862,15 @@ impl ArchiveService {
         Ok(())
     }
 
-    /// Archive a message
-    pub fn archive(&self, message: &str) {
-        // Use try_send to avoid blocking the caller
-        // This provides backpressure if the archive writer can't keep up
-        match self.sender.try_send(message.to_string()) {
+    /// Archive a message (blocking)
+    /// This will block if the archive queue is full, applying backpressure to the caller
+    pub async fn archive(&self, message: &str) {
+        // Use send_async to block until space is available - never drop messages
+        match self.sender.send_async(message.to_string()).await {
             Ok(_) => {
                 // Message successfully queued
             }
-            Err(flume::TrySendError::Full(_)) => {
-                // Channel is full - indicates archive writer is falling behind
-                // This is a sign of disk I/O issues or excessive message rate
-                warn!(
-                    "Archive channel is FULL (10,000 messages buffered) - dropping message. \
-                     This indicates disk writes are slower than incoming APRS messages. \
-                     Check disk I/O performance and consider increasing channel capacity."
-                );
-                // Message is dropped to prevent unbounded memory growth
-            }
-            Err(flume::TrySendError::Disconnected(_)) => {
+            Err(flume::SendError(_)) => {
                 // Archive service has shut down
                 error!("Archive service channel is closed - cannot archive message");
             }

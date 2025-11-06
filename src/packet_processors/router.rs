@@ -171,7 +171,9 @@ impl PacketRouter {
         received_at: chrono::DateTime<chrono::Utc>,
     ) {
         // Step 1: Archive via GenericProcessor
-        self.generic_processor.process_server_message(raw_message);
+        self.generic_processor
+            .process_server_message(raw_message)
+            .await;
 
         // Step 2: Route to server status queue if configured
         if let Some(tx) = &self.server_status_tx {
