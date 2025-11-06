@@ -60,7 +60,9 @@ async fn process_aprs_message(
     // Server messages don't create PacketContext
     if actual_message.starts_with('#') {
         info!("Server message: {}", actual_message);
-        packet_router.process_server_message(actual_message, received_at);
+        packet_router
+            .process_server_message(actual_message, received_at)
+            .await;
         return;
     }
 
@@ -68,7 +70,9 @@ async fn process_aprs_message(
     match ogn_parser::parse(actual_message) {
         Ok(parsed) => {
             // Call PacketRouter to archive, process, and route to queues
-            packet_router.process_packet(parsed, actual_message, received_at);
+            packet_router
+                .process_packet(parsed, actual_message, received_at)
+                .await;
         }
         Err(e) => {
             // For OGNFNT sources with invalid lat/lon, log as trace instead of error

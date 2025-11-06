@@ -140,10 +140,11 @@ impl PacketRouter {
 }
 
 impl PacketRouter {
-    /// Enqueue a server message for processing (non-blocking)
+    /// Enqueue a server message for processing (blocking)
     ///
-    /// Messages are placed in internal queue and processed by worker pool
-    pub fn process_server_message(
+    /// Messages are placed in internal queue and processed by worker pool.
+    /// This method will block until space is available in the queue.
+    pub async fn process_server_message(
         &self,
         raw_message: &str,
         received_at: chrono::DateTime<chrono::Utc>,
@@ -153,12 +154,13 @@ impl PacketRouter {
             received_at,
         };
 
-        if let Err(e) = self.internal_queue_tx.try_send(task) {
+        // Block until space is available - never drop messages
+        if let Err(e) = self.internal_queue_tx.send_async(task).await {
             warn!(
-                "PacketRouter internal queue full, dropping server message: {}",
+                "PacketRouter internal queue disconnected, cannot send server message: {}",
                 e
             );
-            metrics::counter!("aprs.router.internal_queue_full").increment(1);
+            metrics::counter!("aprs.router.internal_queue_disconnected").increment(1);
         }
     }
 
@@ -188,10 +190,11 @@ impl PacketRouter {
         }
     }
 
-    /// Enqueue an APRS packet for processing (non-blocking)
+    /// Enqueue an APRS packet for processing (blocking)
     ///
-    /// Packets are placed in internal queue and processed by worker pool
-    pub fn process_packet(
+    /// Packets are placed in internal queue and processed by worker pool.
+    /// This method will block until space is available in the queue.
+    pub async fn process_packet(
         &self,
         packet: AprsPacket,
         raw_message: &str,
@@ -203,9 +206,13 @@ impl PacketRouter {
             received_at,
         };
 
-        if let Err(e) = self.internal_queue_tx.try_send(task) {
-            warn!("PacketRouter internal queue full, dropping packet: {}", e);
-            metrics::counter!("aprs.router.internal_queue_full").increment(1);
+        // Block until space is available - never drop packets
+        if let Err(e) = self.internal_queue_tx.send_async(task).await {
+            warn!(
+                "PacketRouter internal queue disconnected, cannot send packet: {}",
+                e
+            );
+            metrics::counter!("aprs.router.internal_queue_disconnected").increment(1);
         }
     }
 
