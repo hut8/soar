@@ -12,7 +12,7 @@ use tracing::{info, warn};
 mod commands;
 use commands::{
     handle_archive, handle_ingest_aprs, handle_load_data, handle_pull_data, handle_resurrect,
-    handle_run, handle_sitemap_generation,
+    handle_run, handle_seed_test_data, handle_sitemap_generation,
 };
 
 // Embed migrations at compile time
@@ -193,6 +193,19 @@ enum Commands {
     /// scripts to ensure migrations are applied before starting services.
     /// Migrations are also run automatically by other commands that need the database.
     Migrate {},
+    /// Seed test data for E2E testing
+    ///
+    /// Creates a known set of test data for E2E tests:
+    /// - Test user with known credentials (configurable via env vars)
+    /// - Test club
+    /// - Test devices
+    ///
+    /// Environment variables:
+    /// - TEST_USER_EMAIL (default: test@example.com)
+    /// - TEST_USER_PASSWORD (default: testpassword123)
+    /// - TEST_USER_FIRST_NAME (default: Test)
+    /// - TEST_USER_LAST_NAME (default: User)
+    SeedTestData {},
 }
 
 // Query logger that logs SQL statements to tracing
@@ -776,5 +789,6 @@ async fn main() -> Result<()> {
             info!("All pending migrations have been applied");
             Ok(())
         }
+        Commands::SeedTestData {} => handle_seed_test_data(&diesel_pool).await,
     }
 }

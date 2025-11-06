@@ -5,6 +5,7 @@ This directory contains end-to-end (E2E) tests for the SOAR web application usin
 ## Table of Contents
 
 - [Overview](#overview)
+- [Test Database Setup](#test-database-setup)
 - [Running Tests](#running-tests)
 - [Writing Tests](#writing-tests)
 - [Test Structure](#test-structure)
@@ -20,6 +21,69 @@ Our E2E tests use **Playwright** to test the application in real browsers (Chrom
 - **Devices**: Searching, listing, and viewing aircraft devices
 - **Flights**: Flight tracking and details (TODO)
 - **Clubs**: Club management (TODO)
+
+## Test Database Setup
+
+E2E tests use a separate `soar_test` database with seeded test data. **You must set up the test database before running E2E tests.**
+
+### Quick Setup (Recommended)
+
+From the project root:
+
+```bash
+./scripts/setup-test-db.sh
+```
+
+This script:
+
+1. Drops and recreates the `soar_test` database
+2. Creates the PostGIS extension
+3. Runs all database migrations
+4. Seeds realistic test data using the `fake` crate
+
+### Manual Setup
+
+```bash
+# Set up environment
+export DATABASE_URL="postgres://postgres:postgres@localhost:5432/soar_test"
+
+# Drop and recreate database
+psql -U postgres -c "DROP DATABASE IF EXISTS soar_test;"
+psql -U postgres -c "CREATE DATABASE soar_test;"
+psql -U postgres -d soar_test -c "CREATE EXTENSION IF NOT EXISTS postgis;"
+
+# Run migrations
+diesel migration run
+
+# Seed test data
+cargo run --bin soar -- seed-test-data
+```
+
+### Test Data
+
+The seed command creates:
+
+- **Test User**: `test@example.com` / `testpassword123` (configurable)
+- **Test Club**: "Test Soaring Club"
+- **Test Devices**: N12345, N54321, N98765 (plus random devices)
+- **Test Pilots**: Mix of licensed/unlicensed, instructors, tow pilots
+- **Fake Users**: Realistic test users with random names/emails
+
+### Environment Variables
+
+Customize test data:
+
+```bash
+# Test user credentials (defaults shown)
+export TEST_USER_EMAIL="test@example.com"
+export TEST_USER_PASSWORD="testpassword123"
+
+# Number of additional fake records to create
+export SEED_COUNT=20
+
+# Then run setup script
+./scripts/setup-test-db.sh
+```
 
 ## Running Tests
 
@@ -239,6 +303,16 @@ test.afterEach(async () => {
 
 ## Troubleshooting
 
+### Tests Failing Due to Missing Data
+
+**Symptom**: Login fails, devices not found, "no results" everywhere
+
+**Solution**: Reset the test database
+
+```bash
+./scripts/setup-test-db.sh
+```
+
 ### Tests are flaky
 
 - Add explicit waits: `await page.waitForLoadState('networkidle')`
@@ -259,12 +333,31 @@ test.afterEach(async () => {
   ```
 - Check if element is inside a frame/iframe
 - Verify element is visible and not behind another element
+- Check if selector needs heading level: `{ name: /text/i, level: 1 }`
 
 ### Authentication not working
 
+- **First, verify test database is set up**: `./scripts/setup-test-db.sh`
 - Check test user credentials in `fixtures/data.fixture.ts`
-- Verify API endpoints are correct
+- Verify the test user exists in soar_test database:
+  ```bash
+  psql -U postgres -d soar_test -c "SELECT email FROM users WHERE email = 'test@example.com';"
+  ```
 - Check browser console for errors in Playwright UI mode
+
+### Database Connection Issues
+
+```bash
+# Verify PostgreSQL is running
+psql -U postgres -c "SELECT version();"
+
+# Check database exists
+psql -U postgres -c "\l" | grep soar_test
+
+# Check test data was seeded
+psql -U postgres -d soar_test -c "SELECT COUNT(*) FROM users;"
+psql -U postgres -d soar_test -c "SELECT COUNT(*) FROM devices;"
+```
 
 ### Build takes too long
 
