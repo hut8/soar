@@ -46,7 +46,7 @@ impl NewAprsMessage {
 }
 
 // Diesel model for querying APRS messages
-#[derive(Queryable, Selectable, Serialize, Deserialize, Debug)]
+#[derive(Queryable, Selectable, Insertable, Serialize, Deserialize, Debug)]
 #[diesel(table_name = crate::schema::aprs_messages)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct AprsMessage {
