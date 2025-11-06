@@ -1,6 +1,5 @@
 use metrics::{counter, gauge, histogram};
 use std::time::{Duration, Instant};
-use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 
 use crate::elevation::AglDatabaseTask;
@@ -13,10 +12,7 @@ const QUEUE_WARN_THRESHOLD_95: usize = 9_500;
 
 /// Batch writer task that accumulates AGL updates and writes them to database in batches
 /// This dramatically reduces database load by replacing 100+ individual UPDATEs with a single batch UPDATE
-pub async fn batch_writer_task(
-    mut rx: mpsc::Receiver<AglDatabaseTask>,
-    fixes_repo: FixesRepository,
-) {
+pub async fn batch_writer_task(rx: flume::Receiver<AglDatabaseTask>, fixes_repo: FixesRepository) {
     info!("Starting AGL batch database writer");
 
     let mut batch: Vec<AglDatabaseTask> = Vec::with_capacity(BATCH_SIZE);
@@ -26,8 +22,10 @@ pub async fn batch_writer_task(
 
     loop {
         // Try to receive a task with timeout
-        match tokio::time::timeout(Duration::from_secs(BATCH_TIMEOUT_SECONDS), rx.recv()).await {
-            Ok(Some(task)) => {
+        match tokio::time::timeout(Duration::from_secs(BATCH_TIMEOUT_SECONDS), rx.recv_async())
+            .await
+        {
+            Ok(Ok(task)) => {
                 batch.push(task);
 
                 // Check queue depth and warn if backing up
@@ -58,7 +56,7 @@ pub async fn batch_writer_task(
                     flush_batch(&mut batch, &fixes_repo, &mut last_flush).await;
                 }
             }
-            Ok(None) => {
+            Ok(Err(_)) => {
                 // Channel closed, flush remaining and exit
                 if !batch.is_empty() {
                     info!(
