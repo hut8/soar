@@ -637,17 +637,6 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "aprs_raw_message_queue_depth",
-          "legendFormat": "Raw Message Queue (cap: 10K)",
-          "range": true,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
-          },
-          "editorMode": "code",
           "expr": "aprs_aircraft_queue_depth",
           "legendFormat": "Aircraft Queue (cap: 50K)",
           "range": true,
