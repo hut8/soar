@@ -26,6 +26,10 @@ RestartSec=5
 StartLimitInterval=60s
 StartLimitBurst=3
 
+# Graceful shutdown configuration
+# Allow up to 10 minutes (600s) for queues to drain + 10s buffer
+TimeoutStopSec=610
+
 # Process limits
 LimitNOFILE=65536
 MemoryMax=32G

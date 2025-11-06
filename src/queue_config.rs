@@ -49,10 +49,11 @@ pub const ARCHIVE_QUEUE_SIZE: usize = 10_000;
 pub const NATS_PUBLISH_QUEUE_SIZE: usize = 1_000;
 
 /// JetStream intake queue for raw messages as they're read from JetStream
-/// Medium queue (1,000 messages) - buffers messages between JetStream read and processing
-/// Messages are ACKed immediately when added to this queue for maximum throughput
+/// Large queue (5,000 messages) - buffers messages between JetStream read and processing
+/// Messages are implicitly ACKed when delivered (AckPolicy::None)
 /// This decouples JetStream reading from message parsing/routing
-pub const JETSTREAM_INTAKE_QUEUE_SIZE: usize = 1_000;
+/// Increased from 1,000 to 5,000 to provide larger buffer during processing spikes
+pub const JETSTREAM_INTAKE_QUEUE_SIZE: usize = 5_000;
 
 /// Aircraft position processing queue (highest volume)
 /// Medium queue (1,000 messages) - balances throughput with crash loss

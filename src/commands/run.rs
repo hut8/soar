@@ -321,7 +321,7 @@ pub async fn handle_run(
 
     // Create JetStream intake queue
     // This queue buffers raw messages as they're read from JetStream
-    // Messages are ACKed immediately when added to this queue (not after processing)
+    // Messages are implicitly ACKed when delivered from JetStream (AckPolicy::None)
     // This decouples JetStream reading from message parsing/routing for maximum throughput
     let (jetstream_intake_tx, jetstream_intake_rx) = tokio::sync::mpsc::channel::<(
         String,
@@ -420,8 +420,8 @@ pub async fn handle_run(
 
     // Spawn JetStream intake queue workers
     // These workers read from the intake queue and call process_aprs_message()
-    // This decouples JetStream reading (with immediate ACK) from message processing
-    let num_intake_workers = 10;
+    // This decouples JetStream reading (with implicit ACK) from message processing
+    let num_intake_workers = 40;
     info!(
         "Spawning {} JetStream intake queue workers",
         num_intake_workers
@@ -677,8 +677,8 @@ pub async fn handle_run(
                 Ok(()) => {
                     info!("Received shutdown signal (Ctrl+C), initiating graceful shutdown...");
 
-                    // Wait for queues to drain (check every second, max 30 seconds)
-                    for i in 1..=30 {
+                    // Wait for queues to drain (check every second, max 10 minutes)
+                    for i in 1..=600 {
                         let aircraft_depth = shutdown_aircraft_rx.lock().await.len();
                         let receiver_status_depth = shutdown_receiver_status_rx.lock().await.len();
                         let receiver_position_depth = shutdown_receiver_position_rx.lock().await.len();
@@ -693,7 +693,7 @@ pub async fn handle_run(
                         }
 
                         info!(
-                            "Waiting for queues to drain ({}/30s): {} aircraft, {} rx_status, {} rx_pos, {} server, {} elevation",
+                            "Waiting for queues to drain ({}/600s): {} aircraft, {} rx_status, {} rx_pos, {} server, {} elevation",
                             i, aircraft_depth, receiver_status_depth, receiver_position_depth, server_status_depth, elevation_depth
                         );
 
@@ -742,26 +742,19 @@ pub async fn handle_run(
     info!("APRS client started. Press Ctrl+C to stop.");
 
     // Start consuming messages from JetStream
-    // Messages are added to the intake queue and ACKed immediately
+    // Messages are implicitly ACKed when delivered (AckPolicy::None)
     // Intake workers process from the queue, decoupling JetStream reading from processing
     consumer
         .consume(move |message, jetstream_msg| {
             let intake_tx = jetstream_intake_tx.clone();
             async move {
                 // Try to add message to intake queue
+                // With AckPolicy::None, messages are already implicitly ACKed
+                // If we can't queue it, it will be lost (no NAK possible)
                 match intake_tx.try_send((message, jetstream_msg.clone())) {
                     Ok(()) => {
-                        // Successfully added to intake queue - ACK immediately
-                        // This allows JetStream to continue reading at full speed
-                        if let Err(e) = jetstream_msg.ack().await {
-                            tracing::error!(
-                                "Failed to ACK message after adding to intake queue: {}",
-                                e
-                            );
-                            metrics::counter!("aprs.jetstream.ack_error").increment(1);
-                        } else {
-                            metrics::counter!("aprs.jetstream.acked_immediately").increment(1);
-                        }
+                        // Successfully added to intake queue
+                        metrics::counter!("aprs.jetstream.queued").increment(1);
 
                         // Track intake queue depth
                         let queue_depth = intake_tx.max_capacity() - intake_tx.capacity();
@@ -769,18 +762,16 @@ pub async fn handle_run(
                             .set(queue_depth as f64);
                     }
                     Err(tokio::sync::mpsc::error::TrySendError::Full(_)) => {
-                        tracing::warn!("Intake queue is FULL - NAKing message for retry");
-                        metrics::counter!("aprs.jetstream.intake_queue_full").increment(1);
-                        // NAK the message so it will be redelivered
-                        if let Err(e) = jetstream_msg
-                            .ack_with(async_nats::jetstream::AckKind::Nak(None))
-                            .await
-                        {
-                            tracing::error!("Failed to NAK message: {}", e);
-                        }
+                        tracing::warn!(
+                            "Intake queue is FULL - dropping message (implicit ACK, cannot retry)"
+                        );
+                        metrics::counter!("aprs.jetstream.intake_queue_full_dropped").increment(1);
+                        // With AckPolicy::None, we cannot NAK - message is already ACKed
+                        // This message will be lost
                     }
                     Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => {
-                        tracing::error!("Intake queue is closed");
+                        tracing::error!("Intake queue is closed - shutting down");
+                        return Err(anyhow::anyhow!("Intake queue closed"));
                     }
                 }
                 Ok(())

@@ -45,13 +45,14 @@ impl JetStreamConsumer {
         info!("JetStream stream '{}' found", stream_name);
 
         // Create or get the consumer
-        // This is a durable pull consumer that tracks message acknowledgments
+        // This is a durable pull consumer with implicit ACK (messages are ACKed upon delivery)
+        // Once soar-run receives a message, it is fully responsible for it
         let consumer_config = PullConfig {
             durable_name: Some(consumer_name.clone()),
-            ack_policy: AckPolicy::Explicit, // Require explicit ack after processing
+            ack_policy: AckPolicy::None, // Implicit ACK - messages ACKed upon delivery
             deliver_policy: DeliverPolicy::All, // Start from beginning for new consumers
             filter_subject: subject,
-            max_ack_pending: 50_000, // Allow 50K unACKed messages (default 1000 is too low for slow workers)
+            // max_ack_pending not needed with AckPolicy::None
             ..Default::default()
         };
 
@@ -88,14 +89,15 @@ impl JetStreamConsumer {
     /// Start consuming messages and process them with the provided callback
     ///
     /// This will run indefinitely, processing messages as they arrive.
-    /// Messages are NOT acknowledged here - the callback must handle ACKing after processing.
+    /// Messages are implicitly ACKed upon delivery (AckPolicy::None).
+    /// Once the message is delivered to soar-run, it is fully responsible for processing it.
     ///
     /// The callback receives:
     /// - payload: String - the message content
-    /// - msg: Arc<Message> - the JetStream message handle for ACKing
+    /// - msg: Arc<Message> - the JetStream message handle (for reference only, no ACK needed)
     ///
-    /// The callback should return Ok(()) if the message was processed successfully,
-    /// or Err if processing failed (the message will be NAKed for retry).
+    /// The callback should return Ok(()) if the message was queued successfully,
+    /// or Err if queueing failed.
     pub async fn consume<F, Fut>(&self, mut process_message: F) -> Result<()>
     where
         F: FnMut(String, std::sync::Arc<async_nats::jetstream::Message>) -> Fut,
@@ -144,10 +146,8 @@ impl JetStreamConsumer {
                         Err(e) => {
                             error!("Failed to decode message payload as UTF-8: {}", e);
                             metrics::counter!("aprs.jetstream.decode_error").increment(1);
-                            // Acknowledge the invalid message so we don't get stuck
-                            if let Err(ack_err) = msg.ack().await {
-                                error!("Failed to ack invalid message: {}", ack_err);
-                            }
+                            // With AckPolicy::None, message is already implicitly ACKed
+                            // Just skip this invalid message and continue
                             continue;
                         }
                     };
@@ -155,10 +155,11 @@ impl JetStreamConsumer {
                     // Wrap message in Arc for sharing with workers
                     let msg_arc = std::sync::Arc::new(msg);
 
-                    // Process the message - callback will handle ACKing after processing
+                    // Process the message - with AckPolicy::None, message is already implicitly ACKed
+                    // No manual ACK/NAK needed - soar-run is fully responsible for the message
                     match process_message(payload, msg_arc.clone()).await {
                         Ok(()) => {
-                            // Message processed successfully - worker will ACK
+                            // Message queued successfully
                             processed_count += 1;
                             metrics::counter!("aprs.jetstream.consumed").increment(1);
 
@@ -187,16 +188,13 @@ impl JetStreamConsumer {
                         }
                         Err(e) => {
                             error_count += 1;
-                            warn!("Failed to process message: {} - will retry", e);
-                            metrics::counter!("aprs.jetstream.process_error").increment(1);
-
-                            // NAK the message so it will be redelivered
-                            if let Err(nak_err) = msg_arc
-                                .ack_with(async_nats::jetstream::AckKind::Nak(None))
-                                .await
-                            {
-                                error!("Failed to NAK message: {}", nak_err);
-                            }
+                            warn!(
+                                "Failed to queue message: {} - message will be lost (implicit ACK)",
+                                e
+                            );
+                            metrics::counter!("aprs.jetstream.queue_error").increment(1);
+                            // With AckPolicy::None, we cannot NAK - message is already ACKed
+                            // This message will be lost if we can't queue it
                         }
                     }
                 }
