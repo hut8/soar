@@ -25,6 +25,9 @@ pub struct PacketRouter {
     generic_processor: GenericProcessor,
     /// Internal queue for message tasks (1000 capacity)
     internal_queue_tx: flume::Sender<MessageTask>,
+    /// Internal queue receiver (used once during start())
+    #[allow(clippy::type_complexity)]
+    internal_queue_rx: Option<flume::Receiver<MessageTask>>,
     /// Optional channel sender for aircraft position packets
     aircraft_position_tx: Option<flume::Sender<(AprsPacket, PacketContext)>>,
     /// Optional channel sender for receiver status packets
@@ -36,28 +39,42 @@ pub struct PacketRouter {
 }
 
 impl PacketRouter {
-    /// Create a new PacketRouter with a generic processor and spawn worker pool
+    /// Create a new PacketRouter with a generic processor
     ///
-    /// Creates an internal queue of 1000 message tasks and spawns 10 workers to process them
-    pub fn new(generic_processor: GenericProcessor, num_workers: usize) -> Self {
+    /// Creates an internal queue of 1000 message tasks.
+    /// Workers are spawned when start() is called after configuration.
+    pub fn new(generic_processor: GenericProcessor) -> Self {
         const INTERNAL_QUEUE_SIZE: usize = 1_000;
 
         let (internal_queue_tx, internal_queue_rx) =
             flume::bounded::<MessageTask>(INTERNAL_QUEUE_SIZE);
 
-        let router = Self {
+        Self {
             generic_processor,
             internal_queue_tx,
+            internal_queue_rx: Some(internal_queue_rx),
             aircraft_position_tx: None,
             receiver_status_tx: None,
             receiver_position_tx: None,
             server_status_tx: None,
-        };
+        }
+    }
 
-        // Spawn workers
-        router.spawn_workers(internal_queue_rx, num_workers);
+    /// Start the worker pool after all queues have been configured
+    ///
+    /// This MUST be called after all with_*_queue() methods to ensure
+    /// workers have access to the configured queues.
+    pub fn start(mut self, num_workers: usize) -> Self {
+        // Take the receiver (can only be done once)
+        let internal_queue_rx = self
+            .internal_queue_rx
+            .take()
+            .expect("start() can only be called once");
 
-        router
+        // Spawn workers with the fully configured router
+        self.spawn_workers(internal_queue_rx, num_workers);
+
+        self
     }
 
     /// Spawn worker pool to process messages from internal queue
@@ -228,18 +245,24 @@ impl PacketRouter {
         raw_message: &str,
         received_at: chrono::DateTime<chrono::Utc>,
     ) {
+        metrics::counter!("aprs.router.process_packet_internal.called").increment(1);
+
         // Step 1: Generic processing - archives, identifies receiver, inserts APRS message
         let context = match self
             .generic_processor
             .process_packet(&packet, raw_message, received_at)
             .await
         {
-            Some(ctx) => ctx,
+            Some(ctx) => {
+                metrics::counter!("aprs.router.generic_processor.success").increment(1);
+                ctx
+            }
             None => {
                 warn!(
                     "Generic processing failed for packet from {}, skipping routing",
                     packet.from
                 );
+                metrics::counter!("aprs.router.generic_processor.failed").increment(1);
                 return;
             }
         };
@@ -250,9 +273,11 @@ impl PacketRouter {
 
         match &packet.data {
             AprsData::Position(_) => {
+                metrics::counter!("aprs.router.packet_type.position").increment(1);
                 // Route based on position source type
                 match position_source {
                     PositionSourceType::Aircraft => {
+                        metrics::counter!("aprs.router.position_source.aircraft").increment(1);
                         // Route to aircraft position queue
                         if let Some(tx) = &self.aircraft_position_tx {
                             if let Err(e) = tx.send_async((packet, context)).await {
@@ -263,9 +288,11 @@ impl PacketRouter {
                                 metrics::counter!("aprs.aircraft_queue.closed").increment(1);
                             } else {
                                 trace!("Routed aircraft position to queue");
+                                metrics::counter!("aprs.router.routed.aircraft").increment(1);
                             }
                         } else {
                             trace!("No aircraft position queue configured, packet archived only");
+                            metrics::counter!("aprs.router.no_queue.aircraft").increment(1);
                         }
                     }
                     PositionSourceType::Receiver => {
@@ -300,6 +327,7 @@ impl PacketRouter {
                 }
             }
             AprsData::Status(_) => {
+                metrics::counter!("aprs.router.packet_type.status").increment(1);
                 // Route to receiver status queue
                 trace!(
                     "Received status packet from {} (source type: {:?})",
