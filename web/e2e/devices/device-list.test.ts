@@ -20,7 +20,7 @@ test.describe('Device List', () => {
 		).toBeVisible();
 
 		// Check search input is visible (default is registration search)
-		await expect(page.getByPlaceholder(/aircraft registration/i)).toBeVisible();
+		await expect(page.getByPlaceholder(/aircraft registration/i).first()).toBeVisible();
 
 		// Check search button
 		await expect(page.getByRole('button', { name: /search devices/i })).toBeVisible();
@@ -42,13 +42,13 @@ test.describe('Device List', () => {
 		await goToDevices(page);
 
 		// Initially should show registration search
-		await expect(page.getByPlaceholder(/aircraft registration/i)).toBeVisible();
+		await expect(page.getByPlaceholder(/aircraft registration/i).first()).toBeVisible();
 
 		// Click on Device Address search type
 		await page.getByRole('button', { name: /device address/i }).click();
 
 		// Should show device address input
-		await expect(page.getByPlaceholder('Device address')).toBeVisible();
+		await expect(page.getByPlaceholder('Device address').first()).toBeVisible();
 
 		// Should show address type selector (ICAO, OGN, FLARM)
 		await expect(page.getByText('ICAO')).toBeVisible();
@@ -63,7 +63,7 @@ test.describe('Device List', () => {
 
 		// Should show club selector
 		// Note: The actual club selector UI may vary
-		await expect(page.getByPlaceholder(/select a club/i)).toBeVisible();
+		await expect(page.getByPlaceholder(/select a club/i).first()).toBeVisible();
 
 		// Take screenshot of club search
 		await expect(page).toHaveScreenshot('device-search-type-club.png');
@@ -73,7 +73,10 @@ test.describe('Device List', () => {
 		await goToDevices(page);
 
 		// Fill in registration
-		await page.getByPlaceholder(/aircraft registration/i).fill(testDevices.validRegistration);
+		await page
+			.getByPlaceholder(/aircraft registration/i)
+			.first()
+			.fill(testDevices.validRegistration);
 
 		// Click search
 		await page.getByRole('button', { name: /search devices/i }).click();
@@ -113,7 +116,10 @@ test.describe('Device List', () => {
 		await goToDevices(page);
 
 		// Search for a registration that definitely doesn't exist
-		await page.getByPlaceholder(/aircraft registration/i).fill(testDevices.invalidRegistration);
+		await page
+			.getByPlaceholder(/aircraft registration/i)
+			.first()
+			.fill(testDevices.invalidRegistration);
 
 		// Click search
 		await page.getByRole('button', { name: /search devices/i }).click();
@@ -189,7 +195,10 @@ test.describe('Device List', () => {
 		await goToDevices(page);
 
 		// Fill in registration
-		await page.getByPlaceholder(/aircraft registration/i).fill(testDevices.validRegistration);
+		await page
+			.getByPlaceholder(/aircraft registration/i)
+			.first()
+			.fill(testDevices.validRegistration);
 
 		// Start search (don't await - we want to check loading state)
 		const searchPromise = page.getByRole('button', { name: /search devices/i }).click();
@@ -208,7 +217,10 @@ test.describe('Device List', () => {
 
 		// Search for a query likely to return many results
 		// Note: This depends on having sufficient test data
-		await page.getByPlaceholder(/aircraft registration/i).fill('N');
+		await page
+			.getByPlaceholder(/aircraft registration/i)
+			.first()
+			.fill('N');
 		await page.getByRole('button', { name: /search devices/i }).click();
 
 		await page.waitForLoadState('networkidle');

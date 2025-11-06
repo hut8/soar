@@ -63,7 +63,8 @@ export async function searchDevicesByRegistration(page: Page, registration: stri
 	await goToDevices(page);
 
 	// Fill in the search input (registration is the default search type)
-	await page.getByPlaceholder('Aircraft registration').fill(registration);
+	// Use .first() because there are mobile and desktop versions of the input
+	await page.getByPlaceholder('Aircraft registration').first().fill(registration);
 
 	// Click the search button
 	await page.getByRole('button', { name: /search devices/i }).click();
@@ -96,7 +97,8 @@ export async function searchDevicesByAddress(
 	await page.getByRole('button', { name: addressTypeLabels[addressType] }).click();
 
 	// Fill in the device address
-	await page.getByPlaceholder('Device address').fill(address);
+	// Use .first() because there are mobile and desktop versions of the input
+	await page.getByPlaceholder('Device address').first().fill(address);
 
 	// Click the search button
 	await page.getByRole('button', { name: /search devices/i }).click();
