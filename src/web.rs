@@ -175,6 +175,50 @@ fn format_query_params(query_string: &str) -> String {
     }
 }
 
+// Helper function to extract the real remote IP address
+fn extract_remote_ip(headers: &HeaderMap, remote_addr: Option<std::net::SocketAddr>) -> String {
+    // First, try X-Real-IP header (set by Caddy and other reverse proxies)
+    if let Some(real_ip) = headers.get("x-real-ip")
+        && let Ok(ip_str) = real_ip.to_str()
+    {
+        return ip_str.to_string();
+    }
+
+    // Second, try X-Forwarded-For header (comma-separated list, take the first/leftmost IP)
+    if let Some(forwarded_for) = headers.get("x-forwarded-for")
+        && let Ok(ip_str) = forwarded_for.to_str()
+    {
+        // Take the first IP in the comma-separated list (the original client IP)
+        if let Some(first_ip) = ip_str.split(',').next() {
+            return first_ip.trim().to_string();
+        }
+    }
+
+    // Third, try the Forwarded header (RFC 7239)
+    if let Some(forwarded) = headers.get("forwarded")
+        && let Ok(forwarded_str) = forwarded.to_str()
+    {
+        // Parse "for=..." from the Forwarded header
+        for part in forwarded_str.split(';') {
+            let part = part.trim();
+            if let Some(for_value) = part.strip_prefix("for=") {
+                // Remove quotes and extract IP (may include port)
+                let ip = for_value
+                    .trim_matches('"')
+                    .split(':')
+                    .next()
+                    .unwrap_or(for_value);
+                return ip.to_string();
+            }
+        }
+    }
+
+    // Fallback to actual socket address if no proxy headers found
+    remote_addr
+        .map(|addr| addr.ip().to_string())
+        .unwrap_or_else(|| "unknown".to_string())
+}
+
 // Middleware for request logging with correlation ID
 async fn request_logging_middleware(request: Request<Body>, next: Next) -> Response {
     let method = request.method().clone();
@@ -182,6 +226,15 @@ async fn request_logging_middleware(request: Request<Body>, next: Next) -> Respo
     let query_string = request.uri().query().unwrap_or("");
     let request_id = Uuid::now_v7().to_string()[..8].to_string();
     let start_time = Instant::now();
+
+    // Extract remote IP from headers or connection info
+    let remote_ip = extract_remote_ip(
+        request.headers(),
+        request
+            .extensions()
+            .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
+            .map(|ci| ci.0),
+    );
 
     // Skip logging for metrics endpoint to reduce noise
     let should_log = path != "/data/metrics";
@@ -195,8 +248,8 @@ async fn request_logging_middleware(request: Request<Body>, next: Next) -> Respo
 
     if should_log {
         info!(
-            "Started {} {} [{}{}]",
-            method, path, request_id, query_params_formatted
+            "Started {} {} [{}{}] from {}",
+            method, path, request_id, query_params_formatted, remote_ip
         );
     }
 
@@ -206,13 +259,14 @@ async fn request_logging_middleware(request: Request<Body>, next: Next) -> Respo
 
     if should_log {
         info!(
-            "Completed {} {} [{}{}] {} in {:.2}ms",
+            "Completed {} {} [{}{}] {} in {:.2}ms from {}",
             method,
             path,
             request_id,
             query_params_formatted,
             status.as_u16(),
-            duration.as_secs_f64() * 1000.0
+            duration.as_secs_f64() * 1000.0,
+            remote_ip
         );
     }
 
@@ -562,8 +616,12 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
     let listener = tokio::net::TcpListener::bind(format!("{}:{}", interface, port)).await?;
     info!("Web server listening on http://{}:{}", interface, port);
 
-    // Start the server
-    axum::serve(listener, app).await?;
+    // Start the server with ConnectInfo to track remote addresses
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .await?;
 
     Ok(())
 }
