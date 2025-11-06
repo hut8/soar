@@ -9,11 +9,15 @@ test.describe('Device List', () => {
 		// Check page title
 		await expect(page).toHaveTitle(/devices/i);
 
-		// Check main heading
-		await expect(page.getByRole('heading', { name: /aircraft devices/i })).toBeVisible();
+		// Check main heading (use level 1 to be specific to h1)
+		await expect(
+			page.getByRole('heading', { name: /^aircraft devices$/i, level: 1 })
+		).toBeVisible();
 
 		// Check search section is present
-		await expect(page.getByRole('heading', { name: /search aircraft devices/i })).toBeVisible();
+		await expect(
+			page.getByRole('heading', { name: /search aircraft devices/i, level: 3 })
+		).toBeVisible();
 
 		// Check search input is visible (default is registration search)
 		await expect(page.getByPlaceholder(/aircraft registration/i)).toBeVisible();
