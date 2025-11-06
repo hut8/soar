@@ -132,11 +132,33 @@ impl AprsClient {
                             last_receive_time = std::time::Instant::now();
                             attempted_count += 1;
 
-                            // Use semaphore to limit concurrent publishes to 100
-                            let permit = publish_semaphore.clone().acquire_owned().await.unwrap();
+                            // Spawn task immediately without blocking on semaphore
+                            // The semaphore acquire happens inside the task so we never block the event loop
+                            let semaphore = publish_semaphore.clone();
                             let pub_clone = publisher.clone();
 
                             tokio::spawn(async move {
+                                // Try to acquire permit with timeout to avoid indefinite waiting
+                                let permit = match tokio::time::timeout(
+                                    Duration::from_secs(10),
+                                    semaphore.acquire_owned()
+                                ).await {
+                                    Ok(Ok(permit)) => permit,
+                                    Ok(Err(_)) => {
+                                        error!("Semaphore closed - this should never happen");
+                                        return;
+                                    }
+                                    Err(_) => {
+                                        error!("Timeout waiting for publish permit after 10s - all 100 slots filled");
+                                        metrics::counter!("aprs.jetstream.permit_timeout").increment(1);
+                                        sentry::capture_message(
+                                            "Timeout waiting for JetStream publish permit - all 100 concurrent slots filled for 10+ seconds",
+                                            sentry::Level::Error
+                                        );
+                                        return;
+                                    }
+                                };
+
                                 let _permit = permit; // Hold permit until publish completes
                                 let publish_start = std::time::Instant::now();
 
@@ -161,7 +183,6 @@ impl AprsClient {
                                         error!("JetStream publish timed out after 5 seconds - NATS may be blocked");
                                         metrics::counter!("aprs.jetstream.publish_timeout").increment(1);
 
-                                        // Report timeout to Sentry (throttled)
                                         sentry::capture_message(
                                             "JetStream publish timed out after 5 seconds",
                                             sentry::Level::Error
