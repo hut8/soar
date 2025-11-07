@@ -46,7 +46,7 @@
 
 	let mapContainer = $state<HTMLElement>();
 	let map = $state<google.maps.Map>();
-	let flightPath = $state<google.maps.Polyline | null>(null);
+	let flightPathSegments = $state<google.maps.Polyline[]>([]);
 	let altitudeChartContainer = $state<HTMLElement>();
 	let altitudeChartInitialized = $state(false);
 	let altitudeInfoWindow = $state<google.maps.InfoWindow | null>(null);
@@ -63,16 +63,6 @@
 	// Nearby flights data - using full Flight type
 	let nearbyFlights = $state<Flight[]>([]);
 
-	// Spline path response type
-	interface SplinePoint {
-		latitude: number;
-		longitude: number;
-		altitude_meters: number | null;
-	}
-	interface SplinePathResponse {
-		points: SplinePoint[];
-		count: number;
-	}
 	let nearbyFlightPaths = $state<google.maps.Polyline[]>([]);
 	let isLoadingNearbyFlights = $state(false);
 
@@ -119,6 +109,83 @@
 		const maxMsl = Math.max(...data.fixes.map((f) => f.altitude_msl_feet || 0));
 		return maxMsl > 0 ? maxMsl : null;
 	});
+
+	// Calculate minimum altitude from fixes
+	const minAltitude = $derived(() => {
+		if (data.fixes.length === 0) return null;
+		const validAltitudes = data.fixes
+			.map((f) => f.altitude_msl_feet)
+			.filter((alt): alt is number => alt !== null && alt !== undefined);
+		if (validAltitudes.length === 0) return null;
+		return Math.min(...validAltitudes);
+	});
+
+	// Helper function to calculate bearing between two points
+	function calculateBearing(lat1: number, lon1: number, lat2: number, lon2: number): number {
+		const φ1 = (lat1 * Math.PI) / 180;
+		const φ2 = (lat2 * Math.PI) / 180;
+		const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+
+		const y = Math.sin(Δλ) * Math.cos(φ2);
+		const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+		const θ = Math.atan2(y, x);
+		const bearing = ((θ * 180) / Math.PI + 360) % 360;
+		return bearing;
+	}
+
+	// Helper function to map altitude to color (red→blue gradient)
+	function altitudeToColor(altitude: number | null | undefined, min: number, max: number): string {
+		if (altitude === null || altitude === undefined || max === min) {
+			return '#888888'; // Gray for unknown altitude
+		}
+
+		// Normalize altitude to 0-1 range
+		const normalized = (altitude - min) / (max - min);
+
+		// Interpolate from red (low) to blue (high)
+		// Red: rgb(239, 68, 68) - #ef4444
+		// Blue: rgb(59, 130, 246) - #3b82f6
+		const r = Math.round(239 - normalized * (239 - 59));
+		const g = Math.round(68 + normalized * (130 - 68));
+		const b = Math.round(68 + normalized * (246 - 68));
+
+		return `rgb(${r}, ${g}, ${b})`;
+	}
+
+	// Helper function to create gradient polyline segments
+	function createGradientPolylines(
+		fixesInOrder: typeof data.fixes,
+		targetMap: google.maps.Map
+	): google.maps.Polyline[] {
+		const minAlt = minAltitude() ?? 0;
+		const maxAlt = maxAltitude() ?? 1000;
+		const segments: google.maps.Polyline[] = [];
+
+		// Create a polyline segment for each pair of consecutive fixes
+		for (let i = 0; i < fixesInOrder.length - 1; i++) {
+			const fix1 = fixesInOrder[i];
+			const fix2 = fixesInOrder[i + 1];
+
+			// Use the starting fix's altitude for the segment color
+			const color = altitudeToColor(fix1.altitude_msl_feet, minAlt, maxAlt);
+
+			const segment = new google.maps.Polyline({
+				path: [
+					{ lat: fix1.latitude, lng: fix1.longitude },
+					{ lat: fix2.latitude, lng: fix2.longitude }
+				],
+				geodesic: true,
+				strokeColor: color,
+				strokeOpacity: 1.0,
+				strokeWeight: 3
+			});
+
+			segment.setMap(targetMap);
+			segments.push(segment);
+		}
+
+		return segments;
+	}
 
 	// Calculate maximum AGL altitude from fixes
 	const maxAglAltitude = $derived(() => {
@@ -367,43 +434,22 @@
 		};
 	}
 
-	// Helper function to fetch and apply spline path to map
-	async function updateFlightPath(
-		fixesInOrder: typeof data.fixes
-	): Promise<google.maps.LatLngLiteral[]> {
-		try {
-			const splineResponse = await serverCall<SplinePathResponse>(
-				`/flights/${data.flight.id}/spline-path`
-			);
-
-			if (splineResponse.points.length > 0) {
-				return splineResponse.points.map((point) => ({
-					lat: point.latitude,
-					lng: point.longitude
-				}));
-			}
-		} catch (error) {
-			console.error('Failed to fetch spline path, using raw fixes:', error);
-		}
-
-		// Fallback to raw fixes
-		return fixesInOrder.map((fix) => ({
-			lat: fix.latitude,
-			lng: fix.longitude
-		}));
-	}
-
 	// Update map and altitude chart with new data
 	async function updateMapAndChart() {
 		if (data.fixes.length === 0) return;
 
 		// Update map
-		if (map && flightPath) {
+		if (map && flightPathSegments.length > 0) {
 			const fixesInOrder = [...data.fixes].reverse();
 
-			// Update flight path with spline interpolation
-			const pathCoordinates = await updateFlightPath(fixesInOrder);
-			flightPath.setPath(pathCoordinates);
+			// Clear existing flight path segments
+			flightPathSegments.forEach((segment) => {
+				segment.setMap(null);
+			});
+			flightPathSegments = [];
+
+			// Create new gradient polyline segments
+			flightPathSegments = createGradientPolylines(fixesInOrder, map);
 
 			// Clear existing fix markers
 			fixMarkers.forEach((marker) => {
@@ -413,17 +459,47 @@
 
 			// Wait for map to be ready before adding markers
 			google.maps.event.addListenerOnce(map, 'idle', () => {
-				// Re-add fix markers
-				fixesInOrder.forEach((fix) => {
-					const fixDot = document.createElement('div');
-					fixDot.innerHTML = `
-						<div style="background-color: white; width: 6px; height: 6px; border-radius: 50%; border: 1px solid rgba(0,0,0,0.3); box-shadow: 0 0 2px rgba(0,0,0,0.5); cursor: pointer;"></div>
+				// Re-add fix markers as directional arrows
+				const minAlt = minAltitude() ?? 0;
+				const maxAlt = maxAltitude() ?? 1000;
+
+				fixesInOrder.forEach((fix, index) => {
+					// Calculate bearing to next fix (or use previous bearing for last fix)
+					let bearing = 0;
+					if (index < fixesInOrder.length - 1) {
+						const nextFix = fixesInOrder[index + 1];
+						bearing = calculateBearing(
+							fix.latitude,
+							fix.longitude,
+							nextFix.latitude,
+							nextFix.longitude
+						);
+					} else if (index > 0) {
+						// For last fix, use bearing from previous fix
+						const prevFix = fixesInOrder[index - 1];
+						bearing = calculateBearing(
+							prevFix.latitude,
+							prevFix.longitude,
+							fix.latitude,
+							fix.longitude
+						);
+					}
+
+					// Get color based on altitude
+					const color = altitudeToColor(fix.altitude_msl_feet, minAlt, maxAlt);
+
+					// Create SVG arrow element
+					const arrowSvg = document.createElement('div');
+					arrowSvg.innerHTML = `
+						<svg width="16" height="16" viewBox="0 0 16 16" style="transform: rotate(${bearing}deg); filter: drop-shadow(0 0 2px rgba(0,0,0,0.5)); cursor: pointer;">
+							<path d="M8 2 L14 14 L8 11 L2 14 Z" fill="${color}" stroke="rgba(0,0,0,0.3)" stroke-width="1"/>
+						</svg>
 					`;
 
 					const marker = new google.maps.marker.AdvancedMarkerElement({
 						map,
 						position: { lat: fix.latitude, lng: fix.longitude },
-						content: fixDot
+						content: arrowSvg
 					});
 
 					marker.addListener('click', () => {
@@ -546,18 +622,8 @@
 			// Fit bounds
 			map.fitBounds(bounds);
 
-			// Create flight path with spline interpolation
-			const pathCoordinates = await updateFlightPath(fixesInOrder);
-
-			flightPath = new google.maps.Polyline({
-				path: pathCoordinates,
-				geodesic: true,
-				strokeColor: '#FF0000',
-				strokeOpacity: 1.0,
-				strokeWeight: 3
-			});
-
-			flightPath.setMap(map);
+			// Create gradient polyline segments
+			flightPathSegments = createGradientPolylines(fixesInOrder, map);
 
 			// Create info window for altitude display
 			altitudeInfoWindow = new google.maps.InfoWindow();
