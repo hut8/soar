@@ -6,6 +6,7 @@
 
 @import '@skeletonlabs/skeleton/dist/themes/cerberus.css';
 
+@custom-variant skb (&);
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* Ensure full height layout */
