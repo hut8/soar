@@ -283,13 +283,13 @@
 <!-- Aircraft Status Modal -->
 {#if showModal && selectedDevice}
 	<div
-		class="fixed inset-0 z-50 flex items-start justify-center bg-surface-950-50/50 pt-20"
+		class="bg-surface-950-50/50 fixed inset-0 z-50 flex items-start justify-center pt-20"
 		onclick={closeModal}
 		onkeydown={(e) => e.key === 'Escape' && closeModal()}
 		role="presentation"
 	>
 		<div
-			class="relative max-h-[calc(90vh-5rem)] w-full max-w-4xl overflow-y-auto card bg-surface-50 text-surface-900 shadow-xl dark:bg-surface-900 dark:text-surface-50"
+			class="card bg-surface-50 text-surface-900 dark:bg-surface-900 dark:text-surface-50 relative max-h-[calc(90vh-5rem)] w-full max-w-4xl overflow-y-auto shadow-xl"
 			onclick={(e) => e.stopPropagation()}
 			onkeydown={(e) => e.key === 'Escape' && closeModal()}
 			role="dialog"
@@ -299,7 +299,7 @@
 		>
 			<!-- Header -->
 			<div
-				class="flex items-center justify-between border-b border-surface-300 p-6 dark:border-surface-600"
+				class="border-surface-300 dark:border-surface-600 flex items-center justify-between border-b p-6"
 			>
 				<div class="flex items-center gap-3">
 					{#if isCompassActive && userLocation}
@@ -320,7 +320,7 @@
 									/>
 								</svg>
 							</div>
-							<div class="mt-1 text-xs font-semibold text-surface-700 dark:text-surface-300">
+							<div class="text-surface-700 dark:text-surface-300 mt-1 text-xs font-semibold">
 								{Math.round(directionToAircraft)}°
 							</div>
 						</div>
@@ -334,7 +334,7 @@
 					{/if}
 					<div>
 						<h2 id="aircraft-status-title" class="text-xl font-bold">Aircraft Status</h2>
-						<p class="text-sm text-surface-600 dark:text-surface-400">
+						<p class="text-surface-600 dark:text-surface-400 text-sm">
 							{selectedDevice.registration ||
 								formatDeviceAddress(selectedDevice.address_type, selectedDevice.address)}
 							{#if selectedDevice.aircraft_model}
@@ -370,12 +370,12 @@
 						</h3>
 
 						<div
-							class="rounded-lg border border-surface-300 bg-surface-100 p-4 dark:border-surface-600 dark:bg-surface-800"
+							class="border-surface-300 bg-surface-100 dark:border-surface-600 dark:bg-surface-800 rounded-lg border p-4"
 						>
 							<div class="space-y-3">
 								<div class="grid grid-cols-2 gap-4">
 									<div>
-										<dt class="text-sm font-medium text-surface-600 dark:text-surface-400">
+										<dt class="text-surface-600 dark:text-surface-400 text-sm font-medium">
 											Registration
 										</dt>
 										<dd class="font-mono text-sm">
@@ -383,7 +383,7 @@
 										</dd>
 									</div>
 									<div>
-										<dt class="text-sm font-medium text-surface-600 dark:text-surface-400">
+										<dt class="text-surface-600 dark:text-surface-400 text-sm font-medium">
 											Address
 										</dt>
 										<dd class="font-mono text-sm">
@@ -394,7 +394,7 @@
 
 								<div class="grid grid-cols-2 gap-4">
 									<div>
-										<dt class="text-sm font-medium text-surface-600 dark:text-surface-400">
+										<dt class="text-surface-600 dark:text-surface-400 text-sm font-medium">
 											Aircraft Model
 										</dt>
 										<dd class="text-sm">
@@ -402,7 +402,7 @@
 										</dd>
 									</div>
 									<div>
-										<dt class="text-sm font-medium text-surface-600 dark:text-surface-400">
+										<dt class="text-surface-600 dark:text-surface-400 text-sm font-medium">
 											Competition Number
 										</dt>
 										<dd class="text-sm">
@@ -450,7 +450,7 @@
 								{#if selectedDevice.aircraft_type_ogn}
 									<div class="grid grid-cols-1 gap-4">
 										<div>
-											<dt class="text-sm font-medium text-surface-600 dark:text-surface-400">
+											<dt class="text-surface-600 dark:text-surface-400 text-sm font-medium">
 												Aircraft Type
 											</dt>
 											<dd class="text-sm">
@@ -470,28 +470,28 @@
 
 						<!-- Aircraft Registration Details -->
 						{#if loadingRegistration}
-							<div class="flex items-center gap-2 text-sm text-surface-600 dark:text-surface-400">
+							<div class="text-surface-600 dark:text-surface-400 flex items-center gap-2 text-sm">
 								<RotateCcw class="animate-spin" size={16} />
 								Loading aircraft registration...
 							</div>
 						{:else if aircraftRegistration}
-							<div class="space-y-3 border-t border-surface-300 pt-4 dark:border-surface-600">
-								<h4 class="font-medium text-surface-900 dark:text-surface-100">
+							<div class="border-surface-300 dark:border-surface-600 space-y-3 border-t pt-4">
+								<h4 class="text-surface-900 dark:text-surface-100 font-medium">
 									FAA Registration Details
 								</h4>
 								<dl class="grid grid-cols-2 gap-4 text-sm">
 									<div>
-										<dt class="font-medium text-surface-600 dark:text-surface-400">Owner</dt>
+										<dt class="text-surface-600 dark:text-surface-400 font-medium">Owner</dt>
 										<dd>{aircraftRegistration.registrant_name}</dd>
 									</div>
 									<div>
-										<dt class="font-medium text-surface-600 dark:text-surface-400">
+										<dt class="text-surface-600 dark:text-surface-400 font-medium">
 											Serial Number
 										</dt>
 										<dd class="font-mono">{aircraftRegistration.serial_number}</dd>
 									</div>
 									<div>
-										<dt class="font-medium text-surface-600 dark:text-surface-400">
+										<dt class="text-surface-600 dark:text-surface-400 font-medium">
 											Transponder Code
 										</dt>
 										<dd class="font-mono">
@@ -499,40 +499,40 @@
 										</dd>
 									</div>
 									<div>
-										<dt class="font-medium text-surface-600 dark:text-surface-400">Year</dt>
+										<dt class="text-surface-600 dark:text-surface-400 font-medium">Year</dt>
 										<dd>{aircraftRegistration.year_mfr}</dd>
 									</div>
 									<div>
-										<dt class="font-medium text-surface-600 dark:text-surface-400">Type</dt>
+										<dt class="text-surface-600 dark:text-surface-400 font-medium">Type</dt>
 										<dd>{getAircraftTypeDescription(aircraftRegistration.type_aircraft)}</dd>
 									</div>
 									<div>
-										<dt class="font-medium text-surface-600 dark:text-surface-400">Status</dt>
+										<dt class="text-surface-600 dark:text-surface-400 font-medium">Status</dt>
 										<dd>
 											{getStatusCodeDescription(aircraftRegistration.status_code)}
-											<span class="ml-1 text-xs text-surface-500 dark:text-surface-500"
+											<span class="text-surface-500 dark:text-surface-500 ml-1 text-xs"
 												>({aircraftRegistration.status_code})</span
 											>
 										</dd>
 									</div>
 									<div>
-										<dt class="font-medium text-surface-600 dark:text-surface-400">
+										<dt class="text-surface-600 dark:text-surface-400 font-medium">
 											Certificate Issue
 										</dt>
 										<dd>{dayjs(aircraftRegistration.cert_issue_date).format('YYYY-MM-DD')}</dd>
 									</div>
 									<div>
-										<dt class="font-medium text-surface-600 dark:text-surface-400">Expiration</dt>
+										<dt class="text-surface-600 dark:text-surface-400 font-medium">Expiration</dt>
 										<dd>{dayjs(aircraftRegistration.expiration_date).format('YYYY-MM-DD')}</dd>
 									</div>
 									<div>
-										<dt class="font-medium text-surface-600 dark:text-surface-400">
+										<dt class="text-surface-600 dark:text-surface-400 font-medium">
 											Airworthiness
 										</dt>
 										<dd>{dayjs(aircraftRegistration.air_worth_date).format('YYYY-MM-DD')}</dd>
 									</div>
 									<div>
-										<dt class="font-medium text-surface-600 dark:text-surface-400">Last Action</dt>
+										<dt class="text-surface-600 dark:text-surface-400 font-medium">Last Action</dt>
 										<dd>{dayjs(aircraftRegistration.last_action_date).format('YYYY-MM-DD')}</dd>
 									</div>
 								</dl>
@@ -541,54 +541,54 @@
 
 						<!-- Aircraft Model Details -->
 						{#if loadingModel}
-							<div class="flex items-center gap-2 text-sm text-surface-600 dark:text-surface-400">
+							<div class="text-surface-600 dark:text-surface-400 flex items-center gap-2 text-sm">
 								<RotateCcw class="animate-spin" size={16} />
 								Loading aircraft model details...
 							</div>
 						{:else if aircraftModel}
-							<div class="space-y-3 border-t border-surface-300 pt-4 dark:border-surface-600">
-								<h4 class="font-medium text-surface-900 dark:text-surface-100">
+							<div class="border-surface-300 dark:border-surface-600 space-y-3 border-t pt-4">
+								<h4 class="text-surface-900 dark:text-surface-100 font-medium">
 									Aircraft Model Details
 								</h4>
 								<dl class="grid grid-cols-2 gap-4 text-sm">
 									<div>
-										<dt class="font-medium text-surface-600 dark:text-surface-400">Manufacturer</dt>
+										<dt class="text-surface-600 dark:text-surface-400 font-medium">Manufacturer</dt>
 										<dd>{aircraftModel.manufacturer_name || 'Unknown'}</dd>
 									</div>
 									<div>
-										<dt class="font-medium text-surface-600 dark:text-surface-400">Model</dt>
+										<dt class="text-surface-600 dark:text-surface-400 font-medium">Model</dt>
 										<dd>{aircraftModel.model_name || 'Unknown'}</dd>
 									</div>
 									<div>
-										<dt class="font-medium text-surface-600 dark:text-surface-400">
+										<dt class="text-surface-600 dark:text-surface-400 font-medium">
 											Aircraft Type
 										</dt>
 										<dd>{formatTitleCase(aircraftModel.aircraft_type)}</dd>
 									</div>
 									<div>
-										<dt class="font-medium text-surface-600 dark:text-surface-400">Engine Type</dt>
+										<dt class="text-surface-600 dark:text-surface-400 font-medium">Engine Type</dt>
 										<dd>{formatTitleCase(aircraftModel.engine_type)}</dd>
 									</div>
 									<div>
-										<dt class="font-medium text-surface-600 dark:text-surface-400">Category</dt>
+										<dt class="text-surface-600 dark:text-surface-400 font-medium">Category</dt>
 										<dd>{formatTitleCase(aircraftModel.aircraft_category)}</dd>
 									</div>
 									<div>
-										<dt class="font-medium text-surface-600 dark:text-surface-400">
+										<dt class="text-surface-600 dark:text-surface-400 font-medium">
 											Builder Certification
 										</dt>
 										<dd>{formatTitleCase(aircraftModel.builder_certification)}</dd>
 									</div>
 									<div>
-										<dt class="font-medium text-surface-600 dark:text-surface-400">Seats</dt>
+										<dt class="text-surface-600 dark:text-surface-400 font-medium">Seats</dt>
 										<dd>{aircraftModel.number_of_seats ?? 'Unknown'}</dd>
 									</div>
 									<div>
-										<dt class="font-medium text-surface-600 dark:text-surface-400">Engines</dt>
+										<dt class="text-surface-600 dark:text-surface-400 font-medium">Engines</dt>
 										<dd>{aircraftModel.number_of_engines ?? 'Unknown'}</dd>
 									</div>
 									<div>
-										<dt class="font-medium text-surface-600 dark:text-surface-400">
+										<dt class="text-surface-600 dark:text-surface-400 font-medium">
 											Cruising Speed
 										</dt>
 										<dd>
@@ -598,7 +598,7 @@
 										</dd>
 									</div>
 									<div>
-										<dt class="font-medium text-surface-600 dark:text-surface-400">Weight Class</dt>
+										<dt class="text-surface-600 dark:text-surface-400 font-medium">Weight Class</dt>
 										<dd>{formatTitleCase(aircraftModel.weight_class)}</dd>
 									</div>
 								</dl>
@@ -614,7 +614,7 @@
 						</h3>
 
 						{#if recentFixes.length === 0}
-							<div class="py-8 text-center text-surface-500 dark:text-surface-500">
+							<div class="text-surface-500 dark:text-surface-500 py-8 text-center">
 								<MapPin size={48} class="mx-auto mb-2 opacity-50" />
 								<p>No recent position data available</p>
 							</div>
@@ -622,14 +622,14 @@
 							<!-- Latest Fix Summary -->
 							{@const latestFix = recentFixes[0]}
 							<div
-								class="rounded-lg border border-surface-300 bg-surface-100 p-4 dark:border-surface-600 dark:bg-surface-800"
+								class="border-surface-300 bg-surface-100 dark:border-surface-600 dark:bg-surface-800 rounded-lg border p-4"
 							>
-								<h4 class="mb-3 font-medium text-surface-900 dark:text-surface-100">
+								<h4 class="text-surface-900 dark:text-surface-100 mb-3 font-medium">
 									Latest Position
 								</h4>
 								<dl class="grid grid-cols-2 gap-4 text-sm">
 									<div>
-										<dt class="font-medium text-surface-600 dark:text-surface-400">
+										<dt class="text-surface-600 dark:text-surface-400 font-medium">
 											Altitude (ft)
 										</dt>
 										<dd>
@@ -644,15 +644,15 @@
 										</dd>
 									</div>
 									<div>
-										<dt class="font-medium text-surface-600 dark:text-surface-400">Ground Speed</dt>
+										<dt class="text-surface-600 dark:text-surface-400 font-medium">Ground Speed</dt>
 										<dd>{formatSpeed(latestFix.ground_speed_knots)}</dd>
 									</div>
 									<div>
-										<dt class="font-medium text-surface-600 dark:text-surface-400">Track</dt>
+										<dt class="text-surface-600 dark:text-surface-400 font-medium">Track</dt>
 										<dd>{formatTrack(latestFix.track_degrees)}</dd>
 									</div>
 									<div>
-										<dt class="font-medium text-surface-600 dark:text-surface-400">Climb Rate</dt>
+										<dt class="text-surface-600 dark:text-surface-400 font-medium">Climb Rate</dt>
 										<dd>
 											<span
 												class="{latestFix.climb_fpm !== undefined &&
@@ -683,18 +683,18 @@
 										)}
 										{@const distances = formatDistance(distanceNm)}
 										<div>
-											<dt class="font-medium text-surface-600 dark:text-surface-400">
+											<dt class="text-surface-600 dark:text-surface-400 font-medium">
 												Distance from me
 											</dt>
 											<dd>{distances.nm} nm / {distances.mi} mi</dd>
 										</div>
 										<div>
-											<dt class="font-medium text-surface-600 dark:text-surface-400">Bearing</dt>
+											<dt class="text-surface-600 dark:text-surface-400 font-medium">Bearing</dt>
 											<dd>{formatBearing(bearing)}</dd>
 										</div>
 									{:else}
 										<div class="col-span-2">
-											<dt class="font-medium text-surface-600 dark:text-surface-400">
+											<dt class="text-surface-600 dark:text-surface-400 font-medium">
 												Distance & Bearing
 											</dt>
 											<dd>
@@ -711,7 +711,7 @@
 									{/if}
 
 									<div class="col-span-2">
-										<dt class="font-medium text-surface-600 dark:text-surface-400">Coordinates</dt>
+										<dt class="text-surface-600 dark:text-surface-400 font-medium">Coordinates</dt>
 										<dd class="font-mono">
 											{formatCoordinates(latestFix.latitude, latestFix.longitude)}
 										</dd>
@@ -719,7 +719,7 @@
 									<div class="col-span-2">
 										<dd>
 											Last seen {formatTimestamp(latestFix.timestamp).relative}
-											<div class="text-xs text-surface-500 dark:text-surface-500">
+											<div class="text-surface-500 dark:text-surface-500 text-xs">
 												{formatTimestamp(latestFix.timestamp).absolute}
 											</div>
 										</dd>
@@ -740,31 +740,31 @@
 						</h3>
 
 						<div
-							class="max-h-64 overflow-y-auto rounded-lg border border-surface-300 dark:border-surface-600"
+							class="border-surface-300 dark:border-surface-600 max-h-64 overflow-y-auto rounded-lg border"
 						>
 							<table class="w-full text-sm">
 								<thead
-									class="border-b border-surface-300 bg-surface-100 dark:border-surface-600 dark:bg-surface-800"
+									class="border-surface-300 bg-surface-100 dark:border-surface-600 dark:bg-surface-800 border-b"
 								>
 									<tr>
 										<th
-											class="px-3 py-2 text-left font-medium text-surface-600 dark:text-surface-400"
+											class="text-surface-600 dark:text-surface-400 px-3 py-2 text-left font-medium"
 											>Time</th
 										>
 										<th
-											class="px-3 py-2 text-left font-medium text-surface-600 dark:text-surface-400"
+											class="text-surface-600 dark:text-surface-400 px-3 py-2 text-left font-medium"
 											>Altitude (ft)</th
 										>
 										<th
-											class="px-3 py-2 text-left font-medium text-surface-600 dark:text-surface-400"
+											class="text-surface-600 dark:text-surface-400 px-3 py-2 text-left font-medium"
 											>Climb Rate</th
 										>
 										<th
-											class="px-3 py-2 text-left font-medium text-surface-600 dark:text-surface-400"
+											class="text-surface-600 dark:text-surface-400 px-3 py-2 text-left font-medium"
 											>Speed</th
 										>
 										<th
-											class="px-3 py-2 text-left font-medium text-surface-600 dark:text-surface-400"
+											class="text-surface-600 dark:text-surface-400 px-3 py-2 text-left font-medium"
 											>Track</th
 										>
 									</tr>
@@ -772,7 +772,7 @@
 								<tbody>
 									{#each recentFixes.slice(0, 20) as fix (fix.id)}
 										<tr
-											class="border-b border-surface-200 hover:bg-surface-100 dark:border-surface-700 dark:hover:bg-surface-800"
+											class="border-surface-200 hover:bg-surface-100 dark:border-surface-700 dark:hover:bg-surface-800 border-b"
 										>
 											<td class="px-3 py-2">
 												{formatTimestamp(fix.timestamp).relative}
@@ -811,7 +811,7 @@
 						</div>
 
 						{#if recentFixes.length > 20}
-							<p class="text-center text-xs text-surface-500 dark:text-surface-500">
+							<p class="text-surface-500 dark:text-surface-500 text-center text-xs">
 								Showing latest 20 of {recentFixes.length} fixes
 							</p>
 						{/if}

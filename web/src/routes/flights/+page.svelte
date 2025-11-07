@@ -96,7 +96,7 @@
 <div class="container mx-auto max-w-7xl space-y-6 p-4">
 	<!-- Header -->
 	<header class="space-y-2 text-center">
-		<h1 class="flex items-center justify-center gap-2 h1">
+		<h1 class="h1 flex items-center justify-center gap-2">
 			<Plane class="h-8 w-8" />
 			Flights
 		</h1>
@@ -105,15 +105,15 @@
 
 	<!-- Loading State -->
 	{#if loading}
-		<div class="space-y-4 card p-12 text-center">
+		<div class="card space-y-4 p-12 text-center">
 			<div
-				class="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-primary-500 border-t-transparent"
+				class="border-primary-500 mx-auto h-12 w-12 animate-spin rounded-full border-4 border-t-transparent"
 			></div>
 			<p class="text-surface-500-400-token">Loading flights...</p>
 		</div>
 	{:else if error}
 		<!-- Error State -->
-		<div class="space-y-4 card p-12 text-center">
+		<div class="card space-y-4 p-12 text-center">
 			<div class="rounded border border-red-200 bg-red-50 p-4 text-red-600">
 				{error}
 			</div>
@@ -121,8 +121,8 @@
 		</div>
 	{:else if activeFlights.length === 0 && completedFlights.length === 0}
 		<!-- Empty State -->
-		<div class="space-y-4 card p-12 text-center">
-			<Plane class="mx-auto mb-4 h-16 w-16 text-surface-400" />
+		<div class="card space-y-4 p-12 text-center">
+			<Plane class="text-surface-400 mx-auto mb-4 h-16 w-16" />
 			<div class="space-y-2">
 				<h3 class="h3">No flights found</h3>
 				<p class="text-surface-500-400-token">No flights have been recorded yet.</p>

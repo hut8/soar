@@ -270,7 +270,7 @@
 				<div class="flex flex-wrap items-start justify-between gap-4">
 					<div class="flex-1">
 						<div class="mb-2 flex items-center gap-3">
-							<Radio class="h-8 w-8 text-primary-500" />
+							<Radio class="text-primary-500 h-8 w-8" />
 							<div>
 								<h1 class="h1">
 									{device.registration || 'Unknown'}
@@ -338,8 +338,8 @@
 			<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
 				<!-- Club Assignment (Admin Only) -->
 				{#if isAdmin}
-					<div class="space-y-4 card p-6">
-						<h2 class="flex items-center gap-2 h2">
+					<div class="card space-y-4 p-6">
+						<h2 class="h2 flex items-center gap-2">
 							<Building2 class="h-6 w-6" />
 							Club Assignment
 						</h2>
@@ -393,8 +393,8 @@
 				{/if}
 
 				<!-- Aircraft Registration -->
-				<div class="space-y-4 card p-6">
-					<h2 class="flex items-center gap-2 h2">
+				<div class="card space-y-4 p-6">
+					<h2 class="h2 flex items-center gap-2">
 						<Plane class="h-6 w-6" />
 						Aircraft Registration
 					</h2>
@@ -402,7 +402,7 @@
 					{#if aircraftRegistration}
 						<div class="space-y-3">
 							<div class="flex items-start gap-3">
-								<Info class="mt-1 h-4 w-4 text-surface-500" />
+								<Info class="text-surface-500 mt-1 h-4 w-4" />
 								<div>
 									<p class="text-surface-600-300-token mb-1 text-sm">Registration Number</p>
 									<p class="font-mono font-semibold">
@@ -412,7 +412,7 @@
 							</div>
 
 							<div class="flex items-start gap-3">
-								<Info class="mt-1 h-4 w-4 text-surface-500" />
+								<Info class="text-surface-500 mt-1 h-4 w-4" />
 								<div>
 									<p class="text-surface-600-300-token mb-1 text-sm">Transponder Code</p>
 									<p class="font-mono">
@@ -422,7 +422,7 @@
 							</div>
 
 							<div class="flex items-start gap-3">
-								<Calendar class="mt-1 h-4 w-4 text-surface-500" />
+								<Calendar class="text-surface-500 mt-1 h-4 w-4" />
 								<div>
 									<p class="text-surface-600-300-token mb-1 text-sm">Year Manufactured</p>
 									<p>{aircraftRegistration.year_mfr}</p>
@@ -430,7 +430,7 @@
 							</div>
 
 							<div class="flex items-start gap-3">
-								<User class="mt-1 h-4 w-4 text-surface-500" />
+								<User class="text-surface-500 mt-1 h-4 w-4" />
 								<div>
 									<p class="text-surface-600-300-token mb-1 text-sm">Owner</p>
 									<p>{aircraftRegistration.registrant_name}</p>
@@ -438,7 +438,7 @@
 							</div>
 
 							<div class="flex items-start gap-3">
-								<Info class="mt-1 h-4 w-4 text-surface-500" />
+								<Info class="text-surface-500 mt-1 h-4 w-4" />
 								<div>
 									<p class="text-surface-600-300-token mb-1 text-sm">Serial Number</p>
 									<p class="font-mono">{aircraftRegistration.serial_number}</p>
@@ -446,12 +446,12 @@
 							</div>
 
 							<div class="flex items-start gap-3">
-								<Info class="mt-1 h-4 w-4 text-surface-500" />
+								<Info class="text-surface-500 mt-1 h-4 w-4" />
 								<div>
 									<p class="text-surface-600-300-token mb-1 text-sm">Status</p>
 									<p>
 										{getStatusCodeDescription(aircraftRegistration.status_code)}
-										<span class="ml-1 text-xs text-surface-500"
+										<span class="text-surface-500 ml-1 text-xs"
 											>({aircraftRegistration.status_code})</span
 										>
 									</p>
@@ -459,7 +459,7 @@
 							</div>
 
 							<div class="flex items-start gap-3">
-								<Calendar class="mt-1 h-4 w-4 text-surface-500" />
+								<Calendar class="text-surface-500 mt-1 h-4 w-4" />
 								<div>
 									<p class="text-surface-600-300-token mb-1 text-sm">Certificate Issue Date</p>
 									<p>{dayjs(aircraftRegistration.cert_issue_date).format('YYYY-MM-DD')}</p>
@@ -467,7 +467,7 @@
 							</div>
 
 							<div class="flex items-start gap-3">
-								<Calendar class="mt-1 h-4 w-4 text-surface-500" />
+								<Calendar class="text-surface-500 mt-1 h-4 w-4" />
 								<div>
 									<p class="text-surface-600-300-token mb-1 text-sm">Expiration Date</p>
 									<p>{dayjs(aircraftRegistration.expiration_date).format('YYYY-MM-DD')}</p>
@@ -475,7 +475,7 @@
 							</div>
 
 							<div class="flex items-start gap-3">
-								<Calendar class="mt-1 h-4 w-4 text-surface-500" />
+								<Calendar class="text-surface-500 mt-1 h-4 w-4" />
 								<div>
 									<p class="text-surface-600-300-token mb-1 text-sm">Airworthiness Date</p>
 									<p>{dayjs(aircraftRegistration.air_worth_date).format('YYYY-MM-DD')}</p>
@@ -483,7 +483,7 @@
 							</div>
 
 							<div class="flex items-start gap-3">
-								<Calendar class="mt-1 h-4 w-4 text-surface-500" />
+								<Calendar class="text-surface-500 mt-1 h-4 w-4" />
 								<div>
 									<p class="text-surface-600-300-token mb-1 text-sm">Last Action Date</p>
 									<p>{dayjs(aircraftRegistration.last_action_date).format('YYYY-MM-DD')}</p>
@@ -492,7 +492,7 @@
 						</div>
 					{:else}
 						<div class="text-surface-600-300-token py-8 text-center">
-							<Plane class="mx-auto mb-4 h-12 w-12 text-surface-400" />
+							<Plane class="text-surface-400 mx-auto mb-4 h-12 w-12" />
 							<p>
 								No aircraft registration found for {device.registration || 'Unknown'}
 								<br />
@@ -504,8 +504,8 @@
 
 				<!-- Aircraft Model Details -->
 				{#if aircraftModel}
-					<div class="space-y-4 card p-6">
-						<h2 class="flex items-center gap-2 h2">
+					<div class="card space-y-4 p-6">
+						<h2 class="h2 flex items-center gap-2">
 							<Plane class="h-6 w-6" />
 							Aircraft Model Details
 						</h2>
@@ -617,8 +617,8 @@
 			</div>
 
 			<!-- Flights Section -->
-			<div class="space-y-4 card p-6">
-				<h2 class="flex items-center gap-2 h2">
+			<div class="card space-y-4 p-6">
+				<h2 class="h2 flex items-center gap-2">
 					<Plane class="h-6 w-6" />
 					Flight History
 				</h2>
@@ -630,7 +630,7 @@
 					</div>
 				{:else if flights.length === 0}
 					<div class="text-surface-600-300-token py-8 text-center">
-						<Plane class="mx-auto mb-4 h-12 w-12 text-surface-400" />
+						<Plane class="text-surface-400 mx-auto mb-4 h-12 w-12" />
 						<p>No flights found for this aircraft</p>
 					</div>
 				{:else}
@@ -663,8 +663,8 @@
 				{/if}
 			</div>
 			<!-- Position Fixes Section -->
-			<div class="space-y-4 card p-6">
-				<h2 class="flex items-center gap-2 h2">
+			<div class="card space-y-4 p-6">
+				<h2 class="h2 flex items-center gap-2">
 					<Activity class="h-6 w-6" />
 					Recent Position Fixes (Last 24 Hours)
 				</h2>

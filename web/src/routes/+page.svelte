@@ -44,7 +44,7 @@
 				>
 					<div class="flex items-center gap-6">
 						<div
-							class="rounded-full bg-primary-500/20 p-4 transition-colors group-hover:bg-primary-500/30"
+							class="bg-primary-500/20 group-hover:bg-primary-500/30 rounded-full p-4 transition-colors"
 						>
 							<Radar size={48} class="text-white drop-shadow-lg" />
 						</div>
@@ -67,7 +67,7 @@
 					<div class="space-y-6 text-center">
 						<div class="flex justify-center">
 							<div
-								class="rounded-full bg-primary-500/20 p-4 transition-colors group-hover:bg-primary-500/30"
+								class="bg-primary-500/20 group-hover:bg-primary-500/30 rounded-full p-4 transition-colors"
 							>
 								<Users size={48} class="text-white drop-shadow-lg" />
 							</div>
@@ -86,7 +86,7 @@
 					<div class="space-y-6 text-center">
 						<div class="flex justify-center">
 							<div
-								class="rounded-full bg-secondary-500/20 p-4 transition-colors group-hover:bg-secondary-500/30"
+								class="bg-secondary-500/20 group-hover:bg-secondary-500/30 rounded-full p-4 transition-colors"
 							>
 								<Radar size={48} class="text-white drop-shadow-lg" />
 							</div>
@@ -105,7 +105,7 @@
 					<div class="space-y-6 text-center">
 						<div class="flex justify-center">
 							<div
-								class="rounded-full bg-tertiary-500/20 p-4 transition-colors group-hover:bg-tertiary-500/30"
+								class="bg-tertiary-500/20 group-hover:bg-tertiary-500/30 rounded-full p-4 transition-colors"
 							>
 								<Radio size={48} class="text-white drop-shadow-lg" />
 							</div>
@@ -124,7 +124,7 @@
 					<div class="space-y-6 text-center">
 						<div class="flex justify-center">
 							<div
-								class="rounded-full bg-success-500/20 p-4 transition-colors group-hover:bg-success-500/30"
+								class="bg-success-500/20 group-hover:bg-success-500/30 rounded-full p-4 transition-colors"
 							>
 								<Antenna size={48} class="text-white drop-shadow-lg" />
 							</div>
@@ -143,7 +143,7 @@
 					<div class="space-y-6 text-center">
 						<div class="flex justify-center">
 							<div
-								class="rounded-full bg-warning-500/20 p-4 transition-colors group-hover:bg-warning-500/30"
+								class="bg-warning-500/20 group-hover:bg-warning-500/30 rounded-full p-4 transition-colors"
 							>
 								<MapPin size={48} class="text-white drop-shadow-lg" />
 							</div>
@@ -162,7 +162,7 @@
 					<div class="space-y-6 text-center">
 						<div class="flex justify-center">
 							<div
-								class="rounded-full bg-primary-500/20 p-4 transition-colors group-hover:bg-primary-500/30"
+								class="bg-primary-500/20 group-hover:bg-primary-500/30 rounded-full p-4 transition-colors"
 							>
 								<Plane size={48} class="text-white drop-shadow-lg" />
 							</div>

@@ -87,7 +87,7 @@
 
 	<div class="card p-6">
 		{#if success}
-			<div class="mb-4 rounded-lg preset-filled-success-500 p-4 text-center text-sm">
+			<div class="preset-filled-success-500 mb-4 rounded-lg p-4 text-center text-sm">
 				<div class="font-medium">Password updated successfully!</div>
 				<div class="mt-1">You will be redirected to the login page...</div>
 			</div>
@@ -96,7 +96,7 @@
 				<a href={resolve('/login')} class="anchor"> Continue to login </a>
 			</div>
 		{:else if !token}
-			<div class="mb-4 rounded-lg preset-filled-error-500 p-3 text-sm">
+			<div class="preset-filled-error-500 mb-4 rounded-lg p-3 text-sm">
 				{error}
 			</div>
 
@@ -105,7 +105,7 @@
 			</div>
 		{:else}
 			{#if error}
-				<div class="mb-4 rounded-lg preset-filled-error-500 p-3 text-sm">
+				<div class="preset-filled-error-500 mb-4 rounded-lg p-3 text-sm">
 					{error}
 				</div>
 			{/if}
@@ -136,7 +136,7 @@
 					/>
 				</label>
 
-				<button type="submit" class="btn w-full preset-filled-primary-500" disabled={loading}>
+				<button type="submit" class="btn preset-filled-primary-500 w-full" disabled={loading}>
 					{loading ? 'Updating Password...' : 'Update Password'}
 				</button>
 			</form>

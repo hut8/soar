@@ -55,7 +55,7 @@
 					href={metric.url}
 					target="_blank"
 					rel="noopener noreferrer"
-					class="preset-tonal-primary-500 group flex items-start gap-4 card p-6 transition-all duration-200 hover:scale-[1.02] hover:preset-filled-primary-500"
+					class="preset-tonal-primary-500 group card hover:preset-filled-primary-500 flex items-start gap-4 p-6 transition-all duration-200 hover:scale-[1.02]"
 				>
 					<div class="flex-shrink-0 pt-1">
 						<svelte:component
@@ -96,7 +96,7 @@
 	<!-- About Section -->
 	<section class="space-y-4">
 		<h2 class="text-2xl font-semibold">About</h2>
-		<div class="preset-filled-surface-50-900 space-y-6 card p-6">
+		<div class="preset-filled-surface-50-900 card space-y-6 p-6">
 			<div class="space-y-3">
 				<h3 class="text-xl font-semibold">System Architecture</h3>
 				<p class="text-surface-600-300-token leading-relaxed">

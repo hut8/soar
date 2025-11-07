@@ -243,14 +243,14 @@
 <div class="container mx-auto max-w-7xl space-y-6 p-4">
 	<!-- Header -->
 	<header class="space-y-2 text-center">
-		<h1 class="flex items-center justify-center gap-2 h1">
+		<h1 class="h1 flex items-center justify-center gap-2">
 			<Radio class="h-8 w-8" />
 			Receiver Search
 		</h1>
 	</header>
 
 	<!-- Search Section -->
-	<section class="space-y-4 card p-6">
+	<section class="card space-y-4 p-6">
 		<h3 class="mb-3 flex items-center gap-2 text-lg font-semibold">
 			<Search class="h-5 w-5" />
 			Search Receivers
@@ -302,7 +302,7 @@
 				/>
 
 				<button
-					class="btn w-full preset-filled-primary-500"
+					class="btn preset-filled-primary-500 w-full"
 					onclick={searchReceivers}
 					disabled={loading}
 				>
@@ -333,7 +333,7 @@
 				</div>
 
 				<button
-					class="btn w-full preset-filled-primary-500"
+					class="btn preset-filled-primary-500 w-full"
 					onclick={searchReceivers}
 					disabled={loading}
 				>
@@ -348,7 +348,7 @@
 			<!-- Near Me Search -->
 			<div class="space-y-3 rounded-lg border p-3">
 				<button
-					class="btn w-full preset-filled-primary-500"
+					class="btn preset-filled-primary-500 w-full"
 					onclick={useMyLocation}
 					disabled={gettingLocation || loading}
 				>
@@ -400,37 +400,37 @@
 				{#each receivers as receiver (receiver.id)}
 					<a
 						href={resolve(`/receivers/${receiver.id}`)}
-						class="block card border border-surface-300 bg-surface-50 p-4 transition-all duration-200 hover:scale-[1.01] hover:border-primary-500 hover:shadow-xl dark:border-surface-600 dark:bg-surface-800 dark:hover:border-primary-400"
+						class="card border-surface-300 bg-surface-50 hover:border-primary-500 dark:border-surface-600 dark:bg-surface-800 dark:hover:border-primary-400 block border p-4 transition-all duration-200 hover:scale-[1.01] hover:shadow-xl"
 					>
 						<div class="space-y-3">
 							<div class="flex items-start justify-between">
 								<h3 class="h4 text-lg font-bold">{receiver.callsign}</h3>
-								<Radio class="h-5 w-5 flex-shrink-0 text-primary-500" />
+								<Radio class="text-primary-500 h-5 w-5 flex-shrink-0" />
 							</div>
 
 							{#if receiver.description}
-								<p class="text-sm leading-relaxed text-surface-700 dark:text-surface-300">
+								<p class="text-surface-700 dark:text-surface-300 text-sm leading-relaxed">
 									{receiver.description}
 								</p>
 							{/if}
 
 							<div
-								class="space-y-2 border-t border-surface-200 pt-3 text-sm dark:border-surface-700"
+								class="border-surface-200 dark:border-surface-700 space-y-2 border-t pt-3 text-sm"
 							>
 								{#if receiver.country}
-									<div class="flex items-center gap-2 text-surface-600 dark:text-surface-400">
+									<div class="text-surface-600 dark:text-surface-400 flex items-center gap-2">
 										<MapPin class="h-4 w-4 flex-shrink-0" />
 										<span>{receiver.country}</span>
 									</div>
 								{/if}
 
 								{#if receiver.latitude != null && receiver.longitude != null}
-									<div class="font-mono text-xs text-surface-500 dark:text-surface-400">
+									<div class="text-surface-500 dark:text-surface-400 font-mono text-xs">
 										{formatCoordinates(receiver.latitude, receiver.longitude)}
 									</div>
 								{/if}
 
-								<div class="text-xs text-surface-500 dark:text-surface-400">
+								<div class="text-surface-500 dark:text-surface-400 text-xs">
 									Last heard: <span class="font-medium">{getLastHeard(receiver.updated_at)}</span>
 								</div>
 							</div>
@@ -440,7 +440,7 @@
 			</div>
 
 			<!-- Desktop: Table Layout -->
-			<div class="hidden card md:block">
+			<div class="card hidden md:block">
 				<div class="table-container">
 					<table class="table-hover table">
 						<thead>

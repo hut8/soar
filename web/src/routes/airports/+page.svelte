@@ -109,14 +109,14 @@
 <div class="container mx-auto max-w-7xl space-y-6 p-4">
 	<!-- Header -->
 	<header class="space-y-2 text-center">
-		<h1 class="flex items-center justify-center gap-2 h1">
+		<h1 class="h1 flex items-center justify-center gap-2">
 			<Plane class="h-8 w-8" />
 			Airport Search
 		</h1>
 	</header>
 
 	<!-- Search Section -->
-	<section class="space-y-4 card p-6">
+	<section class="card space-y-4 p-6">
 		<h3 class="mb-3 flex items-center gap-2 text-lg font-semibold">
 			<Search class="h-5 w-5" />
 			Search Airports
@@ -131,7 +131,7 @@
 				/>
 				{#if loading}
 					<div
-						class="absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 animate-spin rounded-full border-2 border-primary-500 border-t-transparent"
+						class="border-primary-500 absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 animate-spin rounded-full border-2 border-t-transparent"
 					></div>
 				{/if}
 			</div>
@@ -173,7 +173,7 @@
 								<td>
 									<a
 										href={resolve(`/airports/${airport.id}`)}
-										class="anchor font-mono text-primary-500 hover:text-primary-600"
+										class="anchor text-primary-500 hover:text-primary-600 font-mono"
 									>
 										{getAirportCode(airport)}
 									</a>
@@ -186,7 +186,7 @@
 								</td>
 								<td>
 									<div class="flex items-center gap-1">
-										<MapPin class="h-4 w-4 text-surface-500" />
+										<MapPin class="text-surface-500 h-4 w-4" />
 										<span>{formatLocation(airport)}</span>
 									</div>
 								</td>
@@ -195,7 +195,7 @@
 										href={getGoogleMapsUrl(airport.latitude_deg, airport.longitude_deg)}
 										target="_blank"
 										rel="noopener noreferrer"
-										class="text-primary-500 underline hover:text-primary-700"
+										class="text-primary-500 hover:text-primary-700 underline"
 									>
 										{formatCoordinates(airport.latitude_deg, airport.longitude_deg)}
 									</a>
@@ -214,8 +214,8 @@
 			</div>
 		</section>
 	{:else if !loading && airports.length === 0 && searchQuery}
-		<div class="space-y-4 card p-12 text-center">
-			<Search class="mx-auto mb-4 h-16 w-16 text-surface-400" />
+		<div class="card space-y-4 p-12 text-center">
+			<Search class="text-surface-400 mx-auto mb-4 h-16 w-16" />
 			<div class="space-y-2">
 				<h3 class="h3">No airports found</h3>
 				<p class="text-surface-500-400-token">

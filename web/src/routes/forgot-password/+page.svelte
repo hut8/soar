@@ -43,7 +43,7 @@
 
 	<div class="card p-6">
 		{#if success}
-			<div class="mb-4 rounded-lg preset-filled-success-500 p-4 text-sm">
+			<div class="preset-filled-success-500 mb-4 rounded-lg p-4 text-sm">
 				<div class="font-medium">Check your email!</div>
 				<div class="mt-1">
 					We've sent a password reset link to <strong>{email}</strong>
@@ -55,7 +55,7 @@
 			</div>
 		{:else}
 			{#if error}
-				<div class="mb-4 rounded-lg preset-filled-error-500 p-3 text-sm">
+				<div class="preset-filled-error-500 mb-4 rounded-lg p-3 text-sm">
 					{error}
 				</div>
 			{/if}
@@ -73,7 +73,7 @@
 					/>
 				</label>
 
-				<button type="submit" class="btn w-full preset-filled-primary-500" disabled={loading}>
+				<button type="submit" class="btn preset-filled-primary-500 w-full" disabled={loading}>
 					{loading ? 'Sending...' : 'Send Reset Link'}
 				</button>
 			</form>

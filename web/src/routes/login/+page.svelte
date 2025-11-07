@@ -69,13 +69,13 @@
 
 	<div class="card p-6">
 		{#if message}
-			<div class="mb-4 rounded-lg preset-filled-success-500 p-3 text-sm">
+			<div class="preset-filled-success-500 mb-4 rounded-lg p-3 text-sm">
 				{message}
 			</div>
 		{/if}
 
 		{#if error}
-			<div class="mb-4 rounded-lg preset-filled-error-500 p-3 text-sm">
+			<div class="preset-filled-error-500 mb-4 rounded-lg p-3 text-sm">
 				{error}
 			</div>
 		{/if}
@@ -107,7 +107,7 @@
 				/>
 			</label>
 
-			<button type="submit" class="btn w-full preset-filled-primary-500" disabled={loading}>
+			<button type="submit" class="btn preset-filled-primary-500 w-full" disabled={loading}>
 				{loading ? 'Signing in...' : 'Sign In'}
 			</button>
 		</form>

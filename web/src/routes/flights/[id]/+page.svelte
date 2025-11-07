@@ -771,7 +771,7 @@
 		<div class="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
 			<div class="flex flex-col gap-2">
 				<div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
-					<h1 class="flex items-center gap-2 h1">
+					<h1 class="h1 flex items-center gap-2">
 						<Plane class="h-8 w-8" />
 						Flight
 					</h1>
@@ -779,7 +779,7 @@
 						<FlightStateBadge state={data.flight.state} />
 						{#if isOutlanding}
 							<span
-								class="chip flex items-center gap-2 preset-filled-warning-500 text-base font-semibold"
+								class="chip preset-filled-warning-500 flex items-center gap-2 text-base font-semibold"
 							>
 								<MapPinMinus class="h-5 w-5" />
 								Outlanding
@@ -825,7 +825,7 @@
 								href="/devices/{data.flight.device_id}"
 								target="_blank"
 								rel="noopener noreferrer"
-								class="btn flex items-center gap-1 preset-filled-primary-500 btn-sm"
+								class="btn preset-filled-primary-500 btn-sm flex items-center gap-1"
 							>
 								<span class="font-mono text-xs">
 									{formatDeviceAddress(data.flight.device_address_type, data.flight.device_address)}
@@ -873,7 +873,7 @@
 				{/if}
 				<button
 					onclick={downloadKML}
-					class="btn flex items-center gap-2 preset-filled-primary-500"
+					class="btn preset-filled-primary-500 flex items-center gap-2"
 					type="button"
 				>
 					<Download class="h-4 w-4" />
@@ -885,7 +885,7 @@
 		<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
 			<!-- Takeoff -->
 			<div class="flex items-start gap-3">
-				<PlaneTakeoff class="mt-1 h-5 w-5 text-primary-500" />
+				<PlaneTakeoff class="text-primary-500 mt-1 h-5 w-5" />
 				<div>
 					<div class="text-surface-600-300-token text-sm">Takeoff</div>
 					<div class="font-semibold">
@@ -931,7 +931,7 @@
 			<!-- Landing / Timeout (hidden for active flights) -->
 			{#if data.flight.state === 'timed_out' || data.flight.landing_time}
 				<div class="flex items-start gap-3">
-					<PlaneLanding class="mt-1 h-5 w-5 text-primary-500" />
+					<PlaneLanding class="text-primary-500 mt-1 h-5 w-5" />
 					<div>
 						<div class="text-surface-600-300-token text-sm">
 							{data.flight.state === 'timed_out' ? 'Timed Out' : 'Landing'}
@@ -989,7 +989,7 @@
 			<!-- Duration -->
 			{#if duration()}
 				<div class="flex items-start gap-3">
-					<Gauge class="mt-1 h-5 w-5 text-primary-500" />
+					<Gauge class="text-primary-500 mt-1 h-5 w-5" />
 					<div>
 						<div class="text-surface-600-300-token text-sm">Duration</div>
 						<div class="font-semibold">{duration()}</div>
@@ -1000,7 +1000,7 @@
 			<!-- Maximum Altitude -->
 			{#if maxAltitude() || maxAglAltitude()}
 				<div class="flex items-start gap-3">
-					<MountainSnow class="mt-1 h-5 w-5 text-primary-500" />
+					<MountainSnow class="text-primary-500 mt-1 h-5 w-5" />
 					<div>
 						<div class="text-surface-600-300-token text-sm">Maximum Altitude</div>
 						{#if maxAltitude()}
@@ -1018,7 +1018,7 @@
 			<!-- Total Distance -->
 			{#if data.flight.total_distance_meters}
 				<div class="flex items-start gap-3">
-					<Route class="mt-1 h-5 w-5 text-primary-500" />
+					<Route class="text-primary-500 mt-1 h-5 w-5" />
 					<div>
 						<div class="text-surface-600-300-token text-sm">Total Distance</div>
 						<div class="font-semibold">{formatDistance(data.flight.total_distance_meters)}</div>
@@ -1029,7 +1029,7 @@
 			<!-- Maximum Displacement -->
 			{#if data.flight.maximum_displacement_meters}
 				<div class="flex items-start gap-3">
-					<MoveUpRight class="mt-1 h-5 w-5 text-primary-500" />
+					<MoveUpRight class="text-primary-500 mt-1 h-5 w-5" />
 					<div>
 						<div class="text-surface-600-300-token text-sm">Max Displacement</div>
 						<div class="font-semibold">
@@ -1045,7 +1045,7 @@
 			<!-- Tow Aircraft -->
 			{#if data.flight.towed_by_device_id}
 				<div class="flex items-start gap-3">
-					<TrendingUp class="mt-1 h-5 w-5 text-primary-500" />
+					<TrendingUp class="text-primary-500 mt-1 h-5 w-5" />
 					<div>
 						<div class="text-surface-600-300-token text-sm">Tow Aircraft</div>
 						<div class="font-semibold">
@@ -1057,7 +1057,7 @@
 
 			<!-- Recognized at -->
 			<div class="flex items-start gap-3">
-				<Clock class="mt-1 h-5 w-5 text-primary-500" />
+				<Clock class="text-primary-500 mt-1 h-5 w-5" />
 				<div>
 					<div class="text-surface-600-300-token text-sm">Recognized at</div>
 					<div class="font-semibold">
@@ -1073,7 +1073,7 @@
 			<!-- Latest fix (for active flights) -->
 			{#if data.flight.state === 'active' && data.fixes.length > 0}
 				<div class="flex items-start gap-3">
-					<Clock class="mt-1 h-5 w-5 text-primary-500" />
+					<Clock class="text-primary-500 mt-1 h-5 w-5" />
 					<div>
 						<div class="text-surface-600-300-token text-sm">Latest fix</div>
 						<div class="font-semibold">
@@ -1112,14 +1112,14 @@
 
 		<!-- Altitude Chart -->
 		<div class="card p-4">
-			<h2 class="mb-3 h3">Altitude Profile</h2>
+			<h2 class="h3 mb-3">Altitude Profile</h2>
 			<div bind:this={altitudeChartContainer} class="h-80 w-full"></div>
 		</div>
 	{/if}
 
 	<!-- Nearby Flights Section -->
 	<div class="card p-6">
-		<h2 class="mb-4 h2">Nearby Flights</h2>
+		<h2 class="h2 mb-4">Nearby Flights</h2>
 
 		{#if !showStandaloneNearby}
 			<button
@@ -1145,7 +1145,7 @@
 			</div>
 		{:else if standaloneNearbyFlights.length === 0}
 			<div class="text-surface-600-300-token py-8 text-center">
-				<Plane class="mx-auto mb-4 h-12 w-12 text-surface-400" />
+				<Plane class="text-surface-400 mx-auto mb-4 h-12 w-12" />
 				<p>No nearby flights found.</p>
 			</div>
 		{:else}
@@ -1168,7 +1168,7 @@
 
 		{#if data.fixes.length === 0}
 			<div class="text-surface-600-300-token py-8 text-center">
-				<Plane class="mx-auto mb-4 h-12 w-12 text-surface-400" />
+				<Plane class="text-surface-400 mx-auto mb-4 h-12 w-12" />
 				<p>No position data available for this flight.</p>
 			</div>
 		{:else}
@@ -1235,7 +1235,7 @@
 	<!-- Nearby Flights List (shown on map) -->
 	{#if includeNearbyFlights && nearbyFlights.length > 0}
 		<div class="card p-6">
-			<h2 class="mb-4 h2">Nearby Flights ({nearbyFlights.length})</h2>
+			<h2 class="h2 mb-4">Nearby Flights ({nearbyFlights.length})</h2>
 			<div class="text-surface-600-300-token mb-4 text-sm">
 				These flights are shown on the map in different colors (blue, green, orange, purple, pink,
 				cyan)

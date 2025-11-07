@@ -115,7 +115,7 @@
 		role="presentation"
 	>
 		<div
-			class="w-full max-w-2xl card bg-surface-50 p-6 text-surface-900 shadow-xl dark:bg-surface-900 dark:text-surface-50"
+			class="card bg-surface-50 text-surface-900 dark:bg-surface-900 dark:text-surface-50 w-full max-w-2xl p-6 shadow-xl"
 			onclick={(e) => e.stopPropagation()}
 			onkeydown={(e) => e.stopPropagation()}
 			role="dialog"
@@ -125,7 +125,7 @@
 		>
 			<header class="mb-6 flex items-center justify-between">
 				<div class="flex items-center gap-3">
-					<User class="h-6 w-6 text-primary-500" />
+					<User class="text-primary-500 h-6 w-6" />
 					<h2 id="pilot-selection-title" class="h2">Add Pilot to Flight</h2>
 				</div>
 				<button
@@ -140,7 +140,7 @@
 			{#if loading}
 				<div class="space-y-4 py-12 text-center">
 					<div
-						class="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-primary-500 border-t-transparent"
+						class="border-primary-500 mx-auto h-12 w-12 animate-spin rounded-full border-4 border-t-transparent"
 					></div>
 					<p class="text-surface-500-400-token">Loading pilots...</p>
 				</div>
@@ -184,7 +184,7 @@
 					<div class="space-y-2">
 						{#each roleOptions as option (option.value)}
 							<label
-								class="flex items-center gap-3 rounded p-3 hover:bg-surface-100 dark:hover:bg-surface-800"
+								class="hover:bg-surface-100 dark:hover:bg-surface-800 flex items-center gap-3 rounded p-3"
 							>
 								<input
 									type="radio"
@@ -195,7 +195,7 @@
 								/>
 								<div class="flex flex-col">
 									<span class="font-medium">{option.label}</span>
-									<span class="text-sm text-surface-600 dark:text-surface-400"
+									<span class="text-surface-600 dark:text-surface-400 text-sm"
 										>{option.description}</span
 									>
 								</div>

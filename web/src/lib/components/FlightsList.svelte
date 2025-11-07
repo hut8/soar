@@ -139,7 +139,7 @@
 											{#if flight.device_id}
 												<a
 													href={`/devices/${flight.device_id}`}
-													class="anchor font-medium text-primary-500 hover:text-primary-600"
+													class="anchor text-primary-500 hover:text-primary-600 font-medium"
 												>
 													{flight.aircraft_model}
 													<span class="text-surface-500-400-token text-sm font-normal"
@@ -156,7 +156,7 @@
 											{/if}
 											{#if flight.towed_by_device_id}
 												<span
-													class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
+													class="badge preset-filled-primary-500 flex items-center gap-1 text-xs"
 													title="This aircraft was towed"
 												>
 													<MoveUp class="h-3 w-3" />
@@ -169,7 +169,7 @@
 											{#if flight.device_id}
 												<a
 													href={`/devices/${flight.device_id}`}
-													class="anchor font-medium text-primary-500 hover:text-primary-600"
+													class="anchor text-primary-500 hover:text-primary-600 font-medium"
 												>
 													{flight.registration}
 												</a>
@@ -178,7 +178,7 @@
 											{/if}
 											{#if flight.towed_by_device_id}
 												<span
-													class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
+													class="badge preset-filled-primary-500 flex items-center gap-1 text-xs"
 													title="This aircraft was towed"
 												>
 													<MoveUp class="h-3 w-3" />
@@ -191,7 +191,7 @@
 											{#if flight.device_id}
 												<a
 													href={`/devices/${flight.device_id}`}
-													class="text-surface-500-400-token anchor font-mono text-sm hover:text-primary-500"
+													class="text-surface-500-400-token anchor hover:text-primary-500 font-mono text-sm"
 												>
 													{formatDeviceAddress(flight.device_address, flight.device_address_type)}
 												</a>
@@ -202,7 +202,7 @@
 											{/if}
 											{#if flight.towed_by_device_id}
 												<span
-													class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
+													class="badge preset-filled-primary-500 flex items-center gap-1 text-xs"
 													title="This aircraft was towed"
 												>
 													<MoveUp class="h-3 w-3" />
@@ -346,7 +346,7 @@
 								href={`/flights/${flight.id}`}
 								target="_blank"
 								rel="noopener noreferrer"
-								class="btn flex items-center gap-1 preset-filled-primary-500 btn-sm"
+								class="btn preset-filled-primary-500 btn-sm flex items-center gap-1"
 							>
 								<ExternalLink class="h-3 w-3" />
 								Open
@@ -362,7 +362,7 @@
 <!-- Mobile Cards -->
 <div class="block space-y-4 md:hidden">
 	{#each flights as flight (flight.id)}
-		<div class="relative card p-4 transition-all duration-200 hover:shadow-lg">
+		<div class="card relative p-4 transition-all duration-200 hover:shadow-lg">
 			<!-- Aircraft info -->
 			<div class="border-surface-200-700-token mb-3 flex items-start justify-between border-b pb-3">
 				<div class="flex flex-wrap items-center gap-2">
@@ -371,7 +371,7 @@
 							{#if flight.device_id}
 								<a
 									href={`/devices/${flight.device_id}`}
-									class="relative z-10 anchor font-semibold text-primary-500 hover:text-primary-600"
+									class="anchor text-primary-500 hover:text-primary-600 relative z-10 font-semibold"
 								>
 									{flight.aircraft_model} ({flight.registration})
 								</a>
@@ -382,7 +382,7 @@
 							{#if flight.device_id}
 								<a
 									href={`/devices/${flight.device_id}`}
-									class="relative z-10 anchor font-semibold text-primary-500 hover:text-primary-600"
+									class="anchor text-primary-500 hover:text-primary-600 relative z-10 font-semibold"
 								>
 									{flight.registration}
 								</a>
@@ -392,7 +392,7 @@
 						{:else if flight.device_id}
 							<a
 								href={`/devices/${flight.device_id}`}
-								class="text-surface-500-400-token relative z-10 anchor font-mono text-sm hover:text-primary-500"
+								class="text-surface-500-400-token anchor hover:text-primary-500 relative z-10 font-mono text-sm"
 							>
 								{formatDeviceAddress(flight.device_address, flight.device_address_type)}
 							</a>
@@ -409,7 +409,7 @@
 					{/if}
 					{#if flight.towed_by_device_id}
 						<span
-							class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
+							class="badge preset-filled-primary-500 flex items-center gap-1 text-xs"
 							title="This aircraft was towed"
 						>
 							<MoveUp class="h-3 w-3" />
@@ -422,7 +422,7 @@
 					class="relative z-10 flex-shrink-0"
 					title="View flight details"
 				>
-					<ExternalLink class="h-4 w-4 text-surface-400 hover:text-primary-500" />
+					<ExternalLink class="text-surface-400 hover:text-primary-500 h-4 w-4" />
 				</a>
 			</div>
 

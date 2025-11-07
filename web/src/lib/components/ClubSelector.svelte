@@ -96,7 +96,7 @@
 
 <div class="club-selector">
 	{#if error}
-		<div class="mb-2 rounded-lg preset-filled-error-500 p-2 text-sm">
+		<div class="preset-filled-error-500 mb-2 rounded-lg p-2 text-sm">
 			{error}
 		</div>
 	{/if}
@@ -118,7 +118,7 @@
 						<div class="flex w-full items-center space-x-2">
 							<span class="flex-1 text-left">{clubItem.label}</span>
 							{#if clubItem.club.is_soaring}
-								<span class="rounded-full bg-primary-500 px-2 py-1 text-xs text-white">Soaring</span
+								<span class="bg-primary-500 rounded-full px-2 py-1 text-xs text-white">Soaring</span
 								>
 							{/if}
 						</div>

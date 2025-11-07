@@ -1,10 +1,7 @@
 @import 'tailwindcss';
+@source '../node_modules/@skeletonlabs/skeleton-common/dist';
 
-@theme {
-  @source '../node_modules/@skeletonlabs/skeleton-common/dist';
-}
-
-@import '@skeletonlabs/skeleton/dist/themes/cerberus.css';
+@import '@skeletonlabs/skeleton/themes/cerberus';
 
 @custom-variant skb (&);
 @custom-variant dark (&:where(.dark, .dark *));

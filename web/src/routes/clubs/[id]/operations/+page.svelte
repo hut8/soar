@@ -222,7 +222,7 @@
 		<div class="space-y-4">
 			<div class="flex flex-wrap items-center justify-between gap-4">
 				<div>
-					<h1 class="flex items-center gap-2 h1">
+					<h1 class="h1 flex items-center gap-2">
 						<Plane class="h-8 w-8" />
 						{club?.name || 'Club'} Operations
 					</h1>
@@ -236,13 +236,13 @@
 
 			<!-- Date Picker -->
 			<div class="flex items-center gap-3">
-				<Calendar class="h-5 w-5 text-surface-500" />
+				<Calendar class="text-surface-500 h-5 w-5" />
 				<label class="flex items-center gap-2">
 					<span class="text-surface-600-300-token text-sm font-medium">Date:</span>
 					<div class="flex items-center gap-1">
 						<button
 							onclick={goToPreviousDay}
-							class="preset-tonal-surface-500 btn p-2 btn-sm"
+							class="preset-tonal-surface-500 btn btn-sm p-2"
 							title="Previous day"
 						>
 							<ChevronLeft class="h-4 w-4" />
@@ -255,7 +255,7 @@
 						/>
 						<button
 							onclick={goToNextDay}
-							class="preset-tonal-surface-500 btn p-2 btn-sm"
+							class="preset-tonal-surface-500 btn btn-sm p-2"
 							title="Next day"
 							disabled={selectedDate >= dayjs().format('YYYY-MM-DD')}
 						>
@@ -269,15 +269,15 @@
 
 	<!-- Loading State -->
 	{#if loadingFlights}
-		<div class="space-y-4 card p-12 text-center">
+		<div class="card space-y-4 p-12 text-center">
 			<div
-				class="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-primary-500 border-t-transparent"
+				class="border-primary-500 mx-auto h-12 w-12 animate-spin rounded-full border-4 border-t-transparent"
 			></div>
 			<p class="text-surface-500-400-token">Loading flights...</p>
 		</div>
 	{:else if flightsError}
 		<!-- Error State -->
-		<div class="space-y-4 card p-12 text-center">
+		<div class="card space-y-4 p-12 text-center">
 			<div class="rounded border border-red-200 bg-red-50 p-4 text-red-600">
 				{flightsError}
 			</div>
@@ -296,7 +296,7 @@
 
 				{#if flightsInProgress.length === 0}
 					<div class="space-y-4 p-12 text-center">
-						<Plane class="mx-auto mb-4 h-16 w-16 text-surface-400" />
+						<Plane class="text-surface-400 mx-auto mb-4 h-16 w-16" />
 						<div class="space-y-2">
 							<h3 class="h3">No flights in progress</h3>
 							<p class="text-surface-500-400-token">There are currently no active flights.</p>
@@ -324,7 +324,7 @@
 														{#if flight.device_id}
 															<a
 																href={`/devices/${flight.device_id}`}
-																class="anchor font-medium text-primary-500 hover:text-primary-600"
+																class="anchor text-primary-500 hover:text-primary-600 font-medium"
 															>
 																{flight.aircraft_model}
 																<span class="text-surface-500-400-token text-sm font-normal"
@@ -344,7 +344,7 @@
 													{#if flight.device_id}
 														<a
 															href={`/devices/${flight.device_id}`}
-															class="anchor font-medium text-primary-500 hover:text-primary-600"
+															class="anchor text-primary-500 hover:text-primary-600 font-medium"
 														>
 															{flight.registration}
 														</a>
@@ -354,7 +354,7 @@
 												{:else if flight.device_id}
 													<a
 														href={`/devices/${flight.device_id}`}
-														class="text-surface-500-400-token anchor font-mono text-sm hover:text-primary-500"
+														class="text-surface-500-400-token anchor hover:text-primary-500 font-mono text-sm"
 													>
 														{formatDeviceAddress(flight.device_address, flight.device_address_type)}
 													</a>
@@ -397,7 +397,7 @@
 												{#if userBelongsToClub}
 													<button
 														onclick={() => openPilotModal(flight.id)}
-														class="preset-tonal-primary-500 btn flex items-center gap-1 btn-sm"
+														class="preset-tonal-primary-500 btn btn-sm flex items-center gap-1"
 														title="Add pilot to flight"
 													>
 														<UserPlus class="h-3 w-3" />
@@ -408,7 +408,7 @@
 													href={`/flights/${flight.id}`}
 													target="_blank"
 													rel="noopener noreferrer"
-													class="preset-tonal-surface-500 btn flex items-center gap-1 btn-sm"
+													class="preset-tonal-surface-500 btn btn-sm flex items-center gap-1"
 												>
 													<ExternalLink class="h-3 w-3" />
 													Open
@@ -436,7 +436,7 @@
 
 			{#if completedFlights.length === 0}
 				<div class="space-y-4 p-12 text-center">
-					<Plane class="mx-auto mb-4 h-16 w-16 text-surface-400" />
+					<Plane class="text-surface-400 mx-auto mb-4 h-16 w-16" />
 					<div class="space-y-2">
 						<h3 class="h3">No completed flights</h3>
 						<p class="text-surface-500-400-token">
@@ -469,7 +469,7 @@
 													{#if flight.device_id}
 														<a
 															href={`/devices/${flight.device_id}`}
-															class="anchor font-medium text-primary-500 hover:text-primary-600"
+															class="anchor text-primary-500 hover:text-primary-600 font-medium"
 														>
 															{flight.aircraft_model}
 															<span class="text-surface-500-400-token text-sm font-normal"
@@ -486,7 +486,7 @@
 													{/if}
 													{#if flight.towed_by_device_id}
 														<span
-															class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
+															class="badge preset-filled-primary-500 flex items-center gap-1 text-xs"
 															title="This aircraft was towed"
 														>
 															<MoveUp class="h-3 w-3" />
@@ -499,7 +499,7 @@
 													{#if flight.device_id}
 														<a
 															href={`/devices/${flight.device_id}`}
-															class="anchor font-medium text-primary-500 hover:text-primary-600"
+															class="anchor text-primary-500 hover:text-primary-600 font-medium"
 														>
 															{flight.registration}
 														</a>
@@ -508,7 +508,7 @@
 													{/if}
 													{#if flight.towed_by_device_id}
 														<span
-															class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
+															class="badge preset-filled-primary-500 flex items-center gap-1 text-xs"
 															title="This aircraft was towed"
 														>
 															<MoveUp class="h-3 w-3" />
@@ -521,7 +521,7 @@
 													{#if flight.device_id}
 														<a
 															href={`/devices/${flight.device_id}`}
-															class="text-surface-500-400-token anchor font-mono text-sm hover:text-primary-500"
+															class="text-surface-500-400-token anchor hover:text-primary-500 font-mono text-sm"
 														>
 															{formatDeviceAddress(
 																flight.device_address,
@@ -538,7 +538,7 @@
 													{/if}
 													{#if flight.towed_by_device_id}
 														<span
-															class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
+															class="badge preset-filled-primary-500 flex items-center gap-1 text-xs"
 															title="This aircraft was towed"
 														>
 															<MoveUp class="h-3 w-3" />
@@ -614,7 +614,7 @@
 											{#if userBelongsToClub}
 												<button
 													onclick={() => openPilotModal(flight.id)}
-													class="preset-tonal-primary-500 btn flex items-center gap-1 btn-sm"
+													class="preset-tonal-primary-500 btn btn-sm flex items-center gap-1"
 													title="Add pilot to flight"
 												>
 													<UserPlus class="h-3 w-3" />
@@ -625,7 +625,7 @@
 												href={`/flights/${flight.id}`}
 												target="_blank"
 												rel="noopener noreferrer"
-												class="preset-tonal-surface-500 btn flex items-center gap-1 btn-sm"
+												class="preset-tonal-surface-500 btn btn-sm flex items-center gap-1"
 											>
 												<ExternalLink class="h-3 w-3" />
 												Open

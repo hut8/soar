@@ -129,14 +129,14 @@
 
 <div class="container mx-auto space-y-8 p-4">
 	<header class="space-y-2 text-center">
-		<h1 class="flex items-center justify-center gap-2 h1">
+		<h1 class="h1 flex items-center justify-center gap-2">
 			<Users class="h-8 w-8" />
 			Soaring Clubs
 		</h1>
 	</header>
 
 	<!-- Search Section -->
-	<section class="space-y-6 card p-6">
+	<section class="card space-y-6 p-6">
 		<!-- Search Method Toggle -->
 		<div class="flex justify-center gap-2">
 			<button
@@ -181,7 +181,7 @@
 									onclick={() => selectClub(club.id)}
 									class="hover:bg-surface-200-700-token border-surface-200-700-token w-full border-b px-4 py-3 text-left transition-colors last:border-b-0"
 								>
-									<div class="font-medium text-primary-500">{club.name}</div>
+									<div class="text-primary-500 font-medium">{club.name}</div>
 									<div class="text-surface-600-300-token text-sm">{formatAddress(club)}</div>
 								</button>
 							{/each}
@@ -264,7 +264,7 @@
 
 	<!-- Results - Desktop Table -->
 	{#if !loading && !error && clubs.length > 0}
-		<section class="hidden card md:block">
+		<section class="card hidden md:block">
 			<header class="card-header">
 				<h2 class="h2">Search Results</h2>
 				<p class="text-surface-500-400-token">
@@ -288,14 +288,14 @@
 								<td>
 									<a
 										href={resolve(`/clubs/${club.id}`)}
-										class="anchor font-medium text-primary-500 hover:text-primary-600"
+										class="anchor text-primary-500 hover:text-primary-600 font-medium"
 									>
 										{club.name}
 									</a>
 								</td>
 								<td>
 									<div class="flex items-start gap-2">
-										<MapPinHouse class="mt-0.5 h-4 w-4 flex-shrink-0 text-surface-500" />
+										<MapPinHouse class="text-surface-500 mt-0.5 h-4 w-4 flex-shrink-0" />
 										<span class="text-sm">{formatAddress(club)}</span>
 									</div>
 								</td>
@@ -305,7 +305,7 @@
 											href={resolve(`/airports/${club.home_base_airport_id}`)}
 											target="_blank"
 											rel="noopener noreferrer"
-											class="flex items-center gap-1 anchor font-mono text-sm text-primary-500 hover:text-primary-600"
+											class="anchor text-primary-500 hover:text-primary-600 flex items-center gap-1 font-mono text-sm"
 										>
 											<Plane class="h-4 w-4" />
 											<span>{club.home_base_airport_ident}</span>
@@ -318,7 +318,7 @@
 								<td>
 									<a
 										href={resolve(`/clubs/${club.id}`)}
-										class="preset-tonal-surface-500 btn flex items-center gap-1 btn-sm"
+										class="preset-tonal-surface-500 btn btn-sm flex items-center gap-1"
 									>
 										<ExternalLink class="h-3 w-3" />
 										View
@@ -341,14 +341,14 @@
 			</div>
 
 			{#each clubs as club (club.id)}
-				<article class="relative card p-4 transition-all duration-200 hover:shadow-lg">
+				<article class="card relative p-4 transition-all duration-200 hover:shadow-lg">
 					<!-- Club header -->
 					<div
 						class="border-surface-200-700-token mb-3 flex items-start justify-between border-b pb-3"
 					>
 						<a
 							href={resolve(`/clubs/${club.id}`)}
-							class="relative z-10 anchor font-semibold text-primary-500 hover:text-primary-600"
+							class="anchor text-primary-500 hover:text-primary-600 relative z-10 font-semibold"
 						>
 							{club.name}
 						</a>
@@ -357,27 +357,27 @@
 							class="relative z-10 flex-shrink-0"
 							title="View club details"
 						>
-							<ExternalLink class="h-4 w-4 text-surface-400 hover:text-primary-500" />
+							<ExternalLink class="text-surface-400 hover:text-primary-500 h-4 w-4" />
 						</a>
 					</div>
 
 					<!-- Club details -->
 					<div class="space-y-2 text-sm">
 						<div class="flex items-start gap-2">
-							<MapPinHouse class="mt-0.5 h-4 w-4 flex-shrink-0 text-surface-500" />
+							<MapPinHouse class="text-surface-500 mt-0.5 h-4 w-4 flex-shrink-0" />
 							<span class="text-surface-600-300-token flex-1">{formatAddress(club)}</span>
 						</div>
 
 						{#if club.home_base_airport_ident}
 							<div class="flex items-center gap-2">
-								<Plane class="h-4 w-4 flex-shrink-0 text-surface-500" />
+								<Plane class="text-surface-500 h-4 w-4 flex-shrink-0" />
 								<span class="text-surface-600-300-token">
 									Airport:
 									<a
 										href={resolve(`/airports/${club.home_base_airport_id}`)}
 										target="_blank"
 										rel="noopener noreferrer"
-										class="inline-flex items-center gap-1 anchor font-mono text-primary-500 hover:text-primary-600"
+										class="anchor text-primary-500 hover:text-primary-600 inline-flex items-center gap-1 font-mono"
 									>
 										{club.home_base_airport_ident}
 										<ExternalLink class="h-3 w-3" />
@@ -390,8 +390,8 @@
 			{/each}
 		</div>
 	{:else if !loading && !error && clubs.length === 0 && (searchQuery || (latitude && longitude))}
-		<div class="space-y-4 card p-12 text-center">
-			<Search class="mx-auto mb-4 h-16 w-16 text-surface-400" />
+		<div class="card space-y-4 p-12 text-center">
+			<Search class="text-surface-400 mx-auto mb-4 h-16 w-16" />
 			<div class="space-y-2">
 				<h3 class="h3">No clubs found</h3>
 				<p class="text-surface-500-400-token">

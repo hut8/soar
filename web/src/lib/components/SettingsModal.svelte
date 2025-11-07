@@ -163,7 +163,7 @@
 		role="presentation"
 	>
 		<div
-			class="max-h-[80vh] w-full max-w-lg overflow-y-auto card bg-surface-50 p-4 text-surface-900 shadow-xl dark:bg-surface-900 dark:text-surface-50"
+			class="card bg-surface-50 text-surface-900 dark:bg-surface-900 dark:text-surface-50 max-h-[80vh] w-full max-w-lg overflow-y-auto p-4 shadow-xl"
 			onclick={(e) => e.stopPropagation()}
 			onkeydown={(e) => e.key === 'Escape' && (showModal = false)}
 			role="dialog"
@@ -183,58 +183,55 @@
 				<section>
 					<h3 class="mb-3 text-lg font-semibold">Display Options</h3>
 					<div class="space-y-3">
-						<div class="flex items-center justify-between">
-							<label for="compass-toggle" class="text-sm font-medium">Show Compass Rose</label>
-							<Switch
-								checked={showCompassRose}
-								onCheckedChange={(details) => {
-									showCompassRose = details.checked;
-									saveSettings();
-								}}
-							>
-								<Switch.Control>
-									<Switch.Thumb />
-								</Switch.Control>
-								<Switch.HiddenInput name="compass-toggle" />
-							</Switch>
-						</div>
-						<div class="flex items-center justify-between">
-							<label for="airports-toggle" class="text-sm font-medium">Show Airport Markers</label>
-							<Switch
-								checked={showAirportMarkers}
-								onCheckedChange={(details) => {
-									showAirportMarkers = details.checked;
-									saveSettings();
-								}}
-							>
-								<Switch.Control>
-									<Switch.Thumb />
-								</Switch.Control>
-								<Switch.HiddenInput name="airports-toggle" />
-							</Switch>
-						</div>
-						<div class="flex items-center justify-between">
-							<label for="runways-toggle" class="text-sm font-medium">Show Runway Overlays</label>
-							<Switch
-								checked={showRunwayOverlays}
-								onCheckedChange={(details) => {
-									showRunwayOverlays = details.checked;
-									saveSettings();
-								}}
-							>
-								<Switch.Control>
-									<Switch.Thumb />
-								</Switch.Control>
-								<Switch.HiddenInput name="runways-toggle" />
-							</Switch>
-						</div>
+						<Switch
+							class="flex justify-between p-2"
+							checked={showCompassRose}
+							onCheckedChange={(details) => {
+								showCompassRose = details.checked;
+								saveSettings();
+							}}
+						>
+							<Switch.Label class="text-sm font-medium">Show Compass Rose</Switch.Label>
+							<Switch.Control>
+								<Switch.Thumb />
+							</Switch.Control>
+							<Switch.HiddenInput name="compass-toggle" />
+						</Switch>
+						<Switch
+							class="flex justify-between p-2"
+							checked={showAirportMarkers}
+							onCheckedChange={(details) => {
+								showAirportMarkers = details.checked;
+								saveSettings();
+							}}
+						>
+							<Switch.Label class="text-sm font-medium">Show Airport Markers</Switch.Label>
+							<Switch.Control>
+								<Switch.Thumb />
+							</Switch.Control>
+							<Switch.HiddenInput name="airports-toggle" />
+						</Switch>
+						<Switch
+							class="flex justify-between p-2"
+							checked={showRunwayOverlays}
+							onCheckedChange={(details) => {
+								showRunwayOverlays = details.checked;
+								saveSettings();
+							}}
+						>
+							<Switch.Label class="text-sm font-medium">Show Runway Overlays</Switch.Label>
+							<Switch.Control>
+								<Switch.Thumb />
+							</Switch.Control>
+							<Switch.HiddenInput name="runways-toggle" />
+						</Switch>
 					</div>
 				</section>
 
 				<!-- Position Fix Window -->
 				<section>
 					<h3 class="mb-3 text-lg font-semibold">Position Fix Window</h3>
-					<p class="mb-3 text-sm text-surface-600 dark:text-surface-400">
+					<p class="text-surface-600 dark:text-surface-400 mb-3 text-sm">
 						Only show devices that have been seen within this time window
 					</p>
 					<div class="space-y-4">
@@ -264,7 +261,7 @@
 								</Slider.Thumb>
 							</Slider.Control>
 						</Slider>
-						<div class="flex justify-between text-xs text-surface-500 dark:text-surface-400">
+						<div class="text-surface-500 dark:text-surface-400 flex justify-between text-xs">
 							<span>None</span>
 							<span>12h</span>
 							<span>24h</span>
@@ -276,11 +273,11 @@
 				<section>
 					<h3 class="mb-3 text-lg font-semibold">Cache Management</h3>
 					<div class="space-y-3">
-						<p class="text-sm text-surface-600 dark:text-surface-400">
+						<p class="text-surface-600 dark:text-surface-400 text-sm">
 							Clear all cached device data from your browser's local storage.
 						</p>
 						<button
-							class="btn w-full preset-filled-error-500"
+							class="btn preset-filled-error-500 w-full"
 							onclick={clearDevicesCache}
 							type="button"
 						>
