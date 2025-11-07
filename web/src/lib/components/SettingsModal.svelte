@@ -187,46 +187,31 @@
 							<label for="compass-toggle" class="text-sm font-medium">Show Compass Rose</label>
 							<Switch
 								checked={showCompassRose}
-								onCheckedChange={(e) => {
-									showCompassRose = e.checked;
+								onCheckedChange={(details) => {
+									showCompassRose = details.checked;
 									saveSettings();
 								}}
-							>
-								<Switch.Control>
-									<Switch.Thumb />
-								</Switch.Control>
-								<Switch.HiddenInput name="compass-toggle" />
-							</Switch>
+							/>
 						</div>
 						<div class="flex items-center justify-between">
 							<label for="airports-toggle" class="text-sm font-medium">Show Airport Markers</label>
 							<Switch
 								checked={showAirportMarkers}
-								onCheckedChange={(e) => {
-									showAirportMarkers = e.checked;
+								onCheckedChange={(details) => {
+									showAirportMarkers = details.checked;
 									saveSettings();
 								}}
-							>
-								<Switch.Control>
-									<Switch.Thumb />
-								</Switch.Control>
-								<Switch.HiddenInput name="airports-toggle" />
-							</Switch>
+							/>
 						</div>
 						<div class="flex items-center justify-between">
 							<label for="runways-toggle" class="text-sm font-medium">Show Runway Overlays</label>
 							<Switch
 								checked={showRunwayOverlays}
-								onCheckedChange={(e) => {
-									showRunwayOverlays = e.checked;
+								onCheckedChange={(details) => {
+									showRunwayOverlays = details.checked;
 									saveSettings();
 								}}
-							>
-								<Switch.Control>
-									<Switch.Thumb />
-								</Switch.Control>
-								<Switch.HiddenInput name="runways-toggle" />
-							</Switch>
+							/>
 						</div>
 					</div>
 				</section>
@@ -247,23 +232,14 @@
 						</div>
 						<Slider
 							value={[positionFixWindow]}
-							onValueChange={(e) => {
-								positionFixWindow = e.value[0];
+							onValueChange={(details) => {
+								positionFixWindow = details.value[0];
 								saveSettings();
 							}}
 							min={0}
 							max={24}
 							step={1}
-						>
-							<Slider.Control>
-								<Slider.Track>
-									<Slider.Range />
-								</Slider.Track>
-								<Slider.Thumb index={0}>
-									<Slider.HiddenInput />
-								</Slider.Thumb>
-							</Slider.Control>
-						</Slider>
+						/>
 						<div class="flex justify-between text-xs text-surface-500 dark:text-surface-400">
 							<span>None</span>
 							<span>12h</span>

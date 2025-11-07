@@ -180,8 +180,8 @@
 	}
 
 	// Handle club selection change
-	function handleClubChange(e: { value: string[] }) {
-		selectedClub = e.value;
+	function handleClubChange(details: { value: string[] }) {
+		selectedClub = details.value;
 		clearClubError();
 
 		if (selectedClub.length > 0) {
@@ -297,9 +297,9 @@
 								name="watchlist-type-mobile"
 								value={newWatchlistEntry.type}
 								orientation="vertical"
-								onValueChange={(e) => {
-									if (e.value) {
-										newWatchlistEntry.type = e.value;
+								onValueChange={(details) => {
+									if (details.value) {
+										newWatchlistEntry.type = details.value;
 										clearError();
 										clearClubError();
 									}
@@ -340,9 +340,9 @@
 										name="address-type-mobile"
 										value={newWatchlistEntry.deviceAddressType}
 										orientation="vertical"
-										onValueChange={(e) => {
-											if (e.value) {
-												newWatchlistEntry.deviceAddressType = e.value;
+										onValueChange={(details) => {
+											if (details.value) {
+												newWatchlistEntry.deviceAddressType = details.value;
 												clearError();
 											}
 										}}
@@ -455,9 +455,9 @@
 									name="watchlist-type-desktop"
 									value={newWatchlistEntry.type}
 									orientation="vertical"
-									onValueChange={(e) => {
-										if (e.value) {
-											newWatchlistEntry.type = e.value;
+									onValueChange={(details) => {
+										if (details.value) {
+											newWatchlistEntry.type = details.value;
 											clearError();
 											clearClubError();
 										}
@@ -500,9 +500,9 @@
 												name="address-type-desktop"
 												value={newWatchlistEntry.deviceAddressType}
 												orientation="vertical"
-												onValueChange={(e) => {
-													if (e.value) {
-														newWatchlistEntry.deviceAddressType = e.value;
+												onValueChange={(details) => {
+													if (details.value) {
+														newWatchlistEntry.deviceAddressType = details.value;
 														clearError();
 													}
 												}}
@@ -704,12 +704,7 @@
 												<Switch
 													checked={entry.active}
 													onCheckedChange={() => toggleWatchlistEntry(entry.id)}
-												>
-													<Switch.Control>
-														<Switch.Thumb />
-													</Switch.Control>
-													<Switch.HiddenInput name="watchlist-{entry.id}" />
-												</Switch>
+												/>
 												<button
 													class="preset-tonal-error-500 btn btn-sm"
 													onclick={() => removeWatchlistEntry(entry.id)}
