@@ -11,8 +11,9 @@
 	export let disabled: boolean = false;
 	export let required: boolean = false;
 	export let searchQuery: string = '';
-	export let onValueChange: ((e: { value: string[] }) => void) | undefined = undefined;
-	export let onInputValueChange: ((e: { inputValue: string }) => void) | undefined = undefined;
+	export let onValueChange: ((details: { value: string[] }) => void) | undefined = undefined;
+	export let onInputValueChange: ((details: { inputValue: string }) => void) | undefined =
+		undefined;
 
 	// Internal state
 	let clubs: ClubWithSoaring[] = [];
@@ -51,12 +52,12 @@
 	}
 
 	// Custom search function
-	function handleInputValueChange(e: { inputValue: string }) {
-		searchQuery = e.inputValue;
+	function handleInputValueChange(details: { inputValue: string }) {
+		searchQuery = details.inputValue;
 
 		// Call external handler if provided
 		if (onInputValueChange) {
-			onInputValueChange(e);
+			onInputValueChange(details);
 		}
 
 		// Debounce the search
@@ -67,12 +68,12 @@
 	}
 
 	// Handle value changes
-	function handleValueChange(e: { value: string[] }) {
-		value = e.value;
+	function handleValueChange(details: { value: string[] }) {
+		value = details.value;
 
 		// Call external handler if provided
 		if (onValueChange) {
-			onValueChange(e);
+			onValueChange(details);
 		}
 	}
 
