@@ -704,7 +704,12 @@
 												<Switch
 													checked={entry.active}
 													onCheckedChange={() => toggleWatchlistEntry(entry.id)}
-												/>
+												>
+													<Switch.Control>
+														<Switch.Thumb />
+													</Switch.Control>
+													<Switch.HiddenInput name="watchlist-{entry.id}" />
+												</Switch>
 												<button
 													class="preset-tonal-error-500 btn btn-sm"
 													onclick={() => removeWatchlistEntry(entry.id)}
