@@ -351,11 +351,38 @@ pub async fn search_devices(
             (None, Some(address_str), Some(address_type_str)) => {
                 search_devices_by_address(address_str.clone(), address_type_str.clone(), state.pool).await.into_response()
             }
+            (None, None, None) => {
+                // No search criteria - return 10 most recently heard from devices
+                get_recent_devices_response(state.pool).await.into_response()
+            }
             _ => json_error(
                 StatusCode::BAD_REQUEST,
                 "Must provide either 'registration' OR both 'address' and 'address-type' parameters",
             )
             .into_response(),
+        }
+    }
+}
+
+/// Get 10 most recently heard from devices
+async fn get_recent_devices_response(pool: crate::web::PgPool) -> impl IntoResponse {
+    let device_repo = DeviceRepository::new(pool);
+
+    match device_repo.get_recent_devices(10).await {
+        Ok(devices) => {
+            let device_views: Vec<DeviceView> = devices.into_iter().map(|d| d.into()).collect();
+            Json(DeviceSearchResponse {
+                devices: device_views,
+            })
+            .into_response()
+        }
+        Err(e) => {
+            tracing::error!("Failed to get recent devices: {}", e);
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to get recent devices",
+            )
+            .into_response()
         }
     }
 }
