@@ -13,6 +13,16 @@ use chrono::{DateTime, Utc};
 pub type PgPool = Pool<ConnectionManager<PgConnection>>;
 pub type PgPooledConnection = PooledConnection<ConnectionManager<PgConnection>>;
 
+/// Fields extracted from packet for device creation/update
+#[derive(Debug, Clone)]
+pub struct DevicePacketFields {
+    pub aircraft_type: Option<AircraftType>,
+    pub icao_model_code: Option<String>,
+    pub adsb_emitter_category: Option<AdsbEmitterCategory>,
+    pub tracker_device_type: Option<String>,
+    pub registration: Option<String>,
+}
+
 #[derive(Clone)]
 pub struct DeviceRepository {
     pool: PgPool,
@@ -154,7 +164,7 @@ impl DeviceRepository {
 
     /// Get or insert a device for fix processing
     /// This method is optimized for the high-frequency fix processing path:
-    /// - If device doesn't exist, creates it with the given fix timestamp
+    /// - If device doesn't exist, creates it with all available fields from the packet
     /// - If device exists, updates last_fix_at and optionally aircraft_type_ogn
     /// - Always returns the device in one atomic operation
     ///
@@ -164,7 +174,7 @@ impl DeviceRepository {
         address: i32,
         address_type: AddressType,
         fix_timestamp: DateTime<Utc>,
-        aircraft_type: Option<AircraftType>,
+        packet_fields: DevicePacketFields,
     ) -> Result<DeviceModel> {
         let pool = self.pool.clone();
 
@@ -175,8 +185,11 @@ impl DeviceRepository {
             let country_code = Device::extract_country_code_from_icao(address as u32, address_type);
 
             // Extract tail number from ICAO address if it's a US aircraft
-            let registration = Device::extract_tail_number_from_icao(address as u32, address_type)
-                .unwrap_or_default();
+            // Use packet registration if available, otherwise try to extract from ICAO
+            let registration = packet_fields.registration.unwrap_or_else(|| {
+                Device::extract_tail_number_from_icao(address as u32, address_type)
+                    .unwrap_or_default()
+            });
 
             let new_device = NewDevice {
                 address,
@@ -190,12 +203,12 @@ impl DeviceRepository {
                 frequency_mhz: None,
                 pilot_name: None,
                 home_base_airport_ident: None,
-                aircraft_type_ogn: aircraft_type,
+                aircraft_type_ogn: packet_fields.aircraft_type,
                 last_fix_at: Some(fix_timestamp),
                 club_id: None,
-                icao_model_code: None,
-                adsb_emitter_category: None,
-                tracker_device_type: None,
+                icao_model_code: packet_fields.icao_model_code,
+                adsb_emitter_category: packet_fields.adsb_emitter_category,
+                tracker_device_type: packet_fields.tracker_device_type,
                 country_code,
             };
 
@@ -208,7 +221,7 @@ impl DeviceRepository {
                 .do_update()
                 .set((
                     devices::last_fix_at.eq(fix_timestamp),
-                    devices::aircraft_type_ogn.eq(aircraft_type),
+                    devices::aircraft_type_ogn.eq(packet_fields.aircraft_type),
                 ))
                 .get_result::<DeviceModel>(&mut conn)?;
 

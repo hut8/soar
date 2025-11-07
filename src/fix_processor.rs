@@ -3,7 +3,7 @@ use tracing::Instrument;
 use tracing::{debug, error, trace, warn};
 
 use crate::Fix;
-use crate::device_repo::DeviceRepository;
+use crate::device_repo::{DevicePacketFields, DeviceRepository};
 use crate::elevation::ElevationTask;
 use crate::fixes_repo::FixesRepository;
 use crate::flight_tracker::FlightTracker;
@@ -149,9 +149,33 @@ impl FixProcessor {
                     _ => crate::devices::AddressType::Unknown,
                 };
 
+                // Extract all available fields from packet for device creation/update
+                let icao_model_code: Option<String> = pos_packet
+                    .comment
+                    .model
+                    .as_ref()
+                    .map(|model| model.to_string());
+                let adsb_emitter_category = pos_packet
+                    .comment
+                    .adsb_emitter_category
+                    .and_then(|cat| cat.to_string().parse().ok());
+                let registration: Option<String> = pos_packet
+                    .comment
+                    .registration
+                    .as_ref()
+                    .map(|reg| reg.to_string());
+
+                let packet_fields = DevicePacketFields {
+                    aircraft_type,
+                    icao_model_code: icao_model_code.clone(),
+                    adsb_emitter_category,
+                    tracker_device_type: Some(tracker_device_type.clone()),
+                    registration: registration.clone(),
+                };
+
                 // Look up or create device based on device_address
                 // When creating spontaneously, use address_type derived from tracker_device_type
-                // Use device_for_fix to atomically update last_fix_at and aircraft_type_ogn
+                // Use device_for_fix to atomically update last_fix_at and insert all available fields
                 let device_lookup_start = std::time::Instant::now();
                 match self
                     .device_repo
@@ -159,28 +183,13 @@ impl FixProcessor {
                         device_address,
                         spontaneous_address_type,
                         received_at,
-                        aircraft_type,
+                        packet_fields,
                     )
                     .await
                 {
                     Ok(device_model) => {
                         metrics::histogram!("aprs.aircraft.device_upsert_ms")
                             .record(device_lookup_start.elapsed().as_micros() as f64 / 1000.0);
-                        // Extract ICAO model code, ADS-B emitter category, and registration from packet for device update
-                        let icao_model_code: Option<String> = pos_packet
-                            .comment
-                            .model
-                            .as_ref()
-                            .map(|model| model.to_string());
-                        let adsb_emitter_category = pos_packet
-                            .comment
-                            .adsb_emitter_category
-                            .and_then(|cat| cat.to_string().parse().ok());
-                        let registration: Option<String> = pos_packet
-                            .comment
-                            .registration
-                            .as_ref()
-                            .map(|reg| reg.to_string());
 
                         // Check if we have new/different information to update
                         let icao_changed = icao_model_code.is_some()
