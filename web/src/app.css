@@ -2,7 +2,6 @@
 
 @import '@skeletonlabs/skeleton';
 @import '@skeletonlabs/skeleton/themes/cerberus';
-@import '@skeletonlabs/skeleton-svelte/dist/index.css';
 
 @custom-variant dark (&:where(.dark, .dark *));
 
