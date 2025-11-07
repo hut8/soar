@@ -152,6 +152,71 @@ impl DeviceRepository {
         Ok(device_model)
     }
 
+    /// Get or insert a device for fix processing
+    /// This method is optimized for the high-frequency fix processing path:
+    /// - If device doesn't exist, creates it with the given fix timestamp
+    /// - If device exists, updates last_fix_at and optionally aircraft_type_ogn
+    /// - Always returns the device in one atomic operation
+    ///
+    /// This avoids the no-op update overhead of get_or_insert_device_by_address
+    pub async fn device_for_fix(
+        &self,
+        address: i32,
+        address_type: AddressType,
+        fix_timestamp: DateTime<Utc>,
+        aircraft_type: Option<AircraftType>,
+    ) -> Result<DeviceModel> {
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            // Extract country code from ICAO address if applicable
+            let country_code = Device::extract_country_code_from_icao(address as u32, address_type);
+
+            // Extract tail number from ICAO address if it's a US aircraft
+            let registration = Device::extract_tail_number_from_icao(address as u32, address_type)
+                .unwrap_or_default();
+
+            let new_device = NewDevice {
+                address,
+                address_type,
+                aircraft_model: String::new(),
+                registration,
+                competition_number: String::new(),
+                tracked: true,
+                identified: true,
+                from_ddb: false,
+                frequency_mhz: None,
+                pilot_name: None,
+                home_base_airport_ident: None,
+                aircraft_type_ogn: aircraft_type,
+                last_fix_at: Some(fix_timestamp),
+                club_id: None,
+                icao_model_code: None,
+                adsb_emitter_category: None,
+                tracker_device_type: None,
+                country_code,
+            };
+
+            // Use INSERT ... ON CONFLICT ... DO UPDATE RETURNING to atomically handle race conditions
+            // On conflict, update last_fix_at (always) and aircraft_type_ogn (if provided)
+            // This ensures we always have current fix time without creating unnecessary row versions
+            let device_model = diesel::insert_into(devices::table)
+                .values(&new_device)
+                .on_conflict(devices::address)
+                .do_update()
+                .set((
+                    devices::last_fix_at.eq(fix_timestamp),
+                    devices::aircraft_type_ogn.eq(aircraft_type),
+                ))
+                .get_result::<DeviceModel>(&mut conn)?;
+
+            Ok::<DeviceModel, anyhow::Error>(device_model)
+        })
+        .await?
+    }
+
     /// Get a device by its UUID
     pub async fn get_device_by_uuid(&self, device_uuid: Uuid) -> Result<Option<Device>> {
         let mut conn = self.get_connection()?;
@@ -216,32 +281,6 @@ impl DeviceRepository {
             .into_iter()
             .map(|model| model.into())
             .collect())
-    }
-
-    /// Update cached fields (aircraft_type_ogn and last_fix_at) from a fix
-    pub async fn update_cached_fields(
-        &self,
-        device_id: Uuid,
-        aircraft_type: Option<AircraftType>,
-        fix_timestamp: DateTime<Utc>,
-    ) -> Result<()> {
-        let pool = self.pool.clone();
-
-        tokio::task::spawn_blocking(move || {
-            let mut conn = pool.get()?;
-
-            diesel::update(devices::table.filter(devices::id.eq(device_id)))
-                .set((
-                    devices::aircraft_type_ogn.eq(aircraft_type),
-                    devices::last_fix_at.eq(fix_timestamp),
-                ))
-                .execute(&mut conn)?;
-
-            Ok::<(), anyhow::Error>(())
-        })
-        .await??;
-
-        Ok(())
     }
 
     /// Update the club assignment for a device

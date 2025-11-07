@@ -151,14 +151,20 @@ impl FixProcessor {
 
                 // Look up or create device based on device_address
                 // When creating spontaneously, use address_type derived from tracker_device_type
+                // Use device_for_fix to atomically update last_fix_at and aircraft_type_ogn
                 let device_lookup_start = std::time::Instant::now();
                 match self
                     .device_repo
-                    .get_or_insert_device_by_address(device_address, spontaneous_address_type)
+                    .device_for_fix(
+                        device_address,
+                        spontaneous_address_type,
+                        received_at,
+                        aircraft_type,
+                    )
                     .await
                 {
                     Ok(device_model) => {
-                        metrics::histogram!("aprs.aircraft.device_lookup_ms")
+                        metrics::histogram!("aprs.aircraft.device_upsert_ms")
                             .record(device_lookup_start.elapsed().as_micros() as f64 / 1000.0);
                         // Extract ICAO model code, ADS-B emitter category, and registration from packet for device update
                         let icao_model_code: Option<String> = pos_packet
@@ -237,8 +243,7 @@ impl FixProcessor {
                                 fix.receiver_id = Some(context.receiver_id);
 
                                 let process_internal_start = std::time::Instant::now();
-                                self.process_fix_internal(fix, raw_message, aircraft_type)
-                                    .await;
+                                self.process_fix_internal(fix, raw_message).await;
                                 metrics::histogram!("aprs.aircraft.process_fix_internal_ms")
                                     .record(
                                         process_internal_start.elapsed().as_micros() as f64
@@ -273,13 +278,8 @@ impl FixProcessor {
     }
 
     /// Internal method to process a fix through the complete pipeline
-    #[tracing::instrument(skip(self, fix, raw_message, aircraft_type), fields(device_id = %fix.device_id))]
-    async fn process_fix_internal(
-        &self,
-        fix: Fix,
-        raw_message: &str,
-        aircraft_type: Option<crate::ogn_aprs_aircraft::AircraftType>,
-    ) {
+    #[tracing::instrument(skip(self, fix, raw_message), fields(device_id = %fix.device_id))]
+    async fn process_fix_internal(&self, fix: Fix, raw_message: &str) {
         // Step 1: Process through flight detection AND save to database
         // This is done atomically while holding a per-device lock to prevent race conditions
         let flight_insert_start = std::time::Instant::now();
@@ -312,28 +312,7 @@ impl FixProcessor {
             );
         }
 
-        // Step 3: Update device cached fields (aircraft_type_ogn and last_fix_at)
-        let device_repo = self.device_repo.clone();
-        let device_id = updated_fix.device_id;
-        let fix_timestamp = updated_fix.timestamp;
-        tokio::spawn(
-            async move {
-                if let Err(e) = device_repo
-                    .update_cached_fields(device_id, aircraft_type, fix_timestamp)
-                    .await
-                {
-                    error!(
-                        "Failed to update cached fields for device {}: {}",
-                        device_id, e
-                    );
-                }
-            }
-            .instrument(
-                tracing::debug_span!("update_device_cached_fields", device_id = %device_id),
-            ),
-        );
-
-        // Step 4: Update flight callsign if this fix has a flight_id and flight_number
+        // Step 3: Update flight callsign if this fix has a flight_id and flight_number
         // IMPORTANT: Only update from NULL to a value, never from one non-null value to another.
         // If callsign changes from one value to another, the flight tracker will create a new flight.
         if let (Some(flight_id), Some(flight_number)) =
@@ -386,7 +365,7 @@ impl FixProcessor {
                 .record(callsign_update_start.elapsed().as_micros() as f64 / 1000.0);
         }
 
-        // Step 5: Calculate and update altitude_agl via dedicated elevation channel
+        // Step 4: Calculate and update altitude_agl via dedicated elevation channel
         // This prevents slow elevation lookups from blocking the main processing queue
         if let Some(elevation_tx) = &self.elevation_tx {
             let elevation_queue_start = std::time::Instant::now();
@@ -412,7 +391,7 @@ impl FixProcessor {
                 .record(elevation_queue_start.elapsed().as_micros() as f64 / 1000.0);
         }
 
-        // Step 6: Publish to NATS with updated fix (including flight_id and flight info)
+        // Step 5: Publish to NATS with updated fix (including flight_id and flight info)
         if let Some(nats_publisher) = self.nats_publisher.as_ref() {
             let nats_publish_start = std::time::Instant::now();
             // Look up flight information if this fix is part of a flight
