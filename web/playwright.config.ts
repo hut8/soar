@@ -55,12 +55,18 @@ export default defineConfig({
 		{
 			// Start Rust backend server with test database
 			command:
-				'DATABASE_URL=postgres://postgres:postgres@localhost:5432/soar_test ../target/release/soar web --port 61225 --interface localhost',
+				'DATABASE_URL=postgres://postgres:postgres@localhost:5432/soar_test NATS_URL=nats://localhost:4222 ../target/release/soar web --port 61225 --interface localhost',
 			port: 61225,
-			timeout: 60000, // 1 minute for backend startup
+			timeout: 120000, // 2 minutes for backend startup (CI can be slow)
 			reuseExistingServer: !process.env.CI,
 			env: {
-				DATABASE_URL: 'postgres://postgres:postgres@localhost:5432/soar_test'
+				DATABASE_URL: 'postgres://postgres:postgres@localhost:5432/soar_test',
+				// NATS URL for backend (optional, backend should handle missing NATS gracefully)
+				NATS_URL: 'nats://localhost:4222',
+				// Disable Sentry in tests
+				SENTRY_DSN: '',
+				// Set environment
+				SOAR_ENV: 'test'
 			}
 		},
 		{
