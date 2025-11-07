@@ -112,7 +112,7 @@
 			<Combobox.Input {placeholder} {required} />
 		</Combobox.Control>
 		<Combobox.Positioner>
-			<Combobox.Content>
+			<Combobox.Content class="bg-surface-50 dark:bg-surface-800">
 				{#each comboboxData as clubItem (clubItem.value)}
 					<Combobox.Item item={{ label: clubItem.label, value: clubItem.value }}>
 						<div class="flex w-full items-center space-x-2">
