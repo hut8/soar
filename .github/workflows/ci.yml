@@ -136,7 +136,8 @@ jobs:
           diesel migration run
 
           # Build the project to get the seed-test-data command
-          cargo build --release
+          # IMPORTANT: Must use --cfg tokio_unstable for console-subscriber
+          RUSTFLAGS="--cfg tokio_unstable" cargo build --release
 
           # Seed test data
           ./target/release/soar seed-test-data
