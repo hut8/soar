@@ -383,18 +383,24 @@ impl FixProcessor {
                 fix: updated_fix.clone(),
             };
 
-            // Send to elevation queue, blocking if full to apply backpressure
-            // This ensures we never drop elevation calculations
-            // With durable JetStream queue, backpressure is safe and correct
-            if let Err(e) = elevation_tx.send_async(task).await {
-                error!(
-                    "Elevation processing channel is closed - cannot queue elevation calculation: {}",
-                    e
-                );
-                metrics::counter!("aprs.elevation.channel_closed").increment(1);
-            } else {
-                // Successfully queued for elevation processing
-                metrics::counter!("aprs.elevation.queued").increment(1);
+            // Send to elevation queue with non-blocking try_send
+            // If queue is full, drop the elevation task rather than blocking fix processing
+            // Large queue (50K) makes drops rare, but prevents multi-second spikes
+            match elevation_tx.try_send(task) {
+                Ok(_) => {
+                    metrics::counter!("aprs.elevation.queued").increment(1);
+                }
+                Err(flume::TrySendError::Full(_)) => {
+                    warn!(
+                        "Elevation queue full - dropping elevation task for fix {}",
+                        updated_fix.id
+                    );
+                    metrics::counter!("aprs.elevation.dropped_full").increment(1);
+                }
+                Err(flume::TrySendError::Disconnected(_)) => {
+                    error!("Elevation processing channel is closed");
+                    metrics::counter!("aprs.elevation.channel_closed").increment(1);
+                }
             }
             metrics::histogram!("aprs.aircraft.elevation_queue_ms")
                 .record(elevation_queue_start.elapsed().as_micros() as f64 / 1000.0);

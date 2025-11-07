@@ -44,6 +44,7 @@ SOAR is a comprehensive aircraft tracking and club management system built with:
 
 **Recent Metric Changes:**
 - `aprs.aircraft.device_lookup_ms` → `aprs.aircraft.device_upsert_ms` (2025-01-07, PR #312)
+- **NEW**: `aprs.elevation.dropped_full` counter - tracks elevation tasks dropped due to full queue (2025-01-07)
 
 ### Frontend Development Standards
 

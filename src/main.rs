@@ -447,14 +447,16 @@ async fn main() -> Result<()> {
 
         Some(sentry::init(sentry::ClientOptions {
             dsn: Some(sentry_dsn.parse().expect("Invalid SENTRY_DSN format")),
-            sample_rate: 0.05,        // Sample 5% of error events
-            traces_sample_rate: 0.05, // Sample 5% of performance traces
+            sample_rate: 0.05,       // Sample 5% of error events
+            traces_sample_rate: 0.1, // Sample 10% of performance traces (increased for better visibility)
             attach_stacktrace: true,
             release,
             enable_logs: true,
             environment: env::var("SOAR_ENV").ok().map(Into::into),
             session_mode: sentry::SessionMode::Request,
             auto_session_tracking: true,
+            // Note: Continuous profiling not available in sentry-rust 0.45.0
+            // Using increased traces_sample_rate for better performance visibility
             before_send: Some(std::sync::Arc::new(
                 move |event: sentry::protocol::Event<'static>| {
                     // Always capture error-level events

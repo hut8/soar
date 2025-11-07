@@ -214,7 +214,10 @@ pub async fn handle_run(
     let (elevation_tx, elevation_rx) =
         flume::bounded::<soar::elevation::ElevationTask>(ELEVATION_QUEUE_SIZE);
 
-    info!("Created bounded elevation processing queue with capacity 1,000");
+    info!(
+        "Created bounded elevation processing queue with capacity {}",
+        ELEVATION_QUEUE_SIZE
+    );
 
     // Create separate bounded channel for AGL database updates
     // This separates the fast elevation calculation from the slower database updates
