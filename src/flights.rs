@@ -495,13 +495,42 @@ impl Flight {
             end_time.format("%Y-%m-%d %H:%M:%S UTC")
         ));
 
-        // Style for flight track line
-        kml.push_str("    <Style id=\"flightTrackStyle\">\n");
-        kml.push_str("      <LineStyle>\n");
-        kml.push_str("        <color>ff0000ff</color>\n"); // Red line
-        kml.push_str("        <width>3</width>\n");
-        kml.push_str("      </LineStyle>\n");
-        kml.push_str("    </Style>\n");
+        // Helper function to convert altitude to KML ABGR color (gradient from red to blue)
+        let altitude_to_kml_color =
+            |altitude_msl_feet: Option<i32>, min_alt: f64, max_alt: f64| -> String {
+                if let Some(alt) = altitude_msl_feet {
+                    let alt_f64 = alt as f64;
+                    if max_alt > min_alt {
+                        // Normalize altitude to 0-1 range
+                        let normalized =
+                            ((alt_f64 - min_alt) / (max_alt - min_alt)).clamp(0.0, 1.0);
+
+                        // Interpolate from red (low) to blue (high)
+                        // Red RGB: (239, 68, 68)
+                        // Blue RGB: (59, 130, 246)
+                        let r = (239.0 - normalized * (239.0 - 59.0)).round() as u8;
+                        let g = (68.0 + normalized * (130.0 - 68.0)).round() as u8;
+                        let b = (68.0 + normalized * (246.0 - 68.0)).round() as u8;
+
+                        // KML uses ABGR format (alpha, blue, green, red)
+                        return format!("ff{:02x}{:02x}{:02x}", b, g, r);
+                    }
+                }
+                // Gray for unknown altitude
+                String::from("ff888888")
+            };
+
+        // Calculate min/max altitudes for gradient
+        let min_alt = fixes
+            .iter()
+            .filter_map(|f| f.altitude_msl_feet)
+            .map(|alt| alt as f64)
+            .fold(f64::INFINITY, f64::min);
+        let max_alt = fixes
+            .iter()
+            .filter_map(|f| f.altitude_msl_feet)
+            .map(|alt| alt as f64)
+            .fold(f64::NEG_INFINITY, f64::max);
 
         // Style for takeoff point
         kml.push_str("    <Style id=\"takeoffStyle\">\n");
@@ -519,47 +548,56 @@ impl Flight {
         kml.push_str("      </IconStyle>\n");
         kml.push_str("    </Style>\n");
 
-        // Flight track as LineString using spline interpolation
-        kml.push_str("    <Placemark>\n");
-        kml.push_str(&format!(
-            "      <name>Flight Track - {}</name>\n",
-            aircraft_reg
-        ));
-        kml.push_str("      <styleUrl>#flightTrackStyle</styleUrl>\n");
-        kml.push_str("      <LineString>\n");
-        kml.push_str("        <extrude>1</extrude>\n");
-        kml.push_str("        <tessellate>1</tessellate>\n");
-        kml.push_str("        <altitudeMode>absolute</altitudeMode>\n");
-        kml.push_str("        <coordinates>\n");
+        // Flight track as gradient LineString segments
+        // Create a segment between each pair of consecutive fixes with altitude-based coloring
+        for i in 0..fixes.len().saturating_sub(1) {
+            let fix1 = &fixes[i];
+            let fix2 = &fixes[i + 1];
 
-        // Convert fixes to GeoPoints with altitude
-        let fix_points: Vec<GeoPoint> = fixes
-            .iter()
-            .map(|fix| {
-                let altitude_meters = fix
-                    .altitude_msl_feet
-                    .map(|alt| alt as f64 * 0.3048)
-                    .unwrap_or(0.0);
-                GeoPoint::new_with_altitude(fix.latitude, fix.longitude, altitude_meters)
-            })
-            .collect();
+            // Get color based on starting fix altitude
+            let color = altitude_to_kml_color(fix1.altitude_msl_feet, min_alt, max_alt);
 
-        // Generate smooth spline path with 100m spacing
-        let path_points = generate_spline_path(&fix_points, 100.0);
+            // Create inline style for this segment
+            kml.push_str(&format!("    <Style id=\"segment{}\">\n", i));
+            kml.push_str("      <LineStyle>\n");
+            kml.push_str(&format!("        <color>{}</color>\n", color));
+            kml.push_str("        <width>3</width>\n");
+            kml.push_str("      </LineStyle>\n");
+            kml.push_str("    </Style>\n");
 
-        // Add interpolated coordinates for flight track (longitude,latitude,altitude_meters)
-        for point in &path_points {
+            // Create LineString segment
+            kml.push_str("    <Placemark>\n");
+            kml.push_str(&format!("      <name>Segment {}</name>\n", i));
+            kml.push_str(&format!("      <styleUrl>#segment{}</styleUrl>\n", i));
+            kml.push_str("      <LineString>\n");
+            kml.push_str("        <extrude>1</extrude>\n");
+            kml.push_str("        <tessellate>1</tessellate>\n");
+            kml.push_str("        <altitudeMode>absolute</altitudeMode>\n");
+            kml.push_str("        <coordinates>\n");
+
+            // Add coordinates for this segment
+            let alt1_meters = fix1
+                .altitude_msl_feet
+                .map(|alt| alt as f64 * 0.3048)
+                .unwrap_or(0.0);
+            let alt2_meters = fix2
+                .altitude_msl_feet
+                .map(|alt| alt as f64 * 0.3048)
+                .unwrap_or(0.0);
+
             kml.push_str(&format!(
                 "          {},{},{}\n",
-                point.longitude,
-                point.latitude,
-                point.altitude_meters.unwrap_or(0.0)
+                fix1.longitude, fix1.latitude, alt1_meters
             ));
-        }
+            kml.push_str(&format!(
+                "          {},{},{}\n",
+                fix2.longitude, fix2.latitude, alt2_meters
+            ));
 
-        kml.push_str("        </coordinates>\n");
-        kml.push_str("      </LineString>\n");
-        kml.push_str("    </Placemark>\n");
+            kml.push_str("        </coordinates>\n");
+            kml.push_str("      </LineString>\n");
+            kml.push_str("    </Placemark>\n");
+        }
 
         // Takeoff point
         if let Some(first_fix) = fixes.first() {
