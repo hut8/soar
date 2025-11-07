@@ -181,24 +181,36 @@
 						}
 					}}
 				>
-					<SegmentedControl.Item value="registration">
-						<div class="flex flex-row items-center">
-							<Plane size={16} />
-							<span class="ml-1">Registration</span>
-						</div>
-					</SegmentedControl.Item>
-					<SegmentedControl.Item value="device">
-						<div class="flex flex-row items-center">
-							<Antenna size={16} />
-							<span class="ml-1">Device Address</span>
-						</div>
-					</SegmentedControl.Item>
-					<SegmentedControl.Item value="club">
-						<div class="flex flex-row items-center">
-							<Building2 size={16} />
-							<span class="ml-1">Club</span>
-						</div>
-					</SegmentedControl.Item>
+					<SegmentedControl.Control>
+						<SegmentedControl.Indicator />
+						<SegmentedControl.Item value="registration">
+							<SegmentedControl.ItemText>
+								<div class="flex flex-row items-center">
+									<Plane size={16} />
+									<span class="ml-1">Registration</span>
+								</div>
+							</SegmentedControl.ItemText>
+							<SegmentedControl.ItemHiddenInput />
+						</SegmentedControl.Item>
+						<SegmentedControl.Item value="device">
+							<SegmentedControl.ItemText>
+								<div class="flex flex-row items-center">
+									<Antenna size={16} />
+									<span class="ml-1">Device Address</span>
+								</div>
+							</SegmentedControl.ItemText>
+							<SegmentedControl.ItemHiddenInput />
+						</SegmentedControl.Item>
+						<SegmentedControl.Item value="club">
+							<SegmentedControl.ItemText>
+								<div class="flex flex-row items-center">
+									<Building2 size={16} />
+									<span class="ml-1">Club</span>
+								</div>
+							</SegmentedControl.ItemText>
+							<SegmentedControl.ItemHiddenInput />
+						</SegmentedControl.Item>
+					</SegmentedControl.Control>
 				</SegmentedControl>
 
 				{#if searchType === 'registration'}
@@ -222,9 +234,21 @@
 								}
 							}}
 						>
-							<SegmentedControl.Item value="I">ICAO</SegmentedControl.Item>
-							<SegmentedControl.Item value="O">OGN</SegmentedControl.Item>
-							<SegmentedControl.Item value="F">FLARM</SegmentedControl.Item>
+							<SegmentedControl.Control>
+								<SegmentedControl.Indicator />
+								<SegmentedControl.Item value="I">
+									<SegmentedControl.ItemText>ICAO</SegmentedControl.ItemText>
+									<SegmentedControl.ItemHiddenInput />
+								</SegmentedControl.Item>
+								<SegmentedControl.Item value="O">
+									<SegmentedControl.ItemText>OGN</SegmentedControl.ItemText>
+									<SegmentedControl.ItemHiddenInput />
+								</SegmentedControl.Item>
+								<SegmentedControl.Item value="F">
+									<SegmentedControl.ItemText>FLARM</SegmentedControl.ItemText>
+									<SegmentedControl.ItemHiddenInput />
+								</SegmentedControl.Item>
+							</SegmentedControl.Control>
 						</SegmentedControl>
 						<input
 							class="input"
@@ -273,24 +297,36 @@
 							}
 						}}
 					>
-						<SegmentedControl.Item value="registration">
-							<div class="flex flex-row items-center">
-								<Plane size={16} />
-								<span class="ml-1">Registration</span>
-							</div>
-						</SegmentedControl.Item>
-						<SegmentedControl.Item value="device">
-							<div class="flex flex-row items-center">
-								<Antenna size={16} />
-								<span class="ml-1">Device Address</span>
-							</div>
-						</SegmentedControl.Item>
-						<SegmentedControl.Item value="club">
-							<div class="flex flex-row items-center">
-								<Building2 size={16} />
-								<span class="ml-1">Club</span>
-							</div>
-						</SegmentedControl.Item>
+						<SegmentedControl.Control>
+							<SegmentedControl.Indicator />
+							<SegmentedControl.Item value="registration">
+								<SegmentedControl.ItemText>
+									<div class="flex flex-row items-center">
+										<Plane size={16} />
+										<span class="ml-1">Registration</span>
+									</div>
+								</SegmentedControl.ItemText>
+								<SegmentedControl.ItemHiddenInput />
+							</SegmentedControl.Item>
+							<SegmentedControl.Item value="device">
+								<SegmentedControl.ItemText>
+									<div class="flex flex-row items-center">
+										<Antenna size={16} />
+										<span class="ml-1">Device Address</span>
+									</div>
+								</SegmentedControl.ItemText>
+								<SegmentedControl.ItemHiddenInput />
+							</SegmentedControl.Item>
+							<SegmentedControl.Item value="club">
+								<SegmentedControl.ItemText>
+									<div class="flex flex-row items-center">
+										<Building2 size={16} />
+										<span class="ml-1">Club</span>
+									</div>
+								</SegmentedControl.ItemText>
+								<SegmentedControl.ItemHiddenInput />
+							</SegmentedControl.Item>
+						</SegmentedControl.Control>
 					</SegmentedControl>
 
 					<!-- Input area -->
@@ -316,9 +352,21 @@
 										}
 									}}
 								>
-									<SegmentedControl.Item value="I">ICAO</SegmentedControl.Item>
-									<SegmentedControl.Item value="O">OGN</SegmentedControl.Item>
-									<SegmentedControl.Item value="F">FLARM</SegmentedControl.Item>
+									<SegmentedControl.Control>
+										<SegmentedControl.Indicator />
+										<SegmentedControl.Item value="I">
+											<SegmentedControl.ItemText>ICAO</SegmentedControl.ItemText>
+											<SegmentedControl.ItemHiddenInput />
+										</SegmentedControl.Item>
+										<SegmentedControl.Item value="O">
+											<SegmentedControl.ItemText>OGN</SegmentedControl.ItemText>
+											<SegmentedControl.ItemHiddenInput />
+										</SegmentedControl.Item>
+										<SegmentedControl.Item value="F">
+											<SegmentedControl.ItemText>FLARM</SegmentedControl.ItemText>
+											<SegmentedControl.ItemHiddenInput />
+										</SegmentedControl.Item>
+									</SegmentedControl.Control>
 								</SegmentedControl>
 								<input
 									class="input flex-1"

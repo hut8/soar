@@ -183,36 +183,48 @@
 				<section>
 					<h3 class="mb-3 text-lg font-semibold">Display Options</h3>
 					<div class="space-y-3">
-						<div class="flex items-center justify-between">
-							<label for="compass-toggle" class="text-sm font-medium">Show Compass Rose</label>
-							<Switch
-								checked={showCompassRose}
-								onCheckedChange={(details) => {
-									showCompassRose = details.checked;
-									saveSettings();
-								}}
-							/>
-						</div>
-						<div class="flex items-center justify-between">
-							<label for="airports-toggle" class="text-sm font-medium">Show Airport Markers</label>
-							<Switch
-								checked={showAirportMarkers}
-								onCheckedChange={(details) => {
-									showAirportMarkers = details.checked;
-									saveSettings();
-								}}
-							/>
-						</div>
-						<div class="flex items-center justify-between">
-							<label for="runways-toggle" class="text-sm font-medium">Show Runway Overlays</label>
-							<Switch
-								checked={showRunwayOverlays}
-								onCheckedChange={(details) => {
-									showRunwayOverlays = details.checked;
-									saveSettings();
-								}}
-							/>
-						</div>
+						<Switch
+							class="flex justify-between p-2"
+							checked={showCompassRose}
+							onCheckedChange={(details) => {
+								showCompassRose = details.checked;
+								saveSettings();
+							}}
+						>
+							<Switch.Label class="text-sm font-medium">Show Compass Rose</Switch.Label>
+							<Switch.Control>
+								<Switch.Thumb />
+							</Switch.Control>
+							<Switch.HiddenInput name="compass-toggle" />
+						</Switch>
+						<Switch
+							class="flex justify-between p-2"
+							checked={showAirportMarkers}
+							onCheckedChange={(details) => {
+								showAirportMarkers = details.checked;
+								saveSettings();
+							}}
+						>
+							<Switch.Label class="text-sm font-medium">Show Airport Markers</Switch.Label>
+							<Switch.Control>
+								<Switch.Thumb />
+							</Switch.Control>
+							<Switch.HiddenInput name="airports-toggle" />
+						</Switch>
+						<Switch
+							class="flex justify-between p-2"
+							checked={showRunwayOverlays}
+							onCheckedChange={(details) => {
+								showRunwayOverlays = details.checked;
+								saveSettings();
+							}}
+						>
+							<Switch.Label class="text-sm font-medium">Show Runway Overlays</Switch.Label>
+							<Switch.Control>
+								<Switch.Thumb />
+							</Switch.Control>
+							<Switch.HiddenInput name="runways-toggle" />
+						</Switch>
 					</div>
 				</section>
 
@@ -239,7 +251,16 @@
 							min={0}
 							max={24}
 							step={1}
-						/>
+						>
+							<Slider.Control>
+								<Slider.Track>
+									<Slider.Range />
+								</Slider.Track>
+								<Slider.Thumb index={0}>
+									<Slider.HiddenInput />
+								</Slider.Thumb>
+							</Slider.Control>
+						</Slider>
 						<div class="flex justify-between text-xs text-surface-500 dark:text-surface-400">
 							<span>None</span>
 							<span>12h</span>

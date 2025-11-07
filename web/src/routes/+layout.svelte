@@ -108,9 +108,9 @@
 </svelte:head>
 
 <div class="flex h-full min-h-screen flex-col">
-	<AppBar class="relative z-[70] bg-orange-400 dark:bg-orange-900">
+	<AppBar class="relative z-[70] bg-orange-400 p-1 dark:bg-orange-900">
 		<LoadingBar />
-		<AppBar.Toolbar class="grid grid-cols-[auto_1fr_auto] gap-3 p-2">
+		<AppBar.Toolbar class="grid grid-cols-[auto_1fr_auto] gap-3 p-0">
 			<AppBar.Lead>
 				<a href={base} class="relative z-10 btn preset-filled-primary-500 btn-sm">
 					<Plane />
@@ -404,7 +404,7 @@
 		</div>
 	{/if}
 
-	<main class="container mx-auto flex-1 space-y-4">
+	<main class="container mx-auto flex-1">
 		{@render children?.()}
 	</main>
 

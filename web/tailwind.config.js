@@ -4,7 +4,8 @@ import { skeleton } from '@skeletonlabs/tw-plugin';
 export const darkMode = 'class';
 export const content = [
 	'./src/**/*.{html,js,svelte,ts}',
-	'./node_modules/@skeletonlabs/skeleton-svelte/**/*.{html,js,svelte,ts}'
+	'./node_modules/@skeletonlabs/skeleton-svelte/**/*.{html,js,svelte,ts}',
+	'./node_modules/@skeletonlabs/skeleton-common/**/*.{html,js,svelte,ts}'
 ];
 export const theme = {
 	extend: {}
