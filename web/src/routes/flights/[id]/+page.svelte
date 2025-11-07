@@ -804,7 +804,13 @@
 		// Update chart if it exists and has been initialized
 		if (altitudeChartInitialized && altitudeChartContainer && Plotly && data.fixes.length > 0) {
 			const isDark = currentTheme === 'dark';
-			Plotly.relayout(altitudeChartContainer, getPlotlyLayout(isDark));
+
+			// Get current traces data from the chart (Plotly adds 'data' property at runtime)
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			const currentData = (altitudeChartContainer as any).data || [];
+
+			// Re-render chart with new layout using react (more reliable than relayout)
+			Plotly.react(altitudeChartContainer, currentData, getPlotlyLayout(isDark));
 		}
 	});
 
