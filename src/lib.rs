@@ -15,6 +15,7 @@ pub mod aprs_filters;
 pub mod aprs_jetstream_consumer;
 pub mod aprs_jetstream_publisher;
 pub mod aprs_messages_repo;
+pub mod archive_service;
 pub mod auth;
 pub mod clubs;
 pub mod clubs_repo;
@@ -58,7 +59,8 @@ pub mod users;
 pub mod users_repo;
 pub mod web;
 
-pub use aprs_client::{AprsClient, AprsClientConfig, AprsClientConfigBuilder, ArchiveService};
+pub use aprs_client::{AprsClient, AprsClientConfig, AprsClientConfigBuilder};
+pub use archive_service::ArchiveService;
 pub use fixes::Fix;
 pub use nats_publisher::NatsFixPublisher;
 pub use packet_processors::{

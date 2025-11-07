@@ -259,7 +259,7 @@ pub async fn handle_run(
 
     // Create GenericProcessor for archiving, receiver identification, and APRS message insertion
     let generic_processor = if let Some(archive_path) = archive_dir.clone() {
-        let archive_service = soar::aprs_client::ArchiveService::new(archive_path).await?;
+        let archive_service = soar::ArchiveService::new(archive_path).await?;
         GenericProcessor::new(receiver_repo.clone(), aprs_messages_repo)
             .with_archive_service(archive_service)
     } else {
