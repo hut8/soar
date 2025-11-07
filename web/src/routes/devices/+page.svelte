@@ -4,6 +4,7 @@
 	import { resolve } from '$app/paths';
 	import { serverCall } from '$lib/api/server';
 	import ClubSelector from '$lib/components/ClubSelector.svelte';
+	import { onMount } from 'svelte';
 	import {
 		formatDeviceAddress,
 		getAircraftTypeOgnDescription,
@@ -45,6 +46,24 @@
 	let clubSearchInProgress = false;
 	let clubErrorMessage = '';
 
+	async function loadRecentDevices() {
+		loading = true;
+		error = '';
+		currentPage = 0;
+
+		try {
+			const response = await serverCall<{ devices: Device[] }>('/devices');
+			devices = response.devices || [];
+		} catch (err) {
+			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+			error = `Failed to load recent devices: ${errorMessage}`;
+			console.error('Error loading recent devices:', err);
+			devices = [];
+		} finally {
+			loading = false;
+		}
+	}
+
 	async function searchDevices() {
 		if (!searchQuery.trim()) {
 			error = 'Please enter a search query';
@@ -77,6 +96,10 @@
 			loading = false;
 		}
 	}
+
+	onMount(() => {
+		loadRecentDevices();
+	});
 
 	// Clear club error message
 	function clearClubError() {
@@ -429,9 +452,22 @@
 			<!-- Results Header -->
 			<div class="flex items-center justify-between">
 				<div>
-					<h2 class="h2">Search Results</h2>
+					<h2 class="h2">
+						{#if !searchQuery && searchType !== 'club'}
+							<div class="flex items-center gap-2">
+								<Activity class="h-6 w-6" />
+								Recently Active Devices
+							</div>
+						{:else}
+							Search Results
+						{/if}
+					</h2>
 					<p class="text-surface-500-400-token">
-						{devices.length} device{devices.length === 1 ? '' : 's'} found
+						{#if !searchQuery && searchType !== 'club'}
+							{devices.length} device{devices.length === 1 ? '' : 's'} heard from recently
+						{:else}
+							{devices.length} device{devices.length === 1 ? '' : 's'} found
+						{/if}
 						{#if totalPages > 1}
 							(showing {currentPage * pageSize + 1}-{Math.min(
 								(currentPage + 1) * pageSize,

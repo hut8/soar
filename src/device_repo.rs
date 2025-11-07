@@ -204,11 +204,12 @@ impl DeviceRepository {
             .collect())
     }
 
-    /// Get recent devices with a limit
+    /// Get recent devices with a limit, ordered by last_fix_at (most recently heard from)
     pub async fn get_recent_devices(&self, limit: i64) -> Result<Vec<Device>> {
         let mut conn = self.get_connection()?;
         let device_models = devices::table
-            .order(devices::updated_at.desc().nulls_last())
+            .filter(devices::last_fix_at.is_not_null())
+            .order(devices::last_fix_at.desc())
             .limit(limit)
             .load::<DeviceModel>(&mut conn)?;
 
