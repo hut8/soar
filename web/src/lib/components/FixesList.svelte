@@ -124,14 +124,14 @@
 	{#if loading}
 		<div class="flex items-center justify-center py-8">
 			<div
-				class="border-primary-500 mx-auto h-8 w-8 animate-spin rounded-full border-4 border-t-transparent"
+				class="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-primary-500 border-t-transparent"
 			></div>
 			<span class="ml-2">Loading position fixes...</span>
 		</div>
 	{:else if fixes.length === 0}
 		<!-- Empty State -->
 		<div class="text-surface-600-300-token py-8 text-center">
-			<Activity class="text-surface-400 mx-auto mb-4 h-12 w-12" />
+			<Activity class="mx-auto mb-4 h-12 w-12 text-surface-400" />
 			<p>{emptyMessage}</p>
 		</div>
 	{:else}

@@ -163,7 +163,7 @@
 		role="presentation"
 	>
 		<div
-			class="card bg-surface-50 text-surface-900 dark:bg-surface-900 dark:text-surface-50 max-h-[80vh] w-full max-w-lg overflow-y-auto p-4 shadow-xl"
+			class="max-h-[80vh] w-full max-w-lg overflow-y-auto card bg-surface-50 p-4 text-surface-900 shadow-xl dark:bg-surface-900 dark:text-surface-50"
 			onclick={(e) => e.stopPropagation()}
 			onkeydown={(e) => e.key === 'Escape' && (showModal = false)}
 			role="dialog"
@@ -231,7 +231,7 @@
 				<!-- Position Fix Window -->
 				<section>
 					<h3 class="mb-3 text-lg font-semibold">Position Fix Window</h3>
-					<p class="text-surface-600 dark:text-surface-400 mb-3 text-sm">
+					<p class="mb-3 text-sm text-surface-600 dark:text-surface-400">
 						Only show devices that have been seen within this time window
 					</p>
 					<div class="space-y-4">
@@ -261,7 +261,7 @@
 								</Slider.Thumb>
 							</Slider.Control>
 						</Slider>
-						<div class="text-surface-500 dark:text-surface-400 flex justify-between text-xs">
+						<div class="flex justify-between text-xs text-surface-500 dark:text-surface-400">
 							<span>None</span>
 							<span>12h</span>
 							<span>24h</span>
@@ -273,11 +273,11 @@
 				<section>
 					<h3 class="mb-3 text-lg font-semibold">Cache Management</h3>
 					<div class="space-y-3">
-						<p class="text-surface-600 dark:text-surface-400 text-sm">
+						<p class="text-sm text-surface-600 dark:text-surface-400">
 							Clear all cached device data from your browser's local storage.
 						</p>
 						<button
-							class="btn preset-filled-error-500 w-full"
+							class="btn w-full preset-filled-error-500"
 							onclick={clearDevicesCache}
 							type="button"
 						>

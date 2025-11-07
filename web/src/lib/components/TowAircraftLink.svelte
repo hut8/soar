@@ -52,7 +52,7 @@
 		href="/devices/{deviceId}"
 		target="_blank"
 		rel="noopener noreferrer"
-		class="anchor inline-flex items-center gap-1 {sizeClasses[size]}"
+		class="inline-flex items-center gap-1 anchor {sizeClasses[size]}"
 		title="View towplane device: {device.registration || deviceId}"
 	>
 		{#if device.registration}
@@ -67,7 +67,7 @@
 		href="/devices/{deviceId}"
 		target="_blank"
 		rel="noopener noreferrer"
-		class="anchor inline-flex items-center gap-1 {sizeClasses[size]}"
+		class="inline-flex items-center gap-1 anchor {sizeClasses[size]}"
 		title="View towplane device"
 	>
 		<Plane class={iconSizes[size]} />

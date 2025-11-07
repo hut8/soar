@@ -264,7 +264,7 @@
 		onkeydown={(e) => e.key === 'Escape' && (showModal = false)}
 	>
 		<div
-			class="card bg-surface-50 text-surface-900 dark:bg-surface-900 dark:text-surface-50 flex h-full max-h-[calc(90vh-5rem)] w-full max-w-9/10 flex-col shadow-xl"
+			class="flex h-full max-h-[calc(90vh-5rem)] w-full max-w-9/10 flex-col card bg-surface-50 text-surface-900 shadow-xl dark:bg-surface-900 dark:text-surface-50"
 			onclick={(e) => e.stopPropagation()}
 			onkeydown={(e) => e.key === 'Escape' && (showModal = false)}
 			role="dialog"
@@ -288,7 +288,7 @@
 				<section class="flex-shrink-0">
 					<h3 class="mb-3 text-lg font-semibold">Add Aircraft</h3>
 					<div
-						class="border-surface-300 dark:border-surface-600 mb-3 space-y-3 rounded-lg border p-3"
+						class="mb-3 space-y-3 rounded-lg border border-surface-300 p-3 dark:border-surface-600"
 					>
 						<!-- Mobile: Vertical layout (segment above inputs) -->
 						<div class="space-y-3 md:hidden">
@@ -371,7 +371,7 @@
 									{#if clubDevices.length > 0}
 										<div class="space-y-2">
 											<div class="flex items-center justify-between">
-												<span class="text-surface-700 dark:text-surface-200 text-sm font-medium">
+												<span class="text-sm font-medium text-surface-700 dark:text-surface-200">
 													Club Aircraft ({clubDevices.length})
 												</span>
 												<button
@@ -385,19 +385,19 @@
 											</div>
 
 											<div
-												class="border-surface-300 bg-surface-100 dark:border-surface-600 dark:bg-surface-800 max-h-48 overflow-y-auto rounded border p-2"
+												class="max-h-48 overflow-y-auto rounded border border-surface-300 bg-surface-100 p-2 dark:border-surface-600 dark:bg-surface-800"
 											>
 												<div class="grid gap-2">
 													{#each clubDevices as device (device.id)}
 														<div
-															class="bg-surface-50 dark:bg-surface-700 flex items-center justify-between rounded p-2 shadow-sm"
+															class="flex items-center justify-between rounded bg-surface-50 p-2 shadow-sm dark:bg-surface-700"
 														>
 															<div class="min-w-0 flex-1">
 																<div class="truncate text-sm font-medium">
 																	{device.registration || 'Unknown Registration'}
 																</div>
 																<div
-																	class="text-surface-600 dark:text-surface-400 truncate text-xs"
+																	class="truncate text-xs text-surface-600 dark:text-surface-400"
 																>
 																	{device.aircraft_model || 'Unknown Model'}
 																</div>
@@ -423,14 +423,14 @@
 											</div>
 										</div>
 									{:else if clubSearchInProgress}
-										<div class="text-surface-600 dark:text-surface-400 py-4 text-center text-sm">
+										<div class="py-4 text-center text-sm text-surface-600 dark:text-surface-400">
 											<div
-												class="border-surface-300 border-t-primary-500 dark:border-surface-600 mx-auto mb-2 h-4 w-4 animate-spin rounded-full border-2"
+												class="mx-auto mb-2 h-4 w-4 animate-spin rounded-full border-2 border-surface-300 border-t-primary-500 dark:border-surface-600"
 											></div>
 											Loading club aircraft...
 										</div>
 									{:else if selectedClub.length > 0}
-										<div class="text-surface-600 dark:text-surface-400 py-4 text-center text-sm">
+										<div class="py-4 text-center text-sm text-surface-600 dark:text-surface-400">
 											No aircraft found for this club.
 										</div>
 									{/if}
@@ -532,7 +532,7 @@
 												<div class="space-y-2">
 													<div class="flex items-center justify-between">
 														<span
-															class="text-surface-700 dark:text-surface-200 text-sm font-medium"
+															class="text-sm font-medium text-surface-700 dark:text-surface-200"
 														>
 															Club Aircraft ({clubDevices.length})
 														</span>
@@ -547,19 +547,19 @@
 													</div>
 
 													<div
-														class="border-surface-300 bg-surface-100 dark:border-surface-600 dark:bg-surface-800 max-h-48 overflow-y-auto rounded border p-2"
+														class="max-h-48 overflow-y-auto rounded border border-surface-300 bg-surface-100 p-2 dark:border-surface-600 dark:bg-surface-800"
 													>
 														<div class="grid gap-2">
 															{#each clubDevices as device (device.id)}
 																<div
-																	class="bg-surface-50 dark:bg-surface-700 flex items-center justify-between rounded p-2 shadow-sm"
+																	class="flex items-center justify-between rounded bg-surface-50 p-2 shadow-sm dark:bg-surface-700"
 																>
 																	<div class="min-w-0 flex-1">
 																		<div class="truncate text-sm font-medium">
 																			{device.registration || 'Unknown Registration'}
 																		</div>
 																		<div
-																			class="text-surface-600 dark:text-surface-400 truncate text-xs"
+																			class="truncate text-xs text-surface-600 dark:text-surface-400"
 																		>
 																			{device.aircraft_model || 'Unknown Model'}
 																		</div>
@@ -586,16 +586,16 @@
 												</div>
 											{:else if clubSearchInProgress}
 												<div
-													class="text-surface-600 dark:text-surface-400 py-4 text-center text-sm"
+													class="py-4 text-center text-sm text-surface-600 dark:text-surface-400"
 												>
 													<div
-														class="border-surface-300 border-t-primary-500 dark:border-surface-600 mx-auto mb-2 h-4 w-4 animate-spin rounded-full border-2"
+														class="mx-auto mb-2 h-4 w-4 animate-spin rounded-full border-2 border-surface-300 border-t-primary-500 dark:border-surface-600"
 													></div>
 													Loading club aircraft...
 												</div>
 											{:else if selectedClub.length > 0}
 												<div
-													class="text-surface-600 dark:text-surface-400 py-4 text-center text-sm"
+													class="py-4 text-center text-sm text-surface-600 dark:text-surface-400"
 												>
 													No aircraft found for this club.
 												</div>
@@ -617,7 +617,7 @@
 
 						{#if newWatchlistEntry.type !== 'club'}
 							<button
-								class="btn preset-filled-primary-500 btn-sm w-full"
+								class="btn w-full preset-filled-primary-500 btn-sm"
 								onclick={addWatchlistEntry}
 								disabled={searchInProgress}
 							>
@@ -656,9 +656,9 @@
 							<div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
 								{#each entriesWithDevices as entry (entry.deviceId)}
 									<div
-										class="border-surface-300 dark:border-surface-600 rounded border p-3 {entry.active
+										class="rounded border border-surface-300 p-3 dark:border-surface-600 {entry.active
 											? 'bg-surface-50 dark:bg-surface-800'
-											: 'bg-surface-100 dark:bg-surface-700 opacity-75'}"
+											: 'bg-surface-100 opacity-75 dark:bg-surface-700'}"
 									>
 										<div class="flex flex-col space-y-2">
 											<div class="flex items-start justify-between">
@@ -675,15 +675,15 @@
 																>
 															{/if}
 														</div>
-														<div class="text-surface-700 dark:text-surface-300 truncate text-sm">
+														<div class="truncate text-sm text-surface-700 dark:text-surface-300">
 															{entry.device.aircraft_model || 'Unknown Aircraft Model'}
 														</div>
 														{#if entry.device.club_id}
-															<div class="text-surface-600 dark:text-surface-400 truncate text-xs">
+															<div class="truncate text-xs text-surface-600 dark:text-surface-400">
 																Club: {clubNames.get(entry.device.club_id) || 'Loading...'}
 															</div>
 														{/if}
-														<div class="text-surface-600 dark:text-surface-400 text-xs">
+														<div class="text-xs text-surface-600 dark:text-surface-400">
 															<div class="truncate">
 																{getAddressTypeLabel(entry.device.address_type)}: {entry.device
 																	.address}
@@ -726,7 +726,7 @@
 						</div>
 					{:else}
 						<div class="flex flex-1 items-center justify-center">
-							<p class="text-surface-600 dark:text-surface-400 text-center text-sm">
+							<p class="text-center text-sm text-surface-600 dark:text-surface-400">
 								No aircraft in watchlist
 							</p>
 						</div>

@@ -4,7 +4,6 @@
 @import '@skeletonlabs/skeleton-svelte';
 @import '@skeletonlabs/skeleton/themes/cerberus';
 
-@custom-variant skb (&);
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* Ensure full height layout */

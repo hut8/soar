@@ -272,7 +272,7 @@
 				<div class="flex flex-wrap items-start justify-between gap-4">
 					<div class="flex-1">
 						<div class="mb-2 flex items-center gap-3">
-							<Plane class="text-primary-500 h-8 w-10" />
+							<Plane class="h-8 w-10 text-primary-500" />
 							<h1 class="h1">{airport.name}</h1>
 						</div>
 						<div class="flex flex-wrap items-center gap-2">
@@ -293,8 +293,8 @@
 			<!-- Main Content Grid -->
 			<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
 				<!-- Location Information -->
-				<div class="card space-y-4 p-6">
-					<h2 class="h2 flex items-center gap-2">
+				<div class="space-y-4 card p-6">
+					<h2 class="flex items-center gap-2 h2">
 						<MapPin class="h-6 w-6" />
 						Location
 					</h2>
@@ -302,7 +302,7 @@
 					<div class="space-y-3">
 						{#if airport.municipality || airport.iso_region}
 							<div class="flex items-start gap-3">
-								<Info class="text-surface-500 mt-1 h-4 w-4" />
+								<Info class="mt-1 h-4 w-4 text-surface-500" />
 								<div>
 									<p class="text-surface-600-300-token mb-1 text-sm">Municipality</p>
 									<p>
@@ -312,7 +312,7 @@
 										{/if}
 									</p>
 									{#if airport.iso_country}
-										<p class="text-surface-500 text-sm">{airport.iso_country}</p>
+										<p class="text-sm text-surface-500">{airport.iso_country}</p>
 									{/if}
 								</div>
 							</div>
@@ -320,7 +320,7 @@
 
 						{#if airport.latitude_deg && airport.longitude_deg}
 							<div class="flex items-start gap-3">
-								<Navigation class="text-surface-500 mt-1 h-4 w-4" />
+								<Navigation class="mt-1 h-4 w-4 text-surface-500" />
 								<div class="flex-1">
 									<p class="text-surface-600-300-token mb-1 text-sm">Coordinates</p>
 									<p class="font-mono text-sm">
@@ -332,7 +332,7 @@
 
 						{#if airport.elevation_ft !== null}
 							<div class="flex items-start gap-3">
-								<Compass class="text-surface-500 mt-1 h-4 w-4" />
+								<Compass class="mt-1 h-4 w-4 text-surface-500" />
 								<div class="flex-1">
 									<p class="text-surface-600-300-token mb-1 text-sm">Elevation</p>
 									<p>{airport.elevation_ft} ft MSL</p>
@@ -369,8 +369,8 @@
 				</div>
 
 				<!-- Airport Codes & Info -->
-				<div class="card space-y-4 p-6">
-					<h2 class="h2 flex items-center gap-2">
+				<div class="space-y-4 card p-6">
+					<h2 class="flex items-center gap-2 h2">
 						<Info class="h-6 w-6" />
 						Airport Codes
 					</h2>
@@ -436,7 +436,7 @@
 			<!-- Runways Section -->
 			{#if airport.runways && airport.runways.length > 0}
 				<div class="card p-6">
-					<h2 class="h2 mb-4 flex items-center gap-2">
+					<h2 class="mb-4 flex items-center gap-2 h2">
 						<Plane class="h-6 w-6" />
 						Runways
 					</h2>
@@ -504,7 +504,7 @@
 								<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 									<!-- Low End -->
 									<div>
-										<h4 class="text-primary-500 mb-2 font-semibold">
+										<h4 class="mb-2 font-semibold text-primary-500">
 											{runway.low.ident || 'Low End'}
 										</h4>
 										<div class="table-container">
@@ -537,7 +537,7 @@
 
 									<!-- High End -->
 									<div>
-										<h4 class="text-primary-500 mb-2 font-semibold">
+										<h4 class="mb-2 font-semibold text-primary-500">
 											{runway.high.ident || 'High End'}
 										</h4>
 										<div class="table-container">
@@ -576,7 +576,7 @@
 
 			<!-- Clubs Based at Airport -->
 			<div class="card p-6">
-				<h2 class="h2 mb-4 flex items-center gap-2">
+				<h2 class="mb-4 flex items-center gap-2 h2">
 					<Users class="h-6 w-6" />
 					Clubs Based at This Airport
 				</h2>
@@ -591,7 +591,7 @@
 
 				<!-- Clubs Error State -->
 				{#if clubsError}
-					<div class="alert preset-filled-error-500 mb-4">
+					<div class="alert mb-4 preset-filled-error-500">
 						<div class="alert-message">
 							<p>{clubsError}</p>
 						</div>
@@ -607,10 +607,10 @@
 							{#each clubs as club (club.id)}
 								<a
 									href={resolve(`/clubs/${club.id}`)}
-									class="card preset-tonal hover:preset-filled-primary-500 p-4 transition-all"
+									class="card preset-tonal p-4 transition-all hover:preset-filled-primary-500"
 								>
 									<div class="flex items-center gap-3">
-										<Users class="text-primary-500 h-5 w-5" />
+										<Users class="h-5 w-5 text-primary-500" />
 										<div class="flex-1">
 											<h3 class="font-semibold">{club.name}</h3>
 										</div>
@@ -624,7 +624,7 @@
 
 			<!-- Recent Flights Section (Last 24 Hours) -->
 			<div class="card p-6">
-				<h2 class="h2 mb-4 flex items-center gap-2">
+				<h2 class="mb-4 flex items-center gap-2 h2">
 					<Clock class="h-6 w-6" />
 					Recent Flights (Last 24 Hours)
 				</h2>
@@ -639,7 +639,7 @@
 
 				<!-- Flights Error State -->
 				{#if flightsError}
-					<div class="alert preset-filled-error-500 mb-4">
+					<div class="alert mb-4 preset-filled-error-500">
 						<div class="alert-message">
 							<p>{flightsError}</p>
 						</div>
@@ -675,7 +675,7 @@
 															>{flightData.device.registration || 'Unknown'}</span
 														>
 														{#if flightData.device.competition_number}
-															<span class="text-surface-500 text-sm"
+															<span class="text-sm text-surface-500"
 																>{flightData.device.competition_number}</span
 															>
 														{/if}
@@ -742,7 +742,7 @@
 			<!-- Map Section -->
 			{#if airport.latitude_deg && airport.longitude_deg}
 				<div class="card p-6">
-					<h2 class="h2 mb-4 flex items-center gap-2">
+					<h2 class="mb-4 flex items-center gap-2 h2">
 						<Navigation class="h-6 w-6" />
 						Location Map
 					</h2>

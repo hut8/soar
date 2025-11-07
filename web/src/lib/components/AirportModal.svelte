@@ -102,13 +102,13 @@
 <!-- Airport Modal -->
 {#if showModal && selectedAirport}
 	<div
-		class="bg-surface-950-50/50 fixed inset-0 z-50 flex items-start justify-center pt-20"
+		class="fixed inset-0 z-50 flex items-start justify-center bg-surface-950-50/50 pt-20"
 		onclick={closeModal}
 		onkeydown={(e) => e.key === 'Escape' && closeModal()}
 		role="presentation"
 	>
 		<div
-			class="card max-h-[calc(90vh-5rem)] w-full max-w-4xl overflow-y-auto bg-white text-gray-900 shadow-xl"
+			class="max-h-[calc(90vh-5rem)] w-full max-w-4xl overflow-y-auto card bg-white text-gray-900 shadow-xl"
 			onclick={(e) => e.stopPropagation()}
 			onkeydown={(e) => e.key === 'Escape' && closeModal()}
 			role="dialog"

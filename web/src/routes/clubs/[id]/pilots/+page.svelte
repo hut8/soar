@@ -157,7 +157,7 @@
 	<!-- Loading State -->
 	{#if loadingClub || loadingPilots}
 		<div class="flex items-center justify-center py-12">
-			<div class="border-primary-500 h-12 w-12 animate-spin rounded-full border-b-2"></div>
+			<div class="h-12 w-12 animate-spin rounded-full border-b-2 border-primary-500"></div>
 		</div>
 	{:else if error}
 		<!-- Error State -->
@@ -181,7 +181,7 @@
 		</div>
 	{:else}
 		<!-- Pilots Table -->
-		<div class="card overflow-hidden">
+		<div class="overflow-hidden card">
 			<div class="table-container">
 				<table class="table-hover table">
 					<thead>
@@ -202,30 +202,30 @@
 								</td>
 								<td>
 									{#if pilot.is_licensed}
-										<Check class="text-success-500 h-5 w-5" />
+										<Check class="h-5 w-5 text-success-500" />
 									{:else}
-										<X class="text-surface-400 h-5 w-5" />
+										<X class="h-5 w-5 text-surface-400" />
 									{/if}
 								</td>
 								<td>
 									{#if pilot.is_instructor}
-										<Check class="text-success-500 h-5 w-5" />
+										<Check class="h-5 w-5 text-success-500" />
 									{:else}
-										<X class="text-surface-400 h-5 w-5" />
+										<X class="h-5 w-5 text-surface-400" />
 									{/if}
 								</td>
 								<td>
 									{#if pilot.is_tow_pilot}
-										<Check class="text-success-500 h-5 w-5" />
+										<Check class="h-5 w-5 text-success-500" />
 									{:else}
-										<X class="text-surface-400 h-5 w-5" />
+										<X class="h-5 w-5 text-surface-400" />
 									{/if}
 								</td>
 								<td>
 									{#if pilot.is_examiner}
-										<Check class="text-success-500 h-5 w-5" />
+										<Check class="h-5 w-5 text-success-500" />
 									{:else}
-										<X class="text-surface-400 h-5 w-5" />
+										<X class="h-5 w-5 text-surface-400" />
 									{/if}
 								</td>
 							</tr>
@@ -247,7 +247,7 @@
 		onkeydown={(e) => e.key === 'Escape' && closeAddModal()}
 	>
 		<div
-			class="card m-4 w-full max-w-md space-y-4 p-6"
+			class="m-4 w-full max-w-md space-y-4 card p-6"
 			onclick={(e) => e.stopPropagation()}
 			role="dialog"
 			tabindex="-1"

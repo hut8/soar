@@ -237,12 +237,12 @@
 				<div class="flex flex-wrap items-start justify-between gap-4">
 					<div class="flex-1">
 						<div class="mb-2 flex items-center gap-3">
-							<Building class="text-primary-500 h-8 w-10" />
+							<Building class="h-8 w-10 text-primary-500" />
 							<h1 class="h1">{club.name}</h1>
 						</div>
 						{#if club.is_soaring}
 							<div
-								class="bg-primary-500 inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm text-white"
+								class="inline-flex items-center gap-2 rounded-full bg-primary-500 px-3 py-1 text-sm text-white"
 							>
 								<Plane class="h-4 w-4" />
 								Soaring Club
@@ -269,7 +269,7 @@
 					{:else if $auth.isAuthenticated && isCurrentClub}
 						<div class="flex flex-shrink-0 flex-col gap-2">
 							<div
-								class="bg-success-500 inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm text-white"
+								class="inline-flex items-center gap-2 rounded-full bg-success-500 px-4 py-2 text-sm text-white"
 							>
 								<UserCheck class="h-4 w-4" />
 								My Club
@@ -295,14 +295,14 @@
 
 			<!-- Home Base Airport Section -->
 			{#if club.home_base_airport_id}
-				<div class="card space-y-4 p-6">
-					<h2 class="h2 flex items-center gap-2">
+				<div class="space-y-4 card p-6">
+					<h2 class="flex items-center gap-2 h2">
 						<MapPin class="h-6 w-6" />
 						Location
 					</h2>
 
 					<div class="flex items-start gap-3">
-						<Plane class="text-surface-500 mt-1 h-4 w-4" />
+						<Plane class="mt-1 h-4 w-4 text-surface-500" />
 						<div class="flex-1">
 							<p class="text-surface-600-300-token mb-2 text-sm">Home Base Airport</p>
 							{#if loadingAirport}
@@ -311,7 +311,7 @@
 									<span class="text-sm">Loading airport...</span>
 								</div>
 							{:else if airportError}
-								<div class="text-error-500 text-sm">
+								<div class="text-sm text-error-500">
 									{airportError}
 								</div>
 							{:else if airport}
@@ -372,8 +372,8 @@
 			{/if}
 
 			<!-- Club Aircraft Section -->
-			<div class="card space-y-4 p-6">
-				<h2 class="h2 flex items-center gap-2">
+			<div class="space-y-4 card p-6">
+				<h2 class="flex items-center gap-2 h2">
 					<Plane class="h-6 w-6" />
 					Club Aircraft
 				</h2>
@@ -394,7 +394,7 @@
 					</div>
 				{:else if aircraft.length === 0}
 					<div class="text-surface-600-300-token py-8 text-center">
-						<Plane class="text-surface-500 mx-auto mb-4 h-12 w-12" />
+						<Plane class="mx-auto mb-4 h-12 w-12 text-surface-500" />
 						<p>No aircraft registered to this club</p>
 					</div>
 				{:else}
@@ -539,7 +539,7 @@
 			<!-- Map Section - Shows home base airport if available -->
 			{#if airport && airport.latitude_deg && airport.longitude_deg}
 				<div class="card p-6">
-					<h2 class="h2 mb-4 flex items-center gap-2">
+					<h2 class="mb-4 flex items-center gap-2 h2">
 						<Navigation class="h-6 w-6" />
 						Airport Location Map
 					</h2>

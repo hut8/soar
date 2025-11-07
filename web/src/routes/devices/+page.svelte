@@ -150,14 +150,14 @@
 <div class="container mx-auto max-w-7xl space-y-6 p-4">
 	<!-- Header -->
 	<header class="space-y-2 text-center">
-		<h1 class="h1 flex items-center justify-center gap-2">
+		<h1 class="flex items-center justify-center gap-2 h1">
 			<Radio class="h-8 w-8" />
 			Aircraft Devices
 		</h1>
 	</header>
 
 	<!-- Search Section -->
-	<section class="card space-y-4 p-6">
+	<section class="space-y-4 card p-6">
 		<h3 class="mb-3 flex items-center gap-2 text-lg font-semibold">
 			<Search class="h-5 w-5" />
 			Search Aircraft Devices
@@ -350,7 +350,7 @@
 
 			{#if searchType !== 'club'}
 				<button
-					class="btn preset-filled-primary-500 w-full"
+					class="btn w-full preset-filled-primary-500"
 					onclick={searchDevices}
 					disabled={loading}
 				>
@@ -399,14 +399,14 @@
 				{#each paginatedDevices as device (device.id || device.address)}
 					<a
 						href={resolve(`/devices/${device.id}`)}
-						class="group card card-hover p-5 transition-all hover:scale-[1.02]"
+						class="group card p-5 card-hover transition-all hover:scale-[1.02]"
 					>
 						<!-- Header Section -->
 						<div class="mb-4 flex items-start justify-between">
 							<div class="flex items-center gap-2">
-								<Radio class="text-primary-500 h-5 w-5" />
+								<Radio class="h-5 w-5 text-primary-500" />
 								<div>
-									<h3 class="group-hover:text-primary-500 font-mono text-lg font-bold">
+									<h3 class="font-mono text-lg font-bold group-hover:text-primary-500">
 										{device.device_address}
 									</h3>
 									<p class="text-surface-600-300-token text-xs">
@@ -419,7 +419,7 @@
 						<!-- Registration and Model -->
 						<div class="mb-4 space-y-2">
 							<div class="flex items-center gap-2">
-								<Plane class="text-surface-500 h-4 w-4" />
+								<Plane class="h-4 w-4 text-surface-500" />
 								<div>
 									<p class="text-surface-600-300-token text-xs">Registration</p>
 									<p class="text-sm font-semibold">
@@ -428,7 +428,7 @@
 								</div>
 							</div>
 							<div class="flex items-center gap-2">
-								<Antenna class="text-surface-500 h-4 w-4" />
+								<Antenna class="h-4 w-4 text-surface-500" />
 								<div>
 									<p class="text-surface-600-300-token text-xs">Aircraft Model</p>
 									<p class="text-sm">{device.aircraft_model || 'Unknown'}</p>
@@ -436,7 +436,7 @@
 							</div>
 							{#if device.competition_number}
 								<div class="flex items-center gap-2">
-									<Activity class="text-surface-500 h-4 w-4" />
+									<Activity class="h-4 w-4 text-surface-500" />
 									<div>
 										<p class="text-surface-600-300-token text-xs">Competition Number</p>
 										<p class="font-mono text-sm">{device.competition_number}</p>
@@ -489,7 +489,7 @@
 
 			<!-- Pagination Controls -->
 			{#if totalPages > 1}
-				<div class="card flex items-center justify-between p-4">
+				<div class="flex items-center justify-between card p-4">
 					<div class="text-surface-500-400-token text-sm">
 						Page {currentPage + 1} of {totalPages}
 					</div>
@@ -527,8 +527,8 @@
 			{/if}
 		</section>
 	{:else if !loading && devices.length === 0 && searchQuery}
-		<div class="card space-y-4 p-12 text-center">
-			<Search class="text-surface-400 mx-auto mb-4 h-16 w-16" />
+		<div class="space-y-4 card p-12 text-center">
+			<Search class="mx-auto mb-4 h-16 w-16 text-surface-400" />
 			<div class="space-y-2">
 				<h3 class="h3">No devices found</h3>
 				<p class="text-surface-500-400-token">
@@ -537,8 +537,8 @@
 			</div>
 		</div>
 	{:else if !loading && devices.length === 0 && searchType === 'club' && selectedClub.length > 0}
-		<div class="card space-y-4 p-12 text-center">
-			<Search class="text-surface-400 mx-auto mb-4 h-16 w-16" />
+		<div class="space-y-4 card p-12 text-center">
+			<Search class="mx-auto mb-4 h-16 w-16 text-surface-400" />
 			<div class="space-y-2">
 				<h3 class="h3">No devices found</h3>
 				<p class="text-surface-500-400-token">No aircraft found for the selected club.</p>

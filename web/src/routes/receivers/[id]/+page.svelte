@@ -493,7 +493,7 @@
 				<div class="flex flex-wrap items-start justify-between gap-4">
 					<div class="flex-1">
 						<div class="mb-2 flex items-center gap-3">
-							<Radio class="text-primary-500 h-8 w-10" />
+							<Radio class="h-8 w-10 text-primary-500" />
 							<h1 class="h1">{receiver.callsign}</h1>
 							{#if receiver.from_ogn_db}
 								<span class="chip preset-filled-secondary-500 text-sm">OGN DB</span>
@@ -513,8 +513,8 @@
 			<!-- Main Content Grid -->
 			<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
 				<!-- Location Information -->
-				<div class="card space-y-4 p-6">
-					<h2 class="h2 flex items-center gap-2">
+				<div class="space-y-4 card p-6">
+					<h2 class="flex items-center gap-2 h2">
 						<MapPin class="h-6 w-6" />
 						Location
 					</h2>
@@ -522,7 +522,7 @@
 					<div class="space-y-3">
 						{#if receiver.country}
 							<div class="flex items-start gap-3">
-								<Globe class="text-surface-500 mt-1 h-4 w-4" />
+								<Globe class="mt-1 h-4 w-4 text-surface-500" />
 								<div>
 									<p class="text-surface-600-300-token mb-1 text-sm">Country</p>
 									<p>{receiver.country}</p>
@@ -532,7 +532,7 @@
 
 						{#if receiver.latitude !== null && receiver.longitude !== null}
 							<div class="flex items-start gap-3">
-								<Navigation class="text-surface-500 mt-1 h-4 w-4" />
+								<Navigation class="mt-1 h-4 w-4 text-surface-500" />
 								<div class="flex-1">
 									<p class="text-surface-600-300-token mb-1 text-sm">Coordinates</p>
 									<p class="font-mono text-sm">
@@ -569,8 +569,8 @@
 				</div>
 
 				<!-- Contact Information -->
-				<div class="card space-y-4 p-6">
-					<h2 class="h2 flex items-center gap-2">
+				<div class="space-y-4 card p-6">
+					<h2 class="flex items-center gap-2 h2">
 						<Info class="h-6 w-6" />
 						Contact Information
 					</h2>
@@ -578,7 +578,7 @@
 					<div class="space-y-3">
 						{#if receiver.contact}
 							<div class="flex items-start gap-3">
-								<User class="text-surface-500 mt-1 h-4 w-4" />
+								<User class="mt-1 h-4 w-4 text-surface-500" />
 								<div>
 									<p class="text-surface-600-300-token mb-1 text-sm">Contact Name</p>
 									<p>{receiver.contact}</p>
@@ -588,7 +588,7 @@
 
 						{#if receiver.email}
 							<div class="flex items-start gap-3">
-								<Mail class="text-surface-500 mt-1 h-4 w-4" />
+								<Mail class="mt-1 h-4 w-4 text-surface-500" />
 								<div>
 									<p class="text-surface-600-300-token mb-1 text-sm">Email</p>
 									<a
@@ -607,7 +607,7 @@
 
 						<div class="border-surface-200-700-token border-t pt-3">
 							<div class="flex items-start gap-3">
-								<Calendar class="text-surface-500 mt-1 h-4 w-4" />
+								<Calendar class="mt-1 h-4 w-4 text-surface-500" />
 								<div class="flex-1">
 									<p class="text-surface-600-300-token mb-1 text-sm">Updated</p>
 									<p class="text-sm">{formatDateTime(receiver.updated_at)}</p>
@@ -623,7 +623,7 @@
 
 			<!-- Statistics Section -->
 			<div class="card p-6">
-				<h2 class="h2 mb-4 flex items-center gap-2">
+				<h2 class="mb-4 flex items-center gap-2 h2">
 					<Signal class="h-6 w-6" />
 					Statistics
 				</h2>
@@ -640,7 +640,7 @@
 				{:else if statistics}
 					<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
 						<!-- Average Update Interval -->
-						<div class="card space-y-2 p-4">
+						<div class="space-y-2 card p-4">
 							<p class="text-surface-600-300-token text-sm">Average Time Between Updates</p>
 							<p class="text-2xl font-semibold">
 								{formatDuration(statistics.average_update_interval_seconds)}
@@ -648,7 +648,7 @@
 						</div>
 
 						<!-- Total Status Count -->
-						<div class="card space-y-2 p-4">
+						<div class="space-y-2 card p-4">
 							<p class="text-surface-600-300-token text-sm">Total Status Updates</p>
 							<p class="text-2xl font-semibold">
 								{statistics.total_status_count.toLocaleString()}
@@ -656,7 +656,7 @@
 						</div>
 
 						<!-- Time Period -->
-						<div class="card space-y-2 p-4">
+						<div class="space-y-2 card p-4">
 							<p class="text-surface-600-300-token text-sm">Time Period</p>
 							<p class="text-2xl font-semibold">
 								{#if statistics.days_included}
@@ -672,13 +672,13 @@
 
 			<!-- Status Reports, Raw Messages, and Received Fixes Section with Tabs -->
 			<div class="card p-6">
-				<h2 class="h2 mb-4 flex items-center gap-2">
+				<h2 class="mb-4 flex items-center gap-2 h2">
 					<Info class="h-6 w-6" />
 					Receiver Data (Last 24 Hours)
 				</h2>
 
 				<Tabs value={activeTab} onValueChange={(details) => (activeTab = details.value)}>
-					<Tabs.List class="border-surface-300 dark:border-surface-600 border-b">
+					<Tabs.List class="border-b border-surface-300 dark:border-surface-600">
 						<Tabs.Trigger value="status-reports">
 							<Signal class="mr-2 h-4 w-4" />
 							Status Reports
@@ -1125,7 +1125,7 @@
 																		<td>
 																			<a
 																				href={resolve(`/devices/${deviceCount.device_id}`)}
-																				class="text-primary-500 hover:text-primary-600 font-mono"
+																				class="font-mono text-primary-500 hover:text-primary-600"
 																			>
 																				{deviceCount.device_id}
 																			</a>
@@ -1152,7 +1152,7 @@
 			<!-- Map Section -->
 			{#if receiver.latitude !== null && receiver.longitude !== null}
 				<div class="card p-6">
-					<h2 class="h2 mb-4 flex items-center gap-2">
+					<h2 class="mb-4 flex items-center gap-2 h2">
 						<Navigation class="h-6 w-6" />
 						Location Map
 					</h2>

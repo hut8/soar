@@ -188,7 +188,7 @@
 		</div>
 
 		<!-- User Info Card -->
-		<div class="card mx-auto max-w-2xl space-y-4 p-6">
+		<div class="mx-auto max-w-2xl space-y-4 card p-6">
 			<h2 class="text-xl font-semibold">Account Information</h2>
 
 			<div class="space-y-3">
@@ -204,9 +204,9 @@
 					<div class="text-surface-700-200-token">
 						Email: {$auth.user.email}
 						{#if !$auth.user.email_verified}
-							<span class="badge preset-filled-warning-500 ml-2">Unverified</span>
+							<span class="ml-2 badge preset-filled-warning-500">Unverified</span>
 						{:else}
-							<span class="badge preset-filled-success-500 ml-2">Verified</span>
+							<span class="ml-2 badge preset-filled-success-500">Verified</span>
 						{/if}
 					</div>
 				</div>
@@ -215,7 +215,7 @@
 					<div class="text-surface-700-200-token">
 						Access Level: {$auth.user.access_level === 'admin' ? 'Admin' : 'User'}
 						{#if $auth.user.access_level === 'admin'}
-							<span class="badge preset-filled-primary-500 ml-2">Administrator</span>
+							<span class="ml-2 badge preset-filled-primary-500">Administrator</span>
 						{/if}
 					</div>
 				</div>
@@ -231,7 +231,7 @@
 							{:else if clubName}
 								<a
 									href={resolve(`/clubs/${$auth.user.club_id}`)}
-									class="text-primary-500 hover:text-primary-600 underline"
+									class="text-primary-500 underline hover:text-primary-600"
 								>
 									{clubName}
 								</a>
@@ -242,7 +242,7 @@
 						<button
 							onclick={clearClub}
 							disabled={clearingClub}
-							class="btn preset-filled-error-500 btn-sm mt-2"
+							class="mt-2 btn preset-filled-error-500 btn-sm"
 							title="Clear club membership"
 						>
 							<X class="h-3 w-3" />
@@ -300,7 +300,7 @@
 	<div class="text-center">
 		<h1 class="text-2xl font-bold">Access Required</h1>
 		<p class="text-surface-600-300-token mt-2">Please log in to view your profile.</p>
-		<a href={resolve('/login')} class="btn preset-filled-primary-500 mt-4"> Login </a>
+		<a href={resolve('/login')} class="mt-4 btn preset-filled-primary-500"> Login </a>
 	</div>
 {/if}
 
@@ -310,7 +310,7 @@
 		class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
 		onclick={closeChangeEmailModal}
 	>
-		<div class="card m-4 w-full max-w-md space-y-4 p-6" onclick={(e) => e.stopPropagation()}>
+		<div class="m-4 w-full max-w-md space-y-4 card p-6" onclick={(e) => e.stopPropagation()}>
 			<div class="flex items-center justify-between">
 				<h2 class="text-xl font-bold">Change Email</h2>
 				<button onclick={closeChangeEmailModal} class="preset-tonal-surface-500 btn btn-sm">
@@ -380,9 +380,9 @@
 		class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
 		onclick={closeDeleteAccountModal}
 	>
-		<div class="card m-4 w-full max-w-md space-y-4 p-6" onclick={(e) => e.stopPropagation()}>
+		<div class="m-4 w-full max-w-md space-y-4 card p-6" onclick={(e) => e.stopPropagation()}>
 			<div class="flex items-center justify-between">
-				<h2 class="text-error-500 text-xl font-bold">Delete Account</h2>
+				<h2 class="text-xl font-bold text-error-500">Delete Account</h2>
 				<button onclick={closeDeleteAccountModal} class="preset-tonal-surface-500 btn btn-sm">
 					<X class="h-4 w-4" />
 				</button>
