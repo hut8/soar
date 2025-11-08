@@ -505,14 +505,46 @@
 					marker.addListener('click', () => {
 						const mslAlt = fix.altitude_msl_feet ? Math.round(fix.altitude_msl_feet) : 'N/A';
 						const aglAlt = fix.altitude_agl_feet ? Math.round(fix.altitude_agl_feet) : 'N/A';
+						const heading =
+							fix.track_degrees !== undefined ? Math.round(fix.track_degrees) + '°' : 'N/A';
+						const turnRate =
+							fix.turn_rate_rot !== undefined ? fix.turn_rate_rot.toFixed(2) + ' rot/min' : 'N/A';
+						const climbRate =
+							fix.climb_fpm !== undefined ? Math.round(fix.climb_fpm) + ' fpm' : 'N/A';
+						const groundSpeed =
+							fix.ground_speed_knots !== undefined
+								? Math.round(fix.ground_speed_knots) + ' kt'
+								: 'N/A';
 						const timestamp = dayjs(fix.timestamp).format('h:mm:ss A');
 
 						const content = `
-							<div style="padding: 8px; min-width: 180px;">
-								<div style="font-weight: bold; margin-bottom: 6px;">${timestamp}</div>
-								<div style="display: flex; flex-direction: column; gap: 4px;">
-									<div><span style="color: #3b82f6; font-weight: 600;">MSL:</span> ${mslAlt} ft</div>
-									<div><span style="color: #10b981; font-weight: 600;">AGL:</span> ${aglAlt} ft</div>
+							<div style="padding: 12px; min-width: 200px; background: white; color: #1f2937; border-radius: 8px; font-family: system-ui, -apple-system, sans-serif;">
+								<div style="font-weight: 600; margin-bottom: 8px; font-size: 14px; color: #111827; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px;">${timestamp}</div>
+								<div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px;">
+									<div style="display: flex; justify-content: space-between;">
+										<span style="color: #6b7280;">MSL:</span>
+										<span style="font-weight: 600; color: #3b82f6;">${mslAlt} ft</span>
+									</div>
+									<div style="display: flex; justify-content: space-between;">
+										<span style="color: #6b7280;">AGL:</span>
+										<span style="font-weight: 600; color: #10b981;">${aglAlt} ft</span>
+									</div>
+									<div style="display: flex; justify-content: space-between;">
+										<span style="color: #6b7280;">Heading:</span>
+										<span style="font-weight: 500; color: #111827;">${heading}</span>
+									</div>
+									<div style="display: flex; justify-content: space-between;">
+										<span style="color: #6b7280;">Turn Rate:</span>
+										<span style="font-weight: 500; color: #111827;">${turnRate}</span>
+									</div>
+									<div style="display: flex; justify-content: space-between;">
+										<span style="color: #6b7280;">Climb:</span>
+										<span style="font-weight: 500; color: #111827;">${climbRate}</span>
+									</div>
+									<div style="display: flex; justify-content: space-between;">
+										<span style="color: #6b7280;">Speed:</span>
+										<span style="font-weight: 500; color: #111827;">${groundSpeed}</span>
+									</div>
 								</div>
 							</div>
 						`;
@@ -630,43 +662,6 @@
 
 			// Wait for map to be fully initialized before adding advanced markers
 			google.maps.event.addListenerOnce(map, 'idle', () => {
-				// Add small markers for each fix (white dots) with click/touch handlers
-				fixesInOrder.forEach((fix) => {
-					const fixDot = document.createElement('div');
-					fixDot.innerHTML = `
-						<div style="background-color: white; width: 6px; height: 6px; border-radius: 50%; border: 1px solid rgba(0,0,0,0.3); box-shadow: 0 0 2px rgba(0,0,0,0.5); cursor: pointer;"></div>
-					`;
-
-					const marker = new google.maps.marker.AdvancedMarkerElement({
-						map,
-						position: { lat: fix.latitude, lng: fix.longitude },
-						content: fixDot
-					});
-
-					// Add click/touch handler to show altitude info
-					marker.addListener('click', () => {
-						const mslAlt = fix.altitude_msl_feet ? Math.round(fix.altitude_msl_feet) : 'N/A';
-						const aglAlt = fix.altitude_agl_feet ? Math.round(fix.altitude_agl_feet) : 'N/A';
-						const timestamp = dayjs(fix.timestamp).format('h:mm:ss A');
-
-						const content = `
-						<div style="padding: 8px; min-width: 180px;">
-							<div style="font-weight: bold; margin-bottom: 6px;">${timestamp}</div>
-							<div style="display: flex; flex-direction: column; gap: 4px;">
-								<div><span style="color: #3b82f6; font-weight: 600;">MSL:</span> ${mslAlt} ft</div>
-								<div><span style="color: #10b981; font-weight: 600;">AGL:</span> ${aglAlt} ft</div>
-							</div>
-						</div>
-					`;
-
-						altitudeInfoWindow?.setContent(content);
-						altitudeInfoWindow?.setPosition({ lat: fix.latitude, lng: fix.longitude });
-						altitudeInfoWindow?.open(map);
-					});
-
-					fixMarkers.push(marker);
-				});
-
 				// Add takeoff marker (green) - first fix chronologically
 				if (fixesInOrder.length > 0) {
 					const first = fixesInOrder[0];

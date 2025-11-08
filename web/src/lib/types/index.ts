@@ -192,6 +192,7 @@ export interface Fix {
 	track_degrees?: number;
 	ground_speed_knots?: number;
 	climb_fpm?: number;
+	turn_rate_rot?: number;
 	registration?: string;
 	model?: string;
 	flight_id?: string;
