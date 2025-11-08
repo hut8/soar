@@ -196,15 +196,17 @@ impl FixProcessor {
 
                         // Device exists or was just created, create fix with proper device_id
                         let fix_creation_start = std::time::Instant::now();
-                        match Fix::from_aprs_packet(packet, received_at, device_model.id) {
-                            Ok(Some(mut fix)) => {
+                        match Fix::from_aprs_packet(
+                            packet,
+                            received_at,
+                            device_model.id,
+                            context.receiver_id,
+                            context.aprs_message_id,
+                        ) {
+                            Ok(Some(fix)) => {
                                 metrics::histogram!("aprs.aircraft.fix_creation_ms").record(
                                     fix_creation_start.elapsed().as_micros() as f64 / 1000.0,
                                 );
-
-                                // Set the aprs_message_id and receiver_id from context
-                                fix.aprs_message_id = Some(context.aprs_message_id);
-                                fix.receiver_id = Some(context.receiver_id);
 
                                 let process_internal_start = std::time::Instant::now();
                                 self.process_fix_internal(fix, raw_message).await;
@@ -258,23 +260,22 @@ impl FixProcessor {
         metrics::histogram!("aprs.aircraft.flight_insert_ms")
             .record(flight_insert_start.elapsed().as_micros() as f64 / 1000.0);
 
-        // Step 2: Update receiver's latest_packet_at if this fix has a receiver_id
-        if let Some(receiver_id) = updated_fix.receiver_id {
-            let receiver_repo = self.receiver_repo.clone();
-            tokio::spawn(
-                async move {
-                    if let Err(e) = receiver_repo.update_latest_packet_at(receiver_id).await {
-                        error!(
-                            "Failed to update latest_packet_at for receiver {}: {}",
-                            receiver_id, e
-                        );
-                    }
+        // Step 2: Update receiver's latest_packet_at
+        let receiver_id = updated_fix.receiver_id;
+        let receiver_repo = self.receiver_repo.clone();
+        tokio::spawn(
+            async move {
+                if let Err(e) = receiver_repo.update_latest_packet_at(receiver_id).await {
+                    error!(
+                        "Failed to update latest_packet_at for receiver {}: {}",
+                        receiver_id, e
+                    );
                 }
-                .instrument(
-                    tracing::debug_span!("update_receiver_timestamp", receiver_id = %receiver_id),
-                ),
-            );
-        }
+            }
+            .instrument(
+                tracing::debug_span!("update_receiver_timestamp", receiver_id = %receiver_id),
+            ),
+        );
 
         // Step 3: Update flight callsign if this fix has a flight_id and flight_number
         // IMPORTANT: Only update from NULL to a value, never from one non-null value to another.

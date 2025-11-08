@@ -126,10 +126,10 @@ struct FixDslRow {
     received_at: DateTime<Utc>,
     is_active: bool,
     altitude_agl_feet: Option<i32>,
-    receiver_id: Option<Uuid>,
+    receiver_id: Uuid,
     gnss_horizontal_resolution: Option<i16>,
     gnss_vertical_resolution: Option<i16>,
-    aprs_message_id: Option<Uuid>,
+    aprs_message_id: Uuid,
     altitude_agl_valid: bool,
 }
 
@@ -177,48 +177,18 @@ impl FixesRepository {
         Self { pool }
     }
 
-    /// Look up receiver UUID by callsign
-    fn lookup_receiver_uuid_by_callsign(
-        conn: &mut diesel::PgConnection,
-        receiver_callsign: &str,
-    ) -> Result<Uuid> {
-        use crate::schema::receivers::dsl::*;
-
-        let receiver_uuid = receivers
-            .filter(callsign.eq(receiver_callsign))
-            .select(id)
-            .first::<Uuid>(conn)
-            .optional()?
-            .ok_or_else(|| anyhow::anyhow!("Receiver not found: {}", receiver_callsign))?;
-
-        Ok(receiver_uuid)
-    }
-
     /// Insert a new fix into the database
     pub async fn insert(&self, fix: &Fix) -> Result<()> {
         use crate::schema::fixes::dsl::*;
 
-        let mut new_fix = fix.clone();
+        let new_fix = fix.clone();
         let pool = self.pool.clone();
 
-        // Note: device_id is already populated in the Fix (from get_or_insert_device_by_address)
-        // Get the receiver callsign from the via array (last entry)
-        let receiver_callsign = fix
-            .via
-            .last()
-            .and_then(|opt| opt.as_ref())
-            .map(|s| s.to_string());
+        // Note: device_id, receiver_id, and aprs_message_id are already populated in the Fix
+        // by the generic processor context before Fix creation
 
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-
-            // Look up the receiver UUID using receiver callsign
-            if let Some(ref callsign) = receiver_callsign {
-                new_fix.receiver_id = Self::lookup_receiver_uuid_by_callsign(
-                    &mut conn,
-                    callsign,
-                ).ok(); // Use ok() to convert Result to Option, ignoring errors
-            }
 
             match diesel::insert_into(fixes)
                 .values(&new_fix)
@@ -351,10 +321,7 @@ impl FixesRepository {
             let mut conn = pool.get()?;
 
             let mut query = fixes::table
-                .left_join(
-                    aprs_messages::table
-                        .on(fixes::aprs_message_id.eq(aprs_messages::id.nullable())),
-                )
+                .left_join(aprs_messages::table.on(fixes::aprs_message_id.eq(aprs_messages::id)))
                 .filter(fixes::device_id.eq(device_id_param))
                 .filter(fixes::timestamp.between(start_time, end_time))
                 .order(fixes::timestamp.desc())
@@ -822,14 +789,14 @@ impl FixesRepository {
                 is_active: bool,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Int4>)]
                 altitude_agl_feet: Option<i32>,
-                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
-                receiver_id: Option<uuid::Uuid>,
+                #[diesel(sql_type = diesel::sql_types::Uuid)]
+                receiver_id: uuid::Uuid,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Int2>)]
                 gnss_horizontal_resolution: Option<i16>,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Int2>)]
                 gnss_vertical_resolution: Option<i16>,
-                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
-                aprs_message_id: Option<uuid::Uuid>,
+                #[diesel(sql_type = diesel::sql_types::Uuid)]
+                aprs_message_id: uuid::Uuid,
                 #[diesel(sql_type = diesel::sql_types::Bool)]
                 altitude_agl_valid: bool,
             }
