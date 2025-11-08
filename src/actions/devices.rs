@@ -202,8 +202,8 @@ async fn search_devices_by_bbox(
 
     let fixes_repo = FixesRepository::new(pool.clone());
 
-    // Perform bounding box search - only fetch the most recent fix per device
-    // Additional fixes will be loaded on the frontend as needed
+    // Perform bounding box search - fetch the 10 most recent fixes per device
+    // This provides enough data for trail rendering without additional API calls
     match fixes_repo
         .get_devices_with_fixes_in_bounding_box(
             lat_max,
@@ -211,7 +211,7 @@ async fn search_devices_by_bbox(
             lat_min,
             lon_max,
             cutoff_time,
-            Some(1),
+            Some(10),
         )
         .await
     {

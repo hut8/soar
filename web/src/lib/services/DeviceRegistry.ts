@@ -31,6 +31,11 @@ export class DeviceRegistry {
 	private readonly deviceCacheExpiration = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 	private refreshIntervalId: number | null = null;
 
+	// Debouncing for notifySubscribers - max 1 update per second
+	private notifyDebounceTimer: number | null = null;
+	private pendingEvents: DeviceRegistryEvent[] = [];
+	private readonly notifyDebounceMs = 1000; // 1 second
+
 	private constructor() {
 		// Private constructor for singleton pattern
 		// Start periodic refresh check when registry is created
@@ -58,9 +63,51 @@ export class DeviceRegistry {
 	}
 
 	private notifySubscribers(event: DeviceRegistryEvent): void {
+		// Add event to pending queue
+		this.pendingEvents.push(event);
+
+		// If no timer is running, start one
+		if (this.notifyDebounceTimer === null) {
+			this.notifyDebounceTimer = window.setTimeout(() => {
+				this.flushPendingNotifications();
+			}, this.notifyDebounceMs);
+		}
+	}
+
+	private flushPendingNotifications(): void {
+		// Clear the timer
+		this.notifyDebounceTimer = null;
+
+		// Get all pending events
+		const events = this.pendingEvents;
+		this.pendingEvents = [];
+
+		// If no events, nothing to do
+		if (events.length === 0) {
+			return;
+		}
+
+		// Optimize: For devices_changed events, we only need the most recent one
+		// since it contains the complete list of all devices
+		const hasDevicesChanged = events.some((e) => e.type === 'devices_changed');
+
+		// Notify subscribers of all events except devices_changed
+		const nonDevicesChangedEvents = events.filter((e) => e.type !== 'devices_changed');
+
 		this.subscribers.forEach((subscriber) => {
 			try {
-				subscriber(event);
+				// Send all non-devices_changed events
+				for (const event of nonDevicesChangedEvents) {
+					subscriber(event);
+				}
+
+				// Send only one devices_changed event with current device list
+				if (hasDevicesChanged) {
+					subscriber({
+						type: 'devices_changed',
+						devices: this.getAllDevices()
+					});
+				}
 			} catch (error) {
 				console.error('Error in DeviceRegistry subscriber:', error);
 			}
@@ -330,6 +377,13 @@ export class DeviceRegistry {
 	public clear(): void {
 		this.devices.clear();
 		this.stopPeriodicRefresh();
+
+		// Clear debounce timer
+		if (this.notifyDebounceTimer !== null) {
+			window.clearTimeout(this.notifyDebounceTimer);
+			this.notifyDebounceTimer = null;
+		}
+		this.pendingEvents = [];
 
 		// Clear localStorage
 		if (browser) {
