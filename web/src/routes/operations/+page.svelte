@@ -1528,7 +1528,7 @@
 	<title>Operations - Glider Flights</title>
 </svelte:head>
 
-<div class="fixed inset-x-0 top-14 bottom-0 w-full">
+<div class="fixed inset-x-0 top-[42px] bottom-0 w-full">
 	<!-- Google Maps Container -->
 	<div bind:this={mapContainer} class="h-full w-full"></div>
 
