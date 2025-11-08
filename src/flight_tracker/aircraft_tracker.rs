@@ -112,8 +112,8 @@ mod tests {
             gnss_vertical_resolution: None,
             device_id: uuid::Uuid::now_v7(),
             is_active: true, // 50 knots is active
-            receiver_id: None,
-            aprs_message_id: None,
+            receiver_id: uuid::Uuid::now_v7(),
+            aprs_message_id: uuid::Uuid::now_v7(),
             altitude_agl_valid: false,
         };
 

@@ -94,10 +94,10 @@ pub struct Fix {
     pub is_active: bool,
 
     /// Receiver that reported this fix (from via array)
-    pub receiver_id: Option<Uuid>,
+    pub receiver_id: Uuid,
 
     /// Reference to the APRS message that contains the raw packet data
-    pub aprs_message_id: Option<Uuid>,
+    pub aprs_message_id: Uuid,
 
     /// Whether altitude_agl_feet has been looked up (true even if NULL due to no data)
     pub altitude_agl_valid: bool,
@@ -173,11 +173,14 @@ impl Fix {
     /// Returns Ok(None) if the packet doesn't represent a position fix
     /// Returns Ok(Some(fix)) for valid position fixes
     /// Returns Err for parsing failures
-    /// Note: device_id must be provided as it should be looked up from device_address/address_type
+    /// Note: device_id, receiver_id, and aprs_message_id are all required as they should be
+    /// determined before Fix creation
     pub fn from_aprs_packet(
         packet: AprsPacket,
         received_at: DateTime<Utc>,
         device_id: Uuid,
+        receiver_id: Uuid,
+        aprs_message_id: Uuid,
     ) -> Result<Option<Self>> {
         // For now, use received_at as the packet timestamp
         let timestamp = received_at;
@@ -263,8 +266,8 @@ impl Fix {
                     device_id,
                     received_at,
                     is_active,
-                    receiver_id: None,         // Will be set during fix insertion
-                    aprs_message_id: None,     // Will be populated during fix processing
+                    receiver_id,
+                    aprs_message_id,
                     altitude_agl_valid: false, // Will be set to true when elevation is looked up
                 }))
             }
