@@ -370,11 +370,19 @@ impl Geocoder {
             .map_err(|e| anyhow!("Google Maps reverse geocoding request failed: {}", e))?;
 
         if geocoding_response.results.is_empty() {
-            return Err(anyhow!(
-                "No Google Maps reverse geocoding results found for coordinates: ({}, {})",
-                latitude,
-                longitude
-            ));
+            // No results is normal for remote/ocean locations - return empty result without error
+            debug!(
+                "No Google Maps reverse geocoding results found for coordinates: ({}, {}) - likely remote/ocean location",
+                latitude, longitude
+            );
+            return Ok(ReverseGeocodeResult {
+                street1: None,
+                city: None,
+                state: None,
+                zip_code: None,
+                country: None,
+                display_name: format!("{}, {}", latitude, longitude),
+            });
         }
 
         let result = &geocoding_response.results[0];

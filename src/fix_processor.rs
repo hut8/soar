@@ -3,7 +3,7 @@ use tracing::Instrument;
 use tracing::{debug, error, trace, warn};
 
 use crate::Fix;
-use crate::device_repo::DeviceRepository;
+use crate::device_repo::{DevicePacketFields, DeviceRepository};
 use crate::elevation::ElevationTask;
 use crate::fixes_repo::FixesRepository;
 use crate::flight_tracker::FlightTracker;
@@ -149,80 +149,50 @@ impl FixProcessor {
                     _ => crate::devices::AddressType::Unknown,
                 };
 
+                // Extract all available fields from packet for device creation/update
+                let icao_model_code: Option<String> = pos_packet
+                    .comment
+                    .model
+                    .as_ref()
+                    .map(|model| model.to_string());
+                let adsb_emitter_category = pos_packet
+                    .comment
+                    .adsb_emitter_category
+                    .and_then(|cat| cat.to_string().parse().ok());
+                let registration: Option<String> = pos_packet
+                    .comment
+                    .registration
+                    .as_ref()
+                    .map(|reg| reg.to_string());
+
+                let packet_fields = DevicePacketFields {
+                    aircraft_type,
+                    icao_model_code: icao_model_code.clone(),
+                    adsb_emitter_category,
+                    tracker_device_type: Some(tracker_device_type.clone()),
+                    registration: registration.clone(),
+                };
+
                 // Look up or create device based on device_address
                 // When creating spontaneously, use address_type derived from tracker_device_type
+                // Use device_for_fix to atomically update last_fix_at and insert all available fields
                 let device_lookup_start = std::time::Instant::now();
                 match self
                     .device_repo
-                    .get_or_insert_device_by_address(device_address, spontaneous_address_type)
+                    .device_for_fix(
+                        device_address,
+                        spontaneous_address_type,
+                        received_at,
+                        packet_fields,
+                    )
                     .await
                 {
                     Ok(device_model) => {
-                        metrics::histogram!("aprs.aircraft.device_lookup_ms")
+                        metrics::histogram!("aprs.aircraft.device_upsert_ms")
                             .record(device_lookup_start.elapsed().as_micros() as f64 / 1000.0);
-                        // Extract ICAO model code, ADS-B emitter category, and registration from packet for device update
-                        let icao_model_code: Option<String> = pos_packet
-                            .comment
-                            .model
-                            .as_ref()
-                            .map(|model| model.to_string());
-                        let adsb_emitter_category = pos_packet
-                            .comment
-                            .adsb_emitter_category
-                            .and_then(|cat| cat.to_string().parse().ok());
-                        let registration: Option<String> = pos_packet
-                            .comment
-                            .registration
-                            .as_ref()
-                            .map(|reg| reg.to_string());
 
-                        // Check if we have new/different information to update
-                        let icao_changed = icao_model_code.is_some()
-                            && icao_model_code != device_model.icao_model_code;
-                        let adsb_changed = adsb_emitter_category.is_some()
-                            && adsb_emitter_category != device_model.adsb_emitter_category;
-                        let tracker_type_changed =
-                            Some(&tracker_device_type) != device_model.tracker_device_type.as_ref();
-                        let registration_changed = registration.is_some()
-                            && (device_model.registration.is_empty()
-                                || registration.as_deref()
-                                    != Some(device_model.registration.as_str()));
-
-                        // Update device fields only if we have new/different information
-                        if icao_changed
-                            || adsb_changed
-                            || tracker_type_changed
-                            || registration_changed
-                        {
-                            let device_repo = self.device_repo.clone();
-                            let device_id = device_model.id;
-                            let tracker_type_to_update = Some(tracker_device_type.clone());
-                            let registration_to_update = if registration_changed {
-                                registration.clone()
-                            } else {
-                                None
-                            };
-                            tokio::spawn(
-                                async move {
-                                    if let Err(e) = device_repo
-                                        .update_adsb_fields(
-                                            device_id,
-                                            icao_model_code,
-                                            adsb_emitter_category,
-                                            tracker_type_to_update,
-                                            registration_to_update,
-                                        )
-                                        .await
-                                    {
-                                        error!(
-                                            "Failed to update ADS-B fields for device {}: {}",
-                                            device_id, e
-                                        );
-                                    }
-                                }
-                                .instrument(tracing::debug_span!("update_device_adsb_fields", device_id = %device_id))
-                            );
-                        }
+                        // All device fields (including ICAO, ADS-B, tracker type, registration)
+                        // are now updated atomically in device_for_fix - no separate update needed
 
                         // Device exists or was just created, create fix with proper device_id
                         let fix_creation_start = std::time::Instant::now();
@@ -237,8 +207,7 @@ impl FixProcessor {
                                 fix.receiver_id = Some(context.receiver_id);
 
                                 let process_internal_start = std::time::Instant::now();
-                                self.process_fix_internal(fix, raw_message, aircraft_type)
-                                    .await;
+                                self.process_fix_internal(fix, raw_message).await;
                                 metrics::histogram!("aprs.aircraft.process_fix_internal_ms")
                                     .record(
                                         process_internal_start.elapsed().as_micros() as f64
@@ -273,13 +242,8 @@ impl FixProcessor {
     }
 
     /// Internal method to process a fix through the complete pipeline
-    #[tracing::instrument(skip(self, fix, raw_message, aircraft_type), fields(device_id = %fix.device_id))]
-    async fn process_fix_internal(
-        &self,
-        fix: Fix,
-        raw_message: &str,
-        aircraft_type: Option<crate::ogn_aprs_aircraft::AircraftType>,
-    ) {
+    #[tracing::instrument(skip(self, fix, raw_message), fields(device_id = %fix.device_id))]
+    async fn process_fix_internal(&self, fix: Fix, raw_message: &str) {
         // Step 1: Process through flight detection AND save to database
         // This is done atomically while holding a per-device lock to prevent race conditions
         let flight_insert_start = std::time::Instant::now();
@@ -312,28 +276,7 @@ impl FixProcessor {
             );
         }
 
-        // Step 3: Update device cached fields (aircraft_type_ogn and last_fix_at)
-        let device_repo = self.device_repo.clone();
-        let device_id = updated_fix.device_id;
-        let fix_timestamp = updated_fix.timestamp;
-        tokio::spawn(
-            async move {
-                if let Err(e) = device_repo
-                    .update_cached_fields(device_id, aircraft_type, fix_timestamp)
-                    .await
-                {
-                    error!(
-                        "Failed to update cached fields for device {}: {}",
-                        device_id, e
-                    );
-                }
-            }
-            .instrument(
-                tracing::debug_span!("update_device_cached_fields", device_id = %device_id),
-            ),
-        );
-
-        // Step 4: Update flight callsign if this fix has a flight_id and flight_number
+        // Step 3: Update flight callsign if this fix has a flight_id and flight_number
         // IMPORTANT: Only update from NULL to a value, never from one non-null value to another.
         // If callsign changes from one value to another, the flight tracker will create a new flight.
         if let (Some(flight_id), Some(flight_number)) =
@@ -386,7 +329,7 @@ impl FixProcessor {
                 .record(callsign_update_start.elapsed().as_micros() as f64 / 1000.0);
         }
 
-        // Step 5: Calculate and update altitude_agl via dedicated elevation channel
+        // Step 4: Calculate and update altitude_agl via dedicated elevation channel
         // This prevents slow elevation lookups from blocking the main processing queue
         if let Some(elevation_tx) = &self.elevation_tx {
             let elevation_queue_start = std::time::Instant::now();
@@ -395,24 +338,30 @@ impl FixProcessor {
                 fix: updated_fix.clone(),
             };
 
-            // Send to elevation queue, blocking if full to apply backpressure
-            // This ensures we never drop elevation calculations
-            // With durable JetStream queue, backpressure is safe and correct
-            if let Err(e) = elevation_tx.send_async(task).await {
-                error!(
-                    "Elevation processing channel is closed - cannot queue elevation calculation: {}",
-                    e
-                );
-                metrics::counter!("aprs.elevation.channel_closed").increment(1);
-            } else {
-                // Successfully queued for elevation processing
-                metrics::counter!("aprs.elevation.queued").increment(1);
+            // Send to elevation queue with non-blocking try_send
+            // If queue is full, drop the elevation task rather than blocking fix processing
+            // Large queue (50K) makes drops rare, but prevents multi-second spikes
+            match elevation_tx.try_send(task) {
+                Ok(_) => {
+                    metrics::counter!("aprs.elevation.queued").increment(1);
+                }
+                Err(flume::TrySendError::Full(_)) => {
+                    warn!(
+                        "Elevation queue full - dropping elevation task for fix {}",
+                        updated_fix.id
+                    );
+                    metrics::counter!("aprs.elevation.dropped_full").increment(1);
+                }
+                Err(flume::TrySendError::Disconnected(_)) => {
+                    error!("Elevation processing channel is closed");
+                    metrics::counter!("aprs.elevation.channel_closed").increment(1);
+                }
             }
             metrics::histogram!("aprs.aircraft.elevation_queue_ms")
                 .record(elevation_queue_start.elapsed().as_micros() as f64 / 1000.0);
         }
 
-        // Step 6: Publish to NATS with updated fix (including flight_id and flight info)
+        // Step 5: Publish to NATS with updated fix (including flight_id and flight info)
         if let Some(nats_publisher) = self.nats_publisher.as_ref() {
             let nats_publish_start = std::time::Instant::now();
             // Look up flight information if this fix is part of a flight

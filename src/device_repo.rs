@@ -13,6 +13,16 @@ use chrono::{DateTime, Utc};
 pub type PgPool = Pool<ConnectionManager<PgConnection>>;
 pub type PgPooledConnection = PooledConnection<ConnectionManager<PgConnection>>;
 
+/// Fields extracted from packet for device creation/update
+#[derive(Debug, Clone)]
+pub struct DevicePacketFields {
+    pub aircraft_type: Option<AircraftType>,
+    pub icao_model_code: Option<String>,
+    pub adsb_emitter_category: Option<AdsbEmitterCategory>,
+    pub tracker_device_type: Option<String>,
+    pub registration: Option<String>,
+}
+
 #[derive(Clone)]
 pub struct DeviceRepository {
     pool: PgPool,
@@ -152,6 +162,80 @@ impl DeviceRepository {
         Ok(device_model)
     }
 
+    /// Get or insert a device for fix processing
+    /// This method is optimized for the high-frequency fix processing path:
+    /// - If device doesn't exist, creates it with all available fields from the packet
+    /// - If device exists, atomically updates all packet-derived fields in one operation:
+    ///   - last_fix_at (always)
+    ///   - aircraft_type_ogn, icao_model_code, adsb_emitter_category, tracker_device_type, registration
+    /// - Always returns the device in one atomic operation
+    ///
+    /// This avoids both no-op updates and separate update tasks for modified fields
+    pub async fn device_for_fix(
+        &self,
+        address: i32,
+        address_type: AddressType,
+        fix_timestamp: DateTime<Utc>,
+        packet_fields: DevicePacketFields,
+    ) -> Result<DeviceModel> {
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            // Extract country code from ICAO address if applicable
+            let country_code = Device::extract_country_code_from_icao(address as u32, address_type);
+
+            // Extract tail number from ICAO address if it's a US aircraft
+            // Use packet registration if available, otherwise try to extract from ICAO
+            let registration = packet_fields.registration.clone().unwrap_or_else(|| {
+                Device::extract_tail_number_from_icao(address as u32, address_type)
+                    .unwrap_or_default()
+            });
+
+            let new_device = NewDevice {
+                address,
+                address_type,
+                aircraft_model: String::new(),
+                registration: registration.clone(),
+                competition_number: String::new(),
+                tracked: true,
+                identified: true,
+                from_ddb: false,
+                frequency_mhz: None,
+                pilot_name: None,
+                home_base_airport_ident: None,
+                aircraft_type_ogn: packet_fields.aircraft_type,
+                last_fix_at: Some(fix_timestamp),
+                club_id: None,
+                icao_model_code: packet_fields.icao_model_code.clone(),
+                adsb_emitter_category: packet_fields.adsb_emitter_category,
+                tracker_device_type: packet_fields.tracker_device_type.clone(),
+                country_code,
+            };
+
+            // Use INSERT ... ON CONFLICT ... DO UPDATE RETURNING to atomically handle race conditions
+            // On conflict, update all packet-derived fields atomically in one operation
+            // This eliminates the need for separate async update tasks
+            let device_model = diesel::insert_into(devices::table)
+                .values(&new_device)
+                .on_conflict(devices::address)
+                .do_update()
+                .set((
+                    devices::last_fix_at.eq(fix_timestamp),
+                    devices::aircraft_type_ogn.eq(packet_fields.aircraft_type),
+                    devices::icao_model_code.eq(packet_fields.icao_model_code),
+                    devices::adsb_emitter_category.eq(packet_fields.adsb_emitter_category),
+                    devices::tracker_device_type.eq(packet_fields.tracker_device_type),
+                    devices::registration.eq(registration),
+                ))
+                .get_result::<DeviceModel>(&mut conn)?;
+
+            Ok::<DeviceModel, anyhow::Error>(device_model)
+        })
+        .await?
+    }
+
     /// Get a device by its UUID
     pub async fn get_device_by_uuid(&self, device_uuid: Uuid) -> Result<Option<Device>> {
         let mut conn = self.get_connection()?;
@@ -217,32 +301,6 @@ impl DeviceRepository {
             .into_iter()
             .map(|model| model.into())
             .collect())
-    }
-
-    /// Update cached fields (aircraft_type_ogn and last_fix_at) from a fix
-    pub async fn update_cached_fields(
-        &self,
-        device_id: Uuid,
-        aircraft_type: Option<AircraftType>,
-        fix_timestamp: DateTime<Utc>,
-    ) -> Result<()> {
-        let pool = self.pool.clone();
-
-        tokio::task::spawn_blocking(move || {
-            let mut conn = pool.get()?;
-
-            diesel::update(devices::table.filter(devices::id.eq(device_id)))
-                .set((
-                    devices::aircraft_type_ogn.eq(aircraft_type),
-                    devices::last_fix_at.eq(fix_timestamp),
-                ))
-                .execute(&mut conn)?;
-
-            Ok::<(), anyhow::Error>(())
-        })
-        .await??;
-
-        Ok(())
     }
 
     /// Update the club assignment for a device

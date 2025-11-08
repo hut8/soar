@@ -73,9 +73,10 @@ pub const RECEIVER_POSITION_QUEUE_SIZE: usize = 100;
 pub const SERVER_STATUS_QUEUE_SIZE: usize = 100;
 
 /// Elevation lookup queue for Google Maps API requests
-/// Medium queue (1,000 tasks) since elevation lookups are API-rate-limited
-/// Kept at 1K as elevation is async and doesn't block message ACKing
-pub const ELEVATION_QUEUE_SIZE: usize = 1_000;
+/// Very large queue (50,000 tasks) to prevent blocking fix processing
+/// Changed from 1K to 50K to eliminate backpressure spikes in fix processing
+/// Uses non-blocking send - drops elevation tasks if queue is full rather than blocking
+pub const ELEVATION_QUEUE_SIZE: usize = 50_000;
 
 /// AGL database lookup queue for batch writes to database
 /// Small queue (100 tasks) - minimizes message loss during crashes

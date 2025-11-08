@@ -37,6 +37,15 @@ SOAR is a comprehensive aircraft tracking and club management system built with:
 - **All data modifications must go through migrations** - This ensures they're tracked and reproducible
 - **Deleting data before adding constraints** - You can include DELETE statements in the same migration before constraint creation. The constraint validates against the final state of the transaction, so the DELETE will complete first.
 
+### METRICS AND MONITORING
+- **When changing metric names** - Update Grafana dashboards to use the new metric names
+- **Metric naming convention** - Use dot notation (e.g., `aprs.aircraft.device_upsert_ms`)
+- **Document metric changes** - Note metric name changes in PR description for ops team awareness
+
+**Recent Metric Changes:**
+- `aprs.aircraft.device_lookup_ms` → `aprs.aircraft.device_upsert_ms` (2025-01-07, PR #312)
+- **NEW**: `aprs.elevation.dropped_full` counter - tracks elevation tasks dropped due to full queue (2025-01-07)
+
 ### Frontend Development Standards
 
 #### Svelte 5 Syntax (REQUIRED)
