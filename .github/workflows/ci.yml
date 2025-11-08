@@ -51,6 +51,7 @@ jobs:
   test-e2e:
     name: E2E Tests (Playwright)
     runs-on: ubuntu-22.04
+    needs: test-sveltekit
     defaults:
       run:
         working-directory: ./web
@@ -83,6 +84,12 @@ jobs:
 
       - name: Install web dependencies
         run: npm ci
+
+      - name: Download web build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: web-build
+          path: web/build/
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
@@ -142,12 +149,76 @@ jobs:
           # Seed test data
           ./target/release/soar seed-test-data
 
+      - name: Start Rust backend server
+        working-directory: .
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/soar_test
+          SENTRY_DSN: ''
+          SOAR_ENV: test
+        run: |
+          # Start backend server in background
+          ./target/release/soar web --port 61225 --interface localhost > backend.log 2>&1 &
+          BACKEND_PID=$!
+          echo "Backend PID: $BACKEND_PID"
+          echo $BACKEND_PID > backend.pid
+
+          # Wait for backend to be ready (max 60 seconds)
+          for i in {1..60}; do
+            if curl -s http://localhost:61225/health > /dev/null 2>&1; then
+              echo "Backend server is ready!"
+              break
+            fi
+            if [ $i -eq 60 ]; then
+              echo "Backend server failed to start within 60 seconds"
+              cat backend.log
+              exit 1
+            fi
+            echo "Waiting for backend... ($i/60)"
+            sleep 1
+          done
+
+      - name: Start SvelteKit preview server
+        run: |
+          # Start preview server in background
+          npm run preview > preview.log 2>&1 &
+          PREVIEW_PID=$!
+          echo "Preview PID: $PREVIEW_PID"
+          echo $PREVIEW_PID > preview.pid
+
+          # Wait for preview server to be ready (max 30 seconds)
+          for i in {1..30}; do
+            if curl -s http://localhost:4173 > /dev/null 2>&1; then
+              echo "Preview server is ready!"
+              break
+            fi
+            if [ $i -eq 30 ]; then
+              echo "Preview server failed to start within 30 seconds"
+              cat preview.log
+              exit 1
+            fi
+            echo "Waiting for preview server... ($i/30)"
+            sleep 1
+          done
+
       - name: Run E2E tests
         env:
           TEST_USER_EMAIL: test@example.com
           TEST_USER_PASSWORD: testpassword123
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/soar_test
         run: npm test
+
+      - name: Stop servers
+        if: always()
+        working-directory: .
+        run: |
+          # Kill backend server
+          if [ -f backend.pid ]; then
+            kill $(cat backend.pid) || true
+          fi
+          # Kill preview server
+          if [ -f web/preview.pid ]; then
+            kill $(cat web/preview.pid) || true
+          fi
 
       - name: Upload Playwright report
         if: always()

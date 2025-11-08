@@ -50,33 +50,36 @@ export default defineConfig({
 	],
 
 	// Web server configuration
-	// Start both the Rust backend and SvelteKit preview server for E2E tests
-	webServer: [
-		{
-			// Start Rust backend server with test database
-			command:
-				'DATABASE_URL=postgres://postgres:postgres@localhost:5432/soar_test NATS_URL=nats://localhost:4222 ../target/release/soar web --port 61225 --interface localhost',
-			port: 61225,
-			timeout: 120000, // 2 minutes for backend startup (CI can be slow)
-			reuseExistingServer: !process.env.CI,
-			env: {
-				DATABASE_URL: 'postgres://postgres:postgres@localhost:5432/soar_test',
-				// NATS URL for backend (optional, backend should handle missing NATS gracefully)
-				NATS_URL: 'nats://localhost:4222',
-				// Disable Sentry in tests
-				SENTRY_DSN: '',
-				// Set environment
-				SOAR_ENV: 'test'
-			}
-		},
-		{
-			// Start SvelteKit preview server (proxies /data/* to Rust backend)
-			command: 'npm run build && npm run preview',
-			port: 4173,
-			timeout: 180000, // 3 minutes for build + server startup
-			reuseExistingServer: !process.env.CI
-		}
-	],
+	// In CI, servers are started manually in the workflow
+	// In local development, Playwright starts them automatically
+	webServer: process.env.CI
+		? undefined
+		: [
+				{
+					// Start Rust backend server with test database
+					command:
+						'DATABASE_URL=postgres://postgres:postgres@localhost:5432/soar_test NATS_URL=nats://localhost:4222 ../target/release/soar web --port 61225 --interface localhost',
+					port: 61225,
+					timeout: 120000, // 2 minutes for backend startup
+					reuseExistingServer: true,
+					env: {
+						DATABASE_URL: 'postgres://postgres:postgres@localhost:5432/soar_test',
+						// NATS URL for backend (optional, backend should handle missing NATS gracefully)
+						NATS_URL: 'nats://localhost:4222',
+						// Disable Sentry in tests
+						SENTRY_DSN: '',
+						// Set environment
+						SOAR_ENV: 'test'
+					}
+				},
+				{
+					// Start SvelteKit preview server (proxies /data/* to Rust backend)
+					command: 'npm run build && npm run preview',
+					port: 4173,
+					timeout: 180000, // 3 minutes for build + server startup
+					reuseExistingServer: true
+				}
+			],
 
 	// Screenshot comparison settings
 	expect: {
