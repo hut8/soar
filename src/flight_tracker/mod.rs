@@ -81,6 +81,21 @@ pub(crate) type DeviceLocksMap = Arc<RwLock<HashMap<Uuid, Arc<Mutex<()>>>>>;
 /// Type alias for aircraft trackers map: device_id -> AircraftTracker
 pub(crate) type AircraftTrackersMap = Arc<RwLock<HashMap<Uuid, aircraft_tracker::AircraftTracker>>>;
 
+/// Context for flight processing operations
+/// Contains all repositories and state needed for flight lifecycle management
+pub(crate) struct FlightProcessorContext<'a> {
+    pub flights_repo: &'a FlightsRepository,
+    pub device_repo: &'a DeviceRepository,
+    pub airports_repo: &'a AirportsRepository,
+    pub locations_repo: &'a LocationsRepository,
+    pub runways_repo: &'a RunwaysRepository,
+    pub fixes_repo: &'a FixesRepository,
+    pub elevation_db: &'a ElevationDB,
+    pub active_flights: &'a ActiveFlightsMap,
+    pub device_locks: &'a DeviceLocksMap,
+    pub aircraft_trackers: &'a AircraftTrackersMap,
+}
+
 /// Simple flight tracker - just tracks which device is currently on which flight
 pub struct FlightTracker {
     flights_repo: FlightsRepository,
@@ -129,6 +144,23 @@ impl FlightTracker {
             active_flights: Arc::new(RwLock::new(HashMap::new())),
             device_locks: Arc::new(RwLock::new(HashMap::new())),
             aircraft_trackers: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    /// Get a context reference for flight processing operations
+    /// This provides a convenient way to pass all necessary dependencies to flight lifecycle functions
+    fn context(&self) -> FlightProcessorContext<'_> {
+        FlightProcessorContext {
+            flights_repo: &self.flights_repo,
+            device_repo: &self.device_repo,
+            airports_repo: &self.airports_repo,
+            locations_repo: &self.locations_repo,
+            runways_repo: &self.runways_repo,
+            fixes_repo: &self.fixes_repo,
+            elevation_db: &self.elevation_db,
+            active_flights: &self.active_flights,
+            device_locks: &self.device_locks,
+            aircraft_trackers: &self.aircraft_trackers,
         }
     }
 
@@ -394,27 +426,14 @@ impl FlightTracker {
         );
 
         // Process state transition
-        let updated_fix = match state_transitions::process_state_transition(
-            &self.flights_repo,
-            &self.device_repo,
-            &self.airports_repo,
-            &self.locations_repo,
-            &self.runways_repo,
-            &self.fixes_repo,
-            &self.elevation_db,
-            &self.active_flights,
-            &self.device_locks,
-            &self.aircraft_trackers,
-            fix,
-        )
-        .await
-        {
-            Ok(updated_fix) => updated_fix,
-            Err(e) => {
-                error!("Failed to process state transition: {}", e);
-                return None;
-            }
-        };
+        let updated_fix =
+            match state_transitions::process_state_transition(&self.context(), fix).await {
+                Ok(updated_fix) => updated_fix,
+                Err(e) => {
+                    error!("Failed to process state transition: {}", e);
+                    return None;
+                }
+            };
 
         // Insert the fix into the database WHILE STILL HOLDING THE LOCK
         match fixes_repo.insert(&updated_fix).await {
