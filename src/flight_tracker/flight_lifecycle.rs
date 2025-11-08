@@ -1,18 +1,13 @@
 use crate::Fix;
-use crate::airports_repo::AirportsRepository;
-use crate::device_repo::DeviceRepository;
 use crate::devices::Device;
-use crate::elevation::ElevationDB;
-use crate::fixes_repo::FixesRepository;
 use crate::flights::Flight;
 use crate::flights_repo::FlightsRepository;
-use crate::locations_repo::LocationsRepository;
-use crate::runways_repo::RunwaysRepository;
 use anyhow::Result;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use super::ActiveFlightsMap;
+use super::FlightProcessorContext;
 use super::altitude::calculate_altitude_offset_ft;
 use super::geometry::haversine_distance;
 use super::location::{create_or_find_location, find_nearby_airport};
@@ -20,21 +15,14 @@ use super::runway::determine_runway_identifier;
 
 /// Create a new flight for takeoff
 /// Accepts a pre-generated flight_id to prevent race conditions
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn create_flight(
-    flights_repo: &FlightsRepository,
-    device_repo: &DeviceRepository,
-    airports_repo: &AirportsRepository,
-    locations_repo: &LocationsRepository,
-    runways_repo: &RunwaysRepository,
-    fixes_repo: &FixesRepository,
-    elevation_db: &ElevationDB,
+    ctx: &FlightProcessorContext<'_>,
     fix: &Fix,
     flight_id: Uuid,
     skip_airport_runway_lookup: bool,
 ) -> Result<Uuid> {
     // Fetch device first as we need it for Flight creation
-    let device = match device_repo.get_device_by_uuid(fix.device_id).await {
+    let device = match ctx.device_repo.get_device_by_uuid(fix.device_id).await {
         Ok(Some(device)) => device,
         Ok(None) => {
             warn!(
@@ -57,14 +45,14 @@ pub(crate) async fn create_flight(
         Flight::new_airborne_from_fix_with_id(fix, &device, flight_id)
     } else {
         // Actual takeoff - calculate altitude offset and look up airport/runway
-        let takeoff_altitude_offset_ft = calculate_altitude_offset_ft(elevation_db, fix).await;
+        let takeoff_altitude_offset_ft = calculate_altitude_offset_ft(ctx.elevation_db, fix).await;
 
         let departure_airport_id =
-            find_nearby_airport(airports_repo, fix.latitude, fix.longitude).await;
+            find_nearby_airport(ctx.airports_repo, fix.latitude, fix.longitude).await;
 
         let takeoff_location_id = create_or_find_location(
-            airports_repo,
-            locations_repo,
+            ctx.airports_repo,
+            ctx.locations_repo,
             fix.latitude,
             fix.longitude,
             departure_airport_id,
@@ -72,8 +60,8 @@ pub(crate) async fn create_flight(
         .await;
 
         let takeoff_runway_info = determine_runway_identifier(
-            fixes_repo,
-            runways_repo,
+            ctx.fixes_repo,
+            ctx.runways_repo,
             &device,
             fix.timestamp,
             fix.latitude,
@@ -96,7 +84,7 @@ pub(crate) async fn create_flight(
     // Copy device's club_id to the flight
     flight.club_id = device.club_id;
 
-    flights_repo.create_flight(flight).await?;
+    ctx.flights_repo.create_flight(flight).await?;
 
     debug!(
         "Created flight {} for device {} (takeoff at {:.6}, {:.6})",
@@ -115,7 +103,7 @@ pub(crate) async fn timeout_flight(
     flight_id: Uuid,
     device_id: Uuid,
 ) -> Result<()> {
-    info!(
+    debug!(
         "Timing out flight {} for device {} (no beacons for 1+ hour)",
         flight_id, device_id
     );
@@ -138,11 +126,6 @@ pub(crate) async fn timeout_flight(
     // Mark flight as timed out in database
     match flights_repo.timeout_flight(flight_id, timeout_time).await {
         Ok(true) => {
-            info!(
-                "Successfully timed out flight {} at {}",
-                flight_id, timeout_time
-            );
-
             // Calculate and update bounding box now that flight is timed out
             flights_repo
                 .calculate_and_update_bounding_box(flight_id)
@@ -171,24 +154,18 @@ pub(crate) async fn timeout_flight(
 
 /// Update flight with landing information
 /// Returns Ok(true) if flight was completed normally, Ok(false) if flight was deleted as spurious
-#[allow(clippy::too_many_arguments)]
 pub(crate) async fn complete_flight(
-    flights_repo: &FlightsRepository,
-    airports_repo: &AirportsRepository,
-    locations_repo: &LocationsRepository,
-    runways_repo: &RunwaysRepository,
-    fixes_repo: &FixesRepository,
-    elevation_db: &ElevationDB,
-    active_flights: &ActiveFlightsMap,
+    ctx: &FlightProcessorContext<'_>,
     device: &Device,
     flight_id: Uuid,
     fix: &Fix,
 ) -> Result<bool> {
-    let arrival_airport_id = find_nearby_airport(airports_repo, fix.latitude, fix.longitude).await;
+    let arrival_airport_id =
+        find_nearby_airport(ctx.airports_repo, fix.latitude, fix.longitude).await;
 
     let landing_location_id = create_or_find_location(
-        airports_repo,
-        locations_repo,
+        ctx.airports_repo,
+        ctx.locations_repo,
         fix.latitude,
         fix.longitude,
         arrival_airport_id,
@@ -196,8 +173,8 @@ pub(crate) async fn complete_flight(
     .await;
 
     let landing_runway_info = determine_runway_identifier(
-        fixes_repo,
-        runways_repo,
+        ctx.fixes_repo,
+        ctx.runways_repo,
         device,
         fix.timestamp,
         fix.latitude,
@@ -210,10 +187,10 @@ pub(crate) async fn complete_flight(
         Some((runway, was_inferred)) => (Some(runway), Some(was_inferred)),
         None => (None, None),
     };
-    let landing_altitude_offset_ft = calculate_altitude_offset_ft(elevation_db, fix).await;
+    let landing_altitude_offset_ft = calculate_altitude_offset_ft(ctx.elevation_db, fix).await;
 
     // Fetch the flight to compute distance metrics
-    let flight = match flights_repo.get_flight_by_id(flight_id).await? {
+    let flight = match ctx.flights_repo.get_flight_by_id(flight_id).await? {
         Some(f) => f,
         None => {
             error!("Flight {} not found when completing", flight_id);
@@ -224,7 +201,7 @@ pub(crate) async fn complete_flight(
     // Check if this is a spurious flight (too short or no altitude variation)
     if let Some(takeoff_time) = flight.takeoff_time {
         let duration_seconds = (fix.timestamp - takeoff_time).num_seconds();
-        let flight_fixes = fixes_repo.get_fixes_for_flight(flight_id, None).await?;
+        let flight_fixes = ctx.fixes_repo.get_fixes_for_flight(flight_id, None).await?;
 
         let altitude_range = if !flight_fixes.is_empty() {
             let altitudes: Vec<i32> = flight_fixes
@@ -336,17 +313,17 @@ pub(crate) async fn complete_flight(
             // CRITICAL: Remove from active_flights FIRST to prevent race condition
             // where new fixes arrive and get assigned this flight_id while we're deleting it
             {
-                let mut flights = active_flights.write().await;
+                let mut flights = ctx.active_flights.write().await;
                 flights.remove(&fix.device_id);
             }
 
             // Clear flight_id from all associated fixes
-            if let Err(e) = fixes_repo.clear_flight_id(flight_id).await {
+            if let Err(e) = ctx.fixes_repo.clear_flight_id(flight_id).await {
                 error!("Failed to clear flight_id from fixes: {}", e);
             }
 
             // Delete the flight
-            match flights_repo.delete_flight(flight_id).await {
+            match ctx.flights_repo.delete_flight(flight_id).await {
                 Ok(_) => {
                     info!("Deleted spurious flight {}", flight_id);
                     return Ok(false); // Return false to indicate flight was deleted
@@ -360,16 +337,16 @@ pub(crate) async fn complete_flight(
     }
 
     // Calculate total distance flown
-    let total_distance_meters = flight.total_distance(fixes_repo).await.ok().flatten();
+    let total_distance_meters = flight.total_distance(ctx.fixes_repo).await.ok().flatten();
 
     // Calculate maximum displacement
     let maximum_displacement_meters = flight
-        .maximum_displacement(fixes_repo, airports_repo)
+        .maximum_displacement(ctx.fixes_repo, ctx.airports_repo)
         .await
         .ok()
         .flatten();
 
-    flights_repo
+    ctx.flights_repo
         .update_flight_landing(
             flight_id,
             fix.timestamp,
@@ -385,7 +362,7 @@ pub(crate) async fn complete_flight(
         .await?;
 
     // Calculate and update bounding box now that flight is complete
-    flights_repo
+    ctx.flights_repo
         .calculate_and_update_bounding_box(flight_id)
         .await?;
 

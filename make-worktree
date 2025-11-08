@@ -33,6 +33,7 @@ fi
 
 BRANCH_NAME="$1"
 WORKTREE_DIR="$HOME/soar-worktrees/$BRANCH_NAME"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Check for .env file
 ENV_FILE=""
@@ -72,11 +73,18 @@ npm install
 echo -e "${GREEN}✓ npm dependencies installed${NC}"
 echo ""
 
-# Build Rust project to pre-cache artifacts
-echo -e "${BLUE}[4/4]${NC} ${BOLD}Building Rust project (pre-caching artifacts)...${NC}"
+# Copy or build Rust project artifacts
+echo -e "${BLUE}[4/4]${NC} ${BOLD}Setting up Rust build artifacts...${NC}"
 cd "$WORKTREE_DIR"
-cargo build
-echo -e "${GREEN}✓ Cargo build complete${NC}"
+if [ -d "$SCRIPT_DIR/target" ]; then
+    echo -e "${CYAN}Copying target directory from source worktree...${NC}"
+    cp -r "$SCRIPT_DIR/target" "$WORKTREE_DIR/"
+    echo -e "${GREEN}✓ Target directory copied${NC}"
+else
+    echo -e "${CYAN}No target directory found, building Rust project (pre-caching artifacts)...${NC}"
+    cargo build
+    echo -e "${GREEN}✓ Cargo build complete${NC}"
+fi
 echo ""
 
 echo -e "${GREEN}${BOLD}✓ Worktree setup complete!${NC}"
