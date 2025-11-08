@@ -770,14 +770,21 @@ async fn main() -> Result<()> {
             .await
         }
         Commands::Web { interface, port } => {
-            // Check SOAR_ENV and override port if not production
+            // Check SOAR_ENV and override port only for development mode
             let final_port = match env::var("SOAR_ENV") {
                 Ok(soar_env) if soar_env == "production" => {
                     info!("Running in production mode on port {}", port);
                     port
                 }
+                Ok(soar_env) if soar_env == "test" => {
+                    info!("Running in test mode on port {}", port);
+                    port
+                }
                 Ok(soar_env) => {
-                    info!("Running in {} mode, overriding port to 1337", soar_env);
+                    info!(
+                        "Running in {} mode, overriding port to 1337 (development default)",
+                        soar_env
+                    );
                     1337
                 }
                 Err(_) => {
