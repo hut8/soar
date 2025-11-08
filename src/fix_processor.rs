@@ -191,53 +191,8 @@ impl FixProcessor {
                         metrics::histogram!("aprs.aircraft.device_upsert_ms")
                             .record(device_lookup_start.elapsed().as_micros() as f64 / 1000.0);
 
-                        // Check if we have new/different information to update
-                        let icao_changed = icao_model_code.is_some()
-                            && icao_model_code != device_model.icao_model_code;
-                        let adsb_changed = adsb_emitter_category.is_some()
-                            && adsb_emitter_category != device_model.adsb_emitter_category;
-                        let tracker_type_changed =
-                            Some(&tracker_device_type) != device_model.tracker_device_type.as_ref();
-                        let registration_changed = registration.is_some()
-                            && (device_model.registration.is_empty()
-                                || registration.as_deref()
-                                    != Some(device_model.registration.as_str()));
-
-                        // Update device fields only if we have new/different information
-                        if icao_changed
-                            || adsb_changed
-                            || tracker_type_changed
-                            || registration_changed
-                        {
-                            let device_repo = self.device_repo.clone();
-                            let device_id = device_model.id;
-                            let tracker_type_to_update = Some(tracker_device_type.clone());
-                            let registration_to_update = if registration_changed {
-                                registration.clone()
-                            } else {
-                                None
-                            };
-                            tokio::spawn(
-                                async move {
-                                    if let Err(e) = device_repo
-                                        .update_adsb_fields(
-                                            device_id,
-                                            icao_model_code,
-                                            adsb_emitter_category,
-                                            tracker_type_to_update,
-                                            registration_to_update,
-                                        )
-                                        .await
-                                    {
-                                        error!(
-                                            "Failed to update ADS-B fields for device {}: {}",
-                                            device_id, e
-                                        );
-                                    }
-                                }
-                                .instrument(tracing::debug_span!("update_device_adsb_fields", device_id = %device_id))
-                            );
-                        }
+                        // All device fields (including ICAO, ADS-B, tracker type, registration)
+                        // are now updated atomically in device_for_fix - no separate update needed
 
                         // Device exists or was just created, create fix with proper device_id
                         let fix_creation_start = std::time::Instant::now();

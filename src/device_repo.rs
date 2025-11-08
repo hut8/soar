@@ -165,10 +165,12 @@ impl DeviceRepository {
     /// Get or insert a device for fix processing
     /// This method is optimized for the high-frequency fix processing path:
     /// - If device doesn't exist, creates it with all available fields from the packet
-    /// - If device exists, updates last_fix_at and optionally aircraft_type_ogn
+    /// - If device exists, atomically updates all packet-derived fields in one operation:
+    ///   - last_fix_at (always)
+    ///   - aircraft_type_ogn, icao_model_code, adsb_emitter_category, tracker_device_type, registration
     /// - Always returns the device in one atomic operation
     ///
-    /// This avoids the no-op update overhead of get_or_insert_device_by_address
+    /// This avoids both no-op updates and separate update tasks for modified fields
     pub async fn device_for_fix(
         &self,
         address: i32,
@@ -186,7 +188,7 @@ impl DeviceRepository {
 
             // Extract tail number from ICAO address if it's a US aircraft
             // Use packet registration if available, otherwise try to extract from ICAO
-            let registration = packet_fields.registration.unwrap_or_else(|| {
+            let registration = packet_fields.registration.clone().unwrap_or_else(|| {
                 Device::extract_tail_number_from_icao(address as u32, address_type)
                     .unwrap_or_default()
             });
@@ -195,7 +197,7 @@ impl DeviceRepository {
                 address,
                 address_type,
                 aircraft_model: String::new(),
-                registration,
+                registration: registration.clone(),
                 competition_number: String::new(),
                 tracked: true,
                 identified: true,
@@ -206,15 +208,15 @@ impl DeviceRepository {
                 aircraft_type_ogn: packet_fields.aircraft_type,
                 last_fix_at: Some(fix_timestamp),
                 club_id: None,
-                icao_model_code: packet_fields.icao_model_code,
+                icao_model_code: packet_fields.icao_model_code.clone(),
                 adsb_emitter_category: packet_fields.adsb_emitter_category,
-                tracker_device_type: packet_fields.tracker_device_type,
+                tracker_device_type: packet_fields.tracker_device_type.clone(),
                 country_code,
             };
 
             // Use INSERT ... ON CONFLICT ... DO UPDATE RETURNING to atomically handle race conditions
-            // On conflict, update last_fix_at (always) and aircraft_type_ogn (if provided)
-            // This ensures we always have current fix time without creating unnecessary row versions
+            // On conflict, update all packet-derived fields atomically in one operation
+            // This eliminates the need for separate async update tasks
             let device_model = diesel::insert_into(devices::table)
                 .values(&new_device)
                 .on_conflict(devices::address)
@@ -222,6 +224,10 @@ impl DeviceRepository {
                 .set((
                     devices::last_fix_at.eq(fix_timestamp),
                     devices::aircraft_type_ogn.eq(packet_fields.aircraft_type),
+                    devices::icao_model_code.eq(packet_fields.icao_model_code),
+                    devices::adsb_emitter_category.eq(packet_fields.adsb_emitter_category),
+                    devices::tracker_device_type.eq(packet_fields.tracker_device_type),
+                    devices::registration.eq(registration),
                 ))
                 .get_result::<DeviceModel>(&mut conn)?;
 
