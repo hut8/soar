@@ -630,43 +630,6 @@
 
 			// Wait for map to be fully initialized before adding advanced markers
 			google.maps.event.addListenerOnce(map, 'idle', () => {
-				// Add small markers for each fix (white dots) with click/touch handlers
-				fixesInOrder.forEach((fix) => {
-					const fixDot = document.createElement('div');
-					fixDot.innerHTML = `
-						<div style="background-color: white; width: 6px; height: 6px; border-radius: 50%; border: 1px solid rgba(0,0,0,0.3); box-shadow: 0 0 2px rgba(0,0,0,0.5); cursor: pointer;"></div>
-					`;
-
-					const marker = new google.maps.marker.AdvancedMarkerElement({
-						map,
-						position: { lat: fix.latitude, lng: fix.longitude },
-						content: fixDot
-					});
-
-					// Add click/touch handler to show altitude info
-					marker.addListener('click', () => {
-						const mslAlt = fix.altitude_msl_feet ? Math.round(fix.altitude_msl_feet) : 'N/A';
-						const aglAlt = fix.altitude_agl_feet ? Math.round(fix.altitude_agl_feet) : 'N/A';
-						const timestamp = dayjs(fix.timestamp).format('h:mm:ss A');
-
-						const content = `
-						<div style="padding: 8px; min-width: 180px;">
-							<div style="font-weight: bold; margin-bottom: 6px;">${timestamp}</div>
-							<div style="display: flex; flex-direction: column; gap: 4px;">
-								<div><span style="color: #3b82f6; font-weight: 600;">MSL:</span> ${mslAlt} ft</div>
-								<div><span style="color: #10b981; font-weight: 600;">AGL:</span> ${aglAlt} ft</div>
-							</div>
-						</div>
-					`;
-
-						altitudeInfoWindow?.setContent(content);
-						altitudeInfoWindow?.setPosition({ lat: fix.latitude, lng: fix.longitude });
-						altitudeInfoWindow?.open(map);
-					});
-
-					fixMarkers.push(marker);
-				});
-
 				// Add takeoff marker (green) - first fix chronologically
 				if (fixesInOrder.length > 0) {
 					const first = fixesInOrder[0];
