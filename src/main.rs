@@ -458,44 +458,53 @@ async fn main() -> Result<()> {
 
     // Initialize Sentry for error tracking (errors only, no performance monitoring)
     let _guard = if let Ok(sentry_dsn) = env::var("SENTRY_DSN") {
-        info!("Initializing Sentry with DSN");
+        // Skip Sentry initialization if DSN is empty or invalid
+        if sentry_dsn.is_empty() {
+            info!("SENTRY_DSN is empty, Sentry disabled");
+            None
+        } else if let Ok(parsed_dsn) = sentry_dsn.parse() {
+            info!("Initializing Sentry with DSN");
 
-        // Use SENTRY_RELEASE env var if set (for deployed versions with commit SHA),
-        // otherwise fall back to CARGO_PKG_VERSION for local development
-        let release = env::var("SENTRY_RELEASE")
-            .ok()
-            .or_else(|| Some(env!("CARGO_PKG_VERSION").to_string()))
-            .map(Into::into);
+            // Use SENTRY_RELEASE env var if set (for deployed versions with commit SHA),
+            // otherwise fall back to CARGO_PKG_VERSION for local development
+            let release = env::var("SENTRY_RELEASE")
+                .ok()
+                .or_else(|| Some(env!("CARGO_PKG_VERSION").to_string()))
+                .map(Into::into);
 
-        if let Some(ref r) = release {
-            info!("Sentry release version: {}", r);
+            if let Some(ref r) = release {
+                info!("Sentry release version: {}", r);
+            }
+
+            Some(sentry::init(sentry::ClientOptions {
+                dsn: Some(parsed_dsn),
+                sample_rate: 0.05,       // Sample 5% of error events
+                traces_sample_rate: 0.1, // Sample 10% of performance traces (increased for better visibility)
+                attach_stacktrace: true,
+                release,
+                enable_logs: true,
+                environment: env::var("SOAR_ENV").ok().map(Into::into),
+                session_mode: sentry::SessionMode::Request,
+                auto_session_tracking: true,
+                // Note: Continuous profiling not available in sentry-rust 0.45.0
+                // Using increased traces_sample_rate for better performance visibility
+                before_send: Some(std::sync::Arc::new(
+                    move |event: sentry::protocol::Event<'static>| {
+                        // Always capture error-level events
+                        if event.level >= sentry::Level::Error {
+                            Some(event)
+                        } else {
+                            // For non-error events, only capture in production
+                            if is_production { Some(event) } else { None }
+                        }
+                    },
+                )),
+                ..Default::default()
+            }))
+        } else {
+            eprintln!("WARNING: Invalid SENTRY_DSN format, Sentry disabled");
+            None
         }
-
-        Some(sentry::init(sentry::ClientOptions {
-            dsn: Some(sentry_dsn.parse().expect("Invalid SENTRY_DSN format")),
-            sample_rate: 0.05,       // Sample 5% of error events
-            traces_sample_rate: 0.1, // Sample 10% of performance traces (increased for better visibility)
-            attach_stacktrace: true,
-            release,
-            enable_logs: true,
-            environment: env::var("SOAR_ENV").ok().map(Into::into),
-            session_mode: sentry::SessionMode::Request,
-            auto_session_tracking: true,
-            // Note: Continuous profiling not available in sentry-rust 0.45.0
-            // Using increased traces_sample_rate for better performance visibility
-            before_send: Some(std::sync::Arc::new(
-                move |event: sentry::protocol::Event<'static>| {
-                    // Always capture error-level events
-                    if event.level >= sentry::Level::Error {
-                        Some(event)
-                    } else {
-                        // For non-error events, only capture in production
-                        if is_production { Some(event) } else { None }
-                    }
-                },
-            )),
-            ..Default::default()
-        }))
     } else {
         if is_production {
             eprintln!("ERROR: SENTRY_DSN environment variable is required in production mode");
