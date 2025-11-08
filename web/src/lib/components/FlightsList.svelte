@@ -32,28 +32,27 @@
 	}
 
 	function calculateFlightDuration(
-		takeoff: string | null | undefined,
-		landing: string | null | undefined,
-		timedOut: string | null | undefined
+		createdAt: string | null | undefined,
+		latestFixTimestamp: string | null | undefined,
+		landing: string | null | undefined
 	): string {
-		// If no takeoff time, use created_at if available
-		const startTime = takeoff;
-		if (!startTime) return '—';
+		// Always use created_at as start time
+		if (!createdAt) return '—';
 
-		const takeoffTime = new Date(startTime).getTime();
+		const startTime = new Date(createdAt).getTime();
 		let endTime: number;
 
-		// Determine end time: landing, timeout, or now
+		// Determine end time: landing if complete, latest fix if active/timed out, or now
 		if (landing) {
 			endTime = new Date(landing).getTime();
-		} else if (timedOut) {
-			endTime = new Date(timedOut).getTime();
+		} else if (latestFixTimestamp) {
+			endTime = new Date(latestFixTimestamp).getTime();
 		} else {
-			// Still flying - use now
+			// No fixes yet - use now
 			endTime = new Date().getTime();
 		}
 
-		const durationMs = endTime - takeoffTime;
+		const durationMs = endTime - startTime;
 		const hours = Math.floor(durationMs / (1000 * 60 * 60));
 		const minutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
 		return `${hours}h ${minutes}m`;
@@ -313,9 +312,9 @@
 						{/if}
 						<td class="font-semibold">
 							{calculateFlightDuration(
-								flight.takeoff_time,
-								flight.landing_time,
-								flight.timed_out_at
+								flight.created_at,
+								flight.latest_fix_timestamp,
+								flight.landing_time
 							)}
 						</td>
 						<td class="font-semibold">
@@ -499,9 +498,9 @@
 						<span class="text-surface-500-400-token text-xs">Duration:</span>
 						<span class="font-semibold"
 							>{calculateFlightDuration(
-								flight.takeoff_time,
-								flight.landing_time,
-								flight.timed_out_at
+								flight.created_at,
+								flight.latest_fix_timestamp,
+								flight.landing_time
 							)}</span
 						>
 					</div>
