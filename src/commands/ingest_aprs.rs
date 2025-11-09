@@ -161,9 +161,8 @@ pub async fn handle_ingest_aprs(
 
     let mut client = AprsClient::new(config);
 
-    // Set up signal handling for graceful shutdown
-    info!("Setting up graceful shutdown handlers...");
-    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
+    // Set up signal handling for immediate shutdown
+    info!("Setting up shutdown handlers...");
 
     // Spawn signal handler task for both SIGINT and SIGTERM
     tokio::spawn(async move {
@@ -178,10 +177,10 @@ pub async fn handle_ingest_aprs(
 
             tokio::select! {
                 _ = sigterm.recv() => {
-                    info!("Received SIGTERM, initiating graceful shutdown...");
+                    info!("Received SIGTERM, exiting immediately...");
                 }
                 _ = sigint.recv() => {
-                    info!("Received SIGINT (Ctrl+C), initiating graceful shutdown...");
+                    info!("Received SIGINT (Ctrl+C), exiting immediately...");
                 }
             }
         }
@@ -190,7 +189,7 @@ pub async fn handle_ingest_aprs(
         {
             match tokio::signal::ctrl_c().await {
                 Ok(()) => {
-                    info!("Received SIGINT (Ctrl+C), initiating graceful shutdown...");
+                    info!("Received SIGINT (Ctrl+C), exiting immediately...");
                 }
                 Err(err) => {
                     error!("Failed to listen for SIGINT signal: {}", err);
@@ -199,7 +198,8 @@ pub async fn handle_ingest_aprs(
             }
         }
 
-        let _ = shutdown_tx.send(());
+        // Exit immediately without graceful shutdown
+        std::process::exit(0);
     });
 
     info!("Starting APRS client for ingestion...");
@@ -211,7 +211,7 @@ pub async fn handle_ingest_aprs(
     }
 
     client
-        .start_jetstream_with_shutdown(jetstream_publisher, shutdown_rx, health_state)
+        .start_jetstream(jetstream_publisher)
         .await
         .context("APRS ingestion client failed")?;
 
