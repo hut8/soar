@@ -98,8 +98,12 @@ impl AprsClient {
         shutdown_rx: tokio::sync::oneshot::Receiver<()>,
         health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::AprsIngestHealth>>,
     ) -> Result<()> {
-        let (internal_shutdown_tx, mut internal_shutdown_rx) =
-            tokio::sync::oneshot::channel::<()>();
+        // Use broadcast channel to send shutdown signal to both publisher and connection tasks
+        let (shutdown_broadcast_tx, _) = tokio::sync::broadcast::channel::<()>(1);
+        let shutdown_rx_for_publisher = shutdown_broadcast_tx.subscribe();
+        let shutdown_rx_for_connection = shutdown_broadcast_tx.subscribe();
+
+        let (internal_shutdown_tx, _internal_shutdown_rx) = tokio::sync::oneshot::channel::<()>();
         self.shutdown_tx = Some(internal_shutdown_tx);
 
         let config = self.config.clone();
@@ -111,9 +115,19 @@ impl AprsClient {
             RAW_MESSAGE_QUEUE_SIZE
         );
 
+        // Spawn a task to forward the external shutdown signal to the broadcast channel
+        let shutdown_forwarder = tokio::spawn({
+            let shutdown_broadcast_tx = shutdown_broadcast_tx.clone();
+            async move {
+                let _ = shutdown_rx.await;
+                info!("External shutdown signal received, broadcasting to all tasks");
+                let _ = shutdown_broadcast_tx.send(());
+            }
+        });
+
         // Spawn message publishing task
         let publisher = jetstream_publisher.clone();
-        let mut shutdown_rx_for_publisher = shutdown_rx;
+        let mut shutdown_rx_for_publisher = shutdown_rx_for_publisher;
         let publisher_handle = tokio::spawn(
             async move {
                 let mut stats_timer = tokio::time::interval(Duration::from_secs(10));
@@ -228,7 +242,7 @@ impl AprsClient {
                                 );
                             }
                         }
-                        Ok(_) = &mut shutdown_rx_for_publisher => {
+                        _ = shutdown_rx_for_publisher.recv() => {
                             info!("Shutdown signal received by publisher, flushing queue...");
 
                             // Start graceful shutdown - flush remaining messages with timeout
@@ -269,21 +283,36 @@ impl AprsClient {
 
         // Spawn connection management task (same as regular start)
         let health_for_connection = health_state.clone();
+        let mut shutdown_rx_for_connection = shutdown_rx_for_connection;
         let connection_handle = tokio::spawn(
             async move {
                 let mut retry_count = 0;
                 let mut current_delay = config.retry_delay_seconds;
 
                 loop {
-                    // Check if shutdown was requested
-                    if internal_shutdown_rx.try_recv().is_ok() {
-                        info!("Shutdown requested, stopping APRS JetStream ingestion");
-                        // Mark as disconnected in health state
-                        {
-                            let mut health = health_for_connection.write().await;
-                            health.aprs_connected = false;
+                    // Check if shutdown was requested (non-blocking check)
+                    match shutdown_rx_for_connection.try_recv() {
+                        Ok(_) | Err(tokio::sync::broadcast::error::TryRecvError::Closed) => {
+                            info!("Shutdown requested, stopping APRS JetStream ingestion immediately");
+                            // Mark as disconnected in health state
+                            {
+                                let mut health = health_for_connection.write().await;
+                                health.aprs_connected = false;
+                            }
+                            break;
                         }
-                        break;
+                        Err(tokio::sync::broadcast::error::TryRecvError::Empty) => {
+                            // No shutdown signal, continue
+                        }
+                        Err(tokio::sync::broadcast::error::TryRecvError::Lagged(_)) => {
+                            // We missed the shutdown signal (channel overflow), treat as shutdown
+                            info!("Shutdown signal detected (lagged), stopping APRS JetStream ingestion immediately");
+                            {
+                                let mut health = health_for_connection.write().await;
+                                health.aprs_connected = false;
+                            }
+                            break;
+                        }
                     }
 
                     if retry_count == 0 {
@@ -363,7 +392,22 @@ impl AprsClient {
                             "Waiting {} seconds before reconnecting... (retry attempt {})",
                             delay, retry_count
                         );
-                        sleep(Duration::from_secs(delay)).await;
+
+                        // Use tokio::select! to make the sleep interruptible by shutdown signal
+                        tokio::select! {
+                            _ = sleep(Duration::from_secs(delay)) => {
+                                // Sleep completed normally, continue to retry
+                            }
+                            _ = shutdown_rx_for_connection.recv() => {
+                                info!("Shutdown signal received during retry delay, cancelling reconnection");
+                                // Mark as disconnected in health state
+                                {
+                                    let mut health = health_for_connection.write().await;
+                                    health.aprs_connected = false;
+                                }
+                                break;
+                            }
+                        }
 
                         // Exponential backoff: start at 1 second, double each time, cap at 60 seconds
                         if current_delay == 0 {
@@ -377,12 +421,13 @@ impl AprsClient {
             .instrument(tracing::info_span!("jetstream_connection_loop")),
         );
 
-        // Wait for both tasks to complete (they run until shutdown or fatal error)
+        // Wait for all tasks to complete (they run until shutdown or fatal error)
         // If either task panics, we'll get an error here
-        let (publisher_result, connection_result) =
-            tokio::join!(publisher_handle, connection_handle);
+        let (shutdown_forwarder_result, publisher_result, connection_result) =
+            tokio::join!(shutdown_forwarder, publisher_handle, connection_handle);
 
-        // Check if either task panicked
+        // Check if any task panicked
+        shutdown_forwarder_result.context("Shutdown forwarder task panicked")?;
         publisher_result.context("JetStream publisher task panicked")?;
         connection_result.context("Connection management task panicked or stopped")?;
 

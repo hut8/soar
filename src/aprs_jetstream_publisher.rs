@@ -26,18 +26,12 @@ impl JetStreamPublisher {
     /// Publish a raw APRS message to JetStream
     ///
     /// This is called by the APRS client for each message received from APRS-IS
-    #[tracing::instrument(skip(self, message), fields(message_len = message.len()))]
     pub async fn publish(&self, message: &str) -> Result<()> {
-        // Track message type for debugging
+        // Track message type for metrics
         let is_server_message = message.starts_with('#');
         if is_server_message {
-            debug!("Publishing server message to JetStream: {}", message);
             metrics::counter!("aprs.jetstream.published.server").increment(1);
         } else {
-            debug!(
-                "Publishing APRS message to JetStream (first 50 chars): {}",
-                &message.chars().take(50).collect::<String>()
-            );
             metrics::counter!("aprs.jetstream.published.aprs").increment(1);
         }
 
@@ -66,6 +60,13 @@ impl JetStreamPublisher {
     pub async fn publish_with_retry(&self, message: &str) {
         const MAX_RETRIES: u32 = 3;
         const RETRY_DELAY_MS: u64 = 100;
+
+        // Log once at the start, not on each retry
+        debug!(
+            "Publishing message to JetStream (len={}, first 50 chars): {}",
+            message.len(),
+            &message.chars().take(50).collect::<String>()
+        );
 
         for attempt in 1..=MAX_RETRIES {
             match self.publish(message).await {
@@ -104,16 +105,11 @@ impl JetStreamPublisher {
     /// This maximizes throughput at the cost of not knowing if the message was persisted.
     /// Acceptable for high-volume streaming data where message loss during crashes is tolerable.
     pub async fn publish_fire_and_forget(&self, message: &str) {
-        // Track message type for debugging
+        // Track message type for metrics (no debug logging for high-volume fire-and-forget)
         let is_server_message = message.starts_with('#');
         if is_server_message {
-            debug!("Publishing server message to JetStream: {}", message);
             metrics::counter!("aprs.jetstream.published.server").increment(1);
         } else {
-            debug!(
-                "Publishing APRS message to JetStream (first 50 chars): {}",
-                &message.chars().take(50).collect::<String>()
-            );
             metrics::counter!("aprs.jetstream.published.aprs").increment(1);
         }
 
