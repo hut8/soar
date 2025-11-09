@@ -307,12 +307,25 @@
 <!-- Change Email Modal -->
 {#if showChangeEmailModal}
 	<div
+		role="button"
+		tabindex="0"
+		aria-label="Close change email modal"
 		class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
 		onclick={closeChangeEmailModal}
+		onkeydown={(e) => {
+			if (e.key === 'Enter' || e.key === ' ') {
+				closeChangeEmailModal();
+			}
+		}}
 	>
-		<div class="m-4 w-full max-w-md space-y-4 card p-6" onclick={(e) => e.stopPropagation()}>
+		<div
+			role="dialog"
+			aria-labelledby="change-email-heading"
+			class="m-4 w-full max-w-md space-y-4 card p-6"
+			onclick={(e) => e.stopPropagation()}
+		>
 			<div class="flex items-center justify-between">
-				<h2 class="text-xl font-bold">Change Email</h2>
+				<h2 id="change-email-heading" class="text-xl font-bold">Change Email</h2>
 				<button onclick={closeChangeEmailModal} class="preset-tonal-surface-500 btn btn-sm">
 					<X class="h-4 w-4" />
 				</button>
@@ -377,12 +390,25 @@
 <!-- Delete Account Modal -->
 {#if showDeleteAccountModal}
 	<div
+		role="button"
+		tabindex="0"
+		aria-label="Close delete account modal"
 		class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
 		onclick={closeDeleteAccountModal}
+		onkeydown={(e) => {
+			if (e.key === 'Enter' || e.key === ' ') {
+				closeDeleteAccountModal();
+			}
+		}}
 	>
-		<div class="m-4 w-full max-w-md space-y-4 card p-6" onclick={(e) => e.stopPropagation()}>
+		<div
+			role="dialog"
+			aria-labelledby="delete-account-heading"
+			class="m-4 w-full max-w-md space-y-4 card p-6"
+			onclick={(e) => e.stopPropagation()}
+		>
 			<div class="flex items-center justify-between">
-				<h2 class="text-xl font-bold text-error-500">Delete Account</h2>
+				<h2 id="delete-account-heading" class="text-xl font-bold text-error-500">Delete Account</h2>
 				<button onclick={closeDeleteAccountModal} class="preset-tonal-surface-500 btn btn-sm">
 					<X class="h-4 w-4" />
 				</button>
