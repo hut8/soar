@@ -351,21 +351,36 @@ impl Flight {
     /// Uses centripetal Catmull-Rom spline interpolation to account for aircraft
     /// turning behavior, providing more accurate distance than straight-line segments.
     /// Returns the distance in meters, or None if there are insufficient fixes.
+    ///
+    /// # Arguments
+    /// * `fixes_repo` - Repository for fetching fixes (only used if `cached_fixes` is None)
+    /// * `cached_fixes` - Optional pre-fetched fixes to use instead of querying the database
     pub async fn total_distance(
         &self,
         fixes_repo: &crate::fixes_repo::FixesRepository,
+        cached_fixes: Option<&[crate::Fix]>,
     ) -> Result<Option<f64>> {
-        let start_time = self.takeoff_time.unwrap_or(self.created_at);
-        let end_time = self.landing_time.unwrap_or(self.last_fix_at);
+        // Use cached fixes if provided, otherwise fetch from database
+        let fixes = if let Some(cached) = cached_fixes {
+            cached.to_vec()
+        } else {
+            let start_time = self.takeoff_time.unwrap_or(self.created_at);
+            let end_time = self.landing_time.unwrap_or(self.last_fix_at);
 
-        let fixes = fixes_repo
-            .get_fixes_for_aircraft_with_time_range(
-                &self.device_id.unwrap_or(Uuid::nil()),
-                start_time,
-                end_time,
-                None,
-            )
-            .await?;
+            // get_fixes_for_aircraft_with_time_range returns Vec<FixWithRawPacket>
+            // Extract just the Fix objects
+            fixes_repo
+                .get_fixes_for_aircraft_with_time_range(
+                    &self.device_id.unwrap_or(Uuid::nil()),
+                    start_time,
+                    end_time,
+                    None,
+                )
+                .await?
+                .into_iter()
+                .map(|fix_with_packet| fix_with_packet.fix)
+                .collect()
+        };
 
         if fixes.len() < 2 {
             return Ok(None);
@@ -424,10 +439,16 @@ impl Flight {
     /// Only applicable if the departure and arrival airports are the same (i.e., a local flight)
     /// Uses spline interpolation to check the entire flight path, not just the GPS fix points.
     /// Returns the maximum distance in meters from the departure airport, or None if not applicable
+    ///
+    /// # Arguments
+    /// * `fixes_repo` - Repository for fetching fixes (only used if `cached_fixes` is None)
+    /// * `airports_repo` - Repository for fetching airport information
+    /// * `cached_fixes` - Optional pre-fetched fixes to use instead of querying the database
     pub async fn maximum_displacement(
         &self,
         fixes_repo: &crate::fixes_repo::FixesRepository,
         airports_repo: &crate::airports_repo::AirportsRepository,
+        cached_fixes: Option<&[crate::Fix]>,
     ) -> Result<Option<f64>> {
         // Only applicable for flights where departure == arrival
         if self.departure_airport_id.is_none()
@@ -452,17 +473,27 @@ impl Flight {
             _ => return Ok(None),
         };
 
-        let start_time = self.takeoff_time.unwrap_or(self.created_at);
-        let end_time = self.landing_time.unwrap_or(self.last_fix_at);
+        // Use cached fixes if provided, otherwise fetch from database
+        let fixes = if let Some(cached) = cached_fixes {
+            cached.to_vec()
+        } else {
+            let start_time = self.takeoff_time.unwrap_or(self.created_at);
+            let end_time = self.landing_time.unwrap_or(self.last_fix_at);
 
-        let fixes = fixes_repo
-            .get_fixes_for_aircraft_with_time_range(
-                &self.device_id.unwrap_or(Uuid::nil()),
-                start_time,
-                end_time,
-                None,
-            )
-            .await?;
+            // get_fixes_for_aircraft_with_time_range returns Vec<FixWithRawPacket>
+            // Extract just the Fix objects
+            fixes_repo
+                .get_fixes_for_aircraft_with_time_range(
+                    &self.device_id.unwrap_or(Uuid::nil()),
+                    start_time,
+                    end_time,
+                    None,
+                )
+                .await?
+                .into_iter()
+                .map(|fix_with_packet| fix_with_packet.fix)
+                .collect()
+        };
 
         if fixes.is_empty() {
             return Ok(None);

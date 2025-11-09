@@ -160,6 +160,14 @@ pub(crate) async fn complete_flight(
     flight_id: Uuid,
     fix: &Fix,
 ) -> Result<bool> {
+    // OPTIMIZATION: Fetch ALL fixes for this flight ONCE at the beginning
+    // This single fetch is reused for:
+    // 1. Spurious flight detection
+    // 2. Total distance calculation
+    // 3. Maximum displacement calculation
+    // Previously, we were fetching fixes 3 separate times, causing 9+ second delays for long flights
+    let flight_fixes = ctx.fixes_repo.get_fixes_for_flight(flight_id, None).await?;
+
     let arrival_airport_id =
         find_nearby_airport(ctx.airports_repo, fix.latitude, fix.longitude).await;
 
@@ -199,9 +207,9 @@ pub(crate) async fn complete_flight(
     };
 
     // Check if this is a spurious flight (too short or no altitude variation)
+    // Use pre-fetched flight_fixes instead of fetching again
     if let Some(takeoff_time) = flight.takeoff_time {
         let duration_seconds = (fix.timestamp - takeoff_time).num_seconds();
-        let flight_fixes = ctx.fixes_repo.get_fixes_for_flight(flight_id, None).await?;
 
         let altitude_range = if !flight_fixes.is_empty() {
             let altitudes: Vec<i32> = flight_fixes
@@ -336,12 +344,16 @@ pub(crate) async fn complete_flight(
         }
     }
 
-    // Calculate total distance flown
-    let total_distance_meters = flight.total_distance(ctx.fixes_repo).await.ok().flatten();
+    // Calculate total distance flown (using cached fixes for performance)
+    let total_distance_meters = flight
+        .total_distance(ctx.fixes_repo, Some(&flight_fixes))
+        .await
+        .ok()
+        .flatten();
 
-    // Calculate maximum displacement
+    // Calculate maximum displacement (using cached fixes for performance)
     let maximum_displacement_meters = flight
-        .maximum_displacement(ctx.fixes_repo, ctx.airports_repo)
+        .maximum_displacement(ctx.fixes_repo, ctx.airports_repo, Some(&flight_fixes))
         .await
         .ok()
         .flatten();
