@@ -517,32 +517,65 @@ impl ClubsRepository {
 
     /// Get clubs based at a specific airport
     pub async fn get_clubs_by_airport(&self, airport_id: i32) -> Result<Vec<Club>> {
+        use crate::schema::{airports, clubs, locations};
+
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            let sql = r#"
-                SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, c.location_id,
-                       l.street1, l.street2, l.city, l.state, l.zip_code, l.region_code,
-                       l.country_mail_code,
-                       (l.geolocation)[0]::numeric as longitude,
-                       (l.geolocation)[1]::numeric as latitude,
-                       c.created_at, c.updated_at
-                FROM clubs c
-                LEFT JOIN locations l ON c.location_id = l.id
-                WHERE c.home_base_airport_id = $1
-                ORDER BY c.name
-            "#;
+            // Use Diesel's query builder to join clubs with locations and airports
+            let query_result: Vec<(
+                crate::clubs::ClubModel,
+                Option<crate::locations::LocationModel>,
+                Option<String>,
+            )> = clubs::table
+                .left_join(locations::table.on(clubs::location_id.eq(locations::id.nullable())))
+                .left_join(
+                    airports::table.on(clubs::home_base_airport_id.eq(airports::id.nullable())),
+                )
+                .filter(clubs::home_base_airport_id.eq(airport_id))
+                .select((
+                    clubs::all_columns,
+                    locations::all_columns.nullable(),
+                    airports::ident.nullable(),
+                ))
+                .order(clubs::name)
+                .load::<(
+                    crate::clubs::ClubModel,
+                    Option<crate::locations::LocationModel>,
+                    Option<String>,
+                )>(&mut conn)?;
 
-            let clubs: Vec<ClubWithLocation> = diesel::sql_query(sql)
-                .bind::<diesel::sql_types::Integer, _>(airport_id)
-                .load::<ClubWithLocation>(&mut conn)?;
+            // Map to Club structs
+            let clubs: Vec<Club> = query_result
+                .into_iter()
+                .map(|(club_model, location_model, airport_ident)| {
+                    let mut club: Club = club_model.into();
 
-            Ok::<Vec<ClubWithLocation>, anyhow::Error>(clubs)
+                    // Add airport ident
+                    club.home_base_airport_ident = airport_ident;
+
+                    // Add location data if available
+                    if let Some(location) = location_model {
+                        club.street1 = location.street1;
+                        club.street2 = location.street2;
+                        club.city = location.city;
+                        club.state = location.state;
+                        club.zip_code = location.zip_code;
+                        club.region_code = location.region_code;
+                        club.country_mail_code = location.country_mail_code;
+                        club.base_location = location.geolocation;
+                    }
+
+                    club
+                })
+                .collect();
+
+            Ok::<Vec<Club>, anyhow::Error>(clubs)
         })
         .await??;
 
-        Ok(result.into_iter().map(|cwl| cwl.into()).collect())
+        Ok(result)
     }
 
     /// Update the home base airport ID for a club
