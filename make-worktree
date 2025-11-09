@@ -76,15 +76,10 @@ echo ""
 # Copy or build Rust project artifacts
 echo -e "${BLUE}[4/4]${NC} ${BOLD}Setting up Rust build artifacts...${NC}"
 cd "$WORKTREE_DIR"
-if [ -d "$SCRIPT_DIR/target" ]; then
-    echo -e "${CYAN}Copying target directory from source worktree...${NC}"
-    cp -r "$SCRIPT_DIR/target" "$WORKTREE_DIR/"
-    echo -e "${GREEN}✓ Target directory copied${NC}"
-else
-    echo -e "${CYAN}No target directory found, building Rust project (pre-caching artifacts)...${NC}"
-    cargo build
-    echo -e "${GREEN}✓ Cargo build complete${NC}"
-fi
+echo -e "${CYAN}No target directory found, building Rust project (pre-caching artifacts)...${NC}"
+export RUSTC_WRAPPER=$(command -v sccache)
+cargo build
+echo -e "${GREEN}✓ Cargo build complete${NC}"
 echo ""
 
 echo -e "${GREEN}${BOLD}✓ Worktree setup complete!${NC}"

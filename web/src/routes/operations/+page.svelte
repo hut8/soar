@@ -1501,23 +1501,14 @@
 			console.log(`[REST] Received ${devicesWithFixes.length} devices`);
 
 			// Process each device and add to registry
+			// The backend now includes the last 10 fixes per device, so we don't need
+			// to make additional API calls for trail data
 			for (const aircraft of devicesWithFixes) {
-				// First, register the aircraft (includes device info and most recent fix)
-				// This prevents individual API calls when adding fixes
+				// Register the aircraft with all its fixes
 				await deviceRegistry.updateDeviceFromAircraft(aircraft);
-
-				// Now load additional fixes within the position fix window for trail display
-				// This is done asynchronously after initial device display
-				if (aircraft.id && currentSettings.positionFixWindow > 0) {
-					deviceRegistry
-						.loadRecentFixesFromAPI(aircraft.id, currentSettings.positionFixWindow)
-						.catch((error) => {
-							console.warn(`[REST] Failed to load fixes for device ${aircraft.id}:`, error);
-						});
-				}
 			}
 
-			console.log('[REST] Devices loaded, loading additional fixes for trails...');
+			console.log('[REST] Devices loaded with fixes from backend');
 		} catch (error) {
 			console.error('[REST] Failed to fetch devices in viewport:', error);
 		}
