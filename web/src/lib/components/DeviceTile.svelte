@@ -1,7 +1,11 @@
 <script lang="ts">
 	import { Radio, Plane, Antenna, Check, X, Activity } from '@lucide/svelte';
 	import { resolve } from '$app/paths';
-	import { getAircraftTypeOgnDescription, getAircraftTypeColor } from '$lib/formatters';
+	import {
+		getAircraftTypeOgnDescription,
+		getAircraftTypeColor,
+		getDeviceTitle
+	} from '$lib/formatters';
 	import type { Device } from '$lib/types';
 
 	let { device }: { device: Device } = $props();
@@ -13,6 +17,7 @@
 		<div class="mb-4 flex items-start justify-between">
 			<div class="flex items-center gap-2">
 				<Radio class="h-5 w-5 text-primary-500" />
+				<h3 class="text-lg font-semibold">{getDeviceTitle(device)}</h3>
 			</div>
 		</div>
 

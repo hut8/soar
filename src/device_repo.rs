@@ -289,10 +289,53 @@ impl DeviceRepository {
     }
 
     /// Get recent devices with a limit, ordered by last_fix_at (most recently heard from)
-    pub async fn get_recent_devices(&self, limit: i64) -> Result<Vec<Device>> {
+    /// Optionally filter by aircraft types
+    pub async fn get_recent_devices(
+        &self,
+        limit: i64,
+        aircraft_types: Option<Vec<String>>,
+    ) -> Result<Vec<Device>> {
+        use diesel::ExpressionMethods;
+
         let mut conn = self.get_connection()?;
-        let device_models = devices::table
+
+        let mut query = devices::table
             .filter(devices::last_fix_at.is_not_null())
+            .into_boxed();
+
+        // Apply aircraft type filter if provided
+        if let Some(types) = aircraft_types
+            && !types.is_empty()
+        {
+            // Convert string aircraft types to AircraftType enum values
+            let aircraft_type_enums: Vec<crate::ogn_aprs_aircraft::AircraftType> = types
+                .iter()
+                .filter_map(|t| match t.as_str() {
+                    "glider" => Some(AircraftType::Glider),
+                    "tow_tug" => Some(AircraftType::TowTug),
+                    "helicopter_gyro" => Some(AircraftType::HelicopterGyro),
+                    "skydiver_parachute" => Some(AircraftType::SkydiverParachute),
+                    "drop_plane" => Some(AircraftType::DropPlane),
+                    "hang_glider" => Some(AircraftType::HangGlider),
+                    "paraglider" => Some(AircraftType::Paraglider),
+                    "recip_engine" => Some(AircraftType::RecipEngine),
+                    "jet_turboprop" => Some(AircraftType::JetTurboprop),
+                    "unknown" => Some(AircraftType::Unknown),
+                    "balloon" => Some(AircraftType::Balloon),
+                    "airship" => Some(AircraftType::Airship),
+                    "uav" => Some(AircraftType::Uav),
+                    "static_obstacle" => Some(AircraftType::StaticObstacle),
+                    "reserved" => Some(AircraftType::Reserved),
+                    _ => None,
+                })
+                .collect();
+
+            if !aircraft_type_enums.is_empty() {
+                query = query.filter(devices::aircraft_type_ogn.eq_any(aircraft_type_enums));
+            }
+        }
+
+        let device_models = query
             .order(devices::last_fix_at.desc())
             .limit(limit)
             .load::<DeviceModel>(&mut conn)?;
