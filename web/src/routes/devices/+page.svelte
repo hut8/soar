@@ -1,30 +1,55 @@
 <script lang="ts">
-	import { Search, Radio, Plane, Antenna, Building2, Activity } from '@lucide/svelte';
+	import { Search, Radio, Plane, Antenna, Building2, Activity, Filter } from '@lucide/svelte';
 	import { SegmentedControl } from '@skeletonlabs/skeleton-svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { serverCall } from '$lib/api/server';
 	import ClubSelector from '$lib/components/ClubSelector.svelte';
 	import DeviceTile from '$lib/components/DeviceTile.svelte';
 	import { onMount } from 'svelte';
 	import type { Device } from '$lib/types';
 
-	let devices: Device[] = [];
-	let loading = false;
-	let error = '';
-	let searchQuery = '';
-	let searchType: 'registration' | 'device' | 'club' = 'registration';
-	let deviceAddressType = 'I'; // ICAO, OGN, FLARM
+	let devices = $state<Device[]>([]);
+	let loading = $state(false);
+	let error = $state('');
+	let searchQuery = $state('');
+	let searchType = $state<'registration' | 'device' | 'club'>('registration');
+	let deviceAddressType = $state('I'); // ICAO, OGN, FLARM
+
+	// Aircraft type filter state (for recently active devices only)
+	let selectedAircraftTypes = new SvelteSet<string>();
+
+	// Available aircraft types for filtering
+	const aircraftTypes = [
+		{ value: 'glider', label: 'Glider' },
+		{ value: 'tow_tug', label: 'Tow/Tug' },
+		{ value: 'recip_engine', label: 'Reciprocating Engine' },
+		{ value: 'jet_turboprop', label: 'Jet/Turboprop' },
+		{ value: 'helicopter_gyro', label: 'Helicopter/Gyro' },
+		{ value: 'paraglider', label: 'Paraglider' },
+		{ value: 'hang_glider', label: 'Hang Glider' },
+		{ value: 'skydiver_parachute', label: 'Skydiver/Parachute' },
+		{ value: 'drop_plane', label: 'Drop Plane' },
+		{ value: 'balloon', label: 'Balloon' },
+		{ value: 'airship', label: 'Airship' },
+		{ value: 'uav', label: 'UAV' },
+		{ value: 'static_obstacle', label: 'Static Obstacle' }
+	];
 
 	// Pagination state
-	let currentPage = 0;
+	let currentPage = $state(0);
 	let pageSize = 50;
-	$: totalPages = Math.ceil(devices.length / pageSize);
-	$: paginatedDevices = devices.slice(currentPage * pageSize, (currentPage + 1) * pageSize);
+
+	// Pagination - no filtering on frontend, backend handles it
+	let totalPages = $derived(Math.ceil(devices.length / pageSize));
+	let paginatedDevices = $derived(
+		devices.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
+	);
 
 	// Club search state
-	let selectedClub: string[] = [];
-	let clubDevices: Device[] = [];
-	let clubSearchInProgress = false;
-	let clubErrorMessage = '';
+	let selectedClub = $state<string[]>([]);
+	let clubDevices = $state<Device[]>([]);
+	let clubSearchInProgress = $state(false);
+	let clubErrorMessage = $state('');
 
 	async function loadRecentDevices() {
 		loading = true;
@@ -32,7 +57,14 @@
 		currentPage = 0;
 
 		try {
-			const response = await serverCall<{ devices: Device[] }>('/devices');
+			// Build query parameters
+			let endpoint = '/devices';
+			if (selectedAircraftTypes.size > 0) {
+				const typesParam = Array.from(selectedAircraftTypes).join(',');
+				endpoint += `?aircraft-types=${encodeURIComponent(typesParam)}`;
+			}
+
+			const response = await serverCall<{ devices: Device[] }>(endpoint);
 			devices = response.devices || [];
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
@@ -141,6 +173,22 @@
 		if (page >= 0 && page < totalPages) {
 			currentPage = page;
 		}
+	}
+
+	function toggleAircraftType(type: string) {
+		if (selectedAircraftTypes.has(type)) {
+			selectedAircraftTypes.delete(type);
+		} else {
+			selectedAircraftTypes.add(type);
+		}
+		currentPage = 0; // Reset to first page when filter changes
+		loadRecentDevices(); // Reload from backend with new filter
+	}
+
+	function clearAircraftTypeFilter() {
+		selectedAircraftTypes.clear();
+		currentPage = 0;
+		loadRecentDevices(); // Reload from backend without filter
 	}
 
 	// Don't load devices automatically on mount - wait for user search
@@ -426,36 +474,50 @@
 		</div>
 	</section>
 
+	<!-- Aircraft Type Filter (only for recently active devices) -->
+	{#if !searchQuery && searchType !== 'club' && !loading}
+		<section class="space-y-4 card p-6">
+			<div class="mb-3 flex items-center justify-between">
+				<h3 class="flex items-center gap-2 text-lg font-semibold">
+					<Filter class="h-5 w-5" />
+					Filter by Aircraft Type
+				</h3>
+				{#if selectedAircraftTypes.size > 0}
+					<button class="btn preset-filled-surface-500 btn-sm" onclick={clearAircraftTypeFilter}>
+						Clear Filter
+					</button>
+				{/if}
+			</div>
+			<div class="flex flex-wrap gap-2">
+				{#each aircraftTypes as type (type.value)}
+					<button
+						class="badge text-xs transition-all {selectedAircraftTypes.has(type.value)
+							? 'preset-filled-primary-500'
+							: 'preset-tonal-surface-500'}"
+						onclick={() => toggleAircraftType(type.value)}
+					>
+						{type.label}
+					</button>
+				{/each}
+			</div>
+		</section>
+	{/if}
+
 	<!-- Results Cards -->
 	{#if !loading && devices.length > 0}
 		<section class="space-y-4">
 			<!-- Results Header -->
 			<div class="flex items-center justify-between">
-				<div>
-					<h2 class="h2">
-						{#if !searchQuery && searchType !== 'club'}
-							<div class="flex items-center gap-2">
-								<Activity class="h-6 w-6" />
-								Recently Active Devices
-							</div>
-						{:else}
-							Search Results
-						{/if}
-					</h2>
-					<p class="text-surface-500-400-token">
-						{#if !searchQuery && searchType !== 'club'}
-							{devices.length} device{devices.length === 1 ? '' : 's'} heard from recently
-						{:else}
-							{devices.length} device{devices.length === 1 ? '' : 's'} found
-						{/if}
-						{#if totalPages > 1}
-							(showing {currentPage * pageSize + 1}-{Math.min(
-								(currentPage + 1) * pageSize,
-								devices.length
-							)})
-						{/if}
-					</p>
-				</div>
+				<h2 class="h2">
+					{#if !searchQuery && searchType !== 'club'}
+						<div class="flex items-center gap-2">
+							<Activity class="h-6 w-6" />
+							Recently Active Devices
+						</div>
+					{:else}
+						Search Results
+					{/if}
+				</h2>
 			</div>
 
 			<!-- Device Cards Grid -->

@@ -68,6 +68,9 @@ pub struct DeviceSearchQuery {
     pub longitude_max: Option<f64>,
     /// Optional cutoff time for fixes (ISO 8601 format)
     pub after: Option<DateTime<Utc>>,
+    /// Optional aircraft types filter (comma-separated list, e.g., "glider,tow_tug")
+    #[serde(rename = "aircraft-types")]
+    pub aircraft_types: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -353,7 +356,7 @@ pub async fn search_devices(
             }
             (None, None, None) => {
                 // No search criteria - return 10 most recently heard from devices
-                get_recent_devices_response(state.pool).await.into_response()
+                get_recent_devices_response(state.pool, query.aircraft_types).await.into_response()
             }
             _ => json_error(
                 StatusCode::BAD_REQUEST,
@@ -365,10 +368,25 @@ pub async fn search_devices(
 }
 
 /// Get 10 most recently heard from devices
-async fn get_recent_devices_response(pool: crate::web::PgPool) -> impl IntoResponse {
+async fn get_recent_devices_response(
+    pool: crate::web::PgPool,
+    aircraft_types: Option<String>,
+) -> impl IntoResponse {
     let device_repo = DeviceRepository::new(pool);
 
-    match device_repo.get_recent_devices(10).await {
+    // Parse aircraft types from comma-separated string
+    let aircraft_type_filters = aircraft_types.as_ref().map(|types_str| {
+        types_str
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<String>>()
+    });
+
+    match device_repo
+        .get_recent_devices(10, aircraft_type_filters)
+        .await
+    {
         Ok(devices) => {
             let device_views: Vec<DeviceView> = devices.into_iter().map(|d| d.into()).collect();
             Json(DeviceSearchResponse {
