@@ -1,7 +1,8 @@
 import { browser, dev } from '$app/environment';
 import type { Aircraft, Fix } from '$lib/types';
 import { DeviceRegistry } from './DeviceRegistry';
-import { FORCE_PRODUCTION_BACKEND } from '$lib/api/server';
+import { backendMode } from '$lib/stores/backend';
+import { get } from 'svelte/store';
 
 // Event types for subscribers
 export type FixFeedEvent =
@@ -79,16 +80,20 @@ export class FixFeed {
 	private initializeWebSocketUrl(): void {
 		if (!browser) return;
 
-		if (dev && !FORCE_PRODUCTION_BACKEND) {
-			// Dev mode with local backend
-			this.websocketUrl = 'ws://localhost:1337/data/fixes/live';
-		} else if (dev && FORCE_PRODUCTION_BACKEND) {
-			// Dev mode forcing production backend
-			this.websocketUrl = 'wss://glider.flights/data/fixes/live';
-		} else {
+		if (!dev) {
 			// Production mode - use current host
 			const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
 			this.websocketUrl = `${protocol}//${window.location.host}/data/fixes/live`;
+		} else {
+			// Development mode - check backend mode setting
+			const mode = get(backendMode);
+			if (mode === 'dev') {
+				// Dev mode with local backend
+				this.websocketUrl = 'ws://localhost:1337/data/fixes/live';
+			} else {
+				// Dev mode using production backend
+				this.websocketUrl = 'wss://glider.flights/data/fixes/live';
+			}
 		}
 	}
 

@@ -619,7 +619,7 @@ impl Flight {
             elements.push(Kml::Placemark(placemark));
         }
 
-        // Takeoff point
+        // Takeoff or detected point
         if let Some(first_fix) = fixes.first() {
             let altitude_meters = first_fix
                 .altitude_msl_feet
@@ -637,12 +637,25 @@ impl Flight {
                 attrs: HashMap::new(),
             };
 
+            // Use "Detected" if no takeoff time (flight was first seen airborne)
+            let (name, description) = if self.takeoff_time.is_some() {
+                (
+                    "Takeoff".to_string(),
+                    format!("Takeoff at {} UTC", start_time.format("%Y-%m-%d %H:%M:%S")),
+                )
+            } else {
+                (
+                    "Detected".to_string(),
+                    format!(
+                        "Flight first detected at {} UTC (already airborne)",
+                        start_time.format("%Y-%m-%d %H:%M:%S")
+                    ),
+                )
+            };
+
             let placemark = Placemark {
-                name: Some("Takeoff".to_string()),
-                description: Some(format!(
-                    "Takeoff at {} UTC",
-                    start_time.format("%Y-%m-%d %H:%M:%S")
-                )),
+                name: Some(name),
+                description: Some(description),
                 geometry: Some(kml::types::Geometry::Point(point)),
                 style_url: Some("#takeoffStyle".to_string()),
                 attrs: HashMap::new(),
@@ -651,8 +664,8 @@ impl Flight {
             elements.push(Kml::Placemark(placemark));
         }
 
-        // Landing point (if flight is complete)
-        if self.landing_time.is_some()
+        // Landing or signal lost point (if flight is complete or timed out)
+        if (self.landing_time.is_some() || self.timed_out_at.is_some())
             && let Some(last_fix) = fixes.last()
         {
             let altitude_meters = last_fix
@@ -671,12 +684,25 @@ impl Flight {
                 attrs: HashMap::new(),
             };
 
+            // Use "Signal Lost" if timed out, otherwise "Landing"
+            let (name, description) = if self.timed_out_at.is_some() {
+                (
+                    "Signal Lost".to_string(),
+                    format!(
+                        "Last signal received at {} UTC (flight timed out after 1+ hour without updates)",
+                        end_time.format("%Y-%m-%d %H:%M:%S")
+                    ),
+                )
+            } else {
+                (
+                    "Landing".to_string(),
+                    format!("Landing at {} UTC", end_time.format("%Y-%m-%d %H:%M:%S")),
+                )
+            };
+
             let placemark = Placemark {
-                name: Some("Landing".to_string()),
-                description: Some(format!(
-                    "Landing at {} UTC",
-                    end_time.format("%Y-%m-%d %H:%M:%S")
-                )),
+                name: Some(name),
+                description: Some(description),
                 geometry: Some(kml::types::Geometry::Point(point)),
                 style_url: Some("#landingStyle".to_string()),
                 attrs: HashMap::new(),
