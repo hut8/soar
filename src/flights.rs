@@ -383,6 +383,43 @@ impl Flight {
         Ok(Some(distance))
     }
 
+    /// Generate a human-readable aircraft identifier for display
+    /// Priority: 1) Model + Registration, 2) Registration only, 3) Model only, 4) ICAO-XXYYZZ format
+    fn get_aircraft_identifier(&self, device: Option<&crate::devices::Device>) -> String {
+        if let Some(device) = device {
+            let has_model = !device.aircraft_model.is_empty();
+            let has_registration = !device.registration.is_empty();
+
+            match (has_model, has_registration) {
+                (true, true) => {
+                    // Both model and registration available: "Piper Pacer N8437D"
+                    format!("{} {}", device.aircraft_model, device.registration)
+                }
+                (false, true) => {
+                    // Only registration: "N8437D"
+                    device.registration.clone()
+                }
+                (true, false) => {
+                    // Only model: "Piper Pacer"
+                    device.aircraft_model.clone()
+                }
+                (false, false) => {
+                    // Neither available, fall back to ICAO-XXYYZZ format
+                    let type_prefix = match device.address_type {
+                        crate::devices::AddressType::Icao => "ICAO",
+                        crate::devices::AddressType::Flarm => "FLARM",
+                        crate::devices::AddressType::Ogn => "OGN",
+                        crate::devices::AddressType::Unknown => "Unknown",
+                    };
+                    format!("{}-{}", type_prefix, device.device_address_hex())
+                }
+            }
+        } else {
+            // No device info, use the flight's device_address
+            self.device_address.clone()
+        }
+    }
+
     /// Calculate the maximum displacement from the departure airport
     /// Only applicable if the departure and arrival airports are the same (i.e., a local flight)
     /// Uses spline interpolation to check the entire flight path, not just the GPS fix points.
@@ -456,6 +493,7 @@ impl Flight {
     pub async fn make_kml(
         &self,
         fixes_repo: &crate::fixes_repo::FixesRepository,
+        device: Option<&crate::devices::Device>,
     ) -> Result<String> {
         use kml::types::{
             AltitudeMode, Coord, IconStyle, LineString, LineStyle, Placemark, Point, Style,
@@ -602,7 +640,7 @@ impl Flight {
             // Create LineString segment
             let line_string = LineString {
                 coords,
-                extrude: true,
+                extrude: false,
                 tessellate: true,
                 altitude_mode: AltitudeMode::Absolute,
                 attrs: HashMap::new(),
@@ -712,11 +750,11 @@ impl Flight {
         }
 
         // Create the document with name and description in attrs
-        let flight_name = format!("Flight {}", self.device_address);
-        let aircraft_reg = &self.device_address;
+        let aircraft_identifier = self.get_aircraft_identifier(device);
+        let flight_name = format!("Flight {}", aircraft_identifier);
         let description = format!(
             "Flight track for aircraft {} from {} to {}",
-            aircraft_reg,
+            aircraft_identifier,
             start_time.format("%Y-%m-%d %H:%M:%S UTC"),
             end_time.format("%Y-%m-%d %H:%M:%S UTC")
         );
