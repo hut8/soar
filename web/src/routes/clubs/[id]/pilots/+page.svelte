@@ -249,11 +249,13 @@
 		<div
 			class="m-4 w-full max-w-md space-y-4 card p-6"
 			onclick={(e) => e.stopPropagation()}
+			onkeydown={(e) => e.stopPropagation()}
 			role="dialog"
+			aria-labelledby="add-pilot-heading"
 			tabindex="-1"
 		>
 			<div class="flex items-center justify-between">
-				<h2 class="text-xl font-bold">Add Pilot</h2>
+				<h2 id="add-pilot-heading" class="text-xl font-bold">Add Pilot</h2>
 				<button onclick={closeAddModal} class="preset-tonal-surface-500 btn btn-sm">
 					<X class="h-4 w-4" />
 				</button>

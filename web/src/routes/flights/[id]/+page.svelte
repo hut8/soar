@@ -20,7 +20,8 @@
 		Info,
 		ExternalLink,
 		MountainSnow,
-		Clock
+		Clock,
+		Expand
 	} from '@lucide/svelte';
 	import type { PageData } from './$types';
 	import type { Flight } from '$lib/types';
@@ -491,8 +492,8 @@
 					// Create SVG arrow element
 					const arrowSvg = document.createElement('div');
 					arrowSvg.innerHTML = `
-						<svg width="16" height="16" viewBox="0 0 16 16" style="transform: rotate(${bearing}deg); filter: drop-shadow(0 0 2px rgba(0,0,0,0.5)); cursor: pointer;">
-							<path d="M8 2 L14 14 L8 11 L2 14 Z" fill="${color}" stroke="rgba(0,0,0,0.3)" stroke-width="1"/>
+						<svg width="6" height="6" viewBox="0 0 16 16" style="transform: rotate(${bearing}deg); filter: drop-shadow(0 0 1px rgba(0,0,0,0.5)); cursor: pointer;">
+							<path d="M8 2 L14 14 L8 11 L2 14 Z" fill="${color}" stroke="rgba(0,0,0,0.3)" stroke-width="0.4"/>
 						</svg>
 					`;
 
@@ -1160,7 +1161,16 @@
 	{#if data.fixes.length > 0}
 		<div class="card p-4">
 			<div class="mb-3 flex items-center justify-between">
-				<h2 class="h3">Flight Track</h2>
+				<div class="flex items-center gap-3">
+					<h2 class="h3">Flight Track</h2>
+					<a
+						href="/flights/{data.flight.id}/map"
+						class="variant-soft-primary btn flex items-center gap-1 btn-sm"
+					>
+						<Expand class="h-3 w-3" />
+						<span>Full Screen</span>
+					</a>
+				</div>
 				<label class="flex cursor-pointer items-center gap-2">
 					<input
 						type="checkbox"
