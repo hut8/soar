@@ -1,6 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
+	// Global setup to seed test database before running tests
+	globalSetup: process.env.CI ? undefined : './playwright.global-setup.ts',
+
 	// Test directory
 	testDir: 'e2e',
 
@@ -58,10 +61,10 @@ export default defineConfig({
 				{
 					// Start Rust backend server with test database
 					command:
-						'DATABASE_URL=postgres://postgres:postgres@localhost:5432/soar_test NATS_URL=nats://localhost:4222 ../target/release/soar web --port 61225 --interface localhost',
-					port: 61225,
+						'JWT_SECRET=test-jwt-secret-for-e2e-tests SOAR_ENV=test DATABASE_URL=postgres://postgres:postgres@localhost:5432/soar_test NATS_URL=nats://localhost:4222 ../target/release/soar web --port 61226 --interface localhost',
+					port: 61226,
 					timeout: 120000, // 2 minutes for backend startup
-					reuseExistingServer: true,
+					reuseExistingServer: true, // Can reuse since globalSetup seeds database first
 					env: {
 						DATABASE_URL: 'postgres://postgres:postgres@localhost:5432/soar_test',
 						// NATS URL for backend (optional, backend should handle missing NATS gracefully)

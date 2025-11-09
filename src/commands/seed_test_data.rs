@@ -1,4 +1,8 @@
 use anyhow::{Context, Result};
+use argon2::{
+    Argon2,
+    password_hash::{PasswordHasher, SaltString, rand_core::OsRng},
+};
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool};
 use fake::Fake;
@@ -34,9 +38,8 @@ pub async fn handle_seed_test_data(pool: &PgPool) -> Result<()> {
         .parse()
         .unwrap_or(10);
 
-    // Hash the test password
-    let password_hash =
-        bcrypt::hash(&test_password, bcrypt::DEFAULT_COST).context("Failed to hash password")?;
+    // Hash the test password using Argon2 (matching the authentication system)
+    let password_hash = hash_password(&test_password)?;
 
     // Create test clubs
     info!("Creating test clubs");
@@ -72,6 +75,18 @@ pub async fn handle_seed_test_data(pool: &PgPool) -> Result<()> {
     info!("  Club ID: {}", test_club_id);
 
     Ok(())
+}
+
+/// Hash a password using Argon2 (matching the production authentication system)
+fn hash_password(password: &str) -> Result<String> {
+    let argon2 = Argon2::default();
+    let salt = SaltString::generate(&mut OsRng);
+
+    let password_hash = argon2
+        .hash_password(password.as_bytes(), &salt)
+        .map_err(|e| anyhow::anyhow!("Failed to hash password: {}", e))?;
+
+    Ok(password_hash.to_string())
 }
 
 fn create_test_clubs(conn: &mut PgConnection, count: usize) -> Result<Uuid> {
@@ -176,7 +191,7 @@ fn create_fake_users(conn: &mut PgConnection, club_id_value: Uuid, count: usize)
         let user_first_name: String = FirstName().fake();
         let user_last_name: String = LastName().fake();
         let user_email: String = FreeEmail().fake();
-        let default_password_hash = bcrypt::hash("password123", bcrypt::DEFAULT_COST)?;
+        let default_password_hash = hash_password("password123")?;
 
         diesel::insert_into(users)
             .values((
