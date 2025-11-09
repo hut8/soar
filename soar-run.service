@@ -10,7 +10,7 @@ Type=simple
 User=soar
 Group=soar
 WorkingDirectory=/var/soar
-ExecStart=/usr/local/bin/soar run --archive
+ExecStart=/usr/local/bin/soar run --archive --suppress-aprs-type OGADSB
 ExecReload=/bin/kill -s HUP $MAINPID
 
 # Environment variables
