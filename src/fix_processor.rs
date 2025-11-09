@@ -24,6 +24,8 @@ pub struct FixProcessor {
     nats_publisher: Option<NatsFixPublisher>,
     /// Sender for elevation processing tasks (bounded channel to prevent queue overflow)
     elevation_tx: Option<flume::Sender<ElevationTask>>,
+    /// APRS types to suppress from processing (e.g., OGADSB, OGFLR)
+    suppressed_aprs_types: Vec<String>,
 }
 
 impl FixProcessor {
@@ -35,12 +37,19 @@ impl FixProcessor {
             flight_detection_processor: FlightTracker::new(&diesel_pool),
             nats_publisher: None,
             elevation_tx: None,
+            suppressed_aprs_types: Vec::new(),
         }
     }
 
     /// Add elevation channel sender to the processor
     pub fn with_elevation_channel(mut self, elevation_tx: flume::Sender<ElevationTask>) -> Self {
         self.elevation_tx = Some(elevation_tx);
+        self
+    }
+
+    /// Set APRS types to suppress from processing
+    pub fn with_suppressed_aprs_types(mut self, types: Vec<String>) -> Self {
+        self.suppressed_aprs_types = types;
         self
     }
 
@@ -58,6 +67,7 @@ impl FixProcessor {
             flight_detection_processor: FlightTracker::new(&diesel_pool),
             nats_publisher: Some(nats_publisher),
             elevation_tx: None,
+            suppressed_aprs_types: Vec::new(),
         })
     }
 
@@ -73,6 +83,7 @@ impl FixProcessor {
             flight_detection_processor: flight_tracker,
             nats_publisher: None,
             elevation_tx: None,
+            suppressed_aprs_types: Vec::new(),
         }
     }
 
@@ -91,6 +102,7 @@ impl FixProcessor {
             flight_detection_processor: flight_tracker,
             nats_publisher: Some(nats_publisher),
             elevation_tx: None,
+            suppressed_aprs_types: Vec::new(),
         })
     }
 
@@ -143,6 +155,18 @@ impl FixProcessor {
                 // When creating devices spontaneously (not from DDB), determine address_type from tracker_device_type
                 // tracker_device_type is the packet destination (e.g., "OGFLR", "OGADSB")
                 let tracker_device_type = packet.to.to_string();
+
+                // Check if this APRS type is suppressed
+                if self
+                    .suppressed_aprs_types
+                    .iter()
+                    .any(|t| t == &tracker_device_type)
+                {
+                    trace!("Suppressing fix from APRS type: {}", tracker_device_type);
+                    metrics::counter!("aprs.fixes.suppressed").increment(1);
+                    return;
+                }
+
                 let spontaneous_address_type = match tracker_device_type.as_str() {
                     "OGFLR" => crate::devices::AddressType::Flarm,
                     "OGADSB" => crate::devices::AddressType::Icao,

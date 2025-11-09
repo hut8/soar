@@ -108,6 +108,7 @@ async fn process_aprs_message(
 pub async fn handle_run(
     archive_dir: Option<String>,
     nats_url: String,
+    suppress_aprs_types: &[String],
     diesel_pool: Pool<ConnectionManager<PgConnection>>,
 ) -> Result<()> {
     sentry::configure_scope(|scope| {
@@ -227,6 +228,14 @@ pub async fn handle_run(
 
     info!("Created bounded AGL database update queue with capacity 100");
 
+    // Log suppressed APRS types if any
+    if !suppress_aprs_types.is_empty() {
+        info!(
+            "Suppressing APRS types from processing: {:?}",
+            suppress_aprs_types
+        );
+    }
+
     // Create database fix processor to save all valid fixes to the database
     // Try to create with NATS first, fall back to without NATS if connection fails
     let fix_processor = match FixProcessor::with_flight_tracker_and_nats(
@@ -238,7 +247,9 @@ pub async fn handle_run(
     {
         Ok(processor_with_nats) => {
             info!("Created FixProcessor with NATS publisher");
-            processor_with_nats.with_elevation_channel(elevation_tx.clone())
+            processor_with_nats
+                .with_elevation_channel(elevation_tx.clone())
+                .with_suppressed_aprs_types(suppress_aprs_types.to_vec())
         }
         Err(e) => {
             warn!(
@@ -247,6 +258,7 @@ pub async fn handle_run(
             );
             FixProcessor::with_flight_tracker(diesel_pool.clone(), flight_tracker.clone())
                 .with_elevation_channel(elevation_tx.clone())
+                .with_suppressed_aprs_types(suppress_aprs_types.to_vec())
         }
     };
 

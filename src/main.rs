@@ -130,6 +130,11 @@ enum Commands {
         /// NATS server URL for JetStream consumer and pub/sub
         #[arg(long, default_value = "nats://localhost:4222")]
         nats_url: String,
+
+        /// APRS type(s) to suppress from processing (e.g., OGADSB, OGFLR)
+        /// Can be specified multiple times to suppress multiple types
+        #[arg(long)]
+        suppress_aprs_type: Vec<String>,
     },
     /// Start the web server
     Web {
@@ -717,6 +722,7 @@ async fn main() -> Result<()> {
             archive_dir,
             archive,
             nats_url,
+            suppress_aprs_type,
         } => {
             // Determine archive directory if --archive flag is used
             let final_archive_dir = if archive {
@@ -725,7 +731,13 @@ async fn main() -> Result<()> {
                 archive_dir
             };
 
-            handle_run(final_archive_dir, nats_url, diesel_pool).await
+            handle_run(
+                final_archive_dir,
+                nats_url,
+                &suppress_aprs_type,
+                diesel_pool,
+            )
+            .await
         }
         Commands::Web { interface, port } => {
             // Check SOAR_ENV and override port if not production
