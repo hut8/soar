@@ -8,8 +8,10 @@
 	import { page } from '$app/state';
 	import { auth } from '$lib/stores/auth';
 	import { theme } from '$lib/stores/theme';
+	import { backendMode } from '$lib/stores/backend';
 	import { websocketStatus, debugStatus } from '$lib/stores/watchlist';
 	import { onMount } from 'svelte';
+	import { dev } from '$app/environment';
 	import RadarLoader from '$lib/components/RadarLoader.svelte';
 	import LoadingBar from '$lib/components/LoadingBar.svelte';
 	import BottomLoadingBar from '$lib/components/BottomLoadingBar.svelte';
@@ -56,10 +58,11 @@
 	);
 	let hasClub = $derived($auth.isAuthenticated && !!$auth.user?.club_id);
 
-	// Initialize auth and theme from localStorage on mount
+	// Initialize auth, theme, and backend mode from localStorage on mount
 	onMount(() => {
 		auth.initFromStorage();
 		theme.init();
+		backendMode.init();
 
 		// Add click outside listener
 		document.addEventListener('click', handleClickOutside);
@@ -201,6 +204,19 @@
 							<Info />
 						</a>
 					</nav>
+
+					<!-- Backend Toggle (Dev Only) -->
+					{#if dev}
+						<button
+							class="preset-tonal-surface-500 btn btn-sm font-mono font-bold"
+							onclick={() => backendMode.toggle()}
+							title={$backendMode === 'dev'
+								? 'Using local backend (localhost:1337) - Click to switch to production'
+								: 'Using production backend (glider.flights) - Click to switch to local'}
+						>
+							{$backendMode === 'dev' ? 'D' : 'P'}
+						</button>
+					{/if}
 
 					<!-- Theme Toggle -->
 					<button
@@ -389,6 +405,20 @@
 						</a>
 					</div>
 				{/if}
+
+				<!-- Mobile Backend Toggle (Dev Only) -->
+				{#if dev}
+					<button
+						class="btn w-full justify-start preset-filled-surface-500"
+						onclick={() => backendMode.toggle()}
+					>
+						<span class="font-mono font-bold">
+							{$backendMode === 'dev' ? 'D' : 'P'}
+						</span>
+						{$backendMode === 'dev' ? 'Local Backend' : 'Production Backend'}
+					</button>
+				{/if}
+
 				<!-- Mobile Theme Toggle -->
 				<button
 					class="btn w-full justify-start preset-filled-surface-500"

@@ -383,6 +383,43 @@ impl Flight {
         Ok(Some(distance))
     }
 
+    /// Generate a human-readable aircraft identifier for display
+    /// Priority: 1) Model + Registration, 2) Registration only, 3) Model only, 4) ICAO-XXYYZZ format
+    fn get_aircraft_identifier(&self, device: Option<&crate::devices::Device>) -> String {
+        if let Some(device) = device {
+            let has_model = !device.aircraft_model.is_empty();
+            let has_registration = !device.registration.is_empty();
+
+            match (has_model, has_registration) {
+                (true, true) => {
+                    // Both model and registration available: "Piper Pacer N8437D"
+                    format!("{} {}", device.aircraft_model, device.registration)
+                }
+                (false, true) => {
+                    // Only registration: "N8437D"
+                    device.registration.clone()
+                }
+                (true, false) => {
+                    // Only model: "Piper Pacer"
+                    device.aircraft_model.clone()
+                }
+                (false, false) => {
+                    // Neither available, fall back to ICAO-XXYYZZ format
+                    let type_prefix = match device.address_type {
+                        crate::devices::AddressType::Icao => "ICAO",
+                        crate::devices::AddressType::Flarm => "FLARM",
+                        crate::devices::AddressType::Ogn => "OGN",
+                        crate::devices::AddressType::Unknown => "Unknown",
+                    };
+                    format!("{}-{}", type_prefix, device.device_address_hex())
+                }
+            }
+        } else {
+            // No device info, use the flight's device_address
+            self.device_address.clone()
+        }
+    }
+
     /// Calculate the maximum displacement from the departure airport
     /// Only applicable if the departure and arrival airports are the same (i.e., a local flight)
     /// Uses spline interpolation to check the entire flight path, not just the GPS fix points.
@@ -456,7 +493,14 @@ impl Flight {
     pub async fn make_kml(
         &self,
         fixes_repo: &crate::fixes_repo::FixesRepository,
+        device: Option<&crate::devices::Device>,
     ) -> Result<String> {
+        use kml::types::{
+            AltitudeMode, Coord, IconStyle, LineString, LineStyle, Placemark, Point, Style,
+        };
+        use kml::{Kml, KmlWriter};
+        use std::collections::HashMap;
+
         // Get all fixes for this flight based on aircraft ID and time range
         let start_time = self.takeoff_time.unwrap_or(self.created_at);
         let end_time = self.landing_time.unwrap_or(self.last_fix_at);
@@ -473,27 +517,6 @@ impl Flight {
         if fixes.is_empty() {
             return Ok(self.generate_empty_kml());
         }
-
-        let mut kml = String::new();
-
-        // KML header
-        kml.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
-        kml.push_str("<kml xmlns=\"http://www.opengis.net/kml/2.2\">\n");
-        kml.push_str("  <Document>\n");
-
-        // Flight name and description
-        let flight_name = format!("Flight {}", self.device_address);
-        // Note: Registration is stored on the device, not individual fixes
-        // For KML export, we use the device address as the identifier
-        let aircraft_reg = &self.device_address;
-
-        kml.push_str(&format!("    <name>{}</name>\n", flight_name));
-        kml.push_str(&format!(
-            "    <description>Flight track for aircraft {} from {} to {}</description>\n",
-            aircraft_reg,
-            start_time.format("%Y-%m-%d %H:%M:%S UTC"),
-            end_time.format("%Y-%m-%d %H:%M:%S UTC")
-        ));
 
         // Helper function to convert altitude to KML ABGR color (gradient from red to blue)
         let altitude_to_kml_color =
@@ -532,21 +555,41 @@ impl Flight {
             .map(|alt| alt as f64)
             .fold(f64::NEG_INFINITY, f64::max);
 
-        // Style for takeoff point
-        kml.push_str("    <Style id=\"takeoffStyle\">\n");
-        kml.push_str("      <IconStyle>\n");
-        kml.push_str("        <color>ff00ff00</color>\n"); // Green
-        kml.push_str("        <scale>1.2</scale>\n");
-        kml.push_str("      </IconStyle>\n");
-        kml.push_str("    </Style>\n");
+        let mut elements: Vec<Kml<f64>> = Vec::new();
 
-        // Style for landing point
-        kml.push_str("    <Style id=\"landingStyle\">\n");
-        kml.push_str("      <IconStyle>\n");
-        kml.push_str("        <color>ff0000ff</color>\n"); // Red
-        kml.push_str("        <scale>1.2</scale>\n");
-        kml.push_str("      </IconStyle>\n");
-        kml.push_str("    </Style>\n");
+        // Add takeoff style
+        let takeoff_style = Style {
+            id: Some("takeoffStyle".to_string()),
+            icon: Some(IconStyle {
+                id: None,
+                scale: 1.2,
+                heading: 0.0,
+                hot_spot: None,
+                icon: Default::default(),
+                color: "ff00ff00".to_string(), // Green
+                color_mode: Default::default(),
+                attrs: HashMap::new(),
+            }),
+            ..Default::default()
+        };
+        elements.push(Kml::Style(takeoff_style));
+
+        // Add landing style
+        let landing_style = Style {
+            id: Some("landingStyle".to_string()),
+            icon: Some(IconStyle {
+                id: None,
+                scale: 1.2,
+                heading: 0.0,
+                hot_spot: None,
+                icon: Default::default(),
+                color: "ff0000ff".to_string(), // Red
+                color_mode: Default::default(),
+                attrs: HashMap::new(),
+            }),
+            ..Default::default()
+        };
+        elements.push(Kml::Style(landing_style));
 
         // Flight track as gradient LineString segments
         // Create a segment between each pair of consecutive fixes with altitude-based coloring
@@ -557,25 +600,21 @@ impl Flight {
             // Get color based on starting fix altitude
             let color = altitude_to_kml_color(fix1.altitude_msl_feet, min_alt, max_alt);
 
-            // Create inline style for this segment
-            kml.push_str(&format!("    <Style id=\"segment{}\">\n", i));
-            kml.push_str("      <LineStyle>\n");
-            kml.push_str(&format!("        <color>{}</color>\n", color));
-            kml.push_str("        <width>3</width>\n");
-            kml.push_str("      </LineStyle>\n");
-            kml.push_str("    </Style>\n");
+            // Create style for this segment
+            let segment_style = Style {
+                id: Some(format!("segment{}", i)),
+                line: Some(LineStyle {
+                    id: None,
+                    color: color.clone(),
+                    color_mode: Default::default(),
+                    width: 3.0,
+                    attrs: HashMap::new(),
+                }),
+                ..Default::default()
+            };
+            elements.push(Kml::Style(segment_style));
 
-            // Create LineString segment
-            kml.push_str("    <Placemark>\n");
-            kml.push_str(&format!("      <name>Segment {}</name>\n", i));
-            kml.push_str(&format!("      <styleUrl>#segment{}</styleUrl>\n", i));
-            kml.push_str("      <LineString>\n");
-            kml.push_str("        <extrude>1</extrude>\n");
-            kml.push_str("        <tessellate>1</tessellate>\n");
-            kml.push_str("        <altitudeMode>absolute</altitudeMode>\n");
-            kml.push_str("        <coordinates>\n");
-
-            // Add coordinates for this segment
+            // Create coordinates for this segment
             let alt1_meters = fix1
                 .altitude_msl_feet
                 .map(|alt| alt as f64 * 0.3048)
@@ -585,73 +624,159 @@ impl Flight {
                 .map(|alt| alt as f64 * 0.3048)
                 .unwrap_or(0.0);
 
-            kml.push_str(&format!(
-                "          {},{},{}\n",
-                fix1.longitude, fix1.latitude, alt1_meters
-            ));
-            kml.push_str(&format!(
-                "          {},{},{}\n",
-                fix2.longitude, fix2.latitude, alt2_meters
-            ));
+            let coords = vec![
+                Coord {
+                    x: fix1.longitude,
+                    y: fix1.latitude,
+                    z: Some(alt1_meters),
+                },
+                Coord {
+                    x: fix2.longitude,
+                    y: fix2.latitude,
+                    z: Some(alt2_meters),
+                },
+            ];
 
-            kml.push_str("        </coordinates>\n");
-            kml.push_str("      </LineString>\n");
-            kml.push_str("    </Placemark>\n");
+            // Create LineString segment
+            let line_string = LineString {
+                coords,
+                extrude: false,
+                tessellate: true,
+                altitude_mode: AltitudeMode::Absolute,
+                attrs: HashMap::new(),
+            };
+
+            let placemark = Placemark {
+                name: Some(format!("Segment {}", i)),
+                description: None,
+                geometry: Some(kml::types::Geometry::LineString(line_string)),
+                style_url: Some(format!("#segment{}", i)),
+                attrs: HashMap::new(),
+                children: vec![],
+            };
+            elements.push(Kml::Placemark(placemark));
         }
 
-        // Takeoff point
+        // Takeoff or detected point
         if let Some(first_fix) = fixes.first() {
-            kml.push_str("    <Placemark>\n");
-            kml.push_str("      <name>Takeoff</name>\n");
-            kml.push_str(&format!(
-                "      <description>Takeoff at {} UTC</description>\n",
-                start_time.format("%Y-%m-%d %H:%M:%S")
-            ));
-            kml.push_str("      <styleUrl>#takeoffStyle</styleUrl>\n");
-            kml.push_str("      <Point>\n");
-            kml.push_str("        <altitudeMode>absolute</altitudeMode>\n");
             let altitude_meters = first_fix
                 .altitude_msl_feet
                 .map(|alt| alt as f64 * 0.3048)
                 .unwrap_or(0.0);
-            kml.push_str(&format!(
-                "        <coordinates>{},{},{}</coordinates>\n",
-                first_fix.longitude, first_fix.latitude, altitude_meters
-            ));
-            kml.push_str("      </Point>\n");
-            kml.push_str("    </Placemark>\n");
+
+            let point = Point {
+                coord: Coord {
+                    x: first_fix.longitude,
+                    y: first_fix.latitude,
+                    z: Some(altitude_meters),
+                },
+                extrude: false,
+                altitude_mode: AltitudeMode::Absolute,
+                attrs: HashMap::new(),
+            };
+
+            // Use "Detected" if no takeoff time (flight was first seen airborne)
+            let (name, description) = if self.takeoff_time.is_some() {
+                (
+                    "Takeoff".to_string(),
+                    format!("Takeoff at {} UTC", start_time.format("%Y-%m-%d %H:%M:%S")),
+                )
+            } else {
+                (
+                    "Detected".to_string(),
+                    format!(
+                        "Flight first detected at {} UTC (already airborne)",
+                        start_time.format("%Y-%m-%d %H:%M:%S")
+                    ),
+                )
+            };
+
+            let placemark = Placemark {
+                name: Some(name),
+                description: Some(description),
+                geometry: Some(kml::types::Geometry::Point(point)),
+                style_url: Some("#takeoffStyle".to_string()),
+                attrs: HashMap::new(),
+                children: vec![],
+            };
+            elements.push(Kml::Placemark(placemark));
         }
 
-        // Landing point (if flight is complete)
-        if self.landing_time.is_some()
+        // Landing or signal lost point (if flight is complete or timed out)
+        if (self.landing_time.is_some() || self.timed_out_at.is_some())
             && let Some(last_fix) = fixes.last()
         {
-            kml.push_str("    <Placemark>\n");
-            kml.push_str("      <name>Landing</name>\n");
-            kml.push_str(&format!(
-                "      <description>Landing at {} UTC</description>\n",
-                end_time.format("%Y-%m-%d %H:%M:%S")
-            ));
-            kml.push_str("      <styleUrl>#landingStyle</styleUrl>\n");
-            kml.push_str("      <Point>\n");
-            kml.push_str("        <altitudeMode>absolute</altitudeMode>\n");
             let altitude_meters = last_fix
                 .altitude_msl_feet
                 .map(|alt| alt as f64 * 0.3048)
                 .unwrap_or(0.0);
-            kml.push_str(&format!(
-                "        <coordinates>{},{},{}</coordinates>\n",
-                last_fix.longitude, last_fix.latitude, altitude_meters
-            ));
-            kml.push_str("      </Point>\n");
-            kml.push_str("    </Placemark>\n");
+
+            let point = Point {
+                coord: Coord {
+                    x: last_fix.longitude,
+                    y: last_fix.latitude,
+                    z: Some(altitude_meters),
+                },
+                extrude: false,
+                altitude_mode: AltitudeMode::Absolute,
+                attrs: HashMap::new(),
+            };
+
+            // Use "Signal Lost" if timed out, otherwise "Landing"
+            let (name, description) = if self.timed_out_at.is_some() {
+                (
+                    "Signal Lost".to_string(),
+                    format!(
+                        "Last signal received at {} UTC (flight timed out after 1+ hour without updates)",
+                        end_time.format("%Y-%m-%d %H:%M:%S")
+                    ),
+                )
+            } else {
+                (
+                    "Landing".to_string(),
+                    format!("Landing at {} UTC", end_time.format("%Y-%m-%d %H:%M:%S")),
+                )
+            };
+
+            let placemark = Placemark {
+                name: Some(name),
+                description: Some(description),
+                geometry: Some(kml::types::Geometry::Point(point)),
+                style_url: Some("#landingStyle".to_string()),
+                attrs: HashMap::new(),
+                children: vec![],
+            };
+            elements.push(Kml::Placemark(placemark));
         }
 
-        // KML footer
-        kml.push_str("  </Document>\n");
-        kml.push_str("</kml>\n");
+        // Create the document with name and description in attrs
+        let aircraft_identifier = self.get_aircraft_identifier(device);
+        let flight_name = format!("Flight {}", aircraft_identifier);
+        let description = format!(
+            "Flight track for aircraft {} from {} to {}",
+            aircraft_identifier,
+            start_time.format("%Y-%m-%d %H:%M:%S UTC"),
+            end_time.format("%Y-%m-%d %H:%M:%S UTC")
+        );
 
-        Ok(kml)
+        let mut doc_attrs = HashMap::new();
+        doc_attrs.insert("name".to_string(), flight_name);
+        doc_attrs.insert("description".to_string(), description);
+
+        let document = Kml::Document {
+            attrs: doc_attrs,
+            elements,
+        };
+
+        // Write the KML to a string
+        let mut buf = Vec::new();
+        let mut writer = KmlWriter::from_writer(&mut buf);
+        writer
+            .write(&document)
+            .map_err(|e| anyhow::anyhow!("Failed to write KML: {}", e))?;
+
+        String::from_utf8(buf)
+            .map_err(|e| anyhow::anyhow!("Failed to convert KML to string: {}", e))
     }
 
     /// Generate an empty KML file when no fixes are available

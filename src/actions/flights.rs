@@ -173,6 +173,7 @@ pub async fn get_flight_kml(
 ) -> impl IntoResponse {
     let flights_repo = FlightsRepository::new(state.pool.clone());
     let fixes_repo = FixesRepository::new(state.pool.clone());
+    let device_repo = DeviceRepository::new(state.pool.clone());
 
     // First get the flight
     let flight = match flights_repo.get_flight_by_id(id).await {
@@ -185,8 +186,19 @@ pub async fn get_flight_kml(
         }
     };
 
+    // Get device info for better KML naming
+    let device = if let Some(device_id) = flight.device_id {
+        device_repo
+            .get_device_by_uuid(device_id)
+            .await
+            .ok()
+            .flatten()
+    } else {
+        None
+    };
+
     // Generate KML
-    match flight.make_kml(&fixes_repo).await {
+    match flight.make_kml(&fixes_repo, device.as_ref()).await {
         Ok(kml_content) => {
             let mut headers = HeaderMap::new();
             headers.insert(

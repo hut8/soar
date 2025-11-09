@@ -1,17 +1,22 @@
 import { dev } from '$app/environment';
 import { loading } from '$lib/stores/loading';
+import { backendMode } from '$lib/stores/backend';
+import { get } from 'svelte/store';
 
-// Development-only flag to force using production backend
-// Set to true to use https://glider.flights/data even in dev mode
-export const FORCE_PRODUCTION_BACKEND = true;
+// Get the API base URL based on environment and backend mode
+export function getApiBase(): string {
+	if (!dev) {
+		// Production build always uses relative path
+		return '/data';
+	}
 
-// Detect development mode and set appropriate API base URL
-export const API_BASE =
-	dev && !FORCE_PRODUCTION_BACKEND
-		? 'http://localhost:1337/data'
-		: dev && FORCE_PRODUCTION_BACKEND
-			? 'https://glider.flights/data'
-			: '/data';
+	// In development, check the backend mode setting
+	const mode = get(backendMode);
+	return mode === 'dev' ? 'http://localhost:1337/data' : 'https://glider.flights/data';
+}
+
+// Legacy export for compatibility - but prefer using getApiBase()
+export const API_BASE = getApiBase();
 
 export class ServerError extends Error {
 	constructor(
@@ -35,7 +40,7 @@ export async function serverCall<T>(endpoint: string, options?: ServerCallOption
 	const { params, fetch: customFetch, ...requestOptions } = options || {};
 
 	// Build query string from params
-	let url = `${API_BASE}${endpoint}`;
+	let url = `${getApiBase()}${endpoint}`;
 	if (params) {
 		const searchParams = new URLSearchParams();
 		Object.entries(params).forEach(([key, value]) => {
