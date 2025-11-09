@@ -118,13 +118,13 @@ pub async fn get_flight_by_id(
             // For active flights, calculate distance metrics dynamically
             if flight.landing_time.is_none() {
                 // Calculate total distance flown
-                if let Ok(Some(total_distance)) = flight.total_distance(&fixes_repo).await {
+                if let Ok(Some(total_distance)) = flight.total_distance(&fixes_repo, None).await {
                     flight.total_distance_meters = Some(total_distance);
                 }
 
                 // Calculate maximum displacement from takeoff point
                 if let Ok(Some(max_displacement)) = flight
-                    .maximum_displacement(&fixes_repo, &airports_repo)
+                    .maximum_displacement(&fixes_repo, &airports_repo, None)
                     .await
                 {
                     flight.maximum_displacement_meters = Some(max_displacement);
