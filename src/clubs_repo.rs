@@ -491,7 +491,7 @@ impl ClubsRepository {
             let mut conn = pool.get()?;
 
             let sql = r#"
-                SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, c.location_id,
+                SELECT c.id, c.name, c.is_soaring, c.home_base_airport_id, a.ident as home_base_airport_ident, c.location_id,
                        l.street1, l.street2, l.city, l.state, l.zip_code, l.region_code,
                        l.country_mail_code,
                        (l.geolocation)[0]::numeric as longitude,
@@ -499,6 +499,7 @@ impl ClubsRepository {
                        c.created_at, c.updated_at
                 FROM clubs c
                 LEFT JOIN locations l ON c.location_id = l.id
+                LEFT JOIN airports a ON c.home_base_airport_id = a.id
                 WHERE c.is_soaring = true
                 AND c.home_base_airport_id IS NULL
                 AND l.geolocation IS NOT NULL
