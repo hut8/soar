@@ -386,20 +386,11 @@ impl Device {
             return None;
         }
 
-        // Convert ICAO address to hex string (6 digits)
-        let icao_str = format!("{:06X}", address);
+        // Convert u32 address to [u8; 3] byte array (big-endian)
+        let icao_bytes = [(address >> 16) as u8, (address >> 8) as u8, address as u8];
 
-        // Parse using flydent with icao24bit=true
-        let parser = flydent::Parser::new();
-        parser.parse(&icao_str, false, true).and_then(|entity| {
-            // Only return tail number for US aircraft
-            match entity {
-                flydent::EntityResult::Country { ref iso2, .. } if iso2 == "US" => {
-                    Some(entity.canonical_callsign().to_string())
-                }
-                _ => None,
-            }
-        })
+        // Use flydent's icao_to_registration function for US ICAO addresses
+        flydent::registration::icao_to_registration(icao_bytes).ok()
     }
 
     /// Determines the registration country based on the registration format
@@ -1263,6 +1254,29 @@ mod tests {
         // Test OGN address (should return None)
         let ogn_code = Device::extract_country_code_from_icao(0x123456, AddressType::Ogn);
         assert_eq!(ogn_code, None);
+    }
+
+    #[test]
+    fn test_extract_tail_number_from_icao() {
+        // Test US ICAO address - N841X (AB859D)
+        let n841x = Device::extract_tail_number_from_icao(0xAB859D, AddressType::Icao);
+        assert_eq!(n841x, Some("N841X".to_string()));
+
+        // Test another US ICAO address
+        let n1 = Device::extract_tail_number_from_icao(0xA00001, AddressType::Icao);
+        assert_eq!(n1, Some("N1".to_string()));
+
+        // Test non-US ICAO address (German - should return None)
+        let de_tail = Device::extract_tail_number_from_icao(0x3C0001, AddressType::Icao);
+        assert_eq!(de_tail, None);
+
+        // Test FLARM address (should return None)
+        let flarm_tail = Device::extract_tail_number_from_icao(0x123456, AddressType::Flarm);
+        assert_eq!(flarm_tail, None);
+
+        // Test OGN address (should return None)
+        let ogn_tail = Device::extract_tail_number_from_icao(0x123456, AddressType::Ogn);
+        assert_eq!(ogn_tail, None);
     }
 
     // Helper function to create a test device with a specific registration

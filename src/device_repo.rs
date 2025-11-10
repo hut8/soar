@@ -187,11 +187,14 @@ impl DeviceRepository {
             let country_code = Device::extract_country_code_from_icao(address as u32, address_type);
 
             // Extract tail number from ICAO address if it's a US aircraft
-            // Use packet registration if available, otherwise try to extract from ICAO
-            let registration = packet_fields.registration.clone().unwrap_or_else(|| {
-                Device::extract_tail_number_from_icao(address as u32, address_type)
-                    .unwrap_or_default()
-            });
+            // Use packet registration if available and non-empty, otherwise try to extract from ICAO
+            let registration = packet_fields
+                .registration
+                .as_ref()
+                .filter(|r| !r.is_empty())
+                .cloned()
+                .or_else(|| Device::extract_tail_number_from_icao(address as u32, address_type))
+                .unwrap_or_default();
 
             let new_device = NewDevice {
                 address,
@@ -211,7 +214,7 @@ impl DeviceRepository {
                 icao_model_code: packet_fields.icao_model_code.clone(),
                 adsb_emitter_category: packet_fields.adsb_emitter_category,
                 tracker_device_type: packet_fields.tracker_device_type.clone(),
-                country_code,
+                country_code: country_code.clone(),
             };
 
             // Use INSERT ... ON CONFLICT ... DO UPDATE RETURNING to atomically handle race conditions
@@ -227,7 +230,8 @@ impl DeviceRepository {
                     devices::icao_model_code.eq(packet_fields.icao_model_code),
                     devices::adsb_emitter_category.eq(packet_fields.adsb_emitter_category),
                     devices::tracker_device_type.eq(packet_fields.tracker_device_type),
-                    devices::registration.eq(registration),
+                    devices::registration.eq(&registration),
+                    devices::country_code.eq(&country_code),
                 ))
                 .get_result::<DeviceModel>(&mut conn)?;
 
