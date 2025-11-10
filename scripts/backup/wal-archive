@@ -1,0 +1,93 @@
+#!/bin/bash
+#
+# wal-archive - Archive PostgreSQL WAL segments to cloud storage
+#
+# This script is called by PostgreSQL via archive_command for each completed
+# WAL segment (typically 16MB files). It uploads the WAL file to S3-compatible
+# cloud storage and verifies the upload succeeded.
+#
+# Usage (called by PostgreSQL):
+#   wal-archive <wal_path> <wal_filename>
+#
+# Arguments:
+#   $1 - Full path to WAL file in pg_wal/ directory
+#   $2 - WAL filename only (e.g., 000000010000000000000001)
+#
+# Exit codes:
+#   0 - Success (WAL file archived)
+#   1 - Failure (PostgreSQL will retry)
+#
+# Configuration:
+#   Source credentials from /etc/soar/backup-env
+#
+# Example archive_command in postgresql.conf:
+#   archive_command = '/usr/local/bin/soar-wal-archive %p %f'
+
+set -euo pipefail
+
+# Load configuration
+if [[ ! -f /etc/soar/backup-env ]]; then
+    echo "ERROR: /etc/soar/backup-env not found" >&2
+    exit 1
+fi
+
+source /etc/soar/backup-env
+
+# Arguments
+WAL_PATH="$1"
+WAL_FILE="$2"
+
+# Validate arguments
+if [[ ! -f "$WAL_PATH" ]]; then
+    echo "ERROR: WAL file does not exist: $WAL_PATH" >&2
+    exit 1
+fi
+
+# Validate configuration
+if [[ -z "${BACKUP_BUCKET:-}" ]]; then
+    echo "ERROR: BACKUP_BUCKET not set in /etc/soar/backup-env" >&2
+    exit 1
+fi
+
+if [[ -z "${AWS_ACCESS_KEY_ID:-}" ]] || [[ -z "${AWS_SECRET_ACCESS_KEY:-}" ]]; then
+    echo "ERROR: AWS credentials not set in /etc/soar/backup-env" >&2
+    exit 1
+fi
+
+# Log directory
+LOG_DIR="${BACKUP_LOG_DIR:-/var/log/soar}"
+mkdir -p "$LOG_DIR"
+
+# Function to log messages
+log() {
+    echo "[$(date -u +"%Y-%m-%d %H:%M:%S UTC")] WAL Archive: $*" >> "$LOG_DIR/backup.log"
+}
+
+# Destination in cloud storage
+DEST="${BACKUP_BUCKET}/wal/${WAL_FILE}"
+
+# Upload WAL file to cloud storage
+# Use --no-progress to avoid verbose output in PostgreSQL logs
+# Set Content-Type to application/octet-stream
+log "Archiving WAL segment: $WAL_FILE ($(du -h "$WAL_PATH" | cut -f1))"
+
+if aws s3 cp "$WAL_PATH" "$DEST" \
+    --no-progress \
+    --content-type "application/octet-stream" \
+    ${AWS_ENDPOINT_URL:+--endpoint-url "$AWS_ENDPOINT_URL"} \
+    >> "$LOG_DIR/backup.log" 2>&1; then
+
+    # Verify upload by checking if file exists in cloud
+    if aws s3 ls "$DEST" \
+        ${AWS_ENDPOINT_URL:+--endpoint-url "$AWS_ENDPOINT_URL"} \
+        >> "$LOG_DIR/backup.log" 2>&1; then
+        log "Successfully archived WAL segment: $WAL_FILE"
+        exit 0
+    else
+        log "ERROR: WAL segment uploaded but verification failed: $WAL_FILE"
+        exit 1
+    fi
+else
+    log "ERROR: Failed to upload WAL segment: $WAL_FILE"
+    exit 1
+fi

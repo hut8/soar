@@ -1,0 +1,48 @@
+# SOAR Backup Verify Timer
+#
+# This systemd timer automatically verifies backup integrity once weekly on Monday at 3:00 AM.
+# It checks that base backups are valid, WAL archiving is working, and backups are restorable.
+#
+# Verification checks:
+#   - Base backup existence and completeness
+#   - WAL file continuity (no gaps)
+#   - Backup age (alerts if too old)
+#   - Cloud storage accessibility
+#   - Metadata integrity
+#
+# Installation:
+#   sudo cp soar-backup-verify.service soar-backup-verify.timer /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable soar-backup-verify.timer
+#   sudo systemctl start soar-backup-verify.timer
+#
+# Check status:
+#   sudo systemctl status soar-backup-verify.timer
+#   sudo systemctl list-timers soar-backup-verify.timer
+#
+# Manual execution:
+#   sudo systemctl start soar-backup-verify.service
+#
+# View logs:
+#   sudo journalctl -u soar-backup-verify.service -f
+#   sudo tail -f /var/log/soar/backup.log
+
+[Unit]
+Description=SOAR Backup Verify Timer - Weekly Backup Verification
+Requires=soar-backup-verify.service
+
+[Timer]
+# Run weekly on Monday at 3:00 AM UTC (after Sunday's base backup completes)
+OnCalendar=Mon *-*-* 03:00:00
+
+# If the system was down when the timer should have triggered, run it as soon as possible
+Persistent=yes
+
+# Add some randomization to avoid exact timing conflicts
+RandomizedDelaySec=300
+
+# Allow some timing drift
+AccuracySec=30min
+
+[Install]
+WantedBy=timers.target

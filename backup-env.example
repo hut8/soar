@@ -1,0 +1,194 @@
+# SOAR Database Backup Configuration
+#
+# This file contains environment variables for the backup system.
+# Copy this file to /etc/soar/backup-env and configure with your settings.
+#
+# Installation:
+#   sudo mkdir -p /etc/soar
+#   sudo cp backup-env.example /etc/soar/backup-env
+#   sudo nano /etc/soar/backup-env  # Edit with your values
+#   sudo chown postgres:postgres /etc/soar/backup-env
+#   sudo chmod 600 /etc/soar/backup-env
+#
+# IMPORTANT: This file contains sensitive credentials. Protect it carefully!
+#   - Set permissions to 600 (read/write for owner only)
+#   - Owner should be postgres:postgres
+#   - Never commit this file to version control
+
+#------------------------------------------------------------------------------
+# CLOUD STORAGE CONFIGURATION
+#------------------------------------------------------------------------------
+
+# Choose ONE of the following cloud storage providers and uncomment the
+# appropriate section. All providers must be S3-compatible.
+
+# --- AWS S3 (Standard) ---
+# Most integrated option, highest cost (~$21/month for 900GB)
+#
+# export AWS_ACCESS_KEY_ID="AKIA..."
+# export AWS_SECRET_ACCESS_KEY="your-secret-key-here"
+# export AWS_DEFAULT_REGION="us-east-1"
+# export BACKUP_BUCKET="s3://soar-backup-prod"
+# Note: No AWS_ENDPOINT_URL needed for standard AWS S3
+
+# --- Backblaze B2 (Recommended) ---
+# Best cost/performance balance (~$4.50/month for 900GB)
+# Free egress up to 3× storage (2.7TB/month)
+#
+# 1. Create account at https://www.backblaze.com/b2/sign-up.html
+# 2. Create bucket: soar-backup-prod (Private)
+# 3. Create application key with access to bucket
+# 4. Find your endpoint URL at https://www.backblaze.com/b2/docs/s3_compatible_api.html
+#    (Format: https://s3.us-west-004.backblazeb2.com or similar)
+#
+# export AWS_ACCESS_KEY_ID="your-backblaze-keyID"
+# export AWS_SECRET_ACCESS_KEY="your-backblaze-applicationKey"
+# export AWS_ENDPOINT_URL="https://s3.us-west-004.backblazeb2.com"
+# export BACKUP_BUCKET="s3://soar-backup-prod"
+
+# --- Wasabi ---
+# Similar pricing to B2, no egress fees (~$5.40/month for 900GB)
+#
+# export AWS_ACCESS_KEY_ID="your-wasabi-access-key"
+# export AWS_SECRET_ACCESS_KEY="your-wasabi-secret-key"
+# export AWS_ENDPOINT_URL="https://s3.wasabisys.com"
+# export BACKUP_BUCKET="s3://soar-backup-prod"
+
+# --- DigitalOcean Spaces ---
+# Simple option with included egress (~$5/month + overages)
+#
+# export AWS_ACCESS_KEY_ID="your-do-spaces-key"
+# export AWS_SECRET_ACCESS_KEY="your-do-spaces-secret"
+# export AWS_ENDPOINT_URL="https://nyc3.digitaloceanspaces.com"
+# export BACKUP_BUCKET="s3://soar-backup-prod"
+
+#------------------------------------------------------------------------------
+# BACKUP RETENTION CONFIGURATION
+#------------------------------------------------------------------------------
+
+# How many days to keep backups (both base backups and WAL archives)
+# Default: 30 days (keeps 4 weekly base backups + 30 days of WAL)
+# Longer retention = more storage cost but more recovery options
+export BACKUP_RETENTION_DAYS=30
+
+#------------------------------------------------------------------------------
+# POSTGRESQL CONNECTION
+#------------------------------------------------------------------------------
+
+# PostgreSQL connection settings
+# Usually localhost for local PostgreSQL instance
+export PGHOST=localhost
+export PGPORT=5432
+export PGDATABASE=soar
+export PGUSER=postgres
+
+# Password authentication:
+# DO NOT set PGPASSWORD here! Instead use ~/.pgpass file:
+#   echo "localhost:5432:soar:postgres:your-password" >> ~/.pgpass
+#   chmod 600 ~/.pgpass
+#
+# Or use peer authentication (if postgres user runs the scripts)
+
+# PostgreSQL data directory and version (for restore operations)
+# Adjust based on your PostgreSQL installation
+export PGDATA=/var/lib/postgresql/15/main
+export PG_VERSION=15
+
+#------------------------------------------------------------------------------
+# BACKUP PATHS
+#------------------------------------------------------------------------------
+
+# Temporary directory for staging backups during creation
+# Needs space for ~150GB compressed backup during upload
+# Will be automatically created if it doesn't exist
+export BACKUP_TEMP_DIR=/var/lib/soar/backup-temp
+
+# Directory for backup logs
+# Will be automatically created if it doesn't exist
+export BACKUP_LOG_DIR=/var/log/soar
+
+#------------------------------------------------------------------------------
+# BACKUP COMPRESSION AND PERFORMANCE
+#------------------------------------------------------------------------------
+
+# Compression method for base backups
+# Options: gzip, none
+# gzip reduces size by ~60-70% but takes longer
+export BACKUP_COMPRESSION=gzip
+
+# Number of parallel jobs for compression/upload
+# Higher = faster but more CPU/memory usage
+# Recommended: 2-4 for most systems
+export BACKUP_PARALLEL_JOBS=4
+
+#------------------------------------------------------------------------------
+# MONITORING AND NOTIFICATIONS (OPTIONAL)
+#------------------------------------------------------------------------------
+
+# Email notification on backup success/failure (requires mail command)
+# Leave empty to disable email notifications
+export BACKUP_NOTIFY_EMAIL=""
+# Example: export BACKUP_NOTIFY_EMAIL="ops@example.com"
+
+# Slack webhook for notifications
+# Create webhook at: https://api.slack.com/messaging/webhooks
+# Leave empty to disable Slack notifications
+export BACKUP_NOTIFY_SLACK_WEBHOOK=""
+# Example: export BACKUP_NOTIFY_SLACK_WEBHOOK="https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXX"
+
+# Prometheus Pushgateway for metrics (optional)
+# If you have a Pushgateway, backup metrics will be pushed after each backup
+export METRICS_PUSHGATEWAY=""
+# Example: export METRICS_PUSHGATEWAY="http://localhost:9091"
+
+#------------------------------------------------------------------------------
+# AWS CLI CONFIGURATION
+#------------------------------------------------------------------------------
+
+# AWS CLI profile (optional, usually not needed)
+# export AWS_PROFILE=default
+
+# Additional AWS CLI options (optional)
+# export AWS_CLI_OPTS="--quiet"
+
+# Certificate verification (usually leave at default)
+# export AWS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+
+#------------------------------------------------------------------------------
+# ADVANCED CONFIGURATION
+#------------------------------------------------------------------------------
+
+# WAL segment size (usually 16MB, don't change unless you know what you're doing)
+# export WAL_SEGMENT_SIZE=16777216
+
+# Archive timeout (seconds) - how long to wait before archiving partial WAL
+# Only relevant if database is very low write volume
+# export ARCHIVE_TIMEOUT=300
+
+# Maximum retries for cloud uploads
+# export MAX_UPLOAD_RETRIES=3
+
+# Upload retry delay (seconds)
+# export UPLOAD_RETRY_DELAY=60
+
+#------------------------------------------------------------------------------
+# VERIFICATION
+#------------------------------------------------------------------------------
+
+# After editing this file, verify the configuration:
+#
+# 1. Test cloud storage access:
+#    source /etc/soar/backup-env
+#    aws s3 ls ${BACKUP_BUCKET}/
+#
+# 2. Test WAL archiving (as postgres user):
+#    sudo -u postgres /usr/local/bin/soar-wal-archive \
+#      /var/lib/postgresql/15/main/pg_wal/000000010000000000000001 \
+#      000000010000000000000001
+#
+# 3. Test base backup (manual run):
+#    sudo systemctl start soar-backup-base.service
+#    sudo journalctl -u soar-backup-base.service -f
+#
+# 4. Verify backup in cloud:
+#    aws s3 ls ${BACKUP_BUCKET}/base/ --recursive --human-readable
