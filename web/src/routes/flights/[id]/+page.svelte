@@ -60,12 +60,25 @@
 
 	// Display options
 	let includeNearbyFlights = $state(false);
+	let showReceivers = $state(false);
 
 	// Nearby flights data - using full Flight type
 	let nearbyFlights = $state<Flight[]>([]);
 
 	let nearbyFlightPaths = $state<google.maps.Polyline[]>([]);
 	let isLoadingNearbyFlights = $state(false);
+
+	// Receiver data
+	interface ReceiverView {
+		id: string;
+		callsign: string;
+		description: string | null;
+		latitude: number | null;
+		longitude: number | null;
+	}
+	let receivers = $state<ReceiverView[]>([]);
+	let receiverMarkers = $state<google.maps.marker.AdvancedMarkerElement[]>([]);
+	let isLoadingReceivers = $state(false);
 
 	// Standalone nearby flights section (not tied to map)
 	let standaloneNearbyFlights = $state<Flight[]>([]);
@@ -266,6 +279,20 @@
 		}
 	}
 
+	// Handle receivers toggle
+	function handleReceiversToggle() {
+		if (showReceivers) {
+			fetchReceivers();
+		} else {
+			// Clear receivers from map
+			receiverMarkers.forEach((marker) => {
+				marker.map = null;
+			});
+			receiverMarkers = [];
+			receivers = [];
+		}
+	}
+
 	// Fetch nearby flights for standalone section (no map paths)
 	async function fetchStandaloneNearbyFlights() {
 		isLoadingStandaloneNearby = true;
@@ -333,6 +360,94 @@
 			console.error('Failed to fetch nearby flights:', err);
 		} finally {
 			isLoadingNearbyFlights = false;
+		}
+	}
+
+	// Fetch receivers in viewport
+	async function fetchReceivers() {
+		if (!map) return;
+
+		isLoadingReceivers = true;
+		try {
+			const bounds = map.getBounds();
+			if (!bounds) return;
+
+			const ne = bounds.getNorthEast();
+			const sw = bounds.getSouthWest();
+
+			const params = new URLSearchParams({
+				latitude_min: sw.lat().toString(),
+				latitude_max: ne.lat().toString(),
+				longitude_min: sw.lng().toString(),
+				longitude_max: ne.lng().toString()
+			});
+
+			const data = await serverCall(`/receivers?${params}`);
+			if (!data || typeof data !== 'object' || !('receivers' in data)) {
+				throw new Error('Invalid response format');
+			}
+
+			const response = data as { receivers: unknown[] };
+			receivers = response.receivers.filter((receiver: unknown): receiver is ReceiverView => {
+				return (
+					typeof receiver === 'object' &&
+					receiver !== null &&
+					'id' in receiver &&
+					'callsign' in receiver &&
+					'latitude' in receiver &&
+					'longitude' in receiver
+				);
+			});
+
+			// Display receivers on map
+			if (map) {
+				// Clear existing receiver markers
+				receiverMarkers.forEach((marker) => {
+					marker.map = null;
+				});
+				receiverMarkers = [];
+
+				receivers.forEach((receiver) => {
+					if (!receiver.latitude || !receiver.longitude) return;
+
+					// Create marker content with Radio icon
+					const markerContent = document.createElement('div');
+					markerContent.className = 'receiver-marker';
+
+					const iconDiv = document.createElement('div');
+					iconDiv.className = 'receiver-icon';
+					iconDiv.innerHTML = `
+						<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+							<path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/>
+							<path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/>
+							<circle cx="12" cy="12" r="2"/>
+							<path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/>
+							<path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"/>
+						</svg>
+					`;
+
+					const labelDiv = document.createElement('div');
+					labelDiv.className = 'receiver-label';
+					labelDiv.textContent = receiver.callsign;
+
+					markerContent.appendChild(iconDiv);
+					markerContent.appendChild(labelDiv);
+
+					const marker = new google.maps.marker.AdvancedMarkerElement({
+						position: { lat: receiver.latitude, lng: receiver.longitude },
+						map: map,
+						title: `${receiver.callsign}${receiver.description ? ` - ${receiver.description}` : ''}`,
+						content: markerContent,
+						zIndex: 150
+					});
+
+					receiverMarkers.push(marker);
+				});
+			}
+		} catch (err) {
+			console.error('Failed to fetch receivers:', err);
+		} finally {
+			isLoadingReceivers = false;
 		}
 	}
 
@@ -1180,18 +1295,32 @@
 						<span>Full Screen</span>
 					</a>
 				</div>
-				<label class="flex cursor-pointer items-center gap-2">
-					<input
-						type="checkbox"
-						class="checkbox"
-						bind:checked={includeNearbyFlights}
-						onchange={handleNearbyFlightsToggle}
-					/>
-					<span class="text-sm">Include Nearby Flights</span>
-					{#if isLoadingNearbyFlights}
-						<span class="text-surface-600-300-token text-xs">(Loading...)</span>
-					{/if}
-				</label>
+				<div class="flex items-center gap-4">
+					<label class="flex cursor-pointer items-center gap-2">
+						<input
+							type="checkbox"
+							class="checkbox"
+							bind:checked={includeNearbyFlights}
+							onchange={handleNearbyFlightsToggle}
+						/>
+						<span class="text-sm">Include Nearby Flights</span>
+						{#if isLoadingNearbyFlights}
+							<span class="text-surface-600-300-token text-xs">(Loading...)</span>
+						{/if}
+					</label>
+					<label class="flex cursor-pointer items-center gap-2">
+						<input
+							type="checkbox"
+							class="checkbox"
+							bind:checked={showReceivers}
+							onchange={handleReceiversToggle}
+						/>
+						<span class="text-sm">Show Receivers</span>
+						{#if isLoadingReceivers}
+							<span class="text-surface-600-300-token text-xs">(Loading...)</span>
+						{/if}
+					</label>
+				</div>
 			</div>
 			<div bind:this={mapContainer} class="h-96 w-full rounded-lg"></div>
 		</div>
