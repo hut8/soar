@@ -10,7 +10,7 @@ COPY web/ ./
 RUN npm run build
 
 # Rust build stage
-FROM rust:1.75-slim-bullseye AS rust-builder
+FROM rust:1-slim-bookworm AS rust-builder
 
 # Install system dependencies for building
 RUN apt-get update && apt-get install -y \
@@ -38,12 +38,12 @@ RUN mkdir -p web/node_modules
 RUN cargo build --release
 
 # Runtime stage
-FROM debian:bullseye-slim
+FROM debian:bookworm-slim
 
 # Install runtime dependencies including debug symbols for Sentry symbolication
 RUN apt-get update && apt-get install -y \
     ca-certificates \
-    libssl1.1 \
+    libssl3 \
     libpq5 \
     libc6-dbg \
     && rm -rf /var/lib/apt/lists/*
