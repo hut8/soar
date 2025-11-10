@@ -42,18 +42,20 @@ export RCLONE_CONFIG="/etc/soar/rclone.conf"
 #------------------------------------------------------------------------------
 
 # How many days to keep base backups before deletion
-# Default: 21 days (3 weeks) - deletes backups older than this
+# MUST be >= WAL_RETENTION_DAYS (WAL files are useless without a base backup!)
+# Default: 30 days - ensures all WAL files can be used for recovery
 # Combined with bi-weekly backups, this keeps ~2 base backups at any time
-export BACKUP_RETENTION_DAYS=21
+export BACKUP_RETENTION_DAYS=30
 
 # Minimum number of base backups to always keep (safety check)
 # Even if backups are older than BACKUP_RETENTION_DAYS, keep at least this many
 # Default: 2 (ensures we always have a recent backup for recovery)
 export BASE_BACKUP_MIN_COUNT=2
 
-# WAL archive retention (independent of base backups)
-# Keep WAL files for point-in-time recovery
+# WAL archive retention (for point-in-time recovery)
+# MUST be <= BACKUP_RETENTION_DAYS (need base backup to use WAL files!)
 # Default: 30 days (allows recovery to any point in last month)
+# Note: Can reduce to 21 days to save ~15% storage if 3-week PITR is sufficient
 export WAL_RETENTION_DAYS=30
 
 #------------------------------------------------------------------------------
