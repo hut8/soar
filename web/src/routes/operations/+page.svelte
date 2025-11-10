@@ -908,14 +908,36 @@
 
 			const response = data as { receivers: unknown[] };
 			receivers = response.receivers.filter((receiver: unknown): receiver is Receiver => {
-				return (
-					typeof receiver === 'object' &&
-					receiver !== null &&
-					'id' in receiver &&
-					'callsign' in receiver &&
-					'latitude' in receiver &&
-					'longitude' in receiver
-				);
+				// Validate receiver object
+				if (typeof receiver !== 'object' || receiver === null) {
+					console.error('Invalid receiver: not an object or is null', receiver);
+					return false;
+				}
+
+				// Check required fields
+				const requiredFields = ['id', 'callsign', 'latitude', 'longitude'] as const;
+				for (const field of requiredFields) {
+					if (!(field in receiver)) {
+						console.error(`Invalid receiver: missing required field "${field}"`, receiver);
+						return false;
+					}
+				}
+
+				// Validate latitude and longitude are numbers (or null)
+				const lat = (receiver as Record<string, unknown>).latitude;
+				const lng = (receiver as Record<string, unknown>).longitude;
+
+				if (lat !== null && typeof lat !== 'number') {
+					console.error('Invalid receiver: latitude is not a number or null', receiver);
+					return false;
+				}
+
+				if (lng !== null && typeof lng !== 'number') {
+					console.error('Invalid receiver: longitude is not a number or null', receiver);
+					return false;
+				}
+
+				return true;
 			});
 
 			displayReceiversOnMap();
@@ -946,9 +968,12 @@
 				return;
 			}
 
-			// Create marker content with Radio icon
-			const markerContent = document.createElement('div');
-			markerContent.className = 'receiver-marker';
+			// Create marker content with Radio icon and link
+			const markerLink = document.createElement('a');
+			markerLink.href = `/receivers/${receiver.id}`;
+			markerLink.target = '_blank';
+			markerLink.rel = 'noopener noreferrer';
+			markerLink.className = 'receiver-marker';
 
 			const iconDiv = document.createElement('div');
 			iconDiv.className = 'receiver-icon';
@@ -967,14 +992,14 @@
 			labelDiv.className = 'receiver-label';
 			labelDiv.textContent = receiver.callsign;
 
-			markerContent.appendChild(iconDiv);
-			markerContent.appendChild(labelDiv);
+			markerLink.appendChild(iconDiv);
+			markerLink.appendChild(labelDiv);
 
 			const marker = new google.maps.marker.AdvancedMarkerElement({
 				position: { lat: receiver.latitude, lng: receiver.longitude },
 				map: map,
 				title: `${receiver.callsign}${receiver.description ? ` - ${receiver.description}` : ''}`,
-				content: markerContent,
+				content: markerLink,
 				zIndex: 150 // Between airports (100) and aircraft (1000)
 			});
 
@@ -2095,10 +2120,16 @@
 		align-items: center;
 		pointer-events: auto;
 		cursor: pointer;
+		text-decoration: none;
+		transition: transform 0.2s ease-in-out;
+	}
+
+	:global(.receiver-marker:hover) {
+		transform: scale(1.1);
 	}
 
 	:global(.receiver-icon) {
-		background: transparent;
+		background: white;
 		border: 2px solid #374151;
 		border-radius: 50%;
 		width: 24px;
@@ -2108,10 +2139,23 @@
 		justify-content: center;
 		color: #10b981;
 		box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+		transition: all 0.2s ease-in-out;
+	}
+
+	@media (prefers-color-scheme: dark) {
+		:global(.receiver-icon) {
+			background: #1f2937;
+			border-color: #6b7280;
+		}
+	}
+
+	:global(.receiver-marker:hover .receiver-icon) {
+		border-color: #10b981;
+		box-shadow: 0 3px 8px rgba(16, 185, 129, 0.4);
 	}
 
 	:global(.receiver-label) {
-		background: rgba(255, 255, 255, 0.5);
+		background: rgba(255, 255, 255, 0.95);
 		border: 1px solid #d1d5db;
 		border-radius: 4px;
 		padding: 2px 6px;
@@ -2124,5 +2168,13 @@
 		text-rendering: optimizeLegibility;
 		-webkit-font-smoothing: antialiased;
 		-moz-osx-font-smoothing: grayscale;
+	}
+
+	@media (prefers-color-scheme: dark) {
+		:global(.receiver-label) {
+			background: rgba(31, 41, 55, 0.95);
+			border-color: #4b5563;
+			color: #e5e7eb;
+		}
 	}
 </style>
