@@ -129,17 +129,15 @@ export METRICS_PUSHGATEWAY=""
 # Example: export METRICS_PUSHGATEWAY="http://localhost:9091"
 
 #------------------------------------------------------------------------------
-# AWS CLI CONFIGURATION
+# RCLONE CONFIGURATION
 #------------------------------------------------------------------------------
 
-# AWS CLI profile (optional, usually not needed)
-# export AWS_PROFILE=default
+# Rclone configuration file location (default: /etc/soar/rclone.conf)
+# Only change if you need to use a different config file
+# export RCLONE_CONFIG="/etc/soar/rclone.conf"
 
-# Additional AWS CLI options (optional)
-# export AWS_CLI_OPTS="--quiet"
-
-# Certificate verification (usually leave at default)
-# export AWS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+# Rclone additional options (optional)
+# export RCLONE_OPTS="--stats=1s"
 
 #------------------------------------------------------------------------------
 # ADVANCED CONFIGURATION
@@ -166,11 +164,11 @@ export METRICS_PUSHGATEWAY=""
 #
 # 1. Test cloud storage access:
 #    source /etc/soar/backup-env
-#    aws s3 ls ${BACKUP_BUCKET}/
+#    rclone lsd ${BACKUP_REMOTE} --config /etc/soar/rclone.conf
 #
 # 2. Test WAL archiving (as postgres user):
 #    sudo -u postgres /usr/local/bin/soar-wal-archive \
-#      /var/lib/postgresql/15/main/pg_wal/000000010000000000000001 \
+#      /var/lib/postgresql/17/main/pg_wal/000000010000000000000001 \
 #      000000010000000000000001
 #
 # 3. Test base backup (manual run):
@@ -178,4 +176,4 @@ export METRICS_PUSHGATEWAY=""
 #    sudo journalctl -u soar-backup-base.service -f
 #
 # 4. Verify backup in cloud:
-#    aws s3 ls ${BACKUP_BUCKET}/base/ --recursive --human-readable
+#    rclone lsd ${BACKUP_REMOTE}/base/ --config /etc/soar/rclone.conf

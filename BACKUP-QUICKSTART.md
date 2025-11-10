@@ -6,9 +6,9 @@ For comprehensive documentation, see [DB-BACKUPS.md](./DB-BACKUPS.md).
 
 ## Prerequisites
 
-- PostgreSQL 12+ with 420GB `soar` database
-- AWS CLI installed (`apt install awscli`)
-- Cloud storage account (Backblaze B2 recommended for cost)
+- PostgreSQL 17 with 420GB `soar` database
+- rclone installed (`apt install rclone`)
+- Cloud storage account (Wasabi recommended)
 - ~150GB free disk space in `/var/lib/soar/backup-temp`
 
 ## Step 1: Set Up Cloud Storage (5 minutes)
@@ -29,9 +29,10 @@ For comprehensive documentation, see [DB-BACKUPS.md](./DB-BACKUPS.md).
 
 ### Option B: AWS S3 (Standard - $21/month)
 
-1. Create S3 bucket: `aws s3 mb s3://soar-backup-prod`
+1. Create S3 bucket via AWS Console
 2. Create IAM user with S3 access
 3. Save access key ID and secret key
+4. Configure in rclone.conf (see rclone.conf.example)
 
 ## Step 2: Configure Backup System (5 minutes)
 
@@ -62,7 +63,7 @@ sudo chmod 600 /etc/soar/backup-env
 **Test cloud access:**
 ```bash
 source /etc/soar/backup-env
-aws s3 ls ${BACKUP_BUCKET}/
+rclone lsd ${BACKUP_REMOTE} --config /etc/soar/rclone.conf
 # Should show empty bucket or return without error
 ```
 
@@ -156,7 +157,7 @@ psql -U postgres -d soar -c "SELECT * FROM pg_stat_archiver;"
 
 # Check cloud storage for WAL files
 source /etc/soar/backup-env
-aws s3 ls ${BACKUP_BUCKET}/wal/ | tail -10
+rclone ls ${BACKUP_REMOTE}/wal/ --config /etc/soar/rclone.conf | tail -10
 ```
 
 ✓ You should see recent WAL files in cloud storage.
@@ -195,7 +196,7 @@ sudo systemctl list-timers | grep backup
 
 # Check last base backup
 source /etc/soar/backup-env
-aws s3 ls ${BACKUP_BUCKET}/base/ | tail -5
+rclone lsd ${BACKUP_REMOTE}/base/ --config /etc/soar/rclone.conf
 
 # Check WAL archiving status
 psql -U postgres -d soar -c "SELECT last_archived_wal, last_archived_time FROM pg_stat_archiver;"
@@ -220,9 +221,9 @@ du -sh /var/lib/postgresql/15/main/pg_wal/
 **Symptom**: `pg_wal/` directory growing, no files in cloud storage
 
 **Fix**:
-1. Check credentials: `source /etc/soar/backup-env && aws s3 ls ${BACKUP_BUCKET}/`
-2. Check logs: `grep "archive command failed" /var/log/postgresql/postgresql-15-main.log`
-3. Test manually: `sudo -u postgres /usr/local/bin/soar-wal-archive /var/lib/postgresql/15/main/pg_wal/000000010000000000000001 000000010000000000000001`
+1. Check credentials: `source /etc/soar/backup-env && rclone lsd ${BACKUP_REMOTE} --config /etc/soar/rclone.conf`
+2. Check logs: `grep "archive command failed" /var/log/postgresql/postgresql-17-main.log`
+3. Test manually: `sudo -u postgres /usr/local/bin/soar-wal-archive /var/lib/postgresql/17/main/pg_wal/000000010000000000000001 000000010000000000000001`
 
 ### Disk Space Running Low
 

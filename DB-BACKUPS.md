@@ -276,92 +276,38 @@ s3://your-backup-bucket/
     └── backup-config.json    # Backup metadata
 ```
 
-### AWS S3 Setup
+### Wasabi Setup (Recommended)
 
-1. **Create IAM user for backups**:
+1. **Create account** at https://wasabi.com
+
+2. **Create bucket**:
+   - Log into Wasabi console
+   - Create bucket: `soar-backup-prod`
+   - Set to "Private"
+   - Note your region endpoint (e.g., `s3.wasabisys.com`)
+
+3. **Create access key**:
+   - Go to "Access Keys" in Wasabi console
+   - Create new access key
+   - Save the `Access Key` and `Secret Key`
+
+4. **Configure rclone** (see rclone.conf.example for details):
    ```bash
-   aws iam create-user --user-name soar-backup
+   sudo nano /etc/soar/rclone.conf
    ```
 
-2. **Create S3 bucket**:
-   ```bash
-   aws s3 mb s3://soar-backup-prod --region us-east-1
+   Add configuration:
+   ```ini
+   [soar-db]
+   type = s3
+   provider = Wasabi
+   access_key_id = YOUR_WASABI_ACCESS_KEY
+   secret_access_key = YOUR_WASABI_SECRET_KEY
+   endpoint = s3.wasabisys.com
+   acl = private
    ```
 
-3. **Enable versioning** (protects against accidental deletion):
-   ```bash
-   aws s3api put-bucket-versioning \
-     --bucket soar-backup-prod \
-     --versioning-configuration Status=Enabled
-   ```
-
-4. **Set lifecycle policy** (auto-delete old backups):
-   ```bash
-   cat > lifecycle-policy.json <<'EOF'
-   {
-     "Rules": [
-       {
-         "Id": "delete-old-wal",
-         "Status": "Enabled",
-         "Prefix": "wal/",
-         "Expiration": {
-           "Days": 30
-         }
-       },
-       {
-         "Id": "delete-old-base",
-         "Status": "Enabled",
-         "Prefix": "base/",
-         "Expiration": {
-           "Days": 30
-         }
-       }
-     ]
-   }
-   EOF
-
-   aws s3api put-bucket-lifecycle-configuration \
-     --bucket soar-backup-prod \
-     --lifecycle-configuration file://lifecycle-policy.json
-   ```
-
-5. **Create IAM policy**:
-   ```bash
-   cat > backup-policy.json <<'EOF'
-   {
-     "Version": "2012-10-17",
-     "Statement": [
-       {
-         "Effect": "Allow",
-         "Action": [
-           "s3:PutObject",
-           "s3:GetObject",
-           "s3:ListBucket",
-           "s3:DeleteObject"
-         ],
-         "Resource": [
-           "arn:aws:s3:::soar-backup-prod",
-           "arn:aws:s3:::soar-backup-prod/*"
-         ]
-       }
-     ]
-   }
-   EOF
-
-   aws iam put-user-policy \
-     --user-name soar-backup \
-     --policy-name soar-backup-policy \
-     --policy-document file://backup-policy.json
-   ```
-
-6. **Create access key**:
-   ```bash
-   aws iam create-access-key --user-name soar-backup
-   ```
-
-   Save the `AccessKeyId` and `SecretAccessKey` - you'll need these for configuration.
-
-### Backblaze B2 Setup
+### Backblaze B2 Setup (Alternative - Lower Cost)
 
 1. **Create account** at https://www.backblaze.com/b2/sign-up.html
 
@@ -375,12 +321,33 @@ s3://your-backup-bucket/
    - Go to "App Keys" in B2 console
    - Create new key with access to `soar-backup-prod` bucket
    - Save the `keyID` and `applicationKey`
+   - Note your endpoint (e.g., `https://s3.us-west-004.backblazeb2.com`)
 
-4. **Install B2 CLI** (optional, for testing):
-   ```bash
-   pip install b2
-   b2 authorize-account <keyID> <applicationKey>
-   b2 ls soar-backup-prod
+4. **Configure rclone**:
+   ```ini
+   [soar-db]
+   type = s3
+   provider = Backblaze
+   access_key_id = YOUR_BACKBLAZE_KEY_ID
+   secret_access_key = YOUR_BACKBLAZE_APPLICATION_KEY
+   endpoint = s3.us-west-004.backblazeb2.com
+   acl = private
+   ```
+
+### AWS S3 Setup (Alternative - Higher Cost)
+
+1. **Create S3 bucket** via AWS Console
+2. **Create IAM user** with S3 access
+3. **Create access key** and save credentials
+4. **Configure rclone**:
+   ```ini
+   [soar-db]
+   type = s3
+   provider = AWS
+   access_key_id = YOUR_AWS_ACCESS_KEY_ID
+   secret_access_key = YOUR_AWS_SECRET_ACCESS_KEY
+   region = us-east-1
+   acl = private
    ```
 
 ### Local Configuration
@@ -388,40 +355,33 @@ s3://your-backup-bucket/
 Create `/etc/soar/backup-env` (restrict permissions!):
 
 ```bash
-# Cloud storage credentials
-# Use either AWS S3 or S3-compatible endpoint (Backblaze B2, Wasabi, etc.)
+# Rclone remote and bucket
+export BACKUP_REMOTE="soar-db:soar-backup-prod"
 
-# For AWS S3
-export AWS_ACCESS_KEY_ID="AKIA..."
-export AWS_SECRET_ACCESS_KEY="..."
-export AWS_DEFAULT_REGION="us-east-1"
-export BACKUP_BUCKET="s3://soar-backup-prod"
-
-# For Backblaze B2 (S3-compatible)
-# export AWS_ACCESS_KEY_ID="<keyID>"
-# export AWS_SECRET_ACCESS_KEY="<applicationKey>"
-# export AWS_ENDPOINT_URL="https://s3.us-west-004.backblazeb2.com"
-# export BACKUP_BUCKET="s3://soar-backup-prod"
-
-# For Wasabi
-# export AWS_ACCESS_KEY_ID="..."
-# export AWS_SECRET_ACCESS_KEY="..."
-# export AWS_ENDPOINT_URL="https://s3.wasabisys.com"
-# export BACKUP_BUCKET="s3://soar-backup-prod"
+# Rclone configuration file
+export RCLONE_CONFIG="/etc/soar/rclone.conf"
 
 # Backup retention
 export BACKUP_RETENTION_DAYS=30
+export BASE_BACKUP_MIN_COUNT=2
+export WAL_RETENTION_DAYS=30
 
 # PostgreSQL connection (usually local)
 export PGHOST=localhost
 export PGPORT=5432
 export PGDATABASE=soar
 export PGUSER=postgres
+export PGDATA=/var/lib/postgresql/17/main
+export PG_VERSION=17
 # Note: Use .pgpass for password, not environment variable
 
 # Backup paths
 export BACKUP_TEMP_DIR="/var/lib/soar/backup-temp"
 export BACKUP_LOG_DIR="/var/log/soar"
+
+# Backup compression
+export BACKUP_COMPRESSION=gzip
+export BACKUP_PARALLEL_JOBS=4
 
 # Notification (optional)
 # export BACKUP_NOTIFY_EMAIL="ops@example.com"
@@ -430,8 +390,8 @@ export BACKUP_LOG_DIR="/var/log/soar"
 
 **Set restrictive permissions**:
 ```bash
-sudo chown postgres:postgres /etc/soar/backup-env
-sudo chmod 600 /etc/soar/backup-env
+sudo chown postgres:postgres /etc/soar/backup-env /etc/soar/rclone.conf
+sudo chmod 600 /etc/soar/backup-env /etc/soar/rclone.conf
 ```
 
 ### Testing Cloud Access
@@ -440,28 +400,31 @@ sudo chmod 600 /etc/soar/backup-env
 # Source credentials
 source /etc/soar/backup-env
 
+# Test listing buckets
+rclone lsd soar-db: --config /etc/soar/rclone.conf
+
 # Test upload
-echo "test" | aws s3 cp - ${BACKUP_BUCKET}/test.txt
+echo "test" | rclone rcat ${BACKUP_REMOTE}/test.txt --config /etc/soar/rclone.conf
 
 # Test download
-aws s3 cp ${BACKUP_BUCKET}/test.txt -
+rclone cat ${BACKUP_REMOTE}/test.txt --config /etc/soar/rclone.conf
 
 # Test listing
-aws s3 ls ${BACKUP_BUCKET}/
+rclone lsf ${BACKUP_REMOTE}/ --config /etc/soar/rclone.conf
 
 # Cleanup
-aws s3 rm ${BACKUP_BUCKET}/test.txt
+rclone delete ${BACKUP_REMOTE}/test.txt --config /etc/soar/rclone.conf
 ```
 
 ## Backup Scripts
 
-All scripts are located in `/scripts/backup/` and must be executable (`chmod +x`).
+All scripts are installed to `/usr/local/bin/` with a `soar-` prefix.
 
 ### 1. WAL Archive Script: `wal-archive`
 
 **Purpose**: Called by PostgreSQL to archive WAL segments continuously.
 
-**Location**: `/usr/local/bin/soar-wal-archive` (symlink to `/scripts/backup/wal-archive`)
+**Location**: `/usr/local/bin/soar-wal-archive` (symlink to `/usr/local/bin/soar-wal-archive`)
 
 **Usage**: Called automatically by PostgreSQL via `archive_command`.
 
@@ -483,7 +446,7 @@ sudo -u postgres /usr/local/bin/soar-wal-archive \
 
 **Purpose**: Creates weekly full database backup.
 
-**Location**: `/scripts/backup/base-backup`
+**Location**: `/usr/local/bin/soar-base-backup`
 
 **Scheduled**: Weekly via systemd timer (Sunday 2:00 AM)
 
@@ -498,7 +461,7 @@ sudo -u postgres /usr/local/bin/soar-wal-archive \
 **Manual usage**:
 ```bash
 # Run as postgres user
-sudo -u postgres /scripts/backup/base-backup
+sudo -u postgres /usr/local/bin/soar-base-backup
 
 # Or via systemd
 sudo systemctl start soar-backup-base.service
@@ -513,7 +476,7 @@ sudo systemctl start soar-backup-base.service
 
 **Purpose**: Verifies backup integrity weekly.
 
-**Location**: `/scripts/backup/backup-verify`
+**Location**: `/usr/local/bin/soar-backup-verify`
 
 **Scheduled**: Weekly via systemd timer (Monday 3:00 AM)
 
@@ -526,17 +489,17 @@ sudo systemctl start soar-backup-base.service
 
 **Manual usage**:
 ```bash
-sudo -u postgres /scripts/backup/backup-verify
+sudo -u postgres /usr/local/bin/soar-backup-verify
 
 # Verify specific backup
-sudo -u postgres /scripts/backup/backup-verify 2025-01-05
+sudo -u postgres /usr/local/bin/soar-backup-verify 2025-01-05
 ```
 
 ### 4. Restore Script: `restore`
 
 **Purpose**: Restore database from backup (full disaster recovery or PITR).
 
-**Location**: `/scripts/backup/restore`
+**Location**: `/usr/local/bin/soar-restore`
 
 **Usage**: **ONLY run during disaster recovery - this is destructive!**
 
@@ -552,13 +515,13 @@ sudo -u postgres /scripts/backup/backup-verify 2025-01-05
 **Manual usage**:
 ```bash
 # Full restore to latest available point
-sudo /scripts/backup/restore --latest
+sudo /usr/local/bin/soar-restore --latest
 
 # Point-in-time restore to specific timestamp
-sudo /scripts/backup/restore --target-time "2025-01-10 14:30:00"
+sudo /usr/local/bin/soar-restore --target-time "2025-01-10 14:30:00"
 
 # Restore from specific base backup
-sudo /scripts/backup/restore --base-backup 2025-01-05 --target-time "2025-01-08 10:00:00"
+sudo /usr/local/bin/soar-restore --base-backup 2025-01-05 --target-time "2025-01-08 10:00:00"
 ```
 
 **Safety features**:
@@ -576,13 +539,13 @@ Before attempting any restore:
 1. **Verify backups exist**:
    ```bash
    source /etc/soar/backup-env
-   aws s3 ls ${BACKUP_BUCKET}/base/
-   aws s3 ls ${BACKUP_BUCKET}/wal/ | head -20
+   rclone lsd ${BACKUP_REMOTE}/base/ --config /etc/soar/rclone.conf
+   rclone ls ${BACKUP_REMOTE}/wal/ --config /etc/soar/rclone.conf | head -20
    ```
 
 2. **Check backup age**:
    ```bash
-   /scripts/backup/backup-verify
+   /usr/local/bin/soar-backup-verify
    ```
 
 3. **Estimate restore time**:
@@ -610,7 +573,7 @@ Before attempting any restore:
 
 2. **Run restore script**:
    ```bash
-   sudo /scripts/backup/restore --latest
+   sudo /usr/local/bin/soar-restore --latest
    ```
 
 3. **Verify restoration**:
@@ -660,7 +623,7 @@ Before attempting any restore:
 
 3. **Run restore with target time**:
    ```bash
-   sudo /scripts/backup/restore --target-time "2025-01-10 14:25:00"
+   sudo /usr/local/bin/soar-restore --target-time "2025-01-10 14:25:00"
    ```
 
 4. **Verify restored state**:
@@ -694,7 +657,7 @@ Before attempting any restore:
 
 2. **Run restore to alternate location**:
    ```bash
-   sudo /scripts/backup/restore \
+   sudo /usr/local/bin/soar-restore \
      --target-time "2025-01-10 14:25:00" \
      --target-database soar_restore_test \
      --no-destructive
@@ -725,10 +688,10 @@ Before attempting any restore:
    cd /tmp/restore
 
    # Find latest backup
-   LATEST_BACKUP=$(aws s3 ls ${BACKUP_BUCKET}/base/ | tail -1 | awk '{print $2}' | tr -d '/')
+   LATEST_BACKUP=$(rclone lsd ${BACKUP_REMOTE}/base/ --config /etc/soar/rclone.conf | tail -1 | awk '{print $2}' | tr -d '/')
 
    # Download
-   aws s3 cp ${BACKUP_BUCKET}/base/${LATEST_BACKUP}/backup.tar.gz .
+   rclone copyto ${BACKUP_REMOTE}/base/${LATEST_BACKUP}/backup.tar.gz --config /etc/soar/rclone.conf .
    tar xzf backup.tar.gz
    ```
 
@@ -908,7 +871,7 @@ EOF
 
 # Check if WAL files were archived
 source /etc/soar/backup-env
-aws s3 ls ${BACKUP_BUCKET}/wal/ | tail -20
+rclone ls ${BACKUP_REMOTE}/wal/ --config /etc/soar/rclone.conf | tail -20
 
 # Check PostgreSQL archiver status
 psql -U postgres -d soar -c "SELECT * FROM pg_stat_archiver;"
@@ -927,7 +890,7 @@ sudo journalctl -u soar-backup-base.service -f
 
 # Check results in cloud
 source /etc/soar/backup-env
-aws s3 ls ${BACKUP_BUCKET}/base/ --recursive --human-readable
+rclone lsd ${BACKUP_REMOTE}/base/ --config /etc/soar/rclone.conf --recursive --human-readable
 ```
 
 **Expected**: Should complete in 2-4 hours and show ~150GB compressed backup in cloud.
@@ -939,7 +902,7 @@ aws s3 ls ${BACKUP_BUCKET}/base/ --recursive --human-readable
 sudo -u postgres createdb soar_restore_test
 
 # Restore
-sudo /scripts/backup/restore \
+sudo /usr/local/bin/soar-restore \
   --target-database soar_restore_test \
   --no-destructive \
   --latest
@@ -963,7 +926,7 @@ sudo -u postgres dropdb soar_restore_test
 1. **Pre-test checks**:
    ```bash
    # Verify backup health
-   /scripts/backup/backup-verify
+   /usr/local/bin/soar-backup-verify
 
    # Document current database state
    psql -U postgres -d soar -c "
@@ -982,7 +945,7 @@ sudo -u postgres dropdb soar_restore_test
    sudo -u postgres createdb soar_restore_test
 
    # Time the restore
-   time sudo /scripts/backup/restore \
+   time sudo /usr/local/bin/soar-restore \
      --target-database soar_restore_test \
      --no-destructive \
      --latest
@@ -1095,17 +1058,18 @@ sudo -u postgres /usr/local/bin/soar-wal-archive \
 
 1. **Cloud credentials expired/invalid**:
    ```bash
-   # Test AWS credentials
+   # Test rclone credentials
    source /etc/soar/backup-env
-   aws sts get-caller-identity
+   rclone lsd soar-db: --config /etc/soar/rclone.conf
    ```
 
-   **Fix**: Update credentials in `/etc/soar/backup-env`
+   **Fix**: Update credentials in `/etc/soar/rclone.conf`
 
 2. **Network connectivity issues**:
    ```bash
-   # Test connectivity to S3
-   curl -I https://s3.amazonaws.com
+   # Test connectivity to cloud storage
+   # For Wasabi:
+   curl -I https://s3.wasabisys.com
    ```
 
    **Fix**: Check firewall, proxy settings
@@ -1113,14 +1077,15 @@ sudo -u postgres /usr/local/bin/soar-wal-archive \
 3. **Insufficient permissions**:
    ```bash
    # Test bucket access
-   aws s3 ls ${BACKUP_BUCKET}/wal/
+   rclone ls ${BACKUP_REMOTE}/wal/ --config /etc/soar/rclone.conf
    ```
 
-   **Fix**: Update IAM policy to allow PutObject
+   **Fix**: Verify rclone configuration has correct permissions
 
 4. **Disk full on destination**:
    ```bash
-   aws s3api list-buckets
+   # Check storage usage
+   rclone size ${BACKUP_REMOTE} --config /etc/soar/rclone.conf --json
    ```
 
    **Fix**: Verify lifecycle policy is working, manually clean old files
@@ -1133,7 +1098,7 @@ sudo systemctl reload postgresql
 
 # Clean up old WAL files (DANGEROUS - only if archiving is broken)
 # This will lose PITR capability!
-sudo -u postgres pg_archivecleanup /var/lib/postgresql/15/main/pg_wal 000000010000000000000064
+sudo -u postgres pg_archivecleanup /var/lib/postgresql/17/main/pg_wal 000000010000000000000064
 
 # Fix archiving issue, then re-enable
 sudo -u postgres psql -d soar -c "ALTER SYSTEM SET archive_command = '/usr/local/bin/soar-wal-archive %p %f';"
@@ -1170,7 +1135,7 @@ sudo journalctl -u soar-backup-base.service -f
 
 2. **Script has errors**:
    ```bash
-   sudo -u postgres /scripts/backup/base-backup
+   sudo -u postgres /usr/local/bin/soar-base-backup
    ```
 
 3. **Insufficient disk space**:
@@ -1213,7 +1178,7 @@ df -h /var/lib/postgresql
 2. **Corrupted backup**:
    ```bash
    # Verify backup integrity
-   /scripts/backup/backup-verify
+   /usr/local/bin/soar-backup-verify
    ```
 
    **Fix**: Use older backup, re-run base backup
@@ -1242,13 +1207,14 @@ df -h /var/lib/postgresql
 **Diagnosis**:
 ```bash
 # Check actual storage usage
-aws s3 ls ${BACKUP_BUCKET}/ --recursive --summarize --human-readable
+rclone size ${BACKUP_REMOTE} --config /etc/soar/rclone.conf --json
 
-# Check lifecycle policies
-aws s3api get-bucket-lifecycle-configuration --bucket soar-backup-prod
+# Check total size by directory
+rclone size ${BACKUP_REMOTE}/base/ --config /etc/soar/rclone.conf
+rclone size ${BACKUP_REMOTE}/wal/ --config /etc/soar/rclone.conf
 
 # Find large files
-aws s3 ls ${BACKUP_BUCKET}/ --recursive --human-readable | sort -k3 -h | tail -20
+rclone ls ${BACKUP_REMOTE} --config /etc/soar/rclone.conf | sort -k1 -h | tail -20
 ```
 
 **Common causes**:
@@ -1265,7 +1231,7 @@ aws s3 ls ${BACKUP_BUCKET}/ --recursive --human-readable | sort -k3 -h | tail -2
 
 3. **WAL files not expiring**:
    ```bash
-   aws s3 ls ${BACKUP_BUCKET}/wal/ | head -20
+   rclone ls ${BACKUP_REMOTE}/wal/ --config /etc/soar/rclone.conf | head -20
    # Check oldest WAL file date
    ```
 
