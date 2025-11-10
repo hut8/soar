@@ -272,10 +272,12 @@ fn dump_schema_if_non_production(database_url: &str) -> Result<()> {
     }
 
     // Write output to schema.sql in repository root
-    let schema_path = "schema.sql";
-    std::fs::write(schema_path, &output.stdout).context("Failed to write schema.sql")?;
+    // Use CARGO_MANIFEST_DIR to get the crate root (repo root) at compile time
+    let repo_root = env!("CARGO_MANIFEST_DIR");
+    let schema_path = Path::new(repo_root).join("schema.sql");
+    std::fs::write(&schema_path, &output.stdout).context("Failed to write schema.sql")?;
 
-    info!("Successfully dumped schema to {}", schema_path);
+    info!("Successfully dumped schema to {}", schema_path.display());
     Ok(())
 }
 
@@ -632,30 +634,46 @@ async fn main() -> Result<()> {
             );
         }
         Commands::Web { .. } => {
-            // Web subcommand uses tokio-console on port 6670 to avoid conflict
-            let console_layer = filter::Filtered::new(
-                console_subscriber::ConsoleLayer::builder()
-                    .server_addr(([0, 0, 0, 0], 6670))
-                    .spawn(),
-                console_filter.clone(),
-            );
+            // Skip console subscriber in test mode to avoid port conflicts
+            let is_test_mode = env::var("SOAR_ENV").map(|v| v == "test").unwrap_or(false);
 
-            if let Some(sentry_layer) = _guard
-                .as_ref()
-                .map(|_| sentry::integrations::tracing::layer())
-            {
-                registry
-                    .with(fmt_layer)
-                    .with(console_layer)
-                    .with(sentry_layer)
-                    .init();
+            if is_test_mode {
+                // Test mode: skip console subscriber
+                if let Some(sentry_layer) = _guard
+                    .as_ref()
+                    .map(|_| sentry::integrations::tracing::layer())
+                {
+                    registry.with(fmt_layer).with(sentry_layer).init();
+                } else {
+                    registry.with(fmt_layer).init();
+                }
+                info!("Running in test mode - console subscriber disabled");
             } else {
-                registry.with(fmt_layer).with(console_layer).init();
-            }
+                // Production/development mode: use tokio-console on port 6670
+                let console_layer = filter::Filtered::new(
+                    console_subscriber::ConsoleLayer::builder()
+                        .server_addr(([0, 0, 0, 0], 6670))
+                        .spawn(),
+                    console_filter.clone(),
+                );
 
-            info!(
-                "tokio-console subscriber initialized on port 6670 - connect with `tokio-console http://localhost:6670`"
-            );
+                if let Some(sentry_layer) = _guard
+                    .as_ref()
+                    .map(|_| sentry::integrations::tracing::layer())
+                {
+                    registry
+                        .with(fmt_layer)
+                        .with(console_layer)
+                        .with(sentry_layer)
+                        .init();
+                } else {
+                    registry.with(fmt_layer).with(console_layer).init();
+                }
+
+                info!(
+                    "tokio-console subscriber initialized on port 6670 - connect with `tokio-console http://localhost:6670`"
+                );
+            }
         }
         _ => {
             // Other subcommands use regular tracing (no tokio-console overhead)
