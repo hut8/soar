@@ -1,6 +1,7 @@
 <script lang="ts">
 	/// <reference types="@types/google.maps" />
 	import { onMount, onDestroy } from 'svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
 	import { goto } from '$app/navigation';
 	import Plotly from 'plotly.js-dist-min';
@@ -62,6 +63,42 @@
 		const θ = Math.atan2(y, x);
 		const bearing = ((θ * 180) / Math.PI + 360) % 360;
 		return bearing;
+	}
+
+	// Helper function to determine which fixes should display arrow markers
+	// Returns a Set of indices for fixes that should show arrows
+	function getArrowFixIndices(fixesInOrder: typeof data.fixes): SvelteSet<number> {
+		const indices = new SvelteSet<number>();
+
+		if (fixesInOrder.length === 0) return indices;
+
+		// Always include the first fix
+		indices.add(0);
+
+		if (fixesInOrder.length === 1) return indices;
+
+		// Calculate 10% intervals
+		const totalFixes = fixesInOrder.length;
+		const interval = Math.floor(totalFixes / 10); // 10% of total fixes
+
+		if (interval === 0) return indices; // Too few fixes for intervals
+
+		let lastArrowTimestamp = new Date(fixesInOrder[0].timestamp).getTime();
+		const oneMinuteMs = 60 * 1000; // 1 minute in milliseconds
+
+		// Check each 10% marker
+		for (let i = 1; i <= 10; i++) {
+			const candidateIndex = Math.min(i * interval, totalFixes - 1);
+			const candidateTimestamp = new Date(fixesInOrder[candidateIndex].timestamp).getTime();
+
+			// Only add if at least 1 minute has passed since last arrow
+			if (candidateTimestamp - lastArrowTimestamp >= oneMinuteMs) {
+				indices.add(candidateIndex);
+				lastArrowTimestamp = candidateTimestamp;
+			}
+		}
+
+		return indices;
 	}
 
 	// Helper function to map altitude to color (red→blue gradient)
@@ -370,8 +407,12 @@
 
 		const minAlt = minAltitude() ?? 0;
 		const maxAlt = maxAltitude() ?? 1000;
+		const arrowIndices = getArrowFixIndices(fixesInOrder);
 
 		fixesInOrder.forEach((fix, index) => {
+			// Only create arrow markers for selected indices
+			if (!arrowIndices.has(index)) return;
+
 			// Calculate bearing to next fix
 			let bearing = 0;
 			if (index < fixesInOrder.length - 1) {
@@ -394,10 +435,10 @@
 
 			const color = altitudeToColor(fix.altitude_msl_feet, minAlt, maxAlt);
 
-			// Create SVG arrow element (6x6 pixels)
+			// Create SVG arrow element (12x12 pixels, twice the original size)
 			const arrowSvg = document.createElement('div');
 			arrowSvg.innerHTML = `
-				<svg width="6" height="6" viewBox="0 0 16 16" style="transform: rotate(${bearing}deg); filter: drop-shadow(0 0 1px rgba(0,0,0,0.5)); cursor: pointer;">
+				<svg width="12" height="12" viewBox="0 0 16 16" style="transform: rotate(${bearing}deg); filter: drop-shadow(0 0 1px rgba(0,0,0,0.5)); cursor: pointer;">
 					<path d="M8 2 L14 14 L8 11 L2 14 Z" fill="${color}" stroke="rgba(0,0,0,0.3)" stroke-width="0.4"/>
 				</svg>
 			`;
@@ -551,7 +592,7 @@
 					});
 				}
 
-				// Add directional arrow markers
+				// Add directional arrow markers at selected intervals
 				addFixMarkers(fixesInOrder);
 			});
 		} catch (error) {

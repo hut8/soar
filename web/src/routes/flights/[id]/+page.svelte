@@ -1,6 +1,7 @@
 <script lang="ts">
 	/// <reference types="@types/google.maps" />
 	import { onMount, onDestroy } from 'svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
 	import Plotly from 'plotly.js-dist-min';
 	import {
@@ -138,6 +139,42 @@
 		const θ = Math.atan2(y, x);
 		const bearing = ((θ * 180) / Math.PI + 360) % 360;
 		return bearing;
+	}
+
+	// Helper function to determine which fixes should display arrow markers
+	// Returns a Set of indices for fixes that should show arrows
+	function getArrowFixIndices(fixesInOrder: typeof data.fixes): SvelteSet<number> {
+		const indices = new SvelteSet<number>();
+
+		if (fixesInOrder.length === 0) return indices;
+
+		// Always include the first fix
+		indices.add(0);
+
+		if (fixesInOrder.length === 1) return indices;
+
+		// Calculate 10% intervals
+		const totalFixes = fixesInOrder.length;
+		const interval = Math.floor(totalFixes / 10); // 10% of total fixes
+
+		if (interval === 0) return indices; // Too few fixes for intervals
+
+		let lastArrowTimestamp = new Date(fixesInOrder[0].timestamp).getTime();
+		const oneMinuteMs = 60 * 1000; // 1 minute in milliseconds
+
+		// Check each 10% marker
+		for (let i = 1; i <= 10; i++) {
+			const candidateIndex = Math.min(i * interval, totalFixes - 1);
+			const candidateTimestamp = new Date(fixesInOrder[candidateIndex].timestamp).getTime();
+
+			// Only add if at least 1 minute has passed since last arrow
+			if (candidateTimestamp - lastArrowTimestamp >= oneMinuteMs) {
+				indices.add(candidateIndex);
+				lastArrowTimestamp = candidateTimestamp;
+			}
+		}
+
+		return indices;
 	}
 
 	// Helper function to map altitude to color (red→blue gradient)
@@ -605,8 +642,12 @@
 				// Re-add fix markers as directional arrows
 				const minAlt = minAltitude() ?? 0;
 				const maxAlt = maxAltitude() ?? 1000;
+				const arrowIndices = getArrowFixIndices(fixesInOrder);
 
 				fixesInOrder.forEach((fix, index) => {
+					// Only create arrow markers for selected indices
+					if (!arrowIndices.has(index)) return;
+
 					// Calculate bearing to next fix (or use previous bearing for last fix)
 					let bearing = 0;
 					if (index < fixesInOrder.length - 1) {
@@ -631,10 +672,10 @@
 					// Get color based on altitude
 					const color = altitudeToColor(fix.altitude_msl_feet, minAlt, maxAlt);
 
-					// Create SVG arrow element
+					// Create SVG arrow element (12x12 pixels, twice the original size)
 					const arrowSvg = document.createElement('div');
 					arrowSvg.innerHTML = `
-						<svg width="6" height="6" viewBox="0 0 16 16" style="transform: rotate(${bearing}deg); filter: drop-shadow(0 0 1px rgba(0,0,0,0.5)); cursor: pointer;">
+						<svg width="12" height="12" viewBox="0 0 16 16" style="transform: rotate(${bearing}deg); filter: drop-shadow(0 0 1px rgba(0,0,0,0.5)); cursor: pointer;">
 							<path d="M8 2 L14 14 L8 11 L2 14 Z" fill="${color}" stroke="rgba(0,0,0,0.3)" stroke-width="0.4"/>
 						</svg>
 					`;
@@ -836,6 +877,108 @@
 						title: 'Landing'
 					});
 				}
+
+				// Add directional arrow markers at selected intervals
+				const minAlt = minAltitude() ?? 0;
+				const maxAlt = maxAltitude() ?? 1000;
+				const arrowIndices = getArrowFixIndices(fixesInOrder);
+
+				fixesInOrder.forEach((fix, index) => {
+					// Only create arrow markers for selected indices
+					if (!arrowIndices.has(index)) return;
+
+					// Calculate bearing to next fix (or use previous bearing for last fix)
+					let bearing = 0;
+					if (index < fixesInOrder.length - 1) {
+						const nextFix = fixesInOrder[index + 1];
+						bearing = calculateBearing(
+							fix.latitude,
+							fix.longitude,
+							nextFix.latitude,
+							nextFix.longitude
+						);
+					} else if (index > 0) {
+						// For last fix, use bearing from previous fix
+						const prevFix = fixesInOrder[index - 1];
+						bearing = calculateBearing(
+							prevFix.latitude,
+							prevFix.longitude,
+							fix.latitude,
+							fix.longitude
+						);
+					}
+
+					// Get color based on altitude
+					const color = altitudeToColor(fix.altitude_msl_feet, minAlt, maxAlt);
+
+					// Create SVG arrow element (12x12 pixels, twice the original size)
+					const arrowSvg = document.createElement('div');
+					arrowSvg.innerHTML = `
+						<svg width="12" height="12" viewBox="0 0 16 16" style="transform: rotate(${bearing}deg); filter: drop-shadow(0 0 1px rgba(0,0,0,0.5)); cursor: pointer;">
+							<path d="M8 2 L14 14 L8 11 L2 14 Z" fill="${color}" stroke="rgba(0,0,0,0.3)" stroke-width="0.4"/>
+						</svg>
+					`;
+
+					const marker = new google.maps.marker.AdvancedMarkerElement({
+						map,
+						position: { lat: fix.latitude, lng: fix.longitude },
+						content: arrowSvg
+					});
+
+					marker.addListener('click', () => {
+						const mslAlt = fix.altitude_msl_feet ? Math.round(fix.altitude_msl_feet) : 'N/A';
+						const aglAlt = fix.altitude_agl_feet ? Math.round(fix.altitude_agl_feet) : 'N/A';
+						const heading =
+							fix.track_degrees !== undefined ? Math.round(fix.track_degrees) + '°' : 'N/A';
+						const turnRate =
+							fix.turn_rate_rot !== undefined ? fix.turn_rate_rot.toFixed(2) + ' rot/min' : 'N/A';
+						const climbRate =
+							fix.climb_fpm !== undefined ? Math.round(fix.climb_fpm) + ' fpm' : 'N/A';
+						const groundSpeed =
+							fix.ground_speed_knots !== undefined
+								? Math.round(fix.ground_speed_knots) + ' kt'
+								: 'N/A';
+						const timestamp = dayjs(fix.timestamp).format('h:mm:ss A');
+
+						const content = `
+							<div style="padding: 12px; min-width: 200px; background: white; color: #1f2937; border-radius: 8px; font-family: system-ui, -apple-system, sans-serif;">
+								<div style="font-weight: 600; margin-bottom: 8px; font-size: 14px; color: #111827; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px;">${timestamp}</div>
+								<div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px;">
+									<div style="display: flex; justify-content: space-between;">
+										<span style="color: #6b7280;">MSL:</span>
+										<span style="font-weight: 600; color: #3b82f6;">${mslAlt} ft</span>
+									</div>
+									<div style="display: flex; justify-content: space-between;">
+										<span style="color: #6b7280;">AGL:</span>
+										<span style="font-weight: 600; color: #10b981;">${aglAlt} ft</span>
+									</div>
+									<div style="display: flex; justify-content: space-between;">
+										<span style="color: #6b7280;">Heading:</span>
+										<span style="font-weight: 500; color: #111827;">${heading}</span>
+									</div>
+									<div style="display: flex; justify-content: space-between;">
+										<span style="color: #6b7280;">Turn Rate:</span>
+										<span style="font-weight: 500; color: #111827;">${turnRate}</span>
+									</div>
+									<div style="display: flex; justify-content: space-between;">
+										<span style="color: #6b7280;">Climb:</span>
+										<span style="font-weight: 500; color: #111827;">${climbRate}</span>
+									</div>
+									<div style="display: flex; justify-content: space-between;">
+										<span style="color: #6b7280;">Speed:</span>
+										<span style="font-weight: 500; color: #111827;">${groundSpeed}</span>
+									</div>
+								</div>
+							</div>
+						`;
+
+						altitudeInfoWindow?.setContent(content);
+						altitudeInfoWindow?.setPosition({ lat: fix.latitude, lng: fix.longitude });
+						altitudeInfoWindow?.open(map);
+					});
+
+					fixMarkers.push(marker);
+				});
 			});
 		} catch (error) {
 			console.error('Failed to load Google Maps:', error);
