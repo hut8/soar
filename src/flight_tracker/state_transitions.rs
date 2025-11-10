@@ -304,9 +304,15 @@ pub(crate) async fn process_state_transition(
                 .await
                 .unwrap_or_default();
 
-            // If we have 3+ recent fixes and they're all inactive, this is a takeoff
-            let is_takeoff =
-                recent_fixes.len() >= 3 && recent_fixes.iter().all(|f| !should_be_active(f));
+            // Calculate AGL altitude to determine if we're on the ground
+            let agl_altitude = calculate_altitude_agl(ctx.elevation_db, &fix).await;
+
+            // Determine if this is a takeoff:
+            // 1. If we have 3+ recent fixes and they're all inactive, it's a takeoff
+            // 2. If the current fix is at ground level (AGL < 100 ft), it's a takeoff
+            let is_takeoff = (recent_fixes.len() >= 3
+                && recent_fixes.iter().all(|f| !should_be_active(f)))
+                || agl_altitude.map(|agl| agl < 100).unwrap_or(false);
 
             let flight_id = Uuid::now_v7();
 
