@@ -73,6 +73,8 @@ TIMER_SERVICES=(
     "soar-pull-data.service"
     "soar-sitemap.service"
     "soar-archive.service"
+    "soar-backup-base.service"
+    "soar-backup-verify.service"
 )
 
 # All services (for stopping and installing)
@@ -82,6 +84,8 @@ TIMERS=(
     "soar-pull-data.timer"
     "soar-sitemap.timer"
     "soar-archive.timer"
+    "soar-backup-base.timer"
+    "soar-backup-verify.timer"
 )
 
 # Create temporary binary directory with timestamp
@@ -200,6 +204,25 @@ for timer in "${TIMERS[@]}"; do
         log_warn "$timer not found in deployment directory, skipping"
     fi
 done
+
+# Install backup scripts
+if [ -d "$DEPLOY_DIR/scripts/backup" ]; then
+    log_info "Installing backup scripts..."
+    mkdir -p /scripts/backup
+    cp "$DEPLOY_DIR/scripts/backup"/* /scripts/backup/
+    chmod 755 /scripts/backup/*
+    chown root:root /scripts/backup/*
+
+    # Create symlink for WAL archive script (called by PostgreSQL)
+    if [ -f "/scripts/backup/wal-archive" ]; then
+        log_info "Creating symlink: /usr/local/bin/soar-wal-archive -> /scripts/backup/wal-archive"
+        ln -sf /scripts/backup/wal-archive /usr/local/bin/soar-wal-archive
+    fi
+
+    log_info "Backup scripts installed successfully"
+else
+    log_warn "scripts/backup directory not found in deployment, skipping backup script installation"
+fi
 
 # Install Prometheus job configuration files
 if [ -d "$DEPLOY_DIR/prometheus-jobs" ]; then

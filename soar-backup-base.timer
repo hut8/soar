@@ -1,15 +1,15 @@
 # SOAR Backup Base Timer
 #
-# This systemd timer automatically runs full database backups once every two weeks on Sunday at 2:00 AM.
+# This systemd timer automatically runs full database backups on the 1st and 15th of each month at 2:00 AM.
 # It creates a complete physical backup using pg_basebackup, compresses it, and uploads to
 # cloud storage (S3-compatible).
 #
 # Backup details:
-#   - Frequency: Bi-weekly (every other Sunday at 2:00 AM)
+#   - Frequency: Bi-weekly (1st and 15th of month at 2:00 AM UTC)
 #   - Method: pg_basebackup (physical backup)
 #   - Compression: gzip
 #   - Storage: Cloud storage (Wasabi/S3/B2/etc.)
-#   - Retention: 3 weeks minimum (keeps at least 2 backups)
+#   - Retention: 30 days (keeps at least 2 backups)
 #   - Duration: ~2-4 hours for 420GB database
 #
 # Combined with continuous WAL archiving, this provides point-in-time recovery capability
@@ -38,10 +38,10 @@ Description=SOAR Backup Base Timer - Bi-weekly Full Database Backup
 Requires=soar-backup-base.service
 
 [Timer]
-# Run bi-weekly: 1st and 3rd Sunday of each month at 2:00 AM UTC
-# This provides roughly 2-week intervals (13-15 days apart)
-OnCalendar=Sun *-*-01..07 02:00:00
-OnCalendar=Sun *-*-15..21 02:00:00
+# Run bi-weekly: 1st and 15th of each month at 2:00 AM UTC
+# This provides consistent 14-day intervals
+OnCalendar=*-*-01 02:00:00
+OnCalendar=*-*-15 02:00:00
 
 # If the system was down when the timer should have triggered, run it as soon as possible
 Persistent=yes
