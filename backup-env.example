@@ -6,9 +6,11 @@
 # Installation:
 #   sudo mkdir -p /etc/soar
 #   sudo cp backup-env.example /etc/soar/backup-env
+#   sudo cp rclone.conf.example /etc/soar/rclone.conf
 #   sudo nano /etc/soar/backup-env  # Edit with your values
-#   sudo chown postgres:postgres /etc/soar/backup-env
-#   sudo chmod 600 /etc/soar/backup-env
+#   sudo nano /etc/soar/rclone.conf  # Edit with your rclone remote config
+#   sudo chown postgres:postgres /etc/soar/backup-env /etc/soar/rclone.conf
+#   sudo chmod 600 /etc/soar/backup-env /etc/soar/rclone.conf
 #
 # IMPORTANT: This file contains sensitive credentials. Protect it carefully!
 #   - Set permissions to 600 (read/write for owner only)
@@ -16,51 +18,24 @@
 #   - Never commit this file to version control
 
 #------------------------------------------------------------------------------
-# CLOUD STORAGE CONFIGURATION
+# CLOUD STORAGE CONFIGURATION (using rclone)
 #------------------------------------------------------------------------------
 
-# Choose ONE of the following cloud storage providers and uncomment the
-# appropriate section. All providers must be S3-compatible.
+# Rclone remote and bucket (in rclone remote:bucket format)
+# The remote name must match a [remote] section in /etc/soar/rclone.conf
+#
+# For Wasabi example:
+export BACKUP_REMOTE="soar-db:soar-backup-prod"
+#
+# Where:
+#   soar-db = rclone remote name (defined in /etc/soar/rclone.conf)
+#   soar-backup-prod = bucket name
+#
+# See rclone.conf.example for configuration examples
 
-# --- AWS S3 (Standard) ---
-# Most integrated option, highest cost (~$21/month for 900GB)
-#
-# export AWS_ACCESS_KEY_ID="AKIA..."
-# export AWS_SECRET_ACCESS_KEY="your-secret-key-here"
-# export AWS_DEFAULT_REGION="us-east-1"
-# export BACKUP_BUCKET="s3://soar-backup-prod"
-# Note: No AWS_ENDPOINT_URL needed for standard AWS S3
-
-# --- Backblaze B2 (Recommended) ---
-# Best cost/performance balance (~$4.50/month for 900GB)
-# Free egress up to 3× storage (2.7TB/month)
-#
-# 1. Create account at https://www.backblaze.com/b2/sign-up.html
-# 2. Create bucket: soar-backup-prod (Private)
-# 3. Create application key with access to bucket
-# 4. Find your endpoint URL at https://www.backblaze.com/b2/docs/s3_compatible_api.html
-#    (Format: https://s3.us-west-004.backblazeb2.com or similar)
-#
-# export AWS_ACCESS_KEY_ID="your-backblaze-keyID"
-# export AWS_SECRET_ACCESS_KEY="your-backblaze-applicationKey"
-# export AWS_ENDPOINT_URL="https://s3.us-west-004.backblazeb2.com"
-# export BACKUP_BUCKET="s3://soar-backup-prod"
-
-# --- Wasabi ---
-# Similar pricing to B2, no egress fees (~$5.40/month for 900GB)
-#
-# export AWS_ACCESS_KEY_ID="your-wasabi-access-key"
-# export AWS_SECRET_ACCESS_KEY="your-wasabi-secret-key"
-# export AWS_ENDPOINT_URL="https://s3.wasabisys.com"
-# export BACKUP_BUCKET="s3://soar-backup-prod"
-
-# --- DigitalOcean Spaces ---
-# Simple option with included egress (~$5/month + overages)
-#
-# export AWS_ACCESS_KEY_ID="your-do-spaces-key"
-# export AWS_SECRET_ACCESS_KEY="your-do-spaces-secret"
-# export AWS_ENDPOINT_URL="https://nyc3.digitaloceanspaces.com"
-# export BACKUP_BUCKET="s3://soar-backup-prod"
+# Path to rclone configuration file
+# Default: /etc/soar/rclone.conf
+export RCLONE_CONFIG="/etc/soar/rclone.conf"
 
 #------------------------------------------------------------------------------
 # BACKUP RETENTION CONFIGURATION

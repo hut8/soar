@@ -3,8 +3,8 @@
 # wal-archive - Archive PostgreSQL WAL segments to cloud storage
 #
 # This script is called by PostgreSQL via archive_command for each completed
-# WAL segment (typically 16MB files). It uploads the WAL file to S3-compatible
-# cloud storage and verifies the upload succeeded.
+# WAL segment (typically 16MB files). It uploads the WAL file to cloud storage
+# using rclone and verifies the upload succeeded.
 #
 # Usage (called by PostgreSQL):
 #   wal-archive <wal_path> <wal_filename>
@@ -19,6 +19,7 @@
 #
 # Configuration:
 #   Source credentials from /etc/soar/backup-env
+#   Rclone config at /etc/soar/rclone.conf
 #
 # Example archive_command in postgresql.conf:
 #   archive_command = '/usr/local/bin/soar-wal-archive %p %f'
@@ -33,6 +34,9 @@ fi
 
 source /etc/soar/backup-env
 
+# Rclone configuration
+RCLONE_CONFIG="${RCLONE_CONFIG:-/etc/soar/rclone.conf}"
+
 # Arguments
 WAL_PATH="$1"
 WAL_FILE="$2"
@@ -44,13 +48,13 @@ if [[ ! -f "$WAL_PATH" ]]; then
 fi
 
 # Validate configuration
-if [[ -z "${BACKUP_BUCKET:-}" ]]; then
-    echo "ERROR: BACKUP_BUCKET not set in /etc/soar/backup-env" >&2
+if [[ -z "${BACKUP_REMOTE:-}" ]]; then
+    echo "ERROR: BACKUP_REMOTE not set in /etc/soar/backup-env" >&2
     exit 1
 fi
 
-if [[ -z "${AWS_ACCESS_KEY_ID:-}" ]] || [[ -z "${AWS_SECRET_ACCESS_KEY:-}" ]]; then
-    echo "ERROR: AWS credentials not set in /etc/soar/backup-env" >&2
+if [[ ! -f "$RCLONE_CONFIG" ]]; then
+    echo "ERROR: Rclone config not found: $RCLONE_CONFIG" >&2
     exit 1
 fi
 
@@ -63,23 +67,23 @@ log() {
     echo "[$(date -u +"%Y-%m-%d %H:%M:%S UTC")] WAL Archive: $*" >> "$LOG_DIR/backup.log"
 }
 
-# Destination in cloud storage
-DEST="${BACKUP_BUCKET}/wal/${WAL_FILE}"
+# Destination in cloud storage (rclone remote:bucket/path format)
+DEST="${BACKUP_REMOTE}/wal/${WAL_FILE}"
 
-# Upload WAL file to cloud storage
-# Use --no-progress to avoid verbose output in PostgreSQL logs
-# Set Content-Type to application/octet-stream
+# Upload WAL file to cloud storage using rclone
 log "Archiving WAL segment: $WAL_FILE ($(du -h "$WAL_PATH" | cut -f1))"
 
-if aws s3 cp "$WAL_PATH" "$DEST" \
-    --no-progress \
-    --content-type "application/octet-stream" \
-    ${AWS_ENDPOINT_URL:+--endpoint-url "$AWS_ENDPOINT_URL"} \
+if rclone copyto \
+    --config "$RCLONE_CONFIG" \
+    --quiet \
+    "$WAL_PATH" \
+    "$DEST" \
     >> "$LOG_DIR/backup.log" 2>&1; then
 
     # Verify upload by checking if file exists in cloud
-    if aws s3 ls "$DEST" \
-        ${AWS_ENDPOINT_URL:+--endpoint-url "$AWS_ENDPOINT_URL"} \
+    if rclone lsf \
+        --config "$RCLONE_CONFIG" \
+        "$DEST" \
         >> "$LOG_DIR/backup.log" 2>&1; then
         log "Successfully archived WAL segment: $WAL_FILE"
         exit 0

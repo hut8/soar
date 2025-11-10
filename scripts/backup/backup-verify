@@ -36,13 +36,15 @@ source /etc/soar/backup-env
 SPECIFIC_BACKUP="${1:-}"
 
 # Validate configuration
-if [[ -z "${BACKUP_BUCKET:-}" ]]; then
-    echo "ERROR: BACKUP_BUCKET not set in /etc/soar/backup-env" >&2
+if [[ -z "${BACKUP_REMOTE:-}" ]]; then
+    echo "ERROR: BACKUP_REMOTE not set in /etc/soar/backup-env" >&2
     exit 1
 fi
 
-if [[ -z "${AWS_ACCESS_KEY_ID:-}" ]] || [[ -z "${AWS_SECRET_ACCESS_KEY:-}" ]]; then
-    echo "ERROR: AWS credentials not set in /etc/soar/backup-env" >&2
+# Rclone configuration
+RCLONE_CONFIG="${RCLONE_CONFIG:-/etc/soar/rclone.conf}"
+if [[ ! -f "$RCLONE_CONFIG" ]]; then
+    echo "ERROR: Rclone config not found: $RCLONE_CONFIG" >&2
     exit 1
 fi
 
@@ -101,21 +103,21 @@ date_to_timestamp() {
 # Function to verify a single base backup
 verify_base_backup() {
     local backup_date="$1"
-    local backup_prefix="${BACKUP_BUCKET}/base/${backup_date}"
+    local backup_prefix="${BACKUP_REMOTE}/base/${backup_date}"
 
     log INFO "Verifying base backup: $backup_date"
 
     # Check if backup exists
-    if ! aws s3 ls "$backup_prefix/" \
-        ${AWS_ENDPOINT_URL:+--endpoint-url "$AWS_ENDPOINT_URL"} \
+    if ! rclone lsd "$backup_prefix/" \
+        --config "$RCLONE_CONFIG" \
         >/dev/null 2>&1; then
         check_result FAIL "Base backup does not exist: $backup_date"
         return 1
     fi
 
     # List files in backup
-    local files=$(aws s3 ls "$backup_prefix/" \
-        ${AWS_ENDPOINT_URL:+--endpoint-url "$AWS_ENDPOINT_URL"} \
+    local files=$(rclone lsf "$backup_prefix/" \
+        --config "$RCLONE_CONFIG" \
         2>/dev/null || echo "")
 
     if [[ -z "$files" ]]; then
@@ -132,14 +134,14 @@ verify_base_backup() {
     fi
 
     # Check for metadata file
-    if aws s3 ls "$backup_prefix/backup-metadata.json" \
-        ${AWS_ENDPOINT_URL:+--endpoint-url "$AWS_ENDPOINT_URL"} \
+    if rclone lsf "$backup_prefix/backup-metadata.json" \
+        --config "$RCLONE_CONFIG" \
         >/dev/null 2>&1; then
         check_result PASS "Base backup has metadata: $backup_date"
 
         # Download and parse metadata
-        local metadata=$(aws s3 cp "$backup_prefix/backup-metadata.json" - \
-            ${AWS_ENDPOINT_URL:+--endpoint-url "$AWS_ENDPOINT_URL"} \
+        local metadata=$(rclone cat "$backup_prefix/backup-metadata.json" \
+            --config "$RCLONE_CONFIG" \
             2>/dev/null || echo "{}")
 
         if [[ -n "$metadata" ]] && echo "$metadata" | jq . >/dev/null 2>&1; then
@@ -168,8 +170,9 @@ verify_wal_continuity() {
     log INFO "Verifying WAL continuity..."
 
     # List WAL files (limit to recent files for performance)
-    local wal_list=$(aws s3 ls "${BACKUP_BUCKET}/wal/" \
-        ${AWS_ENDPOINT_URL:+--endpoint-url "$AWS_ENDPOINT_URL"} \
+    local wal_list=$(rclone ls "${BACKUP_REMOTE}/wal/" \
+        --config "$RCLONE_CONFIG" \
+        --max-depth 1 \
         2>/dev/null | tail -100 || echo "")
 
     if [[ -z "$wal_list" ]]; then
@@ -214,9 +217,9 @@ check_backup_freshness() {
     log INFO "Checking backup freshness..."
 
     # Find newest base backup
-    local newest_backup=$(aws s3 ls "${BACKUP_BUCKET}/base/" \
-        ${AWS_ENDPOINT_URL:+--endpoint-url "$AWS_ENDPOINT_URL"} \
-        2>/dev/null | grep "PRE" | awk '{print $2}' | tr -d '/' | sort -r | head -1 || echo "")
+    local newest_backup=$(rclone lsd "${BACKUP_REMOTE}/base/" \
+        --config "$RCLONE_CONFIG" \
+        2>/dev/null | awk '{print $5}' | sort -r | head -1 || echo "")
 
     if [[ -z "$newest_backup" ]]; then
         check_result FAIL "No base backups found"
@@ -245,14 +248,14 @@ check_backup_freshness() {
 check_storage_usage() {
     log INFO "Checking storage usage..."
 
-    # Get total size of backups
-    local base_size=$(aws s3 ls "${BACKUP_BUCKET}/base/" --recursive --summarize \
-        ${AWS_ENDPOINT_URL:+--endpoint-url "$AWS_ENDPOINT_URL"} \
-        2>/dev/null | grep "Total Size:" | awk '{print $3}' || echo "0")
+    # Get total size of backups (rclone size returns JSON)
+    local base_size=$(rclone size "${BACKUP_REMOTE}/base/" \
+        --config "$RCLONE_CONFIG" \
+        --json 2>/dev/null | jq -r '.bytes // 0' || echo "0")
 
-    local wal_size=$(aws s3 ls "${BACKUP_BUCKET}/wal/" --recursive --summarize \
-        ${AWS_ENDPOINT_URL:+--endpoint-url "$AWS_ENDPOINT_URL"} \
-        2>/dev/null | grep "Total Size:" | awk '{print $3}' || echo "0")
+    local wal_size=$(rclone size "${BACKUP_REMOTE}/wal/" \
+        --config "$RCLONE_CONFIG" \
+        --json 2>/dev/null | jq -r '.bytes // 0' || echo "0")
 
     local total_size=$((base_size + wal_size))
 
@@ -297,13 +300,13 @@ main() {
     log INFO "=========================================="
     log INFO "Starting backup verification"
     log INFO "=========================================="
-    log INFO "Backup bucket: $BACKUP_BUCKET"
+    log INFO "Backup remote: $BACKUP_REMOTE"
     log INFO "Retention: $RETENTION_DAYS days"
 
     # Check cloud connectivity
     log INFO "Testing cloud storage connectivity..."
-    if aws s3 ls "$BACKUP_BUCKET/" \
-        ${AWS_ENDPOINT_URL:+--endpoint-url "$AWS_ENDPOINT_URL"} \
+    if rclone lsd "$BACKUP_REMOTE/" \
+        --config "$RCLONE_CONFIG" \
         >/dev/null 2>&1; then
         check_result PASS "Cloud storage is accessible"
     else
@@ -320,9 +323,9 @@ main() {
         log INFO "Verifying all backups within retention period..."
 
         # List all base backups
-        local all_backups=$(aws s3 ls "${BACKUP_BUCKET}/base/" \
-            ${AWS_ENDPOINT_URL:+--endpoint-url "$AWS_ENDPOINT_URL"} \
-            2>/dev/null | grep "PRE" | awk '{print $2}' | tr -d '/' | sort -r || echo "")
+        local all_backups=$(rclone lsd "${BACKUP_REMOTE}/base/" \
+            --config "$RCLONE_CONFIG" \
+            2>/dev/null | awk '{print $5}' | sort -r || echo "")
 
         if [[ -z "$all_backups" ]]; then
             check_result FAIL "No base backups found"

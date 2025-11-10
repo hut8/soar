@@ -47,13 +47,15 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Validate configuration
-if [[ -z "${BACKUP_BUCKET:-}" ]]; then
-    echo "ERROR: BACKUP_BUCKET not set in /etc/soar/backup-env" >&2
+if [[ -z "${BACKUP_REMOTE:-}" ]]; then
+    echo "ERROR: BACKUP_REMOTE not set in /etc/soar/backup-env" >&2
     exit 1
 fi
 
-if [[ -z "${AWS_ACCESS_KEY_ID:-}" ]] || [[ -z "${AWS_SECRET_ACCESS_KEY:-}" ]]; then
-    echo "ERROR: AWS credentials not set in /etc/soar/backup-env" >&2
+# Rclone configuration
+RCLONE_CONFIG="${RCLONE_CONFIG:-/etc/soar/rclone.conf}"
+if [[ ! -f "$RCLONE_CONFIG" ]]; then
+    echo "ERROR: Rclone config not found: $RCLONE_CONFIG" >&2
     exit 1
 fi
 
@@ -78,7 +80,7 @@ BACKUP_DATE=$(date -u +"%Y-%m-%d")
 BACKUP_TIMESTAMP=$(date -u +"%Y-%m-%d_%H-%M-%S")
 BACKUP_NAME="backup-${BACKUP_TIMESTAMP}"
 BACKUP_LOCAL_DIR="$TEMP_DIR/$BACKUP_NAME"
-BACKUP_CLOUD_PREFIX="${BACKUP_BUCKET}/base/${BACKUP_DATE}"
+BACKUP_CLOUD_PREFIX="${BACKUP_REMOTE}/base/${BACKUP_DATE}"
 
 # Metrics and notifications
 NOTIFY_EMAIL="${BACKUP_NOTIFY_EMAIL:-}"
@@ -186,10 +188,9 @@ main() {
     # Upload to cloud storage
     log INFO "Uploading backup to cloud storage..."
 
-    if ! aws s3 sync "$BACKUP_LOCAL_DIR" "$BACKUP_CLOUD_PREFIX/" \
-        --no-progress \
-        --storage-class STANDARD \
-        ${AWS_ENDPOINT_URL:+--endpoint-url "$AWS_ENDPOINT_URL"} \
+    if ! rclone sync "$BACKUP_LOCAL_DIR" "$BACKUP_CLOUD_PREFIX/" \
+        --config "$RCLONE_CONFIG" \
+        --progress \
         >> "$LOG_DIR/backup.log" 2>&1; then
         log ERROR "Failed to upload backup to cloud storage"
         exit 1
@@ -199,8 +200,8 @@ main() {
 
     # Verify uploaded files
     log INFO "Verifying uploaded files..."
-    local uploaded_count=$(aws s3 ls "$BACKUP_CLOUD_PREFIX/" \
-        ${AWS_ENDPOINT_URL:+--endpoint-url "$AWS_ENDPOINT_URL"} \
+    local uploaded_count=$(rclone lsf "$BACKUP_CLOUD_PREFIX/" \
+        --config "$RCLONE_CONFIG" \
         | wc -l)
 
     if [[ $uploaded_count -eq 0 ]]; then
@@ -227,10 +228,8 @@ main() {
 }
 EOF
 
-    aws s3 cp "$TEMP_DIR/backup-metadata.json" "$BACKUP_CLOUD_PREFIX/backup-metadata.json" \
-        --no-progress \
-        --content-type "application/json" \
-        ${AWS_ENDPOINT_URL:+--endpoint-url "$AWS_ENDPOINT_URL"} \
+    rclone copyto "$TEMP_DIR/backup-metadata.json" "$BACKUP_CLOUD_PREFIX/backup-metadata.json" \
+        --config "$RCLONE_CONFIG" \
         >> "$LOG_DIR/backup.log" 2>&1
 
     # Cleanup old backups if enabled
@@ -238,9 +237,9 @@ EOF
         log INFO "Cleaning up old backups (retention: $RETENTION_DAYS days)..."
 
         # List all base backups
-        local all_backups=$(aws s3 ls "${BACKUP_BUCKET}/base/" \
-            ${AWS_ENDPOINT_URL:+--endpoint-url "$AWS_ENDPOINT_URL"} \
-            | grep "PRE" | awk '{print $2}' | tr -d '/')
+        local all_backups=$(rclone lsd "${BACKUP_REMOTE}/base/" \
+            --config "$RCLONE_CONFIG" \
+            2>/dev/null | awk '{print $5}' || echo "")
 
         # Calculate cutoff date
         local cutoff_date=$(date -u -d "$RETENTION_DAYS days ago" +"%Y-%m-%d")
@@ -250,9 +249,8 @@ EOF
         for backup_date in $all_backups; do
             if [[ "$backup_date" < "$cutoff_date" ]]; then
                 log INFO "Deleting old backup: $backup_date"
-                aws s3 rm "${BACKUP_BUCKET}/base/${backup_date}/" \
-                    --recursive \
-                    ${AWS_ENDPOINT_URL:+--endpoint-url "$AWS_ENDPOINT_URL"} \
+                rclone purge "${BACKUP_REMOTE}/base/${backup_date}/" \
+                    --config "$RCLONE_CONFIG" \
                     >> "$LOG_DIR/backup.log" 2>&1
                 ((deleted_count++))
             fi
