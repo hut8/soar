@@ -243,7 +243,6 @@
 			const [flightResponse, fixesResponse] = await Promise.all([
 				serverCall<{
 					flight: typeof data.flight;
-					device?: typeof data.device;
 				}>(`/flights/${data.flight.id}`),
 				serverCall<{
 					fixes: typeof data.fixes;
@@ -252,9 +251,7 @@
 			]);
 
 			data.flight = flightResponse.flight;
-			if (flightResponse.device) {
-				data.device = flightResponse.device;
-			}
+			// Device doesn't change during a flight, so we don't re-fetch it
 
 			// Append new fixes to the existing list (new fixes are in DESC order)
 			if (fixesResponse.fixes.length > 0) {
