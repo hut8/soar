@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Radio, Plane, Antenna, Check, X, Activity } from '@lucide/svelte';
+	import { Radio, Plane, Antenna, Check, X, Activity, Map, Navigation } from '@lucide/svelte';
 	import { resolve } from '$app/paths';
 	import {
 		getAircraftTypeOgnDescription,
@@ -9,6 +9,26 @@
 	import type { Device } from '$lib/types';
 
 	let { device }: { device: Device } = $props();
+
+	// Get the most recent fix with location data
+	let latestFix = $derived(
+		device.fixes && device.fixes.length > 0
+			? device.fixes.find((fix) => fix.latitude && fix.longitude)
+			: null
+	);
+
+	// Check if device has an active flight (most recent fix is active and has a flight_id)
+	let hasActiveFlight = $derived(latestFix?.active && latestFix?.flight_id ? true : false);
+
+	// Build the operations map URL with location parameters
+	let mapUrl = $derived(
+		latestFix ? `/operations?lat=${latestFix.latitude}&lng=${latestFix.longitude}&zoom=13` : null
+	);
+
+	// Build the flight detail URL
+	let flightUrl = $derived(
+		hasActiveFlight && latestFix?.flight_id ? `/flights/${latestFix.flight_id}` : null
+	);
 </script>
 
 <div class="card preset-tonal-primary p-4">
@@ -89,4 +109,28 @@
 			{/if}
 		</div>
 	</a>
+
+	<!-- Action Buttons -->
+	<div class="mt-4 flex flex-wrap gap-2">
+		{#if mapUrl}
+			<a
+				href={mapUrl}
+				class="btn flex-1 preset-filled-secondary-500 btn-sm"
+				onclick={(e) => e.stopPropagation()}
+			>
+				<Map class="h-4 w-4" />
+				<span>View on Map</span>
+			</a>
+		{/if}
+		{#if flightUrl}
+			<a
+				href={flightUrl}
+				class="btn flex-1 preset-filled-primary-500 btn-sm"
+				onclick={(e) => e.stopPropagation()}
+			>
+				<Navigation class="h-4 w-4" />
+				<span>Current Flight</span>
+			</a>
+		{/if}
+	</div>
 </div>

@@ -4,6 +4,7 @@
 	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { serverCall } from '$lib/api/server';
 	import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
+	import { page } from '$app/stores';
 	import { Settings, ListChecks, MapPlus, MapMinus } from '@lucide/svelte';
 	import WatchlistModal from '$lib/components/WatchlistModal.svelte';
 	import SettingsModal from '$lib/components/SettingsModal.svelte';
@@ -255,8 +256,32 @@
 		}
 	}
 
-	// Load map state from localStorage, fallback to CONUS center
+	// Load map state from URL params, localStorage, or fallback to CONUS center
 	function loadMapState(): MapState {
+		// First check URL parameters
+		if (browser) {
+			const params = $page.url.searchParams;
+			const lat = params.get('lat');
+			const lng = params.get('lng');
+			const zoom = params.get('zoom');
+
+			if (lat && lng) {
+				const parsedLat = parseFloat(lat);
+				const parsedLng = parseFloat(lng);
+				const parsedZoom = zoom ? parseInt(zoom, 10) : 13;
+
+				if (!isNaN(parsedLat) && !isNaN(parsedLng) && !isNaN(parsedZoom)) {
+					console.log('[MAP] Using URL parameters:', {
+						lat: parsedLat,
+						lng: parsedLng,
+						zoom: parsedZoom
+					});
+					return { center: { lat: parsedLat, lng: parsedLng }, zoom: parsedZoom };
+				}
+			}
+		}
+
+		// Fall back to localStorage
 		if (!browser) {
 			return { center: CONUS_CENTER, zoom: 4 };
 		}
