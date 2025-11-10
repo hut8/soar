@@ -144,7 +144,19 @@ async fn handle_websocket_read(
                 // Ignore other message types (binary, ping, pong)
             }
             Err(e) => {
-                error!("WebSocket error: {}", e);
+                // Connection reset errors are normal when browsers close abruptly
+                // Don't report these to Sentry as errors
+                let error_msg = e.to_string();
+                if error_msg.contains("Connection reset without closing handshake")
+                    || error_msg.contains("Connection reset")
+                {
+                    info!(
+                        "WebSocket connection reset by client (browser closed): {}",
+                        e
+                    );
+                } else {
+                    error!("WebSocket error: {}", e);
+                }
                 break;
             }
         }
