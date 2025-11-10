@@ -69,6 +69,8 @@ export default defineConfig({
 						DATABASE_URL: 'postgres://postgres:postgres@localhost:5432/soar_test',
 						// NATS URL for backend (optional, backend should handle missing NATS gracefully)
 						NATS_URL: 'nats://localhost:4222',
+						// JWT secret for token generation
+						JWT_SECRET: 'test-jwt-secret-for-e2e-tests',
 						// Disable Sentry in tests
 						SENTRY_DSN: '',
 						// Set environment

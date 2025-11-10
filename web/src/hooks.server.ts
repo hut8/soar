@@ -7,7 +7,7 @@ import type { Handle, HandleServerError } from '@sveltejs/kit';
 export const handle: Handle = async ({ event, resolve }) => {
 	// Proxy /data/* requests to Rust backend
 	if (event.url.pathname.startsWith('/data/')) {
-		const backendUrl = process.env.BACKEND_URL || 'http://localhost:61225';
+		const backendUrl = process.env.BACKEND_URL || 'http://localhost:61226';
 		const targetUrl = `${backendUrl}${event.url.pathname}${event.url.search}`;
 
 		try {
