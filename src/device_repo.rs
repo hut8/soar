@@ -350,6 +350,159 @@ impl DeviceRepository {
             .collect())
     }
 
+    /// Get recent devices with latest fix location and active flight ID
+    /// This extended version includes lat/lng and flight_id for quick navigation
+    pub async fn get_recent_devices_with_location(
+        &self,
+        limit: i64,
+        aircraft_types: Option<Vec<String>>,
+    ) -> Result<Vec<(DeviceModel, Option<f64>, Option<f64>, Option<Uuid>)>> {
+        let pool = self.pool.clone();
+        let aircraft_types_filter = aircraft_types.clone();
+
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            // Build aircraft type filter condition
+            let aircraft_type_condition = if let Some(types) = aircraft_types_filter
+                && !types.is_empty()
+            {
+                let types_str = types
+                    .iter()
+                    .map(|t| format!("'{}'", t))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                format!("AND d.aircraft_type_ogn::text IN ({})", types_str)
+            } else {
+                String::new()
+            };
+
+            let query = format!(
+                r#"
+                SELECT
+                    d.*,
+                    latest_fix.latitude AS latest_latitude,
+                    latest_fix.longitude AS latest_longitude,
+                    active_flight.id AS active_flight_id
+                FROM devices d
+                LEFT JOIN LATERAL (
+                    SELECT latitude, longitude
+                    FROM fixes
+                    WHERE device_id = d.id
+                    ORDER BY timestamp DESC
+                    LIMIT 1
+                ) latest_fix ON true
+                LEFT JOIN flights active_flight ON (
+                    active_flight.device_id = d.id
+                    AND active_flight.landing_time IS NULL
+                    AND active_flight.timed_out_at IS NULL
+                )
+                WHERE d.last_fix_at IS NOT NULL
+                {}
+                ORDER BY d.last_fix_at DESC
+                LIMIT $1
+                "#,
+                aircraft_type_condition
+            );
+
+            use diesel::sql_query;
+            use diesel::sql_types::{
+                BigInt, Bool, Float8, Int4, Nullable, Numeric, Text, Timestamptz,
+            };
+
+            #[derive(diesel::QueryableByName)]
+            struct DeviceWithLocation {
+                #[diesel(sql_type = Int4)]
+                address: i32,
+                #[diesel(sql_type = crate::schema::sql_types::AddressType)]
+                address_type: crate::devices::AddressType,
+                #[diesel(sql_type = Text)]
+                aircraft_model: String,
+                #[diesel(sql_type = Text)]
+                registration: String,
+                #[diesel(sql_type = Text)]
+                competition_number: String,
+                #[diesel(sql_type = Bool)]
+                tracked: bool,
+                #[diesel(sql_type = Bool)]
+                identified: bool,
+                #[diesel(sql_type = Timestamptz)]
+                created_at: chrono::DateTime<chrono::Utc>,
+                #[diesel(sql_type = Timestamptz)]
+                updated_at: chrono::DateTime<chrono::Utc>,
+                #[diesel(sql_type = diesel::sql_types::Uuid)]
+                id: uuid::Uuid,
+                #[diesel(sql_type = Bool)]
+                from_ddb: bool,
+                #[diesel(sql_type = Nullable<Numeric>)]
+                frequency_mhz: Option<bigdecimal::BigDecimal>,
+                #[diesel(sql_type = Nullable<Text>)]
+                pilot_name: Option<String>,
+                #[diesel(sql_type = Nullable<Text>)]
+                home_base_airport_ident: Option<String>,
+                #[diesel(sql_type = Nullable<crate::schema::sql_types::AircraftTypeOgn>)]
+                aircraft_type_ogn: Option<crate::ogn_aprs_aircraft::AircraftType>,
+                #[diesel(sql_type = Nullable<Timestamptz>)]
+                last_fix_at: Option<chrono::DateTime<chrono::Utc>>,
+                #[diesel(sql_type = Nullable<diesel::sql_types::Uuid>)]
+                club_id: Option<uuid::Uuid>,
+                #[diesel(sql_type = Nullable<Text>)]
+                icao_model_code: Option<String>,
+                #[diesel(sql_type = Nullable<crate::schema::sql_types::AdsbEmitterCategory>)]
+                adsb_emitter_category: Option<crate::ogn_aprs_aircraft::AdsbEmitterCategory>,
+                #[diesel(sql_type = Nullable<Text>)]
+                tracker_device_type: Option<String>,
+                #[diesel(sql_type = Nullable<Text>)]
+                country_code: Option<String>,
+                #[diesel(sql_type = Nullable<Float8>)]
+                latest_latitude: Option<f64>,
+                #[diesel(sql_type = Nullable<Float8>)]
+                latest_longitude: Option<f64>,
+                #[diesel(sql_type = Nullable<diesel::sql_types::Uuid>)]
+                active_flight_id: Option<uuid::Uuid>,
+            }
+
+            let results: Vec<DeviceWithLocation> =
+                sql_query(query).bind::<BigInt, _>(limit).load(&mut conn)?;
+
+            Ok(results
+                .into_iter()
+                .map(|row| {
+                    let device_model = DeviceModel {
+                        id: row.id,
+                        address: row.address,
+                        address_type: row.address_type,
+                        aircraft_model: row.aircraft_model,
+                        registration: row.registration,
+                        competition_number: row.competition_number,
+                        tracked: row.tracked,
+                        identified: row.identified,
+                        created_at: row.created_at,
+                        updated_at: row.updated_at,
+                        from_ddb: row.from_ddb,
+                        frequency_mhz: row.frequency_mhz,
+                        pilot_name: row.pilot_name,
+                        home_base_airport_ident: row.home_base_airport_ident,
+                        aircraft_type_ogn: row.aircraft_type_ogn,
+                        last_fix_at: row.last_fix_at,
+                        club_id: row.club_id,
+                        icao_model_code: row.icao_model_code,
+                        adsb_emitter_category: row.adsb_emitter_category,
+                        tracker_device_type: row.tracker_device_type,
+                        country_code: row.country_code,
+                    };
+                    (
+                        device_model,
+                        row.latest_latitude,
+                        row.latest_longitude,
+                        row.active_flight_id,
+                    )
+                })
+                .collect())
+        })
+        .await?
+    }
+
     /// Update the club assignment for a device
     pub async fn update_club_id(&self, device_id: Uuid, club_id: Option<Uuid>) -> Result<bool> {
         let mut conn = self.get_connection()?;
