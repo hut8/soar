@@ -888,6 +888,7 @@
 				};
 
 				await Plotly.newPlot(altitudeChartContainer, traces, layout, config);
+				altitudeChartInitialized = true;
 
 				// Add hover event to highlight position on map
 				// eslint-disable-next-line @typescript-eslint/no-explicit-any
