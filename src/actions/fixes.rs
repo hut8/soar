@@ -10,7 +10,7 @@ use chrono::{Duration, Utc};
 use futures_util::{sink::SinkExt, stream::StreamExt};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::broadcast;
 use tracing::{error, info, instrument, warn};
 
 use crate::fixes_repo::FixesRepository;
@@ -72,8 +72,8 @@ async fn handle_websocket(socket: WebSocket, state: AppState) {
     let (sender, receiver) = socket.split();
 
     // Create channels for communication between tasks
-    let (subscription_tx, subscription_rx) = mpsc::unbounded_channel::<SubscriptionMessage>();
-    let (fix_tx, fix_rx) = mpsc::unbounded_channel::<WebSocketMessage>();
+    let (subscription_tx, subscription_rx) = flume::unbounded::<SubscriptionMessage>();
+    let (fix_tx, fix_rx) = flume::unbounded::<WebSocketMessage>();
 
     // Spawn task to handle incoming WebSocket messages (subscriptions)
     let subscription_tx_clone = subscription_tx.clone();
@@ -117,7 +117,7 @@ async fn handle_websocket(socket: WebSocket, state: AppState) {
 
 async fn handle_websocket_read(
     mut receiver: futures_util::stream::SplitStream<WebSocket>,
-    subscription_tx: mpsc::UnboundedSender<SubscriptionMessage>,
+    subscription_tx: flume::Sender<SubscriptionMessage>,
 ) {
     while let Some(msg) = receiver.next().await {
         match msg {
@@ -165,9 +165,9 @@ async fn handle_websocket_read(
 
 async fn handle_websocket_write(
     mut sender: futures_util::stream::SplitSink<WebSocket, Message>,
-    mut fix_rx: mpsc::UnboundedReceiver<WebSocketMessage>,
+    fix_rx: flume::Receiver<WebSocketMessage>,
 ) {
-    while let Some(websocket_message) = fix_rx.recv().await {
+    while let Ok(websocket_message) = fix_rx.recv_async().await {
         // Track WebSocket queue depth (messages buffered for sending to client)
         // Note: This is an approximation since we can't directly measure unbounded channel depth
         // We track this after recv to see how many are still waiting
@@ -202,8 +202,8 @@ async fn handle_websocket_write(
 
 async fn handle_subscriptions(
     live_fix_service: crate::live_fixes::LiveFixService,
-    mut subscription_rx: mpsc::UnboundedReceiver<SubscriptionMessage>,
-    fix_tx: mpsc::UnboundedSender<WebSocketMessage>,
+    subscription_rx: flume::Receiver<SubscriptionMessage>,
+    fix_tx: flume::Sender<WebSocketMessage>,
     _pool: crate::web::PgPool,
 ) {
     let mut subscribed_aircraft: Vec<String> = Vec::new();
@@ -212,9 +212,9 @@ async fn handle_subscriptions(
     loop {
         tokio::select! {
             // Handle subscription messages from WebSocket
-            sub_msg = subscription_rx.recv() => {
+            sub_msg = subscription_rx.recv_async() => {
                 match sub_msg {
-                    Some(sub_msg) => {
+                    Ok(sub_msg) => {
                         match sub_msg {
                             SubscriptionMessage::Device { action, id } => {
                                 match action.as_str() {
@@ -296,7 +296,7 @@ async fn handle_subscriptions(
                             }
                         }
                     }
-                    None => {
+                    Err(_) => {
                         // Subscription channel closed, WebSocket disconnected
                         break;
                     }
