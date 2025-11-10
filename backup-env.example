@@ -41,10 +41,20 @@ export RCLONE_CONFIG="/etc/soar/rclone.conf"
 # BACKUP RETENTION CONFIGURATION
 #------------------------------------------------------------------------------
 
-# How many days to keep backups (both base backups and WAL archives)
-# Default: 30 days (keeps 4 weekly base backups + 30 days of WAL)
-# Longer retention = more storage cost but more recovery options
-export BACKUP_RETENTION_DAYS=30
+# How many days to keep base backups before deletion
+# Default: 21 days (3 weeks) - deletes backups older than this
+# Combined with bi-weekly backups, this keeps ~2 base backups at any time
+export BACKUP_RETENTION_DAYS=21
+
+# Minimum number of base backups to always keep (safety check)
+# Even if backups are older than BACKUP_RETENTION_DAYS, keep at least this many
+# Default: 2 (ensures we always have a recent backup for recovery)
+export BASE_BACKUP_MIN_COUNT=2
+
+# WAL archive retention (independent of base backups)
+# Keep WAL files for point-in-time recovery
+# Default: 30 days (allows recovery to any point in last month)
+export WAL_RETENTION_DAYS=30
 
 #------------------------------------------------------------------------------
 # POSTGRESQL CONNECTION
@@ -66,8 +76,8 @@ export PGUSER=postgres
 
 # PostgreSQL data directory and version (for restore operations)
 # Adjust based on your PostgreSQL installation
-export PGDATA=/var/lib/postgresql/15/main
-export PG_VERSION=15
+export PGDATA=/var/lib/postgresql/17/main
+export PG_VERSION=17
 
 #------------------------------------------------------------------------------
 # BACKUP PATHS

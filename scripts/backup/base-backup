@@ -234,29 +234,64 @@ EOF
 
     # Cleanup old backups if enabled
     if [[ "$CLEANUP" == "true" ]]; then
-        log INFO "Cleaning up old backups (retention: $RETENTION_DAYS days)..."
+        log INFO "Cleaning up old backups (retention: $RETENTION_DAYS days, minimum: ${BASE_BACKUP_MIN_COUNT:-2})..."
 
-        # List all base backups
+        # List all base backups (sorted newest first)
         local all_backups=$(rclone lsd "${BACKUP_REMOTE}/base/" \
             --config "$RCLONE_CONFIG" \
-            2>/dev/null | awk '{print $5}' || echo "")
+            2>/dev/null | awk '{print $5}' | sort -r || echo "")
 
-        # Calculate cutoff date
-        local cutoff_date=$(date -u -d "$RETENTION_DAYS days ago" +"%Y-%m-%d")
+        if [[ -z "$all_backups" ]]; then
+            log WARN "No backups found for cleanup"
+        else
+            local backup_count=$(echo "$all_backups" | wc -l)
+            log INFO "Found $backup_count total backups"
 
-        # Delete old backups
-        local deleted_count=0
-        for backup_date in $all_backups; do
-            if [[ "$backup_date" < "$cutoff_date" ]]; then
-                log INFO "Deleting old backup: $backup_date"
-                rclone purge "${BACKUP_REMOTE}/base/${backup_date}/" \
-                    --config "$RCLONE_CONFIG" \
-                    >> "$LOG_DIR/backup.log" 2>&1
-                ((deleted_count++))
+            # Minimum number of backups to keep (default: 2)
+            local min_backups=${BASE_BACKUP_MIN_COUNT:-2}
+
+            # Calculate cutoff date (default: 21 days for 3 weeks)
+            local cutoff_date=$(date -u -d "$RETENTION_DAYS days ago" +"%Y-%m-%d")
+            log INFO "Cutoff date: $cutoff_date (keeping backups newer than this)"
+
+            # Count valid recent backups
+            local recent_count=0
+            for backup_date in $all_backups; do
+                if [[ "$backup_date" >= "$cutoff_date" ]]; then
+                    ((recent_count++))
+                fi
+            done
+
+            log INFO "Recent backups (within retention): $recent_count"
+
+            # Only proceed with deletion if we have enough recent backups
+            if [[ $backup_count -le $min_backups ]]; then
+                log INFO "Only $backup_count backups exist, keeping all (minimum: $min_backups)"
+            elif [[ $recent_count -lt $min_backups ]]; then
+                log WARN "Only $recent_count recent backups, need at least $min_backups. Skipping cleanup for safety."
+            else
+                # Safe to delete old backups
+                log INFO "Have $recent_count recent backups (>= $min_backups), proceeding with cleanup"
+
+                local deleted_count=0
+                for backup_date in $all_backups; do
+                    if [[ "$backup_date" < "$cutoff_date" ]]; then
+                        log INFO "Deleting old backup: $backup_date (older than $cutoff_date)"
+
+                        if rclone purge "${BACKUP_REMOTE}/base/${backup_date}/" \
+                            --config "$RCLONE_CONFIG" \
+                            >> "$LOG_DIR/backup.log" 2>&1; then
+                            ((deleted_count++))
+                            log INFO "Successfully deleted backup: $backup_date"
+                        else
+                            log ERROR "Failed to delete backup: $backup_date"
+                        fi
+                    fi
+                done
+
+                log INFO "Cleanup completed: deleted $deleted_count old backups, kept $recent_count recent backups"
             fi
-        done
-
-        log INFO "Cleanup completed: deleted $deleted_count old backups"
+        fi
     fi
 
     # Calculate duration

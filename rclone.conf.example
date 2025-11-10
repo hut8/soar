@@ -19,9 +19,13 @@
 # in /etc/soar/backup-env (e.g., soar-db:bucket-name)
 
 #------------------------------------------------------------------------------
-# Wasabi Configuration (Recommended - $5.40/month for 900GB)
+# Wasabi Configuration (RECOMMENDED - $5.40/month for 900GB, ~$3/month for 300GB)
 #------------------------------------------------------------------------------
-# No egress fees, S3-compatible API
+# Best balance of performance, cost, and simplicity
+# - No egress fees (unlimited downloads)
+# - S3-compatible API (works with standard tools)
+# - Reliable performance
+# - Simple pricing (just storage, no API charges)
 #
 # Setup:
 #   1. Create account at https://wasabi.com
@@ -38,9 +42,10 @@ endpoint = s3.wasabisys.com
 acl = private
 
 #------------------------------------------------------------------------------
-# Backblaze B2 Configuration (Best Value - $4.50/month for 900GB)
+# Backblaze B2 Configuration (Lowest Cost - $4.50/month for 900GB)
 #------------------------------------------------------------------------------
-# Free egress up to 3× storage (2.7TB/month)
+# Cheapest option with free egress up to 3× storage (2.7TB/month)
+# Good for cost-conscious setups with infrequent restores
 #
 # Setup:
 #   1. Create account at https://www.backblaze.com/b2/sign-up.html
