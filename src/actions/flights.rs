@@ -227,6 +227,7 @@ pub async fn get_flight_kml(
 /// Get fixes for a flight by flight ID
 pub async fn get_flight_fixes(
     Path(id): Path<Uuid>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
     let flights_repo = FlightsRepository::new(state.pool.clone());
@@ -244,7 +245,19 @@ pub async fn get_flight_fixes(
     };
 
     // Get fixes for the flight based on device address and time range
-    let start_time = flight.takeoff_time.unwrap_or(flight.created_at);
+    // If 'after' parameter is provided, use it as the start time (for polling updates)
+    let start_time = if let Some(after_str) = params.get("after") {
+        match chrono::DateTime::parse_from_rfc3339(after_str) {
+            Ok(dt) => dt.with_timezone(&chrono::Utc),
+            Err(e) => {
+                tracing::warn!("Invalid 'after' parameter: {}, error: {}", after_str, e);
+                flight.takeoff_time.unwrap_or(flight.created_at)
+            }
+        }
+    } else {
+        flight.takeoff_time.unwrap_or(flight.created_at)
+    };
+
     let end_time = flight.landing_time.unwrap_or_else(chrono::Utc::now);
 
     match fixes_repo
