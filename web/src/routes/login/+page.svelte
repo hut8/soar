@@ -3,7 +3,8 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { auth } from '$lib/stores/auth';
-	import { authApi, AuthApiError } from '$lib/api/auth';
+	import { authApi } from '$lib/api/auth';
+	import { ServerError } from '$lib/api/server';
 	import { resolve } from '$app/paths';
 
 	let email = '';
@@ -36,7 +37,7 @@
 			// Redirect to home page after successful login
 			goto(resolve('/'));
 		} catch (err) {
-			if (err instanceof AuthApiError) {
+			if (err instanceof ServerError) {
 				if (err.status === 401) {
 					error = 'Invalid email or password';
 				} else {
