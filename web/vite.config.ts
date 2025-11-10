@@ -9,7 +9,7 @@ export default defineConfig({
 	server: {
 		proxy: {
 			'/data': {
-				target: 'http://localhost:61225',
+				target: 'http://localhost:61226',
 				changeOrigin: true
 			}
 		}
@@ -17,7 +17,7 @@ export default defineConfig({
 	preview: {
 		proxy: {
 			'/data': {
-				target: 'http://localhost:61225',
+				target: 'http://localhost:61226',
 				changeOrigin: true
 			}
 		}
