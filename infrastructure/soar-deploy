@@ -309,21 +309,15 @@ done
 # Timer-invoked services are installed but not enabled or started
 log_info "Timer-invoked services (${TIMER_SERVICES[*]}) will only be invoked by their timers"
 
-# Enable timers (but don't start them - they will activate on next boot or scheduled time)
-log_info "Enabling SOAR timers..."
+# Enable and start timers to ensure they are properly scheduled
+log_info "Enabling and starting SOAR timers..."
 for timer in "${TIMERS[@]}"; do
     if [ -f "/etc/systemd/system/$timer" ]; then
         log_info "Enabling $timer..."
         systemctl enable "$timer" || log_warn "Failed to enable $timer"
 
-        # Check if timer was already running before deployment
-        # If so, restart it to pick up any config changes
-        if systemctl is-active --quiet "$timer"; then
-            log_info "Restarting $timer (was already active)..."
-            systemctl restart "$timer" || log_warn "Failed to restart $timer"
-        else
-            log_info "$timer enabled (will activate on next boot or scheduled time)"
-        fi
+        log_info "Starting $timer..."
+        systemctl restart "$timer" || log_warn "Failed to restart $timer"
     fi
 done
 

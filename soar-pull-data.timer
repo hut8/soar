@@ -26,8 +26,6 @@ Requires=soar-pull-data.service
 
 [Timer]
 # Run daily at 3:00 AM local time
-OnCalendar=daily
-# Offset to 3:00 AM
 OnCalendar=*-*-* 03:00:00
 
 # If the system was down when the timer should have triggered, run it as soon as possible
