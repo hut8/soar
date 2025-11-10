@@ -31,11 +31,9 @@ COPY migrations/ ./migrations/
 COPY --from=web-builder /app/web/build/ ./web/build/
 COPY --from=web-builder /app/web/package*.json ./web/
 
-# Create a fake web directory structure for the build script
-RUN mkdir -p web/node_modules
-
 # Build the Rust application in release mode
-RUN cargo build --release
+# Set SKIP_WEB_BUILD because web is already built in the web-builder stage
+RUN SKIP_WEB_BUILD=1 cargo build --release
 
 # Runtime stage
 FROM debian:bookworm-slim
