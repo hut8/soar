@@ -169,6 +169,9 @@ export interface Device {
 	tracker_device_type?: string | null;
 	icao_model_code?: string | null;
 	country_code?: string | null;
+	latest_latitude?: number | null;
+	latest_longitude?: number | null;
+	active_flight_id?: string | null;
 	fixes?: Fix[];
 }
 

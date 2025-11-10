@@ -10,25 +10,15 @@
 
 	let { device }: { device: Device } = $props();
 
-	// Get the most recent fix with location data
-	let latestFix = $derived(
-		device.fixes && device.fixes.length > 0
-			? device.fixes.find((fix) => fix.latitude && fix.longitude)
+	// Build the operations map URL with location parameters from latest fix
+	let mapUrl = $derived(
+		device.latest_latitude && device.latest_longitude
+			? `/operations?lat=${device.latest_latitude}&lng=${device.latest_longitude}&zoom=13`
 			: null
 	);
 
-	// Check if device has an active flight (most recent fix is active and has a flight_id)
-	let hasActiveFlight = $derived(latestFix?.active && latestFix?.flight_id ? true : false);
-
-	// Build the operations map URL with location parameters
-	let mapUrl = $derived(
-		latestFix ? `/operations?lat=${latestFix.latitude}&lng=${latestFix.longitude}&zoom=13` : null
-	);
-
-	// Build the flight detail URL
-	let flightUrl = $derived(
-		hasActiveFlight && latestFix?.flight_id ? `/flights/${latestFix.flight_id}` : null
-	);
+	// Build the flight detail URL from active flight ID
+	let flightUrl = $derived(device.active_flight_id ? `/flights/${device.active_flight_id}` : null);
 </script>
 
 <div class="card preset-tonal-primary p-4">

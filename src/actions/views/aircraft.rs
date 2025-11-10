@@ -108,6 +108,12 @@ pub struct DeviceView {
     pub tracker_device_type: Option<String>,
     pub icao_model_code: Option<String>,
     pub country_code: Option<String>,
+    /// Latest fix latitude (for quick map linking)
+    pub latest_latitude: Option<f64>,
+    /// Latest fix longitude (for quick map linking)
+    pub latest_longitude: Option<f64>,
+    /// Active flight ID if device is currently on an active flight
+    pub active_flight_id: Option<Uuid>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fixes: Option<Vec<crate::fixes::Fix>>,
 }
@@ -161,6 +167,9 @@ impl DeviceView {
             tracker_device_type: device.tracker_device_type,
             icao_model_code: device.icao_model_code,
             country_code: device.country_code,
+            latest_latitude: None,
+            latest_longitude: None,
+            active_flight_id: None,
             fixes: None,
         }
     }
@@ -213,6 +222,9 @@ impl DeviceView {
             tracker_device_type: device_model.tracker_device_type,
             icao_model_code: device_model.icao_model_code,
             country_code: device_model.country_code,
+            latest_latitude: None,
+            latest_longitude: None,
+            active_flight_id: None,
             fixes: None,
         }
     }

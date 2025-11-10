@@ -384,11 +384,20 @@ async fn get_recent_devices_response(
     });
 
     match device_repo
-        .get_recent_devices(10, aircraft_type_filters)
+        .get_recent_devices_with_location(10, aircraft_type_filters)
         .await
     {
-        Ok(devices) => {
-            let device_views: Vec<DeviceView> = devices.into_iter().map(|d| d.into()).collect();
+        Ok(devices_with_location) => {
+            let device_views: Vec<DeviceView> = devices_with_location
+                .into_iter()
+                .map(|(device_model, latest_lat, latest_lng, active_flight_id)| {
+                    let mut device_view: DeviceView = device_model.into();
+                    device_view.latest_latitude = latest_lat;
+                    device_view.latest_longitude = latest_lng;
+                    device_view.active_flight_id = active_flight_id;
+                    device_view
+                })
+                .collect();
             Json(DeviceSearchResponse {
                 devices: device_views,
             })
