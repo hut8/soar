@@ -26,6 +26,7 @@ WORKDIR /app
 COPY Cargo.toml Cargo.lock build.rs ./
 COPY src/ ./src/
 COPY migrations/ ./migrations/
+COPY static/ ./static/
 
 # Copy the built web assets from previous stage
 COPY --from=web-builder /app/web/build/ ./web/build/
