@@ -425,9 +425,10 @@ pub(crate) async fn process_state_transition(
             match agl {
                 Some(altitude_agl) if altitude_agl >= 250 => {
                     // Case 3b2: Still airborne (>= 250 ft AGL) - slow moving aircraft
+                    let speed_knots = fix.ground_speed_knots.unwrap_or(0.0);
                     info!(
-                        "Device {} slow but still airborne at {} ft AGL - continuing flight {}",
-                        fix.device_id, altitude_agl, flight_id
+                        "Device {} slow but still airborne at {} ft AGL ({:.1} knots) - continuing flight {}",
+                        fix.device_id, altitude_agl, speed_knots, flight_id
                     );
 
                     // Keep the flight active, assign flight_id to fix

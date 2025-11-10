@@ -20,7 +20,7 @@ use soar::receiver_status_repo::ReceiverStatusRepository;
 use soar::server_messages_repo::ServerMessagesRepository;
 use std::env;
 use tracing::Instrument;
-use tracing::{info, trace, warn};
+use tracing::{debug, info, trace, warn};
 
 /// Process a received APRS message by parsing and routing through PacketRouter
 /// The message format is: "YYYY-MM-DDTHH:MM:SS.SSSZ <original_message>"
@@ -62,7 +62,7 @@ async fn process_aprs_message(
     // Route server messages (starting with #) differently
     // Server messages don't create PacketContext
     if actual_message.starts_with('#') {
-        info!("Server message: {}", actual_message);
+        debug!("Server message: {}", actual_message);
         packet_router
             .process_server_message(actual_message, received_at)
             .await;
