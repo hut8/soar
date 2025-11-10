@@ -666,7 +666,7 @@
 			<div class="space-y-4 card p-6">
 				<h2 class="flex items-center gap-2 h2">
 					<Activity class="h-6 w-6" />
-					Recent Position Fixes (Last 24 Hours)
+					Recent Position Fixes
 				</h2>
 
 				<FixesList

@@ -321,7 +321,7 @@ impl FixesRepository {
             let mut conn = pool.get()?;
 
             let mut query = fixes::table
-                .left_join(aprs_messages::table.on(fixes::aprs_message_id.eq(aprs_messages::id)))
+                .inner_join(aprs_messages::table.on(fixes::aprs_message_id.eq(aprs_messages::id)))
                 .filter(fixes::device_id.eq(device_id_param))
                 .filter(fixes::timestamp.between(start_time, end_time))
                 .order(fixes::timestamp.desc())
@@ -334,10 +334,10 @@ impl FixesRepository {
 
             // Select all Fix fields plus raw_message from aprs_messages as raw_packet
             let results = query
-                .select((Fix::as_select(), aprs_messages::raw_message.nullable()))
-                .load::<(Fix, Option<String>)>(&mut conn)?
+                .select((Fix::as_select(), aprs_messages::raw_message))
+                .load::<(Fix, String)>(&mut conn)?
                 .into_iter()
-                .map(|(fix, raw_packet)| crate::fixes::FixWithRawPacket::new(fix, raw_packet))
+                .map(|(fix, raw_packet)| crate::fixes::FixWithRawPacket::new(fix, Some(raw_packet)))
                 .collect();
 
             Ok::<Vec<crate::fixes::FixWithRawPacket>, anyhow::Error>(results)
@@ -454,39 +454,47 @@ impl FixesRepository {
         page: i64,
         per_page: i64,
         active_only: Option<bool>,
-    ) -> Result<(Vec<Fix>, i64)> {
+    ) -> Result<(Vec<crate::fixes::FixWithRawPacket>, i64)> {
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
-            use crate::schema::fixes::dsl::*;
+            use crate::schema::{aprs_messages, fixes};
             let mut conn = pool.get()?;
 
             // Build base query for count
-            let mut count_query = fixes.filter(device_id.eq(device_uuid)).into_boxed();
+            let mut count_query = fixes::table
+                .filter(fixes::device_id.eq(device_uuid))
+                .into_boxed();
             if let Some(after_timestamp) = after {
-                count_query = count_query.filter(timestamp.gt(after_timestamp));
+                count_query = count_query.filter(fixes::timestamp.gt(after_timestamp));
             }
             if active_only == Some(true) {
-                count_query = count_query.filter(is_active.eq(true));
+                count_query = count_query.filter(fixes::is_active.eq(true));
             }
             let total_count = count_query.count().get_result::<i64>(&mut conn)?;
 
-            // Build query for paginated results
-            let mut query = fixes.filter(device_id.eq(device_uuid)).into_boxed();
+            // Build query for paginated results with raw packet data
+            let mut query = fixes::table
+                .inner_join(aprs_messages::table.on(fixes::aprs_message_id.eq(aprs_messages::id)))
+                .filter(fixes::device_id.eq(device_uuid))
+                .into_boxed();
             if let Some(after_timestamp) = after {
-                query = query.filter(timestamp.gt(after_timestamp));
+                query = query.filter(fixes::timestamp.gt(after_timestamp));
             }
             if active_only == Some(true) {
-                query = query.filter(is_active.eq(true));
+                query = query.filter(fixes::is_active.eq(true));
             }
             let offset = (page - 1) * per_page;
             let results = query
-                .order(timestamp.desc())
+                .order(fixes::timestamp.desc())
                 .limit(per_page)
                 .offset(offset)
-                .select(Fix::as_select())
-                .load::<Fix>(&mut conn)?;
+                .select((Fix::as_select(), aprs_messages::raw_message))
+                .load::<(Fix, String)>(&mut conn)?
+                .into_iter()
+                .map(|(fix, raw_packet)| crate::fixes::FixWithRawPacket::new(fix, Some(raw_packet)))
+                .collect();
 
-            Ok::<(Vec<Fix>, i64), anyhow::Error>((results, total_count))
+            Ok::<(Vec<crate::fixes::FixWithRawPacket>, i64), anyhow::Error>((results, total_count))
         })
         .await??;
 

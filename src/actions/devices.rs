@@ -40,7 +40,7 @@ pub struct FlightsQuery {
 
 #[derive(Debug, Serialize)]
 pub struct PaginatedFixesResponse {
-    pub fixes: Vec<Fix>,
+    pub fixes: Vec<crate::fixes::FixWithRawPacket>,
     pub page: i64,
     pub total_pages: i64,
 }
