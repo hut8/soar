@@ -80,7 +80,7 @@ mkdir -p web/test-results
 mkdir -p web/playwright-report
 
 echo -e "${YELLOW}[1/3] Starting services (PostgreSQL, NATS, SOAR app)...${NC}"
-docker-compose up -d ${BUILD_FLAG} postgres nats app || {
+docker compose up -d ${BUILD_FLAG} postgres nats app || {
     echo -e "${RED}Failed to start services${NC}"
     exit 1
 }
@@ -92,7 +92,7 @@ echo -e "${YELLOW}[2/3] Waiting for services to be healthy...${NC}"
 MAX_WAIT=60
 WAITED=0
 while [ $WAITED -lt $MAX_WAIT ]; do
-    if docker-compose ps | grep -q "app.*healthy"; then
+    if docker compose ps | grep -q "app.*healthy"; then
         echo -e "${GREEN}✓ All services are healthy${NC}"
         break
     fi
@@ -103,7 +103,7 @@ done
 
 if [ $WAITED -ge $MAX_WAIT ]; then
     echo -e "${RED}Services failed to become healthy within ${MAX_WAIT} seconds${NC}"
-    docker-compose logs app
+    docker compose logs app
     exit 1
 fi
 echo ""
@@ -126,7 +126,7 @@ if [[ "$TEST_COMMAND" == *"--ui"* ]] || [[ "$TEST_COMMAND" == *"--debug"* ]] || 
     cd ..
 else
     # Run in container for CI-style execution
-    docker-compose ${COMPOSE_FILES} run --rm e2e-tests sh -c "
+    docker compose ${COMPOSE_FILES} run --rm e2e-tests sh -c "
         npm ci &&
         npx playwright install --with-deps chromium &&
         ${TEST_COMMAND}
@@ -158,7 +158,7 @@ echo ""
 # Cleanup if requested
 if [ "$DOWN_FLAG" = true ]; then
     echo -e "${YELLOW}Stopping and removing containers...${NC}"
-    docker-compose down
+    docker compose down
     echo -e "${GREEN}✓ Cleanup complete${NC}"
 fi
 
