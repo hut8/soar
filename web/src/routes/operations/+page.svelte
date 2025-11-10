@@ -11,7 +11,7 @@
 	import AirportModal from '$lib/components/AirportModal.svelte';
 	import { DeviceRegistry } from '$lib/services/DeviceRegistry';
 	import { FixFeed } from '$lib/services/FixFeed';
-	import type { Device } from '$lib/types';
+	import type { Device, Receiver } from '$lib/types';
 	import { toaster } from '$lib/toaster';
 	import { debugStatus } from '$lib/stores/watchlist';
 	import { browser } from '$app/environment';
@@ -87,6 +87,12 @@
 	let shouldShowAirports: boolean = false;
 	let airportUpdateDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
+	// Receiver display variables
+	let receivers: Receiver[] = [];
+	let receiverMarkers: google.maps.marker.AdvancedMarkerElement[] = [];
+	let shouldShowReceivers: boolean = false;
+	let receiverUpdateDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
 	// Aircraft display variables
 	let aircraftMarkers = new SvelteMap<string, google.maps.marker.AdvancedMarkerElement>();
 	let latestFixes = new SvelteMap<string, Fix>();
@@ -114,6 +120,7 @@
 	let currentSettings = $state({
 		showCompassRose: true,
 		showAirportMarkers: true,
+		showReceiverMarkers: true,
 		showRunwayOverlays: false,
 		positionFixWindow: 8
 	});
@@ -135,6 +142,7 @@
 	function handleSettingsChange(newSettings: {
 		showCompassRose: boolean;
 		showAirportMarkers: boolean;
+		showReceiverMarkers: boolean;
 		showRunwayOverlays: boolean;
 		positionFixWindow: number;
 	}) {
@@ -361,6 +369,17 @@
 		}
 	});
 
+	$effect(() => {
+		if (!currentSettings.showReceiverMarkers && shouldShowReceivers) {
+			clearReceiverMarkers();
+			receivers = [];
+			shouldShowReceivers = false;
+		} else if (currentSettings.showReceiverMarkers && map) {
+			// Re-check if we should show receivers
+			checkAndUpdateReceivers();
+		}
+	});
+
 	// Get singleton instances
 	const deviceRegistry = DeviceRegistry.getInstance();
 	const fixFeed = FixFeed.getInstance();
@@ -511,6 +530,7 @@
 		// Add event listeners for viewport changes
 		map.addListener('zoom_changed', () => {
 			setTimeout(checkAndUpdateAirports, 100); // Small delay to ensure bounds are updated
+			setTimeout(checkAndUpdateReceivers, 100); // Check receivers as well
 			// Update aircraft marker scaling on zoom change
 			updateAllAircraftMarkersScale();
 			// Update area tracker availability and subscriptions
@@ -528,6 +548,7 @@
 
 		map.addListener('dragend', async () => {
 			checkAndUpdateAirports();
+			checkAndUpdateReceivers();
 			// Update area subscriptions after panning
 			if (areaTrackerActive) {
 				// Hybrid approach: Fetch immediate snapshot then update WebSocket subscriptions
@@ -538,8 +559,9 @@
 			saveMapState();
 		});
 
-		// Initial check for airports
+		// Initial check for airports and receivers
 		setTimeout(checkAndUpdateAirports, 1000); // Give map time to fully initialize
+		setTimeout(checkAndUpdateReceivers, 1000);
 
 		// Initial area tracker availability check
 		setTimeout(updateAreaTrackerAvailability, 1000);
@@ -835,6 +857,163 @@
 		airportMarkers = [];
 	}
 
+	async function fetchReceiversInViewport(): Promise<void> {
+		if (!map) return;
+
+		const bounds = map.getBounds();
+		if (!bounds) return;
+
+		const ne = bounds.getNorthEast();
+		const sw = bounds.getSouthWest();
+
+		// Validate bounding box coordinates
+		const nwLat = ne.lat();
+		const nwLng = sw.lng();
+		const seLat = sw.lat();
+		const seLng = ne.lng();
+
+		// Ensure northwest latitude is greater than southeast latitude
+		if (nwLat <= seLat) {
+			console.warn(
+				'Invalid bounding box: northwest latitude must be greater than southeast latitude'
+			);
+			return;
+		}
+
+		// Validate latitude bounds
+		if (nwLat > 90 || nwLat < -90 || seLat > 90 || seLat < -90) {
+			console.warn('Invalid latitude values in bounding box');
+			return;
+		}
+
+		// Validate longitude bounds
+		if (nwLng < -180 || nwLng > 180 || seLng < -180 || seLng > 180) {
+			console.warn('Invalid longitude values in bounding box');
+			return;
+		}
+
+		try {
+			const params = new URLSearchParams({
+				latitude_min: seLat.toString(),
+				latitude_max: nwLat.toString(),
+				longitude_min: nwLng.toString(),
+				longitude_max: seLng.toString()
+			});
+
+			const data = await serverCall(`/receivers?${params}`);
+			// Type guard to ensure we have the correct data structure
+			if (!data || typeof data !== 'object' || !('receivers' in data)) {
+				throw new Error('Invalid response format: expected object with receivers array');
+			}
+
+			const response = data as { receivers: unknown[] };
+			receivers = response.receivers.filter((receiver: unknown): receiver is Receiver => {
+				// Validate receiver object
+				if (typeof receiver !== 'object' || receiver === null) {
+					console.error('Invalid receiver: not an object or is null', receiver);
+					return false;
+				}
+
+				// Check required fields
+				const requiredFields = ['id', 'callsign', 'latitude', 'longitude'] as const;
+				for (const field of requiredFields) {
+					if (!(field in receiver)) {
+						console.error(`Invalid receiver: missing required field "${field}"`, receiver);
+						return false;
+					}
+				}
+
+				// Validate latitude and longitude are numbers (or null)
+				const lat = (receiver as Record<string, unknown>).latitude;
+				const lng = (receiver as Record<string, unknown>).longitude;
+
+				if (lat !== null && typeof lat !== 'number') {
+					console.error('Invalid receiver: latitude is not a number or null', receiver);
+					return false;
+				}
+
+				if (lng !== null && typeof lng !== 'number') {
+					console.error('Invalid receiver: longitude is not a number or null', receiver);
+					return false;
+				}
+
+				return true;
+			});
+
+			displayReceiversOnMap();
+		} catch (error) {
+			console.error('Error fetching receivers:', error);
+		}
+	}
+
+	function displayReceiversOnMap(): void {
+		// Clear existing receiver markers
+		clearReceiverMarkers();
+
+		receivers.forEach((receiver) => {
+			if (!receiver.latitude || !receiver.longitude) return;
+
+			// Validate coordinates are valid numbers and within expected ranges
+			if (
+				isNaN(receiver.latitude) ||
+				isNaN(receiver.longitude) ||
+				receiver.latitude < -90 ||
+				receiver.latitude > 90 ||
+				receiver.longitude < -180 ||
+				receiver.longitude > 180
+			) {
+				console.warn(
+					`Invalid coordinates for receiver ${receiver.callsign}: ${receiver.latitude}, ${receiver.longitude}`
+				);
+				return;
+			}
+
+			// Create marker content with Radio icon and link
+			const markerLink = document.createElement('a');
+			markerLink.href = `/receivers/${receiver.id}`;
+			markerLink.target = '_blank';
+			markerLink.rel = 'noopener noreferrer';
+			markerLink.className = 'receiver-marker';
+
+			const iconDiv = document.createElement('div');
+			iconDiv.className = 'receiver-icon';
+			// Create SVG for Radio icon (antenna symbol)
+			iconDiv.innerHTML = `
+				<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+					<path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/>
+					<path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/>
+					<circle cx="12" cy="12" r="2"/>
+					<path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/>
+					<path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"/>
+				</svg>
+			`;
+
+			const labelDiv = document.createElement('div');
+			labelDiv.className = 'receiver-label';
+			labelDiv.textContent = receiver.callsign;
+
+			markerLink.appendChild(iconDiv);
+			markerLink.appendChild(labelDiv);
+
+			const marker = new google.maps.marker.AdvancedMarkerElement({
+				position: { lat: receiver.latitude, lng: receiver.longitude },
+				map: map,
+				title: `${receiver.callsign}${receiver.description ? ` - ${receiver.description}` : ''}`,
+				content: markerLink,
+				zIndex: 150 // Between airports (100) and aircraft (1000)
+			});
+
+			receiverMarkers.push(marker);
+		});
+	}
+
+	function clearReceiverMarkers(): void {
+		receiverMarkers.forEach((marker) => {
+			marker.map = null;
+		});
+		receiverMarkers = [];
+	}
+
 	function checkAndUpdateAirports(): void {
 		// Clear any existing debounce timer
 		if (airportUpdateDebounceTimer !== null) {
@@ -861,6 +1040,35 @@
 			}
 
 			airportUpdateDebounceTimer = null;
+		}, 100);
+	}
+
+	function checkAndUpdateReceivers(): void {
+		// Clear any existing debounce timer
+		if (receiverUpdateDebounceTimer !== null) {
+			clearTimeout(receiverUpdateDebounceTimer);
+		}
+
+		// Debounce receiver updates by 100ms to prevent excessive API calls
+		receiverUpdateDebounceTimer = setTimeout(() => {
+			const area = calculateViewportArea();
+			const shouldShow = area < 10000 && currentSettings.showReceiverMarkers;
+
+			if (shouldShow !== shouldShowReceivers) {
+				shouldShowReceivers = shouldShow;
+
+				if (shouldShowReceivers) {
+					fetchReceiversInViewport();
+				} else {
+					clearReceiverMarkers();
+					receivers = [];
+				}
+			} else if (shouldShowReceivers) {
+				// Still showing receivers, update them for the new viewport
+				fetchReceiversInViewport();
+			}
+
+			receiverUpdateDebounceTimer = null;
 		}, 100);
 	}
 
@@ -1903,5 +2111,70 @@
 		color: #374151;
 		text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
 		margin-top: 1px;
+	}
+
+	/* Receiver marker styling */
+	:global(.receiver-marker) {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		pointer-events: auto;
+		cursor: pointer;
+		text-decoration: none;
+		transition: transform 0.2s ease-in-out;
+	}
+
+	:global(.receiver-marker:hover) {
+		transform: scale(1.1);
+	}
+
+	:global(.receiver-icon) {
+		background: white;
+		border: 2px solid #374151;
+		border-radius: 50%;
+		width: 24px;
+		height: 24px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		color: #10b981;
+		box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+		transition: all 0.2s ease-in-out;
+	}
+
+	@media (prefers-color-scheme: dark) {
+		:global(.receiver-icon) {
+			background: #1f2937;
+			border-color: #6b7280;
+		}
+	}
+
+	:global(.receiver-marker:hover .receiver-icon) {
+		border-color: #10b981;
+		box-shadow: 0 3px 8px rgba(16, 185, 129, 0.4);
+	}
+
+	:global(.receiver-label) {
+		background: rgba(255, 255, 255, 0.95);
+		border: 1px solid #d1d5db;
+		border-radius: 4px;
+		padding: 2px 6px;
+		font-size: 11px;
+		font-weight: 600;
+		color: #374151;
+		margin-top: 2px;
+		white-space: nowrap;
+		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+		text-rendering: optimizeLegibility;
+		-webkit-font-smoothing: antialiased;
+		-moz-osx-font-smoothing: grayscale;
+	}
+
+	@media (prefers-color-scheme: dark) {
+		:global(.receiver-label) {
+			background: rgba(31, 41, 55, 0.95);
+			border-color: #4b5563;
+			color: #e5e7eb;
+		}
 	}
 </style>

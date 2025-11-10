@@ -15,6 +15,7 @@
 	interface SettingsData {
 		showCompassRose?: boolean;
 		showAirportMarkers?: boolean;
+		showReceiverMarkers?: boolean;
 		showRunwayOverlays?: boolean;
 		positionFixWindow?: number;
 		// Legacy support for old settings
@@ -24,6 +25,7 @@
 	// Settings state
 	let showCompassRose = $state(true);
 	let showAirportMarkers = $state(true);
+	let showReceiverMarkers = $state(true);
 	let showRunwayOverlays = $state(false);
 	let positionFixWindow = $state(8); // Hours - default 8 hours
 
@@ -44,6 +46,7 @@
 				if (backendSettings && Object.keys(backendSettings).length > 0) {
 					showCompassRose = backendSettings.showCompassRose ?? true;
 					showAirportMarkers = backendSettings.showAirportMarkers ?? true;
+					showReceiverMarkers = backendSettings.showReceiverMarkers ?? true;
 					showRunwayOverlays = backendSettings.showRunwayOverlays ?? false;
 					// Use positionFixWindow, or fallback to trailLength for legacy support
 					positionFixWindow =
@@ -63,6 +66,7 @@
 				const settings = JSON.parse(saved);
 				showCompassRose = settings.showCompassRose ?? true;
 				showAirportMarkers = settings.showAirportMarkers ?? true;
+				showReceiverMarkers = settings.showReceiverMarkers ?? true;
 				showRunwayOverlays = settings.showRunwayOverlays ?? false;
 				// Use positionFixWindow, or fallback to trailLength for legacy support
 				positionFixWindow =
@@ -82,6 +86,7 @@
 		const settings = {
 			showCompassRose,
 			showAirportMarkers,
+			showReceiverMarkers,
 			showRunwayOverlays,
 			positionFixWindow
 		};
@@ -112,6 +117,7 @@
 			onSettingsChange({
 				showCompassRose,
 				showAirportMarkers,
+				showReceiverMarkers,
 				showRunwayOverlays,
 				positionFixWindow
 			});
@@ -126,6 +132,7 @@
 				onSettingsChange({
 					showCompassRose,
 					showAirportMarkers,
+					showReceiverMarkers,
 					showRunwayOverlays,
 					positionFixWindow
 				});
@@ -210,6 +217,20 @@
 								<Switch.Thumb />
 							</Switch.Control>
 							<Switch.HiddenInput name="airports-toggle" />
+						</Switch>
+						<Switch
+							class="flex justify-between p-2"
+							checked={showReceiverMarkers}
+							onCheckedChange={(details) => {
+								showReceiverMarkers = details.checked;
+								saveSettings();
+							}}
+						>
+							<Switch.Label class="text-sm font-medium">Show Receiver Markers</Switch.Label>
+							<Switch.Control>
+								<Switch.Thumb />
+							</Switch.Control>
+							<Switch.HiddenInput name="receivers-toggle" />
 						</Switch>
 						<Switch
 							class="flex justify-between p-2"

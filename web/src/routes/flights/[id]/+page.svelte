@@ -24,7 +24,7 @@
 		Expand
 	} from '@lucide/svelte';
 	import type { PageData } from './$types';
-	import type { Flight } from '$lib/types';
+	import type { Flight, Receiver } from '$lib/types';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
 	import {
@@ -60,12 +60,18 @@
 
 	// Display options
 	let includeNearbyFlights = $state(false);
+	let showReceivers = $state(false);
 
 	// Nearby flights data - using full Flight type
 	let nearbyFlights = $state<Flight[]>([]);
 
 	let nearbyFlightPaths = $state<google.maps.Polyline[]>([]);
 	let isLoadingNearbyFlights = $state(false);
+
+	// Receiver data
+	let receivers = $state<Receiver[]>([]);
+	let receiverMarkers = $state<google.maps.marker.AdvancedMarkerElement[]>([]);
+	let isLoadingReceivers = $state(false);
 
 	// Standalone nearby flights section (not tied to map)
 	let standaloneNearbyFlights = $state<Flight[]>([]);
@@ -266,6 +272,20 @@
 		}
 	}
 
+	// Handle receivers toggle
+	function handleReceiversToggle() {
+		if (showReceivers) {
+			fetchReceivers();
+		} else {
+			// Clear receivers from map
+			receiverMarkers.forEach((marker) => {
+				marker.map = null;
+			});
+			receiverMarkers = [];
+			receivers = [];
+		}
+	}
+
 	// Fetch nearby flights for standalone section (no map paths)
 	async function fetchStandaloneNearbyFlights() {
 		isLoadingStandaloneNearby = true;
@@ -333,6 +353,119 @@
 			console.error('Failed to fetch nearby flights:', err);
 		} finally {
 			isLoadingNearbyFlights = false;
+		}
+	}
+
+	// Fetch receivers in viewport
+	async function fetchReceivers() {
+		if (!map) return;
+
+		isLoadingReceivers = true;
+		try {
+			const bounds = map.getBounds();
+			if (!bounds) return;
+
+			const ne = bounds.getNorthEast();
+			const sw = bounds.getSouthWest();
+
+			const params = new URLSearchParams({
+				latitude_min: sw.lat().toString(),
+				latitude_max: ne.lat().toString(),
+				longitude_min: sw.lng().toString(),
+				longitude_max: ne.lng().toString()
+			});
+
+			const data = await serverCall(`/receivers?${params}`);
+			if (!data || typeof data !== 'object' || !('receivers' in data)) {
+				throw new Error('Invalid response format');
+			}
+
+			const response = data as { receivers: unknown[] };
+			receivers = response.receivers.filter((receiver: unknown): receiver is Receiver => {
+				// Validate receiver object
+				if (typeof receiver !== 'object' || receiver === null) {
+					console.error('Invalid receiver: not an object or is null', receiver);
+					return false;
+				}
+
+				// Check required fields
+				const requiredFields = ['id', 'callsign', 'latitude', 'longitude'] as const;
+				for (const field of requiredFields) {
+					if (!(field in receiver)) {
+						console.error(`Invalid receiver: missing required field "${field}"`, receiver);
+						return false;
+					}
+				}
+
+				// Validate latitude and longitude are numbers (or null)
+				const lat = (receiver as Record<string, unknown>).latitude;
+				const lng = (receiver as Record<string, unknown>).longitude;
+
+				if (lat !== null && typeof lat !== 'number') {
+					console.error('Invalid receiver: latitude is not a number or null', receiver);
+					return false;
+				}
+
+				if (lng !== null && typeof lng !== 'number') {
+					console.error('Invalid receiver: longitude is not a number or null', receiver);
+					return false;
+				}
+
+				return true;
+			});
+
+			// Display receivers on map
+			if (map) {
+				// Clear existing receiver markers
+				receiverMarkers.forEach((marker) => {
+					marker.map = null;
+				});
+				receiverMarkers = [];
+
+				receivers.forEach((receiver) => {
+					if (!receiver.latitude || !receiver.longitude) return;
+
+					// Create marker content with Radio icon and link
+					const markerLink = document.createElement('a');
+					markerLink.href = `/receivers/${receiver.id}`;
+					markerLink.target = '_blank';
+					markerLink.rel = 'noopener noreferrer';
+					markerLink.className = 'receiver-marker';
+
+					const iconDiv = document.createElement('div');
+					iconDiv.className = 'receiver-icon';
+					iconDiv.innerHTML = `
+						<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+							<path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/>
+							<path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/>
+							<circle cx="12" cy="12" r="2"/>
+							<path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/>
+							<path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"/>
+						</svg>
+					`;
+
+					const labelDiv = document.createElement('div');
+					labelDiv.className = 'receiver-label';
+					labelDiv.textContent = receiver.callsign;
+
+					markerLink.appendChild(iconDiv);
+					markerLink.appendChild(labelDiv);
+
+					const marker = new google.maps.marker.AdvancedMarkerElement({
+						position: { lat: receiver.latitude, lng: receiver.longitude },
+						map: map,
+						title: `${receiver.callsign}${receiver.description ? ` - ${receiver.description}` : ''}`,
+						content: markerLink,
+						zIndex: 150
+					});
+
+					receiverMarkers.push(marker);
+				});
+			}
+		} catch (err) {
+			console.error('Failed to fetch receivers:', err);
+		} finally {
+			isLoadingReceivers = false;
 		}
 	}
 
@@ -1180,18 +1313,32 @@
 						<span>Full Screen</span>
 					</a>
 				</div>
-				<label class="flex cursor-pointer items-center gap-2">
-					<input
-						type="checkbox"
-						class="checkbox"
-						bind:checked={includeNearbyFlights}
-						onchange={handleNearbyFlightsToggle}
-					/>
-					<span class="text-sm">Include Nearby Flights</span>
-					{#if isLoadingNearbyFlights}
-						<span class="text-surface-600-300-token text-xs">(Loading...)</span>
-					{/if}
-				</label>
+				<div class="flex items-center gap-4">
+					<label class="flex cursor-pointer items-center gap-2">
+						<input
+							type="checkbox"
+							class="checkbox"
+							bind:checked={includeNearbyFlights}
+							onchange={handleNearbyFlightsToggle}
+						/>
+						<span class="text-sm">Include Nearby Flights</span>
+						{#if isLoadingNearbyFlights}
+							<span class="text-surface-600-300-token text-xs">(Loading...)</span>
+						{/if}
+					</label>
+					<label class="flex cursor-pointer items-center gap-2">
+						<input
+							type="checkbox"
+							class="checkbox"
+							bind:checked={showReceivers}
+							onchange={handleReceiversToggle}
+						/>
+						<span class="text-sm">Show Receivers</span>
+						{#if isLoadingReceivers}
+							<span class="text-surface-600-300-token text-xs">(Loading...)</span>
+						{/if}
+					</label>
+				</div>
 			</div>
 			<div bind:this={mapContainer} class="h-96 w-full rounded-lg"></div>
 		</div>
@@ -1330,3 +1477,70 @@
 		</div>
 	{/if}
 </div>
+
+<style>
+	/* Receiver marker styling */
+	:global(.receiver-marker) {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		pointer-events: auto;
+		cursor: pointer;
+		text-decoration: none;
+		transition: transform 0.2s ease-in-out;
+	}
+
+	:global(.receiver-marker:hover) {
+		transform: scale(1.1);
+	}
+
+	:global(.receiver-icon) {
+		background: white;
+		border: 2px solid #374151;
+		border-radius: 50%;
+		width: 24px;
+		height: 24px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		color: #10b981;
+		box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+		transition: all 0.2s ease-in-out;
+	}
+
+	@media (prefers-color-scheme: dark) {
+		:global(.receiver-icon) {
+			background: #1f2937;
+			border-color: #6b7280;
+		}
+	}
+
+	:global(.receiver-marker:hover .receiver-icon) {
+		border-color: #10b981;
+		box-shadow: 0 3px 8px rgba(16, 185, 129, 0.4);
+	}
+
+	:global(.receiver-label) {
+		background: rgba(255, 255, 255, 0.95);
+		border: 1px solid #d1d5db;
+		border-radius: 4px;
+		padding: 2px 6px;
+		font-size: 11px;
+		font-weight: 600;
+		color: #374151;
+		margin-top: 2px;
+		white-space: nowrap;
+		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+		text-rendering: optimizeLegibility;
+		-webkit-font-smoothing: antialiased;
+		-moz-osx-font-smoothing: grayscale;
+	}
+
+	@media (prefers-color-scheme: dark) {
+		:global(.receiver-label) {
+			background: rgba(31, 41, 55, 0.95);
+			border-color: #4b5563;
+			color: #e5e7eb;
+		}
+	}
+</style>
