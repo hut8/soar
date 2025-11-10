@@ -17,6 +17,7 @@
 
 	// Aircraft type filter state (for recently active devices only)
 	let selectedAircraftTypes = new SvelteSet<string>();
+	let filterExpanded = $state(false); // Track whether filter panel is expanded
 
 	// Available aircraft types for filtering
 	const aircraftTypes = [
@@ -185,10 +186,19 @@
 		loadRecentDevices(); // Reload from backend with new filter
 	}
 
-	function clearAircraftTypeFilter() {
-		selectedAircraftTypes.clear();
-		currentPage = 0;
-		loadRecentDevices(); // Reload from backend without filter
+	function toggleFilterExpanded() {
+		if (filterExpanded) {
+			// Collapsing - clear all filters and reload all devices
+			filterExpanded = false;
+			selectedAircraftTypes.clear();
+			currentPage = 0;
+			loadRecentDevices();
+		} else {
+			// Expanding - show filter options (starting with nothing selected)
+			filterExpanded = true;
+			// If there were previously selected types, keep them
+			// Otherwise the filter starts empty and shows no results until types are selected
+		}
 	}
 
 	// Don't load devices automatically on mount - wait for user search
@@ -477,29 +487,32 @@
 	<!-- Aircraft Type Filter (only for recently active devices) -->
 	{#if !searchQuery && searchType !== 'club' && !loading}
 		<section class="space-y-4 card p-6">
-			<div class="mb-3 flex items-center justify-between">
-				<h3 class="flex items-center gap-2 text-lg font-semibold">
-					<Filter class="h-5 w-5" />
-					Filter by Aircraft Type
-				</h3>
-				{#if selectedAircraftTypes.size > 0}
-					<button class="btn preset-filled-surface-500 btn-sm" onclick={clearAircraftTypeFilter}>
-						Clear Filter
-					</button>
-				{/if}
-			</div>
-			<div class="flex flex-wrap gap-2">
-				{#each aircraftTypes as type (type.value)}
-					<button
-						class="badge text-xs transition-all {selectedAircraftTypes.has(type.value)
-							? 'preset-filled-primary-500'
-							: 'preset-tonal-surface-500'}"
-						onclick={() => toggleAircraftType(type.value)}
-					>
-						{type.label}
-					</button>
-				{/each}
-			</div>
+			<!-- Filter toggle button -->
+			<button
+				class="btn w-full {filterExpanded
+					? 'preset-filled-primary-500'
+					: 'preset-filled-surface-500'}"
+				onclick={toggleFilterExpanded}
+			>
+				<Filter class="h-5 w-5" />
+				Filter by Aircraft Type
+			</button>
+
+			<!-- Aircraft type selection (shown when expanded) -->
+			{#if filterExpanded}
+				<div class="grid grid-cols-2 gap-2 md:grid-cols-7">
+					{#each aircraftTypes as type (type.value)}
+						<button
+							class="badge text-xs transition-all {selectedAircraftTypes.has(type.value)
+								? 'preset-filled-primary-500'
+								: 'preset-filled-error-500'}"
+							onclick={() => toggleAircraftType(type.value)}
+						>
+							{type.label}
+						</button>
+					{/each}
+				</div>
+			{/if}
 		</section>
 	{/if}
 
