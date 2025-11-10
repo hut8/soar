@@ -11,7 +11,7 @@
 	import AirportModal from '$lib/components/AirportModal.svelte';
 	import { DeviceRegistry } from '$lib/services/DeviceRegistry';
 	import { FixFeed } from '$lib/services/FixFeed';
-	import type { Device } from '$lib/types';
+	import type { Device, Receiver } from '$lib/types';
 	import { toaster } from '$lib/toaster';
 	import { debugStatus } from '$lib/stores/watchlist';
 	import { browser } from '$app/environment';
@@ -68,27 +68,6 @@
 		runways: RunwayView[];
 	}
 
-	// TypeScript interface for receiver data
-	interface ReceiverView {
-		id: string;
-		callsign: string;
-		description: string | null;
-		contact: string | null;
-		email: string | null;
-		ogn_db_country: string | null;
-		latitude: number | null;
-		longitude: number | null;
-		street_address: string | null;
-		city: string | null;
-		region: string | null;
-		country: string | null;
-		postal_code: string | null;
-		created_at: string;
-		updated_at: string;
-		latest_packet_at: string | null;
-		from_ogn_db: boolean;
-	}
-
 	let mapContainer: HTMLElement;
 	let map: google.maps.Map;
 	let userLocationButton: HTMLButtonElement;
@@ -109,7 +88,7 @@
 	let airportUpdateDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 	// Receiver display variables
-	let receivers: ReceiverView[] = [];
+	let receivers: Receiver[] = [];
 	let receiverMarkers: google.maps.marker.AdvancedMarkerElement[] = [];
 	let shouldShowReceivers: boolean = false;
 	let receiverUpdateDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -928,7 +907,7 @@
 			}
 
 			const response = data as { receivers: unknown[] };
-			receivers = response.receivers.filter((receiver: unknown): receiver is ReceiverView => {
+			receivers = response.receivers.filter((receiver: unknown): receiver is Receiver => {
 				return (
 					typeof receiver === 'object' &&
 					receiver !== null &&

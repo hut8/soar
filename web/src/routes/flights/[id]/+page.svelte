@@ -24,7 +24,7 @@
 		Expand
 	} from '@lucide/svelte';
 	import type { PageData } from './$types';
-	import type { Flight } from '$lib/types';
+	import type { Flight, Receiver } from '$lib/types';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
 	import {
@@ -69,14 +69,7 @@
 	let isLoadingNearbyFlights = $state(false);
 
 	// Receiver data
-	interface ReceiverView {
-		id: string;
-		callsign: string;
-		description: string | null;
-		latitude: number | null;
-		longitude: number | null;
-	}
-	let receivers = $state<ReceiverView[]>([]);
+	let receivers = $state<Receiver[]>([]);
 	let receiverMarkers = $state<google.maps.marker.AdvancedMarkerElement[]>([]);
 	let isLoadingReceivers = $state(false);
 
@@ -388,7 +381,7 @@
 			}
 
 			const response = data as { receivers: unknown[] };
-			receivers = response.receivers.filter((receiver: unknown): receiver is ReceiverView => {
+			receivers = response.receivers.filter((receiver: unknown): receiver is Receiver => {
 				return (
 					typeof receiver === 'object' &&
 					receiver !== null &&

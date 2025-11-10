@@ -274,3 +274,24 @@ export interface Pilot {
 	created_at: string;
 	updated_at: string;
 }
+
+// Receiver interface matching backend ReceiverView
+export interface Receiver {
+	id: string;
+	callsign: string;
+	description: string | null;
+	contact: string | null;
+	email: string | null;
+	ogn_db_country: string | null;
+	latitude: number | null;
+	longitude: number | null;
+	street_address: string | null;
+	city: string | null;
+	region: string | null;
+	country: string | null;
+	postal_code: string | null;
+	created_at: string;
+	updated_at: string;
+	latest_packet_at: string | null;
+	from_ogn_db: boolean;
+}
