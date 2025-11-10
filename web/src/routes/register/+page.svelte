@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { authApi } from '$lib/api/auth';
-	import { ServerError } from '$lib/api/server';
+	import { authApi, AuthApiError } from '$lib/api/auth';
 	import { resolve } from '$app/paths';
 	import { ClubSelector } from '$lib';
 
@@ -55,7 +54,7 @@
 			const href = `/login?message=${encodeURIComponent(message)}`;
 			void goto(href);
 		} catch (err) {
-			if (err instanceof ServerError) {
+			if (err instanceof AuthApiError) {
 				if (err.status === 409) {
 					error = 'An account with this email already exists';
 				} else {
