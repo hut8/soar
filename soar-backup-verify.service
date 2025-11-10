@@ -1,0 +1,33 @@
+[Unit]
+Description=SOAR Backup - Verify Backup Integrity
+Documentation=https://github.com/hut8/soar
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=postgres
+Group=postgres
+WorkingDirectory=/var/lib/postgresql
+
+# Run backup verification script
+ExecStart=/usr/local/bin/soar-backup-verify
+
+# Environment variables for cloud storage credentials
+EnvironmentFile=/etc/soar/backup-env
+
+# Security settings
+NoNewPrivileges=yes
+ReadWritePaths=-/var/log/soar
+
+# Process limits
+LimitNOFILE=65536
+
+# Timeout (allow up to 30 minutes for verification)
+TimeoutStartSec=1800
+
+# Don't restart on failure - let monitoring alert on verification failures
+Restart=no
+
+[Install]
+WantedBy=multi-user.target

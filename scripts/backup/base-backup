@@ -1,0 +1,332 @@
+#!/bin/bash
+#
+# base-backup - Create full PostgreSQL base backup and upload to cloud storage
+#
+# This script creates a physical backup of the PostgreSQL database using
+# pg_basebackup, compresses it, uploads to cloud storage, and manages retention.
+#
+# Usage:
+#   base-backup [--no-cleanup]
+#
+# Options:
+#   --no-cleanup    Skip cleanup of old backups (useful for testing)
+#
+# Exit codes:
+#   0 - Success
+#   1 - Failure
+#
+# Configuration:
+#   Source credentials from /etc/soar/backup-env
+#
+# Scheduling:
+#   Run via systemd timer: soar-backup-base.timer (weekly, Sunday 2 AM)
+
+set -euo pipefail
+
+# Load configuration
+if [[ ! -f /etc/soar/backup-env ]]; then
+    echo "ERROR: /etc/soar/backup-env not found" >&2
+    exit 1
+fi
+
+source /etc/soar/backup-env
+
+# Parse arguments
+CLEANUP=true
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --no-cleanup)
+            CLEANUP=false
+            shift
+            ;;
+        *)
+            echo "Unknown option: $1" >&2
+            exit 1
+            ;;
+    esac
+done
+
+# Validate configuration
+if [[ -z "${BACKUP_REMOTE:-}" ]]; then
+    echo "ERROR: BACKUP_REMOTE not set in /etc/soar/backup-env" >&2
+    exit 1
+fi
+
+# Rclone configuration
+RCLONE_CONFIG="${RCLONE_CONFIG:-/etc/soar/rclone.conf}"
+if [[ ! -f "$RCLONE_CONFIG" ]]; then
+    echo "ERROR: Rclone config not found: $RCLONE_CONFIG" >&2
+    exit 1
+fi
+
+# Directories
+TEMP_DIR="${BACKUP_TEMP_DIR:-/var/lib/soar/backup-temp}"
+LOG_DIR="${BACKUP_LOG_DIR:-/var/log/soar}"
+mkdir -p "$TEMP_DIR" "$LOG_DIR"
+
+# Database connection
+PGHOST="${PGHOST:-localhost}"
+PGPORT="${PGPORT:-5432}"
+PGDATABASE="${PGDATABASE:-soar}"
+PGUSER="${PGUSER:-postgres}"
+
+# Backup configuration
+COMPRESSION="${BACKUP_COMPRESSION:-gzip}"
+PARALLEL_JOBS="${BACKUP_PARALLEL_JOBS:-4}"
+RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-30}"
+
+# Backup identifier (date)
+BACKUP_DATE=$(date -u +"%Y-%m-%d")
+BACKUP_TIMESTAMP=$(date -u +"%Y-%m-%d_%H-%M-%S")
+BACKUP_NAME="backup-${BACKUP_TIMESTAMP}"
+BACKUP_LOCAL_DIR="$TEMP_DIR/$BACKUP_NAME"
+BACKUP_CLOUD_PREFIX="${BACKUP_REMOTE}/base/${BACKUP_DATE}"
+
+# Metrics and notifications
+NOTIFY_EMAIL="${BACKUP_NOTIFY_EMAIL:-}"
+NOTIFY_SLACK="${BACKUP_NOTIFY_SLACK_WEBHOOK:-}"
+
+# Function to log messages
+log() {
+    local level="$1"
+    shift
+    echo "[$(date -u +"%Y-%m-%d %H:%M:%S UTC")] [$level] Base Backup: $*" | tee -a "$LOG_DIR/backup.log"
+}
+
+# Function to send notifications
+notify() {
+    local status="$1"
+    local message="$2"
+
+    log INFO "Notification: $status - $message"
+
+    # Email notification
+    if [[ -n "$NOTIFY_EMAIL" ]] && command -v mail >/dev/null 2>&1; then
+        echo "$message" | mail -s "SOAR Backup: $status" "$NOTIFY_EMAIL"
+    fi
+
+    # Slack notification
+    if [[ -n "$NOTIFY_SLACK" ]] && command -v curl >/dev/null 2>&1; then
+        curl -X POST "$NOTIFY_SLACK" \
+            -H 'Content-Type: application/json' \
+            -d "{\"text\":\"SOAR Backup: $status\n$message\"}" \
+            >/dev/null 2>&1 || true
+    fi
+}
+
+# Function to cleanup on exit
+cleanup() {
+    local exit_code=$?
+    if [[ $exit_code -ne 0 ]]; then
+        log ERROR "Backup failed with exit code $exit_code"
+        notify "FAILED" "Base backup failed on $(hostname) at $(date). Check logs at $LOG_DIR/backup.log"
+    fi
+
+    # Remove temporary files
+    if [[ -d "$BACKUP_LOCAL_DIR" ]]; then
+        log INFO "Cleaning up temporary directory: $BACKUP_LOCAL_DIR"
+        rm -rf "$BACKUP_LOCAL_DIR"
+    fi
+}
+
+trap cleanup EXIT
+
+# Main backup function
+main() {
+    local start_time=$(date +%s)
+
+    log INFO "=========================================="
+    log INFO "Starting base backup: $BACKUP_NAME"
+    log INFO "=========================================="
+    log INFO "Database: ${PGUSER}@${PGHOST}:${PGPORT}/${PGDATABASE}"
+    log INFO "Destination: $BACKUP_CLOUD_PREFIX"
+    log INFO "Compression: $COMPRESSION"
+    log INFO "Parallel jobs: $PARALLEL_JOBS"
+
+    # Check database connectivity
+    log INFO "Checking database connectivity..."
+    if ! psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -c "SELECT 1" >/dev/null 2>&1; then
+        log ERROR "Cannot connect to database"
+        exit 1
+    fi
+
+    # Check available disk space
+    local available_space=$(df "$TEMP_DIR" | tail -1 | awk '{print $4}')
+    log INFO "Available disk space in $TEMP_DIR: $(numfmt --to=iec-i --suffix=B $((available_space * 1024)))"
+
+    # Get current database size for reference
+    local db_size=$(psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -t -c \
+        "SELECT pg_database_size('$PGDATABASE')" | tr -d ' ')
+    log INFO "Current database size: $(numfmt --to=iec-i --suffix=B "$db_size")"
+
+    # Create base backup using pg_basebackup
+    log INFO "Creating base backup with pg_basebackup..."
+    mkdir -p "$BACKUP_LOCAL_DIR"
+
+    if ! pg_basebackup \
+        -h "$PGHOST" \
+        -p "$PGPORT" \
+        -U "$PGUSER" \
+        -D "$BACKUP_LOCAL_DIR" \
+        -Ft \
+        -z \
+        -P \
+        -v \
+        --wal-method=fetch \
+        --label="$BACKUP_NAME" \
+        >> "$LOG_DIR/backup.log" 2>&1; then
+        log ERROR "pg_basebackup failed"
+        exit 1
+    fi
+
+    log INFO "Base backup completed successfully"
+
+    # Get backup size
+    local backup_size=$(du -sb "$BACKUP_LOCAL_DIR" | cut -f1)
+    log INFO "Backup size: $(numfmt --to=iec-i --suffix=B "$backup_size")"
+
+    # Upload to cloud storage
+    log INFO "Uploading backup to cloud storage..."
+
+    if ! rclone sync "$BACKUP_LOCAL_DIR" "$BACKUP_CLOUD_PREFIX/" \
+        --config "$RCLONE_CONFIG" \
+        --progress \
+        >> "$LOG_DIR/backup.log" 2>&1; then
+        log ERROR "Failed to upload backup to cloud storage"
+        exit 1
+    fi
+
+    log INFO "Upload completed successfully"
+
+    # Verify uploaded files
+    log INFO "Verifying uploaded files..."
+    local uploaded_count=$(rclone lsf "$BACKUP_CLOUD_PREFIX/" \
+        --config "$RCLONE_CONFIG" \
+        | wc -l)
+
+    if [[ $uploaded_count -eq 0 ]]; then
+        log ERROR "Verification failed: no files found in cloud storage"
+        exit 1
+    fi
+
+    log INFO "Verification passed: found $uploaded_count files in cloud storage"
+
+    # Create metadata file
+    log INFO "Creating backup metadata..."
+    cat > "$TEMP_DIR/backup-metadata.json" <<EOF
+{
+  "backup_name": "$BACKUP_NAME",
+  "backup_date": "$BACKUP_DATE",
+  "backup_timestamp": "$BACKUP_TIMESTAMP",
+  "database": "$PGDATABASE",
+  "database_size_bytes": $db_size,
+  "backup_size_bytes": $backup_size,
+  "compression": "$COMPRESSION",
+  "hostname": "$(hostname)",
+  "postgresql_version": "$(psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -t -c "SHOW server_version" | tr -d ' ')",
+  "completed_at": "$(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+}
+EOF
+
+    rclone copyto "$TEMP_DIR/backup-metadata.json" "$BACKUP_CLOUD_PREFIX/backup-metadata.json" \
+        --config "$RCLONE_CONFIG" \
+        >> "$LOG_DIR/backup.log" 2>&1
+
+    # Cleanup old backups if enabled
+    if [[ "$CLEANUP" == "true" ]]; then
+        log INFO "Cleaning up old backups (retention: $RETENTION_DAYS days, minimum: ${BASE_BACKUP_MIN_COUNT:-2})..."
+
+        # List all base backups (sorted newest first)
+        local all_backups=$(rclone lsd "${BACKUP_REMOTE}/base/" \
+            --config "$RCLONE_CONFIG" \
+            2>/dev/null | awk '{print $5}' | sort -r || echo "")
+
+        if [[ -z "$all_backups" ]]; then
+            log WARN "No backups found for cleanup"
+        else
+            local backup_count=$(echo "$all_backups" | wc -l)
+            log INFO "Found $backup_count total backups"
+
+            # Minimum number of backups to keep (default: 2)
+            local min_backups=${BASE_BACKUP_MIN_COUNT:-2}
+
+            # Calculate cutoff date (default: 21 days for 3 weeks)
+            local cutoff_date=$(date -u -d "$RETENTION_DAYS days ago" +"%Y-%m-%d")
+            log INFO "Cutoff date: $cutoff_date (keeping backups newer than this)"
+
+            # Count valid recent backups
+            local recent_count=0
+            for backup_date in $all_backups; do
+                if [[ "$backup_date" >= "$cutoff_date" ]]; then
+                    ((recent_count++))
+                fi
+            done
+
+            log INFO "Recent backups (within retention): $recent_count"
+
+            # Only proceed with deletion if we have enough recent backups
+            if [[ $backup_count -le $min_backups ]]; then
+                log INFO "Only $backup_count backups exist, keeping all (minimum: $min_backups)"
+            elif [[ $recent_count -lt $min_backups ]]; then
+                log WARN "Only $recent_count recent backups, need at least $min_backups. Skipping cleanup for safety."
+            else
+                # Safe to delete old backups
+                log INFO "Have $recent_count recent backups (>= $min_backups), proceeding with cleanup"
+
+                local deleted_count=0
+                for backup_date in $all_backups; do
+                    if [[ "$backup_date" < "$cutoff_date" ]]; then
+                        log INFO "Deleting old backup: $backup_date (older than $cutoff_date)"
+
+                        if rclone purge "${BACKUP_REMOTE}/base/${backup_date}/" \
+                            --config "$RCLONE_CONFIG" \
+                            >> "$LOG_DIR/backup.log" 2>&1; then
+                            ((deleted_count++))
+                            log INFO "Successfully deleted backup: $backup_date"
+                        else
+                            log ERROR "Failed to delete backup: $backup_date"
+                        fi
+                    fi
+                done
+
+                log INFO "Cleanup completed: deleted $deleted_count old backups, kept $recent_count recent backups"
+            fi
+        fi
+    fi
+
+    # Calculate duration
+    local end_time=$(date +%s)
+    local duration=$((end_time - start_time))
+    local duration_formatted=$(printf '%02d:%02d:%02d' $((duration/3600)) $((duration%3600/60)) $((duration%60)))
+
+    log INFO "=========================================="
+    log INFO "Backup completed successfully!"
+    log INFO "Duration: $duration_formatted"
+    log INFO "Backup location: $BACKUP_CLOUD_PREFIX"
+    log INFO "=========================================="
+
+    # Send success notification
+    notify "SUCCESS" "Base backup completed successfully on $(hostname)
+Backup: $BACKUP_NAME
+Duration: $duration_formatted
+Database size: $(numfmt --to=iec-i --suffix=B "$db_size")
+Backup size: $(numfmt --to=iec-i --suffix=B "$backup_size")
+Location: $BACKUP_CLOUD_PREFIX"
+
+    # Update metrics (if metrics endpoint is available)
+    if [[ -n "${METRICS_PUSHGATEWAY:-}" ]] && command -v curl >/dev/null 2>&1; then
+        cat <<EOF | curl --data-binary @- "${METRICS_PUSHGATEWAY}/metrics/job/soar_backup" >/dev/null 2>&1 || true
+# TYPE backup_base_duration_seconds gauge
+backup_base_duration_seconds $duration
+# TYPE backup_base_size_bytes gauge
+backup_base_size_bytes $backup_size
+# TYPE backup_base_last_success_timestamp gauge
+backup_base_last_success_timestamp $(date +%s)
+EOF
+    fi
+
+    return 0
+}
+
+# Run main function
+main

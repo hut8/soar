@@ -1,0 +1,56 @@
+# SOAR Backup Base Timer
+#
+# This systemd timer automatically runs full database backups on the 1st and 15th of each month at 2:00 AM.
+# It creates a complete physical backup using pg_basebackup, compresses it, and uploads to
+# cloud storage (S3-compatible).
+#
+# Backup details:
+#   - Frequency: Bi-weekly (1st and 15th of month at 2:00 AM UTC)
+#   - Method: pg_basebackup (physical backup)
+#   - Compression: gzip
+#   - Storage: Cloud storage (Wasabi/S3/B2/etc.)
+#   - Retention: 30 days (keeps at least 2 backups)
+#   - Duration: ~2-4 hours for 420GB database
+#
+# Combined with continuous WAL archiving, this provides point-in-time recovery capability
+# for any moment within the 30-day retention period. Less frequent base backups reduce
+# storage costs while maintaining full recovery capability via WAL replay.
+#
+# Installation:
+#   sudo cp soar-backup-base.service soar-backup-base.timer /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable soar-backup-base.timer
+#   sudo systemctl start soar-backup-base.timer
+#
+# Check status:
+#   sudo systemctl status soar-backup-base.timer
+#   sudo systemctl list-timers soar-backup-base.timer
+#
+# Manual execution:
+#   sudo systemctl start soar-backup-base.service
+#
+# View logs:
+#   sudo journalctl -u soar-backup-base.service -f
+#   sudo tail -f /var/log/soar/backup.log
+
+[Unit]
+Description=SOAR Backup Base Timer - Bi-weekly Full Database Backup
+Requires=soar-backup-base.service
+
+[Timer]
+# Run bi-weekly: 1st and 15th of each month at 2:00 AM UTC
+# This provides consistent 14-day intervals
+OnCalendar=*-*-01 02:00:00
+OnCalendar=*-*-15 02:00:00
+
+# If the system was down when the timer should have triggered, run it as soon as possible
+Persistent=yes
+
+# Add some randomization to avoid exact timing conflicts (up to 30 minutes)
+RandomizedDelaySec=1800
+
+# Allow some timing drift since exact timing isn't critical for weekly backups
+AccuracySec=1h
+
+[Install]
+WantedBy=timers.target

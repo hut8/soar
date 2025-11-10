@@ -1,0 +1,179 @@
+# SOAR Database Backup Configuration
+#
+# This file contains environment variables for the backup system.
+# Copy this file to /etc/soar/backup-env and configure with your settings.
+#
+# Installation:
+#   sudo mkdir -p /etc/soar
+#   sudo cp backup-env.example /etc/soar/backup-env
+#   sudo cp rclone.conf.example /etc/soar/rclone.conf
+#   sudo nano /etc/soar/backup-env  # Edit with your values
+#   sudo nano /etc/soar/rclone.conf  # Edit with your rclone remote config
+#   sudo chown postgres:postgres /etc/soar/backup-env /etc/soar/rclone.conf
+#   sudo chmod 600 /etc/soar/backup-env /etc/soar/rclone.conf
+#
+# IMPORTANT: This file contains sensitive credentials. Protect it carefully!
+#   - Set permissions to 600 (read/write for owner only)
+#   - Owner should be postgres:postgres
+#   - Never commit this file to version control
+
+#------------------------------------------------------------------------------
+# CLOUD STORAGE CONFIGURATION (using rclone)
+#------------------------------------------------------------------------------
+
+# Rclone remote and bucket (in rclone remote:bucket format)
+# The remote name must match a [remote] section in /etc/soar/rclone.conf
+#
+# For Wasabi example:
+export BACKUP_REMOTE="soar-db:soar-backup-prod"
+#
+# Where:
+#   soar-db = rclone remote name (defined in /etc/soar/rclone.conf)
+#   soar-backup-prod = bucket name
+#
+# See rclone.conf.example for configuration examples
+
+# Path to rclone configuration file
+# Default: /etc/soar/rclone.conf
+export RCLONE_CONFIG="/etc/soar/rclone.conf"
+
+#------------------------------------------------------------------------------
+# BACKUP RETENTION CONFIGURATION
+#------------------------------------------------------------------------------
+
+# How many days to keep base backups before deletion
+# MUST be >= WAL_RETENTION_DAYS (WAL files are useless without a base backup!)
+# Default: 30 days - ensures all WAL files can be used for recovery
+# Combined with bi-weekly backups, this keeps ~2 base backups at any time
+export BACKUP_RETENTION_DAYS=30
+
+# Minimum number of base backups to always keep (safety check)
+# Even if backups are older than BACKUP_RETENTION_DAYS, keep at least this many
+# Default: 2 (ensures we always have a recent backup for recovery)
+export BASE_BACKUP_MIN_COUNT=2
+
+# WAL archive retention (for point-in-time recovery)
+# MUST be <= BACKUP_RETENTION_DAYS (need base backup to use WAL files!)
+# Default: 30 days (allows recovery to any point in last month)
+# Note: Can reduce to 21 days to save ~15% storage if 3-week PITR is sufficient
+export WAL_RETENTION_DAYS=30
+
+#------------------------------------------------------------------------------
+# POSTGRESQL CONNECTION
+#------------------------------------------------------------------------------
+
+# PostgreSQL connection settings
+# Usually localhost for local PostgreSQL instance
+export PGHOST=localhost
+export PGPORT=5432
+export PGDATABASE=soar
+export PGUSER=postgres
+
+# Password authentication:
+# DO NOT set PGPASSWORD here! Instead use ~/.pgpass file:
+#   echo "localhost:5432:soar:postgres:your-password" >> ~/.pgpass
+#   chmod 600 ~/.pgpass
+#
+# Or use peer authentication (if postgres user runs the scripts)
+
+# PostgreSQL data directory and version (for restore operations)
+# Adjust based on your PostgreSQL installation
+export PGDATA=/var/lib/postgresql/17/main
+export PG_VERSION=17
+
+#------------------------------------------------------------------------------
+# BACKUP PATHS
+#------------------------------------------------------------------------------
+
+# Temporary directory for staging backups during creation
+# Needs space for ~150GB compressed backup during upload
+# Will be automatically created if it doesn't exist
+export BACKUP_TEMP_DIR=/var/lib/soar/backup-temp
+
+# Directory for backup logs
+# Will be automatically created if it doesn't exist
+export BACKUP_LOG_DIR=/var/log/soar
+
+#------------------------------------------------------------------------------
+# BACKUP COMPRESSION AND PERFORMANCE
+#------------------------------------------------------------------------------
+
+# Compression method for base backups
+# Options: gzip, none
+# gzip reduces size by ~60-70% but takes longer
+export BACKUP_COMPRESSION=gzip
+
+# Number of parallel jobs for compression/upload
+# Higher = faster but more CPU/memory usage
+# Recommended: 2-4 for most systems
+export BACKUP_PARALLEL_JOBS=4
+
+#------------------------------------------------------------------------------
+# MONITORING AND NOTIFICATIONS (OPTIONAL)
+#------------------------------------------------------------------------------
+
+# Email notification on backup success/failure (requires mail command)
+# Leave empty to disable email notifications
+export BACKUP_NOTIFY_EMAIL=""
+# Example: export BACKUP_NOTIFY_EMAIL="ops@example.com"
+
+# Slack webhook for notifications
+# Create webhook at: https://api.slack.com/messaging/webhooks
+# Leave empty to disable Slack notifications
+export BACKUP_NOTIFY_SLACK_WEBHOOK=""
+# Example: export BACKUP_NOTIFY_SLACK_WEBHOOK="https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXX"
+
+# Prometheus Pushgateway for metrics (optional)
+# If you have a Pushgateway, backup metrics will be pushed after each backup
+export METRICS_PUSHGATEWAY=""
+# Example: export METRICS_PUSHGATEWAY="http://localhost:9091"
+
+#------------------------------------------------------------------------------
+# RCLONE CONFIGURATION
+#------------------------------------------------------------------------------
+
+# Rclone configuration file location (default: /etc/soar/rclone.conf)
+# Only change if you need to use a different config file
+# export RCLONE_CONFIG="/etc/soar/rclone.conf"
+
+# Rclone additional options (optional)
+# export RCLONE_OPTS="--stats=1s"
+
+#------------------------------------------------------------------------------
+# ADVANCED CONFIGURATION
+#------------------------------------------------------------------------------
+
+# WAL segment size (usually 16MB, don't change unless you know what you're doing)
+# export WAL_SEGMENT_SIZE=16777216
+
+# Archive timeout (seconds) - how long to wait before archiving partial WAL
+# Only relevant if database is very low write volume
+# export ARCHIVE_TIMEOUT=300
+
+# Maximum retries for cloud uploads
+# export MAX_UPLOAD_RETRIES=3
+
+# Upload retry delay (seconds)
+# export UPLOAD_RETRY_DELAY=60
+
+#------------------------------------------------------------------------------
+# VERIFICATION
+#------------------------------------------------------------------------------
+
+# After editing this file, verify the configuration:
+#
+# 1. Test cloud storage access:
+#    source /etc/soar/backup-env
+#    rclone lsd ${BACKUP_REMOTE} --config /etc/soar/rclone.conf
+#
+# 2. Test WAL archiving (as postgres user):
+#    sudo -u postgres /usr/local/bin/soar-wal-archive \
+#      /var/lib/postgresql/17/main/pg_wal/000000010000000000000001 \
+#      000000010000000000000001
+#
+# 3. Test base backup (manual run):
+#    sudo systemctl start soar-backup-base.service
+#    sudo journalctl -u soar-backup-base.service -f
+#
+# 4. Verify backup in cloud:
+#    rclone lsd ${BACKUP_REMOTE}/base/ --config /etc/soar/rclone.conf

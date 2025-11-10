@@ -1,0 +1,143 @@
+# Rclone Configuration for SOAR Database Backups
+#
+# This file configures the rclone remote for accessing cloud storage.
+# Copy this file to /etc/soar/rclone.conf and configure with your credentials.
+#
+# Installation:
+#   sudo mkdir -p /etc/soar
+#   sudo cp rclone.conf.example /etc/soar/rclone.conf
+#   sudo nano /etc/soar/rclone.conf  # Edit with your credentials
+#   sudo chown postgres:postgres /etc/soar/rclone.conf
+#   sudo chmod 600 /etc/soar/rclone.conf
+#
+# IMPORTANT: This file contains sensitive credentials!
+#   - Set permissions to 600 (read/write for owner only)
+#   - Owner should be postgres:postgres
+#   - Never commit this file to version control
+#
+# The remote name (e.g., [soar-db]) must match the BACKUP_REMOTE setting
+# in /etc/soar/backup-env (e.g., soar-db:bucket-name)
+
+#------------------------------------------------------------------------------
+# Wasabi Configuration (RECOMMENDED - $5.40/month for 900GB, ~$3/month for 300GB)
+#------------------------------------------------------------------------------
+# Best balance of performance, cost, and simplicity
+# - No egress fees (unlimited downloads)
+# - S3-compatible API (works with standard tools)
+# - Reliable performance
+# - Simple pricing (just storage, no API charges)
+#
+# Setup:
+#   1. Create account at https://wasabi.com
+#   2. Create bucket: soar-backup-prod
+#   3. Create access key in Wasabi console
+#   4. Note your region endpoint (e.g., s3.wasabisys.com for us-east-1)
+#
+[soar-db]
+type = s3
+provider = Wasabi
+access_key_id = YOUR_WASABI_ACCESS_KEY
+secret_access_key = YOUR_WASABI_SECRET_KEY
+endpoint = s3.wasabisys.com
+acl = private
+
+#------------------------------------------------------------------------------
+# Backblaze B2 Configuration (Lowest Cost - $4.50/month for 900GB)
+#------------------------------------------------------------------------------
+# Cheapest option with free egress up to 3× storage (2.7TB/month)
+# Good for cost-conscious setups with infrequent restores
+#
+# Setup:
+#   1. Create account at https://www.backblaze.com/b2/sign-up.html
+#   2. Create bucket: soar-backup-prod (Private)
+#   3. Create application key with access to bucket
+#   4. Find endpoint at https://www.backblaze.com/b2/docs/s3_compatible_api.html
+#      (e.g., https://s3.us-west-004.backblazeb2.com)
+#
+# [soar-db]
+# type = s3
+# provider = Backblaze
+# access_key_id = YOUR_BACKBLAZE_KEY_ID
+# secret_access_key = YOUR_BACKBLAZE_APPLICATION_KEY
+# endpoint = s3.us-west-004.backblazeb2.com
+# acl = private
+
+#------------------------------------------------------------------------------
+# AWS S3 Configuration (Standard - $21/month for 900GB)
+#------------------------------------------------------------------------------
+# Most integrated, highest cost
+#
+# Setup:
+#   1. Create S3 bucket: soar-backup-prod
+#   2. Create IAM user with S3 access
+#   3. Note region (e.g., us-east-1)
+#
+# [soar-db]
+# type = s3
+# provider = AWS
+# access_key_id = YOUR_AWS_ACCESS_KEY_ID
+# secret_access_key = YOUR_AWS_SECRET_ACCESS_KEY
+# region = us-east-1
+# acl = private
+
+#------------------------------------------------------------------------------
+# DigitalOcean Spaces Configuration ($5/month + overages)
+#------------------------------------------------------------------------------
+# Simple option with 250GB free egress/month
+#
+# Setup:
+#   1. Create Space: soar-backup-prod
+#   2. Generate Spaces access key
+#   3. Note region (e.g., nyc3, sfo3)
+#
+# [soar-db]
+# type = s3
+# provider = DigitalOcean
+# access_key_id = YOUR_DO_SPACES_KEY
+# secret_access_key = YOUR_DO_SPACES_SECRET
+# endpoint = nyc3.digitaloceanspaces.com
+# acl = private
+
+#------------------------------------------------------------------------------
+# Verification
+#------------------------------------------------------------------------------
+# After configuring, test your rclone setup:
+#
+#   # Test connection
+#   rclone lsd soar-db: --config /etc/soar/rclone.conf
+#
+#   # List buckets
+#   rclone lsd soar-db: --config /etc/soar/rclone.conf
+#
+#   # Test upload
+#   echo "test" | rclone rcat soar-db:soar-backup-prod/test.txt --config /etc/soar/rclone.conf
+#
+#   # Test download
+#   rclone cat soar-db:soar-backup-prod/test.txt --config /etc/soar/rclone.conf
+#
+#   # Cleanup test file
+#   rclone delete soar-db:soar-backup-prod/test.txt --config /etc/soar/rclone.conf
+
+#------------------------------------------------------------------------------
+# Advanced Configuration Options
+#------------------------------------------------------------------------------
+# For high-performance uploads, you can add these options to your remote:
+#
+# transfers = 4              # Number of parallel transfers (default: 4)
+# checkers = 8               # Number of checkers to run in parallel (default: 8)
+# buffer_size = 16M          # Buffer size for uploads (default: 16M)
+# s3_upload_concurrency = 4  # Number of chunks to upload concurrently (default: 4)
+# s3_chunk_size = 5M         # Chunk size for multipart uploads (default: 5M)
+#
+# Example with performance tuning:
+# [soar-db-fast]
+# type = s3
+# provider = Wasabi
+# access_key_id = YOUR_KEY
+# secret_access_key = YOUR_SECRET
+# endpoint = s3.wasabisys.com
+# acl = private
+# transfers = 8
+# checkers = 16
+# s3_upload_concurrency = 8
+# s3_chunk_size = 16M
