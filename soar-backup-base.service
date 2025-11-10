@@ -12,7 +12,7 @@ Group=postgres
 WorkingDirectory=/var/lib/postgresql
 
 # Run base backup script
-ExecStart=/scripts/backup/base-backup
+ExecStart=/usr/local/bin/soar-base-backup
 
 # Environment variables for cloud storage credentials
 EnvironmentFile=/etc/soar/backup-env

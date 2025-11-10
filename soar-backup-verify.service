@@ -11,7 +11,7 @@ Group=postgres
 WorkingDirectory=/var/lib/postgresql
 
 # Run backup verification script
-ExecStart=/scripts/backup/backup-verify
+ExecStart=/usr/local/bin/soar-backup-verify
 
 # Environment variables for cloud storage credentials
 EnvironmentFile=/etc/soar/backup-env

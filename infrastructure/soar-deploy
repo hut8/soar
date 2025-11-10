@@ -207,17 +207,17 @@ done
 
 # Install backup scripts
 if [ -d "$DEPLOY_DIR/scripts/backup" ]; then
-    log_info "Installing backup scripts..."
-    mkdir -p /scripts/backup
-    cp "$DEPLOY_DIR/scripts/backup"/* /scripts/backup/
-    chmod 755 /scripts/backup/*
-    chown root:root /scripts/backup/*
+    log_info "Installing backup scripts to /usr/local/bin/..."
 
-    # Create symlink for WAL archive script (called by PostgreSQL)
-    if [ -f "/scripts/backup/wal-archive" ]; then
-        log_info "Creating symlink: /usr/local/bin/soar-wal-archive -> /scripts/backup/wal-archive"
-        ln -sf /scripts/backup/wal-archive /usr/local/bin/soar-wal-archive
-    fi
+    # Install each backup script with soar- prefix
+    for script in wal-archive base-backup backup-verify restore; do
+        if [ -f "$DEPLOY_DIR/scripts/backup/$script" ]; then
+            log_info "Installing soar-$script..."
+            install -m 755 -o root -g root "$DEPLOY_DIR/scripts/backup/$script" "/usr/local/bin/soar-$script"
+        else
+            log_warn "scripts/backup/$script not found, skipping"
+        fi
+    done
 
     log_info "Backup scripts installed successfully"
 else

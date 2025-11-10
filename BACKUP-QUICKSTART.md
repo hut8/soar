@@ -92,10 +92,8 @@ log_checkpoints = on
 log_archive_command = on
 ```
 
-**Create symlink for archive script:**
-```bash
-sudo ln -s /home/liam/soar-worktrees/feat/db-backup/scripts/backup/wal-archive /usr/local/bin/soar-wal-archive
-```
+**Archive script will be installed by deployment:**
+The `soar-wal-archive` script will be automatically installed to `/usr/local/bin/soar-wal-archive` by the deployment script.
 
 **Restart PostgreSQL:**
 ```bash
@@ -251,7 +249,7 @@ du -sh /var/lib/postgresql/15/main/pg_wal/
 Practice recovery by restoring to a test database:
 ```bash
 sudo -u postgres createdb soar_test_restore
-sudo /scripts/backup/restore --target-database soar_test_restore --no-destructive --latest
+sudo soar-restore --target-database soar_test_restore --no-destructive --latest
 
 # Verify
 psql -U postgres -d soar_test_restore -c "SELECT COUNT(*) FROM devices;"
@@ -272,10 +270,10 @@ Quick reference:
 sudo systemctl stop soar-*
 
 # Restore to latest point
-sudo /scripts/backup/restore --latest
+sudo soar-restore --latest
 
 # Or restore to specific time
-sudo /scripts/backup/restore --target-time "2025-01-10 14:30:00"
+sudo soar-restore --target-time "2025-01-10 14:30:00"
 
 # Restart application
 sudo systemctl start soar-*
@@ -305,6 +303,6 @@ For 420GB database with 30-day retention:
 
 - **Full Documentation**: [DB-BACKUPS.md](./DB-BACKUPS.md)
 - **Troubleshooting**: See DB-BACKUPS.md#troubleshooting
-- **Scripts**: `/scripts/backup/`
+- **Scripts**: `/usr/local/bin/soar-{wal-archive,base-backup,backup-verify,restore}`
 - **Logs**: `/var/log/soar/backup.log`
 - **Service Status**: `sudo systemctl status soar-backup-*`
