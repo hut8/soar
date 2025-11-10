@@ -1,0 +1,39 @@
+version: '3.8'
+
+# Extended compose file specifically for E2E testing
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.e2e.yml up
+
+services:
+  # E2E test runner
+  e2e-tests:
+    image: mcr.microsoft.com/playwright:v1.48.2-noble
+    container_name: soar-e2e-tests
+    working_dir: /app/web
+    environment:
+      # Point to the app container
+      PLAYWRIGHT_BASE_URL: http://app:61226
+      # Use the same database for verification
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/soar_test
+      CI: "true"
+    volumes:
+      # Mount the web directory for tests
+      - ./web:/app/web
+      # Mount test results
+      - ./web/test-results:/app/web/test-results
+      - ./web/playwright-report:/app/web/playwright-report
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - soar-network
+    command: >
+      sh -c "
+        npm ci &&
+        npx playwright install --with-deps chromium &&
+        npx playwright test
+      "
+
+networks:
+  soar-network:
+    external: true
+    name: soar-worktrees-feat-e2e-test-data-seeding_soar-network

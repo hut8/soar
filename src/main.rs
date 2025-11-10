@@ -145,6 +145,10 @@ enum Commands {
         /// Interface to bind the web server to
         #[arg(long, default_value = "localhost")]
         interface: String,
+
+        /// Enable test mode (auto-generates JWT_SECRET, sets test database and NATS)
+        #[arg(long)]
+        test_mode: bool,
     },
     /// Archive old data to compressed CSV files and delete from database
     ///
@@ -703,6 +707,53 @@ async fn main() -> Result<()> {
         }
     }
 
+    // Check if we're in test mode and configure environment BEFORE database setup
+    if let Commands::Web { test_mode, .. } = &cli.command
+        && *test_mode
+    {
+        info!("Test mode enabled: configuring test environment");
+
+        // Set JWT_SECRET for authentication
+        // SAFETY: We're setting environment variables during startup before any threads are spawned.
+        // This is safe because:
+        // 1. We're in main() and haven't started the async runtime yet
+        // 2. No other threads exist that could be reading these variables
+        // 3. These are only set in test mode, not in production
+        unsafe {
+            env::set_var("JWT_SECRET", "test-jwt-secret-for-e2e-tests");
+        }
+        info!("  ✓ JWT_SECRET configured");
+
+        // Set test database URL (if not already set)
+        if env::var("DATABASE_URL").is_err() {
+            unsafe {
+                env::set_var(
+                    "DATABASE_URL",
+                    "postgres://postgres:postgres@localhost:5432/soar_test",
+                );
+            }
+            info!("  ✓ DATABASE_URL set to test database");
+        }
+
+        // Set NATS URL (if not already set)
+        if env::var("NATS_URL").is_err() {
+            unsafe {
+                env::set_var("NATS_URL", "nats://localhost:4222");
+            }
+            info!("  ✓ NATS_URL configured");
+        }
+
+        // Set SOAR_ENV to test (if not already set)
+        if env::var("SOAR_ENV").is_err() {
+            unsafe {
+                env::set_var("SOAR_ENV", "test");
+            }
+            info!("  ✓ SOAR_ENV set to 'test'");
+        }
+
+        info!("Test environment configuration complete");
+    }
+
     // Enable SQL query logging only for the migrate command
     if matches!(cli.command, Commands::Migrate {}) {
         set_default_instrumentation(|| Some(Box::new(QueryLogger)))
@@ -769,7 +820,12 @@ async fn main() -> Result<()> {
             )
             .await
         }
-        Commands::Web { interface, port } => {
+        Commands::Web {
+            interface,
+            port,
+            test_mode: _,
+        } => {
+            // Test mode environment is configured earlier, before database setup
             // Check SOAR_ENV and override port only for development mode
             let final_port = match env::var("SOAR_ENV") {
                 Ok(soar_env) if soar_env == "production" => {

@@ -60,21 +60,14 @@ export default defineConfig({
 		: [
 				{
 					// Start Rust backend server with test database
-					command:
-						'JWT_SECRET=test-jwt-secret-for-e2e-tests SOAR_ENV=test DATABASE_URL=postgres://postgres:postgres@localhost:5432/soar_test NATS_URL=nats://localhost:4222 ../target/release/soar web --port 61226 --interface localhost',
+					// Using --test-mode flag to auto-configure JWT_SECRET, DATABASE_URL, NATS_URL, and SOAR_ENV
+					command: '../target/release/soar web --port 61226 --interface localhost --test-mode',
 					port: 61226,
 					timeout: 120000, // 2 minutes for backend startup
 					reuseExistingServer: true, // Can reuse since globalSetup seeds database first
 					env: {
-						DATABASE_URL: 'postgres://postgres:postgres@localhost:5432/soar_test',
-						// NATS URL for backend (optional, backend should handle missing NATS gracefully)
-						NATS_URL: 'nats://localhost:4222',
-						// JWT secret for token generation
-						JWT_SECRET: 'test-jwt-secret-for-e2e-tests',
 						// Disable Sentry in tests
-						SENTRY_DSN: '',
-						// Set environment
-						SOAR_ENV: 'test'
+						SENTRY_DSN: ''
 					}
 				},
 				{

@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict zmuWYUsauSSwEn9J1WBx7C94jrqKm2wefjC0NMorCqgq075gXorTQUhm1yp0RhR
+\restrict ZN1McNN6H5Q70YRcCAtBQ5yKfoWZYURtQQsF9LqZGjyhAYnusCgzbH2qUOpVk15
 
 -- Dumped from database version 17.6 (Ubuntu 17.6-2.pgdg22.04+1)
 -- Dumped by pg_dump version 17.6 (Ubuntu 17.6-2.pgdg22.04+1)
@@ -175,6 +175,22 @@ CREATE TYPE public.registrant_type AS ENUM (
     'non_citizen_co_owned',
     'unknown'
 );
+
+
+--
+-- Name: compute_aprs_message_hash(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.compute_aprs_message_hash() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    IF NEW.raw_message_hash IS NULL THEN
+        NEW.raw_message_hash := digest(NEW.raw_message, 'sha256');
+    END IF;
+    RETURN NEW;
+END;
+$$;
 
 
 --
@@ -375,7 +391,7 @@ CREATE TABLE public.aprs_messages (
     received_at timestamp with time zone NOT NULL,
     receiver_id uuid NOT NULL,
     unparsed text,
-    raw_message_hash bytea
+    raw_message_hash bytea NOT NULL
 );
 
 
@@ -1809,6 +1825,13 @@ CREATE INDEX users_password_reset_token_idx ON public.users USING btree (passwor
 
 
 --
+-- Name: aprs_messages ensure_aprs_message_hash; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER ensure_aprs_message_hash BEFORE INSERT ON public.aprs_messages FOR EACH ROW EXECUTE FUNCTION public.compute_aprs_message_hash();
+
+
+--
 -- Name: pilots set_club_pilots_updated_at; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -2155,5 +2178,4 @@ ALTER TABLE ONLY public.users
 -- PostgreSQL database dump complete
 --
 
-\unrestrict zmuWYUsauSSwEn9J1WBx7C94jrqKm2wefjC0NMorCqgq075gXorTQUhm1yp0RhR
-
+\unrestrict ZN1McNN6H5Q70YRcCAtBQ5yKfoWZYURtQQsF9LqZGjyhAYnusCgzbH2qUOpVk15
