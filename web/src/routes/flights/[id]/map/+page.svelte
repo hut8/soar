@@ -232,30 +232,41 @@
 	// Poll for updates to in-progress flights
 	async function pollForUpdates() {
 		try {
+			// Get the timestamp of the most recent fix (fixes are in DESC order, so first element is newest)
+			const latestFixTimestamp = data.fixes.length > 0 ? data.fixes[0].timestamp : null;
+
+			// Build URL with 'after' parameter if we have fixes
+			const fixesUrl = latestFixTimestamp
+				? `/flights/${data.flight.id}/fixes?after=${encodeURIComponent(latestFixTimestamp)}`
+				: `/flights/${data.flight.id}/fixes`;
+
 			const [flightResponse, fixesResponse] = await Promise.all([
 				serverCall<{
 					flight: typeof data.flight;
-					device?: typeof data.device;
 				}>(`/flights/${data.flight.id}`),
 				serverCall<{
 					fixes: typeof data.fixes;
 					count: number;
-				}>(`/flights/${data.flight.id}/fixes`)
+				}>(fixesUrl)
 			]);
 
 			data.flight = flightResponse.flight;
-			if (flightResponse.device) {
-				data.device = flightResponse.device;
-			}
+			// Device doesn't change during a flight, so we don't re-fetch it
 
-			data.fixes = fixesResponse.fixes;
-			data.fixesCount = fixesResponse.count;
+			// Append new fixes to the existing list (new fixes are in DESC order)
+			if (fixesResponse.fixes.length > 0) {
+				data.fixes = [...fixesResponse.fixes, ...data.fixes];
+				data.fixesCount = data.fixes.length;
+			}
 
 			if (data.flight.state !== 'active') {
 				stopPolling();
 			}
 
-			updateMapAndChart();
+			// Only update map/chart if we got new fixes
+			if (fixesResponse.fixes.length > 0) {
+				updateMapAndChart();
+			}
 		} catch (err) {
 			console.error('Failed to poll for flight updates:', err);
 		}
@@ -663,26 +674,26 @@
 	}
 </script>
 
-<!-- Full-screen container -->
-<div class="fixed inset-x-0 top-0 bottom-0 w-full">
+<!-- Container that fills viewport below AppBar -->
+<div class="relative h-[calc(100vh-4rem)] w-full overflow-hidden">
 	<!-- Map container -->
 	<div
 		bind:this={mapContainer}
-		class="h-full w-full"
-		style={isPanelCollapsed ? 'height: 100%;' : 'height: calc(100% - 300px);'}
+		class="absolute inset-0 h-full w-full"
+		style={isPanelCollapsed ? '' : 'height: calc(100% - 300px);'}
 	></div>
 
 	<!-- Back button (top-left) -->
 	<button
 		onclick={goBack}
-		class="variant-filled-surface absolute top-4 left-4 z-10 btn flex items-center gap-2 shadow-lg"
+		class="variant-filled-surface absolute top-4 left-4 z-[80] btn flex items-center gap-2 shadow-lg"
 	>
 		<ArrowLeft class="h-4 w-4" />
 		<span>Back to Flight</span>
 	</button>
 
 	<!-- Nearby flights toggle (top-right) -->
-	<div class="absolute top-4 right-4 z-10">
+	<div class="absolute top-4 right-4 z-[80]">
 		<label
 			class="bg-surface-50-900-token flex cursor-pointer items-center gap-2 rounded-lg p-3 shadow-lg"
 		>
@@ -701,7 +712,7 @@
 
 	<!-- Bottom panel with altitude chart -->
 	<div
-		class="bg-surface-50-900-token absolute right-0 bottom-0 left-0 z-10 shadow-lg transition-all duration-300"
+		class="bg-surface-50-900-token absolute right-0 bottom-0 left-0 z-[80] shadow-lg transition-all duration-300"
 		style={isPanelCollapsed ? 'height: 48px;' : 'height: 300px;'}
 	>
 		<!-- Panel header -->

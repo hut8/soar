@@ -339,34 +339,43 @@
 	// Poll for updates to in-progress flights
 	async function pollForUpdates() {
 		try {
+			// Get the timestamp of the most recent fix (fixes are in DESC order, so first element is newest)
+			const latestFixTimestamp = data.fixes.length > 0 ? data.fixes[0].timestamp : null;
+
+			// Build URL with 'after' parameter if we have fixes
+			const fixesUrl = latestFixTimestamp
+				? `/flights/${data.flight.id}/fixes?after=${encodeURIComponent(latestFixTimestamp)}`
+				: `/flights/${data.flight.id}/fixes`;
+
 			const [flightResponse, fixesResponse] = await Promise.all([
 				serverCall<{
 					flight: typeof data.flight;
-					device?: typeof data.device;
 				}>(`/flights/${data.flight.id}`),
 				serverCall<{
 					fixes: typeof data.fixes;
 					count: number;
-				}>(`/flights/${data.flight.id}/fixes`)
+				}>(fixesUrl)
 			]);
 
 			// Update flight data
 			data.flight = flightResponse.flight;
-			if (flightResponse.device) {
-				data.device = flightResponse.device;
-			}
+			// Device doesn't change during a flight, so we don't re-fetch it
 
-			// Update fixes data
-			data.fixes = fixesResponse.fixes;
-			data.fixesCount = fixesResponse.count;
+			// Append new fixes to the existing list (new fixes are in DESC order)
+			if (fixesResponse.fixes.length > 0) {
+				data.fixes = [...fixesResponse.fixes, ...data.fixes];
+				data.fixesCount = data.fixes.length;
+			}
 
 			// If flight has landed or timed out, stop polling
 			if (data.flight.state !== 'active') {
 				stopPolling();
 			}
 
-			// Update map and chart
-			updateMapAndChart();
+			// Only update map/chart if we got new fixes
+			if (fixesResponse.fixes.length > 0) {
+				updateMapAndChart();
+			}
 		} catch (err) {
 			console.error('Failed to poll for flight updates:', err);
 		}

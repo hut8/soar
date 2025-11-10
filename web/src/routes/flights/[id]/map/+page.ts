@@ -5,7 +5,6 @@ import type { Flight, Device, Fix } from '$lib/types';
 
 interface FlightResponse {
 	flight: Flight;
-	device?: Device;
 }
 
 interface FlightFixesResponse {
@@ -17,14 +16,20 @@ export const load: PageLoad = async ({ params, fetch }) => {
 	const { id } = params;
 
 	try {
+		// First fetch flight and fixes in parallel
 		const [flightResponse, fixesResponse] = await Promise.all([
 			serverCall<FlightResponse>(`/flights/${id}`, { fetch }),
 			serverCall<FlightFixesResponse>(`/flights/${id}/fixes`, { fetch })
 		]);
 
+		// Then fetch device separately if the flight has one
+		const device = flightResponse.flight.device_id
+			? await serverCall<Device>(`/flights/${id}/device`, { fetch }).catch(() => undefined)
+			: undefined;
+
 		return {
 			flight: flightResponse.flight,
-			device: flightResponse.device,
+			device,
 			fixes: fixesResponse.fixes,
 			fixesCount: fixesResponse.count
 		};

@@ -610,6 +610,7 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         .route("/fixes/live", get(actions::fixes_live_websocket))
         .route("/flights", get(actions::search_flights))
         .route("/flights/{id}", get(actions::get_flight_by_id))
+        .route("/flights/{id}/device", get(actions::get_flight_device))
         .route("/flights/{id}/kml", get(actions::get_flight_kml))
         .route("/flights/{id}/fixes", get(actions::get_flight_fixes))
         .route(
