@@ -139,7 +139,7 @@
 				<input
 					class="input"
 					type="password"
-					placeholder="Enter your password"
+					placeholder="Password"
 					bind:value={password}
 					disabled={loading}
 					required
@@ -152,7 +152,7 @@
 				<input
 					class="input"
 					type="password"
-					placeholder="Confirm your password"
+					placeholder="Confirm password"
 					bind:value={confirmPassword}
 					disabled={loading}
 					required
