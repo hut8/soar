@@ -1039,45 +1039,6 @@ impl FixesRepository {
         Ok(result)
     }
 
-    /// Get fix counts grouped by APRS type for a specific source (receiver callsign)
-    pub async fn get_fix_counts_by_aprs_type_for_source(
-        &self,
-        source_callsign: &str,
-    ) -> Result<Vec<crate::actions::receivers::AprsTypeCount>> {
-        let pool = self.pool.clone();
-        let source_callsign = source_callsign.to_string();
-
-        let result = tokio::task::spawn_blocking(move || {
-            use crate::schema::fixes::dsl::*;
-            use diesel::dsl::count_star;
-            let mut conn = pool.get()?;
-
-            // Group by aprs_type and count
-            let counts = fixes
-                .filter(source.eq(&source_callsign))
-                .group_by(aprs_type)
-                .select((aprs_type, count_star()))
-                .order_by(count_star().desc())
-                .load::<(String, i64)>(&mut conn)?;
-
-            // Convert to AprsTypeCount structs
-            let result: Vec<crate::actions::receivers::AprsTypeCount> = counts
-                .into_iter()
-                .map(
-                    |(type_name, count)| crate::actions::receivers::AprsTypeCount {
-                        aprs_type: type_name,
-                        count,
-                    },
-                )
-                .collect();
-
-            Ok::<Vec<crate::actions::receivers::AprsTypeCount>, anyhow::Error>(result)
-        })
-        .await??;
-
-        Ok(result)
-    }
-
     /// Get fix counts grouped by device for a specific receiver ID (last 24 hours only)
     pub async fn get_fix_counts_by_device_for_receiver(
         &self,
