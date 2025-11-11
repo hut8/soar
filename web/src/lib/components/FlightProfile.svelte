@@ -21,6 +21,11 @@
 	let chartContainer = $state<HTMLElement>();
 	let chartInitialized = $state(false);
 
+	// Store event listener functions so we can remove them
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	let hoverListener: ((event: any) => void) | null = null;
+	let unhoverListener: (() => void) | null = null;
+
 	// Get Plotly layout configuration based on theme
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	function getPlotlyLayout(isDark: boolean): any {
@@ -80,6 +85,14 @@
 		if (!chartContainer || fixes.length === 0) return;
 
 		try {
+			// Remove old event listeners if they exist
+			if (hoverListener && chartContainer) {
+				chartContainer.removeEventListener('plotly_hover', hoverListener);
+			}
+			if (unhoverListener && chartContainer) {
+				chartContainer.removeEventListener('plotly_unhover', unhoverListener);
+			}
+
 			const fixesInOrder = [...fixes].reverse();
 			const timestamps = fixesInOrder.map((fix) => new Date(fix.timestamp));
 			const altitudesMsl = fixesInOrder.map((fix) => fix.altitude_msl_feet || 0);
@@ -140,7 +153,7 @@
 			// Add hover event handlers if callbacks are provided
 			if (onHover) {
 				// eslint-disable-next-line @typescript-eslint/no-explicit-any
-				chartContainer.addEventListener('plotly_hover', (event: any) => {
+				hoverListener = (event: any) => {
 					const data_event = event.detail || event;
 					if (data_event.points && data_event.points.length > 0) {
 						const pointIndex = data_event.points[0].pointIndex;
@@ -149,13 +162,15 @@
 							onHover(fix);
 						}
 					}
-				});
+				};
+				chartContainer.addEventListener('plotly_hover', hoverListener);
 			}
 
 			if (onUnhover) {
-				chartContainer.addEventListener('plotly_unhover', () => {
+				unhoverListener = () => {
 					onUnhover();
-				});
+				};
+				chartContainer.addEventListener('plotly_unhover', unhoverListener);
 			}
 		} catch (error) {
 			console.error('Failed to create flight profile chart:', error);
@@ -195,6 +210,15 @@
 
 	// Cleanup
 	onDestroy(() => {
+		// Remove event listeners
+		if (hoverListener && chartContainer) {
+			chartContainer.removeEventListener('plotly_hover', hoverListener);
+		}
+		if (unhoverListener && chartContainer) {
+			chartContainer.removeEventListener('plotly_unhover', unhoverListener);
+		}
+
+		// Purge Plotly chart
 		if (chartContainer) {
 			Plotly.purge(chartContainer);
 		}

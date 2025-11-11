@@ -24,6 +24,7 @@
 	// Display options
 	let isPanelCollapsed = $state(false);
 	let chartRecreateTrigger = $state(0);
+	let wasPanelCollapsed = $state(false);
 
 	// Check if fixes have AGL data
 	const hasAglData = $derived(data.fixes.some((f) => f.altitude_agl_feet !== null));
@@ -538,12 +539,15 @@
 		startPolling();
 	});
 
-	// Recreate chart when panel is expanded
+	// Recreate chart when panel transitions from collapsed to expanded
 	$effect(() => {
-		if (!isPanelCollapsed) {
+		// Detect transition: was collapsed, now expanded
+		if (wasPanelCollapsed && !isPanelCollapsed) {
 			// Trigger chart recreation when panel expands
 			chartRecreateTrigger++;
 		}
+		// Update previous state for next check
+		wasPanelCollapsed = isPanelCollapsed;
 	});
 
 	// Callbacks for chart hover interaction with map
