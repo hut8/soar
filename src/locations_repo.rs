@@ -15,48 +15,6 @@ impl LocationsRepository {
         Self { pool }
     }
 
-    /// Get location by ID
-    pub async fn get_by_id(&self, location_id: Uuid) -> Result<Option<Location>> {
-        use crate::schema::locations::dsl::*;
-
-        let pool = self.pool.clone();
-        let result = tokio::task::spawn_blocking(move || {
-            let mut conn = pool.get()?;
-
-            let location_model: Option<LocationModel> = locations
-                .filter(id.eq(location_id))
-                .select(LocationModel::as_select())
-                .first(&mut conn)
-                .optional()?;
-
-            Ok::<Option<LocationModel>, anyhow::Error>(location_model)
-        })
-        .await??;
-
-        Ok(result.map(|model| model.into()))
-    }
-
-    /// Insert a new location
-    pub async fn insert(&self, location: &Location) -> Result<()> {
-        use crate::schema::locations;
-
-        let pool = self.pool.clone();
-        let new_location_model: NewLocationModel = location.clone().into();
-
-        tokio::task::spawn_blocking(move || {
-            let mut conn = pool.get()?;
-
-            diesel::insert_into(locations::table)
-                .values(&new_location_model)
-                .execute(&mut conn)?;
-
-            Ok::<(), anyhow::Error>(())
-        })
-        .await??;
-
-        Ok(())
-    }
-
     /// Update geolocation for a location
     pub async fn update_geolocation(
         &self,
@@ -120,27 +78,6 @@ impl LocationsRepository {
         .await??;
 
         Ok(results.into_iter().map(|model| model.into()).collect())
-    }
-
-    /// Find or create a location by geolocation only (for receivers)
-    /// This creates a minimal location record with just coordinates
-    pub async fn find_or_create_by_geolocation(
-        &self,
-        latitude: f64,
-        longitude: f64,
-    ) -> Result<Location> {
-        // Use the general find_or_create with only geolocation
-        self.find_or_create(
-            None, // street1
-            None, // street2
-            None, // city
-            None, // state
-            None, // zip_code
-            None, // region_code
-            None, // country_mail_code
-            Some(Point::new(latitude, longitude)),
-        )
-        .await
     }
 
     /// Find or create a location by address (atomic operation)
