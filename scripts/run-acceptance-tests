@@ -14,14 +14,10 @@
 # Options:
 #   --build       Force rebuild of containers
 #   --down        Stop and remove containers after tests
-#   --ui          Run tests in UI mode (interactive)
-#   --debug       Run tests in debug mode
-#   --headed      Run tests in headed mode (visible browser)
 #
 # Examples:
 #   ./scripts/run-acceptance-tests                    # Run tests
 #   ./scripts/run-acceptance-tests --build --down     # Rebuild, run, and cleanup
-#   ./scripts/run-acceptance-tests --ui               # Run in interactive UI mode
 
 set -e  # Exit on error
 
@@ -35,7 +31,6 @@ NC='\033[0m' # No Color
 # Parse command line options
 BUILD_FLAG=""
 DOWN_FLAG=false
-TEST_COMMAND="npx playwright test"
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -47,21 +42,9 @@ while [[ $# -gt 0 ]]; do
             DOWN_FLAG=true
             shift
             ;;
-        --ui)
-            TEST_COMMAND="npx playwright test --ui"
-            shift
-            ;;
-        --debug)
-            TEST_COMMAND="npx playwright test --debug"
-            shift
-            ;;
-        --headed)
-            TEST_COMMAND="npx playwright test --headed"
-            shift
-            ;;
         *)
             echo -e "${RED}Unknown option: $1${NC}"
-            echo "Usage: $0 [--build] [--down] [--ui] [--debug] [--headed]"
+            echo "Usage: $0 [--build] [--down]"
             exit 1
             ;;
     esac
@@ -109,29 +92,16 @@ fi
 echo ""
 
 echo -e "${YELLOW}[3/3] Running E2E tests...${NC}"
-echo -e "${BLUE}Test command: ${TEST_COMMAND}${NC}"
 echo ""
 
-# Run the E2E tests
-# Update the command in docker-compose.e2e.yml to use the custom test command
+# Run the E2E tests in container
 COMPOSE_FILES="-f docker-compose.yml -f docker-compose.e2e.yml"
 
-# If using UI/debug/headed mode, we need to run tests on the host instead of in a container
-if [[ "$TEST_COMMAND" == *"--ui"* ]] || [[ "$TEST_COMMAND" == *"--debug"* ]] || [[ "$TEST_COMMAND" == *"--headed"* ]]; then
-    echo -e "${YELLOW}Running tests on host machine (interactive mode)...${NC}"
-    export PLAYWRIGHT_BASE_URL="http://localhost:61226"
-    cd web
-    $TEST_COMMAND
-    TEST_EXIT_CODE=$?
-    cd ..
-else
-    # Run in container for CI-style execution
-    docker compose ${COMPOSE_FILES} run --rm e2e-tests sh -c "
-        npm ci &&
-        npx playwright install --with-deps chromium &&
-        ${TEST_COMMAND}
-    " || TEST_EXIT_CODE=$?
-fi
+docker compose ${COMPOSE_FILES} run --rm e2e-tests sh -c "
+    npm ci &&
+    npx playwright install --with-deps chromium &&
+    npx playwright test
+" || TEST_EXIT_CODE=$?
 
 echo ""
 
