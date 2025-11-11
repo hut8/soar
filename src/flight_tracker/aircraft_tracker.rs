@@ -115,6 +115,7 @@ mod tests {
             receiver_id: uuid::Uuid::now_v7(),
             aprs_message_id: uuid::Uuid::now_v7(),
             altitude_agl_valid: false,
+            time_gap_seconds: None,
         };
 
         assert!(should_be_active(&fix));

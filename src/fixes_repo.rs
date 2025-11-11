@@ -131,6 +131,7 @@ struct FixDslRow {
     gnss_vertical_resolution: Option<i16>,
     aprs_message_id: Uuid,
     altitude_agl_valid: bool,
+    time_gap_seconds: Option<i32>,
 }
 
 impl From<FixDslRow> for Fix {
@@ -163,6 +164,7 @@ impl From<FixDslRow> for Fix {
             receiver_id: row.receiver_id,
             aprs_message_id: row.aprs_message_id,
             altitude_agl_valid: row.altitude_agl_valid,
+            time_gap_seconds: row.time_gap_seconds,
         }
     }
 }
@@ -807,6 +809,8 @@ impl FixesRepository {
                 aprs_message_id: uuid::Uuid,
                 #[diesel(sql_type = diesel::sql_types::Bool)]
                 altitude_agl_valid: bool,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Int4>)]
+                time_gap_seconds: Option<i32>,
             }
 
             let fix_rows: Vec<FixRow> = diesel::sql_query(fixes_sql)
@@ -850,6 +854,7 @@ impl FixesRepository {
                     receiver_id: fix_row.receiver_id,
                     aprs_message_id: fix_row.aprs_message_id,
                     altitude_agl_valid: fix_row.altitude_agl_valid,
+                    time_gap_seconds: fix_row.time_gap_seconds,
                 };
                 fixes_by_device
                     .entry(device_id)
