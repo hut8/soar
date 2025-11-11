@@ -1449,7 +1449,7 @@
 
 		<!-- Altitude Chart -->
 		<div class="card p-4">
-			<h2 class="mb-3 text-right h3">Flight Profile</h2>
+			<h2 class="mb-3 h3">Flight Profile</h2>
 			<div class="h-80 w-full">
 				<FlightProfile fixes={data.fixes} {hasAglData} />
 			</div>
