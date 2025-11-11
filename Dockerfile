@@ -45,7 +45,6 @@ RUN apt-get update && apt-get install -y \
     libssl3 \
     libpq5 \
     libc6-dbg \
-    postgresql-client \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
