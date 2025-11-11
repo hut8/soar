@@ -107,55 +107,6 @@ impl ReceiverStatusRepository {
         Ok(statuses)
     }
 
-    /// Get all recent statuses across all receivers
-    pub async fn get_recent_all_receivers(
-        &self,
-        limit: Option<i64>,
-    ) -> Result<Vec<ReceiverStatus>> {
-        let limit = limit.unwrap_or(100);
-        let mut conn = self.get_connection()?;
-
-        let statuses = receiver_statuses::table
-            .order(receiver_statuses::received_at.desc())
-            .limit(limit)
-            .load::<ReceiverStatus>(&mut conn)?;
-
-        Ok(statuses)
-    }
-
-    /// Get the latest status for each receiver
-    pub async fn get_latest_for_all_receivers(&self) -> Result<Vec<ReceiverStatus>> {
-        let mut conn = self.get_connection()?;
-
-        // Use DISTINCT ON to get the latest status for each receiver
-        use crate::schema::receiver_statuses::dsl::*;
-
-        let statuses = receiver_statuses
-            .order((receiver_id, received_at.desc()))
-            .distinct_on(receiver_id)
-            .select(ReceiverStatus::as_select())
-            .load::<ReceiverStatus>(&mut conn)?;
-
-        Ok(statuses)
-    }
-
-    /// Delete old receiver statuses beyond a retention period
-    pub async fn delete_old_statuses(&self, retention_days: i32) -> Result<u64> {
-        let cutoff_time = Utc::now() - chrono::Duration::days(retention_days as i64);
-        let mut conn = self.get_connection()?;
-
-        let deleted_count = diesel::delete(
-            receiver_statuses::table.filter(receiver_statuses::received_at.lt(cutoff_time)),
-        )
-        .execute(&mut conn)?;
-
-        info!(
-            "Deleted {} old receiver statuses older than {} days",
-            deleted_count, retention_days
-        );
-        Ok(deleted_count as u64)
-    }
-
     /// Get count of receiver statuses
     pub async fn count(&self) -> Result<i64> {
         let mut conn = self.get_connection()?;

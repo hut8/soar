@@ -488,42 +488,6 @@ impl AircraftRegistrationsRepository {
         }
     }
 
-    /// Search aircraft registrations by registrant name
-    pub async fn search_by_registrant_name(&self, registrant_name: &str) -> Result<Vec<Aircraft>> {
-        let mut conn = self.get_connection()?;
-        let search_pattern = format!("%{}%", registrant_name);
-        let aircraft_models = aircraft_registrations::table
-            .filter(aircraft_registrations::registrant_name.ilike(&search_pattern))
-            .select(AircraftRegistrationModel::as_select())
-            .load::<AircraftRegistrationModel>(&mut conn)?;
-
-        let mut aircraft_list = Vec::new();
-        for model in aircraft_models {
-            let aircraft = self.model_to_aircraft(model).await?;
-            aircraft_list.push(aircraft);
-        }
-
-        Ok(aircraft_list)
-    }
-
-    /// Search aircraft registrations by transponder code
-    pub async fn search_by_transponder_code(&self, transponder_code: u32) -> Result<Vec<Aircraft>> {
-        let mut conn = self.get_connection()?;
-        let transponder_code_i64 = transponder_code as i64;
-        let aircraft_models = aircraft_registrations::table
-            .filter(aircraft_registrations::transponder_code.eq(transponder_code_i64))
-            .select(AircraftRegistrationModel::as_select())
-            .load::<AircraftRegistrationModel>(&mut conn)?;
-
-        let mut aircraft_list = Vec::new();
-        for model in aircraft_models {
-            let aircraft = self.model_to_aircraft(model).await?;
-            aircraft_list.push(aircraft);
-        }
-
-        Ok(aircraft_list)
-    }
-
     // TODO: The following methods were removed because club_id moved from aircraft_registrations
     // to devices table. To query aircraft by club, you should now:
     // 1. Query devices table for devices with the given club_id

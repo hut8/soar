@@ -522,67 +522,6 @@ impl DeviceRepository {
             Ok(false)
         }
     }
-
-    /// Update ICAO model code, ADS-B emitter category, tracker device type, and/or registration for a device
-    /// Only updates fields that are Some (allows partial updates)
-    pub async fn update_adsb_fields(
-        &self,
-        device_id: Uuid,
-        icao_model_code: Option<String>,
-        adsb_emitter_category: Option<AdsbEmitterCategory>,
-        tracker_device_type: Option<String>,
-        registration: Option<String>,
-    ) -> Result<()> {
-        let pool = self.pool.clone();
-
-        tokio::task::spawn_blocking(move || {
-            let mut conn = pool.get()?;
-
-            // If all fields are provided, update them all at once
-            if let (Some(code), Some(category), Some(tracker_type), Some(reg)) = (
-                &icao_model_code,
-                &adsb_emitter_category,
-                &tracker_device_type,
-                &registration,
-            ) {
-                diesel::update(devices::table.filter(devices::id.eq(device_id)))
-                    .set((
-                        devices::icao_model_code.eq(code),
-                        devices::adsb_emitter_category.eq(category),
-                        devices::tracker_device_type.eq(tracker_type),
-                        devices::registration.eq(reg),
-                    ))
-                    .execute(&mut conn)?;
-            } else {
-                // Otherwise, update each field conditionally
-                if let Some(code) = icao_model_code {
-                    diesel::update(devices::table.filter(devices::id.eq(device_id)))
-                        .set(devices::icao_model_code.eq(code))
-                        .execute(&mut conn)?;
-                }
-                if let Some(category) = adsb_emitter_category {
-                    diesel::update(devices::table.filter(devices::id.eq(device_id)))
-                        .set(devices::adsb_emitter_category.eq(category))
-                        .execute(&mut conn)?;
-                }
-                if let Some(tracker_type) = tracker_device_type {
-                    diesel::update(devices::table.filter(devices::id.eq(device_id)))
-                        .set(devices::tracker_device_type.eq(tracker_type))
-                        .execute(&mut conn)?;
-                }
-                if let Some(reg) = registration {
-                    diesel::update(devices::table.filter(devices::id.eq(device_id)))
-                        .set(devices::registration.eq(reg))
-                        .execute(&mut conn)?;
-                }
-            }
-
-            Ok::<(), anyhow::Error>(())
-        })
-        .await??;
-
-        Ok(())
-    }
 }
 
 #[cfg(test)]

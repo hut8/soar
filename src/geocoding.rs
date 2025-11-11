@@ -625,53 +625,6 @@ impl Geocoder {
             }
         }
     }
-
-    /// Geocode multiple addresses with rate limiting
-    pub async fn geocode_addresses(&self, addresses: Vec<String>) -> Vec<(String, Result<Point>)> {
-        let mut results = Vec::new();
-
-        for address in addresses {
-            let result = self.geocode_address(&address).await;
-            results.push((address.clone(), result));
-
-            // Rate limiting: Nominatim requests max 1 request per second
-            // We'll be conservative and wait 1.1 seconds
-            tokio::time::sleep(Duration::from_millis(1100)).await;
-        }
-
-        results
-    }
-
-    /// Geocode an address with retries and exponential backoff
-    pub async fn geocode_address_with_retry(
-        &self,
-        address: &str,
-        max_retries: u32,
-    ) -> Result<Point> {
-        let mut last_error = None;
-
-        for attempt in 0..=max_retries {
-            match self.geocode_address(address).await {
-                Ok(point) => return Ok(point),
-                Err(e) => {
-                    last_error = Some(e);
-
-                    if attempt < max_retries {
-                        let delay = Duration::from_millis(1000 * (2_u64.pow(attempt)));
-                        warn!(
-                            "Geocoding attempt {} failed for '{}', retrying in {:?}",
-                            attempt + 1,
-                            address,
-                            delay
-                        );
-                        tokio::time::sleep(delay).await;
-                    }
-                }
-            }
-        }
-
-        Err(last_error.unwrap_or_else(|| anyhow!("All geocoding attempts failed")))
-    }
 }
 
 /// Convenience function to geocode a single address

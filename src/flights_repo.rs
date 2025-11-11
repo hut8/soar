@@ -42,33 +42,6 @@ impl FlightsRepository {
         Ok(())
     }
 
-    /// Update landing time for a flight
-    pub async fn update_landing_time(
-        &self,
-        flight_id: Uuid,
-        landing_time_param: DateTime<Utc>,
-    ) -> Result<bool> {
-        use crate::schema::flights::dsl::*;
-
-        let pool = self.pool.clone();
-
-        let rows_affected = tokio::task::spawn_blocking(move || {
-            let mut conn = pool.get()?;
-
-            let rows = diesel::update(flights.filter(id.eq(flight_id)))
-                .set((
-                    landing_time.eq(&Some(landing_time_param)),
-                    updated_at.eq(Utc::now()),
-                ))
-                .execute(&mut conn)?;
-
-            Ok::<usize, anyhow::Error>(rows)
-        })
-        .await??;
-
-        Ok(rows_affected > 0)
-    }
-
     /// Update flight with landing information
     #[allow(clippy::too_many_arguments)]
     pub async fn update_flight_landing(
@@ -577,15 +550,6 @@ impl FlightsRepository {
         .await??;
 
         Ok(rows_affected > 0)
-    }
-
-    /// Get flights for a specific date (all flights that took off on that date)
-    pub async fn get_flights_for_date(&self, date: chrono::NaiveDate) -> Result<Vec<Flight>> {
-        let start_of_day = date.and_hms_opt(0, 0, 0).unwrap().and_utc();
-        let end_of_day = date.and_hms_opt(23, 59, 59).unwrap().and_utc();
-
-        self.get_flights_in_time_range(start_of_day, end_of_day, None)
-            .await
     }
 
     /// Get flights associated with an airport (either departure or arrival) within a time range

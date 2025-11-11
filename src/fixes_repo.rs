@@ -1055,43 +1055,4 @@ impl FixesRepository {
 
         Ok(result)
     }
-
-    /// Get fix counts grouped by device for a specific receiver source
-    pub async fn get_fix_counts_by_device_for_source(
-        &self,
-        source_callsign: &str,
-    ) -> Result<Vec<crate::actions::receivers::DeviceFixCount>> {
-        let pool = self.pool.clone();
-        let source_callsign = source_callsign.to_string();
-
-        let result = tokio::task::spawn_blocking(move || {
-            use crate::schema::fixes::dsl::*;
-            use diesel::dsl::count_star;
-            let mut conn = pool.get()?;
-
-            // Group by device_id and count
-            let counts = fixes
-                .filter(source.eq(&source_callsign))
-                .group_by(device_id)
-                .select((device_id, count_star()))
-                .order_by(count_star().desc())
-                .load::<(uuid::Uuid, i64)>(&mut conn)?;
-
-            // Convert to DeviceFixCount structs
-            let result: Vec<crate::actions::receivers::DeviceFixCount> = counts
-                .into_iter()
-                .map(
-                    |(dev_id, count)| crate::actions::receivers::DeviceFixCount {
-                        device_id: dev_id,
-                        count,
-                    },
-                )
-                .collect();
-
-            Ok::<Vec<crate::actions::receivers::DeviceFixCount>, anyhow::Error>(result)
-        })
-        .await??;
-
-        Ok(result)
-    }
 }

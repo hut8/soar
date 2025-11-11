@@ -335,51 +335,6 @@ impl ReceiverRepository {
         .await?
     }
 
-    /// Search receivers by OGN DB country
-    pub async fn search_by_ogn_db_country(
-        &self,
-        country_param: &str,
-    ) -> Result<Vec<ReceiverRecord>> {
-        let pool = self.pool.clone();
-        let country_param = country_param.to_string();
-
-        tokio::task::spawn_blocking(move || -> Result<Vec<ReceiverRecord>> {
-            let mut conn = pool.get()?;
-            let receiver_models = receivers::table
-                .filter(receivers::ogn_db_country.eq(&country_param))
-                .order(receivers::callsign.asc())
-                .select(ReceiverModel::as_select())
-                .load::<ReceiverModel>(&mut conn)?;
-
-            Ok(receiver_models
-                .into_iter()
-                .map(ReceiverRecord::from)
-                .collect())
-        })
-        .await?
-    }
-
-    /// Search receivers by country (structured location field)
-    pub async fn search_by_country(&self, country_param: &str) -> Result<Vec<ReceiverRecord>> {
-        let pool = self.pool.clone();
-        let country_param = country_param.to_string();
-
-        tokio::task::spawn_blocking(move || -> Result<Vec<ReceiverRecord>> {
-            let mut conn = pool.get()?;
-            let receiver_models = receivers::table
-                .filter(receivers::country.eq(&country_param))
-                .order(receivers::callsign.asc())
-                .select(ReceiverModel::as_select())
-                .load::<ReceiverModel>(&mut conn)?;
-
-            Ok(receiver_models
-                .into_iter()
-                .map(ReceiverRecord::from)
-                .collect())
-        })
-        .await?
-    }
-
     /// Get all receivers with pagination
     pub async fn get_receivers_paginated(
         &self,
