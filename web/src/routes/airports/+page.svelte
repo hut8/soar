@@ -155,62 +155,100 @@
 				</p>
 			</header>
 
-			<div class="table-container">
-				<table class="table-hover table">
-					<thead>
-						<tr>
-							<th>Code</th>
-							<th>Name</th>
-							<th>Type</th>
-							<th>Location</th>
-							<th>Coordinates</th>
-							<th>Elevation</th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each airports as airport (airport.id)}
+			<!-- Desktop: Table -->
+			<div class="hidden md:block">
+				<div class="table-container">
+					<table class="table-hover table">
+						<thead>
 							<tr>
-								<td>
-									<a
-										href={resolve(`/airports/${airport.id}`)}
-										class="anchor font-mono text-primary-500 hover:text-primary-600"
-									>
-										{getAirportCode(airport)}
-									</a>
-								</td>
-								<td class="font-semibold">{airport.name}</td>
-								<td>
-									<span class="badge preset-tonal">
-										{formatSnakeCase(airport.airport_type)}
-									</span>
-								</td>
-								<td>
-									<div class="flex items-center gap-1">
-										<MapPin class="h-4 w-4 text-surface-500" />
-										<span>{formatLocation(airport)}</span>
-									</div>
-								</td>
-								<td class="font-mono text-sm">
-									<a
-										href={getGoogleMapsUrl(airport.latitude_deg, airport.longitude_deg)}
-										target="_blank"
-										rel="noopener noreferrer"
-										class="text-primary-500 underline hover:text-primary-700"
-									>
-										{formatCoordinates(airport.latitude_deg, airport.longitude_deg)}
-									</a>
-								</td>
-								<td>
-									{#if airport.elevation_ft !== null}
-										<span>{airport.elevation_ft} ft</span>
-									{:else}
-										<span class="text-surface-500">—</span>
-									{/if}
-								</td>
+								<th>Code</th>
+								<th>Name</th>
+								<th>Type</th>
+								<th>Location</th>
+								<th>Coordinates</th>
+								<th>Elevation</th>
 							</tr>
-						{/each}
-					</tbody>
-				</table>
+						</thead>
+						<tbody>
+							{#each airports as airport (airport.id)}
+								<tr>
+									<td>
+										<a
+											href={resolve(`/airports/${airport.id}`)}
+											class="anchor font-mono text-primary-500 hover:text-primary-600"
+										>
+											{getAirportCode(airport)}
+										</a>
+									</td>
+									<td class="font-semibold">{airport.name}</td>
+									<td>
+										<span class="badge preset-tonal">
+											{formatSnakeCase(airport.airport_type)}
+										</span>
+									</td>
+									<td>
+										<div class="flex items-center gap-1">
+											<MapPin class="h-4 w-4 text-surface-500" />
+											<span>{formatLocation(airport)}</span>
+										</div>
+									</td>
+									<td class="font-mono text-sm">
+										<a
+											href={getGoogleMapsUrl(airport.latitude_deg, airport.longitude_deg)}
+											target="_blank"
+											rel="noopener noreferrer"
+											class="text-primary-500 underline hover:text-primary-700"
+										>
+											{formatCoordinates(airport.latitude_deg, airport.longitude_deg)}
+										</a>
+									</td>
+									<td>
+										{#if airport.elevation_ft !== null}
+											<span>{airport.elevation_ft} ft</span>
+										{:else}
+											<span class="text-surface-500">—</span>
+										{/if}
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			</div>
+
+			<!-- Mobile: Cards -->
+			<div class="space-y-4 p-4 md:hidden">
+				{#each airports as airport (airport.id)}
+					<a
+						href={resolve(`/airports/${airport.id}`)}
+						class="block card p-4 hover:ring-2 hover:ring-primary-500"
+					>
+						<div class="mb-2 flex items-start justify-between gap-2">
+							<div class="flex-1">
+								<div class="font-mono text-sm text-primary-500">{getAirportCode(airport)}</div>
+								<div class="font-semibold">{airport.name}</div>
+							</div>
+							<span class="badge preset-tonal text-xs">
+								{formatSnakeCase(airport.airport_type)}
+							</span>
+						</div>
+
+						<dl class="space-y-2 text-sm">
+							<div class="flex items-start gap-2">
+								<MapPin class="mt-0.5 h-4 w-4 flex-shrink-0 text-surface-500" />
+								<span class="text-surface-600-300-token">{formatLocation(airport)}</span>
+							</div>
+							<div class="text-surface-600-300-token font-mono text-xs">
+								{formatCoordinates(airport.latitude_deg, airport.longitude_deg)}
+							</div>
+							{#if airport.elevation_ft !== null}
+								<div class="text-surface-600-300-token text-xs">
+									Elevation: {airport.elevation_ft} ft
+								</div>
+							{/if}
+						</dl>
+					</a>
+				{/each}
 			</div>
 		</section>
 	{:else if !loading && airports.length === 0 && searchQuery}

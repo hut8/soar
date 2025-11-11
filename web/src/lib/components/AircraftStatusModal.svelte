@@ -739,8 +739,9 @@
 							<span class="text-sm font-normal text-gray-600"> (Last 24 hours) </span>
 						</h3>
 
+						<!-- Desktop: Table -->
 						<div
-							class="max-h-64 overflow-y-auto rounded-lg border border-surface-300 dark:border-surface-600"
+							class="hidden max-h-64 overflow-y-auto rounded-lg border border-surface-300 md:block dark:border-surface-600"
 						>
 							<table class="w-full text-sm">
 								<thead
@@ -808,6 +809,56 @@
 									{/each}
 								</tbody>
 							</table>
+						</div>
+
+						<!-- Mobile: Cards -->
+						<div class="max-h-64 space-y-3 overflow-y-auto md:hidden">
+							{#each recentFixes.slice(0, 20) as fix (fix.id)}
+								<div class="rounded-lg border border-surface-300 p-3 dark:border-surface-600">
+									<div class="mb-2 text-xs text-surface-600 dark:text-surface-400">
+										{formatTimestamp(fix.timestamp).relative}
+									</div>
+									<dl class="space-y-1 text-sm">
+										<div class="flex justify-between gap-4">
+											<dt class="text-surface-600-300-token">Altitude</dt>
+											<dd>
+												{#if fix.altitude_msl_feet !== undefined && fix.altitude_msl_feet !== null}
+													<div class="text-right">
+														<div>{fix.altitude_msl_feet.toLocaleString()} MSL</div>
+														{#if fix.altitude_agl_feet !== undefined && fix.altitude_agl_feet !== null}
+															<div class="text-xs text-surface-500">
+																{fix.altitude_agl_feet.toLocaleString()} AGL
+															</div>
+														{/if}
+													</div>
+												{:else}
+													Unknown
+												{/if}
+											</dd>
+										</div>
+										<div class="flex justify-between gap-4">
+											<dt class="text-surface-600-300-token">Climb Rate</dt>
+											<dd
+												class="{fix.climb_fpm !== undefined &&
+												fix.climb_fpm !== null &&
+												fix.climb_fpm < 0
+													? 'text-red-600 dark:text-red-400'
+													: 'text-green-600 dark:text-green-400'} font-semibold"
+											>
+												{formatClimbRate(fix.climb_fpm)}
+											</dd>
+										</div>
+										<div class="flex justify-between gap-4">
+											<dt class="text-surface-600-300-token">Speed</dt>
+											<dd>{formatSpeed(fix.ground_speed_knots)}</dd>
+										</div>
+										<div class="flex justify-between gap-4">
+											<dt class="text-surface-600-300-token">Track</dt>
+											<dd>{formatTrack(fix.track_degrees)}</dd>
+										</div>
+									</dl>
+								</div>
+							{/each}
 						</div>
 
 						{#if recentFixes.length > 20}

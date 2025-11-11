@@ -474,31 +474,56 @@
 									</div>
 								</div>
 
-								<!-- Runway Details Table -->
-								<div class="table-container mb-4">
-									<table class="table-compact table-hover table">
-										<tbody>
-											{#if runway.length_ft}
-												<tr>
-													<td class="w-1/3 font-medium">Length</td>
-													<td>{runway.length_ft.toLocaleString()} ft</td>
-												</tr>
-											{/if}
-											{#if runway.width_ft}
-												<tr>
-													<td class="w-1/3 font-medium">Width</td>
-													<td>{runway.width_ft} ft</td>
-												</tr>
-											{/if}
-											{#if runway.surface}
-												<tr>
-													<td class="w-1/3 font-medium">Surface</td>
-													<td>{runway.surface}</td>
-												</tr>
-											{/if}
-										</tbody>
-									</table>
+								<!-- Runway Details -->
+								<!-- Desktop: Table -->
+								<div class="mb-4 hidden md:block">
+									<div class="table-container">
+										<table class="table-compact table-hover table">
+											<tbody>
+												{#if runway.length_ft}
+													<tr>
+														<td class="w-1/3 font-medium">Length</td>
+														<td>{runway.length_ft.toLocaleString()} ft</td>
+													</tr>
+												{/if}
+												{#if runway.width_ft}
+													<tr>
+														<td class="w-1/3 font-medium">Width</td>
+														<td>{runway.width_ft} ft</td>
+													</tr>
+												{/if}
+												{#if runway.surface}
+													<tr>
+														<td class="w-1/3 font-medium">Surface</td>
+														<td>{runway.surface}</td>
+													</tr>
+												{/if}
+											</tbody>
+										</table>
+									</div>
 								</div>
+
+								<!-- Mobile: Definition List -->
+								<dl class="mb-4 space-y-2 md:hidden">
+									{#if runway.length_ft}
+										<div class="flex justify-between gap-4">
+											<dt class="text-surface-600-300-token font-medium">Length</dt>
+											<dd class="font-semibold">{runway.length_ft.toLocaleString()} ft</dd>
+										</div>
+									{/if}
+									{#if runway.width_ft}
+										<div class="flex justify-between gap-4">
+											<dt class="text-surface-600-300-token font-medium">Width</dt>
+											<dd class="font-semibold">{runway.width_ft} ft</dd>
+										</div>
+									{/if}
+									{#if runway.surface}
+										<div class="flex justify-between gap-4">
+											<dt class="text-surface-600-300-token font-medium">Surface</dt>
+											<dd class="font-semibold">{runway.surface}</dd>
+										</div>
+									{/if}
+								</dl>
 
 								<!-- Runway Ends Details -->
 								<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -507,32 +532,58 @@
 										<h4 class="mb-2 font-semibold text-primary-500">
 											{runway.low.ident || 'Low End'}
 										</h4>
-										<div class="table-container">
-											<table class="table-compact table-hover table">
-												<tbody>
-													{#if runway.low.heading_degt !== null}
-														<tr>
-															<td class="w-2/3 text-sm">True Heading</td>
-															<td class="text-sm font-medium">{runway.low.heading_degt}°</td>
-														</tr>
-													{/if}
-													{#if runway.low.elevation_ft !== null}
-														<tr>
-															<td class="w-2/3 text-sm">Elevation</td>
-															<td class="text-sm font-medium">{runway.low.elevation_ft} ft</td>
-														</tr>
-													{/if}
-													{#if runway.low.displaced_threshold_ft !== null && runway.low.displaced_threshold_ft > 0}
-														<tr>
-															<td class="w-2/3 text-sm">Displaced Threshold</td>
-															<td class="text-sm font-medium"
-																>{runway.low.displaced_threshold_ft} ft</td
-															>
-														</tr>
-													{/if}
-												</tbody>
-											</table>
+
+										<!-- Desktop: Table -->
+										<div class="hidden md:block">
+											<div class="table-container">
+												<table class="table-compact table-hover table">
+													<tbody>
+														{#if runway.low.heading_degt !== null}
+															<tr>
+																<td class="w-2/3 text-sm">True Heading</td>
+																<td class="text-sm font-medium">{runway.low.heading_degt}°</td>
+															</tr>
+														{/if}
+														{#if runway.low.elevation_ft !== null}
+															<tr>
+																<td class="w-2/3 text-sm">Elevation</td>
+																<td class="text-sm font-medium">{runway.low.elevation_ft} ft</td>
+															</tr>
+														{/if}
+														{#if runway.low.displaced_threshold_ft !== null && runway.low.displaced_threshold_ft > 0}
+															<tr>
+																<td class="w-2/3 text-sm">Displaced Threshold</td>
+																<td class="text-sm font-medium"
+																	>{runway.low.displaced_threshold_ft} ft</td
+																>
+															</tr>
+														{/if}
+													</tbody>
+												</table>
+											</div>
 										</div>
+
+										<!-- Mobile: Definition List -->
+										<dl class="space-y-2 text-sm md:hidden">
+											{#if runway.low.heading_degt !== null}
+												<div class="flex justify-between gap-4">
+													<dt class="text-surface-600-300-token">True Heading</dt>
+													<dd class="font-medium">{runway.low.heading_degt}°</dd>
+												</div>
+											{/if}
+											{#if runway.low.elevation_ft !== null}
+												<div class="flex justify-between gap-4">
+													<dt class="text-surface-600-300-token">Elevation</dt>
+													<dd class="font-medium">{runway.low.elevation_ft} ft</dd>
+												</div>
+											{/if}
+											{#if runway.low.displaced_threshold_ft !== null && runway.low.displaced_threshold_ft > 0}
+												<div class="flex justify-between gap-4">
+													<dt class="text-surface-600-300-token">Displaced Threshold</dt>
+													<dd class="font-medium">{runway.low.displaced_threshold_ft} ft</dd>
+												</div>
+											{/if}
+										</dl>
 									</div>
 
 									<!-- High End -->
@@ -540,32 +591,58 @@
 										<h4 class="mb-2 font-semibold text-primary-500">
 											{runway.high.ident || 'High End'}
 										</h4>
-										<div class="table-container">
-											<table class="table-compact table-hover table">
-												<tbody>
-													{#if runway.high.heading_degt !== null}
-														<tr>
-															<td class="w-2/3 text-sm">True Heading</td>
-															<td class="text-sm font-medium">{runway.high.heading_degt}°</td>
-														</tr>
-													{/if}
-													{#if runway.high.elevation_ft !== null}
-														<tr>
-															<td class="w-2/3 text-sm">Elevation</td>
-															<td class="text-sm font-medium">{runway.high.elevation_ft} ft</td>
-														</tr>
-													{/if}
-													{#if runway.high.displaced_threshold_ft !== null && runway.high.displaced_threshold_ft > 0}
-														<tr>
-															<td class="w-2/3 text-sm">Displaced Threshold</td>
-															<td class="text-sm font-medium"
-																>{runway.high.displaced_threshold_ft} ft</td
-															>
-														</tr>
-													{/if}
-												</tbody>
-											</table>
+
+										<!-- Desktop: Table -->
+										<div class="hidden md:block">
+											<div class="table-container">
+												<table class="table-compact table-hover table">
+													<tbody>
+														{#if runway.high.heading_degt !== null}
+															<tr>
+																<td class="w-2/3 text-sm">True Heading</td>
+																<td class="text-sm font-medium">{runway.high.heading_degt}°</td>
+															</tr>
+														{/if}
+														{#if runway.high.elevation_ft !== null}
+															<tr>
+																<td class="w-2/3 text-sm">Elevation</td>
+																<td class="text-sm font-medium">{runway.high.elevation_ft} ft</td>
+															</tr>
+														{/if}
+														{#if runway.high.displaced_threshold_ft !== null && runway.high.displaced_threshold_ft > 0}
+															<tr>
+																<td class="w-2/3 text-sm">Displaced Threshold</td>
+																<td class="text-sm font-medium"
+																	>{runway.high.displaced_threshold_ft} ft</td
+																>
+															</tr>
+														{/if}
+													</tbody>
+												</table>
+											</div>
 										</div>
+
+										<!-- Mobile: Definition List -->
+										<dl class="space-y-2 text-sm md:hidden">
+											{#if runway.high.heading_degt !== null}
+												<div class="flex justify-between gap-4">
+													<dt class="text-surface-600-300-token">True Heading</dt>
+													<dd class="font-medium">{runway.high.heading_degt}°</dd>
+												</div>
+											{/if}
+											{#if runway.high.elevation_ft !== null}
+												<div class="flex justify-between gap-4">
+													<dt class="text-surface-600-300-token">Elevation</dt>
+													<dd class="font-medium">{runway.high.elevation_ft} ft</dd>
+												</div>
+											{/if}
+											{#if runway.high.displaced_threshold_ft !== null && runway.high.displaced_threshold_ft > 0}
+												<div class="flex justify-between gap-4">
+													<dt class="text-surface-600-300-token">Displaced Threshold</dt>
+													<dd class="font-medium">{runway.high.displaced_threshold_ft} ft</dd>
+												</div>
+											{/if}
+										</dl>
 									</div>
 								</div>
 							</div>
@@ -651,89 +728,170 @@
 					{#if flights.length === 0}
 						<p class="text-surface-500">No flights in the last 24 hours.</p>
 					{:else}
-						<div class="table-container">
-							<table class="table-hover table">
-								<thead>
-									<tr>
-										<th>Aircraft</th>
-										<th>Type</th>
-										<th>Departure</th>
-										<th>Arrival</th>
-										<th>Takeoff</th>
-										<th>Landing</th>
-										<th>Status</th>
-										<th>Actions</th>
-									</tr>
-								</thead>
-								<tbody>
-									{#each flights as flightData (flightData.flight.id)}
+						<!-- Desktop: Table -->
+						<div class="hidden md:block">
+							<div class="table-container">
+								<table class="table-hover table">
+									<thead>
 										<tr>
-											<td>
-												{#if flightData.device}
-													<div class="flex flex-col">
-														<span class="font-mono font-semibold"
-															>{flightData.device.registration || 'Unknown'}</span
-														>
-														{#if flightData.device.competition_number}
-															<span class="text-sm text-surface-500"
-																>{flightData.device.competition_number}</span
-															>
-														{/if}
-													</div>
-												{:else}
-													<span class="font-mono">{flightData.flight.device_address}</span>
-												{/if}
-											</td>
-											<td>
-												<span
-													class="badge preset-tonal"
-													class:preset-tonal-primary-500={getFlightType(
-														flightData.flight,
-														airport?.ident || ''
-													) === 'Departure'}
-													class:preset-tonal-success-500={getFlightType(
-														flightData.flight,
-														airport?.ident || ''
-													) === 'Arrival'}
-													class:preset-tonal-secondary-500={getFlightType(
-														flightData.flight,
-														airport?.ident || ''
-													) === 'Local'}
-												>
-													{getFlightType(flightData.flight, airport?.ident || '')}
-												</span>
-											</td>
-											<td>
-												<span class="font-mono text-sm">
-													{flightData.flight.departure_airport || '—'}
-												</span>
-											</td>
-											<td>
-												<span class="font-mono text-sm">
-													{flightData.flight.arrival_airport || '—'}
-												</span>
-											</td>
-											<td>{formatDateTime(flightData.flight.takeoff_time)}</td>
-											<td>{formatDateTime(flightData.flight.landing_time)}</td>
-											<td>
-												{#if getFlightStatus(flightData.flight) === 'In Progress'}
-													<span class="badge preset-filled-warning-500">In Progress</span>
-												{:else}
-													<span class="badge preset-filled-success-500">Completed</span>
-												{/if}
-											</td>
-											<td>
-												<a
-													href={resolve(`/flights/${flightData.flight.id}`)}
-													class="preset-tonal-primary-500 btn btn-sm"
-												>
-													View
-												</a>
-											</td>
+											<th>Aircraft</th>
+											<th>Type</th>
+											<th>Departure</th>
+											<th>Arrival</th>
+											<th>Takeoff</th>
+											<th>Landing</th>
+											<th>Status</th>
+											<th>Actions</th>
 										</tr>
-									{/each}
-								</tbody>
-							</table>
+									</thead>
+									<tbody>
+										{#each flights as flightData (flightData.flight.id)}
+											<tr>
+												<td>
+													{#if flightData.device}
+														<div class="flex flex-col">
+															<span class="font-mono font-semibold"
+																>{flightData.device.registration || 'Unknown'}</span
+															>
+															{#if flightData.device.competition_number}
+																<span class="text-sm text-surface-500"
+																	>{flightData.device.competition_number}</span
+																>
+															{/if}
+														</div>
+													{:else}
+														<span class="font-mono">{flightData.flight.device_address}</span>
+													{/if}
+												</td>
+												<td>
+													<span
+														class="badge preset-tonal"
+														class:preset-tonal-primary-500={getFlightType(
+															flightData.flight,
+															airport?.ident || ''
+														) === 'Departure'}
+														class:preset-tonal-success-500={getFlightType(
+															flightData.flight,
+															airport?.ident || ''
+														) === 'Arrival'}
+														class:preset-tonal-secondary-500={getFlightType(
+															flightData.flight,
+															airport?.ident || ''
+														) === 'Local'}
+													>
+														{getFlightType(flightData.flight, airport?.ident || '')}
+													</span>
+												</td>
+												<td>
+													<span class="font-mono text-sm">
+														{flightData.flight.departure_airport || '—'}
+													</span>
+												</td>
+												<td>
+													<span class="font-mono text-sm">
+														{flightData.flight.arrival_airport || '—'}
+													</span>
+												</td>
+												<td>{formatDateTime(flightData.flight.takeoff_time)}</td>
+												<td>{formatDateTime(flightData.flight.landing_time)}</td>
+												<td>
+													{#if getFlightStatus(flightData.flight) === 'In Progress'}
+														<span class="badge preset-filled-warning-500">In Progress</span>
+													{:else}
+														<span class="badge preset-filled-success-500">Completed</span>
+													{/if}
+												</td>
+												<td>
+													<a
+														href={resolve(`/flights/${flightData.flight.id}`)}
+														class="preset-tonal-primary-500 btn btn-sm"
+													>
+														View
+													</a>
+												</td>
+											</tr>
+										{/each}
+									</tbody>
+								</table>
+							</div>
+						</div>
+
+						<!-- Mobile: Cards -->
+						<div class="space-y-4 md:hidden">
+							{#each flights as flightData (flightData.flight.id)}
+								<div class="card p-4">
+									<div class="mb-3 flex items-start justify-between gap-2">
+										<div>
+											{#if flightData.device}
+												<div class="font-mono font-semibold">
+													{flightData.device.registration || 'Unknown'}
+												</div>
+												{#if flightData.device.competition_number}
+													<div class="text-sm text-surface-500">
+														{flightData.device.competition_number}
+													</div>
+												{/if}
+											{:else}
+												<div class="font-mono">{flightData.flight.device_address}</div>
+											{/if}
+										</div>
+										<div class="flex flex-col items-end gap-2">
+											<span
+												class="badge preset-tonal text-xs"
+												class:preset-tonal-primary-500={getFlightType(
+													flightData.flight,
+													airport?.ident || ''
+												) === 'Departure'}
+												class:preset-tonal-success-500={getFlightType(
+													flightData.flight,
+													airport?.ident || ''
+												) === 'Arrival'}
+												class:preset-tonal-secondary-500={getFlightType(
+													flightData.flight,
+													airport?.ident || ''
+												) === 'Local'}
+											>
+												{getFlightType(flightData.flight, airport?.ident || '')}
+											</span>
+											{#if getFlightStatus(flightData.flight) === 'In Progress'}
+												<span class="badge preset-filled-warning-500 text-xs">In Progress</span>
+											{:else}
+												<span class="badge preset-filled-success-500 text-xs">Completed</span>
+											{/if}
+										</div>
+									</div>
+
+									<dl class="mb-4 space-y-2 text-sm">
+										<div class="flex justify-between gap-4">
+											<dt class="text-surface-600-300-token">Departure</dt>
+											<dd class="font-mono font-medium">
+												{flightData.flight.departure_airport || '—'}
+											</dd>
+										</div>
+										<div class="flex justify-between gap-4">
+											<dt class="text-surface-600-300-token">Arrival</dt>
+											<dd class="font-mono font-medium">
+												{flightData.flight.arrival_airport || '—'}
+											</dd>
+										</div>
+										<div class="flex justify-between gap-4">
+											<dt class="text-surface-600-300-token">Takeoff</dt>
+											<dd class="font-medium">{formatDateTime(flightData.flight.takeoff_time)}</dd>
+										</div>
+										<div class="flex justify-between gap-4">
+											<dt class="text-surface-600-300-token">Landing</dt>
+											<dd class="font-medium">{formatDateTime(flightData.flight.landing_time)}</dd>
+										</div>
+									</dl>
+
+									<a
+										href={resolve(`/flights/${flightData.flight.id}`)}
+										class="preset-tonal-primary-500 btn w-full btn-sm"
+									>
+										View Flight Details
+									</a>
+								</div>
+							{/each}
 						</div>
 					{/if}
 				{/if}

@@ -722,38 +722,117 @@
 									No status reports in the last 24 hours
 								</p>
 							{:else}
-								<div class="table-container">
-									<table class="table-hover table">
-										<thead>
-											<tr>
-												<th>Timestamp</th>
-												<th>Version</th>
-												<th>Platform</th>
-												<th>CPU</th>
-												<th>RAM</th>
-												<th>Senders</th>
-												<th>Voltage</th>
-												<th>Lag</th>
-											</tr>
-										</thead>
-										<tbody>
-											{#each statuses as status, index (status.id)}
-												<tr
-													class="border-b border-gray-200 hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800 {index %
-														2 ===
-													0
-														? 'bg-gray-50 dark:bg-gray-900'
-														: ''}"
-												>
-													<td class="text-xs">
-														<div>{formatDateTime(status.received_at)}</div>
-														<div class="text-surface-500-400-token">
-															{formatRelativeTime(status.received_at)}
-														</div>
-													</td>
-													<td class="font-mono text-xs">{status.version || '—'}</td>
-													<td class="text-xs">{status.platform || '—'}</td>
-													<td class="text-sm">
+								<!-- Desktop: Table -->
+								<div class="hidden md:block">
+									<div class="table-container">
+										<table class="table-hover table">
+											<thead>
+												<tr>
+													<th>Timestamp</th>
+													<th>Version</th>
+													<th>Platform</th>
+													<th>CPU</th>
+													<th>RAM</th>
+													<th>Senders</th>
+													<th>Voltage</th>
+													<th>Lag</th>
+												</tr>
+											</thead>
+											<tbody>
+												{#each statuses as status, index (status.id)}
+													<tr
+														class="border-b border-gray-200 hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800 {index %
+															2 ===
+														0
+															? 'bg-gray-50 dark:bg-gray-900'
+															: ''}"
+													>
+														<td class="text-xs">
+															<div>{formatDateTime(status.received_at)}</div>
+															<div class="text-surface-500-400-token">
+																{formatRelativeTime(status.received_at)}
+															</div>
+														</td>
+														<td class="font-mono text-xs">{status.version || '—'}</td>
+														<td class="text-xs">{status.platform || '—'}</td>
+														<td class="text-sm">
+															{#if status.cpu_load !== null}
+																{(Number(status.cpu_load) * 100).toFixed(0)}%
+																{#if status.cpu_temperature !== null}
+																	<span class="text-surface-500-400-token text-xs">
+																		({Number(status.cpu_temperature).toFixed(1)}°C)
+																	</span>
+																{/if}
+															{:else}
+																—
+															{/if}
+														</td>
+														<td class="text-xs">
+															{formatRamUsage(status.ram_free, status.ram_total)}
+														</td>
+														<td>
+															{#if status.visible_senders !== null}
+																{status.visible_senders}
+																{#if status.senders !== null}
+																	<span class="text-surface-500-400-token">/ {status.senders}</span>
+																{/if}
+															{:else}
+																—
+															{/if}
+														</td>
+														<td>
+															{#if status.voltage !== null}
+																{Number(status.voltage).toFixed(2)}V
+																{#if status.amperage !== null}
+																	<span class="text-surface-500-400-token text-xs">
+																		({Number(status.amperage).toFixed(2)}A)
+																	</span>
+																{/if}
+															{:else}
+																—
+															{/if}
+														</td>
+														<td>{status.lag !== null ? `${status.lag}ms` : '—'}</td>
+													</tr>
+													{#if showRawData}
+														<tr
+															class="border-b border-gray-200 dark:border-gray-700 {index % 2 === 0
+																? 'bg-gray-100 dark:bg-gray-800'
+																: ''}"
+														>
+															<td colspan="8" class="px-3 py-2 font-mono text-sm">
+																{status.raw_data}
+															</td>
+														</tr>
+													{/if}
+												{/each}
+											</tbody>
+										</table>
+									</div>
+								</div>
+
+								<!-- Mobile: Cards -->
+								<div class="space-y-4 md:hidden">
+									{#each statuses as status (status.id)}
+										<div class="card p-4">
+											<div class="mb-3 flex items-start justify-between gap-2">
+												<div class="text-xs">
+													<div class="font-semibold">{formatDateTime(status.received_at)}</div>
+													<div class="text-surface-500-400-token">
+														{formatRelativeTime(status.received_at)}
+													</div>
+												</div>
+												<span class="chip preset-tonal text-xs">{status.version || '—'}</span>
+											</div>
+
+											<dl class="space-y-2 text-sm">
+												<div class="flex justify-between gap-4">
+													<dt class="text-surface-600-300-token">Platform</dt>
+													<dd class="font-medium">{status.platform || '—'}</dd>
+												</div>
+												<div class="flex justify-between gap-4">
+													<dt class="text-surface-600-300-token">CPU</dt>
+													<dd class="font-medium">
 														{#if status.cpu_load !== null}
 															{(Number(status.cpu_load) * 100).toFixed(0)}%
 															{#if status.cpu_temperature !== null}
@@ -764,11 +843,17 @@
 														{:else}
 															—
 														{/if}
-													</td>
-													<td class="text-xs">
+													</dd>
+												</div>
+												<div class="flex justify-between gap-4">
+													<dt class="text-surface-600-300-token">RAM</dt>
+													<dd class="text-xs font-medium">
 														{formatRamUsage(status.ram_free, status.ram_total)}
-													</td>
-													<td>
+													</dd>
+												</div>
+												<div class="flex justify-between gap-4">
+													<dt class="text-surface-600-300-token">Senders</dt>
+													<dd class="font-medium">
 														{#if status.visible_senders !== null}
 															{status.visible_senders}
 															{#if status.senders !== null}
@@ -777,8 +862,11 @@
 														{:else}
 															—
 														{/if}
-													</td>
-													<td>
+													</dd>
+												</div>
+												<div class="flex justify-between gap-4">
+													<dt class="text-surface-600-300-token">Voltage</dt>
+													<dd class="font-medium">
 														{#if status.voltage !== null}
 															{Number(status.voltage).toFixed(2)}V
 															{#if status.amperage !== null}
@@ -789,23 +877,24 @@
 														{:else}
 															—
 														{/if}
-													</td>
-													<td>{status.lag !== null ? `${status.lag}ms` : '—'}</td>
-												</tr>
-												{#if showRawData}
-													<tr
-														class="border-b border-gray-200 dark:border-gray-700 {index % 2 === 0
-															? 'bg-gray-100 dark:bg-gray-800'
-															: ''}"
-													>
-														<td colspan="8" class="px-3 py-2 font-mono text-sm">
-															{status.raw_data}
-														</td>
-													</tr>
-												{/if}
-											{/each}
-										</tbody>
-									</table>
+													</dd>
+												</div>
+												<div class="flex justify-between gap-4">
+													<dt class="text-surface-600-300-token">Lag</dt>
+													<dd class="font-medium">
+														{status.lag !== null ? `${status.lag}ms` : '—'}
+													</dd>
+												</div>
+											</dl>
+
+											{#if showRawData}
+												<div class="mt-3 border-t border-surface-300 pt-3 dark:border-surface-600">
+													<div class="text-surface-600-300-token mb-1 text-xs">Raw Data</div>
+													<div class="overflow-x-auto font-mono text-xs">{status.raw_data}</div>
+												</div>
+											{/if}
+										</div>
+									{/each}
 								</div>
 
 								<!-- Pagination Controls -->
@@ -837,47 +926,89 @@
 								{#if aggregateStats && aggregateStats.fix_counts_by_device.length > 0}
 									<div class="mt-6 space-y-4">
 										<h3 class="h3">Fixes Received by Device</h3>
-										<div class="table-container">
-											<table class="table-hover table">
-												<thead>
-													<tr>
-														<th>Device</th>
-														<th class="text-right">Count</th>
-													</tr>
-												</thead>
-												<tbody>
-													{#each aggregateStats.fix_counts_by_device as deviceCount (deviceCount.device_id)}
+
+										<!-- Desktop: Table -->
+										<div class="hidden md:block">
+											<div class="table-container">
+												<table class="table-hover table">
+													<thead>
 														<tr>
-															<td>
-																<a
-																	href={resolve(`/devices/${deviceCount.device_id}`)}
-																	class="text-primary-500 hover:text-primary-600"
-																>
-																	<div class="flex items-center gap-2">
-																		<span class="font-semibold">
-																			{formatDeviceLabel(deviceCount.device, deviceCount.device_id)}
-																		</span>
-																		{#if deviceCount.device?.aircraft_type_ogn}
-																			<span
-																				class="badge {getAircraftTypeColor(
-																					deviceCount.device.aircraft_type_ogn
-																				)} text-xs"
-																			>
-																				{getAircraftTypeOgnDescription(
-																					deviceCount.device.aircraft_type_ogn
+															<th>Device</th>
+															<th class="text-right">Count</th>
+														</tr>
+													</thead>
+													<tbody>
+														{#each aggregateStats.fix_counts_by_device as deviceCount (deviceCount.device_id)}
+															<tr>
+																<td>
+																	<a
+																		href={resolve(`/devices/${deviceCount.device_id}`)}
+																		class="text-primary-500 hover:text-primary-600"
+																	>
+																		<div class="flex items-center gap-2">
+																			<span class="font-semibold">
+																				{formatDeviceLabel(
+																					deviceCount.device,
+																					deviceCount.device_id
 																				)}
 																			</span>
-																		{/if}
-																	</div>
-																</a>
-															</td>
-															<td class="text-right font-semibold">
+																			{#if deviceCount.device?.aircraft_type_ogn}
+																				<span
+																					class="badge {getAircraftTypeColor(
+																						deviceCount.device.aircraft_type_ogn
+																					)} text-xs"
+																				>
+																					{getAircraftTypeOgnDescription(
+																						deviceCount.device.aircraft_type_ogn
+																					)}
+																				</span>
+																			{/if}
+																		</div>
+																	</a>
+																</td>
+																<td class="text-right font-semibold">
+																	{deviceCount.count.toLocaleString()}
+																</td>
+															</tr>
+														{/each}
+													</tbody>
+												</table>
+											</div>
+										</div>
+
+										<!-- Mobile: Cards -->
+										<div class="space-y-3 md:hidden">
+											{#each aggregateStats.fix_counts_by_device as deviceCount (deviceCount.device_id)}
+												<a
+													href={resolve(`/devices/${deviceCount.device_id}`)}
+													class="block card p-4 hover:ring-2 hover:ring-primary-500"
+												>
+													<div class="flex items-start justify-between gap-3">
+														<div class="min-w-0 flex-1">
+															<div class="truncate font-semibold text-primary-500">
+																{formatDeviceLabel(deviceCount.device, deviceCount.device_id)}
+															</div>
+															{#if deviceCount.device?.aircraft_type_ogn}
+																<span
+																	class="badge {getAircraftTypeColor(
+																		deviceCount.device.aircraft_type_ogn
+																	)} mt-1 text-xs"
+																>
+																	{getAircraftTypeOgnDescription(
+																		deviceCount.device.aircraft_type_ogn
+																	)}
+																</span>
+															{/if}
+														</div>
+														<div class="text-right">
+															<div class="text-lg font-bold">
 																{deviceCount.count.toLocaleString()}
-															</td>
-														</tr>
-													{/each}
-												</tbody>
-											</table>
+															</div>
+															<div class="text-surface-500-400-token text-xs">fixes</div>
+														</div>
+													</div>
+												</a>
+											{/each}
 										</div>
 									</div>
 								{/if}
@@ -902,37 +1033,74 @@
 									No raw messages received in the last 24 hours
 								</p>
 							{:else if rawMessages !== null}
-								<div class="table-container">
-									<table class="table-hover table">
-										<thead>
-											<tr>
-												<th>Timestamp</th>
-												<th>Raw Message</th>
-												<th>Unparsed Data</th>
-											</tr>
-										</thead>
-										<tbody>
-											{#each rawMessages as message (message.id)}
+								<!-- Desktop: Table -->
+								<div class="hidden md:block">
+									<div class="table-container">
+										<table class="table-hover table">
+											<thead>
 												<tr>
-													<td class="text-xs" style="min-width: 150px;">
-														<div>{formatDateTime(message.received_at)}</div>
-														<div class="text-surface-500-400-token">
-															{formatRelativeTime(message.received_at)}
-														</div>
-													</td>
-													<td
-														class="font-mono text-xs"
-														style="max-width: 600px; word-break: break-all;"
-													>
-														{message.raw_message}
-													</td>
-													<td class="font-mono text-xs">
-														{message.unparsed || '—'}
-													</td>
+													<th>Timestamp</th>
+													<th>Raw Message</th>
+													<th>Unparsed Data</th>
 												</tr>
-											{/each}
-										</tbody>
-									</table>
+											</thead>
+											<tbody>
+												{#each rawMessages as message (message.id)}
+													<tr>
+														<td class="text-xs" style="min-width: 150px;">
+															<div>{formatDateTime(message.received_at)}</div>
+															<div class="text-surface-500-400-token">
+																{formatRelativeTime(message.received_at)}
+															</div>
+														</td>
+														<td
+															class="font-mono text-xs"
+															style="max-width: 600px; word-break: break-all;"
+														>
+															{message.raw_message}
+														</td>
+														<td class="font-mono text-xs">
+															{message.unparsed || '—'}
+														</td>
+													</tr>
+												{/each}
+											</tbody>
+										</table>
+									</div>
+								</div>
+
+								<!-- Mobile: Cards -->
+								<div class="space-y-4 md:hidden">
+									{#each rawMessages as message (message.id)}
+										<div class="card p-4">
+											<div class="mb-3">
+												<div class="text-xs font-semibold">
+													{formatDateTime(message.received_at)}
+												</div>
+												<div class="text-surface-500-400-token text-xs">
+													{formatRelativeTime(message.received_at)}
+												</div>
+											</div>
+
+											<div class="space-y-3">
+												<div>
+													<div class="text-surface-600-300-token mb-1 text-xs">Raw Message</div>
+													<div class="overflow-x-auto font-mono text-xs break-all">
+														{message.raw_message}
+													</div>
+												</div>
+
+												{#if message.unparsed}
+													<div>
+														<div class="text-surface-600-300-token mb-1 text-xs">Unparsed Data</div>
+														<div class="overflow-x-auto font-mono text-xs">
+															{message.unparsed}
+														</div>
+													</div>
+												{/if}
+											</div>
+										</div>
+									{/each}
 								</div>
 
 								<!-- Pagination Controls -->
@@ -980,55 +1148,118 @@
 									No fixes received in the last 24 hours
 								</p>
 							{:else if fixes !== null}
-								<div class="table-container">
-									<table class="table-hover table">
-										<thead>
-											<tr>
-												<th>Timestamp</th>
-												<th>Device</th>
-												<th>Registration</th>
-												<th>Position</th>
-												<th>Altitude</th>
-												<th>Speed</th>
-												<th>SNR</th>
-											</tr>
-										</thead>
-										<tbody>
-											{#each fixes as fix (fix.id)}
+								<!-- Desktop: Table -->
+								<div class="hidden md:block">
+									<div class="table-container">
+										<table class="table-hover table">
+											<thead>
 												<tr>
-													<td class="text-xs">
-														<div>{formatDateTime(fix.timestamp)}</div>
-														<div class="text-surface-500-400-token">
-															{formatRelativeTime(fix.timestamp)}
-														</div>
-													</td>
-													<td class="font-mono text-xs">
-														{fix.device_address.toString(16).toUpperCase().padStart(6, '0')}
-													</td>
-													<td class="font-mono text-sm">{fix.registration || '—'}</td>
-													<td class="font-mono text-xs">
-														{fix.latitude?.toFixed(4) ?? '—'}, {fix.longitude?.toFixed(4) ?? '—'}
-													</td>
-													<td
-														>{fix.altitude_msl_feet !== null && fix.altitude_msl_feet !== undefined
-															? `${fix.altitude_msl_feet} ft`
-															: '—'}</td
-													>
-													<td
-														>{fix.ground_speed_knots !== null &&
-														fix.ground_speed_knots !== undefined
-															? `${fix.ground_speed_knots.toFixed(0)} kt`
-															: '—'}</td
-													>
-													<td
-														>{fix.snr_db !== null && fix.snr_db !== undefined
-															? `${fix.snr_db.toFixed(1)} dB`
-															: '—'}</td
-													>
+													<th>Timestamp</th>
+													<th>Device</th>
+													<th>Registration</th>
+													<th>Position</th>
+													<th>Altitude</th>
+													<th>Speed</th>
+													<th>SNR</th>
 												</tr>
-											{/each}
-										</tbody>
-									</table>
+											</thead>
+											<tbody>
+												{#each fixes as fix (fix.id)}
+													<tr>
+														<td class="text-xs">
+															<div>{formatDateTime(fix.timestamp)}</div>
+															<div class="text-surface-500-400-token">
+																{formatRelativeTime(fix.timestamp)}
+															</div>
+														</td>
+														<td class="font-mono text-xs">
+															{fix.device_address.toString(16).toUpperCase().padStart(6, '0')}
+														</td>
+														<td class="font-mono text-sm">{fix.registration || '—'}</td>
+														<td class="font-mono text-xs">
+															{fix.latitude?.toFixed(4) ?? '—'}, {fix.longitude?.toFixed(4) ?? '—'}
+														</td>
+														<td
+															>{fix.altitude_msl_feet !== null &&
+															fix.altitude_msl_feet !== undefined
+																? `${fix.altitude_msl_feet} ft`
+																: '—'}</td
+														>
+														<td
+															>{fix.ground_speed_knots !== null &&
+															fix.ground_speed_knots !== undefined
+																? `${fix.ground_speed_knots.toFixed(0)} kt`
+																: '—'}</td
+														>
+														<td
+															>{fix.snr_db !== null && fix.snr_db !== undefined
+																? `${fix.snr_db.toFixed(1)} dB`
+																: '—'}</td
+														>
+													</tr>
+												{/each}
+											</tbody>
+										</table>
+									</div>
+								</div>
+
+								<!-- Mobile: Cards -->
+								<div class="space-y-4 md:hidden">
+									{#each fixes as fix (fix.id)}
+										<div class="card p-4">
+											<div class="mb-3 flex items-start justify-between gap-2">
+												<div class="text-xs">
+													<div class="font-semibold">{formatDateTime(fix.timestamp)}</div>
+													<div class="text-surface-500-400-token">
+														{formatRelativeTime(fix.timestamp)}
+													</div>
+												</div>
+												{#if fix.registration}
+													<span class="chip preset-tonal font-mono text-xs">{fix.registration}</span
+													>
+												{/if}
+											</div>
+
+											<dl class="space-y-2 text-sm">
+												<div class="flex justify-between gap-4">
+													<dt class="text-surface-600-300-token">Device</dt>
+													<dd class="font-mono text-xs">
+														{fix.device_address.toString(16).toUpperCase().padStart(6, '0')}
+													</dd>
+												</div>
+												<div class="flex justify-between gap-4">
+													<dt class="text-surface-600-300-token">Position</dt>
+													<dd class="font-mono text-xs">
+														{fix.latitude?.toFixed(4) ?? '—'}, {fix.longitude?.toFixed(4) ?? '—'}
+													</dd>
+												</div>
+												<div class="flex justify-between gap-4">
+													<dt class="text-surface-600-300-token">Altitude</dt>
+													<dd class="font-medium">
+														{fix.altitude_msl_feet !== null && fix.altitude_msl_feet !== undefined
+															? `${fix.altitude_msl_feet} ft`
+															: '—'}
+													</dd>
+												</div>
+												<div class="flex justify-between gap-4">
+													<dt class="text-surface-600-300-token">Speed</dt>
+													<dd class="font-medium">
+														{fix.ground_speed_knots !== null && fix.ground_speed_knots !== undefined
+															? `${fix.ground_speed_knots.toFixed(0)} kt`
+															: '—'}
+													</dd>
+												</div>
+												<div class="flex justify-between gap-4">
+													<dt class="text-surface-600-300-token">SNR</dt>
+													<dd class="font-medium">
+														{fix.snr_db !== null && fix.snr_db !== undefined
+															? `${fix.snr_db.toFixed(1)} dB`
+															: '—'}
+													</dd>
+												</div>
+											</dl>
+										</div>
+									{/each}
 								</div>
 
 								<!-- Pagination Controls -->
@@ -1084,25 +1315,46 @@
 											{#if aggregateStats.fix_counts_by_aprs_type.length > 0}
 												<div class="space-y-4">
 													<h3 class="h3">Fixes Received by APRS Type</h3>
-													<div class="table-container">
-														<table class="table-hover table">
-															<thead>
-																<tr>
-																	<th>APRS Type</th>
-																	<th class="text-right">Count</th>
-																</tr>
-															</thead>
-															<tbody>
-																{#each aggregateStats.fix_counts_by_aprs_type as typeCount (typeCount.aprs_type)}
+
+													<!-- Desktop: Table -->
+													<div class="hidden md:block">
+														<div class="table-container">
+															<table class="table-hover table">
+																<thead>
 																	<tr>
-																		<td class="font-mono">{typeCount.aprs_type}</td>
-																		<td class="text-right font-semibold">
-																			{typeCount.count.toLocaleString()}
-																		</td>
+																		<th>APRS Type</th>
+																		<th class="text-right">Count</th>
 																	</tr>
-																{/each}
-															</tbody>
-														</table>
+																</thead>
+																<tbody>
+																	{#each aggregateStats.fix_counts_by_aprs_type as typeCount (typeCount.aprs_type)}
+																		<tr>
+																			<td class="font-mono">{typeCount.aprs_type}</td>
+																			<td class="text-right font-semibold">
+																				{typeCount.count.toLocaleString()}
+																			</td>
+																		</tr>
+																	{/each}
+																</tbody>
+															</table>
+														</div>
+													</div>
+
+													<!-- Mobile: Cards -->
+													<div class="space-y-3 md:hidden">
+														{#each aggregateStats.fix_counts_by_aprs_type as typeCount (typeCount.aprs_type)}
+															<div class="card p-4">
+																<div class="flex items-center justify-between gap-4">
+																	<div class="font-mono font-medium">{typeCount.aprs_type}</div>
+																	<div class="text-right">
+																		<div class="text-lg font-bold">
+																			{typeCount.count.toLocaleString()}
+																		</div>
+																		<div class="text-surface-500-400-token text-xs">fixes</div>
+																	</div>
+																</div>
+															</div>
+														{/each}
 													</div>
 												</div>
 											{/if}
@@ -1111,32 +1363,58 @@
 											{#if aggregateStats && aggregateStats.fix_counts_by_device.length > 0}
 												<div class="space-y-4">
 													<h3 class="h3">Fixes Received by Device</h3>
-													<div class="table-container">
-														<table class="table-hover table">
-															<thead>
-																<tr>
-																	<th>Device</th>
-																	<th class="text-right">Count</th>
-																</tr>
-															</thead>
-															<tbody>
-																{#each aggregateStats.fix_counts_by_device as deviceCount (deviceCount.device_id)}
+
+													<!-- Desktop: Table -->
+													<div class="hidden md:block">
+														<div class="table-container">
+															<table class="table-hover table">
+																<thead>
 																	<tr>
-																		<td>
-																			<a
-																				href={resolve(`/devices/${deviceCount.device_id}`)}
-																				class="font-mono text-primary-500 hover:text-primary-600"
-																			>
-																				{deviceCount.device_id}
-																			</a>
-																		</td>
-																		<td class="text-right font-semibold">
-																			{deviceCount.count.toLocaleString()}
-																		</td>
+																		<th>Device</th>
+																		<th class="text-right">Count</th>
 																	</tr>
-																{/each}
-															</tbody>
-														</table>
+																</thead>
+																<tbody>
+																	{#each aggregateStats.fix_counts_by_device as deviceCount (deviceCount.device_id)}
+																		<tr>
+																			<td>
+																				<a
+																					href={resolve(`/devices/${deviceCount.device_id}`)}
+																					class="font-mono text-primary-500 hover:text-primary-600"
+																				>
+																					{deviceCount.device_id}
+																				</a>
+																			</td>
+																			<td class="text-right font-semibold">
+																				{deviceCount.count.toLocaleString()}
+																			</td>
+																		</tr>
+																	{/each}
+																</tbody>
+															</table>
+														</div>
+													</div>
+
+													<!-- Mobile: Cards -->
+													<div class="space-y-3 md:hidden">
+														{#each aggregateStats.fix_counts_by_device as deviceCount (deviceCount.device_id)}
+															<a
+																href={resolve(`/devices/${deviceCount.device_id}`)}
+																class="block card p-4 hover:ring-2 hover:ring-primary-500"
+															>
+																<div class="flex items-center justify-between gap-4">
+																	<div class="font-mono font-medium text-primary-500">
+																		{deviceCount.device_id}
+																	</div>
+																	<div class="text-right">
+																		<div class="text-lg font-bold">
+																			{deviceCount.count.toLocaleString()}
+																		</div>
+																		<div class="text-surface-500-400-token text-xs">fixes</div>
+																	</div>
+																</div>
+															</a>
+														{/each}
 													</div>
 												</div>
 											{/if}
