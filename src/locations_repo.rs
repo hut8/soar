@@ -36,50 +36,6 @@ impl LocationsRepository {
         Ok(result.map(|model| model.into()))
     }
 
-    /// Find location by address fields
-    pub async fn find_by_address(
-        &self,
-        street1_param: Option<&str>,
-        street2_param: Option<&str>,
-        city_param: Option<&str>,
-        state_param: Option<&str>,
-        zip_code_param: Option<&str>,
-        country_mail_code_param: Option<&str>,
-    ) -> Result<Option<Location>> {
-        use crate::schema::locations::dsl::*;
-
-        let pool = self.pool.clone();
-        let street1_val = street1_param.map(|s| s.to_string());
-        let street2_val = street2_param.map(|s| s.to_string());
-        let city_val = city_param.map(|s| s.to_string());
-        let state_val = state_param.map(|s| s.to_string());
-        let zip_code_val = zip_code_param.map(|s| s.to_string());
-        let country_val = country_mail_code_param.unwrap_or("US").to_string();
-
-        let result = tokio::task::spawn_blocking(move || {
-            let mut conn = pool.get()?;
-
-            let location_model: Option<LocationModel> = locations
-                .filter(
-                    street1
-                        .eq(&street1_val)
-                        .and(street2.eq(&street2_val))
-                        .and(city.eq(&city_val))
-                        .and(state.eq(&state_val))
-                        .and(zip_code.eq(&zip_code_val))
-                        .and(country_mail_code.eq(&country_val)),
-                )
-                .select(LocationModel::as_select())
-                .first(&mut conn)
-                .optional()?;
-
-            Ok::<Option<LocationModel>, anyhow::Error>(location_model)
-        })
-        .await??;
-
-        Ok(result.map(|model| model.into()))
-    }
-
     /// Insert a new location
     pub async fn insert(&self, location: &Location) -> Result<()> {
         use crate::schema::locations;

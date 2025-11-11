@@ -552,15 +552,6 @@ impl FlightsRepository {
         Ok(rows_affected > 0)
     }
 
-    /// Get flights for a specific date (all flights that took off on that date)
-    pub async fn get_flights_for_date(&self, date: chrono::NaiveDate) -> Result<Vec<Flight>> {
-        let start_of_day = date.and_hms_opt(0, 0, 0).unwrap().and_utc();
-        let end_of_day = date.and_hms_opt(23, 59, 59).unwrap().and_utc();
-
-        self.get_flights_in_time_range(start_of_day, end_of_day, None)
-            .await
-    }
-
     /// Get flights associated with an airport (either departure or arrival) within a time range
     pub async fn get_flights_by_airport(
         &self,

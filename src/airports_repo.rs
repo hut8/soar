@@ -242,48 +242,6 @@ impl AirportsRepository {
         Ok(result.into_iter().map(|model| model.into()).collect())
     }
 
-    /// Search airports by country
-    pub async fn search_by_country(&self, country_code: &str) -> Result<Vec<Airport>> {
-        use crate::schema::airports::dsl::*;
-
-        let country_code = country_code.to_string();
-        let pool = self.pool.clone();
-        let result = tokio::task::spawn_blocking(move || {
-            let mut conn = pool.get()?;
-            let airport_models: Vec<AirportModel> = airports
-                .filter(iso_country.eq(&country_code))
-                .order((name, ident))
-                .select(AirportModel::as_select())
-                .load(&mut conn)?;
-
-            Ok::<Vec<AirportModel>, anyhow::Error>(airport_models)
-        })
-        .await??;
-
-        Ok(result.into_iter().map(|model| model.into()).collect())
-    }
-
-    /// Search airports by type
-    pub async fn search_by_type(&self, type_filter: &str) -> Result<Vec<Airport>> {
-        use crate::schema::airports::dsl::*;
-
-        let type_filter = type_filter.to_string();
-        let pool = self.pool.clone();
-        let result = tokio::task::spawn_blocking(move || {
-            let mut conn = pool.get()?;
-            let airport_models: Vec<AirportModel> = airports
-                .filter(type_.eq(&type_filter))
-                .order((name, ident))
-                .select(AirportModel::as_select())
-                .load(&mut conn)?;
-
-            Ok::<Vec<AirportModel>, anyhow::Error>(airport_models)
-        })
-        .await??;
-
-        Ok(result.into_iter().map(|model| model.into()).collect())
-    }
-
     /// Find nearest airports to a given point using PostGIS
     /// Returns airports within the specified distance (in meters) ordered by distance
     pub async fn find_nearest_airports(
@@ -331,26 +289,6 @@ impl AirportsRepository {
             .collect();
 
         Ok(airports_with_distance)
-    }
-
-    /// Get airports with scheduled service only
-    pub async fn get_scheduled_service_airports(&self) -> Result<Vec<Airport>> {
-        use crate::schema::airports::dsl::*;
-
-        let pool = self.pool.clone();
-        let result = tokio::task::spawn_blocking(move || {
-            let mut conn = pool.get()?;
-            let airport_models: Vec<AirportModel> = airports
-                .filter(scheduled_service.eq(true))
-                .order((name, ident))
-                .select(AirportModel::as_select())
-                .load(&mut conn)?;
-
-            Ok::<Vec<AirportModel>, anyhow::Error>(airport_models)
-        })
-        .await??;
-
-        Ok(result.into_iter().map(|model| model.into()).collect())
     }
 
     /// Fuzzy search airports by name, ICAO, IATA, or ident using trigram similarity
