@@ -682,7 +682,7 @@
           },
           "editorMode": "code",
           "expr": "aprs_elevation_queue_depth",
-          "legendFormat": "Elevation Queue (cap: 1K)",
+          "legendFormat": "Elevation Queue (async mode, cap: 100K)",
           "range": true,
           "refId": "F"
         },
@@ -1620,7 +1620,7 @@
           },
           "editorMode": "code",
           "expr": "aprs_aircraft_elevation_queue_ms{component=\"run\",quantile=\"0.5\"}",
-          "legendFormat": "Elevation Queue (P50)",
+          "legendFormat": "Elevation Queue Latency (async, P50)",
           "range": true,
           "refId": "G"
         },
@@ -1796,7 +1796,7 @@
           },
           "editorMode": "code",
           "expr": "aprs_aircraft_elevation_queue_ms{component=\"run\",quantile=\"0.95\"}",
-          "legendFormat": "Elevation Queue (P95)",
+          "legendFormat": "Elevation Queue Latency (async, P95)",
           "range": true,
           "refId": "G"
         },
@@ -1964,8 +1964,8 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "sum(rate(aprs_elevation_processed[5m]))",
-          "legendFormat": "Processed/sec",
+          "expr": "rate(aprs_elevation_sync_processed[5m])",
+          "legendFormat": "Sync Processed/sec",
           "range": true,
           "refId": "A"
         },
@@ -1975,8 +1975,8 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_elevation_queued[5m])",
-          "legendFormat": "Queued/sec",
+          "expr": "sum(rate(aprs_elevation_processed[5m]))",
+          "legendFormat": "Async Processed/sec",
           "range": true,
           "refId": "B"
         },
@@ -1986,8 +1986,8 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_elevation_dropped[5m])",
-          "legendFormat": "Dropped/sec",
+          "expr": "rate(aprs_elevation_queued[5m])",
+          "legendFormat": "Async Queued/sec",
           "range": true,
           "refId": "C"
         },
@@ -1997,13 +1997,24 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_elevation_channel_closed[5m])",
-          "legendFormat": "Channel Closed Errors/sec",
+          "expr": "rate(aprs_elevation_dropped[5m])",
+          "legendFormat": "Async Dropped/sec",
           "range": true,
           "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fe4qj1bybjncwc"
+          },
+          "editorMode": "code",
+          "expr": "rate(aprs_elevation_channel_closed[5m])",
+          "legendFormat": "Async Channel Closed Errors/sec",
+          "range": true,
+          "refId": "E"
         }
       ],
-      "title": "Elevation Tasks",
+      "title": "Elevation Tasks (Sync + Async)",
       "type": "timeseries"
     },
     {
@@ -2096,8 +2107,8 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "aprs_elevation_duration_ms{component=\"run\",quantile=\"0.5\"}",
-          "legendFormat": "P50",
+          "expr": "aprs_elevation_sync_duration_ms{component=\"run\",quantile=\"0.5\"}",
+          "legendFormat": "Sync P50",
           "range": true,
           "refId": "A"
         },
@@ -2107,8 +2118,8 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "aprs_elevation_duration_ms{component=\"run\",quantile=\"0.95\"}",
-          "legendFormat": "P95",
+          "expr": "aprs_elevation_sync_duration_ms{component=\"run\",quantile=\"0.95\"}",
+          "legendFormat": "Sync P95",
           "range": true,
           "refId": "B"
         },
@@ -2118,13 +2129,46 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "aprs_elevation_duration_ms{component=\"run\",quantile=\"0.99\"}",
-          "legendFormat": "P99",
+          "expr": "aprs_elevation_sync_duration_ms{component=\"run\",quantile=\"0.99\"}",
+          "legendFormat": "Sync P99",
           "range": true,
           "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fe4qj1bybjncwc"
+          },
+          "editorMode": "code",
+          "expr": "aprs_elevation_duration_ms{component=\"run\",quantile=\"0.5\"}",
+          "legendFormat": "Async P50",
+          "range": true,
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fe4qj1bybjncwc"
+          },
+          "editorMode": "code",
+          "expr": "aprs_elevation_duration_ms{component=\"run\",quantile=\"0.95\"}",
+          "legendFormat": "Async P95",
+          "range": true,
+          "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fe4qj1bybjncwc"
+          },
+          "editorMode": "code",
+          "expr": "aprs_elevation_duration_ms{component=\"run\",quantile=\"0.99\"}",
+          "legendFormat": "Async P99",
+          "range": true,
+          "refId": "F"
         }
       ],
-      "title": "Elevation Processing Duration",
+      "title": "Elevation Processing Duration (Sync + Async)",
       "type": "timeseries"
     },
     {
