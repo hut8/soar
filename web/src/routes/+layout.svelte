@@ -19,7 +19,7 @@
 		Radar,
 		Users,
 		Plane,
-		Radio,
+		PlaneTakeoff,
 		Antenna,
 		MapPin,
 		Wifi,
@@ -185,7 +185,7 @@
 							<Radar /> Operations
 						</a>
 						<a href={devicesPath} class="btn preset-filled-primary-500 btn-sm">
-							<Radio /> Devices
+							<Plane /> Aircraft
 						</a>
 						<a href={receiversPath} class="btn preset-filled-primary-500 btn-sm">
 							<Antenna /> Receivers
@@ -194,7 +194,7 @@
 							<MapPin /> Airports
 						</a>
 						<a href={flightsPath} class="btn preset-filled-primary-500 btn-sm">
-							<Plane /> Flights
+							<PlaneTakeoff /> Flights
 						</a>
 						<a
 							href={infoPath}
@@ -337,7 +337,7 @@
 					class="btn w-full justify-start preset-filled-primary-500"
 					onclick={() => (showMobileMenu = false)}
 				>
-					<Radio size={16} /> Devices
+					<Plane size={16} /> Aircraft
 				</a>
 				<a
 					href={receiversPath}
@@ -358,7 +358,7 @@
 					class="btn w-full justify-start preset-filled-primary-500"
 					onclick={() => (showMobileMenu = false)}
 				>
-					<Plane size={16} /> Flights
+					<PlaneTakeoff size={16} /> Flights
 				</a>
 				<a
 					href={infoPath}
