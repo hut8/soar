@@ -42,33 +42,6 @@ impl FlightsRepository {
         Ok(())
     }
 
-    /// Update landing time for a flight
-    pub async fn update_landing_time(
-        &self,
-        flight_id: Uuid,
-        landing_time_param: DateTime<Utc>,
-    ) -> Result<bool> {
-        use crate::schema::flights::dsl::*;
-
-        let pool = self.pool.clone();
-
-        let rows_affected = tokio::task::spawn_blocking(move || {
-            let mut conn = pool.get()?;
-
-            let rows = diesel::update(flights.filter(id.eq(flight_id)))
-                .set((
-                    landing_time.eq(&Some(landing_time_param)),
-                    updated_at.eq(Utc::now()),
-                ))
-                .execute(&mut conn)?;
-
-            Ok::<usize, anyhow::Error>(rows)
-        })
-        .await??;
-
-        Ok(rows_affected > 0)
-    }
-
     /// Update flight with landing information
     #[allow(clippy::too_many_arguments)]
     pub async fn update_flight_landing(

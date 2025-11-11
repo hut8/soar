@@ -125,34 +125,4 @@ The SOAR Team"#,
         let response = self.mailer.send(email).await?;
         Ok(response)
     }
-
-    pub async fn send_welcome_email(&self, to_email: &str, to_name: &str) -> Result<Response> {
-        let base_url =
-            std::env::var("BASE_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
-
-        let subject = "Welcome to SOAR!";
-        let body = format!(
-            r#"Hello {},
-
-Welcome to SOAR! Your account has been successfully created.
-
-You can access the system at: {}
-
-If you have any questions or need assistance, please don't hesitate to contact us.
-
-Best regards,
-The SOAR Team"#,
-            to_name, base_url
-        );
-
-        let email = Message::builder()
-            .from(format!("{} <{}>", self.from_name, self.from_email).parse()?)
-            .to(format!("{} <{}>", to_name, to_email).parse()?)
-            .subject(subject)
-            .header(ContentType::TEXT_PLAIN)
-            .body(body)?;
-
-        let response = self.mailer.send(email).await?;
-        Ok(response)
-    }
 }
