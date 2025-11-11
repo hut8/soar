@@ -936,7 +936,9 @@
 				center: { lat: center.lat(), lng: center.lng() },
 				zoom: 12,
 				mapId: 'FLIGHT_MAP',
-				mapTypeId: google.maps.MapTypeId.SATELLITE
+				mapTypeId: google.maps.MapTypeId.SATELLITE,
+				streetViewControl: false,
+				fullscreenControl: false
 			});
 
 			// Fit bounds

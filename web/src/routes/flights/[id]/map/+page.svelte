@@ -238,12 +238,6 @@
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	function getPlotlyLayout(isDark: boolean): any {
 		return {
-			title: {
-				text: 'Flight Profile',
-				font: {
-					color: isDark ? '#e5e7eb' : '#111827'
-				}
-			},
 			xaxis: {
 				title: {
 					text: 'Time',
@@ -582,7 +576,7 @@
 				mapTypeId: google.maps.MapTypeId.SATELLITE,
 				mapTypeControl: true,
 				mapTypeControlOptions: {
-					position: google.maps.ControlPosition.LEFT_BOTTOM,
+					position: google.maps.ControlPosition.RIGHT_TOP,
 					style: google.maps.MapTypeControlStyle.DEFAULT
 				},
 				streetViewControl: false,
@@ -847,22 +841,19 @@
 	}
 </script>
 
-<!-- Container that fills viewport below AppBar -->
-<div class="relative h-[calc(100vh-4rem)] w-full overflow-hidden">
+<!-- Container that fills viewport - using fixed positioning to break out of main container -->
+<div class="fixed inset-x-0 top-[42px] bottom-0 w-full overflow-hidden">
 	<!-- Map container -->
 	<div
 		bind:this={mapContainer}
-		class="absolute inset-0 h-full w-full"
-		style={isPanelCollapsed ? '' : 'height: calc(100% - 300px);'}
+		class="absolute top-0 right-0 left-0"
+		class:bottom-[48px]={isPanelCollapsed}
+		class:bottom-[300px]={!isPanelCollapsed}
 	></div>
 
 	<!-- Back button (top-left) -->
-	<button
-		onclick={goBack}
-		class="variant-filled-surface absolute top-4 left-4 z-[80] btn flex items-center gap-2 shadow-lg"
-	>
-		<ArrowLeft class="h-4 w-4" />
-		<span>Back to Flight</span>
+	<button onclick={goBack} class="location-btn absolute top-4 left-4 z-[80]" title="Back to Flight">
+		<ArrowLeft size={20} />
 	</button>
 
 	<!-- Bottom panel with altitude chart -->
@@ -871,7 +862,7 @@
 		style={isPanelCollapsed ? 'height: 48px;' : 'height: 300px;'}
 	>
 		<!-- Panel header -->
-		<div class="border-surface-300-600-token flex items-center justify-between border-b px-4 py-2">
+		<div class="flex items-center gap-3 px-4 py-2">
 			<button onclick={togglePanel} class="toggle-btn">
 				{#if isPanelCollapsed}
 					<ChevronUp class="h-4 w-4" />
@@ -884,7 +875,7 @@
 
 		<!-- Panel content -->
 		{#if !isPanelCollapsed}
-			<div class="h-[252px] w-full p-4">
+			<div class="h-[252px] w-full">
 				<div bind:this={altitudeChartContainer} class="h-full w-full"></div>
 			</div>
 		{/if}
@@ -892,7 +883,8 @@
 </div>
 
 <style>
-	/* Toggle button styling to match operations page buttons */
+	/* Button styling to match operations page buttons */
+	.location-btn,
 	.toggle-btn {
 		background: white;
 		color: #374151; /* Gray-700 for good contrast against white */
@@ -907,11 +899,13 @@
 		justify-content: center;
 	}
 
+	.location-btn:hover,
 	.toggle-btn:hover {
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 		transform: translateY(-1px);
 	}
 
+	.location-btn:focus,
 	.toggle-btn:focus {
 		outline: none;
 		box-shadow:
