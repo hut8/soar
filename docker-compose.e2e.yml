@@ -30,8 +30,3 @@ services:
         npx playwright install --with-deps chromium &&
         npx playwright test
       "
-
-networks:
-  soar-network:
-    external: true
-    name: soar-worktrees-feat-e2e-test-data-seeding_soar-network
