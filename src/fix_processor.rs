@@ -4,7 +4,7 @@ use tracing::{debug, error, trace, warn};
 
 use crate::Fix;
 use crate::device_repo::{DevicePacketFields, DeviceRepository};
-use crate::elevation::ElevationTask;
+use crate::elevation::{ElevationService, ElevationTask};
 use crate::fixes_repo::FixesRepository;
 use crate::flight_tracker::FlightTracker;
 use crate::nats_publisher::NatsFixPublisher;
@@ -14,6 +14,17 @@ use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
 use ogn_parser::AprsPacket;
 
+/// Elevation processing mode configuration
+#[derive(Clone)]
+pub enum ElevationMode {
+    /// Synchronous: Calculate elevation inline before database insert
+    Sync { elevation_db: ElevationService },
+    /// Asynchronous: Queue elevation tasks for processing by dedicated workers
+    Async {
+        channel: flume::Sender<ElevationTask>,
+    },
+}
+
 /// Database fix processor that saves valid fixes to the database and performs flight tracking
 #[derive(Clone)]
 pub struct FixProcessor {
@@ -22,8 +33,8 @@ pub struct FixProcessor {
     receiver_repo: ReceiverRepository,
     flight_detection_processor: FlightTracker,
     nats_publisher: Option<NatsFixPublisher>,
-    /// Sender for elevation processing tasks (bounded channel to prevent queue overflow)
-    elevation_tx: Option<flume::Sender<ElevationTask>>,
+    /// Elevation processing mode (sync or async)
+    elevation_mode: Option<ElevationMode>,
     /// APRS types to suppress from processing (e.g., OGADSB, OGFLR)
     suppressed_aprs_types: Vec<String>,
 }
@@ -36,14 +47,31 @@ impl FixProcessor {
             receiver_repo: ReceiverRepository::new(diesel_pool.clone()),
             flight_detection_processor: FlightTracker::new(&diesel_pool),
             nats_publisher: None,
-            elevation_tx: None,
+            elevation_mode: None,
             suppressed_aprs_types: Vec::new(),
         }
     }
 
-    /// Add elevation channel sender to the processor
+    /// Configure synchronous elevation processing
+    pub fn with_sync_elevation(mut self, elevation_db: ElevationService) -> Self {
+        self.elevation_mode = Some(ElevationMode::Sync { elevation_db });
+        self
+    }
+
+    /// Configure asynchronous elevation processing (legacy mode)
+    pub fn with_async_elevation(mut self, elevation_tx: flume::Sender<ElevationTask>) -> Self {
+        self.elevation_mode = Some(ElevationMode::Async {
+            channel: elevation_tx,
+        });
+        self
+    }
+
+    /// Add elevation channel sender to the processor (deprecated - use with_async_elevation)
+    #[deprecated(note = "Use with_async_elevation instead")]
     pub fn with_elevation_channel(mut self, elevation_tx: flume::Sender<ElevationTask>) -> Self {
-        self.elevation_tx = Some(elevation_tx);
+        self.elevation_mode = Some(ElevationMode::Async {
+            channel: elevation_tx,
+        });
         self
     }
 
@@ -66,7 +94,7 @@ impl FixProcessor {
             receiver_repo: ReceiverRepository::new(diesel_pool.clone()),
             flight_detection_processor: FlightTracker::new(&diesel_pool),
             nats_publisher: Some(nats_publisher),
-            elevation_tx: None,
+            elevation_mode: None,
             suppressed_aprs_types: Vec::new(),
         })
     }
@@ -82,7 +110,7 @@ impl FixProcessor {
             receiver_repo: ReceiverRepository::new(diesel_pool.clone()),
             flight_detection_processor: flight_tracker,
             nats_publisher: None,
-            elevation_tx: None,
+            elevation_mode: None,
             suppressed_aprs_types: Vec::new(),
         }
     }
@@ -101,7 +129,7 @@ impl FixProcessor {
             receiver_repo: ReceiverRepository::new(diesel_pool.clone()),
             flight_detection_processor: flight_tracker,
             nats_publisher: Some(nats_publisher),
-            elevation_tx: None,
+            elevation_mode: None,
             suppressed_aprs_types: Vec::new(),
         })
     }
@@ -269,7 +297,27 @@ impl FixProcessor {
 
     /// Internal method to process a fix through the complete pipeline
     #[tracing::instrument(skip(self, fix, raw_message), fields(device_id = %fix.device_id))]
-    async fn process_fix_internal(&self, fix: Fix, raw_message: &str) {
+    async fn process_fix_internal(&self, mut fix: Fix, raw_message: &str) {
+        // Step 0: Calculate elevation synchronously if in sync mode (before database insert)
+        // This ensures the fix is inserted with complete data including AGL altitude
+        if let Some(ElevationMode::Sync { elevation_db }) = &self.elevation_mode
+            && fix.altitude_msl_feet.is_some()
+        {
+            let elevation_start = std::time::Instant::now();
+
+            // Calculate AGL altitude synchronously
+            let agl =
+                crate::flight_tracker::altitude::calculate_altitude_agl(elevation_db, &fix).await;
+
+            // Update fix with AGL data before database insert
+            fix.altitude_agl_feet = agl;
+            fix.altitude_agl_valid = true; // Mark as valid even if agl is None (no elevation data available)
+
+            metrics::histogram!("aprs.elevation.sync_duration_ms")
+                .record(elevation_start.elapsed().as_micros() as f64 / 1000.0);
+            metrics::counter!("aprs.elevation.sync_processed").increment(1);
+        }
+
         // Step 1: Process through flight detection AND save to database
         // This is done atomically while holding a per-device lock to prevent race conditions
         let flight_insert_start = std::time::Instant::now();
@@ -354,9 +402,10 @@ impl FixProcessor {
                 .record(callsign_update_start.elapsed().as_micros() as f64 / 1000.0);
         }
 
-        // Step 4: Calculate and update altitude_agl via dedicated elevation channel
-        // This prevents slow elevation lookups from blocking the main processing queue
-        if let Some(elevation_tx) = &self.elevation_tx {
+        // Step 4: Calculate and update altitude_agl via dedicated elevation channel (async mode only)
+        // In sync mode, elevation was already calculated before database insert (Step 0)
+        // This prevents slow elevation lookups from blocking the main processing queue in async mode
+        if let Some(ElevationMode::Async { channel }) = &self.elevation_mode {
             let elevation_queue_start = std::time::Instant::now();
             let task = ElevationTask {
                 fix_id: updated_fix.id,
@@ -366,7 +415,7 @@ impl FixProcessor {
             // Send to elevation queue with blocking send_async
             // Never drops elevation tasks - applies backpressure if queue fills
             // Large queue (100K) prevents backpressure under normal conditions
-            match elevation_tx.send_async(task).await {
+            match channel.send_async(task).await {
                 Ok(_) => {
                     metrics::counter!("aprs.elevation.queued").increment(1);
                 }
