@@ -454,48 +454,6 @@ pub struct ReceiverRawMessagesResponse {
     pub total_pages: i64,
 }
 
-/// Get fix counts by APRS type for a specific receiver
-pub async fn get_receiver_fix_counts_by_aprs_type(
-    Path(id): Path<Uuid>,
-    State(state): State<AppState>,
-) -> impl IntoResponse {
-    use crate::fixes_repo::FixesRepository;
-
-    let receiver_repo = ReceiverRepository::new(state.pool.clone());
-    let fixes_repo = FixesRepository::new(state.pool.clone());
-
-    // First verify the receiver exists and get its callsign
-    let receiver = match receiver_repo.get_receiver_by_id(id).await {
-        Ok(Some(r)) => r,
-        Ok(None) => return json_error(StatusCode::NOT_FOUND, "Receiver not found").into_response(),
-        Err(e) => {
-            tracing::error!("Failed to get receiver {}: {}", id, e);
-            return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get receiver")
-                .into_response();
-        }
-    };
-
-    // Get fix counts grouped by APRS type
-    match fixes_repo
-        .get_fix_counts_by_aprs_type_for_source(&receiver.callsign)
-        .await
-    {
-        Ok(counts) => Json(ReceiverFixCountsByAprsTypeResponse { counts }).into_response(),
-        Err(e) => {
-            tracing::error!(
-                "Failed to get fix counts by APRS type for receiver {}: {}",
-                id,
-                e
-            );
-            json_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to get fix counts by APRS type",
-            )
-            .into_response()
-        }
-    }
-}
-
 #[derive(Debug, Serialize)]
 pub struct AprsTypeCount {
     pub aprs_type: String,
@@ -506,11 +464,6 @@ pub struct AprsTypeCount {
 pub struct DeviceFixCount {
     pub device_id: uuid::Uuid,
     pub count: i64,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ReceiverFixCountsByAprsTypeResponse {
-    pub counts: Vec<AprsTypeCount>,
 }
 
 /// Get statistics for a specific receiver
