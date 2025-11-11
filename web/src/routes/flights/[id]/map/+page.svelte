@@ -19,6 +19,7 @@
 	let altitudeInfoWindow = $state<google.maps.InfoWindow | null>(null);
 	let fixMarkers: google.maps.marker.AdvancedMarkerElement[] = [];
 	let pollingInterval: ReturnType<typeof setInterval> | null = null;
+	let hoverMarker = $state<google.maps.marker.AdvancedMarkerElement | null>(null);
 
 	// Display options
 	let isPanelCollapsed = $state(false);
@@ -547,31 +548,33 @@
 
 	// Callbacks for chart hover interaction with map
 	function handleChartHover(fix: (typeof data.fixes)[0]) {
-		if (!map || !altitudeInfoWindow) return;
+		if (!map) return;
 
-		const mslAlt = fix.altitude_msl_feet ? Math.round(fix.altitude_msl_feet) : 'N/A';
-		const aglAlt = fix.altitude_agl_feet ? Math.round(fix.altitude_agl_feet) : 'N/A';
-		const timestamp = dayjs(fix.timestamp).format('h:mm:ss A');
+		// Create or update hover marker
+		if (!hoverMarker) {
+			const markerContent = document.createElement('div');
+			markerContent.innerHTML = `
+				<div style="background-color: #f97316; width: 16px; height: 16px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.3);"></div>
+			`;
 
-		const content = `
-			<div style="padding: 8px; min-width: 180px;">
-				<div style="font-weight: bold; margin-bottom: 6px;">${timestamp}</div>
-				<div style="display: flex; flex-direction: column; gap: 4px;">
-					<div><span style="color: #3b82f6; font-weight: 600;">MSL:</span> ${mslAlt} ft</div>
-					<div><span style="color: #10b981; font-weight: 600;">AGL:</span> ${aglAlt} ft</div>
-				</div>
-			</div>
-		`;
-
-		altitudeInfoWindow.setContent(content);
-		altitudeInfoWindow.setPosition({ lat: fix.latitude, lng: fix.longitude });
-		altitudeInfoWindow.open(map);
-
-		map.panTo({ lat: fix.latitude, lng: fix.longitude });
+			hoverMarker = new google.maps.marker.AdvancedMarkerElement({
+				map,
+				position: { lat: fix.latitude, lng: fix.longitude },
+				content: markerContent,
+				zIndex: 1000
+			});
+		} else {
+			// Update position of existing marker
+			hoverMarker.position = { lat: fix.latitude, lng: fix.longitude };
+			hoverMarker.map = map;
+		}
 	}
 
 	function handleChartUnhover() {
-		altitudeInfoWindow?.close();
+		// Hide hover marker
+		if (hoverMarker) {
+			hoverMarker.map = null;
+		}
 	}
 
 	// Cleanup

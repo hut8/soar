@@ -52,6 +52,7 @@
 	let altitudeInfoWindow = $state<google.maps.InfoWindow | null>(null);
 	let fixMarkers: google.maps.marker.AdvancedMarkerElement[] = [];
 	let pollingInterval: ReturnType<typeof setInterval> | null = null;
+	let hoverMarker = $state<google.maps.marker.AdvancedMarkerElement | null>(null);
 
 	// Track user interaction with map
 	let hasUserInteracted = $state(false);
@@ -1019,6 +1020,37 @@
 		startPolling();
 	});
 
+	// Callbacks for chart hover interaction with map
+	function handleChartHover(fix: (typeof data.fixes)[0]) {
+		if (!map) return;
+
+		// Create or update hover marker
+		if (!hoverMarker) {
+			const markerContent = document.createElement('div');
+			markerContent.innerHTML = `
+				<div style="background-color: #f97316; width: 16px; height: 16px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.3);"></div>
+			`;
+
+			hoverMarker = new google.maps.marker.AdvancedMarkerElement({
+				map,
+				position: { lat: fix.latitude, lng: fix.longitude },
+				content: markerContent,
+				zIndex: 1000
+			});
+		} else {
+			// Update position of existing marker
+			hoverMarker.position = { lat: fix.latitude, lng: fix.longitude };
+			hoverMarker.map = map;
+		}
+	}
+
+	function handleChartUnhover() {
+		// Hide hover marker
+		if (hoverMarker) {
+			hoverMarker.map = null;
+		}
+	}
+
 	// Cleanup on component unmount
 	onDestroy(() => {
 		stopPolling();
@@ -1451,7 +1483,12 @@
 		<div class="card p-4">
 			<h2 class="mb-3 h3">Flight Profile</h2>
 			<div class="h-80 w-full">
-				<FlightProfile fixes={data.fixes} {hasAglData} />
+				<FlightProfile
+					fixes={data.fixes}
+					{hasAglData}
+					onHover={handleChartHover}
+					onUnhover={handleChartUnhover}
+				/>
 			</div>
 		</div>
 	{/if}
