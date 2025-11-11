@@ -22,7 +22,8 @@ export default defineConfig({
 	// Shared settings for all projects
 	use: {
 		// Base URL for navigation
-		baseURL: 'http://localhost:4173',
+		// Use PLAYWRIGHT_BASE_URL environment variable in CI/Docker, otherwise default to localhost
+		baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:4173',
 
 		// Collect trace on failure for debugging
 		trace: 'on-first-retry',
