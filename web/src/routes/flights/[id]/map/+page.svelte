@@ -7,7 +7,6 @@
 	import Plotly from 'plotly.js-dist-min';
 	import { ArrowLeft, ChevronDown, ChevronUp } from '@lucide/svelte';
 	import type { PageData } from './$types';
-	import type { Flight } from '$lib/types';
 	import dayjs from 'dayjs';
 	import { GOOGLE_MAPS_API_KEY } from '$lib/config';
 	import { serverCall } from '$lib/api/server';
@@ -24,13 +23,7 @@
 	let pollingInterval: ReturnType<typeof setInterval> | null = null;
 
 	// Display options
-	let includeNearbyFlights = $state(false);
 	let isPanelCollapsed = $state(false);
-
-	// Nearby flights data
-	let nearbyFlights = $state<Flight[]>([]);
-	let nearbyFlightPaths = $state<google.maps.Polyline[]>([]);
-	let isLoadingNearbyFlights = $state(false);
 
 	// Check if fixes have AGL data
 	const hasAglData = $derived(data.fixes.some((f) => f.altitude_agl_feet !== null));
@@ -118,6 +111,66 @@
 		return `rgb(${r}, ${g}, ${b})`;
 	}
 
+	// Calculate arrow scale based on zoom level (inversely proportional to zoom)
+	// Zoom 8 (far out) -> scale 1, Zoom 16 (close in) -> scale 4
+	function getArrowScale(zoom: number): number {
+		// Scale increases linearly with zoom: at zoom 8 = 1, at zoom 16 = 4
+		return Math.max(1, Math.min(5, (zoom - 8) * 0.5 + 1));
+	}
+
+	// Update arrow icons on all polyline segments based on current zoom
+	function updateArrowScales() {
+		if (!map) return;
+		const zoom = map.getZoom() ?? 12;
+		const scale = getArrowScale(zoom);
+		const minAlt = minAltitude() ?? 0;
+		const maxAlt = maxAltitude() ?? 1000;
+
+		// Track last arrow timestamp to display one every 10 minutes
+		let lastArrowTime: Date | null = null;
+		const TEN_MINUTES_MS = 10 * 60 * 1000;
+
+		const fixes = [...data.fixes].reverse();
+
+		flightPathSegments.forEach((segment, index) => {
+			const path = segment.getPath();
+			if (path.getLength() < 2) return;
+
+			// Get color based on segment index
+			if (index >= fixes.length) return;
+			const fix = fixes[index];
+			const color = altitudeToColor(fix.altitude_msl_feet, minAlt, maxAlt);
+
+			// Check if we should display an arrow for this segment
+			const fixTime = new Date(fix.timestamp);
+			const shouldShowArrow =
+				lastArrowTime === null || fixTime.getTime() - lastArrowTime.getTime() >= TEN_MINUTES_MS;
+
+			// Only add arrow icon if this segment should have one
+			const icons = [];
+			if (shouldShowArrow) {
+				const arrowSymbol = {
+					path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+					fillColor: color,
+					fillOpacity: 1,
+					strokeColor: color,
+					strokeOpacity: 0.8,
+					strokeWeight: 1,
+					scale: scale
+				};
+				icons.push({
+					icon: arrowSymbol,
+					offset: '50%'
+				});
+				lastArrowTime = fixTime;
+			}
+
+			segment.setOptions({
+				icons: icons
+			});
+		});
+	}
+
 	// Helper function to create gradient polyline segments
 	function createGradientPolylines(
 		fixesInOrder: typeof data.fixes,
@@ -126,12 +179,42 @@
 		const minAlt = minAltitude() ?? 0;
 		const maxAlt = maxAltitude() ?? 1000;
 		const segments: google.maps.Polyline[] = [];
+		const zoom = targetMap.getZoom() ?? 12;
+		const scale = getArrowScale(zoom);
+
+		// Track last arrow timestamp to display one every 10 minutes
+		let lastArrowTime: Date | null = null;
+		const TEN_MINUTES_MS = 10 * 60 * 1000;
 
 		for (let i = 0; i < fixesInOrder.length - 1; i++) {
 			const fix1 = fixesInOrder[i];
 			const fix2 = fixesInOrder[i + 1];
 
 			const color = altitudeToColor(fix1.altitude_msl_feet, minAlt, maxAlt);
+
+			// Check if we should display an arrow for this segment
+			const fix1Time = new Date(fix1.timestamp);
+			const shouldShowArrow =
+				lastArrowTime === null || fix1Time.getTime() - lastArrowTime.getTime() >= TEN_MINUTES_MS;
+
+			// Define arrow symbol for this segment if needed
+			const icons = [];
+			if (shouldShowArrow) {
+				const arrowSymbol = {
+					path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+					fillColor: color,
+					fillOpacity: 1,
+					strokeColor: color,
+					strokeOpacity: 0.8,
+					strokeWeight: 1,
+					scale: scale
+				};
+				icons.push({
+					icon: arrowSymbol,
+					offset: '50%'
+				});
+				lastArrowTime = fix1Time;
+			}
 
 			const segment = new google.maps.Polyline({
 				path: [
@@ -141,7 +224,8 @@
 				geodesic: true,
 				strokeColor: color,
 				strokeOpacity: 1.0,
-				strokeWeight: 3
+				strokeWeight: 3,
+				icons: icons
 			});
 
 			segment.setMap(targetMap);
@@ -154,12 +238,6 @@
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	function getPlotlyLayout(isDark: boolean): any {
 		return {
-			title: {
-				text: 'Altitude Profile',
-				font: {
-					color: isDark ? '#e5e7eb' : '#111827'
-				}
-			},
 			xaxis: {
 				title: {
 					text: 'Time',
@@ -182,6 +260,19 @@
 				color: isDark ? '#9ca3af' : '#6b7280',
 				gridcolor: isDark ? '#374151' : '#e5e7eb'
 			},
+			yaxis2: {
+				title: {
+					text: 'Ground Speed (kt)',
+					font: {
+						color: isDark ? '#e5e7eb' : '#111827'
+					}
+				},
+				overlaying: 'y',
+				side: 'right',
+				rangemode: 'tozero',
+				color: isDark ? '#9ca3af' : '#6b7280',
+				showgrid: false
+			},
 			hovermode: 'x unified',
 			showlegend: true,
 			legend: {
@@ -192,7 +283,7 @@
 					color: isDark ? '#e5e7eb' : '#111827'
 				}
 			},
-			margin: { l: 60, r: 20, t: 40, b: 60 },
+			margin: { l: 60, r: 60, t: 40, b: 60 },
 			paper_bgcolor: isDark ? '#1f2937' : '#ffffff',
 			plot_bgcolor: isDark ? '#111827' : '#f9fafb'
 		};
@@ -200,70 +291,6 @@
 
 	function isFlightInProgress(): boolean {
 		return data.flight.state === 'active';
-	}
-
-	// Handle nearby flights toggle
-	function handleNearbyFlightsToggle() {
-		if (includeNearbyFlights) {
-			fetchNearbyFlights();
-		} else {
-			// Clear nearby flights from map
-			nearbyFlightPaths.forEach((path) => path.setMap(null));
-			nearbyFlightPaths = [];
-			nearbyFlights = [];
-		}
-	}
-
-	async function fetchNearbyFlights() {
-		isLoadingNearbyFlights = true;
-		try {
-			const flights = await serverCall<Flight[]>(`/flights/${data.flight.id}/nearby`);
-			nearbyFlights = flights;
-
-			if (map) {
-				// Clear existing nearby flight paths
-				nearbyFlightPaths.forEach((path) => path.setMap(null));
-				nearbyFlightPaths = [];
-
-				// Color palette for nearby flights
-				const colors = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'];
-
-				for (let i = 0; i < nearbyFlights.length; i++) {
-					const nearbyFlight = nearbyFlights[i];
-					try {
-						const fixesResponse = await serverCall<{
-							fixes: typeof data.fixes;
-							count: number;
-						}>(`/flights/${nearbyFlight.id}/fixes`);
-
-						if (fixesResponse.fixes.length > 0) {
-							const fixesInOrder = [...fixesResponse.fixes].reverse();
-							const pathCoordinates = fixesInOrder.map((fix) => ({
-								lat: fix.latitude,
-								lng: fix.longitude
-							}));
-
-							const flightPath = new google.maps.Polyline({
-								path: pathCoordinates,
-								geodesic: true,
-								strokeColor: colors[i % colors.length],
-								strokeOpacity: 0.6,
-								strokeWeight: 2
-							});
-
-							flightPath.setMap(map);
-							nearbyFlightPaths.push(flightPath);
-						}
-					} catch (err) {
-						console.error(`Failed to fetch fixes for nearby flight ${nearbyFlight.id}:`, err);
-					}
-				}
-			}
-		} catch (err) {
-			console.error('Failed to fetch nearby flights:', err);
-		} finally {
-			isLoadingNearbyFlights = false;
-		}
 	}
 
 	// Poll for updates to in-progress flights
@@ -546,7 +573,15 @@
 				center: { lat: center.lat(), lng: center.lng() },
 				zoom: 12,
 				mapId: 'FLIGHT_MAP',
-				mapTypeId: google.maps.MapTypeId.SATELLITE
+				mapTypeId: google.maps.MapTypeId.SATELLITE,
+				mapTypeControl: true,
+				mapTypeControlOptions: {
+					position: google.maps.ControlPosition.RIGHT_TOP,
+					style: google.maps.MapTypeControlStyle.DEFAULT
+				},
+				streetViewControl: false,
+				fullscreenControl: false,
+				zoomControl: false
 			});
 
 			// Fit bounds
@@ -554,6 +589,11 @@
 
 			// Create gradient polyline segments
 			flightPathSegments = createGradientPolylines(fixesInOrder, map);
+
+			// Add zoom listener to update arrow scales
+			map.addListener('zoom_changed', () => {
+				updateArrowScales();
+			});
 
 			// Create info window
 			altitudeInfoWindow = new google.maps.InfoWindow();
@@ -605,6 +645,7 @@
 				const fixesInOrder = [...data.fixes].reverse();
 				const timestamps = fixesInOrder.map((fix) => new Date(fix.timestamp));
 				const altitudesMsl = fixesInOrder.map((fix) => fix.altitude_msl_feet || 0);
+				const groundSpeeds = fixesInOrder.map((fix) => fix.ground_speed_knots || 0);
 
 				const traces = [
 					{
@@ -630,6 +671,20 @@
 						hovertemplate: '<b>AGL:</b> %{y:.0f} ft<br>%{x}<extra></extra>'
 					});
 				}
+
+				// Add ground speed trace on secondary y-axis
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				const groundSpeedTrace: any = {
+					x: timestamps,
+					y: groundSpeeds,
+					type: 'scatter' as const,
+					mode: 'lines' as const,
+					name: 'Ground Speed',
+					line: { color: '#f59e0b', width: 2 },
+					yaxis: 'y2',
+					hovertemplate: '<b>GS:</b> %{y:.0f} kt<br>%{x}<extra></extra>'
+				};
+				traces.push(groundSpeedTrace);
 
 				// eslint-disable-next-line @typescript-eslint/no-explicit-any
 				const layout: any = getPlotlyLayout($theme === 'dark');
@@ -701,6 +756,77 @@
 		}
 	});
 
+	// Recreate chart when panel is expanded
+	$effect(() => {
+		if (!isPanelCollapsed && altitudeChartContainer && Plotly && data.fixes.length > 0) {
+			// Wait for next tick to ensure DOM is ready
+			setTimeout(async () => {
+				if (!altitudeChartContainer) return; // Double-check container exists
+				try {
+					const fixesInOrder = [...data.fixes].reverse();
+
+					const timestamps = fixesInOrder.map((fix) => new Date(fix.timestamp).toISOString());
+					const altitudes = fixesInOrder.map((fix) => fix.altitude_msl_feet || 0);
+					const groundSpeeds = fixesInOrder.map((fix) => fix.ground_speed_knots || 0);
+
+					// eslint-disable-next-line @typescript-eslint/no-explicit-any
+					const traces: any[] = [
+						{
+							x: timestamps,
+							y: altitudes,
+							type: 'scatter' as const,
+							mode: 'lines' as const,
+							name: 'MSL Altitude',
+							line: { color: '#3b82f6', width: 2 },
+							hovertemplate: '<b>MSL:</b> %{y:.0f} ft<br>%{x}<extra></extra>'
+						}
+					];
+
+					if (hasAglData) {
+						const aglAltitudes = fixesInOrder.map((fix) => fix.altitude_agl_feet || 0);
+						traces.push({
+							x: timestamps,
+							y: aglAltitudes,
+							type: 'scatter' as const,
+							mode: 'lines' as const,
+							name: 'AGL Altitude',
+							line: { color: '#10b981', width: 2 },
+							hovertemplate: '<b>AGL:</b> %{y:.0f} ft<br>%{x}<extra></extra>'
+						});
+					}
+
+					// Add ground speed trace on secondary y-axis
+					// eslint-disable-next-line @typescript-eslint/no-explicit-any
+					const groundSpeedTrace: any = {
+						x: timestamps,
+						y: groundSpeeds,
+						type: 'scatter' as const,
+						mode: 'lines' as const,
+						name: 'Ground Speed',
+						line: { color: '#f59e0b', width: 2 },
+						yaxis: 'y2',
+						hovertemplate: '<b>GS:</b> %{y:.0f} kt<br>%{x}<extra></extra>'
+					};
+					traces.push(groundSpeedTrace);
+
+					// eslint-disable-next-line @typescript-eslint/no-explicit-any
+					const layout: any = getPlotlyLayout($theme === 'dark');
+					// eslint-disable-next-line @typescript-eslint/no-explicit-any
+					const config: any = {
+						responsive: true,
+						displayModeBar: true,
+						displaylogo: false,
+						modeBarButtonsToRemove: ['pan2d', 'lasso2d', 'select2d']
+					};
+
+					await Plotly.newPlot(altitudeChartContainer, traces, layout, config);
+				} catch (error) {
+					console.error('Failed to recreate chart after panel expand:', error);
+				}
+			}, 100);
+		}
+	});
+
 	// Cleanup
 	onDestroy(() => {
 		stopPolling();
@@ -715,41 +841,20 @@
 	}
 </script>
 
-<!-- Container that fills viewport below AppBar -->
-<div class="relative h-[calc(100vh-4rem)] w-full overflow-hidden">
+<!-- Container that fills viewport - using fixed positioning to break out of main container -->
+<div class="fixed inset-x-0 top-[42px] bottom-0 w-full overflow-hidden">
 	<!-- Map container -->
 	<div
 		bind:this={mapContainer}
-		class="absolute inset-0 h-full w-full"
-		style={isPanelCollapsed ? '' : 'height: calc(100% - 300px);'}
+		class="absolute top-0 right-0 left-0"
+		class:bottom-[48px]={isPanelCollapsed}
+		class:bottom-[300px]={!isPanelCollapsed}
 	></div>
 
 	<!-- Back button (top-left) -->
-	<button
-		onclick={goBack}
-		class="variant-filled-surface absolute top-4 left-4 z-[80] btn flex items-center gap-2 shadow-lg"
-	>
-		<ArrowLeft class="h-4 w-4" />
-		<span>Back to Flight</span>
+	<button onclick={goBack} class="location-btn absolute top-4 left-4 z-[80]" title="Back to Flight">
+		<ArrowLeft size={20} />
 	</button>
-
-	<!-- Nearby flights toggle (top-right) -->
-	<div class="absolute top-4 right-4 z-[80]">
-		<label
-			class="bg-surface-50-900-token flex cursor-pointer items-center gap-2 rounded-lg p-3 shadow-lg"
-		>
-			<input
-				type="checkbox"
-				class="checkbox"
-				bind:checked={includeNearbyFlights}
-				onchange={handleNearbyFlightsToggle}
-			/>
-			<span class="text-sm">Nearby Flights</span>
-			{#if isLoadingNearbyFlights}
-				<span class="text-surface-600-300-token text-xs">(Loading...)</span>
-			{/if}
-		</label>
-	</div>
 
 	<!-- Bottom panel with altitude chart -->
 	<div
@@ -757,22 +862,54 @@
 		style={isPanelCollapsed ? 'height: 48px;' : 'height: 300px;'}
 	>
 		<!-- Panel header -->
-		<div class="border-surface-300-600-token flex items-center justify-between border-b px-4 py-2">
-			<h3 class="font-semibold">Altitude Profile</h3>
-			<button onclick={togglePanel} class="variant-soft btn-icon btn-icon-sm">
+		<div class="flex items-center gap-3 px-4 py-2">
+			<button onclick={togglePanel} class="toggle-btn">
 				{#if isPanelCollapsed}
 					<ChevronUp class="h-4 w-4" />
 				{:else}
 					<ChevronDown class="h-4 w-4" />
 				{/if}
 			</button>
+			<h3 class="font-semibold">Flight Profile</h3>
 		</div>
 
 		<!-- Panel content -->
 		{#if !isPanelCollapsed}
-			<div class="h-[252px] w-full p-4">
+			<div class="h-[252px] w-full">
 				<div bind:this={altitudeChartContainer} class="h-full w-full"></div>
 			</div>
 		{/if}
 	</div>
 </div>
+
+<style>
+	/* Button styling to match operations page buttons */
+	.location-btn,
+	.toggle-btn {
+		background: white;
+		color: #374151; /* Gray-700 for good contrast against white */
+		border: none;
+		border-radius: 0.375rem;
+		padding: 0.75rem;
+		cursor: pointer;
+		transition: all 200ms;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.location-btn:hover,
+	.toggle-btn:hover {
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+		transform: translateY(-1px);
+	}
+
+	.location-btn:focus,
+	.toggle-btn:focus {
+		outline: none;
+		box-shadow:
+			0 0 0 2px rgba(59, 130, 246, 0.5),
+			0 2px 8px rgba(0, 0, 0, 0.15);
+	}
+</style>
