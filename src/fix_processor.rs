@@ -66,15 +66,6 @@ impl FixProcessor {
         self
     }
 
-    /// Add elevation channel sender to the processor (deprecated - use with_async_elevation)
-    #[deprecated(note = "Use with_async_elevation instead")]
-    pub fn with_elevation_channel(mut self, elevation_tx: flume::Sender<ElevationTask>) -> Self {
-        self.elevation_mode = Some(ElevationMode::Async {
-            channel: elevation_tx,
-        });
-        self
-    }
-
     /// Set APRS types to suppress from processing
     pub fn with_suppressed_aprs_types(mut self, types: Vec<String>) -> Self {
         self.suppressed_aprs_types = types;
