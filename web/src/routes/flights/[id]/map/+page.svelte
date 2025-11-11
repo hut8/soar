@@ -4,26 +4,25 @@
 	import { SvelteSet } from 'svelte/reactivity';
 	import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
 	import { goto } from '$app/navigation';
-	import Plotly from 'plotly.js-dist-min';
 	import { ArrowLeft, ChevronDown, ChevronUp } from '@lucide/svelte';
 	import type { PageData } from './$types';
 	import dayjs from 'dayjs';
 	import { GOOGLE_MAPS_API_KEY } from '$lib/config';
 	import { serverCall } from '$lib/api/server';
-	import { theme } from '$lib/stores/theme';
+	import FlightProfile from '$lib/components/FlightProfile.svelte';
 
 	let { data }: { data: PageData } = $props();
 
 	let mapContainer = $state<HTMLElement>();
 	let map = $state<google.maps.Map>();
 	let flightPathSegments = $state<google.maps.Polyline[]>([]);
-	let altitudeChartContainer = $state<HTMLElement>();
 	let altitudeInfoWindow = $state<google.maps.InfoWindow | null>(null);
 	let fixMarkers: google.maps.marker.AdvancedMarkerElement[] = [];
 	let pollingInterval: ReturnType<typeof setInterval> | null = null;
 
 	// Display options
 	let isPanelCollapsed = $state(false);
+	let chartRecreateTrigger = $state(0);
 
 	// Check if fixes have AGL data
 	const hasAglData = $derived(data.fixes.some((f) => f.altitude_agl_feet !== null));
@@ -235,60 +234,6 @@
 		return segments;
 	}
 
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	function getPlotlyLayout(isDark: boolean): any {
-		return {
-			xaxis: {
-				title: {
-					text: 'Time',
-					font: {
-						color: isDark ? '#e5e7eb' : '#111827'
-					}
-				},
-				type: 'date',
-				color: isDark ? '#9ca3af' : '#6b7280',
-				gridcolor: isDark ? '#374151' : '#e5e7eb'
-			},
-			yaxis: {
-				title: {
-					text: 'Altitude (ft)',
-					font: {
-						color: isDark ? '#e5e7eb' : '#111827'
-					}
-				},
-				rangemode: 'tozero',
-				color: isDark ? '#9ca3af' : '#6b7280',
-				gridcolor: isDark ? '#374151' : '#e5e7eb'
-			},
-			yaxis2: {
-				title: {
-					text: 'Ground Speed (kt)',
-					font: {
-						color: isDark ? '#e5e7eb' : '#111827'
-					}
-				},
-				overlaying: 'y',
-				side: 'right',
-				rangemode: 'tozero',
-				color: isDark ? '#9ca3af' : '#6b7280',
-				showgrid: false
-			},
-			hovermode: 'x unified',
-			showlegend: true,
-			legend: {
-				x: 0.01,
-				y: 0.99,
-				bgcolor: isDark ? 'rgba(31, 41, 55, 0.8)' : 'rgba(255, 255, 255, 0.8)',
-				font: {
-					color: isDark ? '#e5e7eb' : '#111827'
-				}
-			},
-			margin: { l: 60, r: 60, t: 40, b: 60 },
-			paper_bgcolor: isDark ? '#1f2937' : '#ffffff',
-			plot_bgcolor: isDark ? '#111827' : '#f9fafb'
-		};
-	}
-
 	function isFlightInProgress(): boolean {
 		return data.flight.state === 'active';
 	}
@@ -327,9 +272,9 @@
 				stopPolling();
 			}
 
-			// Only update map/chart if we got new fixes
+			// Only update map if we got new fixes (chart will update automatically via reactivity)
 			if (fixesResponse.fixes.length > 0) {
-				updateMapAndChart();
+				updateMap();
 			}
 		} catch (err) {
 			console.error('Failed to poll for flight updates:', err);
@@ -351,82 +296,31 @@
 		}
 	}
 
-	// Update map and altitude chart with new data
-	async function updateMapAndChart() {
-		if (data.fixes.length === 0) return;
+	// Update map with new data
+	function updateMap() {
+		if (data.fixes.length === 0 || !map || flightPathSegments.length === 0) return;
 
-		// Update map
-		if (map && flightPathSegments.length > 0) {
-			const fixesInOrder = [...data.fixes].reverse();
+		const fixesInOrder = [...data.fixes].reverse();
 
-			// Clear existing flight path segments
-			flightPathSegments.forEach((segment) => {
-				segment.setMap(null);
-			});
-			flightPathSegments = [];
+		// Clear existing flight path segments
+		flightPathSegments.forEach((segment) => {
+			segment.setMap(null);
+		});
+		flightPathSegments = [];
 
-			// Create new gradient polyline segments
-			flightPathSegments = createGradientPolylines(fixesInOrder, map);
+		// Create new gradient polyline segments
+		flightPathSegments = createGradientPolylines(fixesInOrder, map);
 
-			// Clear existing fix markers
-			fixMarkers.forEach((marker) => {
-				marker.map = null;
-			});
-			fixMarkers = [];
+		// Clear existing fix markers
+		fixMarkers.forEach((marker) => {
+			marker.map = null;
+		});
+		fixMarkers = [];
 
-			// Wait for map to be ready before adding markers
-			google.maps.event.addListenerOnce(map, 'idle', () => {
-				addFixMarkers(fixesInOrder);
-			});
-		}
-
-		// Update altitude chart
-		if (altitudeChartContainer && data.fixes.length > 0) {
-			try {
-				const fixesInOrder = [...data.fixes].reverse();
-				const timestamps = fixesInOrder.map((fix) => new Date(fix.timestamp));
-				const altitudesMsl = fixesInOrder.map((fix) => fix.altitude_msl_feet || 0);
-
-				const traces = [
-					{
-						x: timestamps,
-						y: altitudesMsl,
-						type: 'scatter' as const,
-						mode: 'lines' as const,
-						name: 'MSL Altitude',
-						line: { color: '#3b82f6', width: 2 },
-						hovertemplate: '<b>MSL:</b> %{y:.0f} ft<br>%{x}<extra></extra>'
-					}
-				];
-
-				if (hasAglData) {
-					const altitudesAgl = fixesInOrder.map((fix) => fix.altitude_agl_feet || 0);
-					traces.push({
-						x: timestamps,
-						y: altitudesAgl,
-						type: 'scatter' as const,
-						mode: 'lines' as const,
-						name: 'AGL Altitude',
-						line: { color: '#10b981', width: 2 },
-						hovertemplate: '<b>AGL:</b> %{y:.0f} ft<br>%{x}<extra></extra>'
-					});
-				}
-
-				// eslint-disable-next-line @typescript-eslint/no-explicit-any
-				const layout: any = getPlotlyLayout($theme === 'dark');
-				// eslint-disable-next-line @typescript-eslint/no-explicit-any
-				const config: any = {
-					responsive: true,
-					displayModeBar: true,
-					displaylogo: false,
-					modeBarButtonsToRemove: ['pan2d', 'lasso2d', 'select2d']
-				};
-
-				await Plotly.react(altitudeChartContainer, traces, layout, config);
-			} catch (error) {
-				console.error('Failed to update altitude chart:', error);
-			}
-		}
+		// Wait for map to be ready before adding markers
+		google.maps.event.addListenerOnce(map, 'idle', () => {
+			addFixMarkers(fixesInOrder);
+		});
 	}
 
 	function addFixMarkers(fixesInOrder: typeof data.fixes) {
@@ -639,193 +533,46 @@
 			console.error('Failed to load Google Maps:', error);
 		}
 
-		// Initialize altitude chart
-		if (altitudeChartContainer && data.fixes.length > 0) {
-			try {
-				const fixesInOrder = [...data.fixes].reverse();
-				const timestamps = fixesInOrder.map((fix) => new Date(fix.timestamp));
-				const altitudesMsl = fixesInOrder.map((fix) => fix.altitude_msl_feet || 0);
-				const groundSpeeds = fixesInOrder.map((fix) => fix.ground_speed_knots || 0);
-
-				const traces = [
-					{
-						x: timestamps,
-						y: altitudesMsl,
-						type: 'scatter' as const,
-						mode: 'lines' as const,
-						name: 'MSL Altitude',
-						line: { color: '#3b82f6', width: 2 },
-						hovertemplate: '<b>MSL:</b> %{y:.0f} ft<br>%{x}<extra></extra>'
-					}
-				];
-
-				if (hasAglData) {
-					const altitudesAgl = fixesInOrder.map((fix) => fix.altitude_agl_feet || 0);
-					traces.push({
-						x: timestamps,
-						y: altitudesAgl,
-						type: 'scatter' as const,
-						mode: 'lines' as const,
-						name: 'AGL Altitude',
-						line: { color: '#10b981', width: 2 },
-						hovertemplate: '<b>AGL:</b> %{y:.0f} ft<br>%{x}<extra></extra>'
-					});
-				}
-
-				// Add ground speed trace on secondary y-axis
-				// eslint-disable-next-line @typescript-eslint/no-explicit-any
-				const groundSpeedTrace: any = {
-					x: timestamps,
-					y: groundSpeeds,
-					type: 'scatter' as const,
-					mode: 'lines' as const,
-					name: 'Ground Speed',
-					line: { color: '#f59e0b', width: 2 },
-					yaxis: 'y2',
-					hovertemplate: '<b>GS:</b> %{y:.0f} kt<br>%{x}<extra></extra>'
-				};
-				traces.push(groundSpeedTrace);
-
-				// eslint-disable-next-line @typescript-eslint/no-explicit-any
-				const layout: any = getPlotlyLayout($theme === 'dark');
-				// eslint-disable-next-line @typescript-eslint/no-explicit-any
-				const config: any = {
-					responsive: true,
-					displayModeBar: true,
-					displaylogo: false,
-					modeBarButtonsToRemove: ['pan2d', 'lasso2d', 'select2d']
-				};
-
-				await Plotly.newPlot(altitudeChartContainer, traces, layout, config);
-
-				// Add hover event to highlight position on map
-				// eslint-disable-next-line @typescript-eslint/no-explicit-any
-				altitudeChartContainer.addEventListener('plotly_hover', (event: any) => {
-					const data_event = event.detail || event;
-					if (data_event.points && data_event.points.length > 0) {
-						const pointIndex = data_event.points[0].pointIndex;
-						if (pointIndex >= 0 && pointIndex < fixesInOrder.length) {
-							const fix = fixesInOrder[pointIndex];
-							const mslAlt = fix.altitude_msl_feet ? Math.round(fix.altitude_msl_feet) : 'N/A';
-							const aglAlt = fix.altitude_agl_feet ? Math.round(fix.altitude_agl_feet) : 'N/A';
-							const timestamp = dayjs(fix.timestamp).format('h:mm:ss A');
-
-							const content = `
-								<div style="padding: 8px; min-width: 180px;">
-									<div style="font-weight: bold; margin-bottom: 6px;">${timestamp}</div>
-									<div style="display: flex; flex-direction: column; gap: 4px;">
-										<div><span style="color: #3b82f6; font-weight: 600;">MSL:</span> ${mslAlt} ft</div>
-										<div><span style="color: #10b981; font-weight: 600;">AGL:</span> ${aglAlt} ft</div>
-									</div>
-								</div>
-							`;
-
-							altitudeInfoWindow?.setContent(content);
-							altitudeInfoWindow?.setPosition({ lat: fix.latitude, lng: fix.longitude });
-							altitudeInfoWindow?.open(map);
-
-							map?.panTo({ lat: fix.latitude, lng: fix.longitude });
-						}
-					}
-				});
-
-				altitudeChartContainer.addEventListener('plotly_unhover', () => {
-					altitudeInfoWindow?.close();
-				});
-			} catch (error) {
-				console.error('Failed to create altitude chart:', error);
-			}
-		}
-
 		// Start polling if flight is in progress
 		startPolling();
 	});
 
-	// Update chart when theme changes
-	$effect(() => {
-		const currentTheme = $theme;
-
-		if (altitudeChartContainer && Plotly && data.fixes.length > 0) {
-			const isDark = currentTheme === 'dark';
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			const currentData = (altitudeChartContainer as any).data || [];
-
-			if (currentData.length > 0) {
-				Plotly.react(altitudeChartContainer, currentData, getPlotlyLayout(isDark));
-			}
-		}
-	});
-
 	// Recreate chart when panel is expanded
 	$effect(() => {
-		if (!isPanelCollapsed && altitudeChartContainer && Plotly && data.fixes.length > 0) {
-			// Wait for next tick to ensure DOM is ready
-			setTimeout(async () => {
-				if (!altitudeChartContainer) return; // Double-check container exists
-				try {
-					const fixesInOrder = [...data.fixes].reverse();
-
-					const timestamps = fixesInOrder.map((fix) => new Date(fix.timestamp).toISOString());
-					const altitudes = fixesInOrder.map((fix) => fix.altitude_msl_feet || 0);
-					const groundSpeeds = fixesInOrder.map((fix) => fix.ground_speed_knots || 0);
-
-					// eslint-disable-next-line @typescript-eslint/no-explicit-any
-					const traces: any[] = [
-						{
-							x: timestamps,
-							y: altitudes,
-							type: 'scatter' as const,
-							mode: 'lines' as const,
-							name: 'MSL Altitude',
-							line: { color: '#3b82f6', width: 2 },
-							hovertemplate: '<b>MSL:</b> %{y:.0f} ft<br>%{x}<extra></extra>'
-						}
-					];
-
-					if (hasAglData) {
-						const aglAltitudes = fixesInOrder.map((fix) => fix.altitude_agl_feet || 0);
-						traces.push({
-							x: timestamps,
-							y: aglAltitudes,
-							type: 'scatter' as const,
-							mode: 'lines' as const,
-							name: 'AGL Altitude',
-							line: { color: '#10b981', width: 2 },
-							hovertemplate: '<b>AGL:</b> %{y:.0f} ft<br>%{x}<extra></extra>'
-						});
-					}
-
-					// Add ground speed trace on secondary y-axis
-					// eslint-disable-next-line @typescript-eslint/no-explicit-any
-					const groundSpeedTrace: any = {
-						x: timestamps,
-						y: groundSpeeds,
-						type: 'scatter' as const,
-						mode: 'lines' as const,
-						name: 'Ground Speed',
-						line: { color: '#f59e0b', width: 2 },
-						yaxis: 'y2',
-						hovertemplate: '<b>GS:</b> %{y:.0f} kt<br>%{x}<extra></extra>'
-					};
-					traces.push(groundSpeedTrace);
-
-					// eslint-disable-next-line @typescript-eslint/no-explicit-any
-					const layout: any = getPlotlyLayout($theme === 'dark');
-					// eslint-disable-next-line @typescript-eslint/no-explicit-any
-					const config: any = {
-						responsive: true,
-						displayModeBar: true,
-						displaylogo: false,
-						modeBarButtonsToRemove: ['pan2d', 'lasso2d', 'select2d']
-					};
-
-					await Plotly.newPlot(altitudeChartContainer, traces, layout, config);
-				} catch (error) {
-					console.error('Failed to recreate chart after panel expand:', error);
-				}
-			}, 100);
+		if (!isPanelCollapsed) {
+			// Trigger chart recreation when panel expands
+			chartRecreateTrigger++;
 		}
 	});
+
+	// Callbacks for chart hover interaction with map
+	function handleChartHover(fix: (typeof data.fixes)[0]) {
+		if (!map || !altitudeInfoWindow) return;
+
+		const mslAlt = fix.altitude_msl_feet ? Math.round(fix.altitude_msl_feet) : 'N/A';
+		const aglAlt = fix.altitude_agl_feet ? Math.round(fix.altitude_agl_feet) : 'N/A';
+		const timestamp = dayjs(fix.timestamp).format('h:mm:ss A');
+
+		const content = `
+			<div style="padding: 8px; min-width: 180px;">
+				<div style="font-weight: bold; margin-bottom: 6px;">${timestamp}</div>
+				<div style="display: flex; flex-direction: column; gap: 4px;">
+					<div><span style="color: #3b82f6; font-weight: 600;">MSL:</span> ${mslAlt} ft</div>
+					<div><span style="color: #10b981; font-weight: 600;">AGL:</span> ${aglAlt} ft</div>
+				</div>
+			</div>
+		`;
+
+		altitudeInfoWindow.setContent(content);
+		altitudeInfoWindow.setPosition({ lat: fix.latitude, lng: fix.longitude });
+		altitudeInfoWindow.open(map);
+
+		map.panTo({ lat: fix.latitude, lng: fix.longitude });
+	}
+
+	function handleChartUnhover() {
+		altitudeInfoWindow?.close();
+	}
 
 	// Cleanup
 	onDestroy(() => {
@@ -876,7 +623,13 @@
 		<!-- Panel content -->
 		{#if !isPanelCollapsed}
 			<div class="h-[252px] w-full">
-				<div bind:this={altitudeChartContainer} class="h-full w-full"></div>
+				<FlightProfile
+					fixes={data.fixes}
+					{hasAglData}
+					onHover={handleChartHover}
+					onUnhover={handleChartUnhover}
+					bind:recreateTrigger={chartRecreateTrigger}
+				/>
 			</div>
 		{/if}
 	</div>
