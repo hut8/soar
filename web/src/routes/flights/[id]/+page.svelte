@@ -1051,6 +1051,29 @@
 		}
 	}
 
+	function handleChartClick(fix: (typeof data.fixes)[0]) {
+		if (!map) return;
+
+		// Create or update hover marker (reuse the same marker for clicks)
+		if (!hoverMarker) {
+			const markerContent = document.createElement('div');
+			markerContent.innerHTML = `
+				<div style="background-color: #f97316; width: 16px; height: 16px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.3);"></div>
+			`;
+
+			hoverMarker = new google.maps.marker.AdvancedMarkerElement({
+				map,
+				position: { lat: fix.latitude, lng: fix.longitude },
+				content: markerContent,
+				zIndex: 1000
+			});
+		} else {
+			// Update position of existing marker
+			hoverMarker.position = { lat: fix.latitude, lng: fix.longitude };
+			hoverMarker.map = map;
+		}
+	}
+
 	// Cleanup on component unmount
 	onDestroy(() => {
 		stopPolling();
@@ -1426,7 +1449,7 @@
 	<!-- Map -->
 	{#if data.fixes.length > 0}
 		<div class="card p-4">
-			<div class="mb-3 flex items-center justify-between">
+			<div class="mb-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
 				<div class="flex items-center gap-3">
 					<h2 class="h3">Flight Track</h2>
 					<a
@@ -1488,6 +1511,7 @@
 					{hasAglData}
 					onHover={handleChartHover}
 					onUnhover={handleChartUnhover}
+					onClick={handleChartClick}
 				/>
 			</div>
 		</div>

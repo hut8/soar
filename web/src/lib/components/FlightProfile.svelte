@@ -9,12 +9,14 @@
 		hasAglData = false,
 		onHover = undefined,
 		onUnhover = undefined,
+		onClick = undefined,
 		recreateTrigger = $bindable(0)
 	}: {
 		fixes: Fix[];
 		hasAglData?: boolean;
 		onHover?: (fix: Fix) => void;
 		onUnhover?: () => void;
+		onClick?: (fix: Fix) => void;
 		recreateTrigger?: number;
 	} = $props();
 
@@ -25,40 +27,25 @@
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	let hoverListener: ((event: any) => void) | null = null;
 	let unhoverListener: (() => void) | null = null;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	let clickListener: ((event: any) => void) | null = null;
 
 	// Get Plotly layout configuration based on theme
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	function getPlotlyLayout(isDark: boolean): any {
 		return {
 			xaxis: {
-				title: {
-					text: 'Time',
-					font: {
-						color: isDark ? '#e5e7eb' : '#111827'
-					}
-				},
 				type: 'date',
+				tickformat: '%H:%M',
 				color: isDark ? '#9ca3af' : '#6b7280',
 				gridcolor: isDark ? '#374151' : '#e5e7eb'
 			},
 			yaxis: {
-				title: {
-					text: 'Altitude (ft)',
-					font: {
-						color: isDark ? '#e5e7eb' : '#111827'
-					}
-				},
 				rangemode: 'tozero',
 				color: isDark ? '#9ca3af' : '#6b7280',
 				gridcolor: isDark ? '#374151' : '#e5e7eb'
 			},
 			yaxis2: {
-				title: {
-					text: 'Ground Speed (kt)',
-					font: {
-						color: isDark ? '#e5e7eb' : '#111827'
-					}
-				},
 				overlaying: 'y',
 				side: 'right',
 				rangemode: 'tozero',
@@ -68,14 +55,17 @@
 			hovermode: 'x unified',
 			showlegend: true,
 			legend: {
-				x: 0.01,
-				y: 0.99,
+				x: 0.5,
+				y: -0.25,
+				xanchor: 'center',
+				yanchor: 'top',
+				orientation: 'h',
 				bgcolor: isDark ? 'rgba(31, 41, 55, 0.8)' : 'rgba(255, 255, 255, 0.8)',
 				font: {
 					color: isDark ? '#e5e7eb' : '#111827'
 				}
 			},
-			margin: { l: 60, r: 60, t: 40, b: 60 },
+			margin: { l: 40, r: 40, t: 40, b: 100 },
 			paper_bgcolor: isDark ? '#1f2937' : '#ffffff',
 			plot_bgcolor: isDark ? '#111827' : '#f9fafb'
 		};
@@ -92,6 +82,9 @@
 			if (unhoverListener && chartContainer) {
 				chartContainer.removeEventListener('plotly_unhover', unhoverListener);
 			}
+			if (clickListener && chartContainer) {
+				chartContainer.removeEventListener('plotly_click', clickListener);
+			}
 
 			const fixesInOrder = [...fixes].reverse();
 			const timestamps = fixesInOrder.map((fix) => new Date(fix.timestamp));
@@ -104,7 +97,7 @@
 					y: altitudesMsl,
 					type: 'scatter' as const,
 					mode: 'lines' as const,
-					name: 'MSL Altitude',
+					name: 'MSL Altitude (ft)',
 					line: { color: '#3b82f6', width: 2 },
 					hovertemplate: '<b>MSL:</b> %{y:.0f} ft<br>%{x}<extra></extra>'
 				}
@@ -117,7 +110,7 @@
 					y: altitudesAgl,
 					type: 'scatter' as const,
 					mode: 'lines' as const,
-					name: 'AGL Altitude',
+					name: 'AGL Altitude (ft)',
 					line: { color: '#10b981', width: 2 },
 					hovertemplate: '<b>AGL:</b> %{y:.0f} ft<br>%{x}<extra></extra>'
 				});
@@ -130,7 +123,7 @@
 				y: groundSpeeds,
 				type: 'scatter' as const,
 				mode: 'lines' as const,
-				name: 'Ground Speed',
+				name: 'Ground Speed (kt, Right Y Axis)',
 				line: { color: '#f59e0b', width: 2 },
 				yaxis: 'y2',
 				hovertemplate: '<b>GS:</b> %{y:.0f} kt<br>%{x}<extra></extra>'
@@ -144,7 +137,8 @@
 				responsive: true,
 				displayModeBar: true,
 				displaylogo: false,
-				modeBarButtonsToRemove: ['pan2d', 'lasso2d', 'select2d']
+				modeBarButtonsToRemove: ['pan2d', 'lasso2d', 'select2d', 'zoom2d', 'zoomIn2d', 'zoomOut2d'],
+				scrollZoom: false
 			};
 
 			await Plotly.newPlot(chartContainer, traces, layout, config);
@@ -152,6 +146,19 @@
 
 			// Add hover event handlers if callbacks are provided
 			if (onHover) {
+				// Use Plotly's event system
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				(chartContainer as any).on('plotly_hover', (data: any) => {
+					if (data.points && data.points.length > 0) {
+						const pointIndex = data.points[0].pointIndex;
+						if (pointIndex >= 0 && pointIndex < fixesInOrder.length) {
+							const fix = fixesInOrder[pointIndex];
+							onHover(fix);
+						}
+					}
+				});
+
+				// Also use addEventListener as backup
 				// eslint-disable-next-line @typescript-eslint/no-explicit-any
 				hoverListener = (event: any) => {
 					const data_event = event.detail || event;
@@ -167,10 +174,45 @@
 			}
 
 			if (onUnhover) {
+				// Use Plotly's event system
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				(chartContainer as any).on('plotly_unhover', () => {
+					onUnhover();
+				});
+
 				unhoverListener = () => {
 					onUnhover();
 				};
 				chartContainer.addEventListener('plotly_unhover', unhoverListener);
+			}
+
+			// Add click event handler if callback is provided
+			if (onClick) {
+				// Use Plotly's event system
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				(chartContainer as any).on('plotly_click', (data: any) => {
+					if (data.points && data.points.length > 0) {
+						const pointIndex = data.points[0].pointIndex;
+						if (pointIndex >= 0 && pointIndex < fixesInOrder.length) {
+							const fix = fixesInOrder[pointIndex];
+							onClick(fix);
+						}
+					}
+				});
+
+				// Also use addEventListener as backup
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				clickListener = (event: any) => {
+					const data_event = event.detail || event;
+					if (data_event.points && data_event.points.length > 0) {
+						const pointIndex = data_event.points[0].pointIndex;
+						if (pointIndex >= 0 && pointIndex < fixesInOrder.length) {
+							const fix = fixesInOrder[pointIndex];
+							onClick(fix);
+						}
+					}
+				};
+				chartContainer.addEventListener('plotly_click', clickListener);
 			}
 		} catch (error) {
 			console.error('Failed to create flight profile chart:', error);
@@ -217,6 +259,9 @@
 		if (unhoverListener && chartContainer) {
 			chartContainer.removeEventListener('plotly_unhover', unhoverListener);
 		}
+		if (clickListener && chartContainer) {
+			chartContainer.removeEventListener('plotly_click', clickListener);
+		}
 
 		// Purge Plotly chart
 		if (chartContainer) {
@@ -225,4 +270,6 @@
 	});
 </script>
 
-<div bind:this={chartContainer} class="h-full w-full"></div>
+<div class="relative h-full w-full">
+	<div bind:this={chartContainer} class="h-full w-full"></div>
+</div>
