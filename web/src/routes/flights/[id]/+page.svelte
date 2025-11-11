@@ -196,6 +196,66 @@
 		return `rgb(${r}, ${g}, ${b})`;
 	}
 
+	// Calculate arrow scale based on zoom level (inversely proportional to zoom)
+	// Zoom 8 (far out) -> scale 1, Zoom 16 (close in) -> scale 4
+	function getArrowScale(zoom: number): number {
+		// Scale increases linearly with zoom: at zoom 8 = 1, at zoom 16 = 4
+		return Math.max(1, Math.min(5, (zoom - 8) * 0.5 + 1));
+	}
+
+	// Update arrow icons on all polyline segments based on current zoom
+	function updateArrowScales() {
+		if (!map) return;
+		const zoom = map.getZoom() ?? 12;
+		const scale = getArrowScale(zoom);
+		const minAlt = minAltitude() ?? 0;
+		const maxAlt = maxAltitude() ?? 1000;
+
+		// Track last arrow timestamp to display one every 10 minutes
+		let lastArrowTime: Date | null = null;
+		const TEN_MINUTES_MS = 10 * 60 * 1000;
+
+		const fixes = [...data.fixes].reverse();
+
+		flightPathSegments.forEach((segment, index) => {
+			const path = segment.getPath();
+			if (path.getLength() < 2) return;
+
+			// Get color based on segment index
+			if (index >= fixes.length) return;
+			const fix = fixes[index];
+			const color = altitudeToColor(fix.altitude_msl_feet, minAlt, maxAlt);
+
+			// Check if we should display an arrow for this segment
+			const fixTime = new Date(fix.timestamp);
+			const shouldShowArrow =
+				lastArrowTime === null || fixTime.getTime() - lastArrowTime.getTime() >= TEN_MINUTES_MS;
+
+			// Only add arrow icon if this segment should have one
+			const icons = [];
+			if (shouldShowArrow) {
+				const arrowSymbol = {
+					path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+					fillColor: color,
+					fillOpacity: 1,
+					strokeColor: color,
+					strokeOpacity: 0.8,
+					strokeWeight: 1,
+					scale: scale
+				};
+				icons.push({
+					icon: arrowSymbol,
+					offset: '50%'
+				});
+				lastArrowTime = fixTime;
+			}
+
+			segment.setOptions({
+				icons: icons
+			});
+		});
+	}
+
 	// Helper function to create gradient polyline segments
 	function createGradientPolylines(
 		fixesInOrder: typeof data.fixes,
@@ -204,6 +264,12 @@
 		const minAlt = minAltitude() ?? 0;
 		const maxAlt = maxAltitude() ?? 1000;
 		const segments: google.maps.Polyline[] = [];
+		const zoom = targetMap.getZoom() ?? 12;
+		const scale = getArrowScale(zoom);
+
+		// Track last arrow timestamp to display one every 10 minutes
+		let lastArrowTime: Date | null = null;
+		const TEN_MINUTES_MS = 10 * 60 * 1000;
 
 		// Create a polyline segment for each pair of consecutive fixes
 		for (let i = 0; i < fixesInOrder.length - 1; i++) {
@@ -213,6 +279,30 @@
 			// Use the starting fix's altitude for the segment color
 			const color = altitudeToColor(fix1.altitude_msl_feet, minAlt, maxAlt);
 
+			// Check if we should display an arrow for this segment
+			const fix1Time = new Date(fix1.timestamp);
+			const shouldShowArrow =
+				lastArrowTime === null || fix1Time.getTime() - lastArrowTime.getTime() >= TEN_MINUTES_MS;
+
+			// Define arrow symbol for this segment if needed
+			const icons = [];
+			if (shouldShowArrow) {
+				const arrowSymbol = {
+					path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+					fillColor: color,
+					fillOpacity: 1,
+					strokeColor: color,
+					strokeOpacity: 0.8,
+					strokeWeight: 1,
+					scale: scale
+				};
+				icons.push({
+					icon: arrowSymbol,
+					offset: '50%'
+				});
+				lastArrowTime = fix1Time;
+			}
+
 			const segment = new google.maps.Polyline({
 				path: [
 					{ lat: fix1.latitude, lng: fix1.longitude },
@@ -221,7 +311,8 @@
 				geodesic: true,
 				strokeColor: color,
 				strokeOpacity: 1.0,
-				strokeWeight: 3
+				strokeWeight: 3,
+				icons: icons
 			});
 
 			segment.setMap(targetMap);
@@ -571,7 +662,7 @@
 	function getPlotlyLayout(isDark: boolean): any {
 		return {
 			title: {
-				text: 'Altitude Profile',
+				text: 'Flight Profile',
 				font: {
 					color: isDark ? '#e5e7eb' : '#111827'
 				}
@@ -598,6 +689,19 @@
 				color: isDark ? '#9ca3af' : '#6b7280',
 				gridcolor: isDark ? '#374151' : '#e5e7eb'
 			},
+			yaxis2: {
+				title: {
+					text: 'Ground Speed (kt)',
+					font: {
+						color: isDark ? '#e5e7eb' : '#111827'
+					}
+				},
+				overlaying: 'y',
+				side: 'right',
+				rangemode: 'tozero',
+				color: isDark ? '#9ca3af' : '#6b7280',
+				showgrid: false
+			},
 			hovermode: 'x unified',
 			showlegend: true,
 			legend: {
@@ -608,7 +712,7 @@
 					color: isDark ? '#e5e7eb' : '#111827'
 				}
 			},
-			margin: { l: 60, r: 20, t: 40, b: 60 },
+			margin: { l: 60, r: 60, t: 40, b: 60 },
 			paper_bgcolor: isDark ? '#1f2937' : '#ffffff',
 			plot_bgcolor: isDark ? '#111827' : '#f9fafb'
 		};
@@ -841,6 +945,11 @@
 			// Create gradient polyline segments
 			flightPathSegments = createGradientPolylines(fixesInOrder, map);
 
+			// Add zoom listener to update arrow scales
+			map.addListener('zoom_changed', () => {
+				updateArrowScales();
+			});
+
 			// Create info window for altitude display
 			altitudeInfoWindow = new google.maps.InfoWindow();
 
@@ -992,6 +1101,7 @@
 				// Prepare data for the chart
 				const timestamps = fixesInOrder.map((fix) => new Date(fix.timestamp));
 				const altitudesMsl = fixesInOrder.map((fix) => fix.altitude_msl_feet || 0);
+				const groundSpeeds = fixesInOrder.map((fix) => fix.ground_speed_knots || 0);
 
 				// Create traces - only include AGL if data is available
 				const traces = [
@@ -1018,6 +1128,20 @@
 						hovertemplate: '<b>AGL:</b> %{y:.0f} ft<br>%{x}<extra></extra>'
 					});
 				}
+
+				// Add ground speed trace on secondary y-axis
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				const groundSpeedTrace: any = {
+					x: timestamps,
+					y: groundSpeeds,
+					type: 'scatter' as const,
+					mode: 'lines' as const,
+					name: 'Ground Speed',
+					line: { color: '#f59e0b', width: 2 },
+					yaxis: 'y2',
+					hovertemplate: '<b>GS:</b> %{y:.0f} kt<br>%{x}<extra></extra>'
+				};
+				traces.push(groundSpeedTrace);
 
 				// eslint-disable-next-line @typescript-eslint/no-explicit-any
 				const layout: any = getPlotlyLayout($theme === 'dark');
@@ -1489,7 +1613,7 @@
 
 		<!-- Altitude Chart -->
 		<div class="card p-4">
-			<h2 class="mb-3 h3">Altitude Profile</h2>
+			<h2 class="mb-3 text-right h3">Flight Profile</h2>
 			<div bind:this={altitudeChartContainer} class="h-80 w-full"></div>
 		</div>
 	{/if}
