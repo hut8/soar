@@ -280,6 +280,7 @@ diesel::table! {
         aprs_message_id -> Uuid,
         altitude_agl_valid -> Bool,
         location_geom -> Nullable<Geometry>,
+        time_gap_seconds -> Nullable<Int4>,
     }
 }
 
