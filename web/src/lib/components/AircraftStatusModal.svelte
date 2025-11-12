@@ -1,6 +1,21 @@
 <script lang="ts">
-	import { X, Plane, MapPin, Clock, RotateCcw, ExternalLink, Navigation } from '@lucide/svelte';
+	import { X, Plane, MapPin, RotateCcw, ExternalLink, Navigation } from '@lucide/svelte';
 	import type { Device, Aircraft, Fix, AircraftRegistration, AircraftModel } from '$lib/types';
+
+	interface Flight {
+		id: string;
+		state?: string;
+		departure_time?: string;
+		arrival_time?: string;
+		duration_seconds?: number;
+		max_altitude_msl_feet?: number;
+		departure_airport?: {
+			ident?: string;
+		};
+		arrival_airport?: {
+			ident?: string;
+		};
+	}
 	import {
 		formatTitleCase,
 		formatDeviceAddress,
@@ -31,8 +46,10 @@
 	// Reactive variables
 	let aircraftRegistration: AircraftRegistration | null = $state(null);
 	let aircraftModel: AircraftModel | null = $state(null);
+	let currentFlight: Flight | null = $state(null);
 	let loadingRegistration = $state(false);
 	let loadingModel = $state(false);
+	let loadingFlight = $state(false);
 	let recentFixes: Fix[] = $state([]);
 
 	// Direction arrow variables
@@ -50,6 +67,7 @@
 		} else {
 			aircraftRegistration = null;
 			aircraftModel = null;
+			currentFlight = null;
 			recentFixes = [];
 		}
 	});
@@ -60,10 +78,12 @@
 		// Load aircraft registration and model data in parallel
 		loadingRegistration = true;
 		loadingModel = true;
+		loadingFlight = true;
 
 		try {
-			// Import DeviceRegistry to fetch recent fixes
+			// Import DeviceRegistry and serverCall
 			const { DeviceRegistry } = await import('$lib/services/DeviceRegistry');
+			const { serverCall } = await import('$lib/api/server');
 			const registry = DeviceRegistry.getInstance();
 
 			// Load recent fixes from API
@@ -82,14 +102,28 @@
 			const aircraft = selectedDevice as Aircraft;
 			aircraftRegistration = aircraft.aircraft_registration || null;
 			aircraftModel = aircraft.aircraft_model_details || null;
+
+			// Load current flight if device has an active flight
+			if (selectedDevice.active_flight_id) {
+				try {
+					currentFlight = await serverCall(`/flights/${selectedDevice.active_flight_id}`);
+				} catch (error) {
+					console.warn('Failed to load flight data:', error);
+					currentFlight = null;
+				}
+			} else {
+				currentFlight = null;
+			}
 		} catch (error) {
 			console.warn('Failed to load aircraft data:', error);
 			aircraftRegistration = null;
 			aircraftModel = null;
+			currentFlight = null;
 			recentFixes = [];
 		} finally {
 			loadingRegistration = false;
 			loadingModel = false;
+			loadingFlight = false;
 		}
 	}
 
@@ -604,6 +638,82 @@
 								</dl>
 							</div>
 						{/if}
+
+						<!-- Current Flight -->
+						{#if loadingFlight}
+							<div class="flex items-center gap-2 text-sm text-surface-600 dark:text-surface-400">
+								<RotateCcw class="animate-spin" size={16} />
+								Loading flight information...
+							</div>
+						{:else if currentFlight}
+							<div class="space-y-3 border-t border-surface-300 pt-4 dark:border-surface-600">
+								<h4 class="font-medium text-surface-900 dark:text-surface-100">Current Flight</h4>
+								<dl class="grid grid-cols-2 gap-4 text-sm">
+									{#if currentFlight.departure_airport}
+										<div>
+											<dt class="font-medium text-surface-600 dark:text-surface-400">Departure</dt>
+											<dd>
+												{currentFlight.departure_airport.ident || 'Unknown'}
+												{#if currentFlight.departure_time}
+													<div class="text-xs text-surface-500">
+														{dayjs(currentFlight.departure_time).format('HH:mm')}
+													</div>
+												{/if}
+											</dd>
+										</div>
+									{/if}
+									{#if currentFlight.arrival_airport}
+										<div>
+											<dt class="font-medium text-surface-600 dark:text-surface-400">Arrival</dt>
+											<dd>
+												{currentFlight.arrival_airport.ident || 'Unknown'}
+												{#if currentFlight.arrival_time}
+													<div class="text-xs text-surface-500">
+														{dayjs(currentFlight.arrival_time).format('HH:mm')}
+													</div>
+												{/if}
+											</dd>
+										</div>
+									{/if}
+									<div>
+										<dt class="font-medium text-surface-600 dark:text-surface-400">State</dt>
+										<dd>
+											<span class="badge preset-filled-primary-500">
+												{currentFlight.state || 'In Progress'}
+											</span>
+										</dd>
+									</div>
+									{#if currentFlight.duration_seconds}
+										<div>
+											<dt class="font-medium text-surface-600 dark:text-surface-400">Duration</dt>
+											<dd>
+												{Math.floor(currentFlight.duration_seconds / 3600)}h
+												{Math.floor((currentFlight.duration_seconds % 3600) / 60)}m
+											</dd>
+										</div>
+									{/if}
+									{#if currentFlight.max_altitude_msl_feet}
+										<div>
+											<dt class="font-medium text-surface-600 dark:text-surface-400">
+												Max Altitude
+											</dt>
+											<dd>{currentFlight.max_altitude_msl_feet.toLocaleString()} ft MSL</dd>
+										</div>
+									{/if}
+									<div class="col-span-2">
+										<a
+											href="/flights/{currentFlight.id}"
+											target="_blank"
+											rel="noopener noreferrer"
+											class="btn w-full preset-filled-primary-500 btn-sm"
+										>
+											<ExternalLink size={14} />
+											View Full Flight Details
+										</a>
+									</div>
+								</dl>
+							</div>
+						{/if}
 					</div>
 
 					<!-- Current Fix -->
@@ -729,94 +839,6 @@
 						{/if}
 					</div>
 				</div>
-
-				<!-- Recent Fixes List - Full Width -->
-				{#if recentFixes.length > 0}
-					<div class="mt-6 space-y-4">
-						<h3 class="flex items-center gap-2 text-lg font-semibold">
-							<Clock size={20} />
-							Recent Fixes
-							<span class="text-sm font-normal text-gray-600"> (Last 24 hours) </span>
-						</h3>
-
-						<div
-							class="max-h-64 overflow-y-auto rounded-lg border border-surface-300 dark:border-surface-600"
-						>
-							<table class="w-full text-sm">
-								<thead
-									class="border-b border-surface-300 bg-surface-100 dark:border-surface-600 dark:bg-surface-800"
-								>
-									<tr>
-										<th
-											class="px-3 py-2 text-left font-medium text-surface-600 dark:text-surface-400"
-											>Time</th
-										>
-										<th
-											class="px-3 py-2 text-left font-medium text-surface-600 dark:text-surface-400"
-											>Altitude (ft)</th
-										>
-										<th
-											class="px-3 py-2 text-left font-medium text-surface-600 dark:text-surface-400"
-											>Climb Rate</th
-										>
-										<th
-											class="px-3 py-2 text-left font-medium text-surface-600 dark:text-surface-400"
-											>Speed</th
-										>
-										<th
-											class="px-3 py-2 text-left font-medium text-surface-600 dark:text-surface-400"
-											>Track</th
-										>
-									</tr>
-								</thead>
-								<tbody>
-									{#each recentFixes.slice(0, 20) as fix (fix.id)}
-										<tr
-											class="border-b border-surface-200 hover:bg-surface-100 dark:border-surface-700 dark:hover:bg-surface-800"
-										>
-											<td class="px-3 py-2">
-												{formatTimestamp(fix.timestamp).relative}
-											</td>
-											<td class="px-3 py-2">
-												{#if fix.altitude_msl_feet !== undefined && fix.altitude_msl_feet !== null}
-													{fix.altitude_msl_feet.toLocaleString()} MSL
-													{#if fix.altitude_agl_feet !== undefined && fix.altitude_agl_feet !== null}
-														/ {fix.altitude_agl_feet.toLocaleString()} AGL
-													{/if}
-												{:else}
-													Unknown
-												{/if}
-											</td>
-											<td class="px-3 py-2">
-												<span
-													class="{fix.climb_fpm !== undefined &&
-													fix.climb_fpm !== null &&
-													fix.climb_fpm < 0
-														? 'text-red-600 dark:text-red-400'
-														: 'text-green-600 dark:text-green-400'} font-semibold"
-												>
-													{formatClimbRate(fix.climb_fpm)}
-												</span>
-											</td>
-											<td class="px-3 py-2">
-												{formatSpeed(fix.ground_speed_knots)}
-											</td>
-											<td class="px-3 py-2">
-												{formatTrack(fix.track_degrees)}
-											</td>
-										</tr>
-									{/each}
-								</tbody>
-							</table>
-						</div>
-
-						{#if recentFixes.length > 20}
-							<p class="text-center text-xs text-surface-500 dark:text-surface-500">
-								Showing latest 20 of {recentFixes.length} fixes
-							</p>
-						{/if}
-					</div>
-				{/if}
 			</div>
 		</div>
 	</div>
