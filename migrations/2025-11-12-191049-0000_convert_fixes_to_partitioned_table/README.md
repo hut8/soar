@@ -89,34 +89,11 @@ sudo systemctl start soar
 
 ## Ongoing Maintenance
 
-### Option 1: pg_cron (Recommended)
+### Systemd Timer (Installed)
 
-Install pg_cron extension:
-```bash
-sudo apt-get install postgresql-16-cron
-```
+A systemd timer has been installed and configured to run partition maintenance daily at 3 AM.
 
-Schedule daily maintenance:
-```sql
--- Run partition maintenance daily at 3 AM for both tables
-SELECT cron.schedule('partman-maintenance', '0 3 * * *',
-    $$SELECT partman.run_maintenance_proc()$$
-);
-```
-
-### Option 2: System Cron
-
-The cron job has been installed for the soar user:
-```bash
-# Run partition maintenance daily at 3 AM
-0 3 * * * psql postgres://localhost/soar -c "SELECT partman.run_maintenance_proc()" >> /var/soar/logs/partman.log 2>&1
-```
-
-This will maintain partitions for ALL tables managed by pg_partman (both fixes and aprs_messages).
-
-### Option 3: Systemd Timer
-
-Create `/etc/systemd/system/partman-maintenance.service`:
+**Service file**: `/etc/systemd/system/partman-maintenance.service`
 ```ini
 [Unit]
 Description=pg_partman partition maintenance
@@ -124,28 +101,56 @@ After=postgresql.service
 
 [Service]
 Type=oneshot
-User=postgres
-ExecStart=/usr/bin/psql -d soar -c "SELECT partman.run_maintenance_proc()"
+User=soar
+ExecStart=/usr/bin/psql postgres://localhost/soar -c "SELECT partman.run_maintenance_proc()"
+StandardOutput=append:/var/soar/logs/partman.log
+StandardError=append:/var/soar/logs/partman.log
 ```
 
-Create `/etc/systemd/system/partman-maintenance.timer`:
+**Timer file**: `/etc/systemd/system/partman-maintenance.timer`
 ```ini
 [Unit]
-Description=Run pg_partman maintenance daily
+Description=Run pg_partman maintenance daily at 3 AM
+Requires=partman-maintenance.service
 
 [Timer]
-OnCalendar=daily
-OnCalendar=03:00
+OnCalendar=*-*-* 03:00:00
 Persistent=true
 
 [Install]
 WantedBy=timers.target
 ```
 
-Enable the timer:
+**Check timer status**:
 ```bash
-sudo systemctl enable partman-maintenance.timer
-sudo systemctl start partman-maintenance.timer
+sudo systemctl status partman-maintenance.timer
+sudo systemctl list-timers partman-maintenance.timer
+```
+
+**View logs**:
+```bash
+tail -f /var/soar/logs/partman.log
+journalctl -u partman-maintenance.service
+```
+
+**Manually trigger maintenance** (for testing):
+```bash
+sudo systemctl start partman-maintenance.service
+```
+
+### Alternative: pg_cron
+
+If you prefer database-level scheduling, you can use pg_cron instead:
+
+```bash
+sudo apt-get install postgresql-16-cron
+```
+
+```sql
+-- Run partition maintenance daily at 3 AM for both tables
+SELECT cron.schedule('partman-maintenance', '0 3 * * *',
+    $$SELECT partman.run_maintenance_proc()$$
+);
 ```
 
 ## What pg_partman Maintenance Does
