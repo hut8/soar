@@ -87,7 +87,13 @@ echo ""
 
 # Wait for services to be healthy
 echo -e "${YELLOW}[2/3] Waiting for services to be healthy...${NC}"
-MAX_WAIT=120
+# Dev mode needs more time for initial compile (up to 10 minutes)
+if [ "$DEV_MODE" = true ]; then
+    MAX_WAIT=600
+    echo -e "${BLUE}(Dev mode: first compile may take up to 10 minutes)${NC}"
+else
+    MAX_WAIT=120
+fi
 WAITED=0
 while [ $WAITED -lt $MAX_WAIT ]; do
     if docker compose ${COMPOSE_FILES} ps | grep -q "app.*healthy"; then
@@ -101,7 +107,7 @@ done
 
 if [ $WAITED -ge $MAX_WAIT ]; then
     echo -e "${RED}Services failed to become healthy within ${MAX_WAIT} seconds${NC}"
-    docker compose ${COMPOSE_FILES} logs app
+    docker compose ${COMPOSE_FILES} logs app | tail -100
     exit 1
 fi
 echo ""
