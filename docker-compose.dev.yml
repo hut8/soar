@@ -19,7 +19,7 @@ services:
       sh -c "
         echo 'Installing build dependencies...' &&
         apt-get update > /dev/null 2>&1 &&
-        apt-get install -y --no-install-recommends build-essential pkg-config libssl-dev libpq-dev curl > /dev/null 2>&1 &&
+        apt-get install -y --no-install-recommends clang build-essential pkg-config libssl-dev libpq-dev curl > /dev/null 2>&1 &&
         echo 'Building application (using cached artifacts)...' &&
         SKIP_WEB_BUILD=1 cargo build --release &&
         echo 'Running migrations...' &&
