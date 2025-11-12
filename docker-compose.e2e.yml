@@ -4,7 +4,7 @@
 services:
   # E2E test runner
   e2e-tests:
-    image: mcr.microsoft.com/playwright:v1.49.1-noble
+    image: mcr.microsoft.com/playwright:v1.56.1-noble
     container_name: soar-e2e-tests
     working_dir: /app/web
     environment:

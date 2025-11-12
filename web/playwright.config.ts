@@ -15,7 +15,7 @@ export default defineConfig({
 	forbidOnly: !!process.env.CI,
 	retries: 0, // Disabled retries for faster feedback
 	workers: process.env.CI ? 1 : undefined,
-	maxFailures: 1, // Stop after first failure for faster feedback
+	maxFailures: 3, // Stop after 3 failures for faster feedback
 
 	// Reporter configuration
 	reporter: [['html'], ['list'], ...(process.env.CI ? [['github' as const]] : [])],
@@ -45,9 +45,16 @@ export default defineConfig({
 			name: 'chromium',
 			use: {
 				...devices['Desktop Chrome'],
-				// Disable security features that can interfere with local testing
+				// Disable security features that can interfere with Docker/testing
 				launchOptions: {
-					args: ['--disable-web-security', '--disable-features=IsolateOrigins,site-per-process']
+					args: [
+						'--no-sandbox',
+						'--disable-setuid-sandbox',
+						'--disable-dev-shm-usage',
+						'--disable-web-security',
+						'--disable-features=IsolateOrigins,site-per-process',
+						'--disable-blink-features=AutomationControlled'
+					]
 				}
 			}
 		}
