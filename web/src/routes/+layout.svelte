@@ -111,7 +111,9 @@
 </svelte:head>
 
 <div class="flex h-full min-h-screen flex-col">
-	<AppBar class="relative z-[70] bg-orange-400 p-1 dark:bg-orange-900">
+	<AppBar
+		class="relative z-[70] bg-gradient-to-br from-orange-300 to-orange-500 p-1 dark:bg-gradient-to-br dark:from-orange-950 dark:to-orange-800"
+	>
 		<LoadingBar />
 		<AppBar.Toolbar class="grid grid-cols-[auto_1fr_auto] gap-3 p-0">
 			<AppBar.Lead>

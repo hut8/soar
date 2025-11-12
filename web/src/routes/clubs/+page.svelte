@@ -4,7 +4,7 @@
 	import { resolve } from '$app/paths';
 	import { goto } from '$app/navigation';
 	import { Users, Search, MapPinHouse, ExternalLink, Plane } from '@lucide/svelte';
-	import { Progress } from '@skeletonlabs/skeleton-svelte';
+	import { Progress, SegmentedControl } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall } from '$lib/api/server';
 	import type { ClubWithSoaring } from '$lib/types';
 
@@ -15,7 +15,7 @@
 	let filteredClubs: ClubWithSoaring[] = [];
 	let searchInput = '';
 	let showResults = false;
-	let locationSearch = false;
+	let searchType = $state<'name' | 'location'>('name');
 	let latitude = '';
 	let longitude = '';
 	let radius = '50';
@@ -29,13 +29,13 @@
 
 		if (q) {
 			searchQuery = q;
-			locationSearch = false;
+			searchType = 'name';
 			await searchClubs();
 		} else if (lat && lng && r) {
 			latitude = lat;
 			longitude = lng;
 			radius = r;
-			locationSearch = true;
+			searchType = 'location';
 			await searchClubs();
 		}
 	});
@@ -47,7 +47,7 @@
 		try {
 			let endpoint = '/clubs';
 
-			if (locationSearch && latitude && longitude && radius) {
+			if (searchType === 'location' && latitude && longitude && radius) {
 				endpoint += `?latitude=${latitude}&longitude=${longitude}&radius=${radius}`;
 			} else if (searchQuery) {
 				endpoint += `?q=${encodeURIComponent(searchQuery)}`;
@@ -136,31 +136,51 @@
 	</header>
 
 	<!-- Search Section -->
-	<section class="space-y-6 card p-6">
-		<!-- Search Method Toggle -->
-		<div class="flex justify-center gap-2">
-			<button
-				class="btn btn-sm {!locationSearch ? 'preset-filled-primary-500' : 'preset-tonal'}"
-				onclick={() => (locationSearch = false)}
-			>
-				<Search class="mr-2 h-4 w-4" />
-				Name Search
-			</button>
-			<button
-				class="btn btn-sm {locationSearch ? 'preset-filled-primary-500' : 'preset-tonal'}"
-				onclick={() => (locationSearch = true)}
-			>
-				<MapPinHouse class="mr-2 h-4 w-4" />
-				Location Search
-			</button>
-		</div>
+	<section class="space-y-4 card p-6">
+		<h3 class="mb-3 flex items-center gap-2 text-lg font-semibold">
+			<Search class="h-5 w-5" />
+			Search Clubs
+		</h3>
+		<div class="space-y-3 rounded-lg border p-3">
+			<!-- Mobile: Vertical layout (segment above inputs) -->
+			<div class="space-y-3 md:hidden">
+				<!-- Search type selector -->
+				<SegmentedControl
+					name="search-type"
+					value={searchType}
+					orientation="vertical"
+					onValueChange={(event: { value: string | null }) => {
+						if (event.value && (event.value === 'name' || event.value === 'location')) {
+							searchType = event.value;
+							error = '';
+						}
+					}}
+				>
+					<SegmentedControl.Control>
+						<SegmentedControl.Indicator />
+						<SegmentedControl.Item value="name">
+							<SegmentedControl.ItemText>
+								<div class="flex flex-row items-center">
+									<Search size={16} />
+									<span class="ml-1">Search</span>
+								</div>
+							</SegmentedControl.ItemText>
+							<SegmentedControl.ItemHiddenInput />
+						</SegmentedControl.Item>
+						<SegmentedControl.Item value="location">
+							<SegmentedControl.ItemText>
+								<div class="flex flex-row items-center">
+									<MapPinHouse size={16} />
+									<span class="ml-1">Location</span>
+								</div>
+							</SegmentedControl.ItemText>
+							<SegmentedControl.ItemHiddenInput />
+						</SegmentedControl.Item>
+					</SegmentedControl.Control>
+				</SegmentedControl>
 
-		<!-- Search Forms -->
-		{#if !locationSearch}
-			<div class="space-y-4">
-				<div class="relative mx-auto max-w-2xl">
-					<label class="label">
-						<span>Search and Select Club</span>
+				{#if searchType === 'name'}
+					<div class="relative">
 						<input
 							bind:value={searchInput}
 							oninput={(e) => handleSearchInput((e.target as HTMLInputElement).value)}
@@ -169,77 +189,203 @@
 							placeholder="Type to search clubs..."
 							autocomplete="off"
 						/>
-					</label>
 
-					<!-- Search Results -->
-					{#if showResults && filteredClubs.length > 0}
-						<div
-							class="bg-surface-100-800-token border-surface-300-600-token absolute z-10 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border shadow-lg"
-						>
-							{#each filteredClubs as club (club.id)}
-								<button
-									onclick={() => selectClub(club.id)}
-									class="hover:bg-surface-200-700-token border-surface-200-700-token w-full border-b px-4 py-3 text-left transition-colors last:border-b-0"
-								>
-									<div class="font-medium text-primary-500">{club.name}</div>
-									<div class="text-surface-600-300-token text-sm">{formatAddress(club)}</div>
-								</button>
-							{/each}
-						</div>
-					{:else if showResults && searchInput.length > 0}
-						<div
-							class="bg-surface-100-800-token border-surface-300-600-token absolute z-10 mt-1 w-full rounded-lg border p-4 shadow-lg"
-						>
-							<div class="text-surface-600-300-token text-center">
-								No clubs found matching "{searchInput}"
+						<!-- Search Results -->
+						{#if showResults && filteredClubs.length > 0}
+							<div
+								class="bg-surface-100-800-token border-surface-300-600-token absolute z-10 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border shadow-lg"
+							>
+								{#each filteredClubs as club (club.id)}
+									<button
+										onclick={() => selectClub(club.id)}
+										class="hover:bg-surface-200-700-token border-surface-200-700-token w-full border-b px-4 py-3 text-left transition-colors last:border-b-0"
+									>
+										<div class="font-medium text-primary-500">{club.name}</div>
+										<div class="text-surface-600-300-token text-sm">{formatAddress(club)}</div>
+									</button>
+								{/each}
 							</div>
-						</div>
-					{/if}
+						{:else if showResults && searchInput.length > 0}
+							<div
+								class="bg-surface-100-800-token border-surface-300-600-token absolute z-10 mt-1 w-full rounded-lg border p-4 shadow-lg"
+							>
+								<div class="text-surface-600-300-token text-center">
+									No clubs found matching "{searchInput}"
+								</div>
+							</div>
+						{/if}
+					</div>
+				{:else if searchType === 'location'}
+					<div class="space-y-3">
+						<label class="label">
+							<span>Latitude</span>
+							<input
+								bind:value={latitude}
+								class="input"
+								type="number"
+								step="any"
+								placeholder="e.g. 40.7128"
+							/>
+						</label>
+						<label class="label">
+							<span>Longitude</span>
+							<input
+								bind:value={longitude}
+								class="input"
+								type="number"
+								step="any"
+								placeholder="e.g. -74.0060"
+							/>
+						</label>
+						<label class="label">
+							<span>Radius (km)</span>
+							<input
+								bind:value={radius}
+								class="input"
+								type="number"
+								min="1"
+								max="1000"
+								placeholder="50"
+							/>
+						</label>
+						<button class="btn w-full preset-filled-primary-500" onclick={getCurrentLocation}>
+							<MapPinHouse class="mr-2 h-4 w-4" />
+							Use My Location
+						</button>
+					</div>
+				{/if}
+			</div>
+
+			<!-- Desktop: Horizontal layout (segment to the left of inputs) -->
+			<div class="hidden md:block">
+				<div class="grid grid-cols-[200px_1fr] items-start gap-4">
+					<!-- Search type selector -->
+					<SegmentedControl
+						name="search-type-desktop"
+						value={searchType}
+						orientation="vertical"
+						onValueChange={(event: { value: string | null }) => {
+							if (event.value && (event.value === 'name' || event.value === 'location')) {
+								searchType = event.value;
+								error = '';
+							}
+						}}
+					>
+						<SegmentedControl.Control>
+							<SegmentedControl.Indicator />
+							<SegmentedControl.Item value="name">
+								<SegmentedControl.ItemText>
+									<div class="flex flex-row items-center">
+										<Search size={16} />
+										<span class="ml-1">Search</span>
+									</div>
+								</SegmentedControl.ItemText>
+								<SegmentedControl.ItemHiddenInput />
+							</SegmentedControl.Item>
+							<SegmentedControl.Item value="location">
+								<SegmentedControl.ItemText>
+									<div class="flex flex-row items-center">
+										<MapPinHouse size={16} />
+										<span class="ml-1">Location</span>
+									</div>
+								</SegmentedControl.ItemText>
+								<SegmentedControl.ItemHiddenInput />
+							</SegmentedControl.Item>
+						</SegmentedControl.Control>
+					</SegmentedControl>
+
+					<!-- Input area -->
+					<div>
+						{#if searchType === 'name'}
+							<div class="relative">
+								<input
+									bind:value={searchInput}
+									oninput={(e) => handleSearchInput((e.target as HTMLInputElement).value)}
+									class="input"
+									type="text"
+									placeholder="Type to search clubs..."
+									autocomplete="off"
+								/>
+
+								<!-- Search Results -->
+								{#if showResults && filteredClubs.length > 0}
+									<div
+										class="bg-surface-100-800-token border-surface-300-600-token absolute z-10 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border shadow-lg"
+									>
+										{#each filteredClubs as club (club.id)}
+											<button
+												onclick={() => selectClub(club.id)}
+												class="hover:bg-surface-200-700-token border-surface-200-700-token w-full border-b px-4 py-3 text-left transition-colors last:border-b-0"
+											>
+												<div class="font-medium text-primary-500">{club.name}</div>
+												<div class="text-surface-600-300-token text-sm">
+													{formatAddress(club)}
+												</div>
+											</button>
+										{/each}
+									</div>
+								{:else if showResults && searchInput.length > 0}
+									<div
+										class="bg-surface-100-800-token border-surface-300-600-token absolute z-10 mt-1 w-full rounded-lg border p-4 shadow-lg"
+									>
+										<div class="text-surface-600-300-token text-center">
+											No clubs found matching "{searchInput}"
+										</div>
+									</div>
+								{/if}
+							</div>
+						{:else if searchType === 'location'}
+							<div class="space-y-3">
+								<div class="grid grid-cols-3 gap-3">
+									<label class="label">
+										<span>Latitude</span>
+										<input
+											bind:value={latitude}
+											class="input"
+											type="number"
+											step="any"
+											placeholder="e.g. 40.7128"
+										/>
+									</label>
+									<label class="label">
+										<span>Longitude</span>
+										<input
+											bind:value={longitude}
+											class="input"
+											type="number"
+											step="any"
+											placeholder="e.g. -74.0060"
+										/>
+									</label>
+									<label class="label">
+										<span>Radius (km)</span>
+										<input
+											bind:value={radius}
+											class="input"
+											type="number"
+											min="1"
+											max="1000"
+											placeholder="50"
+										/>
+									</label>
+								</div>
+								<button class="btn preset-filled-primary-500" onclick={getCurrentLocation}>
+									<MapPinHouse class="mr-2 h-4 w-4" />
+									Use My Location
+								</button>
+							</div>
+						{/if}
+					</div>
 				</div>
 			</div>
-		{:else}
-			<div class="space-y-4">
-				<div class="mx-auto grid max-w-2xl grid-cols-1 gap-4 md:grid-cols-3">
-					<label class="label">
-						<span>Latitude</span>
-						<input
-							bind:value={latitude}
-							class="input"
-							type="number"
-							step="any"
-							placeholder="e.g. 40.7128"
-						/>
-					</label>
-					<label class="label">
-						<span>Longitude</span>
-						<input
-							bind:value={longitude}
-							class="input"
-							type="number"
-							step="any"
-							placeholder="e.g. -74.0060"
-						/>
-					</label>
-					<label class="label">
-						<span>Radius (km)</span>
-						<input
-							bind:value={radius}
-							class="input"
-							type="number"
-							min="1"
-							max="1000"
-							placeholder="50"
-						/>
-					</label>
+
+			<!-- Error message display -->
+			{#if error}
+				<div class="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-600">
+					{error}
 				</div>
-				<div class="flex justify-center">
-					<button class="btn preset-filled-primary-500" onclick={getCurrentLocation}>
-						<MapPinHouse class="mr-2 h-4 w-4" />
-						Use My Location
-					</button>
-				</div>
-			</div>
-		{/if}
+			{/if}
+		</div>
 	</section>
 
 	<!-- Loading State -->
