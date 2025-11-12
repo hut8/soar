@@ -26,6 +26,9 @@ export default defineConfig({
 		// Use PLAYWRIGHT_BASE_URL environment variable in CI/Docker, otherwise default to localhost
 		baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:4173',
 
+		// Ignore HTTPS errors for test environments
+		ignoreHTTPSErrors: true,
+
 		// Collect trace on failure for debugging
 		trace: 'on-first-retry',
 
@@ -40,7 +43,13 @@ export default defineConfig({
 	projects: [
 		{
 			name: 'chromium',
-			use: { ...devices['Desktop Chrome'] }
+			use: {
+				...devices['Desktop Chrome'],
+				// Disable security features that can interfere with local testing
+				launchOptions: {
+					args: ['--disable-web-security', '--disable-features=IsolateOrigins,site-per-process']
+				}
+			}
 		}
 
 		// Uncomment to test on more browsers:
