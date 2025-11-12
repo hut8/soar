@@ -13,8 +13,9 @@ export default defineConfig({
 	// Test execution settings
 	fullyParallel: true,
 	forbidOnly: !!process.env.CI,
-	retries: process.env.CI ? 2 : 0,
+	retries: 0, // Disabled retries for faster feedback
 	workers: process.env.CI ? 1 : undefined,
+	maxFailures: 1, // Stop after first failure for faster feedback
 
 	// Reporter configuration
 	reporter: [['html'], ['list'], ...(process.env.CI ? [['github' as const]] : [])],
