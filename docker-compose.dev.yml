@@ -2,8 +2,8 @@
 # Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 
 services:
-  # Override app service for development
-  app:
+  # Override soar service for development
+  soar:
     # Use a base Rust image instead of building
     image: rust:1-slim-bookworm
     # Mount source code for live editing

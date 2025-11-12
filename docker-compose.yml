@@ -34,7 +34,7 @@ services:
       - soar-network
 
   # SOAR backend application
-  app:
+  soar:
     build:
       context: .
       dockerfile: Dockerfile

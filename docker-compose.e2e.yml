@@ -8,8 +8,8 @@ services:
     container_name: soar-e2e-tests
     working_dir: /app/web
     environment:
-      # Point to the app container
-      PLAYWRIGHT_BASE_URL: http://app:61226
+      # Point to the soar container
+      PLAYWRIGHT_BASE_URL: http://soar:61226
       # Use the same database for verification
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/soar_test
       CI: "true"
@@ -20,7 +20,7 @@ services:
       - ./web/test-results:/app/web/test-results
       - ./web/playwright-report:/app/web/playwright-report
     depends_on:
-      app:
+      soar:
         condition: service_healthy
     networks:
       - soar-network
