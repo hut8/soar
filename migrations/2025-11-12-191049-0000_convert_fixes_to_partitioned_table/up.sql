@@ -73,8 +73,8 @@ SELECT partman.create_parent(
 -- This is the SLOW part - it will take 30-60 minutes on production (225M rows)
 SELECT partman.partition_data_time(
     p_parent_table := 'public.fixes',
-    p_batch_count := 10,  -- Process in batches
-    p_batch_interval := interval '100000 rows',  -- Batch size
+    p_batch_count := 10,  -- Process 10 batches per call (call multiple times if needed)
+    p_batch_interval := interval '1 day',  -- Process 1 day of data per batch
     p_lock_wait := 2  -- Wait 2 seconds for locks
 );
 
@@ -150,8 +150,8 @@ SELECT partman.create_parent(
 -- Step 13: Migrate data from old aprs_messages table to new partitioned table
 SELECT partman.partition_data_time(
     p_parent_table := 'public.aprs_messages',
-    p_batch_count := 10,  -- Process in batches
-    p_batch_interval := interval '100000 rows',  -- Batch size
+    p_batch_count := 10,  -- Process 10 batches per call (call multiple times if needed)
+    p_batch_interval := interval '1 day',  -- Process 1 day of data per batch
     p_lock_wait := 2  -- Wait 2 seconds for locks
 );
 
