@@ -65,7 +65,7 @@ SELECT partman.create_parent(
     p_parent_table := 'public.fixes',
     p_control := 'received_at',
     p_type := 'native',
-    p_interval := 'daily',
+    p_interval := '1 day',
     p_premake := 3,  -- Create 3 days ahead
     p_start_partition := (SELECT date_trunc('day', MIN(received_at))::text FROM fixes_old)
 );
@@ -144,7 +144,7 @@ SELECT partman.create_parent(
     p_parent_table := 'public.aprs_messages',
     p_control := 'received_at',
     p_type := 'native',
-    p_interval := 'daily',
+    p_interval := '1 day',
     p_premake := 3,  -- Create 3 days ahead
     p_start_partition := (SELECT date_trunc('day', MIN(received_at))::text FROM aprs_messages_old)
 );
