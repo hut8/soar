@@ -42,6 +42,10 @@ This migration converts the `fixes` and `aprs_messages` tables from monolithic t
 
 On Debian/Ubuntu:
 ```bash
+# For PostgreSQL 17 (production version)
+sudo apt-get install postgresql-17-partman
+
+# For PostgreSQL 16
 sudo apt-get install postgresql-16-partman
 ```
 
@@ -143,6 +147,10 @@ sudo systemctl start partman-maintenance.service
 If you prefer database-level scheduling, you can use pg_cron instead:
 
 ```bash
+# For PostgreSQL 17 (production version)
+sudo apt-get install postgresql-17-cron
+
+# For PostgreSQL 16
 sudo apt-get install postgresql-16-cron
 ```
 
