@@ -83,21 +83,22 @@ SELECT partman.partition_data_time(
 ALTER TABLE fixes ADD PRIMARY KEY (id, received_at);
 
 -- Step 7: Recreate indexes on fixes parent table (will cascade to partitions)
-CREATE INDEX idx_fixes_device_received_at ON fixes (device_id, received_at DESC);
-CREATE INDEX idx_fixes_location_geom ON fixes USING GIST (location_geom);
-CREATE INDEX idx_fixes_location ON fixes USING GIST (location);
-CREATE INDEX idx_fixes_source ON fixes (source);
-CREATE INDEX idx_fixes_timestamp ON fixes (timestamp DESC);
-CREATE INDEX idx_fixes_altitude_agl_feet ON fixes (altitude_agl_feet);
-CREATE INDEX idx_fixes_altitude_agl_valid ON fixes (altitude_agl_valid) WHERE altitude_agl_valid = false;
-CREATE INDEX idx_fixes_aprs_message_id ON fixes (aprs_message_id);
-CREATE INDEX idx_fixes_backfill_optimized ON fixes (timestamp) WHERE altitude_agl_valid = false AND altitude_msl_feet IS NOT NULL AND is_active = true;
-CREATE INDEX idx_fixes_device_id_timestamp ON fixes (device_id, timestamp);
-CREATE INDEX idx_fixes_flight_id_timestamp ON fixes (flight_id, timestamp);
-CREATE INDEX idx_fixes_ground_speed_knots ON fixes (ground_speed_knots);
-CREATE INDEX idx_fixes_is_active ON fixes (is_active);
-CREATE INDEX idx_fixes_receiver_id ON fixes (receiver_id);
-CREATE INDEX idx_fixes_time_gap_seconds ON fixes (time_gap_seconds) WHERE time_gap_seconds IS NOT NULL;
+-- Note: partition_data_time may have already copied these indexes, so use IF NOT EXISTS
+CREATE INDEX IF NOT EXISTS idx_fixes_device_received_at ON fixes (device_id, received_at DESC);
+CREATE INDEX IF NOT EXISTS idx_fixes_location_geom ON fixes USING GIST (location_geom);
+CREATE INDEX IF NOT EXISTS idx_fixes_location ON fixes USING GIST (location);
+CREATE INDEX IF NOT EXISTS idx_fixes_source ON fixes (source);
+CREATE INDEX IF NOT EXISTS idx_fixes_timestamp ON fixes (timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_fixes_altitude_agl_feet ON fixes (altitude_agl_feet);
+CREATE INDEX IF NOT EXISTS idx_fixes_altitude_agl_valid ON fixes (altitude_agl_valid) WHERE altitude_agl_valid = false;
+CREATE INDEX IF NOT EXISTS idx_fixes_aprs_message_id ON fixes (aprs_message_id);
+CREATE INDEX IF NOT EXISTS idx_fixes_backfill_optimized ON fixes (timestamp) WHERE altitude_agl_valid = false AND altitude_msl_feet IS NOT NULL AND is_active = true;
+CREATE INDEX IF NOT EXISTS idx_fixes_device_id_timestamp ON fixes (device_id, timestamp);
+CREATE INDEX IF NOT EXISTS idx_fixes_flight_id_timestamp ON fixes (flight_id, timestamp);
+CREATE INDEX IF NOT EXISTS idx_fixes_ground_speed_knots ON fixes (ground_speed_knots);
+CREATE INDEX IF NOT EXISTS idx_fixes_is_active ON fixes (is_active);
+CREATE INDEX IF NOT EXISTS idx_fixes_receiver_id ON fixes (receiver_id);
+CREATE INDEX IF NOT EXISTS idx_fixes_time_gap_seconds ON fixes (time_gap_seconds) WHERE time_gap_seconds IS NOT NULL;
 
 -- Step 8: Recreate foreign key constraints on fixes
 ALTER TABLE fixes ADD CONSTRAINT fixes_aprs_message_id_fkey FOREIGN KEY (aprs_message_id) REFERENCES aprs_messages(id) ON DELETE SET NULL;
@@ -159,8 +160,9 @@ SELECT partman.partition_data_time(
 ALTER TABLE aprs_messages ADD PRIMARY KEY (id, received_at);
 
 -- Step 15: Recreate indexes on aprs_messages parent table
-CREATE INDEX idx_aprs_messages_received_at ON aprs_messages (received_at);
-CREATE INDEX idx_aprs_messages_receiver_id ON aprs_messages (receiver_id);
+-- Note: partition_data_time may have already copied these indexes, so use IF NOT EXISTS
+CREATE INDEX IF NOT EXISTS idx_aprs_messages_received_at ON aprs_messages (received_at);
+CREATE INDEX IF NOT EXISTS idx_aprs_messages_receiver_id ON aprs_messages (receiver_id);
 
 -- Step 16: Recreate foreign key constraints on aprs_messages
 ALTER TABLE aprs_messages ADD CONSTRAINT aprs_messages_receiver_id_fkey FOREIGN KEY (receiver_id) REFERENCES receivers(id) ON DELETE CASCADE;
