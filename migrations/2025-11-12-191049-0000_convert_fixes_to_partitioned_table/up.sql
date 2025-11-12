@@ -15,7 +15,8 @@
 -- 4. Configure 30-day retention with safe dropping (detach, don't drop)
 -- ================================================================================
 
--- Step 1: Install pg_partman extension
+-- Step 1: Create partman schema and install pg_partman extension
+CREATE SCHEMA IF NOT EXISTS partman;
 CREATE EXTENSION IF NOT EXISTS pg_partman SCHEMA partman;
 
 -- ================================================================================

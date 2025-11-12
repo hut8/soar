@@ -55,3 +55,7 @@ END $$;
 
 COMMENT ON TABLE fixes IS 'Non-partitioned fixes table (partitioning rolled back)';
 COMMENT ON TABLE aprs_messages IS 'Non-partitioned aprs_messages table (partitioning rolled back)';
+
+-- Step 8: Drop pg_partman extension and schema (created by this migration)
+DROP EXTENSION IF EXISTS pg_partman CASCADE;
+DROP SCHEMA IF EXISTS partman CASCADE;
