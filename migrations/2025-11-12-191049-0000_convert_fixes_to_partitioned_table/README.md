@@ -98,7 +98,7 @@ SELECT cron.schedule('partman-maintenance', '0 3 * * *',
 Add to crontab:
 ```bash
 # Run partition maintenance daily at 3 AM
-0 3 * * * psql $DATABASE_URL -c "SELECT partman.run_maintenance('public.fixes')" >> /var/log/partman.log 2>&1
+0 3 * * * psql $DATABASE_URL -c "SELECT partman.run_maintenance('public.fixes')" >> /var/soar/logs/partman.log 2>&1
 ```
 
 ### Option 3: Systemd Timer
