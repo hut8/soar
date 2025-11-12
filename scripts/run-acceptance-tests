@@ -14,10 +14,12 @@
 # Options:
 #   --build       Force rebuild of containers
 #   --down        Stop and remove containers after tests
+#   --dev         Use development mode (mount source, cache builds)
 #
 # Examples:
 #   ./scripts/run-acceptance-tests                    # Run tests
 #   ./scripts/run-acceptance-tests --build --down     # Rebuild, run, and cleanup
+#   ./scripts/run-acceptance-tests --dev              # Dev mode with cached builds
 
 set -e  # Exit on error
 
@@ -31,6 +33,8 @@ NC='\033[0m' # No Color
 # Parse command line options
 BUILD_FLAG=""
 DOWN_FLAG=false
+DEV_MODE=false
+COMPOSE_FILES="-f docker-compose.yml"
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -42,13 +46,24 @@ while [[ $# -gt 0 ]]; do
             DOWN_FLAG=true
             shift
             ;;
+        --dev)
+            DEV_MODE=true
+            shift
+            ;;
         *)
             echo -e "${RED}Unknown option: $1${NC}"
-            echo "Usage: $0 [--build] [--down]"
+            echo "Usage: $0 [--build] [--down] [--dev]"
             exit 1
             ;;
     esac
 done
+
+# Set compose files based on mode
+if [ "$DEV_MODE" = true ]; then
+    COMPOSE_FILES="-f docker-compose.yml -f docker-compose.dev.yml"
+    echo -e "${BLUE}Running in development mode (source mounted, builds cached)${NC}"
+    echo ""
+fi
 
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${BLUE}  SOAR E2E Acceptance Tests${NC}"
@@ -63,7 +78,7 @@ mkdir -p web/test-results
 mkdir -p web/playwright-report
 
 echo -e "${YELLOW}[1/3] Starting services (PostgreSQL, NATS, SOAR app)...${NC}"
-docker compose up -d ${BUILD_FLAG} postgres nats app || {
+docker compose ${COMPOSE_FILES} up -d ${BUILD_FLAG} postgres nats app || {
     echo -e "${RED}Failed to start services${NC}"
     exit 1
 }
@@ -72,10 +87,10 @@ echo ""
 
 # Wait for services to be healthy
 echo -e "${YELLOW}[2/3] Waiting for services to be healthy...${NC}"
-MAX_WAIT=60
+MAX_WAIT=120
 WAITED=0
 while [ $WAITED -lt $MAX_WAIT ]; do
-    if docker compose ps | grep -q "app.*healthy"; then
+    if docker compose ${COMPOSE_FILES} ps | grep -q "app.*healthy"; then
         echo -e "${GREEN}✓ All services are healthy${NC}"
         break
     fi
@@ -86,7 +101,7 @@ done
 
 if [ $WAITED -ge $MAX_WAIT ]; then
     echo -e "${RED}Services failed to become healthy within ${MAX_WAIT} seconds${NC}"
-    docker compose logs app
+    docker compose ${COMPOSE_FILES} logs app
     exit 1
 fi
 echo ""
@@ -95,9 +110,10 @@ echo -e "${YELLOW}[3/3] Running E2E tests...${NC}"
 echo ""
 
 # Run the E2E tests in container
-COMPOSE_FILES="-f docker-compose.yml -f docker-compose.e2e.yml"
+# Add e2e compose file to the existing compose files
+E2E_COMPOSE_FILES="${COMPOSE_FILES} -f docker-compose.e2e.yml"
 
-docker compose ${COMPOSE_FILES} run --rm e2e-tests sh -c "
+docker compose ${E2E_COMPOSE_FILES} run --rm e2e-tests sh -c "
     npm ci &&
     npx playwright install --with-deps chromium &&
     npx playwright test
@@ -128,7 +144,7 @@ echo ""
 # Cleanup if requested
 if [ "$DOWN_FLAG" = true ]; then
     echo -e "${YELLOW}Stopping and removing containers...${NC}"
-    docker compose down
+    docker compose ${COMPOSE_FILES} down
     echo -e "${GREEN}✓ Cleanup complete${NC}"
 fi
 
