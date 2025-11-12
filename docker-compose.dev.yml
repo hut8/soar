@@ -17,10 +17,10 @@ services:
     # Install runtime dependencies and compile on startup
     command: >
       sh -c "
-        echo 'Installing runtime dependencies...' &&
+        echo 'Installing build dependencies...' &&
         apt-get update > /dev/null 2>&1 &&
         apt-get install -y --no-install-recommends
-          pkg-config libssl-dev libpq-dev curl
+          build-essential pkg-config libssl-dev libpq-dev curl
           > /dev/null 2>&1 &&
         echo 'Building application (using cached artifacts)...' &&
         SKIP_WEB_BUILD=1 cargo build --release &&
