@@ -6,7 +6,22 @@
 	import { Users, Search, MapPinHouse, ExternalLink, Plane } from '@lucide/svelte';
 	import { Progress, SegmentedControl } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall } from '$lib/api/server';
+	import { GOOGLE_MAPS_API_KEY } from '$lib/config';
+	import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
 	import type { ClubWithSoaring } from '$lib/types';
+
+	interface PlaceLocation {
+		lat(): number;
+		lng(): number;
+	}
+
+	interface PlaceResult {
+		location?: PlaceLocation;
+	}
+
+	interface PlaceAutocompleteElement extends HTMLElement {
+		value?: PlaceResult;
+	}
 
 	let clubs: ClubWithSoaring[] = [];
 	let loading = false;
@@ -16,11 +31,58 @@
 	let searchInput = '';
 	let showResults = false;
 	let searchType = $state<'name' | 'location'>('name');
-	let latitude = '';
-	let longitude = '';
+	let autocompleteElement = $state<google.maps.places.PlaceAutocompleteElement | null>(null);
+	let selectedLatitude = $state<number | null>(null);
+	let selectedLongitude = $state<number | null>(null);
 	let radius = '50';
 
+	// Handle place selection from autocomplete
+	function handlePlaceSelect(event: Event) {
+		console.log('Place select event:', event);
+
+		const target = event.target as PlaceAutocompleteElement;
+		let place: PlaceResult | null | undefined = null;
+
+		// Method 1: Check if place is on the event itself
+		const eventWithPlace = event as Event & { place?: PlaceResult };
+		if (eventWithPlace.place) {
+			place = eventWithPlace.place;
+			console.log('Place from event:', place);
+		}
+		// Method 2: Check the target's value property
+		else if (target?.value) {
+			place = target.value;
+			console.log('Place from target.value:', place);
+		}
+		// Method 3: Check autocompleteElement
+		else if (autocompleteElement) {
+			place = (autocompleteElement as PlaceAutocompleteElement).value;
+			console.log('Place from autocompleteElement:', place);
+		}
+
+		if (place?.location) {
+			selectedLatitude = place.location.lat();
+			selectedLongitude = place.location.lng();
+			console.log('Coordinates set:', selectedLatitude, selectedLongitude);
+		} else {
+			console.warn('No location found in place object:', place);
+		}
+	}
+
+	async function loadGoogleMapsScript(): Promise<void> {
+		setOptions({
+			key: GOOGLE_MAPS_API_KEY,
+			v: 'weekly'
+		});
+
+		// Import the places library for autocomplete
+		await importLibrary('places');
+	}
+
 	onMount(async () => {
+		// Load Google Maps script when component mounts
+		loadGoogleMapsScript();
+
 		const queryParams = page.url.searchParams;
 		const q = queryParams.get('q');
 		const lat = queryParams.get('latitude');
@@ -32,8 +94,8 @@
 			searchType = 'name';
 			await searchClubs();
 		} else if (lat && lng && r) {
-			latitude = lat;
-			longitude = lng;
+			selectedLatitude = parseFloat(lat);
+			selectedLongitude = parseFloat(lng);
 			radius = r;
 			searchType = 'location';
 			await searchClubs();
@@ -47,8 +109,13 @@
 		try {
 			let endpoint = '/clubs';
 
-			if (searchType === 'location' && latitude && longitude && radius) {
-				endpoint += `?latitude=${latitude}&longitude=${longitude}&radius=${radius}`;
+			if (
+				searchType === 'location' &&
+				selectedLatitude !== null &&
+				selectedLongitude !== null &&
+				radius
+			) {
+				endpoint += `?latitude=${selectedLatitude}&longitude=${selectedLongitude}&radius=${radius}`;
 			} else if (searchQuery) {
 				endpoint += `?q=${encodeURIComponent(searchQuery)}`;
 			}
@@ -68,8 +135,8 @@
 		if (navigator.geolocation) {
 			navigator.geolocation.getCurrentPosition(
 				(position) => {
-					latitude = position.coords.latitude.toString();
-					longitude = position.coords.longitude.toString();
+					selectedLatitude = position.coords.latitude;
+					selectedLongitude = position.coords.longitude;
 					// Automatically trigger search after getting location
 					searchClubs();
 				},
@@ -217,26 +284,13 @@
 					</div>
 				{:else if searchType === 'location'}
 					<div class="space-y-3">
-						<label class="label">
-							<span>Latitude</span>
-							<input
-								bind:value={latitude}
-								class="input"
-								type="number"
-								step="any"
-								placeholder="e.g. 40.7128"
-							/>
-						</label>
-						<label class="label">
-							<span>Longitude</span>
-							<input
-								bind:value={longitude}
-								class="input"
-								type="number"
-								step="any"
-								placeholder="e.g. -74.0060"
-							/>
-						</label>
+						<gmp-place-autocomplete
+							bind:this={autocompleteElement}
+							placeholder="Enter a city or location"
+							ongmpplaceselect={handlePlaceSelect}
+							class="google-autocomplete"
+						></gmp-place-autocomplete>
+
 						<label class="label">
 							<span>Radius (km)</span>
 							<input
@@ -248,7 +302,13 @@
 								placeholder="50"
 							/>
 						</label>
-						<button class="btn w-full preset-filled-primary-500" onclick={getCurrentLocation}>
+
+						<button class="btn w-full preset-filled-primary-500" onclick={searchClubs}>
+							<Search class="mr-2 h-4 w-4" />
+							Search
+						</button>
+
+						<button class="preset-tonal-surface-500 btn w-full" onclick={getCurrentLocation}>
 							<MapPinHouse class="mr-2 h-4 w-4" />
 							Use My Location
 						</button>
@@ -336,28 +396,16 @@
 							</div>
 						{:else if searchType === 'location'}
 							<div class="space-y-3">
-								<div class="grid grid-cols-3 gap-3">
-									<label class="label">
-										<span>Latitude</span>
-										<input
-											bind:value={latitude}
-											class="input"
-											type="number"
-											step="any"
-											placeholder="e.g. 40.7128"
-										/>
-									</label>
-									<label class="label">
-										<span>Longitude</span>
-										<input
-											bind:value={longitude}
-											class="input"
-											type="number"
-											step="any"
-											placeholder="e.g. -74.0060"
-										/>
-									</label>
-									<label class="label">
+								<div class="flex gap-3">
+									<div class="flex-1">
+										<gmp-place-autocomplete
+											bind:this={autocompleteElement}
+											placeholder="Enter a city or location"
+											ongmpplaceselect={handlePlaceSelect}
+											class="google-autocomplete"
+										></gmp-place-autocomplete>
+									</div>
+									<label class="label w-32">
 										<span>Radius (km)</span>
 										<input
 											bind:value={radius}
@@ -369,10 +417,17 @@
 										/>
 									</label>
 								</div>
-								<button class="btn preset-filled-primary-500" onclick={getCurrentLocation}>
-									<MapPinHouse class="mr-2 h-4 w-4" />
-									Use My Location
-								</button>
+
+								<div class="flex gap-3">
+									<button class="btn flex-1 preset-filled-primary-500" onclick={searchClubs}>
+										<Search class="mr-2 h-4 w-4" />
+										Search
+									</button>
+									<button class="preset-tonal-surface-500 btn" onclick={getCurrentLocation}>
+										<MapPinHouse class="mr-2 h-4 w-4" />
+										Use My Location
+									</button>
+								</div>
 							</div>
 						{/if}
 					</div>
@@ -535,7 +590,7 @@
 				</article>
 			{/each}
 		</div>
-	{:else if !loading && !error && clubs.length === 0 && (searchQuery || (latitude && longitude))}
+	{:else if !loading && !error && clubs.length === 0 && (searchQuery || (selectedLatitude !== null && selectedLongitude !== null))}
 		<div class="space-y-4 card p-12 text-center">
 			<Search class="mx-auto mb-4 h-16 w-16 text-surface-400" />
 			<div class="space-y-2">
@@ -547,3 +602,17 @@
 		</div>
 	{/if}
 </div>
+
+<style>
+	/* Dark mode support for Google Maps autocomplete */
+	/* The gmp-place-autocomplete component automatically respects color-scheme */
+	gmp-place-autocomplete {
+		width: 100%;
+		color-scheme: light;
+	}
+
+	/* Dark mode - component will automatically adapt to dark color scheme */
+	:global(.dark) gmp-place-autocomplete {
+		color-scheme: dark;
+	}
+</style>

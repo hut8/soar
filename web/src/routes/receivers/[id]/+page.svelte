@@ -52,12 +52,12 @@
 		latitude: number;
 		longitude: number;
 		altitude_msl_feet: number | null;
-		device_address: number;
+		device_id: string;
 		ground_speed_knots: number | null;
 		track_degrees: number | null;
 		climb_fpm: number | null;
 		snr_db: number | null;
-		registration: string | null;
+		source: string;
 	}
 
 	interface FixesResponse {
@@ -985,8 +985,8 @@
 										<thead>
 											<tr>
 												<th>Timestamp</th>
-												<th>Device</th>
-												<th>Registration</th>
+												<th>Source</th>
+												<th>Device ID</th>
 												<th>Position</th>
 												<th>Altitude</th>
 												<th>Speed</th>
@@ -1003,9 +1003,14 @@
 														</div>
 													</td>
 													<td class="font-mono text-xs">
-														{fix.device_address.toString(16).toUpperCase().padStart(6, '0')}
+														<a
+															href={resolve(`/devices/${fix.device_id}`)}
+															class="text-primary-500 hover:text-primary-600"
+														>
+															{fix.source}
+														</a>
 													</td>
-													<td class="font-mono text-sm">{fix.registration || '—'}</td>
+													<td class="font-mono text-xs">{fix.device_id.slice(0, 8)}</td>
 													<td class="font-mono text-xs">
 														{fix.latitude?.toFixed(4) ?? '—'}, {fix.longitude?.toFixed(4) ?? '—'}
 													</td>

@@ -5,8 +5,8 @@ use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
 use tracing::info;
 use uuid::Uuid;
 
-use crate::receiver_statuses::{NewReceiverStatus, ReceiverStatus};
-use crate::schema::receiver_statuses;
+use crate::receiver_statuses::{NewReceiverStatus, ReceiverStatus, ReceiverStatusWithRaw};
+use crate::schema::{aprs_messages, receiver_statuses};
 
 pub type PgPool = Pool<ConnectionManager<PgConnection>>;
 pub type PgPooledConnection = PooledConnection<ConnectionManager<PgConnection>>;
@@ -153,6 +153,41 @@ impl ReceiverStatusRepository {
             .load::<ReceiverStatus>(&mut conn)?;
 
         Ok((statuses, total_count))
+    }
+
+    /// Get statuses for a receiver with pagination, including raw APRS message data
+    pub async fn get_statuses_with_raw_by_receiver_paginated(
+        &self,
+        receiver_id: Uuid,
+        page: i64,
+        per_page: i64,
+    ) -> Result<(Vec<ReceiverStatusWithRaw>, i64)> {
+        let mut conn = self.get_connection()?;
+
+        // Get total count
+        let total_count: i64 = receiver_statuses::table
+            .filter(receiver_statuses::receiver_id.eq(receiver_id))
+            .count()
+            .get_result(&mut conn)?;
+
+        // Get paginated results with raw message data
+        let offset = (page - 1) * per_page;
+        let results = receiver_statuses::table
+            .inner_join(aprs_messages::table)
+            .filter(receiver_statuses::receiver_id.eq(receiver_id))
+            .order(receiver_statuses::received_at.desc())
+            .limit(per_page)
+            .offset(offset)
+            .select((ReceiverStatus::as_select(), aprs_messages::raw_message))
+            .load::<(ReceiverStatus, String)>(&mut conn)?;
+
+        // Convert to ReceiverStatusWithRaw
+        let statuses_with_raw = results
+            .into_iter()
+            .map(|(status, raw_data)| ReceiverStatusWithRaw { status, raw_data })
+            .collect();
+
+        Ok((statuses_with_raw, total_count))
     }
 
     /// Get average time between status updates for a receiver

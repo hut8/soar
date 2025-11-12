@@ -6,6 +6,14 @@ use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use uuid::Uuid;
 
+/// Response struct that includes raw APRS message data
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReceiverStatusWithRaw {
+    #[serde(flatten)]
+    pub status: ReceiverStatus,
+    pub raw_data: String,
+}
+
 /// Database model for receiver status information
 #[derive(
     Debug,
