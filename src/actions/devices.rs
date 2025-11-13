@@ -5,6 +5,7 @@ use axum::{
 };
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use tracing::{info, instrument};
 use uuid::Uuid;
 
@@ -82,6 +83,67 @@ pub struct DeviceSearchResponse {
 pub struct DeviceFixesResponse {
     pub fixes: Vec<Fix>,
     pub count: usize,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BulkDevicesQuery {
+    /// Comma-separated list of device UUIDs (max 10)
+    pub ids: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct BulkDevicesResponse {
+    pub devices: HashMap<String, DeviceView>,
+}
+
+/// Get multiple devices by their UUIDs (max 10)
+#[instrument(skip(state))]
+pub async fn get_devices_bulk(
+    Query(query): Query<BulkDevicesQuery>,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let device_repo = DeviceRepository::new(state.pool);
+
+    // Parse the comma-separated IDs
+    let id_strings: Vec<&str> = query.ids.split(',').map(|s| s.trim()).collect();
+
+    // Validate max 10 IDs
+    if id_strings.len() > 10 {
+        return json_error(
+            StatusCode::BAD_REQUEST,
+            "Maximum 10 device IDs allowed per request",
+        )
+        .into_response();
+    }
+
+    // Parse UUIDs
+    let mut uuids = Vec::new();
+    for id_str in &id_strings {
+        match Uuid::parse_str(id_str) {
+            Ok(uuid) => uuids.push(uuid),
+            Err(_) => {
+                return json_error(
+                    StatusCode::BAD_REQUEST,
+                    &format!("Invalid UUID format: {}", id_str),
+                )
+                .into_response();
+            }
+        }
+    }
+
+    // Fetch devices
+    let mut devices_map = HashMap::new();
+    for uuid in uuids {
+        if let Ok(Some(device)) = device_repo.get_device_by_uuid(uuid).await {
+            let device_view: DeviceView = device.into();
+            devices_map.insert(uuid.to_string(), device_view);
+        }
+    }
+
+    Json(BulkDevicesResponse {
+        devices: devices_map,
+    })
+    .into_response()
 }
 
 /// Get a device by its UUID

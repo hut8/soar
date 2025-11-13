@@ -23,7 +23,7 @@
 	import { serverCall } from '$lib/api/server';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
-	import type { Device } from '$lib/types';
+	import type { Device, Receiver, Fix, FixesResponse } from '$lib/types';
 	import {
 		formatDeviceAddress,
 		getAircraftTypeOgnDescription,
@@ -31,40 +31,6 @@
 	} from '$lib/formatters';
 
 	dayjs.extend(relativeTime);
-
-	interface Receiver {
-		id: string;
-		callsign: string;
-		description: string | null;
-		contact: string | null;
-		email: string | null;
-		country: string | null;
-		latitude: number | null;
-		longitude: number | null;
-		created_at: string;
-		updated_at: string;
-		from_ogn_db: boolean;
-	}
-
-	interface Fix {
-		id: string;
-		timestamp: string;
-		latitude: number;
-		longitude: number;
-		altitude_msl_feet: number | null;
-		device_address: number;
-		ground_speed_knots: number | null;
-		track_degrees: number | null;
-		climb_fpm: number | null;
-		snr_db: number | null;
-		registration: string | null;
-	}
-
-	interface FixesResponse {
-		fixes: Fix[];
-		page: number;
-		total_pages: number;
-	}
 
 	interface ReceiverStatus {
 		id: string;
@@ -131,6 +97,7 @@
 	let rawMessages = $state<RawMessage[] | null>(null);
 	let statistics = $state<ReceiverStatistics | null>(null);
 	let aggregateStats = $state<AggregateStatsResponse | null>(null);
+	let devicesMap = $state<Record<string, Device>>({});
 	let loading = $state(true);
 	let loadingFixes = $state(false);
 	let loadingStatuses = $state(false);
@@ -217,6 +184,9 @@
 			);
 			fixes = response.fixes || [];
 			fixesTotalPages = response.total_pages || 1;
+
+			// Fetch device information for the fixes
+			await loadDevicesForFixes(fixes);
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			fixesError = `Failed to load fixes: ${errorMessage}`;
@@ -224,6 +194,34 @@
 			fixes = []; // Set to empty array on error to prevent retry loop
 		} finally {
 			loadingFixes = false;
+		}
+	}
+
+	async function loadDevicesForFixes(fixesList: Fix[]) {
+		// Extract unique device IDs from fixes
+		const deviceIds = [...new Set(fixesList.map((fix) => fix.device_id).filter(Boolean))];
+
+		if (deviceIds.length === 0) return;
+
+		// Batch device IDs into groups of 10 (max allowed by endpoint)
+		const batches: string[][] = [];
+		for (let i = 0; i < deviceIds.length; i += 10) {
+			batches.push(deviceIds.slice(i, i + 10) as string[]);
+		}
+
+		// Fetch all batches
+		try {
+			for (const batch of batches) {
+				const idsParam = batch.join(',');
+				const response = await serverCall<{ devices: Record<string, Device> }>(
+					`/devices/bulk?ids=${encodeURIComponent(idsParam)}`
+				);
+				// Merge the devices into the map
+				Object.assign(devicesMap, response.devices);
+			}
+		} catch (err) {
+			console.error('Failed to load device information:', err);
+			// Don't fail the whole operation if device fetching fails
 		}
 	}
 
@@ -1173,7 +1171,7 @@
 															</div>
 														</td>
 														<td class="font-mono text-xs">
-															{fix.device_address.toString(16).toUpperCase().padStart(6, '0')}
+															{fix.device_address_hex || '—'}
 														</td>
 														<td class="font-mono text-sm">{fix.registration || '—'}</td>
 														<td class="font-mono text-xs">
@@ -1224,7 +1222,7 @@
 												<div class="flex justify-between gap-4">
 													<dt class="text-surface-600-300-token">Device</dt>
 													<dd class="font-mono text-xs">
-														{fix.device_address.toString(16).toUpperCase().padStart(6, '0')}
+														{fix.device_address_hex || '—'}
 													</dd>
 												</div>
 												<div class="flex justify-between gap-4">

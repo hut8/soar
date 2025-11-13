@@ -134,7 +134,7 @@ export function getAircraftTypeOgnDescription(aircraftType: string | undefined |
 		drop_plane: 'Drop Plane',
 		hang_glider: 'Hang Glider',
 		paraglider: 'Paraglider',
-		recip_engine: 'Reciprocating Engine',
+		recip_engine: 'Piston',
 		jet_turboprop: 'Jet/Turboprop',
 		unknown: 'Unknown',
 		balloon: 'Balloon',

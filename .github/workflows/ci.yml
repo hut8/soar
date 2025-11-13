@@ -366,6 +366,12 @@ jobs:
             echo "Grafana dashboards included in deployment package: $DASHBOARD_COUNT"
           fi
 
+          # Copy backup scripts directory
+          if [ -d scripts/backup ]; then
+            cp -r scripts/backup deploy-pkg/scripts/
+            echo "Backup scripts included in deployment package"
+          fi
+
           # Create version file with commit SHA (short form for Sentry)
           echo "${GITHUB_SHA:0:7}" > deploy-pkg/VERSION
 
@@ -379,6 +385,10 @@ jobs:
           if [ -d deploy-pkg/grafana-provisioning ]; then
             echo "Grafana provisioning:"
             ls -lh deploy-pkg/grafana-provisioning/dashboards/
+          fi
+          if [ -d deploy-pkg/scripts/backup ]; then
+            echo "Backup scripts:"
+            ls -lh deploy-pkg/scripts/backup/
           fi
 
       - name: Upload deployment package
