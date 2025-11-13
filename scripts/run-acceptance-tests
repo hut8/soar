@@ -3,10 +3,11 @@
 # Run E2E acceptance tests using Docker Compose
 #
 # This script:
-# 1. Builds and starts PostgreSQL, NATS, and SOAR containers
-# 2. Runs Playwright E2E tests in a container
-# 3. Collects test artifacts (screenshots, reports) to web/test-results and web/playwright-report
-# 4. Cleans up containers after tests complete
+# 1. Starts PostgreSQL, NATS, and SOAR containers with source mounted
+# 2. Compiles Rust application with cached artifacts (first run ~10min, subsequent ~30sec)
+# 3. Runs Playwright E2E tests in a container
+# 4. Collects test artifacts (screenshots, reports) to web/test-results and web/playwright-report
+# 5. Cleans up containers after tests complete
 #
 # Usage:
 #   ./scripts/run-acceptance-tests
@@ -20,7 +21,7 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-COMPOSE_FILES="-f docker-compose.yml"
+COMPOSE_FILES="-f docker-compose.yml -f docker-compose.dev.yml"
 
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${BLUE}  SOAR E2E Acceptance Tests${NC}"
@@ -45,8 +46,9 @@ docker compose ${COMPOSE_FILES} down --remove-orphans > /dev/null 2>&1 || true
 docker rm -f soar-app-test > /dev/null 2>&1 || true
 echo ""
 
-echo -e "${YELLOW}[1/3] Building and starting services (PostgreSQL, NATS, SOAR app)...${NC}"
-docker compose ${COMPOSE_FILES} up -d --build postgres nats soar || {
+echo -e "${YELLOW}[1/3] Starting services (PostgreSQL, NATS, SOAR app)...${NC}"
+echo -e "${BLUE}(Source mounted with cargo cache - first compile ~10min, subsequent ~30sec)${NC}"
+docker compose ${COMPOSE_FILES} up -d postgres nats soar || {
     echo -e "${RED}Failed to start services${NC}"
     exit 1
 }
@@ -55,7 +57,7 @@ echo ""
 
 # Wait for services to be healthy
 echo -e "${YELLOW}[2/3] Waiting for services to be healthy...${NC}"
-MAX_WAIT=120
+MAX_WAIT=600  # 10 minutes for initial compile
 WAITED=0
 while [ $WAITED -lt $MAX_WAIT ]; do
     if docker compose ${COMPOSE_FILES} ps | grep -q "soar-app-test.*healthy"; then
