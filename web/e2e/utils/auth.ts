@@ -43,12 +43,11 @@ export async function login(page: Page, email: string, password: string): Promis
  * await logout(page);
  */
 export async function logout(page: Page): Promise<void> {
-	// Click on user name (next to user icon) to open menu
-	// The exact locator might need adjustment based on your UI structure
-	await page.getByRole('button', { name: /user|profile/i }).click();
+	// Click on user name button to open menu (shows first name "Test")
+	await page.getByRole('button', { name: 'Test' }).click();
 
-	// Click "Sign out" in the menu
-	await page.getByRole('menuitem', { name: /sign out/i }).click();
+	// Click "Sign out" button in the menu
+	await page.getByRole('button', { name: /sign out/i }).click();
 
 	// Wait for redirect to login page
 	await page.waitForURL('/login');
