@@ -23,13 +23,13 @@
 		value?: PlaceResult;
 	}
 
-	let clubs: ClubWithSoaring[] = [];
-	let loading = false;
-	let error = '';
-	let searchQuery = '';
-	let filteredClubs: ClubWithSoaring[] = [];
-	let searchInput = '';
-	let showResults = false;
+	let clubs = $state<ClubWithSoaring[]>([]);
+	let loading = $state(false);
+	let error = $state('');
+	let searchQuery = $state('');
+	let filteredClubs = $state<ClubWithSoaring[]>([]);
+	let searchInput = $state('');
+	let showResults = $state(false);
 	let searchType = $state<'name' | 'location'>('name');
 	let autocompleteElement = $state<google.maps.places.PlaceAutocompleteElement | null>(null);
 	let selectedLatitude = $state<number | null>(null);
