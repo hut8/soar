@@ -35,6 +35,15 @@ cd "$(dirname "$0")/.."
 export USER_ID=$(id -u)
 export GROUP_ID=$(id -g)
 
+# Build web frontend (required for embedded serving in Rust app)
+echo -e "${YELLOW}Building web frontend...${NC}"
+cd web
+npm ci --silent
+npm run build
+cd ..
+echo -e "${GREEN}✓ Web frontend built${NC}"
+echo ""
+
 # Create artifact directories if they don't exist
 mkdir -p web/test-results
 mkdir -p web/playwright-report
