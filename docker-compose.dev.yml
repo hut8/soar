@@ -14,6 +14,13 @@ services:
       - cargo-git:/usr/local/cargo/git
       - target-cache:/workspace/target
     working_dir: /workspace
+    # Override health check for dev mode - first compile takes up to 10 minutes
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:61226/"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 600s  # 10 minutes for initial compile
     # Install build dependencies and compile on startup
     command: >
       sh -c "
