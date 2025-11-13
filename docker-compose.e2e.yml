@@ -31,6 +31,5 @@ services:
     command: >
       sh -c "
         npm ci &&
-        npx playwright install --with-deps chromium &&
         npx playwright test
       "
