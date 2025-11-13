@@ -34,7 +34,7 @@
 	let autocompleteElement = $state<google.maps.places.PlaceAutocompleteElement | null>(null);
 	let selectedLatitude = $state<number | null>(null);
 	let selectedLongitude = $state<number | null>(null);
-	let radius = '50';
+	let radius = $state('50');
 
 	// Handle place selection from autocomplete
 	function handlePlaceSelect(event: Event) {
