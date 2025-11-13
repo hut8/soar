@@ -221,24 +221,21 @@
 						{/if}
 						<td>
 							<div class="flex flex-col gap-1">
-								<div class="flex items-center gap-1">
-									<div class="text-sm">
-										{formatRelativeTime(
-											isAirborne(flight) ? flight.created_at : flight.takeoff_time
-										)}
-									</div>
+								<div class="text-sm">
+									{formatRelativeTime(isAirborne(flight) ? flight.created_at : flight.takeoff_time)}
+								</div>
+								<div class="flex items-center gap-1 text-xs">
+									<span class="text-surface-500-400-token">
+										{formatLocalTime(isAirborne(flight) ? flight.created_at : flight.takeoff_time)}
+									</span>
 									{#if isAirborne(flight)}
 										<span
-											class="badge preset-filled-tertiary-500"
-											style="font-size: 0.75rem;"
+											class="badge preset-filled-surface-500 text-xs"
 											title="First detected while airborne"
 										>
 											Airborne
 										</span>
 									{/if}
-								</div>
-								<div class="text-surface-500-400-token text-xs">
-									{formatLocalTime(isAirborne(flight) ? flight.created_at : flight.takeoff_time)}
 								</div>
 								{#if flight.departure_airport}
 									<div class="text-surface-500-400-token flex items-center gap-1 text-xs">
@@ -422,8 +419,7 @@
 					</span>
 					{#if isAirborne(flight)}
 						<span
-							class="badge preset-filled-tertiary-500"
-							style="font-size: 0.75rem;"
+							class="badge preset-filled-surface-500 text-xs"
 							title="First detected while airborne"
 						>
 							Airborne
