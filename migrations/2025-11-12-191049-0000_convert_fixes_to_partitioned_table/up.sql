@@ -71,12 +71,35 @@ SELECT partman.create_parent(
 
 -- Step 5: Migrate data from old fixes table to new partitioned table
 -- This is the SLOW part - it will take 30-60 minutes on production (225M rows)
-SELECT partman.partition_data_time(
-    p_parent_table := 'public.fixes',
-    p_batch_count := 10,  -- Process 10 batches per call (call multiple times if needed)
-    p_batch_interval := interval '1 day',  -- Process 1 day of data per batch
-    p_lock_wait := 2  -- Wait 2 seconds for locks
-);
+-- Loop until all data is migrated
+DO $$
+DECLARE
+    rows_moved BIGINT;
+    total_moved BIGINT := 0;
+    iteration INT := 0;
+BEGIN
+    LOOP
+        iteration := iteration + 1;
+
+        -- Process batches of data
+        rows_moved := partman.partition_data_time(
+            p_parent_table := 'public.fixes',
+            p_batch_count := 10,  -- Process 10 days per iteration
+            p_batch_interval := interval '1 day',  -- 1 day per batch
+            p_lock_wait := 2  -- Wait 2 seconds for locks
+        );
+
+        total_moved := total_moved + rows_moved;
+
+        -- Log progress every iteration
+        RAISE NOTICE 'Iteration %: Moved % rows (total: %)', iteration, rows_moved, total_moved;
+
+        -- Exit when no more rows to move
+        EXIT WHEN rows_moved = 0;
+    END LOOP;
+
+    RAISE NOTICE 'Fixes data migration complete: % total rows migrated in % iterations', total_moved, iteration;
+END $$;
 
 -- Step 6: Add primary key constraint on fixes
 -- Note: In partitioned tables, PK must include partition key
@@ -149,12 +172,35 @@ SELECT partman.create_parent(
 );
 
 -- Step 13: Migrate data from old aprs_messages table to new partitioned table
-SELECT partman.partition_data_time(
-    p_parent_table := 'public.aprs_messages',
-    p_batch_count := 10,  -- Process 10 batches per call (call multiple times if needed)
-    p_batch_interval := interval '1 day',  -- Process 1 day of data per batch
-    p_lock_wait := 2  -- Wait 2 seconds for locks
-);
+-- Loop until all data is migrated
+DO $$
+DECLARE
+    rows_moved BIGINT;
+    total_moved BIGINT := 0;
+    iteration INT := 0;
+BEGIN
+    LOOP
+        iteration := iteration + 1;
+
+        -- Process batches of data
+        rows_moved := partman.partition_data_time(
+            p_parent_table := 'public.aprs_messages',
+            p_batch_count := 10,  -- Process 10 days per iteration
+            p_batch_interval := interval '1 day',  -- 1 day per batch
+            p_lock_wait := 2  -- Wait 2 seconds for locks
+        );
+
+        total_moved := total_moved + rows_moved;
+
+        -- Log progress every iteration
+        RAISE NOTICE 'Iteration %: Moved % rows (total: %)', iteration, rows_moved, total_moved;
+
+        -- Exit when no more rows to move
+        EXIT WHEN rows_moved = 0;
+    END LOOP;
+
+    RAISE NOTICE 'APRS messages data migration complete: % total rows migrated in % iterations', total_moved, iteration;
+END $$;
 
 -- Step 14: Add primary key constraint on aprs_messages
 ALTER TABLE aprs_messages ADD PRIMARY KEY (id, received_at);
