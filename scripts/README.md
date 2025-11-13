@@ -1,6 +1,90 @@
-# Database Scripts
+# Scripts
 
-This directory contains database management and utility scripts.
+This directory contains database management, deployment, and utility scripts.
+
+## Deployment Script
+
+The `deploy` script allows you to deploy SOAR to the production server from your local machine, mimicking the GitHub Actions deployment workflow.
+
+### Usage
+
+```bash
+# Deploy current branch
+./scripts/deploy
+
+# Deploy a specific branch
+./scripts/deploy my-branch
+```
+
+### Environment Variables
+
+The deployment script supports the following optional environment variables:
+
+```bash
+# Sentry integration (optional)
+SENTRY_AUTH_TOKEN=your-token      # Sentry authentication token
+SENTRY_ORG=your-org               # Sentry organization slug
+SENTRY_PROJECT=your-project       # Sentry project slug
+
+# SSH configuration
+SSH_PRIVATE_KEY_PATH=~/.ssh/id_rsa  # Path to SSH private key (default: ~/.ssh/id_rsa)
+DEPLOY_SERVER=your-server.com       # Deployment server hostname
+
+# Deployment options
+SKIP_SENTRY=1                     # Skip Sentry debug symbols and release creation
+SKIP_TESTS=1                      # Skip running tests (not recommended)
+```
+
+### Prerequisites
+
+1. SSH access to the deployment server as the `soar` user
+2. sentry-cli installed (optional, for Sentry integration)
+3. Built dependencies: Node.js, Rust toolchain
+4. The deployment script (`/usr/local/bin/soar-deploy`) installed on the server
+
+### Deployment Process
+
+The script performs the following steps:
+
+1. Checks out the specified branch (or uses current branch)
+2. Runs tests (cargo fmt, clippy, cargo test, npm lint, npm check)
+3. Builds the web frontend (`npm run build`)
+4. Builds the Rust release binary (`cargo build --release`)
+5. Uploads debug symbols to Sentry (if configured)
+6. Creates a Sentry release (if configured)
+7. Prepares deployment package including:
+   - `soar` binary
+   - `infrastructure/soar-deploy` script
+   - `*.service` and `*.timer` systemd files
+   - Prometheus job configurations
+   - Grafana provisioning and dashboards
+   - Backup scripts
+   - VERSION file with commit SHA
+8. Uploads package to server via SSH
+9. Executes remote deployment script
+
+### Example
+
+```bash
+# Deploy with all features
+SENTRY_AUTH_TOKEN=xxx SENTRY_ORG=my-org SENTRY_PROJECT=soar \
+DEPLOY_SERVER=prod.example.com \
+./scripts/deploy main
+
+# Deploy without Sentry, skipping tests (for testing)
+SKIP_SENTRY=1 SKIP_TESTS=1 DEPLOY_SERVER=staging.example.com \
+./scripts/deploy feat/my-feature
+```
+
+### Safety Features
+
+- Confirms uncommitted changes before proceeding
+- Shows deployment package contents
+- Tests SSH connection before uploading
+- Requires manual confirmation before executing deployment
+- Returns to original branch after deployment (if branch was switched)
+
+---
 
 ## Database Reset Script
 
