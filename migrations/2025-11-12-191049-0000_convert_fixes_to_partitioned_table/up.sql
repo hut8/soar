@@ -61,28 +61,75 @@ CREATE TABLE fixes (
 ) PARTITION BY RANGE (received_at);
 
 -- Step 4: Create partitions using pg_partman for fixes
+-- Note: create_parent sets up the partition structure and creates a default partition
 SELECT partman.create_parent(
     p_parent_table := 'public.fixes',
     p_control := 'received_at',
     p_interval := '1 day',
     p_premake := 3,  -- Create 3 days ahead
-    p_start_partition := (SELECT date_trunc('day', MIN(received_at))::text FROM fixes_old)
+    p_start_partition := (SELECT date_trunc('day', MIN(received_at))::text FROM fixes_old),
+    p_default_table := true  -- Create default partition to hold unmigrated data
 );
 
--- Step 5: Migrate data from old fixes table to new partitioned table
+-- Step 5: Copy data from old table to new partitioned table's default partition
+-- All data will initially go to the default partition
+-- Note: Exclude generated columns (location, location_geom) - they will be auto-generated
+INSERT INTO fixes (
+    id, source, aprs_type, via, timestamp, latitude, longitude,
+    altitude_msl_feet, flight_number, squawk, ground_speed_knots,
+    track_degrees, climb_fpm, turn_rate_rot, snr_db, bit_errors_corrected,
+    freq_offset_khz, flight_id, device_id, received_at, is_active,
+    altitude_agl_feet, receiver_id, gnss_horizontal_resolution,
+    gnss_vertical_resolution, aprs_message_id, altitude_agl_valid,
+    time_gap_seconds
+)
+SELECT
+    id, source, aprs_type, via, timestamp, latitude, longitude,
+    altitude_msl_feet, flight_number, squawk, ground_speed_knots,
+    track_degrees, climb_fpm, turn_rate_rot, snr_db, bit_errors_corrected,
+    freq_offset_khz, flight_id, device_id, received_at, is_active,
+    altitude_agl_feet, receiver_id, gnss_horizontal_resolution,
+    gnss_vertical_resolution, aprs_message_id, altitude_agl_valid,
+    time_gap_seconds
+FROM fixes_old;
+
+-- Step 6: Migrate data from default partition to time-based child partitions
 -- This is the SLOW part - it will take 30-60 minutes on production (225M rows)
-SELECT partman.partition_data_time(
-    p_parent_table := 'public.fixes',
-    p_batch_count := 10,  -- Process 10 batches per call (call multiple times if needed)
-    p_batch_interval := interval '1 day',  -- Process 1 day of data per batch
-    p_lock_wait := 2  -- Wait 2 seconds for locks
-);
+-- Loop until all data is migrated
+DO $$
+DECLARE
+    rows_moved BIGINT;
+    total_moved BIGINT := 0;
+    iteration INT := 0;
+BEGIN
+    LOOP
+        iteration := iteration + 1;
 
--- Step 6: Add primary key constraint on fixes
+        -- Process batches of data
+        rows_moved := partman.partition_data_time(
+            p_parent_table := 'public.fixes',
+            p_batch_count := 10,  -- Process 10 days per iteration
+            p_batch_interval := interval '1 day',  -- 1 day per batch
+            p_lock_wait := 2  -- Wait 2 seconds for locks
+        );
+
+        total_moved := total_moved + rows_moved;
+
+        -- Log progress every iteration
+        RAISE NOTICE 'Iteration %: Moved % rows (total: %)', iteration, rows_moved, total_moved;
+
+        -- Exit when no more rows to move
+        EXIT WHEN rows_moved = 0;
+    END LOOP;
+
+    RAISE NOTICE 'Fixes data migration complete: % total rows migrated in % iterations', total_moved, iteration;
+END $$;
+
+-- Step 7: Add primary key constraint on fixes
 -- Note: In partitioned tables, PK must include partition key
 ALTER TABLE fixes ADD PRIMARY KEY (id, received_at);
 
--- Step 7: Recreate indexes on fixes parent table (will cascade to partitions)
+-- Step 8: Recreate indexes on fixes parent table (will cascade to partitions)
 -- Note: partition_data_time may have already copied these indexes, so use IF NOT EXISTS
 CREATE INDEX IF NOT EXISTS idx_fixes_device_received_at ON fixes (device_id, received_at DESC);
 CREATE INDEX IF NOT EXISTS idx_fixes_location_geom ON fixes USING GIST (location_geom);
@@ -100,13 +147,13 @@ CREATE INDEX IF NOT EXISTS idx_fixes_is_active ON fixes (is_active);
 CREATE INDEX IF NOT EXISTS idx_fixes_receiver_id ON fixes (receiver_id);
 CREATE INDEX IF NOT EXISTS idx_fixes_time_gap_seconds ON fixes (time_gap_seconds) WHERE time_gap_seconds IS NOT NULL;
 
--- Step 8: Recreate foreign key constraints on fixes
+-- Step 9: Recreate foreign key constraints on fixes
 ALTER TABLE fixes ADD CONSTRAINT fixes_aprs_message_id_fkey FOREIGN KEY (aprs_message_id) REFERENCES aprs_messages(id) ON DELETE SET NULL;
 ALTER TABLE fixes ADD CONSTRAINT fixes_device_id_fkey FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE SET NULL;
 ALTER TABLE fixes ADD CONSTRAINT fixes_flight_id_fkey FOREIGN KEY (flight_id) REFERENCES flights(id) ON DELETE SET NULL;
 ALTER TABLE fixes ADD CONSTRAINT fixes_receiver_id_fkey FOREIGN KEY (receiver_id) REFERENCES receivers(id) ON DELETE SET NULL;
 
--- Step 9: Verify fixes migration was successful
+-- Step 10: Verify fixes migration was successful
 DO $$
 DECLARE
     old_count bigint;
@@ -126,10 +173,10 @@ END $$;
 -- PARTITION APRS_MESSAGES TABLE
 -- ================================================================================
 
--- Step 10: Rename existing aprs_messages table
+-- Step 11: Rename existing aprs_messages table
 ALTER TABLE aprs_messages RENAME TO aprs_messages_old;
 
--- Step 11: Create new partitioned aprs_messages table with same structure
+-- Step 12: Create new partitioned aprs_messages table with same structure
 CREATE TABLE aprs_messages (
     id uuid NOT NULL DEFAULT gen_random_uuid(),
     raw_message text NOT NULL,
@@ -139,35 +186,63 @@ CREATE TABLE aprs_messages (
     raw_message_hash bytea NOT NULL
 ) PARTITION BY RANGE (received_at);
 
--- Step 12: Create partitions using pg_partman for aprs_messages
+-- Step 13: Create partitions using pg_partman for aprs_messages
 SELECT partman.create_parent(
     p_parent_table := 'public.aprs_messages',
     p_control := 'received_at',
     p_interval := '1 day',
     p_premake := 3,  -- Create 3 days ahead
-    p_start_partition := (SELECT date_trunc('day', MIN(received_at))::text FROM aprs_messages_old)
+    p_start_partition := (SELECT date_trunc('day', MIN(received_at))::text FROM aprs_messages_old),
+    p_default_table := true  -- Create default partition to hold unmigrated data
 );
 
--- Step 13: Migrate data from old aprs_messages table to new partitioned table
-SELECT partman.partition_data_time(
-    p_parent_table := 'public.aprs_messages',
-    p_batch_count := 10,  -- Process 10 batches per call (call multiple times if needed)
-    p_batch_interval := interval '1 day',  -- Process 1 day of data per batch
-    p_lock_wait := 2  -- Wait 2 seconds for locks
-);
+-- Step 14: Copy data from old table to new partitioned table's default partition
+INSERT INTO aprs_messages
+SELECT * FROM aprs_messages_old;
 
--- Step 14: Add primary key constraint on aprs_messages
+-- Step 15: Migrate data from default partition to time-based child partitions
+-- Loop until all data is migrated
+DO $$
+DECLARE
+    rows_moved BIGINT;
+    total_moved BIGINT := 0;
+    iteration INT := 0;
+BEGIN
+    LOOP
+        iteration := iteration + 1;
+
+        -- Process batches of data
+        rows_moved := partman.partition_data_time(
+            p_parent_table := 'public.aprs_messages',
+            p_batch_count := 10,  -- Process 10 days per iteration
+            p_batch_interval := interval '1 day',  -- 1 day per batch
+            p_lock_wait := 2  -- Wait 2 seconds for locks
+        );
+
+        total_moved := total_moved + rows_moved;
+
+        -- Log progress every iteration
+        RAISE NOTICE 'Iteration %: Moved % rows (total: %)', iteration, rows_moved, total_moved;
+
+        -- Exit when no more rows to move
+        EXIT WHEN rows_moved = 0;
+    END LOOP;
+
+    RAISE NOTICE 'APRS messages data migration complete: % total rows migrated in % iterations', total_moved, iteration;
+END $$;
+
+-- Step 16: Add primary key constraint on aprs_messages
 ALTER TABLE aprs_messages ADD PRIMARY KEY (id, received_at);
 
--- Step 15: Recreate indexes on aprs_messages parent table
+-- Step 17: Recreate indexes on aprs_messages parent table
 -- Note: partition_data_time may have already copied these indexes, so use IF NOT EXISTS
 CREATE INDEX IF NOT EXISTS idx_aprs_messages_received_at ON aprs_messages (received_at);
 CREATE INDEX IF NOT EXISTS idx_aprs_messages_receiver_id ON aprs_messages (receiver_id);
 
--- Step 16: Recreate foreign key constraints on aprs_messages
+-- Step 18: Recreate foreign key constraints on aprs_messages
 ALTER TABLE aprs_messages ADD CONSTRAINT aprs_messages_receiver_id_fkey FOREIGN KEY (receiver_id) REFERENCES receivers(id) ON DELETE CASCADE;
 
--- Step 17: Verify aprs_messages migration was successful
+-- Step 19: Verify aprs_messages migration was successful
 DO $$
 DECLARE
     old_count bigint;
@@ -187,7 +262,7 @@ END $$;
 -- CONFIGURE RETENTION FOR BOTH TABLES
 -- ================================================================================
 
--- Step 18: Configure pg_partman for automatic partition management on fixes
+-- Step 20: Configure pg_partman for automatic partition management on fixes
 -- Set 30-day retention with SAFE dropping (detach but don't drop empty partitions)
 UPDATE partman.part_config SET
     retention = '30 days',
@@ -196,7 +271,7 @@ UPDATE partman.part_config SET
     infinite_time_partitions = true
 WHERE parent_table = 'public.fixes';
 
--- Step 19: Configure pg_partman for automatic partition management on aprs_messages
+-- Step 21: Configure pg_partman for automatic partition management on aprs_messages
 UPDATE partman.part_config SET
     retention = '30 days',
     retention_keep_table = true,   -- Detach old partitions but DON'T drop them
@@ -204,7 +279,7 @@ UPDATE partman.part_config SET
     infinite_time_partitions = true
 WHERE parent_table = 'public.aprs_messages';
 
--- Step 20: Add helpful comments
+-- Step 22: Add helpful comments
 COMMENT ON TABLE fixes IS 'Partitioned by received_at (daily). Managed by pg_partman. Retention: 30 days (detached, not dropped).';
 COMMENT ON TABLE aprs_messages IS 'Partitioned by received_at (daily). Managed by pg_partman. Retention: 30 days (detached, not dropped).';
 

@@ -57,6 +57,7 @@ impl DeviceRepository {
                 .on_conflict(devices::address)
                 .do_update()
                 .set((
+                    devices::address_type.eq(excluded(devices::address_type)),
                     devices::aircraft_model.eq(excluded(devices::aircraft_model)),
                     devices::registration.eq(excluded(devices::registration)),
                     devices::competition_number.eq(excluded(devices::competition_number)),

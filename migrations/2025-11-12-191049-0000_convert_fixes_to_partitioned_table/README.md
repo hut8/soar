@@ -24,14 +24,17 @@ This migration converts the `fixes` and `aprs_messages` tables from monolithic t
    - Rename fixes → fixes_old (~1s)
    - Create partitioned table structure (~1s)
    - Create partitions for existing data (~30s)
-   - Migrate 225M rows to partitions (**SLOW**: 30-60 mins)
+   - Migrate 225M rows to partitions in batches (**SLOW**: 30-60 mins)
+     - The migration loops automatically, processing 10 days of data per iteration
+     - Progress is logged with NOTICE messages showing rows moved per iteration
    - Recreate indexes on partitions (~2-3 mins)
    - Add constraints (~10s)
 3. Partition aprs_messages table:
    - Rename aprs_messages → aprs_messages_old (~1s)
    - Create partitioned table structure (~1s)
    - Create partitions (~30s)
-   - Migrate data (~5-10 mins)
+   - Migrate data in batches (~5-10 mins)
+     - The migration loops automatically until all data is migrated
    - Recreate indexes (~1 min)
    - Add constraints (~10s)
 4. Configure pg_partman with 30-day retention (~1s)

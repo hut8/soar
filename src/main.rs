@@ -11,8 +11,8 @@ use tracing::{info, warn};
 
 mod commands;
 use commands::{
-    handle_archive, handle_ingest_aprs, handle_load_data, handle_pull_data, handle_resurrect,
-    handle_run, handle_sitemap_generation,
+    handle_archive, handle_dump_unified_ddb, handle_ingest_aprs, handle_load_data,
+    handle_pull_data, handle_resurrect, handle_run, handle_sitemap_generation,
 };
 
 // Embed migrations at compile time
@@ -193,6 +193,19 @@ enum Commands {
     /// scripts to ensure migrations are applied before starting services.
     /// Migrations are also run automatically by other commands that need the database.
     Migrate {},
+    /// Dump unified FlarmNet device database to JSONL file
+    ///
+    /// Downloads the unified FlarmNet database from <https://turbo87.github.io/united-flarmnet/united.fln>
+    /// and exports all device records to a JSONL (JSON Lines) file for debugging.
+    /// Each line contains one complete device record with all fields.
+    DumpUnifiedDdb {
+        /// Output file path for JSONL export
+        #[arg(value_name = "OUTPUT_FILE")]
+        output: String,
+        /// Optional local source file (if not specified, downloads from remote)
+        #[arg(long)]
+        source: Option<String>,
+    },
 }
 
 // Query logger that logs SQL statements to tracing
@@ -668,6 +681,10 @@ async fn main() -> Result<()> {
             )
             .await;
         }
+        Commands::DumpUnifiedDdb { output, source } => {
+            // DumpUnifiedDdb only downloads and exports data, doesn't need database
+            return handle_dump_unified_ddb(output.clone(), source.clone()).await;
+        }
         _ => {
             // All other commands need database access
         }
@@ -775,6 +792,10 @@ async fn main() -> Result<()> {
             info!("Database migrations completed successfully");
             info!("All pending migrations have been applied");
             Ok(())
+        }
+        Commands::DumpUnifiedDdb { .. } => {
+            // This should never be reached due to early return above
+            unreachable!("DumpUnifiedDdb should be handled before database setup")
         }
     }
 }
