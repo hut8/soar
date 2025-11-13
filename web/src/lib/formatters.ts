@@ -50,7 +50,7 @@ export function formatDeviceAddress(addressType: string, address: string): strin
 		case 'I':
 			return `ICAO-${hexAddress}`;
 		default:
-			return `ICAO-${hexAddress}`;
+			return `UNKNOWN-${hexAddress}`;
 	}
 }
 

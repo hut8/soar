@@ -460,6 +460,9 @@ pub enum DeviceSearchCriteria {
 
 /// Read and decode unified FlarmNet file from disk
 pub fn read_flarmnet_file(path: &str) -> Result<Vec<Device>> {
+    use rayon::prelude::*;
+    use std::cell::RefCell;
+
     info!("Reading unified FlarmNet file from: {}", path);
 
     let content = std::fs::read_to_string(path)
@@ -472,24 +475,32 @@ pub fn read_flarmnet_file(path: &str) -> Result<Vec<Device>> {
                 decoded.records.len()
             );
 
-            let reg_parser = flydent::Parser::new();
+            // Thread-local parser - one parser per thread, reused across all records in that thread
+            thread_local! {
+                static PARSER: RefCell<flydent::Parser> = RefCell::new(flydent::Parser::new());
+            }
 
-            // Convert FlarmNet records to Device structs
+            // Convert FlarmNet records to Device structs in parallel
             let devices: Vec<Device> = decoded
                 .records
-                .into_iter()
+                .into_par_iter() // Parallel iteration for performance
                 .filter_map(|result| {
                     match result {
                         Ok(record) => {
                             // Parse FLARM ID as hex address
                             let address = u32::from_str_radix(&record.flarm_id, 16).ok()?;
 
-                            // Normalize registration using flydent parser
-                            let registration =
-                                match reg_parser.parse(&record.registration, false, false) {
+                            // Normalize registration using thread-local parser
+                            let registration = PARSER.with(|parser| {
+                                match parser.borrow().parse(&record.registration, false, false) {
                                     Some(r) => r.canonical_callsign().to_string(),
-                                    None => String::new(),
-                                };
+                                    None => {
+                                        // If flydent can't parse it, return the original
+                                        // This handles edge cases where the registration format is unusual
+                                        record.registration.clone()
+                                    }
+                                }
+                            });
 
                             Some(Device {
                                 id: None, // Will be set by database
@@ -622,6 +633,9 @@ impl DeviceFetcher {
     /// Fetch and decode unified FlarmNet file from XCSoar format
     /// This replaces the existing Glidernet/Flarmnet sources
     pub async fn fetch_unified_flarmnet(&self) -> Result<Vec<Device>> {
+        use rayon::prelude::*;
+        use std::cell::RefCell;
+
         info!("Fetching unified FlarmNet from XCSoar...");
 
         let response = reqwest::get(DDB_URL_UNIFIED_FLARMNET).await?;
@@ -644,24 +658,33 @@ impl DeviceFetcher {
                     decoded.records.len()
                 );
 
-                let reg_parser = flydent::Parser::new();
+                // Thread-local parser - one parser per thread, reused across all records in that thread
+                thread_local! {
+                    static PARSER: RefCell<flydent::Parser> = RefCell::new(flydent::Parser::new());
+                }
 
-                // Convert FlarmNet records to Device structs
+                // Convert FlarmNet records to Device structs in parallel
                 let devices: Vec<Device> = decoded
                     .records
-                    .into_iter()
+                    .into_par_iter() // Parallel iteration for performance
                     .filter_map(|result| {
                         match result {
                             Ok(record) => {
                                 // Parse FLARM ID as hex address
                                 let address = u32::from_str_radix(&record.flarm_id, 16).ok()?;
 
-                                // Normalize registration using flydent parser
-                                let registration =
-                                    match reg_parser.parse(&record.registration, false, false) {
+                                // Normalize registration using thread-local parser
+                                let registration = PARSER.with(|parser| {
+                                    match parser.borrow().parse(&record.registration, false, false)
+                                    {
                                         Some(r) => r.canonical_callsign().to_string(),
-                                        None => String::new(),
-                                    };
+                                        None => {
+                                            // If flydent can't parse it, return the original
+                                            // This handles edge cases where the registration format is unusual
+                                            record.registration.clone()
+                                        }
+                                    }
+                                });
 
                                 Some(Device {
                                     id: None, // Will be set by database
