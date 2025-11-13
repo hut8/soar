@@ -97,7 +97,6 @@
 					bind:value={email}
 					onkeydown={handleKeydown}
 					disabled={loading}
-					required
 				/>
 			</label>
 
@@ -110,7 +109,6 @@
 					bind:value={password}
 					onkeydown={handleKeydown}
 					disabled={loading}
-					required
 				/>
 			</label>
 
