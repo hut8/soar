@@ -61,9 +61,9 @@ pub struct RunwayView {
 }
 
 impl RunwayView {
-    /// Create a RunwayView from a Runway and airport coordinates
-    /// airport_lat and airport_lon are used to calculate polyline when runway endpoints are not available
-    pub fn from_runway(runway: Runway, airport_lat: Option<f64>, airport_lon: Option<f64>) -> Self {
+    /// Create a RunwayView from a Runway
+    /// Polyline will only be calculated if runway has endpoint coordinates and width
+    pub fn from_runway(runway: Runway) -> Self {
         let low = RunwayEnd {
             ident: runway.le_ident.clone(),
             latitude_deg: runway.le_latitude_deg,
@@ -83,7 +83,7 @@ impl RunwayView {
         };
 
         // Calculate polyline
-        let polyline = Self::calculate_polyline(&runway, &low, &high, airport_lat, airport_lon);
+        let polyline = Self::calculate_polyline(&runway, &low, &high);
 
         Self {
             id: runway.id,
@@ -100,13 +100,8 @@ impl RunwayView {
 
     /// Calculate the polygon rectangle for a runway
     /// Returns 4 corners: [low-left, low-right, high-right, high-left]
-    fn calculate_polyline(
-        runway: &Runway,
-        low: &RunwayEnd,
-        high: &RunwayEnd,
-        airport_lat: Option<f64>,
-        airport_lon: Option<f64>,
-    ) -> Vec<[f64; 2]> {
+    /// Only creates polyline if runway has actual endpoint coordinates
+    fn calculate_polyline(runway: &Runway, low: &RunwayEnd, high: &RunwayEnd) -> Vec<[f64; 2]> {
         let width_ft = match runway.width_ft {
             Some(w) if w > 0 => w,
             _ => return vec![], // Can't create polygon without width
@@ -115,7 +110,7 @@ impl RunwayView {
         let width_meters = width_ft as f64 * 0.3048; // Convert feet to meters
         let half_width = width_meters / 2.0;
 
-        // Try to get endpoints with coordinates
+        // Only create polyline if we have actual runway endpoint coordinates
         let (low_lat, low_lon, high_lat, high_lon) =
             if let (Some(ll), Some(ln), Some(hl), Some(hn)) = (
                 low.latitude_deg,
@@ -124,24 +119,8 @@ impl RunwayView {
                 high.longitude_deg,
             ) {
                 (ll, ln, hl, hn)
-            } else if let (Some(airport_lat), Some(airport_lon), Some(length_ft), Some(heading)) = (
-                airport_lat,
-                airport_lon,
-                runway.length_ft,
-                runway.le_heading_degt.or(runway.he_heading_degt),
-            ) {
-                // Calculate endpoints from airport center, length, and heading
-                let length_meters = length_ft as f64 * 0.3048;
-                let half_length = length_meters / 2.0;
-
-                let low_bearing = (heading + 180.0) % 360.0;
-                let (ll, ln) =
-                    calculate_endpoint(airport_lat, airport_lon, half_length, low_bearing);
-                let (hl, hn) = calculate_endpoint(airport_lat, airport_lon, half_length, heading);
-
-                (ll, ln, hl, hn)
             } else {
-                return vec![]; // Can't calculate without endpoints
+                return vec![]; // Can't calculate without actual endpoint coordinates
             };
 
         // Calculate bearing from low to high
@@ -181,8 +160,7 @@ impl RunwayView {
 
 impl From<Runway> for RunwayView {
     fn from(runway: Runway) -> Self {
-        // Fallback implementation without airport coordinates
-        Self::from_runway(runway, None, None)
+        Self::from_runway(runway)
     }
 }
 
@@ -240,40 +218,14 @@ impl From<Airport> for AirportView {
 impl AirportView {
     /// Create an AirportView with runways populated
     pub fn with_runways(airport: Airport, runways: Vec<Runway>) -> Self {
-        let mut view = AirportView::from(airport.clone());
+        let mut view = AirportView::from(airport);
 
-        // Extract airport coordinates for runway polyline calculation
-        let airport_lat = airport
-            .latitude_deg
-            .as_ref()
-            .and_then(|bd| bd.to_string().parse::<f64>().ok());
-        let airport_lon = airport
-            .longitude_deg
-            .as_ref()
-            .and_then(|bd| bd.to_string().parse::<f64>().ok());
-
-        view.runways = runways
-            .into_iter()
-            .map(|r| RunwayView::from_runway(r, airport_lat, airport_lon))
-            .collect();
+        view.runways = runways.into_iter().map(RunwayView::from_runway).collect();
         view
     }
 
     /// Add runways to an existing AirportView
     pub fn add_runways(&mut self, runways: Vec<Runway>) {
-        // Extract airport coordinates for runway polyline calculation
-        let airport_lat = self
-            .latitude_deg
-            .as_ref()
-            .and_then(|bd| bd.to_string().parse::<f64>().ok());
-        let airport_lon = self
-            .longitude_deg
-            .as_ref()
-            .and_then(|bd| bd.to_string().parse::<f64>().ok());
-
-        self.runways = runways
-            .into_iter()
-            .map(|r| RunwayView::from_runway(r, airport_lat, airport_lon))
-            .collect();
+        self.runways = runways.into_iter().map(RunwayView::from_runway).collect();
     }
 }
