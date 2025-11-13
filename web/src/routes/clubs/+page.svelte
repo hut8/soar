@@ -115,9 +115,15 @@
 				selectedLongitude !== null &&
 				radius
 			) {
-				endpoint += `?latitude=${selectedLatitude}&longitude=${selectedLongitude}&radius=${radius}`;
+				const params = new URLSearchParams({
+					latitude: selectedLatitude.toString(),
+					longitude: selectedLongitude.toString(),
+					radius: radius.toString()
+				});
+				endpoint = `/clubs?${params}`;
 			} else if (searchQuery) {
-				endpoint += `?q=${encodeURIComponent(searchQuery)}`;
+				const params = new URLSearchParams({ q: searchQuery });
+				endpoint = `/clubs?${params}`;
 			}
 
 			clubs = await serverCall<ClubWithSoaring[]>(endpoint);
