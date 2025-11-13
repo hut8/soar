@@ -52,24 +52,31 @@ jobs:
     name: Test Rust Project
     runs-on: ubuntu-22.04
 
-    services:
-      postgres:
-        image: postgis/postgis:15-3.4
-        env:
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_USER: postgres
-          POSTGRES_DB: soar_test
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Build custom PostgreSQL image with pg_partman
+        run: |
+          docker build -t postgis-partman:test -f .github/postgis-partman.Dockerfile .
+
+      - name: Start PostgreSQL service with pg_partman
+        run: |
+          docker run -d \
+            --name postgres \
+            -e POSTGRES_PASSWORD=postgres \
+            -e POSTGRES_USER=postgres \
+            -e POSTGRES_DB=soar_test \
+            -p 5432:5432 \
+            --health-cmd="pg_isready" \
+            --health-interval=10s \
+            --health-timeout=5s \
+            --health-retries=5 \
+            postgis-partman:test
+
+      - name: Wait for PostgreSQL to be ready
+        run: |
+          timeout 60s bash -c 'until docker exec postgres pg_isready -U postgres; do sleep 2; done'
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -146,6 +153,12 @@ jobs:
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/soar_test
         run: cargo nextest run
+
+      - name: Cleanup PostgreSQL container
+        if: always()
+        run: |
+          docker stop postgres || true
+          docker rm postgres || true
 
   build-release:
     name: Build Release Binary
