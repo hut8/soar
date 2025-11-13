@@ -126,7 +126,8 @@
 				endpoint = `/clubs?${params}`;
 			}
 
-			clubs = await serverCall<ClubWithSoaring[]>(endpoint);
+			const response = await serverCall<{ clubs: ClubWithSoaring[] }>(endpoint);
+			clubs = response.clubs || [];
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			error = `Failed to search clubs: ${errorMessage}`;
