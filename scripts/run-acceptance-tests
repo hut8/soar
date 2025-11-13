@@ -79,7 +79,9 @@ mkdir -p web/playwright-report
 
 # Stop and remove any existing containers to avoid conflicts
 echo -e "${YELLOW}Cleaning up any existing containers...${NC}"
-docker compose ${COMPOSE_FILES} down > /dev/null 2>&1 || true
+docker compose ${COMPOSE_FILES} down --remove-orphans > /dev/null 2>&1 || true
+# Also force remove the specific container name if it exists
+docker rm -f soar-app-test > /dev/null 2>&1 || true
 echo ""
 
 echo -e "${YELLOW}[1/3] Starting services (PostgreSQL, NATS, SOAR app)...${NC}"
