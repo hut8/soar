@@ -36,6 +36,20 @@ services:
     networks:
       - soar-network
 
+  # Mailpit email testing server
+  mailpit:
+    image: axllent/mailpit:v1.20
+    container_name: soar-mailpit-test
+    # Ports are not exposed to host - containers communicate via soar-network
+    # For local debugging, use docker-compose.dev.yml to expose port 8025
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8025/api/v1/info"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - soar-network
+
   # SOAR backend application
   soar:
     build:
@@ -49,10 +63,20 @@ services:
       SOAR_ENV: test
       SENTRY_DSN: ""
       RUST_LOG: info
+      # SMTP configuration (Mailpit)
+      SMTP_SERVER: mailpit
+      SMTP_PORT: 1025
+      SMTP_USERNAME: test
+      SMTP_PASSWORD: test
+      FROM_EMAIL: test@soar.local
+      FROM_NAME: SOAR Test
+      BASE_URL: http://localhost:4173
     depends_on:
       postgres:
         condition: service_healthy
       nats:
+        condition: service_healthy
+      mailpit:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:61226/"]

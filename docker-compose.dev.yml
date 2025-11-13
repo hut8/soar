@@ -2,6 +2,12 @@
 # Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 
 services:
+  # Expose Mailpit ports for local development
+  mailpit:
+    ports:
+      - "8025:8025"  # Web UI for debugging emails
+      - "1025:1025"  # SMTP server for local Playwright tests
+
   # Override soar service for development
   soar:
     # Use a base Rust image instead of building

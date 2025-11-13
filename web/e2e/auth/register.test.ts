@@ -1,8 +1,68 @@
 import { test, expect } from '@playwright/test';
 import { testUsers } from '../fixtures/data.fixture';
 
+interface MailpitRecipient {
+	Address: string;
+	Name?: string;
+}
+
+interface MailpitMessage {
+	ID: string;
+	To: MailpitRecipient[];
+	Subject: string;
+	Text: string;
+}
+
+interface MailpitMessagesResponse {
+	messages?: MailpitMessage[];
+}
+
+/**
+ * Helper function to query Mailpit API for emails sent to a specific address
+ * @param email - The recipient email address to search for
+ * @returns The most recent email message or null if not found
+ */
+async function getLatestEmailFromMailpit(email: string): Promise<MailpitMessage | null> {
+	const mailpitUrl = process.env.CI ? 'http://mailpit:8025' : 'http://localhost:8025';
+	const response = await fetch(`${mailpitUrl}/api/v1/messages?limit=50`);
+
+	if (!response.ok) {
+		throw new Error(`Mailpit API returned ${response.status}: ${await response.text()}`);
+	}
+
+	const data = (await response.json()) as MailpitMessagesResponse;
+
+	// Find the most recent email sent to this address
+	const message = data.messages?.find((msg) =>
+		msg.To?.some((recipient) => recipient.Address === email)
+	);
+
+	if (!message) {
+		return null;
+	}
+
+	// Fetch the full message details
+	const messageResponse = await fetch(`${mailpitUrl}/api/v1/message/${message.ID}`);
+	if (!messageResponse.ok) {
+		throw new Error(`Mailpit message API returned ${messageResponse.status}`);
+	}
+
+	return (await messageResponse.json()) as MailpitMessage;
+}
+
+/**
+ * Helper function to clear all emails from Mailpit
+ */
+async function clearMailpit(): Promise<void> {
+	const mailpitUrl = process.env.CI ? 'http://mailpit:8025' : 'http://localhost:8025';
+	await fetch(`${mailpitUrl}/api/v1/messages`, { method: 'DELETE' });
+}
+
 test.describe('Registration', () => {
 	test.beforeEach(async ({ page }) => {
+		// Clear Mailpit before each test
+		await clearMailpit();
+
 		// Navigate to registration page before each test
 		await page.goto('/register');
 	});
@@ -46,6 +106,16 @@ test.describe('Registration', () => {
 		// Should be redirected to login page with success message
 		await expect(page).toHaveURL(/\/login/);
 		await expect(page.getByText(/registration successful.*check your email/i)).toBeVisible();
+
+		// Verify that verification email was sent via Mailpit
+		// Wait a bit for email to be processed
+		await page.waitForTimeout(1000);
+
+		const email = await getLatestEmailFromMailpit(uniqueEmail);
+		expect(email).not.toBeNull();
+		expect(email.Subject).toContain('Verify Your Email Address');
+		expect(email.Text).toContain('verify your email');
+		expect(email.Text).toContain('/verify-email?token=');
 
 		// Take screenshot of success state
 		await expect(page).toHaveScreenshot('register-success.png');

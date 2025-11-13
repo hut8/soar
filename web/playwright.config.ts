@@ -85,7 +85,15 @@ export default defineConfig({
 					reuseExistingServer: true, // Can reuse since globalSetup seeds database first
 					env: {
 						// Disable Sentry in tests
-						SENTRY_DSN: ''
+						SENTRY_DSN: '',
+						// SMTP configuration (Mailpit - must be running separately)
+						SMTP_SERVER: 'localhost',
+						SMTP_PORT: '1025',
+						SMTP_USERNAME: 'test',
+						SMTP_PASSWORD: 'test',
+						FROM_EMAIL: 'test@soar.local',
+						FROM_NAME: 'SOAR Test',
+						BASE_URL: 'http://localhost:4173'
 					}
 				},
 				{

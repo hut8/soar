@@ -61,6 +61,13 @@ SOAR is a comprehensive aircraft tracking and club management system built with:
 
 ### Frontend Development Standards
 
+#### Static Site Generation (CRITICAL)
+- **NO Server-Side Rendering (SSR) ANYWHERE** - The frontend MUST be compiled statically
+- Use `export const ssr = false;` in `+page.ts` files to disable SSR for specific pages
+- The compiled static site is embedded in the Rust binary for deployment
+- All pages must work as a pure client-side Single Page Application (SPA)
+- Authentication and route protection must be handled client-side
+
 #### Svelte 5 Syntax (REQUIRED)
 ```svelte
 <!--  CORRECT: Use Svelte 5 event handlers -->
