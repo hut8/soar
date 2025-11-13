@@ -82,7 +82,11 @@ impl ReceiverStatusRepository {
         // Get paginated results with raw message data
         let offset = (page - 1) * per_page;
         let results = receiver_statuses::table
-            .inner_join(aprs_messages::table)
+            .inner_join(
+                aprs_messages::table.on(receiver_statuses::aprs_message_id
+                    .eq(aprs_messages::id.nullable())
+                    .and(receiver_statuses::received_at.eq(aprs_messages::received_at))),
+            )
             .filter(receiver_statuses::receiver_id.eq(receiver_id))
             .order(receiver_statuses::received_at.desc())
             .limit(per_page)
