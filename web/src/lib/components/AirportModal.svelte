@@ -307,56 +307,97 @@
 											</div>
 										</div>
 
-										<!-- Runway Details Table -->
-										<div class="table-container mb-3">
-											<table class="table-compact table-hover table">
-												<tbody>
-													<tr>
-														<td class="w-1/3 font-medium text-gray-600">Length</td>
-														<td>{formatRunwayLength(runway.length_ft)}</td>
-													</tr>
-													<tr>
-														<td class="w-1/3 font-medium text-gray-600">Width</td>
-														<td>{formatRunwayWidth(runway.width_ft)}</td>
-													</tr>
-													<tr>
-														<td class="w-1/3 font-medium text-gray-600">Surface</td>
-														<td>{runway.surface || 'Unknown'}</td>
-													</tr>
-												</tbody>
-											</table>
+										<!-- Runway Details -->
+										<!-- Desktop: Table -->
+										<div class="mb-3 hidden md:block">
+											<div class="table-container">
+												<table class="table-compact table-hover table">
+													<tbody>
+														<tr>
+															<td class="w-1/3 font-medium text-gray-600">Length</td>
+															<td>{formatRunwayLength(runway.length_ft)}</td>
+														</tr>
+														<tr>
+															<td class="w-1/3 font-medium text-gray-600">Width</td>
+															<td>{formatRunwayWidth(runway.width_ft)}</td>
+														</tr>
+														<tr>
+															<td class="w-1/3 font-medium text-gray-600">Surface</td>
+															<td>{runway.surface || 'Unknown'}</td>
+														</tr>
+													</tbody>
+												</table>
+											</div>
 										</div>
+
+										<!-- Mobile: Definition List -->
+										<dl class="mb-3 space-y-2 text-sm md:hidden">
+											<div class="flex justify-between gap-4">
+												<dt class="font-medium text-gray-600">Length</dt>
+												<dd class="font-semibold">{formatRunwayLength(runway.length_ft)}</dd>
+											</div>
+											<div class="flex justify-between gap-4">
+												<dt class="font-medium text-gray-600">Width</dt>
+												<dd class="font-semibold">{formatRunwayWidth(runway.width_ft)}</dd>
+											</div>
+											<div class="flex justify-between gap-4">
+												<dt class="font-medium text-gray-600">Surface</dt>
+												<dd class="font-semibold">{runway.surface || 'Unknown'}</dd>
+											</div>
+										</dl>
 
 										<!-- Runway End Details -->
 										{#if runway.low.heading_degt !== null || runway.high.heading_degt !== null || runway.low.displaced_threshold_ft || runway.high.displaced_threshold_ft}
-											<div class="grid grid-cols-2 gap-3">
+											<div class="grid grid-cols-1 gap-3 md:grid-cols-2">
 												<!-- Low End -->
 												<div>
 													<h5 class="mb-1 text-xs font-semibold text-blue-600">
 														{runway.low.ident || 'Low'}
 													</h5>
-													<div class="table-container">
-														<table class="table-compact table">
-															<tbody>
-																{#if runway.low.heading_degt !== null}
-																	<tr>
-																		<td class="text-xs text-gray-600">True Hdg</td>
-																		<td class="text-xs font-medium"
-																			>{formatHeading(runway.low.heading_degt)}</td
-																		>
-																	</tr>
-																{/if}
-																{#if runway.low.displaced_threshold_ft}
-																	<tr>
-																		<td class="text-xs text-gray-600">Displaced</td>
-																		<td class="text-xs font-medium"
-																			>{runway.low.displaced_threshold_ft} ft</td
-																		>
-																	</tr>
-																{/if}
-															</tbody>
-														</table>
+
+													<!-- Desktop: Table -->
+													<div class="hidden md:block">
+														<div class="table-container">
+															<table class="table-compact table">
+																<tbody>
+																	{#if runway.low.heading_degt !== null}
+																		<tr>
+																			<td class="text-xs text-gray-600">True Hdg</td>
+																			<td class="text-xs font-medium"
+																				>{formatHeading(runway.low.heading_degt)}</td
+																			>
+																		</tr>
+																	{/if}
+																	{#if runway.low.displaced_threshold_ft}
+																		<tr>
+																			<td class="text-xs text-gray-600">Displaced</td>
+																			<td class="text-xs font-medium"
+																				>{runway.low.displaced_threshold_ft} ft</td
+																			>
+																		</tr>
+																	{/if}
+																</tbody>
+															</table>
+														</div>
 													</div>
+
+													<!-- Mobile: Definition List -->
+													<dl class="space-y-1 text-xs md:hidden">
+														{#if runway.low.heading_degt !== null}
+															<div class="flex justify-between gap-2">
+																<dt class="text-gray-600">True Heading</dt>
+																<dd class="font-medium">
+																	{formatHeading(runway.low.heading_degt)}
+																</dd>
+															</div>
+														{/if}
+														{#if runway.low.displaced_threshold_ft}
+															<div class="flex justify-between gap-2">
+																<dt class="text-gray-600">Displaced</dt>
+																<dd class="font-medium">{runway.low.displaced_threshold_ft} ft</dd>
+															</div>
+														{/if}
+													</dl>
 												</div>
 
 												<!-- High End -->
@@ -364,28 +405,50 @@
 													<h5 class="mb-1 text-xs font-semibold text-blue-600">
 														{runway.high.ident || 'High'}
 													</h5>
-													<div class="table-container">
-														<table class="table-compact table">
-															<tbody>
-																{#if runway.high.heading_degt !== null}
-																	<tr>
-																		<td class="text-xs text-gray-600">True Hdg</td>
-																		<td class="text-xs font-medium"
-																			>{formatHeading(runway.high.heading_degt)}</td
-																		>
-																	</tr>
-																{/if}
-																{#if runway.high.displaced_threshold_ft}
-																	<tr>
-																		<td class="text-xs text-gray-600">Displaced</td>
-																		<td class="text-xs font-medium"
-																			>{runway.high.displaced_threshold_ft} ft</td
-																		>
-																	</tr>
-																{/if}
-															</tbody>
-														</table>
+
+													<!-- Desktop: Table -->
+													<div class="hidden md:block">
+														<div class="table-container">
+															<table class="table-compact table">
+																<tbody>
+																	{#if runway.high.heading_degt !== null}
+																		<tr>
+																			<td class="text-xs text-gray-600">True Hdg</td>
+																			<td class="text-xs font-medium"
+																				>{formatHeading(runway.high.heading_degt)}</td
+																			>
+																		</tr>
+																	{/if}
+																	{#if runway.high.displaced_threshold_ft}
+																		<tr>
+																			<td class="text-xs text-gray-600">Displaced</td>
+																			<td class="text-xs font-medium"
+																				>{runway.high.displaced_threshold_ft} ft</td
+																			>
+																		</tr>
+																	{/if}
+																</tbody>
+															</table>
+														</div>
 													</div>
+
+													<!-- Mobile: Definition List -->
+													<dl class="space-y-1 text-xs md:hidden">
+														{#if runway.high.heading_degt !== null}
+															<div class="flex justify-between gap-2">
+																<dt class="text-gray-600">True Heading</dt>
+																<dd class="font-medium">
+																	{formatHeading(runway.high.heading_degt)}
+																</dd>
+															</div>
+														{/if}
+														{#if runway.high.displaced_threshold_ft}
+															<div class="flex justify-between gap-2">
+																<dt class="text-gray-600">Displaced</dt>
+																<dd class="font-medium">{runway.high.displaced_threshold_ft} ft</dd>
+															</div>
+														{/if}
+													</dl>
 												</div>
 											</div>
 										{/if}

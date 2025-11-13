@@ -319,25 +319,6 @@ impl UsersRepository {
         .await?
     }
 
-    /// Clear password reset token
-    pub async fn clear_password_reset_token(&self, user_id: Uuid) -> Result<bool> {
-        let pool = self.pool.clone();
-        let now = Utc::now();
-
-        tokio::task::spawn_blocking(move || -> Result<bool> {
-            let mut conn = pool.get()?;
-            let rows_affected = diesel::update(users::table.filter(users::id.eq(user_id)))
-                .set((
-                    users::password_reset_token.eq(None::<String>),
-                    users::password_reset_expires_at.eq(None::<DateTime<Utc>>),
-                    users::updated_at.eq(now),
-                ))
-                .execute(&mut conn)?;
-            Ok(rows_affected > 0)
-        })
-        .await?
-    }
-
     /// Verify email
     pub async fn verify_email(&self, user_id: Uuid) -> Result<bool> {
         let pool = self.pool.clone();

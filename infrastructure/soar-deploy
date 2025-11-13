@@ -75,6 +75,7 @@ TIMER_SERVICES=(
     "soar-archive.service"
     "soar-backup-base.service"
     "soar-backup-verify.service"
+    "partman-maintenance.service"
 )
 
 # All services (for stopping and installing)
@@ -86,6 +87,7 @@ TIMERS=(
     "soar-archive.timer"
     "soar-backup-base.timer"
     "soar-backup-verify.timer"
+    "partman-maintenance.timer"
 )
 
 # Create temporary binary directory with timestamp

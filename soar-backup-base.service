@@ -25,8 +25,8 @@ ReadWritePaths=-/var/log/soar
 # Process limits
 LimitNOFILE=65536
 
-# Timeout (allow up to 6 hours for large database backup and upload)
-TimeoutStartSec=21600
+# Timeout (allow up to 12 hours for large database backup and upload)
+TimeoutStartSec=43200
 
 # Restart on failure after 10 minutes
 Restart=on-failure

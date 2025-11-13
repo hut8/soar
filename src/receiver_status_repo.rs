@@ -2,7 +2,6 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
-use tracing::info;
 use uuid::Uuid;
 
 use crate::receiver_statuses::{NewReceiverStatus, ReceiverStatus, ReceiverStatusWithRaw};
@@ -36,96 +35,6 @@ impl ReceiverStatusRepository {
             .get_result::<ReceiverStatus>(&mut conn)?;
 
         Ok(status)
-    }
-
-    /// Insert multiple receiver statuses in a batch
-    pub async fn insert_batch(
-        &self,
-        statuses: &[NewReceiverStatus],
-    ) -> Result<Vec<ReceiverStatus>> {
-        if statuses.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        let mut conn = self.get_connection()?;
-        let inserted_statuses = diesel::insert_into(receiver_statuses::table)
-            .values(statuses)
-            .returning(ReceiverStatus::as_returning())
-            .load::<ReceiverStatus>(&mut conn)?;
-
-        info!("Inserted {} receiver statuses", inserted_statuses.len());
-        Ok(inserted_statuses)
-    }
-
-    /// Get receiver status by ID
-    pub async fn get_by_id(&self, status_id: Uuid) -> Result<Option<ReceiverStatus>> {
-        let mut conn = self.get_connection()?;
-        let status = receiver_statuses::table
-            .filter(receiver_statuses::id.eq(status_id))
-            .first::<ReceiverStatus>(&mut conn)
-            .optional()?;
-
-        Ok(status)
-    }
-
-    /// Get recent statuses for a specific receiver
-    pub async fn get_recent_for_receiver(
-        &self,
-        receiver_id: Uuid,
-        limit: Option<i64>,
-    ) -> Result<Vec<ReceiverStatus>> {
-        let limit = limit.unwrap_or(100);
-        let mut conn = self.get_connection()?;
-
-        let statuses = receiver_statuses::table
-            .filter(receiver_statuses::receiver_id.eq(receiver_id))
-            .order(receiver_statuses::received_at.desc())
-            .limit(limit)
-            .load::<ReceiverStatus>(&mut conn)?;
-
-        Ok(statuses)
-    }
-
-    /// Get statuses for a receiver within a time range
-    pub async fn get_for_receiver_in_time_range(
-        &self,
-        receiver_id: Uuid,
-        start_time: DateTime<Utc>,
-        end_time: DateTime<Utc>,
-        limit: Option<i64>,
-    ) -> Result<Vec<ReceiverStatus>> {
-        let limit = limit.unwrap_or(1000);
-        let mut conn = self.get_connection()?;
-
-        let statuses = receiver_statuses::table
-            .filter(receiver_statuses::receiver_id.eq(receiver_id))
-            .filter(receiver_statuses::received_at.between(start_time, end_time))
-            .order(receiver_statuses::received_at.desc())
-            .limit(limit)
-            .load::<ReceiverStatus>(&mut conn)?;
-
-        Ok(statuses)
-    }
-
-    /// Get count of receiver statuses
-    pub async fn count(&self) -> Result<i64> {
-        let mut conn = self.get_connection()?;
-        let count = receiver_statuses::table
-            .count()
-            .get_result::<i64>(&mut conn)?;
-
-        Ok(count)
-    }
-
-    /// Get count of receiver statuses for a specific receiver
-    pub async fn count_for_receiver(&self, receiver_id: Uuid) -> Result<i64> {
-        let mut conn = self.get_connection()?;
-        let count = receiver_statuses::table
-            .filter(receiver_statuses::receiver_id.eq(receiver_id))
-            .count()
-            .get_result::<i64>(&mut conn)?;
-
-        Ok(count)
     }
 
     /// Get statuses for a receiver with pagination
@@ -188,6 +97,17 @@ impl ReceiverStatusRepository {
             .collect();
 
         Ok((statuses_with_raw, total_count))
+    }
+
+    /// Get count of receiver statuses for a specific receiver
+    pub async fn count_for_receiver(&self, receiver_id: Uuid) -> Result<i64> {
+        let mut conn = self.get_connection()?;
+        let count = receiver_statuses::table
+            .filter(receiver_statuses::receiver_id.eq(receiver_id))
+            .count()
+            .get_result::<i64>(&mut conn)?;
+
+        Ok(count)
     }
 
     /// Get average time between status updates for a receiver

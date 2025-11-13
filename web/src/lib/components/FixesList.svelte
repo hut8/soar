@@ -135,8 +135,8 @@
 			<p>{emptyMessage}</p>
 		</div>
 	{:else}
-		<!-- Table -->
-		<div class="overflow-x-auto">
+		<!-- Desktop: Table -->
+		<div class="hidden overflow-x-auto md:block">
 			<table class="w-full table-auto">
 				<thead class="bg-surface-100-800-token border-surface-300-600-token border-b">
 					<tr>
@@ -195,6 +195,63 @@
 					{/each}
 				</tbody>
 			</table>
+		</div>
+
+		<!-- Mobile: Cards -->
+		<div class="space-y-4 md:hidden">
+			{#each fixes as fix (fix.id)}
+				<div class="card p-4 {!fix.active ? 'opacity-50' : ''}">
+					<div class="mb-3 text-sm" title={formatDate(fix.timestamp)}>
+						<div class="font-semibold">{formatFixTime(fix.timestamp)}</div>
+						<div class="text-surface-500-400-token text-xs">{formatDate(fix.timestamp)}</div>
+					</div>
+
+					<dl class="mb-3 space-y-2 text-sm">
+						<div class="flex justify-between gap-4">
+							<dt class="text-surface-600-300-token">Coordinates</dt>
+							<dd class="font-mono text-xs">
+								<a
+									href={getGoogleMapsUrl(fix.latitude, fix.longitude)}
+									target="_blank"
+									rel="noopener noreferrer"
+									class="text-primary-500 hover:text-primary-600 hover:underline"
+								>
+									{formatCoordinates(fix.latitude, fix.longitude)}
+								</a>
+							</dd>
+						</div>
+						<div class="flex justify-between gap-4">
+							<dt class="text-surface-600-300-token">Altitude MSL</dt>
+							<dd class="font-medium">{formatAltitude(fix.altitude_msl_feet)}</dd>
+						</div>
+						<div class="flex justify-between gap-4">
+							<dt class="text-surface-600-300-token">Altitude AGL</dt>
+							<dd class="font-medium">{formatAltitude(fix.altitude_agl_feet)}</dd>
+						</div>
+						<div class="flex justify-between gap-4">
+							<dt class="text-surface-600-300-token">Speed</dt>
+							<dd class="font-medium">{formatSpeed(fix.ground_speed_knots)}</dd>
+						</div>
+						<div class="flex justify-between gap-4">
+							<dt class="text-surface-600-300-token">Track</dt>
+							<dd class="font-medium">{formatTrack(fix.track_degrees)}</dd>
+						</div>
+						{#if showClimb}
+							<div class="flex justify-between gap-4">
+								<dt class="text-surface-600-300-token">Climb</dt>
+								<dd class="font-medium">{formatClimb(fix.climb_fpm)}</dd>
+							</div>
+						{/if}
+					</dl>
+
+					{#if showRawData && fix.raw_packet}
+						<div class="border-t border-surface-300 pt-3 dark:border-surface-600">
+							<div class="text-surface-600-300-token mb-1 text-xs">Raw Packet</div>
+							<div class="overflow-x-auto font-mono text-xs">{fix.raw_packet}</div>
+						</div>
+					{/if}
+				</div>
+			{/each}
 		</div>
 	{/if}
 </div>
