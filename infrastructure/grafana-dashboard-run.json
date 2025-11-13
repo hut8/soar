@@ -1456,7 +1456,837 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 38
+        "y": 54
+      },
+      "id": 951,
+      "panels": [],
+      "title": "SOAR Run - APRS Router & Parser",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "fe4qj1bybjncwc"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*Failed.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 55
+      },
+      "id": 952,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.2.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fe4qj1bybjncwc"
+          },
+          "editorMode": "code",
+          "expr": "rate(aprs_parse_success{component=\"run\"}[5m])",
+          "legendFormat": "Parse Success/sec",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fe4qj1bybjncwc"
+          },
+          "editorMode": "code",
+          "expr": "rate(aprs_parse_failed{component=\"run\"}[5m])",
+          "legendFormat": "Parse Failed/sec",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Parse Success/Failure Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "fe4qj1bybjncwc"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 55
+      },
+      "id": 953,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.2.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fe4qj1bybjncwc"
+          },
+          "editorMode": "code",
+          "expr": "rate(aprs_router_packet_type_position{component=\"run\"}[5m])",
+          "legendFormat": "Position Packets/sec",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fe4qj1bybjncwc"
+          },
+          "editorMode": "code",
+          "expr": "rate(aprs_router_packet_type_status{component=\"run\"}[5m])",
+          "legendFormat": "Status Packets/sec",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Packet Type Distribution",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "fe4qj1bybjncwc"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*Failed.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 63
+      },
+      "id": 954,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.2.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fe4qj1bybjncwc"
+          },
+          "editorMode": "code",
+          "expr": "rate(aprs_router_routed_aircraft{component=\"run\"}[5m])",
+          "legendFormat": "Routed to Aircraft/sec",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fe4qj1bybjncwc"
+          },
+          "editorMode": "code",
+          "expr": "rate(aprs_router_generic_processor_success{component=\"run\"}[5m])",
+          "legendFormat": "Generic Success/sec",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fe4qj1bybjncwc"
+          },
+          "editorMode": "code",
+          "expr": "rate(aprs_router_generic_processor_failed{component=\"run\"}[5m])",
+          "legendFormat": "Generic Failed/sec",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "Router Processing",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "fe4qj1bybjncwc"
+      },
+      "description": "Tracks fixes inserted into the database, duplicates detected on redelivery, and fixes suppressed due to high frequency",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*Inserted.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*Duplicates.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "yellow",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*Suppressed.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "orange",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 63
+      },
+      "id": 955,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.2.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fe4qj1bybjncwc"
+          },
+          "editorMode": "code",
+          "expr": "rate(aprs_fixes_inserted{component=\"run\"}[5m])",
+          "legendFormat": "Fixes Inserted/sec",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fe4qj1bybjncwc"
+          },
+          "editorMode": "code",
+          "expr": "rate(aprs_fixes_duplicate_on_redelivery{component=\"run\"}[5m])",
+          "legendFormat": "Duplicates Detected/sec",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fe4qj1bybjncwc"
+          },
+          "editorMode": "code",
+          "expr": "rate(aprs_fixes_suppressed{component=\"run\"}[5m])",
+          "legendFormat": "Fixes Suppressed/sec",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "Fix Processing Details",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "fe4qj1bybjncwc"
+      },
+      "description": "Monitors router internal queue depth and disconnection events",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*Disconnected.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 71
+      },
+      "id": 956,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.2.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fe4qj1bybjncwc"
+          },
+          "editorMode": "code",
+          "expr": "aprs_router_internal_queue_depth{component=\"run\"}",
+          "legendFormat": "Internal Queue Depth",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fe4qj1bybjncwc"
+          },
+          "editorMode": "code",
+          "expr": "rate(aprs_router_internal_queue_disconnected{component=\"run\"}[5m])",
+          "legendFormat": "Queue Disconnected/sec",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Router Internal Queue Health",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "fe4qj1bybjncwc"
+      },
+      "description": "Detailed router processing metrics and aircraft position routing",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "ops"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*No Queue.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "yellow",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 71
+      },
+      "id": 957,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.2.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fe4qj1bybjncwc"
+          },
+          "editorMode": "code",
+          "expr": "rate(aprs_router_process_packet_called{component=\"run\"}[5m])",
+          "legendFormat": "Process Packet Called/sec",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fe4qj1bybjncwc"
+          },
+          "editorMode": "code",
+          "expr": "rate(aprs_router_process_packet_internal_called{component=\"run\"}[5m])",
+          "legendFormat": "Internal Processing/sec",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fe4qj1bybjncwc"
+          },
+          "editorMode": "code",
+          "expr": "rate(aprs_router_position_source_aircraft{component=\"run\"}[5m])",
+          "legendFormat": "Aircraft Position Source/sec",
+          "range": true,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fe4qj1bybjncwc"
+          },
+          "editorMode": "code",
+          "expr": "rate(aprs_router_no_queue_aircraft{component=\"run\"}[5m])",
+          "legendFormat": "No Queue Available/sec",
+          "range": true,
+          "refId": "D"
+        }
+      ],
+      "title": "Router Processing Details",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 79
       },
       "id": 290,
       "panels": [],
@@ -1525,7 +2355,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 47
+        "y": 55
       },
       "id": 291,
       "options": {
@@ -1564,8 +2394,8 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "aprs_aircraft_device_lookup_ms{component=\"run\",quantile=\"0.5\"}",
-          "legendFormat": "Device Lookup (P50)",
+          "expr": "aprs_aircraft_device_upsert_ms{component=\"run\",quantile=\"0.5\"}",
+          "legendFormat": "Device Upsert (P50)",
           "range": true,
           "refId": "B"
         },
@@ -1701,7 +2531,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 47
+        "y": 55
       },
       "id": 292,
       "options": {
@@ -1740,8 +2570,8 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "aprs_aircraft_device_lookup_ms{component=\"run\",quantile=\"0.95\"}",
-          "legendFormat": "Device Lookup (P95)",
+          "expr": "aprs_aircraft_device_upsert_ms{component=\"run\",quantile=\"0.95\"}",
+          "legendFormat": "Device Upsert (P95)",
           "range": true,
           "refId": "B"
         },
@@ -1821,7 +2651,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 47
+        "y": 55
       },
       "id": 300,
       "panels": [],
@@ -1936,7 +2766,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 39
+        "y": 47
       },
       "id": 301,
       "options": {
@@ -1990,17 +2820,6 @@
           "legendFormat": "Async Queued/sec",
           "range": true,
           "refId": "C"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
-          },
-          "editorMode": "code",
-          "expr": "rate(aprs_elevation_dropped[5m])",
-          "legendFormat": "Async Dropped/sec",
-          "range": true,
-          "refId": "D"
         },
         {
           "datasource": {
@@ -2079,7 +2898,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 39
+        "y": 47
       },
       "id": 302,
       "options": {
@@ -2177,7 +2996,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 47
+        "y": 55
       },
       "id": 400,
       "panels": [],
@@ -2246,7 +3065,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 48
+        "y": 56
       },
       "id": 401,
       "options": {
@@ -2332,7 +3151,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 48
+        "y": 56
       },
       "id": 402,
       "options": {
@@ -2403,7 +3222,7 @@
         "h": 4,
         "w": 12,
         "x": 0,
-        "y": 56
+        "y": 64
       },
       "id": 403,
       "options": {
@@ -2502,7 +3321,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 56
+        "y": 64
       },
       "id": 404,
       "options": {
@@ -2588,7 +3407,7 @@
         "h": 4,
         "w": 12,
         "x": 0,
-        "y": 64
+        "y": 72
       },
       "id": 406,
       "options": {
@@ -2661,7 +3480,7 @@
         "h": 4,
         "w": 12,
         "x": 12,
-        "y": 64
+        "y": 72
       },
       "id": 405,
       "options": {
@@ -2736,7 +3555,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 68
+        "y": 76
       },
       "id": 407,
       "options": {
@@ -2833,7 +3652,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 68
+        "y": 76
       },
       "id": 408,
       "options": {
@@ -2943,7 +3762,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 76
+        "y": 84
       },
       "id": 406,
       "options": {
@@ -3008,7 +3827,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 84
+        "y": 92
       },
       "id": 500,
       "panels": [],
@@ -3093,7 +3912,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 85
+        "y": 93
       },
       "id": 501,
       "options": {
@@ -3125,17 +3944,6 @@
           "legendFormat": "Published/sec",
           "range": true,
           "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
-          },
-          "editorMode": "code",
-          "expr": "rate(nats_publisher_dropped_fixes[5m])",
-          "legendFormat": "Dropped/sec",
-          "range": true,
-          "refId": "B"
         },
         {
           "datasource": {
@@ -3188,7 +3996,7 @@
         "h": 4,
         "w": 12,
         "x": 12,
-        "y": 85
+        "y": 93
       },
       "id": 502,
       "options": {
@@ -3231,7 +4039,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 93
+        "y": 101
       },
       "id": 600,
       "panels": [],
@@ -3274,7 +4082,7 @@
         "h": 4,
         "w": 12,
         "x": 0,
-        "y": 94
+        "y": 102
       },
       "id": 601,
       "options": {
@@ -3373,7 +4181,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 94
+        "y": 102
       },
       "id": 603,
       "options": {
@@ -3416,7 +4224,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 102
+        "y": 110
       },
       "id": 700,
       "panels": [],
@@ -3485,7 +4293,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 103
+        "y": 111
       },
       "id": 701,
       "options": {
@@ -3528,7 +4336,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 111
+        "y": 119
       },
       "id": 900,
       "panels": [],
@@ -3597,7 +4405,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 112
+        "y": 120
       },
       "id": 901,
       "options": {
@@ -3722,7 +4530,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 112
+        "y": 120
       },
       "id": 902,
       "options": {

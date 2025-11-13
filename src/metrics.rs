@@ -251,17 +251,10 @@ pub fn initialize_run_metrics() {
     metrics::counter!("generic_processor.receiver_cache.hit").absolute(0);
     metrics::counter!("generic_processor.receiver_cache.miss").absolute(0);
 
-    // JetStream connection status
-    metrics::gauge!("jetstream_connected").set(0.0);
-
     // NATS publisher metrics
     metrics::counter!("nats_publisher_fixes_published").absolute(0);
     metrics::gauge!("nats_publisher_queue_depth").set(0.0);
     metrics::counter!("nats_publisher_errors").absolute(0);
-
-    // APRS processing metrics
-    metrics::counter!("aprs_aircraft_processed").absolute(0);
-    metrics::gauge!("aprs_raw_message_queue_depth").set(0.0);
 
     // Queue drop/close counters
     metrics::counter!("aprs.raw_message_queue.full").absolute(0);
@@ -290,9 +283,6 @@ pub fn initialize_run_metrics() {
     metrics::counter!("aprs.messages.processed.receiver_position").absolute(0);
     metrics::counter!("aprs.messages.processed.server").absolute(0);
     metrics::counter!("aprs.messages.processed.total").absolute(0);
-
-    // Elevation processing metrics
-    metrics::counter!("aprs_elevation_processed").absolute(0);
 
     // Aircraft position processing latency metrics
     metrics::histogram!("aprs.aircraft.device_lookup_ms").record(0.0);

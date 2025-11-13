@@ -38,13 +38,26 @@ SOAR is a comprehensive aircraft tracking and club management system built with:
 - **Deleting data before adding constraints** - You can include DELETE statements in the same migration before constraint creation. The constraint validates against the final state of the transaction, so the DELETE will complete first.
 
 ### METRICS AND MONITORING
-- **When changing metric names** - Update Grafana dashboards to use the new metric names
-- **Metric naming convention** - Use dot notation (e.g., `aprs.aircraft.device_upsert_ms`)
+
+**CRITICAL - Grafana Dashboard Synchronization:**
+- **ALWAYS update Grafana dashboards when changing metrics** - Any metric rename, addition, or removal MUST be reflected in the corresponding dashboard files in `infrastructure/`
+- **Verify dashboard queries after changes** - After updating code, search all dashboard files for the old metric name and update them
+- **Dashboard locations:**
+  - `infrastructure/grafana-dashboard-run.json` - Main processing (`run` command)
+  - `infrastructure/grafana-dashboard-aprs-ingest.json` - APRS connection (`ingest-aprs` command)
+  - `infrastructure/grafana-dashboard-web.json` - Web server (`web` command)
+  - `infrastructure/grafana-dashboard-nats-jetstream.json` - NATS/JetStream metrics
+
+**Metric Standards:**
+- **Naming convention** - Use dot notation (e.g., `aprs.aircraft.device_upsert_ms`)
 - **Document metric changes** - Note metric name changes in PR description for ops team awareness
+- **Remove obsolete dashboard queries** - If a metric is removed from code, remove it from dashboards too
 
 **Recent Metric Changes:**
 - `aprs.aircraft.device_lookup_ms` → `aprs.aircraft.device_upsert_ms` (2025-01-07, PR #312)
-- **NEW**: `aprs.elevation.dropped_full` counter - tracks elevation tasks dropped due to full queue (2025-01-07)
+  - Updated in code and Grafana dashboard (2025-01-12)
+- **REMOVED**: `aprs.elevation.dropped` and `nats_publisher.dropped_fixes` (2025-01-12)
+  - These metrics were removed from dashboard as messages can no longer be dropped
 
 ### Frontend Development Standards
 

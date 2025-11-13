@@ -167,6 +167,11 @@ pub(crate) async fn process_state_transition(
                 // Assign existing flight_id to this fix
                 fix.flight_id = Some(state.flight_id);
 
+                // Calculate time gap from last fix in the same flight
+                let time_gap_seconds =
+                    (fix.timestamp - state.last_fix_timestamp).num_seconds() as i32;
+                fix.time_gap_seconds = Some(time_gap_seconds);
+
                 // Update last_fix_at in database
                 update_flight_timestamp(ctx.flights_repo, state.flight_id, fix.timestamp).await;
 
@@ -289,6 +294,12 @@ pub(crate) async fn process_state_transition(
 
                     // Assign fix to the resumed flight
                     fix.flight_id = Some(flight_id);
+
+                    // Calculate time gap from the last fix in the resumed flight
+                    // This will capture the gap during the timeout period
+                    let time_gap_seconds =
+                        (fix.timestamp - timed_out_flight.last_fix_at).num_seconds() as i32;
+                    fix.time_gap_seconds = Some(time_gap_seconds);
 
                     // Return the fix with the resumed flight_id
                     return Ok(fix);
@@ -434,6 +445,11 @@ pub(crate) async fn process_state_transition(
                     // Keep the flight active, assign flight_id to fix
                     fix.flight_id = Some(flight_id);
 
+                    // Calculate time gap from last fix in the same flight
+                    let time_gap_seconds =
+                        (fix.timestamp - state.last_fix_timestamp).num_seconds() as i32;
+                    fix.time_gap_seconds = Some(time_gap_seconds);
+
                     // Update last_fix_at in database
                     update_flight_timestamp(ctx.flights_repo, flight_id, fix.timestamp).await;
 
@@ -460,6 +476,11 @@ pub(crate) async fn process_state_transition(
 
                         // Assign flight_id to this landing fix
                         fix.flight_id = Some(flight_id);
+
+                        // Calculate time gap from last fix in the same flight
+                        let time_gap_seconds =
+                            (fix.timestamp - state.last_fix_timestamp).num_seconds() as i32;
+                        fix.time_gap_seconds = Some(time_gap_seconds);
 
                         // Update altitude_agl_feet if we have it
                         if let Some(altitude_agl) = agl {
@@ -522,6 +543,11 @@ pub(crate) async fn process_state_transition(
 
                         // Assign flight_id to this fix
                         fix.flight_id = Some(flight_id);
+
+                        // Calculate time gap from last fix in the same flight
+                        let time_gap_seconds =
+                            (fix.timestamp - state.last_fix_timestamp).num_seconds() as i32;
+                        fix.time_gap_seconds = Some(time_gap_seconds);
 
                         // Update last_fix_at in database
                         update_flight_timestamp(ctx.flights_repo, flight_id, fix.timestamp).await;

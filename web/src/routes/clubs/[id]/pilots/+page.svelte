@@ -180,58 +180,108 @@
 			</button>
 		</div>
 	{:else}
-		<!-- Pilots Table -->
+		<!-- Pilots List -->
 		<div class="overflow-hidden card">
-			<div class="table-container">
-				<table class="table-hover table">
-					<thead>
-						<tr>
-							<th>Name</th>
-							<th>Licensed</th>
-							<th>Instructor</th>
-							<th>Tow Pilot</th>
-							<th>Examiner</th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each pilots as pilot (pilot.id)}
+			<!-- Desktop: Table -->
+			<div class="hidden md:block">
+				<div class="table-container">
+					<table class="table-hover table">
+						<thead>
 							<tr>
-								<td class="font-medium">
-									{pilot.first_name}
-									{pilot.last_name}
-								</td>
-								<td>
-									{#if pilot.is_licensed}
-										<Check class="h-5 w-5 text-success-500" />
-									{:else}
-										<X class="h-5 w-5 text-surface-400" />
-									{/if}
-								</td>
-								<td>
-									{#if pilot.is_instructor}
-										<Check class="h-5 w-5 text-success-500" />
-									{:else}
-										<X class="h-5 w-5 text-surface-400" />
-									{/if}
-								</td>
-								<td>
-									{#if pilot.is_tow_pilot}
-										<Check class="h-5 w-5 text-success-500" />
-									{:else}
-										<X class="h-5 w-5 text-surface-400" />
-									{/if}
-								</td>
-								<td>
-									{#if pilot.is_examiner}
-										<Check class="h-5 w-5 text-success-500" />
-									{:else}
-										<X class="h-5 w-5 text-surface-400" />
-									{/if}
-								</td>
+								<th>Name</th>
+								<th>Licensed</th>
+								<th>Instructor</th>
+								<th>Tow Pilot</th>
+								<th>Examiner</th>
 							</tr>
-						{/each}
-					</tbody>
-				</table>
+						</thead>
+						<tbody>
+							{#each pilots as pilot (pilot.id)}
+								<tr>
+									<td class="font-medium">
+										{pilot.first_name}
+										{pilot.last_name}
+									</td>
+									<td>
+										{#if pilot.is_licensed}
+											<Check class="h-5 w-5 text-success-500" />
+										{:else}
+											<X class="h-5 w-5 text-surface-400" />
+										{/if}
+									</td>
+									<td>
+										{#if pilot.is_instructor}
+											<Check class="h-5 w-5 text-success-500" />
+										{:else}
+											<X class="h-5 w-5 text-surface-400" />
+										{/if}
+									</td>
+									<td>
+										{#if pilot.is_tow_pilot}
+											<Check class="h-5 w-5 text-success-500" />
+										{:else}
+											<X class="h-5 w-5 text-surface-400" />
+										{/if}
+									</td>
+									<td>
+										{#if pilot.is_examiner}
+											<Check class="h-5 w-5 text-success-500" />
+										{:else}
+											<X class="h-5 w-5 text-surface-400" />
+										{/if}
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			</div>
+
+			<!-- Mobile: Cards -->
+			<div class="space-y-4 p-4 md:hidden">
+				{#each pilots as pilot (pilot.id)}
+					<div class="card p-4">
+						<div class="mb-3 text-lg font-medium">
+							{pilot.first_name}
+							{pilot.last_name}
+						</div>
+
+						<div class="grid grid-cols-2 gap-3 text-sm">
+							<div class="flex items-center gap-2">
+								{#if pilot.is_licensed}
+									<Check class="h-5 w-5 text-success-500" />
+								{:else}
+									<X class="h-5 w-5 text-surface-400" />
+								{/if}
+								<span class="text-surface-600-300-token">Licensed</span>
+							</div>
+							<div class="flex items-center gap-2">
+								{#if pilot.is_instructor}
+									<Check class="h-5 w-5 text-success-500" />
+								{:else}
+									<X class="h-5 w-5 text-surface-400" />
+								{/if}
+								<span class="text-surface-600-300-token">Instructor</span>
+							</div>
+							<div class="flex items-center gap-2">
+								{#if pilot.is_tow_pilot}
+									<Check class="h-5 w-5 text-success-500" />
+								{:else}
+									<X class="h-5 w-5 text-surface-400" />
+								{/if}
+								<span class="text-surface-600-300-token">Tow Pilot</span>
+							</div>
+							<div class="flex items-center gap-2">
+								{#if pilot.is_examiner}
+									<Check class="h-5 w-5 text-success-500" />
+								{:else}
+									<X class="h-5 w-5 text-surface-400" />
+								{/if}
+								<span class="text-surface-600-300-token">Examiner</span>
+							</div>
+						</div>
+					</div>
+				{/each}
 			</div>
 		</div>
 	{/if}

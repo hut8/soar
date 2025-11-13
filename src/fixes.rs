@@ -101,6 +101,10 @@ pub struct Fix {
 
     /// Whether altitude_agl_feet has been looked up (true even if NULL due to no data)
     pub altitude_agl_valid: bool,
+
+    /// Number of seconds elapsed since the previous fix within the same flight
+    /// NULL for the first fix in a flight or for fixes without a flight_id
+    pub time_gap_seconds: Option<i32>,
 }
 
 /// Extended Fix struct that includes raw packet data from aprs_messages table
@@ -269,6 +273,7 @@ impl Fix {
                     receiver_id,
                     aprs_message_id,
                     altitude_agl_valid: false, // Will be set to true when elevation is looked up
+                    time_gap_seconds: None,    // Will be set by flight tracker if part of a flight
                 }))
             }
             _ => {
