@@ -1,20 +1,28 @@
 #!/bin/bash
 #
-# SOAR Local Deployment Script
+# SOAR Deployment Script
 #
-# Deploy SOAR to production server from your local machine.
+# Deploy SOAR locally or to a remote production server.
 # This script mimics the GitHub Actions deployment workflow.
 #
 # Usage:
-#   ./scripts/deploy              # Deploy current branch
+#   ./scripts/deploy              # Deploy current branch (prompts for server or local)
 #   ./scripts/deploy my-branch    # Deploy specific branch
+#
+#   # Local deployment (on the same server):
+#   LOCAL_DEPLOY=1 ./scripts/deploy
+#   DEPLOY_SERVER=local ./scripts/deploy
+#
+#   # Remote deployment:
+#   DEPLOY_SERVER=prod.example.com ./scripts/deploy
 #
 # Environment variables (optional):
 #   SENTRY_AUTH_TOKEN    - Sentry authentication token
 #   SENTRY_ORG           - Sentry organization slug
 #   SENTRY_PROJECT       - Sentry project slug
 #   SSH_PRIVATE_KEY_PATH - Path to SSH private key (default: ~/.ssh/id_rsa)
-#   DEPLOY_SERVER        - Deployment server hostname (default: from ~/.ssh/config or prompt)
+#   DEPLOY_SERVER        - Deployment server hostname, or 'local'/'localhost' for local deploy
+#   LOCAL_DEPLOY         - Set to 1 to force local deployment
 #   SKIP_SENTRY          - Set to 1 to skip Sentry steps
 #   SKIP_TESTS           - Set to 1 to skip running tests (not recommended)
 #
@@ -234,74 +242,150 @@ echo "$SHORT_SHA" > "$DEPLOY_PKG/VERSION"
 log_info "Deployment package contents:"
 ls -lh "$DEPLOY_PKG/"
 
-# Get deployment server
+# Determine deployment mode (local or remote)
 DEPLOY_SERVER="${DEPLOY_SERVER:-}"
-if [ -z "$DEPLOY_SERVER" ]; then
-    read -p "Enter deployment server hostname: " DEPLOY_SERVER
-    if [ -z "$DEPLOY_SERVER" ]; then
-        log_error "Deployment server not specified"
+LOCAL_DEPLOY="${LOCAL_DEPLOY:-0}"
+
+# Check if we're doing a local deployment
+if [ "$LOCAL_DEPLOY" = "1" ] || [ "$DEPLOY_SERVER" = "local" ] || [ "$DEPLOY_SERVER" = "localhost" ]; then
+    LOCAL_DEPLOY=1
+    log_info "Local deployment mode"
+
+    # Verify /usr/local/bin/soar-deploy exists
+    if [ ! -f "/usr/local/bin/soar-deploy" ]; then
+        log_error "/usr/local/bin/soar-deploy not found"
+        log_info "Install it with: sudo install -m 755 infrastructure/soar-deploy /usr/local/bin/soar-deploy"
         exit 1
+    fi
+else
+    # Remote deployment mode
+    if [ -z "$DEPLOY_SERVER" ]; then
+        read -p "Enter deployment server hostname (or 'local' for local deployment): " DEPLOY_SERVER
+        if [ -z "$DEPLOY_SERVER" ]; then
+            log_error "Deployment server not specified"
+            exit 1
+        fi
+
+        if [ "$DEPLOY_SERVER" = "local" ] || [ "$DEPLOY_SERVER" = "localhost" ]; then
+            LOCAL_DEPLOY=1
+            log_info "Local deployment mode"
+
+            # Verify /usr/local/bin/soar-deploy exists
+            if [ ! -f "/usr/local/bin/soar-deploy" ]; then
+                log_error "/usr/local/bin/soar-deploy not found"
+                log_info "Install it with: sudo install -m 755 infrastructure/soar-deploy /usr/local/bin/soar-deploy"
+                exit 1
+            fi
+        fi
     fi
 fi
 
-log_info "Deployment server: $DEPLOY_SERVER"
+if [ "$LOCAL_DEPLOY" = "1" ]; then
+    # Local deployment - copy to /tmp and invoke directly
+    log_step "Preparing local deployment"
 
-# Test SSH connection
-log_step "Testing SSH connection"
-if ! ssh -o ConnectTimeout=5 "soar@$DEPLOY_SERVER" "echo 'SSH connection successful'" > /dev/null 2>&1; then
-    log_error "Failed to connect to soar@$DEPLOY_SERVER"
-    log_info "Make sure:"
-    log_info "  1. The server is reachable"
-    log_info "  2. Your SSH key is configured"
-    log_info "  3. The 'soar' user exists on the server"
-    exit 1
-fi
+    DEPLOY_DIR="/tmp/soar/deploy/$TIMESTAMP"
+    log_info "Creating deployment directory: $DEPLOY_DIR"
+    mkdir -p "$DEPLOY_DIR"
 
-log_info "SSH connection successful"
+    log_info "Copying deployment package..."
+    cp -r "$DEPLOY_PKG"/* "$DEPLOY_DIR/"
 
-# Upload deployment package
-log_step "Uploading deployment package"
+    log_info "Deployment package ready at: $DEPLOY_DIR"
 
-REMOTE_DEPLOY_DIR="/tmp/soar/deploy/$TIMESTAMP"
-log_info "Creating remote deployment directory: $REMOTE_DEPLOY_DIR"
-ssh "soar@$DEPLOY_SERVER" "mkdir -p $REMOTE_DEPLOY_DIR"
+    # Execute deployment
+    log_step "Executing local deployment"
 
-log_info "Uploading files..."
-scp -r "$DEPLOY_PKG"/* "soar@$DEPLOY_SERVER:$REMOTE_DEPLOY_DIR/"
+    log_warn "About to execute deployment locally"
+    log_info "This will:"
+    log_info "  1. Stop all SOAR services"
+    log_info "  2. Run database migrations"
+    log_info "  3. Install new binary and service files"
+    log_info "  4. Restart all services"
+    echo
 
-log_info "Deployment package uploaded"
+    read -p "Continue with deployment? (y/N) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        log_info "Deployment cancelled"
+        log_info "Deployment package remains at: $DEPLOY_DIR"
+        exit 1
+    fi
 
-# Execute deployment
-log_step "Executing deployment on server"
+    log_info "Executing deployment script..."
+    sudo /usr/local/bin/soar-deploy "$DEPLOY_DIR"
 
-log_warn "About to execute deployment on $DEPLOY_SERVER"
-log_info "This will:"
-log_info "  1. Stop all SOAR services"
-log_info "  2. Run database migrations"
-log_info "  3. Install new binary and service files"
-log_info "  4. Restart all services"
-echo
-
-read -p "Continue with deployment? (y/N) " -n 1 -r
-echo
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    log_info "Deployment cancelled"
-    log_info "Deployment package remains at: $REMOTE_DEPLOY_DIR"
-    exit 1
-fi
-
-log_info "Executing deployment script..."
-ssh "soar@$DEPLOY_SERVER" "sudo /usr/local/bin/soar-deploy $REMOTE_DEPLOY_DIR"
-
-# Check deployment result
-if [ $? -eq 0 ]; then
-    log_step "Deployment completed successfully!"
-    log_info "Deployed commit: $SHORT_SHA"
-    log_info "Branch: $BRANCH"
-    log_info "Timestamp: $TIMESTAMP"
+    # Check deployment result
+    if [ $? -eq 0 ]; then
+        log_step "Deployment completed successfully!"
+        log_info "Deployed commit: $SHORT_SHA"
+        log_info "Branch: $BRANCH"
+        log_info "Timestamp: $TIMESTAMP"
+    else
+        log_error "Deployment failed!"
+        exit 1
+    fi
 else
-    log_error "Deployment failed!"
-    exit 1
+    # Remote deployment - use SSH
+    log_info "Deployment server: $DEPLOY_SERVER"
+
+    # Test SSH connection
+    log_step "Testing SSH connection"
+    if ! ssh -o ConnectTimeout=5 "soar@$DEPLOY_SERVER" "echo 'SSH connection successful'" > /dev/null 2>&1; then
+        log_error "Failed to connect to soar@$DEPLOY_SERVER"
+        log_info "Make sure:"
+        log_info "  1. The server is reachable"
+        log_info "  2. Your SSH key is configured"
+        log_info "  3. The 'soar' user exists on the server"
+        exit 1
+    fi
+
+    log_info "SSH connection successful"
+
+    # Upload deployment package
+    log_step "Uploading deployment package"
+
+    REMOTE_DEPLOY_DIR="/tmp/soar/deploy/$TIMESTAMP"
+    log_info "Creating remote deployment directory: $REMOTE_DEPLOY_DIR"
+    ssh "soar@$DEPLOY_SERVER" "mkdir -p $REMOTE_DEPLOY_DIR"
+
+    log_info "Uploading files..."
+    scp -r "$DEPLOY_PKG"/* "soar@$DEPLOY_SERVER:$REMOTE_DEPLOY_DIR/"
+
+    log_info "Deployment package uploaded"
+
+    # Execute deployment
+    log_step "Executing deployment on server"
+
+    log_warn "About to execute deployment on $DEPLOY_SERVER"
+    log_info "This will:"
+    log_info "  1. Stop all SOAR services"
+    log_info "  2. Run database migrations"
+    log_info "  3. Install new binary and service files"
+    log_info "  4. Restart all services"
+    echo
+
+    read -p "Continue with deployment? (y/N) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        log_info "Deployment cancelled"
+        log_info "Deployment package remains at: $REMOTE_DEPLOY_DIR"
+        exit 1
+    fi
+
+    log_info "Executing deployment script..."
+    ssh "soar@$DEPLOY_SERVER" "sudo /usr/local/bin/soar-deploy $REMOTE_DEPLOY_DIR"
+
+    # Check deployment result
+    if [ $? -eq 0 ]; then
+        log_step "Deployment completed successfully!"
+        log_info "Deployed commit: $SHORT_SHA"
+        log_info "Branch: $BRANCH"
+        log_info "Timestamp: $TIMESTAMP"
+    else
+        log_error "Deployment failed!"
+        exit 1
+    fi
 fi
 
 # Return to original branch if we switched
