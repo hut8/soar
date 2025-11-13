@@ -8,7 +8,7 @@ services:
     container_name: soar-e2e-tests
     working_dir: /app/web
     # Run as current user to avoid root-owned files
-    user: "${UID:-1000}:${GID:-1000}"
+    user: "${USER_ID:-1000}:${GROUP_ID:-1000}"
     environment:
       # Point to the soar container
       PLAYWRIGHT_BASE_URL: http://soar:61226
