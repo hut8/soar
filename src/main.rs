@@ -250,6 +250,7 @@ fn dump_schema_if_non_production(database_url: &str) -> Result<()> {
         .arg("--no-privileges") // Don't include GRANT/REVOKE
         .arg("--no-tablespaces") // Don't include tablespace assignments
         .arg("--no-comments") // Don't include comments (may contain timestamps)
+        .arg("--restrict-key=SOAR") // Use fixed key to prevent random \restrict hash changes
         .arg(database_url)
         .output()
         .context("Failed to execute pg_dump - is PostgreSQL client installed?")?;

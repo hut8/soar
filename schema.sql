@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict rAxl4ss8SS21uLt3GYYc3qF732g01WHTd1x5wbXzcc9KCiN6UO1uqrwh4hfccfc
+\restrict SOAR
 
 -- Dumped from database version 17.6 (Ubuntu 17.6-2.pgdg22.04+1)
 -- Dumped by pg_dump version 17.6 (Ubuntu 17.6-2.pgdg22.04+1)
@@ -24,6 +24,13 @@ SET row_security = off;
 --
 
 CREATE SCHEMA partman;
+
+
+--
+-- Name: btree_gin; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS btree_gin WITH SCHEMA public;
 
 
 --
@@ -3400,7 +3407,7 @@ ALTER TABLE ONLY public.fixes_old
 --
 
 ALTER TABLE public.fixes
-    ADD CONSTRAINT fixes_aprs_message_id_fkey FOREIGN KEY (aprs_message_id, received_at) REFERENCES public.aprs_messages(id, received_at) ON DELETE SET NULL;
+    ADD CONSTRAINT fixes_aprs_message_id_fkey FOREIGN KEY (aprs_message_id, received_at) REFERENCES public.aprs_messages(id, received_at);
 
 
 --
@@ -3576,7 +3583,7 @@ ALTER TABLE ONLY public.pilots
 --
 
 ALTER TABLE ONLY public.receiver_statuses
-    ADD CONSTRAINT receiver_statuses_aprs_message_id_fkey FOREIGN KEY (aprs_message_id, received_at) REFERENCES public.aprs_messages(id, received_at) ON DELETE SET NULL;
+    ADD CONSTRAINT receiver_statuses_aprs_message_id_fkey FOREIGN KEY (aprs_message_id, received_at) REFERENCES public.aprs_messages(id, received_at);
 
 
 --
@@ -3615,4 +3622,4 @@ ALTER TABLE ONLY public.users
 -- PostgreSQL database dump complete
 --
 
-\unrestrict rAxl4ss8SS21uLt3GYYc3qF732g01WHTd1x5wbXzcc9KCiN6UO1uqrwh4hfccfc
+\unrestrict SOAR
