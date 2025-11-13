@@ -1,0 +1,397 @@
+#!/bin/bash
+#
+# SOAR Deployment Script
+#
+# Deploy SOAR locally or to a remote production server.
+# This script mimics the GitHub Actions deployment workflow.
+#
+# Usage:
+#   ./scripts/deploy              # Deploy current branch (prompts for server or local)
+#   ./scripts/deploy my-branch    # Deploy specific branch
+#
+#   # Local deployment (on the same server):
+#   LOCAL_DEPLOY=1 ./scripts/deploy
+#   DEPLOY_SERVER=local ./scripts/deploy
+#
+#   # Remote deployment:
+#   DEPLOY_SERVER=prod.example.com ./scripts/deploy
+#
+# Environment variables (optional):
+#   SENTRY_AUTH_TOKEN    - Sentry authentication token
+#   SENTRY_ORG           - Sentry organization slug
+#   SENTRY_PROJECT       - Sentry project slug
+#   SSH_PRIVATE_KEY_PATH - Path to SSH private key (default: ~/.ssh/id_rsa)
+#   DEPLOY_SERVER        - Deployment server hostname, or 'local'/'localhost' for local deploy
+#   LOCAL_DEPLOY         - Set to 1 to force local deployment
+#   SKIP_SENTRY          - Set to 1 to skip Sentry steps
+#   SKIP_TESTS           - Set to 1 to skip running tests (not recommended)
+#
+
+set -e
+set -u
+set -o pipefail
+
+# Color codes for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+log_info() {
+    echo -e "${GREEN}[INFO]${NC} $1"
+}
+
+log_warn() {
+    echo -e "${YELLOW}[WARN]${NC} $1"
+}
+
+log_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+log_step() {
+    echo -e "\n${BLUE}==>${NC} ${BLUE}$1${NC}\n"
+}
+
+# Cleanup function
+cleanup() {
+    if [ -n "${TEMP_DIR:-}" ] && [ -d "$TEMP_DIR" ]; then
+        log_info "Cleaning up temporary directory: $TEMP_DIR"
+        rm -rf "$TEMP_DIR"
+    fi
+}
+
+trap cleanup EXIT
+
+# Check if we're in the project root
+if [ ! -f "Cargo.toml" ] || [ ! -d "web" ]; then
+    log_error "This script must be run from the project root directory"
+    exit 1
+fi
+
+# Determine branch to deploy
+BRANCH="${1:-}"
+if [ -z "$BRANCH" ]; then
+    BRANCH=$(git rev-parse --abbrev-ref HEAD)
+    log_info "No branch specified, using current branch: $BRANCH"
+else
+    log_info "Deploying branch: $BRANCH"
+fi
+
+# Verify branch exists
+if ! git rev-parse --verify "$BRANCH" > /dev/null 2>&1; then
+    log_error "Branch '$BRANCH' does not exist"
+    exit 1
+fi
+
+# Check for uncommitted changes
+if [ -n "$(git status --porcelain)" ]; then
+    log_warn "You have uncommitted changes in your working directory"
+    read -p "Continue anyway? (y/N) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        log_info "Deployment cancelled"
+        exit 1
+    fi
+fi
+
+# Checkout branch if not already on it
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+if [ "$CURRENT_BRANCH" != "$BRANCH" ]; then
+    log_step "Checking out branch: $BRANCH"
+    git checkout "$BRANCH"
+fi
+
+# Get commit SHA (short form for Sentry)
+COMMIT_SHA=$(git rev-parse HEAD)
+SHORT_SHA="${COMMIT_SHA:0:7}"
+log_info "Commit SHA: $COMMIT_SHA (short: $SHORT_SHA)"
+
+# Run tests unless explicitly skipped
+if [ "${SKIP_TESTS:-0}" != "1" ]; then
+    log_step "Running tests"
+
+    log_info "Running web tests..."
+    cd web
+    npm run lint
+    npm run check
+    cd ..
+
+    log_info "Running Rust tests..."
+    cargo fmt --check
+    cargo clippy --all-targets --all-features -- -D warnings
+    cargo test
+else
+    log_warn "Skipping tests (SKIP_TESTS=1)"
+fi
+
+# Build web project
+log_step "Building web project"
+cd web
+npm ci
+npm run build
+cd ..
+
+# Build release binary
+log_step "Building release binary"
+cargo build --release --verbose
+
+# Verify binary was built
+if [ ! -f "target/release/soar" ]; then
+    log_error "Release binary not found at target/release/soar"
+    exit 1
+fi
+
+log_info "Binary size: $(du -h target/release/soar | cut -f1)"
+
+# Handle Sentry integration (optional)
+if [ "${SKIP_SENTRY:-0}" != "1" ]; then
+    if [ -n "${SENTRY_AUTH_TOKEN:-}" ] && [ -n "${SENTRY_ORG:-}" ] && [ -n "${SENTRY_PROJECT:-}" ]; then
+        log_step "Uploading debug symbols to Sentry"
+
+        # Check if sentry-cli is installed
+        if ! command -v sentry-cli &> /dev/null; then
+            log_warn "sentry-cli not found, installing..."
+            curl -sL https://sentry.io/get-cli/ | bash
+        fi
+
+        # Upload debug symbols
+        sentry-cli debug-files upload \
+            --org "$SENTRY_ORG" \
+            --project "$SENTRY_PROJECT" \
+            ./target/release/soar
+
+        log_step "Creating Sentry release"
+        sentry-cli releases new "$SHORT_SHA" \
+            --org "$SENTRY_ORG" \
+            --project "$SENTRY_PROJECT"
+
+        sentry-cli releases set-commits "$SHORT_SHA" --auto --ignore-missing \
+            --org "$SENTRY_ORG" \
+            --project "$SENTRY_PROJECT"
+
+        sentry-cli releases finalize "$SHORT_SHA" \
+            --org "$SENTRY_ORG" \
+            --project "$SENTRY_PROJECT"
+
+        log_info "Sentry release created: $SHORT_SHA"
+    else
+        log_warn "Sentry credentials not configured, skipping Sentry steps"
+        log_info "Set SENTRY_AUTH_TOKEN, SENTRY_ORG, and SENTRY_PROJECT to enable"
+    fi
+else
+    log_warn "Skipping Sentry integration (SKIP_SENTRY=1)"
+fi
+
+# Prepare deployment package
+log_step "Preparing deployment package"
+
+TIMESTAMP=$(date +%Y%m%d%H%M%S)
+TEMP_DIR=$(mktemp -d)
+DEPLOY_PKG="$TEMP_DIR/deploy-pkg"
+mkdir -p "$DEPLOY_PKG"
+
+log_info "Creating deployment package in: $DEPLOY_PKG"
+
+# Copy binary
+cp target/release/soar "$DEPLOY_PKG/"
+
+# Copy deployment script
+if [ -f "infrastructure/soar-deploy" ]; then
+    cp infrastructure/soar-deploy "$DEPLOY_PKG/"
+else
+    log_warn "infrastructure/soar-deploy not found"
+fi
+
+# Copy service files
+cp *.service "$DEPLOY_PKG/" 2>/dev/null || log_warn "No service files found in root"
+
+# Copy timer files
+cp *.timer "$DEPLOY_PKG/" 2>/dev/null || log_warn "No timer files found in root"
+
+# Copy Prometheus job configuration files
+if [ -d "infrastructure/prometheus-jobs" ]; then
+    cp -r infrastructure/prometheus-jobs "$DEPLOY_PKG/"
+    log_info "Prometheus job files included"
+fi
+
+# Copy Grafana provisioning configuration
+if [ -d "infrastructure/grafana-provisioning" ]; then
+    cp -r infrastructure/grafana-provisioning "$DEPLOY_PKG/"
+    log_info "Grafana provisioning configuration included"
+fi
+
+# Copy Grafana dashboard files
+if compgen -G "infrastructure/grafana-dashboard-*.json" > /dev/null; then
+    cp infrastructure/grafana-dashboard-*.json "$DEPLOY_PKG/"
+    DASHBOARD_COUNT=$(ls -1 infrastructure/grafana-dashboard-*.json | wc -l)
+    log_info "Grafana dashboards included: $DASHBOARD_COUNT"
+fi
+
+# Copy backup scripts directory
+if [ -d "scripts/backup" ]; then
+    mkdir -p "$DEPLOY_PKG/scripts"
+    cp -r scripts/backup "$DEPLOY_PKG/scripts/"
+    log_info "Backup scripts included"
+fi
+
+# Create version file
+echo "$SHORT_SHA" > "$DEPLOY_PKG/VERSION"
+
+log_info "Deployment package contents:"
+ls -lh "$DEPLOY_PKG/"
+
+# Determine deployment mode (local or remote)
+DEPLOY_SERVER="${DEPLOY_SERVER:-}"
+LOCAL_DEPLOY="${LOCAL_DEPLOY:-0}"
+
+# Check if we're doing a local deployment
+if [ "$LOCAL_DEPLOY" = "1" ] || [ "$DEPLOY_SERVER" = "local" ] || [ "$DEPLOY_SERVER" = "localhost" ]; then
+    LOCAL_DEPLOY=1
+    log_info "Local deployment mode"
+
+    # Verify /usr/local/bin/soar-deploy exists
+    if [ ! -f "/usr/local/bin/soar-deploy" ]; then
+        log_error "/usr/local/bin/soar-deploy not found"
+        log_info "Install it with: sudo install -m 755 infrastructure/soar-deploy /usr/local/bin/soar-deploy"
+        exit 1
+    fi
+else
+    # Remote deployment mode
+    if [ -z "$DEPLOY_SERVER" ]; then
+        read -p "Enter deployment server hostname (or 'local' for local deployment): " DEPLOY_SERVER
+        if [ -z "$DEPLOY_SERVER" ]; then
+            log_error "Deployment server not specified"
+            exit 1
+        fi
+
+        if [ "$DEPLOY_SERVER" = "local" ] || [ "$DEPLOY_SERVER" = "localhost" ]; then
+            LOCAL_DEPLOY=1
+            log_info "Local deployment mode"
+
+            # Verify /usr/local/bin/soar-deploy exists
+            if [ ! -f "/usr/local/bin/soar-deploy" ]; then
+                log_error "/usr/local/bin/soar-deploy not found"
+                log_info "Install it with: sudo install -m 755 infrastructure/soar-deploy /usr/local/bin/soar-deploy"
+                exit 1
+            fi
+        fi
+    fi
+fi
+
+if [ "$LOCAL_DEPLOY" = "1" ]; then
+    # Local deployment - copy to /tmp and invoke directly
+    log_step "Preparing local deployment"
+
+    DEPLOY_DIR="/tmp/soar/deploy/$TIMESTAMP"
+    log_info "Creating deployment directory: $DEPLOY_DIR"
+    mkdir -p "$DEPLOY_DIR"
+
+    log_info "Copying deployment package..."
+    cp -r "$DEPLOY_PKG"/* "$DEPLOY_DIR/"
+
+    log_info "Deployment package ready at: $DEPLOY_DIR"
+
+    # Execute deployment
+    log_step "Executing local deployment"
+
+    log_warn "About to execute deployment locally"
+    log_info "This will:"
+    log_info "  1. Stop all SOAR services"
+    log_info "  2. Run database migrations"
+    log_info "  3. Install new binary and service files"
+    log_info "  4. Restart all services"
+    echo
+
+    read -p "Continue with deployment? (y/N) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        log_info "Deployment cancelled"
+        log_info "Deployment package remains at: $DEPLOY_DIR"
+        exit 1
+    fi
+
+    log_info "Executing deployment script..."
+    sudo /usr/local/bin/soar-deploy "$DEPLOY_DIR"
+
+    # Check deployment result
+    if [ $? -eq 0 ]; then
+        log_step "Deployment completed successfully!"
+        log_info "Deployed commit: $SHORT_SHA"
+        log_info "Branch: $BRANCH"
+        log_info "Timestamp: $TIMESTAMP"
+    else
+        log_error "Deployment failed!"
+        exit 1
+    fi
+else
+    # Remote deployment - use SSH
+    log_info "Deployment server: $DEPLOY_SERVER"
+
+    # Test SSH connection
+    log_step "Testing SSH connection"
+    if ! ssh -o ConnectTimeout=5 "soar@$DEPLOY_SERVER" "echo 'SSH connection successful'" > /dev/null 2>&1; then
+        log_error "Failed to connect to soar@$DEPLOY_SERVER"
+        log_info "Make sure:"
+        log_info "  1. The server is reachable"
+        log_info "  2. Your SSH key is configured"
+        log_info "  3. The 'soar' user exists on the server"
+        exit 1
+    fi
+
+    log_info "SSH connection successful"
+
+    # Upload deployment package
+    log_step "Uploading deployment package"
+
+    REMOTE_DEPLOY_DIR="/tmp/soar/deploy/$TIMESTAMP"
+    log_info "Creating remote deployment directory: $REMOTE_DEPLOY_DIR"
+    ssh "soar@$DEPLOY_SERVER" "mkdir -p $REMOTE_DEPLOY_DIR"
+
+    log_info "Uploading files..."
+    scp -r "$DEPLOY_PKG"/* "soar@$DEPLOY_SERVER:$REMOTE_DEPLOY_DIR/"
+
+    log_info "Deployment package uploaded"
+
+    # Execute deployment
+    log_step "Executing deployment on server"
+
+    log_warn "About to execute deployment on $DEPLOY_SERVER"
+    log_info "This will:"
+    log_info "  1. Stop all SOAR services"
+    log_info "  2. Run database migrations"
+    log_info "  3. Install new binary and service files"
+    log_info "  4. Restart all services"
+    echo
+
+    read -p "Continue with deployment? (y/N) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        log_info "Deployment cancelled"
+        log_info "Deployment package remains at: $REMOTE_DEPLOY_DIR"
+        exit 1
+    fi
+
+    log_info "Executing deployment script..."
+    ssh "soar@$DEPLOY_SERVER" "sudo /usr/local/bin/soar-deploy $REMOTE_DEPLOY_DIR"
+
+    # Check deployment result
+    if [ $? -eq 0 ]; then
+        log_step "Deployment completed successfully!"
+        log_info "Deployed commit: $SHORT_SHA"
+        log_info "Branch: $BRANCH"
+        log_info "Timestamp: $TIMESTAMP"
+    else
+        log_error "Deployment failed!"
+        exit 1
+    fi
+fi
+
+# Return to original branch if we switched
+if [ "$CURRENT_BRANCH" != "$BRANCH" ]; then
+    log_info "Returning to original branch: $CURRENT_BRANCH"
+    git checkout "$CURRENT_BRANCH"
+fi
+
+log_info "Done!"
