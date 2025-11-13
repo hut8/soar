@@ -115,7 +115,9 @@
 						<th>End</th>
 					{/if}
 					<th>Duration</th>
-					<th>Distance</th>
+					{#if showEnd}
+						<th>Distance</th>
+					{/if}
 					{#if !showEnd}
 						<th>Altitude</th>
 						<th>Latest Fix</th>
@@ -296,9 +298,11 @@
 								flight.landing_time
 							)}
 						</td>
-						<td class="font-semibold">
-							{formatDistance(flight.total_distance_meters)}
-						</td>
+						{#if showEnd}
+							<td class="font-semibold">
+								{formatDistance(flight.total_distance_meters)}
+							</td>
+						{/if}
 						{#if !showEnd}
 							<td>
 								<div class="text-sm">
@@ -469,10 +473,12 @@
 							)}</span
 						>
 					</div>
-					<div>
-						<span class="text-surface-500-400-token text-xs">Distance:</span>
-						<span class="font-semibold">{formatDistance(flight.total_distance_meters)}</span>
-					</div>
+					{#if showEnd}
+						<div>
+							<span class="text-surface-500-400-token text-xs">Distance:</span>
+							<span class="font-semibold">{formatDistance(flight.total_distance_meters)}</span>
+						</div>
+					{/if}
 				</div>
 				{#if !showEnd && (flight.latest_altitude_msl_feet !== null || flight.latest_altitude_agl_feet !== null)}
 					<div>
