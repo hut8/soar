@@ -74,7 +74,7 @@
 	function handleLogout() {
 		auth.logout();
 		showUserMenu = false;
-		goto(base);
+		goto(loginPath);
 	}
 
 	// Close menus when clicking outside
