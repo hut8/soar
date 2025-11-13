@@ -7,12 +7,16 @@ services:
     image: mcr.microsoft.com/playwright:v1.56.1-noble
     container_name: soar-e2e-tests
     working_dir: /app/web
+    # Run as current user to avoid root-owned files
+    user: "${UID:-1000}:${GID:-1000}"
     environment:
       # Point to the soar container
       PLAYWRIGHT_BASE_URL: http://soar:61226
       # Use the same database for verification
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/soar_test
       CI: "true"
+      # Ensure npm cache is writable
+      HOME: /tmp
     volumes:
       # Mount the web directory for tests
       - ./web:/app/web

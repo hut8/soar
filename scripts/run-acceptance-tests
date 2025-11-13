@@ -73,6 +73,10 @@ echo ""
 # Ensure we're in the repo root
 cd "$(dirname "$0")/.."
 
+# Export UID and GID for Docker Compose to use (prevents root-owned files)
+export UID=$(id -u)
+export GID=$(id -g)
+
 # Create artifact directories if they don't exist
 mkdir -p web/test-results
 mkdir -p web/playwright-report
