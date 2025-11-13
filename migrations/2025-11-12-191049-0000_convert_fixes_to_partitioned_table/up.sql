@@ -73,8 +73,25 @@ SELECT partman.create_parent(
 
 -- Step 5: Copy data from old table to new partitioned table's default partition
 -- All data will initially go to the default partition
-INSERT INTO fixes
-SELECT * FROM fixes_old;
+-- Note: Exclude generated columns (location, location_geom) - they will be auto-generated
+INSERT INTO fixes (
+    id, source, aprs_type, via, timestamp, latitude, longitude,
+    altitude_msl_feet, flight_number, squawk, ground_speed_knots,
+    track_degrees, climb_fpm, turn_rate_rot, snr_db, bit_errors_corrected,
+    freq_offset_khz, flight_id, device_id, received_at, is_active,
+    altitude_agl_feet, receiver_id, gnss_horizontal_resolution,
+    gnss_vertical_resolution, aprs_message_id, altitude_agl_valid,
+    time_gap_seconds
+)
+SELECT
+    id, source, aprs_type, via, timestamp, latitude, longitude,
+    altitude_msl_feet, flight_number, squawk, ground_speed_knots,
+    track_degrees, climb_fpm, turn_rate_rot, snr_db, bit_errors_corrected,
+    freq_offset_khz, flight_id, device_id, received_at, is_active,
+    altitude_agl_feet, receiver_id, gnss_horizontal_resolution,
+    gnss_vertical_resolution, aprs_message_id, altitude_agl_valid,
+    time_gap_seconds
+FROM fixes_old;
 
 -- Step 6: Migrate data from default partition to time-based child partitions
 -- This is the SLOW part - it will take 30-60 minutes on production (225M rows)
