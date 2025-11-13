@@ -1,21 +1,13 @@
 <script lang="ts">
 	import { X, Plane, MapPin, RotateCcw, ExternalLink, Navigation } from '@lucide/svelte';
-	import type { Device, Aircraft, Fix, AircraftRegistration, AircraftModel } from '$lib/types';
-
-	interface Flight {
-		id: string;
-		state?: string;
-		departure_time?: string;
-		arrival_time?: string;
-		duration_seconds?: number;
-		max_altitude_msl_feet?: number;
-		departure_airport?: {
-			ident?: string;
-		};
-		arrival_airport?: {
-			ident?: string;
-		};
-	}
+	import type {
+		Device,
+		Aircraft,
+		Fix,
+		AircraftRegistration,
+		AircraftModel,
+		Flight
+	} from '$lib/types';
 	import {
 		formatTitleCase,
 		formatDeviceAddress,
@@ -653,10 +645,10 @@
 										<div>
 											<dt class="font-medium text-surface-600 dark:text-surface-400">Departure</dt>
 											<dd>
-												{currentFlight.departure_airport.ident || 'Unknown'}
-												{#if currentFlight.departure_time}
+												{currentFlight.departure_airport}
+												{#if currentFlight.takeoff_time}
 													<div class="text-xs text-surface-500">
-														{dayjs(currentFlight.departure_time).format('HH:mm')}
+														{dayjs(currentFlight.takeoff_time).format('HH:mm')}
 													</div>
 												{/if}
 											</dd>
@@ -666,10 +658,10 @@
 										<div>
 											<dt class="font-medium text-surface-600 dark:text-surface-400">Arrival</dt>
 											<dd>
-												{currentFlight.arrival_airport.ident || 'Unknown'}
-												{#if currentFlight.arrival_time}
+												{currentFlight.arrival_airport}
+												{#if currentFlight.landing_time}
 													<div class="text-xs text-surface-500">
-														{dayjs(currentFlight.arrival_time).format('HH:mm')}
+														{dayjs(currentFlight.landing_time).format('HH:mm')}
 													</div>
 												{/if}
 											</dd>
@@ -679,7 +671,7 @@
 										<dt class="font-medium text-surface-600 dark:text-surface-400">State</dt>
 										<dd>
 											<span class="badge preset-filled-primary-500">
-												{currentFlight.state || 'In Progress'}
+												{currentFlight.state}
 											</span>
 										</dd>
 									</div>
@@ -692,12 +684,12 @@
 											</dd>
 										</div>
 									{/if}
-									{#if currentFlight.max_altitude_msl_feet}
+									{#if currentFlight.latest_altitude_msl_feet}
 										<div>
 											<dt class="font-medium text-surface-600 dark:text-surface-400">
-												Max Altitude
+												Current Altitude
 											</dt>
-											<dd>{currentFlight.max_altitude_msl_feet.toLocaleString()} ft MSL</dd>
+											<dd>{currentFlight.latest_altitude_msl_feet.toLocaleString()} ft MSL</dd>
 										</div>
 									{/if}
 									<div class="col-span-2">
