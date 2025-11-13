@@ -1,7 +1,10 @@
 services:
-  # PostgreSQL database with PostGIS extension
+  # PostgreSQL database with PostGIS and pg_partman extensions
   postgres:
-    image: postgis/postgis:17-3.5
+    build:
+      context: .
+      dockerfile: .github/postgis-partman.Dockerfile
+    image: postgis-partman:test
     container_name: soar-postgres-test
     environment:
       POSTGRES_USER: postgres
