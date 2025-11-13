@@ -17,9 +17,9 @@ use tracing::info;
 
 /// Handle the archive command
 /// Archives data in the correct order to respect foreign key constraints:
-/// 1. Flights (8+ days old)
-/// 2. Fixes and ReceiverStatuses (9+ days old)
-/// 3. AprsMessages (10+ days old)
+/// 1. Flights (22+ days old)
+/// 2. Fixes and ReceiverStatuses (23+ days old)
+/// 3. AprsMessages (24+ days old)
 pub async fn handle_archive(pool: PgPool, before: String, archive_path: String) -> Result<()> {
     // Parse the before date
     let before_date = NaiveDate::parse_from_str(&before, "%Y-%m-%d").context(format!(
@@ -49,20 +49,20 @@ pub async fn handle_archive(pool: PgPool, before: String, archive_path: String) 
     info!("Archive directory: {}", archive_path);
 
     // Archive in order to respect foreign key constraints
-    // Flights first (8+ days old)
-    info!("=== Archiving flights (8+ days old) ===");
-    let flights_before = before_date - chrono::Duration::days(8);
+    // Flights first (22+ days old)
+    info!("=== Archiving flights (22+ days old) ===");
+    let flights_before = before_date - chrono::Duration::days(22);
     archive::<FlightModel>(&pool, flights_before, archive_dir).await?;
 
-    // Fixes and ReceiverStatuses next (9+ days old)
-    info!("=== Archiving fixes and receiver_statuses (9+ days old) ===");
-    let fixes_before = before_date - chrono::Duration::days(9);
+    // Fixes and ReceiverStatuses next (23+ days old)
+    info!("=== Archiving fixes and receiver_statuses (23+ days old) ===");
+    let fixes_before = before_date - chrono::Duration::days(23);
     archive::<Fix>(&pool, fixes_before, archive_dir).await?;
     archive::<ReceiverStatus>(&pool, fixes_before, archive_dir).await?;
 
-    // AprsMessages last (10+ days old)
-    info!("=== Archiving aprs_messages (10+ days old) ===");
-    let messages_before = before_date - chrono::Duration::days(10);
+    // AprsMessages last (24+ days old)
+    info!("=== Archiving aprs_messages (24+ days old) ===");
+    let messages_before = before_date - chrono::Duration::days(24);
     archive::<AprsMessage>(&pool, messages_before, archive_dir).await?;
 
     info!("Archive process completed successfully");
