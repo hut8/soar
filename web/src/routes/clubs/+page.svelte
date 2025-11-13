@@ -2,7 +2,6 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
-	import { goto } from '$app/navigation';
 	import { Users, Search, MapPinHouse, ExternalLink, Plane } from '@lucide/svelte';
 	import { Progress, SegmentedControl } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall } from '$lib/api/server';
@@ -27,9 +26,6 @@
 	let loading = $state(false);
 	let error = $state('');
 	let searchQuery = $state('');
-	let filteredClubs = $state<ClubWithSoaring[]>([]);
-	let searchInput = $state('');
-	let showResults = $state(false);
 	let searchType = $state<'name' | 'location'>('name');
 	let autocompleteElement = $state<google.maps.places.PlaceAutocompleteElement | null>(null);
 	let selectedLatitude = $state<number | null>(null);
@@ -137,6 +133,15 @@
 		}
 	}
 
+	// Handle search input changes for autocomplete behavior
+	async function handleSearchInput() {
+		if (searchQuery.length > 0) {
+			await searchClubs();
+		} else {
+			clubs = [];
+		}
+	}
+
 	function getCurrentLocation() {
 		if (navigator.geolocation) {
 			navigator.geolocation.getCurrentPosition(
@@ -165,34 +170,6 @@
 		if (club.location.state) parts.push(club.location.state);
 		if (club.location.zip_code) parts.push(club.location.zip_code);
 		return parts.join(', ') || 'Address not available';
-	}
-
-	// Handle search input changes
-	async function handleSearchInput(value: string) {
-		searchInput = value;
-		if (value.length > 0) {
-			await searchClubsForFilter(value);
-			showResults = true;
-		} else {
-			filteredClubs = [];
-			showResults = false;
-		}
-	}
-
-	// Search clubs for filtering
-	async function searchClubsForFilter(query: string) {
-		try {
-			const endpoint = `/clubs?q=${encodeURIComponent(query)}`;
-			filteredClubs = await serverCall<ClubWithSoaring[]>(endpoint);
-		} catch (err) {
-			console.error('Error searching clubs:', err);
-			filteredClubs = [];
-		}
-	}
-
-	// Navigate to selected club
-	function selectClub(clubId: string) {
-		goto(resolve(`/clubs/${clubId}`));
 	}
 </script>
 
@@ -253,41 +230,14 @@
 				</SegmentedControl>
 
 				{#if searchType === 'name'}
-					<div class="relative">
-						<input
-							bind:value={searchInput}
-							oninput={(e) => handleSearchInput((e.target as HTMLInputElement).value)}
-							class="input"
-							type="text"
-							placeholder="Type to search clubs..."
-							autocomplete="off"
-						/>
-
-						<!-- Search Results -->
-						{#if showResults && filteredClubs.length > 0}
-							<div
-								class="bg-surface-100-800-token border-surface-300-600-token absolute z-10 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border shadow-lg"
-							>
-								{#each filteredClubs as club (club.id)}
-									<button
-										onclick={() => selectClub(club.id)}
-										class="hover:bg-surface-200-700-token border-surface-200-700-token w-full border-b px-4 py-3 text-left transition-colors last:border-b-0"
-									>
-										<div class="font-medium text-primary-500">{club.name}</div>
-										<div class="text-surface-600-300-token text-sm">{formatAddress(club)}</div>
-									</button>
-								{/each}
-							</div>
-						{:else if showResults && searchInput.length > 0}
-							<div
-								class="bg-surface-100-800-token border-surface-300-600-token absolute z-10 mt-1 w-full rounded-lg border p-4 shadow-lg"
-							>
-								<div class="text-surface-600-300-token text-center">
-									No clubs found matching "{searchInput}"
-								</div>
-							</div>
-						{/if}
-					</div>
+					<input
+						bind:value={searchQuery}
+						oninput={handleSearchInput}
+						class="input"
+						type="text"
+						placeholder="Type to search clubs..."
+						autocomplete="off"
+					/>
 				{:else if searchType === 'location'}
 					<div class="space-y-3">
 						<gmp-place-autocomplete
@@ -363,43 +313,14 @@
 					<!-- Input area -->
 					<div>
 						{#if searchType === 'name'}
-							<div class="relative">
-								<input
-									bind:value={searchInput}
-									oninput={(e) => handleSearchInput((e.target as HTMLInputElement).value)}
-									class="input"
-									type="text"
-									placeholder="Type to search clubs..."
-									autocomplete="off"
-								/>
-
-								<!-- Search Results -->
-								{#if showResults && filteredClubs.length > 0}
-									<div
-										class="bg-surface-100-800-token border-surface-300-600-token absolute z-10 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border shadow-lg"
-									>
-										{#each filteredClubs as club (club.id)}
-											<button
-												onclick={() => selectClub(club.id)}
-												class="hover:bg-surface-200-700-token border-surface-200-700-token w-full border-b px-4 py-3 text-left transition-colors last:border-b-0"
-											>
-												<div class="font-medium text-primary-500">{club.name}</div>
-												<div class="text-surface-600-300-token text-sm">
-													{formatAddress(club)}
-												</div>
-											</button>
-										{/each}
-									</div>
-								{:else if showResults && searchInput.length > 0}
-									<div
-										class="bg-surface-100-800-token border-surface-300-600-token absolute z-10 mt-1 w-full rounded-lg border p-4 shadow-lg"
-									>
-										<div class="text-surface-600-300-token text-center">
-											No clubs found matching "{searchInput}"
-										</div>
-									</div>
-								{/if}
-							</div>
+							<input
+								bind:value={searchQuery}
+								oninput={handleSearchInput}
+								class="input"
+								type="text"
+								placeholder="Type to search clubs..."
+								autocomplete="off"
+							/>
 						{:else if searchType === 'location'}
 							<div class="space-y-3">
 								<div class="flex gap-3">
