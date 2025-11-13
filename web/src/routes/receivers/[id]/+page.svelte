@@ -27,8 +27,7 @@
 	import {
 		formatDeviceAddress,
 		getAircraftTypeOgnDescription,
-		getAircraftTypeColor,
-		getDeviceTitle
+		getAircraftTypeColor
 	} from '$lib/formatters';
 
 	dayjs.extend(relativeTime);
@@ -1172,7 +1171,7 @@
 															</div>
 														</td>
 														<td class="font-mono text-xs">
-															{fix.device_address.toString(16).toUpperCase().padStart(6, '0')}
+															{fix.device_address_hex || '—'}
 														</td>
 														<td class="font-mono text-sm">{fix.registration || '—'}</td>
 														<td class="font-mono text-xs">
@@ -1223,7 +1222,7 @@
 												<div class="flex justify-between gap-4">
 													<dt class="text-surface-600-300-token">Device</dt>
 													<dd class="font-mono text-xs">
-														{fix.device_address.toString(16).toUpperCase().padStart(6, '0')}
+														{fix.device_address_hex || '—'}
 													</dd>
 												</div>
 												<div class="flex justify-between gap-4">
