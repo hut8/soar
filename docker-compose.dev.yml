@@ -14,6 +14,8 @@ services:
       - cargo-git:/usr/local/cargo/git
       - target-cache:/workspace/target
     working_dir: /workspace
+    # Environment variables are inherited from base docker-compose.yml automatically
+    # No need to redeclare them here
     # Override health check for dev mode - first compile takes up to 10 minutes
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:61226/"]
