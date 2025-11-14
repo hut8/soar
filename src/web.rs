@@ -634,6 +634,7 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         .route("/clubs/{id}/devices", get(actions::get_devices_by_club))
         // Device routes
         .route("/devices", get(actions::search_devices))
+        .route("/devices/bulk", get(actions::get_devices_bulk))
         .route("/devices/{id}", get(actions::get_device_by_id))
         .route("/devices/{id}/fixes", get(actions::get_device_fixes))
         .route("/devices/{id}/flights", get(actions::get_device_flights))

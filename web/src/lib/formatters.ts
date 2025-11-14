@@ -50,7 +50,7 @@ export function formatDeviceAddress(addressType: string, address: string): strin
 		case 'I':
 			return `ICAO-${hexAddress}`;
 		default:
-			return `ICAO-${hexAddress}`;
+			return `UNKNOWN-${hexAddress}`;
 	}
 }
 
@@ -134,7 +134,7 @@ export function getAircraftTypeOgnDescription(aircraftType: string | undefined |
 		drop_plane: 'Drop Plane',
 		hang_glider: 'Hang Glider',
 		paraglider: 'Paraglider',
-		recip_engine: 'Reciprocating Engine',
+		recip_engine: 'Piston',
 		jet_turboprop: 'Jet/Turboprop',
 		unknown: 'Unknown',
 		balloon: 'Balloon',

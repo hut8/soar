@@ -6,11 +6,13 @@
 # Installation:
 #   sudo mkdir -p /etc/soar
 #   sudo cp backup-env.example /etc/soar/backup-env
-#   sudo cp rclone.conf.example /etc/soar/rclone.conf
 #   sudo nano /etc/soar/backup-env  # Edit with your values
-#   sudo nano /etc/soar/rclone.conf  # Edit with your rclone remote config
-#   sudo chown postgres:postgres /etc/soar/backup-env /etc/soar/rclone.conf
-#   sudo chmod 600 /etc/soar/backup-env /etc/soar/rclone.conf
+#   sudo chown postgres:postgres /etc/soar/backup-env
+#   sudo chmod 600 /etc/soar/backup-env
+#
+#   # Ensure SSH key exists and has correct permissions
+#   sudo chown postgres:postgres /var/soar/keys/backup_key
+#   sudo chmod 600 /var/soar/keys/backup_key
 #
 # IMPORTANT: This file contains sensitive credentials. Protect it carefully!
 #   - Set permissions to 600 (read/write for owner only)
@@ -18,24 +20,27 @@
 #   - Never commit this file to version control
 
 #------------------------------------------------------------------------------
-# CLOUD STORAGE CONFIGURATION (using rclone)
+# SSH BACKUP STORAGE CONFIGURATION
 #------------------------------------------------------------------------------
 
-# Rclone remote and bucket (in rclone remote:bucket format)
-# The remote name must match a [remote] section in /etc/soar/rclone.conf
-#
-# For Wasabi example:
-export BACKUP_REMOTE="soar-db:soar-backup-prod"
-#
-# Where:
-#   soar-db = rclone remote name (defined in /etc/soar/rclone.conf)
-#   soar-backup-prod = bucket name
-#
-# See rclone.conf.example for configuration examples
+# SSH server hostname or IP address
+export BACKUP_SSH_HOST="cryptobot"
 
-# Path to rclone configuration file
-# Default: /etc/soar/rclone.conf
-export RCLONE_CONFIG="/etc/soar/rclone.conf"
+# SSH user (default: root)
+export BACKUP_SSH_USER="root"
+
+# Remote path on SSH server where backups will be stored
+export BACKUP_SSH_PATH="/srv/soar-backups"
+
+# Path to SSH private key for authentication
+# Default: /var/soar/keys/backup_key
+export BACKUP_SSH_KEY="/var/soar/keys/backup_key"
+
+# Note: The SSH public key must be added to the authorized_keys file
+# on the remote server:
+#   ssh-copy-id -i /var/soar/keys/backup_key.pub root@cryptobot
+# Or manually add the contents of /var/soar/keys/backup_key.pub to
+# ~/.ssh/authorized_keys on the remote server
 
 #------------------------------------------------------------------------------
 # BACKUP RETENTION CONFIGURATION
@@ -129,15 +134,14 @@ export METRICS_PUSHGATEWAY=""
 # Example: export METRICS_PUSHGATEWAY="http://localhost:9091"
 
 #------------------------------------------------------------------------------
-# RCLONE CONFIGURATION
+# SSH CONNECTION CONFIGURATION
 #------------------------------------------------------------------------------
 
-# Rclone configuration file location (default: /etc/soar/rclone.conf)
-# Only change if you need to use a different config file
-# export RCLONE_CONFIG="/etc/soar/rclone.conf"
-
-# Rclone additional options (optional)
-# export RCLONE_OPTS="--stats=1s"
+# Additional SSH options can be configured by modifying the backup scripts
+# Default SSH options used:
+#   -i $SSH_KEY                      # Use specified private key
+#   -o StrictHostKeyChecking=accept-new  # Accept new host keys automatically
+#   -o BatchMode=yes                 # Non-interactive mode
 
 #------------------------------------------------------------------------------
 # ADVANCED CONFIGURATION
@@ -162,9 +166,9 @@ export METRICS_PUSHGATEWAY=""
 
 # After editing this file, verify the configuration:
 #
-# 1. Test cloud storage access:
+# 1. Test SSH access to backup server:
 #    source /etc/soar/backup-env
-#    rclone lsd ${BACKUP_REMOTE} --config /etc/soar/rclone.conf
+#    ssh -i ${BACKUP_SSH_KEY} ${BACKUP_SSH_USER}@${BACKUP_SSH_HOST} "ls -la ${BACKUP_SSH_PATH}"
 #
 # 2. Test WAL archiving (as postgres user):
 #    sudo -u postgres /usr/local/bin/soar-wal-archive \
@@ -175,5 +179,6 @@ export METRICS_PUSHGATEWAY=""
 #    sudo systemctl start soar-backup-base.service
 #    sudo journalctl -u soar-backup-base.service -f
 #
-# 4. Verify backup in cloud:
-#    rclone lsd ${BACKUP_REMOTE}/base/ --config /etc/soar/rclone.conf
+# 4. Verify backup on remote server:
+#    ssh -i ${BACKUP_SSH_KEY} ${BACKUP_SSH_USER}@${BACKUP_SSH_HOST} \
+#      "find ${BACKUP_SSH_PATH}/base -type d"

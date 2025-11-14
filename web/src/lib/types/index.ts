@@ -196,12 +196,19 @@ export interface Fix {
 	ground_speed_knots?: number;
 	climb_fpm?: number;
 	turn_rate_rot?: number;
+	snr_db?: number;
 	registration?: string;
 	model?: string;
 	flight_id?: string;
 	active: boolean;
 	raw_packet?: string; // Raw APRS packet data (joined from aprs_messages table)
 	flight?: Flight; // Full flight information if part of an active flight (from websocket)
+}
+
+export interface FixesResponse {
+	fixes: Fix[];
+	page: number;
+	total_pages: number;
 }
 
 // User authentication and profile

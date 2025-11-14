@@ -22,7 +22,8 @@
 		MountainSnow,
 		Clock,
 		Expand,
-		LocateFixed
+		LocateFixed,
+		Palette
 	} from '@lucide/svelte';
 	import type { PageData } from './$types';
 	import type { Flight, Receiver } from '$lib/types';
@@ -65,6 +66,10 @@
 	// Display options
 	let includeNearbyFlights = $state(false);
 	let showReceivers = $state(false);
+
+	// Color scheme selection
+	type ColorScheme = 'altitude' | 'time';
+	let colorScheme = $state<ColorScheme>('altitude');
 
 	// Nearby flights data - using full Flight type
 	let nearbyFlights = $state<Flight[]>([]);
@@ -199,6 +204,41 @@
 		return `rgb(${r}, ${g}, ${b})`;
 	}
 
+	// Helper function to map time to color (purple→orange gradient)
+	// Earlier fixes are purple, later fixes are orange
+	function timeToColor(fixIndex: number, totalFixes: number): string {
+		if (totalFixes <= 1) {
+			return '#888888'; // Gray for single fix
+		}
+
+		// Normalize index to 0-1 range
+		const normalized = fixIndex / (totalFixes - 1);
+
+		// Interpolate from purple (early) to orange (late)
+		// Purple: rgb(147, 51, 234) - #9333ea
+		// Orange: rgb(251, 146, 60) - #fb923c
+		const r = Math.round(147 + normalized * (251 - 147));
+		const g = Math.round(51 + normalized * (146 - 51));
+		const b = Math.round(234 - normalized * (234 - 60));
+
+		return `rgb(${r}, ${g}, ${b})`;
+	}
+
+	// Get color for a fix based on current color scheme
+	function getFixColor(
+		fixIndex: number,
+		altitude: number | null | undefined,
+		minAlt: number,
+		maxAlt: number,
+		totalFixes: number
+	): string {
+		if (colorScheme === 'altitude') {
+			return altitudeToColor(altitude, minAlt, maxAlt);
+		} else {
+			return timeToColor(fixIndex, totalFixes);
+		}
+	}
+
 	// Calculate arrow scale based on zoom level (inversely proportional to zoom)
 	// Zoom 8 (far out) -> scale 1, Zoom 16 (close in) -> scale 4
 	function getArrowScale(zoom: number): number {
@@ -219,6 +259,7 @@
 		const TEN_MINUTES_MS = 10 * 60 * 1000;
 
 		const fixes = [...data.fixes].reverse();
+		const totalFixes = fixes.length;
 
 		flightPathSegments.forEach((segment, index) => {
 			const path = segment.getPath();
@@ -227,7 +268,7 @@
 			// Get color based on segment index
 			if (index >= fixes.length) return;
 			const fix = fixes[index];
-			const color = altitudeToColor(fix.altitude_msl_feet, minAlt, maxAlt);
+			const color = getFixColor(index, fix.altitude_msl_feet, minAlt, maxAlt, totalFixes);
 
 			// Check if we should display an arrow for this segment
 			const fixTime = new Date(fix.timestamp);
@@ -269,6 +310,7 @@
 		const segments: google.maps.Polyline[] = [];
 		const zoom = targetMap.getZoom() ?? 12;
 		const scale = getArrowScale(zoom);
+		const totalFixes = fixesInOrder.length;
 
 		// Track last arrow timestamp to display one every 10 minutes
 		let lastArrowTime: Date | null = null;
@@ -279,8 +321,8 @@
 			const fix1 = fixesInOrder[i];
 			const fix2 = fixesInOrder[i + 1];
 
-			// Use the starting fix's altitude for the segment color
-			const color = altitudeToColor(fix1.altitude_msl_feet, minAlt, maxAlt);
+			// Use the starting fix's color for the segment
+			const color = getFixColor(i, fix1.altitude_msl_feet, minAlt, maxAlt, totalFixes);
 
 			// Check if we should display an arrow for this segment
 			const fix1Time = new Date(fix1.timestamp);
@@ -687,6 +729,7 @@
 			const minAlt = minAltitude() ?? 0;
 			const maxAlt = maxAltitude() ?? 1000;
 			const arrowIndices = getArrowFixIndices(fixesInOrder);
+			const totalFixes = fixesInOrder.length;
 
 			fixesInOrder.forEach((fix, index) => {
 				// Only create arrow markers for selected indices
@@ -713,8 +756,8 @@
 					);
 				}
 
-				// Get color based on altitude
-				const color = altitudeToColor(fix.altitude_msl_feet, minAlt, maxAlt);
+				// Get color based on current scheme
+				const color = getFixColor(index, fix.altitude_msl_feet, minAlt, maxAlt, totalFixes);
 
 				// Create SVG arrow element (12x12 pixels, twice the original size)
 				const arrowSvg = document.createElement('div');
@@ -914,6 +957,7 @@
 				const minAlt = minAltitude() ?? 0;
 				const maxAlt = maxAltitude() ?? 1000;
 				const arrowIndices = getArrowFixIndices(fixesInOrder);
+				const totalFixes = fixesInOrder.length;
 
 				fixesInOrder.forEach((fix, index) => {
 					// Only create arrow markers for selected indices
@@ -940,8 +984,8 @@
 						);
 					}
 
-					// Get color based on altitude
-					const color = altitudeToColor(fix.altitude_msl_feet, minAlt, maxAlt);
+					// Get color based on current scheme
+					const color = getFixColor(index, fix.altitude_msl_feet, minAlt, maxAlt, totalFixes);
 
 					// Create SVG arrow element (12x12 pixels, twice the original size)
 					const arrowSvg = document.createElement('div');
@@ -1073,6 +1117,14 @@
 			hoverMarker.map = map;
 		}
 	}
+
+	// Update map when color scheme changes
+	$effect(() => {
+		// Reactively update map when color scheme changes
+		if (colorScheme && map && flightPathSegments.length > 0) {
+			updateMap();
+		}
+	});
 
 	// Cleanup on component unmount
 	onDestroy(() => {
@@ -1449,42 +1501,75 @@
 	<!-- Map -->
 	{#if data.fixes.length > 0}
 		<div class="card p-4">
-			<div class="mb-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-				<div class="flex items-center gap-3">
-					<h2 class="h3">Flight Track</h2>
-					<a
-						href="/flights/{data.flight.id}/map"
-						class="btn flex items-center gap-1 preset-filled-primary-500 btn-sm"
-					>
-						<Expand class="h-3 w-3" />
-						<span>Full Screen</span>
-					</a>
+			<div class="mb-3 flex flex-col gap-3">
+				<div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+					<div class="flex items-center gap-3">
+						<h2 class="h3">Flight Track</h2>
+						<a
+							href="/flights/{data.flight.id}/map"
+							class="btn flex items-center gap-1 preset-filled-primary-500 btn-sm"
+						>
+							<Expand class="h-3 w-3" />
+							<span>Full Screen</span>
+						</a>
+					</div>
+					<div class="flex flex-wrap items-center gap-4">
+						<label class="flex cursor-pointer items-center gap-2">
+							<input
+								type="checkbox"
+								class="checkbox"
+								bind:checked={includeNearbyFlights}
+								onchange={handleNearbyFlightsToggle}
+							/>
+							<span class="text-sm">Include Nearby Flights</span>
+							{#if isLoadingNearbyFlights}
+								<span class="text-surface-600-300-token text-xs">(Loading...)</span>
+							{/if}
+						</label>
+						<label class="flex cursor-pointer items-center gap-2">
+							<input
+								type="checkbox"
+								class="checkbox"
+								bind:checked={showReceivers}
+								onchange={handleReceiversToggle}
+							/>
+							<span class="text-sm">Show Receivers</span>
+							{#if isLoadingReceivers}
+								<span class="text-surface-600-300-token text-xs">(Loading...)</span>
+							{/if}
+						</label>
+					</div>
 				</div>
-				<div class="flex items-center gap-4">
-					<label class="flex cursor-pointer items-center gap-2">
-						<input
-							type="checkbox"
-							class="checkbox"
-							bind:checked={includeNearbyFlights}
-							onchange={handleNearbyFlightsToggle}
-						/>
-						<span class="text-sm">Include Nearby Flights</span>
-						{#if isLoadingNearbyFlights}
-							<span class="text-surface-600-300-token text-xs">(Loading...)</span>
+				<div class="flex items-center gap-2">
+					<Palette class="text-surface-600-300-token h-4 w-4" />
+					<span class="text-surface-600-300-token text-sm">Color by:</span>
+					<div class="inline-flex rounded-md shadow-sm" role="group">
+						<button
+							type="button"
+							onclick={() => (colorScheme = 'altitude')}
+							class="btn btn-sm {colorScheme === 'altitude'
+								? 'preset-filled-primary-500'
+								: 'preset-tonal'} rounded-r-none"
+						>
+							Altitude
+						</button>
+						<button
+							type="button"
+							onclick={() => (colorScheme = 'time')}
+							class="btn btn-sm {colorScheme === 'time'
+								? 'preset-filled-primary-500'
+								: 'preset-tonal'} rounded-l-none"
+						>
+							Time
+						</button>
+					</div>
+					<span class="text-surface-600-300-token text-xs">
+						{#if colorScheme === 'altitude'}
+							(Red = lowest, Blue = highest)
+						{:else}
+							(Purple = start, Orange = end)
 						{/if}
-					</label>
-					<label class="flex cursor-pointer items-center gap-2">
-						<input
-							type="checkbox"
-							class="checkbox"
-							bind:checked={showReceivers}
-							onchange={handleReceiversToggle}
-						/>
-						<span class="text-sm">Show Receivers</span>
-						{#if isLoadingReceivers}
-							<span class="text-surface-600-300-token text-xs">(Loading...)</span>
-						{/if}
-					</label>
+					</span>
 				</div>
 			</div>
 			<div class="relative">

@@ -327,9 +327,9 @@ pub async fn get_receiver_statuses(
     let page = params.page.unwrap_or(1).max(1);
     let per_page = params.per_page.unwrap_or(100).clamp(1, 100);
 
-    // Get statuses for this receiver
+    // Get statuses for this receiver with raw APRS message data
     match status_repo
-        .get_statuses_by_receiver_paginated(id, page, per_page)
+        .get_statuses_with_raw_by_receiver_paginated(id, page, per_page)
         .await
     {
         Ok((statuses, total_count)) => {
@@ -373,7 +373,7 @@ pub struct ReceiverStatusesQuery {
 
 #[derive(Debug, Serialize)]
 pub struct ReceiverStatusesResponse {
-    pub statuses: Vec<crate::receiver_statuses::ReceiverStatus>,
+    pub statuses: Vec<crate::receiver_statuses::ReceiverStatusWithRaw>,
     pub page: i64,
     pub total_pages: i64,
 }

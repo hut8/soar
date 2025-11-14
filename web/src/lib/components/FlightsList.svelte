@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { MapPin, Clock, ExternalLink, MoveUp, Radio, AlertCircle } from '@lucide/svelte';
+	import { MapPin, Clock, ExternalLink, MoveUp, AlertCircle } from '@lucide/svelte';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
 	import { getAircraftTypeOgnDescription, getAircraftTypeColor } from '$lib/formatters';
@@ -110,15 +110,14 @@
 						<th>Aircraft</th>
 						<th>Type</th>
 					{/if}
-					{#if !showEnd}
-						<th>Recognized</th>
-					{/if}
 					<th>Start</th>
 					{#if showEnd}
 						<th>End</th>
 					{/if}
 					<th>Duration</th>
-					<th>Distance</th>
+					{#if showEnd}
+						<th>Distance</th>
+					{/if}
 					{#if !showEnd}
 						<th>Altitude</th>
 						<th>Latest Fix</th>
@@ -222,42 +221,24 @@
 								{/if}
 							</td>
 						{/if}
-						{#if !showEnd}
-							<td>
-								<div class="flex flex-col gap-1">
-									<div class="flex items-center gap-1 text-sm">
-										<Clock class="h-3 w-3" />
-										{formatRelativeTime(flight.created_at)}
-									</div>
-									{#if flight.created_at}
-										<div class="text-surface-500-400-token text-xs">
-											{formatLocalTime(flight.created_at)}
-										</div>
-									{/if}
-								</div>
-							</td>
-						{/if}
 						<td>
 							<div class="flex flex-col gap-1">
-								<div class="flex items-center gap-1 text-sm">
+								<div class="text-sm">
+									{formatRelativeTime(isAirborne(flight) ? flight.created_at : flight.takeoff_time)}
+								</div>
+								<div class="flex items-center gap-1 text-xs">
+									<span class="text-surface-500-400-token">
+										{formatLocalTime(isAirborne(flight) ? flight.created_at : flight.takeoff_time)}
+									</span>
 									{#if isAirborne(flight)}
-										<Radio class="h-3 w-3" />
 										<span
-											class="badge preset-filled-tertiary-500 text-xs"
+											class="badge preset-filled-surface-500 text-xs"
 											title="First detected while airborne"
 										>
 											Airborne
 										</span>
-									{:else}
-										<Clock class="h-3 w-3" />
-										{formatRelativeTime(flight.takeoff_time)}
 									{/if}
 								</div>
-								{#if flight.takeoff_time}
-									<div class="text-surface-500-400-token text-xs">
-										{formatLocalTime(flight.takeoff_time)}
-									</div>
-								{/if}
 								{#if flight.departure_airport}
 									<div class="text-surface-500-400-token flex items-center gap-1 text-xs">
 										<MapPin class="h-3 w-3" />
@@ -317,9 +298,11 @@
 								flight.landing_time
 							)}
 						</td>
-						<td class="font-semibold">
-							{formatDistance(flight.total_distance_meters)}
-						</td>
+						{#if showEnd}
+							<td class="font-semibold">
+								{formatDistance(flight.total_distance_meters)}
+							</td>
+						{/if}
 						{#if !showEnd}
 							<td>
 								<div class="text-sm">
@@ -427,37 +410,23 @@
 
 			<!-- Flight details -->
 			<div class="text-surface-600-300-token space-y-2 text-sm">
-				{#if !showEnd}
-					<div>
-						<span class="text-surface-500-400-token text-xs">Recognized:</span>
-						{formatLocalTime(flight.created_at)}
-						<span class="text-surface-500-400-token text-xs">
-							({formatRelativeTime(flight.created_at)})
-						</span>
-					</div>
-				{/if}
 				<div>
 					<span class="text-surface-500-400-token text-xs">Start:</span>
+					{#if flight.departure_airport}
+						<span class="font-medium">
+							{flight.departure_airport}{#if flight.takeoff_runway_ident}/{flight.takeoff_runway_ident}{/if}
+						</span>
+					{/if}
+					{formatLocalTime(isAirborne(flight) ? flight.created_at : flight.takeoff_time)}
+					<span class="text-surface-500-400-token text-xs">
+						({formatRelativeTime(isAirborne(flight) ? flight.created_at : flight.takeoff_time)})
+					</span>
 					{#if isAirborne(flight)}
 						<span
-							class="badge preset-filled-tertiary-500 text-xs"
+							class="badge preset-filled-surface-500 text-xs"
 							title="First detected while airborne"
 						>
-							<Radio class="mr-1 inline h-3 w-3" />
 							Airborne
-						</span>
-						{#if flight.created_at}
-							{formatLocalTime(flight.created_at)}
-						{/if}
-					{:else}
-						{#if flight.departure_airport}
-							<span class="font-medium">
-								{flight.departure_airport}{#if flight.takeoff_runway_ident}/{flight.takeoff_runway_ident}{/if}
-							</span>
-						{/if}
-						{formatLocalTime(flight.takeoff_time)}
-						<span class="text-surface-500-400-token text-xs">
-							({formatRelativeTime(flight.takeoff_time)})
 						</span>
 					{/if}
 				</div>
@@ -504,10 +473,12 @@
 							)}</span
 						>
 					</div>
-					<div>
-						<span class="text-surface-500-400-token text-xs">Distance:</span>
-						<span class="font-semibold">{formatDistance(flight.total_distance_meters)}</span>
-					</div>
+					{#if showEnd}
+						<div>
+							<span class="text-surface-500-400-token text-xs">Distance:</span>
+							<span class="font-semibold">{formatDistance(flight.total_distance_meters)}</span>
+						</div>
+					{/if}
 				</div>
 				{#if !showEnd && (flight.latest_altitude_msl_feet !== null || flight.latest_altitude_agl_feet !== null)}
 					<div>

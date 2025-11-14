@@ -1,4 +1,5 @@
 pub mod archive;
+pub mod dump_unified_ddb;
 pub mod ingest_aprs;
 pub mod load_data;
 pub mod pull_data;
@@ -7,6 +8,7 @@ pub mod seed_test_data;
 pub mod sitemap;
 
 pub use archive::{handle_archive, handle_resurrect};
+pub use dump_unified_ddb::handle_dump_unified_ddb;
 pub use ingest_aprs::handle_ingest_aprs;
 pub use load_data::handle_load_data;
 pub use pull_data::handle_pull_data;

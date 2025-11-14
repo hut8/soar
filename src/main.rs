@@ -11,8 +11,9 @@ use tracing::{info, warn};
 
 mod commands;
 use commands::{
-    handle_archive, handle_ingest_aprs, handle_load_data, handle_pull_data, handle_resurrect,
-    handle_run, handle_seed_test_data, handle_sitemap_generation,
+    handle_archive, handle_dump_unified_ddb, handle_ingest_aprs, handle_load_data,
+    handle_pull_data, handle_resurrect, handle_run, handle_seed_test_data,
+    handle_sitemap_generation,
 };
 
 // Embed migrations at compile time
@@ -210,6 +211,19 @@ enum Commands {
     /// - TEST_USER_FIRST_NAME (default: Test)
     /// - TEST_USER_LAST_NAME (default: User)
     SeedTestData {},
+    /// Dump unified FlarmNet device database to JSONL file
+    ///
+    /// Downloads the unified FlarmNet database from <https://turbo87.github.io/united-flarmnet/united.fln>
+    /// and exports all device records to a JSONL (JSON Lines) file for debugging.
+    /// Each line contains one complete device record with all fields.
+    DumpUnifiedDdb {
+        /// Output file path for JSONL export
+        #[arg(value_name = "OUTPUT_FILE")]
+        output: String,
+        /// Optional local source file (if not specified, downloads from remote)
+        #[arg(long)]
+        source: Option<String>,
+    },
 }
 
 // Query logger that logs SQL statements to tracing
@@ -265,6 +279,7 @@ fn dump_schema_if_non_production(database_url: &str) -> Result<()> {
         .arg("--no-privileges") // Don't include GRANT/REVOKE
         .arg("--no-tablespaces") // Don't include tablespace assignments
         .arg("--no-comments") // Don't include comments (may contain timestamps)
+        .arg("--restrict-key=SOAR") // Use fixed key to prevent random \restrict hash changes
         .arg(database_url)
         .output()
         .context("Failed to execute pg_dump - is PostgreSQL client installed?")?;
@@ -723,6 +738,10 @@ async fn main() -> Result<()> {
             )
             .await;
         }
+        Commands::DumpUnifiedDdb { output, source } => {
+            // DumpUnifiedDdb only downloads and exports data, doesn't need database
+            return handle_dump_unified_ddb(output.clone(), source.clone()).await;
+        }
         _ => {
             // All other commands need database access
         }
@@ -891,5 +910,9 @@ async fn main() -> Result<()> {
             Ok(())
         }
         Commands::SeedTestData {} => handle_seed_test_data(&diesel_pool).await,
+        Commands::DumpUnifiedDdb { .. } => {
+            // This should never be reached due to early return above
+            unreachable!("DumpUnifiedDdb should be handled before database setup")
+        }
     }
 }

@@ -323,7 +323,11 @@ impl FixesRepository {
             let mut conn = pool.get()?;
 
             let mut query = fixes::table
-                .inner_join(aprs_messages::table.on(fixes::aprs_message_id.eq(aprs_messages::id)))
+                .inner_join(
+                    aprs_messages::table.on(fixes::aprs_message_id
+                        .eq(aprs_messages::id)
+                        .and(fixes::received_at.eq(aprs_messages::received_at))),
+                )
                 .filter(fixes::device_id.eq(device_id_param))
                 .filter(fixes::timestamp.between(start_time, end_time))
                 .order(fixes::timestamp.desc())
@@ -476,7 +480,11 @@ impl FixesRepository {
 
             // Build query for paginated results with raw packet data
             let mut query = fixes::table
-                .inner_join(aprs_messages::table.on(fixes::aprs_message_id.eq(aprs_messages::id)))
+                .inner_join(
+                    aprs_messages::table.on(fixes::aprs_message_id
+                        .eq(aprs_messages::id)
+                        .and(fixes::received_at.eq(aprs_messages::received_at))),
+                )
                 .filter(fixes::device_id.eq(device_uuid))
                 .into_boxed();
             if let Some(after_timestamp) = after {

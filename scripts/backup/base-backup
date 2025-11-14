@@ -1,9 +1,9 @@
 #!/bin/bash
 #
-# base-backup - Create full PostgreSQL base backup and upload to cloud storage
+# base-backup - Create full PostgreSQL base backup and upload to remote SSH server
 #
 # This script creates a physical backup of the PostgreSQL database using
-# pg_basebackup, compresses it, uploads to cloud storage, and manages retention.
+# pg_basebackup, compresses it, uploads to remote SSH server, and manages retention.
 #
 # Usage:
 #   base-backup [--no-cleanup]
@@ -46,16 +46,20 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# SSH configuration
+SSH_KEY="${BACKUP_SSH_KEY:-/var/soar/keys/backup_key}"
+SSH_HOST="${BACKUP_SSH_HOST:-cryptobot}"
+SSH_PATH="${BACKUP_SSH_PATH:-/srv/soar-backups}"
+SSH_USER="${BACKUP_SSH_USER:-root}"
+
 # Validate configuration
-if [[ -z "${BACKUP_REMOTE:-}" ]]; then
-    echo "ERROR: BACKUP_REMOTE not set in /etc/soar/backup-env" >&2
+if [[ -z "${BACKUP_SSH_HOST:-}" ]]; then
+    echo "ERROR: BACKUP_SSH_HOST not set in /etc/soar/backup-env" >&2
     exit 1
 fi
 
-# Rclone configuration
-RCLONE_CONFIG="${RCLONE_CONFIG:-/etc/soar/rclone.conf}"
-if [[ ! -f "$RCLONE_CONFIG" ]]; then
-    echo "ERROR: Rclone config not found: $RCLONE_CONFIG" >&2
+if [[ ! -f "$SSH_KEY" ]]; then
+    echo "ERROR: SSH key not found: $SSH_KEY" >&2
     exit 1
 fi
 
@@ -80,7 +84,10 @@ BACKUP_DATE=$(date -u +"%Y-%m-%d")
 BACKUP_TIMESTAMP=$(date -u +"%Y-%m-%d_%H-%M-%S")
 BACKUP_NAME="backup-${BACKUP_TIMESTAMP}"
 BACKUP_LOCAL_DIR="$TEMP_DIR/$BACKUP_NAME"
-BACKUP_CLOUD_PREFIX="${BACKUP_REMOTE}/base/${BACKUP_DATE}"
+BACKUP_REMOTE_PATH="${SSH_PATH}/base/${BACKUP_DATE}"
+
+# SSH options for rsync
+SSH_OPTS="-i $SSH_KEY -o StrictHostKeyChecking=accept-new -o BatchMode=yes"
 
 # Metrics and notifications
 NOTIFY_EMAIL="${BACKUP_NOTIFY_EMAIL:-}"
@@ -139,7 +146,7 @@ main() {
     log INFO "Starting base backup: $BACKUP_NAME"
     log INFO "=========================================="
     log INFO "Database: ${PGUSER}@${PGHOST}:${PGPORT}/${PGDATABASE}"
-    log INFO "Destination: $BACKUP_CLOUD_PREFIX"
+    log INFO "Destination: ${SSH_USER}@${SSH_HOST}:${BACKUP_REMOTE_PATH}"
     log INFO "Compression: $COMPRESSION"
     log INFO "Parallel jobs: $PARALLEL_JOBS"
 
@@ -185,14 +192,24 @@ main() {
     local backup_size=$(du -sb "$BACKUP_LOCAL_DIR" | cut -f1)
     log INFO "Backup size: $(numfmt --to=iec-i --suffix=B "$backup_size")"
 
-    # Upload to cloud storage
-    log INFO "Uploading backup to cloud storage..."
-
-    if ! rclone sync "$BACKUP_LOCAL_DIR" "$BACKUP_CLOUD_PREFIX/" \
-        --config "$RCLONE_CONFIG" \
-        --progress \
+    # Create remote directory if it doesn't exist
+    log INFO "Creating remote directory..."
+    if ! ssh $SSH_OPTS "${SSH_USER}@${SSH_HOST}" \
+        "mkdir -p ${BACKUP_REMOTE_PATH}" \
         >> "$LOG_DIR/backup.log" 2>&1; then
-        log ERROR "Failed to upload backup to cloud storage"
+        log ERROR "Failed to create remote directory"
+        exit 1
+    fi
+
+    # Upload to remote server
+    log INFO "Uploading backup to remote server..."
+
+    if ! rsync -avz --progress \
+        -e "ssh $SSH_OPTS" \
+        "$BACKUP_LOCAL_DIR/" \
+        "${SSH_USER}@${SSH_HOST}:${BACKUP_REMOTE_PATH}/" \
+        >> "$LOG_DIR/backup.log" 2>&1; then
+        log ERROR "Failed to upload backup to remote server"
         exit 1
     fi
 
@@ -200,16 +217,15 @@ main() {
 
     # Verify uploaded files
     log INFO "Verifying uploaded files..."
-    local uploaded_count=$(rclone lsf "$BACKUP_CLOUD_PREFIX/" \
-        --config "$RCLONE_CONFIG" \
-        | wc -l)
+    local uploaded_count=$(ssh $SSH_OPTS "${SSH_USER}@${SSH_HOST}" \
+        "find ${BACKUP_REMOTE_PATH} -type f | wc -l" 2>> "$LOG_DIR/backup.log")
 
     if [[ $uploaded_count -eq 0 ]]; then
-        log ERROR "Verification failed: no files found in cloud storage"
+        log ERROR "Verification failed: no files found on remote server"
         exit 1
     fi
 
-    log INFO "Verification passed: found $uploaded_count files in cloud storage"
+    log INFO "Verification passed: found $uploaded_count files on remote server"
 
     # Create metadata file
     log INFO "Creating backup metadata..."
@@ -228,8 +244,10 @@ main() {
 }
 EOF
 
-    rclone copyto "$TEMP_DIR/backup-metadata.json" "$BACKUP_CLOUD_PREFIX/backup-metadata.json" \
-        --config "$RCLONE_CONFIG" \
+    rsync -az \
+        -e "ssh $SSH_OPTS" \
+        "$TEMP_DIR/backup-metadata.json" \
+        "${SSH_USER}@${SSH_HOST}:${BACKUP_REMOTE_PATH}/backup-metadata.json" \
         >> "$LOG_DIR/backup.log" 2>&1
 
     # Cleanup old backups if enabled
@@ -237,9 +255,9 @@ EOF
         log INFO "Cleaning up old backups (retention: $RETENTION_DAYS days, minimum: ${BASE_BACKUP_MIN_COUNT:-2})..."
 
         # List all base backups (sorted newest first)
-        local all_backups=$(rclone lsd "${BACKUP_REMOTE}/base/" \
-            --config "$RCLONE_CONFIG" \
-            2>/dev/null | awk '{print $5}' | sort -r || echo "")
+        local all_backups=$(ssh $SSH_OPTS "${SSH_USER}@${SSH_HOST}" \
+            "find ${SSH_PATH}/base -maxdepth 1 -type d -name '20*' -printf '%f\n' | sort -r" \
+            2>/dev/null || echo "")
 
         if [[ -z "$all_backups" ]]; then
             log WARN "No backups found for cleanup"
@@ -278,8 +296,8 @@ EOF
                     if [[ "$backup_date" < "$cutoff_date" ]]; then
                         log INFO "Deleting old backup: $backup_date (older than $cutoff_date)"
 
-                        if rclone purge "${BACKUP_REMOTE}/base/${backup_date}/" \
-                            --config "$RCLONE_CONFIG" \
+                        if ssh $SSH_OPTS "${SSH_USER}@${SSH_HOST}" \
+                            "rm -rf ${SSH_PATH}/base/${backup_date}" \
                             >> "$LOG_DIR/backup.log" 2>&1; then
                             ((deleted_count++))
                             log INFO "Successfully deleted backup: $backup_date"
@@ -302,7 +320,7 @@ EOF
     log INFO "=========================================="
     log INFO "Backup completed successfully!"
     log INFO "Duration: $duration_formatted"
-    log INFO "Backup location: $BACKUP_CLOUD_PREFIX"
+    log INFO "Backup location: ${SSH_USER}@${SSH_HOST}:${BACKUP_REMOTE_PATH}"
     log INFO "=========================================="
 
     # Send success notification
@@ -311,7 +329,7 @@ Backup: $BACKUP_NAME
 Duration: $duration_formatted
 Database size: $(numfmt --to=iec-i --suffix=B "$db_size")
 Backup size: $(numfmt --to=iec-i --suffix=B "$backup_size")
-Location: $BACKUP_CLOUD_PREFIX"
+Location: ${SSH_USER}@${SSH_HOST}:${BACKUP_REMOTE_PATH}"
 
     # Update metrics (if metrics endpoint is available)
     if [[ -n "${METRICS_PUSHGATEWAY:-}" ]] && command -v curl >/dev/null 2>&1; then

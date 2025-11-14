@@ -126,10 +126,15 @@ if sudo -u soar bash -c "set -a; source /etc/soar/env; set +a; exec '$TEMP_BIN_P
     log_info "Database migrations completed successfully"
 else
     log_error "Database migrations failed"
+    log_error "Database may be in a partially migrated state"
+    log_error "DO NOT restart services - manual intervention required"
     log_info "Cleaning up temporary binary: $TEMP_BIN_PATH"
     rm -f "$TEMP_BIN_PATH"
-    # Restart soar-run since we stopped it
-    systemctl start "soar-run.service" || log_warn "Failed to restart soar-run.service"
+    log_error "Deployment aborted. soar-run.service remains stopped for safety."
+    log_info "To investigate:"
+    log_info "  1. Check migration logs above"
+    log_info "  2. Verify database state manually"
+    log_info "  3. Fix any issues before attempting to restart services"
     exit 1
 fi
 

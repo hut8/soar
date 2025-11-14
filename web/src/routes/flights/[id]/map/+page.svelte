@@ -4,7 +4,7 @@
 	import { SvelteSet } from 'svelte/reactivity';
 	import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
 	import { goto } from '$app/navigation';
-	import { ArrowLeft, ChevronDown, ChevronUp } from '@lucide/svelte';
+	import { ArrowLeft, ChevronDown, ChevronUp, Palette } from '@lucide/svelte';
 	import type { PageData } from './$types';
 	import dayjs from 'dayjs';
 	import { GOOGLE_MAPS_API_KEY } from '$lib/config';
@@ -25,6 +25,10 @@
 	let isPanelCollapsed = $state(false);
 	let chartRecreateTrigger = $state(0);
 	let wasPanelCollapsed = $state(false);
+
+	// Color scheme selection
+	type ColorScheme = 'altitude' | 'time';
+	let colorScheme = $state<ColorScheme>('altitude');
 
 	// Check if fixes have AGL data
 	const hasAglData = $derived(data.fixes.some((f) => f.altitude_agl_feet !== null));
@@ -112,6 +116,41 @@
 		return `rgb(${r}, ${g}, ${b})`;
 	}
 
+	// Helper function to map time to color (purple→orange gradient)
+	// Earlier fixes are purple, later fixes are orange
+	function timeToColor(fixIndex: number, totalFixes: number): string {
+		if (totalFixes <= 1) {
+			return '#888888'; // Gray for single fix
+		}
+
+		// Normalize index to 0-1 range
+		const normalized = fixIndex / (totalFixes - 1);
+
+		// Interpolate from purple (early) to orange (late)
+		// Purple: rgb(147, 51, 234) - #9333ea
+		// Orange: rgb(251, 146, 60) - #fb923c
+		const r = Math.round(147 + normalized * (251 - 147));
+		const g = Math.round(51 + normalized * (146 - 51));
+		const b = Math.round(234 - normalized * (234 - 60));
+
+		return `rgb(${r}, ${g}, ${b})`;
+	}
+
+	// Get color for a fix based on current color scheme
+	function getFixColor(
+		fixIndex: number,
+		altitude: number | null | undefined,
+		minAlt: number,
+		maxAlt: number,
+		totalFixes: number
+	): string {
+		if (colorScheme === 'altitude') {
+			return altitudeToColor(altitude, minAlt, maxAlt);
+		} else {
+			return timeToColor(fixIndex, totalFixes);
+		}
+	}
+
 	// Calculate arrow scale based on zoom level (inversely proportional to zoom)
 	// Zoom 8 (far out) -> scale 1, Zoom 16 (close in) -> scale 4
 	function getArrowScale(zoom: number): number {
@@ -132,6 +171,7 @@
 		const TEN_MINUTES_MS = 10 * 60 * 1000;
 
 		const fixes = [...data.fixes].reverse();
+		const totalFixes = fixes.length;
 
 		flightPathSegments.forEach((segment, index) => {
 			const path = segment.getPath();
@@ -140,7 +180,7 @@
 			// Get color based on segment index
 			if (index >= fixes.length) return;
 			const fix = fixes[index];
-			const color = altitudeToColor(fix.altitude_msl_feet, minAlt, maxAlt);
+			const color = getFixColor(index, fix.altitude_msl_feet, minAlt, maxAlt, totalFixes);
 
 			// Check if we should display an arrow for this segment
 			const fixTime = new Date(fix.timestamp);
@@ -182,6 +222,7 @@
 		const segments: google.maps.Polyline[] = [];
 		const zoom = targetMap.getZoom() ?? 12;
 		const scale = getArrowScale(zoom);
+		const totalFixes = fixesInOrder.length;
 
 		// Track last arrow timestamp to display one every 10 minutes
 		let lastArrowTime: Date | null = null;
@@ -191,7 +232,7 @@
 			const fix1 = fixesInOrder[i];
 			const fix2 = fixesInOrder[i + 1];
 
-			const color = altitudeToColor(fix1.altitude_msl_feet, minAlt, maxAlt);
+			const color = getFixColor(i, fix1.altitude_msl_feet, minAlt, maxAlt, totalFixes);
 
 			// Check if we should display an arrow for this segment
 			const fix1Time = new Date(fix1.timestamp);
@@ -331,6 +372,7 @@
 		const minAlt = minAltitude() ?? 0;
 		const maxAlt = maxAltitude() ?? 1000;
 		const arrowIndices = getArrowFixIndices(fixesInOrder);
+		const totalFixes = fixesInOrder.length;
 
 		fixesInOrder.forEach((fix, index) => {
 			// Only create arrow markers for selected indices
@@ -356,7 +398,7 @@
 				);
 			}
 
-			const color = altitudeToColor(fix.altitude_msl_feet, minAlt, maxAlt);
+			const color = getFixColor(index, fix.altitude_msl_feet, minAlt, maxAlt, totalFixes);
 
 			// Create SVG arrow element (12x12 pixels, twice the original size)
 			const arrowSvg = document.createElement('div');
@@ -539,6 +581,14 @@
 		startPolling();
 	});
 
+	// Update map when color scheme changes
+	$effect(() => {
+		// Reactively update map when color scheme changes
+		if (colorScheme && map && flightPathSegments.length > 0) {
+			updateMap();
+		}
+	});
+
 	// Recreate chart when panel transitions from collapsed to expanded
 	$effect(() => {
 		// Detect transition: was collapsed, now expanded
@@ -639,15 +689,48 @@
 		style={isPanelCollapsed ? 'height: 48px;' : 'height: 300px;'}
 	>
 		<!-- Panel header -->
-		<div class="flex items-center gap-3 px-4 py-2">
-			<button onclick={togglePanel} class="toggle-btn">
-				{#if isPanelCollapsed}
-					<ChevronUp class="h-4 w-4" />
-				{:else}
-					<ChevronDown class="h-4 w-4" />
-				{/if}
-			</button>
-			<h3 class="font-semibold">Flight Profile</h3>
+		<div class="flex items-center justify-between gap-3 px-4 py-2">
+			<div class="flex items-center gap-3">
+				<button onclick={togglePanel} class="toggle-btn">
+					{#if isPanelCollapsed}
+						<ChevronUp class="h-4 w-4" />
+					{:else}
+						<ChevronDown class="h-4 w-4" />
+					{/if}
+				</button>
+				<h3 class="font-semibold">Flight Profile</h3>
+			</div>
+			<div class="flex items-center gap-2">
+				<Palette class="text-surface-600-300-token h-4 w-4" />
+				<span class="text-surface-600-300-token text-sm">Color:</span>
+				<div class="inline-flex rounded-md shadow-sm" role="group">
+					<button
+						type="button"
+						onclick={() => (colorScheme = 'altitude')}
+						class="btn btn-sm {colorScheme === 'altitude'
+							? 'preset-filled-primary-500'
+							: 'preset-tonal'} rounded-r-none"
+					>
+						Altitude
+					</button>
+					<button
+						type="button"
+						onclick={() => (colorScheme = 'time')}
+						class="btn btn-sm {colorScheme === 'time'
+							? 'preset-filled-primary-500'
+							: 'preset-tonal'} rounded-l-none"
+					>
+						Time
+					</button>
+				</div>
+				<span class="text-surface-600-300-token text-xs">
+					{#if colorScheme === 'altitude'}
+						(Red→Blue)
+					{:else}
+						(Purple→Orange)
+					{/if}
+				</span>
+			</div>
 		</div>
 
 		<!-- Panel content -->
