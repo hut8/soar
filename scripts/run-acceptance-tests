@@ -55,9 +55,9 @@ docker compose ${COMPOSE_FILES} down --remove-orphans > /dev/null 2>&1 || true
 docker rm -f soar-app-test > /dev/null 2>&1 || true
 echo ""
 
-echo -e "${YELLOW}[1/3] Starting services (PostgreSQL, NATS, SOAR app)...${NC}"
+echo -e "${YELLOW}[1/3] Starting services (PostgreSQL, NATS, Mailpit, SOAR app)...${NC}"
 echo -e "${BLUE}(Source mounted with cargo cache - first compile ~10min, subsequent ~30sec)${NC}"
-docker compose ${COMPOSE_FILES} up -d postgres nats soar || {
+docker compose ${COMPOSE_FILES} up -d postgres nats mailpit soar || {
     echo -e "${RED}Failed to start services${NC}"
     exit 1
 }
