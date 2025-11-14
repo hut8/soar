@@ -14,7 +14,8 @@ export default defineConfig({
 	fullyParallel: true,
 	forbidOnly: !!process.env.CI,
 	retries: 0, // Disabled retries for faster feedback
-	workers: process.env.CI ? 1 : undefined,
+	// Allow parallel execution in CI - use PLAYWRIGHT_WORKERS env var to override
+	workers: process.env.PLAYWRIGHT_WORKERS ? parseInt(process.env.PLAYWRIGHT_WORKERS) : undefined,
 	maxFailures: 3, // Stop after 3 failures for faster feedback
 
 	// Reporter configuration

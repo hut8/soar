@@ -17,6 +17,8 @@ services:
       CI: "true"
       # Ensure npm cache is writable
       HOME: /tmp
+      # Run tests in parallel (default 2 workers, override with PLAYWRIGHT_WORKERS env var)
+      PLAYWRIGHT_WORKERS: "${PLAYWRIGHT_WORKERS:-2}"
     volumes:
       # Mount the web directory for tests
       - ./web:/app/web
