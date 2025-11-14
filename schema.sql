@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict mKjdUTYIfcMKob3RN2hcQ8kMctDm9SqdZJ7RsbSWA3px10N5Zt0QwZgzXTDBckV
+\restrict SOAR
 
 -- Dumped from database version 17.6 (Ubuntu 17.6-2.pgdg22.04+1)
 -- Dumped by pg_dump version 17.6 (Ubuntu 17.6-2.pgdg22.04+1)
@@ -24,6 +24,13 @@ SET row_security = off;
 --
 
 CREATE SCHEMA partman;
+
+
+--
+-- Name: btree_gin; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS btree_gin WITH SCHEMA public;
 
 
 --
@@ -491,34 +498,6 @@ CREATE TABLE public.aprs_messages_old (
 
 
 --
--- Name: aprs_messages_p20251108; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.aprs_messages_p20251108 (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    raw_message text NOT NULL,
-    received_at timestamp with time zone NOT NULL,
-    receiver_id uuid NOT NULL,
-    unparsed text,
-    raw_message_hash bytea NOT NULL
-);
-
-
---
--- Name: aprs_messages_p20251109; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.aprs_messages_p20251109 (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    raw_message text NOT NULL,
-    received_at timestamp with time zone NOT NULL,
-    receiver_id uuid NOT NULL,
-    unparsed text,
-    raw_message_hash bytea NOT NULL
-);
-
-
---
 -- Name: aprs_messages_p20251110; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -785,45 +764,6 @@ CREATE TABLE public.fixes_old (
     location_geom public.geometry(Point,4326) GENERATED ALWAYS AS (public.st_setsrid(public.st_makepoint(longitude, latitude), 4326)) STORED,
     time_gap_seconds integer,
     CONSTRAINT fixes_track_degrees_check CHECK (((track_degrees >= (0)::double precision) AND (track_degrees < (360)::double precision)))
-);
-
-
---
--- Name: fixes_p20251109; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.fixes_p20251109 (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    source character varying(9) NOT NULL,
-    aprs_type character varying(9) NOT NULL,
-    via text[] NOT NULL,
-    "timestamp" timestamp with time zone NOT NULL,
-    latitude double precision NOT NULL,
-    longitude double precision NOT NULL,
-    location public.geography(Point,4326) GENERATED ALWAYS AS ((public.st_point(longitude, latitude))::public.geography) STORED,
-    altitude_msl_feet integer,
-    flight_number character varying(20),
-    squawk character varying(4),
-    ground_speed_knots real,
-    track_degrees real,
-    climb_fpm integer,
-    turn_rate_rot real,
-    snr_db real,
-    bit_errors_corrected integer,
-    freq_offset_khz real,
-    flight_id uuid,
-    device_id uuid NOT NULL,
-    received_at timestamp with time zone NOT NULL,
-    is_active boolean DEFAULT true NOT NULL,
-    altitude_agl_feet integer,
-    receiver_id uuid NOT NULL,
-    gnss_horizontal_resolution smallint,
-    gnss_vertical_resolution smallint,
-    aprs_message_id uuid NOT NULL,
-    altitude_agl_valid boolean DEFAULT false NOT NULL,
-    location_geom public.geometry(Point,4326) GENERATED ALWAYS AS (public.st_setsrid(public.st_makepoint(longitude, latitude), 4326)) STORED,
-    time_gap_seconds integer,
-    CONSTRAINT fixes_track_degrees_check1 CHECK (((track_degrees >= (0)::double precision) AND (track_degrees < (360)::double precision)))
 );
 
 
@@ -1467,20 +1407,6 @@ ALTER TABLE ONLY public.aprs_messages ATTACH PARTITION public.aprs_messages_defa
 
 
 --
--- Name: aprs_messages_p20251108; Type: TABLE ATTACH; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.aprs_messages ATTACH PARTITION public.aprs_messages_p20251108 FOR VALUES FROM ('2025-11-08 00:00:00+00') TO ('2025-11-09 00:00:00+00');
-
-
---
--- Name: aprs_messages_p20251109; Type: TABLE ATTACH; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.aprs_messages ATTACH PARTITION public.aprs_messages_p20251109 FOR VALUES FROM ('2025-11-09 00:00:00+00') TO ('2025-11-10 00:00:00+00');
-
-
---
 -- Name: aprs_messages_p20251110; Type: TABLE ATTACH; Schema: public; Owner: -
 --
 
@@ -1534,13 +1460,6 @@ ALTER TABLE ONLY public.aprs_messages ATTACH PARTITION public.aprs_messages_p202
 --
 
 ALTER TABLE ONLY public.fixes ATTACH PARTITION public.fixes_default DEFAULT;
-
-
---
--- Name: fixes_p20251109; Type: TABLE ATTACH; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.fixes ATTACH PARTITION public.fixes_p20251109 FOR VALUES FROM ('2025-11-09 00:00:00+00') TO ('2025-11-10 00:00:00+00');
 
 
 --
@@ -1679,22 +1598,6 @@ ALTER TABLE ONLY public.aprs_messages_default
 
 
 --
--- Name: aprs_messages_p20251108 aprs_messages_p20251108_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.aprs_messages_p20251108
-    ADD CONSTRAINT aprs_messages_p20251108_pkey PRIMARY KEY (id, received_at);
-
-
---
--- Name: aprs_messages_p20251109 aprs_messages_p20251109_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.aprs_messages_p20251109
-    ADD CONSTRAINT aprs_messages_p20251109_pkey PRIMARY KEY (id, received_at);
-
-
---
 -- Name: aprs_messages_p20251110 aprs_messages_p20251110_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1812,14 +1715,6 @@ ALTER TABLE ONLY public.fixes
 
 ALTER TABLE ONLY public.fixes_default
     ADD CONSTRAINT fixes_default_pkey PRIMARY KEY (id, received_at);
-
-
---
--- Name: fixes_p20251109 fixes_p20251109_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.fixes_p20251109
-    ADD CONSTRAINT fixes_p20251109_pkey PRIMARY KEY (id, received_at);
 
 
 --
@@ -2211,34 +2106,6 @@ CREATE INDEX fixes_location_geom_idx ON public.fixes_old USING gist (location_ge
 --
 
 CREATE INDEX fixes_location_idx ON public.fixes_old USING gist (location);
-
-
---
--- Name: fixes_p20251109_device_id_received_at_idx; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX fixes_p20251109_device_id_received_at_idx ON public.fixes_p20251109 USING btree (device_id, received_at DESC);
-
-
---
--- Name: fixes_p20251109_location_geom_idx; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX fixes_p20251109_location_geom_idx ON public.fixes_p20251109 USING gist (location_geom);
-
-
---
--- Name: fixes_p20251109_location_idx; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX fixes_p20251109_location_idx ON public.fixes_p20251109 USING gist (location);
-
-
---
--- Name: fixes_p20251109_source_idx; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX fixes_p20251109_source_idx ON public.fixes_p20251109 USING btree (source);
 
 
 --
@@ -3033,20 +2900,6 @@ ALTER INDEX public.aprs_messages_pkey1 ATTACH PARTITION public.aprs_messages_def
 
 
 --
--- Name: aprs_messages_p20251108_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
---
-
-ALTER INDEX public.aprs_messages_pkey1 ATTACH PARTITION public.aprs_messages_p20251108_pkey;
-
-
---
--- Name: aprs_messages_p20251109_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
---
-
-ALTER INDEX public.aprs_messages_pkey1 ATTACH PARTITION public.aprs_messages_p20251109_pkey;
-
-
---
 -- Name: aprs_messages_p20251110_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
@@ -3128,41 +2981,6 @@ ALTER INDEX public.fixes_pkey1 ATTACH PARTITION public.fixes_default_pkey;
 --
 
 ALTER INDEX public.idx_fixes_source ATTACH PARTITION public.fixes_default_source_idx;
-
-
---
--- Name: fixes_p20251109_device_id_received_at_idx; Type: INDEX ATTACH; Schema: public; Owner: -
---
-
-ALTER INDEX public.idx_fixes_device_received_at ATTACH PARTITION public.fixes_p20251109_device_id_received_at_idx;
-
-
---
--- Name: fixes_p20251109_location_geom_idx; Type: INDEX ATTACH; Schema: public; Owner: -
---
-
-ALTER INDEX public.idx_fixes_location_geom ATTACH PARTITION public.fixes_p20251109_location_geom_idx;
-
-
---
--- Name: fixes_p20251109_location_idx; Type: INDEX ATTACH; Schema: public; Owner: -
---
-
-ALTER INDEX public.idx_fixes_location ATTACH PARTITION public.fixes_p20251109_location_idx;
-
-
---
--- Name: fixes_p20251109_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
---
-
-ALTER INDEX public.fixes_pkey1 ATTACH PARTITION public.fixes_p20251109_pkey;
-
-
---
--- Name: fixes_p20251109_source_idx; Type: INDEX ATTACH; Schema: public; Owner: -
---
-
-ALTER INDEX public.idx_fixes_source ATTACH PARTITION public.fixes_p20251109_source_idx;
 
 
 --
@@ -3589,7 +3407,7 @@ ALTER TABLE ONLY public.fixes_old
 --
 
 ALTER TABLE public.fixes
-    ADD CONSTRAINT fixes_aprs_message_id_fkey FOREIGN KEY (aprs_message_id) REFERENCES public.aprs_messages_old(id) ON DELETE SET NULL;
+    ADD CONSTRAINT fixes_aprs_message_id_fkey FOREIGN KEY (aprs_message_id, received_at) REFERENCES public.aprs_messages(id, received_at);
 
 
 --
@@ -3765,7 +3583,7 @@ ALTER TABLE ONLY public.pilots
 --
 
 ALTER TABLE ONLY public.receiver_statuses
-    ADD CONSTRAINT receiver_statuses_aprs_message_id_fkey FOREIGN KEY (aprs_message_id) REFERENCES public.aprs_messages_old(id) ON DELETE SET NULL;
+    ADD CONSTRAINT receiver_statuses_aprs_message_id_fkey FOREIGN KEY (aprs_message_id, received_at) REFERENCES public.aprs_messages(id, received_at);
 
 
 --
@@ -3804,4 +3622,4 @@ ALTER TABLE ONLY public.users
 -- PostgreSQL database dump complete
 --
 
-\unrestrict mKjdUTYIfcMKob3RN2hcQ8kMctDm9SqdZJ7RsbSWA3px10N5Zt0QwZgzXTDBckV
+\unrestrict SOAR
