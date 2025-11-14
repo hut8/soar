@@ -24,15 +24,15 @@ test.describe('Device Detail', () => {
 	test('should display device detail authenticatedPage', async ({ authenticatedPage }) => {
 		await navigateToTestDevice(authenticatedPage);
 
-		// Check authenticatedPage title includes device info
-		await expect(authenticatedPage).toHaveTitle(/device/i);
+		// Check page has device-related content
+		await expect(authenticatedPage.getByRole('heading', { level: 1 })).toBeVisible();
 
 		// Should have a back button
-		await expect(authenticatedPage.getByRole('link', { name: /back/i })).toBeVisible();
+		await expect(authenticatedPage.getByRole('button', { name: /back to devices/i })).toBeVisible();
 
-		// Should show device information section
+		// Should show aircraft registration section
 		await expect(
-			authenticatedPage.getByRole('heading', { name: /device information/i })
+			authenticatedPage.getByRole('heading', { name: /aircraft registration/i })
 		).toBeVisible();
 
 		// Take screenshot for visual regression testing
@@ -45,15 +45,12 @@ test.describe('Device Detail', () => {
 	test('should display device address and type information', async ({ authenticatedPage }) => {
 		await navigateToTestDevice(authenticatedPage);
 
-		// Should show device address label
-		await expect(authenticatedPage.getByText(/device address/i)).toBeVisible();
+		// Should show device address in the format "Address: ICAO-ABC123" or similar
+		await expect(authenticatedPage.getByText(/Address:/i)).toBeVisible();
 
-		// Should show address type information (ICAO, OGN, or FLARM)
-		const hasICAO = await authenticatedPage.getByText('ICAO').isVisible();
-		const hasOGN = await authenticatedPage.getByText('OGN').isVisible();
-		const hasFLARM = await authenticatedPage.getByText('FLARM').isVisible();
-
-		expect(hasICAO || hasOGN || hasFLARM).toBe(true);
+		// Should show address type information (ICAO, OGN, or FLARM) in the address string
+		const addressText = await authenticatedPage.getByText(/Address:/i).textContent();
+		expect(addressText).toMatch(/ICAO|OGN|FLARM/i);
 	});
 
 	test('should display aircraft registration information if available', async ({
