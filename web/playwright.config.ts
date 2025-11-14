@@ -86,7 +86,9 @@ export default defineConfig({
 					env: {
 						// Disable Sentry in tests
 						SENTRY_DSN: '',
-						// SMTP configuration (Mailpit - must be running separately)
+						// SMTP configuration - for local testing, run:
+						//   docker run -d -p 1025:1025 -p 8025:8025 axllent/mailpit:v1.20
+						// Or use ./scripts/run-acceptance-tests which handles this automatically
 						SMTP_SERVER: 'localhost',
 						SMTP_PORT: '1025',
 						SMTP_USERNAME: 'test',
