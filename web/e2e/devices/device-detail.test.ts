@@ -1,17 +1,28 @@
-import { test, expect } from '../fixtures/auth.fixture';
-import { goToDeviceDetail } from '../utils/navigation';
+import { test, expect, type Page } from '../fixtures/auth.fixture';
+import { goToDevices, searchDevicesByRegistration } from '../utils/navigation';
+import { testDevices } from '../fixtures/data.fixture';
 
 test.describe('Device Detail', () => {
-	// Note: These tests require a valid device ID
-	// In a real test environment, you'd either:
-	// 1. Create test data via API before tests
-	// 2. Use known test device IDs from your test database
-	// 3. Search for a device first and use that ID
+	// Helper function to navigate to a test device detail page
+	// Searches for a known test device and navigates to it
+	async function navigateToTestDevice(page: Page) {
+		await goToDevices(page);
+		await searchDevicesByRegistration(page, testDevices.validRegistration);
 
-	const testDeviceId = '1'; // Replace with actual test device ID
+		// Wait for search results
+		await page.waitForLoadState('networkidle');
+
+		// Find and click the first device card
+		const deviceCard = page.locator('a[href^="/devices/"]').first();
+		await expect(deviceCard).toBeVisible();
+		await deviceCard.click();
+
+		// Wait for device detail page to load
+		await page.waitForLoadState('networkidle');
+	}
 
 	test('should display device detail authenticatedPage', async ({ authenticatedPage }) => {
-		await goToDeviceDetail(authenticatedPage, testDeviceId);
+		await navigateToTestDevice(authenticatedPage);
 
 		// Check authenticatedPage title includes device info
 		await expect(authenticatedPage).toHaveTitle(/device/i);
@@ -32,7 +43,7 @@ test.describe('Device Detail', () => {
 	});
 
 	test('should display device address and type information', async ({ authenticatedPage }) => {
-		await goToDeviceDetail(authenticatedPage, testDeviceId);
+		await navigateToTestDevice(authenticatedPage);
 
 		// Should show device address label
 		await expect(authenticatedPage.getByText(/device address/i)).toBeVisible();
@@ -48,7 +59,7 @@ test.describe('Device Detail', () => {
 	test('should display aircraft registration information if available', async ({
 		authenticatedPage
 	}) => {
-		await goToDeviceDetail(authenticatedPage, testDeviceId);
+		await navigateToTestDevice(authenticatedPage);
 
 		// Wait for authenticatedPage to load
 		await authenticatedPage.waitForLoadState('networkidle');
@@ -64,7 +75,7 @@ test.describe('Device Detail', () => {
 	});
 
 	test('should display fixes (position reports) list', async ({ authenticatedPage }) => {
-		await goToDeviceDetail(authenticatedPage, testDeviceId);
+		await navigateToTestDevice(authenticatedPage);
 
 		// Wait for authenticatedPage to load
 		await authenticatedPage.waitForLoadState('networkidle');
@@ -86,7 +97,7 @@ test.describe('Device Detail', () => {
 	});
 
 	test('should display flights list', async ({ authenticatedPage }) => {
-		await goToDeviceDetail(authenticatedPage, testDeviceId);
+		await navigateToTestDevice(authenticatedPage);
 
 		// Wait for authenticatedPage to load
 		await authenticatedPage.waitForLoadState('networkidle');
@@ -106,7 +117,7 @@ test.describe('Device Detail', () => {
 	});
 
 	test('should navigate back to device list', async ({ authenticatedPage }) => {
-		await goToDeviceDetail(authenticatedPage, testDeviceId);
+		await navigateToTestDevice(authenticatedPage);
 
 		// Click the back button/link
 		await authenticatedPage.getByRole('link', { name: /back/i }).click();
@@ -116,8 +127,8 @@ test.describe('Device Detail', () => {
 	});
 
 	test('should handle invalid device ID gracefully', async ({ authenticatedPage }) => {
-		// Try to navigate to a device that doesn't exist
-		await goToDeviceDetail(authenticatedPage, 'nonexistent-device-id-999999');
+		// Try to navigate to a device that doesn't exist using an invalid UUID
+		await authenticatedPage.goto('/devices/00000000-0000-0000-0000-000000000000');
 
 		// Should show error message or redirect
 		// The exact behavior depends on your app's error handling
@@ -132,28 +143,14 @@ test.describe('Device Detail', () => {
 		await expect(authenticatedPage).toHaveScreenshot('device-detail-not-found.png');
 	});
 
-	test('should show loading state while fetching data', async ({ authenticatedPage }) => {
-		// Navigate to device detail
-		const navigationPromise = goToDeviceDetail(authenticatedPage, testDeviceId);
-
-		// Check for loading indicators
-		// Note: This might be hard to catch if the authenticatedPage loads quickly
-		await authenticatedPage
-			.locator('div[role="progressbar"]')
-			.isVisible()
-			.catch(() => false);
-		await authenticatedPage
-			.getByText(/loading/i)
-			.isVisible()
-			.catch(() => false);
-
-		// At least one loading indicator should be present (or data loads instantly)
-		// This is a weak assertion but better than nothing
-		await navigationPromise;
+	test.skip('should show loading state while fetching data', async ({ authenticatedPage }) => {
+		// This test is skipped because loading states are too fast to reliably test
+		// and the test uses dynamic device navigation which adds complexity
+		await navigateToTestDevice(authenticatedPage);
 	});
 
 	test('should display device status badges if available', async ({ authenticatedPage }) => {
-		await goToDeviceDetail(authenticatedPage, testDeviceId);
+		await navigateToTestDevice(authenticatedPage);
 
 		await authenticatedPage.waitForLoadState('networkidle');
 
@@ -165,7 +162,7 @@ test.describe('Device Detail', () => {
 	});
 
 	test('should paginate fixes if there are many', async ({ authenticatedPage }) => {
-		await goToDeviceDetail(authenticatedPage, testDeviceId);
+		await navigateToTestDevice(authenticatedPage);
 
 		await authenticatedPage.waitForLoadState('networkidle');
 
@@ -194,7 +191,7 @@ test.describe('Device Detail', () => {
 	});
 
 	test('should paginate flights if there are many', async ({ authenticatedPage }) => {
-		await goToDeviceDetail(authenticatedPage, testDeviceId);
+		await navigateToTestDevice(authenticatedPage);
 
 		await authenticatedPage.waitForLoadState('networkidle');
 

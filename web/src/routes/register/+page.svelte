@@ -55,7 +55,7 @@
 
 			const message = 'Registration successful. Please check your email to verify your account.';
 			const href = `/login?message=${encodeURIComponent(message)}`;
-			void goto(href);
+			await goto(href);
 		} catch (err) {
 			if (err instanceof ServerError) {
 				if (err.status === 409) {
