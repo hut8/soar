@@ -1,5 +1,6 @@
 -- Revert foreign keys back to simple FK (not composite)
--- Note: This assumes we're reverting to before the partition migration was completed
+-- Note: This reverts to the state after partition migration (single-column FK on fixes only)
+-- This migration is idempotent and safe to run multiple times
 
 -- Drop the composite FK constraints
 ALTER TABLE fixes DROP CONSTRAINT IF EXISTS fixes_aprs_message_id_fkey;
@@ -21,14 +22,24 @@ BEGIN
     END LOOP;
 END $$;
 
--- Restore simple FK constraints (pointing to parent table, not composite)
--- This matches the state after the partition migration but before this fix
-ALTER TABLE fixes
-    ADD CONSTRAINT fixes_aprs_message_id_fkey
-    FOREIGN KEY (aprs_message_id)
-    REFERENCES aprs_messages(id);
+-- Restore simple FK constraint on fixes (matching state after partition migration)
+-- Use DO block to make this idempotent
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'fixes_aprs_message_id_fkey'
+          AND conrelid = 'fixes'::regclass
+    ) THEN
+        ALTER TABLE fixes
+            ADD CONSTRAINT fixes_aprs_message_id_fkey
+            FOREIGN KEY (aprs_message_id)
+            REFERENCES aprs_messages(id) ON DELETE SET NULL;
+        RAISE NOTICE 'Added single-column FK constraint: fixes_aprs_message_id_fkey';
+    ELSE
+        RAISE NOTICE 'FK constraint fixes_aprs_message_id_fkey already exists, skipping';
+    END IF;
+END $$;
 
-ALTER TABLE receiver_statuses
-    ADD CONSTRAINT receiver_statuses_aprs_message_id_fkey
-    FOREIGN KEY (aprs_message_id)
-    REFERENCES aprs_messages(id);
+-- Note: receiver_statuses does NOT get a FK constraint in the reverted state
+-- (it didn't have one in the partition migration)
