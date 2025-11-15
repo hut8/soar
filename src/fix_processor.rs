@@ -175,6 +175,10 @@ impl FixProcessor {
                 // tracker_device_type is the packet destination (e.g., "OGFLR", "OGADSB")
                 let tracker_device_type = packet.to.to_string();
 
+                // Track APRS type before filtering
+                metrics::counter!("aprs.type.received", "type" => tracker_device_type.clone())
+                    .increment(1);
+
                 // Check if this APRS type is suppressed
                 if self
                     .suppressed_aprs_types

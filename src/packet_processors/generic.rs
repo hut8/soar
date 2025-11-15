@@ -38,11 +38,12 @@ impl GenericProcessor {
         receiver_repo: ReceiverRepository,
         aprs_messages_repo: AprsMessagesRepository,
     ) -> Self {
-        // Create a cache with 10,000 entry capacity and 1 hour TTL
-        // This should cover most receivers we see in a typical session
+        // Create a cache with 100,000 entry capacity and 24 hour TTL
+        // Receivers don't change often, so we can cache them for a long time
+        // Larger capacity handles high-traffic scenarios with many unique receivers
         let receiver_cache = Cache::builder()
-            .max_capacity(10_000)
-            .time_to_live(std::time::Duration::from_secs(3600))
+            .max_capacity(100_000)
+            .time_to_live(std::time::Duration::from_secs(86400))
             .build();
 
         Self {
