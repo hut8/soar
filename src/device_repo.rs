@@ -57,14 +57,40 @@ impl DeviceRepository {
                 .on_conflict(devices::address)
                 .do_update()
                 .set((
+                    // Update fields from DDB, but preserve existing values if DDB value is empty
+                    // Use COALESCE(NULLIF(new, ''), old) to keep existing data when DDB has empty strings
                     devices::address_type.eq(excluded(devices::address_type)),
-                    devices::aircraft_model.eq(excluded(devices::aircraft_model)),
-                    devices::registration.eq(excluded(devices::registration)),
-                    devices::competition_number.eq(excluded(devices::competition_number)),
+                    devices::aircraft_model.eq(diesel::dsl::sql(
+                        "COALESCE(NULLIF(EXCLUDED.aircraft_model, ''), devices.aircraft_model)"
+                    )),
+                    devices::registration.eq(diesel::dsl::sql(
+                        "COALESCE(NULLIF(EXCLUDED.registration, ''), devices.registration)"
+                    )),
+                    devices::competition_number.eq(diesel::dsl::sql(
+                        "COALESCE(NULLIF(EXCLUDED.competition_number, ''), devices.competition_number)"
+                    )),
                     devices::tracked.eq(excluded(devices::tracked)),
                     devices::identified.eq(excluded(devices::identified)),
                     devices::from_ddb.eq(excluded(devices::from_ddb)),
+                    // For Option fields, use COALESCE to prefer new value over NULL, but keep old if new is NULL
+                    devices::frequency_mhz.eq(diesel::dsl::sql(
+                        "COALESCE(EXCLUDED.frequency_mhz, devices.frequency_mhz)"
+                    )),
+                    devices::pilot_name.eq(diesel::dsl::sql(
+                        "COALESCE(EXCLUDED.pilot_name, devices.pilot_name)"
+                    )),
+                    devices::home_base_airport_ident.eq(diesel::dsl::sql(
+                        "COALESCE(EXCLUDED.home_base_airport_ident, devices.home_base_airport_ident)"
+                    )),
                     devices::updated_at.eq(diesel::dsl::now),
+                    // NOTE: We do NOT update the following fields because they come from real-time packets:
+                    // - aircraft_type_ogn (from OGN packets)
+                    // - icao_model_code (from ADSB packets)
+                    // - adsb_emitter_category (from ADSB packets)
+                    // - tracker_device_type (from tracker packets)
+                    // - country_code (derived from ICAO address, managed separately)
+                    // - last_fix_at (managed by fix processing)
+                    // - club_id (managed by club assignment logic)
                 ))
                 .execute(&mut conn);
 
