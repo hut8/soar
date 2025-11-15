@@ -56,24 +56,48 @@ jobs:
       run:
         working-directory: ./web
 
-    services:
-      postgres:
-        image: postgis/postgis:17-3.5
-        env:
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_USER: postgres
-          POSTGRES_DB: soar_test
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Build custom PostgreSQL image with pg_partman
+        working-directory: .
+        run: |
+          docker build -t postgis-partman:test -f .github/postgis-partman.Dockerfile .
+
+      - name: Start PostgreSQL service with pg_partman
+        working-directory: .
+        run: |
+          docker run -d \
+            --name postgres \
+            -e POSTGRES_PASSWORD=postgres \
+            -e POSTGRES_USER=postgres \
+            -e POSTGRES_DB=soar_test \
+            -p 5432:5432 \
+            --health-cmd="pg_isready" \
+            --health-interval=10s \
+            --health-timeout=5s \
+            --health-retries=5 \
+            postgis-partman:test
+
+      - name: Wait for PostgreSQL to be ready
+        working-directory: .
+        run: |
+          timeout 60s bash -c 'until docker exec postgres pg_isready -U postgres; do sleep 2; done'
+
+      - name: Start Mailpit service for email testing
+        working-directory: .
+        run: |
+          docker run -d \
+            --name mailpit \
+            -p 8025:8025 \
+            -p 1025:1025 \
+            axllent/mailpit:v1.20
+
+      - name: Wait for Mailpit to be ready
+        working-directory: .
+        run: |
+          timeout 30s bash -c 'until curl -s http://localhost:8025/api/v1/info > /dev/null 2>&1; do sleep 2; done'
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -155,6 +179,13 @@ jobs:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/soar_test
           SENTRY_DSN: ''
           SOAR_ENV: test
+          SMTP_SERVER: localhost
+          SMTP_PORT: 1025
+          SMTP_USERNAME: test
+          SMTP_PASSWORD: test
+          FROM_EMAIL: test@soar.local
+          FROM_NAME: SOAR Test
+          BASE_URL: http://localhost:4173
         run: |
           # Start backend server in background
           ./target/release/soar web --port 61225 --interface localhost > backend.log 2>&1 &
@@ -219,6 +250,13 @@ jobs:
           if [ -f web/preview.pid ]; then
             kill $(cat web/preview.pid) || true
           fi
+
+      - name: Cleanup containers
+        if: always()
+        working-directory: .
+        run: |
+          docker stop postgres mailpit || true
+          docker rm postgres mailpit || true
 
       - name: Upload Playwright report
         if: always()
