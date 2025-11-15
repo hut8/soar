@@ -64,9 +64,15 @@ test.describe('Device List', () => {
 		).toBeVisible();
 
 		// Should show address type selector (ICAO, OGN, FLARM)
-		await expect(authenticatedPage.getByText('ICAO')).toBeVisible();
-		await expect(authenticatedPage.getByText('OGN')).toBeVisible();
-		await expect(authenticatedPage.getByText('FLARM')).toBeVisible();
+		await expect(
+			authenticatedPage.locator('text=ICAO').locator('visible=true').first()
+		).toBeVisible();
+		await expect(
+			authenticatedPage.locator('text=OGN').locator('visible=true').first()
+		).toBeVisible();
+		await expect(
+			authenticatedPage.locator('text=FLARM').locator('visible=true').first()
+		).toBeVisible();
 
 		// Take screenshot of device address search
 		await expect(authenticatedPage).toHaveScreenshot('device-search-type-address.png');
