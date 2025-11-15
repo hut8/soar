@@ -61,14 +61,10 @@ test.describe('Device Detail', () => {
 		// Wait for authenticatedPage to load
 		await authenticatedPage.waitForLoadState('networkidle');
 
-		// Check if registration section exists
-		// Note: Not all devices have registration info
-		const hasRegistration = await authenticatedPage.getByText(/registration/i).isVisible();
-
-		if (hasRegistration) {
-			// Should show registration number
-			await expect(authenticatedPage.getByText(/N\d+|[A-Z]{1,2}-[A-Z0-9]+/)).toBeVisible();
-		}
+		// Should have Aircraft Registration section heading
+		await expect(
+			authenticatedPage.getByRole('heading', { name: /aircraft registration/i })
+		).toBeVisible();
 	});
 
 	test('should display fixes (position reports) list', async ({ authenticatedPage }) => {
@@ -77,15 +73,10 @@ test.describe('Device Detail', () => {
 		// Wait for authenticatedPage to load
 		await authenticatedPage.waitForLoadState('networkidle');
 
-		// Should have fixes section or "no fixes" message
-		const hasFixesHeading = await authenticatedPage
-			.getByRole('heading', { name: /fixes|positions/i })
-			.isVisible();
-		const hasNoFixesMessage = await authenticatedPage
-			.getByText(/no fixes|no position reports/i)
-			.isVisible();
-
-		expect(hasFixesHeading || hasNoFixesMessage).toBe(true);
+		// Should have Recent Position Fixes section heading
+		await expect(
+			authenticatedPage.getByRole('heading', { name: /recent position fixes/i })
+		).toBeVisible();
 
 		// Take screenshot of fixes section
 		await expect(authenticatedPage).toHaveScreenshot('device-detail-fixes.png', {
@@ -99,13 +90,8 @@ test.describe('Device Detail', () => {
 		// Wait for authenticatedPage to load
 		await authenticatedPage.waitForLoadState('networkidle');
 
-		// Should have flights section or "no flights" message
-		const hasFlightsHeading = await authenticatedPage
-			.getByRole('heading', { name: /flights/i })
-			.isVisible();
-		const hasNoFlightsMessage = await authenticatedPage.getByText(/no flights/i).isVisible();
-
-		expect(hasFlightsHeading || hasNoFlightsMessage).toBe(true);
+		// Should have Flight History section heading
+		await expect(authenticatedPage.getByRole('heading', { name: /flight history/i })).toBeVisible();
 
 		// Take screenshot of flights section
 		await expect(authenticatedPage).toHaveScreenshot('device-detail-flights.png', {

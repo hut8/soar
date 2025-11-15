@@ -50,19 +50,8 @@ async function getLatestEmailFromMailpit(email: string): Promise<MailpitMessage 
 	return (await messageResponse.json()) as MailpitMessage;
 }
 
-/**
- * Helper function to clear all emails from Mailpit
- */
-async function clearMailpit(): Promise<void> {
-	const mailpitUrl = process.env.CI ? 'http://mailpit:8025' : 'http://localhost:8025';
-	await fetch(`${mailpitUrl}/api/v1/messages`, { method: 'DELETE' });
-}
-
 test.describe('Registration', () => {
 	test.beforeEach(async ({ page }) => {
-		// Clear Mailpit before each test
-		await clearMailpit();
-
 		// Navigate to registration page before each test
 		await page.goto('/register');
 	});
@@ -103,6 +92,20 @@ test.describe('Registration', () => {
 		// Submit the form
 		await page.getByRole('button', { name: /create account/i }).click();
 
+		// Wait a bit for the API call to complete
+		await page.waitForTimeout(2000);
+
+		// Debug: Check if there's an error message
+		const errorDiv = page.locator('div.preset-filled-error-500');
+		const hasError = await errorDiv.isVisible();
+		if (hasError) {
+			const errorText = await errorDiv.textContent();
+			console.log('Registration error displayed:', errorText);
+		}
+
+		// Debug: Check current URL
+		console.log('Current URL after registration:', page.url());
+
 		// Should be redirected to login page with success message
 		await expect(page).toHaveURL(/\/login/);
 		await expect(page.getByText(/registration successful.*check your email/i)).toBeVisible();
@@ -112,6 +115,19 @@ test.describe('Registration', () => {
 		await page.waitForTimeout(1000);
 
 		const email = await getLatestEmailFromMailpit(uniqueEmail);
+
+		// Debug logging to help diagnose Mailpit issues
+		if (!email) {
+			const mailpitUrl = process.env.CI ? 'http://mailpit:8025' : 'http://localhost:8025';
+			const debugResponse = await fetch(`${mailpitUrl}/api/v1/messages?limit=50`);
+			const debugData = await debugResponse.json();
+			console.log('Mailpit debug - Total messages:', debugData.messages?.length || 0);
+			console.log('Mailpit debug - Looking for email:', uniqueEmail);
+			if (debugData.messages && debugData.messages.length > 0) {
+				console.log('Mailpit debug - First message To:', debugData.messages[0].To);
+			}
+		}
+
 		expect(email).not.toBeNull();
 		expect(email.Subject).toContain('Verify Your Email Address');
 		expect(email.Text).toContain('verify your email');
