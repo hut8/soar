@@ -116,12 +116,10 @@ test.describe('Device Detail', () => {
 		// Wait for page to load
 		await authenticatedPage.waitForLoadState('networkidle');
 
-		// Should show error message
-		const hasError = await authenticatedPage
-			.getByText(/error loading device|failed to load/i)
-			.isVisible();
-
-		expect(hasError).toBe(true);
+		// Should show error message (both heading and paragraph match, use first())
+		await expect(
+			authenticatedPage.getByText(/error loading device|failed to load/i).first()
+		).toBeVisible();
 
 		// Take screenshot of error state
 		await expect(authenticatedPage).toHaveScreenshot('device-detail-not-found.png');
