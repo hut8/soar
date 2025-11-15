@@ -38,10 +38,11 @@ impl EmailService {
         // Check if we're using a local/test SMTP server (port 1025 is Mailpit's default)
         let mailer = if smtp_port == 1025 {
             // Use builder for insecure local SMTP (Mailpit)
-            tracing::info!("Using insecure SMTP connection for port 1025 (Mailpit)");
+            // Mailpit doesn't support TLS, so we need to disable it completely
+            tracing::info!("Using insecure SMTP connection for port 1025 (Mailpit) without TLS");
             AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(&smtp_server)
                 .port(smtp_port)
-                .credentials(creds)
+                .tls(lettre::transport::smtp::client::Tls::None)
                 .build()
         } else {
             // Use relay (with TLS) for production SMTP servers
