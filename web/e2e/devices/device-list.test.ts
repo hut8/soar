@@ -34,10 +34,10 @@ test.describe('Device List', () => {
 	test('should show search type selector with all options', async ({ authenticatedPage }) => {
 		await goToDevices(authenticatedPage);
 
-		// Check that all search type options are visible
-		await expect(authenticatedPage.getByText('Registration')).toBeVisible();
-		await expect(authenticatedPage.getByText('Device Address')).toBeVisible();
-		await expect(authenticatedPage.getByText('Club')).toBeVisible();
+		// Check that all search type options are visible (use :visible to avoid strict mode)
+		await expect(authenticatedPage.locator('text=Registration').first()).toBeVisible();
+		await expect(authenticatedPage.locator('text=Device Address').first()).toBeVisible();
+		await expect(authenticatedPage.locator('text=Club').first()).toBeVisible();
 	});
 
 	test('should switch between search types', async ({ authenticatedPage }) => {
@@ -48,8 +48,8 @@ test.describe('Device List', () => {
 			authenticatedPage.locator('input[placeholder*="Aircraft registration"]:visible')
 		).toBeVisible();
 
-		// Click on Device Address search type
-		await authenticatedPage.getByRole('button', { name: /device address/i }).click();
+		// Click on Device Address search type (use text selector for SegmentedControl)
+		await authenticatedPage.locator('text=Device Address').first().click();
 
 		// Should show device address input
 		await expect(
@@ -64,8 +64,8 @@ test.describe('Device List', () => {
 		// Take screenshot of device address search
 		await expect(authenticatedPage).toHaveScreenshot('device-search-type-address.png');
 
-		// Click on Club search type
-		await authenticatedPage.getByRole('button', { name: /^club$/i }).click();
+		// Click on Club search type (use text selector for SegmentedControl)
+		await authenticatedPage.locator('text=Club').first().click();
 
 		// Should show club selector
 		// Note: The actual club selector UI may vary
@@ -160,12 +160,12 @@ test.describe('Device List', () => {
 			// First device card should have expected elements
 			const firstCard = deviceCards.first();
 
-			// Should show device address (in monospace font)
-			await expect(firstCard.locator('.font-mono')).toBeVisible();
-
-			// Should have icon/visual elements
-			// (exact content varies, but card should be clickable)
+			// Card should be visible and clickable
 			await expect(firstCard).toBeVisible();
+
+			// Should have some content (registration or model info)
+			const hasContent = await firstCard.locator('text=/Registration|Aircraft Model/i').isVisible();
+			expect(hasContent).toBe(true);
 
 			// Take screenshot of device card
 			await expect(firstCard).toHaveScreenshot('device-card.png');

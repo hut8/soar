@@ -102,8 +102,8 @@ test.describe('Device Detail', () => {
 	test('should navigate back to device list', async ({ authenticatedPage }) => {
 		await navigateToTestDevice(authenticatedPage);
 
-		// Click the back button/link
-		await authenticatedPage.getByRole('link', { name: /back/i }).click();
+		// Click the back button
+		await authenticatedPage.getByRole('button', { name: /back to devices/i }).click();
 
 		// Should navigate back to devices authenticatedPage
 		await expect(authenticatedPage).toHaveURL(/\/devices$/);
@@ -113,14 +113,15 @@ test.describe('Device Detail', () => {
 		// Try to navigate to a device that doesn't exist using an invalid UUID
 		await authenticatedPage.goto('/devices/00000000-0000-0000-0000-000000000000');
 
-		// Should show error message or redirect
-		// The exact behavior depends on your app's error handling
-		const hasError = await authenticatedPage.getByText(/not found|error|invalid/i).isVisible();
-		const redirectedToDevices =
-			authenticatedPage.url().includes('/devices') &&
-			!authenticatedPage.url().match(/\/devices\/[^/]+/);
+		// Wait for page to load
+		await authenticatedPage.waitForLoadState('networkidle');
 
-		expect(hasError || redirectedToDevices).toBe(true);
+		// Should show error message
+		const hasError = await authenticatedPage
+			.getByText(/error loading device|failed to load/i)
+			.isVisible();
+
+		expect(hasError).toBe(true);
 
 		// Take screenshot of error state
 		await expect(authenticatedPage).toHaveScreenshot('device-detail-not-found.png');
