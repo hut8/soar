@@ -376,38 +376,10 @@ fi
 log_info "receiver_statuses updated"
 
 # ============================================================================
-# STEP 7: Delete orphaned rows
+# STEP 7: Add FK constraints
 # ============================================================================
-log_step "Step 7: Deleting orphaned rows"
-
-log_info "Deleting orphaned fixes..."
-psql -U "$DB_USER" -d "$DB_NAME" << 'EOF'
-DELETE FROM fixes f
-WHERE f.aprs_message_id IS NOT NULL
-  AND NOT EXISTS (
-      SELECT 1 FROM aprs_messages am
-      WHERE am.id = f.aprs_message_id
-        AND am.received_at = f.received_at
-  );
-EOF
-
-log_info "Deleting orphaned receiver_statuses..."
-psql -U "$DB_USER" -d "$DB_NAME" << 'EOF'
-DELETE FROM receiver_statuses rs
-WHERE rs.aprs_message_id IS NOT NULL
-  AND NOT EXISTS (
-      SELECT 1 FROM aprs_messages am
-      WHERE am.id = rs.aprs_message_id
-        AND am.received_at = rs.received_at
-  );
-EOF
-
-log_info "Orphaned rows deleted"
-
-# ============================================================================
-# STEP 8: Add FK constraints
-# ============================================================================
-log_step "Step 8: Adding composite FK constraints"
+log_step "Step 7: Adding composite FK constraints"
+log_info "If there are any orphaned rows, this will fail (as expected)"
 
 psql -U "$DB_USER" -d "$DB_NAME" << 'EOF'
 ALTER TABLE fixes
@@ -424,9 +396,9 @@ EOF
 log_info "FK constraints added"
 
 # ============================================================================
-# STEP 9: Rebuild indexes in parallel
+# STEP 8: Rebuild indexes in parallel
 # ============================================================================
-log_step "Step 9: Rebuilding indexes in parallel"
+log_step "Step 8: Rebuilding indexes in parallel"
 
 # Note: Cannot use CONCURRENTLY with partitioned indexes
 # Creating on parent table automatically creates on all partitions
@@ -466,9 +438,9 @@ wait
 log_info "Indexes rebuilt"
 
 # ============================================================================
-# STEP 10: Re-enable autovacuum and restore PostgreSQL settings
+# STEP 9: Re-enable autovacuum and restore PostgreSQL settings
 # ============================================================================
-log_step "Step 10: Re-enabling autovacuum on all partitions"
+log_step "Step 9: Re-enabling autovacuum on all partitions"
 
 psql -U "$DB_USER" -d "$DB_NAME" << 'EOF'
 -- Re-enable autovacuum on all fixes partitions
