@@ -1,7 +1,9 @@
 use anyhow::Result;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool};
+use moka::sync::Cache;
+use std::sync::Arc;
 use tracing::{info, warn};
 use uuid::Uuid;
 
@@ -23,11 +25,25 @@ const GEOCODING_ENABLED_FOR_RECEIVERS: bool = false;
 #[derive(Clone)]
 pub struct ReceiverRepository {
     pool: PgPool,
+    /// Cache tracking the last time we updated each receiver's latest_packet_at timestamp
+    /// Maps receiver_id -> last update timestamp
+    /// This prevents excessive database UPDATEs - we only update if >5 seconds have passed
+    latest_packet_at_cache: Arc<Cache<Uuid, DateTime<Utc>>>,
 }
 
 impl ReceiverRepository {
     pub fn new(pool: PgPool) -> Self {
-        Self { pool }
+        // Create a cache for tracking last update time of receiver latest_packet_at
+        // 10,000 receivers with 1 hour TTL should be plenty
+        let latest_packet_at_cache = Cache::builder()
+            .max_capacity(10_000)
+            .time_to_live(std::time::Duration::from_secs(3600))
+            .build();
+
+        Self {
+            pool,
+            latest_packet_at_cache: Arc::new(latest_packet_at_cache),
+        }
     }
 
     /// Upsert receivers from JSON data into the database
@@ -620,20 +636,42 @@ impl ReceiverRepository {
     }
 
     /// Update the latest_packet_at timestamp for a receiver
+    /// This is cached - we only update the database if >5 seconds have passed since the last update
     pub async fn update_latest_packet_at(&self, receiver_id: Uuid) -> Result<bool> {
+        let now = Utc::now();
+
+        // Check if we recently updated this receiver
+        if let Some(last_update) = self.latest_packet_at_cache.get(&receiver_id) {
+            let elapsed = now.signed_duration_since(last_update);
+            if elapsed.num_seconds() < 5 {
+                // Less than 5 seconds since last update - skip database write
+                metrics::counter!("receiver_repo.latest_packet_at.skipped").increment(1);
+                return Ok(true);
+            }
+        }
+
+        // More than 5 seconds (or never updated) - perform database update
         let pool = self.pool.clone();
 
-        tokio::task::spawn_blocking(move || -> Result<bool> {
+        let result = tokio::task::spawn_blocking(move || -> Result<bool> {
             let mut conn = pool.get()?;
 
             let rows_affected =
                 diesel::update(receivers::table.filter(receivers::id.eq(receiver_id)))
-                    .set(receivers::latest_packet_at.eq(Utc::now()))
+                    .set(receivers::latest_packet_at.eq(now))
                     .execute(&mut conn)?;
 
             Ok(rows_affected > 0)
         })
-        .await?
+        .await?;
+
+        // Update cache with the current timestamp
+        if result.is_ok() {
+            self.latest_packet_at_cache.insert(receiver_id, now);
+            metrics::counter!("receiver_repo.latest_packet_at.updated").increment(1);
+        }
+
+        result
     }
 
     /// Get receivers that need geocoding (geocoded=false and have lat/lng)
