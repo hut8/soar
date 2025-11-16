@@ -63,12 +63,26 @@ mkdir -p "$WORKTREE_DIR/.logs"
 ) &
 NPM_PID=$!
 
+# Check for sccache and warn if not installed
+if command -v sccache &>/dev/null; then
+    SCCACHE_PATH=$(command -v sccache)
+    echo -e "${GREEN}✓ sccache found: ${CYAN}$SCCACHE_PATH${NC}"
+else
+    echo -e "${YELLOW}⚠ Warning: sccache not installed - builds will be slower without caching${NC}"
+    echo -e "${YELLOW}  Install with: ${CYAN}cargo install sccache${NC}"
+    SCCACHE_PATH=""
+fi
+
 # Background cargo build (dependencies only)
 # We use 'cargo check' which is faster than 'cargo build' and still compiles all dependencies
 # This populates sccache without building the final soar binary
 (
     cd "$WORKTREE_DIR"
-    export RUSTC_WRAPPER=$(command -v sccache 2>/dev/null || echo "")
+
+    # Set RUSTC_WRAPPER for sccache if available
+    if [ -n "$SCCACHE_PATH" ]; then
+        export RUSTC_WRAPPER="$SCCACHE_PATH"
+    fi
 
     # First, fetch all dependencies
     cargo fetch &>"$WORKTREE_DIR/.logs/cargo-fetch.log"
