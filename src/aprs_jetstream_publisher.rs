@@ -27,14 +27,6 @@ impl JetStreamPublisher {
     ///
     /// This is called by the APRS client for each message received from APRS-IS
     pub async fn publish(&self, message: &str) -> Result<()> {
-        // Track message type for metrics
-        let is_server_message = message.starts_with('#');
-        if is_server_message {
-            metrics::counter!("aprs.jetstream.published.server").increment(1);
-        } else {
-            metrics::counter!("aprs.jetstream.published.aprs").increment(1);
-        }
-
         // Convert message to owned bytes for JetStream
         let bytes = message.as_bytes().to_vec();
 
@@ -105,13 +97,7 @@ impl JetStreamPublisher {
     /// This maximizes throughput at the cost of not knowing if the message was persisted.
     /// Acceptable for high-volume streaming data where message loss during crashes is tolerable.
     pub async fn publish_fire_and_forget(&self, message: &str) {
-        // Track message type for metrics (no debug logging for high-volume fire-and-forget)
-        let is_server_message = message.starts_with('#');
-        if is_server_message {
-            metrics::counter!("aprs.jetstream.published.server").increment(1);
-        } else {
-            metrics::counter!("aprs.jetstream.published.aprs").increment(1);
-        }
+        let start = std::time::Instant::now();
 
         // Convert message to owned bytes for JetStream
         let bytes = message.as_bytes().to_vec();
@@ -125,6 +111,8 @@ impl JetStreamPublisher {
         {
             Ok(_ack_future) => {
                 // Message sent successfully, but we don't wait for the ack
+                let duration_ms = start.elapsed().as_millis() as f64;
+                metrics::histogram!("aprs.jetstream.publish_duration_ms").record(duration_ms);
                 metrics::counter!("aprs.jetstream.published").increment(1);
             }
             Err(e) => {
