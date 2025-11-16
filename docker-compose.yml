@@ -1,3 +1,26 @@
+# Docker Compose configuration for SOAR E2E testing
+#
+# This configuration is specifically designed for running end-to-end tests.
+# It is NOT used for production deployment (which uses systemd services)
+# or daily development (which uses `cargo run` directly).
+#
+# Key features:
+# - Source code is mounted from the host for live editing
+# - Cargo build artifacts are cached for fast rebuilds
+# - Initial compile takes ~10 minutes, subsequent builds are much faster
+#
+# Services:
+# - postgres: PostgreSQL with PostGIS and pg_partman extensions
+# - nats: NATS messaging server with JetStream enabled
+# - mailpit: Email testing service (SMTP + web UI)
+# - soar: Main application container (builds from source)
+#
+# Usage:
+#   ./scripts/run-acceptance-tests                    # Run E2E tests
+#   ./scripts/run-acceptance-tests --update-snapshots # Update screenshot baselines
+#   docker compose up postgres nats mailpit           # Start infrastructure only
+#   docker compose down                               # Stop all services
+
 services:
   # PostgreSQL database with PostGIS and pg_partman extensions
   postgres:
@@ -51,11 +74,27 @@ services:
       - soar-network
 
   # SOAR backend application
+  # Uses base Rust image and builds from mounted source code.
+  # This allows live code editing while maintaining build artifact caching.
   soar:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    # Use base Rust image instead of building a Docker image
+    image: rust:1-slim-bookworm
     container_name: soar-app-test
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      mailpit:
+        condition: service_healthy
+    volumes:
+      # Mount source code from host (enables live editing)
+      - .:/workspace
+      # Cache cargo dependencies and build artifacts (enables fast rebuilds)
+      - cargo-cache:/usr/local/cargo/registry
+      - cargo-git:/usr/local/cargo/git
+      - target-cache:/workspace/target
+    working_dir: /workspace
     environment:
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/soar_test
       NATS_URL: nats://nats:4222
@@ -71,30 +110,40 @@ services:
       FROM_EMAIL: test@soar.local
       FROM_NAME: SOAR Test
       BASE_URL: http://localhost:4173
-    depends_on:
-      postgres:
-        condition: service_healthy
-      nats:
-        condition: service_healthy
-      mailpit:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:61226/"]
       interval: 10s
       timeout: 3s
       retries: 5
-      start_period: 30s
+      # Extended start period for initial cargo build (can take 10+ minutes)
+      start_period: 600s
     networks:
       - soar-network
+    # Install build dependencies and compile on startup
     command: >
       sh -c "
-        soar migrate &&
-        soar seed-test-data &&
-        soar web --port 61226 --interface 0.0.0.0 --test-mode
+        echo 'Installing build dependencies...' &&
+        apt-get update > /dev/null 2>&1 &&
+        apt-get install -y --no-install-recommends clang build-essential pkg-config libssl-dev libpq-dev curl > /dev/null 2>&1 &&
+        echo 'Building application (using cached artifacts)...' &&
+        SKIP_WEB_BUILD=1 cargo build --release &&
+        echo 'Running migrations...' &&
+        ./target/release/soar migrate &&
+        echo 'Seeding test data...' &&
+        ./target/release/soar seed-test-data &&
+        echo 'Starting web server...' &&
+        ./target/release/soar web --port 61226 --interface 0.0.0.0 --test-mode
       "
 
 volumes:
   postgres-data:
+    driver: local
+  # Persist Rust build cache between runs for fast rebuilds
+  cargo-cache:
+    driver: local
+  cargo-git:
+    driver: local
+  target-cache:
     driver: local
 
 networks:

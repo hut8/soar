@@ -10,7 +10,8 @@
 # 5. Cleans up containers after tests complete
 #
 # Usage:
-#   ./scripts/run-acceptance-tests
+#   ./scripts/run-acceptance-tests                    # Run tests normally
+#   ./scripts/run-acceptance-tests --update-snapshots # Update screenshot baselines
 
 set -e  # Exit on error
 
@@ -21,7 +22,36 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-COMPOSE_FILES="-f docker-compose.yml -f docker-compose.dev.yml"
+# Parse arguments
+UPDATE_SNAPSHOTS=""
+for arg in "$@"; do
+  case $arg in
+    --update-snapshots)
+      UPDATE_SNAPSHOTS="--update-snapshots"
+      echo -e "${YELLOW}Screenshot baseline update mode enabled${NC}"
+      shift
+      ;;
+    --help|-h)
+      echo "Usage: $0 [OPTIONS]"
+      echo ""
+      echo "Run SOAR E2E tests in Docker containers"
+      echo ""
+      echo "Options:"
+      echo "  --update-snapshots    Update Playwright screenshot baselines"
+      echo "  --help, -h            Show this help message"
+      echo ""
+      echo "Examples:"
+      echo "  $0                    # Run tests normally"
+      echo "  $0 --update-snapshots # Update screenshot baselines"
+      exit 0
+      ;;
+    *)
+      # Unknown option - ignore
+      ;;
+  esac
+done
+
+COMPOSE_FILES="-f docker-compose.yml"
 
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${BLUE}  SOAR E2E Acceptance Tests${NC}"
@@ -94,7 +124,7 @@ E2E_COMPOSE_FILES="${COMPOSE_FILES} -f docker-compose.e2e.yml"
 
 docker compose ${E2E_COMPOSE_FILES} run --rm e2e-tests sh -c "
     npm ci &&
-    npx playwright test
+    npx playwright test ${UPDATE_SNAPSHOTS}
 " || TEST_EXIT_CODE=$?
 
 echo ""
