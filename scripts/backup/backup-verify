@@ -59,6 +59,11 @@ RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-30}"
 MAX_BACKUP_AGE_DAYS=8  # Alert if newest base backup > 8 days old
 MAX_WAL_AGE_MINUTES=15 # Alert if newest WAL > 15 minutes old
 
+# Notifications
+NOTIFY_EMAIL="${BACKUP_NOTIFY_EMAIL:-}"
+NOTIFY_SLACK="${BACKUP_NOTIFY_SLACK_WEBHOOK:-}"
+SENTRY_DSN="${SENTRY_DSN:-}"
+
 # Counters
 TOTAL_CHECKS=0
 PASSED_CHECKS=0
@@ -93,6 +98,74 @@ check_result() {
             log WARN "⚠ WARN: $message"
             ;;
     esac
+}
+
+# Function to send notifications
+notify() {
+    local status="$1"
+    local message="$2"
+
+    log INFO "Notification: $status - $message"
+
+    # Email notification
+    if [[ -n "$NOTIFY_EMAIL" ]] && command -v mail >/dev/null 2>&1; then
+        echo "$message" | mail -s "SOAR Backup Verification: $status" "$NOTIFY_EMAIL"
+    fi
+
+    # Slack notification
+    if [[ -n "$NOTIFY_SLACK" ]] && command -v curl >/dev/null 2>&1; then
+        curl -X POST "$NOTIFY_SLACK" \
+            -H 'Content-Type: application/json' \
+            -d "{\"text\":\"SOAR Backup Verification: $status\n$message\"}" \
+            >/dev/null 2>&1 || true
+    fi
+
+    # Sentry notification
+    if [[ -n "$SENTRY_DSN" ]] && command -v curl >/dev/null 2>&1; then
+        # Extract project ID and key from DSN
+        local sentry_key=$(echo "$SENTRY_DSN" | sed -n 's|https://\([^@]*\)@.*|\1|p')
+        local sentry_host=$(echo "$SENTRY_DSN" | sed -n 's|https://[^@]*@\([^/]*\).*|\1|p')
+        local sentry_project=$(echo "$SENTRY_DSN" | sed -n 's|.*/\([0-9]*\)$|\1|p')
+
+        if [[ -n "$sentry_key" ]] && [[ -n "$sentry_host" ]] && [[ -n "$sentry_project" ]]; then
+            local event_level="info"
+            [[ "$status" == "FAILED" ]] && event_level="error"
+            [[ "$status" == "WARNING" ]] && event_level="warning"
+            [[ "$status" == "SUCCESS" ]] && event_level="info"
+
+            local event_payload=$(cat <<EOF
+{
+  "event_id": "$(uuidgen | tr -d '-' | tr '[:upper:]' '[:lower:]')",
+  "timestamp": "$(date -u +"%Y-%m-%dT%H:%M:%S")",
+  "platform": "other",
+  "level": "$event_level",
+  "logger": "soar-backup",
+  "message": "SOAR Backup Verification: $status",
+  "extra": {
+    "total_checks": $TOTAL_CHECKS,
+    "passed_checks": $PASSED_CHECKS,
+    "failed_checks": $FAILED_CHECKS,
+    "warnings": $WARNINGS,
+    "hostname": "$(hostname)",
+    "message": "$message",
+    "script": "backup-verify"
+  },
+  "tags": {
+    "backup_type": "verification",
+    "status": "$status",
+    "environment": "production"
+  }
+}
+EOF
+)
+
+            curl -X POST "https://${sentry_host}/api/${sentry_project}/store/" \
+                -H "X-Sentry-Auth: Sentry sentry_version=7, sentry_key=${sentry_key}, sentry_client=soar-backup/1.0" \
+                -H 'Content-Type: application/json' \
+                -d "$event_payload" \
+                >/dev/null 2>&1 || true
+        fi
+    fi
 }
 
 # Function to convert date to timestamp
@@ -350,6 +423,28 @@ main() {
 
     # Print summary
     print_summary
+
+    # Send notifications
+    if [[ $FAILED_CHECKS -gt 0 ]]; then
+        notify "FAILED" "Backup verification failed on $(hostname)
+Total checks: $TOTAL_CHECKS
+Passed: $PASSED_CHECKS
+Failed: $FAILED_CHECKS
+Warnings: $WARNINGS
+
+Check logs at $LOG_DIR/backup.log for details."
+    elif [[ $WARNINGS -gt 0 ]]; then
+        notify "WARNING" "Backup verification completed with warnings on $(hostname)
+Total checks: $TOTAL_CHECKS
+Passed: $PASSED_CHECKS
+Warnings: $WARNINGS
+
+Check logs at $LOG_DIR/backup.log for details."
+    else
+        notify "SUCCESS" "Backup verification passed on $(hostname)
+Total checks: $TOTAL_CHECKS
+All checks passed successfully."
+    fi
 
     # Exit with appropriate code
     if [[ $FAILED_CHECKS -gt 0 ]]; then

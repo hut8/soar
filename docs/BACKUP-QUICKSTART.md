@@ -96,6 +96,24 @@ log_archive_command = on
 **Archive script will be installed by deployment:**
 The `soar-wal-archive` script will be automatically installed to `/usr/local/bin/soar-wal-archive` by the deployment script.
 
+**Configure authentication for backups:**
+
+Edit `pg_hba.conf` to allow replication connections without password:
+```bash
+sudo nano /etc/postgresql/17/main/pg_hba.conf
+```
+
+Find the replication lines and ensure they use `trust` authentication for localhost:
+```conf
+# Allow replication connections from localhost, by a user with the
+# replication privilege.
+local   replication     all                                     peer
+host    replication     all             127.0.0.1/32            trust
+host    replication     all             ::1/128                 trust
+```
+
+**IMPORTANT**: Change `scram-sha-256` to `trust` for the `host replication` lines if needed.
+
 **Restart PostgreSQL:**
 ```bash
 sudo systemctl restart postgresql
@@ -106,6 +124,13 @@ sudo systemctl restart postgresql
 psql -U postgres -d soar -c "SHOW wal_level;"        # Should show: replica
 psql -U postgres -d soar -c "SHOW archive_mode;"     # Should show: on
 psql -U postgres -d soar -c "SHOW archive_command;"  # Should show: /usr/local/bin/soar-wal-archive %p %f
+```
+
+**Verify backup authentication works:**
+```bash
+sudo -u postgres pg_basebackup -h localhost -U postgres -D /tmp/test-auth -Fp --progress
+# Should start without prompting for password (Ctrl+C to cancel after it starts)
+sudo rm -rf /tmp/test-auth
 ```
 
 ## Step 4: Install Backup Services (2 minutes)
@@ -215,6 +240,24 @@ du -sh /var/lib/postgresql/15/main/pg_wal/
 | WAL file count | < 20 | > 100 | Archive falling behind |
 
 ## Common Issues
+
+### Backup Prompting for Password
+
+**Symptom**: Backup log shows repeated "Password:" prompts, backups timeout after 12 hours
+
+**Cause**: PostgreSQL `pg_hba.conf` requires password authentication for replication connections
+
+**Fix**:
+1. Edit `pg_hba.conf`: `sudo nano /etc/postgresql/17/main/pg_hba.conf`
+2. Change replication authentication from `scram-sha-256` to `trust` for localhost:
+   ```
+   host    replication     all             127.0.0.1/32            trust
+   host    replication     all             ::1/128                 trust
+   ```
+3. Reload PostgreSQL: `sudo systemctl reload postgresql`
+4. Test: `sudo -u postgres pg_basebackup -h localhost -U postgres -D /tmp/test -Fp --progress`
+   - Should start without password prompt (Ctrl+C to cancel)
+5. Cleanup: `sudo rm -rf /tmp/test`
 
 ### WAL Archiving Not Working
 
