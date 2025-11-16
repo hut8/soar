@@ -92,6 +92,7 @@ SSH_OPTS="-i $SSH_KEY -o StrictHostKeyChecking=accept-new -o BatchMode=yes"
 # Metrics and notifications
 NOTIFY_EMAIL="${BACKUP_NOTIFY_EMAIL:-}"
 NOTIFY_SLACK="${BACKUP_NOTIFY_SLACK_WEBHOOK:-}"
+SENTRY_DSN="${SENTRY_DSN:-}"
 
 # Function to log messages
 log() {
@@ -118,6 +119,51 @@ notify() {
             -H 'Content-Type: application/json' \
             -d "{\"text\":\"SOAR Backup: $status\n$message\"}" \
             >/dev/null 2>&1 || true
+    fi
+
+    # Sentry notification
+    if [[ -n "$SENTRY_DSN" ]] && command -v curl >/dev/null 2>&1; then
+        # Extract project ID and key from DSN
+        # DSN format: https://<key>@<organization>.ingest.sentry.io/<project_id>
+        local sentry_key=$(echo "$SENTRY_DSN" | sed -n 's|https://\([^@]*\)@.*|\1|p')
+        local sentry_host=$(echo "$SENTRY_DSN" | sed -n 's|https://[^@]*@\([^/]*\).*|\1|p')
+        local sentry_project=$(echo "$SENTRY_DSN" | sed -n 's|.*/\([0-9]*\)$|\1|p')
+
+        if [[ -n "$sentry_key" ]] && [[ -n "$sentry_host" ]] && [[ -n "$sentry_project" ]]; then
+            local event_level="info"
+            [[ "$status" == "FAILED" ]] && event_level="error"
+            [[ "$status" == "SUCCESS" ]] && event_level="info"
+
+            local event_payload=$(cat <<EOF
+{
+  "event_id": "$(uuidgen | tr -d '-' | tr '[:upper:]' '[:lower:]')",
+  "timestamp": "$(date -u +"%Y-%m-%dT%H:%M:%S")",
+  "platform": "other",
+  "level": "$event_level",
+  "logger": "soar-backup",
+  "message": "SOAR Backup: $status",
+  "extra": {
+    "backup_name": "${BACKUP_NAME:-unknown}",
+    "backup_date": "${BACKUP_DATE:-unknown}",
+    "hostname": "$(hostname)",
+    "message": "$message",
+    "script": "base-backup"
+  },
+  "tags": {
+    "backup_type": "base",
+    "status": "$status",
+    "environment": "production"
+  }
+}
+EOF
+)
+
+            curl -X POST "https://${sentry_host}/api/${sentry_project}/store/" \
+                -H "X-Sentry-Auth: Sentry sentry_version=7, sentry_key=${sentry_key}, sentry_client=soar-backup/1.0" \
+                -H 'Content-Type: application/json' \
+                -d "$event_payload" \
+                >/dev/null 2>&1 || true
+        fi
     fi
 }
 
