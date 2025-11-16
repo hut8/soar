@@ -135,6 +135,10 @@ enum Commands {
         /// Can be specified multiple times to suppress multiple types
         #[arg(long)]
         suppress_aprs_type: Vec<String>,
+
+        /// Enable tokio-console for async task monitoring (port 6669)
+        #[arg(long)]
+        enable_tokio_console: bool,
     },
     /// Start the web server
     Web {
@@ -145,6 +149,10 @@ enum Commands {
         /// Interface to bind the web server to
         #[arg(long, default_value = "localhost")]
         interface: String,
+
+        /// Enable tokio-console for async task monitoring (port 6670)
+        #[arg(long)]
+        enable_tokio_console: bool,
     },
     /// Archive old data to compressed CSV files and delete from database
     ///
@@ -193,7 +201,11 @@ enum Commands {
     ///
     /// Tests that the runtime can initialize without panicking. Used for CI/CD
     /// to catch configuration issues like missing tokio_unstable flag.
-    VerifyRuntime {},
+    VerifyRuntime {
+        /// Enable tokio-console for async task monitoring (port 7779)
+        #[arg(long)]
+        enable_tokio_console: bool,
+    },
     /// Run database migrations
     ///
     /// Runs all pending database migrations and exits. This is useful for deployment
@@ -566,83 +578,127 @@ async fn main() -> Result<()> {
     let fmt_layer = filter::Filtered::new(tracing_subscriber::fmt::layer(), fmt_filter);
 
     match &cli.command {
-        Commands::Run { .. } => {
-            // Run subcommand uses tokio-console on port 6669
-            let console_layer = filter::Filtered::new(
-                console_subscriber::ConsoleLayer::builder()
-                    .server_addr(([0, 0, 0, 0], 6669))
-                    .spawn(),
-                console_filter.clone(),
-            );
+        Commands::Run {
+            enable_tokio_console,
+            ..
+        } => {
+            if *enable_tokio_console {
+                // Run subcommand uses tokio-console on port 6669
+                let console_layer = filter::Filtered::new(
+                    console_subscriber::ConsoleLayer::builder()
+                        .server_addr(([0, 0, 0, 0], 6669))
+                        .spawn(),
+                    console_filter.clone(),
+                );
 
-            if let Some(sentry_layer) = _guard
-                .as_ref()
-                .map(|_| sentry::integrations::tracing::layer())
-            {
-                registry
-                    .with(fmt_layer)
-                    .with(console_layer)
-                    .with(sentry_layer)
-                    .init();
+                if let Some(sentry_layer) = _guard
+                    .as_ref()
+                    .map(|_| sentry::integrations::tracing::layer())
+                {
+                    registry
+                        .with(fmt_layer)
+                        .with(console_layer)
+                        .with(sentry_layer)
+                        .init();
+                } else {
+                    registry.with(fmt_layer).with(console_layer).init();
+                }
+
+                info!(
+                    "tokio-console subscriber initialized on port 6669 - connect with `tokio-console http://localhost:6669`"
+                );
             } else {
-                registry.with(fmt_layer).with(console_layer).init();
+                // No tokio-console overhead
+                if let Some(sentry_layer) = _guard
+                    .as_ref()
+                    .map(|_| sentry::integrations::tracing::layer())
+                {
+                    registry.with(fmt_layer).with(sentry_layer).init();
+                } else {
+                    registry.with(fmt_layer).init();
+                }
             }
-
-            info!(
-                "tokio-console subscriber initialized on port 6669 - connect with `tokio-console http://localhost:6669`"
-            );
         }
-        Commands::VerifyRuntime { .. } => {
-            // VerifyRuntime uses tokio-console on port 7779 to avoid conflict with Run
-            let console_layer = filter::Filtered::new(
-                console_subscriber::ConsoleLayer::builder()
-                    .server_addr(([0, 0, 0, 0], 7779))
-                    .spawn(),
-                console_filter.clone(),
-            );
+        Commands::VerifyRuntime {
+            enable_tokio_console,
+        } => {
+            if *enable_tokio_console {
+                // VerifyRuntime uses tokio-console on port 7779 to avoid conflict with Run
+                let console_layer = filter::Filtered::new(
+                    console_subscriber::ConsoleLayer::builder()
+                        .server_addr(([0, 0, 0, 0], 7779))
+                        .spawn(),
+                    console_filter.clone(),
+                );
 
-            if let Some(sentry_layer) = _guard
-                .as_ref()
-                .map(|_| sentry::integrations::tracing::layer())
-            {
-                registry
-                    .with(fmt_layer)
-                    .with(console_layer)
-                    .with(sentry_layer)
-                    .init();
+                if let Some(sentry_layer) = _guard
+                    .as_ref()
+                    .map(|_| sentry::integrations::tracing::layer())
+                {
+                    registry
+                        .with(fmt_layer)
+                        .with(console_layer)
+                        .with(sentry_layer)
+                        .init();
+                } else {
+                    registry.with(fmt_layer).with(console_layer).init();
+                }
+
+                info!(
+                    "tokio-console subscriber initialized on port 7779 - connect with `tokio-console http://localhost:7779`"
+                );
             } else {
-                registry.with(fmt_layer).with(console_layer).init();
+                // No tokio-console overhead
+                if let Some(sentry_layer) = _guard
+                    .as_ref()
+                    .map(|_| sentry::integrations::tracing::layer())
+                {
+                    registry.with(fmt_layer).with(sentry_layer).init();
+                } else {
+                    registry.with(fmt_layer).init();
+                }
             }
-
-            info!(
-                "tokio-console subscriber initialized on port 7779 - connect with `tokio-console http://localhost:7779`"
-            );
         }
-        Commands::Web { .. } => {
-            // Web subcommand uses tokio-console on port 6670 to avoid conflict
-            let console_layer = filter::Filtered::new(
-                console_subscriber::ConsoleLayer::builder()
-                    .server_addr(([0, 0, 0, 0], 6670))
-                    .spawn(),
-                console_filter.clone(),
-            );
+        Commands::Web {
+            enable_tokio_console,
+            ..
+        } => {
+            if *enable_tokio_console {
+                // Web subcommand uses tokio-console on port 6670 to avoid conflict
+                let console_layer = filter::Filtered::new(
+                    console_subscriber::ConsoleLayer::builder()
+                        .server_addr(([0, 0, 0, 0], 6670))
+                        .spawn(),
+                    console_filter.clone(),
+                );
 
-            if let Some(sentry_layer) = _guard
-                .as_ref()
-                .map(|_| sentry::integrations::tracing::layer())
-            {
-                registry
-                    .with(fmt_layer)
-                    .with(console_layer)
-                    .with(sentry_layer)
-                    .init();
+                if let Some(sentry_layer) = _guard
+                    .as_ref()
+                    .map(|_| sentry::integrations::tracing::layer())
+                {
+                    registry
+                        .with(fmt_layer)
+                        .with(console_layer)
+                        .with(sentry_layer)
+                        .init();
+                } else {
+                    registry.with(fmt_layer).with(console_layer).init();
+                }
+
+                info!(
+                    "tokio-console subscriber initialized on port 6670 - connect with `tokio-console http://localhost:6670`"
+                );
             } else {
-                registry.with(fmt_layer).with(console_layer).init();
+                // No tokio-console overhead
+                if let Some(sentry_layer) = _guard
+                    .as_ref()
+                    .map(|_| sentry::integrations::tracing::layer())
+                {
+                    registry.with(fmt_layer).with(sentry_layer).init();
+                } else {
+                    registry.with(fmt_layer).init();
+                }
             }
-
-            info!(
-                "tokio-console subscriber initialized on port 6670 - connect with `tokio-console http://localhost:6670`"
-            );
         }
         _ => {
             // Other subcommands use regular tracing (no tokio-console overhead)
@@ -659,11 +715,15 @@ async fn main() -> Result<()> {
 
     // Handle commands that don't need database access early
     match &cli.command {
-        Commands::VerifyRuntime {} => {
+        Commands::VerifyRuntime {
+            enable_tokio_console,
+        } => {
             info!("Runtime verification successful:");
             info!("  ✓ Sentry integration initialized");
             info!("  ✓ Tracing subscriber initialized");
-            info!("  ✓ tokio-console layer initialized (port 7779)");
+            if *enable_tokio_console {
+                info!("  ✓ tokio-console layer initialized (port 7779)");
+            }
             info!("  ✓ All runtime components ready");
             info!("Runtime verification PASSED");
             return Ok(());
@@ -748,6 +808,7 @@ async fn main() -> Result<()> {
             archive,
             nats_url,
             suppress_aprs_type,
+            enable_tokio_console: _,
         } => {
             // Determine archive directory if --archive flag is used
             let final_archive_dir = if archive {
@@ -764,7 +825,11 @@ async fn main() -> Result<()> {
             )
             .await
         }
-        Commands::Web { interface, port } => {
+        Commands::Web {
+            interface,
+            port,
+            enable_tokio_console: _,
+        } => {
             // Check SOAR_ENV and override port if not production
             let final_port = match env::var("SOAR_ENV") {
                 Ok(soar_env) if soar_env == "production" => {
@@ -791,7 +856,7 @@ async fn main() -> Result<()> {
         Commands::Resurrect { date, archive_path } => {
             handle_resurrect(diesel_pool, date, archive_path).await
         }
-        Commands::VerifyRuntime {} => {
+        Commands::VerifyRuntime { .. } => {
             // This should never be reached due to early return above
             unreachable!("VerifyRuntime should be handled before database setup")
         }
