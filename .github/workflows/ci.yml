@@ -179,6 +179,7 @@ jobs:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/soar_test
           SENTRY_DSN: ''
           SOAR_ENV: test
+          JWT_SECRET: test-jwt-secret-for-e2e-tests-only
           SMTP_SERVER: localhost
           SMTP_PORT: 1025
           SMTP_USERNAME: test
