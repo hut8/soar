@@ -54,7 +54,7 @@ impl DeviceRepository {
         for new_device in new_devices {
             let result = diesel::insert_into(devices::table)
                 .values(&new_device)
-                .on_conflict(devices::address)
+                .on_conflict((devices::address_type, devices::address))
                 .do_update()
                 .set((
                     // Update fields from DDB, but preserve existing values if DDB value is empty
@@ -181,7 +181,7 @@ impl DeviceRepository {
         // The DO UPDATE with a no-op ensures RETURNING gives us the existing row on conflict
         let device_model = diesel::insert_into(devices::table)
             .values(&new_device)
-            .on_conflict(devices::address)
+            .on_conflict((devices::address_type, devices::address))
             .do_update()
             .set(devices::address.eq(excluded(devices::address))) // No-op update to trigger RETURNING
             .get_result::<DeviceModel>(&mut conn)?;
@@ -249,7 +249,7 @@ impl DeviceRepository {
             // This eliminates the need for separate async update tasks
             let device_model = diesel::insert_into(devices::table)
                 .values(&new_device)
-                .on_conflict(devices::address)
+                .on_conflict((devices::address_type, devices::address))
                 .do_update()
                 .set((
                     devices::last_fix_at.eq(fix_timestamp),
