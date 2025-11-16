@@ -326,7 +326,7 @@ EOF
             # Count valid recent backups
             local recent_count=0
             for backup_date in $all_backups; do
-                if [[ "$backup_date" >= "$cutoff_date" ]]; then
+                if [[ "$backup_date" > "$cutoff_date" || "$backup_date" == "$cutoff_date" ]]; then
                     ((recent_count++))
                 fi
             done

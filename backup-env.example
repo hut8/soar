@@ -14,27 +14,28 @@
 #   sudo chown postgres:postgres /var/soar/keys/backup_key
 #   sudo chmod 600 /var/soar/keys/backup_key
 #
-# IMPORTANT: This file contains sensitive credentials. Protect it carefully!
+# IMPORTANT: This file is a systemd EnvironmentFile - DO NOT use 'export'!
 #   - Set permissions to 600 (read/write for owner only)
 #   - Owner should be postgres:postgres
 #   - Never commit this file to version control
+#   - Format: KEY=value (no 'export', no quotes unless needed)
 
 #------------------------------------------------------------------------------
 # SSH BACKUP STORAGE CONFIGURATION
 #------------------------------------------------------------------------------
 
-# SSH server hostname or IP address
-export BACKUP_SSH_HOST="cryptobot"
+# SSH server hostname or IP address (REQUIRED)
+BACKUP_SSH_HOST=cryptobot
 
 # SSH user (default: root)
-export BACKUP_SSH_USER="root"
+BACKUP_SSH_USER=root
 
 # Remote path on SSH server where backups will be stored
-export BACKUP_SSH_PATH="/srv/soar-backups"
+BACKUP_SSH_PATH=/srv/soar-backups
 
 # Path to SSH private key for authentication
 # Default: /var/soar/keys/backup_key
-export BACKUP_SSH_KEY="/var/soar/keys/backup_key"
+BACKUP_SSH_KEY=/var/soar/keys/backup_key
 
 # Note: The SSH public key must be added to the authorized_keys file
 # on the remote server:
@@ -50,18 +51,18 @@ export BACKUP_SSH_KEY="/var/soar/keys/backup_key"
 # MUST be >= WAL_RETENTION_DAYS (WAL files are useless without a base backup!)
 # Default: 30 days - ensures all WAL files can be used for recovery
 # Combined with bi-weekly backups, this keeps ~2 base backups at any time
-export BACKUP_RETENTION_DAYS=30
+BACKUP_RETENTION_DAYS=30
 
 # Minimum number of base backups to always keep (safety check)
 # Even if backups are older than BACKUP_RETENTION_DAYS, keep at least this many
 # Default: 2 (ensures we always have a recent backup for recovery)
-export BASE_BACKUP_MIN_COUNT=2
+BASE_BACKUP_MIN_COUNT=2
 
 # WAL archive retention (for point-in-time recovery)
 # MUST be <= BACKUP_RETENTION_DAYS (need base backup to use WAL files!)
 # Default: 30 days (allows recovery to any point in last month)
 # Note: Can reduce to 21 days to save ~15% storage if 3-week PITR is sufficient
-export WAL_RETENTION_DAYS=30
+WAL_RETENTION_DAYS=30
 
 #------------------------------------------------------------------------------
 # POSTGRESQL CONNECTION
@@ -69,10 +70,10 @@ export WAL_RETENTION_DAYS=30
 
 # PostgreSQL connection settings
 # Usually localhost for local PostgreSQL instance
-export PGHOST=localhost
-export PGPORT=5432
-export PGDATABASE=soar
-export PGUSER=postgres
+PGHOST=localhost
+PGPORT=5432
+PGDATABASE=soar
+PGUSER=postgres
 
 # Password authentication:
 # DO NOT set PGPASSWORD here! Instead use ~/.pgpass file:
@@ -83,8 +84,8 @@ export PGUSER=postgres
 
 # PostgreSQL data directory and version (for restore operations)
 # Adjust based on your PostgreSQL installation
-export PGDATA=/var/lib/postgresql/17/main
-export PG_VERSION=17
+PGDATA=/var/lib/postgresql/17/main
+PG_VERSION=17
 
 #------------------------------------------------------------------------------
 # BACKUP PATHS
@@ -93,25 +94,29 @@ export PG_VERSION=17
 # Temporary directory for staging backups during creation
 # Needs space for ~150GB compressed backup during upload
 # Will be automatically created if it doesn't exist
-export BACKUP_TEMP_DIR=/var/lib/soar/backup-temp
+BACKUP_TEMP_DIR=/var/lib/soar/backup-temp
 
 # Directory for backup logs
 # Will be automatically created if it doesn't exist
-export BACKUP_LOG_DIR=/var/log/soar
+BACKUP_LOG_DIR=/var/log/soar
 
 #------------------------------------------------------------------------------
 # BACKUP COMPRESSION AND PERFORMANCE
 #------------------------------------------------------------------------------
 
 # Compression method for base backups
-# Options: gzip, none
-# gzip reduces size by ~60-70% but takes longer
-export BACKUP_COMPRESSION=gzip
+# NOTE: The backup script uses zstd compression with all available CPU cores
+# This setting is kept for backward compatibility but is not currently used
+# by the soar-base-backup script, which hardcodes zstd compression.
+# Options: zstd (recommended), gzip, none
+# zstd reduces size by ~60-70% and is faster than gzip with multi-threading
+BACKUP_COMPRESSION=zstd
 
 # Number of parallel jobs for compression/upload
-# Higher = faster but more CPU/memory usage
+# NOTE: For zstd compression, all available CPU cores are automatically used
+# This setting may be used for other operations like rsync parallelization
 # Recommended: 2-4 for most systems
-export BACKUP_PARALLEL_JOBS=4
+BACKUP_PARALLEL_JOBS=4
 
 #------------------------------------------------------------------------------
 # MONITORING AND NOTIFICATIONS (OPTIONAL)
@@ -119,21 +124,21 @@ export BACKUP_PARALLEL_JOBS=4
 
 # Email notification on backup success/failure (requires mail command)
 # Leave empty to disable email notifications
-export BACKUP_NOTIFY_EMAIL=""
-# Example: export BACKUP_NOTIFY_EMAIL="ops@example.com"
+BACKUP_NOTIFY_EMAIL=
+# Example: BACKUP_NOTIFY_EMAIL=ops@example.com
 
 # Slack webhook for notifications
 # Create webhook at: https://api.slack.com/messaging/webhooks
 # Leave empty to disable Slack notifications
-export BACKUP_NOTIFY_SLACK_WEBHOOK=""
-# Example: export BACKUP_NOTIFY_SLACK_WEBHOOK="https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXX"
+BACKUP_NOTIFY_SLACK_WEBHOOK=
+# Example: BACKUP_NOTIFY_SLACK_WEBHOOK=https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXX
 
 # Sentry DSN for error tracking and notifications
 # The backup scripts will send events to Sentry for both successes and failures
 # Sentry is already used by the SOAR application - use the same DSN
 # Leave empty to disable Sentry notifications
-export SENTRY_DSN=""
-# Example: export SENTRY_DSN="https://abc123def456@o123456.ingest.sentry.io/7890123"
+SENTRY_DSN=
+# Example: SENTRY_DSN=https://abc123def456@o123456.ingest.sentry.io/7890123
 #
 # Events sent to Sentry:
 # - Base backup failures (level: error)
@@ -149,8 +154,8 @@ export SENTRY_DSN=""
 
 # Prometheus Pushgateway for metrics (optional)
 # If you have a Pushgateway, backup metrics will be pushed after each backup
-export METRICS_PUSHGATEWAY=""
-# Example: export METRICS_PUSHGATEWAY="http://localhost:9091"
+METRICS_PUSHGATEWAY=
+# Example: METRICS_PUSHGATEWAY=http://localhost:9091
 
 #------------------------------------------------------------------------------
 # SSH CONNECTION CONFIGURATION
