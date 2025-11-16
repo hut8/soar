@@ -83,7 +83,7 @@ test.describe('Device List', () => {
 		// Should show club selector
 		// Note: The actual club selector UI may vary
 		await expect(
-			authenticatedPage.locator('input[placeholder*="Select a club"]:visible')
+			authenticatedPage.locator('input[placeholder="Select a club..."]:visible')
 		).toBeVisible();
 
 		// Take screenshot of club search
