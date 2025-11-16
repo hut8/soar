@@ -15,6 +15,7 @@ pub mod aprs_filters;
 pub mod aprs_jetstream_consumer;
 pub mod aprs_jetstream_publisher;
 pub mod aprs_messages_repo;
+pub mod archive_email_reporter;
 pub mod archive_service;
 pub mod auth;
 pub mod clubs;
