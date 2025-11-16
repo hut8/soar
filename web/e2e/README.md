@@ -2,6 +2,8 @@
 
 This directory contains end-to-end (E2E) tests for the SOAR web application using [Playwright](https://playwright.dev/).
 
+Tests are run automatically in CI on every pull request.
+
 ## Table of Contents
 
 - [Overview](#overview)
