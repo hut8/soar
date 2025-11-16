@@ -298,14 +298,22 @@ impl AprsClient {
                         );
                     }
 
-                    match Self::connect_and_run(
-                        &config,
-                        raw_message_tx.clone(),
-                        health_for_connection.clone(),
+                    // Add 30-second timeout to connection attempt to prevent indefinite hangs
+                    // This ensures DNS resolution and TCP connection don't block forever
+                    let connection_timeout = Duration::from_secs(30);
+                    let connect_result = timeout(
+                        connection_timeout,
+                        Self::connect_and_run(
+                            &config,
+                            raw_message_tx.clone(),
+                            health_for_connection.clone(),
+                        ),
                     )
-                    .await
-                    {
-                        ConnectionResult::Success => {
+                    .await;
+
+                    match connect_result {
+                        // Connection attempt succeeded (returned a result within timeout)
+                        Ok(ConnectionResult::Success) => {
                             info!("Connection ended normally");
                             // Mark as disconnected in health state
                             {
@@ -325,7 +333,7 @@ impl AprsClient {
                             retry_count = 0; // Reset retry count on successful connection
                             current_delay = config.retry_delay_seconds;
                         }
-                        ConnectionResult::ConnectionFailed(e) => {
+                        Ok(ConnectionResult::ConnectionFailed(e)) => {
                             error!("Failed to connect to APRS server: {}", e);
 
                             // Report connection failure to Sentry
@@ -338,7 +346,7 @@ impl AprsClient {
                             }
                             retry_count += 1;
                         }
-                        ConnectionResult::OperationFailed(e) => {
+                        Ok(ConnectionResult::OperationFailed(e)) => {
                             warn!("Connection operation failed: {}", e);
 
                             // Report operation failure to Sentry (connection was established but dropped)
@@ -350,6 +358,30 @@ impl AprsClient {
                                 health.aprs_connected = false;
                             }
                             retry_count += 1;
+                        }
+                        Err(_) => {
+                            // Connection attempt timed out (DNS resolution or TCP connect hung)
+                            error!(
+                                "Connection attempt timed out after {}s - DNS resolution or TCP connection may be hanging",
+                                connection_timeout.as_secs()
+                            );
+
+                            // Report timeout to Sentry
+                            sentry::capture_message(
+                                &format!(
+                                    "APRS connection attempt timed out after {}s",
+                                    connection_timeout.as_secs()
+                                ),
+                                sentry::Level::Error,
+                            );
+
+                            // Mark as disconnected in health state
+                            {
+                                let mut health = health_for_connection.write().await;
+                                health.aprs_connected = false;
+                            }
+                            retry_count += 1;
+                            metrics::counter!("aprs.connection.timeout").increment(1);
                         }
                     }
 

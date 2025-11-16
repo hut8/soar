@@ -1100,7 +1100,6 @@
         "type": "prometheus",
         "uid": "fe4qj1bybjncwc"
       },
-      "description": "Breakdown of messages published by type (server status vs APRS packets)",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1118,9 +1117,9 @@
             "fillOpacity": 10,
             "gradientMode": "none",
             "hideFrom": {
-              "legend": false,
               "tooltip": false,
-              "viz": false
+              "viz": false,
+              "legend": false
             },
             "insertNulls": false,
             "lineInterpolation": "linear",
@@ -1130,7 +1129,6 @@
               "type": "linear"
             },
             "showPoints": "never",
-            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -1146,11 +1144,11 @@
             "steps": [
               {
                 "color": "green",
-                "value": 0
+                "value": null
               }
             ]
           },
-          "unit": "ops"
+          "unit": "ms"
         },
         "overrides": []
       },
@@ -1160,23 +1158,22 @@
         "x": 12,
         "y": 43
       },
-      "id": 116,
+      "id": 100,
       "options": {
         "legend": {
           "calcs": [
-            "lastNotNull"
+            "mean",
+            "max"
           ],
-          "displayMode": "table",
+          "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
         },
         "tooltip": {
-          "hideZeros": false,
-          "mode": "multi",
-          "sort": "desc"
+          "mode": "single",
+          "sort": "none"
         }
       },
-      "pluginVersion": "12.2.1",
       "targets": [
         {
           "datasource": {
@@ -1184,8 +1181,8 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_jetstream_published_server{component=\"ingest-aprs\"}[5m])",
-          "legendFormat": "Server Messages/sec",
+          "expr": "histogram_quantile(0.50, sum(rate(aprs_jetstream_publish_duration_ms_bucket{component=\"ingest-aprs\"}[5m])) by (le))",
+          "legendFormat": "p50",
           "range": true,
           "refId": "A"
         },
@@ -1195,13 +1192,26 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_jetstream_published_aprs{component=\"ingest-aprs\"}[5m])",
-          "legendFormat": "APRS Messages/sec",
+          "expr": "histogram_quantile(0.95, sum(rate(aprs_jetstream_publish_duration_ms_bucket{component=\"ingest-aprs\"}[5m])) by (le))",
+          "hide": false,
+          "legendFormat": "p95",
           "range": true,
           "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fe4qj1bybjncwc"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.99, sum(rate(aprs_jetstream_publish_duration_ms_bucket{component=\"ingest-aprs\"}[5m])) by (le))",
+          "hide": false,
+          "legendFormat": "p99",
+          "range": true,
+          "refId": "C"
         }
       ],
-      "title": "Publish Breakdown (Server vs APRS)",
+      "title": "JetStream Publish Duration",
       "type": "timeseries"
     }
   ],
