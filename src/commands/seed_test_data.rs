@@ -263,7 +263,7 @@ fn create_test_devices(conn: &mut PgConnection, count: usize) -> Result<()> {
         let device_id = Uuid::new_v4();
         let addr_int: i32 = i32::from_str_radix(addr, 16).unwrap_or(0);
 
-        diesel::insert_into(devices)
+        let result = diesel::insert_into(devices)
             .values((
                 id.eq(device_id),
                 address.eq(addr_int),
@@ -278,11 +278,18 @@ fn create_test_devices(conn: &mut PgConnection, count: usize) -> Result<()> {
                 updated_at.eq(chrono::Utc::now()),
             ))
             .on_conflict(address)
-            .do_nothing()
-            .execute(conn)
-            .ok();
+            .do_update()
+            .set((
+                registration.eq(reg),
+                aircraft_model.eq(model),
+                updated_at.eq(chrono::Utc::now()),
+            ))
+            .execute(conn);
 
-        info!("Created test device: {} ({})", reg, addr);
+        match result {
+            Ok(_) => info!("Created test device: {} ({})", reg, addr),
+            Err(e) => tracing::error!("Failed to create test device {} ({}): {}", reg, addr, e),
+        }
     }
 
     // Create additional random devices
@@ -306,7 +313,7 @@ fn create_test_devices(conn: &mut PgConnection, count: usize) -> Result<()> {
                 id.eq(device_id),
                 address.eq(addr_int),
                 address_type.eq(AddressType::Icao),
-                registration.eq(reg_number),
+                registration.eq(reg_number.clone()),
                 aircraft_model.eq(model),
                 competition_number.eq(""),
                 tracked.eq(i % 2 == 0), // Half are tracked
@@ -315,7 +322,13 @@ fn create_test_devices(conn: &mut PgConnection, count: usize) -> Result<()> {
                 created_at.eq(chrono::Utc::now()),
                 updated_at.eq(chrono::Utc::now()),
             ))
-            .on_conflict_do_nothing()
+            .on_conflict(address)
+            .do_update()
+            .set((
+                registration.eq(reg_number),
+                aircraft_model.eq(model),
+                updated_at.eq(chrono::Utc::now()),
+            ))
             .execute(conn)
             .ok();
     }

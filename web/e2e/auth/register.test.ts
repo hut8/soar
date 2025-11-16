@@ -23,7 +23,8 @@ interface MailpitMessagesResponse {
  * @returns The most recent email message or null if not found
  */
 async function getLatestEmailFromMailpit(email: string): Promise<MailpitMessage | null> {
-	const mailpitUrl = process.env.CI ? 'http://mailpit:8025' : 'http://localhost:8025';
+	// Always use localhost - Mailpit container exposes port 8025
+	const mailpitUrl = 'http://localhost:8025';
 	const response = await fetch(`${mailpitUrl}/api/v1/messages?limit=50`);
 
 	if (!response.ok) {
@@ -118,7 +119,7 @@ test.describe('Registration', () => {
 
 		// Debug logging to help diagnose Mailpit issues
 		if (!email) {
-			const mailpitUrl = process.env.CI ? 'http://mailpit:8025' : 'http://localhost:8025';
+			const mailpitUrl = 'http://localhost:8025';
 			const debugResponse = await fetch(`${mailpitUrl}/api/v1/messages?limit=50`);
 			const debugData = await debugResponse.json();
 			console.log('Mailpit debug - Total messages:', debugData.messages?.length || 0);
