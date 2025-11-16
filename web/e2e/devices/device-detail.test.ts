@@ -6,11 +6,35 @@ test.describe('Device Detail', () => {
 	// Helper function to navigate to a test device detail page
 	// Searches for a known test device and navigates to it
 	async function navigateToTestDevice(page: Page) {
+		// First, directly query the backend API to verify devices exist
+		const backendUrl = 'http://localhost:61225';
+		const apiResponse = await page.request.get(
+			`${backendUrl}/data/devices?registration=${testDevices.validRegistration}`
+		);
+		const apiData = await apiResponse.json();
+		console.log('Backend API response:', JSON.stringify(apiData, null, 2));
+		console.log('API status:', apiResponse.status());
+		console.log('Device count from API:', apiData.devices?.length || 0);
+
 		await goToDevices(page);
 		await searchDevicesByRegistration(page, testDevices.validRegistration);
 
 		// Wait for search results
 		await page.waitForLoadState('networkidle');
+
+		// Debug: Check what's actually on the page
+		console.log('Page title:', await page.title());
+		console.log('Page URL:', page.url());
+		console.log('Device cards found:', await page.locator('a[href^="/devices/"]').count());
+
+		// Check if there's an error message
+		const errorText = await page
+			.locator('text=/error|failed|not found/i')
+			.textContent()
+			.catch(() => null);
+		if (errorText) {
+			console.log('Error message on page:', errorText);
+		}
 
 		// Find and click the first device card
 		const deviceCard = page.locator('a[href^="/devices/"]').first();
