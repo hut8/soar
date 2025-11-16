@@ -74,6 +74,9 @@ test.describe('Device List', () => {
 			authenticatedPage.locator('text=FLARM').locator('visible=true').first()
 		).toBeVisible();
 
+		// Wait for animations to settle before screenshot
+		await authenticatedPage.waitForTimeout(500);
+
 		// Take screenshot of device address search
 		await expect(authenticatedPage).toHaveScreenshot('device-search-type-address.png');
 
@@ -86,8 +89,14 @@ test.describe('Device List', () => {
 			authenticatedPage.locator('input[placeholder="Select a club..."]:visible')
 		).toBeVisible();
 
+		// Wait for animations to settle before screenshot
+		await authenticatedPage.waitForTimeout(500);
+
 		// Take screenshot of club search
 		await expect(authenticatedPage).toHaveScreenshot('device-search-type-club.png');
+
+		// Wait for screenshot to complete before test ends
+		await authenticatedPage.waitForTimeout(200);
 	});
 
 	test('should search for devices by registration', async ({ authenticatedPage }) => {

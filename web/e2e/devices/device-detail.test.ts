@@ -7,7 +7,8 @@ test.describe('Device Detail', () => {
 	// Searches for a known test device and navigates to it
 	async function navigateToTestDevice(page: Page) {
 		// First, directly query the backend API to verify devices exist
-		const backendUrl = 'http://localhost:61225';
+		// Use same port as the test server (4173)
+		const backendUrl = 'http://localhost:4173';
 		const apiResponse = await page.request.get(
 			`${backendUrl}/data/devices?registration=${testDevices.validRegistration}`
 		);

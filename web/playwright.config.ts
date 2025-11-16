@@ -75,37 +75,36 @@ export default defineConfig({
 	// In local development, Playwright starts them automatically
 	webServer: process.env.CI
 		? undefined
-		: [
-				{
-					// Start Rust backend server with test database
-					// Using --test-mode flag to auto-configure JWT_SECRET, DATABASE_URL, NATS_URL, and SOAR_ENV
-					command: '../target/release/soar web --port 61226 --interface localhost --test-mode',
-					port: 61226,
-					timeout: 120000, // 2 minutes for backend startup
-					reuseExistingServer: true, // Can reuse since globalSetup seeds database first
-					env: {
-						// Disable Sentry in tests
-						SENTRY_DSN: '',
-						// SMTP configuration - for local testing, run:
-						//   docker run -d -p 1025:1025 -p 8025:8025 axllent/mailpit:v1.20
-						// Or use ./scripts/run-acceptance-tests which handles this automatically
-						SMTP_SERVER: 'localhost',
-						SMTP_PORT: '1025',
-						SMTP_USERNAME: 'test',
-						SMTP_PASSWORD: 'test',
-						FROM_EMAIL: 'test@soar.local',
-						FROM_NAME: 'SOAR Test',
-						BASE_URL: 'http://localhost:4173'
-					}
-				},
-				{
-					// Start SvelteKit preview server (proxies /data/* to Rust backend)
-					command: 'npm run build && npm run preview',
-					port: 4173,
-					timeout: 180000, // 3 minutes for build + server startup
-					reuseExistingServer: true
+		: {
+				// Start soar web server with embedded assets and test database
+				// This matches production architecture: single process serving both API and assets
+				command: '../target/release/soar web --port 4173 --interface localhost',
+				port: 4173,
+				timeout: 120000, // 2 minutes for server startup
+				reuseExistingServer: true, // Can reuse since globalSetup seeds database first
+				env: {
+					// Test database
+					DATABASE_URL: 'postgres://postgres:postgres@localhost:5432/soar_test',
+					// JWT secret for tests
+					JWT_SECRET: 'test_jwt_secret_key_for_e2e_tests_only',
+					// NATS (use test instance or disable if not needed)
+					NATS_URL: 'nats://localhost:4222',
+					// Environment
+					SOAR_ENV: 'test',
+					// Disable Sentry in tests
+					SENTRY_DSN: '',
+					// SMTP configuration - for local testing, run:
+					//   docker run -d -p 1025:1025 -p 8025:8025 axllent/mailpit:v1.20
+					// Or use ./scripts/run-acceptance-tests which handles this automatically
+					SMTP_SERVER: 'localhost',
+					SMTP_PORT: '1025',
+					SMTP_USERNAME: 'test',
+					SMTP_PASSWORD: 'test',
+					FROM_EMAIL: 'test@soar.local',
+					FROM_NAME: 'SOAR Test',
+					BASE_URL: 'http://localhost:4173'
 				}
-			],
+			},
 
 	// Screenshot comparison settings
 	expect: {
