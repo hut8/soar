@@ -18,9 +18,14 @@ impl Archivable for AprsMessage {
         let pool = pool.clone();
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
+            // Instead of MIN() which scans all partitions, use ORDER BY + LIMIT
+            // which allows the query planner to scan only the oldest partition
             let oldest_timestamp: Option<chrono::DateTime<Utc>> = aprs_messages::table
-                .select(diesel::dsl::min(aprs_messages::received_at))
-                .first::<Option<chrono::DateTime<Utc>>>(&mut conn)?;
+                .select(aprs_messages::received_at)
+                .order(aprs_messages::received_at.asc())
+                .limit(1)
+                .first::<chrono::DateTime<Utc>>(&mut conn)
+                .optional()?;
             Ok(oldest_timestamp.map(|ts| ts.date_naive()))
         })
         .await?

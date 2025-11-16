@@ -18,9 +18,14 @@ impl Archivable for ReceiverStatus {
         let pool = pool.clone();
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
+            // Instead of MIN() which scans all partitions, use ORDER BY + LIMIT
+            // which allows the query planner to scan only the oldest partition
             let oldest_timestamp: Option<chrono::DateTime<Utc>> = receiver_statuses::table
-                .select(diesel::dsl::min(receiver_statuses::received_at))
-                .first::<Option<chrono::DateTime<Utc>>>(&mut conn)?;
+                .select(receiver_statuses::received_at)
+                .order(receiver_statuses::received_at.asc())
+                .limit(1)
+                .first::<chrono::DateTime<Utc>>(&mut conn)
+                .optional()?;
             Ok(oldest_timestamp.map(|ts| ts.date_naive()))
         })
         .await?

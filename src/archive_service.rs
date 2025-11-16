@@ -16,19 +16,32 @@ impl ArchiveService {
         use std::io::Write;
         use std::path::PathBuf;
 
-        // Create base directory if it doesn't exist
-        fs::create_dir_all(&base_dir)?;
+        // Create raw subdirectory for archive files
+        let raw_dir = PathBuf::from(&base_dir).join("raw");
+        fs::create_dir_all(&raw_dir)?;
 
-        // Check for yesterday's uncompressed file and compress it
-        let yesterday = Local::now().date_naive() - chrono::Duration::days(1);
-        let yesterday_file = PathBuf::from(&base_dir).join(format!("{}.log", yesterday));
-        if yesterday_file.exists() {
-            info!(
-                "Found uncompressed file from yesterday: {:?}, compressing...",
-                yesterday_file
-            );
-            if let Err(e) = Self::compress_file(&yesterday_file).await {
-                warn!("Failed to compress yesterday's file: {}", e);
+        // Compress all old uncompressed .log files on startup
+        // This handles cases where the service wasn't running at midnight
+        let today = Local::now().date_naive();
+        if let Ok(entries) = fs::read_dir(&raw_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                // Only process .log files (not .log.zst)
+                if path.extension().and_then(|s| s.to_str()) == Some("log") {
+                    // Check if this is an old file (not today's)
+                    if let Some(file_name) = path.file_stem().and_then(|s| s.to_str()) {
+                        // Try to parse the date from the filename
+                        if let Ok(file_date) =
+                            chrono::NaiveDate::parse_from_str(file_name, "%Y-%m-%d")
+                            && file_date < today
+                        {
+                            info!("Found old uncompressed file: {:?}, compressing...", path);
+                            if let Err(e) = Self::compress_file(&path).await {
+                                warn!("Failed to compress old file {:?}: {}", path, e);
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -41,14 +54,15 @@ impl ArchiveService {
             ARCHIVE_QUEUE_SIZE
         );
 
+        // Clone raw_dir for the background task
+        let archive_dir = raw_dir.clone();
+
         // Spawn background task for file writing and management
         tokio::spawn(async move {
             let mut current_file: Option<std::io::BufWriter<std::fs::File>> = None;
             let mut current_date: Option<chrono::NaiveDate> = None;
             let mut messages_written = 0u64;
-            let mut messages_since_flush = 0u64;
             let mut last_stats_log = std::time::Instant::now();
-            let mut last_flush = std::time::Instant::now();
 
             while let Ok(message) = receiver.recv_async().await {
                 let now = Local::now();
@@ -66,7 +80,7 @@ impl ArchiveService {
                         // Compress the previous day's file
                         if let Some(prev_date) = current_date {
                             let prev_file =
-                                PathBuf::from(&base_dir).join(format!("{}.log", prev_date));
+                                PathBuf::from(&archive_dir).join(format!("{}.log", prev_date));
                             tokio::spawn(async move {
                                 if let Err(e) = Self::compress_file(&prev_file).await {
                                     warn!("Failed to compress archive file: {}", e);
@@ -76,7 +90,7 @@ impl ArchiveService {
                     }
 
                     // Open new file for today
-                    let log_path = PathBuf::from(&base_dir).join(format!("{}.log", today));
+                    let log_path = PathBuf::from(&archive_dir).join(format!("{}.log", today));
                     match std::fs::OpenOptions::new()
                         .create(true)
                         .append(true)
@@ -88,8 +102,6 @@ impl ArchiveService {
                             current_file =
                                 Some(std::io::BufWriter::with_capacity(1024 * 1024, file));
                             current_date = Some(today);
-                            messages_since_flush = 0;
-                            last_flush = std::time::Instant::now();
                         }
                         Err(e) => {
                             error!("Failed to open archive file {:?}: {}", log_path, e);
@@ -99,6 +111,11 @@ impl ArchiveService {
                 }
 
                 // Write message to current file
+                // Note: We don't explicitly flush here for performance reasons.
+                // The BufWriter will flush automatically when full, on file rotation,
+                // or on shutdown. This prevents blocking I/O from slowing down
+                // message processing. Some data may be lost in case of crash,
+                // but this is acceptable for the archive use case.
                 if let Some(file) = &mut current_file {
                     if let Err(e) = writeln!(file, "{}", message) {
                         error!(
@@ -107,33 +124,6 @@ impl ArchiveService {
                         );
                     } else {
                         messages_written += 1;
-                        messages_since_flush += 1;
-                    }
-                }
-
-                // Flush buffer periodically to ensure data durability
-                // Flush every 1000 messages OR every 30 seconds, whichever comes first
-                let should_flush =
-                    messages_since_flush >= 1000 || last_flush.elapsed().as_secs() >= 30;
-
-                if should_flush && let Some(file) = &mut current_file {
-                    let flush_start = std::time::Instant::now();
-                    if let Err(e) = file.flush() {
-                        error!("Failed to flush archive buffer: {}", e);
-                    } else {
-                        let flush_duration = flush_start.elapsed();
-
-                        // Warn if flush takes more than 100ms (indicates I/O issues)
-                        if flush_duration.as_millis() > 100 {
-                            warn!(
-                                "Slow archive flush detected: {}ms for {} messages - disk I/O may be bottleneck",
-                                flush_duration.as_millis(),
-                                messages_since_flush
-                            );
-                        }
-
-                        messages_since_flush = 0;
-                        last_flush = std::time::Instant::now();
                     }
                 }
 

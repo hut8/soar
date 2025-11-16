@@ -284,6 +284,17 @@ pub async fn handle_load_data(
 
     report.total_duration_secs = overall_start.elapsed().as_secs_f64();
 
+    // Query for duplicate device addresses before sending email
+    if let Ok(duplicates) = query_duplicate_devices(diesel_pool.clone()).await {
+        report.duplicate_devices = duplicates;
+        if !report.duplicate_devices.is_empty() {
+            warn!(
+                "Found {} devices with duplicate addresses",
+                report.duplicate_devices.len()
+            );
+        }
+    }
+
     // Record overall metrics
     metrics::histogram!("data_load.total_duration_seconds").record(report.total_duration_secs);
     metrics::gauge!("data_load.overall_success").set(if report.overall_success {
@@ -426,6 +437,46 @@ async fn get_geocoded_clubs_count(
             .get_result(&mut conn)?;
 
         Ok(result)
+    })
+    .await?
+}
+
+/// Query for devices that have duplicate addresses (same address, different address_type)
+async fn query_duplicate_devices(
+    diesel_pool: Pool<ConnectionManager<PgConnection>>,
+) -> Result<Vec<soar::devices::DeviceModel>> {
+    use diesel::prelude::*;
+    use diesel::sql_types::Integer;
+    use soar::schema::devices;
+
+    tokio::task::spawn_blocking(move || {
+        let mut conn = diesel_pool.get()?;
+
+        // First, find all addresses that appear more than once
+        #[derive(QueryableByName)]
+        struct DuplicateAddressRow {
+            #[diesel(sql_type = Integer)]
+            address: i32,
+        }
+
+        let duplicate_addresses: Vec<i32> =
+            diesel::sql_query("SELECT address FROM devices GROUP BY address HAVING COUNT(*) > 1")
+                .load::<DuplicateAddressRow>(&mut conn)?
+                .into_iter()
+                .map(|row| row.address)
+                .collect();
+
+        if duplicate_addresses.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Now fetch all device rows for those duplicate addresses
+        let duplicate_devices = devices::table
+            .filter(devices::address.eq_any(duplicate_addresses))
+            .order((devices::address.asc(), devices::address_type.asc()))
+            .load::<soar::devices::DeviceModel>(&mut conn)?;
+
+        Ok(duplicate_devices)
     })
     .await?
 }

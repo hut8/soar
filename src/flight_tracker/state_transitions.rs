@@ -258,7 +258,7 @@ pub(crate) async fn process_state_transition(
                 if should_coalesce {
                     // Resume the timed-out flight
                     let flight_id = timed_out_flight.id;
-                    info!(
+                    debug!(
                         "Device {} came back into range - resuming timed-out flight {} (was timed out at {})",
                         fix.device_id,
                         flight_id,
@@ -329,7 +329,7 @@ pub(crate) async fn process_state_transition(
 
             if is_takeoff {
                 // Case 2a: Taking off - last fixes were inactive
-                info!(
+                debug!(
                     "Device {} is taking off (recent fixes were inactive) - creating flight {} with airport lookup",
                     fix.device_id, flight_id
                 );
