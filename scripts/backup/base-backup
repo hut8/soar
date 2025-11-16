@@ -222,6 +222,9 @@ main() {
     local compression_level=${BACKUP_COMPRESSION_LEVEL:-3}
     log INFO "Using zstd compression level $compression_level"
 
+    # Use --wal-method=stream to stream WAL in parallel with the backup
+    # This prevents "WAL segment has already been removed" errors on large databases
+    # where the backup takes longer than wal_keep_size allows
     if ! pg_basebackup \
         -h "$PGHOST" \
         -p "$PGPORT" \
@@ -230,7 +233,7 @@ main() {
         -Ft \
         -P \
         -v \
-        --wal-method=fetch \
+        --wal-method=stream \
         --compress=zstd:${compression_level} \
         --label="$BACKUP_NAME" \
         >> "$LOG_DIR/backup.log" 2>&1; then
