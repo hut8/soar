@@ -47,6 +47,7 @@ SOAR is a comprehensive aircraft tracking and club management system built with:
   - `infrastructure/grafana-dashboard-aprs-ingest.json` - APRS connection (`ingest-aprs` command)
   - `infrastructure/grafana-dashboard-web.json` - Web server (`web` command)
   - `infrastructure/grafana-dashboard-nats-jetstream.json` - NATS/JetStream metrics
+  - `infrastructure/grafana-dashboard-analytics.json` - Analytics API and cache performance
 
 **Metric Standards:**
 - **Naming convention** - Use dot notation (e.g., `aprs.aircraft.device_upsert_ms`)
@@ -293,6 +294,62 @@ pub struct LiveFix {
     pub timestamp: String,
 }
 ```
+
+### Analytics Layer
+SOAR includes a comprehensive analytics system for tracking flight statistics and performance metrics.
+
+**Database Tables:**
+- `flight_analytics_daily` - Daily flight aggregations with automatic triggers
+- `flight_analytics_hourly` - Hourly flight statistics for recent trends
+- Materialized automatically via PostgreSQL triggers on flight insert/update
+
+**Backend Components:**
+- `src/analytics.rs` - Core data models for analytics responses
+- `src/analytics_repo.rs` - Database queries using Diesel ORM
+- `src/analytics_cache.rs` - 60-second TTL cache using Moka
+- `src/actions/analytics.rs` - REST API endpoints
+
+**API Endpoints (`/data/analytics/...`):**
+- `/flights/daily` - Daily flight counts and statistics
+- `/flights/hourly` - Hourly flight trends
+- `/flights/duration-distribution` - Flight duration buckets
+- `/devices/outliers` - Devices with anomalous flight patterns (z-score > threshold)
+- `/devices/top` - Top devices by flight count
+- `/clubs/daily` - Club-level analytics
+- `/airports/activity` - Airport usage statistics
+- `/summary` - Dashboard summary with key metrics
+
+**Caching Strategy:**
+- All queries cached for 60 seconds to reduce database load
+- Cache hit/miss metrics tracked in `analytics.cache.hit` and `analytics.cache.miss`
+- Query latency tracked per endpoint (e.g., `analytics.query.daily_flights_ms`)
+
+**Metrics & Monitoring:**
+```rust
+// Analytics API metrics
+metrics::counter!("analytics.api.daily_flights.requests").increment(1);
+metrics::counter!("analytics.api.errors").increment(1);
+metrics::histogram!("analytics.query.daily_flights_ms").record(duration_ms);
+metrics::counter!("analytics.cache.hit").increment(1);
+
+// Background task updates these gauges every 60 seconds
+metrics::gauge!("analytics.flights.today").set(summary.flights_today as f64);
+metrics::gauge!("analytics.flights.last_7d").set(summary.flights_7d as f64);
+metrics::gauge!("analytics.devices.active_7d").set(summary.active_devices_7d as f64);
+```
+
+**Grafana Dashboard:**
+- Location: `infrastructure/grafana-dashboard-analytics.json`
+- Tracks: API request rates, cache hit rates, query latency percentiles, error rates
+- Background task runs every 60 seconds to update summary metrics
+
+**Adding New Analytics:**
+1. Add database query to `analytics_repo.rs`
+2. Add caching method to `analytics_cache.rs` with metrics
+3. Add API handler to `actions/analytics.rs` with request/error metrics
+4. Register route in `web.rs`
+5. Add metrics to `metrics.rs::initialize_analytics_metrics()`
+6. Update Grafana dashboard with new metric queries
 
 ## Code Quality Standards
 

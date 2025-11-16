@@ -190,6 +190,31 @@ pub async fn process_metrics_task() {
     }
 }
 
+/// Background task to update analytics metrics from database
+/// Updates flight counts, device counts, and other analytics gauges every 60 seconds
+pub async fn analytics_metrics_task(pool: crate::web::PgPool) {
+    use crate::analytics_repo::AnalyticsRepository;
+
+    loop {
+        // Sleep first to allow database to warm up on startup
+        tokio::time::sleep(Duration::from_secs(60)).await;
+
+        let repo = AnalyticsRepository::new(pool.clone());
+
+        // Get summary data and update gauges
+        if let Ok(summary) = repo.get_summary().await {
+            metrics::gauge!("analytics.flights.today").set(summary.flights_today as f64);
+            metrics::gauge!("analytics.flights.last_7d").set(summary.flights_7d as f64);
+            metrics::gauge!("analytics.flights.last_30d").set(summary.flights_30d as f64);
+            metrics::gauge!("analytics.devices.active_7d").set(summary.active_devices_7d as f64);
+            metrics::gauge!("analytics.devices.outliers").set(summary.outlier_devices_count as f64);
+            if let Some(score) = summary.data_quality_score {
+                metrics::gauge!("analytics.data_quality_score").set(score);
+            }
+        }
+    }
+}
+
 /// Initialize APRS ingest metrics to zero/default values
 /// This ensures metrics always appear in Prometheus queries even if no events have occurred
 pub fn initialize_aprs_ingest_metrics() {
@@ -303,6 +328,46 @@ pub fn initialize_run_metrics() {
     metrics::histogram!("aprs.aircraft.callsign_update_ms").record(0.0);
     metrics::histogram!("aprs.aircraft.elevation_queue_ms").record(0.0);
     metrics::histogram!("aprs.aircraft.nats_publish_ms").record(0.0);
+}
+
+/// Initialize analytics metrics to zero/default values
+/// This ensures metrics always appear in Prometheus queries even if no events have occurred
+pub fn initialize_analytics_metrics() {
+    // Analytics cache hit/miss metrics
+    metrics::counter!("analytics.cache.hit").absolute(0);
+    metrics::counter!("analytics.cache.miss").absolute(0);
+    metrics::gauge!("analytics.cache.size").set(0.0);
+
+    // Analytics query duration metrics (in milliseconds)
+    metrics::histogram!("analytics.query.daily_flights_ms").record(0.0);
+    metrics::histogram!("analytics.query.hourly_flights_ms").record(0.0);
+    metrics::histogram!("analytics.query.duration_distribution_ms").record(0.0);
+    metrics::histogram!("analytics.query.device_outliers_ms").record(0.0);
+    metrics::histogram!("analytics.query.top_devices_ms").record(0.0);
+    metrics::histogram!("analytics.query.club_analytics_ms").record(0.0);
+    metrics::histogram!("analytics.query.airport_activity_ms").record(0.0);
+    metrics::histogram!("analytics.query.summary_ms").record(0.0);
+
+    // Analytics API endpoint request counters
+    metrics::counter!("analytics.api.daily_flights.requests").absolute(0);
+    metrics::counter!("analytics.api.hourly_flights.requests").absolute(0);
+    metrics::counter!("analytics.api.duration_distribution.requests").absolute(0);
+    metrics::counter!("analytics.api.device_outliers.requests").absolute(0);
+    metrics::counter!("analytics.api.top_devices.requests").absolute(0);
+    metrics::counter!("analytics.api.club_analytics.requests").absolute(0);
+    metrics::counter!("analytics.api.airport_activity.requests").absolute(0);
+    metrics::counter!("analytics.api.summary.requests").absolute(0);
+
+    // Analytics API error counters
+    metrics::counter!("analytics.api.errors").absolute(0);
+
+    // Analytics data metrics (updated periodically by background task)
+    metrics::gauge!("analytics.flights.today").set(0.0);
+    metrics::gauge!("analytics.flights.last_7d").set(0.0);
+    metrics::gauge!("analytics.flights.last_30d").set(0.0);
+    metrics::gauge!("analytics.devices.active_7d").set(0.0);
+    metrics::gauge!("analytics.devices.outliers").set(0.0);
+    metrics::gauge!("analytics.data_quality_score").set(0.0);
 }
 
 /// Health check handler for APRS ingestion service
