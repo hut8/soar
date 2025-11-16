@@ -77,8 +77,8 @@ test.describe('Device List', () => {
 		// Take screenshot of device address search
 		await expect(authenticatedPage).toHaveScreenshot('device-search-type-address.png');
 
-		// Click on Club search type (use data attribute to avoid clicking Club Ops nav)
-		await authenticatedPage.locator('[data-value="club"]').first().click();
+		// Click on Club search type using the visible text
+		await authenticatedPage.locator('text=Club').locator('visible=true').first().click();
 
 		// Should show club selector
 		// Note: The actual club selector UI may vary
@@ -105,9 +105,24 @@ test.describe('Device List', () => {
 		// We can't guarantee results will be found, but we can check the UI responds
 		await authenticatedPage.waitForLoadState('networkidle');
 
-		// Should show either results or "no devices found" message
-		const hasResults = await authenticatedPage.getByText(/search results/i).isVisible();
-		const hasNoResults = await authenticatedPage.getByText(/no devices found/i).isVisible();
+		// Should show either "Search Results" heading or "No devices found" message
+		// Wait for one of these to appear (with timeout)
+		await Promise.race([
+			authenticatedPage
+				.getByRole('heading', { name: /search results/i })
+				.waitFor({ timeout: 5000 }),
+			authenticatedPage
+				.getByRole('heading', { name: /no devices found/i })
+				.waitFor({ timeout: 5000 })
+		]);
+
+		// Verify either results or "no devices found" message is visible
+		const hasResults = await authenticatedPage
+			.getByRole('heading', { name: /search results/i })
+			.isVisible();
+		const hasNoResults = await authenticatedPage
+			.getByRole('heading', { name: /no devices found/i })
+			.isVisible();
 
 		expect(hasResults || hasNoResults).toBe(true);
 
