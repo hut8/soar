@@ -3,9 +3,10 @@ Description=SOAR APRS Ingest - Durable APRS Message Queue Service
 Documentation=https://github.com/hut8/soar
 After=network-online.target nats-server.service
 Wants=network-online.target
-Requires=nats-server.service
 # This service ingests APRS messages and publishes them to NATS JetStream
 # It is designed to run independently from the main processing service
+# Removed Requires=nats-server.service to prevent restart when NATS restarts
+# Service will reconnect automatically via built-in retry logic
 
 [Service]
 Type=simple

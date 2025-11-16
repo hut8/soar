@@ -3,7 +3,9 @@ Description=SOAR Web - Web Interface Service
 Documentation=https://github.com/hut8/soar
 After=network-online.target postgresql.service nats-server.service
 Wants=network-online.target
-Requires=postgresql.service nats-server.service
+Requires=postgresql.service
+# Removed Requires=nats-server.service to prevent restart when NATS restarts
+# Service will reconnect automatically via built-in retry logic
 
 [Service]
 Type=simple
