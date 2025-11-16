@@ -416,7 +416,8 @@ impl DeviceRepository {
                     SELECT latitude, longitude
                     FROM fixes
                     WHERE device_id = d.id
-                    ORDER BY timestamp DESC
+                    AND received_at >= NOW() - INTERVAL '24 hours'
+                    ORDER BY received_at DESC
                     LIMIT 1
                 ) latest_fix ON true
                 LEFT JOIN flights active_flight ON (
