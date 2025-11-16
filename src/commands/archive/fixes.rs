@@ -18,6 +18,7 @@ impl Archivable for Fix {
         let pool = pool.clone();
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
+            // Use received_at for partition pruning (timestamp and received_at are usually very close)
             let oldest_timestamp: Option<chrono::DateTime<Utc>> = fixes::table
                 .select(diesel::dsl::min(fixes::received_at))
                 .first::<Option<chrono::DateTime<Utc>>>(&mut conn)?;
@@ -54,6 +55,7 @@ impl Archivable for Fix {
         let file_path = file_path.to_path_buf();
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
+
             let fixes_iter = fixes::table
                 .filter(fixes::received_at.ge(day_start))
                 .filter(fixes::received_at.lt(day_end))

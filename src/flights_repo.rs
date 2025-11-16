@@ -501,13 +501,31 @@ impl FlightsRepository {
 
             // Calculate tow release height delta if we have a towplane flight
             let height_delta = if let Some(towplane_flight_id) = towplane_flight_id_opt {
-                // Get the first fix of the towplane flight (chronologically) - just need altitude
-                let first_fix_altitude: Option<Option<i32>> = fixes_dsl::fixes
-                    .filter(fixes_dsl::flight_id.eq(towplane_flight_id))
-                    .order_by(fixes_dsl::timestamp.asc())
-                    .select(fixes_dsl::altitude_msl_feet)
+                // Get the towplane flight's time range for partition pruning
+                let flight_times: Option<(chrono::DateTime<Utc>, chrono::DateTime<Utc>)> = flights
+                    .filter(id.eq(towplane_flight_id))
+                    .select((created_at, last_fix_at))
                     .first(&mut conn)
                     .optional()?;
+
+                // Get the first fix of the towplane flight (chronologically) - just need altitude
+                let first_fix_altitude: Option<Option<i32>> = if let Some((start_time, end_time)) =
+                    flight_times
+                {
+                    // Add 1-hour buffer for partition pruning
+                    let start_with_buffer = start_time - chrono::Duration::hours(1);
+                    let end_with_buffer = end_time + chrono::Duration::hours(1);
+
+                    fixes_dsl::fixes
+                        .filter(fixes_dsl::flight_id.eq(towplane_flight_id))
+                        .filter(fixes_dsl::received_at.between(start_with_buffer, end_with_buffer))
+                        .order_by(fixes_dsl::received_at.asc())
+                        .select(fixes_dsl::altitude_msl_feet)
+                        .first(&mut conn)
+                        .optional()?
+                } else {
+                    None
+                };
 
                 // Calculate delta: release altitude - towplane takeoff altitude
                 first_fix_altitude.and_then(|alt_opt| {
