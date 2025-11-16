@@ -378,7 +378,7 @@ pub(crate) async fn complete_flight(
         .calculate_and_update_bounding_box(flight_id)
         .await?;
 
-    info!(
+    debug!(
         "Completed flight {} with landing at {:.6}, {:.6}",
         flight_id, fix.latitude, fix.longitude
     );

@@ -136,6 +136,18 @@ diesel::table! {
 }
 
 diesel::table! {
+    airport_analytics_daily (airport_id, date) {
+        airport_id -> Int4,
+        date -> Date,
+        airport_ident -> Nullable<Varchar>,
+        airport_name -> Nullable<Varchar>,
+        departure_count -> Int4,
+        arrival_count -> Int4,
+        updated_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
     use diesel::sql_types::*;
     use super::sql_types::Geography;
 
@@ -288,6 +300,19 @@ diesel::table! {
 }
 
 diesel::table! {
+    club_analytics_daily (club_id, date) {
+        club_id -> Uuid,
+        date -> Date,
+        club_name -> Nullable<Varchar>,
+        flight_count -> Int4,
+        active_devices -> Int4,
+        total_airtime_seconds -> Int8,
+        tow_count -> Int4,
+        updated_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
     clubs (id) {
         id -> Uuid,
         #[max_length = 255]
@@ -305,6 +330,36 @@ diesel::table! {
         #[max_length = 2]
         code -> Bpchar,
         name -> Text,
+    }
+}
+
+diesel::table! {
+    data_quality_metrics_daily (metric_date) {
+        metric_date -> Date,
+        total_fixes -> Int8,
+        fixes_with_gaps_60s -> Int4,
+        fixes_with_gaps_300s -> Int4,
+        unparsed_aprs_messages -> Int4,
+        flights_timed_out -> Int4,
+        avg_fixes_per_flight -> Numeric,
+        quality_score -> Numeric,
+        updated_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    device_analytics (device_id) {
+        device_id -> Uuid,
+        registration -> Nullable<Varchar>,
+        aircraft_model -> Nullable<Varchar>,
+        flight_count_total -> Int4,
+        flight_count_30d -> Int4,
+        flight_count_7d -> Int4,
+        last_flight_at -> Nullable<Timestamptz>,
+        avg_flight_duration_seconds -> Int4,
+        total_distance_meters -> Int8,
+        z_score_30d -> Nullable<Numeric>,
+        updated_at -> Timestamptz,
     }
 }
 
@@ -771,6 +826,41 @@ diesel::table! {
 }
 
 diesel::table! {
+    flight_analytics_daily (date) {
+        date -> Date,
+        flight_count -> Int4,
+        total_duration_seconds -> Int8,
+        avg_duration_seconds -> Int4,
+        total_distance_meters -> Int8,
+        tow_flight_count -> Int4,
+        cross_country_count -> Int4,
+        updated_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    flight_analytics_hourly (hour) {
+        hour -> Timestamptz,
+        flight_count -> Int4,
+        active_devices -> Int4,
+        active_clubs -> Int4,
+        updated_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    flight_duration_buckets (bucket_name) {
+        #[max_length = 20]
+        bucket_name -> Varchar,
+        bucket_order -> Int4,
+        min_minutes -> Int4,
+        max_minutes -> Nullable<Int4>,
+        flight_count -> Int4,
+        updated_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
     flight_pilots (id) {
         id -> Uuid,
         flight_id -> Uuid,
@@ -1141,6 +1231,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     aircraft_models,
     aircraft_other_names,
     aircraft_registrations,
+    airport_analytics_daily,
     airports,
     aprs_messages,
     aprs_messages_default,
@@ -1152,8 +1243,11 @@ diesel::allow_tables_to_appear_in_same_query!(
     aprs_messages_p20251114,
     aprs_messages_p20251115,
     aprs_messages_p20251116,
+    club_analytics_daily,
     clubs,
     countries,
+    data_quality_metrics_daily,
+    device_analytics,
     devices,
     fixes,
     fixes_default,
@@ -1165,6 +1259,9 @@ diesel::allow_tables_to_appear_in_same_query!(
     fixes_p20251114,
     fixes_p20251115,
     fixes_p20251116,
+    flight_analytics_daily,
+    flight_analytics_hourly,
+    flight_duration_buckets,
     flight_pilots,
     flights,
     locations,

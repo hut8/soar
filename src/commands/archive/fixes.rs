@@ -18,10 +18,14 @@ impl Archivable for Fix {
         let pool = pool.clone();
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            // Use received_at for partition pruning (timestamp and received_at are usually very close)
+            // Instead of MIN() which scans all partitions, use ORDER BY + LIMIT
+            // which allows the query planner to scan only the oldest partition
             let oldest_timestamp: Option<chrono::DateTime<Utc>> = fixes::table
-                .select(diesel::dsl::min(fixes::received_at))
-                .first::<Option<chrono::DateTime<Utc>>>(&mut conn)?;
+                .select(fixes::received_at)
+                .order(fixes::received_at.asc())
+                .limit(1)
+                .first::<chrono::DateTime<Utc>>(&mut conn)
+                .optional()?;
             Ok(oldest_timestamp.map(|ts| ts.date_naive()))
         })
         .await?

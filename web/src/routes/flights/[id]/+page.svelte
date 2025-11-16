@@ -1,6 +1,6 @@
 <script lang="ts">
 	/// <reference types="@types/google.maps" />
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, untrack } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
 	import {
@@ -73,6 +73,7 @@
 
 	// Nearby flights data - using full Flight type
 	let nearbyFlights = $state<Flight[]>([]);
+	let nearbyFlightsFixes = $state<Map<string, typeof data.fixes>>(new Map());
 
 	let nearbyFlightPaths = $state<google.maps.Polyline[]>([]);
 	let isLoadingNearbyFlights = $state(false);
@@ -95,7 +96,7 @@
 	);
 
 	// Calculate flight duration
-	const duration = $derived(() => {
+	const duration = $derived.by(() => {
 		if (!data.flight.takeoff_time || !data.flight.landing_time) {
 			return null;
 		}
@@ -108,7 +109,7 @@
 	});
 
 	// Calculate fixes per second rate
-	const fixesPerSecond = $derived(() => {
+	const fixesPerSecond = $derived.by(() => {
 		if (!data.flight.takeoff_time || !data.flight.landing_time || data.fixesCount === 0) {
 			return null;
 		}
@@ -120,14 +121,14 @@
 	});
 
 	// Calculate maximum altitude from fixes
-	const maxAltitude = $derived(() => {
+	const maxAltitude = $derived.by(() => {
 		if (data.fixes.length === 0) return null;
 		const maxMsl = Math.max(...data.fixes.map((f) => f.altitude_msl_feet || 0));
 		return maxMsl > 0 ? maxMsl : null;
 	});
 
 	// Calculate minimum altitude from fixes
-	const minAltitude = $derived(() => {
+	const minAltitude = $derived.by(() => {
 		if (data.fixes.length === 0) return null;
 		const validAltitudes = data.fixes
 			.map((f) => f.altitude_msl_feet)
@@ -251,8 +252,8 @@
 		if (!map) return;
 		const zoom = map.getZoom() ?? 12;
 		const scale = getArrowScale(zoom);
-		const minAlt = minAltitude() ?? 0;
-		const maxAlt = maxAltitude() ?? 1000;
+		const minAlt = minAltitude ?? 0;
+		const maxAlt = maxAltitude ?? 1000;
 
 		// Track last arrow timestamp to display one every 10 minutes
 		let lastArrowTime: Date | null = null;
@@ -305,8 +306,8 @@
 		fixesInOrder: typeof data.fixes,
 		targetMap: google.maps.Map
 	): google.maps.Polyline[] {
-		const minAlt = minAltitude() ?? 0;
-		const maxAlt = maxAltitude() ?? 1000;
+		const minAlt = minAltitude ?? 0;
+		const maxAlt = maxAltitude ?? 1000;
 		const segments: google.maps.Polyline[] = [];
 		const zoom = targetMap.getZoom() ?? 12;
 		const scale = getArrowScale(zoom);
@@ -368,7 +369,7 @@
 	}
 
 	// Calculate maximum AGL altitude from fixes
-	const maxAglAltitude = $derived(() => {
+	const maxAglAltitude = $derived.by(() => {
 		if (data.fixes.length === 0) return null;
 		const maxAgl = Math.max(...data.fixes.map((f) => f.altitude_agl_feet || 0));
 		return maxAgl > 0 ? maxAgl : null;
@@ -442,6 +443,7 @@
 			nearbyFlightPaths.forEach((path) => path.setMap(null));
 			nearbyFlightPaths = [];
 			nearbyFlights = [];
+			nearbyFlightsFixes.clear();
 		}
 	}
 
@@ -473,6 +475,100 @@
 		}
 	}
 
+	// Helper function to filter fixes to only those in viewport (with padding)
+	function filterFixesToViewport(
+		fixes: typeof data.fixes,
+		bounds: google.maps.LatLngBounds
+	): typeof data.fixes {
+		// Expand bounds by ~20% in each direction to include slightly off-screen fixes
+		const ne = bounds.getNorthEast();
+		const sw = bounds.getSouthWest();
+		const latPadding = (ne.lat() - sw.lat()) * 0.2;
+		const lngPadding = (ne.lng() - sw.lng()) * 0.2;
+
+		const paddedBounds = new google.maps.LatLngBounds(
+			{ lat: sw.lat() - latPadding, lng: sw.lng() - lngPadding },
+			{ lat: ne.lat() + latPadding, lng: ne.lng() + lngPadding }
+		);
+
+		return fixes.filter((fix) => {
+			const latLng = { lat: fix.latitude, lng: fix.longitude };
+			return paddedBounds.contains(latLng);
+		});
+	}
+
+	// Helper function to simplify polyline by reducing point density
+	function simplifyPath(
+		fixes: typeof data.fixes,
+		maxPoints: number = 500
+	): { lat: number; lng: number }[] {
+		if (fixes.length <= maxPoints) {
+			// No simplification needed
+			return fixes.map((fix) => ({ lat: fix.latitude, lng: fix.longitude }));
+		}
+
+		// Use a simple decimation algorithm - take every Nth point
+		// Always include first and last points
+		const result: { lat: number; lng: number }[] = [];
+		const step = Math.ceil(fixes.length / maxPoints);
+
+		result.push({ lat: fixes[0].latitude, lng: fixes[0].longitude });
+
+		for (let i = step; i < fixes.length - 1; i += step) {
+			result.push({ lat: fixes[i].latitude, lng: fixes[i].longitude });
+		}
+
+		// Always include the last point
+		if (fixes.length > 1) {
+			const last = fixes[fixes.length - 1];
+			result.push({ lat: last.latitude, lng: last.longitude });
+		}
+
+		return result;
+	}
+
+	// Update nearby flight paths based on current map viewport
+	function updateNearbyFlightPaths() {
+		if (!map || nearbyFlightsFixes.size === 0) return;
+
+		const bounds = map.getBounds();
+		if (!bounds) return;
+
+		// Clear existing paths
+		nearbyFlightPaths.forEach((path) => path.setMap(null));
+		nearbyFlightPaths = [];
+
+		// Color palette for nearby flights (excluding red which is used for main flight)
+		const colors = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'];
+
+		// Store map reference for use in closure
+		const currentMap = map;
+
+		// Render polylines for each nearby flight
+		Array.from(nearbyFlightsFixes.values()).forEach((fixes, i) => {
+			if (fixes.length === 0) return;
+
+			const fixesInOrder = [...fixes].reverse();
+
+			// Filter to viewport and simplify the path
+			const viewportFixes = filterFixesToViewport(fixesInOrder, bounds);
+			if (viewportFixes.length === 0) return;
+
+			const pathCoordinates = simplifyPath(viewportFixes, 500);
+
+			const flightPath = new google.maps.Polyline({
+				path: pathCoordinates,
+				geodesic: true,
+				strokeColor: colors[i % colors.length],
+				strokeOpacity: 0.6,
+				strokeWeight: 2
+			});
+
+			flightPath.setMap(currentMap);
+			nearbyFlightPaths.push(flightPath);
+		});
+	}
+
 	// Fetch nearby flights and their fixes
 	async function fetchNearbyFlights() {
 		isLoadingNearbyFlights = true;
@@ -481,46 +577,32 @@
 			const flights = await serverCall<Flight[]>(`/flights/${data.flight.id}/nearby`);
 			nearbyFlights = flights;
 
-			// Fetch fixes for each nearby flight and add to map
 			if (map) {
-				// Clear existing nearby flight paths
-				nearbyFlightPaths.forEach((path) => path.setMap(null));
-				nearbyFlightPaths = [];
+				// Fetch all fixes in parallel for better performance
+				const fixesPromises = nearbyFlights.map((nearbyFlight) =>
+					serverCall<{
+						fixes: typeof data.fixes;
+						count: number;
+					}>(`/flights/${nearbyFlight.id}/fixes`)
+						.then((response) => ({ flightId: nearbyFlight.id, fixes: response.fixes }))
+						.catch((err) => {
+							console.error(`Failed to fetch fixes for nearby flight ${nearbyFlight.id}:`, err);
+							return null;
+						})
+				);
 
-				// Color palette for nearby flights (excluding red which is used for main flight)
-				const colors = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'];
+				const allFixesResponses = await Promise.all(fixesPromises);
 
-				for (let i = 0; i < nearbyFlights.length; i++) {
-					const nearbyFlight = nearbyFlights[i];
-					try {
-						const fixesResponse = await serverCall<{
-							fixes: typeof data.fixes;
-							count: number;
-						}>(`/flights/${nearbyFlight.id}/fixes`);
-
-						if (fixesResponse.fixes.length > 0) {
-							// Draw flight path for this nearby flight
-							const fixesInOrder = [...fixesResponse.fixes].reverse();
-							const pathCoordinates = fixesInOrder.map((fix) => ({
-								lat: fix.latitude,
-								lng: fix.longitude
-							}));
-
-							const flightPath = new google.maps.Polyline({
-								path: pathCoordinates,
-								geodesic: true,
-								strokeColor: colors[i % colors.length],
-								strokeOpacity: 0.6,
-								strokeWeight: 2
-							});
-
-							flightPath.setMap(map);
-							nearbyFlightPaths.push(flightPath);
-						}
-					} catch (err) {
-						console.error(`Failed to fetch fixes for nearby flight ${nearbyFlight.id}:`, err);
+				// Store all fixes in the map
+				nearbyFlightsFixes.clear();
+				allFixesResponses.forEach((response) => {
+					if (response && response.fixes.length > 0) {
+						nearbyFlightsFixes.set(response.flightId, response.fixes);
 					}
-				}
+				});
+
+				// Render paths based on current viewport
+				updateNearbyFlightPaths();
 			}
 		} catch (err) {
 			console.error('Failed to fetch nearby flights:', err);
@@ -726,8 +808,8 @@
 		// Wait for map to be ready before adding markers
 		google.maps.event.addListenerOnce(map, 'idle', () => {
 			// Re-add fix markers as directional arrows
-			const minAlt = minAltitude() ?? 0;
-			const maxAlt = maxAltitude() ?? 1000;
+			const minAlt = minAltitude ?? 0;
+			const maxAlt = maxAltitude ?? 1000;
 			const arrowIndices = getArrowFixIndices(fixesInOrder);
 			const totalFixes = fixesInOrder.length;
 
@@ -916,6 +998,21 @@
 				isAutomatedZoom = false;
 			});
 
+			// Add bounds_changed listener to update nearby flights when panning/zooming
+			// Use debouncing to avoid excessive re-renders
+			let boundsChangedTimeout: ReturnType<typeof setTimeout> | null = null;
+			map.addListener('bounds_changed', () => {
+				if (boundsChangedTimeout) {
+					clearTimeout(boundsChangedTimeout);
+				}
+				boundsChangedTimeout = setTimeout(() => {
+					// Only update if nearby flights are enabled
+					if (includeNearbyFlights && nearbyFlightsFixes.size > 0) {
+						updateNearbyFlightPaths();
+					}
+				}, 300); // 300ms debounce
+			});
+
 			// Create info window for altitude display
 			altitudeInfoWindow = new google.maps.InfoWindow();
 
@@ -954,8 +1051,8 @@
 				}
 
 				// Add directional arrow markers at selected intervals
-				const minAlt = minAltitude() ?? 0;
-				const maxAlt = maxAltitude() ?? 1000;
+				const minAlt = minAltitude ?? 0;
+				const maxAlt = maxAltitude ?? 1000;
 				const arrowIndices = getArrowFixIndices(fixesInOrder);
 				const totalFixes = fixesInOrder.length;
 
@@ -1120,10 +1217,15 @@
 
 	// Update map when color scheme changes
 	$effect(() => {
-		// Reactively update map when color scheme changes
-		if (colorScheme && map && flightPathSegments.length > 0) {
-			updateMap();
-		}
+		// Track colorScheme changes
+		void colorScheme;
+
+		// Untrack the rest to avoid infinite loop when updateMap modifies state
+		untrack(() => {
+			if (map && data.fixes.length > 0 && flightPathSegments.length > 0) {
+				updateMap();
+			}
+		});
 	});
 
 	// Cleanup on component unmount
@@ -1396,28 +1498,28 @@
 			{/if}
 
 			<!-- Duration -->
-			{#if duration()}
+			{#if duration}
 				<div class="flex items-start gap-3">
 					<Gauge class="mt-1 h-5 w-5 text-primary-500" />
 					<div>
 						<div class="text-surface-600-300-token text-sm">Duration</div>
-						<div class="font-semibold">{duration()}</div>
+						<div class="font-semibold">{duration}</div>
 					</div>
 				</div>
 			{/if}
 
 			<!-- Maximum Altitude -->
-			{#if maxAltitude() || maxAglAltitude()}
+			{#if maxAltitude || maxAglAltitude}
 				<div class="flex items-start gap-3">
 					<MountainSnow class="mt-1 h-5 w-5 text-primary-500" />
 					<div>
 						<div class="text-surface-600-300-token text-sm">Maximum Altitude</div>
-						{#if maxAltitude()}
-							<div class="font-semibold">{formatAltitude(maxAltitude() ?? undefined)} MSL</div>
+						{#if maxAltitude}
+							<div class="font-semibold">{formatAltitude(maxAltitude ?? undefined)} MSL</div>
 						{/if}
-						{#if maxAglAltitude()}
+						{#if maxAglAltitude}
 							<div class="text-surface-600-300-token text-sm">
-								{formatAltitude(maxAglAltitude() ?? undefined)} AGL
+								{formatAltitude(maxAglAltitude ?? undefined)} AGL
 							</div>
 						{/if}
 					</div>
@@ -1643,9 +1745,9 @@
 		<div class="mb-4 flex items-center justify-between">
 			<h2 class="h2">
 				Position Fixes ({data.fixesCount})
-				{#if fixesPerSecond()}
+				{#if fixesPerSecond}
 					<span class="text-surface-600-300-token ml-2 text-lg">
-						({fixesPerSecond()} fixes/sec)
+						({fixesPerSecond} fixes/sec)
 					</span>
 				{/if}
 			</h2>

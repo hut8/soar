@@ -598,6 +598,7 @@ jobs:
 
           # Copy backup scripts directory
           if [ -d scripts/backup ]; then
+            mkdir -p deploy-pkg/scripts
             cp -r scripts/backup deploy-pkg/scripts/
             echo "Backup scripts included in deployment package"
           fi

@@ -95,41 +95,72 @@ pub async fn handle_archive(
     let pool_clone4 = pool.clone();
 
     // Archive all tables in parallel
-    let (
-        (flights_metrics, flights_duration),
-        (fixes_metrics, fixes_duration),
-        (receiver_statuses_metrics, receiver_statuses_duration),
-        (aprs_messages_metrics, aprs_messages_duration),
-    ) = tokio::join!(
-        async {
-            let start = Instant::now();
-            let metrics = archive::<FlightModel>(&pool_clone1, flights_before, &archive_dir_path)
-                .await
-                .expect("Failed to archive flights");
-            (metrics, start.elapsed().as_secs_f64())
-        },
-        async {
-            let start = Instant::now();
-            let metrics = archive::<Fix>(&pool_clone2, fixes_before, &archive_dir_path)
-                .await
-                .expect("Failed to archive fixes");
-            (metrics, start.elapsed().as_secs_f64())
-        },
-        async {
-            let start = Instant::now();
-            let metrics = archive::<ReceiverStatus>(&pool_clone3, fixes_before, &archive_dir_path)
-                .await
-                .expect("Failed to archive receiver_statuses");
-            (metrics, start.elapsed().as_secs_f64())
-        },
-        async {
-            let start = Instant::now();
-            let metrics = archive::<AprsMessage>(&pool_clone4, messages_before, &archive_dir_path)
-                .await
-                .expect("Failed to archive aprs_messages");
-            (metrics, start.elapsed().as_secs_f64())
-        }
-    );
+    let (flights_result, fixes_result, receiver_statuses_result, aprs_messages_result) =
+        tokio::join!(
+            async {
+                let start = Instant::now();
+                let metrics =
+                    match archive::<FlightModel>(&pool_clone1, flights_before, &archive_dir_path)
+                        .await
+                    {
+                        Ok(m) => m,
+                        Err(e) => {
+                            tracing::error!("Failed to archive flights: {}", e);
+                            return Err(anyhow::anyhow!("Failed to archive flights: {}", e));
+                        }
+                    };
+                Ok((metrics, start.elapsed().as_secs_f64()))
+            },
+            async {
+                let start = Instant::now();
+                let metrics =
+                    match archive::<Fix>(&pool_clone2, fixes_before, &archive_dir_path).await {
+                        Ok(m) => m,
+                        Err(e) => {
+                            tracing::error!("Failed to archive fixes: {}", e);
+                            return Err(anyhow::anyhow!("Failed to archive fixes: {}", e));
+                        }
+                    };
+                Ok((metrics, start.elapsed().as_secs_f64()))
+            },
+            async {
+                let start = Instant::now();
+                let metrics =
+                    match archive::<ReceiverStatus>(&pool_clone3, fixes_before, &archive_dir_path)
+                        .await
+                    {
+                        Ok(m) => m,
+                        Err(e) => {
+                            tracing::error!("Failed to archive receiver_statuses: {}", e);
+                            return Err(anyhow::anyhow!(
+                                "Failed to archive receiver_statuses: {}",
+                                e
+                            ));
+                        }
+                    };
+                Ok((metrics, start.elapsed().as_secs_f64()))
+            },
+            async {
+                let start = Instant::now();
+                let metrics =
+                    match archive::<AprsMessage>(&pool_clone4, messages_before, &archive_dir_path)
+                        .await
+                    {
+                        Ok(m) => m,
+                        Err(e) => {
+                            tracing::error!("Failed to archive aprs_messages: {}", e);
+                            return Err(anyhow::anyhow!("Failed to archive aprs_messages: {}", e));
+                        }
+                    };
+                Ok((metrics, start.elapsed().as_secs_f64()))
+            }
+        );
+
+    // Check if any archival task failed
+    let (flights_metrics, flights_duration) = flights_result?;
+    let (fixes_metrics, fixes_duration) = fixes_result?;
+    let (receiver_statuses_metrics, receiver_statuses_duration) = receiver_statuses_result?;
+    let (aprs_messages_metrics, aprs_messages_duration) = aprs_messages_result?;
 
     info!("Parallel archival completed, collecting metadata...");
 
