@@ -1,6 +1,6 @@
 <script lang="ts">
 	/// <reference types="@types/google.maps" />
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, untrack } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
 	import { goto } from '$app/navigation';
@@ -583,10 +583,15 @@
 
 	// Update map when color scheme changes
 	$effect(() => {
-		// Reactively update map when color scheme changes
-		if (colorScheme && map && flightPathSegments.length > 0) {
-			updateMap();
-		}
+		// Track colorScheme changes
+		void colorScheme;
+
+		// Untrack the rest to avoid infinite loop when updateMap modifies state
+		untrack(() => {
+			if (map && flightPathSegments.length > 0) {
+				updateMap();
+			}
+		});
 	});
 
 	// Recreate chart when panel transitions from collapsed to expanded
