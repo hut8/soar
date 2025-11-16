@@ -560,8 +560,14 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
     metrics::counter!("websocket_area_subscribes").absolute(0);
     metrics::counter!("websocket_area_unsubscribes").absolute(0);
 
+    // Initialize analytics metrics
+    crate::metrics::initialize_analytics_metrics();
+
     // Start process metrics background task
     tokio::spawn(crate::metrics::process_metrics_task());
+
+    // Start analytics metrics background task
+    tokio::spawn(crate::metrics::analytics_metrics_task(pool.clone()));
 
     info!("Starting web server on {}:{}", interface, port);
 
@@ -693,6 +699,27 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         // User settings routes
         .route("/user/settings", get(actions::get_user_settings))
         .route("/user/settings", put(actions::update_user_settings))
+        // Analytics routes
+        .route("/analytics/flights/daily", get(actions::get_daily_flights))
+        .route(
+            "/analytics/flights/hourly",
+            get(actions::get_hourly_flights),
+        )
+        .route(
+            "/analytics/flights/duration-distribution",
+            get(actions::get_duration_distribution),
+        )
+        .route(
+            "/analytics/devices/outliers",
+            get(actions::get_device_outliers),
+        )
+        .route("/analytics/devices/top", get(actions::get_top_devices))
+        .route("/analytics/clubs/daily", get(actions::get_club_analytics))
+        .route(
+            "/analytics/airports/activity",
+            get(actions::get_airport_activity),
+        )
+        .route("/analytics/summary", get(actions::get_summary))
         .with_state(app_state.clone());
 
     // Build the main Axum application
