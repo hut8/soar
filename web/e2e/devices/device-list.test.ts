@@ -77,8 +77,8 @@ test.describe('Device List', () => {
 		// Take screenshot of device address search
 		await expect(authenticatedPage).toHaveScreenshot('device-search-type-address.png');
 
-		// Click on Club search type (filter for visible elements)
-		await authenticatedPage.locator('text=Club').locator('visible=true').first().click();
+		// Click on Club search type (use data attribute to avoid clicking Club Ops nav)
+		await authenticatedPage.locator('[data-value="club"]').first().click();
 
 		// Should show club selector
 		// Note: The actual club selector UI may vary
