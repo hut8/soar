@@ -329,8 +329,8 @@ impl FixesRepository {
                         .and(fixes::received_at.eq(aprs_messages::received_at))),
                 )
                 .filter(fixes::device_id.eq(device_id_param))
-                .filter(fixes::timestamp.between(start_time, end_time))
-                .order(fixes::timestamp.desc())
+                .filter(fixes::received_at.between(start_time, end_time))
+                .order(fixes::received_at.desc())
                 .into_boxed();
 
             // Only apply limit if specified
@@ -480,7 +480,7 @@ impl FixesRepository {
                 .filter(fixes::device_id.eq(device_uuid))
                 .into_boxed();
             if let Some(after_timestamp) = after {
-                count_query = count_query.filter(fixes::timestamp.gt(after_timestamp));
+                count_query = count_query.filter(fixes::received_at.gt(after_timestamp));
             }
             if active_only == Some(true) {
                 count_query = count_query.filter(fixes::is_active.eq(true));
@@ -497,14 +497,14 @@ impl FixesRepository {
                 .filter(fixes::device_id.eq(device_uuid))
                 .into_boxed();
             if let Some(after_timestamp) = after {
-                query = query.filter(fixes::timestamp.gt(after_timestamp));
+                query = query.filter(fixes::received_at.gt(after_timestamp));
             }
             if active_only == Some(true) {
                 query = query.filter(fixes::is_active.eq(true));
             }
             let offset = (page - 1) * per_page;
             let results = query
-                .order(fixes::timestamp.desc())
+                .order(fixes::received_at.desc())
                 .limit(per_page)
                 .offset(offset)
                 .select((Fix::as_select(), aprs_messages::raw_message))

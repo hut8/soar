@@ -757,25 +757,43 @@ impl FlightsRepository {
         let rows_affected = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            // Calculate bounding box from all fixes for this flight
-            let bbox_result = fixes_dsl::fixes
-                .filter(fixes_dsl::flight_id.eq(flight_id))
-                .select((
-                    diesel::dsl::sql::<diesel::sql_types::Nullable<diesel::sql_types::Double>>(
-                        "MIN(latitude)",
-                    ),
-                    diesel::dsl::sql::<diesel::sql_types::Nullable<diesel::sql_types::Double>>(
-                        "MAX(latitude)",
-                    ),
-                    diesel::dsl::sql::<diesel::sql_types::Nullable<diesel::sql_types::Double>>(
-                        "MIN(longitude)",
-                    ),
-                    diesel::dsl::sql::<diesel::sql_types::Nullable<diesel::sql_types::Double>>(
-                        "MAX(longitude)",
-                    ),
-                ))
-                .first::<(Option<f64>, Option<f64>, Option<f64>, Option<f64>)>(&mut conn)
+            // First, get the flight's time range to enable partition pruning
+            let flight_times = flights
+                .filter(id.eq(flight_id))
+                .select((created_at, last_fix_at))
+                .first::<(chrono::DateTime<Utc>, chrono::DateTime<Utc>)>(&mut conn)
                 .optional()?;
+
+            let bbox_result = if let Some((start_time, end_time)) = flight_times {
+                // Add 1 hour buffer to handle clock skew and ensure we get all fixes
+                let start_with_buffer = start_time - chrono::Duration::hours(1);
+                let end_with_buffer = end_time + chrono::Duration::hours(1);
+
+                // Calculate bounding box from all fixes for this flight
+                // Filter by received_at for partition pruning (flights are always < 24h)
+                fixes_dsl::fixes
+                    .filter(fixes_dsl::flight_id.eq(flight_id))
+                    .filter(fixes_dsl::received_at.between(start_with_buffer, end_with_buffer))
+                    .select((
+                        diesel::dsl::sql::<diesel::sql_types::Nullable<diesel::sql_types::Double>>(
+                            "MIN(latitude)",
+                        ),
+                        diesel::dsl::sql::<diesel::sql_types::Nullable<diesel::sql_types::Double>>(
+                            "MAX(latitude)",
+                        ),
+                        diesel::dsl::sql::<diesel::sql_types::Nullable<diesel::sql_types::Double>>(
+                            "MIN(longitude)",
+                        ),
+                        diesel::dsl::sql::<diesel::sql_types::Nullable<diesel::sql_types::Double>>(
+                            "MAX(longitude)",
+                        ),
+                    ))
+                    .first::<(Option<f64>, Option<f64>, Option<f64>, Option<f64>)>(&mut conn)
+                    .optional()?
+            } else {
+                // Flight not found, return None
+                None
+            };
 
             // If we got bounding box values, update the flight
             if let Some((min_lat, max_lat, min_lon, max_lon)) = bbox_result {
@@ -814,12 +832,33 @@ impl FlightsRepository {
 
             // Get the target flight's bounding box and time range from flights table
             // Fall back to calculating from fixes if bounding box is not yet populated
+            // Use received_at filter for partition pruning (flights are always < 24h)
             let bbox_sql = r#"
                 SELECT
-                    COALESCE(f.min_latitude, (SELECT MIN(latitude) FROM fixes WHERE flight_id = $1)) as min_lat,
-                    COALESCE(f.max_latitude, (SELECT MAX(latitude) FROM fixes WHERE flight_id = $1)) as max_lat,
-                    COALESCE(f.min_longitude, (SELECT MIN(longitude) FROM fixes WHERE flight_id = $1)) as min_lon,
-                    COALESCE(f.max_longitude, (SELECT MAX(longitude) FROM fixes WHERE flight_id = $1)) as max_lon,
+                    COALESCE(f.min_latitude, (
+                        SELECT MIN(latitude) FROM fixes
+                        WHERE flight_id = $1
+                        AND received_at BETWEEN f.created_at - INTERVAL '1 hour'
+                                            AND f.last_fix_at + INTERVAL '1 hour'
+                    )) as min_lat,
+                    COALESCE(f.max_latitude, (
+                        SELECT MAX(latitude) FROM fixes
+                        WHERE flight_id = $1
+                        AND received_at BETWEEN f.created_at - INTERVAL '1 hour'
+                                            AND f.last_fix_at + INTERVAL '1 hour'
+                    )) as max_lat,
+                    COALESCE(f.min_longitude, (
+                        SELECT MIN(longitude) FROM fixes
+                        WHERE flight_id = $1
+                        AND received_at BETWEEN f.created_at - INTERVAL '1 hour'
+                                            AND f.last_fix_at + INTERVAL '1 hour'
+                    )) as min_lon,
+                    COALESCE(f.max_longitude, (
+                        SELECT MAX(longitude) FROM fixes
+                        WHERE flight_id = $1
+                        AND received_at BETWEEN f.created_at - INTERVAL '1 hour'
+                                            AND f.last_fix_at + INTERVAL '1 hour'
+                    )) as max_lon,
                     COALESCE(f.takeoff_time, f.created_at) as start_time,
                     COALESCE(f.landing_time, f.last_fix_at) as end_time
                 FROM flights f
