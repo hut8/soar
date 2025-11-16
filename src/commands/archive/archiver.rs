@@ -55,17 +55,41 @@ pub trait Archivable: Sized + Serialize + for<'de> Deserialize<'de> + Send + 'st
     fn insert_batch(conn: &mut PgConnection, batch: &[Self]) -> Result<()>;
 }
 
+/// Metrics returned from archiving a table
+#[derive(Debug, Clone)]
+pub struct ArchiveMetrics {
+    pub total_rows_deleted: usize,
+    pub archive_files: Vec<ArchiveFile>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ArchiveFile {
+    pub path: String,
+    pub size_bytes: u64,
+}
+
+impl ArchiveMetrics {
+    pub fn new() -> Self {
+        Self {
+            total_rows_deleted: 0,
+            archive_files: Vec::new(),
+        }
+    }
+}
+
 /// Archive all records before a given date
 pub async fn archive<T: Archivable>(
     pool: &PgPool,
     before_date: NaiveDate,
     archive_dir: &Path,
-) -> Result<()> {
+) -> Result<ArchiveMetrics> {
     info!(
         "Starting archive process for {} before {}",
         T::table_name(),
         before_date
     );
+
+    let mut metrics = ArchiveMetrics::new();
 
     let oldest_date = T::get_oldest_date(pool).await?;
     match oldest_date {
@@ -74,13 +98,21 @@ pub async fn archive<T: Archivable>(
                 "No {} found in database. Nothing to archive.",
                 T::table_name()
             );
-            Ok(())
+            Ok(metrics)
         }
         Some(oldest) => {
             info!("Oldest {} date in database: {}", T::table_name(), oldest);
             let mut current_date = oldest;
             while current_date < before_date {
-                archive_day::<T>(pool, current_date, archive_dir).await?;
+                let (rows, file_path, file_size) =
+                    archive_day::<T>(pool, current_date, archive_dir).await?;
+                metrics.total_rows_deleted += rows;
+                if let Some(path) = file_path {
+                    metrics.archive_files.push(ArchiveFile {
+                        path,
+                        size_bytes: file_size,
+                    });
+                }
                 current_date = current_date.succ_opt().context(format!(
                     "Failed to calculate next day after {}",
                     current_date
@@ -90,17 +122,18 @@ pub async fn archive<T: Archivable>(
                 "Archive process completed successfully for {}",
                 T::table_name()
             );
-            Ok(())
+            Ok(metrics)
         }
     }
 }
 
 /// Archive records for a single day
+/// Returns (rows_deleted, file_path, file_size_bytes)
 pub async fn archive_day<T: Archivable>(
     pool: &PgPool,
     date: NaiveDate,
     archive_dir: &Path,
-) -> Result<()> {
+) -> Result<(usize, Option<String>, u64)> {
     info!("Archiving {} for {}", T::table_name(), date);
     let (day_start, day_end) = get_day_boundaries(date)?;
     let date_str = date.format("%Y%m%d").to_string();
@@ -112,7 +145,7 @@ pub async fn archive_day<T: Archivable>(
     let count = T::count_for_day(pool, day_start, day_end).await?;
     if count == 0 {
         info!("No {} found for {}. Skipping.", T::table_name(), date);
-        return Ok(());
+        return Ok((0, None, 0));
     }
     info!("Found {} {} for {}", count, T::table_name(), date);
 
@@ -138,10 +171,19 @@ pub async fn archive_day<T: Archivable>(
     ))?;
     info!("Successfully archived {} to {}", date, final_path.display());
 
+    // Get file size
+    let file_size = fs::metadata(&final_path)
+        .context("Failed to get file metadata")?
+        .len();
+
     // Run VACUUM ANALYZE on table after deletion
     vacuum_analyze_table(pool, T::table_name()).await?;
 
-    Ok(())
+    Ok((
+        count as usize,
+        Some(final_path.to_string_lossy().to_string()),
+        file_size,
+    ))
 }
 
 /// Resurrect (restore) archived records from a file back into the database

@@ -11,13 +11,13 @@ User=soar
 Group=soar
 WorkingDirectory=/var/soar
 
-# Calculate date 7 days ago (UTC) and run archive command
+# Run archive command with default retention (21 days ago)
 # Archives data with staggered retention:
-#   - Flights: 8+ days old
-#   - Fixes and ReceiverStatuses: 9+ days old
-#   - AprsMessages: 10+ days old
-# Using "7 days ago" as the base date ensures the oldest data (10 days from today) gets archived
-ExecStart=/bin/sh -c '/usr/local/bin/soar archive "$(date -u -d "7 days ago" "+%%Y-%%m-%%d")" --archive-path /var/soar/archive'
+#   - Flights: 21+ days old
+#   - Fixes and ReceiverStatuses: 22+ days old
+#   - AprsMessages: 23+ days old
+# The archive command defaults to 21 days ago if no date is specified
+ExecStart=/usr/local/bin/soar archive --archive-path /var/soar/archive
 
 # Environment variables
 EnvironmentFile=/etc/soar/env

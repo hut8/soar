@@ -148,17 +148,24 @@ enum Commands {
     },
     /// Archive old data to compressed CSV files and delete from database
     ///
-    /// Archives data one day at a time in order to respect foreign key constraints:
-    /// 1. Flights (8+ days old)
-    /// 2. Fixes and ReceiverStatuses (9+ days old)
-    /// 3. AprsMessages (10+ days old)
+    /// Archives data with staggered retention to respect foreign key constraints:
+    /// 1. Flights (before_date + 0 days)
+    /// 2. Fixes and ReceiverStatuses (before_date + 1 day)
+    /// 3. AprsMessages (before_date + 2 days)
+    ///
+    /// Default: Uses 21 days ago, which archives:
+    /// - Flights: 21+ days old
+    /// - Fixes and ReceiverStatuses: 22+ days old
+    /// - AprsMessages: 23+ days old
     ///
     /// Each day's data is written to files named YYYYMMDD-{table}.csv.zst
     Archive {
         /// Archive data before this date (YYYY-MM-DD format, exclusive, UTC)
-        /// Cannot be a future date. If today's date is used, archives all data up to (but not including) today.
+        /// Cannot be a future date. Flights are archived before this date,
+        /// Fixes/ReceiverStatuses before date+1, AprsMessages before date+2.
+        /// Defaults to 21 days ago if not specified.
         #[arg(value_name = "BEFORE_DATE")]
-        before: String,
+        before: Option<String>,
 
         /// Directory where archive files will be stored
         #[arg(long)]
