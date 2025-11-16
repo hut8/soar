@@ -105,16 +105,26 @@ BACKUP_LOG_DIR=/var/log/soar
 #------------------------------------------------------------------------------
 
 # Compression method for base backups
-# NOTE: The backup script uses zstd compression with all available CPU cores
+# NOTE: The backup script uses zstd compression
 # This setting is kept for backward compatibility but is not currently used
 # by the soar-base-backup script, which hardcodes zstd compression.
 # Options: zstd (recommended), gzip, none
 # zstd reduces size by ~60-70% and is faster than gzip with multi-threading
 BACKUP_COMPRESSION=zstd
 
+# Compression level for zstd (used by pg_basebackup)
+# Valid range: -131072 to 22 (negative values for ultra-fast compression)
+# Recommended values:
+#   1  = fastest compression, larger files
+#   3  = default, good balance of speed and compression (recommended)
+#   9  = slower but better compression
+#   19 = maximum compression, much slower
+# Default: 3
+BACKUP_COMPRESSION_LEVEL=3
+
 # Number of parallel jobs for compression/upload
-# NOTE: For zstd compression, all available CPU cores are automatically used
-# This setting may be used for other operations like rsync parallelization
+# NOTE: This setting is used for operations like rsync parallelization
+# The zstd compression level is controlled by BACKUP_COMPRESSION_LEVEL above
 # Recommended: 2-4 for most systems
 BACKUP_PARALLEL_JOBS=4
 

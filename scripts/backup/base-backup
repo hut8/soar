@@ -216,10 +216,15 @@ main() {
     log INFO "Creating base backup with pg_basebackup..."
     mkdir -p "$BACKUP_LOCAL_DIR"
 
-    # Detect number of CPU cores for parallel compression
-    local num_cores=$(nproc)
-    log INFO "Using zstd compression with $num_cores threads"
+    # Use zstd compression level (configurable via BACKUP_COMPRESSION_LEVEL)
+    # Valid range: -131072 to 22, default is 3 (good balance of speed and compression)
+    # Note: The compression level parameter is not for parallelism
+    local compression_level=${BACKUP_COMPRESSION_LEVEL:-3}
+    log INFO "Using zstd compression level $compression_level"
 
+    # Use --wal-method=stream to stream WAL in parallel with the backup
+    # This prevents "WAL segment has already been removed" errors on large databases
+    # where the backup takes longer than wal_keep_size allows
     if ! pg_basebackup \
         -h "$PGHOST" \
         -p "$PGPORT" \
@@ -228,8 +233,8 @@ main() {
         -Ft \
         -P \
         -v \
-        --wal-method=fetch \
-        --compress=zstd:${num_cores} \
+        --wal-method=stream \
+        --compress=zstd:${compression_level} \
         --label="$BACKUP_NAME" \
         >> "$LOG_DIR/backup.log" 2>&1; then
         log ERROR "pg_basebackup failed"
