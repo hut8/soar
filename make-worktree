@@ -10,25 +10,14 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 BOLD='\033[1m'
 
-# Detect if script is being sourced
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    SOURCED=false
-    set -e  # Exit on error (only when not sourced)
-else
-    SOURCED=true
-fi
+set -e  # Exit on error
 
 # Check if branch name is provided
 if [ -z "$1" ]; then
     echo -e "${RED}Error: Branch name is required${NC}"
-    echo -e "${YELLOW}Usage: make-worktree <branch-name>${NC}"
-    echo -e "${YELLOW}   or: . make-worktree <branch-name> (to auto-cd)${NC}"
-    echo -e "${YELLOW}Example: make-worktree feat/ogn-tracker-type${NC}"
-    if [ "$SOURCED" = true ]; then
-        return 1
-    else
-        exit 1
-    fi
+    echo -e "${YELLOW}Usage: ./make-worktree <branch-name>${NC}"
+    echo -e "${YELLOW}Example: ./make-worktree feat/ogn-tracker-type${NC}"
+    exit 1
 fi
 
 BRANCH_NAME="$1"
@@ -43,11 +32,7 @@ elif [ -f "$HOME/soar/.env" ]; then
     ENV_FILE="$HOME/soar/.env"
 else
     echo -e "${RED}Error: .env file not found in current directory or $HOME/soar/.env${NC}"
-    if [ "$SOURCED" = true ]; then
-        return 1
-    else
-        exit 1
-    fi
+    exit 1
 fi
 
 echo -e "${BOLD}${CYAN}Creating worktree for branch: ${MAGENTA}$BRANCH_NAME${NC}"
@@ -55,51 +40,103 @@ echo -e "${CYAN}Location: ${NC}$WORKTREE_DIR"
 echo ""
 
 # Create the worktree
-echo -e "${BLUE}[1/4]${NC} ${BOLD}Creating git worktree...${NC}"
+echo -e "${BLUE}[1/3]${NC} ${BOLD}Creating git worktree...${NC}"
 git worktree add -b "$BRANCH_NAME" "$WORKTREE_DIR" main
 echo -e "${GREEN}✓ Worktree created${NC}"
 echo ""
 
 # Copy .env file
-echo -e "${BLUE}[2/4]${NC} ${BOLD}Copying .env file...${NC}"
+echo -e "${BLUE}[2/3]${NC} ${BOLD}Copying .env file...${NC}"
 cp "$ENV_FILE" "$WORKTREE_DIR/.env"
 echo -e "${GREEN}✓ .env file copied${NC}"
 echo ""
 
-# Run npm install in the web directory
-echo -e "${BLUE}[3/4]${NC} ${BOLD}Installing npm dependencies...${NC}"
-cd "$WORKTREE_DIR/web"
-npm install
-echo -e "${GREEN}✓ npm dependencies installed${NC}"
-echo ""
+# Launch background builds
+echo -e "${BLUE}[3/3]${NC} ${BOLD}Launching background builds...${NC}"
+mkdir -p "$WORKTREE_DIR/.logs"
 
-# Copy or build Rust project artifacts
-echo -e "${BLUE}[4/4]${NC} ${BOLD}Setting up Rust build artifacts...${NC}"
-cd "$WORKTREE_DIR"
-echo -e "${CYAN}No target directory found, building Rust project (pre-caching artifacts)...${NC}"
-export RUSTC_WRAPPER=$(command -v sccache)
-cargo build
-echo -e "${GREEN}✓ Cargo build complete${NC}"
+# Background npm install
+(
+    cd "$WORKTREE_DIR/web"
+    npm install &>"$WORKTREE_DIR/.logs/npm-install.log"
+    echo -e "${GREEN}✓ npm dependencies installed${NC}" >> "$WORKTREE_DIR/.logs/npm-install.log"
+) &
+NPM_PID=$!
+
+# Check for sccache and warn if not installed
+if command -v sccache &>/dev/null; then
+    SCCACHE_PATH=$(command -v sccache)
+    echo -e "${GREEN}✓ sccache found: ${CYAN}$SCCACHE_PATH${NC}"
+else
+    echo -e "${YELLOW}⚠ Warning: sccache not installed - builds will be slower without caching${NC}"
+    echo -e "${YELLOW}  Install with: ${CYAN}cargo install sccache${NC}"
+    SCCACHE_PATH=""
+fi
+
+# Background cargo build (dependencies only)
+# We use 'cargo check' which is faster than 'cargo build' and still compiles all dependencies
+# This populates sccache without building the final soar binary
+(
+    cd "$WORKTREE_DIR"
+
+    # Set RUSTC_WRAPPER for sccache if available
+    if [ -n "$SCCACHE_PATH" ]; then
+        export RUSTC_WRAPPER="$SCCACHE_PATH"
+    fi
+
+    # First, fetch all dependencies
+    cargo fetch &>"$WORKTREE_DIR/.logs/cargo-fetch.log"
+
+    # Then check all dependencies (faster than build, still caches everything)
+    cargo check --all-targets --all-features &>"$WORKTREE_DIR/.logs/cargo-check.log"
+
+    echo -e "${GREEN}✓ Cargo dependencies cached${NC}" >> "$WORKTREE_DIR/.logs/cargo-check.log"
+) &
+CARGO_PID=$!
+
+echo -e "${CYAN}  • npm install running in background (PID: $NPM_PID)${NC}"
+echo -e "${CYAN}  • cargo check running in background (PID: $CARGO_PID)${NC}"
+echo -e "${CYAN}  • Logs: $WORKTREE_DIR/.logs/${NC}"
+echo -e "${GREEN}✓ Background builds started${NC}"
 echo ""
 
 echo -e "${GREEN}${BOLD}✓ Worktree setup complete!${NC}"
+echo -e "${YELLOW}Background builds are still running. Check progress with:${NC}"
+echo -e "${CYAN}  tail -f $WORKTREE_DIR/.logs/npm-install.log${NC}"
+echo -e "${CYAN}  tail -f $WORKTREE_DIR/.logs/cargo-check.log${NC}"
 echo ""
 
-# If sourced, automatically cd into the worktree
-if [ "$SOURCED" = true ]; then
-    echo -e "${YELLOW}Changing directory to worktree...${NC}"
-    cd "$WORKTREE_DIR"
-    echo -e "${GREEN}✓ Now in: ${CYAN}$(pwd)${NC}"
+# Change to the worktree directory
+cd "$WORKTREE_DIR"
 
-    # Run mise trust if mise is installed
-    if command -v mise &> /dev/null; then
-        echo -e "${BLUE}Running mise trust...${NC}"
-        mise trust
-        echo -e "${GREEN}✓ mise trust complete${NC}"
-    fi
-else
-    echo -e "${YELLOW}To start working:${NC}"
-    echo -e "  ${CYAN}cd $WORKTREE_DIR${NC}"
+# Run mise trust if mise is installed
+if command -v mise &> /dev/null; then
+    echo -e "${BLUE}Running mise trust...${NC}"
+    mise trust 2>/dev/null || true
+    echo -e "${GREEN}✓ mise trust complete${NC}"
+fi
+
+# Set tmux window title if in tmux
+if [ -n "$TMUX" ]; then
+    tmux rename-window "$BRANCH_NAME" 2>/dev/null || true
+    echo -e "${GREEN}✓ tmux window renamed to: ${MAGENTA}$BRANCH_NAME${NC}"
+fi
+
+echo ""
+echo -e "${BOLD}${CYAN}Launching Claude Code...${NC}"
+echo ""
+
+# Launch Claude Code in the worktree directory
+# After Claude exits, spawn a shell so the user stays in the worktree
+if command -v claude &> /dev/null; then
+    claude
     echo ""
-    echo -e "${YELLOW}Tip: Use ${CYAN}. make-worktree <branch>${YELLOW} to auto-cd into the worktree${NC}"
+    echo -e "${YELLOW}Claude Code exited. Spawning shell in worktree...${NC}"
+    echo -e "${CYAN}Current directory: $(pwd)${NC}"
+    exec $SHELL
+else
+    echo -e "${YELLOW}Warning: 'claude' command not found${NC}"
+    echo -e "${YELLOW}Spawning shell in worktree instead...${NC}"
+    echo -e "${CYAN}Current directory: $(pwd)${NC}"
+    exec $SHELL
 fi
