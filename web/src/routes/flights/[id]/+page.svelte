@@ -1849,7 +1849,7 @@
 	}
 
 	:global(.receiver-icon) {
-		background: white;
+		background: transparent;
 		border: 2px solid #374151;
 		border-radius: 50%;
 		width: 24px;
@@ -1857,21 +1857,28 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		color: #10b981;
+		color: #fb923c;
 		box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
 		transition: all 0.2s ease-in-out;
 	}
 
 	@media (prefers-color-scheme: dark) {
 		:global(.receiver-icon) {
-			background: #1f2937;
+			background: transparent;
 			border-color: #6b7280;
 		}
 	}
 
 	:global(.receiver-marker:hover .receiver-icon) {
-		border-color: #10b981;
-		box-shadow: 0 3px 8px rgba(16, 185, 129, 0.4);
+		background: white;
+		border-color: #fb923c;
+		box-shadow: 0 3px 8px rgba(251, 146, 60, 0.4);
+	}
+
+	@media (prefers-color-scheme: dark) {
+		:global(.receiver-marker:hover .receiver-icon) {
+			background: #1f2937;
+		}
 	}
 
 	:global(.receiver-label) {
@@ -1888,6 +1895,11 @@
 		text-rendering: optimizeLegibility;
 		-webkit-font-smoothing: antialiased;
 		-moz-osx-font-smoothing: grayscale;
+		opacity: 0;
+		visibility: hidden;
+		transition:
+			opacity 0.2s ease-in-out,
+			visibility 0.2s ease-in-out;
 	}
 
 	@media (prefers-color-scheme: dark) {
@@ -1896,5 +1908,10 @@
 			border-color: #4b5563;
 			color: #e5e7eb;
 		}
+	}
+
+	:global(.receiver-marker:hover .receiver-label) {
+		opacity: 1;
+		visibility: visible;
 	}
 </style>
