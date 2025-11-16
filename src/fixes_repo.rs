@@ -378,7 +378,7 @@ impl FixesRepository {
             let results = fixes
                 .filter(device_id.eq(device_uuid))
                 .filter(received_at.ge(cutoff_time))
-                .order(timestamp.desc())
+                .order(received_at.desc())
                 .limit(limit)
                 .select(Fix::as_select())
                 .load::<Fix>(&mut conn)?;
