@@ -1,6 +1,6 @@
 <script lang="ts">
 	/// <reference types="@types/google.maps" />
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, untrack } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
 	import {
@@ -95,7 +95,7 @@
 	);
 
 	// Calculate flight duration
-	const duration = $derived(() => {
+	const duration = $derived.by(() => {
 		if (!data.flight.takeoff_time || !data.flight.landing_time) {
 			return null;
 		}
@@ -108,7 +108,7 @@
 	});
 
 	// Calculate fixes per second rate
-	const fixesPerSecond = $derived(() => {
+	const fixesPerSecond = $derived.by(() => {
 		if (!data.flight.takeoff_time || !data.flight.landing_time || data.fixesCount === 0) {
 			return null;
 		}
@@ -120,14 +120,14 @@
 	});
 
 	// Calculate maximum altitude from fixes
-	const maxAltitude = $derived(() => {
+	const maxAltitude = $derived.by(() => {
 		if (data.fixes.length === 0) return null;
 		const maxMsl = Math.max(...data.fixes.map((f) => f.altitude_msl_feet || 0));
 		return maxMsl > 0 ? maxMsl : null;
 	});
 
 	// Calculate minimum altitude from fixes
-	const minAltitude = $derived(() => {
+	const minAltitude = $derived.by(() => {
 		if (data.fixes.length === 0) return null;
 		const validAltitudes = data.fixes
 			.map((f) => f.altitude_msl_feet)
@@ -251,8 +251,8 @@
 		if (!map) return;
 		const zoom = map.getZoom() ?? 12;
 		const scale = getArrowScale(zoom);
-		const minAlt = minAltitude() ?? 0;
-		const maxAlt = maxAltitude() ?? 1000;
+		const minAlt = minAltitude ?? 0;
+		const maxAlt = maxAltitude ?? 1000;
 
 		// Track last arrow timestamp to display one every 10 minutes
 		let lastArrowTime: Date | null = null;
@@ -305,8 +305,8 @@
 		fixesInOrder: typeof data.fixes,
 		targetMap: google.maps.Map
 	): google.maps.Polyline[] {
-		const minAlt = minAltitude() ?? 0;
-		const maxAlt = maxAltitude() ?? 1000;
+		const minAlt = minAltitude ?? 0;
+		const maxAlt = maxAltitude ?? 1000;
 		const segments: google.maps.Polyline[] = [];
 		const zoom = targetMap.getZoom() ?? 12;
 		const scale = getArrowScale(zoom);
@@ -368,7 +368,7 @@
 	}
 
 	// Calculate maximum AGL altitude from fixes
-	const maxAglAltitude = $derived(() => {
+	const maxAglAltitude = $derived.by(() => {
 		if (data.fixes.length === 0) return null;
 		const maxAgl = Math.max(...data.fixes.map((f) => f.altitude_agl_feet || 0));
 		return maxAgl > 0 ? maxAgl : null;
@@ -726,8 +726,8 @@
 		// Wait for map to be ready before adding markers
 		google.maps.event.addListenerOnce(map, 'idle', () => {
 			// Re-add fix markers as directional arrows
-			const minAlt = minAltitude() ?? 0;
-			const maxAlt = maxAltitude() ?? 1000;
+			const minAlt = minAltitude ?? 0;
+			const maxAlt = maxAltitude ?? 1000;
 			const arrowIndices = getArrowFixIndices(fixesInOrder);
 			const totalFixes = fixesInOrder.length;
 
@@ -954,8 +954,8 @@
 				}
 
 				// Add directional arrow markers at selected intervals
-				const minAlt = minAltitude() ?? 0;
-				const maxAlt = maxAltitude() ?? 1000;
+				const minAlt = minAltitude ?? 0;
+				const maxAlt = maxAltitude ?? 1000;
 				const arrowIndices = getArrowFixIndices(fixesInOrder);
 				const totalFixes = fixesInOrder.length;
 
@@ -1120,10 +1120,15 @@
 
 	// Update map when color scheme changes
 	$effect(() => {
-		// Reactively update map when color scheme changes
-		if (colorScheme && map && flightPathSegments.length > 0) {
-			updateMap();
-		}
+		// Track colorScheme changes
+		void colorScheme;
+
+		// Untrack the rest to avoid infinite loop when updateMap modifies state
+		untrack(() => {
+			if (map && data.fixes.length > 0 && flightPathSegments.length > 0) {
+				updateMap();
+			}
+		});
 	});
 
 	// Cleanup on component unmount
@@ -1396,28 +1401,28 @@
 			{/if}
 
 			<!-- Duration -->
-			{#if duration()}
+			{#if duration}
 				<div class="flex items-start gap-3">
 					<Gauge class="mt-1 h-5 w-5 text-primary-500" />
 					<div>
 						<div class="text-surface-600-300-token text-sm">Duration</div>
-						<div class="font-semibold">{duration()}</div>
+						<div class="font-semibold">{duration}</div>
 					</div>
 				</div>
 			{/if}
 
 			<!-- Maximum Altitude -->
-			{#if maxAltitude() || maxAglAltitude()}
+			{#if maxAltitude || maxAglAltitude}
 				<div class="flex items-start gap-3">
 					<MountainSnow class="mt-1 h-5 w-5 text-primary-500" />
 					<div>
 						<div class="text-surface-600-300-token text-sm">Maximum Altitude</div>
-						{#if maxAltitude()}
-							<div class="font-semibold">{formatAltitude(maxAltitude() ?? undefined)} MSL</div>
+						{#if maxAltitude}
+							<div class="font-semibold">{formatAltitude(maxAltitude ?? undefined)} MSL</div>
 						{/if}
-						{#if maxAglAltitude()}
+						{#if maxAglAltitude}
 							<div class="text-surface-600-300-token text-sm">
-								{formatAltitude(maxAglAltitude() ?? undefined)} AGL
+								{formatAltitude(maxAglAltitude ?? undefined)} AGL
 							</div>
 						{/if}
 					</div>
@@ -1643,9 +1648,9 @@
 		<div class="mb-4 flex items-center justify-between">
 			<h2 class="h2">
 				Position Fixes ({data.fixesCount})
-				{#if fixesPerSecond()}
+				{#if fixesPerSecond}
 					<span class="text-surface-600-300-token ml-2 text-lg">
-						({fixesPerSecond()} fixes/sec)
+						({fixesPerSecond} fixes/sec)
 					</span>
 				{/if}
 			</h2>
