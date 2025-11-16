@@ -72,14 +72,68 @@ pub async fn handle_archive(
 
     let mut report = ArchiveReport::new();
 
-    // Archive in order to respect foreign key constraints
-    // Flights first (before_date + 0 days)
-    info!("=== Archiving flights (before {}) ===", before_date);
-    let flights_before = before_date;
-    let flights_start = Instant::now();
-    let flights_metrics = archive::<FlightModel>(&pool, flights_before, archive_dir).await?;
-    let flights_duration = flights_start.elapsed().as_secs_f64();
+    // Archive in parallel with staggered retention to respect foreign key constraints
+    // Using different date ranges allows safe parallel execution:
+    // - Flights: before_date + 0 days
+    // - Fixes and ReceiverStatuses: before_date + 1 day
+    // - AprsMessages: before_date + 2 days
+    info!(
+        "Starting parallel archive: flights (before {}), fixes/receiver_statuses (before {}), aprs_messages (before {})",
+        before_date,
+        before_date + chrono::Duration::days(1),
+        before_date + chrono::Duration::days(2)
+    );
 
+    let flights_before = before_date;
+    let fixes_before = before_date + chrono::Duration::days(1);
+    let messages_before = before_date + chrono::Duration::days(2);
+
+    let archive_dir_path = archive_dir.to_path_buf();
+    let pool_clone1 = pool.clone();
+    let pool_clone2 = pool.clone();
+    let pool_clone3 = pool.clone();
+    let pool_clone4 = pool.clone();
+
+    // Archive all tables in parallel
+    let (
+        (flights_metrics, flights_duration),
+        (fixes_metrics, fixes_duration),
+        (receiver_statuses_metrics, receiver_statuses_duration),
+        (aprs_messages_metrics, aprs_messages_duration),
+    ) = tokio::join!(
+        async {
+            let start = Instant::now();
+            let metrics = archive::<FlightModel>(&pool_clone1, flights_before, &archive_dir_path)
+                .await
+                .expect("Failed to archive flights");
+            (metrics, start.elapsed().as_secs_f64())
+        },
+        async {
+            let start = Instant::now();
+            let metrics = archive::<Fix>(&pool_clone2, fixes_before, &archive_dir_path)
+                .await
+                .expect("Failed to archive fixes");
+            (metrics, start.elapsed().as_secs_f64())
+        },
+        async {
+            let start = Instant::now();
+            let metrics = archive::<ReceiverStatus>(&pool_clone3, fixes_before, &archive_dir_path)
+                .await
+                .expect("Failed to archive receiver_statuses");
+            (metrics, start.elapsed().as_secs_f64())
+        },
+        async {
+            let start = Instant::now();
+            let metrics = archive::<AprsMessage>(&pool_clone4, messages_before, &archive_dir_path)
+                .await
+                .expect("Failed to archive aprs_messages");
+            (metrics, start.elapsed().as_secs_f64())
+        }
+    );
+
+    info!("Parallel archival completed, collecting metadata...");
+
+    // Collect metadata for flights
     let flights_oldest = FlightModel::get_oldest_date(&pool).await?;
     let flights_file_size = flights_metrics
         .archive_files
@@ -101,17 +155,7 @@ pub async fn handle_archive(
         oldest_remaining: flights_oldest,
     });
 
-    // Fixes and ReceiverStatuses next (before_date + 1 day)
-    info!(
-        "=== Archiving fixes and receiver_statuses (before {}) ===",
-        before_date + chrono::Duration::days(1)
-    );
-    let fixes_before = before_date + chrono::Duration::days(1);
-
-    let fixes_start = Instant::now();
-    let fixes_metrics = archive::<Fix>(&pool, fixes_before, archive_dir).await?;
-    let fixes_duration = fixes_start.elapsed().as_secs_f64();
-
+    // Collect metadata for fixes
     let fixes_oldest = Fix::get_oldest_date(&pool).await?;
     let fixes_file_size = fixes_metrics
         .archive_files
@@ -133,11 +177,7 @@ pub async fn handle_archive(
         oldest_remaining: fixes_oldest,
     });
 
-    let receiver_statuses_start = Instant::now();
-    let receiver_statuses_metrics =
-        archive::<ReceiverStatus>(&pool, fixes_before, archive_dir).await?;
-    let receiver_statuses_duration = receiver_statuses_start.elapsed().as_secs_f64();
-
+    // Collect metadata for receiver_statuses
     let receiver_statuses_oldest = ReceiverStatus::get_oldest_date(&pool).await?;
     let receiver_statuses_file_size = receiver_statuses_metrics
         .archive_files
@@ -159,16 +199,7 @@ pub async fn handle_archive(
         oldest_remaining: receiver_statuses_oldest,
     });
 
-    // AprsMessages last (before_date + 2 days)
-    info!(
-        "=== Archiving aprs_messages (before {}) ===",
-        before_date + chrono::Duration::days(2)
-    );
-    let messages_before = before_date + chrono::Duration::days(2);
-    let aprs_messages_start = Instant::now();
-    let aprs_messages_metrics = archive::<AprsMessage>(&pool, messages_before, archive_dir).await?;
-    let aprs_messages_duration = aprs_messages_start.elapsed().as_secs_f64();
-
+    // Collect metadata for aprs_messages
     let aprs_messages_oldest = AprsMessage::get_oldest_date(&pool).await?;
     let aprs_messages_file_size = aprs_messages_metrics
         .archive_files
