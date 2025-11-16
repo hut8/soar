@@ -4637,6 +4637,7 @@ dependencies = [
  "flydent",
  "futures-util",
  "google_maps",
+ "hex",
  "http-body 1.0.1",
  "http-body-util",
  "include_dir",

@@ -5,9 +5,9 @@ mod flights;
 mod receiver_statuses;
 
 use anyhow::{Context, Result};
+use aprs_messages::AprsMessageCsv;
 use archiver::{Archivable, PgPool, archive, resurrect};
 use chrono::{NaiveDate, Utc};
-use soar::aprs_messages_repo::AprsMessage;
 use soar::fixes::Fix;
 use soar::flights::FlightModel;
 use soar::receiver_statuses::ReceiverStatus;
@@ -95,66 +95,67 @@ pub async fn handle_archive(
     let pool_clone4 = pool.clone();
 
     // Archive all tables in parallel
-    let (flights_result, fixes_result, receiver_statuses_result, aprs_messages_result) =
-        tokio::join!(
-            async {
-                let start = Instant::now();
-                let metrics =
-                    match archive::<FlightModel>(&pool_clone1, flights_before, &archive_dir_path)
-                        .await
-                    {
-                        Ok(m) => m,
-                        Err(e) => {
-                            tracing::error!("Failed to archive flights: {}", e);
-                            return Err(anyhow::anyhow!("Failed to archive flights: {}", e));
-                        }
-                    };
-                Ok((metrics, start.elapsed().as_secs_f64()))
-            },
-            async {
-                let start = Instant::now();
-                let metrics =
-                    match archive::<Fix>(&pool_clone2, fixes_before, &archive_dir_path).await {
-                        Ok(m) => m,
-                        Err(e) => {
-                            tracing::error!("Failed to archive fixes: {}", e);
-                            return Err(anyhow::anyhow!("Failed to archive fixes: {}", e));
-                        }
-                    };
-                Ok((metrics, start.elapsed().as_secs_f64()))
-            },
-            async {
-                let start = Instant::now();
-                let metrics =
-                    match archive::<ReceiverStatus>(&pool_clone3, fixes_before, &archive_dir_path)
-                        .await
-                    {
-                        Ok(m) => m,
-                        Err(e) => {
-                            tracing::error!("Failed to archive receiver_statuses: {}", e);
-                            return Err(anyhow::anyhow!(
-                                "Failed to archive receiver_statuses: {}",
-                                e
-                            ));
-                        }
-                    };
-                Ok((metrics, start.elapsed().as_secs_f64()))
-            },
-            async {
-                let start = Instant::now();
-                let metrics =
-                    match archive::<AprsMessage>(&pool_clone4, messages_before, &archive_dir_path)
-                        .await
-                    {
-                        Ok(m) => m,
-                        Err(e) => {
-                            tracing::error!("Failed to archive aprs_messages: {}", e);
-                            return Err(anyhow::anyhow!("Failed to archive aprs_messages: {}", e));
-                        }
-                    };
-                Ok((metrics, start.elapsed().as_secs_f64()))
-            }
-        );
+    let (flights_result, fixes_result, receiver_statuses_result, aprs_messages_result) = tokio::join!(
+        async {
+            let start = Instant::now();
+            let metrics =
+                match archive::<FlightModel>(&pool_clone1, flights_before, &archive_dir_path).await
+                {
+                    Ok(m) => m,
+                    Err(e) => {
+                        tracing::error!("Failed to archive flights: {}", e);
+                        return Err(anyhow::anyhow!("Failed to archive flights: {}", e));
+                    }
+                };
+            Ok((metrics, start.elapsed().as_secs_f64()))
+        },
+        async {
+            let start = Instant::now();
+            let metrics = match archive::<Fix>(&pool_clone2, fixes_before, &archive_dir_path).await
+            {
+                Ok(m) => m,
+                Err(e) => {
+                    tracing::error!("Failed to archive fixes: {}", e);
+                    return Err(anyhow::anyhow!("Failed to archive fixes: {}", e));
+                }
+            };
+            Ok((metrics, start.elapsed().as_secs_f64()))
+        },
+        async {
+            let start = Instant::now();
+            let metrics = match archive::<ReceiverStatus>(
+                &pool_clone3,
+                fixes_before,
+                &archive_dir_path,
+            )
+            .await
+            {
+                Ok(m) => m,
+                Err(e) => {
+                    tracing::error!("Failed to archive receiver_statuses: {}", e);
+                    return Err(anyhow::anyhow!(
+                        "Failed to archive receiver_statuses: {}",
+                        e
+                    ));
+                }
+            };
+            Ok((metrics, start.elapsed().as_secs_f64()))
+        },
+        async {
+            let start = Instant::now();
+            let metrics =
+                match archive::<AprsMessageCsv>(&pool_clone4, messages_before, &archive_dir_path)
+                    .await
+                {
+                    Ok(m) => m,
+                    Err(e) => {
+                        tracing::error!("Failed to archive aprs_messages: {}", e);
+                        return Err(anyhow::anyhow!("Failed to archive aprs_messages: {}", e));
+                    }
+                };
+            Ok((metrics, start.elapsed().as_secs_f64()))
+        }
+    );
 
     // Check if any archival task failed
     let (flights_metrics, flights_duration) = flights_result?;
@@ -231,7 +232,7 @@ pub async fn handle_archive(
     });
 
     // Collect metadata for aprs_messages
-    let aprs_messages_oldest = AprsMessage::get_oldest_date(&pool).await?;
+    let aprs_messages_oldest = AprsMessageCsv::get_oldest_date(&pool).await?;
     let aprs_messages_file_size = aprs_messages_metrics
         .archive_files
         .iter()
@@ -337,7 +338,7 @@ pub async fn handle_archive(
             .and_hms_opt(0, 0, 0)
             .unwrap()
             .and_utc();
-        let count = AprsMessage::count_for_day(&pool, day_start, day_end).await?;
+        let count = AprsMessageCsv::count_for_day(&pool, day_start, day_end).await?;
         let archived = date < messages_before;
         aprs_messages_counts.push(DailyCount {
             date,
@@ -397,7 +398,7 @@ pub async fn handle_resurrect(pool: PgPool, date: String, archive_path: String) 
     info!("=== Resurrecting aprs_messages ===");
     let aprs_messages_file = archive_dir.join(format!("{}-aprs_messages.csv.zst", date_str));
     if aprs_messages_file.exists() {
-        resurrect::<AprsMessage>(&pool, &aprs_messages_file).await?;
+        resurrect::<AprsMessageCsv>(&pool, &aprs_messages_file).await?;
     } else {
         info!(
             "No aprs_messages archive found for {} (expected: {})",
