@@ -73,6 +73,7 @@
 
 	// Nearby flights data - using full Flight type
 	let nearbyFlights = $state<Flight[]>([]);
+	let nearbyFlightsFixes = $state<Map<string, typeof data.fixes>>(new Map());
 
 	let nearbyFlightPaths = $state<google.maps.Polyline[]>([]);
 	let isLoadingNearbyFlights = $state(false);
@@ -442,6 +443,7 @@
 			nearbyFlightPaths.forEach((path) => path.setMap(null));
 			nearbyFlightPaths = [];
 			nearbyFlights = [];
+			nearbyFlightsFixes.clear();
 		}
 	}
 
@@ -473,6 +475,100 @@
 		}
 	}
 
+	// Helper function to filter fixes to only those in viewport (with padding)
+	function filterFixesToViewport(
+		fixes: typeof data.fixes,
+		bounds: google.maps.LatLngBounds
+	): typeof data.fixes {
+		// Expand bounds by ~20% in each direction to include slightly off-screen fixes
+		const ne = bounds.getNorthEast();
+		const sw = bounds.getSouthWest();
+		const latPadding = (ne.lat() - sw.lat()) * 0.2;
+		const lngPadding = (ne.lng() - sw.lng()) * 0.2;
+
+		const paddedBounds = new google.maps.LatLngBounds(
+			{ lat: sw.lat() - latPadding, lng: sw.lng() - lngPadding },
+			{ lat: ne.lat() + latPadding, lng: ne.lng() + lngPadding }
+		);
+
+		return fixes.filter((fix) => {
+			const latLng = { lat: fix.latitude, lng: fix.longitude };
+			return paddedBounds.contains(latLng);
+		});
+	}
+
+	// Helper function to simplify polyline by reducing point density
+	function simplifyPath(
+		fixes: typeof data.fixes,
+		maxPoints: number = 500
+	): { lat: number; lng: number }[] {
+		if (fixes.length <= maxPoints) {
+			// No simplification needed
+			return fixes.map((fix) => ({ lat: fix.latitude, lng: fix.longitude }));
+		}
+
+		// Use a simple decimation algorithm - take every Nth point
+		// Always include first and last points
+		const result: { lat: number; lng: number }[] = [];
+		const step = Math.ceil(fixes.length / maxPoints);
+
+		result.push({ lat: fixes[0].latitude, lng: fixes[0].longitude });
+
+		for (let i = step; i < fixes.length - 1; i += step) {
+			result.push({ lat: fixes[i].latitude, lng: fixes[i].longitude });
+		}
+
+		// Always include the last point
+		if (fixes.length > 1) {
+			const last = fixes[fixes.length - 1];
+			result.push({ lat: last.latitude, lng: last.longitude });
+		}
+
+		return result;
+	}
+
+	// Update nearby flight paths based on current map viewport
+	function updateNearbyFlightPaths() {
+		if (!map || nearbyFlightsFixes.size === 0) return;
+
+		const bounds = map.getBounds();
+		if (!bounds) return;
+
+		// Clear existing paths
+		nearbyFlightPaths.forEach((path) => path.setMap(null));
+		nearbyFlightPaths = [];
+
+		// Color palette for nearby flights (excluding red which is used for main flight)
+		const colors = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'];
+
+		// Store map reference for use in closure
+		const currentMap = map;
+
+		// Render polylines for each nearby flight
+		Array.from(nearbyFlightsFixes.values()).forEach((fixes, i) => {
+			if (fixes.length === 0) return;
+
+			const fixesInOrder = [...fixes].reverse();
+
+			// Filter to viewport and simplify the path
+			const viewportFixes = filterFixesToViewport(fixesInOrder, bounds);
+			if (viewportFixes.length === 0) return;
+
+			const pathCoordinates = simplifyPath(viewportFixes, 500);
+
+			const flightPath = new google.maps.Polyline({
+				path: pathCoordinates,
+				geodesic: true,
+				strokeColor: colors[i % colors.length],
+				strokeOpacity: 0.6,
+				strokeWeight: 2
+			});
+
+			flightPath.setMap(currentMap);
+			nearbyFlightPaths.push(flightPath);
+		});
+	}
+
 	// Fetch nearby flights and their fixes
 	async function fetchNearbyFlights() {
 		isLoadingNearbyFlights = true;
@@ -481,46 +577,32 @@
 			const flights = await serverCall<Flight[]>(`/flights/${data.flight.id}/nearby`);
 			nearbyFlights = flights;
 
-			// Fetch fixes for each nearby flight and add to map
 			if (map) {
-				// Clear existing nearby flight paths
-				nearbyFlightPaths.forEach((path) => path.setMap(null));
-				nearbyFlightPaths = [];
+				// Fetch all fixes in parallel for better performance
+				const fixesPromises = nearbyFlights.map((nearbyFlight) =>
+					serverCall<{
+						fixes: typeof data.fixes;
+						count: number;
+					}>(`/flights/${nearbyFlight.id}/fixes`)
+						.then((response) => ({ flightId: nearbyFlight.id, fixes: response.fixes }))
+						.catch((err) => {
+							console.error(`Failed to fetch fixes for nearby flight ${nearbyFlight.id}:`, err);
+							return null;
+						})
+				);
 
-				// Color palette for nearby flights (excluding red which is used for main flight)
-				const colors = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'];
+				const allFixesResponses = await Promise.all(fixesPromises);
 
-				for (let i = 0; i < nearbyFlights.length; i++) {
-					const nearbyFlight = nearbyFlights[i];
-					try {
-						const fixesResponse = await serverCall<{
-							fixes: typeof data.fixes;
-							count: number;
-						}>(`/flights/${nearbyFlight.id}/fixes`);
-
-						if (fixesResponse.fixes.length > 0) {
-							// Draw flight path for this nearby flight
-							const fixesInOrder = [...fixesResponse.fixes].reverse();
-							const pathCoordinates = fixesInOrder.map((fix) => ({
-								lat: fix.latitude,
-								lng: fix.longitude
-							}));
-
-							const flightPath = new google.maps.Polyline({
-								path: pathCoordinates,
-								geodesic: true,
-								strokeColor: colors[i % colors.length],
-								strokeOpacity: 0.6,
-								strokeWeight: 2
-							});
-
-							flightPath.setMap(map);
-							nearbyFlightPaths.push(flightPath);
-						}
-					} catch (err) {
-						console.error(`Failed to fetch fixes for nearby flight ${nearbyFlight.id}:`, err);
+				// Store all fixes in the map
+				nearbyFlightsFixes.clear();
+				allFixesResponses.forEach((response) => {
+					if (response && response.fixes.length > 0) {
+						nearbyFlightsFixes.set(response.flightId, response.fixes);
 					}
-				}
+				});
+
+				// Render paths based on current viewport
+				updateNearbyFlightPaths();
 			}
 		} catch (err) {
 			console.error('Failed to fetch nearby flights:', err);
@@ -914,6 +996,21 @@
 					hasUserInteracted = true;
 				}
 				isAutomatedZoom = false;
+			});
+
+			// Add bounds_changed listener to update nearby flights when panning/zooming
+			// Use debouncing to avoid excessive re-renders
+			let boundsChangedTimeout: ReturnType<typeof setTimeout> | null = null;
+			map.addListener('bounds_changed', () => {
+				if (boundsChangedTimeout) {
+					clearTimeout(boundsChangedTimeout);
+				}
+				boundsChangedTimeout = setTimeout(() => {
+					// Only update if nearby flights are enabled
+					if (includeNearbyFlights && nearbyFlightsFixes.size > 0) {
+						updateNearbyFlightPaths();
+					}
+				}, 300); // 300ms debounce
 			});
 
 			// Create info window for altitude display
