@@ -193,7 +193,7 @@ main() {
     log INFO "=========================================="
     log INFO "Database: ${PGUSER}@${PGHOST}:${PGPORT}/${PGDATABASE}"
     log INFO "Destination: ${SSH_USER}@${SSH_HOST}:${BACKUP_REMOTE_PATH}"
-    log INFO "Compression: $COMPRESSION"
+    log INFO "Compression: zstd (multi-threaded)"
     log INFO "Parallel jobs: $PARALLEL_JOBS"
 
     # Check database connectivity
@@ -216,16 +216,20 @@ main() {
     log INFO "Creating base backup with pg_basebackup..."
     mkdir -p "$BACKUP_LOCAL_DIR"
 
+    # Detect number of CPU cores for parallel compression
+    local num_cores=$(nproc)
+    log INFO "Using zstd compression with $num_cores threads"
+
     if ! pg_basebackup \
         -h "$PGHOST" \
         -p "$PGPORT" \
         -U "$PGUSER" \
         -D "$BACKUP_LOCAL_DIR" \
         -Ft \
-        -z \
         -P \
         -v \
         --wal-method=fetch \
+        --compress=zstd:${num_cores} \
         --label="$BACKUP_NAME" \
         >> "$LOG_DIR/backup.log" 2>&1; then
         log ERROR "pg_basebackup failed"
@@ -283,7 +287,8 @@ main() {
   "database": "$PGDATABASE",
   "database_size_bytes": $db_size,
   "backup_size_bytes": $backup_size,
-  "compression": "$COMPRESSION",
+  "compression": "zstd",
+  "compression_threads": $(nproc),
   "hostname": "$(hostname)",
   "postgresql_version": "$(psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -t -c "SHOW server_version" | tr -d ' ')",
   "completed_at": "$(date -u +"%Y-%m-%d %H:%M:%S UTC")"
