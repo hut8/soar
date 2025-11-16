@@ -166,7 +166,9 @@ pub async fn handle_archive(
     info!("Parallel archival completed, collecting metadata...");
 
     // Collect metadata for flights
-    let flights_oldest = FlightModel::get_oldest_date(&pool).await?;
+    // Use today + 1000 years as a "no upper bound" to get the actual oldest remaining record
+    let far_future = today + chrono::Duration::days(365 * 1000);
+    let flights_oldest = FlightModel::get_oldest_date(&pool, far_future).await?;
     let flights_file_size = flights_metrics
         .archive_files
         .iter()
@@ -188,7 +190,7 @@ pub async fn handle_archive(
     });
 
     // Collect metadata for fixes
-    let fixes_oldest = Fix::get_oldest_date(&pool).await?;
+    let fixes_oldest = Fix::get_oldest_date(&pool, far_future).await?;
     let fixes_file_size = fixes_metrics
         .archive_files
         .iter()
@@ -210,7 +212,7 @@ pub async fn handle_archive(
     });
 
     // Collect metadata for receiver_statuses
-    let receiver_statuses_oldest = ReceiverStatus::get_oldest_date(&pool).await?;
+    let receiver_statuses_oldest = ReceiverStatus::get_oldest_date(&pool, far_future).await?;
     let receiver_statuses_file_size = receiver_statuses_metrics
         .archive_files
         .iter()
@@ -232,7 +234,7 @@ pub async fn handle_archive(
     });
 
     // Collect metadata for aprs_messages
-    let aprs_messages_oldest = AprsMessageCsv::get_oldest_date(&pool).await?;
+    let aprs_messages_oldest = AprsMessageCsv::get_oldest_date(&pool, far_future).await?;
     let aprs_messages_file_size = aprs_messages_metrics
         .archive_files
         .iter()

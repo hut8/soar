@@ -26,8 +26,10 @@ pub trait Archivable: Sized + Serialize + for<'de> Deserialize<'de> + Send + 'st
         Self::table_name()
     }
 
-    /// Get the oldest date of records in the database
-    async fn get_oldest_date(pool: &PgPool) -> Result<Option<NaiveDate>>;
+    /// Get the oldest date of records in the database that are eligible for archival.
+    /// Only considers records before the given date to enable partition pruning.
+    /// If the oldest record is newer than before_date, returns None.
+    async fn get_oldest_date(pool: &PgPool, before_date: NaiveDate) -> Result<Option<NaiveDate>>;
 
     /// Count records for a specific day range
     async fn count_for_day(
@@ -91,17 +93,23 @@ pub async fn archive<T: Archivable>(
 
     let mut metrics = ArchiveMetrics::new();
 
-    let oldest_date = T::get_oldest_date(pool).await?;
+    let oldest_date = T::get_oldest_date(pool, before_date).await?;
     match oldest_date {
         None => {
             info!(
-                "No {} found in database. Nothing to archive.",
-                T::table_name()
+                "No {} found in database older than {}. Nothing to archive.",
+                T::table_name(),
+                before_date
             );
             Ok(metrics)
         }
         Some(oldest) => {
-            info!("Oldest {} date in database: {}", T::table_name(), oldest);
+            info!(
+                "Oldest {} date in database (before {}): {}",
+                T::table_name(),
+                before_date,
+                oldest
+            );
             let mut current_date = oldest;
             while current_date < before_date {
                 let (rows, file_path, file_size) =
