@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
 use soar::fix_processor::FixProcessor;
@@ -20,7 +20,7 @@ use soar::receiver_status_repo::ReceiverStatusRepository;
 use soar::server_messages_repo::ServerMessagesRepository;
 use std::env;
 use tracing::Instrument;
-use tracing::{debug, info, trace, warn};
+use tracing::{debug, error, info, trace, warn};
 
 /// Process a received APRS message by parsing and routing through PacketRouter
 /// The message format is: "YYYY-MM-DDTHH:MM:SS.SSSZ <original_message>"
@@ -720,63 +720,99 @@ pub async fn handle_run(
     );
     info!("Graceful shutdown handler configured");
 
-    // Set up JetStream consumer to read from durable queue
-    info!("Connecting to NATS at {}...", nats_url);
-    let nats_client = async_nats::ConnectOptions::new()
-        .name("soar-run")
-        .connect(&nats_url)
+    // Retry loop for JetStream consumer connection and consumption
+    loop {
+        info!("Connecting to NATS at {}...", nats_url);
+        let nats_result = async_nats::ConnectOptions::new()
+            .name("soar-run")
+            .connect(&nats_url)
+            .await;
+
+        let nats_client = match nats_result {
+            Ok(client) => {
+                info!("Connected to NATS successfully");
+                client
+            }
+            Err(e) => {
+                error!("Failed to connect to NATS: {} - retrying in 1s", e);
+                metrics::counter!("aprs.jetstream.connection_failed").increment(1);
+                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                continue;
+            }
+        };
+
+        let jetstream = async_nats::jetstream::new(nats_client);
+
+        // Create JetStream consumer
+        info!(
+            "Creating JetStream consumer '{}' for stream '{}', subject '{}'...",
+            final_consumer_name, final_stream_name, final_subject
+        );
+
+        let consumer = match soar::aprs_jetstream_consumer::JetStreamConsumer::new(
+            jetstream,
+            final_stream_name.clone(),
+            final_subject.clone(),
+            final_consumer_name.clone(),
+        )
         .await
-        .context("Failed to connect to NATS")?;
-    info!("Connected to NATS successfully");
+        {
+            Ok(consumer) => {
+                info!("JetStream consumer ready, starting message processing...");
+                consumer
+            }
+            Err(e) => {
+                error!(
+                    "Failed to create JetStream consumer: {} - retrying in 1s",
+                    e
+                );
+                metrics::counter!("aprs.jetstream.consumer_setup_failed").increment(1);
+                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                continue;
+            }
+        };
 
-    let jetstream = async_nats::jetstream::new(nats_client);
+        info!("APRS client started. Press Ctrl+C to stop.");
 
-    // Create JetStream consumer
-    info!(
-        "Creating JetStream consumer '{}' for stream '{}', subject '{}'...",
-        final_consumer_name, final_stream_name, final_subject
-    );
-    let consumer = soar::aprs_jetstream_consumer::JetStreamConsumer::new(
-        jetstream,
-        final_stream_name.clone(),
-        final_subject.clone(),
-        final_consumer_name.clone(),
-    )
-    .await
-    .context("Failed to create JetStream consumer")?;
-
-    info!("JetStream consumer ready, starting message processing...");
-
-    info!("APRS client started. Press Ctrl+C to stop.");
-
-    // Start consuming messages from JetStream and sending them to the intake queue
-    // Messages are implicitly ACKed when delivered (AckPolicy::None)
-    // The intake queue processor will handle parsing and routing
-    // Blocking sends to the intake queue provide natural backpressure to JetStream
-    consumer
-        .consume(move |message, _jetstream_msg| {
-            let intake_tx = jetstream_intake_tx.clone();
-            async move {
-                // Send message to intake queue (blocking send for backpressure)
-                // When intake queue is full, this will block and stop reading from JetStream
-                match intake_tx.send_async(message).await {
-                    Ok(_) => {
-                        metrics::counter!("aprs.jetstream.received").increment(1);
-                        Ok(())
-                    }
-                    Err(e) => {
-                        warn!("Failed to send message to intake queue: {}", e);
-                        metrics::counter!("aprs.jetstream.send_errors").increment(1);
-                        Ok(()) // Still ack the message to JetStream
+        // Start consuming messages from JetStream and sending them to the intake queue
+        // Messages are explicitly ACKed after successful queueing
+        // The intake queue processor will handle parsing and routing
+        // Blocking sends to the intake queue provide natural backpressure to JetStream
+        let intake_tx_clone = jetstream_intake_tx.clone();
+        let consume_result = consumer
+            .consume(move |message, _jetstream_msg| {
+                let intake_tx = intake_tx_clone.clone();
+                async move {
+                    // Send message to intake queue (blocking send for backpressure)
+                    // When intake queue is full, this will block and stop reading from JetStream
+                    match intake_tx.send_async(message).await {
+                        Ok(_) => {
+                            metrics::counter!("aprs.jetstream.received").increment(1);
+                            Ok(())
+                        }
+                        Err(e) => {
+                            warn!("Failed to send message to intake queue: {}", e);
+                            metrics::counter!("aprs.jetstream.send_errors").increment(1);
+                            Ok(()) // Still ack the message to JetStream
+                        }
                     }
                 }
-            }
-        })
-        .await?;
+            })
+            .await;
 
-    // If we reach here, the consumer stream ended unexpectedly
-    warn!("JetStream consumer stopped unexpectedly");
-    Ok(())
+        // If we reach here, the consumer stream ended (either normally or with error)
+        match consume_result {
+            Ok(_) => {
+                warn!("JetStream consumer stopped normally - reconnecting in 1s");
+            }
+            Err(e) => {
+                error!("JetStream consumer failed: {} - reconnecting in 1s", e);
+                metrics::counter!("aprs.jetstream.consume_failed").increment(1);
+            }
+        }
+
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+    }
 }
 
 #[cfg(test)]

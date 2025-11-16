@@ -18,8 +18,9 @@ impl Archivable for Fix {
         let pool = pool.clone();
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
+            // Use received_at for partition pruning (timestamp and received_at are usually very close)
             let oldest_timestamp: Option<chrono::DateTime<Utc>> = fixes::table
-                .select(diesel::dsl::min(fixes::timestamp))
+                .select(diesel::dsl::min(fixes::received_at))
                 .first::<Option<chrono::DateTime<Utc>>>(&mut conn)?;
             Ok(oldest_timestamp.map(|ts| ts.date_naive()))
         })
@@ -35,8 +36,8 @@ impl Archivable for Fix {
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
             let count = fixes::table
-                .filter(fixes::timestamp.ge(day_start))
-                .filter(fixes::timestamp.lt(day_end))
+                .filter(fixes::received_at.ge(day_start))
+                .filter(fixes::received_at.lt(day_end))
                 .count()
                 .get_result::<i64>(&mut conn)?;
             Ok(count)
@@ -54,10 +55,11 @@ impl Archivable for Fix {
         let file_path = file_path.to_path_buf();
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
+
             let fixes_iter = fixes::table
-                .filter(fixes::timestamp.ge(day_start))
-                .filter(fixes::timestamp.lt(day_end))
-                .order(fixes::timestamp.asc())
+                .filter(fixes::received_at.ge(day_start))
+                .filter(fixes::received_at.lt(day_end))
+                .order(fixes::received_at.asc())
                 .select(Fix::as_select())
                 .load_iter::<Fix, diesel::pg::PgRowByRowLoadingMode>(&mut conn)?;
 
@@ -77,8 +79,8 @@ impl Archivable for Fix {
             conn.transaction::<_, anyhow::Error, _>(|conn| {
                 let deleted_count = diesel::delete(
                     fixes::table
-                        .filter(fixes::timestamp.ge(day_start))
-                        .filter(fixes::timestamp.lt(day_end)),
+                        .filter(fixes::received_at.ge(day_start))
+                        .filter(fixes::received_at.lt(day_end)),
                 )
                 .execute(conn)?;
                 info!(

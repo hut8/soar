@@ -1,0 +1,181 @@
+#!/usr/bin/env python3
+import os
+import json
+import time
+import glob
+import requests
+
+BASE_URL = "https://ginfoapi.caa.co.uk/api/aircraft/search"
+DETAILS_URL = "https://ginfoapi.caa.co.uk/api/aircraft/details"
+OUT_DIR = os.path.expanduser("~/aircraft-data/registrations/gb")
+AIRCRAFT_DIR = os.path.expanduser("~/aircraft-data/aircraft/gb")
+JSONL_PATH = os.path.join(OUT_DIR, "aircraft-list.jsonl")
+
+HEADERS = {
+    "accept": "application/json, text/plain, */*",
+    "accept-language": "en-US,en;q=0.9",
+    "cache-control": "no-cache",
+    "content-type": "application/json",
+    "origin": "https://www.caa.co.uk",
+    "pragma": "no-cache",
+    "priority": "u=1, i",
+    "referer": "https://www.caa.co.uk/aircraft-register/g-info/search-g-info/",
+    "sec-ch-ua": '"Chromium";v="142", "Google Chrome";v="142", "Not_A Brand";v="99"',
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": '"macOS"',
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-site",
+    "user-agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/142.0.0.0 Safari/537.36"
+    ),
+}
+
+TEMPLATE_PAYLOAD = {
+    "AircraftType": None,
+    "AOCHolder": None,
+    "ICAO24BitHex": None,
+    "ICAOAircraftTypeDesignator": None,
+    "MilitarySerialNumber": None,
+    "RegisteredOwner": None,
+    "Registration": None,
+    "SerialNumber": None,  # filled in per request
+    "IncludeDeregistered": False,
+}
+
+
+def ensure_out_dir():
+    os.makedirs(OUT_DIR, exist_ok=True)
+
+
+def fetch_all_serials():
+    """Fetch results for serial numbers 00–99 and save each to its own JSON file."""
+    ensure_out_dir()
+
+    for i in range(100):
+        serial = f"{i:02d}"
+        out_path = os.path.join(OUT_DIR, f"{serial}.json")
+
+        # Skip if file already exists
+        if os.path.exists(out_path):
+            print(f"[*] Serial {serial} already exists, skipping…")
+            continue
+
+        print(f"[*] Fetching serial {serial}…")
+
+        payload = TEMPLATE_PAYLOAD.copy()
+        payload["SerialNumber"] = serial
+
+        resp = requests.post(
+            BASE_URL,
+            headers=HEADERS,
+            json=payload,
+            timeout=30,
+        )
+        resp.raise_for_status()
+
+        data = resp.json()
+        with open(out_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+        # Tiny delay to be polite to the API; adjust or remove if you want.
+        time.sleep(0.2)
+
+
+def load_records_from_file(path):
+    """Load records from a JSON file (expected to be an array of aircraft objects)."""
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    # The API returns an array of aircraft objects
+    if isinstance(data, list):
+        return data
+
+    # Unexpected format
+    print(f"[!] Warning: Unexpected data format in {path}")
+    return []
+
+
+def dedupe_by_aircraft_id():
+    """Read all per-serial JSONs, dedupe by AircraftID, write JSONL."""
+    files = sorted(glob.glob(os.path.join(OUT_DIR, "[0-9][0-9].json")))
+    seen = {}
+    count = 0
+
+    for path in files:
+        records = load_records_from_file(path)
+        for rec in records:
+            aircraft_id = rec.get("AircraftID")
+            # Skip records without an AircraftID
+            if aircraft_id is None:
+                continue
+            # Keep the first record per unique AircraftID
+            if aircraft_id not in seen:
+                seen[aircraft_id] = rec
+                count += 1
+
+    print(f"[*] Writing {count} unique records to {JSONL_PATH}")
+    with open(JSONL_PATH, "w", encoding="utf-8") as out:
+        for rec in seen.values():
+            out.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
+
+def fetch_aircraft_details():
+    """Read aircraft-list.jsonl and fetch detailed info for each aircraft."""
+    if not os.path.exists(JSONL_PATH):
+        print(f"[!] {JSONL_PATH} not found. Run registration fetch first.")
+        return
+
+    os.makedirs(AIRCRAFT_DIR, exist_ok=True)
+
+    with open(JSONL_PATH, "r", encoding="utf-8") as f:
+        for line in f:
+            rec = json.loads(line)
+            aircraft_id = rec.get("AircraftID")
+
+            if aircraft_id is None:
+                continue
+
+            out_path = os.path.join(AIRCRAFT_DIR, f"{aircraft_id}.json")
+
+            # Skip if already fetched
+            if os.path.exists(out_path):
+                print(f"[*] Aircraft {aircraft_id} already exists, skipping…")
+                continue
+
+            print(f"[*] Fetching aircraft details for {aircraft_id}…")
+
+            try:
+                resp = requests.get(
+                    f"{DETAILS_URL}/{aircraft_id}",
+                    headers=HEADERS,
+                    timeout=30,
+                )
+                resp.raise_for_status()
+
+                data = resp.json()
+                with open(out_path, "w", encoding="utf-8") as out:
+                    json.dump(data, out, ensure_ascii=False, indent=2)
+
+                # Be polite to the API
+                time.sleep(0.2)
+            except Exception as e:
+                print(f"[!] Error fetching aircraft {aircraft_id}: {e}")
+
+
+def main():
+    # Skip all registration fetching if aircraft-list.jsonl already exists
+    if os.path.exists(JSONL_PATH):
+        print(f"[*] {JSONL_PATH} already exists, skipping registration fetch")
+    else:
+        fetch_all_serials()
+        dedupe_by_aircraft_id()
+
+    # Fetch individual aircraft details
+    fetch_aircraft_details()
+
+
+if __name__ == "__main__":
+    main()

@@ -311,7 +311,7 @@ pub(crate) async fn process_state_transition(
             // We need to query recent fixes to determine this
             let recent_fixes = ctx
                 .fixes_repo
-                .get_fixes_for_device(fix.device_id, Some(3))
+                .get_fixes_for_device(fix.device_id, Some(3), None)
                 .await
                 .unwrap_or_default();
 
@@ -469,7 +469,7 @@ pub(crate) async fn process_state_transition(
 
                     // Check if we have 5 consecutive inactive fixes
                     if state.has_five_consecutive_inactive() {
-                        info!(
+                        debug!(
                             "Device {} landing after 5 consecutive inactive fixes (AGL: {:?} ft) - completing flight {}",
                             fix.device_id, agl, flight_id
                         );
@@ -529,7 +529,7 @@ pub(crate) async fn process_state_transition(
                         }
                     } else {
                         // Not enough consecutive inactive fixes yet - keep flight active
-                        info!(
+                        debug!(
                             "Device {} inactive (AGL: {:?} ft) but waiting for more inactive fixes ({}/5) - continuing flight {}",
                             fix.device_id,
                             agl,

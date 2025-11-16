@@ -166,24 +166,51 @@ log_archive_command = on
 
 1. **Edit the configuration file**:
    ```bash
-   sudo nano /etc/postgresql/15/main/postgresql.conf
+   sudo nano /etc/postgresql/17/main/postgresql.conf
    ```
 
-2. **Verify configuration syntax**:
+2. **Configure authentication for backups**:
+
+   Edit `pg_hba.conf` to allow replication connections without password:
    ```bash
-   sudo -u postgres /usr/lib/postgresql/15/bin/postgres -C archive_mode -D /var/lib/postgresql/15/main
+   sudo nano /etc/postgresql/17/main/pg_hba.conf
    ```
 
-3. **Restart PostgreSQL** (requires downtime):
+   Ensure the replication lines use `trust` authentication for localhost:
+   ```conf
+   # Allow replication connections from localhost, by a user with the
+   # replication privilege.
+   local   replication     all                                     peer
+   host    replication     all             127.0.0.1/32            trust
+   host    replication     all             ::1/128                 trust
+   ```
+
+   **IMPORTANT**: Change `scram-sha-256` to `trust` for the `host replication` lines.
+   This is required because `pg_basebackup` connects via TCP (even to localhost) and
+   needs passwordless access when running as the `postgres` user.
+
+3. **Verify configuration syntax**:
+   ```bash
+   sudo -u postgres /usr/lib/postgresql/17/bin/postgres -C archive_mode -D /var/lib/postgresql/17/main
+   ```
+
+4. **Restart PostgreSQL** (requires downtime):
    ```bash
    sudo systemctl restart postgresql
    ```
 
-4. **Verify settings are active**:
+5. **Verify settings are active**:
    ```bash
    psql -U postgres -d soar -c "SHOW wal_level;"
    psql -U postgres -d soar -c "SHOW archive_mode;"
    psql -U postgres -d soar -c "SHOW archive_command;"
+   ```
+
+6. **Verify backup authentication works**:
+   ```bash
+   sudo -u postgres pg_basebackup -h localhost -U postgres -D /tmp/test-auth -Fp --progress
+   # Should start without prompting for password (Ctrl+C to cancel after it starts)
+   sudo rm -rf /tmp/test-auth
    ```
 
 ### Understanding the Configuration
@@ -1148,6 +1175,30 @@ sudo journalctl -u soar-backup-base.service -f
 4. **PostgreSQL not accepting connections**:
    ```bash
    sudo -u postgres psql -d soar -c "SELECT 1;"
+   ```
+
+5. **Backup prompting for password** (most common):
+
+   **Symptoms**: Backup log (`/var/log/soar/backup.log`) shows repeated "Password:" prompts, backups timeout after 12 hours
+
+   **Cause**: PostgreSQL `pg_hba.conf` requires password authentication for replication connections
+
+   **Fix**:
+   ```bash
+   # Edit pg_hba.conf
+   sudo nano /etc/postgresql/17/main/pg_hba.conf
+
+   # Change these lines from scram-sha-256 to trust:
+   host    replication     all             127.0.0.1/32            trust
+   host    replication     all             ::1/128                 trust
+
+   # Reload PostgreSQL
+   sudo systemctl reload postgresql
+
+   # Test authentication
+   sudo -u postgres pg_basebackup -h localhost -U postgres -D /tmp/test -Fp --progress
+   # Should start without password prompt (Ctrl+C to cancel)
+   sudo rm -rf /tmp/test
    ```
 
 ### Issue: Restore Failing

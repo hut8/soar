@@ -216,10 +216,20 @@ pub fn initialize_aprs_ingest_metrics() {
 
     // JetStream publishing metrics (ingest-aprs publishes to JetStream)
     metrics::counter!("aprs.jetstream.published").absolute(0);
-    metrics::counter!("aprs.jetstream.published.server").absolute(0);
-    metrics::counter!("aprs.jetstream.published.aprs").absolute(0);
     metrics::counter!("aprs.jetstream.publish_error").absolute(0);
+    metrics::counter!("aprs.jetstream.slow_publish").absolute(0);
+    metrics::counter!("aprs.jetstream.publish_timeout").absolute(0);
     metrics::gauge!("aprs.jetstream.queue_depth").set(0.0);
+    metrics::gauge!("aprs.jetstream.in_flight").set(0.0);
+    metrics::histogram!("aprs.jetstream.publish_duration_ms").record(0.0);
+
+    // Connection timeout metric
+    metrics::counter!("aprs.connection.timeout").absolute(0);
+
+    // Shutdown metrics
+    metrics::counter!("aprs.shutdown.queue_depth_at_shutdown").absolute(0);
+    metrics::counter!("aprs.shutdown.messages_flushed").absolute(0);
+    metrics::histogram!("aprs.shutdown.flush_duration_seconds").record(0.0);
 }
 
 /// Initialize SOAR run metrics to zero/default values

@@ -487,7 +487,7 @@ async fn get_fixes_by_device_id(
     let fixes_repo = FixesRepository::new(pool);
 
     match fixes_repo
-        .get_fixes_for_device(device_id, Some(limit.unwrap_or(1000)))
+        .get_fixes_for_device(device_id, Some(limit.unwrap_or(1000)), None)
         .await
     {
         Ok(fixes) => Json(fixes).into_response(),

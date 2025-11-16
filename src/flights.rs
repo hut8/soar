@@ -239,7 +239,7 @@ impl Flight {
     /// This is used to prevent race conditions when creating flights asynchronously
     pub fn new_airborne_from_fix_with_id(fix: &Fix, device: &Device, flight_id: Uuid) -> Self {
         let now = Utc::now();
-        info!("Creating airborne flight {} from fix: {:?}", flight_id, fix);
+        debug!("Creating airborne flight {} from fix: {:?}", flight_id, fix);
         Self {
             id: flight_id,
             device_id: fix.device_id.into(),

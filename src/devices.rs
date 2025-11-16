@@ -1293,4 +1293,28 @@ mod tests {
             country_code: None,
         }
     }
+
+    #[test]
+    fn test_flydent_parses_french_registration_f_jjij() {
+        // Verify that flydent 0.6.0 correctly parses the French registration "F-JJIJ"
+        // This is the specific case reported by the user
+        let parser = flydent::Parser::new();
+
+        // Test parsing in non-strict mode (false, false)
+        let result = parser.parse("F-JJIJ", false, false);
+        assert!(
+            result.is_some(),
+            "Flydent 0.6.0 should be able to parse French registration 'F-JJIJ' in non-strict mode"
+        );
+
+        if let Some(entity) = result {
+            let canonical = entity.canonical_callsign().to_string();
+            // The canonical form should be "F-JJIJ" (not blank!)
+            assert_eq!(
+                canonical, "F-JJIJ",
+                "Flydent should normalize F-JJIJ to F-JJIJ, got: {}",
+                canonical
+            );
+        }
+    }
 }

@@ -298,13 +298,16 @@ impl AprsClient {
                         );
                     }
 
-                    match Self::connect_and_run(
+                    // No timeout wrapper here - connect_and_run has its own internal timeouts
+                    // for message processing (5 minute timeout) and doesn't need an outer limit
+                    let connect_result = Self::connect_and_run(
                         &config,
                         raw_message_tx.clone(),
                         health_for_connection.clone(),
                     )
-                    .await
-                    {
+                    .await;
+
+                    match connect_result {
                         ConnectionResult::Success => {
                             info!("Connection ended normally");
                             // Mark as disconnected in health state

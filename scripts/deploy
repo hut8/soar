@@ -284,7 +284,10 @@ if [ "$LOCAL_DEPLOY" = "1" ]; then
     # Local deployment - copy to /tmp and invoke directly
     log_step "Preparing local deployment"
 
-    DEPLOY_DIR="/tmp/soar/deploy/$TIMESTAMP"
+    # Create user-owned temp directory for deployment
+    DEPLOY_BASE_DIR="${TMPDIR:-/tmp}/soar-deploy"
+    mkdir -p "$DEPLOY_BASE_DIR"
+    DEPLOY_DIR="$DEPLOY_BASE_DIR/$TIMESTAMP"
     log_info "Creating deployment directory: $DEPLOY_DIR"
     mkdir -p "$DEPLOY_DIR"
 
@@ -296,21 +299,12 @@ if [ "$LOCAL_DEPLOY" = "1" ]; then
     # Execute deployment
     log_step "Executing local deployment"
 
-    log_warn "About to execute deployment locally"
-    log_info "This will:"
-    log_info "  1. Stop all SOAR services"
-    log_info "  2. Run database migrations"
-    log_info "  3. Install new binary and service files"
+    log_info "Deployment will:"
+    log_info "  1. Stop soar-run service"
+    log_info "  2. Run database migrations (aprs-ingest and web keep running)"
+    log_info "  3. Stop remaining services and install new binary"
     log_info "  4. Restart all services"
     echo
-
-    read -p "Continue with deployment? (y/N) " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        log_info "Deployment cancelled"
-        log_info "Deployment package remains at: $DEPLOY_DIR"
-        exit 1
-    fi
 
     log_info "Executing deployment script..."
     sudo /usr/local/bin/soar-deploy "$DEPLOY_DIR"
@@ -345,9 +339,10 @@ else
     # Upload deployment package
     log_step "Uploading deployment package"
 
-    REMOTE_DEPLOY_DIR="/tmp/soar/deploy/$TIMESTAMP"
+    # Create user-owned temp directory for deployment on remote server
+    REMOTE_DEPLOY_DIR="\${TMPDIR:-/tmp}/soar-deploy/$TIMESTAMP"
     log_info "Creating remote deployment directory: $REMOTE_DEPLOY_DIR"
-    ssh "soar@$DEPLOY_SERVER" "mkdir -p $REMOTE_DEPLOY_DIR"
+    ssh "soar@$DEPLOY_SERVER" "mkdir -p \${TMPDIR:-/tmp}/soar-deploy && mkdir -p $REMOTE_DEPLOY_DIR"
 
     log_info "Uploading files..."
     scp -r "$DEPLOY_PKG"/* "soar@$DEPLOY_SERVER:$REMOTE_DEPLOY_DIR/"
@@ -357,21 +352,13 @@ else
     # Execute deployment
     log_step "Executing deployment on server"
 
-    log_warn "About to execute deployment on $DEPLOY_SERVER"
-    log_info "This will:"
-    log_info "  1. Stop all SOAR services"
-    log_info "  2. Run database migrations"
-    log_info "  3. Install new binary and service files"
+    log_info "Deploying to $DEPLOY_SERVER"
+    log_info "Deployment will:"
+    log_info "  1. Stop soar-run service"
+    log_info "  2. Run database migrations (aprs-ingest and web keep running)"
+    log_info "  3. Stop remaining services and install new binary"
     log_info "  4. Restart all services"
     echo
-
-    read -p "Continue with deployment? (y/N) " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        log_info "Deployment cancelled"
-        log_info "Deployment package remains at: $REMOTE_DEPLOY_DIR"
-        exit 1
-    fi
 
     log_info "Executing deployment script..."
     ssh "soar@$DEPLOY_SERVER" "sudo /usr/local/bin/soar-deploy $REMOTE_DEPLOY_DIR"

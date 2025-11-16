@@ -1,5 +1,5 @@
 use anyhow::Result;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use diesel::prelude::*;
 use diesel_derive_enum::DbEnum;
 use tracing::{debug, info, instrument, trace};
@@ -329,8 +329,8 @@ impl FixesRepository {
                         .and(fixes::received_at.eq(aprs_messages::received_at))),
                 )
                 .filter(fixes::device_id.eq(device_id_param))
-                .filter(fixes::timestamp.between(start_time, end_time))
-                .order(fixes::timestamp.desc())
+                .filter(fixes::received_at.between(start_time, end_time))
+                .order(fixes::received_at.desc())
                 .into_boxed();
 
             // Only apply limit if specified
@@ -353,15 +353,23 @@ impl FixesRepository {
         Ok(result)
     }
 
-    /// Get recent fixes for an aircraft (without time range)
+    /// Get recent fixes for a device with optional lookback period
+    ///
+    /// # Arguments
+    /// * `device_uuid` - The device UUID to query
+    /// * `limit` - Maximum number of fixes to return (default: 100)
+    /// * `lookback_hours` - How many hours back to search (default: 24)
     pub async fn get_fixes_for_device(
         &self,
         device_uuid: uuid::Uuid,
         limit: Option<i64>,
+        lookback_hours: Option<i64>,
     ) -> Result<Vec<Fix>> {
         use crate::schema::fixes::dsl::*;
 
         let limit = limit.unwrap_or(100);
+        let lookback = lookback_hours.unwrap_or(24);
+        let cutoff_time = Utc::now() - Duration::hours(lookback);
         let pool = self.pool.clone();
 
         let result = tokio::task::spawn_blocking(move || {
@@ -369,7 +377,8 @@ impl FixesRepository {
 
             let results = fixes
                 .filter(device_id.eq(device_uuid))
-                .order(timestamp.desc())
+                .filter(received_at.ge(cutoff_time))
+                .order(received_at.desc())
                 .limit(limit)
                 .select(Fix::as_select())
                 .load::<Fix>(&mut conn)?;
@@ -382,14 +391,17 @@ impl FixesRepository {
     }
 
     /// Get recent fixes (most recent first)
+    /// Only returns fixes from the last 24 hours for partition pruning
     pub async fn get_recent_fixes(&self, limit: i64) -> Result<Vec<Fix>> {
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
             use crate::schema::fixes::dsl::*;
             let mut conn = pool.get()?;
 
+            let cutoff_time = Utc::now() - Duration::hours(24);
             let results = fixes
-                .order(timestamp.desc())
+                .filter(received_at.ge(cutoff_time))
+                .order(received_at.desc())
                 .limit(limit)
                 .select(Fix::as_select())
                 .load::<Fix>(&mut conn)?;
@@ -414,10 +426,10 @@ impl FixesRepository {
             let mut conn = pool.get()?;
             let mut query = fixes.filter(device_id.eq(device_uuid)).into_boxed();
             if let Some(after_timestamp) = after {
-                query = query.filter(timestamp.gt(after_timestamp));
+                query = query.filter(received_at.gt(after_timestamp));
             }
             let results = query
-                .order(timestamp.asc())
+                .order(received_at.asc())
                 .limit(limit)
                 .select(Fix::as_select())
                 .load::<Fix>(&mut conn)?;
@@ -440,8 +452,8 @@ impl FixesRepository {
             let mut conn = pool.get()?;
             let fix_result = fixes
                 .filter(device_id.eq(device_uuid))
-                .filter(timestamp.gt(after))
-                .order(timestamp.desc())
+                .filter(received_at.gt(after))
+                .order(received_at.desc())
                 .limit(1)
                 .select(Fix::as_select())
                 .first::<Fix>(&mut conn)
@@ -471,7 +483,7 @@ impl FixesRepository {
                 .filter(fixes::device_id.eq(device_uuid))
                 .into_boxed();
             if let Some(after_timestamp) = after {
-                count_query = count_query.filter(fixes::timestamp.gt(after_timestamp));
+                count_query = count_query.filter(fixes::received_at.gt(after_timestamp));
             }
             if active_only == Some(true) {
                 count_query = count_query.filter(fixes::is_active.eq(true));
@@ -488,14 +500,14 @@ impl FixesRepository {
                 .filter(fixes::device_id.eq(device_uuid))
                 .into_boxed();
             if let Some(after_timestamp) = after {
-                query = query.filter(fixes::timestamp.gt(after_timestamp));
+                query = query.filter(fixes::received_at.gt(after_timestamp));
             }
             if active_only == Some(true) {
                 query = query.filter(fixes::is_active.eq(true));
             }
             let offset = (page - 1) * per_page;
             let results = query
-                .order(fixes::timestamp.desc())
+                .order(fixes::received_at.desc())
                 .limit(per_page)
                 .offset(offset)
                 .select((Fix::as_select(), aprs_messages::raw_message))
@@ -539,7 +551,7 @@ impl FixesRepository {
             let results = fixes
                 .filter(receiver_id.eq(receiver_uuid))
                 .filter(received_at.gt(cutoff_time))
-                .order(timestamp.desc())
+                .order(received_at.desc())
                 .limit(per_page)
                 .offset(offset)
                 .select(Fix::as_select())
@@ -552,7 +564,7 @@ impl FixesRepository {
         Ok(result)
     }
 
-    /// Get fixes by source (receiver callsign) with pagination
+    /// Get fixes by source (receiver callsign) with pagination (last 24 hours only)
     pub async fn get_fixes_by_source_paginated(
         &self,
         source_callsign: &str,
@@ -566,9 +578,13 @@ impl FixesRepository {
             use crate::schema::fixes::dsl::*;
             let mut conn = pool.get()?;
 
+            // Only get fixes from the last 24 hours for partition pruning
+            let cutoff_time = chrono::Utc::now() - chrono::Duration::hours(24);
+
             // Get total count
             let total_count = fixes
                 .filter(source.eq(&source_callsign))
+                .filter(received_at.gt(cutoff_time))
                 .count()
                 .get_result::<i64>(&mut conn)?;
 
@@ -576,7 +592,8 @@ impl FixesRepository {
             let offset = (page - 1) * per_page;
             let results = fixes
                 .filter(source.eq(&source_callsign))
-                .order(timestamp.desc())
+                .filter(received_at.gt(cutoff_time))
+                .order(received_at.desc())
                 .limit(per_page)
                 .offset(offset)
                 .select(Fix::as_select())

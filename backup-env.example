@@ -128,6 +128,25 @@ export BACKUP_NOTIFY_EMAIL=""
 export BACKUP_NOTIFY_SLACK_WEBHOOK=""
 # Example: export BACKUP_NOTIFY_SLACK_WEBHOOK="https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXX"
 
+# Sentry DSN for error tracking and notifications
+# The backup scripts will send events to Sentry for both successes and failures
+# Sentry is already used by the SOAR application - use the same DSN
+# Leave empty to disable Sentry notifications
+export SENTRY_DSN=""
+# Example: export SENTRY_DSN="https://abc123def456@o123456.ingest.sentry.io/7890123"
+#
+# Events sent to Sentry:
+# - Base backup failures (level: error)
+# - Base backup successes (level: info)
+# - Verification failures (level: error)
+# - Verification warnings (level: warning)
+# - Verification successes (level: info)
+#
+# Each event includes:
+# - Backup details (name, date, hostname)
+# - Error messages and context
+# - Tags for filtering (backup_type, status, environment)
+
 # Prometheus Pushgateway for metrics (optional)
 # If you have a Pushgateway, backup metrics will be pushed after each backup
 export METRICS_PUSHGATEWAY=""

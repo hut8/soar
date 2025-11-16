@@ -2,15 +2,17 @@
 Description=SOAR Run - APRS Data Collection Service
 Documentation=https://github.com/hut8/soar
 After=network-online.target postgresql.service nats-server.service
-Wants=network-online.target
-Requires=postgresql.service nats-server.service
+Wants=network-online.target nats-server.service
+Requires=postgresql.service
+# Wants=nats-server.service ensures NATS starts when this service starts
+# Service will reconnect automatically via built-in retry logic if NATS restarts
 
 [Service]
 Type=simple
 User=soar
 Group=soar
 WorkingDirectory=/var/soar
-ExecStart=/usr/local/bin/soar run --archive --suppress-aprs-type OGADSB
+ExecStart=/usr/local/bin/soar run --archive
 ExecReload=/bin/kill -s HUP $MAINPID
 
 # Environment variables

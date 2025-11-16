@@ -1,6 +1,7 @@
 /target
 .env
 .vscode/settings.json
+.logs
 
 # Web build artifacts
 web/build/
