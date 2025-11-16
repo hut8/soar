@@ -1,5 +1,5 @@
 use anyhow::Result;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use diesel::prelude::*;
 use diesel_derive_enum::DbEnum;
 use tracing::{debug, info, instrument, trace};
@@ -353,15 +353,23 @@ impl FixesRepository {
         Ok(result)
     }
 
-    /// Get recent fixes for an aircraft (without time range)
+    /// Get recent fixes for a device with optional lookback period
+    ///
+    /// # Arguments
+    /// * `device_uuid` - The device UUID to query
+    /// * `limit` - Maximum number of fixes to return (default: 100)
+    /// * `lookback_hours` - How many hours back to search (default: 24)
     pub async fn get_fixes_for_device(
         &self,
         device_uuid: uuid::Uuid,
         limit: Option<i64>,
+        lookback_hours: Option<i64>,
     ) -> Result<Vec<Fix>> {
         use crate::schema::fixes::dsl::*;
 
         let limit = limit.unwrap_or(100);
+        let lookback = lookback_hours.unwrap_or(24);
+        let cutoff_time = Utc::now() - Duration::hours(lookback);
         let pool = self.pool.clone();
 
         let result = tokio::task::spawn_blocking(move || {
@@ -369,7 +377,8 @@ impl FixesRepository {
 
             let results = fixes
                 .filter(device_id.eq(device_uuid))
-                .order(timestamp.desc())
+                .filter(received_at.ge(cutoff_time))
+                .order(received_at.desc())
                 .limit(limit)
                 .select(Fix::as_select())
                 .load::<Fix>(&mut conn)?;

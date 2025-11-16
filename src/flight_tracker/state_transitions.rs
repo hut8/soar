@@ -311,7 +311,7 @@ pub(crate) async fn process_state_transition(
             // We need to query recent fixes to determine this
             let recent_fixes = ctx
                 .fixes_repo
-                .get_fixes_for_device(fix.device_id, Some(3))
+                .get_fixes_for_device(fix.device_id, Some(3), None)
                 .await
                 .unwrap_or_default();
 
