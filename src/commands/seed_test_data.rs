@@ -277,7 +277,7 @@ fn create_test_devices(conn: &mut PgConnection, count: usize) -> Result<()> {
                 created_at.eq(chrono::Utc::now()),
                 updated_at.eq(chrono::Utc::now()),
             ))
-            .on_conflict(address)
+            .on_conflict((address_type, address))
             .do_update()
             .set((
                 registration.eq(reg),
@@ -322,7 +322,7 @@ fn create_test_devices(conn: &mut PgConnection, count: usize) -> Result<()> {
                 created_at.eq(chrono::Utc::now()),
                 updated_at.eq(chrono::Utc::now()),
             ))
-            .on_conflict(address)
+            .on_conflict((address_type, address))
             .do_update()
             .set((
                 registration.eq(reg_number),
