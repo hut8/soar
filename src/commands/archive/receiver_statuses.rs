@@ -1,5 +1,5 @@
 use anyhow::Result;
-use chrono::{NaiveDate, Utc};
+use chrono::{NaiveDate, TimeZone, Utc};
 use diesel::prelude::*;
 use std::path::Path;
 use tracing::info;
@@ -14,14 +14,20 @@ impl Archivable for ReceiverStatus {
         "receiver_statuses"
     }
 
-    async fn get_oldest_date(pool: &PgPool) -> Result<Option<NaiveDate>> {
+    async fn get_oldest_date(pool: &PgPool, before_date: NaiveDate) -> Result<Option<NaiveDate>> {
         let pool = pool.clone();
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            // Instead of MIN() which scans all partitions, use ORDER BY + LIMIT
-            // which allows the query planner to scan only the oldest partition
+            // Add WHERE clause to enable partition pruning - only scan partitions before the cutoff
+            // This is much more efficient than scanning all partitions
+            let cutoff = Utc
+                .from_local_datetime(&before_date.and_hms_opt(0, 0, 0).unwrap())
+                .single()
+                .ok_or_else(|| anyhow::anyhow!("Failed to create cutoff datetime"))?;
+
             let oldest_timestamp: Option<chrono::DateTime<Utc>> = receiver_statuses::table
                 .select(receiver_statuses::received_at)
+                .filter(receiver_statuses::received_at.lt(cutoff))
                 .order(receiver_statuses::received_at.asc())
                 .limit(1)
                 .first::<chrono::DateTime<Utc>>(&mut conn)
