@@ -21,7 +21,7 @@ pub mod aprs_messages_repo;
 pub mod archive_email_reporter;
 pub mod archive_service;
 pub mod auth;
-pub mod beast_client;
+pub mod beast;
 pub mod beast_jetstream_publisher;
 pub mod clubs;
 pub mod clubs_repo;

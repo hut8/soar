@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use soar::beast_client::{BeastClient, BeastClientConfig};
+use soar::beast::{BeastClient, BeastClientConfig};
 use soar::instance_lock::InstanceLock;
 use std::env;
 use tracing::Instrument;
