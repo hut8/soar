@@ -44,6 +44,34 @@ impl Archivable for FlightModel {
         .await?
     }
 
+    async fn get_daily_counts_grouped(
+        pool: &PgPool,
+        start_date: NaiveDate,
+        end_date: NaiveDate,
+    ) -> Result<Vec<(NaiveDate, i64)>> {
+        use diesel::dsl::sql;
+        use diesel::sql_types::{BigInt, Date};
+
+        let pool = pool.clone();
+        let start_datetime = start_date.and_hms_opt(0, 0, 0).unwrap().and_utc();
+        let end_datetime = end_date.and_hms_opt(0, 0, 0).unwrap().and_utc();
+
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            // Use DATE() to group by day in UTC
+            let results: Vec<(NaiveDate, i64)> = flights::table
+                .filter(flights::last_fix_at.ge(start_datetime))
+                .filter(flights::last_fix_at.lt(end_datetime))
+                .select((sql::<Date>("DATE(last_fix_at)"), sql::<BigInt>("COUNT(*)")))
+                .group_by(sql::<Date>("DATE(last_fix_at)"))
+                .load(&mut conn)?;
+
+            Ok(results)
+        })
+        .await?
+    }
+
     async fn write_to_file(
         pool: &PgPool,
         day_start: chrono::DateTime<Utc>,
