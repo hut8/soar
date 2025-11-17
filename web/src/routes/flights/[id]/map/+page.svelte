@@ -1,11 +1,12 @@
 <script lang="ts">
 	/// <reference types="@types/google.maps" />
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, untrack } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
 	import { goto } from '$app/navigation';
 	import { ArrowLeft, ChevronDown, ChevronUp, Palette } from '@lucide/svelte';
 	import type { PageData } from './$types';
+	import type { Receiver } from '$lib/types';
 	import dayjs from 'dayjs';
 	import { GOOGLE_MAPS_API_KEY } from '$lib/config';
 	import { serverCall } from '$lib/api/server';
@@ -29,6 +30,12 @@
 	// Color scheme selection
 	type ColorScheme = 'altitude' | 'time';
 	let colorScheme = $state<ColorScheme>('altitude');
+
+	// Receiver data
+	let showReceivers = $state(false);
+	let receivers = $state<Receiver[]>([]);
+	let receiverMarkers = $state<google.maps.marker.AdvancedMarkerElement[]>([]);
+	let isLoadingReceivers = $state(false);
 
 	// Check if fixes have AGL data
 	const hasAglData = $derived(data.fixes.some((f) => f.altitude_agl_feet !== null));
@@ -583,10 +590,15 @@
 
 	// Update map when color scheme changes
 	$effect(() => {
-		// Reactively update map when color scheme changes
-		if (colorScheme && map && flightPathSegments.length > 0) {
-			updateMap();
-		}
+		// Track colorScheme changes
+		void colorScheme;
+
+		// Untrack the rest to avoid infinite loop when updateMap modifies state
+		untrack(() => {
+			if (map && flightPathSegments.length > 0) {
+				updateMap();
+			}
+		});
 	});
 
 	// Recreate chart when panel transitions from collapsed to expanded
@@ -666,6 +678,133 @@
 	function togglePanel() {
 		isPanelCollapsed = !isPanelCollapsed;
 	}
+
+	// Handle receivers toggle
+	function handleReceiversToggle() {
+		if (showReceivers) {
+			fetchReceivers();
+		} else {
+			// Clear receivers from map
+			receiverMarkers.forEach((marker) => {
+				marker.map = null;
+			});
+			receiverMarkers = [];
+			receivers = [];
+		}
+	}
+
+	// Fetch receivers in viewport
+	async function fetchReceivers() {
+		if (!map) return;
+
+		isLoadingReceivers = true;
+		try {
+			const bounds = map.getBounds();
+			if (!bounds) return;
+
+			const ne = bounds.getNorthEast();
+			const sw = bounds.getSouthWest();
+
+			const params = new URLSearchParams({
+				latitude_min: sw.lat().toString(),
+				latitude_max: ne.lat().toString(),
+				longitude_min: sw.lng().toString(),
+				longitude_max: ne.lng().toString()
+			});
+
+			const data = await serverCall(`/receivers?${params}`);
+			if (!data || typeof data !== 'object' || !('receivers' in data)) {
+				throw new Error('Invalid response format');
+			}
+
+			const response = data as { receivers: unknown[] };
+			receivers = response.receivers.filter((receiver: unknown): receiver is Receiver => {
+				// Validate receiver object
+				if (typeof receiver !== 'object' || receiver === null) {
+					console.error('Invalid receiver: not an object or is null', receiver);
+					return false;
+				}
+
+				// Check required fields
+				const requiredFields = ['id', 'callsign', 'latitude', 'longitude'] as const;
+				for (const field of requiredFields) {
+					if (!(field in receiver)) {
+						console.error(`Invalid receiver: missing required field "${field}"`, receiver);
+						return false;
+					}
+				}
+
+				// Validate latitude and longitude are numbers (or null)
+				const lat = (receiver as Record<string, unknown>).latitude;
+				const lng = (receiver as Record<string, unknown>).longitude;
+
+				if (lat !== null && typeof lat !== 'number') {
+					console.error('Invalid receiver: latitude is not a number or null', receiver);
+					return false;
+				}
+
+				if (lng !== null && typeof lng !== 'number') {
+					console.error('Invalid receiver: longitude is not a number or null', receiver);
+					return false;
+				}
+
+				return true;
+			});
+
+			// Display receivers on map
+			if (map) {
+				// Clear existing receiver markers
+				receiverMarkers.forEach((marker) => {
+					marker.map = null;
+				});
+				receiverMarkers = [];
+
+				receivers.forEach((receiver) => {
+					if (!receiver.latitude || !receiver.longitude) return;
+
+					// Create marker content with Radio icon and link
+					const markerLink = document.createElement('a');
+					markerLink.href = `/receivers/${receiver.id}`;
+					markerLink.target = '_blank';
+					markerLink.rel = 'noopener noreferrer';
+					markerLink.className = 'receiver-marker';
+
+					const iconDiv = document.createElement('div');
+					iconDiv.className = 'receiver-icon';
+					iconDiv.innerHTML = `
+						<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+							<path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/>
+							<path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/>
+							<circle cx="12" cy="12" r="2"/>
+							<path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/>
+							<path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"/>
+						</svg>
+					`;
+
+					const labelDiv = document.createElement('div');
+					labelDiv.className = 'receiver-label';
+					labelDiv.textContent = receiver.callsign;
+
+					markerLink.appendChild(iconDiv);
+					markerLink.appendChild(labelDiv);
+
+					const marker = new google.maps.marker.AdvancedMarkerElement({
+						position: { lat: receiver.latitude, lng: receiver.longitude },
+						map: map,
+						title: `${receiver.callsign}${receiver.description ? ` - ${receiver.description}` : ''}`,
+						content: markerLink,
+						zIndex: 150
+					});
+
+					receiverMarkers.push(marker);
+				});
+			}
+		} catch (err) {
+			console.error('Failed to fetch receivers:', err);
+		} finally {
+			isLoadingReceivers = false;
+		}
+	}
 </script>
 
 <!-- Container that fills viewport - using fixed positioning to break out of main container -->
@@ -700,7 +839,19 @@
 				</button>
 				<h3 class="font-semibold">Flight Profile</h3>
 			</div>
-			<div class="flex items-center gap-2">
+			<div class="flex items-center gap-4">
+				<label class="flex cursor-pointer items-center gap-2">
+					<input
+						type="checkbox"
+						class="checkbox"
+						bind:checked={showReceivers}
+						onchange={handleReceiversToggle}
+					/>
+					<span class="text-sm">Show Receivers</span>
+					{#if isLoadingReceivers}
+						<span class="text-surface-600-300-token text-xs">(Loading...)</span>
+					{/if}
+				</label>
 				<Palette class="text-surface-600-300-token h-4 w-4" />
 				<span class="text-surface-600-300-token text-sm">Color:</span>
 				<div class="inline-flex rounded-md shadow-sm" role="group">
@@ -778,5 +929,87 @@
 		box-shadow:
 			0 0 0 2px rgba(59, 130, 246, 0.5),
 			0 2px 8px rgba(0, 0, 0, 0.15);
+	}
+
+	/* Receiver marker styling */
+	:global(.receiver-marker) {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		pointer-events: auto;
+		cursor: pointer;
+		text-decoration: none;
+		transition: transform 0.2s ease-in-out;
+	}
+
+	:global(.receiver-marker:hover) {
+		transform: scale(1.1);
+	}
+
+	:global(.receiver-icon) {
+		background: transparent;
+		border: 2px solid #374151;
+		border-radius: 50%;
+		width: 24px;
+		height: 24px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		color: #fb923c;
+		box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+		transition: all 0.2s ease-in-out;
+	}
+
+	@media (prefers-color-scheme: dark) {
+		:global(.receiver-icon) {
+			background: transparent;
+			border-color: #6b7280;
+		}
+	}
+
+	:global(.receiver-marker:hover .receiver-icon) {
+		background: white;
+		border-color: #fb923c;
+		box-shadow: 0 3px 8px rgba(251, 146, 60, 0.4);
+	}
+
+	@media (prefers-color-scheme: dark) {
+		:global(.receiver-marker:hover .receiver-icon) {
+			background: #1f2937;
+		}
+	}
+
+	:global(.receiver-label) {
+		background: rgba(255, 255, 255, 0.95);
+		border: 1px solid #d1d5db;
+		border-radius: 4px;
+		padding: 2px 6px;
+		font-size: 11px;
+		font-weight: 600;
+		color: #374151;
+		margin-top: 2px;
+		white-space: nowrap;
+		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+		text-rendering: optimizeLegibility;
+		-webkit-font-smoothing: antialiased;
+		-moz-osx-font-smoothing: grayscale;
+		opacity: 0;
+		visibility: hidden;
+		transition:
+			opacity 0.2s ease-in-out,
+			visibility 0.2s ease-in-out;
+	}
+
+	@media (prefers-color-scheme: dark) {
+		:global(.receiver-label) {
+			background: rgba(31, 41, 55, 0.95);
+			border-color: #4b5563;
+			color: #e5e7eb;
+		}
+	}
+
+	:global(.receiver-marker:hover .receiver-label) {
+		opacity: 1;
+		visibility: visible;
 	}
 </style>

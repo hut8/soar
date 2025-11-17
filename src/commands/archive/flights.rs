@@ -1,5 +1,5 @@
 use anyhow::Result;
-use chrono::{NaiveDate, Utc};
+use chrono::{NaiveDate, TimeZone, Utc};
 use diesel::prelude::*;
 use std::path::Path;
 use tracing::info;
@@ -14,13 +14,24 @@ impl Archivable for FlightModel {
         "flights"
     }
 
-    async fn get_oldest_date(pool: &PgPool) -> Result<Option<NaiveDate>> {
+    async fn get_oldest_date(pool: &PgPool, before_date: NaiveDate) -> Result<Option<NaiveDate>> {
         let pool = pool.clone();
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
+            // Add WHERE clause to enable partition pruning - only scan partitions before the cutoff
+            // This is much more efficient than scanning all partitions
+            let cutoff = Utc
+                .from_local_datetime(&before_date.and_hms_opt(0, 0, 0).unwrap())
+                .single()
+                .ok_or_else(|| anyhow::anyhow!("Failed to create cutoff datetime"))?;
+
             let oldest_timestamp: Option<chrono::DateTime<Utc>> = flights::table
-                .select(diesel::dsl::min(flights::last_fix_at))
-                .first::<Option<chrono::DateTime<Utc>>>(&mut conn)?;
+                .select(flights::last_fix_at)
+                .filter(flights::last_fix_at.lt(cutoff))
+                .order(flights::last_fix_at.asc())
+                .limit(1)
+                .first::<chrono::DateTime<Utc>>(&mut conn)
+                .optional()?;
             Ok(oldest_timestamp.map(|ts| ts.date_naive()))
         })
         .await?
@@ -40,6 +51,34 @@ impl Archivable for FlightModel {
                 .count()
                 .get_result::<i64>(&mut conn)?;
             Ok(count)
+        })
+        .await?
+    }
+
+    async fn get_daily_counts_grouped(
+        pool: &PgPool,
+        start_date: NaiveDate,
+        end_date: NaiveDate,
+    ) -> Result<Vec<(NaiveDate, i64)>> {
+        use diesel::dsl::sql;
+        use diesel::sql_types::{BigInt, Date};
+
+        let pool = pool.clone();
+        let start_datetime = start_date.and_hms_opt(0, 0, 0).unwrap().and_utc();
+        let end_datetime = end_date.and_hms_opt(0, 0, 0).unwrap().and_utc();
+
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            // Use DATE() to group by day in UTC
+            let results: Vec<(NaiveDate, i64)> = flights::table
+                .filter(flights::last_fix_at.ge(start_datetime))
+                .filter(flights::last_fix_at.lt(end_datetime))
+                .select((sql::<Date>("DATE(last_fix_at)"), sql::<BigInt>("COUNT(*)")))
+                .group_by(sql::<Date>("DATE(last_fix_at)"))
+                .load(&mut conn)?;
+
+            Ok(results)
         })
         .await?
     }

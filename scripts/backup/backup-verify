@@ -48,9 +48,7 @@ if [[ ! -f "$RCLONE_CONFIG" ]]; then
     exit 1
 fi
 
-# Directories
-LOG_DIR="${BACKUP_LOG_DIR:-/var/log/soar}"
-mkdir -p "$LOG_DIR"
+# No log directory needed - output goes to systemd journal
 
 # Retention configuration
 RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-30}"
@@ -74,7 +72,7 @@ WARNINGS=0
 log() {
     local level="$1"
     shift
-    echo "[$(date -u +"%Y-%m-%d %H:%M:%S UTC")] [$level] Backup Verify: $*" | tee -a "$LOG_DIR/backup.log"
+    echo "[$(date -u +"%Y-%m-%d %H:%M:%S UTC")] [$level] Backup Verify: $*"
 }
 
 # Function to increment check counters
@@ -432,14 +430,14 @@ Passed: $PASSED_CHECKS
 Failed: $FAILED_CHECKS
 Warnings: $WARNINGS
 
-Check logs at $LOG_DIR/backup.log for details."
+Check logs with: journalctl -u soar-backup-verify"
     elif [[ $WARNINGS -gt 0 ]]; then
         notify "WARNING" "Backup verification completed with warnings on $(hostname)
 Total checks: $TOTAL_CHECKS
 Passed: $PASSED_CHECKS
 Warnings: $WARNINGS
 
-Check logs at $LOG_DIR/backup.log for details."
+Check logs with: journalctl -u soar-backup-verify"
     else
         notify "SUCCESS" "Backup verification passed on $(hostname)
 Total checks: $TOTAL_CHECKS

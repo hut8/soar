@@ -29,8 +29,9 @@ ReadWritePaths=-/var/soar/archive
 # Process limits
 LimitNOFILE=65536
 
-# Timeout (allow up to 2 hours for archiving large datasets)
-TimeoutStartSec=7200
+# Timeout (allow up to 4 hours for archiving large datasets and analytics collection)
+# Increased from 2 hours due to post-archival analytics queries taking significant time
+TimeoutStartSec=14400
 
 [Install]
 WantedBy=multi-user.target soar.target
