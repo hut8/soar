@@ -10,7 +10,7 @@ Type=oneshot
 User=soar
 Group=soar
 WorkingDirectory=/var/soar
-ExecStart=/usr/local/bin/soar sitemap
+ExecStart=/usr/local/bin/soar-staging sitemap
 
 # Environment variables (staging environment)
 EnvironmentFile=/etc/soar/env-staging

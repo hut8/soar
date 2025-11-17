@@ -122,6 +122,16 @@ sudo chmod 755 /usr/local/bin/soar-deploy
 sudo chown root:root /usr/local/bin/soar-deploy
 ```
 
+### 4a. Create Backup Directories
+
+```bash
+# Create backup directories for both environments
+sudo mkdir -p /home/soar/backups/production
+sudo mkdir -p /home/soar/backups/staging
+sudo chown -R soar:soar /home/soar/backups
+sudo chmod 755 /home/soar/backups
+```
+
 ### 5. Update Sudoers Configuration
 
 Update sudoers to allow staging deployments:
@@ -230,6 +240,15 @@ curl http://localhost:9092/metrics  # soar-run-staging
 curl http://localhost:9094/metrics  # soar-aprs-ingest-staging
 curl http://localhost:61226/data/metrics  # soar-web-staging
 ```
+
+## Binary Locations
+
+| Environment | Binary Path |
+|-------------|-------------|
+| Production | `/usr/local/bin/soar` |
+| Staging | `/usr/local/bin/soar-staging` |
+
+**Important**: Staging and production use **separate binaries** so they can run different code versions simultaneously. This allows testing code in staging before deploying to production.
 
 ## Port Assignments
 

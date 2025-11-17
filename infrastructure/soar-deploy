@@ -72,14 +72,19 @@ log_info "Starting SOAR deployment for $ENVIRONMENT from: $DEPLOY_DIR"
 if [ "$ENVIRONMENT" = "staging" ]; then
     SERVICE_SUFFIX="-staging"
     ENV_FILE="/etc/soar/env-staging"
+    BINARY_PATH="/usr/local/bin/soar-staging"
+    BACKUP_DIR="/home/soar/backups/staging"
 else
     SERVICE_SUFFIX=""
     ENV_FILE="/etc/soar/env"
+    BINARY_PATH="/usr/local/bin/soar"
+    BACKUP_DIR="/home/soar/backups/production"
 fi
 
 log_info "Environment: $ENVIRONMENT"
 log_info "Service suffix: '$SERVICE_SUFFIX'"
 log_info "Environment file: $ENV_FILE"
+log_info "Binary path: $BINARY_PATH"
 
 # Verify binary exists
 if [ ! -f "$DEPLOY_DIR/soar" ]; then
@@ -212,19 +217,22 @@ log_info "Waiting for services to fully terminate..."
 sleep 3
 
 # Backup current binary
-if [ -f /usr/local/bin/soar ]; then
-    BACKUP_FILE="/home/soar/soar.backup.$(date +%s)"
+mkdir -p "$BACKUP_DIR"
+chown soar:soar "$BACKUP_DIR"
+
+if [ -f "$BINARY_PATH" ]; then
+    BACKUP_FILE="$BACKUP_DIR/soar.backup.$(date +%s)"
     log_info "Backing up current binary to $BACKUP_FILE..."
-    cp /usr/local/bin/soar "$BACKUP_FILE"
+    cp "$BINARY_PATH" "$BACKUP_FILE"
     chown soar:soar "$BACKUP_FILE"
 else
-    log_warn "No existing binary to backup"
+    log_warn "No existing binary to backup at $BINARY_PATH"
 fi
 
-# Install new binary to /usr/local/bin
-log_info "Installing new binary to /usr/local/bin..."
-install -m 755 -o root -g root "$TEMP_BIN_PATH" /usr/local/bin/soar
-log_info "Binary installed successfully"
+# Install new binary
+log_info "Installing new binary to $BINARY_PATH..."
+install -m 755 -o root -g root "$TEMP_BIN_PATH" "$BINARY_PATH"
+log_info "Binary installed successfully at $BINARY_PATH"
 
 # Clean up temporary binary
 log_info "Cleaning up temporary binary: $TEMP_BIN_PATH"
@@ -443,8 +451,8 @@ log_info "Recent logs from soar-web${SERVICE_SUFFIX}:"
 journalctl -u "soar-web${SERVICE_SUFFIX}.service" --no-pager --lines=5 || true
 
 # Clean up old backups (keep last 5)
-log_info "Cleaning up old backups (keeping last 5)..."
-ls -t /home/soar/soar.backup.* 2>/dev/null | tail -n +6 | xargs rm -f || true
+log_info "Cleaning up old backups in $BACKUP_DIR (keeping last 5)..."
+ls -t "$BACKUP_DIR"/soar.backup.* 2>/dev/null | tail -n +6 | xargs rm -f || true
 
 # Clean up old deployment directories (keep last 3)
 log_info "Cleaning up old deployment directories (keeping last 3)..."

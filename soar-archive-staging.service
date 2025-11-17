@@ -14,7 +14,7 @@ WorkingDirectory=/var/soar
 # Archive with 3-day retention (vs production's 21-day retention)
 # Calculates date dynamically: 3 days ago
 # Double %% is required in systemd unit files for date command
-ExecStart=/bin/bash -c 'source /etc/soar/env-staging && /usr/local/bin/soar archive --archive-path /var/soar/archive-staging --before $(date -d "3 days ago" +%%Y-%%m-%%d)'
+ExecStart=/bin/bash -c 'source /etc/soar/env-staging && /usr/local/bin/soar-staging archive --archive-path /var/soar/archive-staging --before $(date -d "3 days ago" +%%Y-%%m-%%d)'
 
 # Environment variables (staging environment)
 EnvironmentFile=/etc/soar/env-staging

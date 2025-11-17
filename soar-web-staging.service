@@ -12,7 +12,7 @@ Type=simple
 User=soar
 Group=soar
 WorkingDirectory=/var/soar
-ExecStart=/usr/local/bin/soar web --interface 127.0.0.1 --port 61226
+ExecStart=/usr/local/bin/soar-staging web --interface 127.0.0.1 --port 61226
 ExecReload=/bin/kill -s HUP $MAINPID
 
 # Environment variables (staging environment)

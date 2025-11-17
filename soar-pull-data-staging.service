@@ -10,7 +10,7 @@ Type=oneshot
 User=soar
 Group=soar
 WorkingDirectory=/var/soar
-ExecStart=/usr/local/bin/soar pull-data
+ExecStart=/usr/local/bin/soar-staging pull-data
 
 # Environment variables (staging environment)
 EnvironmentFile=/etc/soar/env-staging
