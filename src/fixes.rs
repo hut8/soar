@@ -73,14 +73,10 @@ pub struct Fix {
     pub climb_fpm: Option<i32>,
     pub turn_rate_rot: Option<f32>,
 
-    /// Signal quality
-    pub snr_db: Option<f32>,
-    pub bit_errors_corrected: Option<i32>,
-    pub freq_offset_khz: Option<f32>,
-
-    /// GNSS resolution (units unknown)
-    pub gnss_horizontal_resolution: Option<i16>,
-    pub gnss_vertical_resolution: Option<i16>,
+    /// Protocol-specific metadata stored as JSONB
+    /// For APRS: snr_db, bit_errors_corrected, freq_offset_khz, gnss_*_resolution
+    /// For ADS-B: nic, nac_p, nac_v, sil, emergency_status, on_ground, etc.
+    pub source_metadata: Option<serde_json::Value>,
 
     /// Associations
     pub flight_id: Option<Uuid>,
@@ -96,8 +92,8 @@ pub struct Fix {
     /// Receiver that reported this fix (from via array)
     pub receiver_id: Uuid,
 
-    /// Reference to the APRS message that contains the raw packet data
-    pub aprs_message_id: Uuid,
+    /// Reference to the raw message that contains the raw packet data
+    pub raw_message_id: Uuid,
 
     /// Whether altitude_agl_feet has been looked up (true even if NULL due to no data)
     pub altitude_agl_valid: bool,
@@ -177,14 +173,14 @@ impl Fix {
     /// Returns Ok(None) if the packet doesn't represent a position fix
     /// Returns Ok(Some(fix)) for valid position fixes
     /// Returns Err for parsing failures
-    /// Note: device_id, receiver_id, and aprs_message_id are all required as they should be
+    /// Note: device_id, receiver_id, and raw_message_id are all required as they should be
     /// determined before Fix creation
     pub fn from_aprs_packet(
         packet: AprsPacket,
         received_at: DateTime<Utc>,
         device_id: Uuid,
         receiver_id: Uuid,
-        aprs_message_id: Uuid,
+        raw_message_id: Uuid,
     ) -> Result<Option<Self>> {
         // For now, use received_at as the packet timestamp
         let timestamp = received_at;
@@ -245,6 +241,39 @@ impl Fix {
                 // Determine if aircraft is active based on ground speed
                 let is_active = ground_speed_knots.is_none_or(|speed| speed >= 20.0);
 
+                // Build source_metadata JSONB for APRS-specific fields
+                let source_metadata = {
+                    let mut metadata = serde_json::Map::new();
+                    metadata.insert("protocol".to_string(), serde_json::json!("aprs"));
+
+                    if let Some(snr) = snr_db {
+                        metadata.insert("snr_db".to_string(), serde_json::json!(snr));
+                    }
+                    if let Some(errors) = bit_errors_corrected {
+                        metadata.insert(
+                            "bit_errors_corrected".to_string(),
+                            serde_json::json!(errors),
+                        );
+                    }
+                    if let Some(offset) = freq_offset_khz {
+                        metadata.insert("freq_offset_khz".to_string(), serde_json::json!(offset));
+                    }
+                    if let Some(horiz) = gnss_horizontal_resolution {
+                        metadata.insert(
+                            "gnss_horizontal_resolution".to_string(),
+                            serde_json::json!(horiz),
+                        );
+                    }
+                    if let Some(vert) = gnss_vertical_resolution {
+                        metadata.insert(
+                            "gnss_vertical_resolution".to_string(),
+                            serde_json::json!(vert),
+                        );
+                    }
+
+                    Some(serde_json::Value::Object(metadata))
+                };
+
                 Ok(Some(Fix {
                     id: Uuid::now_v7(),
                     source,
@@ -261,17 +290,13 @@ impl Fix {
                     track_degrees,
                     climb_fpm,
                     turn_rate_rot,
-                    snr_db,
-                    bit_errors_corrected,
-                    freq_offset_khz,
-                    gnss_horizontal_resolution,
-                    gnss_vertical_resolution,
+                    source_metadata,
                     flight_id: None, // Will be set by flight detection processor
                     device_id,
                     received_at,
                     is_active,
                     receiver_id,
-                    aprs_message_id,
+                    raw_message_id,
                     altitude_agl_valid: false, // Will be set to true when elevation is looked up
                     time_gap_seconds: None,    // Will be set by flight tracker if part of a flight
                 }))

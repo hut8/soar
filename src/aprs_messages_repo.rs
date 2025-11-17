@@ -10,7 +10,7 @@ use crate::web::PgPool;
 
 // Diesel model for inserting new APRS messages
 #[derive(Insertable)]
-#[diesel(table_name = crate::schema::aprs_messages)]
+#[diesel(table_name = crate::schema::raw_messages)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct NewAprsMessage {
     pub id: Uuid,
@@ -47,7 +47,7 @@ impl NewAprsMessage {
 
 // Diesel model for querying APRS messages
 #[derive(Queryable, Selectable, Insertable, Serialize, Deserialize, Debug)]
-#[diesel(table_name = crate::schema::aprs_messages)]
+#[diesel(table_name = crate::schema::raw_messages)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct AprsMessage {
     pub id: Uuid,
@@ -72,7 +72,7 @@ impl AprsMessagesRepository {
     /// Returns the ID of the inserted message
     /// On duplicate (redelivery after crash), returns the existing message ID
     pub async fn insert(&self, new_message: NewAprsMessage) -> Result<Uuid> {
-        use crate::schema::aprs_messages::dsl::*;
+        use crate::schema::raw_messages::dsl::*;
 
         let message_id = new_message.id;
         let pool = self.pool.clone();
@@ -83,7 +83,7 @@ impl AprsMessagesRepository {
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            match diesel::insert_into(aprs_messages)
+            match diesel::insert_into(raw_messages)
                 .values(&new_message)
                 .execute(&mut conn)
             {
@@ -100,7 +100,7 @@ impl AprsMessagesRepository {
                     metrics::counter!("aprs.messages.duplicate_on_redelivery").increment(1);
 
                     // Find existing message ID by natural key
-                    let existing = aprs_messages
+                    let existing = raw_messages
                         .filter(receiver_id.eq(receiver))
                         .filter(received_at.eq(timestamp))
                         .filter(raw_message_hash.eq(&hash))
@@ -125,7 +125,7 @@ impl AprsMessagesRepository {
         page: i64,
         per_page: i64,
     ) -> Result<(Vec<AprsMessage>, i64)> {
-        use crate::schema::aprs_messages::dsl::*;
+        use crate::schema::raw_messages::dsl::*;
 
         let pool = self.pool.clone();
         let offset = (page - 1) * per_page;
@@ -137,14 +137,14 @@ impl AprsMessagesRepository {
             let mut conn = pool.get()?;
 
             // Get total count
-            let total_count: i64 = aprs_messages
+            let total_count: i64 = raw_messages
                 .filter(receiver_id.eq(receiver_uuid))
                 .filter(received_at.ge(twenty_four_hours_ago))
                 .count()
                 .get_result(&mut conn)?;
 
             // Get paginated messages
-            let messages: Vec<AprsMessage> = aprs_messages
+            let messages: Vec<AprsMessage> = raw_messages
                 .filter(receiver_id.eq(receiver_uuid))
                 .filter(received_at.ge(twenty_four_hours_ago))
                 .order(received_at.desc())
@@ -160,14 +160,14 @@ impl AprsMessagesRepository {
 
     /// Get a single APRS message by ID
     pub async fn get_by_id(&self, message_id: Uuid) -> Result<Option<AprsMessage>> {
-        use crate::schema::aprs_messages::dsl::*;
+        use crate::schema::raw_messages::dsl::*;
 
         let pool = self.pool.clone();
 
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            let message = aprs_messages
+            let message = raw_messages
                 .filter(id.eq(message_id))
                 .select(AprsMessage::as_select())
                 .first(&mut conn)
@@ -180,14 +180,14 @@ impl AprsMessagesRepository {
 
     /// Get multiple APRS messages by their IDs
     pub async fn get_by_ids(&self, message_ids: Vec<Uuid>) -> Result<Vec<AprsMessage>> {
-        use crate::schema::aprs_messages::dsl::*;
+        use crate::schema::raw_messages::dsl::*;
 
         let pool = self.pool.clone();
 
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            let messages = aprs_messages
+            let messages = raw_messages
                 .filter(id.eq_any(message_ids))
                 .select(AprsMessage::as_select())
                 .load(&mut conn)?;
@@ -227,7 +227,7 @@ mod tests {
         // Clean up test data (migrations have already created the schema)
         conn.batch_execute(
             r#"
-            DELETE FROM aprs_messages;
+            DELETE FROM raw_messages;
             DELETE FROM receivers;
             "#,
         )
