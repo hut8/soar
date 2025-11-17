@@ -765,12 +765,14 @@ impl FixesRepository {
 
             // Second query: Get recent fixes for the devices using the device_id index
             // This is much faster than repeating the spatial query
+            // Time-based pruning filter reduces rows before windowing for better performance
             let fixes_sql = r#"
                 WITH ranked AS (
                     SELECT f.*,
                            ROW_NUMBER() OVER (PARTITION BY f.device_id ORDER BY f.received_at DESC) AS rn
                     FROM fixes f
                     WHERE f.device_id = ANY($1)
+                      AND f.received_at >= $3
                 )
                 SELECT *
                 FROM ranked
@@ -835,6 +837,7 @@ impl FixesRepository {
             let fix_rows: Vec<FixRow> = diesel::sql_query(fixes_sql)
                 .bind::<diesel::sql_types::Array<diesel::sql_types::Uuid>, _>(&device_ids)
                 .bind::<diesel::sql_types::BigInt, _>(fixes_per_device)
+                .bind::<diesel::sql_types::Timestamptz, _>(cutoff_time)
                 .load(&mut conn)?;
 
             info!("Second query returned {} fix rows", fix_rows.len());

@@ -325,6 +325,50 @@ diesel::table! {
 }
 
 diesel::table! {
+    aprs_messages_p20251117 (id, received_at) {
+        id -> Uuid,
+        raw_message -> Text,
+        received_at -> Timestamptz,
+        receiver_id -> Uuid,
+        unparsed -> Nullable<Text>,
+        raw_message_hash -> Bytea,
+    }
+}
+
+diesel::table! {
+    aprs_messages_p20251118 (id, received_at) {
+        id -> Uuid,
+        raw_message -> Text,
+        received_at -> Timestamptz,
+        receiver_id -> Uuid,
+        unparsed -> Nullable<Text>,
+        raw_message_hash -> Bytea,
+    }
+}
+
+diesel::table! {
+    aprs_messages_p20251119 (id, received_at) {
+        id -> Uuid,
+        raw_message -> Text,
+        received_at -> Timestamptz,
+        receiver_id -> Uuid,
+        unparsed -> Nullable<Text>,
+        raw_message_hash -> Bytea,
+    }
+}
+
+diesel::table! {
+    aprs_messages_p20251120 (id, received_at) {
+        id -> Uuid,
+        raw_message -> Text,
+        received_at -> Timestamptz,
+        receiver_id -> Uuid,
+        unparsed -> Nullable<Text>,
+        raw_message_hash -> Bytea,
+    }
+}
+
+diesel::table! {
     club_analytics_daily (club_id, date) {
         club_id -> Uuid,
         date -> Date,
@@ -815,6 +859,178 @@ diesel::table! {
 }
 
 diesel::table! {
+    use diesel::sql_types::*;
+    use super::sql_types::Geography;
+    use super::sql_types::Geometry;
+
+    fixes_p20251117 (id, received_at) {
+        id -> Uuid,
+        #[max_length = 9]
+        source -> Varchar,
+        #[max_length = 9]
+        aprs_type -> Varchar,
+        via -> Array<Nullable<Text>>,
+        timestamp -> Timestamptz,
+        latitude -> Float8,
+        longitude -> Float8,
+        location -> Nullable<Geography>,
+        altitude_msl_feet -> Nullable<Int4>,
+        #[max_length = 20]
+        flight_number -> Nullable<Varchar>,
+        #[max_length = 4]
+        squawk -> Nullable<Varchar>,
+        ground_speed_knots -> Nullable<Float4>,
+        track_degrees -> Nullable<Float4>,
+        climb_fpm -> Nullable<Int4>,
+        turn_rate_rot -> Nullable<Float4>,
+        snr_db -> Nullable<Float4>,
+        bit_errors_corrected -> Nullable<Int4>,
+        freq_offset_khz -> Nullable<Float4>,
+        flight_id -> Nullable<Uuid>,
+        device_id -> Uuid,
+        received_at -> Timestamptz,
+        is_active -> Bool,
+        altitude_agl_feet -> Nullable<Int4>,
+        receiver_id -> Uuid,
+        gnss_horizontal_resolution -> Nullable<Int2>,
+        gnss_vertical_resolution -> Nullable<Int2>,
+        aprs_message_id -> Uuid,
+        altitude_agl_valid -> Bool,
+        location_geom -> Nullable<Geometry>,
+        time_gap_seconds -> Nullable<Int4>,
+    }
+}
+
+diesel::table! {
+    use diesel::sql_types::*;
+    use super::sql_types::Geography;
+    use super::sql_types::Geometry;
+
+    fixes_p20251118 (id, received_at) {
+        id -> Uuid,
+        #[max_length = 9]
+        source -> Varchar,
+        #[max_length = 9]
+        aprs_type -> Varchar,
+        via -> Array<Nullable<Text>>,
+        timestamp -> Timestamptz,
+        latitude -> Float8,
+        longitude -> Float8,
+        location -> Nullable<Geography>,
+        altitude_msl_feet -> Nullable<Int4>,
+        #[max_length = 20]
+        flight_number -> Nullable<Varchar>,
+        #[max_length = 4]
+        squawk -> Nullable<Varchar>,
+        ground_speed_knots -> Nullable<Float4>,
+        track_degrees -> Nullable<Float4>,
+        climb_fpm -> Nullable<Int4>,
+        turn_rate_rot -> Nullable<Float4>,
+        snr_db -> Nullable<Float4>,
+        bit_errors_corrected -> Nullable<Int4>,
+        freq_offset_khz -> Nullable<Float4>,
+        flight_id -> Nullable<Uuid>,
+        device_id -> Uuid,
+        received_at -> Timestamptz,
+        is_active -> Bool,
+        altitude_agl_feet -> Nullable<Int4>,
+        receiver_id -> Uuid,
+        gnss_horizontal_resolution -> Nullable<Int2>,
+        gnss_vertical_resolution -> Nullable<Int2>,
+        aprs_message_id -> Uuid,
+        altitude_agl_valid -> Bool,
+        location_geom -> Nullable<Geometry>,
+        time_gap_seconds -> Nullable<Int4>,
+    }
+}
+
+diesel::table! {
+    use diesel::sql_types::*;
+    use super::sql_types::Geography;
+    use super::sql_types::Geometry;
+
+    fixes_p20251119 (id, received_at) {
+        id -> Uuid,
+        #[max_length = 9]
+        source -> Varchar,
+        #[max_length = 9]
+        aprs_type -> Varchar,
+        via -> Array<Nullable<Text>>,
+        timestamp -> Timestamptz,
+        latitude -> Float8,
+        longitude -> Float8,
+        location -> Nullable<Geography>,
+        altitude_msl_feet -> Nullable<Int4>,
+        #[max_length = 20]
+        flight_number -> Nullable<Varchar>,
+        #[max_length = 4]
+        squawk -> Nullable<Varchar>,
+        ground_speed_knots -> Nullable<Float4>,
+        track_degrees -> Nullable<Float4>,
+        climb_fpm -> Nullable<Int4>,
+        turn_rate_rot -> Nullable<Float4>,
+        snr_db -> Nullable<Float4>,
+        bit_errors_corrected -> Nullable<Int4>,
+        freq_offset_khz -> Nullable<Float4>,
+        flight_id -> Nullable<Uuid>,
+        device_id -> Uuid,
+        received_at -> Timestamptz,
+        is_active -> Bool,
+        altitude_agl_feet -> Nullable<Int4>,
+        receiver_id -> Uuid,
+        gnss_horizontal_resolution -> Nullable<Int2>,
+        gnss_vertical_resolution -> Nullable<Int2>,
+        aprs_message_id -> Uuid,
+        altitude_agl_valid -> Bool,
+        location_geom -> Nullable<Geometry>,
+        time_gap_seconds -> Nullable<Int4>,
+    }
+}
+
+diesel::table! {
+    use diesel::sql_types::*;
+    use super::sql_types::Geography;
+    use super::sql_types::Geometry;
+
+    fixes_p20251120 (id, received_at) {
+        id -> Uuid,
+        #[max_length = 9]
+        source -> Varchar,
+        #[max_length = 9]
+        aprs_type -> Varchar,
+        via -> Array<Nullable<Text>>,
+        timestamp -> Timestamptz,
+        latitude -> Float8,
+        longitude -> Float8,
+        location -> Nullable<Geography>,
+        altitude_msl_feet -> Nullable<Int4>,
+        #[max_length = 20]
+        flight_number -> Nullable<Varchar>,
+        #[max_length = 4]
+        squawk -> Nullable<Varchar>,
+        ground_speed_knots -> Nullable<Float4>,
+        track_degrees -> Nullable<Float4>,
+        climb_fpm -> Nullable<Int4>,
+        turn_rate_rot -> Nullable<Float4>,
+        snr_db -> Nullable<Float4>,
+        bit_errors_corrected -> Nullable<Int4>,
+        freq_offset_khz -> Nullable<Float4>,
+        flight_id -> Nullable<Uuid>,
+        device_id -> Uuid,
+        received_at -> Timestamptz,
+        is_active -> Bool,
+        altitude_agl_feet -> Nullable<Int4>,
+        receiver_id -> Uuid,
+        gnss_horizontal_resolution -> Nullable<Int2>,
+        gnss_vertical_resolution -> Nullable<Int2>,
+        aprs_message_id -> Uuid,
+        altitude_agl_valid -> Bool,
+        location_geom -> Nullable<Geometry>,
+        time_gap_seconds -> Nullable<Int4>,
+    }
+}
+
+diesel::table! {
     flight_analytics_daily (date) {
         date -> Date,
         flight_count -> Int4,
@@ -1185,6 +1401,10 @@ diesel::joinable!(aprs_messages_p20251113 -> receivers (receiver_id));
 diesel::joinable!(aprs_messages_p20251114 -> receivers (receiver_id));
 diesel::joinable!(aprs_messages_p20251115 -> receivers (receiver_id));
 diesel::joinable!(aprs_messages_p20251116 -> receivers (receiver_id));
+diesel::joinable!(aprs_messages_p20251117 -> receivers (receiver_id));
+diesel::joinable!(aprs_messages_p20251118 -> receivers (receiver_id));
+diesel::joinable!(aprs_messages_p20251119 -> receivers (receiver_id));
+diesel::joinable!(aprs_messages_p20251120 -> receivers (receiver_id));
 diesel::joinable!(clubs -> airports (home_base_airport_id));
 diesel::joinable!(clubs -> locations (location_id));
 diesel::joinable!(devices -> clubs (club_id));
@@ -1219,6 +1439,18 @@ diesel::joinable!(fixes_p20251115 -> receivers (receiver_id));
 diesel::joinable!(fixes_p20251116 -> devices (device_id));
 diesel::joinable!(fixes_p20251116 -> flights (flight_id));
 diesel::joinable!(fixes_p20251116 -> receivers (receiver_id));
+diesel::joinable!(fixes_p20251117 -> devices (device_id));
+diesel::joinable!(fixes_p20251117 -> flights (flight_id));
+diesel::joinable!(fixes_p20251117 -> receivers (receiver_id));
+diesel::joinable!(fixes_p20251118 -> devices (device_id));
+diesel::joinable!(fixes_p20251118 -> flights (flight_id));
+diesel::joinable!(fixes_p20251118 -> receivers (receiver_id));
+diesel::joinable!(fixes_p20251119 -> devices (device_id));
+diesel::joinable!(fixes_p20251119 -> flights (flight_id));
+diesel::joinable!(fixes_p20251119 -> receivers (receiver_id));
+diesel::joinable!(fixes_p20251120 -> devices (device_id));
+diesel::joinable!(fixes_p20251120 -> flights (flight_id));
+diesel::joinable!(fixes_p20251120 -> receivers (receiver_id));
 diesel::joinable!(flight_pilots -> flights (flight_id));
 diesel::joinable!(flight_pilots -> pilots (pilot_id));
 diesel::joinable!(flights -> clubs (club_id));
@@ -1246,6 +1478,10 @@ diesel::allow_tables_to_appear_in_same_query!(
     aprs_messages_p20251114,
     aprs_messages_p20251115,
     aprs_messages_p20251116,
+    aprs_messages_p20251117,
+    aprs_messages_p20251118,
+    aprs_messages_p20251119,
+    aprs_messages_p20251120,
     club_analytics_daily,
     clubs,
     countries,
@@ -1262,6 +1498,10 @@ diesel::allow_tables_to_appear_in_same_query!(
     fixes_p20251114,
     fixes_p20251115,
     fixes_p20251116,
+    fixes_p20251117,
+    fixes_p20251118,
+    fixes_p20251119,
+    fixes_p20251120,
     flight_analytics_daily,
     flight_analytics_hourly,
     flight_duration_buckets,
