@@ -35,6 +35,33 @@ pub fn set_aprs_health(health: Arc<RwLock<AprsIngestHealth>>) {
     let _ = APRS_HEALTH.set(health);
 }
 
+/// Global health state for Beast (ADS-B) ingestion service
+/// Used by the /health endpoint to determine readiness
+#[derive(Clone, Debug, Default)]
+pub struct BeastIngestHealth {
+    pub beast_connected: bool,
+    pub jetstream_connected: bool,
+    pub last_message_time: Option<Instant>,
+    pub last_error: Option<String>,
+}
+
+static BEAST_HEALTH: OnceLock<Arc<RwLock<BeastIngestHealth>>> = OnceLock::new();
+
+/// Initialize the global Beast health state
+pub fn init_beast_health() -> Arc<RwLock<BeastIngestHealth>> {
+    Arc::new(RwLock::new(BeastIngestHealth::default()))
+}
+
+/// Get the global Beast health state
+pub fn get_beast_health() -> Option<Arc<RwLock<BeastIngestHealth>>> {
+    BEAST_HEALTH.get().cloned()
+}
+
+/// Set the global Beast health state (should be called once during initialization)
+pub fn set_beast_health(health: Arc<RwLock<BeastIngestHealth>>) {
+    let _ = BEAST_HEALTH.set(health);
+}
+
 /// Initialize Prometheus metrics exporter
 /// Returns a handle that can be used to render metrics for scraping
 pub fn init_metrics() -> PrometheusHandle {
@@ -255,6 +282,37 @@ pub fn initialize_aprs_ingest_metrics() {
     metrics::counter!("aprs.shutdown.queue_depth_at_shutdown").absolute(0);
     metrics::counter!("aprs.shutdown.messages_flushed").absolute(0);
     metrics::histogram!("aprs.shutdown.flush_duration_seconds").record(0.0);
+}
+
+/// Initialize Beast ingest metrics to zero/default values
+/// This ensures metrics always appear in Prometheus queries even if no events have occurred
+pub fn initialize_beast_ingest_metrics() {
+    // Beast connection metrics
+    metrics::counter!("beast.connection.established").absolute(0);
+    metrics::counter!("beast.connection.failed").absolute(0);
+    metrics::counter!("beast.operation.failed").absolute(0);
+    metrics::counter!("beast.timeout").absolute(0);
+    metrics::gauge!("beast.connection.connected").set(0.0);
+
+    // Beast data metrics
+    metrics::counter!("beast.bytes.received").absolute(0);
+    metrics::counter!("beast.frames.published").absolute(0);
+    metrics::counter!("beast.frames.dropped").absolute(0);
+    metrics::gauge!("beast.message_rate").set(0.0);
+
+    // JetStream publishing metrics (ingest-beast publishes to JetStream)
+    metrics::counter!("beast.jetstream.published").absolute(0);
+    metrics::counter!("beast.jetstream.publish_error").absolute(0);
+    metrics::counter!("beast.jetstream.slow_publish").absolute(0);
+    metrics::counter!("beast.jetstream.publish_timeout").absolute(0);
+    metrics::counter!("beast.jetstream.connection_failed").absolute(0);
+    metrics::counter!("beast.jetstream.stream_setup_failed").absolute(0);
+    metrics::gauge!("beast.jetstream.queue_depth").set(0.0);
+    metrics::gauge!("beast.jetstream.in_flight").set(0.0);
+    metrics::histogram!("beast.jetstream.publish_duration_ms").record(0.0);
+
+    // General ingestion metrics
+    metrics::counter!("beast.ingest_failed").absolute(0);
 }
 
 /// Initialize SOAR run metrics to zero/default values

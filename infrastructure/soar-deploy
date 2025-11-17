@@ -69,6 +69,7 @@ ACTIVE_SERVICES=(
 )
 
 # Timer-invoked services (only installed, not enabled or started)
+# NOTE: soar-beast-ingest.service is disabled by default until ready for production
 TIMER_SERVICES=(
     "soar-pull-data.service"
     "soar-sitemap.service"
@@ -76,6 +77,7 @@ TIMER_SERVICES=(
     "soar-backup-base.service"
     "soar-backup-verify.service"
     "partman-maintenance.service"
+    "soar-beast-ingest.service"
 )
 
 # All services (for stopping and installing)
