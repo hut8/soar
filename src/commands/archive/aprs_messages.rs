@@ -1,5 +1,5 @@
 use anyhow::Result;
-use chrono::{NaiveDate, TimeZone, Utc};
+use chrono::{DateTime, NaiveDate, TimeZone, Utc};
 use diesel::prelude::*;
 use hex;
 use serde::{Deserialize, Serialize};
