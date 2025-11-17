@@ -518,20 +518,21 @@ impl BeastClient {
     }
 
     /// Publish a Beast frame to JetStream with timestamp
+    /// Format: 8-byte Unix timestamp (microseconds as i64) + raw Beast frame bytes
     async fn publish_frame(raw_message_tx: &flume::Sender<Vec<u8>>, frame: Vec<u8>) {
         if frame.is_empty() {
             return;
         }
 
-        // Add timestamp prefix in ISO-8601 format, then the hex-encoded Beast frame
-        let timestamp = chrono::Utc::now().to_rfc3339();
-        let hex_frame = hex::encode(&frame);
-        let timestamped_message = format!("{} {}", timestamp, hex_frame);
+        // Get current timestamp as microseconds since Unix epoch
+        let timestamp_micros = chrono::Utc::now().timestamp_micros();
 
-        match raw_message_tx
-            .send_async(timestamped_message.into_bytes())
-            .await
-        {
+        // Build message: 8-byte timestamp + frame bytes
+        let mut message = Vec::with_capacity(8 + frame.len());
+        message.extend_from_slice(&timestamp_micros.to_be_bytes());
+        message.extend_from_slice(&frame);
+
+        match raw_message_tx.send_async(message).await {
             Ok(_) => {
                 trace!("Published Beast frame ({} bytes)", frame.len());
                 metrics::counter!("beast.frames.published").increment(1);
