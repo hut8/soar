@@ -334,6 +334,11 @@ pub fn initialize_beast_consumer_metrics() {
     metrics::counter!("beast.consumer.write_errors").absolute(0);
     metrics::histogram!("beast.consumer.batch_write_ms").record(0.0);
 
+    // Beast decoding metrics
+    metrics::counter!("beast.consumer.decoded").absolute(0);
+    metrics::counter!("beast.consumer.decode_error").absolute(0);
+    metrics::counter!("beast.consumer.json_error").absolute(0);
+
     // General consumption metrics
     metrics::counter!("beast.consume_failed").absolute(0);
 }

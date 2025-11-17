@@ -1,9 +1,10 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use tokio::time::{Duration, sleep};
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
+use crate::beast::decoder::{decode_beast_frame, message_to_json};
 use crate::beast_jetstream_consumer::JetStreamConsumer;
 use crate::raw_messages_repo::{BeastMessagesRepository, NewBeastMessage};
 
@@ -78,10 +79,40 @@ impl BeastConsumerTask {
                         DateTime::from_timestamp_micros(timestamp_micros).unwrap_or_else(Utc::now);
 
                     // Extract Beast frame (remaining bytes)
-                    let raw_message = payload[8..].to_vec();
+                    let raw_frame = &payload[8..];
 
-                    // Create new Beast message
-                    let message = NewBeastMessage::new(raw_message, received_at, receiver_id, None);
+                    // Decode the Beast frame using rs1090
+                    let decoded_json = match decode_beast_frame(raw_frame, received_at) {
+                        Ok(decoded) => {
+                            metrics::counter!("beast.consumer.decoded").increment(1);
+                            // Convert to JSON for storage
+                            match message_to_json(&decoded.message) {
+                                Ok(json) => {
+                                    debug!("Decoded Beast message: {:?}", json);
+                                    Some(json.to_string())
+                                }
+                                Err(e) => {
+                                    warn!("Failed to serialize decoded message to JSON: {}", e);
+                                    metrics::counter!("beast.consumer.json_error").increment(1);
+                                    None
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            // Log decode errors but still store the raw frame
+                            debug!("Failed to decode Beast frame: {}", e);
+                            metrics::counter!("beast.consumer.decode_error").increment(1);
+                            None
+                        }
+                    };
+
+                    // Create new Beast message with decoded JSON in unparsed field
+                    let message = NewBeastMessage::new(
+                        raw_frame.to_vec(),
+                        received_at,
+                        receiver_id,
+                        decoded_json,
+                    );
 
                     // Send to batch writer (blocking send for backpressure)
                     match batch_tx.send_async(message).await {
