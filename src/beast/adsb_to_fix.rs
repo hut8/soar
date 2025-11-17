@@ -112,13 +112,22 @@ struct PositionInfo {
 
 /// Extract position information from ADS-B message
 ///
-/// Note: This is a placeholder for Phase 4. Full CPR decoding requires
-/// tracking even/odd message pairs and maintaining position state.
-/// That will be implemented in Phase 5 using rs1090's decode_positions() function.
-fn extract_position_info(_message: &Message) -> Option<PositionInfo> {
-    // CPR decoding not yet implemented
-    // This will be added in Phase 5
-    None
+/// Note: Full CPR decoding for lat/lon requires tracking even/odd message pairs
+/// and maintaining state across messages. For now, we extract altitude only.
+/// Full position decoding will require implementing a stateful CPR decoder using
+/// rs1090's decode_positions() function in a future phase.
+fn extract_position_info(message: &Message) -> Option<PositionInfo> {
+    // Serialize to JSON to access position fields (BDS 05 - airborne position)
+    let json = serde_json::to_value(message).ok()?;
+
+    // Check if this is a position message (has altitude field)
+    json.get("altitude")
+        .and_then(|v| v.as_i64())
+        .map(|altitude| PositionInfo {
+            latitude: 0.0,  // CPR decoding required
+            longitude: 0.0, // CPR decoding required
+            altitude_feet: Some(altitude as i32),
+        })
 }
 
 /// Velocity information extracted from ADS-B message
@@ -130,17 +139,43 @@ struct VelocityInfo {
 }
 
 /// Extract velocity information from airborne velocity messages
-fn extract_velocity_info(_message: &Message) -> Option<VelocityInfo> {
-    // Velocity extraction not yet implemented
-    // This will be added after we parse the DF enum properly
-    None
+fn extract_velocity_info(message: &Message) -> Option<VelocityInfo> {
+    // Serialize to JSON to access velocity fields (BDS 09 - airborne velocity)
+    let json = serde_json::to_value(message).ok()?;
+
+    // Check if this is a velocity message (has groundspeed field)
+    if json.get("groundspeed").is_some() {
+        let ground_speed_knots = json
+            .get("groundspeed")
+            .and_then(|v| v.as_f64())
+            .map(|v| v as f32);
+
+        let track_degrees = json.get("track").and_then(|v| v.as_f64()).map(|v| v as f32);
+
+        let vertical_rate_fpm = json
+            .get("vertical_rate")
+            .and_then(|v| v.as_i64())
+            .map(|v| v as i32);
+
+        Some(VelocityInfo {
+            ground_speed_knots,
+            track_degrees,
+            vertical_rate_fpm,
+        })
+    } else {
+        None
+    }
 }
 
 /// Extract callsign from identification messages
-fn extract_callsign(_message: &Message) -> Option<String> {
-    // Callsign extraction not yet implemented
-    // This will be added after we parse the DF enum properly
-    None
+fn extract_callsign(message: &Message) -> Option<String> {
+    // Serialize to JSON to access callsign field (BDS 08 - aircraft identification)
+    let json = serde_json::to_value(message).ok()?;
+
+    json.get("callsign")
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
 }
 
 /// Extract squawk code if available
@@ -211,5 +246,100 @@ mod tests {
             "4BB463",
             "ICAO should format as 6-digit hex"
         );
+    }
+
+    #[test]
+    fn test_extract_velocity() {
+        // Airborne velocity message (DF=17, BDS 09)
+        let frame = hex!("8D485020994409940838175B284F");
+        let timestamp = Utc::now();
+        let decoded = decode_beast_frame(&frame, timestamp).unwrap();
+
+        let velocity = extract_velocity_info(&decoded.message).expect("Should extract velocity");
+
+        // Based on the test output we saw earlier:
+        // groundspeed: 159.20113, track: 182.88037, vertical_rate: -832
+        assert!(velocity.ground_speed_knots.is_some());
+        assert!(velocity.track_degrees.is_some());
+        assert!(velocity.vertical_rate_fpm.is_some());
+
+        let speed = velocity.ground_speed_knots.unwrap();
+        assert!(
+            (speed - 159.2).abs() < 1.0,
+            "Ground speed should be ~159 knots"
+        );
+
+        let track = velocity.track_degrees.unwrap();
+        assert!((track - 182.9).abs() < 1.0, "Track should be ~183 degrees");
+
+        let vrate = velocity.vertical_rate_fpm.unwrap();
+        assert_eq!(vrate, -832, "Vertical rate should be -832 fpm");
+    }
+
+    #[test]
+    fn test_extract_callsign() {
+        // Aircraft identification message (DF=17, BDS 08)
+        let frame = hex!("8D4840D6202CC371C32CE0576098");
+        let timestamp = Utc::now();
+        let decoded = decode_beast_frame(&frame, timestamp).unwrap();
+
+        let callsign = extract_callsign(&decoded.message).expect("Should extract callsign");
+        assert_eq!(callsign, "KLM1023", "Callsign should be KLM1023");
+    }
+
+    #[test]
+    fn test_extract_position_altitude() {
+        // Airborne position message (DF=17, BDS 05)
+        let frame = hex!("8D40621D58C382D690C8AC2863A7");
+        let timestamp = Utc::now();
+        let decoded = decode_beast_frame(&frame, timestamp).unwrap();
+
+        let position = extract_position_info(&decoded.message).expect("Should extract position");
+
+        assert!(position.altitude_feet.is_some(), "Should have altitude");
+        assert_eq!(
+            position.altitude_feet.unwrap(),
+            38000,
+            "Altitude should be 38000 feet"
+        );
+
+        // Lat/lon not decoded yet (CPR required)
+        assert_eq!(
+            position.latitude, 0.0,
+            "Latitude placeholder until CPR implemented"
+        );
+        assert_eq!(
+            position.longitude, 0.0,
+            "Longitude placeholder until CPR implemented"
+        );
+    }
+
+    #[test]
+    fn test_adsb_to_fix_with_velocity() {
+        // Velocity message should create a Fix
+        let frame = hex!("8D485020994409940838175B284F");
+        let timestamp = Utc::now();
+        let receiver_id = Uuid::now_v7();
+        let device_id = Uuid::now_v7();
+        let raw_message_id = Uuid::now_v7();
+
+        let decoded = decode_beast_frame(&frame, timestamp).unwrap();
+        let fix_result = adsb_message_to_fix(
+            &decoded.message,
+            timestamp,
+            receiver_id,
+            device_id,
+            raw_message_id,
+        );
+
+        assert!(fix_result.is_ok());
+        let fix_opt = fix_result.unwrap();
+        assert!(fix_opt.is_some(), "Should create Fix for velocity message");
+
+        let fix = fix_opt.unwrap();
+        assert_eq!(fix.source, "485020", "ICAO should be 485020");
+        assert!(fix.ground_speed_knots.is_some(), "Should have ground speed");
+        assert!(fix.track_degrees.is_some(), "Should have track");
+        assert!(fix.climb_fpm.is_some(), "Should have vertical rate");
     }
 }
