@@ -7,7 +7,7 @@ use std::path::Path;
 use tracing::info;
 use uuid::Uuid;
 
-use soar::aprs_messages_repo::AprsMessage;
+use soar::raw_messages_repo::AprsMessage;
 use soar::schema::raw_messages;
 
 use super::archiver::{Archivable, PgPool, write_records_to_file};

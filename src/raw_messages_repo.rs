@@ -8,7 +8,41 @@ use uuid::Uuid;
 
 use crate::web::PgPool;
 
-// Diesel model for inserting new APRS messages
+// Diesel model for inserting new Beast messages (using raw SQL for enum)
+pub struct NewBeastMessage {
+    pub id: Uuid,
+    pub raw_message: String,
+    pub received_at: DateTime<Utc>,
+    pub receiver_id: Uuid,
+    pub unparsed: Option<String>,
+    pub raw_message_hash: Vec<u8>,
+}
+
+impl NewBeastMessage {
+    /// Create a new Beast message with computed hash
+    pub fn new(
+        raw_message: String,
+        received_at: DateTime<Utc>,
+        receiver_id: Uuid,
+        unparsed: Option<String>,
+    ) -> Self {
+        // Compute SHA-256 hash of raw message for deduplication
+        let mut hasher = Sha256::new();
+        hasher.update(raw_message.as_bytes());
+        let hash = hasher.finalize().to_vec();
+
+        Self {
+            id: Uuid::now_v7(),
+            raw_message,
+            received_at,
+            receiver_id,
+            unparsed,
+            raw_message_hash: hash,
+        }
+    }
+}
+
+// Legacy APRS-specific struct for backward compatibility
 #[derive(Insertable)]
 #[diesel(table_name = crate::schema::raw_messages)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
@@ -195,6 +229,79 @@ impl AprsMessagesRepository {
             Ok::<Vec<AprsMessage>, anyhow::Error>(messages)
         })
         .await?
+    }
+}
+
+/// Repository for Beast messages
+/// Provides methods to insert and query Beast messages from the raw_messages table
+#[derive(Clone)]
+pub struct BeastMessagesRepository {
+    pool: PgPool,
+}
+
+impl BeastMessagesRepository {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+
+    /// Insert a new Beast message into the database
+    /// Returns the ID of the inserted message
+    /// On duplicate (redelivery after crash), returns the existing message ID
+    pub async fn insert(&self, new_message: NewBeastMessage) -> Result<Uuid> {
+        let message_id = new_message.id;
+        let pool = self.pool.clone();
+        let receiver = new_message.receiver_id;
+        let timestamp = new_message.received_at;
+        let hash = new_message.raw_message_hash.clone();
+        let raw_msg = new_message.raw_message;
+        let unparsed_val = new_message.unparsed;
+
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            // Use raw SQL to insert with enum value 'beast'
+            let insert_result = diesel::sql_query(
+                "INSERT INTO raw_messages (id, raw_message, received_at, receiver_id, unparsed, raw_message_hash, source)
+                 VALUES ($1, $2, $3, $4, $5, $6, 'beast'::message_source)"
+            )
+            .bind::<diesel::sql_types::Uuid, _>(message_id)
+            .bind::<diesel::sql_types::Text, _>(&raw_msg)
+            .bind::<diesel::sql_types::Timestamptz, _>(timestamp)
+            .bind::<diesel::sql_types::Uuid, _>(receiver)
+            .bind::<diesel::sql_types::Nullable<diesel::sql_types::Text>, _>(&unparsed_val)
+            .bind::<diesel::sql_types::Bytea, _>(&hash)
+            .execute(&mut conn);
+
+            match insert_result {
+                Ok(_) => {
+                    metrics::counter!("beast.messages.inserted").increment(1);
+                    Ok::<Uuid, anyhow::Error>(message_id)
+                }
+                Err(diesel::result::Error::DatabaseError(
+                    diesel::result::DatabaseErrorKind::UniqueViolation,
+                    _,
+                )) => {
+                    // Duplicate message on redelivery - this is expected after crashes
+                    debug!("Duplicate beast message detected on redelivery");
+                    metrics::counter!("beast.messages.duplicate_on_redelivery").increment(1);
+
+                    // Find existing message ID by natural key
+                    use crate::schema::raw_messages::dsl::*;
+                    let existing = raw_messages
+                        .filter(receiver_id.eq(receiver))
+                        .filter(received_at.eq(timestamp))
+                        .filter(raw_message_hash.eq(&hash))
+                        .select(id)
+                        .first::<Uuid>(&mut conn)?;
+
+                    Ok(existing)
+                }
+                Err(e) => Err(e.into()),
+            }
+        })
+        .await??;
+
+        Ok(result)
     }
 }
 

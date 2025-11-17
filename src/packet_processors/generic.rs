@@ -1,5 +1,5 @@
 use crate::ArchiveService;
-use crate::aprs_messages_repo::{AprsMessagesRepository, NewAprsMessage};
+use crate::raw_messages_repo::{AprsMessagesRepository, NewAprsMessage};
 use crate::receiver_repo::ReceiverRepository;
 use moka::sync::Cache;
 use ogn_parser::{AprsData, AprsPacket};
