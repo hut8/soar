@@ -105,15 +105,11 @@ mod tests {
             track_degrees: None,
             climb_fpm: None,
             turn_rate_rot: None,
-            snr_db: None,
-            bit_errors_corrected: None,
-            freq_offset_khz: None,
-            gnss_horizontal_resolution: None,
-            gnss_vertical_resolution: None,
+            source_metadata: None,
             device_id: uuid::Uuid::now_v7(),
             is_active: true, // 50 knots is active
             receiver_id: uuid::Uuid::now_v7(),
-            aprs_message_id: uuid::Uuid::now_v7(),
+            raw_message_id: uuid::Uuid::now_v7(),
             altitude_agl_valid: false,
             time_gap_seconds: None,
         };

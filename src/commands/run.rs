@@ -310,7 +310,7 @@ pub async fn handle_run(
     let receiver_repo = ReceiverRepository::new(diesel_pool.clone());
     let receiver_status_repo = ReceiverStatusRepository::new(diesel_pool.clone());
     let aprs_messages_repo =
-        soar::aprs_messages_repo::AprsMessagesRepository::new(diesel_pool.clone());
+        soar::raw_messages_repo::AprsMessagesRepository::new(diesel_pool.clone());
 
     // Create GenericProcessor for archiving, receiver identification, and APRS message insertion
     let generic_processor = if let Some(archive_path) = archive_dir.clone() {

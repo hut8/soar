@@ -48,8 +48,8 @@ impl ReceiverStatusProcessor {
                 received_at, // received_at
             );
 
-            // Set the aprs_message_id from context
-            new_status.aprs_message_id = Some(context.aprs_message_id);
+            // Set the raw_message_id from context
+            new_status.raw_message_id = Some(context.raw_message_id);
 
             // Insert receiver status
             match self.status_repo.insert(&new_status).await {

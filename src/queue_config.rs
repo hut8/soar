@@ -28,6 +28,18 @@ pub const APRS_RAW_SUBJECT_STAGING: &str = "staging.aprs.raw";
 /// JetStream consumer name for soar-run (staging/development)
 pub const SOAR_RUN_CONSUMER_STAGING: &str = "soar-run-staging";
 
+/// JetStream stream name for raw Beast (ADS-B) messages (production)
+pub const BEAST_RAW_STREAM: &str = "BEAST_RAW";
+
+/// JetStream subject for raw Beast (ADS-B) messages (production)
+pub const BEAST_RAW_SUBJECT: &str = "beast.raw";
+
+/// JetStream stream name for raw Beast (ADS-B) messages (staging/development)
+pub const BEAST_RAW_STREAM_STAGING: &str = "STAGING_BEAST_RAW";
+
+/// JetStream subject for raw Beast (ADS-B) messages (staging/development)
+pub const BEAST_RAW_SUBJECT_STAGING: &str = "staging.beast.raw";
+
 // ============================================================================
 // Queue Size Constants
 // ============================================================================

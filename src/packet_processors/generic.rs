@@ -1,5 +1,5 @@
 use crate::ArchiveService;
-use crate::aprs_messages_repo::{AprsMessagesRepository, NewAprsMessage};
+use crate::raw_messages_repo::{AprsMessagesRepository, NewAprsMessage};
 use crate::receiver_repo::ReceiverRepository;
 use moka::sync::Cache;
 use ogn_parser::{AprsData, AprsPacket};
@@ -12,7 +12,7 @@ use uuid::Uuid;
 #[derive(Debug, Clone)]
 pub struct PacketContext {
     /// ID of the APRS message record created for this packet
-    pub aprs_message_id: Uuid,
+    pub raw_message_id: Uuid,
     /// ID of the receiver that sent/relayed this packet
     pub receiver_id: Uuid,
     /// Timestamp when the message was received from APRS-IS
@@ -129,7 +129,7 @@ impl GenericProcessor {
                     id, receiver_callsign
                 );
                 Some(PacketContext {
-                    aprs_message_id: id,
+                    raw_message_id: id,
                     receiver_id,
                     received_at: received_at_timestamp,
                 })

@@ -39,6 +39,7 @@ ogn-parser = { git = "https://github.com/hut8/ogn-parser-rs", branch = "master" 
 once_cell = "1.19"
 regex = "1.12"
 reqwest = { version = "0.12", features = ["json"] }
+rs1090 = "0.4.14"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
 diesel = { version = "2.3", features = [
@@ -83,6 +84,9 @@ moka = { version = "0.12", features = ["future", "sync"] }
 sha2 = "0.10.9"
 kml = "0.12"
 hex = "0.4.3"
+
+[dev-dependencies]
+hex-literal = "0.4"
 
 # Optimized development profile with light optimization
 # Use with: cargo build --profile dev-fast
