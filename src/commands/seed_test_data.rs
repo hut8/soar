@@ -296,8 +296,15 @@ fn create_test_devices(conn: &mut PgConnection, count: usize) -> Result<Vec<Uuid
 
         match result {
             Ok(_) => {
-                info!("Created test device: {} ({})", reg, addr);
-                device_ids.push(device_id);
+                info!("Created/updated test device: {} ({})", reg, addr);
+                // Query back the actual device ID after upsert
+                let actual_device_id: Uuid = devices
+                    .filter(address_type.eq(AddressType::Icao))
+                    .filter(address.eq(addr_int))
+                    .select(id)
+                    .first(conn)
+                    .expect("Failed to query device ID after upsert");
+                device_ids.push(actual_device_id);
             }
             Err(e) => tracing::error!("Failed to create test device {} ({}): {}", reg, addr, e),
         }

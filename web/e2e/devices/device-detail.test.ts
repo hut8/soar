@@ -7,8 +7,8 @@ test.describe('Device Detail', () => {
 	// Searches for a known test device and navigates to it
 	async function navigateToTestDevice(page: Page) {
 		// First, directly query the backend API to verify devices exist
-		// Use same port as the test server (4173)
-		const backendUrl = 'http://localhost:4173';
+		// Use baseURL from playwright config (respects PLAYWRIGHT_BASE_URL in CI)
+		const backendUrl = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:4173';
 		const apiResponse = await page.request.get(
 			`${backendUrl}/data/devices?registration=${testDevices.validRegistration}`
 		);
