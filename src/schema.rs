@@ -199,12 +199,12 @@ diesel::table! {
 
     aprs_messages_default (id, received_at) {
         id -> Uuid,
-        raw_message -> Text,
         received_at -> Timestamptz,
         receiver_id -> Uuid,
         unparsed -> Nullable<Text>,
         raw_message_hash -> Bytea,
         source -> MessageSource,
+        raw_message -> Bytea,
     }
 }
 
@@ -225,12 +225,12 @@ diesel::table! {
 
     aprs_messages_p20251110 (id, received_at) {
         id -> Uuid,
-        raw_message -> Text,
         received_at -> Timestamptz,
         receiver_id -> Uuid,
         unparsed -> Nullable<Text>,
         raw_message_hash -> Bytea,
         source -> MessageSource,
+        raw_message -> Bytea,
     }
 }
 
@@ -240,12 +240,12 @@ diesel::table! {
 
     aprs_messages_p20251111 (id, received_at) {
         id -> Uuid,
-        raw_message -> Text,
         received_at -> Timestamptz,
         receiver_id -> Uuid,
         unparsed -> Nullable<Text>,
         raw_message_hash -> Bytea,
         source -> MessageSource,
+        raw_message -> Bytea,
     }
 }
 
@@ -255,12 +255,12 @@ diesel::table! {
 
     aprs_messages_p20251112 (id, received_at) {
         id -> Uuid,
-        raw_message -> Text,
         received_at -> Timestamptz,
         receiver_id -> Uuid,
         unparsed -> Nullable<Text>,
         raw_message_hash -> Bytea,
         source -> MessageSource,
+        raw_message -> Bytea,
     }
 }
 
@@ -270,12 +270,12 @@ diesel::table! {
 
     aprs_messages_p20251113 (id, received_at) {
         id -> Uuid,
-        raw_message -> Text,
         received_at -> Timestamptz,
         receiver_id -> Uuid,
         unparsed -> Nullable<Text>,
         raw_message_hash -> Bytea,
         source -> MessageSource,
+        raw_message -> Bytea,
     }
 }
 
@@ -285,12 +285,12 @@ diesel::table! {
 
     aprs_messages_p20251114 (id, received_at) {
         id -> Uuid,
-        raw_message -> Text,
         received_at -> Timestamptz,
         receiver_id -> Uuid,
         unparsed -> Nullable<Text>,
         raw_message_hash -> Bytea,
         source -> MessageSource,
+        raw_message -> Bytea,
     }
 }
 
@@ -300,12 +300,12 @@ diesel::table! {
 
     aprs_messages_p20251115 (id, received_at) {
         id -> Uuid,
-        raw_message -> Text,
         received_at -> Timestamptz,
         receiver_id -> Uuid,
         unparsed -> Nullable<Text>,
         raw_message_hash -> Bytea,
         source -> MessageSource,
+        raw_message -> Bytea,
     }
 }
 
@@ -315,12 +315,12 @@ diesel::table! {
 
     aprs_messages_p20251116 (id, received_at) {
         id -> Uuid,
-        raw_message -> Text,
         received_at -> Timestamptz,
         receiver_id -> Uuid,
         unparsed -> Nullable<Text>,
         raw_message_hash -> Bytea,
         source -> MessageSource,
+        raw_message -> Bytea,
     }
 }
 
@@ -945,12 +945,12 @@ diesel::table! {
 
     raw_messages (id, received_at) {
         id -> Uuid,
-        raw_message -> Text,
         received_at -> Timestamptz,
         receiver_id -> Uuid,
         unparsed -> Nullable<Text>,
         raw_message_hash -> Bytea,
         source -> MessageSource,
+        raw_message -> Bytea,
     }
 }
 

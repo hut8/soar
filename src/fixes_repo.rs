@@ -333,9 +333,14 @@ impl FixesRepository {
             // Select all Fix fields plus raw_message from raw_messages as raw_packet
             let results = query
                 .select((Fix::as_select(), raw_messages::raw_message))
-                .load::<(Fix, String)>(&mut conn)?
+                .load::<(Fix, Vec<u8>)>(&mut conn)?
                 .into_iter()
-                .map(|(fix, raw_packet)| crate::fixes::FixWithRawPacket::new(fix, Some(raw_packet)))
+                .map(|(fix, raw_packet_bytes)| {
+                    crate::fixes::FixWithRawPacket::new(
+                        fix,
+                        Some(String::from_utf8_lossy(&raw_packet_bytes).to_string()),
+                    )
+                })
                 .collect();
 
             Ok::<Vec<crate::fixes::FixWithRawPacket>, anyhow::Error>(results)
@@ -503,9 +508,14 @@ impl FixesRepository {
                 .limit(per_page)
                 .offset(offset)
                 .select((Fix::as_select(), raw_messages::raw_message))
-                .load::<(Fix, String)>(&mut conn)?
+                .load::<(Fix, Vec<u8>)>(&mut conn)?
                 .into_iter()
-                .map(|(fix, raw_packet)| crate::fixes::FixWithRawPacket::new(fix, Some(raw_packet)))
+                .map(|(fix, raw_packet_bytes)| {
+                    crate::fixes::FixWithRawPacket::new(
+                        fix,
+                        Some(String::from_utf8_lossy(&raw_packet_bytes).to_string()),
+                    )
+                })
                 .collect();
 
             Ok::<(Vec<crate::fixes::FixWithRawPacket>, i64), anyhow::Error>((results, total_count))

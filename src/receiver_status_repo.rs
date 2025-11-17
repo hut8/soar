@@ -92,12 +92,15 @@ impl ReceiverStatusRepository {
             .limit(per_page)
             .offset(offset)
             .select((ReceiverStatus::as_select(), raw_messages::raw_message))
-            .load::<(ReceiverStatus, String)>(&mut conn)?;
+            .load::<(ReceiverStatus, Vec<u8>)>(&mut conn)?;
 
         // Convert to ReceiverStatusWithRaw
         let statuses_with_raw = results
             .into_iter()
-            .map(|(status, raw_data)| ReceiverStatusWithRaw { status, raw_data })
+            .map(|(status, raw_data_bytes)| ReceiverStatusWithRaw {
+                status,
+                raw_data: String::from_utf8_lossy(&raw_data_bytes).to_string(),
+            })
             .collect();
 
         Ok((statuses_with_raw, total_count))

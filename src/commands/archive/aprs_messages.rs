@@ -28,7 +28,7 @@ impl From<AprsMessage> for AprsMessageCsv {
     fn from(msg: AprsMessage) -> Self {
         Self {
             id: msg.id,
-            raw_message: msg.raw_message,
+            raw_message: String::from_utf8_lossy(&msg.raw_message).to_string(), // Decode bytes to UTF-8
             received_at: msg.received_at,
             receiver_id: msg.receiver_id,
             unparsed: msg.unparsed,
@@ -41,7 +41,7 @@ impl From<AprsMessageCsv> for AprsMessage {
     fn from(csv: AprsMessageCsv) -> Self {
         Self {
             id: csv.id,
-            raw_message: csv.raw_message,
+            raw_message: csv.raw_message.into_bytes(), // Encode UTF-8 text to bytes
             received_at: csv.received_at,
             receiver_id: csv.receiver_id,
             unparsed: csv.unparsed,

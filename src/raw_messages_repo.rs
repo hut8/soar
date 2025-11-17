@@ -11,7 +11,7 @@ use crate::web::PgPool;
 // Diesel model for inserting new Beast messages (using raw SQL for enum)
 pub struct NewBeastMessage {
     pub id: Uuid,
-    pub raw_message: String,
+    pub raw_message: Vec<u8>, // Binary Beast frame
     pub received_at: DateTime<Utc>,
     pub receiver_id: Uuid,
     pub unparsed: Option<String>,
@@ -21,14 +21,14 @@ pub struct NewBeastMessage {
 impl NewBeastMessage {
     /// Create a new Beast message with computed hash
     pub fn new(
-        raw_message: String,
+        raw_message: Vec<u8>, // Binary Beast frame
         received_at: DateTime<Utc>,
         receiver_id: Uuid,
         unparsed: Option<String>,
     ) -> Self {
         // Compute SHA-256 hash of raw message for deduplication
         let mut hasher = Sha256::new();
-        hasher.update(raw_message.as_bytes());
+        hasher.update(&raw_message);
         let hash = hasher.finalize().to_vec();
 
         Self {
@@ -48,7 +48,7 @@ impl NewBeastMessage {
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct NewAprsMessage {
     pub id: Uuid,
-    pub raw_message: String,
+    pub raw_message: Vec<u8>, // UTF-8 encoded APRS text
     pub received_at: DateTime<Utc>,
     pub receiver_id: Uuid,
     pub unparsed: Option<String>,
@@ -57,20 +57,24 @@ pub struct NewAprsMessage {
 
 impl NewAprsMessage {
     /// Create a new APRS message with computed hash
+    /// Accepts ASCII/UTF-8 text and stores as bytes
     pub fn new(
-        raw_message: String,
+        raw_message: String, // APRS text message
         received_at: DateTime<Utc>,
         receiver_id: Uuid,
         unparsed: Option<String>,
     ) -> Self {
+        // Convert text to UTF-8 bytes for storage
+        let message_bytes = raw_message.into_bytes();
+
         // Compute SHA-256 hash of raw message for deduplication
         let mut hasher = Sha256::new();
-        hasher.update(raw_message.as_bytes());
+        hasher.update(&message_bytes);
         let hash = hasher.finalize().to_vec();
 
         Self {
             id: Uuid::now_v7(),
-            raw_message,
+            raw_message: message_bytes,
             received_at,
             receiver_id,
             unparsed,
@@ -80,16 +84,74 @@ impl NewAprsMessage {
 }
 
 // Diesel model for querying APRS messages
-#[derive(Queryable, Selectable, Insertable, Serialize, Deserialize, Debug)]
+// Note: raw_message is stored as BYTEA (UTF-8 encoded text for APRS)
+// For JSON serialization, raw_message is automatically decoded to UTF-8 string
+#[derive(Queryable, Selectable, Insertable, Debug, Clone)]
 #[diesel(table_name = crate::schema::raw_messages)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct AprsMessage {
     pub id: Uuid,
-    pub raw_message: String,
+    #[diesel(deserialize_as = Vec<u8>)]
+    pub raw_message: Vec<u8>, // UTF-8 encoded APRS text (stored as BYTEA)
     pub received_at: DateTime<Utc>,
     pub receiver_id: Uuid,
     pub unparsed: Option<String>,
     pub raw_message_hash: Vec<u8>,
+}
+
+impl AprsMessage {
+    /// Decode raw_message bytes to UTF-8 string
+    /// Returns lossy conversion if invalid UTF-8 is encountered
+    pub fn raw_message_text(&self) -> String {
+        String::from_utf8_lossy(&self.raw_message).to_string()
+    }
+}
+
+// Custom serialization for JSON APIs - decode raw_message to string
+impl Serialize for AprsMessage {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut state = serializer.serialize_struct("AprsMessage", 6)?;
+        state.serialize_field("id", &self.id)?;
+        state.serialize_field("raw_message", &self.raw_message_text())?; // Decode to string
+        state.serialize_field("received_at", &self.received_at)?;
+        state.serialize_field("receiver_id", &self.receiver_id)?;
+        state.serialize_field("unparsed", &self.unparsed)?;
+        state.serialize_field("raw_message_hash", &hex::encode(&self.raw_message_hash))?; // Hex encode hash
+        state.end()
+    }
+}
+
+// Custom deserialization for JSON APIs - encode string to bytes
+impl<'de> Deserialize<'de> for AprsMessage {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct AprsMessageHelper {
+            id: Uuid,
+            raw_message: String, // Expect string in JSON
+            received_at: DateTime<Utc>,
+            receiver_id: Uuid,
+            unparsed: Option<String>,
+            raw_message_hash: String, // Hex-encoded in JSON
+        }
+
+        let helper = AprsMessageHelper::deserialize(deserializer)?;
+        Ok(AprsMessage {
+            id: helper.id,
+            raw_message: helper.raw_message.into_bytes(), // Convert to bytes
+            received_at: helper.received_at,
+            receiver_id: helper.receiver_id,
+            unparsed: helper.unparsed,
+            raw_message_hash: hex::decode(&helper.raw_message_hash)
+                .map_err(serde::de::Error::custom)?,
+        })
+    }
 }
 
 #[derive(Clone)]
@@ -265,7 +327,7 @@ impl BeastMessagesRepository {
                  VALUES ($1, $2, $3, $4, $5, $6, 'beast'::message_source)"
             )
             .bind::<diesel::sql_types::Uuid, _>(message_id)
-            .bind::<diesel::sql_types::Text, _>(&raw_msg)
+            .bind::<diesel::sql_types::Bytea, _>(&raw_msg)  // Binary Beast frame
             .bind::<diesel::sql_types::Timestamptz, _>(timestamp)
             .bind::<diesel::sql_types::Uuid, _>(receiver)
             .bind::<diesel::sql_types::Nullable<diesel::sql_types::Text>, _>(&unparsed_val)
@@ -381,7 +443,7 @@ mod tests {
         assert!(retrieved.is_some());
         let message = retrieved.unwrap();
         assert_eq!(message.id, message_id);
-        assert_eq!(message.raw_message, "TEST>APRS:>Test message");
+        assert_eq!(message.raw_message_text(), "TEST>APRS:>Test message");
         assert_eq!(message.receiver_id, receiver_id);
     }
 
