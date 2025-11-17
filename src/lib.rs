@@ -21,6 +21,8 @@ pub mod archive_email_reporter;
 pub mod archive_service;
 pub mod auth;
 pub mod beast;
+pub mod beast_consumer_task;
+pub mod beast_jetstream_consumer;
 pub mod beast_jetstream_publisher;
 pub mod clubs;
 pub mod clubs_repo;

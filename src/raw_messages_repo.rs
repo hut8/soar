@@ -9,6 +9,7 @@ use uuid::Uuid;
 use crate::web::PgPool;
 
 // Diesel model for inserting new Beast messages (using raw SQL for enum)
+#[derive(Clone)]
 pub struct NewBeastMessage {
     pub id: Uuid,
     pub raw_message: Vec<u8>, // Binary Beast frame
@@ -364,6 +365,51 @@ impl BeastMessagesRepository {
         .await??;
 
         Ok(result)
+    }
+
+    /// Insert a batch of Beast messages into the database
+    /// Uses a transaction for atomicity and ignores duplicates
+    pub async fn insert_batch(&self, messages: &[NewBeastMessage]) -> Result<()> {
+        if messages.is_empty() {
+            return Ok(());
+        }
+
+        let pool = self.pool.clone();
+        let messages_vec = messages.to_vec();
+
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            conn.transaction::<_, anyhow::Error, _>(|conn| {
+                for message in &messages_vec {
+                    // Use raw SQL to insert with enum value 'beast'
+                    let insert_result = diesel::sql_query(
+                        "INSERT INTO raw_messages (id, raw_message, received_at, receiver_id, unparsed, raw_message_hash, source)
+                         VALUES ($1, $2, $3, $4, $5, $6, 'beast'::message_source)
+                         ON CONFLICT (receiver_id, received_at, raw_message_hash) DO NOTHING"
+                    )
+                    .bind::<diesel::sql_types::Uuid, _>(message.id)
+                    .bind::<diesel::sql_types::Bytea, _>(&message.raw_message)
+                    .bind::<diesel::sql_types::Timestamptz, _>(message.received_at)
+                    .bind::<diesel::sql_types::Uuid, _>(message.receiver_id)
+                    .bind::<diesel::sql_types::Nullable<diesel::sql_types::Text>, _>(&message.unparsed)
+                    .bind::<diesel::sql_types::Bytea, _>(&message.raw_message_hash)
+                    .execute(conn)?;
+
+                    if insert_result > 0 {
+                        metrics::counter!("beast.messages.inserted").increment(1);
+                    } else {
+                        metrics::counter!("beast.messages.duplicate_on_redelivery").increment(1);
+                    }
+                }
+                Ok(())
+            })?;
+
+            Ok::<(), anyhow::Error>(())
+        })
+        .await??;
+
+        Ok(())
     }
 }
 

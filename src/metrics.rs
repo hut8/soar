@@ -315,6 +315,29 @@ pub fn initialize_beast_ingest_metrics() {
     metrics::counter!("beast.ingest_failed").absolute(0);
 }
 
+/// Initialize Beast consumer metrics to zero/default values
+/// This ensures metrics always appear in Prometheus queries even if no events have occurred
+pub fn initialize_beast_consumer_metrics() {
+    // JetStream consumer metrics (consume-beast consumes from JetStream)
+    metrics::counter!("beast.jetstream.consumed").absolute(0);
+    metrics::counter!("beast.jetstream.receive_error").absolute(0);
+    metrics::counter!("beast.jetstream.ack_error").absolute(0);
+    metrics::counter!("beast.jetstream.invalid_message").absolute(0);
+    metrics::counter!("beast.jetstream.connection_failed").absolute(0);
+    metrics::counter!("beast.jetstream.consumer_setup_failed").absolute(0);
+
+    // Beast consumer processing metrics
+    metrics::counter!("beast.consumer.received").absolute(0);
+    metrics::counter!("beast.consumer.invalid_message").absolute(0);
+    metrics::counter!("beast.consumer.send_errors").absolute(0);
+    metrics::counter!("beast.consumer.messages_stored").absolute(0);
+    metrics::counter!("beast.consumer.write_errors").absolute(0);
+    metrics::histogram!("beast.consumer.batch_write_ms").record(0.0);
+
+    // General consumption metrics
+    metrics::counter!("beast.consume_failed").absolute(0);
+}
+
 /// Initialize SOAR run metrics to zero/default values
 /// This ensures metrics always appear in Prometheus queries even if no events have occurred
 pub fn initialize_run_metrics() {
