@@ -6,7 +6,7 @@ use diesel::{PgConnection, QueryableByName, RunQueryDsl};
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
 use std::env;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tracing::{info, warn};
 
 mod commands;
@@ -266,6 +266,29 @@ impl Instrumentation for QueryLogger {
     }
 }
 
+/// Find the git repository root by walking up the directory tree
+fn find_git_root() -> Result<PathBuf> {
+    let current_dir = env::current_dir().context("Failed to get current directory")?;
+
+    let mut path = current_dir.as_path();
+    loop {
+        let git_dir = path.join(".git");
+        if git_dir.exists() {
+            return Ok(path.to_path_buf());
+        }
+
+        match path.parent() {
+            Some(parent) => path = parent,
+            None => {
+                return Err(anyhow::anyhow!(
+                    "Could not find .git directory. Started from: {}",
+                    current_dir.display()
+                ));
+            }
+        }
+    }
+}
+
 /// Dump database schema to schema.sql if not in production, test, or CI
 fn dump_schema_if_non_production(database_url: &str) -> Result<()> {
     // Check environment
@@ -309,9 +332,9 @@ fn dump_schema_if_non_production(database_url: &str) -> Result<()> {
     }
 
     // Write output to schema.sql in repository root
-    // Use CARGO_MANIFEST_DIR to get the crate root (repo root) at compile time
-    let repo_root = env!("CARGO_MANIFEST_DIR");
-    let schema_path = Path::new(repo_root).join("schema.sql");
+    // Find the repository root by looking for .git directory
+    let repo_root = find_git_root().context("Failed to find repository root (.git directory)")?;
+    let schema_path = repo_root.join("schema.sql");
     std::fs::write(&schema_path, &output.stdout).context("Failed to write schema.sql")?;
 
     info!("Successfully dumped schema to {}", schema_path.display());
