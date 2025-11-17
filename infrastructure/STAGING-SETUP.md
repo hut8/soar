@@ -61,7 +61,7 @@ OGN_APRS_SERVER=aprs.glidernet.org
 OGN_APRS_PORT=14580
 
 # Application settings
-BASE_URL=https://staging.soar.example.com
+BASE_URL=https://staging.glider.flights
 SITEMAP_ROOT=/var/soar/sitemap-staging
 
 # JWT and SMTP settings (copy from production /etc/soar/env)
@@ -175,28 +175,19 @@ nats stream add STAGING_APRS_RAW \
   --discard old
 ```
 
-### 7. Configure Reverse Proxy (Optional)
+### 7. Configure Reverse Proxy
 
-If you want staging to be accessible externally, configure Caddy/nginx:
+The `infrastructure/Caddyfile` already includes the staging configuration. After the first deployment, Caddy will automatically reload and pick up the configuration.
 
-**Caddy example** (`/etc/caddy/Caddyfile`):
+The staging site will be available at: **https://staging.glider.flights**
 
-```
-staging.soar.example.com {
-    reverse_proxy localhost:61226
-
-    # Optional: Add basic auth or IP restrictions
-    # basicauth {
-    #     admin $2a$14$...
-    # }
-}
-```
-
-Reload Caddy:
+If you need to manually reload Caddy:
 
 ```bash
 sudo systemctl reload caddy
 ```
+
+**Note**: Caddy will automatically obtain and renew SSL certificates for staging.glider.flights.
 
 ### 8. First Deployment
 
