@@ -2,8 +2,6 @@
 -- This prevents "null value in column 'date' violates not-null constraint" errors
 -- when flights are updated without a takeoff_time
 
-BEGIN;
-
 -- Recreate all trigger functions with NULL checks
 CREATE OR REPLACE FUNCTION public.update_airport_analytics_daily()
  RETURNS trigger
@@ -615,5 +613,3 @@ BEGIN
     RETURN NEW;
 END;
 $function$;
-
-COMMIT;
