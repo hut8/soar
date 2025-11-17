@@ -350,6 +350,19 @@ pub fn initialize_run_metrics() {
     metrics::counter!("flight_tracker_timeouts_detected").absolute(0);
     metrics::gauge!("flight_tracker_active_devices").set(0.0);
 
+    // Flight coalescing metrics
+    metrics::counter!("flight_tracker.coalesce.resumed").absolute(0);
+    metrics::counter!("flight_tracker.coalesce.callsign_mismatch").absolute(0);
+    metrics::counter!("flight_tracker.coalesce.no_timeout_flight").absolute(0);
+
+    // Flight creation metrics
+    metrics::counter!("flight_tracker.flight_created.takeoff").absolute(0);
+    metrics::counter!("flight_tracker.flight_created.airborne").absolute(0);
+
+    // Flight end metrics
+    metrics::counter!("flight_tracker.flight_ended.landed").absolute(0);
+    metrics::counter!("flight_tracker.flight_ended.timed_out").absolute(0);
+
     // Receiver status metrics
     metrics::counter!("receiver_status_updates_total").absolute(0);
 

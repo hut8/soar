@@ -26,8 +26,10 @@ pub trait Archivable: Sized + Serialize + for<'de> Deserialize<'de> + Send + 'st
         Self::table_name()
     }
 
-    /// Get the oldest date of records in the database
-    async fn get_oldest_date(pool: &PgPool) -> Result<Option<NaiveDate>>;
+    /// Get the oldest date of records in the database that are eligible for archival.
+    /// Only considers records before the given date to enable partition pruning.
+    /// If the oldest record is newer than before_date, returns None.
+    async fn get_oldest_date(pool: &PgPool, before_date: NaiveDate) -> Result<Option<NaiveDate>>;
 
     /// Count records for a specific day range
     async fn count_for_day(
@@ -35,6 +37,14 @@ pub trait Archivable: Sized + Serialize + for<'de> Deserialize<'de> + Send + 'st
         day_start: chrono::DateTime<Utc>,
         day_end: chrono::DateTime<Utc>,
     ) -> Result<i64>;
+
+    /// Get daily counts grouped by date (efficient GROUP BY query)
+    /// Returns a vector of (date, count) tuples for the given date range
+    async fn get_daily_counts_grouped(
+        pool: &PgPool,
+        start_date: NaiveDate,
+        end_date: NaiveDate,
+    ) -> Result<Vec<(NaiveDate, i64)>>;
 
     /// Write records for a specific day to a file
     async fn write_to_file(
@@ -91,17 +101,23 @@ pub async fn archive<T: Archivable>(
 
     let mut metrics = ArchiveMetrics::new();
 
-    let oldest_date = T::get_oldest_date(pool).await?;
+    let oldest_date = T::get_oldest_date(pool, before_date).await?;
     match oldest_date {
         None => {
             info!(
-                "No {} found in database. Nothing to archive.",
-                T::table_name()
+                "No {} found in database older than {}. Nothing to archive.",
+                T::table_name(),
+                before_date
             );
             Ok(metrics)
         }
         Some(oldest) => {
-            info!("Oldest {} date in database: {}", T::table_name(), oldest);
+            info!(
+                "Oldest {} date in database (before {}): {}",
+                T::table_name(),
+                before_date,
+                oldest
+            );
             let mut current_date = oldest;
             while current_date < before_date {
                 let (rows, file_path, file_size) =
@@ -320,4 +336,42 @@ where
         count, table_name
     );
     Ok(())
+}
+
+/// Collect daily counts using an efficient GROUP BY query instead of N individual queries
+/// This reduces 30 queries per table to just 1 query per table
+pub async fn collect_daily_counts_grouped<T: Archivable>(
+    pool: &PgPool,
+    start_date: NaiveDate,
+    end_date: NaiveDate,
+    archived_before: NaiveDate,
+) -> Result<Vec<soar::archive_email_reporter::DailyCount>> {
+    use soar::archive_email_reporter::DailyCount;
+    use std::collections::HashMap;
+
+    // Get grouped counts from database
+    let counts_map: HashMap<NaiveDate, i64> =
+        T::get_daily_counts_grouped(pool, start_date, end_date)
+            .await?
+            .into_iter()
+            .collect();
+
+    // Build result vector with all dates in range, filling in zeros for missing dates
+    let mut result = Vec::new();
+    let mut current_date = start_date;
+    while current_date < end_date {
+        let count = counts_map.get(&current_date).copied().unwrap_or(0);
+        let archived = current_date < archived_before;
+        result.push(DailyCount {
+            date: current_date,
+            count,
+            archived,
+        });
+        current_date = current_date.succ_opt().context(format!(
+            "Failed to calculate next day after {}",
+            current_date
+        ))?;
+    }
+
+    Ok(result)
 }

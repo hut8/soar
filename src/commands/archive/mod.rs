@@ -6,7 +6,7 @@ mod receiver_statuses;
 
 use anyhow::{Context, Result};
 use aprs_messages::AprsMessageCsv;
-use archiver::{Archivable, PgPool, archive, resurrect};
+use archiver::{Archivable, PgPool, archive, collect_daily_counts_grouped, resurrect};
 use chrono::{NaiveDate, Utc};
 use soar::fixes::Fix;
 use soar::flights::FlightModel;
@@ -31,7 +31,7 @@ pub async fn handle_archive(
     archive_path: String,
 ) -> Result<()> {
     use soar::archive_email_reporter::{
-        ArchiveReport, DailyCount, TableArchiveMetrics, send_archive_email_report,
+        ArchiveReport, TableArchiveMetrics, send_archive_email_report,
     };
     use soar::email_reporter::EmailConfig;
     use std::time::Instant;
@@ -166,7 +166,9 @@ pub async fn handle_archive(
     info!("Parallel archival completed, collecting metadata...");
 
     // Collect metadata for flights
-    let flights_oldest = FlightModel::get_oldest_date(&pool).await?;
+    // Use today + 1000 years as a "no upper bound" to get the actual oldest remaining record
+    let far_future = today + chrono::Duration::days(365 * 1000);
+    let flights_oldest = FlightModel::get_oldest_date(&pool, far_future).await?;
     let flights_file_size = flights_metrics
         .archive_files
         .iter()
@@ -188,7 +190,7 @@ pub async fn handle_archive(
     });
 
     // Collect metadata for fixes
-    let fixes_oldest = Fix::get_oldest_date(&pool).await?;
+    let fixes_oldest = Fix::get_oldest_date(&pool, far_future).await?;
     let fixes_file_size = fixes_metrics
         .archive_files
         .iter()
@@ -210,7 +212,7 @@ pub async fn handle_archive(
     });
 
     // Collect metadata for receiver_statuses
-    let receiver_statuses_oldest = ReceiverStatus::get_oldest_date(&pool).await?;
+    let receiver_statuses_oldest = ReceiverStatus::get_oldest_date(&pool, far_future).await?;
     let receiver_statuses_file_size = receiver_statuses_metrics
         .archive_files
         .iter()
@@ -232,7 +234,7 @@ pub async fn handle_archive(
     });
 
     // Collect metadata for aprs_messages
-    let aprs_messages_oldest = AprsMessageCsv::get_oldest_date(&pool).await?;
+    let aprs_messages_oldest = AprsMessageCsv::get_oldest_date(&pool, far_future).await?;
     let aprs_messages_file_size = aprs_messages_metrics
         .archive_files
         .iter()
@@ -256,97 +258,56 @@ pub async fn handle_archive(
     report.total_duration_secs = total_start.elapsed().as_secs_f64();
 
     // Collect daily counts for analytics (last 30 days)
+    // Use efficient GROUP BY queries instead of 120 individual queries
     info!("Collecting daily counts for analytics...");
     let analytics_days = 30;
     let analytics_start_date = today - chrono::Duration::days(analytics_days);
 
-    // Collect for flights
-    let mut flights_counts = Vec::new();
-    for day_offset in 0..analytics_days {
-        let date = analytics_start_date + chrono::Duration::days(day_offset);
-        if date >= today {
-            continue; // Don't include today or future dates
-        }
-        let day_start = date.and_hms_opt(0, 0, 0).unwrap().and_utc();
-        let day_end = (date + chrono::Duration::days(1))
-            .and_hms_opt(0, 0, 0)
-            .unwrap()
-            .and_utc();
-        let count = FlightModel::count_for_day(&pool, day_start, day_end).await?;
-        let archived = date < flights_before;
-        flights_counts.push(DailyCount {
-            date,
-            count,
-            archived,
-        });
-    }
-    report.add_daily_counts("flights".to_string(), flights_counts);
+    // Collect daily counts in parallel using GROUP BY queries
+    let pool_clone1 = pool.clone();
+    let pool_clone2 = pool.clone();
+    let pool_clone3 = pool.clone();
+    let pool_clone4 = pool.clone();
 
-    // Collect for fixes
-    let mut fixes_counts = Vec::new();
-    for day_offset in 0..analytics_days {
-        let date = analytics_start_date + chrono::Duration::days(day_offset);
-        if date >= today {
-            continue;
-        }
-        let day_start = date.and_hms_opt(0, 0, 0).unwrap().and_utc();
-        let day_end = (date + chrono::Duration::days(1))
-            .and_hms_opt(0, 0, 0)
-            .unwrap()
-            .and_utc();
-        let count = Fix::count_for_day(&pool, day_start, day_end).await?;
-        let archived = date < fixes_before;
-        fixes_counts.push(DailyCount {
-            date,
-            count,
-            archived,
-        });
-    }
-    report.add_daily_counts("fixes".to_string(), fixes_counts);
+    let (
+        flights_counts_result,
+        fixes_counts_result,
+        receiver_statuses_counts_result,
+        aprs_messages_counts_result,
+    ) = tokio::join!(
+        collect_daily_counts_grouped::<FlightModel>(
+            &pool_clone1,
+            analytics_start_date,
+            today,
+            flights_before
+        ),
+        collect_daily_counts_grouped::<Fix>(
+            &pool_clone2,
+            analytics_start_date,
+            today,
+            fixes_before
+        ),
+        collect_daily_counts_grouped::<ReceiverStatus>(
+            &pool_clone3,
+            analytics_start_date,
+            today,
+            fixes_before
+        ),
+        collect_daily_counts_grouped::<AprsMessageCsv>(
+            &pool_clone4,
+            analytics_start_date,
+            today,
+            messages_before
+        ),
+    );
 
-    // Collect for receiver_statuses
-    let mut receiver_statuses_counts = Vec::new();
-    for day_offset in 0..analytics_days {
-        let date = analytics_start_date + chrono::Duration::days(day_offset);
-        if date >= today {
-            continue;
-        }
-        let day_start = date.and_hms_opt(0, 0, 0).unwrap().and_utc();
-        let day_end = (date + chrono::Duration::days(1))
-            .and_hms_opt(0, 0, 0)
-            .unwrap()
-            .and_utc();
-        let count = ReceiverStatus::count_for_day(&pool, day_start, day_end).await?;
-        let archived = date < fixes_before;
-        receiver_statuses_counts.push(DailyCount {
-            date,
-            count,
-            archived,
-        });
-    }
-    report.add_daily_counts("receiver_statuses".to_string(), receiver_statuses_counts);
-
-    // Collect for aprs_messages
-    let mut aprs_messages_counts = Vec::new();
-    for day_offset in 0..analytics_days {
-        let date = analytics_start_date + chrono::Duration::days(day_offset);
-        if date >= today {
-            continue;
-        }
-        let day_start = date.and_hms_opt(0, 0, 0).unwrap().and_utc();
-        let day_end = (date + chrono::Duration::days(1))
-            .and_hms_opt(0, 0, 0)
-            .unwrap()
-            .and_utc();
-        let count = AprsMessageCsv::count_for_day(&pool, day_start, day_end).await?;
-        let archived = date < messages_before;
-        aprs_messages_counts.push(DailyCount {
-            date,
-            count,
-            archived,
-        });
-    }
-    report.add_daily_counts("aprs_messages".to_string(), aprs_messages_counts);
+    report.add_daily_counts("flights".to_string(), flights_counts_result?);
+    report.add_daily_counts("fixes".to_string(), fixes_counts_result?);
+    report.add_daily_counts(
+        "receiver_statuses".to_string(),
+        receiver_statuses_counts_result?,
+    );
+    report.add_daily_counts("aprs_messages".to_string(), aprs_messages_counts_result?);
 
     info!("Archive process completed successfully");
 

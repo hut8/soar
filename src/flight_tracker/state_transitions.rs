@@ -246,10 +246,11 @@ pub(crate) async fn process_state_transition(
                 // do NOT coalesce (this indicates a different aircraft/flight)
                 let should_coalesce = match (&timed_out_flight.callsign, &fix.flight_number) {
                     (Some(prev_callsign), Some(new_callsign)) if prev_callsign != new_callsign => {
-                        info!(
+                        debug!(
                             "Device {} came back into range but callsigns differ (previous: '{}', new: '{}') - NOT coalescing, will create new flight",
                             fix.device_id, prev_callsign, new_callsign
                         );
+                        metrics::counter!("flight_tracker.coalesce.callsign_mismatch").increment(1);
                         false
                     }
                     _ => true, // Coalesce if either has no callsign, or callsigns match
@@ -267,6 +268,7 @@ pub(crate) async fn process_state_transition(
                             .map(|t| t.to_rfc3339())
                             .unwrap_or_else(|| "unknown".to_string())
                     );
+                    metrics::counter!("flight_tracker.coalesce.resumed").increment(1);
 
                     // Clear the timeout in the database
                     if let Err(e) = ctx.flights_repo.clear_timeout(flight_id).await {
@@ -309,6 +311,7 @@ pub(crate) async fn process_state_transition(
             // No recent timed-out flight to resume, so create a new flight
             // Check if this is a takeoff or mid-flight appearance
             // We need to query recent fixes to determine this
+            metrics::counter!("flight_tracker.coalesce.no_timeout_flight").increment(1);
             let recent_fixes = ctx
                 .fixes_repo
                 .get_fixes_for_device(fix.device_id, Some(3), None)
@@ -360,6 +363,7 @@ pub(crate) async fn process_state_transition(
                 {
                     Ok(_) => {
                         fix.flight_id = Some(flight_id);
+                        metrics::counter!("flight_tracker.flight_created.takeoff").increment(1);
 
                         // If this is a towplane taking off, spawn towing detection task
                         if is_towtug {
@@ -385,7 +389,7 @@ pub(crate) async fn process_state_transition(
                 }
             } else {
                 // Case 2b: First fix is active OR recent fixes were also active - appearing mid-flight
-                info!(
+                debug!(
                     "Device {} appearing in-flight (first fix or recent fixes active) - creating flight {} without airport lookup (ground speed: {:?} kts, altitude MSL: {:?} ft)",
                     fix.device_id, flight_id, fix.ground_speed_knots, fix.altitude_msl_feet
                 );
@@ -406,6 +410,7 @@ pub(crate) async fn process_state_transition(
                 {
                     Ok(_) => {
                         fix.flight_id = Some(flight_id);
+                        metrics::counter!("flight_tracker.flight_created.airborne").increment(1);
                         // Note: last_fix_at is already set during flight creation
                     }
                     Err(e) => {
