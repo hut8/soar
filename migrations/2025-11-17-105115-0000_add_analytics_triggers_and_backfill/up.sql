@@ -18,6 +18,11 @@ DECLARE
 BEGIN
     -- Handle INSERT
     IF TG_OP = 'INSERT' THEN
+        -- Skip flights without takeoff_time
+        IF NEW.takeoff_time IS NULL THEN
+            RETURN NEW;
+        END IF;
+
         affected_date := DATE(NEW.takeoff_time);
 
         -- Update departure airport
@@ -56,6 +61,11 @@ BEGIN
 
     -- Handle UPDATE
     ELSIF TG_OP = 'UPDATE' THEN
+        -- Skip if both old and new takeoff_time are NULL
+        IF OLD.takeoff_time IS NULL AND NEW.takeoff_time IS NULL THEN
+            RETURN NEW;
+        END IF;
+
         old_date := DATE(OLD.takeoff_time);
         affected_date := DATE(NEW.takeoff_time);
 
@@ -111,6 +121,11 @@ BEGIN
 
     -- Handle DELETE
     ELSIF TG_OP = 'DELETE' THEN
+        -- Skip flights without takeoff_time
+        IF OLD.takeoff_time IS NULL THEN
+            RETURN OLD;
+        END IF;
+
         old_date := DATE(OLD.takeoff_time);
 
         -- Remove departure
@@ -148,6 +163,11 @@ DECLARE
 BEGIN
     -- Handle INSERT
     IF TG_OP = 'INSERT' AND NEW.club_id IS NOT NULL THEN
+        -- Skip flights without takeoff_time
+        IF NEW.takeoff_time IS NULL THEN
+            RETURN NEW;
+        END IF;
+
         affected_club := NEW.club_id;
         affected_date := DATE(NEW.takeoff_time);
         flight_duration := get_flight_duration_seconds(NEW.takeoff_time, NEW.landing_time);
@@ -170,6 +190,11 @@ BEGIN
 
     -- Handle UPDATE
     ELSIF TG_OP = 'UPDATE' THEN
+        -- Skip if both old and new takeoff_time are NULL
+        IF OLD.takeoff_time IS NULL AND NEW.takeoff_time IS NULL THEN
+            RETURN NEW;
+        END IF;
+
         old_club := OLD.club_id;
         old_date := DATE(OLD.takeoff_time);
         affected_club := NEW.club_id;
@@ -208,6 +233,11 @@ BEGIN
 
     -- Handle DELETE
     ELSIF TG_OP = 'DELETE' AND OLD.club_id IS NOT NULL THEN
+        -- Skip flights without takeoff_time
+        IF OLD.takeoff_time IS NULL THEN
+            RETURN OLD;
+        END IF;
+
         old_club := OLD.club_id;
         old_date := DATE(OLD.takeoff_time);
         old_duration := get_flight_duration_seconds(OLD.takeoff_time, OLD.landing_time);
@@ -236,6 +266,11 @@ DECLARE
 BEGIN
     -- Handle INSERT
     IF TG_OP = 'INSERT' THEN
+        -- Skip flights without takeoff_time
+        IF NEW.takeoff_time IS NULL THEN
+            RETURN NEW;
+        END IF;
+
         new_device := NEW.device_id;
         flight_duration := get_flight_duration_seconds(NEW.takeoff_time, NEW.landing_time);
 
@@ -260,6 +295,11 @@ BEGIN
 
     -- Handle UPDATE
     ELSIF TG_OP = 'UPDATE' THEN
+        -- Skip if both old and new takeoff_time are NULL
+        IF OLD.takeoff_time IS NULL AND NEW.takeoff_time IS NULL THEN
+            RETURN NEW;
+        END IF;
+
         old_device := OLD.device_id;
         new_device := NEW.device_id;
         old_duration := get_flight_duration_seconds(OLD.takeoff_time, OLD.landing_time);
@@ -301,6 +341,11 @@ BEGIN
 
     -- Handle DELETE
     ELSIF TG_OP = 'DELETE' THEN
+        -- Skip flights without takeoff_time
+        IF OLD.takeoff_time IS NULL THEN
+            RETURN OLD;
+        END IF;
+
         old_device := OLD.device_id;
         old_duration := get_flight_duration_seconds(OLD.takeoff_time, OLD.landing_time);
 
@@ -330,6 +375,11 @@ DECLARE
 BEGIN
     -- Handle INSERT
     IF TG_OP = 'INSERT' THEN
+        -- Skip flights without takeoff_time
+        IF NEW.takeoff_time IS NULL THEN
+            RETURN NEW;
+        END IF;
+
         affected_date := DATE(NEW.takeoff_time);
         flight_duration := get_flight_duration_seconds(NEW.takeoff_time, NEW.landing_time);
 
@@ -355,6 +405,11 @@ BEGIN
 
     -- Handle UPDATE
     ELSIF TG_OP = 'UPDATE' THEN
+        -- Skip if both old and new takeoff_time are NULL
+        IF OLD.takeoff_time IS NULL AND NEW.takeoff_time IS NULL THEN
+            RETURN NEW;
+        END IF;
+
         old_date := DATE(OLD.takeoff_time);
         affected_date := DATE(NEW.takeoff_time);
         old_duration := get_flight_duration_seconds(OLD.takeoff_time, OLD.landing_time);
@@ -396,6 +451,11 @@ BEGIN
 
     -- Handle DELETE
     ELSIF TG_OP = 'DELETE' THEN
+        -- Skip flights without takeoff_time
+        IF OLD.takeoff_time IS NULL THEN
+            RETURN OLD;
+        END IF;
+
         affected_date := DATE(OLD.takeoff_time);
         old_duration := get_flight_duration_seconds(OLD.takeoff_time, OLD.landing_time);
 
@@ -426,6 +486,11 @@ DECLARE
 BEGIN
     -- Handle INSERT
     IF TG_OP = 'INSERT' THEN
+        -- Skip flights without takeoff_time
+        IF NEW.takeoff_time IS NULL THEN
+            RETURN NEW;
+        END IF;
+
         affected_hour := DATE_TRUNC('hour', NEW.takeoff_time);
 
         INSERT INTO flight_analytics_hourly (hour, flight_count, active_devices, active_clubs)
@@ -441,6 +506,11 @@ BEGIN
 
     -- Handle UPDATE
     ELSIF TG_OP = 'UPDATE' THEN
+        -- Skip if both old and new takeoff_time are NULL
+        IF OLD.takeoff_time IS NULL AND NEW.takeoff_time IS NULL THEN
+            RETURN NEW;
+        END IF;
+
         old_hour := DATE_TRUNC('hour', OLD.takeoff_time);
         affected_hour := DATE_TRUNC('hour', NEW.takeoff_time);
 
@@ -464,6 +534,11 @@ BEGIN
 
     -- Handle DELETE
     ELSIF TG_OP = 'DELETE' THEN
+        -- Skip flights without takeoff_time
+        IF OLD.takeoff_time IS NULL THEN
+            RETURN OLD;
+        END IF;
+
         affected_hour := DATE_TRUNC('hour', OLD.takeoff_time);
 
         UPDATE flight_analytics_hourly SET
@@ -488,6 +563,11 @@ DECLARE
 BEGIN
     -- Handle INSERT
     IF TG_OP = 'INSERT' THEN
+        -- Skip flights without takeoff_time
+        IF NEW.takeoff_time IS NULL THEN
+            RETURN NEW;
+        END IF;
+
         new_duration := get_flight_duration_seconds(NEW.takeoff_time, NEW.landing_time);
         IF new_duration > 0 THEN
             new_bucket := get_duration_bucket(new_duration);
@@ -499,6 +579,11 @@ BEGIN
 
     -- Handle UPDATE
     ELSIF TG_OP = 'UPDATE' THEN
+        -- Skip if both old and new takeoff_time are NULL
+        IF OLD.takeoff_time IS NULL AND NEW.takeoff_time IS NULL THEN
+            RETURN NEW;
+        END IF;
+
         old_duration := get_flight_duration_seconds(OLD.takeoff_time, OLD.landing_time);
         new_duration := get_flight_duration_seconds(NEW.takeoff_time, NEW.landing_time);
 
@@ -520,6 +605,11 @@ BEGIN
 
     -- Handle DELETE
     ELSIF TG_OP = 'DELETE' THEN
+        -- Skip flights without takeoff_time
+        IF OLD.takeoff_time IS NULL THEN
+            RETURN OLD;
+        END IF;
+
         old_duration := get_flight_duration_seconds(OLD.takeoff_time, OLD.landing_time);
         IF old_duration > 0 THEN
             old_bucket := get_duration_bucket(old_duration);
