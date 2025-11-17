@@ -20,7 +20,6 @@ EnvironmentFile=/etc/soar/backup-env
 # Security settings
 NoNewPrivileges=yes
 ReadWritePaths=-/var/lib/soar/backup-temp
-ReadWritePaths=-/var/log/soar
 
 # Process limits
 LimitNOFILE=65536
