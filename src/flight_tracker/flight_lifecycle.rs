@@ -135,6 +135,8 @@ pub(crate) async fn timeout_flight(
             let mut flights = active_flights.write().await;
             flights.remove(&device_id);
 
+            metrics::counter!("flight_tracker.flight_ended.timed_out").increment(1);
+
             Ok(())
         }
         Ok(false) => {
@@ -382,6 +384,8 @@ pub(crate) async fn complete_flight(
         "Completed flight {} with landing at {:.6}, {:.6}",
         flight_id, fix.latitude, fix.longitude
     );
+
+    metrics::counter!("flight_tracker.flight_ended.landed").increment(1);
 
     Ok(true) // Return true to indicate flight was completed normally
 }

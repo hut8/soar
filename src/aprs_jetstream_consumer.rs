@@ -171,8 +171,8 @@ impl JetStreamConsumer {
                                 processed_count += 1;
                                 metrics::counter!("aprs.jetstream.consumed").increment(1);
 
-                                // Log progress every 1000 messages
-                                if processed_count.is_multiple_of(1000) {
+                                // Log progress every 10000 messages
+                                if processed_count.is_multiple_of(10000) {
                                     let elapsed_since_start = start_time.elapsed().as_secs_f64();
                                     let rate_since_start =
                                         processed_count as f64 / elapsed_since_start;
