@@ -66,7 +66,13 @@ pub async fn handle_seed_test_data(pool: &PgPool) -> Result<()> {
 
     // Create test devices
     info!("Creating test devices");
-    create_test_devices(&mut conn, seed_count)?;
+    let device_ids = create_test_devices(&mut conn, seed_count)?;
+
+    // Create test flights and fixes for the first test device
+    if !device_ids.is_empty() {
+        info!("Creating test flights and position fixes");
+        create_test_flights_and_fixes(&mut conn, device_ids[0])?;
+    }
 
     info!("Test data seed completed successfully");
     info!("Test user credentials:");
@@ -248,9 +254,11 @@ fn create_test_pilots(conn: &mut PgConnection, club_id_value: Uuid, count: usize
     Ok(())
 }
 
-fn create_test_devices(conn: &mut PgConnection, count: usize) -> Result<()> {
+fn create_test_devices(conn: &mut PgConnection, count: usize) -> Result<Vec<Uuid>> {
     use soar::devices::AddressType;
     use soar::schema::devices::dsl::*;
+
+    let mut device_ids = Vec::new();
 
     // Define known test devices
     let known_devices = vec![
@@ -287,7 +295,10 @@ fn create_test_devices(conn: &mut PgConnection, count: usize) -> Result<()> {
             .execute(conn);
 
         match result {
-            Ok(_) => info!("Created test device: {} ({})", reg, addr),
+            Ok(_) => {
+                info!("Created test device: {} ({})", reg, addr);
+                device_ids.push(device_id);
+            }
             Err(e) => tracing::error!("Failed to create test device {} ({}): {}", reg, addr, e),
         }
     }
@@ -333,5 +344,66 @@ fn create_test_devices(conn: &mut PgConnection, count: usize) -> Result<()> {
             .ok();
     }
 
+    Ok(device_ids)
+}
+
+fn create_test_flights_and_fixes(conn: &mut PgConnection, test_device_id: Uuid) -> Result<()> {
+    use chrono::{Duration, Utc};
+    use soar::devices::AddressType;
+    use soar::schema::fixes;
+    use soar::schema::flights;
+
+    // Create a recent flight (within last 2 days)
+    let new_flight_id = Uuid::new_v4();
+    let flight_start = Utc::now() - Duration::days(1) - Duration::hours(2);
+    let flight_end = Utc::now() - Duration::days(1);
+
+    diesel::insert_into(flights::table)
+        .values((
+            flights::id.eq(new_flight_id),
+            flights::device_id.eq(Some(test_device_id)),
+            flights::device_address.eq("ABC123"),
+            flights::device_address_type.eq(AddressType::Icao),
+            flights::takeoff_time.eq(Some(flight_start)),
+            flights::landing_time.eq(Some(flight_end)),
+            flights::last_fix_at.eq(flight_end),
+            flights::created_at.eq(Utc::now()),
+            flights::updated_at.eq(Utc::now()),
+        ))
+        .on_conflict_do_nothing()
+        .execute(conn)
+        .ok();
+
+    // Create position fixes for the flight
+    // Based on production data: source is like "ICA342348", aprs_type is "OGADSB", via is like {qAS,AVX920}
+    for i in 0..10 {
+        let fix_time = flight_start + Duration::minutes(i * 6);
+        // Create a flight path around San Francisco area
+        let lat = 37.5 + (i as f64 * 0.001);
+        let lon = -122.0 + (i as f64 * 0.001);
+
+        diesel::insert_into(fixes::table)
+            .values((
+                fixes::device_id.eq(test_device_id),
+                fixes::flight_id.eq(Some(new_flight_id)),
+                fixes::timestamp.eq(fix_time),
+                fixes::latitude.eq(lat),
+                fixes::longitude.eq(lon),
+                fixes::altitude_msl_feet.eq(Some(2000 + (i as i32 * 100))),
+                fixes::ground_speed_knots.eq(Some(45.0 + (i as f32 * 2.0))),
+                fixes::track_degrees.eq(Some(90.0 + (i as f32 * 5.0))),
+                // Use realistic values based on production data
+                fixes::source.eq("ICAABC123"), // Source is the device address with ICAO prefix
+                fixes::aprs_type.eq("OGADSB"), // OGN ADS-B type
+                fixes::via.eq(vec!["qAS".to_string(), "TestStation".to_string()]), // Via path like production
+                fixes::received_at.eq(fix_time),
+                fixes::is_active.eq(true),
+            ))
+            .on_conflict_do_nothing()
+            .execute(conn)
+            .ok();
+    }
+
+    info!("Created test flight and {} position fixes for device", 10);
     Ok(())
 }
