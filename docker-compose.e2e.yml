@@ -1,0 +1,37 @@
+# Extended compose file specifically for E2E testing
+# Usage: docker compose -f docker-compose.yml -f docker-compose.e2e.yml up
+
+services:
+  # E2E test runner
+  e2e-tests:
+    image: mcr.microsoft.com/playwright:v1.56.1-noble
+    container_name: soar-e2e-tests
+    working_dir: /app/web
+    # Run as current user to avoid root-owned files
+    user: "${USER_ID:-1000}:${GROUP_ID:-1000}"
+    environment:
+      # Point to the soar container
+      PLAYWRIGHT_BASE_URL: http://soar:61226
+      # Use the same database for verification
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/soar_test
+      CI: "true"
+      # Ensure npm cache is writable
+      HOME: /tmp
+      # Run tests in parallel (default 2 workers, override with PLAYWRIGHT_WORKERS env var)
+      PLAYWRIGHT_WORKERS: "${PLAYWRIGHT_WORKERS:-2}"
+    volumes:
+      # Mount the web directory for tests
+      - ./web:/app/web
+      # Mount test results
+      - ./web/test-results:/app/web/test-results
+      - ./web/playwright-report:/app/web/playwright-report
+    depends_on:
+      soar:
+        condition: service_healthy
+    networks:
+      - soar-network
+    command: >
+      sh -c "
+        npm ci &&
+        npx playwright test
+      "

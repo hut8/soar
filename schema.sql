@@ -215,6 +215,185 @@ $$;
 
 
 --
+-- Name: get_duration_bucket(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.get_duration_bucket(duration_seconds integer) RETURNS character varying
+    LANGUAGE plpgsql IMMUTABLE
+    AS $$
+DECLARE
+    duration_minutes INT;
+BEGIN
+    duration_minutes := duration_seconds / 60;
+
+    IF duration_minutes < 5 THEN RETURN '0-5min';
+    ELSIF duration_minutes < 10 THEN RETURN '5-10min';
+    ELSIF duration_minutes < 15 THEN RETURN '10-15min';
+    ELSIF duration_minutes < 30 THEN RETURN '15-30min';
+    ELSIF duration_minutes < 60 THEN RETURN '30-60min';
+    ELSIF duration_minutes < 90 THEN RETURN '60-90min';
+    ELSIF duration_minutes < 120 THEN RETURN '90-120min';
+    ELSIF duration_minutes < 150 THEN RETURN '120-150min';
+    ELSIF duration_minutes < 180 THEN RETURN '150-180min';
+    ELSIF duration_minutes < 210 THEN RETURN '180-210min';
+    ELSIF duration_minutes < 240 THEN RETURN '210-240min';
+    ELSIF duration_minutes < 270 THEN RETURN '240-270min';
+    ELSIF duration_minutes < 300 THEN RETURN '270-300min';
+    ELSIF duration_minutes < 330 THEN RETURN '300-330min';
+    ELSIF duration_minutes < 360 THEN RETURN '330-360min';
+    ELSE RETURN '360+min';
+    END IF;
+END;
+$$;
+
+
+--
+-- Name: get_flight_duration_seconds(timestamp with time zone, timestamp with time zone); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.get_flight_duration_seconds(takeoff timestamp with time zone, landing timestamp with time zone) RETURNS integer
+    LANGUAGE plpgsql IMMUTABLE
+    AS $$
+BEGIN
+    IF takeoff IS NULL OR landing IS NULL THEN
+        RETURN 0;
+    END IF;
+    RETURN EXTRACT(EPOCH FROM (landing - takeoff))::INT;
+END;
+$$;
+
+
+--
+-- Name: update_airport_analytics_daily(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.update_airport_analytics_daily() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    affected_date DATE;
+    old_date DATE;
+BEGIN
+    -- Handle INSERT
+    IF TG_OP = 'INSERT' THEN
+        affected_date := DATE(NEW.takeoff_time);
+
+        -- Update departure airport
+        IF NEW.departure_airport_id IS NOT NULL THEN
+            INSERT INTO airport_analytics_daily (airport_id, date, airport_ident, airport_name, departure_count, arrival_count)
+            SELECT
+                NEW.departure_airport_id,
+                affected_date,
+                a.ident,
+                a.name,
+                1,
+                0
+            FROM airports a
+            WHERE a.id = NEW.departure_airport_id
+            ON CONFLICT (airport_id, date) DO UPDATE SET
+                departure_count = airport_analytics_daily.departure_count + 1,
+                updated_at = NOW();
+        END IF;
+
+        -- Update arrival airport
+        IF NEW.arrival_airport_id IS NOT NULL THEN
+            INSERT INTO airport_analytics_daily (airport_id, date, airport_ident, airport_name, departure_count, arrival_count)
+            SELECT
+                NEW.arrival_airport_id,
+                affected_date,
+                a.ident,
+                a.name,
+                0,
+                1
+            FROM airports a
+            WHERE a.id = NEW.arrival_airport_id
+            ON CONFLICT (airport_id, date) DO UPDATE SET
+                arrival_count = airport_analytics_daily.arrival_count + 1,
+                updated_at = NOW();
+        END IF;
+
+    -- Handle UPDATE
+    ELSIF TG_OP = 'UPDATE' THEN
+        old_date := DATE(OLD.takeoff_time);
+        affected_date := DATE(NEW.takeoff_time);
+
+        -- Remove old departure
+        IF OLD.departure_airport_id IS NOT NULL THEN
+            UPDATE airport_analytics_daily SET
+                departure_count = GREATEST(0, departure_count - 1),
+                updated_at = NOW()
+            WHERE airport_id = OLD.departure_airport_id AND date = old_date;
+        END IF;
+
+        -- Remove old arrival
+        IF OLD.arrival_airport_id IS NOT NULL THEN
+            UPDATE airport_analytics_daily SET
+                arrival_count = GREATEST(0, arrival_count - 1),
+                updated_at = NOW()
+            WHERE airport_id = OLD.arrival_airport_id AND date = old_date;
+        END IF;
+
+        -- Add new departure
+        IF NEW.departure_airport_id IS NOT NULL THEN
+            INSERT INTO airport_analytics_daily (airport_id, date, airport_ident, airport_name, departure_count, arrival_count)
+            SELECT
+                NEW.departure_airport_id,
+                affected_date,
+                a.ident,
+                a.name,
+                1,
+                0
+            FROM airports a
+            WHERE a.id = NEW.departure_airport_id
+            ON CONFLICT (airport_id, date) DO UPDATE SET
+                departure_count = airport_analytics_daily.departure_count + 1,
+                updated_at = NOW();
+        END IF;
+
+        -- Add new arrival
+        IF NEW.arrival_airport_id IS NOT NULL THEN
+            INSERT INTO airport_analytics_daily (airport_id, date, airport_ident, airport_name, departure_count, arrival_count)
+            SELECT
+                NEW.arrival_airport_id,
+                affected_date,
+                a.ident,
+                a.name,
+                0,
+                1
+            FROM airports a
+            WHERE a.id = NEW.arrival_airport_id
+            ON CONFLICT (airport_id, date) DO UPDATE SET
+                arrival_count = airport_analytics_daily.arrival_count + 1,
+                updated_at = NOW();
+        END IF;
+
+    -- Handle DELETE
+    ELSIF TG_OP = 'DELETE' THEN
+        old_date := DATE(OLD.takeoff_time);
+
+        -- Remove departure
+        IF OLD.departure_airport_id IS NOT NULL THEN
+            UPDATE airport_analytics_daily SET
+                departure_count = GREATEST(0, departure_count - 1),
+                updated_at = NOW()
+            WHERE airport_id = OLD.departure_airport_id AND date = old_date;
+        END IF;
+
+        -- Remove arrival
+        IF OLD.arrival_airport_id IS NOT NULL THEN
+            UPDATE airport_analytics_daily SET
+                arrival_count = GREATEST(0, arrival_count - 1),
+                updated_at = NOW()
+            WHERE airport_id = OLD.arrival_airport_id AND date = old_date;
+        END IF;
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: update_airport_location(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -227,6 +406,426 @@ BEGIN
     ELSE
         NEW.location = NULL;
     END IF;
+    RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: update_club_analytics_daily(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.update_club_analytics_daily() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    affected_club UUID;
+    affected_date DATE;
+    old_club UUID;
+    old_date DATE;
+    flight_duration INT;
+    old_duration INT;
+BEGIN
+    -- Handle INSERT
+    IF TG_OP = 'INSERT' AND NEW.club_id IS NOT NULL THEN
+        affected_club := NEW.club_id;
+        affected_date := DATE(NEW.takeoff_time);
+        flight_duration := get_flight_duration_seconds(NEW.takeoff_time, NEW.landing_time);
+
+        INSERT INTO club_analytics_daily (club_id, date, club_name, flight_count, total_airtime_seconds, tow_count)
+        SELECT
+            NEW.club_id,
+            affected_date,
+            c.name,
+            1,
+            flight_duration,
+            CASE WHEN NEW.towed_by_device_id IS NOT NULL THEN 1 ELSE 0 END
+        FROM clubs c
+        WHERE c.id = NEW.club_id
+        ON CONFLICT (club_id, date) DO UPDATE SET
+            flight_count = club_analytics_daily.flight_count + 1,
+            total_airtime_seconds = club_analytics_daily.total_airtime_seconds + flight_duration,
+            tow_count = club_analytics_daily.tow_count + CASE WHEN NEW.towed_by_device_id IS NOT NULL THEN 1 ELSE 0 END,
+            updated_at = NOW();
+
+    -- Handle UPDATE
+    ELSIF TG_OP = 'UPDATE' THEN
+        old_club := OLD.club_id;
+        old_date := DATE(OLD.takeoff_time);
+        affected_club := NEW.club_id;
+        affected_date := DATE(NEW.takeoff_time);
+        old_duration := get_flight_duration_seconds(OLD.takeoff_time, OLD.landing_time);
+        flight_duration := get_flight_duration_seconds(NEW.takeoff_time, NEW.landing_time);
+
+        -- Remove from old club/date
+        IF old_club IS NOT NULL THEN
+            UPDATE club_analytics_daily SET
+                flight_count = GREATEST(0, flight_count - 1),
+                total_airtime_seconds = GREATEST(0, total_airtime_seconds - old_duration),
+                tow_count = GREATEST(0, tow_count - CASE WHEN OLD.towed_by_device_id IS NOT NULL THEN 1 ELSE 0 END),
+                updated_at = NOW()
+            WHERE club_id = old_club AND date = old_date;
+        END IF;
+
+        -- Add to new club/date
+        IF affected_club IS NOT NULL THEN
+            INSERT INTO club_analytics_daily (club_id, date, club_name, flight_count, total_airtime_seconds, tow_count)
+            SELECT
+                NEW.club_id,
+                affected_date,
+                c.name,
+                1,
+                flight_duration,
+                CASE WHEN NEW.towed_by_device_id IS NOT NULL THEN 1 ELSE 0 END
+            FROM clubs c
+            WHERE c.id = NEW.club_id
+            ON CONFLICT (club_id, date) DO UPDATE SET
+                flight_count = club_analytics_daily.flight_count + 1,
+                total_airtime_seconds = club_analytics_daily.total_airtime_seconds + flight_duration,
+                tow_count = club_analytics_daily.tow_count + CASE WHEN NEW.towed_by_device_id IS NOT NULL THEN 1 ELSE 0 END,
+                updated_at = NOW();
+        END IF;
+
+    -- Handle DELETE
+    ELSIF TG_OP = 'DELETE' AND OLD.club_id IS NOT NULL THEN
+        old_club := OLD.club_id;
+        old_date := DATE(OLD.takeoff_time);
+        old_duration := get_flight_duration_seconds(OLD.takeoff_time, OLD.landing_time);
+
+        UPDATE club_analytics_daily SET
+            flight_count = GREATEST(0, flight_count - 1),
+            total_airtime_seconds = GREATEST(0, total_airtime_seconds - old_duration),
+            tow_count = GREATEST(0, tow_count - CASE WHEN OLD.towed_by_device_id IS NOT NULL THEN 1 ELSE 0 END),
+            updated_at = NOW()
+        WHERE club_id = old_club AND date = old_date;
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: update_device_analytics(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.update_device_analytics() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    old_device UUID;
+    new_device UUID;
+    flight_duration INT;
+    old_duration INT;
+BEGIN
+    -- Handle INSERT
+    IF TG_OP = 'INSERT' THEN
+        new_device := NEW.device_id;
+        flight_duration := get_flight_duration_seconds(NEW.takeoff_time, NEW.landing_time);
+
+        INSERT INTO device_analytics (device_id, registration, aircraft_model, flight_count_total, last_flight_at, total_distance_meters)
+        SELECT
+            NEW.device_id,
+            d.registration,
+            d.aircraft_model,
+            1,
+            NEW.takeoff_time,
+            COALESCE(NEW.total_distance_meters, 0)
+        FROM devices d
+        WHERE d.id = NEW.device_id
+        ON CONFLICT (device_id) DO UPDATE SET
+            flight_count_total = device_analytics.flight_count_total + 1,
+            last_flight_at = GREATEST(device_analytics.last_flight_at, NEW.takeoff_time),
+            total_distance_meters = device_analytics.total_distance_meters + COALESCE(NEW.total_distance_meters, 0),
+            avg_flight_duration_seconds = CASE WHEN device_analytics.flight_count_total + 1 > 0
+                THEN ((device_analytics.avg_flight_duration_seconds * device_analytics.flight_count_total) + flight_duration) / (device_analytics.flight_count_total + 1)
+                ELSE 0 END,
+            updated_at = NOW();
+
+    -- Handle UPDATE
+    ELSIF TG_OP = 'UPDATE' THEN
+        old_device := OLD.device_id;
+        new_device := NEW.device_id;
+        old_duration := get_flight_duration_seconds(OLD.takeoff_time, OLD.landing_time);
+        flight_duration := get_flight_duration_seconds(NEW.takeoff_time, NEW.landing_time);
+
+        -- If device changed, update both
+        IF old_device != new_device THEN
+            -- Remove from old device
+            UPDATE device_analytics SET
+                flight_count_total = GREATEST(0, flight_count_total - 1),
+                total_distance_meters = GREATEST(0, total_distance_meters - COALESCE(OLD.total_distance_meters, 0)),
+                updated_at = NOW()
+            WHERE device_id = old_device;
+
+            -- Add to new device
+            INSERT INTO device_analytics (device_id, registration, aircraft_model, flight_count_total, last_flight_at, total_distance_meters)
+            SELECT
+                NEW.device_id,
+                d.registration,
+                d.aircraft_model,
+                1,
+                NEW.takeoff_time,
+                COALESCE(NEW.total_distance_meters, 0)
+            FROM devices d
+            WHERE d.id = NEW.device_id
+            ON CONFLICT (device_id) DO UPDATE SET
+                flight_count_total = device_analytics.flight_count_total + 1,
+                last_flight_at = GREATEST(device_analytics.last_flight_at, NEW.takeoff_time),
+                total_distance_meters = device_analytics.total_distance_meters + COALESCE(NEW.total_distance_meters, 0),
+                updated_at = NOW();
+        ELSE
+            -- Same device, just update the difference
+            UPDATE device_analytics SET
+                total_distance_meters = total_distance_meters - COALESCE(OLD.total_distance_meters, 0) + COALESCE(NEW.total_distance_meters, 0),
+                last_flight_at = GREATEST(last_flight_at, NEW.takeoff_time),
+                updated_at = NOW()
+            WHERE device_id = new_device;
+        END IF;
+
+    -- Handle DELETE
+    ELSIF TG_OP = 'DELETE' THEN
+        old_device := OLD.device_id;
+        old_duration := get_flight_duration_seconds(OLD.takeoff_time, OLD.landing_time);
+
+        UPDATE device_analytics SET
+            flight_count_total = GREATEST(0, flight_count_total - 1),
+            total_distance_meters = GREATEST(0, total_distance_meters - COALESCE(OLD.total_distance_meters, 0)),
+            avg_flight_duration_seconds = CASE WHEN flight_count_total - 1 > 0
+                THEN ((avg_flight_duration_seconds * flight_count_total) - old_duration) / (flight_count_total - 1)
+                ELSE 0 END,
+            updated_at = NOW()
+        WHERE device_id = old_device;
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: update_flight_analytics_daily(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.update_flight_analytics_daily() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    affected_date DATE;
+    old_date DATE;
+    flight_duration INT;
+    old_duration INT;
+BEGIN
+    -- Handle INSERT
+    IF TG_OP = 'INSERT' THEN
+        affected_date := DATE(NEW.takeoff_time);
+        flight_duration := get_flight_duration_seconds(NEW.takeoff_time, NEW.landing_time);
+
+        INSERT INTO flight_analytics_daily (date, flight_count, total_duration_seconds, total_distance_meters, tow_flight_count, cross_country_count)
+        VALUES (
+            affected_date,
+            1,
+            flight_duration,
+            COALESCE(NEW.total_distance_meters, 0),
+            CASE WHEN NEW.towed_by_device_id IS NOT NULL THEN 1 ELSE 0 END,
+            CASE WHEN NEW.departure_airport_id IS DISTINCT FROM NEW.arrival_airport_id THEN 1 ELSE 0 END
+        )
+        ON CONFLICT (date) DO UPDATE SET
+            flight_count = flight_analytics_daily.flight_count + 1,
+            total_duration_seconds = flight_analytics_daily.total_duration_seconds + flight_duration,
+            total_distance_meters = flight_analytics_daily.total_distance_meters + COALESCE(NEW.total_distance_meters, 0),
+            tow_flight_count = flight_analytics_daily.tow_flight_count + CASE WHEN NEW.towed_by_device_id IS NOT NULL THEN 1 ELSE 0 END,
+            cross_country_count = flight_analytics_daily.cross_country_count + CASE WHEN NEW.departure_airport_id IS DISTINCT FROM NEW.arrival_airport_id THEN 1 ELSE 0 END,
+            avg_duration_seconds = CASE WHEN flight_analytics_daily.flight_count + 1 > 0
+                THEN (flight_analytics_daily.total_duration_seconds + flight_duration) / (flight_analytics_daily.flight_count + 1)
+                ELSE 0 END,
+            updated_at = NOW();
+
+    -- Handle UPDATE
+    ELSIF TG_OP = 'UPDATE' THEN
+        old_date := DATE(OLD.takeoff_time);
+        affected_date := DATE(NEW.takeoff_time);
+        old_duration := get_flight_duration_seconds(OLD.takeoff_time, OLD.landing_time);
+        flight_duration := get_flight_duration_seconds(NEW.takeoff_time, NEW.landing_time);
+
+        -- Remove old values
+        UPDATE flight_analytics_daily SET
+            flight_count = GREATEST(0, flight_count - 1),
+            total_duration_seconds = GREATEST(0, total_duration_seconds - old_duration),
+            total_distance_meters = GREATEST(0, total_distance_meters - COALESCE(OLD.total_distance_meters, 0)),
+            tow_flight_count = GREATEST(0, tow_flight_count - CASE WHEN OLD.towed_by_device_id IS NOT NULL THEN 1 ELSE 0 END),
+            cross_country_count = GREATEST(0, cross_country_count - CASE WHEN OLD.departure_airport_id IS DISTINCT FROM OLD.arrival_airport_id THEN 1 ELSE 0 END),
+            avg_duration_seconds = CASE WHEN flight_count - 1 > 0
+                THEN (total_duration_seconds - old_duration) / (flight_count - 1)
+                ELSE 0 END,
+            updated_at = NOW()
+        WHERE date = old_date;
+
+        -- Add new values
+        INSERT INTO flight_analytics_daily (date, flight_count, total_duration_seconds, total_distance_meters, tow_flight_count, cross_country_count)
+        VALUES (
+            affected_date,
+            1,
+            flight_duration,
+            COALESCE(NEW.total_distance_meters, 0),
+            CASE WHEN NEW.towed_by_device_id IS NOT NULL THEN 1 ELSE 0 END,
+            CASE WHEN NEW.departure_airport_id IS DISTINCT FROM NEW.arrival_airport_id THEN 1 ELSE 0 END
+        )
+        ON CONFLICT (date) DO UPDATE SET
+            flight_count = flight_analytics_daily.flight_count + 1,
+            total_duration_seconds = flight_analytics_daily.total_duration_seconds + flight_duration,
+            total_distance_meters = flight_analytics_daily.total_distance_meters + COALESCE(NEW.total_distance_meters, 0),
+            tow_flight_count = flight_analytics_daily.tow_flight_count + CASE WHEN NEW.towed_by_device_id IS NOT NULL THEN 1 ELSE 0 END,
+            cross_country_count = flight_analytics_daily.cross_country_count + CASE WHEN NEW.departure_airport_id IS DISTINCT FROM NEW.arrival_airport_id THEN 1 ELSE 0 END,
+            avg_duration_seconds = CASE WHEN flight_analytics_daily.flight_count + 1 > 0
+                THEN (flight_analytics_daily.total_duration_seconds + flight_duration) / (flight_analytics_daily.flight_count + 1)
+                ELSE 0 END,
+            updated_at = NOW();
+
+    -- Handle DELETE
+    ELSIF TG_OP = 'DELETE' THEN
+        affected_date := DATE(OLD.takeoff_time);
+        old_duration := get_flight_duration_seconds(OLD.takeoff_time, OLD.landing_time);
+
+        UPDATE flight_analytics_daily SET
+            flight_count = GREATEST(0, flight_count - 1),
+            total_duration_seconds = GREATEST(0, total_duration_seconds - old_duration),
+            total_distance_meters = GREATEST(0, total_distance_meters - COALESCE(OLD.total_distance_meters, 0)),
+            tow_flight_count = GREATEST(0, tow_flight_count - CASE WHEN OLD.towed_by_device_id IS NOT NULL THEN 1 ELSE 0 END),
+            cross_country_count = GREATEST(0, cross_country_count - CASE WHEN OLD.departure_airport_id IS DISTINCT FROM OLD.arrival_airport_id THEN 1 ELSE 0 END),
+            avg_duration_seconds = CASE WHEN flight_count - 1 > 0
+                THEN (total_duration_seconds - old_duration) / (flight_count - 1)
+                ELSE 0 END,
+            updated_at = NOW()
+        WHERE date = affected_date;
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: update_flight_analytics_hourly(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.update_flight_analytics_hourly() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    affected_hour TIMESTAMPTZ;
+    old_hour TIMESTAMPTZ;
+BEGIN
+    -- Handle INSERT
+    IF TG_OP = 'INSERT' THEN
+        affected_hour := DATE_TRUNC('hour', NEW.takeoff_time);
+
+        INSERT INTO flight_analytics_hourly (hour, flight_count, active_devices, active_clubs)
+        VALUES (
+            affected_hour,
+            1,
+            1,
+            CASE WHEN NEW.club_id IS NOT NULL THEN 1 ELSE 0 END
+        )
+        ON CONFLICT (hour) DO UPDATE SET
+            flight_count = flight_analytics_hourly.flight_count + 1,
+            updated_at = NOW();
+
+    -- Handle UPDATE
+    ELSIF TG_OP = 'UPDATE' THEN
+        old_hour := DATE_TRUNC('hour', OLD.takeoff_time);
+        affected_hour := DATE_TRUNC('hour', NEW.takeoff_time);
+
+        -- Remove from old hour
+        UPDATE flight_analytics_hourly SET
+            flight_count = GREATEST(0, flight_count - 1),
+            updated_at = NOW()
+        WHERE hour = old_hour;
+
+        -- Add to new hour
+        INSERT INTO flight_analytics_hourly (hour, flight_count, active_devices, active_clubs)
+        VALUES (
+            affected_hour,
+            1,
+            1,
+            CASE WHEN NEW.club_id IS NOT NULL THEN 1 ELSE 0 END
+        )
+        ON CONFLICT (hour) DO UPDATE SET
+            flight_count = flight_analytics_hourly.flight_count + 1,
+            updated_at = NOW();
+
+    -- Handle DELETE
+    ELSIF TG_OP = 'DELETE' THEN
+        affected_hour := DATE_TRUNC('hour', OLD.takeoff_time);
+
+        UPDATE flight_analytics_hourly SET
+            flight_count = GREATEST(0, flight_count - 1),
+            updated_at = NOW()
+        WHERE hour = affected_hour;
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: update_flight_duration_buckets(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.update_flight_duration_buckets() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    old_bucket VARCHAR;
+    new_bucket VARCHAR;
+    old_duration INT;
+    new_duration INT;
+BEGIN
+    -- Handle INSERT
+    IF TG_OP = 'INSERT' THEN
+        new_duration := get_flight_duration_seconds(NEW.takeoff_time, NEW.landing_time);
+        IF new_duration > 0 THEN
+            new_bucket := get_duration_bucket(new_duration);
+            UPDATE flight_duration_buckets SET
+                flight_count = flight_count + 1,
+                updated_at = NOW()
+            WHERE bucket_name = new_bucket;
+        END IF;
+
+    -- Handle UPDATE
+    ELSIF TG_OP = 'UPDATE' THEN
+        old_duration := get_flight_duration_seconds(OLD.takeoff_time, OLD.landing_time);
+        new_duration := get_flight_duration_seconds(NEW.takeoff_time, NEW.landing_time);
+
+        IF old_duration > 0 THEN
+            old_bucket := get_duration_bucket(old_duration);
+            UPDATE flight_duration_buckets SET
+                flight_count = GREATEST(0, flight_count - 1),
+                updated_at = NOW()
+            WHERE bucket_name = old_bucket;
+        END IF;
+
+        IF new_duration > 0 THEN
+            new_bucket := get_duration_bucket(new_duration);
+            UPDATE flight_duration_buckets SET
+                flight_count = flight_count + 1,
+                updated_at = NOW()
+            WHERE bucket_name = new_bucket;
+        END IF;
+
+    -- Handle DELETE
+    ELSIF TG_OP = 'DELETE' THEN
+        old_duration := get_flight_duration_seconds(OLD.takeoff_time, OLD.landing_time);
+        IF old_duration > 0 THEN
+            old_bucket := get_duration_bucket(old_duration);
+            UPDATE flight_duration_buckets SET
+                flight_count = GREATEST(0, flight_count - 1),
+                updated_at = NOW()
+            WHERE bucket_name = old_bucket;
+        END IF;
+    END IF;
+
     RETURN NEW;
 END;
 $$;
@@ -425,6 +1024,21 @@ CREATE TABLE public.aircraft_registrations (
 
 
 --
+-- Name: airport_analytics_daily; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.airport_analytics_daily (
+    airport_id integer NOT NULL,
+    date date NOT NULL,
+    airport_ident character varying,
+    airport_name character varying,
+    departure_count integer DEFAULT 0 NOT NULL,
+    arrival_count integer DEFAULT 0 NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
 -- Name: airports; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -596,6 +1210,22 @@ CREATE TABLE public.aprs_messages_p20251116 (
 
 
 --
+-- Name: club_analytics_daily; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.club_analytics_daily (
+    club_id uuid NOT NULL,
+    date date NOT NULL,
+    club_name character varying,
+    flight_count integer DEFAULT 0 NOT NULL,
+    active_devices integer DEFAULT 0 NOT NULL,
+    total_airtime_seconds bigint DEFAULT 0 NOT NULL,
+    tow_count integer DEFAULT 0 NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
 -- Name: clubs; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -617,6 +1247,42 @@ CREATE TABLE public.clubs (
 CREATE TABLE public.countries (
     code character(2) NOT NULL,
     name text NOT NULL
+);
+
+
+--
+-- Name: data_quality_metrics_daily; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.data_quality_metrics_daily (
+    metric_date date NOT NULL,
+    total_fixes bigint DEFAULT 0 NOT NULL,
+    fixes_with_gaps_60s integer DEFAULT 0 NOT NULL,
+    fixes_with_gaps_300s integer DEFAULT 0 NOT NULL,
+    unparsed_aprs_messages integer DEFAULT 0 NOT NULL,
+    flights_timed_out integer DEFAULT 0 NOT NULL,
+    avg_fixes_per_flight numeric(10,2) DEFAULT 0 NOT NULL,
+    quality_score numeric(5,2) DEFAULT 100.0 NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: device_analytics; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.device_analytics (
+    device_id uuid NOT NULL,
+    registration character varying,
+    aircraft_model character varying,
+    flight_count_total integer DEFAULT 0 NOT NULL,
+    flight_count_30d integer DEFAULT 0 NOT NULL,
+    flight_count_7d integer DEFAULT 0 NOT NULL,
+    last_flight_at timestamp with time zone,
+    avg_flight_duration_seconds integer DEFAULT 0 NOT NULL,
+    total_distance_meters bigint DEFAULT 0 NOT NULL,
+    z_score_30d numeric(10,2) DEFAULT 0,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 
@@ -1037,6 +1703,49 @@ CREATE TABLE public.fixes_p20251116 (
     location_geom public.geometry(Point,4326) GENERATED ALWAYS AS (public.st_setsrid(public.st_makepoint(longitude, latitude), 4326)) STORED,
     time_gap_seconds integer,
     CONSTRAINT fixes_track_degrees_check1 CHECK (((track_degrees >= (0)::double precision) AND (track_degrees < (360)::double precision)))
+);
+
+
+--
+-- Name: flight_analytics_daily; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.flight_analytics_daily (
+    date date NOT NULL,
+    flight_count integer DEFAULT 0 NOT NULL,
+    total_duration_seconds bigint DEFAULT 0 NOT NULL,
+    avg_duration_seconds integer DEFAULT 0 NOT NULL,
+    total_distance_meters bigint DEFAULT 0 NOT NULL,
+    tow_flight_count integer DEFAULT 0 NOT NULL,
+    cross_country_count integer DEFAULT 0 NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: flight_analytics_hourly; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.flight_analytics_hourly (
+    hour timestamp with time zone NOT NULL,
+    flight_count integer DEFAULT 0 NOT NULL,
+    active_devices integer DEFAULT 0 NOT NULL,
+    active_clubs integer DEFAULT 0 NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: flight_duration_buckets; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.flight_duration_buckets (
+    bucket_name character varying(20) NOT NULL,
+    bucket_order integer NOT NULL,
+    min_minutes integer NOT NULL,
+    max_minutes integer,
+    flight_count integer DEFAULT 0 NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 
@@ -1566,6 +2275,14 @@ ALTER TABLE ONLY public.aircraft_registrations
 
 
 --
+-- Name: airport_analytics_daily airport_analytics_daily_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.airport_analytics_daily
+    ADD CONSTRAINT airport_analytics_daily_pkey PRIMARY KEY (airport_id, date);
+
+
+--
 -- Name: airports airports_ident_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1662,6 +2379,14 @@ ALTER TABLE ONLY public.aprs_messages_old
 
 
 --
+-- Name: club_analytics_daily club_analytics_daily_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.club_analytics_daily
+    ADD CONSTRAINT club_analytics_daily_pkey PRIMARY KEY (club_id, date);
+
+
+--
 -- Name: pilots club_pilots_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1683,6 +2408,22 @@ ALTER TABLE ONLY public.clubs
 
 ALTER TABLE ONLY public.countries
     ADD CONSTRAINT countries_pkey PRIMARY KEY (code);
+
+
+--
+-- Name: data_quality_metrics_daily data_quality_metrics_daily_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.data_quality_metrics_daily
+    ADD CONSTRAINT data_quality_metrics_daily_pkey PRIMARY KEY (metric_date);
+
+
+--
+-- Name: device_analytics device_analytics_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.device_analytics
+    ADD CONSTRAINT device_analytics_pkey PRIMARY KEY (device_id);
 
 
 --
@@ -1779,6 +2520,38 @@ ALTER TABLE ONLY public.fixes_p20251116
 
 ALTER TABLE ONLY public.fixes_old
     ADD CONSTRAINT fixes_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: flight_analytics_daily flight_analytics_daily_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.flight_analytics_daily
+    ADD CONSTRAINT flight_analytics_daily_pkey PRIMARY KEY (date);
+
+
+--
+-- Name: flight_analytics_hourly flight_analytics_hourly_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.flight_analytics_hourly
+    ADD CONSTRAINT flight_analytics_hourly_pkey PRIMARY KEY (hour);
+
+
+--
+-- Name: flight_duration_buckets flight_duration_buckets_bucket_order_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.flight_duration_buckets
+    ADD CONSTRAINT flight_duration_buckets_bucket_order_key UNIQUE (bucket_order);
+
+
+--
+-- Name: flight_duration_buckets flight_duration_buckets_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.flight_duration_buckets
+    ADD CONSTRAINT flight_duration_buckets_pkey PRIMARY KEY (bucket_name);
 
 
 --
@@ -2046,6 +2819,20 @@ CREATE INDEX fixes_default_device_id_received_at_idx ON public.fixes_default USI
 
 
 --
+-- Name: fixes_flight_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_flight_id_idx ON ONLY public.fixes USING btree (flight_id);
+
+
+--
+-- Name: fixes_default_flight_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_default_flight_id_idx ON public.fixes_default USING btree (flight_id);
+
+
+--
 -- Name: idx_fixes_location_geom; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2116,6 +2903,13 @@ CREATE INDEX fixes_p20251110_device_id_received_at_idx ON public.fixes_p20251110
 
 
 --
+-- Name: fixes_p20251110_flight_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251110_flight_id_idx ON public.fixes_p20251110 USING btree (flight_id);
+
+
+--
 -- Name: fixes_p20251110_location_geom_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2141,6 +2935,13 @@ CREATE INDEX fixes_p20251110_source_idx ON public.fixes_p20251110 USING btree (s
 --
 
 CREATE INDEX fixes_p20251111_device_id_received_at_idx ON public.fixes_p20251111 USING btree (device_id, received_at DESC);
+
+
+--
+-- Name: fixes_p20251111_flight_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251111_flight_id_idx ON public.fixes_p20251111 USING btree (flight_id);
 
 
 --
@@ -2172,6 +2973,13 @@ CREATE INDEX fixes_p20251112_device_id_received_at_idx ON public.fixes_p20251112
 
 
 --
+-- Name: fixes_p20251112_flight_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251112_flight_id_idx ON public.fixes_p20251112 USING btree (flight_id);
+
+
+--
 -- Name: fixes_p20251112_location_geom_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2197,6 +3005,13 @@ CREATE INDEX fixes_p20251112_source_idx ON public.fixes_p20251112 USING btree (s
 --
 
 CREATE INDEX fixes_p20251113_device_id_received_at_idx ON public.fixes_p20251113 USING btree (device_id, received_at DESC);
+
+
+--
+-- Name: fixes_p20251113_flight_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251113_flight_id_idx ON public.fixes_p20251113 USING btree (flight_id);
 
 
 --
@@ -2228,6 +3043,13 @@ CREATE INDEX fixes_p20251114_device_id_received_at_idx ON public.fixes_p20251114
 
 
 --
+-- Name: fixes_p20251114_flight_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251114_flight_id_idx ON public.fixes_p20251114 USING btree (flight_id);
+
+
+--
 -- Name: fixes_p20251114_location_geom_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2256,6 +3078,13 @@ CREATE INDEX fixes_p20251115_device_id_received_at_idx ON public.fixes_p20251115
 
 
 --
+-- Name: fixes_p20251115_flight_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251115_flight_id_idx ON public.fixes_p20251115 USING btree (flight_id);
+
+
+--
 -- Name: fixes_p20251115_location_geom_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2281,6 +3110,13 @@ CREATE INDEX fixes_p20251115_source_idx ON public.fixes_p20251115 USING btree (s
 --
 
 CREATE INDEX fixes_p20251116_device_id_received_at_idx ON public.fixes_p20251116 USING btree (device_id, received_at DESC);
+
+
+--
+-- Name: fixes_p20251116_flight_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX fixes_p20251116_flight_id_idx ON public.fixes_p20251116 USING btree (flight_id);
 
 
 --
@@ -2403,6 +3239,20 @@ CREATE INDEX idx_aircraft_registrations_device_id ON public.aircraft_registratio
 
 
 --
+-- Name: idx_airport_analytics_daily_date_arr; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_airport_analytics_daily_date_arr ON public.airport_analytics_daily USING btree (date DESC, arrival_count DESC);
+
+
+--
+-- Name: idx_airport_analytics_daily_date_dep; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_airport_analytics_daily_date_dep ON public.airport_analytics_daily USING btree (date DESC, departure_count DESC);
+
+
+--
 -- Name: idx_airports_gps_code; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2480,6 +3330,20 @@ CREATE INDEX idx_aprs_messages_receiver_id ON public.aprs_messages_old USING btr
 
 
 --
+-- Name: idx_club_analytics_daily_club_date; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_club_analytics_daily_club_date ON public.club_analytics_daily USING btree (club_id, date DESC);
+
+
+--
+-- Name: idx_club_analytics_daily_date; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_club_analytics_daily_date ON public.club_analytics_daily USING btree (date DESC);
+
+
+--
 -- Name: idx_club_pilots_name; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2487,10 +3351,31 @@ CREATE INDEX idx_club_pilots_name ON public.pilots USING btree (last_name, first
 
 
 --
--- Name: idx_devices_address_unique; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_data_quality_metrics_daily_date_desc; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE UNIQUE INDEX idx_devices_address_unique ON public.devices USING btree (address);
+CREATE INDEX idx_data_quality_metrics_daily_date_desc ON public.data_quality_metrics_daily USING btree (metric_date DESC);
+
+
+--
+-- Name: idx_device_analytics_flight_count_30d; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_device_analytics_flight_count_30d ON public.device_analytics USING btree (flight_count_30d DESC);
+
+
+--
+-- Name: idx_device_analytics_last_flight; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_device_analytics_last_flight ON public.device_analytics USING btree (last_flight_at DESC);
+
+
+--
+-- Name: idx_device_analytics_z_score; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_device_analytics_z_score ON public.device_analytics USING btree (z_score_30d DESC);
 
 
 --
@@ -2631,6 +3516,20 @@ CREATE INDEX idx_fixes_time_gap_seconds ON public.fixes_old USING btree (time_ga
 --
 
 CREATE INDEX idx_fixes_timestamp ON public.fixes_old USING btree ("timestamp");
+
+
+--
+-- Name: idx_flight_analytics_daily_date_desc; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_flight_analytics_daily_date_desc ON public.flight_analytics_daily USING btree (date DESC);
+
+
+--
+-- Name: idx_flight_analytics_hourly_hour_desc; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_flight_analytics_hourly_hour_desc ON public.flight_analytics_hourly USING btree (hour DESC);
 
 
 --
@@ -2956,6 +3855,13 @@ ALTER INDEX public.idx_fixes_device_received_at ATTACH PARTITION public.fixes_de
 
 
 --
+-- Name: fixes_default_flight_id_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.fixes_flight_id_idx ATTACH PARTITION public.fixes_default_flight_id_idx;
+
+
+--
 -- Name: fixes_default_location_geom_idx; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
@@ -2988,6 +3894,13 @@ ALTER INDEX public.idx_fixes_source ATTACH PARTITION public.fixes_default_source
 --
 
 ALTER INDEX public.idx_fixes_device_received_at ATTACH PARTITION public.fixes_p20251110_device_id_received_at_idx;
+
+
+--
+-- Name: fixes_p20251110_flight_id_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.fixes_flight_id_idx ATTACH PARTITION public.fixes_p20251110_flight_id_idx;
 
 
 --
@@ -3026,6 +3939,13 @@ ALTER INDEX public.idx_fixes_device_received_at ATTACH PARTITION public.fixes_p2
 
 
 --
+-- Name: fixes_p20251111_flight_id_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.fixes_flight_id_idx ATTACH PARTITION public.fixes_p20251111_flight_id_idx;
+
+
+--
 -- Name: fixes_p20251111_location_geom_idx; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
@@ -3058,6 +3978,13 @@ ALTER INDEX public.idx_fixes_source ATTACH PARTITION public.fixes_p20251111_sour
 --
 
 ALTER INDEX public.idx_fixes_device_received_at ATTACH PARTITION public.fixes_p20251112_device_id_received_at_idx;
+
+
+--
+-- Name: fixes_p20251112_flight_id_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.fixes_flight_id_idx ATTACH PARTITION public.fixes_p20251112_flight_id_idx;
 
 
 --
@@ -3096,6 +4023,13 @@ ALTER INDEX public.idx_fixes_device_received_at ATTACH PARTITION public.fixes_p2
 
 
 --
+-- Name: fixes_p20251113_flight_id_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.fixes_flight_id_idx ATTACH PARTITION public.fixes_p20251113_flight_id_idx;
+
+
+--
 -- Name: fixes_p20251113_location_geom_idx; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
@@ -3128,6 +4062,13 @@ ALTER INDEX public.idx_fixes_source ATTACH PARTITION public.fixes_p20251113_sour
 --
 
 ALTER INDEX public.idx_fixes_device_received_at ATTACH PARTITION public.fixes_p20251114_device_id_received_at_idx;
+
+
+--
+-- Name: fixes_p20251114_flight_id_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.fixes_flight_id_idx ATTACH PARTITION public.fixes_p20251114_flight_id_idx;
 
 
 --
@@ -3166,6 +4107,13 @@ ALTER INDEX public.idx_fixes_device_received_at ATTACH PARTITION public.fixes_p2
 
 
 --
+-- Name: fixes_p20251115_flight_id_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.fixes_flight_id_idx ATTACH PARTITION public.fixes_p20251115_flight_id_idx;
+
+
+--
 -- Name: fixes_p20251115_location_geom_idx; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
@@ -3198,6 +4146,13 @@ ALTER INDEX public.idx_fixes_source ATTACH PARTITION public.fixes_p20251115_sour
 --
 
 ALTER INDEX public.idx_fixes_device_received_at ATTACH PARTITION public.fixes_p20251116_device_id_received_at_idx;
+
+
+--
+-- Name: fixes_p20251116_flight_id_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.fixes_flight_id_idx ATTACH PARTITION public.fixes_p20251116_flight_id_idx;
 
 
 --
@@ -3240,6 +4195,48 @@ CREATE TRIGGER ensure_aprs_message_hash BEFORE INSERT ON public.aprs_messages_ol
 --
 
 CREATE TRIGGER set_club_pilots_updated_at BEFORE UPDATE ON public.pilots FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+
+--
+-- Name: flights trigger_update_airport_analytics_daily; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trigger_update_airport_analytics_daily AFTER INSERT OR DELETE OR UPDATE ON public.flights FOR EACH ROW EXECUTE FUNCTION public.update_airport_analytics_daily();
+
+
+--
+-- Name: flights trigger_update_club_analytics_daily; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trigger_update_club_analytics_daily AFTER INSERT OR DELETE OR UPDATE ON public.flights FOR EACH ROW EXECUTE FUNCTION public.update_club_analytics_daily();
+
+
+--
+-- Name: flights trigger_update_device_analytics; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trigger_update_device_analytics AFTER INSERT OR DELETE OR UPDATE ON public.flights FOR EACH ROW EXECUTE FUNCTION public.update_device_analytics();
+
+
+--
+-- Name: flights trigger_update_flight_analytics_daily; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trigger_update_flight_analytics_daily AFTER INSERT OR DELETE OR UPDATE ON public.flights FOR EACH ROW EXECUTE FUNCTION public.update_flight_analytics_daily();
+
+
+--
+-- Name: flights trigger_update_flight_analytics_hourly; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trigger_update_flight_analytics_hourly AFTER INSERT OR DELETE OR UPDATE ON public.flights FOR EACH ROW EXECUTE FUNCTION public.update_flight_analytics_hourly();
+
+
+--
+-- Name: flights trigger_update_flight_duration_buckets; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trigger_update_flight_duration_buckets AFTER INSERT OR DELETE OR UPDATE ON public.flights FOR EACH ROW EXECUTE FUNCTION public.update_flight_duration_buckets();
 
 
 --
@@ -3623,3 +4620,4 @@ ALTER TABLE ONLY public.users
 --
 
 \unrestrict SOAR
+

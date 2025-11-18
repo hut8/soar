@@ -1,23 +1,31 @@
 /**
  * Test data fixtures
  *
- * Provides mock/test data for use in E2E tests
+ * Provides mock/test data for use in E2E tests.
+ * Test data is seeded into the soar_test database by the setup-test-db.sh script.
+ *
+ * Environment variables (set by CI or local .env.test):
+ * - TEST_USER_EMAIL: Test user email (default: test@example.com)
+ * - TEST_USER_PASSWORD: Test user password (default: testpassword123)
  */
 
 /**
  * Test user credentials
+ *
+ * These correspond to users created by the seed-test-data command.
+ * The validUser is created with known credentials from environment variables.
  */
 export const testUsers = {
 	validUser: {
-		email: 'test@example.com',
-		password: 'testpassword123'
+		email: process.env.TEST_USER_EMAIL || 'test@example.com',
+		password: process.env.TEST_USER_PASSWORD || 'testpassword123'
 	},
 	invalidUser: {
 		email: 'invalid@example.com',
 		password: 'wrongpassword'
 	},
 	newUser: {
-		email: 'newuser@example.com',
+		email: `newuser-${Date.now()}@example.com`, // Unique email for registration tests
 		password: 'newpassword123',
 		name: 'New Test User'
 	}
@@ -25,22 +33,26 @@ export const testUsers = {
 
 /**
  * Test device data
+ *
+ * These correspond to devices created by the seed-test-data command.
+ * Known test devices: N12345, N54321, N98765
  */
 export const testDevices = {
-	validRegistration: 'N12345',
+	validRegistration: 'N12345', // Known test device from seed data
 	validDeviceAddress: {
 		type: 'I', // ICAO
-		address: 'ABC123'
+		address: 'ABC123' // Corresponds to N12345
 	},
-	invalidRegistration: 'INVALIDREG999999'
+	invalidRegistration: 'INVALIDREG999999' // Should not exist in test data
 };
 
 /**
  * Test club data
+ *
+ * The primary test club is created by the seed-test-data command.
  */
 export const testClubs = {
-	validClubId: '1',
-	validClubName: 'Test Soaring Club'
+	validClubName: 'Test Soaring Club' // Created by seed data
 };
 
 /**
