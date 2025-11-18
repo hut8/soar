@@ -1,0 +1,16 @@
+# SOAR Run Metrics (Staging - run subcommand - APRS processing)
+# This file defines a complete scrape job configuration for the SOAR APRS processing service (staging).
+# Prometheus will automatically load this file when using scrape_config_files.
+
+job_name: 'soar-run-staging'
+metrics_path: '/metrics'
+scrape_interval: 1s
+scrape_timeout: 1s
+
+static_configs:
+  - targets:
+      - 'localhost:9092'
+    labels:
+      instance: 'soar-staging'
+      component: 'run'
+      environment: 'staging'

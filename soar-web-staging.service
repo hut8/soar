@@ -1,0 +1,34 @@
+[Unit]
+Description=SOAR Web (Staging) - Web Interface Service
+Documentation=https://github.com/hut8/soar
+After=network-online.target postgresql.service nats-server.service
+Wants=network-online.target nats-server.service
+Requires=postgresql.service
+# Wants=nats-server.service ensures NATS starts when this service starts
+# Service will reconnect automatically via built-in retry logic if NATS restarts
+
+[Service]
+Type=simple
+User=soar
+Group=soar
+WorkingDirectory=/var/soar
+ExecStart=/usr/local/bin/soar-staging web --interface 127.0.0.1 --port 61226
+ExecReload=/bin/kill -s HUP $MAINPID
+
+# Environment variables (staging environment)
+EnvironmentFile=/etc/soar/env-staging
+
+# Security settings
+NoNewPrivileges=yes
+
+# Restart configuration
+Restart=on-failure
+RestartSec=5
+StartLimitInterval=60s
+StartLimitBurst=3
+
+# Process limits
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target soar.target

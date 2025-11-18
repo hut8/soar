@@ -4,11 +4,19 @@
 # Import this file by adding to /usr/local/etc/caddy/Caddyfile:
 #   import /path/to/soar/infrastructure/Caddyfile
 
-# Main SOAR application
+# Main SOAR application (production)
 glider.flights {
 	reverse_proxy localhost:61225
 	log {
 		output file /var/log/caddy/glider.flights.log
+	}
+}
+
+# Staging SOAR application
+staging.glider.flights {
+	reverse_proxy localhost:61226
+	log {
+		output file /var/log/caddy/staging.glider.flights.log
 	}
 }
 

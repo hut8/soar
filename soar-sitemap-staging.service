@@ -1,0 +1,28 @@
+[Unit]
+Description=SOAR Sitemap Generation (Staging) - Generate XML Sitemaps for SEO
+Documentation=https://github.com/hut8/soar
+After=network-online.target postgresql.service soar-pull-data-staging.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+Type=oneshot
+User=soar
+Group=soar
+WorkingDirectory=/var/soar
+ExecStart=/usr/local/bin/soar-staging sitemap
+
+# Environment variables (staging environment)
+EnvironmentFile=/etc/soar/env-staging
+
+# Security settings
+NoNewPrivileges=yes
+
+# Process limits
+LimitNOFILE=65536
+
+# Timeout (allow up to 10 minutes for sitemap generation)
+TimeoutStartSec=600
+
+[Install]
+WantedBy=multi-user.target soar.target

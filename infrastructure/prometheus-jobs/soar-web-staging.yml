@@ -1,0 +1,16 @@
+# SOAR Web Server Metrics (Staging - HTTP API endpoints)
+# This file defines a complete scrape job configuration for the SOAR web server (staging).
+# Prometheus will automatically load this file when using scrape_config_files.
+
+job_name: 'soar-web-staging'
+metrics_path: '/data/metrics'
+scrape_interval: 10s
+scrape_timeout: 5s
+
+static_configs:
+  - targets:
+      - 'localhost:61226'
+    labels:
+      instance: 'soar-web-staging'
+      component: 'web'
+      environment: 'staging'
