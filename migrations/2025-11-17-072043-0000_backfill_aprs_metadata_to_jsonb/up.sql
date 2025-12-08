@@ -3,9 +3,9 @@
 
 -- Update all existing fixes with APRS metadata
 -- Only backfill non-NULL values to keep JSONB compact
+-- Note: protocol field removed as it's redundant (determined from raw_messages.source)
 UPDATE fixes
 SET source_metadata = jsonb_build_object(
-    'protocol', 'aprs',
     'snr_db', snr_db,
     'bit_errors_corrected', bit_errors_corrected,
     'freq_offset_khz', freq_offset_khz,
@@ -14,7 +14,6 @@ SET source_metadata = jsonb_build_object(
 ) - ARRAY(
     SELECT key
     FROM jsonb_each(jsonb_build_object(
-        'protocol', 'aprs',
         'snr_db', snr_db,
         'bit_errors_corrected', bit_errors_corrected,
         'freq_offset_khz', freq_offset_khz,
@@ -32,4 +31,4 @@ WHERE source_metadata IS NULL
     OR gnss_vertical_resolution IS NOT NULL
   );
 
-COMMENT ON COLUMN fixes.source_metadata IS 'Protocol-specific metadata stored as JSONB. For APRS: snr_db, bit_errors_corrected, freq_offset_khz, gnss_*_resolution. For ADS-B: nic, nac_p, nac_v, sil, emergency_status, on_ground, etc.';
+COMMENT ON COLUMN fixes.source_metadata IS 'Protocol-specific metadata stored as JSONB. For OGN/APRS (protocol=aprs): snr_db, bit_errors_corrected, freq_offset_khz, gnss_*_resolution. For ADS-B (protocol=adsb): nic, nac_p, nac_v, sil, emergency_status, on_ground, etc.';

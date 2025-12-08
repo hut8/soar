@@ -322,10 +322,10 @@ impl BeastMessagesRepository {
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            // Use raw SQL to insert with enum value 'beast'
+            // Use raw SQL to insert with enum value 'adsb'
             let insert_result = diesel::sql_query(
                 "INSERT INTO raw_messages (id, raw_message, received_at, receiver_id, unparsed, raw_message_hash, source)
-                 VALUES ($1, $2, $3, $4, $5, $6, 'beast'::message_source)"
+                 VALUES ($1, $2, $3, $4, $5, $6, 'adsb'::message_source)"
             )
             .bind::<diesel::sql_types::Uuid, _>(message_id)
             .bind::<diesel::sql_types::Bytea, _>(&raw_msg)  // Binary Beast frame
@@ -382,10 +382,10 @@ impl BeastMessagesRepository {
 
             conn.transaction::<_, anyhow::Error, _>(|conn| {
                 for message in &messages_vec {
-                    // Use raw SQL to insert with enum value 'beast'
+                    // Use raw SQL to insert with enum value 'adsb'
                     let insert_result = diesel::sql_query(
                         "INSERT INTO raw_messages (id, raw_message, received_at, receiver_id, unparsed, raw_message_hash, source)
-                         VALUES ($1, $2, $3, $4, $5, $6, 'beast'::message_source)
+                         VALUES ($1, $2, $3, $4, $5, $6, 'adsb'::message_source)
                          ON CONFLICT (receiver_id, received_at, raw_message_hash) DO NOTHING"
                     )
                     .bind::<diesel::sql_types::Uuid, _>(message.id)

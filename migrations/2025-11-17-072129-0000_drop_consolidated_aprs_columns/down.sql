@@ -16,4 +16,4 @@ SET snr_db = (source_metadata->>'snr_db')::REAL,
     gnss_horizontal_resolution = (source_metadata->>'gnss_horizontal_resolution')::REAL,
     gnss_vertical_resolution = (source_metadata->>'gnss_vertical_resolution')::REAL
 WHERE source_metadata IS NOT NULL
-  AND source_metadata->>'protocol' = 'aprs';
+  AND source_metadata IS NOT NULL;

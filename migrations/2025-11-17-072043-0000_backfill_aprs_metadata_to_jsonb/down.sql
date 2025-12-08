@@ -4,4 +4,4 @@
 UPDATE fixes
 SET source_metadata = NULL
 WHERE source_metadata IS NOT NULL
-  AND source_metadata->>'protocol' = 'aprs';
+  AND source_metadata IS NOT NULL;
