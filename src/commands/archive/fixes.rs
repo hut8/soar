@@ -109,22 +109,36 @@ impl Archivable for Fix {
     async fn delete_for_day(
         pool: &PgPool,
         day_start: chrono::DateTime<Utc>,
-        day_end: chrono::DateTime<Utc>,
+        _day_end: chrono::DateTime<Utc>,
     ) -> Result<()> {
         let pool = pool.clone();
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
+
+            // Calculate partition name from day_start
+            // Partitions are named like fixes_p20251114 for 2025-11-14
+            let partition_date = day_start.format("%Y%m%d");
+            let partition_name = format!("fixes_p{}", partition_date);
+
+            // Drop the partition directly - much faster than DELETE
+            // This works because:
+            // 1. Each partition contains exactly one day's data
+            // 2. Foreign keys are enforced at the partition level
+            // 3. We've already archived the data to disk
             conn.transaction::<_, anyhow::Error, _>(|conn| {
-                let deleted_count = diesel::delete(
-                    fixes::table
-                        .filter(fixes::received_at.ge(day_start))
-                        .filter(fixes::received_at.lt(day_end)),
-                )
-                .execute(conn)?;
+                // Detach the partition first (optional but makes it invisible to queries immediately)
+                let detach_sql = format!("ALTER TABLE fixes DETACH PARTITION {}", partition_name);
+                diesel::sql_query(&detach_sql).execute(conn)?;
+                info!("Detached partition {} from fixes table", partition_name);
+
+                // Drop the partition table
+                let drop_sql = format!("DROP TABLE IF EXISTS {}", partition_name);
+                diesel::sql_query(&drop_sql).execute(conn)?;
                 info!(
-                    "Deleted {} fixes for day starting {}",
-                    deleted_count, day_start
+                    "Dropped partition {} for day starting {}",
+                    partition_name, day_start
                 );
+
                 Ok(())
             })?;
             Ok(())
