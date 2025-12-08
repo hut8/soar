@@ -246,6 +246,76 @@ jobs:
           echo "Help output:"
           ./target/release/soar --help || true
 
+  build-release-arm64:
+    name: Build Release Binary (ARM64)
+    runs-on: ubuntu-22.04
+    needs: test-sveltekit
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download web build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: web-build
+          path: web/build/
+
+      - name: Setup Node.js (for npm build during Rust build)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install web dependencies
+        working-directory: ./web
+        run: npm ci
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          target: aarch64-unknown-linux-gnu
+
+      - name: Install cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          shared-key: "release-build-arm64"
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          cache-all-crates: true
+
+      - name: Build release binary (ARM64)
+        env:
+          CROSS_CONTAINER_ENGINE: docker
+        run: cross build --release --target aarch64-unknown-linux-gnu
+
+      - name: Create binary archive
+        run: |
+          rm -rf release
+          mkdir -p release
+          cp target/aarch64-unknown-linux-gnu/release/soar release/
+          cp README.md release/ || echo "No README.md found"
+          tar -czf soar-linux-arm64.tar.gz -C release .
+
+      - name: Upload release binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: soar-linux-arm64
+          path: soar-linux-arm64.tar.gz
+          retention-days: 30
+
+      - name: Show binary info
+        run: |
+          echo "Binary size:"
+          ls -lh target/aarch64-unknown-linux-gnu/release/soar
+          echo ""
+          echo "Binary info:"
+          file target/aarch64-unknown-linux-gnu/release/soar
+
   security-audit:
     name: Security Audit
     runs-on: ubuntu-22.04
