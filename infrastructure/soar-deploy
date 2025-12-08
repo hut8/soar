@@ -5,12 +5,14 @@
 # This script is executed with sudo privileges to deploy SOAR updates.
 # It must be installed at /usr/local/bin/soar-deploy with permissions 755.
 #
-# Usage: sudo /usr/local/bin/soar-deploy /tmp/soar/deploy/YYYYMMDDHHMMSS
+# Usage:
+#   sudo /usr/local/bin/soar-deploy [production|staging] /tmp/soar/deploy/YYYYMMDDHHMMSS
+#   sudo /usr/local/bin/soar-deploy /tmp/soar/deploy/YYYYMMDDHHMMSS  (defaults to production)
 #
 # The deployment directory should contain:
 #   - soar (the binary)
-#   - *.service files
-#   - *.timer files
+#   - *.service files (production) or *-staging.service files (staging)
+#   - *.timer files (production) or *-staging.timer files (staging)
 #   - prometheus-jobs/ directory (optional, contains Prometheus job configs)
 #   - grafana-provisioning/ directory (optional, contains Grafana provisioning configs)
 #   - grafana-dashboard-*.json files (optional, Grafana dashboards)
@@ -38,13 +40,25 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Check if deployment directory is provided
-if [ $# -ne 1 ]; then
-    log_error "Usage: $0 /tmp/soar/deploy/YYYYMMDDHHMMSS"
+# Parse arguments: environment and deploy directory
+# Supports both: "soar-deploy staging /path" and "soar-deploy /path" (defaults to production)
+if [ $# -eq 2 ]; then
+    ENVIRONMENT="$1"
+    DEPLOY_DIR="$2"
+elif [ $# -eq 1 ]; then
+    ENVIRONMENT="production"
+    DEPLOY_DIR="$1"
+else
+    log_error "Usage: $0 [production|staging] /tmp/soar/deploy/YYYYMMDDHHMMSS"
+    log_error "   or: $0 /tmp/soar/deploy/YYYYMMDDHHMMSS  (defaults to production)"
     exit 1
 fi
 
-DEPLOY_DIR="$1"
+# Validate environment
+if [ "$ENVIRONMENT" != "production" ] && [ "$ENVIRONMENT" != "staging" ]; then
+    log_error "Invalid environment: $ENVIRONMENT (must be 'production' or 'staging')"
+    exit 1
+fi
 
 # Verify deployment directory exists
 if [ ! -d "$DEPLOY_DIR" ]; then
@@ -52,7 +66,25 @@ if [ ! -d "$DEPLOY_DIR" ]; then
     exit 1
 fi
 
-log_info "Starting SOAR deployment from: $DEPLOY_DIR"
+log_info "Starting SOAR deployment for $ENVIRONMENT from: $DEPLOY_DIR"
+
+# Set environment-specific variables
+if [ "$ENVIRONMENT" = "staging" ]; then
+    SERVICE_SUFFIX="-staging"
+    ENV_FILE="/etc/soar/env-staging"
+    BINARY_PATH="/usr/local/bin/soar-staging"
+    BACKUP_DIR="/home/soar/backups/staging"
+else
+    SERVICE_SUFFIX=""
+    ENV_FILE="/etc/soar/env"
+    BINARY_PATH="/usr/local/bin/soar"
+    BACKUP_DIR="/home/soar/backups/production"
+fi
+
+log_info "Environment: $ENVIRONMENT"
+log_info "Service suffix: '$SERVICE_SUFFIX'"
+log_info "Environment file: $ENV_FILE"
+log_info "Binary path: $BINARY_PATH"
 
 # Verify binary exists
 if [ ! -f "$DEPLOY_DIR/soar" ]; then
@@ -60,35 +92,50 @@ if [ ! -f "$DEPLOY_DIR/soar" ]; then
     exit 1
 fi
 
-# Define services and timers
+# Define services and timers based on environment
 # Active services that should be enabled and started
 ACTIVE_SERVICES=(
-    "soar-aprs-ingest.service"
-    "soar-run.service"
-    "soar-web.service"
+    "soar-aprs-ingest${SERVICE_SUFFIX}.service"
+    "soar-run${SERVICE_SUFFIX}.service"
+    "soar-web${SERVICE_SUFFIX}.service"
 )
 
 # Timer-invoked services (only installed, not enabled or started)
-TIMER_SERVICES=(
-    "soar-pull-data.service"
-    "soar-sitemap.service"
-    "soar-archive.service"
-    "soar-backup-base.service"
-    "soar-backup-verify.service"
-    "partman-maintenance.service"
-)
+# Skip backup services for staging environment
+if [ "$ENVIRONMENT" = "staging" ]; then
+    TIMER_SERVICES=(
+        "soar-pull-data${SERVICE_SUFFIX}.service"
+        "soar-sitemap${SERVICE_SUFFIX}.service"
+        "soar-archive${SERVICE_SUFFIX}.service"
+        "partman-maintenance${SERVICE_SUFFIX}.service"
+    )
+    TIMERS=(
+        "soar-pull-data${SERVICE_SUFFIX}.timer"
+        "soar-sitemap${SERVICE_SUFFIX}.timer"
+        "soar-archive${SERVICE_SUFFIX}.timer"
+        "partman-maintenance${SERVICE_SUFFIX}.timer"
+    )
+else
+    TIMER_SERVICES=(
+        "soar-pull-data${SERVICE_SUFFIX}.service"
+        "soar-sitemap${SERVICE_SUFFIX}.service"
+        "soar-archive${SERVICE_SUFFIX}.service"
+        "soar-backup-base${SERVICE_SUFFIX}.service"
+        "soar-backup-verify${SERVICE_SUFFIX}.service"
+        "partman-maintenance${SERVICE_SUFFIX}.service"
+    )
+    TIMERS=(
+        "soar-pull-data${SERVICE_SUFFIX}.timer"
+        "soar-sitemap${SERVICE_SUFFIX}.timer"
+        "soar-archive${SERVICE_SUFFIX}.timer"
+        "soar-backup-base${SERVICE_SUFFIX}.timer"
+        "soar-backup-verify${SERVICE_SUFFIX}.timer"
+        "partman-maintenance${SERVICE_SUFFIX}.timer"
+    )
+fi
 
 # All services (for stopping and installing)
 ALL_SERVICES=("${ACTIVE_SERVICES[@]}" "${TIMER_SERVICES[@]}")
-
-TIMERS=(
-    "soar-pull-data.timer"
-    "soar-sitemap.timer"
-    "soar-archive.timer"
-    "soar-backup-base.timer"
-    "soar-backup-verify.timer"
-    "partman-maintenance.timer"
-)
 
 # Create temporary binary directory with timestamp
 TIMESTAMP=$(date +%s)
@@ -105,12 +152,12 @@ install -m 755 -o soar -g soar "$DEPLOY_DIR/soar" "$TEMP_BIN_PATH"
 log_info "Binary deployed to temporary location"
 
 # Stop soar-run service only (for migrations, keep others running)
-log_info "Stopping soar-run service for migrations..."
-if systemctl is-active --quiet "soar-run.service"; then
-    systemctl stop "soar-run.service" || log_warn "Failed to stop soar-run.service"
-    log_info "soar-run.service stopped"
+log_info "Stopping soar-run${SERVICE_SUFFIX} service for migrations..."
+if systemctl is-active --quiet "soar-run${SERVICE_SUFFIX}.service"; then
+    systemctl stop "soar-run${SERVICE_SUFFIX}.service" || log_warn "Failed to stop soar-run${SERVICE_SUFFIX}.service"
+    log_info "soar-run${SERVICE_SUFFIX}.service stopped"
 else
-    log_info "soar-run.service is not running"
+    log_info "soar-run${SERVICE_SUFFIX}.service is not running"
 fi
 
 # Wait for service to fully terminate
@@ -118,11 +165,11 @@ sleep 2
 
 # Check current migration status before running migrations
 log_info "Checking current database migration status..."
-sudo -u soar bash -c "set -a; source /etc/soar/env; set +a; psql \"\$DATABASE_URL\" -c \"SELECT version FROM __diesel_schema_migrations ORDER BY version DESC LIMIT 5;\"" 2>/dev/null || log_warn "Could not query migration status"
+sudo -u soar bash -c "set -a; source $ENV_FILE; set +a; psql \"\$DATABASE_URL\" -c \"SELECT version FROM __diesel_schema_migrations ORDER BY version DESC LIMIT 5;\"" 2>/dev/null || log_warn "Could not query migration status"
 
 # Run database migrations from temporary binary (not /usr/local/bin to avoid "text file busy")
 log_info "Running database migrations from temporary binary..."
-if sudo -u soar bash -c "set -a; source /etc/soar/env; set +a; exec '$TEMP_BIN_PATH' migrate"; then
+if sudo -u soar bash -c "set -a; source $ENV_FILE; set +a; exec '$TEMP_BIN_PATH' migrate"; then
     log_info "Database migrations completed successfully"
 else
     log_error "Database migrations failed"
@@ -130,7 +177,7 @@ else
     log_error "DO NOT restart services - manual intervention required"
     log_info "Cleaning up temporary binary: $TEMP_BIN_PATH"
     rm -f "$TEMP_BIN_PATH"
-    log_error "Deployment aborted. soar-run.service remains stopped for safety."
+    log_error "Deployment aborted. soar-run${SERVICE_SUFFIX}.service remains stopped for safety."
     log_info "To investigate:"
     log_info "  1. Check migration logs above"
     log_info "  2. Verify database state manually"
@@ -142,7 +189,7 @@ fi
 log_info "Stopping remaining SOAR services..."
 for service in "${ALL_SERVICES[@]}"; do
     # Skip soar-run since we already stopped it
-    if [ "$service" = "soar-run.service" ]; then
+    if [ "$service" = "soar-run${SERVICE_SUFFIX}.service" ]; then
         continue
     fi
 
@@ -170,19 +217,22 @@ log_info "Waiting for services to fully terminate..."
 sleep 3
 
 # Backup current binary
-if [ -f /usr/local/bin/soar ]; then
-    BACKUP_FILE="/home/soar/soar.backup.$(date +%s)"
+mkdir -p "$BACKUP_DIR"
+chown soar:soar "$BACKUP_DIR"
+
+if [ -f "$BINARY_PATH" ]; then
+    BACKUP_FILE="$BACKUP_DIR/soar.backup.$(date +%s)"
     log_info "Backing up current binary to $BACKUP_FILE..."
-    cp /usr/local/bin/soar "$BACKUP_FILE"
+    cp "$BINARY_PATH" "$BACKUP_FILE"
     chown soar:soar "$BACKUP_FILE"
 else
-    log_warn "No existing binary to backup"
+    log_warn "No existing binary to backup at $BINARY_PATH"
 fi
 
-# Install new binary to /usr/local/bin
-log_info "Installing new binary to /usr/local/bin..."
-install -m 755 -o root -g root "$TEMP_BIN_PATH" /usr/local/bin/soar
-log_info "Binary installed successfully"
+# Install new binary
+log_info "Installing new binary to $BINARY_PATH..."
+install -m 755 -o root -g root "$TEMP_BIN_PATH" "$BINARY_PATH"
+log_info "Binary installed successfully at $BINARY_PATH"
 
 # Clean up temporary binary
 log_info "Cleaning up temporary binary: $TEMP_BIN_PATH"
@@ -309,12 +359,12 @@ systemctl daemon-reload
 log_info "Enabling and starting SOAR services..."
 
 # Start soar-aprs-ingest first
-if [ -f "/etc/systemd/system/soar-aprs-ingest.service" ]; then
-    log_info "Enabling soar-aprs-ingest.service..."
-    systemctl enable soar-aprs-ingest.service || log_warn "Failed to enable soar-aprs-ingest.service"
+if [ -f "/etc/systemd/system/soar-aprs-ingest${SERVICE_SUFFIX}.service" ]; then
+    log_info "Enabling soar-aprs-ingest${SERVICE_SUFFIX}.service..."
+    systemctl enable "soar-aprs-ingest${SERVICE_SUFFIX}.service" || log_warn "Failed to enable soar-aprs-ingest${SERVICE_SUFFIX}.service"
 
-    log_info "Starting soar-aprs-ingest.service..."
-    systemctl start soar-aprs-ingest.service || log_warn "Failed to start soar-aprs-ingest.service"
+    log_info "Starting soar-aprs-ingest${SERVICE_SUFFIX}.service..."
+    systemctl start "soar-aprs-ingest${SERVICE_SUFFIX}.service" || log_warn "Failed to start soar-aprs-ingest${SERVICE_SUFFIX}.service"
 
     # Give it a moment to initialize
     sleep 2
@@ -323,7 +373,7 @@ fi
 # Start the rest of the active services
 for service in "${ACTIVE_SERVICES[@]}"; do
     # Skip aprs-ingest since we already started it
-    if [ "$service" = "soar-aprs-ingest.service" ]; then
+    if [ "$service" = "soar-aprs-ingest${SERVICE_SUFFIX}.service" ]; then
         continue
     fi
 
@@ -394,15 +444,15 @@ for timer in "${TIMERS[@]}"; do
 done
 
 # Show recent logs from all services
-log_info "Recent logs from soar-run:"
-journalctl -u soar-run.service --no-pager --lines=5 || true
+log_info "Recent logs from soar-run${SERVICE_SUFFIX}:"
+journalctl -u "soar-run${SERVICE_SUFFIX}.service" --no-pager --lines=5 || true
 
-log_info "Recent logs from soar-web:"
-journalctl -u soar-web.service --no-pager --lines=5 || true
+log_info "Recent logs from soar-web${SERVICE_SUFFIX}:"
+journalctl -u "soar-web${SERVICE_SUFFIX}.service" --no-pager --lines=5 || true
 
 # Clean up old backups (keep last 5)
-log_info "Cleaning up old backups (keeping last 5)..."
-ls -t /home/soar/soar.backup.* 2>/dev/null | tail -n +6 | xargs rm -f || true
+log_info "Cleaning up old backups in $BACKUP_DIR (keeping last 5)..."
+ls -t "$BACKUP_DIR"/soar.backup.* 2>/dev/null | tail -n +6 | xargs rm -f || true
 
 # Clean up old deployment directories (keep last 3)
 log_info "Cleaning up old deployment directories (keeping last 3)..."
