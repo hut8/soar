@@ -9,7 +9,7 @@ anyhow = "1.0"
 argon2 = "0.5"
 async-nats = "0.45"
 bigdecimal = { version = "0.4", features = ["serde"] }
-axum = { version = "0.8.6", features = ["macros", "ws"] }
+axum = { version = "0.8.7", features = ["macros", "ws"] }
 axum-extra = { version = "0.12.1", features = ["typed-header"] }
 bytes = "1.0"
 http-body = "1.0"
