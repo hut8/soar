@@ -27,13 +27,6 @@ CREATE SCHEMA partman;
 
 
 --
--- Name: btree_gin; Type: EXTENSION; Schema: -; Owner: -
---
-
-CREATE EXTENSION IF NOT EXISTS btree_gin WITH SCHEMA public;
-
-
---
 -- Name: pg_partman; Type: EXTENSION; Schema: -; Owner: -
 --
 
@@ -264,136 +257,6 @@ $$;
 
 
 --
--- Name: update_airport_analytics_daily(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.update_airport_analytics_daily() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-DECLARE
-    affected_date DATE;
-    old_date DATE;
-BEGIN
-    -- Handle INSERT
-    IF TG_OP = 'INSERT' THEN
-        affected_date := DATE(NEW.takeoff_time);
-
-        -- Update departure airport
-        IF NEW.departure_airport_id IS NOT NULL THEN
-            INSERT INTO airport_analytics_daily (airport_id, date, airport_ident, airport_name, departure_count, arrival_count)
-            SELECT
-                NEW.departure_airport_id,
-                affected_date,
-                a.ident,
-                a.name,
-                1,
-                0
-            FROM airports a
-            WHERE a.id = NEW.departure_airport_id
-            ON CONFLICT (airport_id, date) DO UPDATE SET
-                departure_count = airport_analytics_daily.departure_count + 1,
-                updated_at = NOW();
-        END IF;
-
-        -- Update arrival airport
-        IF NEW.arrival_airport_id IS NOT NULL THEN
-            INSERT INTO airport_analytics_daily (airport_id, date, airport_ident, airport_name, departure_count, arrival_count)
-            SELECT
-                NEW.arrival_airport_id,
-                affected_date,
-                a.ident,
-                a.name,
-                0,
-                1
-            FROM airports a
-            WHERE a.id = NEW.arrival_airport_id
-            ON CONFLICT (airport_id, date) DO UPDATE SET
-                arrival_count = airport_analytics_daily.arrival_count + 1,
-                updated_at = NOW();
-        END IF;
-
-    -- Handle UPDATE
-    ELSIF TG_OP = 'UPDATE' THEN
-        old_date := DATE(OLD.takeoff_time);
-        affected_date := DATE(NEW.takeoff_time);
-
-        -- Remove old departure
-        IF OLD.departure_airport_id IS NOT NULL THEN
-            UPDATE airport_analytics_daily SET
-                departure_count = GREATEST(0, departure_count - 1),
-                updated_at = NOW()
-            WHERE airport_id = OLD.departure_airport_id AND date = old_date;
-        END IF;
-
-        -- Remove old arrival
-        IF OLD.arrival_airport_id IS NOT NULL THEN
-            UPDATE airport_analytics_daily SET
-                arrival_count = GREATEST(0, arrival_count - 1),
-                updated_at = NOW()
-            WHERE airport_id = OLD.arrival_airport_id AND date = old_date;
-        END IF;
-
-        -- Add new departure
-        IF NEW.departure_airport_id IS NOT NULL THEN
-            INSERT INTO airport_analytics_daily (airport_id, date, airport_ident, airport_name, departure_count, arrival_count)
-            SELECT
-                NEW.departure_airport_id,
-                affected_date,
-                a.ident,
-                a.name,
-                1,
-                0
-            FROM airports a
-            WHERE a.id = NEW.departure_airport_id
-            ON CONFLICT (airport_id, date) DO UPDATE SET
-                departure_count = airport_analytics_daily.departure_count + 1,
-                updated_at = NOW();
-        END IF;
-
-        -- Add new arrival
-        IF NEW.arrival_airport_id IS NOT NULL THEN
-            INSERT INTO airport_analytics_daily (airport_id, date, airport_ident, airport_name, departure_count, arrival_count)
-            SELECT
-                NEW.arrival_airport_id,
-                affected_date,
-                a.ident,
-                a.name,
-                0,
-                1
-            FROM airports a
-            WHERE a.id = NEW.arrival_airport_id
-            ON CONFLICT (airport_id, date) DO UPDATE SET
-                arrival_count = airport_analytics_daily.arrival_count + 1,
-                updated_at = NOW();
-        END IF;
-
-    -- Handle DELETE
-    ELSIF TG_OP = 'DELETE' THEN
-        old_date := DATE(OLD.takeoff_time);
-
-        -- Remove departure
-        IF OLD.departure_airport_id IS NOT NULL THEN
-            UPDATE airport_analytics_daily SET
-                departure_count = GREATEST(0, departure_count - 1),
-                updated_at = NOW()
-            WHERE airport_id = OLD.departure_airport_id AND date = old_date;
-        END IF;
-
-        -- Remove arrival
-        IF OLD.arrival_airport_id IS NOT NULL THEN
-            UPDATE airport_analytics_daily SET
-                arrival_count = GREATEST(0, arrival_count - 1),
-                updated_at = NOW()
-            WHERE airport_id = OLD.arrival_airport_id AND date = old_date;
-        END IF;
-    END IF;
-
-    RETURN NEW;
-END;
-$$;
-
-
---
 -- Name: update_airport_location(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -406,426 +269,6 @@ BEGIN
     ELSE
         NEW.location = NULL;
     END IF;
-    RETURN NEW;
-END;
-$$;
-
-
---
--- Name: update_club_analytics_daily(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.update_club_analytics_daily() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-DECLARE
-    affected_club UUID;
-    affected_date DATE;
-    old_club UUID;
-    old_date DATE;
-    flight_duration INT;
-    old_duration INT;
-BEGIN
-    -- Handle INSERT
-    IF TG_OP = 'INSERT' AND NEW.club_id IS NOT NULL THEN
-        affected_club := NEW.club_id;
-        affected_date := DATE(NEW.takeoff_time);
-        flight_duration := get_flight_duration_seconds(NEW.takeoff_time, NEW.landing_time);
-
-        INSERT INTO club_analytics_daily (club_id, date, club_name, flight_count, total_airtime_seconds, tow_count)
-        SELECT
-            NEW.club_id,
-            affected_date,
-            c.name,
-            1,
-            flight_duration,
-            CASE WHEN NEW.towed_by_device_id IS NOT NULL THEN 1 ELSE 0 END
-        FROM clubs c
-        WHERE c.id = NEW.club_id
-        ON CONFLICT (club_id, date) DO UPDATE SET
-            flight_count = club_analytics_daily.flight_count + 1,
-            total_airtime_seconds = club_analytics_daily.total_airtime_seconds + flight_duration,
-            tow_count = club_analytics_daily.tow_count + CASE WHEN NEW.towed_by_device_id IS NOT NULL THEN 1 ELSE 0 END,
-            updated_at = NOW();
-
-    -- Handle UPDATE
-    ELSIF TG_OP = 'UPDATE' THEN
-        old_club := OLD.club_id;
-        old_date := DATE(OLD.takeoff_time);
-        affected_club := NEW.club_id;
-        affected_date := DATE(NEW.takeoff_time);
-        old_duration := get_flight_duration_seconds(OLD.takeoff_time, OLD.landing_time);
-        flight_duration := get_flight_duration_seconds(NEW.takeoff_time, NEW.landing_time);
-
-        -- Remove from old club/date
-        IF old_club IS NOT NULL THEN
-            UPDATE club_analytics_daily SET
-                flight_count = GREATEST(0, flight_count - 1),
-                total_airtime_seconds = GREATEST(0, total_airtime_seconds - old_duration),
-                tow_count = GREATEST(0, tow_count - CASE WHEN OLD.towed_by_device_id IS NOT NULL THEN 1 ELSE 0 END),
-                updated_at = NOW()
-            WHERE club_id = old_club AND date = old_date;
-        END IF;
-
-        -- Add to new club/date
-        IF affected_club IS NOT NULL THEN
-            INSERT INTO club_analytics_daily (club_id, date, club_name, flight_count, total_airtime_seconds, tow_count)
-            SELECT
-                NEW.club_id,
-                affected_date,
-                c.name,
-                1,
-                flight_duration,
-                CASE WHEN NEW.towed_by_device_id IS NOT NULL THEN 1 ELSE 0 END
-            FROM clubs c
-            WHERE c.id = NEW.club_id
-            ON CONFLICT (club_id, date) DO UPDATE SET
-                flight_count = club_analytics_daily.flight_count + 1,
-                total_airtime_seconds = club_analytics_daily.total_airtime_seconds + flight_duration,
-                tow_count = club_analytics_daily.tow_count + CASE WHEN NEW.towed_by_device_id IS NOT NULL THEN 1 ELSE 0 END,
-                updated_at = NOW();
-        END IF;
-
-    -- Handle DELETE
-    ELSIF TG_OP = 'DELETE' AND OLD.club_id IS NOT NULL THEN
-        old_club := OLD.club_id;
-        old_date := DATE(OLD.takeoff_time);
-        old_duration := get_flight_duration_seconds(OLD.takeoff_time, OLD.landing_time);
-
-        UPDATE club_analytics_daily SET
-            flight_count = GREATEST(0, flight_count - 1),
-            total_airtime_seconds = GREATEST(0, total_airtime_seconds - old_duration),
-            tow_count = GREATEST(0, tow_count - CASE WHEN OLD.towed_by_device_id IS NOT NULL THEN 1 ELSE 0 END),
-            updated_at = NOW()
-        WHERE club_id = old_club AND date = old_date;
-    END IF;
-
-    RETURN NEW;
-END;
-$$;
-
-
---
--- Name: update_device_analytics(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.update_device_analytics() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-DECLARE
-    old_device UUID;
-    new_device UUID;
-    flight_duration INT;
-    old_duration INT;
-BEGIN
-    -- Handle INSERT
-    IF TG_OP = 'INSERT' THEN
-        new_device := NEW.device_id;
-        flight_duration := get_flight_duration_seconds(NEW.takeoff_time, NEW.landing_time);
-
-        INSERT INTO device_analytics (device_id, registration, aircraft_model, flight_count_total, last_flight_at, total_distance_meters)
-        SELECT
-            NEW.device_id,
-            d.registration,
-            d.aircraft_model,
-            1,
-            NEW.takeoff_time,
-            COALESCE(NEW.total_distance_meters, 0)
-        FROM devices d
-        WHERE d.id = NEW.device_id
-        ON CONFLICT (device_id) DO UPDATE SET
-            flight_count_total = device_analytics.flight_count_total + 1,
-            last_flight_at = GREATEST(device_analytics.last_flight_at, NEW.takeoff_time),
-            total_distance_meters = device_analytics.total_distance_meters + COALESCE(NEW.total_distance_meters, 0),
-            avg_flight_duration_seconds = CASE WHEN device_analytics.flight_count_total + 1 > 0
-                THEN ((device_analytics.avg_flight_duration_seconds * device_analytics.flight_count_total) + flight_duration) / (device_analytics.flight_count_total + 1)
-                ELSE 0 END,
-            updated_at = NOW();
-
-    -- Handle UPDATE
-    ELSIF TG_OP = 'UPDATE' THEN
-        old_device := OLD.device_id;
-        new_device := NEW.device_id;
-        old_duration := get_flight_duration_seconds(OLD.takeoff_time, OLD.landing_time);
-        flight_duration := get_flight_duration_seconds(NEW.takeoff_time, NEW.landing_time);
-
-        -- If device changed, update both
-        IF old_device != new_device THEN
-            -- Remove from old device
-            UPDATE device_analytics SET
-                flight_count_total = GREATEST(0, flight_count_total - 1),
-                total_distance_meters = GREATEST(0, total_distance_meters - COALESCE(OLD.total_distance_meters, 0)),
-                updated_at = NOW()
-            WHERE device_id = old_device;
-
-            -- Add to new device
-            INSERT INTO device_analytics (device_id, registration, aircraft_model, flight_count_total, last_flight_at, total_distance_meters)
-            SELECT
-                NEW.device_id,
-                d.registration,
-                d.aircraft_model,
-                1,
-                NEW.takeoff_time,
-                COALESCE(NEW.total_distance_meters, 0)
-            FROM devices d
-            WHERE d.id = NEW.device_id
-            ON CONFLICT (device_id) DO UPDATE SET
-                flight_count_total = device_analytics.flight_count_total + 1,
-                last_flight_at = GREATEST(device_analytics.last_flight_at, NEW.takeoff_time),
-                total_distance_meters = device_analytics.total_distance_meters + COALESCE(NEW.total_distance_meters, 0),
-                updated_at = NOW();
-        ELSE
-            -- Same device, just update the difference
-            UPDATE device_analytics SET
-                total_distance_meters = total_distance_meters - COALESCE(OLD.total_distance_meters, 0) + COALESCE(NEW.total_distance_meters, 0),
-                last_flight_at = GREATEST(last_flight_at, NEW.takeoff_time),
-                updated_at = NOW()
-            WHERE device_id = new_device;
-        END IF;
-
-    -- Handle DELETE
-    ELSIF TG_OP = 'DELETE' THEN
-        old_device := OLD.device_id;
-        old_duration := get_flight_duration_seconds(OLD.takeoff_time, OLD.landing_time);
-
-        UPDATE device_analytics SET
-            flight_count_total = GREATEST(0, flight_count_total - 1),
-            total_distance_meters = GREATEST(0, total_distance_meters - COALESCE(OLD.total_distance_meters, 0)),
-            avg_flight_duration_seconds = CASE WHEN flight_count_total - 1 > 0
-                THEN ((avg_flight_duration_seconds * flight_count_total) - old_duration) / (flight_count_total - 1)
-                ELSE 0 END,
-            updated_at = NOW()
-        WHERE device_id = old_device;
-    END IF;
-
-    RETURN NEW;
-END;
-$$;
-
-
---
--- Name: update_flight_analytics_daily(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.update_flight_analytics_daily() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-DECLARE
-    affected_date DATE;
-    old_date DATE;
-    flight_duration INT;
-    old_duration INT;
-BEGIN
-    -- Handle INSERT
-    IF TG_OP = 'INSERT' THEN
-        affected_date := DATE(NEW.takeoff_time);
-        flight_duration := get_flight_duration_seconds(NEW.takeoff_time, NEW.landing_time);
-
-        INSERT INTO flight_analytics_daily (date, flight_count, total_duration_seconds, total_distance_meters, tow_flight_count, cross_country_count)
-        VALUES (
-            affected_date,
-            1,
-            flight_duration,
-            COALESCE(NEW.total_distance_meters, 0),
-            CASE WHEN NEW.towed_by_device_id IS NOT NULL THEN 1 ELSE 0 END,
-            CASE WHEN NEW.departure_airport_id IS DISTINCT FROM NEW.arrival_airport_id THEN 1 ELSE 0 END
-        )
-        ON CONFLICT (date) DO UPDATE SET
-            flight_count = flight_analytics_daily.flight_count + 1,
-            total_duration_seconds = flight_analytics_daily.total_duration_seconds + flight_duration,
-            total_distance_meters = flight_analytics_daily.total_distance_meters + COALESCE(NEW.total_distance_meters, 0),
-            tow_flight_count = flight_analytics_daily.tow_flight_count + CASE WHEN NEW.towed_by_device_id IS NOT NULL THEN 1 ELSE 0 END,
-            cross_country_count = flight_analytics_daily.cross_country_count + CASE WHEN NEW.departure_airport_id IS DISTINCT FROM NEW.arrival_airport_id THEN 1 ELSE 0 END,
-            avg_duration_seconds = CASE WHEN flight_analytics_daily.flight_count + 1 > 0
-                THEN (flight_analytics_daily.total_duration_seconds + flight_duration) / (flight_analytics_daily.flight_count + 1)
-                ELSE 0 END,
-            updated_at = NOW();
-
-    -- Handle UPDATE
-    ELSIF TG_OP = 'UPDATE' THEN
-        old_date := DATE(OLD.takeoff_time);
-        affected_date := DATE(NEW.takeoff_time);
-        old_duration := get_flight_duration_seconds(OLD.takeoff_time, OLD.landing_time);
-        flight_duration := get_flight_duration_seconds(NEW.takeoff_time, NEW.landing_time);
-
-        -- Remove old values
-        UPDATE flight_analytics_daily SET
-            flight_count = GREATEST(0, flight_count - 1),
-            total_duration_seconds = GREATEST(0, total_duration_seconds - old_duration),
-            total_distance_meters = GREATEST(0, total_distance_meters - COALESCE(OLD.total_distance_meters, 0)),
-            tow_flight_count = GREATEST(0, tow_flight_count - CASE WHEN OLD.towed_by_device_id IS NOT NULL THEN 1 ELSE 0 END),
-            cross_country_count = GREATEST(0, cross_country_count - CASE WHEN OLD.departure_airport_id IS DISTINCT FROM OLD.arrival_airport_id THEN 1 ELSE 0 END),
-            avg_duration_seconds = CASE WHEN flight_count - 1 > 0
-                THEN (total_duration_seconds - old_duration) / (flight_count - 1)
-                ELSE 0 END,
-            updated_at = NOW()
-        WHERE date = old_date;
-
-        -- Add new values
-        INSERT INTO flight_analytics_daily (date, flight_count, total_duration_seconds, total_distance_meters, tow_flight_count, cross_country_count)
-        VALUES (
-            affected_date,
-            1,
-            flight_duration,
-            COALESCE(NEW.total_distance_meters, 0),
-            CASE WHEN NEW.towed_by_device_id IS NOT NULL THEN 1 ELSE 0 END,
-            CASE WHEN NEW.departure_airport_id IS DISTINCT FROM NEW.arrival_airport_id THEN 1 ELSE 0 END
-        )
-        ON CONFLICT (date) DO UPDATE SET
-            flight_count = flight_analytics_daily.flight_count + 1,
-            total_duration_seconds = flight_analytics_daily.total_duration_seconds + flight_duration,
-            total_distance_meters = flight_analytics_daily.total_distance_meters + COALESCE(NEW.total_distance_meters, 0),
-            tow_flight_count = flight_analytics_daily.tow_flight_count + CASE WHEN NEW.towed_by_device_id IS NOT NULL THEN 1 ELSE 0 END,
-            cross_country_count = flight_analytics_daily.cross_country_count + CASE WHEN NEW.departure_airport_id IS DISTINCT FROM NEW.arrival_airport_id THEN 1 ELSE 0 END,
-            avg_duration_seconds = CASE WHEN flight_analytics_daily.flight_count + 1 > 0
-                THEN (flight_analytics_daily.total_duration_seconds + flight_duration) / (flight_analytics_daily.flight_count + 1)
-                ELSE 0 END,
-            updated_at = NOW();
-
-    -- Handle DELETE
-    ELSIF TG_OP = 'DELETE' THEN
-        affected_date := DATE(OLD.takeoff_time);
-        old_duration := get_flight_duration_seconds(OLD.takeoff_time, OLD.landing_time);
-
-        UPDATE flight_analytics_daily SET
-            flight_count = GREATEST(0, flight_count - 1),
-            total_duration_seconds = GREATEST(0, total_duration_seconds - old_duration),
-            total_distance_meters = GREATEST(0, total_distance_meters - COALESCE(OLD.total_distance_meters, 0)),
-            tow_flight_count = GREATEST(0, tow_flight_count - CASE WHEN OLD.towed_by_device_id IS NOT NULL THEN 1 ELSE 0 END),
-            cross_country_count = GREATEST(0, cross_country_count - CASE WHEN OLD.departure_airport_id IS DISTINCT FROM OLD.arrival_airport_id THEN 1 ELSE 0 END),
-            avg_duration_seconds = CASE WHEN flight_count - 1 > 0
-                THEN (total_duration_seconds - old_duration) / (flight_count - 1)
-                ELSE 0 END,
-            updated_at = NOW()
-        WHERE date = affected_date;
-    END IF;
-
-    RETURN NEW;
-END;
-$$;
-
-
---
--- Name: update_flight_analytics_hourly(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.update_flight_analytics_hourly() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-DECLARE
-    affected_hour TIMESTAMPTZ;
-    old_hour TIMESTAMPTZ;
-BEGIN
-    -- Handle INSERT
-    IF TG_OP = 'INSERT' THEN
-        affected_hour := DATE_TRUNC('hour', NEW.takeoff_time);
-
-        INSERT INTO flight_analytics_hourly (hour, flight_count, active_devices, active_clubs)
-        VALUES (
-            affected_hour,
-            1,
-            1,
-            CASE WHEN NEW.club_id IS NOT NULL THEN 1 ELSE 0 END
-        )
-        ON CONFLICT (hour) DO UPDATE SET
-            flight_count = flight_analytics_hourly.flight_count + 1,
-            updated_at = NOW();
-
-    -- Handle UPDATE
-    ELSIF TG_OP = 'UPDATE' THEN
-        old_hour := DATE_TRUNC('hour', OLD.takeoff_time);
-        affected_hour := DATE_TRUNC('hour', NEW.takeoff_time);
-
-        -- Remove from old hour
-        UPDATE flight_analytics_hourly SET
-            flight_count = GREATEST(0, flight_count - 1),
-            updated_at = NOW()
-        WHERE hour = old_hour;
-
-        -- Add to new hour
-        INSERT INTO flight_analytics_hourly (hour, flight_count, active_devices, active_clubs)
-        VALUES (
-            affected_hour,
-            1,
-            1,
-            CASE WHEN NEW.club_id IS NOT NULL THEN 1 ELSE 0 END
-        )
-        ON CONFLICT (hour) DO UPDATE SET
-            flight_count = flight_analytics_hourly.flight_count + 1,
-            updated_at = NOW();
-
-    -- Handle DELETE
-    ELSIF TG_OP = 'DELETE' THEN
-        affected_hour := DATE_TRUNC('hour', OLD.takeoff_time);
-
-        UPDATE flight_analytics_hourly SET
-            flight_count = GREATEST(0, flight_count - 1),
-            updated_at = NOW()
-        WHERE hour = affected_hour;
-    END IF;
-
-    RETURN NEW;
-END;
-$$;
-
-
---
--- Name: update_flight_duration_buckets(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.update_flight_duration_buckets() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-DECLARE
-    old_bucket VARCHAR;
-    new_bucket VARCHAR;
-    old_duration INT;
-    new_duration INT;
-BEGIN
-    -- Handle INSERT
-    IF TG_OP = 'INSERT' THEN
-        new_duration := get_flight_duration_seconds(NEW.takeoff_time, NEW.landing_time);
-        IF new_duration > 0 THEN
-            new_bucket := get_duration_bucket(new_duration);
-            UPDATE flight_duration_buckets SET
-                flight_count = flight_count + 1,
-                updated_at = NOW()
-            WHERE bucket_name = new_bucket;
-        END IF;
-
-    -- Handle UPDATE
-    ELSIF TG_OP = 'UPDATE' THEN
-        old_duration := get_flight_duration_seconds(OLD.takeoff_time, OLD.landing_time);
-        new_duration := get_flight_duration_seconds(NEW.takeoff_time, NEW.landing_time);
-
-        IF old_duration > 0 THEN
-            old_bucket := get_duration_bucket(old_duration);
-            UPDATE flight_duration_buckets SET
-                flight_count = GREATEST(0, flight_count - 1),
-                updated_at = NOW()
-            WHERE bucket_name = old_bucket;
-        END IF;
-
-        IF new_duration > 0 THEN
-            new_bucket := get_duration_bucket(new_duration);
-            UPDATE flight_duration_buckets SET
-                flight_count = flight_count + 1,
-                updated_at = NOW()
-            WHERE bucket_name = new_bucket;
-        END IF;
-
-    -- Handle DELETE
-    ELSIF TG_OP = 'DELETE' THEN
-        old_duration := get_flight_duration_seconds(OLD.takeoff_time, OLD.landing_time);
-        IF old_duration > 0 THEN
-            old_bucket := get_duration_bucket(old_duration);
-            UPDATE flight_duration_buckets SET
-                flight_count = GREATEST(0, flight_count - 1),
-                updated_at = NOW()
-            WHERE bucket_name = old_bucket;
-        END IF;
-    END IF;
-
     RETURN NEW;
 END;
 $$;
@@ -1112,10 +555,10 @@ CREATE TABLE public.aprs_messages_old (
 
 
 --
--- Name: aprs_messages_p20251110; Type: TABLE; Schema: public; Owner: -
+-- Name: aprs_messages_p20251205; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.aprs_messages_p20251110 (
+CREATE TABLE public.aprs_messages_p20251205 (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     raw_message text NOT NULL,
     received_at timestamp with time zone NOT NULL,
@@ -1126,10 +569,10 @@ CREATE TABLE public.aprs_messages_p20251110 (
 
 
 --
--- Name: aprs_messages_p20251111; Type: TABLE; Schema: public; Owner: -
+-- Name: aprs_messages_p20251206; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.aprs_messages_p20251111 (
+CREATE TABLE public.aprs_messages_p20251206 (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     raw_message text NOT NULL,
     received_at timestamp with time zone NOT NULL,
@@ -1140,10 +583,10 @@ CREATE TABLE public.aprs_messages_p20251111 (
 
 
 --
--- Name: aprs_messages_p20251112; Type: TABLE; Schema: public; Owner: -
+-- Name: aprs_messages_p20251207; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.aprs_messages_p20251112 (
+CREATE TABLE public.aprs_messages_p20251207 (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     raw_message text NOT NULL,
     received_at timestamp with time zone NOT NULL,
@@ -1154,10 +597,10 @@ CREATE TABLE public.aprs_messages_p20251112 (
 
 
 --
--- Name: aprs_messages_p20251113; Type: TABLE; Schema: public; Owner: -
+-- Name: aprs_messages_p20251208; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.aprs_messages_p20251113 (
+CREATE TABLE public.aprs_messages_p20251208 (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     raw_message text NOT NULL,
     received_at timestamp with time zone NOT NULL,
@@ -1168,10 +611,10 @@ CREATE TABLE public.aprs_messages_p20251113 (
 
 
 --
--- Name: aprs_messages_p20251114; Type: TABLE; Schema: public; Owner: -
+-- Name: aprs_messages_p20251209; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.aprs_messages_p20251114 (
+CREATE TABLE public.aprs_messages_p20251209 (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     raw_message text NOT NULL,
     received_at timestamp with time zone NOT NULL,
@@ -1182,10 +625,10 @@ CREATE TABLE public.aprs_messages_p20251114 (
 
 
 --
--- Name: aprs_messages_p20251115; Type: TABLE; Schema: public; Owner: -
+-- Name: aprs_messages_p20251210; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.aprs_messages_p20251115 (
+CREATE TABLE public.aprs_messages_p20251210 (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     raw_message text NOT NULL,
     received_at timestamp with time zone NOT NULL,
@@ -1196,10 +639,10 @@ CREATE TABLE public.aprs_messages_p20251115 (
 
 
 --
--- Name: aprs_messages_p20251116; Type: TABLE; Schema: public; Owner: -
+-- Name: aprs_messages_p20251211; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.aprs_messages_p20251116 (
+CREATE TABLE public.aprs_messages_p20251211 (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     raw_message text NOT NULL,
     received_at timestamp with time zone NOT NULL,
@@ -1434,10 +877,10 @@ CREATE TABLE public.fixes_old (
 
 
 --
--- Name: fixes_p20251110; Type: TABLE; Schema: public; Owner: -
+-- Name: fixes_p20251205; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.fixes_p20251110 (
+CREATE TABLE public.fixes_p20251205 (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     source character varying(9) NOT NULL,
     aprs_type character varying(9) NOT NULL,
@@ -1473,10 +916,10 @@ CREATE TABLE public.fixes_p20251110 (
 
 
 --
--- Name: fixes_p20251111; Type: TABLE; Schema: public; Owner: -
+-- Name: fixes_p20251206; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.fixes_p20251111 (
+CREATE TABLE public.fixes_p20251206 (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     source character varying(9) NOT NULL,
     aprs_type character varying(9) NOT NULL,
@@ -1512,10 +955,10 @@ CREATE TABLE public.fixes_p20251111 (
 
 
 --
--- Name: fixes_p20251112; Type: TABLE; Schema: public; Owner: -
+-- Name: fixes_p20251207; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.fixes_p20251112 (
+CREATE TABLE public.fixes_p20251207 (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     source character varying(9) NOT NULL,
     aprs_type character varying(9) NOT NULL,
@@ -1551,10 +994,10 @@ CREATE TABLE public.fixes_p20251112 (
 
 
 --
--- Name: fixes_p20251113; Type: TABLE; Schema: public; Owner: -
+-- Name: fixes_p20251208; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.fixes_p20251113 (
+CREATE TABLE public.fixes_p20251208 (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     source character varying(9) NOT NULL,
     aprs_type character varying(9) NOT NULL,
@@ -1590,10 +1033,10 @@ CREATE TABLE public.fixes_p20251113 (
 
 
 --
--- Name: fixes_p20251114; Type: TABLE; Schema: public; Owner: -
+-- Name: fixes_p20251209; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.fixes_p20251114 (
+CREATE TABLE public.fixes_p20251209 (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     source character varying(9) NOT NULL,
     aprs_type character varying(9) NOT NULL,
@@ -1629,10 +1072,10 @@ CREATE TABLE public.fixes_p20251114 (
 
 
 --
--- Name: fixes_p20251115; Type: TABLE; Schema: public; Owner: -
+-- Name: fixes_p20251210; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.fixes_p20251115 (
+CREATE TABLE public.fixes_p20251210 (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     source character varying(9) NOT NULL,
     aprs_type character varying(9) NOT NULL,
@@ -1668,10 +1111,10 @@ CREATE TABLE public.fixes_p20251115 (
 
 
 --
--- Name: fixes_p20251116; Type: TABLE; Schema: public; Owner: -
+-- Name: fixes_p20251211; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.fixes_p20251116 (
+CREATE TABLE public.fixes_p20251211 (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     source character varying(9) NOT NULL,
     aprs_type character varying(9) NOT NULL,
@@ -2116,52 +1559,52 @@ ALTER TABLE ONLY public.aprs_messages ATTACH PARTITION public.aprs_messages_defa
 
 
 --
--- Name: aprs_messages_p20251110; Type: TABLE ATTACH; Schema: public; Owner: -
+-- Name: aprs_messages_p20251205; Type: TABLE ATTACH; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.aprs_messages ATTACH PARTITION public.aprs_messages_p20251110 FOR VALUES FROM ('2025-11-10 00:00:00+00') TO ('2025-11-11 00:00:00+00');
-
-
---
--- Name: aprs_messages_p20251111; Type: TABLE ATTACH; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.aprs_messages ATTACH PARTITION public.aprs_messages_p20251111 FOR VALUES FROM ('2025-11-11 00:00:00+00') TO ('2025-11-12 00:00:00+00');
+ALTER TABLE ONLY public.aprs_messages ATTACH PARTITION public.aprs_messages_p20251205 FOR VALUES FROM ('2025-12-05 00:00:00+00') TO ('2025-12-06 00:00:00+00');
 
 
 --
--- Name: aprs_messages_p20251112; Type: TABLE ATTACH; Schema: public; Owner: -
+-- Name: aprs_messages_p20251206; Type: TABLE ATTACH; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.aprs_messages ATTACH PARTITION public.aprs_messages_p20251112 FOR VALUES FROM ('2025-11-12 00:00:00+00') TO ('2025-11-13 00:00:00+00');
-
-
---
--- Name: aprs_messages_p20251113; Type: TABLE ATTACH; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.aprs_messages ATTACH PARTITION public.aprs_messages_p20251113 FOR VALUES FROM ('2025-11-13 00:00:00+00') TO ('2025-11-14 00:00:00+00');
+ALTER TABLE ONLY public.aprs_messages ATTACH PARTITION public.aprs_messages_p20251206 FOR VALUES FROM ('2025-12-06 00:00:00+00') TO ('2025-12-07 00:00:00+00');
 
 
 --
--- Name: aprs_messages_p20251114; Type: TABLE ATTACH; Schema: public; Owner: -
+-- Name: aprs_messages_p20251207; Type: TABLE ATTACH; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.aprs_messages ATTACH PARTITION public.aprs_messages_p20251114 FOR VALUES FROM ('2025-11-14 00:00:00+00') TO ('2025-11-15 00:00:00+00');
-
-
---
--- Name: aprs_messages_p20251115; Type: TABLE ATTACH; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.aprs_messages ATTACH PARTITION public.aprs_messages_p20251115 FOR VALUES FROM ('2025-11-15 00:00:00+00') TO ('2025-11-16 00:00:00+00');
+ALTER TABLE ONLY public.aprs_messages ATTACH PARTITION public.aprs_messages_p20251207 FOR VALUES FROM ('2025-12-07 00:00:00+00') TO ('2025-12-08 00:00:00+00');
 
 
 --
--- Name: aprs_messages_p20251116; Type: TABLE ATTACH; Schema: public; Owner: -
+-- Name: aprs_messages_p20251208; Type: TABLE ATTACH; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.aprs_messages ATTACH PARTITION public.aprs_messages_p20251116 FOR VALUES FROM ('2025-11-16 00:00:00+00') TO ('2025-11-17 00:00:00+00');
+ALTER TABLE ONLY public.aprs_messages ATTACH PARTITION public.aprs_messages_p20251208 FOR VALUES FROM ('2025-12-08 00:00:00+00') TO ('2025-12-09 00:00:00+00');
+
+
+--
+-- Name: aprs_messages_p20251209; Type: TABLE ATTACH; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.aprs_messages ATTACH PARTITION public.aprs_messages_p20251209 FOR VALUES FROM ('2025-12-09 00:00:00+00') TO ('2025-12-10 00:00:00+00');
+
+
+--
+-- Name: aprs_messages_p20251210; Type: TABLE ATTACH; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.aprs_messages ATTACH PARTITION public.aprs_messages_p20251210 FOR VALUES FROM ('2025-12-10 00:00:00+00') TO ('2025-12-11 00:00:00+00');
+
+
+--
+-- Name: aprs_messages_p20251211; Type: TABLE ATTACH; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.aprs_messages ATTACH PARTITION public.aprs_messages_p20251211 FOR VALUES FROM ('2025-12-11 00:00:00+00') TO ('2025-12-12 00:00:00+00');
 
 
 --
@@ -2172,52 +1615,52 @@ ALTER TABLE ONLY public.fixes ATTACH PARTITION public.fixes_default DEFAULT;
 
 
 --
--- Name: fixes_p20251110; Type: TABLE ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251205; Type: TABLE ATTACH; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.fixes ATTACH PARTITION public.fixes_p20251110 FOR VALUES FROM ('2025-11-10 00:00:00+00') TO ('2025-11-11 00:00:00+00');
-
-
---
--- Name: fixes_p20251111; Type: TABLE ATTACH; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.fixes ATTACH PARTITION public.fixes_p20251111 FOR VALUES FROM ('2025-11-11 00:00:00+00') TO ('2025-11-12 00:00:00+00');
+ALTER TABLE ONLY public.fixes ATTACH PARTITION public.fixes_p20251205 FOR VALUES FROM ('2025-12-05 00:00:00+00') TO ('2025-12-06 00:00:00+00');
 
 
 --
--- Name: fixes_p20251112; Type: TABLE ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251206; Type: TABLE ATTACH; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.fixes ATTACH PARTITION public.fixes_p20251112 FOR VALUES FROM ('2025-11-12 00:00:00+00') TO ('2025-11-13 00:00:00+00');
-
-
---
--- Name: fixes_p20251113; Type: TABLE ATTACH; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.fixes ATTACH PARTITION public.fixes_p20251113 FOR VALUES FROM ('2025-11-13 00:00:00+00') TO ('2025-11-14 00:00:00+00');
+ALTER TABLE ONLY public.fixes ATTACH PARTITION public.fixes_p20251206 FOR VALUES FROM ('2025-12-06 00:00:00+00') TO ('2025-12-07 00:00:00+00');
 
 
 --
--- Name: fixes_p20251114; Type: TABLE ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251207; Type: TABLE ATTACH; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.fixes ATTACH PARTITION public.fixes_p20251114 FOR VALUES FROM ('2025-11-14 00:00:00+00') TO ('2025-11-15 00:00:00+00');
-
-
---
--- Name: fixes_p20251115; Type: TABLE ATTACH; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.fixes ATTACH PARTITION public.fixes_p20251115 FOR VALUES FROM ('2025-11-15 00:00:00+00') TO ('2025-11-16 00:00:00+00');
+ALTER TABLE ONLY public.fixes ATTACH PARTITION public.fixes_p20251207 FOR VALUES FROM ('2025-12-07 00:00:00+00') TO ('2025-12-08 00:00:00+00');
 
 
 --
--- Name: fixes_p20251116; Type: TABLE ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251208; Type: TABLE ATTACH; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.fixes ATTACH PARTITION public.fixes_p20251116 FOR VALUES FROM ('2025-11-16 00:00:00+00') TO ('2025-11-17 00:00:00+00');
+ALTER TABLE ONLY public.fixes ATTACH PARTITION public.fixes_p20251208 FOR VALUES FROM ('2025-12-08 00:00:00+00') TO ('2025-12-09 00:00:00+00');
+
+
+--
+-- Name: fixes_p20251209; Type: TABLE ATTACH; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.fixes ATTACH PARTITION public.fixes_p20251209 FOR VALUES FROM ('2025-12-09 00:00:00+00') TO ('2025-12-10 00:00:00+00');
+
+
+--
+-- Name: fixes_p20251210; Type: TABLE ATTACH; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.fixes ATTACH PARTITION public.fixes_p20251210 FOR VALUES FROM ('2025-12-10 00:00:00+00') TO ('2025-12-11 00:00:00+00');
+
+
+--
+-- Name: fixes_p20251211; Type: TABLE ATTACH; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.fixes ATTACH PARTITION public.fixes_p20251211 FOR VALUES FROM ('2025-12-11 00:00:00+00') TO ('2025-12-12 00:00:00+00');
 
 
 --
@@ -2315,59 +1758,59 @@ ALTER TABLE ONLY public.aprs_messages_default
 
 
 --
--- Name: aprs_messages_p20251110 aprs_messages_p20251110_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: aprs_messages_p20251205 aprs_messages_p20251205_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.aprs_messages_p20251110
-    ADD CONSTRAINT aprs_messages_p20251110_pkey PRIMARY KEY (id, received_at);
-
-
---
--- Name: aprs_messages_p20251111 aprs_messages_p20251111_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.aprs_messages_p20251111
-    ADD CONSTRAINT aprs_messages_p20251111_pkey PRIMARY KEY (id, received_at);
+ALTER TABLE ONLY public.aprs_messages_p20251205
+    ADD CONSTRAINT aprs_messages_p20251205_pkey PRIMARY KEY (id, received_at);
 
 
 --
--- Name: aprs_messages_p20251112 aprs_messages_p20251112_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: aprs_messages_p20251206 aprs_messages_p20251206_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.aprs_messages_p20251112
-    ADD CONSTRAINT aprs_messages_p20251112_pkey PRIMARY KEY (id, received_at);
-
-
---
--- Name: aprs_messages_p20251113 aprs_messages_p20251113_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.aprs_messages_p20251113
-    ADD CONSTRAINT aprs_messages_p20251113_pkey PRIMARY KEY (id, received_at);
+ALTER TABLE ONLY public.aprs_messages_p20251206
+    ADD CONSTRAINT aprs_messages_p20251206_pkey PRIMARY KEY (id, received_at);
 
 
 --
--- Name: aprs_messages_p20251114 aprs_messages_p20251114_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: aprs_messages_p20251207 aprs_messages_p20251207_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.aprs_messages_p20251114
-    ADD CONSTRAINT aprs_messages_p20251114_pkey PRIMARY KEY (id, received_at);
-
-
---
--- Name: aprs_messages_p20251115 aprs_messages_p20251115_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.aprs_messages_p20251115
-    ADD CONSTRAINT aprs_messages_p20251115_pkey PRIMARY KEY (id, received_at);
+ALTER TABLE ONLY public.aprs_messages_p20251207
+    ADD CONSTRAINT aprs_messages_p20251207_pkey PRIMARY KEY (id, received_at);
 
 
 --
--- Name: aprs_messages_p20251116 aprs_messages_p20251116_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: aprs_messages_p20251208 aprs_messages_p20251208_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.aprs_messages_p20251116
-    ADD CONSTRAINT aprs_messages_p20251116_pkey PRIMARY KEY (id, received_at);
+ALTER TABLE ONLY public.aprs_messages_p20251208
+    ADD CONSTRAINT aprs_messages_p20251208_pkey PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: aprs_messages_p20251209 aprs_messages_p20251209_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.aprs_messages_p20251209
+    ADD CONSTRAINT aprs_messages_p20251209_pkey PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: aprs_messages_p20251210 aprs_messages_p20251210_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.aprs_messages_p20251210
+    ADD CONSTRAINT aprs_messages_p20251210_pkey PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: aprs_messages_p20251211 aprs_messages_p20251211_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.aprs_messages_p20251211
+    ADD CONSTRAINT aprs_messages_p20251211_pkey PRIMARY KEY (id, received_at);
 
 
 --
@@ -2459,59 +1902,59 @@ ALTER TABLE ONLY public.fixes_default
 
 
 --
--- Name: fixes_p20251110 fixes_p20251110_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: fixes_p20251205 fixes_p20251205_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.fixes_p20251110
-    ADD CONSTRAINT fixes_p20251110_pkey PRIMARY KEY (id, received_at);
-
-
---
--- Name: fixes_p20251111 fixes_p20251111_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.fixes_p20251111
-    ADD CONSTRAINT fixes_p20251111_pkey PRIMARY KEY (id, received_at);
+ALTER TABLE ONLY public.fixes_p20251205
+    ADD CONSTRAINT fixes_p20251205_pkey PRIMARY KEY (id, received_at);
 
 
 --
--- Name: fixes_p20251112 fixes_p20251112_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: fixes_p20251206 fixes_p20251206_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.fixes_p20251112
-    ADD CONSTRAINT fixes_p20251112_pkey PRIMARY KEY (id, received_at);
-
-
---
--- Name: fixes_p20251113 fixes_p20251113_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.fixes_p20251113
-    ADD CONSTRAINT fixes_p20251113_pkey PRIMARY KEY (id, received_at);
+ALTER TABLE ONLY public.fixes_p20251206
+    ADD CONSTRAINT fixes_p20251206_pkey PRIMARY KEY (id, received_at);
 
 
 --
--- Name: fixes_p20251114 fixes_p20251114_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: fixes_p20251207 fixes_p20251207_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.fixes_p20251114
-    ADD CONSTRAINT fixes_p20251114_pkey PRIMARY KEY (id, received_at);
-
-
---
--- Name: fixes_p20251115 fixes_p20251115_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.fixes_p20251115
-    ADD CONSTRAINT fixes_p20251115_pkey PRIMARY KEY (id, received_at);
+ALTER TABLE ONLY public.fixes_p20251207
+    ADD CONSTRAINT fixes_p20251207_pkey PRIMARY KEY (id, received_at);
 
 
 --
--- Name: fixes_p20251116 fixes_p20251116_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: fixes_p20251208 fixes_p20251208_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.fixes_p20251116
-    ADD CONSTRAINT fixes_p20251116_pkey PRIMARY KEY (id, received_at);
+ALTER TABLE ONLY public.fixes_p20251208
+    ADD CONSTRAINT fixes_p20251208_pkey PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: fixes_p20251209 fixes_p20251209_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.fixes_p20251209
+    ADD CONSTRAINT fixes_p20251209_pkey PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: fixes_p20251210 fixes_p20251210_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.fixes_p20251210
+    ADD CONSTRAINT fixes_p20251210_pkey PRIMARY KEY (id, received_at);
+
+
+--
+-- Name: fixes_p20251211 fixes_p20251211_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.fixes_p20251211
+    ADD CONSTRAINT fixes_p20251211_pkey PRIMARY KEY (id, received_at);
 
 
 --
@@ -2896,248 +2339,248 @@ CREATE INDEX fixes_location_idx ON public.fixes_old USING gist (location);
 
 
 --
--- Name: fixes_p20251110_device_id_received_at_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: fixes_p20251205_device_id_received_at_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX fixes_p20251110_device_id_received_at_idx ON public.fixes_p20251110 USING btree (device_id, received_at DESC);
+CREATE INDEX fixes_p20251205_device_id_received_at_idx ON public.fixes_p20251205 USING btree (device_id, received_at DESC);
 
 
 --
--- Name: fixes_p20251110_flight_id_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: fixes_p20251205_flight_id_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX fixes_p20251110_flight_id_idx ON public.fixes_p20251110 USING btree (flight_id);
+CREATE INDEX fixes_p20251205_flight_id_idx ON public.fixes_p20251205 USING btree (flight_id);
 
 
 --
--- Name: fixes_p20251110_location_geom_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: fixes_p20251205_location_geom_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX fixes_p20251110_location_geom_idx ON public.fixes_p20251110 USING gist (location_geom);
+CREATE INDEX fixes_p20251205_location_geom_idx ON public.fixes_p20251205 USING gist (location_geom);
 
 
 --
--- Name: fixes_p20251110_location_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: fixes_p20251205_location_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX fixes_p20251110_location_idx ON public.fixes_p20251110 USING gist (location);
+CREATE INDEX fixes_p20251205_location_idx ON public.fixes_p20251205 USING gist (location);
 
 
 --
--- Name: fixes_p20251110_source_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: fixes_p20251205_source_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX fixes_p20251110_source_idx ON public.fixes_p20251110 USING btree (source);
+CREATE INDEX fixes_p20251205_source_idx ON public.fixes_p20251205 USING btree (source);
 
 
 --
--- Name: fixes_p20251111_device_id_received_at_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: fixes_p20251206_device_id_received_at_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX fixes_p20251111_device_id_received_at_idx ON public.fixes_p20251111 USING btree (device_id, received_at DESC);
+CREATE INDEX fixes_p20251206_device_id_received_at_idx ON public.fixes_p20251206 USING btree (device_id, received_at DESC);
 
 
 --
--- Name: fixes_p20251111_flight_id_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: fixes_p20251206_flight_id_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX fixes_p20251111_flight_id_idx ON public.fixes_p20251111 USING btree (flight_id);
+CREATE INDEX fixes_p20251206_flight_id_idx ON public.fixes_p20251206 USING btree (flight_id);
 
 
 --
--- Name: fixes_p20251111_location_geom_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: fixes_p20251206_location_geom_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX fixes_p20251111_location_geom_idx ON public.fixes_p20251111 USING gist (location_geom);
+CREATE INDEX fixes_p20251206_location_geom_idx ON public.fixes_p20251206 USING gist (location_geom);
 
 
 --
--- Name: fixes_p20251111_location_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: fixes_p20251206_location_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX fixes_p20251111_location_idx ON public.fixes_p20251111 USING gist (location);
+CREATE INDEX fixes_p20251206_location_idx ON public.fixes_p20251206 USING gist (location);
 
 
 --
--- Name: fixes_p20251111_source_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: fixes_p20251206_source_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX fixes_p20251111_source_idx ON public.fixes_p20251111 USING btree (source);
+CREATE INDEX fixes_p20251206_source_idx ON public.fixes_p20251206 USING btree (source);
 
 
 --
--- Name: fixes_p20251112_device_id_received_at_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: fixes_p20251207_device_id_received_at_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX fixes_p20251112_device_id_received_at_idx ON public.fixes_p20251112 USING btree (device_id, received_at DESC);
+CREATE INDEX fixes_p20251207_device_id_received_at_idx ON public.fixes_p20251207 USING btree (device_id, received_at DESC);
 
 
 --
--- Name: fixes_p20251112_flight_id_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: fixes_p20251207_flight_id_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX fixes_p20251112_flight_id_idx ON public.fixes_p20251112 USING btree (flight_id);
+CREATE INDEX fixes_p20251207_flight_id_idx ON public.fixes_p20251207 USING btree (flight_id);
 
 
 --
--- Name: fixes_p20251112_location_geom_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: fixes_p20251207_location_geom_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX fixes_p20251112_location_geom_idx ON public.fixes_p20251112 USING gist (location_geom);
+CREATE INDEX fixes_p20251207_location_geom_idx ON public.fixes_p20251207 USING gist (location_geom);
 
 
 --
--- Name: fixes_p20251112_location_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: fixes_p20251207_location_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX fixes_p20251112_location_idx ON public.fixes_p20251112 USING gist (location);
+CREATE INDEX fixes_p20251207_location_idx ON public.fixes_p20251207 USING gist (location);
 
 
 --
--- Name: fixes_p20251112_source_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: fixes_p20251207_source_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX fixes_p20251112_source_idx ON public.fixes_p20251112 USING btree (source);
+CREATE INDEX fixes_p20251207_source_idx ON public.fixes_p20251207 USING btree (source);
 
 
 --
--- Name: fixes_p20251113_device_id_received_at_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: fixes_p20251208_device_id_received_at_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX fixes_p20251113_device_id_received_at_idx ON public.fixes_p20251113 USING btree (device_id, received_at DESC);
+CREATE INDEX fixes_p20251208_device_id_received_at_idx ON public.fixes_p20251208 USING btree (device_id, received_at DESC);
 
 
 --
--- Name: fixes_p20251113_flight_id_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: fixes_p20251208_flight_id_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX fixes_p20251113_flight_id_idx ON public.fixes_p20251113 USING btree (flight_id);
+CREATE INDEX fixes_p20251208_flight_id_idx ON public.fixes_p20251208 USING btree (flight_id);
 
 
 --
--- Name: fixes_p20251113_location_geom_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: fixes_p20251208_location_geom_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX fixes_p20251113_location_geom_idx ON public.fixes_p20251113 USING gist (location_geom);
+CREATE INDEX fixes_p20251208_location_geom_idx ON public.fixes_p20251208 USING gist (location_geom);
 
 
 --
--- Name: fixes_p20251113_location_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: fixes_p20251208_location_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX fixes_p20251113_location_idx ON public.fixes_p20251113 USING gist (location);
+CREATE INDEX fixes_p20251208_location_idx ON public.fixes_p20251208 USING gist (location);
 
 
 --
--- Name: fixes_p20251113_source_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: fixes_p20251208_source_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX fixes_p20251113_source_idx ON public.fixes_p20251113 USING btree (source);
+CREATE INDEX fixes_p20251208_source_idx ON public.fixes_p20251208 USING btree (source);
 
 
 --
--- Name: fixes_p20251114_device_id_received_at_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: fixes_p20251209_device_id_received_at_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX fixes_p20251114_device_id_received_at_idx ON public.fixes_p20251114 USING btree (device_id, received_at DESC);
+CREATE INDEX fixes_p20251209_device_id_received_at_idx ON public.fixes_p20251209 USING btree (device_id, received_at DESC);
 
 
 --
--- Name: fixes_p20251114_flight_id_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: fixes_p20251209_flight_id_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX fixes_p20251114_flight_id_idx ON public.fixes_p20251114 USING btree (flight_id);
+CREATE INDEX fixes_p20251209_flight_id_idx ON public.fixes_p20251209 USING btree (flight_id);
 
 
 --
--- Name: fixes_p20251114_location_geom_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: fixes_p20251209_location_geom_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX fixes_p20251114_location_geom_idx ON public.fixes_p20251114 USING gist (location_geom);
+CREATE INDEX fixes_p20251209_location_geom_idx ON public.fixes_p20251209 USING gist (location_geom);
 
 
 --
--- Name: fixes_p20251114_location_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: fixes_p20251209_location_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX fixes_p20251114_location_idx ON public.fixes_p20251114 USING gist (location);
+CREATE INDEX fixes_p20251209_location_idx ON public.fixes_p20251209 USING gist (location);
 
 
 --
--- Name: fixes_p20251114_source_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: fixes_p20251209_source_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX fixes_p20251114_source_idx ON public.fixes_p20251114 USING btree (source);
+CREATE INDEX fixes_p20251209_source_idx ON public.fixes_p20251209 USING btree (source);
 
 
 --
--- Name: fixes_p20251115_device_id_received_at_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: fixes_p20251210_device_id_received_at_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX fixes_p20251115_device_id_received_at_idx ON public.fixes_p20251115 USING btree (device_id, received_at DESC);
+CREATE INDEX fixes_p20251210_device_id_received_at_idx ON public.fixes_p20251210 USING btree (device_id, received_at DESC);
 
 
 --
--- Name: fixes_p20251115_flight_id_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: fixes_p20251210_flight_id_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX fixes_p20251115_flight_id_idx ON public.fixes_p20251115 USING btree (flight_id);
+CREATE INDEX fixes_p20251210_flight_id_idx ON public.fixes_p20251210 USING btree (flight_id);
 
 
 --
--- Name: fixes_p20251115_location_geom_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: fixes_p20251210_location_geom_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX fixes_p20251115_location_geom_idx ON public.fixes_p20251115 USING gist (location_geom);
+CREATE INDEX fixes_p20251210_location_geom_idx ON public.fixes_p20251210 USING gist (location_geom);
 
 
 --
--- Name: fixes_p20251115_location_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: fixes_p20251210_location_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX fixes_p20251115_location_idx ON public.fixes_p20251115 USING gist (location);
+CREATE INDEX fixes_p20251210_location_idx ON public.fixes_p20251210 USING gist (location);
 
 
 --
--- Name: fixes_p20251115_source_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: fixes_p20251210_source_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX fixes_p20251115_source_idx ON public.fixes_p20251115 USING btree (source);
+CREATE INDEX fixes_p20251210_source_idx ON public.fixes_p20251210 USING btree (source);
 
 
 --
--- Name: fixes_p20251116_device_id_received_at_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: fixes_p20251211_device_id_received_at_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX fixes_p20251116_device_id_received_at_idx ON public.fixes_p20251116 USING btree (device_id, received_at DESC);
+CREATE INDEX fixes_p20251211_device_id_received_at_idx ON public.fixes_p20251211 USING btree (device_id, received_at DESC);
 
 
 --
--- Name: fixes_p20251116_flight_id_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: fixes_p20251211_flight_id_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX fixes_p20251116_flight_id_idx ON public.fixes_p20251116 USING btree (flight_id);
+CREATE INDEX fixes_p20251211_flight_id_idx ON public.fixes_p20251211 USING btree (flight_id);
 
 
 --
--- Name: fixes_p20251116_location_geom_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: fixes_p20251211_location_geom_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX fixes_p20251116_location_geom_idx ON public.fixes_p20251116 USING gist (location_geom);
+CREATE INDEX fixes_p20251211_location_geom_idx ON public.fixes_p20251211 USING gist (location_geom);
 
 
 --
--- Name: fixes_p20251116_location_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: fixes_p20251211_location_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX fixes_p20251116_location_idx ON public.fixes_p20251116 USING gist (location);
+CREATE INDEX fixes_p20251211_location_idx ON public.fixes_p20251211 USING gist (location);
 
 
 --
--- Name: fixes_p20251116_source_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: fixes_p20251211_source_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX fixes_p20251116_source_idx ON public.fixes_p20251116 USING btree (source);
+CREATE INDEX fixes_p20251211_source_idx ON public.fixes_p20251211 USING btree (source);
 
 
 --
@@ -3533,6 +2976,13 @@ CREATE INDEX idx_flight_analytics_hourly_hour_desc ON public.flight_analytics_ho
 
 
 --
+-- Name: idx_flight_duration_buckets_order; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_flight_duration_buckets_order ON public.flight_duration_buckets USING btree (bucket_order);
+
+
+--
 -- Name: idx_flight_pilots_pilot_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3799,52 +3249,52 @@ ALTER INDEX public.aprs_messages_pkey1 ATTACH PARTITION public.aprs_messages_def
 
 
 --
--- Name: aprs_messages_p20251110_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: aprs_messages_p20251205_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.aprs_messages_pkey1 ATTACH PARTITION public.aprs_messages_p20251110_pkey;
-
-
---
--- Name: aprs_messages_p20251111_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
---
-
-ALTER INDEX public.aprs_messages_pkey1 ATTACH PARTITION public.aprs_messages_p20251111_pkey;
+ALTER INDEX public.aprs_messages_pkey1 ATTACH PARTITION public.aprs_messages_p20251205_pkey;
 
 
 --
--- Name: aprs_messages_p20251112_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: aprs_messages_p20251206_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.aprs_messages_pkey1 ATTACH PARTITION public.aprs_messages_p20251112_pkey;
-
-
---
--- Name: aprs_messages_p20251113_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
---
-
-ALTER INDEX public.aprs_messages_pkey1 ATTACH PARTITION public.aprs_messages_p20251113_pkey;
+ALTER INDEX public.aprs_messages_pkey1 ATTACH PARTITION public.aprs_messages_p20251206_pkey;
 
 
 --
--- Name: aprs_messages_p20251114_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: aprs_messages_p20251207_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.aprs_messages_pkey1 ATTACH PARTITION public.aprs_messages_p20251114_pkey;
-
-
---
--- Name: aprs_messages_p20251115_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
---
-
-ALTER INDEX public.aprs_messages_pkey1 ATTACH PARTITION public.aprs_messages_p20251115_pkey;
+ALTER INDEX public.aprs_messages_pkey1 ATTACH PARTITION public.aprs_messages_p20251207_pkey;
 
 
 --
--- Name: aprs_messages_p20251116_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: aprs_messages_p20251208_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.aprs_messages_pkey1 ATTACH PARTITION public.aprs_messages_p20251116_pkey;
+ALTER INDEX public.aprs_messages_pkey1 ATTACH PARTITION public.aprs_messages_p20251208_pkey;
+
+
+--
+-- Name: aprs_messages_p20251209_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.aprs_messages_pkey1 ATTACH PARTITION public.aprs_messages_p20251209_pkey;
+
+
+--
+-- Name: aprs_messages_p20251210_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.aprs_messages_pkey1 ATTACH PARTITION public.aprs_messages_p20251210_pkey;
+
+
+--
+-- Name: aprs_messages_p20251211_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
+--
+
+ALTER INDEX public.aprs_messages_pkey1 ATTACH PARTITION public.aprs_messages_p20251211_pkey;
 
 
 --
@@ -3890,297 +3340,297 @@ ALTER INDEX public.idx_fixes_source ATTACH PARTITION public.fixes_default_source
 
 
 --
--- Name: fixes_p20251110_device_id_received_at_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251205_device_id_received_at_idx; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.idx_fixes_device_received_at ATTACH PARTITION public.fixes_p20251110_device_id_received_at_idx;
+ALTER INDEX public.idx_fixes_device_received_at ATTACH PARTITION public.fixes_p20251205_device_id_received_at_idx;
 
 
 --
--- Name: fixes_p20251110_flight_id_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251205_flight_id_idx; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.fixes_flight_id_idx ATTACH PARTITION public.fixes_p20251110_flight_id_idx;
+ALTER INDEX public.fixes_flight_id_idx ATTACH PARTITION public.fixes_p20251205_flight_id_idx;
 
 
 --
--- Name: fixes_p20251110_location_geom_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251205_location_geom_idx; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.idx_fixes_location_geom ATTACH PARTITION public.fixes_p20251110_location_geom_idx;
+ALTER INDEX public.idx_fixes_location_geom ATTACH PARTITION public.fixes_p20251205_location_geom_idx;
 
 
 --
--- Name: fixes_p20251110_location_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251205_location_idx; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.idx_fixes_location ATTACH PARTITION public.fixes_p20251110_location_idx;
+ALTER INDEX public.idx_fixes_location ATTACH PARTITION public.fixes_p20251205_location_idx;
 
 
 --
--- Name: fixes_p20251110_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251205_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.fixes_pkey1 ATTACH PARTITION public.fixes_p20251110_pkey;
+ALTER INDEX public.fixes_pkey1 ATTACH PARTITION public.fixes_p20251205_pkey;
 
 
 --
--- Name: fixes_p20251110_source_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251205_source_idx; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.idx_fixes_source ATTACH PARTITION public.fixes_p20251110_source_idx;
+ALTER INDEX public.idx_fixes_source ATTACH PARTITION public.fixes_p20251205_source_idx;
 
 
 --
--- Name: fixes_p20251111_device_id_received_at_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251206_device_id_received_at_idx; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.idx_fixes_device_received_at ATTACH PARTITION public.fixes_p20251111_device_id_received_at_idx;
+ALTER INDEX public.idx_fixes_device_received_at ATTACH PARTITION public.fixes_p20251206_device_id_received_at_idx;
 
 
 --
--- Name: fixes_p20251111_flight_id_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251206_flight_id_idx; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.fixes_flight_id_idx ATTACH PARTITION public.fixes_p20251111_flight_id_idx;
+ALTER INDEX public.fixes_flight_id_idx ATTACH PARTITION public.fixes_p20251206_flight_id_idx;
 
 
 --
--- Name: fixes_p20251111_location_geom_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251206_location_geom_idx; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.idx_fixes_location_geom ATTACH PARTITION public.fixes_p20251111_location_geom_idx;
+ALTER INDEX public.idx_fixes_location_geom ATTACH PARTITION public.fixes_p20251206_location_geom_idx;
 
 
 --
--- Name: fixes_p20251111_location_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251206_location_idx; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.idx_fixes_location ATTACH PARTITION public.fixes_p20251111_location_idx;
+ALTER INDEX public.idx_fixes_location ATTACH PARTITION public.fixes_p20251206_location_idx;
 
 
 --
--- Name: fixes_p20251111_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251206_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.fixes_pkey1 ATTACH PARTITION public.fixes_p20251111_pkey;
+ALTER INDEX public.fixes_pkey1 ATTACH PARTITION public.fixes_p20251206_pkey;
 
 
 --
--- Name: fixes_p20251111_source_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251206_source_idx; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.idx_fixes_source ATTACH PARTITION public.fixes_p20251111_source_idx;
+ALTER INDEX public.idx_fixes_source ATTACH PARTITION public.fixes_p20251206_source_idx;
 
 
 --
--- Name: fixes_p20251112_device_id_received_at_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251207_device_id_received_at_idx; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.idx_fixes_device_received_at ATTACH PARTITION public.fixes_p20251112_device_id_received_at_idx;
+ALTER INDEX public.idx_fixes_device_received_at ATTACH PARTITION public.fixes_p20251207_device_id_received_at_idx;
 
 
 --
--- Name: fixes_p20251112_flight_id_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251207_flight_id_idx; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.fixes_flight_id_idx ATTACH PARTITION public.fixes_p20251112_flight_id_idx;
+ALTER INDEX public.fixes_flight_id_idx ATTACH PARTITION public.fixes_p20251207_flight_id_idx;
 
 
 --
--- Name: fixes_p20251112_location_geom_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251207_location_geom_idx; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.idx_fixes_location_geom ATTACH PARTITION public.fixes_p20251112_location_geom_idx;
+ALTER INDEX public.idx_fixes_location_geom ATTACH PARTITION public.fixes_p20251207_location_geom_idx;
 
 
 --
--- Name: fixes_p20251112_location_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251207_location_idx; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.idx_fixes_location ATTACH PARTITION public.fixes_p20251112_location_idx;
+ALTER INDEX public.idx_fixes_location ATTACH PARTITION public.fixes_p20251207_location_idx;
 
 
 --
--- Name: fixes_p20251112_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251207_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.fixes_pkey1 ATTACH PARTITION public.fixes_p20251112_pkey;
+ALTER INDEX public.fixes_pkey1 ATTACH PARTITION public.fixes_p20251207_pkey;
 
 
 --
--- Name: fixes_p20251112_source_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251207_source_idx; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.idx_fixes_source ATTACH PARTITION public.fixes_p20251112_source_idx;
+ALTER INDEX public.idx_fixes_source ATTACH PARTITION public.fixes_p20251207_source_idx;
 
 
 --
--- Name: fixes_p20251113_device_id_received_at_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251208_device_id_received_at_idx; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.idx_fixes_device_received_at ATTACH PARTITION public.fixes_p20251113_device_id_received_at_idx;
+ALTER INDEX public.idx_fixes_device_received_at ATTACH PARTITION public.fixes_p20251208_device_id_received_at_idx;
 
 
 --
--- Name: fixes_p20251113_flight_id_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251208_flight_id_idx; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.fixes_flight_id_idx ATTACH PARTITION public.fixes_p20251113_flight_id_idx;
+ALTER INDEX public.fixes_flight_id_idx ATTACH PARTITION public.fixes_p20251208_flight_id_idx;
 
 
 --
--- Name: fixes_p20251113_location_geom_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251208_location_geom_idx; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.idx_fixes_location_geom ATTACH PARTITION public.fixes_p20251113_location_geom_idx;
+ALTER INDEX public.idx_fixes_location_geom ATTACH PARTITION public.fixes_p20251208_location_geom_idx;
 
 
 --
--- Name: fixes_p20251113_location_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251208_location_idx; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.idx_fixes_location ATTACH PARTITION public.fixes_p20251113_location_idx;
+ALTER INDEX public.idx_fixes_location ATTACH PARTITION public.fixes_p20251208_location_idx;
 
 
 --
--- Name: fixes_p20251113_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251208_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.fixes_pkey1 ATTACH PARTITION public.fixes_p20251113_pkey;
+ALTER INDEX public.fixes_pkey1 ATTACH PARTITION public.fixes_p20251208_pkey;
 
 
 --
--- Name: fixes_p20251113_source_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251208_source_idx; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.idx_fixes_source ATTACH PARTITION public.fixes_p20251113_source_idx;
+ALTER INDEX public.idx_fixes_source ATTACH PARTITION public.fixes_p20251208_source_idx;
 
 
 --
--- Name: fixes_p20251114_device_id_received_at_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251209_device_id_received_at_idx; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.idx_fixes_device_received_at ATTACH PARTITION public.fixes_p20251114_device_id_received_at_idx;
+ALTER INDEX public.idx_fixes_device_received_at ATTACH PARTITION public.fixes_p20251209_device_id_received_at_idx;
 
 
 --
--- Name: fixes_p20251114_flight_id_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251209_flight_id_idx; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.fixes_flight_id_idx ATTACH PARTITION public.fixes_p20251114_flight_id_idx;
+ALTER INDEX public.fixes_flight_id_idx ATTACH PARTITION public.fixes_p20251209_flight_id_idx;
 
 
 --
--- Name: fixes_p20251114_location_geom_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251209_location_geom_idx; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.idx_fixes_location_geom ATTACH PARTITION public.fixes_p20251114_location_geom_idx;
+ALTER INDEX public.idx_fixes_location_geom ATTACH PARTITION public.fixes_p20251209_location_geom_idx;
 
 
 --
--- Name: fixes_p20251114_location_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251209_location_idx; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.idx_fixes_location ATTACH PARTITION public.fixes_p20251114_location_idx;
+ALTER INDEX public.idx_fixes_location ATTACH PARTITION public.fixes_p20251209_location_idx;
 
 
 --
--- Name: fixes_p20251114_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251209_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.fixes_pkey1 ATTACH PARTITION public.fixes_p20251114_pkey;
+ALTER INDEX public.fixes_pkey1 ATTACH PARTITION public.fixes_p20251209_pkey;
 
 
 --
--- Name: fixes_p20251114_source_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251209_source_idx; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.idx_fixes_source ATTACH PARTITION public.fixes_p20251114_source_idx;
+ALTER INDEX public.idx_fixes_source ATTACH PARTITION public.fixes_p20251209_source_idx;
 
 
 --
--- Name: fixes_p20251115_device_id_received_at_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251210_device_id_received_at_idx; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.idx_fixes_device_received_at ATTACH PARTITION public.fixes_p20251115_device_id_received_at_idx;
+ALTER INDEX public.idx_fixes_device_received_at ATTACH PARTITION public.fixes_p20251210_device_id_received_at_idx;
 
 
 --
--- Name: fixes_p20251115_flight_id_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251210_flight_id_idx; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.fixes_flight_id_idx ATTACH PARTITION public.fixes_p20251115_flight_id_idx;
+ALTER INDEX public.fixes_flight_id_idx ATTACH PARTITION public.fixes_p20251210_flight_id_idx;
 
 
 --
--- Name: fixes_p20251115_location_geom_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251210_location_geom_idx; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.idx_fixes_location_geom ATTACH PARTITION public.fixes_p20251115_location_geom_idx;
+ALTER INDEX public.idx_fixes_location_geom ATTACH PARTITION public.fixes_p20251210_location_geom_idx;
 
 
 --
--- Name: fixes_p20251115_location_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251210_location_idx; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.idx_fixes_location ATTACH PARTITION public.fixes_p20251115_location_idx;
+ALTER INDEX public.idx_fixes_location ATTACH PARTITION public.fixes_p20251210_location_idx;
 
 
 --
--- Name: fixes_p20251115_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251210_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.fixes_pkey1 ATTACH PARTITION public.fixes_p20251115_pkey;
+ALTER INDEX public.fixes_pkey1 ATTACH PARTITION public.fixes_p20251210_pkey;
 
 
 --
--- Name: fixes_p20251115_source_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251210_source_idx; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.idx_fixes_source ATTACH PARTITION public.fixes_p20251115_source_idx;
+ALTER INDEX public.idx_fixes_source ATTACH PARTITION public.fixes_p20251210_source_idx;
 
 
 --
--- Name: fixes_p20251116_device_id_received_at_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251211_device_id_received_at_idx; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.idx_fixes_device_received_at ATTACH PARTITION public.fixes_p20251116_device_id_received_at_idx;
+ALTER INDEX public.idx_fixes_device_received_at ATTACH PARTITION public.fixes_p20251211_device_id_received_at_idx;
 
 
 --
--- Name: fixes_p20251116_flight_id_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251211_flight_id_idx; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.fixes_flight_id_idx ATTACH PARTITION public.fixes_p20251116_flight_id_idx;
+ALTER INDEX public.fixes_flight_id_idx ATTACH PARTITION public.fixes_p20251211_flight_id_idx;
 
 
 --
--- Name: fixes_p20251116_location_geom_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251211_location_geom_idx; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.idx_fixes_location_geom ATTACH PARTITION public.fixes_p20251116_location_geom_idx;
+ALTER INDEX public.idx_fixes_location_geom ATTACH PARTITION public.fixes_p20251211_location_geom_idx;
 
 
 --
--- Name: fixes_p20251116_location_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251211_location_idx; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.idx_fixes_location ATTACH PARTITION public.fixes_p20251116_location_idx;
+ALTER INDEX public.idx_fixes_location ATTACH PARTITION public.fixes_p20251211_location_idx;
 
 
 --
--- Name: fixes_p20251116_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251211_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.fixes_pkey1 ATTACH PARTITION public.fixes_p20251116_pkey;
+ALTER INDEX public.fixes_pkey1 ATTACH PARTITION public.fixes_p20251211_pkey;
 
 
 --
--- Name: fixes_p20251116_source_idx; Type: INDEX ATTACH; Schema: public; Owner: -
+-- Name: fixes_p20251211_source_idx; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.idx_fixes_source ATTACH PARTITION public.fixes_p20251116_source_idx;
+ALTER INDEX public.idx_fixes_source ATTACH PARTITION public.fixes_p20251211_source_idx;
 
 
 --
@@ -4195,48 +3645,6 @@ CREATE TRIGGER ensure_aprs_message_hash BEFORE INSERT ON public.aprs_messages_ol
 --
 
 CREATE TRIGGER set_club_pilots_updated_at BEFORE UPDATE ON public.pilots FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
-
-
---
--- Name: flights trigger_update_airport_analytics_daily; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER trigger_update_airport_analytics_daily AFTER INSERT OR DELETE OR UPDATE ON public.flights FOR EACH ROW EXECUTE FUNCTION public.update_airport_analytics_daily();
-
-
---
--- Name: flights trigger_update_club_analytics_daily; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER trigger_update_club_analytics_daily AFTER INSERT OR DELETE OR UPDATE ON public.flights FOR EACH ROW EXECUTE FUNCTION public.update_club_analytics_daily();
-
-
---
--- Name: flights trigger_update_device_analytics; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER trigger_update_device_analytics AFTER INSERT OR DELETE OR UPDATE ON public.flights FOR EACH ROW EXECUTE FUNCTION public.update_device_analytics();
-
-
---
--- Name: flights trigger_update_flight_analytics_daily; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER trigger_update_flight_analytics_daily AFTER INSERT OR DELETE OR UPDATE ON public.flights FOR EACH ROW EXECUTE FUNCTION public.update_flight_analytics_daily();
-
-
---
--- Name: flights trigger_update_flight_analytics_hourly; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER trigger_update_flight_analytics_hourly AFTER INSERT OR DELETE OR UPDATE ON public.flights FOR EACH ROW EXECUTE FUNCTION public.update_flight_analytics_hourly();
-
-
---
--- Name: flights trigger_update_flight_duration_buckets; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER trigger_update_flight_duration_buckets AFTER INSERT OR DELETE OR UPDATE ON public.flights FOR EACH ROW EXECUTE FUNCTION public.update_flight_duration_buckets();
 
 
 --
