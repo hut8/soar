@@ -4,6 +4,7 @@
 [build.env]
 passthrough = [
     "RUSTFLAGS",
+    "SKIP_WEB_BUILD",
 ]
 
 [target.aarch64-unknown-linux-gnu]
