@@ -46,24 +46,28 @@ pub async fn register_user(
             match users_repo.set_email_verification_token(user.id).await {
                 Ok(token) => {
                     // Send email verification email
-                    if let Ok(email_service) = EmailService::new() {
-                        if let Err(e) = email_service
-                            .send_email_verification(&user.email, &user.full_name(), &token)
-                            .await
-                        {
-                            error!("Failed to send email verification: {}", e);
+                    match EmailService::new() {
+                        Ok(email_service) => {
+                            if let Err(e) = email_service
+                                .send_email_verification(&user.email, &user.full_name(), &token)
+                                .await
+                            {
+                                error!("Failed to send email verification: {}", e);
+                                return json_error(
+                                    StatusCode::INTERNAL_SERVER_ERROR,
+                                    "Failed to send email verification",
+                                )
+                                .into_response();
+                            }
+                        }
+                        Err(e) => {
+                            error!("Email service initialization failed: {}", e);
                             return json_error(
                                 StatusCode::INTERNAL_SERVER_ERROR,
-                                "Failed to send email verification",
+                                "Email service not configured",
                             )
                             .into_response();
                         }
-                    } else {
-                        return json_error(
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            "Email service not configured",
-                        )
-                        .into_response();
                     }
 
                     Json(serde_json::json!({

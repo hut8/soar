@@ -10,7 +10,7 @@ COPY web/ ./
 RUN npm run build
 
 # Rust build stage
-FROM rust:1.75-slim-bullseye AS rust-builder
+FROM rust:1-slim-bookworm AS rust-builder
 
 # Install system dependencies for building
 RUN apt-get update && apt-get install -y \
@@ -26,26 +26,26 @@ WORKDIR /app
 COPY Cargo.toml Cargo.lock build.rs ./
 COPY src/ ./src/
 COPY migrations/ ./migrations/
+COPY static/ ./static/
 
 # Copy the built web assets from previous stage
 COPY --from=web-builder /app/web/build/ ./web/build/
 COPY --from=web-builder /app/web/package*.json ./web/
 
-# Create a fake web directory structure for the build script
-RUN mkdir -p web/node_modules
-
 # Build the Rust application in release mode
-RUN cargo build --release
+# Set SKIP_WEB_BUILD because web is already built in the web-builder stage
+RUN SKIP_WEB_BUILD=1 cargo build --release
 
 # Runtime stage
-FROM debian:bullseye-slim
+FROM debian:bookworm-slim
 
 # Install runtime dependencies including debug symbols for Sentry symbolication
 RUN apt-get update && apt-get install -y \
     ca-certificates \
-    libssl1.1 \
+    libssl3 \
     libpq5 \
     libc6-dbg \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Create a non-root user

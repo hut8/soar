@@ -2,3 +2,11 @@
 .env
 .vscode/settings.json
 .logs
+
+# Web build artifacts
+web/build/
+
+# Playwright E2E test artifacts
+web/playwright-report/
+web/test-results/
+test-results

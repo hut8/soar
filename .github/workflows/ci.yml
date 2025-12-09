@@ -48,6 +48,229 @@ jobs:
           path: web/build/
           retention-days: 1
 
+  test-e2e:
+    name: E2E Tests (Playwright)
+    runs-on: ubuntu-22.04
+    needs: test-sveltekit
+    defaults:
+      run:
+        working-directory: ./web
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build custom PostgreSQL image with pg_partman
+        working-directory: .
+        run: |
+          docker build -t postgis-partman:test -f .github/postgis-partman.Dockerfile .
+
+      - name: Start PostgreSQL service with pg_partman
+        working-directory: .
+        run: |
+          docker run -d \
+            --name postgres \
+            -e POSTGRES_PASSWORD=postgres \
+            -e POSTGRES_USER=postgres \
+            -e POSTGRES_DB=soar_test \
+            -p 5432:5432 \
+            --health-cmd="pg_isready" \
+            --health-interval=10s \
+            --health-timeout=5s \
+            --health-retries=5 \
+            postgis-partman:test
+
+      - name: Wait for PostgreSQL to be ready
+        working-directory: .
+        run: |
+          timeout 60s bash -c 'until docker exec postgres pg_isready -U postgres; do sleep 2; done'
+
+      - name: Start Mailpit service for email testing
+        working-directory: .
+        run: |
+          docker run -d \
+            --name mailpit \
+            -p 8025:8025 \
+            -p 1025:1025 \
+            axllent/mailpit:v1.20
+
+      - name: Wait for Mailpit to be ready
+        working-directory: .
+        run: |
+          timeout 30s bash -c 'until curl -s http://localhost:8025/api/v1/info > /dev/null 2>&1; do sleep 2; done'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install web dependencies
+        run: npm ci
+
+      - name: Download web build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: web-build
+          path: web/build/
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Install PostgreSQL 17 client and GDAL
+        run: |
+          sudo apt-get update
+          # Add PostgreSQL apt repository for version 17
+          sudo apt-get install -y curl ca-certificates
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          sudo sh -c 'echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          sudo apt-get update
+          # Install PostgreSQL 17 client, GDAL, and build tools
+          sudo apt-get install -y postgresql-client-17 libgdal-dev mold clang
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          shared-key: "e2e-build"
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Cache Diesel CLI
+        id: cache-diesel
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/diesel
+          key: ${{ runner.os }}-diesel-cli-2.2.0
+
+      - name: Install Diesel CLI
+        if: steps.cache-diesel.outputs.cache-hit != 'true'
+        run: cargo install diesel_cli --no-default-features --features postgres --version 2.2.0
+
+      - name: Setup test database
+        working-directory: .
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/soar_test
+          PGPASSWORD: postgres
+          TEST_USER_EMAIL: test@example.com
+          TEST_USER_PASSWORD: testpassword123
+          SEED_COUNT: 20
+        run: |
+          # Create PostGIS extension
+          psql -h localhost -U postgres -d soar_test -c "CREATE EXTENSION IF NOT EXISTS postgis;"
+
+          # Run migrations
+          diesel migration run
+
+          # Build the project to get the seed-test-data command
+          # IMPORTANT: Must use --cfg tokio_unstable for console-subscriber
+          RUSTFLAGS="--cfg tokio_unstable" cargo build --release
+
+          # Seed test data
+          ./target/release/soar seed-test-data
+
+      - name: Start Rust backend server
+        working-directory: .
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/soar_test
+          SENTRY_DSN: ''
+          SOAR_ENV: test
+          JWT_SECRET: test-jwt-secret-for-e2e-tests-only
+          SMTP_SERVER: localhost
+          SMTP_PORT: 1025
+          SMTP_USERNAME: test
+          SMTP_PASSWORD: test
+          FROM_EMAIL: test@soar.local
+          FROM_NAME: SOAR Test
+          BASE_URL: http://localhost:4173
+        run: |
+          # Start backend server in background
+          ./target/release/soar web --port 61225 --interface localhost > backend.log 2>&1 &
+          BACKEND_PID=$!
+          echo "Backend PID: $BACKEND_PID"
+          echo $BACKEND_PID > backend.pid
+
+          # Wait for backend to be ready (max 60 seconds)
+          for i in {1..60}; do
+            if curl -s http://localhost:61225/health > /dev/null 2>&1; then
+              echo "Backend server is ready!"
+              break
+            fi
+            if [ $i -eq 60 ]; then
+              echo "Backend server failed to start within 60 seconds"
+              cat backend.log
+              exit 1
+            fi
+            echo "Waiting for backend... ($i/60)"
+            sleep 1
+          done
+
+      - name: Start SvelteKit preview server
+        run: |
+          # Start preview server in background
+          npm run preview > preview.log 2>&1 &
+          PREVIEW_PID=$!
+          echo "Preview PID: $PREVIEW_PID"
+          echo $PREVIEW_PID > preview.pid
+
+          # Wait for preview server to be ready (max 30 seconds)
+          for i in {1..30}; do
+            if curl -s http://localhost:4173 > /dev/null 2>&1; then
+              echo "Preview server is ready!"
+              break
+            fi
+            if [ $i -eq 30 ]; then
+              echo "Preview server failed to start within 30 seconds"
+              cat preview.log
+              exit 1
+            fi
+            echo "Waiting for preview server... ($i/30)"
+            sleep 1
+          done
+
+      - name: Run E2E tests
+        env:
+          TEST_USER_EMAIL: test@example.com
+          TEST_USER_PASSWORD: testpassword123
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/soar_test
+        run: npm test
+
+      - name: Stop servers
+        if: always()
+        working-directory: .
+        run: |
+          # Kill backend server
+          if [ -f backend.pid ]; then
+            kill $(cat backend.pid) || true
+          fi
+          # Kill preview server
+          if [ -f web/preview.pid ]; then
+            kill $(cat web/preview.pid) || true
+          fi
+
+      - name: Cleanup containers
+        if: always()
+        working-directory: .
+        run: |
+          docker stop postgres mailpit || true
+          docker rm postgres mailpit || true
+
+      - name: Upload E2E test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-artifacts
+          path: |
+            web/playwright-report/
+            web/test-results/
+            backend.log
+            web/preview.log
+          retention-days: 30
+
   test-rust:
     name: Test Rust Project
     runs-on: ubuntu-22.04
@@ -94,10 +317,17 @@ jobs:
         with:
           components: clippy, rustfmt
 
-      - name: Install PostgreSQL client, GDAL, and mold linker
+      - name: Install PostgreSQL 17 client, GDAL, and mold linker
         run: |
           sudo apt-get update
-          sudo apt-get install -y postgresql-client libgdal-dev mold clang
+          # Add PostgreSQL apt repository for version 17
+          sudo apt-get install -y curl ca-certificates
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          sudo sh -c 'echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          sudo apt-get update
+          # Install PostgreSQL 17 client, GDAL, and build tools
+          sudo apt-get install -y postgresql-client-17 libgdal-dev mold clang
 
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
@@ -340,7 +570,7 @@ jobs:
   deploy-staging:
     name: Deploy to Staging
     runs-on: ubuntu-latest
-    needs: [test-sveltekit, test-rust, build-release, security-audit]
+    needs: [test-sveltekit, test-e2e, test-rust, build-release, security-audit]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
     steps:

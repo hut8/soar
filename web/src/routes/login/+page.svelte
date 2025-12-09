@@ -3,7 +3,8 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { auth } from '$lib/stores/auth';
-	import { authApi, AuthApiError } from '$lib/api/auth';
+	import { authApi } from '$lib/api/auth';
+	import { ServerError } from '$lib/api/server';
 	import { resolve } from '$app/paths';
 
 	let email = '';
@@ -36,7 +37,7 @@
 			// Redirect to home page after successful login
 			goto(resolve('/'));
 		} catch (err) {
-			if (err instanceof AuthApiError) {
+			if (err instanceof ServerError) {
 				if (err.status === 401) {
 					error = 'Invalid email or password';
 				} else {
@@ -80,7 +81,13 @@
 			</div>
 		{/if}
 
-		<form on:submit|preventDefault={handleLogin} class="space-y-4">
+		<form
+			onsubmit={(e) => {
+				e.preventDefault();
+				handleLogin();
+			}}
+			class="space-y-4"
+		>
 			<label class="label">
 				<span>Email</span>
 				<input
@@ -88,9 +95,8 @@
 					type="email"
 					placeholder="Enter your email"
 					bind:value={email}
-					on:keydown={handleKeydown}
+					onkeydown={handleKeydown}
 					disabled={loading}
-					required
 				/>
 			</label>
 
@@ -101,9 +107,8 @@
 					type="password"
 					placeholder="Enter your password"
 					bind:value={password}
-					on:keydown={handleKeydown}
+					onkeydown={handleKeydown}
 					disabled={loading}
-					required
 				/>
 			</label>
 

@@ -6,13 +6,14 @@ use diesel::{PgConnection, QueryableByName, RunQueryDsl};
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
 use std::env;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tracing::{info, warn};
 
 mod commands;
 use commands::{
     handle_archive, handle_dump_unified_ddb, handle_ingest_aprs, handle_ingest_beast,
-    handle_load_data, handle_pull_data, handle_resurrect, handle_run, handle_sitemap_generation,
+    handle_load_data, handle_pull_data, handle_resurrect, handle_run, handle_seed_test_data,
+    handle_sitemap_generation,
 };
 
 // Embed migrations at compile time
@@ -175,6 +176,10 @@ enum Commands {
         #[arg(long, default_value = "localhost")]
         interface: String,
 
+        /// Enable test mode (auto-generates JWT_SECRET, sets test database and NATS)
+        #[arg(long)]
+        test_mode: bool,
+
         /// Enable tokio-console for async task monitoring (port 6670)
         #[arg(long)]
         enable_tokio_console: bool,
@@ -237,6 +242,19 @@ enum Commands {
     /// scripts to ensure migrations are applied before starting services.
     /// Migrations are also run automatically by other commands that need the database.
     Migrate {},
+    /// Seed test data for E2E testing
+    ///
+    /// Creates a known set of test data for E2E tests:
+    /// - Test user with known credentials (configurable via env vars)
+    /// - Test club
+    /// - Test devices
+    ///
+    /// Environment variables:
+    /// - TEST_USER_EMAIL (default: test@example.com)
+    /// - TEST_USER_PASSWORD (default: testpassword123)
+    /// - TEST_USER_FIRST_NAME (default: Test)
+    /// - TEST_USER_LAST_NAME (default: User)
+    SeedTestData {},
     /// Dump unified FlarmNet device database to JSONL file
     ///
     /// Downloads the unified FlarmNet database from <https://turbo87.github.io/united-flarmnet/united.fln>
@@ -273,15 +291,49 @@ impl Instrumentation for QueryLogger {
     }
 }
 
-/// Dump database schema to schema.sql if not in production
+/// Find the git repository root by walking up the directory tree
+fn find_git_root() -> Result<PathBuf> {
+    let current_dir = env::current_dir().context("Failed to get current directory")?;
+
+    let mut path = current_dir.as_path();
+    loop {
+        let git_dir = path.join(".git");
+        if git_dir.exists() {
+            return Ok(path.to_path_buf());
+        }
+
+        match path.parent() {
+            Some(parent) => path = parent,
+            None => {
+                return Err(anyhow::anyhow!(
+                    "Could not find .git directory. Started from: {}",
+                    current_dir.display()
+                ));
+            }
+        }
+    }
+}
+
+/// Dump database schema to schema.sql if not in production, test, or CI
 fn dump_schema_if_non_production(database_url: &str) -> Result<()> {
-    // Check if we're in production
-    let is_production = env::var("SOAR_ENV")
-        .map(|env| env == "production")
-        .unwrap_or(false);
+    // Check environment
+    let soar_env = env::var("SOAR_ENV").unwrap_or_default();
+    let is_production = soar_env == "production";
+    let is_test = soar_env == "test";
+    let is_ci = env::var("CI").is_ok();
 
     if is_production {
         info!("Skipping schema dump in production environment");
+        return Ok(());
+    }
+
+    if is_test {
+        info!("Skipping schema dump in test environment");
+        return Ok(());
+    }
+
+    if is_ci {
+        info!("Skipping schema dump in CI environment");
         return Ok(());
     }
 
@@ -305,10 +357,12 @@ fn dump_schema_if_non_production(database_url: &str) -> Result<()> {
     }
 
     // Write output to schema.sql in repository root
-    let schema_path = "schema.sql";
-    std::fs::write(schema_path, &output.stdout).context("Failed to write schema.sql")?;
+    // Find the repository root by looking for .git directory
+    let repo_root = find_git_root().context("Failed to find repository root (.git directory)")?;
+    let schema_path = repo_root.join("schema.sql");
+    std::fs::write(&schema_path, &output.stdout).context("Failed to write schema.sql")?;
 
-    info!("Successfully dumped schema to {}", schema_path);
+    info!("Successfully dumped schema to {}", schema_path.display());
     Ok(())
 }
 
@@ -495,44 +549,53 @@ async fn main() -> Result<()> {
 
     // Initialize Sentry for error tracking (errors only, no performance monitoring)
     let _guard = if let Ok(sentry_dsn) = env::var("SENTRY_DSN") {
-        info!("Initializing Sentry with DSN");
+        // Skip Sentry initialization if DSN is empty or invalid
+        if sentry_dsn.is_empty() {
+            info!("SENTRY_DSN is empty, Sentry disabled");
+            None
+        } else if let Ok(parsed_dsn) = sentry_dsn.parse() {
+            info!("Initializing Sentry with DSN");
 
-        // Use SENTRY_RELEASE env var if set (for deployed versions with commit SHA),
-        // otherwise fall back to CARGO_PKG_VERSION for local development
-        let release = env::var("SENTRY_RELEASE")
-            .ok()
-            .or_else(|| Some(env!("CARGO_PKG_VERSION").to_string()))
-            .map(Into::into);
+            // Use SENTRY_RELEASE env var if set (for deployed versions with commit SHA),
+            // otherwise fall back to CARGO_PKG_VERSION for local development
+            let release = env::var("SENTRY_RELEASE")
+                .ok()
+                .or_else(|| Some(env!("CARGO_PKG_VERSION").to_string()))
+                .map(Into::into);
 
-        if let Some(ref r) = release {
-            info!("Sentry release version: {}", r);
+            if let Some(ref r) = release {
+                info!("Sentry release version: {}", r);
+            }
+
+            Some(sentry::init(sentry::ClientOptions {
+                dsn: Some(parsed_dsn),
+                sample_rate: 0.05,       // Sample 5% of error events
+                traces_sample_rate: 0.1, // Sample 10% of performance traces (increased for better visibility)
+                attach_stacktrace: true,
+                release,
+                enable_logs: true,
+                environment: env::var("SOAR_ENV").ok().map(Into::into),
+                session_mode: sentry::SessionMode::Request,
+                auto_session_tracking: true,
+                // Note: Continuous profiling not available in sentry-rust 0.45.0
+                // Using increased traces_sample_rate for better performance visibility
+                before_send: Some(std::sync::Arc::new(
+                    move |event: sentry::protocol::Event<'static>| {
+                        // Always capture error-level events
+                        if event.level >= sentry::Level::Error {
+                            Some(event)
+                        } else {
+                            // For non-error events, only capture in production
+                            if is_production { Some(event) } else { None }
+                        }
+                    },
+                )),
+                ..Default::default()
+            }))
+        } else {
+            eprintln!("WARNING: Invalid SENTRY_DSN format, Sentry disabled");
+            None
         }
-
-        Some(sentry::init(sentry::ClientOptions {
-            dsn: Some(sentry_dsn.parse().expect("Invalid SENTRY_DSN format")),
-            sample_rate: 0.05,       // Sample 5% of error events
-            traces_sample_rate: 0.1, // Sample 10% of performance traces (increased for better visibility)
-            attach_stacktrace: true,
-            release,
-            enable_logs: true,
-            environment: env::var("SOAR_ENV").ok().map(Into::into),
-            session_mode: sentry::SessionMode::Request,
-            auto_session_tracking: true,
-            // Note: Continuous profiling not available in sentry-rust 0.45.0
-            // Using increased traces_sample_rate for better performance visibility
-            before_send: Some(std::sync::Arc::new(
-                move |event: sentry::protocol::Event<'static>| {
-                    // Always capture error-level events
-                    if event.level >= sentry::Level::Error {
-                        Some(event)
-                    } else {
-                        // For non-error events, only capture in production
-                        if is_production { Some(event) } else { None }
-                    }
-                },
-            )),
-            ..Default::default()
-        }))
     } else {
         if is_production {
             eprintln!("ERROR: SENTRY_DSN environment variable is required in production mode");
@@ -688,8 +751,22 @@ async fn main() -> Result<()> {
             enable_tokio_console,
             ..
         } => {
-            if *enable_tokio_console {
-                // Web subcommand uses tokio-console on port 6670 to avoid conflict
+            // Skip console subscriber in test mode to avoid port conflicts
+            let is_test_mode = env::var("SOAR_ENV").map(|v| v == "test").unwrap_or(false);
+
+            if is_test_mode {
+                // Test mode: skip console subscriber
+                if let Some(sentry_layer) = _guard
+                    .as_ref()
+                    .map(|_| sentry::integrations::tracing::layer())
+                {
+                    registry.with(fmt_layer).with(sentry_layer).init();
+                } else {
+                    registry.with(fmt_layer).init();
+                }
+                info!("Running in test mode - console subscriber disabled");
+            } else if *enable_tokio_console {
+                // Production/development mode with tokio-console enabled
                 let console_layer = filter::Filtered::new(
                     console_subscriber::ConsoleLayer::builder()
                         .server_addr(([0, 0, 0, 0], 6670))
@@ -800,6 +877,53 @@ async fn main() -> Result<()> {
         }
     }
 
+    // Check if we're in test mode and configure environment BEFORE database setup
+    if let Commands::Web { test_mode, .. } = &cli.command
+        && *test_mode
+    {
+        info!("Test mode enabled: configuring test environment");
+
+        // Set JWT_SECRET for authentication
+        // SAFETY: We're setting environment variables during startup before any threads are spawned.
+        // This is safe because:
+        // 1. We're in main() and haven't started the async runtime yet
+        // 2. No other threads exist that could be reading these variables
+        // 3. These are only set in test mode, not in production
+        unsafe {
+            env::set_var("JWT_SECRET", "test-jwt-secret-for-e2e-tests");
+        }
+        info!("  ✓ JWT_SECRET configured");
+
+        // Set test database URL (if not already set)
+        if env::var("DATABASE_URL").is_err() {
+            unsafe {
+                env::set_var(
+                    "DATABASE_URL",
+                    "postgres://postgres:postgres@localhost:5432/soar_test",
+                );
+            }
+            info!("  ✓ DATABASE_URL set to test database");
+        }
+
+        // Set NATS URL (if not already set)
+        if env::var("NATS_URL").is_err() {
+            unsafe {
+                env::set_var("NATS_URL", "nats://localhost:4222");
+            }
+            info!("  ✓ NATS_URL configured");
+        }
+
+        // Set SOAR_ENV to test (if not already set)
+        if env::var("SOAR_ENV").is_err() {
+            unsafe {
+                env::set_var("SOAR_ENV", "test");
+            }
+            info!("  ✓ SOAR_ENV set to 'test'");
+        }
+
+        info!("Test environment configuration complete");
+    }
+
     // Enable SQL query logging only for the migrate command
     if matches!(cli.command, Commands::Migrate {}) {
         set_default_instrumentation(|| Some(Box::new(QueryLogger)))
@@ -874,16 +998,25 @@ async fn main() -> Result<()> {
         Commands::Web {
             interface,
             port,
+            test_mode: _,
             enable_tokio_console: _,
         } => {
-            // Check SOAR_ENV and override port if not production
+            // Test mode environment is configured earlier, before database setup
+            // Check SOAR_ENV and override port only for development mode
             let final_port = match env::var("SOAR_ENV") {
                 Ok(soar_env) if soar_env == "production" => {
                     info!("Running in production mode on port {}", port);
                     port
                 }
+                Ok(soar_env) if soar_env == "test" => {
+                    info!("Running in test mode on port {}", port);
+                    port
+                }
                 Ok(soar_env) => {
-                    info!("Running in {} mode, overriding port to 1337", soar_env);
+                    info!(
+                        "Running in {} mode, overriding port to 1337 (development default)",
+                        soar_env
+                    );
                     1337
                 }
                 Err(_) => {
@@ -912,6 +1045,7 @@ async fn main() -> Result<()> {
             info!("All pending migrations have been applied");
             Ok(())
         }
+        Commands::SeedTestData {} => handle_seed_test_data(&diesel_pool).await,
         Commands::DumpUnifiedDdb { .. } => {
             // This should never be reached due to early return above
             unreachable!("DumpUnifiedDdb should be handled before database setup")

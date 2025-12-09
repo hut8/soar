@@ -42,11 +42,11 @@ test.describe('Logout', () => {
 		// Log in
 		await login(page, testUsers.validUser.email, testUsers.validUser.password);
 
-		// Click on user button to open menu
-		await page.getByRole('button', { name: /user|profile/i }).click();
+		// Click on user button to open menu (shows first name "Test")
+		await page.getByRole('button', { name: 'Test' }).click();
 
-		// Menu should be visible with "Sign out" option
-		await expect(page.getByRole('menuitem', { name: /sign out/i })).toBeVisible();
+		// Menu should be visible with "Sign out" button
+		await expect(page.getByRole('button', { name: /sign out/i })).toBeVisible();
 
 		// Take screenshot of user menu
 		await expect(page).toHaveScreenshot('user-menu-open.png');

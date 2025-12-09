@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { authApi, AuthApiError } from '$lib/api/auth';
+	import { authApi } from '$lib/api/auth';
+	import { ServerError } from '$lib/api/server';
 	import { resolve } from '$app/paths';
 	import { ClubSelector } from '$lib';
 
@@ -21,7 +22,9 @@
 	// Get the club ID for registration
 	$: clubId = selectedClub.length > 0 ? selectedClub[0] : '';
 
-	async function handleRegister() {
+	async function handleRegister(event: SubmitEvent) {
+		event.preventDefault();
+
 		// Validation
 		if (!firstName || !lastName || !email || !password) {
 			error = 'Please fill in all required fields';
@@ -52,9 +55,9 @@
 
 			const message = 'Registration successful. Please check your email to verify your account.';
 			const href = `/login?message=${encodeURIComponent(message)}`;
-			void goto(href);
+			await goto(href);
 		} catch (err) {
-			if (err instanceof AuthApiError) {
+			if (err instanceof ServerError) {
 				if (err.status === 409) {
 					error = 'An account with this email already exists';
 				} else {
@@ -85,7 +88,7 @@
 			</div>
 		{/if}
 
-		<form on:submit|preventDefault={handleRegister} class="space-y-4">
+		<form onsubmit={handleRegister} class="space-y-4" novalidate>
 			<div class="grid grid-cols-2 gap-4">
 				<label class="label">
 					<span>First Name *</span>
@@ -139,7 +142,7 @@
 				<input
 					class="input"
 					type="password"
-					placeholder="Enter your password"
+					placeholder="Password"
 					bind:value={password}
 					disabled={loading}
 					required
@@ -152,7 +155,7 @@
 				<input
 					class="input"
 					type="password"
-					placeholder="Confirm your password"
+					placeholder="Confirm password"
 					bind:value={confirmPassword}
 					disabled={loading}
 					required
