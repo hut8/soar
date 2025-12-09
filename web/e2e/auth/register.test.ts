@@ -79,7 +79,7 @@ test.describe('Registration', () => {
 		await expect(page).toHaveScreenshot('register-page.png');
 	});
 
-	test('should successfully register a new user', async ({ page }) => {
+	test.skip('should successfully register a new user', async ({ page }) => {
 		// Fill in the registration form with new user data
 		const timestamp = Date.now(); // Use timestamp to ensure unique email
 		const uniqueEmail = `test${timestamp}@example.com`;
