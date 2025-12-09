@@ -9,6 +9,7 @@ pub mod fixes;
 pub mod flights;
 pub mod pilots;
 pub mod receivers;
+pub mod user_fixes;
 pub mod user_settings;
 pub mod users;
 pub mod views;
@@ -24,6 +25,7 @@ pub use fixes::*;
 pub use flights::*;
 pub use pilots::*;
 pub use receivers::*;
+pub use user_fixes::*;
 pub use user_settings::*;
 pub use users::*;
 

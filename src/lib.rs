@@ -59,6 +59,8 @@ pub mod runways_repo;
 pub mod schema;
 pub mod server_messages;
 pub mod server_messages_repo;
+pub mod user_fixes;
+pub mod user_fixes_repo;
 pub mod users;
 pub mod users_repo;
 pub mod web;
