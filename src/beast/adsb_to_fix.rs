@@ -4,35 +4,55 @@ use rs1090::prelude::*;
 use tracing::debug;
 use uuid::Uuid;
 
+use crate::beast::cpr_decoder::CprDecoder;
 use crate::fixes::Fix;
 
 /// Convert a decoded ADS-B message to a Fix if it contains position information
 ///
-/// This is a simplified converter that extracts what it can from individual messages.
-/// Full position accuracy requires CPR (Compact Position Reporting) decoding which
-/// needs to track message pairs and maintain state. That will be implemented in Phase 5.
+/// This function can work in two modes:
+/// 1. **With CPR decoder**: Full lat/lon position decoding via even/odd frame pairing
+/// 2. **Without CPR decoder**: Only velocity, altitude, and callsign extraction
 ///
-/// For now, this extracts:
+/// The CPR decoder maintains state to pair even/odd position frames and decode
+/// full latitude/longitude coordinates. Without it, positions will have lat=0, lon=0.
+///
+/// Extracts:
 /// - ICAO address → device identifier
+/// - Position (lat/lon/alt) - if CPR decoder provided and frames are available
 /// - Velocity information (ground speed, track, vertical rate)
 /// - Identification (callsign)
-/// - Altitude (from position messages)
 ///
 /// Returns None if the message doesn't contain useful fix information.
 pub fn adsb_message_to_fix(
     message: &Message,
+    raw_frame: &[u8],
     timestamp: DateTime<Utc>,
     receiver_id: Uuid,
     device_id: Uuid,
     raw_message_id: Uuid,
+    cpr_decoder: Option<&CprDecoder>,
 ) -> Result<Option<Fix>> {
     // Extract ICAO address for the source field
     let icao_address = extract_icao_address(message)?;
 
-    // Try to extract position information
-    // Note: For ADS-B, positions are encoded using CPR which requires
-    // pairing even/odd frames. For now, we'll extract what we can.
-    let position_info = extract_position_info(message);
+    // Try to decode full position using CPR decoder if available
+    let position_info = if let Some(decoder) = cpr_decoder {
+        // Use CPR decoder for full lat/lon position
+        match decoder.decode_message(message, timestamp, icao_address, raw_frame.to_vec())? {
+            Some(decoded_pos) => Some(PositionInfo {
+                latitude: decoded_pos.latitude,
+                longitude: decoded_pos.longitude,
+                altitude_feet: decoded_pos.altitude_feet,
+            }),
+            None => {
+                // CPR decoder needs more frames - try to extract at least altitude
+                extract_position_info(message)
+            }
+        }
+    } else {
+        // No CPR decoder - fall back to basic extraction (altitude only)
+        extract_position_info(message)
+    };
 
     // Extract velocity information
     let velocity_info = extract_velocity_info(message);
@@ -185,12 +205,12 @@ fn extract_squawk(_message: &Message) -> Option<String> {
 }
 
 /// Build ADS-B-specific metadata for source_metadata JSONB field
+/// Note: Protocol is determined from raw_messages.source enum, not stored in metadata
 fn build_adsb_metadata(message: &Message) -> serde_json::Value {
     let mut metadata = serde_json::Map::new();
-    metadata.insert("protocol".to_string(), serde_json::json!("adsb"));
 
-    // Add downlink format
-    // This will be expanded as we extract more information
+    // Add CRC and other ADS-B-specific fields
+    // This will be expanded as we extract more information (NIC, NAC, SIL, etc.)
     metadata.insert("crc".to_string(), serde_json::json!(message.crc));
 
     serde_json::Value::Object(metadata)
@@ -214,10 +234,12 @@ mod tests {
         let decoded = decode_beast_frame(&frame, timestamp).unwrap();
         let fix_result = adsb_message_to_fix(
             &decoded.message,
+            &frame,
             timestamp,
             receiver_id,
             device_id,
             raw_message_id,
+            None, // No CPR decoder for this basic test
         );
 
         // For now, this will return None since we haven't implemented
@@ -326,10 +348,12 @@ mod tests {
         let decoded = decode_beast_frame(&frame, timestamp).unwrap();
         let fix_result = adsb_message_to_fix(
             &decoded.message,
+            &frame,
             timestamp,
             receiver_id,
             device_id,
             raw_message_id,
+            None, // No CPR decoder for this test
         );
 
         assert!(fix_result.is_ok());
