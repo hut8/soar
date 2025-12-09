@@ -204,6 +204,109 @@ glider.flights {
 
 Deployment is accomplished via the `deploy` script in the root of the project. The first time this is run, a file is created with appropriate permissions at `/etc/soar/env` which contains necessary environment variables. Edit these as needed. Two systemd files will be installed: `soar-run.service` and `soar-web.service`. Their content is self-explanatory.
 
+## ADS-B Beast Feed Setup
+
+SOAR can ingest ADS-B data in Beast binary format from sources like dump1090, readsb, or aggregators like APRS.LOL. If your Beast feed is restricted by IP address (e.g., only accessible from your home network), you'll need to set up a relay.
+
+### Setting Up a Beast Relay with socat
+
+Use `socat` to relay the Beast feed from a restricted source to a port that SOAR can connect to:
+
+```bash
+# Install socat (if not already installed)
+sudo apt install socat  # Debian/Ubuntu
+# OR
+brew install socat      # macOS
+
+# Relay Beast data from out.adsb.lol to local port 30005
+# This connects to the remote Beast feed and makes it available locally
+socat -d -d TCP-LISTEN:30005,fork,reuseaddr TCP:out.adsb.lol:30005
+```
+
+**Command breakdown:**
+- `TCP-LISTEN:30005` - Listen on local port 30005 (standard Beast port)
+- `fork` - Handle multiple concurrent connections
+- `reuseaddr` - Allow restarting without "address already in use" errors
+- `TCP:out.adsb.lol:30005` - Connect to the remote Beast feed
+- `-d -d` - Debug output (shows connections and data flow)
+
+### Running as a systemd Service
+
+For production use, run the relay as a systemd service:
+
+```bash
+# Create service file
+sudo tee /etc/systemd/system/beast-relay.service << 'EOF'
+[Unit]
+Description=ADS-B Beast Relay (APRS.LOL to local port 30005)
+After=network.target
+
+[Service]
+Type=simple
+User=soar
+Restart=always
+RestartSec=10
+ExecStart=/usr/bin/socat -d -d TCP-LISTEN:30005,fork,reuseaddr TCP:out.adsb.lol:30005
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Enable and start the service
+sudo systemctl daemon-reload
+sudo systemctl enable beast-relay.service
+sudo systemctl start beast-relay.service
+
+# Check status
+sudo systemctl status beast-relay.service
+
+# View logs
+sudo journalctl -u beast-relay.service -f
+```
+
+### Connecting SOAR to the Beast Feed
+
+Once the relay is running, configure SOAR to connect to it:
+
+```bash
+# In your SOAR environment configuration (/etc/soar/env or .env)
+BEAST_HOST=localhost
+BEAST_PORT=30005
+
+# Or connect to a remote relay
+BEAST_HOST=your-relay-server.example.com
+BEAST_PORT=30005
+```
+
+Then start the Beast ingestion service:
+```bash
+soar ingest-beast --host localhost --port 30005
+```
+
+### Notes
+
+- **IP Restrictions**: The relay must run on a host that has access to the restricted Beast feed (e.g., your home IP for APRS.LOL feeders)
+- **Port 30005**: This is the standard Beast binary protocol port used by dump1090/readsb
+- **Firewall**: Ensure your firewall allows incoming connections on port 30005 if SOAR is on a different host
+- **Performance**: socat is very lightweight and can handle the ~500-1000 msg/sec typical Beast feed with minimal overhead
+- **Security**: Consider using SSH tunneling or VPN instead of exposing the port publicly
+
+### Alternative: SSH Tunnel
+
+If the relay host and SOAR host are on different networks, use SSH port forwarding:
+
+```bash
+# On the SOAR host, forward local port 30005 to the relay host
+ssh -L 30005:localhost:30005 user@relay-host.example.com -N
+
+# Then connect SOAR to localhost:30005
+soar ingest-beast --host localhost --port 30005
+```
+
 ## Development
 
 ### Quick Start for New Developers

@@ -11,8 +11,8 @@ use tracing::{info, warn};
 
 mod commands;
 use commands::{
-    handle_archive, handle_dump_unified_ddb, handle_ingest_aprs, handle_load_data,
-    handle_pull_data, handle_resurrect, handle_run, handle_seed_test_data,
+    handle_archive, handle_dump_unified_ddb, handle_ingest_aprs, handle_ingest_beast,
+    handle_load_data, handle_pull_data, handle_resurrect, handle_run, handle_seed_test_data,
     handle_sitemap_generation,
 };
 
@@ -105,6 +105,31 @@ enum Commands {
         /// APRS filter string (omit for full global feed via port 10152, or specify filter for port 14580)
         #[arg(long)]
         filter: Option<String>,
+
+        /// Maximum number of connection retry attempts
+        #[arg(long, default_value = "5")]
+        max_retries: u32,
+
+        /// Delay between reconnection attempts in seconds
+        #[arg(long, default_value = "5")]
+        retry_delay: u64,
+
+        /// NATS server URL for JetStream
+        #[arg(long, default_value = "nats://localhost:4222")]
+        nats_url: String,
+    },
+    /// Ingest Beast (ADS-B) messages into NATS JetStream (durable queue service)
+    ///
+    /// This service connects to a Beast-format ADS-B server and publishes all messages to a durable NATS JetStream queue.
+    /// It is designed to run independently and survive restarts without dropping messages.
+    IngestBeast {
+        /// Beast server hostname
+        #[arg(long, default_value = "localhost")]
+        server: String,
+
+        /// Beast server port (standard Beast port is 30005)
+        #[arg(long, default_value = "30005")]
+        port: u16,
 
         /// Maximum number of connection retry attempts
         #[arg(long, default_value = "5")]
@@ -826,6 +851,23 @@ async fn main() -> Result<()> {
             )
             .await;
         }
+        Commands::IngestBeast {
+            server,
+            port,
+            max_retries,
+            retry_delay,
+            nats_url,
+        } => {
+            // IngestBeast only uses NATS, doesn't need database
+            return handle_ingest_beast(
+                server.clone(),
+                *port,
+                *max_retries,
+                *retry_delay,
+                nats_url.clone(),
+            )
+            .await;
+        }
         Commands::DumpUnifiedDdb { output, source } => {
             // DumpUnifiedDdb only downloads and exports data, doesn't need database
             return handle_dump_unified_ddb(output.clone(), source.clone()).await;
@@ -926,6 +968,10 @@ async fn main() -> Result<()> {
         Commands::IngestAprs { .. } => {
             // This should never be reached due to early return above
             unreachable!("IngestAprs should be handled before database setup")
+        }
+        Commands::IngestBeast { .. } => {
+            // This should never be reached due to early return above
+            unreachable!("IngestBeast should be handled before database setup")
         }
         Commands::Run {
             archive_dir,

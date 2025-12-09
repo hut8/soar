@@ -5,7 +5,7 @@ use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
 use uuid::Uuid;
 
 use crate::receiver_statuses::{NewReceiverStatus, ReceiverStatus, ReceiverStatusWithRaw};
-use crate::schema::{aprs_messages, receiver_statuses};
+use crate::schema::{raw_messages, receiver_statuses};
 
 pub type PgPool = Pool<ConnectionManager<PgConnection>>;
 pub type PgPooledConnection = PooledConnection<ConnectionManager<PgConnection>>;
@@ -83,21 +83,24 @@ impl ReceiverStatusRepository {
         let offset = (page - 1) * per_page;
         let results = receiver_statuses::table
             .inner_join(
-                aprs_messages::table.on(receiver_statuses::aprs_message_id
-                    .eq(aprs_messages::id.nullable())
-                    .and(receiver_statuses::received_at.eq(aprs_messages::received_at))),
+                raw_messages::table.on(receiver_statuses::raw_message_id
+                    .eq(raw_messages::id.nullable())
+                    .and(receiver_statuses::received_at.eq(raw_messages::received_at))),
             )
             .filter(receiver_statuses::receiver_id.eq(receiver_id))
             .order(receiver_statuses::received_at.desc())
             .limit(per_page)
             .offset(offset)
-            .select((ReceiverStatus::as_select(), aprs_messages::raw_message))
-            .load::<(ReceiverStatus, String)>(&mut conn)?;
+            .select((ReceiverStatus::as_select(), raw_messages::raw_message))
+            .load::<(ReceiverStatus, Vec<u8>)>(&mut conn)?;
 
         // Convert to ReceiverStatusWithRaw
         let statuses_with_raw = results
             .into_iter()
-            .map(|(status, raw_data)| ReceiverStatusWithRaw { status, raw_data })
+            .map(|(status, raw_data_bytes)| ReceiverStatusWithRaw {
+                status,
+                raw_data: String::from_utf8_lossy(&raw_data_bytes).to_string(),
+            })
             .collect();
 
         Ok((statuses_with_raw, total_count))

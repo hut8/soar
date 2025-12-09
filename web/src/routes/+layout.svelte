@@ -10,7 +10,8 @@
 	import { theme } from '$lib/stores/theme';
 	import { backendMode } from '$lib/stores/backend';
 	import { websocketStatus, debugStatus } from '$lib/stores/watchlist';
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
+	import { startTracking, stopTracking } from '$lib/services/locationTracker';
 	import { dev } from '$app/environment';
 	import RadarLoader from '$lib/components/RadarLoader.svelte';
 	import LoadingBar from '$lib/components/LoadingBar.svelte';
@@ -69,6 +70,20 @@
 		return () => {
 			document.removeEventListener('click', handleClickOutside);
 		};
+	});
+
+	// Start/stop location tracking based on auth state
+	$effect(() => {
+		if ($auth.isAuthenticated) {
+			startTracking();
+		} else {
+			stopTracking();
+		}
+	});
+
+	// Clean up location tracking on component destroy
+	onDestroy(() => {
+		stopTracking();
 	});
 
 	function handleLogout() {

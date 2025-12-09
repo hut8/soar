@@ -64,7 +64,7 @@ pub struct ReceiverStatus {
     pub lag: Option<i32>,
 
     pub receiver_id: Uuid,
-    pub aprs_message_id: Option<Uuid>,
+    pub raw_message_id: Option<Uuid>,
 }
 
 /// For inserting new receiver statuses (without auto-generated fields)
@@ -105,7 +105,7 @@ pub struct NewReceiverStatus {
     // Computed lag in milliseconds
     pub lag: Option<i32>,
 
-    pub aprs_message_id: Option<Uuid>,
+    pub raw_message_id: Option<Uuid>,
 }
 
 impl NewReceiverStatus {
@@ -156,7 +156,7 @@ impl NewReceiverStatus {
             ognr_pilotaware_version: status_comment.ognr_pilotaware_version.clone(),
             unparsed_data: status_comment.unparsed.clone(),
             lag,
-            aprs_message_id: None, // Will be set by the processor
+            raw_message_id: None, // Will be set by the processor
         }
     }
 

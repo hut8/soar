@@ -699,6 +699,8 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         // User settings routes
         .route("/user/settings", get(actions::get_user_settings))
         .route("/user/settings", put(actions::update_user_settings))
+        // User location tracking
+        .route("/user-fix", post(actions::create_user_fix))
         // Analytics routes
         .route("/analytics/flights/daily", get(actions::get_daily_flights))
         .route(

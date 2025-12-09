@@ -502,8 +502,8 @@ jobs:
           cargo install cargo-outdated
           cargo outdated --exit-code 1 || echo "Some dependencies are outdated (non-critical)"
 
-  deploy:
-    name: Deploy to Server
+  deploy-staging:
+    name: Deploy to Staging
     runs-on: ubuntu-latest
     needs: [test-sveltekit, test-e2e, test-rust, build-release, security-audit]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -634,11 +634,154 @@ jobs:
 
           echo "Deployment package uploaded successfully"
 
-      - name: Execute deployment
+      - name: Execute deployment to staging
         run: |
           DEPLOY_DIR="/tmp/soar/deploy/${{ env.DEPLOY_TIMESTAMP }}"
-          echo "Executing deployment script..."
-          ssh soar@${{ secrets.DEPLOY_SERVER }} "sudo /usr/local/bin/soar-deploy $DEPLOY_DIR"
+          echo "Executing deployment script for staging..."
+          ssh soar@${{ secrets.DEPLOY_SERVER }} "sudo /usr/local/bin/soar-deploy staging $DEPLOY_DIR"
+
+      - name: Cleanup SSH
+        if: always()
+        run: |
+          rm -f ~/.ssh/id_rsa
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [test-sveltekit, test-rust, build-release, security-audit]
+    if: github.event_name == 'release' && github.event.action == 'published'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download release binary
+        uses: actions/download-artifact@v4
+        with:
+          name: soar-linux-x64
+          path: ./
+
+      - name: Extract binary
+        run: |
+          tar -xzf soar-linux-x64.tar.gz
+          chmod +x soar
+
+      - name: Install sentry-cli
+        run: |
+          curl -sL https://sentry.io/get-cli/ | bash
+
+      - name: Upload debug symbols to Sentry
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+        run: |
+          # Upload the binary with embedded debug symbols
+          sentry-cli debug-files upload \
+            --org "$SENTRY_ORG" \
+            --project "$SENTRY_PROJECT" \
+            ./soar
+
+      - name: Create Sentry release
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+        run: |
+          # Use release tag as version (e.g., v1.0.0)
+          export VERSION="${GITHUB_REF#refs/tags/}"
+          sentry-cli releases new "$VERSION" \
+            --org "$SENTRY_ORG" \
+            --project "$SENTRY_PROJECT"
+          sentry-cli releases set-commits "$VERSION" --auto --ignore-missing \
+            --org "$SENTRY_ORG" \
+            --project "$SENTRY_PROJECT"
+          sentry-cli releases finalize "$VERSION" \
+            --org "$SENTRY_ORG" \
+            --project "$SENTRY_PROJECT"
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.DEPLOY_SERVER }} >> ~/.ssh/known_hosts
+
+      - name: Prepare deployment package
+        run: |
+          # Create timestamped deployment directory name
+          TIMESTAMP=$(date +%Y%m%d%H%M%S)
+          echo "DEPLOY_TIMESTAMP=$TIMESTAMP" >> $GITHUB_ENV
+
+          # Create local deployment directory
+          mkdir -p deploy-pkg
+          cp soar deploy-pkg/
+          cp infrastructure/soar-deploy deploy-pkg/
+          cp *.service deploy-pkg/ || echo "No service files found in root"
+          cp *.timer deploy-pkg/ || echo "No timer files found in root"
+
+          # Copy Prometheus job configuration files
+          if [ -d infrastructure/prometheus-jobs ]; then
+            cp -r infrastructure/prometheus-jobs deploy-pkg/
+            echo "Prometheus job files included in deployment package"
+          fi
+
+          # Copy Grafana provisioning configuration
+          if [ -d infrastructure/grafana-provisioning ]; then
+            cp -r infrastructure/grafana-provisioning deploy-pkg/
+            echo "Grafana provisioning configuration included in deployment package"
+          fi
+
+          # Copy Grafana dashboard files
+          if compgen -G "infrastructure/grafana-dashboard-*.json" > /dev/null; then
+            cp infrastructure/grafana-dashboard-*.json deploy-pkg/
+            DASHBOARD_COUNT=$(ls -1 infrastructure/grafana-dashboard-*.json | wc -l)
+            echo "Grafana dashboards included in deployment package: $DASHBOARD_COUNT"
+          fi
+
+          # Copy backup scripts directory
+          if [ -d scripts/backup ]; then
+            mkdir -p deploy-pkg/scripts
+            cp -r scripts/backup deploy-pkg/scripts/
+            echo "Backup scripts included in deployment package"
+          fi
+
+          # Create version file with release tag
+          echo "${GITHUB_REF#refs/tags/}" > deploy-pkg/VERSION
+
+          echo "Deployment package prepared for timestamp: $TIMESTAMP"
+          echo "Release tag: ${GITHUB_REF#refs/tags/}"
+          ls -lh deploy-pkg/
+          if [ -d deploy-pkg/prometheus-jobs ]; then
+            echo "Prometheus jobs:"
+            ls -lh deploy-pkg/prometheus-jobs/
+          fi
+          if [ -d deploy-pkg/grafana-provisioning ]; then
+            echo "Grafana provisioning:"
+            ls -lh deploy-pkg/grafana-provisioning/dashboards/
+          fi
+          if [ -d deploy-pkg/scripts/backup ]; then
+            echo "Backup scripts:"
+            ls -lh deploy-pkg/scripts/backup/
+          fi
+
+      - name: Upload deployment package
+        run: |
+          DEPLOY_DIR="/tmp/soar/deploy/${{ env.DEPLOY_TIMESTAMP }}"
+
+          echo "Creating deployment directory on server: $DEPLOY_DIR"
+          ssh soar@${{ secrets.DEPLOY_SERVER }} "mkdir -p $DEPLOY_DIR"
+
+          echo "Uploading deployment package..."
+          scp -r deploy-pkg/* soar@${{ secrets.DEPLOY_SERVER }}:$DEPLOY_DIR/
+
+          echo "Deployment package uploaded successfully"
+
+      - name: Execute deployment to production
+        run: |
+          DEPLOY_DIR="/tmp/soar/deploy/${{ env.DEPLOY_TIMESTAMP }}"
+          echo "Executing deployment script for production..."
+          ssh soar@${{ secrets.DEPLOY_SERVER }} "sudo /usr/local/bin/soar-deploy production $DEPLOY_DIR"
 
       - name: Cleanup SSH
         if: always()

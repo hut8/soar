@@ -15,5 +15,9 @@
 #
 # Security: This grants minimal privileges - only the deployment script can be run with sudo
 
-# Allow soar user to execute the deployment script
+# Allow soar user to execute the deployment script for production (default)
 soar ALL=(root) NOPASSWD: /usr/local/bin/soar-deploy /tmp/soar/deploy/*
+
+# Allow soar user to execute the deployment script with environment argument (staging or production)
+soar ALL=(root) NOPASSWD: /usr/local/bin/soar-deploy staging /tmp/soar/deploy/*
+soar ALL=(root) NOPASSWD: /usr/local/bin/soar-deploy production /tmp/soar/deploy/*

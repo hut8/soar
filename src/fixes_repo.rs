@@ -118,18 +118,14 @@ struct FixDslRow {
     track_degrees: Option<f32>,
     climb_fpm: Option<i32>,
     turn_rate_rot: Option<f32>,
-    snr_db: Option<f32>,
-    bit_errors_corrected: Option<i32>,
-    freq_offset_khz: Option<f32>,
+    source_metadata: Option<serde_json::Value>,
     flight_id: Option<Uuid>,
     device_id: Uuid,
     received_at: DateTime<Utc>,
     is_active: bool,
     altitude_agl_feet: Option<i32>,
     receiver_id: Uuid,
-    gnss_horizontal_resolution: Option<i16>,
-    gnss_vertical_resolution: Option<i16>,
-    aprs_message_id: Uuid,
+    raw_message_id: Uuid,
     altitude_agl_valid: bool,
     time_gap_seconds: Option<i32>,
 }
@@ -154,15 +150,11 @@ impl From<FixDslRow> for Fix {
             track_degrees: row.track_degrees,
             climb_fpm: row.climb_fpm,
             turn_rate_rot: row.turn_rate_rot,
-            snr_db: row.snr_db,
-            bit_errors_corrected: row.bit_errors_corrected,
-            freq_offset_khz: row.freq_offset_khz,
-            gnss_horizontal_resolution: row.gnss_horizontal_resolution,
-            gnss_vertical_resolution: row.gnss_vertical_resolution,
+            source_metadata: row.source_metadata,
             device_id: row.device_id, // Now directly a Uuid
             is_active: row.is_active,
             receiver_id: row.receiver_id,
-            aprs_message_id: row.aprs_message_id,
+            raw_message_id: row.raw_message_id,
             altitude_agl_valid: row.altitude_agl_valid,
             time_gap_seconds: row.time_gap_seconds,
         }
@@ -186,7 +178,7 @@ impl FixesRepository {
         let new_fix = fix.clone();
         let pool = self.pool.clone();
 
-        // Note: device_id, receiver_id, and aprs_message_id are already populated in the Fix
+        // Note: device_id, receiver_id, and raw_message_id are already populated in the Fix
         // by the generic processor context before Fix creation
 
         tokio::task::spawn_blocking(move || {
@@ -319,14 +311,14 @@ impl FixesRepository {
 
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
-            use crate::schema::{aprs_messages, fixes};
+            use crate::schema::{fixes, raw_messages};
             let mut conn = pool.get()?;
 
             let mut query = fixes::table
                 .inner_join(
-                    aprs_messages::table.on(fixes::aprs_message_id
-                        .eq(aprs_messages::id)
-                        .and(fixes::received_at.eq(aprs_messages::received_at))),
+                    raw_messages::table.on(fixes::raw_message_id
+                        .eq(raw_messages::id)
+                        .and(fixes::received_at.eq(raw_messages::received_at))),
                 )
                 .filter(fixes::device_id.eq(device_id_param))
                 .filter(fixes::received_at.between(start_time, end_time))
@@ -338,12 +330,17 @@ impl FixesRepository {
                 query = query.limit(limit_value);
             }
 
-            // Select all Fix fields plus raw_message from aprs_messages as raw_packet
+            // Select all Fix fields plus raw_message from raw_messages as raw_packet
             let results = query
-                .select((Fix::as_select(), aprs_messages::raw_message))
-                .load::<(Fix, String)>(&mut conn)?
+                .select((Fix::as_select(), raw_messages::raw_message))
+                .load::<(Fix, Vec<u8>)>(&mut conn)?
                 .into_iter()
-                .map(|(fix, raw_packet)| crate::fixes::FixWithRawPacket::new(fix, Some(raw_packet)))
+                .map(|(fix, raw_packet_bytes)| {
+                    crate::fixes::FixWithRawPacket::new(
+                        fix,
+                        Some(String::from_utf8_lossy(&raw_packet_bytes).to_string()),
+                    )
+                })
                 .collect();
 
             Ok::<Vec<crate::fixes::FixWithRawPacket>, anyhow::Error>(results)
@@ -475,7 +472,7 @@ impl FixesRepository {
     ) -> Result<(Vec<crate::fixes::FixWithRawPacket>, i64)> {
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
-            use crate::schema::{aprs_messages, fixes};
+            use crate::schema::{fixes, raw_messages};
             let mut conn = pool.get()?;
 
             // Build base query for count
@@ -493,9 +490,9 @@ impl FixesRepository {
             // Build query for paginated results with raw packet data
             let mut query = fixes::table
                 .inner_join(
-                    aprs_messages::table.on(fixes::aprs_message_id
-                        .eq(aprs_messages::id)
-                        .and(fixes::received_at.eq(aprs_messages::received_at))),
+                    raw_messages::table.on(fixes::raw_message_id
+                        .eq(raw_messages::id)
+                        .and(fixes::received_at.eq(raw_messages::received_at))),
                 )
                 .filter(fixes::device_id.eq(device_uuid))
                 .into_boxed();
@@ -510,10 +507,15 @@ impl FixesRepository {
                 .order(fixes::received_at.desc())
                 .limit(per_page)
                 .offset(offset)
-                .select((Fix::as_select(), aprs_messages::raw_message))
-                .load::<(Fix, String)>(&mut conn)?
+                .select((Fix::as_select(), raw_messages::raw_message))
+                .load::<(Fix, Vec<u8>)>(&mut conn)?
                 .into_iter()
-                .map(|(fix, raw_packet)| crate::fixes::FixWithRawPacket::new(fix, Some(raw_packet)))
+                .map(|(fix, raw_packet_bytes)| {
+                    crate::fixes::FixWithRawPacket::new(
+                        fix,
+                        Some(String::from_utf8_lossy(&raw_packet_bytes).to_string()),
+                    )
+                })
                 .collect();
 
             Ok::<(Vec<crate::fixes::FixWithRawPacket>, i64), anyhow::Error>((results, total_count))
@@ -810,12 +812,8 @@ impl FixesRepository {
                 climb_fpm: Option<i32>,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float4>)]
                 turn_rate_rot: Option<f32>,
-                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float4>)]
-                snr_db: Option<f32>,
-                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Int4>)]
-                bit_errors_corrected: Option<i32>,
-                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float4>)]
-                freq_offset_khz: Option<f32>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Jsonb>)]
+                source_metadata: Option<serde_json::Value>,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
                 flight_id: Option<uuid::Uuid>,
                 #[diesel(sql_type = diesel::sql_types::Uuid)]
@@ -828,12 +826,8 @@ impl FixesRepository {
                 altitude_agl_feet: Option<i32>,
                 #[diesel(sql_type = diesel::sql_types::Uuid)]
                 receiver_id: uuid::Uuid,
-                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Int2>)]
-                gnss_horizontal_resolution: Option<i16>,
-                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Int2>)]
-                gnss_vertical_resolution: Option<i16>,
                 #[diesel(sql_type = diesel::sql_types::Uuid)]
-                aprs_message_id: uuid::Uuid,
+                raw_message_id: uuid::Uuid,
                 #[diesel(sql_type = diesel::sql_types::Bool)]
                 altitude_agl_valid: bool,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Int4>)]
@@ -872,15 +866,11 @@ impl FixesRepository {
                     track_degrees: fix_row.track_degrees,
                     climb_fpm: fix_row.climb_fpm,
                     turn_rate_rot: fix_row.turn_rate_rot,
-                    snr_db: fix_row.snr_db,
-                    bit_errors_corrected: fix_row.bit_errors_corrected,
-                    freq_offset_khz: fix_row.freq_offset_khz,
-                    gnss_horizontal_resolution: fix_row.gnss_horizontal_resolution,
-                    gnss_vertical_resolution: fix_row.gnss_vertical_resolution,
+                    source_metadata: fix_row.source_metadata,
                     device_id: fix_row.device_id,
                     is_active: fix_row.is_active,
                     receiver_id: fix_row.receiver_id,
-                    aprs_message_id: fix_row.aprs_message_id,
+                    raw_message_id: fix_row.raw_message_id,
                     altitude_agl_valid: fix_row.altitude_agl_valid,
                     time_gap_seconds: fix_row.time_gap_seconds,
                 };

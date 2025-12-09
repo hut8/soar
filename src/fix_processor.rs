@@ -248,7 +248,7 @@ impl FixProcessor {
                             received_at,
                             device_model.id,
                             context.receiver_id,
-                            context.aprs_message_id,
+                            context.raw_message_id,
                         ) {
                             Ok(Some(fix)) => {
                                 metrics::histogram!("aprs.aircraft.fix_creation_ms").record(

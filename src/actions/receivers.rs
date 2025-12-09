@@ -384,7 +384,7 @@ pub async fn get_receiver_raw_messages(
     Query(params): Query<ReceiverRawMessagesQuery>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    use crate::aprs_messages_repo::AprsMessagesRepository;
+    use crate::raw_messages_repo::AprsMessagesRepository;
 
     let receiver_repo = ReceiverRepository::new(state.pool.clone());
     let messages_repo = AprsMessagesRepository::new(state.pool.clone());
@@ -449,7 +449,7 @@ pub struct ReceiverRawMessagesQuery {
 
 #[derive(Debug, Serialize)]
 pub struct ReceiverRawMessagesResponse {
-    pub messages: Vec<crate::aprs_messages_repo::AprsMessage>,
+    pub messages: Vec<crate::raw_messages_repo::AprsMessage>,
     pub page: i64,
     pub total_pages: i64,
 }
