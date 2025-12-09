@@ -6,7 +6,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::aprs_messages_repo::{AprsMessage, AprsMessagesRepository};
+use crate::raw_messages_repo::{AprsMessage, AprsMessagesRepository};
 use crate::web::AppState;
 
 use super::json_error;

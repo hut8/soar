@@ -7,8 +7,8 @@ use std::path::Path;
 use tracing::info;
 use uuid::Uuid;
 
-use soar::aprs_messages_repo::AprsMessage;
-use soar::schema::aprs_messages;
+use soar::raw_messages_repo::AprsMessage;
+use soar::schema::raw_messages;
 
 use super::archiver::{Archivable, PgPool, write_records_to_file};
 
@@ -28,7 +28,7 @@ impl From<AprsMessage> for AprsMessageCsv {
     fn from(msg: AprsMessage) -> Self {
         Self {
             id: msg.id,
-            raw_message: msg.raw_message,
+            raw_message: String::from_utf8_lossy(&msg.raw_message).to_string(), // Decode bytes to UTF-8
             received_at: msg.received_at,
             receiver_id: msg.receiver_id,
             unparsed: msg.unparsed,
@@ -41,7 +41,7 @@ impl From<AprsMessageCsv> for AprsMessage {
     fn from(csv: AprsMessageCsv) -> Self {
         Self {
             id: csv.id,
-            raw_message: csv.raw_message,
+            raw_message: csv.raw_message.into_bytes(), // Encode UTF-8 text to bytes
             received_at: csv.received_at,
             receiver_id: csv.receiver_id,
             unparsed: csv.unparsed,
@@ -66,10 +66,10 @@ impl Archivable for AprsMessageCsv {
                 .single()
                 .ok_or_else(|| anyhow::anyhow!("Failed to create cutoff datetime"))?;
 
-            let oldest_timestamp: Option<chrono::DateTime<Utc>> = aprs_messages::table
-                .select(aprs_messages::received_at)
-                .filter(aprs_messages::received_at.lt(cutoff))
-                .order(aprs_messages::received_at.asc())
+            let oldest_timestamp: Option<chrono::DateTime<Utc>> = raw_messages::table
+                .select(raw_messages::received_at)
+                .filter(raw_messages::received_at.lt(cutoff))
+                .order(raw_messages::received_at.asc())
                 .limit(1)
                 .first::<chrono::DateTime<Utc>>(&mut conn)
                 .optional()?;
@@ -86,9 +86,9 @@ impl Archivable for AprsMessageCsv {
         let pool = pool.clone();
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
-            let count = aprs_messages::table
-                .filter(aprs_messages::received_at.ge(day_start))
-                .filter(aprs_messages::received_at.lt(day_end))
+            let count = raw_messages::table
+                .filter(raw_messages::received_at.ge(day_start))
+                .filter(raw_messages::received_at.lt(day_end))
                 .count()
                 .get_result::<i64>(&mut conn)?;
             Ok(count)
@@ -112,9 +112,9 @@ impl Archivable for AprsMessageCsv {
             let mut conn = pool.get()?;
 
             // Use DATE() to group by day in UTC
-            let results: Vec<(NaiveDate, i64)> = aprs_messages::table
-                .filter(aprs_messages::received_at.ge(start_datetime))
-                .filter(aprs_messages::received_at.lt(end_datetime))
+            let results: Vec<(NaiveDate, i64)> = raw_messages::table
+                .filter(raw_messages::received_at.ge(start_datetime))
+                .filter(raw_messages::received_at.lt(end_datetime))
                 .select((sql::<Date>("DATE(received_at)"), sql::<BigInt>("COUNT(*)")))
                 .group_by(sql::<Date>("DATE(received_at)"))
                 .load(&mut conn)?;
@@ -135,10 +135,10 @@ impl Archivable for AprsMessageCsv {
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
             // Query database for AprsMessage records
-            let messages_iter = aprs_messages::table
-                .filter(aprs_messages::received_at.ge(day_start))
-                .filter(aprs_messages::received_at.lt(day_end))
-                .order(aprs_messages::received_at.asc())
+            let messages_iter = raw_messages::table
+                .filter(raw_messages::received_at.ge(day_start))
+                .filter(raw_messages::received_at.lt(day_end))
+                .order(raw_messages::received_at.asc())
                 .select(AprsMessage::as_select())
                 .load_iter::<AprsMessage, diesel::pg::PgRowByRowLoadingMode>(&mut conn)?;
 
@@ -202,7 +202,7 @@ impl Archivable for AprsMessageCsv {
             for csv_message in batch {
                 // Convert CSV format back to database format
                 let db_message: AprsMessage = csv_message.clone().into();
-                diesel::insert_into(aprs_messages::table)
+                diesel::insert_into(raw_messages::table)
                     .values(&db_message)
                     .on_conflict_do_nothing()
                     .execute(conn)?;

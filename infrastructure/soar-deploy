@@ -102,12 +102,14 @@ ACTIVE_SERVICES=(
 
 # Timer-invoked services (only installed, not enabled or started)
 # Skip backup services for staging environment
+# NOTE: soar-beast-ingest.service is disabled by default until ready for production
 if [ "$ENVIRONMENT" = "staging" ]; then
     TIMER_SERVICES=(
         "soar-pull-data${SERVICE_SUFFIX}.service"
         "soar-sitemap${SERVICE_SUFFIX}.service"
         "soar-archive${SERVICE_SUFFIX}.service"
         "partman-maintenance${SERVICE_SUFFIX}.service"
+        "soar-beast-ingest${SERVICE_SUFFIX}.service"
     )
     TIMERS=(
         "soar-pull-data${SERVICE_SUFFIX}.timer"
@@ -123,6 +125,7 @@ else
         "soar-backup-base${SERVICE_SUFFIX}.service"
         "soar-backup-verify${SERVICE_SUFFIX}.service"
         "partman-maintenance${SERVICE_SUFFIX}.service"
+        "soar-beast-ingest${SERVICE_SUFFIX}.service"
     )
     TIMERS=(
         "soar-pull-data${SERVICE_SUFFIX}.timer"
