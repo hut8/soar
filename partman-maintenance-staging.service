@@ -1,0 +1,10 @@
+[Unit]
+Description=pg_partman partition maintenance (staging)
+After=postgresql.service
+
+[Service]
+Type=oneshot
+User=soar
+ExecStart=/usr/bin/psql postgres://localhost/soar_staging -c "SELECT partman.run_maintenance_proc()"
+StandardOutput=append:/var/soar/logs/partman-staging.log
+StandardError=append:/var/soar/logs/partman-staging.log

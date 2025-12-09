@@ -1143,6 +1143,24 @@ diesel::table! {
 }
 
 diesel::table! {
+    use diesel::sql_types::*;
+    use super::sql_types::Geometry;
+    use super::sql_types::Geography;
+
+    user_fixes (id) {
+        id -> Uuid,
+        user_id -> Uuid,
+        latitude -> Float8,
+        longitude -> Float8,
+        heading -> Nullable<Float8>,
+        location_geom -> Nullable<Geometry>,
+        location_geog -> Nullable<Geography>,
+        raw -> Nullable<Jsonb>,
+        timestamp -> Timestamptz,
+    }
+}
+
+diesel::table! {
     users (id) {
         id -> Uuid,
         #[max_length = 255]
@@ -1228,6 +1246,7 @@ diesel::joinable!(raw_messages -> receivers (receiver_id));
 diesel::joinable!(receiver_statuses -> receivers (receiver_id));
 diesel::joinable!(receivers_links -> receivers (receiver_id));
 diesel::joinable!(receivers_photos -> receivers (receiver_id));
+diesel::joinable!(user_fixes -> users (user_id));
 diesel::joinable!(users -> clubs (club_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
@@ -1283,5 +1302,6 @@ diesel::allow_tables_to_appear_in_same_query!(
     type_aircraft,
     type_engines,
     type_registrations,
+    user_fixes,
     users,
 );

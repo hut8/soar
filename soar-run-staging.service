@@ -1,0 +1,40 @@
+[Unit]
+Description=SOAR Run (Staging) - APRS Data Collection Service
+Documentation=https://github.com/hut8/soar
+After=network-online.target postgresql.service nats-server.service
+Wants=network-online.target nats-server.service
+Requires=postgresql.service
+# Wants=nats-server.service ensures NATS starts when this service starts
+# Service will reconnect automatically via built-in retry logic if NATS restarts
+
+[Service]
+Type=simple
+User=soar
+Group=soar
+WorkingDirectory=/var/soar
+ExecStart=/usr/local/bin/soar-staging run --archive
+ExecReload=/bin/kill -s HUP $MAINPID
+
+# Environment variables (staging environment)
+EnvironmentFile=/etc/soar/env-staging
+
+# Security settings
+NoNewPrivileges=yes
+ReadWritePaths=-/var/soar
+
+# Restart configuration
+Restart=on-failure
+RestartSec=5
+StartLimitInterval=60s
+StartLimitBurst=3
+
+# Graceful shutdown configuration
+# Allow up to 10 minutes (600s) for queues to drain + 10s buffer
+TimeoutStopSec=610
+
+# Process limits
+LimitNOFILE=65536
+MemoryMax=32G
+
+[Install]
+WantedBy=multi-user.target soar.target
