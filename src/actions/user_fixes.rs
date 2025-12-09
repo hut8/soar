@@ -38,11 +38,11 @@ pub async fn create_user_fix(
     }
 
     // Validate heading if provided
-    if let Some(heading) = request.heading {
-        if !(0.0..=360.0).contains(&heading) {
-            return json_error(StatusCode::BAD_REQUEST, "Heading must be between 0 and 360")
-                .into_response();
-        }
+    if let Some(heading) = request.heading
+        && !(0.0..=360.0).contains(&heading)
+    {
+        return json_error(StatusCode::BAD_REQUEST, "Heading must be between 0 and 360")
+            .into_response();
     }
 
     match repo
