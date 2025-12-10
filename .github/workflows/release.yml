@@ -176,6 +176,7 @@ jobs:
       - name: Build release binary (ARM64)
         env:
           CROSS_CONTAINER_ENGINE: docker
+          SKIP_WEB_BUILD: "1"  # Frontend already built above
         run: cross build --release --target aarch64-unknown-linux-gnu
 
       - name: Install sentry-cli
