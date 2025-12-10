@@ -47,8 +47,10 @@ if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
 
     # Add PostgreSQL GPG key (modern method, not using deprecated apt-key)
     sudo mkdir -p /etc/apt/keyrings
-    wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | \
-        sudo gpg --dearmor -o /etc/apt/keyrings/postgresql.gpg
+    if [ ! -f /etc/apt/keyrings/postgresql.gpg ]; then
+        wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | \
+            sudo gpg --dearmor -o /etc/apt/keyrings/postgresql.gpg
+    fi
 
     # Add PostgreSQL repository with signed-by
     echo "deb [signed-by=/etc/apt/keyrings/postgresql.gpg] http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | \
@@ -191,8 +193,10 @@ if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
 
     # Add Grafana GPG key (modern method, not using deprecated apt-key)
     sudo mkdir -p /etc/apt/keyrings
-    wget -q -O - https://apt.grafana.com/gpg.key | \
-        sudo gpg --dearmor -o /etc/apt/keyrings/grafana.gpg
+    if [ ! -f /etc/apt/keyrings/grafana.gpg ]; then
+        wget -q -O - https://apt.grafana.com/gpg.key | \
+            sudo gpg --dearmor -o /etc/apt/keyrings/grafana.gpg
+    fi
 
     # Add Grafana repository with signed-by
     echo "deb [signed-by=/etc/apt/keyrings/grafana.gpg] https://apt.grafana.com stable main" | \
