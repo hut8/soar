@@ -299,6 +299,32 @@ sudo systemctl enable prometheus-nats-exporter.service
 sudo systemctl enable prometheus
 sudo systemctl enable grafana-server
 
+# Start Prometheus if not already running
+if ! systemctl is-active --quiet prometheus; then
+    echo -e "${BLUE}Starting Prometheus...${NC}"
+    sudo systemctl start prometheus
+    if systemctl is-active --quiet prometheus; then
+        echo -e "${GREEN}Prometheus started successfully${NC}"
+    else
+        echo -e "${YELLOW}Warning: Failed to start Prometheus. Check logs with: journalctl -u prometheus -n 50${NC}"
+    fi
+else
+    echo -e "${BLUE}Prometheus is already running${NC}"
+fi
+
+# Start Grafana if not already running
+if ! systemctl is-active --quiet grafana-server; then
+    echo -e "${BLUE}Starting Grafana...${NC}"
+    sudo systemctl start grafana-server
+    if systemctl is-active --quiet grafana-server; then
+        echo -e "${GREEN}Grafana started successfully${NC}"
+    else
+        echo -e "${YELLOW}Warning: Failed to start Grafana. Check logs with: journalctl -u grafana-server -n 50${NC}"
+    fi
+else
+    echo -e "${BLUE}Grafana is already running${NC}"
+fi
+
 # Create necessary directories
 echo -e "${BLUE}Creating directories...${NC}"
 sudo mkdir -p /var/soar/logs
