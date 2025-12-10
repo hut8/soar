@@ -185,7 +185,9 @@ echo -e "${BLUE}Installing Grafana...${NC}"
 
 if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
     # Add Grafana APT repository
-    sudo apt-get install -y apt-transport-https software-properties-common gnupg
+    # Note: apt-transport-https not needed on modern Debian/Ubuntu (apt 1.5+)
+    # software-properties-common is Ubuntu-specific and not needed here
+    sudo apt-get install -y gnupg
 
     # Add Grafana GPG key (modern method, not using deprecated apt-key)
     sudo mkdir -p /etc/apt/keyrings
