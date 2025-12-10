@@ -24,6 +24,66 @@ fi
 
 echo -e "${GREEN}Provisioning SOAR server...${NC}"
 
+# Detect OS
+if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    OS=$ID
+    OS_VERSION=$VERSION_ID
+else
+    echo -e "${RED}Error: Cannot detect OS. /etc/os-release not found.${NC}"
+    exit 1
+fi
+
+echo -e "${BLUE}Detected OS: $OS $OS_VERSION${NC}"
+
+# Install PostgreSQL 18
+echo -e "${BLUE}Installing PostgreSQL 18...${NC}"
+
+if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
+    # Add PostgreSQL APT repository
+    echo "Adding PostgreSQL APT repository..."
+    sudo apt-get update
+    sudo apt-get install -y wget ca-certificates lsb-release
+
+    # Add PostgreSQL repository
+    wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+    echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+
+    # Install PostgreSQL 18 and PostGIS
+    sudo apt-get update
+    sudo apt-get install -y postgresql-18 postgresql-client-18 postgresql-18-postgis-3 postgresql-18-partman
+
+elif [[ "$OS" == "centos" ]] || [[ "$OS" == "rhel" ]] || [[ "$OS" == "rocky" ]] || [[ "$OS" == "almalinux" ]]; then
+    # Install PostgreSQL repository
+    sudo dnf install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-${OS_VERSION%%.*}-x86_64/pgdg-redhat-repo-latest.noarch.rpm
+
+    # Disable built-in PostgreSQL module
+    sudo dnf -qy module disable postgresql
+
+    # Install PostgreSQL 18 and extensions
+    sudo dnf install -y postgresql18-server postgresql18-contrib postgis34_18 pg_partman_18
+
+    # Initialize database if not already initialized
+    if [ ! -f /var/lib/pgsql/18/data/PG_VERSION ]; then
+        sudo /usr/pgsql-18/bin/postgresql-18-setup initdb
+    fi
+
+    # Enable and start PostgreSQL
+    sudo systemctl enable postgresql-18
+    sudo systemctl start postgresql-18
+else
+    echo -e "${RED}Error: Unsupported OS: $OS${NC}"
+    echo "Please install PostgreSQL 18, PostGIS, and pg_partman manually."
+    exit 1
+fi
+
+echo -e "${GREEN}PostgreSQL 18 installed successfully${NC}"
+
+# Ensure PostgreSQL is running
+sudo systemctl enable postgresql
+sudo systemctl start postgresql
+echo -e "${GREEN}PostgreSQL service started${NC}"
+
 # Create soar user if it doesn't exist
 if ! id "soar" &>/dev/null; then
     echo -e "${BLUE}Creating 'soar' system user...${NC}"
@@ -45,6 +105,104 @@ if ! sudo visudo -c -f /etc/sudoers.d/soar; then
     sudo rm -f /etc/sudoers.d/soar
     exit 1
 fi
+
+# Install NATS server binary if not already installed
+if [ ! -f /usr/local/bin/nats-server ]; then
+    echo -e "${BLUE}Installing NATS server binary...${NC}"
+    NATS_VERSION="2.10.24"
+    NATS_URL="https://github.com/nats-io/nats-server/releases/download/v${NATS_VERSION}/nats-server-v${NATS_VERSION}-linux-amd64.tar.gz"
+
+    (
+        cd /tmp
+        wget -q "$NATS_URL" || { echo -e "${RED}Failed to download nats-server${NC}"; exit 1; }
+        tar -xzf "nats-server-v${NATS_VERSION}-linux-amd64.tar.gz"
+        sudo install -m 755 "nats-server-v${NATS_VERSION}-linux-amd64/nats-server" /usr/local/bin/
+        rm -rf "nats-server-v${NATS_VERSION}-linux-amd64.tar.gz" "nats-server-v${NATS_VERSION}-linux-amd64"
+    )
+    echo -e "${GREEN}NATS server installed successfully${NC}"
+else
+    echo -e "${BLUE}NATS server already installed${NC}"
+fi
+
+# Install Prometheus
+echo -e "${BLUE}Installing Prometheus...${NC}"
+
+if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
+    sudo apt-get update
+    sudo apt-get install -y prometheus
+elif [[ "$OS" == "centos" ]] || [[ "$OS" == "rhel" ]] || [[ "$OS" == "rocky" ]] || [[ "$OS" == "almalinux" ]]; then
+    # Create prometheus user
+    if ! id "prometheus" &>/dev/null; then
+        sudo useradd --no-create-home --shell /bin/false prometheus
+    fi
+
+    # Download and install Prometheus
+    if [ ! -f /usr/local/bin/prometheus ]; then
+        PROMETHEUS_VERSION="2.48.1"
+        (
+            cd /tmp
+            wget -q "https://github.com/prometheus/prometheus/releases/download/v${PROMETHEUS_VERSION}/prometheus-${PROMETHEUS_VERSION}.linux-amd64.tar.gz"
+            tar -xzf "prometheus-${PROMETHEUS_VERSION}.linux-amd64.tar.gz"
+            sudo cp "prometheus-${PROMETHEUS_VERSION}.linux-amd64/prometheus" /usr/local/bin/
+            sudo cp "prometheus-${PROMETHEUS_VERSION}.linux-amd64/promtool" /usr/local/bin/
+            sudo mkdir -p /etc/prometheus /var/lib/prometheus
+            sudo chown prometheus:prometheus /etc/prometheus /var/lib/prometheus
+            rm -rf "prometheus-${PROMETHEUS_VERSION}.linux-amd64" "prometheus-${PROMETHEUS_VERSION}.linux-amd64.tar.gz"
+        )
+
+        # Create systemd service for RHEL-based systems
+        cat <<'EOF' | sudo tee /etc/systemd/system/prometheus.service
+[Unit]
+Description=Prometheus
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=prometheus
+Group=prometheus
+Type=simple
+ExecStart=/usr/local/bin/prometheus \
+    --config.file=/etc/prometheus/prometheus.yml \
+    --storage.tsdb.path=/var/lib/prometheus/ \
+    --web.console.templates=/etc/prometheus/consoles \
+    --web.console.libraries=/etc/prometheus/console_libraries
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    fi
+fi
+
+echo -e "${GREEN}Prometheus installed successfully${NC}"
+
+# Install Grafana
+echo -e "${BLUE}Installing Grafana...${NC}"
+
+if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
+    # Add Grafana APT repository
+    sudo apt-get install -y apt-transport-https software-properties-common
+    wget -q -O - https://apt.grafana.com/gpg.key | sudo apt-key add -
+    echo "deb https://apt.grafana.com stable main" | sudo tee /etc/apt/sources.list.d/grafana.list
+    sudo apt-get update
+    sudo apt-get install -y grafana
+
+elif [[ "$OS" == "centos" ]] || [[ "$OS" == "rhel" ]] || [[ "$OS" == "rocky" ]] || [[ "$OS" == "almalinux" ]]; then
+    # Add Grafana YUM repository
+    cat <<'EOF' | sudo tee /etc/yum.repos.d/grafana.repo
+[grafana]
+name=grafana
+baseurl=https://rpm.grafana.com
+repo_gpgcheck=1
+enabled=1
+gpgcheck=1
+gpgkey=https://rpm.grafana.com/gpg.key
+sslverify=1
+sslcacert=/etc/pki/tls/certs/ca-bundle.crt
+EOF
+    sudo dnf install -y grafana
+fi
+
+echo -e "${GREEN}Grafana installed successfully${NC}"
 
 # Install prometheus-nats-exporter binary if not already installed
 if [ ! -f /usr/local/bin/prometheus-nats-exporter ]; then
@@ -74,17 +232,79 @@ sudo cp infrastructure/prometheus-nats-exporter.service /etc/systemd/system/
 echo "Reloading systemd daemon..."
 sudo systemctl daemon-reload
 
+# Configure Prometheus
+echo -e "${BLUE}Configuring Prometheus...${NC}"
+sudo mkdir -p /etc/prometheus/jobs
+sudo cp infrastructure/prometheus.yml /etc/prometheus/prometheus.yml
+
+# Set Prometheus ownership
+if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
+    sudo chown prometheus:prometheus /etc/prometheus/prometheus.yml
+    sudo chown prometheus:prometheus /etc/prometheus/jobs
+elif [[ "$OS" == "centos" ]] || [[ "$OS" == "rhel" ]] || [[ "$OS" == "rocky" ]] || [[ "$OS" == "almalinux" ]]; then
+    sudo chown prometheus:prometheus /etc/prometheus/prometheus.yml
+    sudo chown prometheus:prometheus /etc/prometheus/jobs
+fi
+
+echo -e "${GREEN}Prometheus configured${NC}"
+
+# Configure Grafana
+echo -e "${BLUE}Configuring Grafana...${NC}"
+sudo mkdir -p /etc/grafana/provisioning/dashboards
+sudo mkdir -p /etc/grafana/provisioning/datasources
+sudo mkdir -p /etc/grafana/dashboards
+
+# Copy Grafana dashboard provisioning configuration
+if [ -f infrastructure/grafana-provisioning/dashboards/dashboards.yml ]; then
+    sudo cp infrastructure/grafana-provisioning/dashboards/dashboards.yml /etc/grafana/provisioning/dashboards/
+    sudo chown grafana:grafana /etc/grafana/provisioning/dashboards/dashboards.yml
+    echo "Grafana dashboard provisioning configuration installed"
+fi
+
+# Create Prometheus datasource provisioning configuration
+cat <<'EOF' | sudo tee /etc/grafana/provisioning/datasources/prometheus.yml
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://localhost:9090
+    isDefault: true
+    editable: true
+    jsonData:
+      httpMethod: POST
+      timeInterval: 15s
+EOF
+
+sudo chown grafana:grafana /etc/grafana/provisioning/datasources/prometheus.yml
+echo "Grafana Prometheus datasource provisioning installed"
+
+# Copy Grafana dashboards
+DASHBOARD_COUNT=0
+if compgen -G "infrastructure/grafana-dashboard-*.json" > /dev/null; then
+    sudo cp infrastructure/grafana-dashboard-*.json /etc/grafana/dashboards/
+    sudo chown -R grafana:grafana /etc/grafana/dashboards
+    DASHBOARD_COUNT=$(ls -1 infrastructure/grafana-dashboard-*.json | wc -l)
+    echo "Installed $DASHBOARD_COUNT Grafana dashboard(s)"
+fi
+
+echo -e "${GREEN}Grafana configured with $DASHBOARD_COUNT dashboards and Prometheus datasource${NC}"
+
 # Enable infrastructure services
 # Note: SOAR application services are enabled by soar-deploy
 echo -e "${BLUE}Enabling infrastructure services...${NC}"
 sudo systemctl enable nats-server.service
 sudo systemctl enable prometheus-nats-exporter.service
+sudo systemctl enable prometheus
+sudo systemctl enable grafana-server
 
 # Create necessary directories
 echo -e "${BLUE}Creating directories...${NC}"
 sudo mkdir -p /var/soar/logs
 sudo mkdir -p /var/soar/archive
 sudo mkdir -p /etc/soar
+sudo mkdir -p /var/lib/nats/jetstream
 
 # Set ownership for soar user
 echo -e "${BLUE}Setting ownership for soar user...${NC}"
@@ -93,18 +313,192 @@ sudo chown -R soar:soar /var/soar/archive
 sudo chown soar:soar /home/soar
 sudo chmod 755 /home/soar
 
+# Set ownership for NATS JetStream storage
+echo -e "${BLUE}Setting ownership for NATS JetStream storage...${NC}"
+sudo chown -R daemon:daemon /var/lib/nats/jetstream
+echo -e "${GREEN}NATS JetStream storage configured${NC}"
+
+# Configure PostgreSQL authentication
+echo -e "${BLUE}Configuring PostgreSQL authentication...${NC}"
+
+# Determine pg_hba.conf location based on OS
+if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
+    PG_HBA_CONF="/etc/postgresql/18/main/pg_hba.conf"
+    PG_CONF_DIR="/etc/postgresql/18/main"
+elif [[ "$OS" == "centos" ]] || [[ "$OS" == "rhel" ]] || [[ "$OS" == "rocky" ]] || [[ "$OS" == "almalinux" ]]; then
+    PG_HBA_CONF="/var/lib/pgsql/18/data/pg_hba.conf"
+    PG_CONF_DIR="/var/lib/pgsql/18/data"
+fi
+
+if [ ! -f "$PG_HBA_CONF" ]; then
+    echo -e "${RED}Error: pg_hba.conf not found at $PG_HBA_CONF${NC}"
+    exit 1
+fi
+
+# Backup pg_hba.conf
+echo "Backing up pg_hba.conf..."
+sudo cp "$PG_HBA_CONF" "$PG_HBA_CONF.backup.$(date +%Y%m%d_%H%M%S)"
+
+# Check if trust authentication is already configured for soar user
+NEEDS_RELOAD=false
+
+if ! grep -q "^local.*soar.*soar.*trust" "$PG_HBA_CONF"; then
+    echo "Adding Unix socket trust authentication for soar user..."
+    sudo sed -i "/^# \"local\" is for Unix domain socket connections only/a local   soar            soar                                    trust" "$PG_HBA_CONF"
+    NEEDS_RELOAD=true
+fi
+
+if ! grep -q "^host.*soar.*soar.*127.0.0.1/32.*trust" "$PG_HBA_CONF"; then
+    echo "Adding TCP localhost trust authentication for soar user to soar database..."
+    sudo sed -i "/^# IPv4 local connections:/a host    soar            soar            127.0.0.1/32            trust" "$PG_HBA_CONF"
+    NEEDS_RELOAD=true
+fi
+
+if ! grep -q "^host.*soar_staging.*soar.*127.0.0.1/32.*trust" "$PG_HBA_CONF"; then
+    echo "Adding TCP localhost trust authentication for soar user to soar_staging database..."
+    sudo sed -i "/^# IPv4 local connections:/a host    soar_staging    soar            127.0.0.1/32            trust" "$PG_HBA_CONF"
+    NEEDS_RELOAD=true
+fi
+
+if [ "$NEEDS_RELOAD" = true ]; then
+    echo "Reloading PostgreSQL configuration..."
+    sudo systemctl reload postgresql
+    echo -e "${GREEN}PostgreSQL authentication configured for trust on local connections${NC}"
+else
+    echo -e "${BLUE}PostgreSQL authentication already correctly configured${NC}"
+fi
+
+# Create PostgreSQL databases and enable extensions
+echo -e "${BLUE}Creating PostgreSQL databases...${NC}"
+
+# Create soar database user if it doesn't exist (without password)
+sudo -u postgres psql -tc "SELECT 1 FROM pg_user WHERE usename = 'soar'" | grep -q 1 || \
+    sudo -u postgres psql -c "CREATE USER soar;"
+
+echo -e "${GREEN}PostgreSQL 'soar' user configured with trust authentication${NC}"
+echo
+
+# Create production database
+if sudo -u postgres psql -lqt | cut -d \| -f 1 | grep -qw soar; then
+    echo -e "${BLUE}Database 'soar' already exists${NC}"
+else
+    echo "Creating 'soar' database..."
+    sudo -u postgres psql -c "CREATE DATABASE soar OWNER soar;"
+    echo -e "${GREEN}Database 'soar' created${NC}"
+fi
+
+# Create staging database
+if sudo -u postgres psql -lqt | cut -d \| -f 1 | grep -qw soar_staging; then
+    echo -e "${BLUE}Database 'soar_staging' already exists${NC}"
+else
+    echo "Creating 'soar_staging' database..."
+    sudo -u postgres psql -c "CREATE DATABASE soar_staging OWNER soar;"
+    echo -e "${GREEN}Database 'soar_staging' created${NC}"
+fi
+
+# Enable PostGIS extension on soar database
+echo -e "${BLUE}Enabling PostGIS extension on 'soar' database...${NC}"
+sudo -u postgres psql -d soar -c "CREATE EXTENSION IF NOT EXISTS postgis;"
+sudo -u postgres psql -d soar -c "CREATE EXTENSION IF NOT EXISTS postgis_topology;"
+echo -e "${GREEN}PostGIS enabled on 'soar' database${NC}"
+
+# Enable PostGIS extension on soar_staging database
+echo -e "${BLUE}Enabling PostGIS extension on 'soar_staging' database...${NC}"
+sudo -u postgres psql -d soar_staging -c "CREATE EXTENSION IF NOT EXISTS postgis;"
+sudo -u postgres psql -d soar_staging -c "CREATE EXTENSION IF NOT EXISTS postgis_topology;"
+echo -e "${GREEN}PostGIS enabled on 'soar_staging' database${NC}"
+
+# Enable pg_partman extension on soar database
+echo -e "${BLUE}Enabling pg_partman extension on 'soar' database...${NC}"
+sudo -u postgres psql -d soar -c "CREATE SCHEMA IF NOT EXISTS partman;"
+sudo -u postgres psql -d soar -c "CREATE EXTENSION IF NOT EXISTS pg_partman SCHEMA partman;"
+echo -e "${GREEN}pg_partman enabled on 'soar' database${NC}"
+
+# Enable pg_partman extension on soar_staging database
+echo -e "${BLUE}Enabling pg_partman extension on 'soar_staging' database...${NC}"
+sudo -u postgres psql -d soar_staging -c "CREATE SCHEMA IF NOT EXISTS partman;"
+sudo -u postgres psql -d soar_staging -c "CREATE EXTENSION IF NOT EXISTS pg_partman SCHEMA partman;"
+echo -e "${GREEN}pg_partman enabled on 'soar_staging' database${NC}"
+
+echo -e "${GREEN}Database setup complete!${NC}"
+echo
+
 echo -e "${GREEN}Server provisioning complete!${NC}"
 echo
-echo -e "${YELLOW}Next steps:${NC}"
-echo "  1. Run the first deployment with soar-deploy to install SOAR services"
-echo "  2. SOAR services will be managed by soar-deploy on each deployment"
+echo -e "${YELLOW}═══════════════════════════════════════════════════════════════${NC}"
+echo -e "${YELLOW}IMPORTANT: Manual Configuration Steps Required${NC}"
+echo -e "${YELLOW}═══════════════════════════════════════════════════════════════${NC}"
+echo
+echo -e "${YELLOW}1. Configure environment variables:${NC}"
+echo "   Create/edit /etc/soar/.env and set:"
+echo
+echo "   For production:"
+echo "   DATABASE_URL=postgres://soar@localhost/soar"
+echo
+echo "   For staging:"
+echo "   DATABASE_URL=postgres://soar@localhost/soar_staging"
+echo
+echo -e "${YELLOW}2. Set up additional environment variables in /etc/soar/.env:${NC}"
+echo "   - NATS_URL (e.g., nats://localhost:4222)"
+echo "   - APRS_CALLSIGN (for APRS-IS connection)"
+echo "   - Any other application-specific configuration"
+echo
+echo -e "${YELLOW}3. Run database migrations:${NC}"
+echo "   cd /path/to/soar"
+echo "   diesel migration run --database-url=\$DATABASE_URL"
+echo
+echo -e "${YELLOW}4. Deploy SOAR application:${NC}"
+echo "   Run the first deployment with soar-deploy to install SOAR services"
+echo "   SOAR services will be managed by soar-deploy on each deployment"
+echo
+echo -e "${YELLOW}═══════════════════════════════════════════════════════════════${NC}"
 echo
 echo -e "${YELLOW}Infrastructure service control:${NC}"
-echo "  sudo systemctl start nats-server.service"
-echo "  sudo systemctl start prometheus-nats-exporter.service"
-echo "  sudo systemctl status nats-server.service"
-echo "  sudo systemctl status prometheus-nats-exporter.service"
+echo "  Start services:"
+echo "    sudo systemctl start nats-server"
+echo "    sudo systemctl start prometheus"
+echo "    sudo systemctl start prometheus-nats-exporter"
+echo "    sudo systemctl start grafana-server"
+echo
+echo "  Check service status:"
+echo "    sudo systemctl status nats-server"
+echo "    sudo systemctl status prometheus"
+echo "    sudo systemctl status prometheus-nats-exporter"
+echo "    sudo systemctl status grafana-server"
 echo
 echo -e "${YELLOW}Check infrastructure logs:${NC}"
-echo "  sudo journalctl -u nats-server.service -f"
-echo "  sudo journalctl -u prometheus-nats-exporter.service -f"
+echo "  sudo journalctl -u nats-server -f"
+echo "  sudo journalctl -u prometheus -f"
+echo "  sudo journalctl -u prometheus-nats-exporter -f"
+echo "  sudo journalctl -u grafana-server -f"
+echo
+echo -e "${YELLOW}Database verification:${NC}"
+echo "  sudo -u postgres psql -l  # List all databases"
+echo "  sudo -u postgres psql -d soar -c '\\dx'  # List extensions in soar database"
+echo
+echo -e "${YELLOW}PostgreSQL Authentication:${NC}"
+echo "  Local connections (Unix socket and TCP 127.0.0.1) use 'trust' authentication"
+echo "  No password required for the 'soar' user on local connections"
+echo "  pg_hba.conf backup saved to: $PG_HBA_CONF.backup.*"
+echo
+echo -e "${YELLOW}NATS JetStream:${NC}"
+echo "  NATS server installed with JetStream enabled"
+echo "  JetStream storage: /var/lib/nats/jetstream"
+echo "  HTTP monitoring: http://localhost:8222"
+echo "  Verify NATS is running: curl http://localhost:8222/varz"
+echo "  Verify JetStream: curl http://localhost:8222/jsz"
+echo
+echo -e "${YELLOW}Prometheus:${NC}"
+echo "  Configuration: /etc/prometheus/prometheus.yml"
+echo "  Job configs: /etc/prometheus/jobs/*.yml (will be deployed by soar-deploy)"
+echo "  Web UI: http://localhost:9090"
+echo "  Verify Prometheus: curl http://localhost:9090/-/healthy"
+echo "  Data storage: /var/lib/prometheus"
+echo
+echo -e "${YELLOW}Grafana:${NC}"
+echo "  Web UI: http://localhost:3000"
+echo "  Default credentials: admin / admin (you will be prompted to change on first login)"
+echo "  Dashboards: $DASHBOARD_COUNT SOAR dashboards automatically installed in 'SOAR' folder"
+echo "  Prometheus datasource: Automatically configured and ready to use"
+echo "  Configuration: /etc/grafana/grafana.ini"
+echo "  NOTE: After starting Grafana, dashboards will be immediately available"
