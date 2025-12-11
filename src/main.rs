@@ -314,16 +314,22 @@ fn find_git_root() -> Result<PathBuf> {
     }
 }
 
-/// Dump database schema to schema.sql if not in production, test, or CI
+/// Dump database schema to schema.sql if not in production, staging, test, or CI
 fn dump_schema_if_non_production(database_url: &str) -> Result<()> {
     // Check environment
     let soar_env = env::var("SOAR_ENV").unwrap_or_default();
     let is_production = soar_env == "production";
+    let is_staging = soar_env == "staging";
     let is_test = soar_env == "test";
     let is_ci = env::var("CI").is_ok();
 
     if is_production {
         info!("Skipping schema dump in production environment");
+        return Ok(());
+    }
+
+    if is_staging {
+        info!("Skipping schema dump in staging environment");
         return Ok(());
     }
 
@@ -542,10 +548,10 @@ async fn main() -> Result<()> {
     // Load environment variables from .env file early
     dotenvy::dotenv().ok();
 
-    // Check if we're in production mode
-    let is_production = env::var("SOAR_ENV")
-        .map(|env| env == "production")
-        .unwrap_or(false);
+    // Check if we're in production or staging mode
+    let soar_env = env::var("SOAR_ENV").unwrap_or_default();
+    let is_production = soar_env == "production";
+    let is_staging = soar_env == "staging";
 
     // Initialize Sentry for error tracking (errors only, no performance monitoring)
     let _guard = if let Ok(sentry_dsn) = env::var("SENTRY_DSN") {
@@ -585,8 +591,12 @@ async fn main() -> Result<()> {
                         if event.level >= sentry::Level::Error {
                             Some(event)
                         } else {
-                            // For non-error events, only capture in production
-                            if is_production { Some(event) } else { None }
+                            // For non-error events, only capture in production/staging
+                            if is_production || is_staging {
+                                Some(event)
+                            } else {
+                                None
+                            }
                         }
                     },
                 )),
@@ -597,8 +607,10 @@ async fn main() -> Result<()> {
             None
         }
     } else {
-        if is_production {
-            eprintln!("ERROR: SENTRY_DSN environment variable is required in production mode");
+        if is_production || is_staging {
+            eprintln!(
+                "ERROR: SENTRY_DSN environment variable is required in production and staging modes"
+            );
             std::process::exit(1);
         }
         info!("SENTRY_DSN not configured, Sentry disabled");
@@ -649,10 +661,12 @@ async fn main() -> Result<()> {
     use tracing_subscriber::{EnvFilter, filter, layer::SubscriberExt, util::SubscriberInitExt};
 
     // Create separate filter for fmt_layer (console output)
-    // Use RUST_LOG if set, otherwise default based on production mode
+    // Use RUST_LOG if set, otherwise default based on environment
     let fmt_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
         if is_production {
             EnvFilter::new("warn")
+        } else if is_staging {
+            EnvFilter::new("info")
         } else {
             EnvFilter::new("debug")
         }
@@ -1006,6 +1020,10 @@ async fn main() -> Result<()> {
             let final_port = match env::var("SOAR_ENV") {
                 Ok(soar_env) if soar_env == "production" => {
                     info!("Running in production mode on port {}", port);
+                    port
+                }
+                Ok(soar_env) if soar_env == "staging" => {
+                    info!("Running in staging mode on port {}", port);
                     port
                 }
                 Ok(soar_env) if soar_env == "test" => {
