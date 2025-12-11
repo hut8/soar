@@ -549,15 +549,15 @@ echo -e "${YELLOW}IMPORTANT: Manual Configuration Steps Required${NC}"
 echo -e "${YELLOW}═══════════════════════════════════════════════════════════════${NC}"
 echo
 echo -e "${YELLOW}1. Configure environment variables:${NC}"
-echo "   Create/edit /etc/soar/.env and set:"
+echo "   Create/edit environment files and set:"
 echo
-echo "   For production:"
+echo "   For production (/etc/soar/env):"
 echo "   DATABASE_URL=postgres://soar@localhost/soar"
 echo
-echo "   For staging:"
+echo "   For staging (/etc/soar/env.staging):"
 echo "   DATABASE_URL=postgres://soar@localhost/soar_staging"
 echo
-echo -e "${YELLOW}2. Set up additional environment variables in /etc/soar/.env:${NC}"
+echo -e "${YELLOW}2. Set up additional environment variables in /etc/soar/env (or env.staging):${NC}"
 echo "   - NATS_URL (e.g., nats://localhost:4222)"
 echo "   - APRS_CALLSIGN (for APRS-IS connection)"
 echo "   - Any other application-specific configuration"
