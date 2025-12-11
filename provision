@@ -36,6 +36,14 @@ fi
 
 echo -e "${BLUE}Detected OS: $OS $OS_VERSION${NC}"
 
+# Check if OS is Debian or Ubuntu
+if [[ "$OS" != "ubuntu" ]] && [[ "$OS" != "debian" ]]; then
+    echo -e "${RED}Error: This script only supports Debian and Ubuntu.${NC}"
+    echo -e "${RED}Detected OS: $OS${NC}"
+    echo -e "${YELLOW}Please run this script on a Debian or Ubuntu system.${NC}"
+    exit 1
+fi
+
 # Install PostgreSQL 18
 echo -e "${BLUE}Installing PostgreSQL 18...${NC}"
 
@@ -223,6 +231,32 @@ fi
 
 echo -e "${GREEN}Grafana installed successfully${NC}"
 
+# Install Caddy (Debian/Ubuntu only)
+echo -e "${BLUE}Installing Caddy web server...${NC}"
+
+if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
+    # Install Caddy from official Cloudsmith repository
+    sudo apt-get install -y debian-keyring debian-archive-keyring curl
+
+    # Add Caddy GPG key (modern method)
+    sudo mkdir -p /etc/apt/keyrings
+    if [ ! -f /etc/apt/keyrings/caddy-stable-archive-keyring.gpg ]; then
+        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | \
+            sudo gpg --dearmor -o /etc/apt/keyrings/caddy-stable-archive-keyring.gpg
+    fi
+
+    # Add Caddy repository with signed-by
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | \
+        sudo tee /etc/apt/sources.list.d/caddy-stable.list
+
+    sudo apt-get update
+    sudo apt-get install -y caddy
+
+    echo -e "${GREEN}Caddy installed successfully${NC}"
+else
+    echo -e "${YELLOW}Caddy installation skipped (Debian/Ubuntu only)${NC}"
+fi
+
 # Install prometheus-nats-exporter binary if not already installed
 if [ ! -f /usr/local/bin/prometheus-nats-exporter ]; then
     echo -e "${BLUE}Installing prometheus-nats-exporter binary...${NC}"
@@ -310,6 +344,27 @@ fi
 
 echo -e "${GREEN}Grafana configured with $DASHBOARD_COUNT dashboards and Prometheus datasource${NC}"
 
+# Configure Caddy
+if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
+    echo -e "${BLUE}Configuring Caddy web server...${NC}"
+
+    # Create Caddy log directory
+    sudo mkdir -p /var/log/caddy
+    sudo chown caddy:caddy /var/log/caddy
+
+    # Copy Caddyfile to /etc/caddy/
+    if [ -f infrastructure/Caddyfile ]; then
+        sudo cp infrastructure/Caddyfile /etc/caddy/Caddyfile
+        sudo chown root:root /etc/caddy/Caddyfile
+        sudo chmod 644 /etc/caddy/Caddyfile
+        echo "Caddyfile installed to /etc/caddy/Caddyfile"
+    else
+        echo -e "${YELLOW}Warning: infrastructure/Caddyfile not found, skipping Caddyfile installation${NC}"
+    fi
+
+    echo -e "${GREEN}Caddy configured${NC}"
+fi
+
 # Enable infrastructure services
 # Note: SOAR application services are enabled by soar-deploy
 echo -e "${BLUE}Enabling infrastructure services...${NC}"
@@ -317,6 +372,10 @@ sudo systemctl enable nats-server.service
 sudo systemctl enable prometheus-nats-exporter.service
 sudo systemctl enable prometheus
 sudo systemctl enable grafana-server
+
+if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
+    sudo systemctl enable caddy
+fi
 
 # Start Prometheus if not already running
 if ! systemctl is-active --quiet prometheus; then
@@ -342,6 +401,21 @@ if ! systemctl is-active --quiet grafana-server; then
     fi
 else
     echo -e "${BLUE}Grafana is already running${NC}"
+fi
+
+# Start Caddy if not already running (Debian/Ubuntu only)
+if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
+    if ! systemctl is-active --quiet caddy; then
+        echo -e "${BLUE}Starting Caddy...${NC}"
+        sudo systemctl start caddy
+        if systemctl is-active --quiet caddy; then
+            echo -e "${GREEN}Caddy started successfully${NC}"
+        else
+            echo -e "${YELLOW}Warning: Failed to start Caddy. Check logs with: journalctl -u caddy -n 50${NC}"
+        fi
+    else
+        echo -e "${BLUE}Caddy is already running${NC}"
+    fi
 fi
 
 # Create necessary directories
@@ -504,18 +578,21 @@ echo "    sudo systemctl start nats-server"
 echo "    sudo systemctl start prometheus"
 echo "    sudo systemctl start prometheus-nats-exporter"
 echo "    sudo systemctl start grafana-server"
+echo "    sudo systemctl start caddy"
 echo
 echo "  Check service status:"
 echo "    sudo systemctl status nats-server"
 echo "    sudo systemctl status prometheus"
 echo "    sudo systemctl status prometheus-nats-exporter"
 echo "    sudo systemctl status grafana-server"
+echo "    sudo systemctl status caddy"
 echo
 echo -e "${YELLOW}Check infrastructure logs:${NC}"
 echo "  sudo journalctl -u nats-server -f"
 echo "  sudo journalctl -u prometheus -f"
 echo "  sudo journalctl -u prometheus-nats-exporter -f"
 echo "  sudo journalctl -u grafana-server -f"
+echo "  sudo journalctl -u caddy -f"
 echo
 echo -e "${YELLOW}Database verification:${NC}"
 echo "  sudo -u postgres psql -l  # List all databases"
@@ -547,3 +624,24 @@ echo "  Dashboards: $DASHBOARD_COUNT SOAR dashboards automatically installed in 
 echo "  Prometheus datasource: Automatically configured and ready to use"
 echo "  Configuration: /etc/grafana/grafana.ini"
 echo "  NOTE: After starting Grafana, dashboards will be immediately available"
+
+if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
+    echo
+    echo -e "${YELLOW}Caddy Web Server:${NC}"
+    echo "  Configuration: /etc/caddy/Caddyfile"
+    echo "  Configured sites:"
+    echo "    - glider.flights → http://localhost:61225 (production)"
+    echo "    - staging.glider.flights → http://localhost:61226 (staging)"
+    echo "    - grafana.glider.flights → http://localhost:3000"
+    echo "  Logs: /var/log/caddy/"
+    echo "  Verify configuration: sudo caddy validate --config /etc/caddy/Caddyfile"
+    echo
+    echo -e "${YELLOW}  IMPORTANT - DNS Configuration Required:${NC}"
+    echo "    Before Caddy can serve HTTPS, configure DNS A/AAAA records:"
+    echo "      glider.flights → <server-ip>"
+    echo "      staging.glider.flights → <server-ip>"
+    echo "      grafana.glider.flights → <server-ip>"
+    echo
+    echo "    Caddy will automatically obtain Let's Encrypt certificates once DNS is configured."
+    echo "    Test configuration: caddy run --config /etc/caddy/Caddyfile --adapter caddyfile"
+fi
