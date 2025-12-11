@@ -90,11 +90,10 @@ pub async fn calculate_and_update_agl_async(
             "Failed to update altitude_agl_feet for fix {}: {}",
             fix_id, e
         );
-    } else if agl.is_some() {
+    } else if let Some(agl_value) = agl {
         trace!(
             "Updated altitude_agl_feet for fix {} to {} ft",
-            fix_id,
-            agl.unwrap()
+            fix_id, agl_value
         );
     } else {
         trace!(
