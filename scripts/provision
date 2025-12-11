@@ -238,14 +238,14 @@ if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
     # Install Caddy from official Cloudsmith repository
     sudo apt-get install -y debian-keyring debian-archive-keyring curl
 
-    # Add Caddy GPG key (modern method)
-    sudo mkdir -p /etc/apt/keyrings
-    if [ ! -f /etc/apt/keyrings/caddy-stable-archive-keyring.gpg ]; then
+    # Add Caddy GPG key (Cloudsmith expects it in /usr/share/keyrings/)
+    sudo mkdir -p /usr/share/keyrings
+    if [ ! -f /usr/share/keyrings/caddy-stable-archive-keyring.gpg ]; then
         curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | \
-            sudo gpg --dearmor -o /etc/apt/keyrings/caddy-stable-archive-keyring.gpg
+            sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
     fi
 
-    # Add Caddy repository with signed-by
+    # Add Caddy repository (uses signed-by pointing to /usr/share/keyrings/)
     curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | \
         sudo tee /etc/apt/sources.list.d/caddy-stable.list
 
