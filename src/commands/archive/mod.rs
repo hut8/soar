@@ -7,7 +7,7 @@ mod receiver_statuses;
 use anyhow::{Context, Result};
 use aprs_messages::AprsMessageCsv;
 use archiver::{Archivable, PgPool, archive, collect_daily_counts_grouped, resurrect};
-use chrono::{NaiveDate, Utc};
+use chrono::{NaiveDate, TimeZone, Utc};
 use soar::fixes::Fix;
 use soar::flights::FlightModel;
 use soar::receiver_statuses::ReceiverStatus;
@@ -16,15 +16,14 @@ use std::path::Path;
 use tracing::info;
 
 /// Handle the archive command
-/// Archives data in the correct order to respect foreign key constraints:
-/// 1. Flights (before_date + 0 days)
-/// 2. Fixes and ReceiverStatuses (before_date + 1 day)
-/// 3. AprsMessages (before_date + 2 days)
+/// Archives data in the correct order to respect foreign key constraints with ON DELETE RESTRICT:
+/// 1. Fixes (children first - they reference flights and aprs_messages)
+/// 2. ReceiverStatuses (children - they reference aprs_messages)
+/// 3. Flights (parents - after fixes are deleted, clear self-references via towed_by_flight_id)
+/// 4. AprsMessages (parents last - nothing references them anymore)
 ///
-/// Defaults to 21 days ago if no before date is specified:
-/// - Flights: 21 days old
-/// - Fixes and ReceiverStatuses: 22 days old
-/// - AprsMessages: 23 days old
+/// All tables archive data from the same date (before_date).
+/// Defaults to 21 days ago if no before date is specified.
 pub async fn handle_archive(
     pool: PgPool,
     before: Option<String>,
@@ -72,98 +71,68 @@ pub async fn handle_archive(
 
     let mut report = ArchiveReport::new();
 
-    // Archive in parallel with staggered retention to respect foreign key constraints
-    // Using different date ranges allows safe parallel execution:
-    // - Flights: before_date + 0 days
-    // - Fixes and ReceiverStatuses: before_date + 1 day
-    // - AprsMessages: before_date + 2 days
+    // Archive sequentially in dependency order to respect ON DELETE RESTRICT constraints
+    // All tables use the same before_date (simplified from staggered dates)
     info!(
-        "Starting parallel archive: flights (before {}), fixes/receiver_statuses (before {}), aprs_messages (before {})",
-        before_date,
-        before_date + chrono::Duration::days(1),
-        before_date + chrono::Duration::days(2)
+        "Starting sequential archive: fixes -> receiver_statuses -> flights -> aprs_messages (all before {})",
+        before_date
     );
-
-    let flights_before = before_date;
-    let fixes_before = before_date + chrono::Duration::days(1);
-    let messages_before = before_date + chrono::Duration::days(2);
 
     let archive_dir_path = archive_dir.to_path_buf();
-    let pool_clone1 = pool.clone();
-    let pool_clone2 = pool.clone();
-    let pool_clone3 = pool.clone();
-    let pool_clone4 = pool.clone();
 
-    // Archive all tables in parallel
-    let (flights_result, fixes_result, receiver_statuses_result, aprs_messages_result) = tokio::join!(
-        async {
-            let start = Instant::now();
-            let metrics =
-                match archive::<FlightModel>(&pool_clone1, flights_before, &archive_dir_path).await
-                {
-                    Ok(m) => m,
-                    Err(e) => {
-                        tracing::error!("Failed to archive flights: {}", e);
-                        return Err(anyhow::anyhow!("Failed to archive flights: {}", e));
-                    }
-                };
-            Ok((metrics, start.elapsed().as_secs_f64()))
-        },
-        async {
-            let start = Instant::now();
-            let metrics = match archive::<Fix>(&pool_clone2, fixes_before, &archive_dir_path).await
-            {
-                Ok(m) => m,
-                Err(e) => {
-                    tracing::error!("Failed to archive fixes: {}", e);
-                    return Err(anyhow::anyhow!("Failed to archive fixes: {}", e));
-                }
-            };
-            Ok((metrics, start.elapsed().as_secs_f64()))
-        },
-        async {
-            let start = Instant::now();
-            let metrics = match archive::<ReceiverStatus>(
-                &pool_clone3,
-                fixes_before,
-                &archive_dir_path,
+    // Step 1: Archive fixes first (they reference flights and aprs_messages)
+    info!("=== Step 1/4: Archiving fixes ===");
+    let start = Instant::now();
+    let fixes_metrics = archive::<Fix>(&pool, before_date, &archive_dir_path).await?;
+    let fixes_duration = start.elapsed().as_secs_f64();
+
+    // Step 2: Archive receiver_statuses (they reference aprs_messages)
+    info!("=== Step 2/4: Archiving receiver_statuses ===");
+    let start = Instant::now();
+    let receiver_statuses_metrics =
+        archive::<ReceiverStatus>(&pool, before_date, &archive_dir_path).await?;
+    let receiver_statuses_duration = start.elapsed().as_secs_f64();
+
+    // Step 3a: Clear towed_by_flight_id for flights that reference other flights being archived
+    // This prevents FK violations when deleting flights that reference each other
+    info!("=== Step 3a/4: Clearing towed_by_flight_id for flights being archived ===");
+    {
+        use diesel::prelude::*;
+        use soar::schema::flights::dsl::*;
+        let pool_clone = pool.clone();
+        let before_date_clone = before_date;
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool_clone.get()?;
+            let updated = diesel::update(
+                flights.filter(
+                    last_fix_at.lt(chrono::Utc
+                        .from_local_datetime(&before_date_clone.and_hms_opt(0, 0, 0).unwrap())
+                        .single()
+                        .ok_or_else(|| anyhow::anyhow!("Failed to create cutoff datetime"))?),
+                ),
             )
-            .await
-            {
-                Ok(m) => m,
-                Err(e) => {
-                    tracing::error!("Failed to archive receiver_statuses: {}", e);
-                    return Err(anyhow::anyhow!(
-                        "Failed to archive receiver_statuses: {}",
-                        e
-                    ));
-                }
-            };
-            Ok((metrics, start.elapsed().as_secs_f64()))
-        },
-        async {
-            let start = Instant::now();
-            let metrics =
-                match archive::<AprsMessageCsv>(&pool_clone4, messages_before, &archive_dir_path)
-                    .await
-                {
-                    Ok(m) => m,
-                    Err(e) => {
-                        tracing::error!("Failed to archive aprs_messages: {}", e);
-                        return Err(anyhow::anyhow!("Failed to archive aprs_messages: {}", e));
-                    }
-                };
-            Ok((metrics, start.elapsed().as_secs_f64()))
-        }
-    );
+            .set(towed_by_flight_id.eq::<Option<uuid::Uuid>>(None))
+            .execute(&mut conn)?;
+            info!("Cleared towed_by_flight_id for {} flights", updated);
+            Ok::<_, anyhow::Error>(())
+        })
+        .await??;
+    }
 
-    // Check if any archival task failed
-    let (flights_metrics, flights_duration) = flights_result?;
-    let (fixes_metrics, fixes_duration) = fixes_result?;
-    let (receiver_statuses_metrics, receiver_statuses_duration) = receiver_statuses_result?;
-    let (aprs_messages_metrics, aprs_messages_duration) = aprs_messages_result?;
+    // Step 3b: Archive flights (after fixes are deleted and self-references cleared)
+    info!("=== Step 3b/4: Archiving flights ===");
+    let start = Instant::now();
+    let flights_metrics = archive::<FlightModel>(&pool, before_date, &archive_dir_path).await?;
+    let flights_duration = start.elapsed().as_secs_f64();
 
-    info!("Parallel archival completed, collecting metadata...");
+    // Step 4: Archive aprs_messages last (nothing references them anymore)
+    info!("=== Step 4/4: Archiving aprs_messages ===");
+    let start = Instant::now();
+    let aprs_messages_metrics =
+        archive::<AprsMessageCsv>(&pool, before_date, &archive_dir_path).await?;
+    let aprs_messages_duration = start.elapsed().as_secs_f64();
+
+    info!("Sequential archival completed, collecting metadata...");
 
     // Collect metadata for flights
     // Use today + 1000 years as a "no upper bound" to get the actual oldest remaining record
@@ -279,25 +248,20 @@ pub async fn handle_archive(
             &pool_clone1,
             analytics_start_date,
             today,
-            flights_before
+            before_date
         ),
-        collect_daily_counts_grouped::<Fix>(
-            &pool_clone2,
-            analytics_start_date,
-            today,
-            fixes_before
-        ),
+        collect_daily_counts_grouped::<Fix>(&pool_clone2, analytics_start_date, today, before_date),
         collect_daily_counts_grouped::<ReceiverStatus>(
             &pool_clone3,
             analytics_start_date,
             today,
-            fixes_before
+            before_date
         ),
         collect_daily_counts_grouped::<AprsMessageCsv>(
             &pool_clone4,
             analytics_start_date,
             today,
-            messages_before
+            before_date
         ),
     );
 
