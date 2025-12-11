@@ -639,8 +639,8 @@ jobs:
           mkdir -p deploy-pkg
           cp soar deploy-pkg/
           cp infrastructure/soar-deploy deploy-pkg/
-          cp *.service deploy-pkg/ || echo "No service files found in root"
-          cp *.timer deploy-pkg/ || echo "No timer files found in root"
+          cp infrastructure/systemd/*.service deploy-pkg/ || echo "No service files found"
+          cp infrastructure/systemd/*.timer deploy-pkg/ || echo "No timer files found"
 
           # Copy Prometheus job configuration files
           if [ -d infrastructure/prometheus-jobs ]; then
@@ -782,8 +782,8 @@ jobs:
           mkdir -p deploy-pkg
           cp soar deploy-pkg/
           cp infrastructure/soar-deploy deploy-pkg/
-          cp *.service deploy-pkg/ || echo "No service files found in root"
-          cp *.timer deploy-pkg/ || echo "No timer files found in root"
+          cp infrastructure/systemd/*.service deploy-pkg/ || echo "No service files found"
+          cp infrastructure/systemd/*.timer deploy-pkg/ || echo "No timer files found"
 
           # Copy Prometheus job configuration files
           if [ -d infrastructure/prometheus-jobs ]; then
