@@ -64,6 +64,85 @@ The SOAR deployment process has been simplified to use a single deployment scrip
    - `SSH_PRIVATE_KEY`: SSH private key for the `soar` user
    - `DEPLOY_SERVER`: Hostname or IP address of the deployment server
 
+### Elevation Data Setup
+
+SOAR uses SRTM elevation data in HGT format to calculate Above Ground Level (AGL) altitudes for aircraft. The elevation data must be downloaded to `/var/soar/elevation` before SOAR can process position reports with AGL calculations.
+
+#### Quick Setup with rclone
+
+The easiest way to populate the elevation data is using rclone to download from our S3 bucket:
+
+```bash
+# Install rclone if not already installed
+sudo apt-get update && sudo apt-get install -y rclone
+
+# Download elevation tiles from S3 (this may take some time, ~50GB+ of data)
+# Using --size-only to efficiently skip files that already match by size
+sudo rclone copy --progress --size-only \
+  :s3,provider=AWS,anonymous=true,region=us-east-1:elevation-tiles-prod/skadi \
+  /var/soar/elevation
+
+# Set proper ownership for the soar user
+sudo chown -R soar:soar /var/soar/elevation
+```
+
+The download includes worldwide SRTM elevation tiles in gzipped HGT format. The tiles are organized by latitude into subdirectories (e.g., `N45/`, `S12/`), with each tile named by its southwest corner coordinates (e.g., `N45E009.hgt.gz`).
+
+The `--size-only` flag makes rclone skip files that already have matching sizes, allowing you to safely resume interrupted downloads without re-downloading or checksumming existing files.
+
+**Note:** The `scripts/provision` script automatically handles this setup during server provisioning.
+
+#### Manual Setup (Alternative)
+
+If you prefer to download elevation data manually or need specific regions:
+
+1. **Create the directory structure**:
+   ```bash
+   sudo mkdir -p /var/soar/elevation
+   sudo chown soar:soar /var/soar/elevation
+   ```
+
+2. **Download SRTM tiles**:
+   - **Viewfinder Panoramas** (recommended): http://viewfinderpanoramas.org/Coverage%20map%20viewfinderpanoramas_org3.htm
+   - **NASA Earthdata**: https://search.earthdata.nasa.gov/ (search for "SRTM")
+
+3. **Organize tiles**:
+   ```
+   /var/soar/elevation/
+   ├── N00/
+   │   ├── N00E000.hgt.gz
+   │   └── N00E001.hgt.gz
+   ├── N45/
+   │   ├── N45E009.hgt.gz
+   │   └── ...
+   └── S45/
+       └── S45W009.hgt.gz
+   ```
+
+4. **Set ownership**:
+   ```bash
+   sudo chown -R soar:soar /var/soar/elevation
+   ```
+
+#### Verification
+
+After populating the elevation data, verify the setup:
+
+```bash
+# Check directory structure
+ls -lh /var/soar/elevation/
+
+# Verify a specific tile (example)
+ls -lh /var/soar/elevation/N45/N45E009.hgt.gz
+
+# Test decompression
+gzip -t /var/soar/elevation/N45/N45E009.hgt.gz
+```
+
+#### Coverage
+
+The elevation service gracefully handles missing tiles (e.g., ocean areas) by returning `None` for elevation lookups. You can start with just the regions you need and add more tiles later as coverage requirements expand.
+
 ## Deployment Process
 
 ### Automatic Deployment (CI/CD)
