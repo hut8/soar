@@ -627,7 +627,7 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.DEPLOY_SERVER }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H staging.glider.flights >> ~/.ssh/known_hosts
 
       - name: Prepare deployment package
         run: |
@@ -692,10 +692,10 @@ jobs:
           DEPLOY_DIR="/tmp/soar/deploy/${{ env.DEPLOY_TIMESTAMP }}"
 
           echo "Creating deployment directory on server: $DEPLOY_DIR"
-          ssh soar@${{ secrets.DEPLOY_SERVER }} "mkdir -p $DEPLOY_DIR"
+          ssh soar@staging.glider.flights "mkdir -p $DEPLOY_DIR"
 
           echo "Uploading deployment package..."
-          scp -r deploy-pkg/* soar@${{ secrets.DEPLOY_SERVER }}:$DEPLOY_DIR/
+          scp -r deploy-pkg/* soar@staging.glider.flights:$DEPLOY_DIR/
 
           echo "Deployment package uploaded successfully"
 
@@ -703,7 +703,7 @@ jobs:
         run: |
           DEPLOY_DIR="/tmp/soar/deploy/${{ env.DEPLOY_TIMESTAMP }}"
           echo "Executing deployment script for staging..."
-          ssh soar@${{ secrets.DEPLOY_SERVER }} "sudo /usr/local/bin/soar-deploy staging $DEPLOY_DIR"
+          ssh soar@staging.glider.flights "sudo /usr/local/bin/soar-deploy staging $DEPLOY_DIR"
 
       - name: Cleanup SSH
         if: always()
@@ -770,7 +770,7 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.DEPLOY_SERVER }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H glider.flights >> ~/.ssh/known_hosts
 
       - name: Prepare deployment package
         run: |
@@ -835,10 +835,10 @@ jobs:
           DEPLOY_DIR="/tmp/soar/deploy/${{ env.DEPLOY_TIMESTAMP }}"
 
           echo "Creating deployment directory on server: $DEPLOY_DIR"
-          ssh soar@${{ secrets.DEPLOY_SERVER }} "mkdir -p $DEPLOY_DIR"
+          ssh soar@glider.flights "mkdir -p $DEPLOY_DIR"
 
           echo "Uploading deployment package..."
-          scp -r deploy-pkg/* soar@${{ secrets.DEPLOY_SERVER }}:$DEPLOY_DIR/
+          scp -r deploy-pkg/* soar@glider.flights:$DEPLOY_DIR/
 
           echo "Deployment package uploaded successfully"
 
@@ -846,7 +846,7 @@ jobs:
         run: |
           DEPLOY_DIR="/tmp/soar/deploy/${{ env.DEPLOY_TIMESTAMP }}"
           echo "Executing deployment script for production..."
-          ssh soar@${{ secrets.DEPLOY_SERVER }} "sudo /usr/local/bin/soar-deploy production $DEPLOY_DIR"
+          ssh soar@glider.flights "sudo /usr/local/bin/soar-deploy production $DEPLOY_DIR"
 
       - name: Cleanup SSH
         if: always()
