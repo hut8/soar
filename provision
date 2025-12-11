@@ -46,6 +46,60 @@ if ! sudo visudo -c -f /etc/sudoers.d/soar; then
     exit 1
 fi
 
+# Install Caddy web server if not already installed
+if ! command -v caddy &>/dev/null; then
+    echo -e "${BLUE}Installing Caddy web server...${NC}"
+
+    # Install required packages
+    sudo apt-get update
+    sudo apt-get install -y debian-keyring debian-archive-keyring apt-transport-https curl
+
+    # Download and install Caddy GPG key
+    echo -e "${BLUE}Installing Caddy GPG keyring...${NC}"
+    sudo curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | \
+        sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+
+    # Add Caddy apt repository
+    echo -e "${BLUE}Adding Caddy apt repository...${NC}"
+    echo "deb [signed-by=/usr/share/keyrings/caddy-stable-archive-keyring.gpg] https://dl.cloudsmith.io/public/caddy/stable/deb/debian any-version main" | \
+        sudo tee /etc/apt/sources.list.d/caddy-stable.list
+
+    # Install Caddy
+    sudo apt-get update
+    sudo apt-get install -y caddy
+
+    echo -e "${GREEN}Caddy installed successfully${NC}"
+else
+    echo -e "${BLUE}Caddy already installed${NC}"
+fi
+
+# Install Caddyfile configuration
+if [ -f infrastructure/Caddyfile ]; then
+    echo -e "${BLUE}Installing Caddyfile configuration...${NC}"
+    sudo cp infrastructure/Caddyfile /etc/caddy/Caddyfile
+    sudo chown root:root /etc/caddy/Caddyfile
+    sudo chmod 644 /etc/caddy/Caddyfile
+
+    # Validate Caddyfile syntax
+    if sudo caddy validate --config /etc/caddy/Caddyfile; then
+        echo -e "${GREEN}Caddyfile configuration installed and validated${NC}"
+
+        # Enable and reload Caddy
+        sudo systemctl enable caddy
+        if systemctl is-active --quiet caddy; then
+            echo -e "${BLUE}Reloading Caddy configuration...${NC}"
+            sudo systemctl reload caddy
+        else
+            echo -e "${BLUE}Starting Caddy service...${NC}"
+            sudo systemctl start caddy
+        fi
+    else
+        echo -e "${RED}Error: Invalid Caddyfile syntax. Configuration not applied.${NC}"
+    fi
+else
+    echo -e "${YELLOW}Warning: infrastructure/Caddyfile not found, skipping Caddyfile installation${NC}"
+fi
+
 # Install prometheus-nats-exporter binary if not already installed
 if [ ! -f /usr/local/bin/prometheus-nats-exporter ]; then
     echo -e "${BLUE}Installing prometheus-nats-exporter binary...${NC}"
@@ -102,9 +156,12 @@ echo
 echo -e "${YELLOW}Infrastructure service control:${NC}"
 echo "  sudo systemctl start nats-server.service"
 echo "  sudo systemctl start prometheus-nats-exporter.service"
+echo "  sudo systemctl start caddy.service"
 echo "  sudo systemctl status nats-server.service"
 echo "  sudo systemctl status prometheus-nats-exporter.service"
+echo "  sudo systemctl status caddy.service"
 echo
 echo -e "${YELLOW}Check infrastructure logs:${NC}"
 echo "  sudo journalctl -u nats-server.service -f"
 echo "  sudo journalctl -u prometheus-nats-exporter.service -f"
+echo "  sudo journalctl -u caddy.service -f"
