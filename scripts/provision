@@ -422,6 +422,7 @@ fi
 echo -e "${BLUE}Creating directories...${NC}"
 sudo mkdir -p /var/soar/logs
 sudo mkdir -p /var/soar/archive
+sudo mkdir -p /var/soar/elevation
 sudo mkdir -p /etc/soar
 sudo mkdir -p /var/lib/nats/jetstream
 
@@ -431,6 +432,44 @@ sudo chown -R soar:soar /var/soar
 sudo chown -R soar:soar /var/soar/archive
 sudo chown soar:soar /home/soar
 sudo chmod 755 /home/soar
+
+# Download elevation data with rclone
+echo -e "${BLUE}Setting up elevation data...${NC}"
+
+# Check if rclone is installed
+if ! command -v rclone &> /dev/null; then
+    echo "Installing rclone..."
+    if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
+        sudo apt-get update
+        sudo apt-get install -y rclone
+    elif [[ "$OS" == "centos" ]] || [[ "$OS" == "rhel" ]] || [[ "$OS" == "rocky" ]] || [[ "$OS" == "almalinux" ]]; then
+        sudo dnf install -y rclone
+    else
+        echo -e "${YELLOW}Warning: Could not install rclone automatically. Please install manually.${NC}"
+    fi
+fi
+
+# Download elevation tiles
+if command -v rclone &> /dev/null; then
+    echo -e "${BLUE}Downloading elevation tiles from S3 (this may take some time)...${NC}"
+    echo -e "${YELLOW}Note: This will download ~50GB+ of worldwide elevation data${NC}"
+    echo -e "${YELLOW}Using --size-only to skip files that already match${NC}"
+
+    # Download with progress, using --size-only to skip matching files without checksumming
+    # This allows resuming interrupted downloads efficiently
+    sudo rclone copy --progress --size-only \
+        :s3,provider=AWS,anonymous=true,region=us-east-1:elevation-tiles-prod/skadi \
+        /var/soar/elevation
+
+    # Set ownership
+    sudo chown -R soar:soar /var/soar/elevation
+
+    echo -e "${GREEN}Elevation data download complete${NC}"
+else
+    echo -e "${YELLOW}Warning: rclone not available. Skipping elevation data download.${NC}"
+    echo -e "${YELLOW}You will need to download elevation data manually to /var/soar/elevation${NC}"
+    echo -e "${YELLOW}See infrastructure/DEPLOYMENT.md for instructions${NC}"
+fi
 
 # Set ownership for NATS JetStream storage
 echo -e "${BLUE}Setting ownership for NATS JetStream storage...${NC}"
@@ -597,6 +636,19 @@ echo
 echo -e "${YELLOW}Database verification:${NC}"
 echo "  sudo -u postgres psql -l  # List all databases"
 echo "  sudo -u postgres psql -d soar -c '\\dx'  # List extensions in soar database"
+echo
+echo -e "${YELLOW}Elevation Data:${NC}"
+echo "  Location: /var/soar/elevation"
+echo "  Verify tiles: ls -lh /var/soar/elevation/"
+echo "  Test a tile: gzip -t /var/soar/elevation/N45/N45E009.hgt.gz"
+TILE_COUNT=$(find /var/soar/elevation -name '*.hgt.gz' 2>/dev/null | wc -l)
+if [ "$TILE_COUNT" -eq 0 ]; then
+    echo -e "  ${YELLOW}WARNING: No elevation tiles found!${NC}"
+    echo "  rclone may have failed. See infrastructure/DEPLOYMENT.md for manual download."
+else
+    echo "  Tiles installed: $TILE_COUNT"
+    echo "  To resume/update: Re-run provision script or use rclone command from DEPLOYMENT.md"
+fi
 echo
 echo -e "${YELLOW}PostgreSQL Authentication:${NC}"
 echo "  Local connections (Unix socket and TCP 127.0.0.1) use 'trust' authentication"
