@@ -25,7 +25,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
           cache-dependency-path: web/package-lock.json
 
@@ -102,7 +102,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
           cache-dependency-path: web/package-lock.json
 
@@ -304,7 +304,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
           cache-dependency-path: web/package-lock.json
 
@@ -408,7 +408,7 @@ jobs:
       - name: Setup Node.js (for npm build during Rust build)
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
           cache-dependency-path: web/package-lock.json
 
@@ -639,8 +639,8 @@ jobs:
           mkdir -p deploy-pkg
           cp soar deploy-pkg/
           cp infrastructure/soar-deploy deploy-pkg/
-          cp *.service deploy-pkg/ || echo "No service files found in root"
-          cp *.timer deploy-pkg/ || echo "No timer files found in root"
+          cp infrastructure/systemd/*.service deploy-pkg/ || echo "No service files found"
+          cp infrastructure/systemd/*.timer deploy-pkg/ || echo "No timer files found"
 
           # Copy Prometheus job configuration files
           if [ -d infrastructure/prometheus-jobs ]; then
@@ -782,8 +782,8 @@ jobs:
           mkdir -p deploy-pkg
           cp soar deploy-pkg/
           cp infrastructure/soar-deploy deploy-pkg/
-          cp *.service deploy-pkg/ || echo "No service files found in root"
-          cp *.timer deploy-pkg/ || echo "No timer files found in root"
+          cp infrastructure/systemd/*.service deploy-pkg/ || echo "No service files found"
+          cp infrastructure/systemd/*.timer deploy-pkg/ || echo "No timer files found"
 
           # Copy Prometheus job configuration files
           if [ -d infrastructure/prometheus-jobs ]; then
