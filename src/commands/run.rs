@@ -148,10 +148,12 @@ pub async fn handle_run(
 
     // Start metrics server in the background (AFTER metrics are initialized)
     if is_production || is_staging {
-        info!("Starting metrics server on port 9091");
+        // Auto-assign port based on environment: production=9091, staging=9092
+        let metrics_port = if is_staging { 9092 } else { 9091 };
+        info!("Starting metrics server on port {}", metrics_port);
         tokio::spawn(
-            async {
-                soar::metrics::start_metrics_server(9091).await;
+            async move {
+                soar::metrics::start_metrics_server(metrics_port).await;
             }
             .instrument(tracing::info_span!("metrics_server")),
         );

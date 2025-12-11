@@ -70,10 +70,12 @@ pub async fn handle_consume_beast(
 
     // Start metrics server in production/staging mode
     if is_production || is_staging {
+        // Auto-assign default based on environment: production=9095, staging=9097
+        let default_port = if is_staging { 9097 } else { 9095 };
         let metrics_port = env::var("METRICS_PORT")
             .ok()
             .and_then(|p| p.parse::<u16>().ok())
-            .unwrap_or(9095); // Different port from ingest-beast (9094)
+            .unwrap_or(default_port);
 
         info!("Starting metrics server on port {}", metrics_port);
         tokio::spawn(

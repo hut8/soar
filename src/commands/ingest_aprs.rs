@@ -75,10 +75,12 @@ pub async fn handle_ingest_aprs(
     // Start metrics server in production/staging mode (AFTER metrics are initialized)
     if is_production || is_staging {
         // Allow overriding metrics port via METRICS_PORT env var (for blue-green deployment)
+        // Auto-assign default based on environment: production=9093, staging=9094
+        let default_port = if is_staging { 9094 } else { 9093 };
         let metrics_port = env::var("METRICS_PORT")
             .ok()
             .and_then(|p| p.parse::<u16>().ok())
-            .unwrap_or(9093);
+            .unwrap_or(default_port);
 
         info!("Starting metrics server on port {}", metrics_port);
         tokio::spawn(
