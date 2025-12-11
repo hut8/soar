@@ -116,9 +116,9 @@ pub async fn handle_run(
     });
 
     // Determine environment and use appropriate stream/subject/consumer names
-    let is_production = env::var("SOAR_ENV")
-        .map(|env| env == "production")
-        .unwrap_or(false);
+    let soar_env = env::var("SOAR_ENV").unwrap_or_default();
+    let is_production = soar_env == "production";
+    let is_staging = soar_env == "staging";
 
     let (final_stream_name, final_subject, final_consumer_name) = if is_production {
         (
@@ -147,7 +147,7 @@ pub async fn handle_run(
     info!("soar-run metrics initialized");
 
     // Start metrics server in the background (AFTER metrics are initialized)
-    if is_production {
+    if is_production || is_staging {
         info!("Starting metrics server on port 9091");
         tokio::spawn(
             async {

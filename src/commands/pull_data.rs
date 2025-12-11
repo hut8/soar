@@ -9,14 +9,17 @@ use tracing::{info, warn};
 /// Get the data directory based on environment
 ///
 /// In production (SOAR_ENV=production), uses /tmp/soar/data-{date}
+/// In staging (SOAR_ENV=staging), uses /tmp/soar/staging/data-{date}
 /// In development, uses ~/.cache/soar/data-{date}
 fn get_data_directory(date: &str) -> Result<String> {
-    let is_production = env::var("SOAR_ENV")
-        .map(|env| env == "production")
-        .unwrap_or(false);
+    let soar_env = env::var("SOAR_ENV").unwrap_or_default();
+    let is_production = soar_env == "production";
+    let is_staging = soar_env == "staging";
 
     if is_production {
         Ok(format!("/tmp/soar/data-{}", date))
+    } else if is_staging {
+        Ok(format!("/tmp/soar/staging/data-{}", date))
     } else {
         // Use ~/.cache/soar for development
         let home_dir =

@@ -25,9 +25,9 @@ pub async fn handle_consume_beast(
     });
 
     // Determine environment and use appropriate stream/subject names
-    let is_production = env::var("SOAR_ENV")
-        .map(|env| env == "production")
-        .unwrap_or(false);
+    let soar_env = env::var("SOAR_ENV").unwrap_or_default();
+    let is_production = soar_env == "production";
+    let is_staging = soar_env == "staging";
 
     let (final_stream_name, final_subject, final_consumer_name) = if is_production {
         (
@@ -68,8 +68,8 @@ pub async fn handle_consume_beast(
     soar::metrics::initialize_beast_consumer_metrics();
     info!("Beast consumer metrics initialized");
 
-    // Start metrics server in production mode
-    if is_production {
+    // Start metrics server in production/staging mode
+    if is_production || is_staging {
         let metrics_port = env::var("METRICS_PORT")
             .ok()
             .and_then(|p| p.parse::<u16>().ok())

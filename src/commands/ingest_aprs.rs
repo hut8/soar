@@ -32,9 +32,9 @@ pub async fn handle_ingest_aprs(
     // Determine environment and use appropriate stream/subject names
     // Production: "APRS_RAW" and "aprs.raw"
     // Staging: "STAGING_APRS_RAW" and "staging.aprs.raw"
-    let is_production = env::var("SOAR_ENV")
-        .map(|env| env == "production")
-        .unwrap_or(false);
+    let soar_env = env::var("SOAR_ENV").unwrap_or_default();
+    let is_production = soar_env == "production";
+    let is_staging = soar_env == "staging";
 
     let (final_stream_name, final_subject) = if is_production {
         (APRS_RAW_STREAM.to_string(), APRS_RAW_SUBJECT.to_string())
@@ -72,8 +72,8 @@ pub async fn handle_ingest_aprs(
     soar::metrics::initialize_aprs_ingest_metrics();
     info!("APRS ingester metrics initialized");
 
-    // Start metrics server in production mode (AFTER metrics are initialized)
-    if is_production {
+    // Start metrics server in production/staging mode (AFTER metrics are initialized)
+    if is_production || is_staging {
         // Allow overriding metrics port via METRICS_PORT env var (for blue-green deployment)
         let metrics_port = env::var("METRICS_PORT")
             .ok()
