@@ -1733,12 +1733,11 @@ checksum = "1d674e81391d1e1ab681a28d99df07927c6d4aa5b027d7da16ba32d1d21ecd99"
 [[package]]
 name = "flarmnet"
 version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "808d02a44b1124b8c35dad3e12f9f584914f0d8aea3d1d0c523d1bbecbc1fab1"
+source = "git+https://github.com/hut8/flarmnet-rs#2273c5228783e5b363641ac1072769af0ca4f622"
 dependencies = [
  "encoding_rs",
  "minidom",
- "quick-xml 0.30.0",
+ "quick-xml 0.38.3",
  "thiserror 1.0.69",
 ]
 
@@ -3846,15 +3845,6 @@ name = "quick-xml"
 version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f50b1c63b38611e7d4d7f68b82d3ad0cc71a2ad2e7f61fc10f1328d917c93cd"
-dependencies = [
- "memchr",
-]
-
-[[package]]
-name = "quick-xml"
-version = "0.30.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eff6510e86862b57b210fd8cbe8ed3f0d7d600b9c2863cd4549a2e033c66e956"
 dependencies = [
  "memchr",
 ]
