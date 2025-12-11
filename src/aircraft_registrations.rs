@@ -639,7 +639,7 @@ pub struct AircraftRegistrationModel {
     pub home_base_airport_id: Option<i32>,
     pub location_id: Option<Uuid>,
     pub airworthiness_class: Option<AirworthinessClass>,
-    pub device_id: Option<Uuid>,
+    pub aircraft_id: Option<Uuid>,
     pub manufacturer_code: String,
     pub model_code: String,
     pub series_code: String,
@@ -680,7 +680,7 @@ pub struct NewAircraftRegistration {
     pub unique_id: Option<String>,
     pub kit_mfr_name: Option<String>,
     pub kit_model_name: Option<String>,
-    pub device_id: Option<Uuid>,
+    pub aircraft_id: Option<Uuid>,
     pub light_sport_type: Option<LightSportType>,
     pub club_id: Option<Uuid>,
 }
@@ -756,8 +756,8 @@ pub struct Aircraft {
     #[serde(skip_serializing)]
     pub registered_location: Option<Point>, // WGS84 point of registration address (legacy, now in locations table)
 
-    // Device relationship
-    pub device_id: Option<Uuid>, // Foreign key to devices table
+    // Aircraft relationship
+    pub aircraft_id: Option<Uuid>, // Foreign key to devices table
 
     // Light sport aircraft type (only for light sport airworthiness class)
     pub light_sport_type: Option<LightSportType>,
@@ -1037,7 +1037,7 @@ impl Aircraft {
             home_base_airport_id: None,
             location_id: None,
             registered_location: None,
-            device_id: None,
+            aircraft_id: None,
             light_sport_type,
         })
     }
@@ -1249,7 +1249,7 @@ impl Aircraft {
             home_base_airport_id: None,
             location_id: None,
             registered_location: None,
-            device_id: None,
+            aircraft_id: None,
             light_sport_type,
         })
     }
@@ -1363,7 +1363,7 @@ impl From<Aircraft> for NewAircraftRegistration {
             unique_id: aircraft.unique_id,
             kit_mfr_name: aircraft.kit_mfr_name,
             kit_model_name: aircraft.kit_model_name,
-            device_id: aircraft.device_id,
+            aircraft_id: aircraft.aircraft_id,
             light_sport_type: aircraft.light_sport_type,
             club_id: None, // Will be set in repository based on club_name() logic
         }
@@ -1442,7 +1442,7 @@ impl From<AircraftRegistrationModel> for Aircraft {
             kit_model_name: model.kit_model_name,
             home_base_airport_id: None, // Not directly available from model
             registered_location: None,  // Legacy field, now in locations table
-            device_id: model.device_id,
+            aircraft_id: model.aircraft_id,
             light_sport_type: model.light_sport_type,
         }
     }
@@ -1710,7 +1710,7 @@ mod tests {
             home_base_airport_id: None,
             registered_location: None,
             location_id: None,
-            device_id: None,
+            aircraft_id: None,
             light_sport_type: None,
         };
 

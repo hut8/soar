@@ -3,7 +3,7 @@ use tracing::Instrument;
 use tracing::{debug, error, trace, warn};
 
 use crate::Fix;
-use crate::device_repo::{DevicePacketFields, DeviceRepository};
+use crate::aircraft_repo::{AircraftPacketFields, AircraftRepository};
 use crate::elevation::{ElevationService, ElevationTask};
 use crate::fixes_repo::FixesRepository;
 use crate::flight_tracker::FlightTracker;
@@ -29,7 +29,7 @@ pub enum ElevationMode {
 #[derive(Clone)]
 pub struct FixProcessor {
     fixes_repo: FixesRepository,
-    device_repo: DeviceRepository,
+    device_repo: AircraftRepository,
     receiver_repo: ReceiverRepository,
     flight_detection_processor: FlightTracker,
     nats_publisher: Option<NatsFixPublisher>,
@@ -43,7 +43,7 @@ impl FixProcessor {
     pub fn new(diesel_pool: Pool<ConnectionManager<PgConnection>>) -> Self {
         Self {
             fixes_repo: FixesRepository::new(diesel_pool.clone()),
-            device_repo: DeviceRepository::new(diesel_pool.clone()),
+            device_repo: AircraftRepository::new(diesel_pool.clone()),
             receiver_repo: ReceiverRepository::new(diesel_pool.clone()),
             flight_detection_processor: FlightTracker::new(&diesel_pool),
             nats_publisher: None,
@@ -81,7 +81,7 @@ impl FixProcessor {
 
         Ok(Self {
             fixes_repo: FixesRepository::new(diesel_pool.clone()),
-            device_repo: DeviceRepository::new(diesel_pool.clone()),
+            device_repo: AircraftRepository::new(diesel_pool.clone()),
             receiver_repo: ReceiverRepository::new(diesel_pool.clone()),
             flight_detection_processor: FlightTracker::new(&diesel_pool),
             nats_publisher: Some(nats_publisher),
@@ -97,7 +97,7 @@ impl FixProcessor {
     ) -> Self {
         Self {
             fixes_repo: FixesRepository::new(diesel_pool.clone()),
-            device_repo: DeviceRepository::new(diesel_pool.clone()),
+            device_repo: AircraftRepository::new(diesel_pool.clone()),
             receiver_repo: ReceiverRepository::new(diesel_pool.clone()),
             flight_detection_processor: flight_tracker,
             nats_publisher: None,
@@ -116,7 +116,7 @@ impl FixProcessor {
 
         Ok(Self {
             fixes_repo: FixesRepository::new(diesel_pool.clone()),
-            device_repo: DeviceRepository::new(diesel_pool.clone()),
+            device_repo: AircraftRepository::new(diesel_pool.clone()),
             receiver_repo: ReceiverRepository::new(diesel_pool.clone()),
             flight_detection_processor: flight_tracker,
             nats_publisher: Some(nats_publisher),
@@ -152,18 +152,18 @@ impl FixProcessor {
         match packet.data {
             ogn_parser::AprsData::Position(ref pos_packet) => {
                 let mut device_address = 0i32;
-                let mut address_type = crate::devices::AddressType::Unknown;
+                let mut address_type = crate::aircraft::AddressType::Unknown;
                 let mut aircraft_type = None;
 
                 // Extract device info from OGN parameters
                 if let Some(ref id) = pos_packet.comment.id {
                     device_address = id.address.as_();
                     address_type = match id.address_type {
-                        0 => crate::devices::AddressType::Unknown,
-                        1 => crate::devices::AddressType::Icao,
-                        2 => crate::devices::AddressType::Flarm,
-                        3 => crate::devices::AddressType::Ogn,
-                        _ => crate::devices::AddressType::Unknown,
+                        0 => crate::aircraft::AddressType::Unknown,
+                        1 => crate::aircraft::AddressType::Icao,
+                        2 => crate::aircraft::AddressType::Flarm,
+                        3 => crate::aircraft::AddressType::Ogn,
+                        _ => crate::aircraft::AddressType::Unknown,
                     };
                     // Extract aircraft type from OGN parameters
                     aircraft_type = Some(crate::ogn_aprs_aircraft::AircraftType::from(
@@ -191,9 +191,9 @@ impl FixProcessor {
                 }
 
                 let spontaneous_address_type = match tracker_device_type.as_str() {
-                    "OGFLR" => crate::devices::AddressType::Flarm,
-                    "OGADSB" => crate::devices::AddressType::Icao,
-                    _ => crate::devices::AddressType::Unknown,
+                    "OGFLR" => crate::aircraft::AddressType::Flarm,
+                    "OGADSB" => crate::aircraft::AddressType::Icao,
+                    _ => crate::aircraft::AddressType::Unknown,
                 };
 
                 // Extract all available fields from packet for device creation/update
@@ -212,7 +212,7 @@ impl FixProcessor {
                     .as_ref()
                     .map(|reg| reg.to_string());
 
-                let packet_fields = DevicePacketFields {
+                let packet_fields = AircraftPacketFields {
                     aircraft_type,
                     icao_model_code: icao_model_code.clone(),
                     adsb_emitter_category,
@@ -235,13 +235,13 @@ impl FixProcessor {
                     .await
                 {
                     Ok(device_model) => {
-                        metrics::histogram!("aprs.aircraft.device_upsert_ms")
+                        metrics::histogram!("aprs.aircraft.upsert_ms")
                             .record(device_lookup_start.elapsed().as_micros() as f64 / 1000.0);
 
                         // All device fields (including ICAO, ADS-B, tracker type, registration)
                         // are now updated atomically in device_for_fix - no separate update needed
 
-                        // Device exists or was just created, create fix with proper device_id
+                        // Aircraft exists or was just created, create fix with proper device_id
                         let fix_creation_start = std::time::Instant::now();
                         match Fix::from_aprs_packet(
                             packet,
@@ -291,7 +291,7 @@ impl FixProcessor {
     }
 
     /// Internal method to process a fix through the complete pipeline
-    #[tracing::instrument(skip(self, fix, raw_message), fields(device_id = %fix.device_id))]
+    #[tracing::instrument(skip(self, fix, raw_message), fields(device_id = %fix.aircraft_id))]
     async fn process_fix_internal(&self, mut fix: Fix, raw_message: &str) {
         // Step 0: Calculate elevation synchronously if in sync mode (before database insert)
         // This ensures the fix is inserted with complete data including AGL altitude

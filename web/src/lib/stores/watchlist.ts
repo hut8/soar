@@ -1,7 +1,7 @@
 import { writable } from 'svelte/store';
 import { browser } from '$app/environment';
-import type { Device, WatchlistEntry, Fix } from '$lib/types';
-import { DeviceRegistry } from '$lib/services/DeviceRegistry';
+import type { Aircraft, WatchlistEntry, Fix } from '$lib/types';
+import { AircraftRegistry } from '$lib/services/AircraftRegistry';
 import { FixFeed } from '$lib/services/FixFeed';
 
 // Store interfaces
@@ -9,8 +9,8 @@ export interface WatchlistStore {
 	entries: WatchlistEntry[];
 }
 
-export interface DeviceRegistryStore {
-	registry: DeviceRegistry;
+export interface AircraftRegistryStore {
+	registry: AircraftRegistry;
 	lastUpdate: number; // Timestamp of last update for reactivity
 }
 
@@ -19,8 +19,8 @@ const initialWatchlistState: WatchlistStore = {
 	entries: []
 };
 
-const initialDeviceRegistryState: DeviceRegistryStore = {
-	registry: DeviceRegistry.getInstance(),
+const initialAircraftRegistryState: AircraftRegistryStore = {
+	registry: AircraftRegistry.getInstance(),
 	lastUpdate: Date.now()
 };
 
@@ -40,12 +40,12 @@ export const websocketStatus = writable<{
 
 // Debug status store to help diagnose subscription issues
 export const debugStatus = writable<{
-	subscribedDevices: string[];
+	subscribedAircraft: string[];
 	operationsPageActive: boolean;
 	activeWatchlistEntries: string[];
 	activeAreaSubscriptions: number;
 }>({
-	subscribedDevices: [],
+	subscribedAircraft: [],
 	operationsPageActive: false,
 	activeWatchlistEntries: [],
 	activeAreaSubscriptions: 0
@@ -94,19 +94,19 @@ function createWatchlistStore() {
 	return {
 		subscribe,
 
-		// Add device to watchlist
-		add: (deviceId: string) => {
+		// Add aircraft to watchlist
+		add: (aircraftId: string) => {
 			update((state) => {
-				// Check if device is already in watchlist
-				const existingEntry = state.entries.find((entry) => entry.deviceId === deviceId);
+				// Check if aircraft is already in watchlist
+				const existingEntry = state.entries.find((entry) => entry.aircraftId === aircraftId);
 				if (existingEntry) {
-					console.log('Device already in watchlist:', deviceId);
+					console.log('Aircraft already in watchlist:', aircraftId);
 					return state;
 				}
 
 				const newEntry: WatchlistEntry = {
 					id: Date.now().toString(),
-					deviceId,
+					aircraftId,
 					active: true
 				};
 				const newEntries = [...state.entries, newEntry];
@@ -116,7 +116,7 @@ function createWatchlistStore() {
 			});
 		},
 
-		// Remove device from watchlist
+		// Remove aircraft from watchlist
 		remove: (id: string) => {
 			update((state) => {
 				const newEntries = state.entries.filter((entry) => entry.id !== id);
@@ -126,7 +126,7 @@ function createWatchlistStore() {
 			});
 		},
 
-		// Toggle device active state
+		// Toggle aircraft active state
 		toggleActive: (id: string) => {
 			update((state) => {
 				const newEntries = state.entries.map((entry) =>
@@ -146,36 +146,36 @@ function createWatchlistStore() {
 			if (saved) {
 				try {
 					const rawEntries = JSON.parse(saved);
-					const deviceIdMap = new Map<string, WatchlistEntry>();
+					const aircraftIdMap = new Map<string, WatchlistEntry>();
 
-					// Handle both old format (with device objects) and new format (with deviceId)
+					// Handle both old format (with device objects) and new format (with aircraftId)
 					for (const entry of rawEntries) {
 						let normalizedEntry: WatchlistEntry | null = null;
 
-						if (entry.deviceId && entry.id) {
+						if (entry.aircraftId && entry.id) {
 							// New format - just validate and use
 							normalizedEntry = {
 								id: entry.id,
-								deviceId: entry.deviceId,
+								aircraftId: entry.aircraftId,
 								active: entry.active
 							};
 						} else if (entry.device?.id && entry.id) {
 							// Old format - convert to new format
 							normalizedEntry = {
 								id: entry.id,
-								deviceId: entry.device.id,
+								aircraftId: entry.device.id,
 								active: entry.active
 							};
 						}
 
-						// Deduplicate by deviceId - keep the last entry for each deviceId
-						if (normalizedEntry && normalizedEntry.deviceId) {
-							deviceIdMap.set(normalizedEntry.deviceId, normalizedEntry);
+						// Deduplicate by aircraftId - keep the last entry for each aircraftId
+						if (normalizedEntry && normalizedEntry.aircraftId) {
+							aircraftIdMap.set(normalizedEntry.aircraftId, normalizedEntry);
 						}
 					}
 
 					// Convert map back to array
-					const deduplicatedEntries = Array.from(deviceIdMap.values());
+					const deduplicatedEntries = Array.from(aircraftIdMap.values());
 
 					// Check if deduplication was needed
 					const originalCount = rawEntries.length;
@@ -209,9 +209,9 @@ function createWatchlistStore() {
 	};
 }
 
-// Create device registry store
-function createDeviceRegistryStore() {
-	const { subscribe, set, update } = writable<DeviceRegistryStore>(initialDeviceRegistryState);
+// Create aircraft registry store
+function createAircraftRegistryStore() {
+	const { subscribe, set, update } = writable<AircraftRegistryStore>(initialAircraftRegistryState);
 
 	return {
 		subscribe,
@@ -222,11 +222,11 @@ function createDeviceRegistryStore() {
 				// Log each fix to console
 				newFixes.forEach(async (fix) => {
 					console.log('Received fix:', fix);
-					// Add fix to the device registry
+					// Add fix to the aircraft registry
 					try {
-						await state.registry.addFixToDevice(fix);
+						await state.registry.addFixToAircraft(fix);
 					} catch (error) {
-						console.warn('Failed to add fix to device registry:', error);
+						console.warn('Failed to add fix to aircraft registry:', error);
 					}
 				});
 
@@ -239,9 +239,9 @@ function createDeviceRegistryStore() {
 		},
 
 		// Update device information from API
-		updateDeviceFromAPI: async (deviceId: string) => {
+		updateDeviceFromAPI: async (aircraftId: string) => {
 			update((state) => {
-				state.registry.updateDeviceFromAPI(deviceId);
+				state.registry.updateAircraftFromAPI(aircraftId);
 				return {
 					registry: state.registry,
 					lastUpdate: Date.now()
@@ -249,21 +249,21 @@ function createDeviceRegistryStore() {
 			});
 		},
 
-		// Get a specific device
-		getDevice: (deviceId: string): Device | null => {
-			let currentDevice: Device | null = null;
+		// Get a specific aircraft
+		getAircraft: (aircraftId: string): Aircraft | null => {
+			let currentAircraft: Aircraft | null = null;
 			subscribe((state) => {
-				currentDevice = state.registry.getDevice(deviceId);
+				currentAircraft = state.registry.getAircraft(aircraftId);
 			})();
-			return currentDevice;
+			return currentAircraft;
 		},
 
-		// Get all devices with recent fixes
-		getActiveDevices: (): Device[] => {
-			let devices: Device[] = [];
+		// Get all aircraft with recent fixes
+		getActiveAircraft: (): Aircraft[] => {
+			let aircraft: Aircraft[] = [];
 			subscribe((state) => {
-				devices = state.registry.getAllDevices().filter((device) => {
-					const fixes = device.fixes || [];
+				aircraft = state.registry.getAllAircraft().filter((ac: Aircraft) => {
+					const fixes = ac.fixes || [];
 					const latestFix = fixes.length > 0 ? fixes[0] : null;
 					if (!latestFix) return false;
 					// Consider active if last fix was within the last hour
@@ -271,24 +271,24 @@ function createDeviceRegistryStore() {
 					return new Date(latestFix.timestamp).getTime() > oneHourAgo;
 				});
 			})();
-			return devices;
+			return aircraft;
 		},
 
-		// Get fixes for a specific device
-		getFixesForDevice: (deviceId: string): Fix[] => {
-			let deviceFixes: Fix[] = [];
+		// Get fixes for a specific aircraft
+		getFixesForAircraft: (aircraftId: string): Fix[] => {
+			let aircraftFixes: Fix[] = [];
 			subscribe((state) => {
-				const device = state.registry.getDevice(deviceId);
-				deviceFixes = device ? device.fixes || [] : [];
+				const aircraft = state.registry.getAircraft(aircraftId);
+				aircraftFixes = aircraft ? aircraft.fixes || [] : [];
 			})();
-			return deviceFixes;
+			return aircraftFixes;
 		},
 
-		// Clear all devices
+		// Clear all aircraft
 		clear: () => {
-			DeviceRegistry.getInstance().clear();
+			AircraftRegistry.getInstance().clear();
 			set({
-				registry: DeviceRegistry.getInstance(),
+				registry: AircraftRegistry.getInstance(),
 				lastUpdate: Date.now()
 			});
 		}
@@ -302,7 +302,7 @@ function updateDebugStatus() {
 	const connectionStatus = fixFeed.getConnectionStatus();
 	debugStatus.update((current) => ({
 		...current,
-		subscribedDevices: connectionStatus.subscribedDevices,
+		subscribedAircraft: connectionStatus.subscribedAircraft,
 		operationsPageActive: connectionStatus.operationsPageActive
 	}));
 }
@@ -311,18 +311,18 @@ function updateDebugStatus() {
 function notifyWatchlistChange(entries: WatchlistEntry[]) {
 	if (!browser) return;
 
-	const activeDeviceIds = entries
-		.filter((entry) => entry.active && entry.deviceId)
-		.map((entry) => entry.deviceId);
+	const activeAircraftIds = entries
+		.filter((entry) => entry.active && entry.aircraftId)
+		.map((entry) => entry.aircraftId);
 
 	// Update debug status with active watchlist entries
 	debugStatus.update((current) => ({
 		...current,
-		activeWatchlistEntries: activeDeviceIds
+		activeWatchlistEntries: activeAircraftIds
 	}));
 
 	// Update FixFeed subscriptions based on watchlist
-	fixFeed.subscribeToWatchlist(activeDeviceIds);
+	fixFeed.subscribeToWatchlist(activeAircraftIds);
 
 	// Update debug status after subscription change
 	setTimeout(updateDebugStatus, 10); // Small delay to let subscription complete
@@ -348,19 +348,19 @@ export function stopLiveFixesFeed() {
 
 // Create store instances
 export const watchlist = createWatchlistStore();
-export const deviceRegistry = createDeviceRegistryStore();
+export const aircraftRegistry = createAircraftRegistryStore();
 
 // Backward compatibility - provide a way to get all recent fixes
 export const fixes = {
-	subscribe: deviceRegistry.subscribe,
-	addFixes: deviceRegistry.addFixes,
-	clear: deviceRegistry.clear,
-	// Get all recent fixes from all devices
+	subscribe: aircraftRegistry.subscribe,
+	addFixes: aircraftRegistry.addFixes,
+	clear: aircraftRegistry.clear,
+	// Get all recent fixes from all aircraft
 	getAllRecentFixes: (): Fix[] => {
-		const devices = deviceRegistry.getActiveDevices();
+		const aircraft = aircraftRegistry.getActiveAircraft();
 		const allFixes: Fix[] = [];
-		devices.forEach((device) => {
-			allFixes.push(...(device.fixes || []));
+		aircraft.forEach((ac) => {
+			allFixes.push(...(ac.fixes || []));
 		});
 		// Sort by timestamp, most recent first
 		return allFixes.sort(

@@ -28,7 +28,7 @@ pub fn adsb_message_to_fix(
     raw_frame: &[u8],
     timestamp: DateTime<Utc>,
     receiver_id: Uuid,
-    device_id: Uuid,
+    aircraft_id: Uuid,
     raw_message_id: Uuid,
     cpr_decoder: Option<&CprDecoder>,
 ) -> Result<Option<Fix>> {
@@ -93,7 +93,7 @@ pub fn adsb_message_to_fix(
         turn_rate_rot: None, // Not provided in ADS-B velocity messages
         source_metadata: Some(source_metadata),
         flight_id: None, // Will be assigned by flight tracker
-        device_id,
+        aircraft_id,
         received_at: timestamp,
         is_active,
         receiver_id,

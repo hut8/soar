@@ -9,20 +9,20 @@ use soar::email_reporter::EntityMetrics;
 
 type PgPool = Pool<ConnectionManager<PgConnection>>;
 
-/// Link aircraft_registrations.device_id by matching registration numbers
-/// This should be called after both devices and aircraft_registrations are loaded
+/// Link aircraft_registrations.aircraft_id by matching registration numbers
+/// This should be called after both aircraft and aircraft_registrations are loaded
 pub async fn link_aircraft_to_devices_with_metrics(pool: PgPool) -> EntityMetrics {
     let start = Instant::now();
     let mut metrics = EntityMetrics::new("Link Aircraft to Devices");
 
-    info!("Linking aircraft registrations to devices by registration number...");
+    info!("Linking aircraft registrations to aircraft by registration number...");
 
     match link_aircraft_to_devices(&pool).await {
         Ok(count) => {
-            info!("Successfully linked {} aircraft to devices", count);
+            info!("Successfully linked {} aircraft to aircraft", count);
             metrics.records_loaded = count;
 
-            // Get total count of aircraft_registrations with device_id set
+            // Get total count of aircraft_registrations with aircraft_id set
             match get_aircraft_with_device_count(&pool).await {
                 Ok(total) => {
                     metrics.records_in_db = Some(total);
@@ -44,20 +44,20 @@ pub async fn link_aircraft_to_devices_with_metrics(pool: PgPool) -> EntityMetric
     metrics
 }
 
-/// Link devices.club_id from linked aircraft_registrations
-/// This should be called after aircraft have been linked to devices
+/// Link aircraft.club_id from linked aircraft_registrations
+/// This should be called after aircraft have been linked to aircraft
 pub async fn link_devices_to_clubs_with_metrics(pool: PgPool) -> EntityMetrics {
     let start = Instant::now();
     let mut metrics = EntityMetrics::new("Link Devices to Clubs");
 
-    info!("Linking devices to clubs from aircraft registrations...");
+    info!("Linking aircraft to clubs from aircraft registrations...");
 
     match link_devices_to_clubs(&pool).await {
         Ok(count) => {
-            info!("Successfully linked {} devices to clubs", count);
+            info!("Successfully linked {} aircraft to clubs", count);
             metrics.records_loaded = count;
 
-            // Get total count of devices with club_id set
+            // Get total count of aircraft with club_id set
             match get_devices_with_club_count(&pool).await {
                 Ok(total) => {
                     metrics.records_in_db = Some(total);
@@ -79,22 +79,22 @@ pub async fn link_devices_to_clubs_with_metrics(pool: PgPool) -> EntityMetrics {
     metrics
 }
 
-/// Link aircraft_registrations.device_id by matching with devices.registration
+/// Link aircraft_registrations.aircraft_id by matching with aircraft.registration
 async fn link_aircraft_to_devices(pool: &PgPool) -> Result<usize> {
     let pool = pool.clone();
 
     tokio::task::spawn_blocking(move || {
         let mut conn = pool.get()?;
 
-        // Update aircraft_registrations.device_id by matching registration numbers
+        // Update aircraft_registrations.aircraft_id by matching registration numbers
         let count = diesel::sql_query(
             r#"
             UPDATE aircraft_registrations
-            SET device_id = devices.id
-            FROM devices
-            WHERE aircraft_registrations.registration_number = devices.registration
-              AND aircraft_registrations.device_id IS NULL
-              AND devices.registration != ''
+            SET aircraft_id = aircraft.id
+            FROM aircraft
+            WHERE aircraft_registrations.registration_number = aircraft.registration
+              AND aircraft_registrations.aircraft_id IS NULL
+              AND aircraft.registration != ''
             "#,
         )
         .execute(&mut conn)?;
@@ -104,22 +104,22 @@ async fn link_aircraft_to_devices(pool: &PgPool) -> Result<usize> {
     .await?
 }
 
-/// Link devices.club_id from linked aircraft_registrations
+/// Link aircraft.club_id from linked aircraft_registrations
 async fn link_devices_to_clubs(pool: &PgPool) -> Result<usize> {
     let pool = pool.clone();
 
     tokio::task::spawn_blocking(move || {
         let mut conn = pool.get()?;
 
-        // Update devices.club_id from linked aircraft_registrations
+        // Update aircraft.club_id from linked aircraft_registrations
         let count = diesel::sql_query(
             r#"
-            UPDATE devices
+            UPDATE aircraft
             SET club_id = aircraft_registrations.club_id
             FROM aircraft_registrations
-            WHERE devices.id = aircraft_registrations.device_id
+            WHERE aircraft.id = aircraft_registrations.aircraft_id
               AND aircraft_registrations.club_id IS NOT NULL
-              AND devices.club_id IS NULL
+              AND aircraft.club_id IS NULL
             "#,
         )
         .execute(&mut conn)?;
@@ -129,18 +129,18 @@ async fn link_devices_to_clubs(pool: &PgPool) -> Result<usize> {
     .await?
 }
 
-/// Get count of devices with club_id set
+/// Get count of aircraft with club_id set
 async fn get_devices_with_club_count(pool: &PgPool) -> Result<i64> {
     use diesel::dsl::count_star;
     use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
-    use soar::schema::devices::dsl::*;
+    use soar::schema::aircraft::dsl::*;
 
     let pool = pool.clone();
 
     tokio::task::spawn_blocking(move || {
         let mut conn = pool.get()?;
 
-        let count = devices
+        let count = aircraft
             .filter(club_id.is_not_null())
             .select(count_star())
             .first::<i64>(&mut conn)?;
@@ -150,7 +150,7 @@ async fn get_devices_with_club_count(pool: &PgPool) -> Result<i64> {
     .await?
 }
 
-/// Get count of aircraft_registrations with device_id set
+/// Get count of aircraft_registrations with aircraft_id set
 async fn get_aircraft_with_device_count(pool: &PgPool) -> Result<i64> {
     use diesel::dsl::count_star;
     use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
@@ -162,7 +162,7 @@ async fn get_aircraft_with_device_count(pool: &PgPool) -> Result<i64> {
         let mut conn = pool.get()?;
 
         let count = aircraft_registrations
-            .filter(device_id.is_not_null())
+            .filter(aircraft_id.is_not_null())
             .select(count_star())
             .first::<i64>(&mut conn)?;
 

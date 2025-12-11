@@ -1,6 +1,6 @@
 import { browser, dev } from '$app/environment';
 import type { Aircraft, Fix } from '$lib/types';
-import { DeviceRegistry } from './DeviceRegistry';
+import { AircraftRegistry } from './AircraftRegistry';
 import { backendMode } from '$lib/stores/backend';
 import { get } from 'svelte/store';
 
@@ -10,16 +10,16 @@ export type FixFeedEvent =
 	| { type: 'connection_closed'; code: number; reason: string }
 	| { type: 'connection_error'; error: Event }
 	| { type: 'fix_received'; fix: Fix }
-	| { type: 'device_received'; device: Aircraft }
-	| { type: 'subscription_added'; deviceId: string }
-	| { type: 'subscription_removed'; deviceId: string }
+	| { type: 'aircraft_received'; aircraft: Aircraft }
+	| { type: 'subscription_added'; aircraftId: string }
+	| { type: 'subscription_removed'; aircraftId: string }
 	| { type: 'reconnecting'; attempt: number };
 
 export type FixFeedSubscriber = (event: FixFeedEvent) => void;
 
-export interface DeviceSubscriptionMessage {
+export interface AircraftSubscriptionMessage {
 	action: string; // "subscribe" or "unsubscribe"
-	type: 'device';
+	type: 'aircraft';
 	id: string;
 }
 
@@ -30,21 +30,21 @@ export interface AreaSubscriptionMessage {
 	longitude: number;
 }
 
-export type SubscriptionMessage = DeviceSubscriptionMessage | AreaSubscriptionMessage;
+export type SubscriptionMessage = AircraftSubscriptionMessage | AreaSubscriptionMessage;
 
 export class FixFeed {
 	private static instance: FixFeed | null = null;
 	private websocket: WebSocket | null = null;
 	private websocketUrl = '';
 	private subscribers = new Set<FixFeedSubscriber>();
-	private subscribedDevices = new Set<string>();
+	private subscribedAircraft = new Set<string>();
 	private reconnectAttempts = 0;
 	private readonly reconnectDelay = 5000; // Fixed 5 second delay
 	private operationsPageActive = false;
-	private deviceRegistry: DeviceRegistry;
+	private aircraftRegistry: AircraftRegistry;
 
 	private constructor() {
-		this.deviceRegistry = DeviceRegistry.getInstance();
+		this.aircraftRegistry = AircraftRegistry.getInstance();
 		this.initializeWebSocketUrl();
 	}
 
@@ -119,11 +119,11 @@ export class FixFeed {
 
 				this.notifySubscribers({ type: 'connection_opened' });
 
-				// Re-subscribe to all previously subscribed devices
+				// Re-subscribe to all previously subscribed aircraft
 				setTimeout(() => {
 					if (this.websocket?.readyState === WebSocket.OPEN) {
-						this.subscribedDevices.forEach((deviceId) => {
-							this.sendSubscriptionMessage('subscribe', deviceId);
+						this.subscribedAircraft.forEach((aircraftId) => {
+							this.sendSubscriptionMessage('subscribe', aircraftId);
 						});
 					}
 				}, 50);
@@ -139,7 +139,7 @@ export class FixFeed {
 						// Transform WebSocket fix data to match Fix interface
 						const fix: Fix = {
 							id: rawMessage.id,
-							device_id: rawMessage.device_id,
+							aircraft_id: rawMessage.aircraft_id,
 							device_address_hex: rawMessage.device_address_hex,
 							timestamp: rawMessage.timestamp,
 							latitude: rawMessage.latitude,
@@ -155,11 +155,11 @@ export class FixFeed {
 							active: rawMessage.active
 						};
 
-						// Add fix to device registry
-						// For fixes from WebSocket, assume device data is provided via device messages
+						// Add fix to aircraft registry
+						// For fixes from WebSocket, assume aircraft data is provided via aircraft messages
 						// so don't attempt API fallback to avoid N+1 calls
-						this.deviceRegistry.addFixToDevice(fix, false).catch((error) => {
-							console.warn('Failed to add fix to device registry:', error);
+						this.aircraftRegistry.addFixToAircraft(fix, false).catch((error) => {
+							console.warn('Failed to add fix to aircraft registry:', error);
 						});
 
 						// Notify subscribers
@@ -167,29 +167,29 @@ export class FixFeed {
 							type: 'fix_received',
 							fix
 						});
-					} else if (rawMessage.type === 'device') {
+					} else if (rawMessage.type === 'aircraft') {
 						// Handle Aircraft message
 						const aircraft: Aircraft = rawMessage;
 
-						// Add all recent fixes to device registry
+						// Add all recent fixes to aircraft registry
 						const aircraftFixes = aircraft.fixes || [];
 						if (aircraftFixes.length > 0) {
 							for (const fix of aircraftFixes) {
-								this.deviceRegistry.addFixToDevice(fix, false).catch((error) => {
-									console.warn('Failed to add device fix to registry:', error);
+								this.aircraftRegistry.addFixToAircraft(fix, false).catch((error) => {
+									console.warn('Failed to add aircraft fix to registry:', error);
 								});
 							}
 						}
 
-						// Update device registry with complete device info
-						this.deviceRegistry.updateDeviceFromAircraft(aircraft).catch((error) => {
-							console.warn('Failed to update device info in registry:', error);
+						// Update aircraft registry with complete aircraft info
+						this.aircraftRegistry.updateAircraftFromAircraftData(aircraft).catch((error) => {
+							console.warn('Failed to update aircraft info in registry:', error);
 						});
 
 						// Notify subscribers
 						this.notifySubscribers({
-							type: 'device_received',
-							device: aircraft
+							type: 'aircraft_received',
+							aircraft: aircraft
 						});
 					} else {
 						console.warn('Unknown WebSocket message type:', rawMessage.type);
@@ -279,9 +279,9 @@ export class FixFeed {
 		});
 	}
 
-	// Subscribe to a specific device
-	public async subscribeToDevice(deviceId: string): Promise<void> {
-		if (this.subscribedDevices.has(deviceId)) {
+	// Subscribe to a specific aircraft
+	public async subscribeToAircraft(aircraftId: string): Promise<void> {
+		if (this.subscribedAircraft.has(aircraftId)) {
 			return; // Already subscribed
 		}
 
@@ -294,52 +294,52 @@ export class FixFeed {
 		const isConnected = await this.waitForConnection();
 
 		if (isConnected && this.websocket?.readyState === WebSocket.OPEN) {
-			this.sendSubscriptionMessage('subscribe', deviceId);
-			this.subscribedDevices.add(deviceId);
+			this.sendSubscriptionMessage('subscribe', aircraftId);
+			this.subscribedAircraft.add(aircraftId);
 
 			this.notifySubscribers({
 				type: 'subscription_added',
-				deviceId
+				aircraftId
 			});
 
-			// Fetch device info and recent fixes from API
-			await this.deviceRegistry.updateDeviceFromAPI(deviceId);
-			await this.deviceRegistry.loadRecentFixesFromAPI(deviceId);
+			// Fetch aircraft info and recent fixes from API
+			await this.aircraftRegistry.updateAircraftFromAPI(aircraftId);
+			await this.aircraftRegistry.loadRecentFixesFromAPI(aircraftId);
 		} else {
-			console.error(`Failed to subscribe to device ${deviceId}: WebSocket not connected`);
+			console.error(`Failed to subscribe to aircraft ${aircraftId}: WebSocket not connected`);
 		}
 	}
 
-	// Unsubscribe from a specific device
-	public unsubscribeFromDevice(deviceId: string): void {
-		if (!this.subscribedDevices.has(deviceId)) {
+	// Unsubscribe from a specific aircraft
+	public unsubscribeFromAircraft(aircraftId: string): void {
+		if (!this.subscribedAircraft.has(aircraftId)) {
 			return; // Not subscribed
 		}
 
 		if (this.websocket?.readyState === WebSocket.OPEN) {
-			this.sendSubscriptionMessage('unsubscribe', deviceId);
+			this.sendSubscriptionMessage('unsubscribe', aircraftId);
 		}
 
-		this.subscribedDevices.delete(deviceId);
+		this.subscribedAircraft.delete(aircraftId);
 
 		this.notifySubscribers({
 			type: 'subscription_removed',
-			deviceId
+			aircraftId
 		});
 
 		// Disconnect if no subscriptions and operations page not active
-		if (this.subscribedDevices.size === 0 && !this.operationsPageActive) {
+		if (this.subscribedAircraft.size === 0 && !this.operationsPageActive) {
 			this.disconnect();
 		}
 	}
 
 	// Send subscription message to server
-	private sendSubscriptionMessage(action: string, deviceId: string): void {
+	private sendSubscriptionMessage(action: string, aircraftId: string): void {
 		if (this.websocket?.readyState === WebSocket.OPEN) {
-			const message: DeviceSubscriptionMessage = {
+			const message: AircraftSubscriptionMessage = {
 				action,
-				type: 'device',
-				id: deviceId
+				type: 'aircraft',
+				id: aircraftId
 			};
 			this.websocket.send(JSON.stringify(message));
 		}
@@ -369,7 +369,7 @@ export class FixFeed {
 		this.operationsPageActive = false;
 
 		// Only disconnect if there are no active device subscriptions
-		if (this.subscribedDevices.size === 0) {
+		if (this.subscribedAircraft.size === 0) {
 			this.disconnect();
 		}
 	}
@@ -378,13 +378,13 @@ export class FixFeed {
 	public getConnectionStatus(): {
 		connected: boolean;
 		reconnecting: boolean;
-		subscribedDevices: string[];
+		subscribedAircraft: string[];
 		operationsPageActive: boolean;
 	} {
 		return {
 			connected: this.websocket?.readyState === WebSocket.OPEN,
 			reconnecting: this.reconnectAttempts > 0,
-			subscribedDevices: Array.from(this.subscribedDevices),
+			subscribedAircraft: Array.from(this.subscribedAircraft),
 			operationsPageActive: this.operationsPageActive
 		};
 	}
@@ -392,21 +392,21 @@ export class FixFeed {
 	// Subscribe to multiple devices from watchlist
 	public async subscribeToWatchlist(deviceIds: string[]): Promise<void> {
 		// Unsubscribe from devices no longer in the list
-		const devicesToUnsubscribe = Array.from(this.subscribedDevices).filter(
-			(deviceId) => !deviceIds.includes(deviceId)
+		const devicesToUnsubscribe = Array.from(this.subscribedAircraft).filter(
+			(aircraftId) => !deviceIds.includes(aircraftId)
 		);
 
-		for (const deviceId of devicesToUnsubscribe) {
-			this.unsubscribeFromDevice(deviceId);
+		for (const aircraftId of devicesToUnsubscribe) {
+			this.unsubscribeFromAircraft(aircraftId);
 		}
 
 		// Subscribe to new devices
 		const devicesToSubscribe = deviceIds.filter(
-			(deviceId) => !this.subscribedDevices.has(deviceId)
+			(aircraftId) => !this.subscribedAircraft.has(aircraftId)
 		);
 
-		for (const deviceId of devicesToSubscribe) {
-			await this.subscribeToDevice(deviceId);
+		for (const aircraftId of devicesToSubscribe) {
+			await this.subscribeToAircraft(aircraftId);
 		}
 	}
 

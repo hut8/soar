@@ -17,10 +17,10 @@ fn get_topic_prefix() -> &'static str {
 }
 
 /// Publish FixWithFlightInfo to NATS (both device and area topics)
-#[tracing::instrument(skip(nats_client, fix_with_flight), fields(device_id = %device_id))]
+#[tracing::instrument(skip(nats_client, fix_with_flight), fields(aircraft_id = %aircraft_id))]
 async fn publish_to_nats(
     nats_client: &Client,
-    device_id: &str,
+    aircraft_id: &str,
     fix_with_flight: &FixWithFlightInfo,
 ) -> Result<()> {
     let topic_prefix = get_topic_prefix();
@@ -29,7 +29,7 @@ async fn publish_to_nats(
     let payload = serde_json::to_vec(fix_with_flight)?;
 
     // Publish by device
-    let device_subject = format!("{}.fix.{}", topic_prefix, device_id);
+    let device_subject = format!("{}.fix.{}", topic_prefix, aircraft_id);
     nats_client
         .publish(device_subject.clone(), payload.clone().into())
         .await?;
@@ -98,15 +98,15 @@ impl NatsFixPublisher {
                 let mut last_stats_log = std::time::Instant::now();
 
             while let Ok(fix_with_flight) = fix_receiver.recv_async().await {
-                let device_id = fix_with_flight.device_id.to_string();
+                let aircraft_id = fix_with_flight.aircraft_id.to_string();
 
-                match publish_to_nats(&client_clone, &device_id, &fix_with_flight).await {
+                match publish_to_nats(&client_clone, &aircraft_id, &fix_with_flight).await {
                     Ok(()) => {
                         fixes_published += 1;
                         metrics::counter!("nats_publisher_fixes_published").increment(1);
                     }
                     Err(e) => {
-                        error!("Failed to publish fix for device {}: {}", device_id, e);
+                        error!("Failed to publish fix for device {}: {}", aircraft_id, e);
                         metrics::counter!("nats_publisher_errors").increment(1);
                     }
                 }

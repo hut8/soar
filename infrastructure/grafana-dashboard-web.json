@@ -902,7 +902,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "rate(websocket_device_subscribes{component=\"web\"}[5m])",
+          "expr": "rate(websocket_aircraft_subscribes{component=\"web\"}[5m])",
           "legendFormat": "Device Subscribes/sec",
           "range": true,
           "refId": "A"
@@ -913,7 +913,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "rate(websocket_device_unsubscribes{component=\"web\"}[5m])",
+          "expr": "rate(websocket_aircraft_unsubscribes{component=\"web\"}[5m])",
           "legendFormat": "Device Unsubscribes/sec",
           "range": true,
           "refId": "B"

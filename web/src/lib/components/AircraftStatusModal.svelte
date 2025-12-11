@@ -1,16 +1,9 @@
 <script lang="ts">
 	import { X, Plane, MapPin, RotateCcw, ExternalLink, Navigation } from '@lucide/svelte';
-	import type {
-		Device,
-		Aircraft,
-		Fix,
-		AircraftRegistration,
-		AircraftModel,
-		Flight
-	} from '$lib/types';
+	import type { Aircraft, Fix, AircraftRegistration, AircraftModel, Flight } from '$lib/types';
 	import {
 		formatTitleCase,
-		formatDeviceAddress,
+		formatAircraftAddress,
 		getStatusCodeDescription,
 		getAircraftTypeOgnDescription,
 		getAircraftTypeColor,
@@ -30,9 +23,9 @@
 	dayjs.extend(relativeTime);
 
 	// Props
-	let { showModal = $bindable(), selectedDevice = $bindable() } = $props<{
+	let { showModal = $bindable(), selectedAircraft = $bindable() } = $props<{
 		showModal: boolean;
-		selectedDevice: Device | null;
+		selectedAircraft: Aircraft | null;
 	}>();
 
 	// Reactive variables
@@ -46,7 +39,7 @@
 
 	// Direction arrow variables
 	let userLocation: { lat: number; lng: number } | null = $state(null);
-	let deviceHeading: number = $state(0);
+	let aircraftHeading: number = $state(0);
 	let isCompassActive: boolean = $state(false);
 	let directionToAircraft: number = $state(0);
 	let previousDirectionToAircraft: number = $state(0);
@@ -54,7 +47,7 @@
 
 	// Update data when device changes
 	$effect(() => {
-		if (selectedDevice) {
+		if (selectedAircraft) {
 			loadAircraftData();
 		} else {
 			aircraftRegistration = null;
@@ -65,7 +58,7 @@
 	});
 
 	async function loadAircraftData() {
-		if (!selectedDevice) return;
+		if (!selectedAircraft) return;
 
 		// Load aircraft registration and model data in parallel
 		loadingRegistration = true;
@@ -73,32 +66,31 @@
 		loadingFlight = true;
 
 		try {
-			// Import DeviceRegistry and serverCall
-			const { DeviceRegistry } = await import('$lib/services/DeviceRegistry');
+			// Import AircraftRegistry and serverCall
+			const { AircraftRegistry } = await import('$lib/services/AircraftRegistry');
 			const { serverCall } = await import('$lib/api/server');
-			const registry = DeviceRegistry.getInstance();
+			const registry = AircraftRegistry.getInstance();
 
 			// Load recent fixes from API
-			await registry.loadRecentFixesFromAPI(selectedDevice.id, 100);
+			await registry.loadRecentFixesFromAPI(selectedAircraft.id, 100);
 
-			// Update recent fixes from the device (last 24 hours)
+			// Update recent fixes from the aircraft (last 24 hours)
 			const now = Date.now();
 			const twentyFourHoursAgo = now - 24 * 60 * 60 * 1000;
-			const allFixes = selectedDevice.fixes || [];
+			const allFixes = selectedAircraft.fixes || [];
 			recentFixes = allFixes.filter((fix: Fix) => {
 				const fixTime = new Date(fix.timestamp).getTime();
 				return fixTime > twentyFourHoursAgo;
 			});
 
-			// Check if device is actually an Aircraft with registration/model data
-			const aircraft = selectedDevice as Aircraft;
-			aircraftRegistration = aircraft.aircraft_registration || null;
-			aircraftModel = aircraft.aircraft_model_details || null;
+			// Check if aircraft has registration/model data
+			aircraftRegistration = selectedAircraft.aircraft_registration || null;
+			aircraftModel = selectedAircraft.aircraft_model_details || null;
 
-			// Load current flight if device has an active flight
-			if (selectedDevice.active_flight_id) {
+			// Load current flight if aircraft has an active flight
+			if (selectedAircraft.active_flight_id) {
 				try {
-					currentFlight = await serverCall(`/flights/${selectedDevice.active_flight_id}`);
+					currentFlight = await serverCall(`/flights/${selectedAircraft.active_flight_id}`);
 				} catch (error) {
 					console.warn('Failed to load flight data:', error);
 					currentFlight = null;
@@ -121,7 +113,7 @@
 
 	function closeModal() {
 		showModal = false;
-		selectedDevice = null;
+		selectedAircraft = null;
 	}
 
 	function formatSpeed(speed_knots: number | undefined): string {
@@ -176,11 +168,11 @@
 
 	// Update direction to aircraft
 	function updateDirectionToAircraft() {
-		if (!userLocation || !selectedDevice) {
+		if (!userLocation || !selectedAircraft) {
 			return;
 		}
 
-		const fixes = selectedDevice.fixes || [];
+		const fixes = selectedAircraft.fixes || [];
 		const latestFix = fixes.length > 0 ? fixes[0] : null;
 		if (!latestFix) {
 			return;
@@ -195,10 +187,10 @@
 		);
 
 		// The arrow should point toward the aircraft and stay pointing there as phone rotates
-		// Add device heading to rotate arrow opposite to phone rotation
-		// When phone points north (deviceHeading = 0), arrow shows absolute bearing
+		// Add aircraft heading to rotate arrow opposite to phone rotation
+		// When phone points north (aircraftHeading = 0), arrow shows absolute bearing
 		// When phone rotates clockwise, arrow rotates counter-clockwise to keep pointing at aircraft
-		let newDirection = (bearing + deviceHeading) % 360;
+		let newDirection = (bearing + aircraftHeading) % 360;
 
 		// Normalize to 0-360 range
 		newDirection = ((newDirection % 360) + 360) % 360;
@@ -225,11 +217,11 @@
 		previousDirectionToAircraft = newDirection;
 	}
 
-	// Handle device orientation changes
+	// Handle aircraft orientation changes
 	function handleOrientationChange(event: DeviceOrientationEvent) {
 		if (event.alpha !== null) {
 			isCompassActive = true;
-			deviceHeading = event.alpha;
+			aircraftHeading = event.alpha;
 			updateDirectionToAircraft();
 		}
 	}
@@ -298,16 +290,16 @@
 		};
 	});
 
-	// Update direction when device changes
+	// Update direction when aircraft changes
 	$effect(() => {
-		if (selectedDevice) {
+		if (selectedAircraft) {
 			updateDirectionToAircraft();
 		}
 	});
 </script>
 
 <!-- Aircraft Status Modal -->
-{#if showModal && selectedDevice}
+{#if showModal && selectedAircraft}
 	<div
 		class="fixed inset-0 z-50 flex items-start justify-center bg-surface-950-50/50 pt-20"
 		onclick={closeModal}
@@ -361,21 +353,21 @@
 					<div>
 						<h2 id="aircraft-status-title" class="text-xl font-bold">Aircraft Status</h2>
 						<p class="text-sm text-surface-600 dark:text-surface-400">
-							{selectedDevice.registration ||
-								formatDeviceAddress(selectedDevice.address_type, selectedDevice.address)}
-							{#if selectedDevice.aircraft_model}
-								• {selectedDevice.aircraft_model}
+							{selectedAircraft.registration ||
+								formatAircraftAddress(selectedAircraft.address_type, selectedAircraft.address)}
+							{#if selectedAircraft.aircraft_model}
+								• {selectedAircraft.aircraft_model}
 							{/if}
 						</p>
 					</div>
 				</div>
 				<div class="flex items-center gap-2">
 					<a
-						href="/devices/{selectedDevice.id}"
+						href="/aircraft/{selectedAircraft.id}"
 						target="_blank"
 						rel="noopener noreferrer"
 						class="btn preset-filled-primary-500 btn-sm"
-						title="View detailed device page"
+						title="View detailed aircraft page"
 					>
 						<ExternalLink size={16} />
 						View Details
@@ -405,7 +397,7 @@
 											Registration
 										</dt>
 										<dd class="font-mono text-sm">
-											{selectedDevice.registration || 'Unknown'}
+											{selectedAircraft.registration || 'Unknown'}
 										</dd>
 									</div>
 									<div>
@@ -413,7 +405,10 @@
 											Address
 										</dt>
 										<dd class="font-mono text-sm">
-											{formatDeviceAddress(selectedDevice.address_type, selectedDevice.address)}
+											{formatAircraftAddress(
+												selectedAircraft.address_type,
+												selectedAircraft.address
+											)}
 										</dd>
 									</div>
 								</div>
@@ -424,7 +419,7 @@
 											Aircraft Model
 										</dt>
 										<dd class="text-sm">
-											{selectedDevice.aircraft_model || 'Unknown'}
+											{selectedAircraft.aircraft_model || 'Unknown'}
 										</dd>
 									</div>
 									<div>
@@ -432,7 +427,7 @@
 											Competition Number
 										</dt>
 										<dd class="text-sm">
-											{selectedDevice.competition_number || 'None'}
+											{selectedAircraft.competition_number || 'None'}
 										</dd>
 									</div>
 								</div>
@@ -441,39 +436,39 @@
 									<div>
 										<dd class="text-sm">
 											<span
-												class="badge preset-filled-{selectedDevice.tracked
+												class="badge preset-filled-{selectedAircraft.tracked
 													? 'success-500'
 													: 'warning-500'}"
 											>
-												{selectedDevice.tracked ? 'Tracked' : 'Not tracked'}
+												{selectedAircraft.tracked ? 'Tracked' : 'Not tracked'}
 											</span>
 										</dd>
 									</div>
 									<div>
 										<dd class="text-sm">
 											<span
-												class="badge preset-filled-{selectedDevice.identified
+												class="badge preset-filled-{selectedAircraft.identified
 													? 'success-500'
 													: 'warning-500'}"
 											>
-												{selectedDevice.identified ? 'Identified' : 'Not identified'}
+												{selectedAircraft.identified ? 'Identified' : 'Not identified'}
 											</span>
 										</dd>
 									</div>
 									<div>
 										<dd class="text-sm">
 											<span
-												class="badge {selectedDevice.from_ddb
+												class="badge {selectedAircraft.from_ddb
 													? 'preset-filled-success-500'
 													: 'preset-filled-secondary-500'}"
 											>
-												{selectedDevice.from_ddb ? 'From OGN DB' : 'Not in OGN DB'}
+												{selectedAircraft.from_ddb ? 'From OGN DB' : 'Not in OGN DB'}
 											</span>
 										</dd>
 									</div>
 								</div>
 
-								{#if selectedDevice.aircraft_type_ogn}
+								{#if selectedAircraft.aircraft_type_ogn}
 									<div class="grid grid-cols-1 gap-4">
 										<div>
 											<dt class="text-sm font-medium text-surface-600 dark:text-surface-400">
@@ -482,10 +477,10 @@
 											<dd class="text-sm">
 												<span
 													class="badge {getAircraftTypeColor(
-														selectedDevice.aircraft_type_ogn
+														selectedAircraft.aircraft_type_ogn
 													)} text-xs"
 												>
-													{getAircraftTypeOgnDescription(selectedDevice.aircraft_type_ogn)}
+													{getAircraftTypeOgnDescription(selectedAircraft.aircraft_type_ogn)}
 												</span>
 											</dd>
 										</div>

@@ -196,8 +196,8 @@ impl AircraftRegistrationsRepository {
                         .eq(excluded(aircraft_registrations::kit_mfr_name)),
                     aircraft_registrations::kit_model_name
                         .eq(excluded(aircraft_registrations::kit_model_name)),
-                    aircraft_registrations::device_id
-                        .eq(excluded(aircraft_registrations::device_id)),
+                    aircraft_registrations::aircraft_id
+                        .eq(excluded(aircraft_registrations::aircraft_id)),
                     aircraft_registrations::light_sport_type
                         .eq(excluded(aircraft_registrations::light_sport_type)),
                     aircraft_registrations::club_id.eq(excluded(aircraft_registrations::club_id)),
@@ -501,11 +501,11 @@ impl AircraftRegistrationsRepository {
     /// Get aircraft registration by device ID
     pub async fn get_aircraft_registration_by_device_id(
         &self,
-        device_id: Uuid,
+        aircraft_id: Uuid,
     ) -> Result<Option<AircraftRegistrationModel>> {
         let mut conn = self.get_connection()?;
         let aircraft_model = aircraft_registrations::table
-            .filter(aircraft_registrations::device_id.eq(device_id))
+            .filter(aircraft_registrations::aircraft_id.eq(aircraft_id))
             .select(AircraftRegistrationModel::as_select())
             .first::<AircraftRegistrationModel>(&mut conn)
             .optional()?;
@@ -545,7 +545,7 @@ impl AircraftRegistrationsRepository {
         );
         let mut conn = self.get_connection()?;
         let registrations = aircraft_registrations::table
-            .filter(aircraft_registrations::device_id.eq_any(device_ids))
+            .filter(aircraft_registrations::aircraft_id.eq_any(device_ids))
             .select(AircraftRegistrationModel::as_select())
             .load::<AircraftRegistrationModel>(&mut conn)?;
 

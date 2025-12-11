@@ -2359,7 +2359,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "aprs_aircraft_device_upsert_ms{component=\"run\",quantile=\"0.5\"}",
+          "expr": "aprs_aircraft_upsert_ms{component=\"run\",quantile=\"0.5\"}",
           "legendFormat": "Device Upsert (P50)",
           "range": true,
           "refId": "B"
@@ -2535,7 +2535,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "aprs_aircraft_device_upsert_ms{component=\"run\",quantile=\"0.95\"}",
+          "expr": "aprs_aircraft_upsert_ms{component=\"run\",quantile=\"0.95\"}",
           "legendFormat": "Device Upsert (P95)",
           "range": true,
           "refId": "B"
@@ -4186,7 +4186,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "flight_tracker_active_devices",
+          "expr": "flight_tracker_active_aircraft",
           "legendFormat": "Active",
           "range": true,
           "refId": "A"

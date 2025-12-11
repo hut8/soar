@@ -5,8 +5,8 @@ use r2d2::Pool;
 use std::time::Instant;
 use tracing::{error, info};
 
-use soar::device_repo::DeviceRepository;
-use soar::devices::read_flarmnet_file;
+use soar::aircraft::read_flarmnet_file;
+use soar::aircraft_repo::AircraftRepository;
 use soar::email_reporter::EntityMetrics;
 use soar::receiver_repo::ReceiverRepository;
 use soar::receivers::read_receivers_file;
@@ -71,7 +71,7 @@ pub async fn load_devices(
     let devices = read_flarmnet_file(devices_path)?;
     info!("Successfully loaded {} devices", devices.len());
 
-    let device_repo = DeviceRepository::new(diesel_pool);
+    let device_repo = AircraftRepository::new(diesel_pool);
     info!("Upserting {} devices into database...", devices.len());
 
     let upserted_count = device_repo.upsert_devices(devices).await?;

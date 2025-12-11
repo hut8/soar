@@ -39,7 +39,7 @@ pub async fn handle_sitemap_generation(pool: PgPool, static_root: String) -> Res
 
     // Get all device IDs from database
     let device_ids = get_all_device_ids(pool.clone()).await?;
-    info!("Found {} devices for sitemap generation", device_ids.len());
+    info!("Found {} aircraft for sitemap generation", device_ids.len());
 
     // Generate device URLs
     let device_urls = generate_device_urls(&device_ids)?;
@@ -94,7 +94,7 @@ fn generate_static_pages() -> Result<Vec<Url>> {
         Url::builder(format!("{}/", BASE_URL))
             .priority(0.9)
             .build()?,
-        Url::builder(format!("{}/devices", BASE_URL))
+        Url::builder(format!("{}/aircraft", BASE_URL))
             .priority(0.8)
             .build()?,
         Url::builder(format!("{}/clubs", BASE_URL))
@@ -164,8 +164,8 @@ async fn get_all_club_ids(pool: PgPool) -> Result<Vec<Uuid>> {
 fn generate_device_urls(device_ids: &[Uuid]) -> Result<Vec<Url>> {
     let mut urls = Vec::new();
 
-    for device_id in device_ids {
-        let device_url = format!("{}/devices/{}", BASE_URL, device_id);
+    for aircraft_id in device_ids {
+        let device_url = format!("{}/aircraft/{}", BASE_URL, aircraft_id);
         let url = Url::builder(device_url).priority(0.5).build()?;
         urls.push(url);
     }
@@ -176,12 +176,15 @@ fn generate_device_urls(device_ids: &[Uuid]) -> Result<Vec<Url>> {
 /// Get all device IDs from the database
 async fn get_all_device_ids(pool: PgPool) -> Result<Vec<Uuid>> {
     let result = tokio::task::spawn_blocking(move || {
-        use soar::schema::devices::dsl::*;
+        use soar::schema::aircraft::dsl::*;
 
         let mut conn = pool.get()?;
 
         // Get all device IDs (UUIDs)
-        let device_ids: Vec<Uuid> = devices.order(id.asc()).select(id).load::<Uuid>(&mut conn)?;
+        let device_ids: Vec<Uuid> = aircraft
+            .order(id.asc())
+            .select(id)
+            .load::<Uuid>(&mut conn)?;
 
         Ok::<Vec<Uuid>, anyhow::Error>(device_ids)
     })

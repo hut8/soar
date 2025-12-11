@@ -166,7 +166,7 @@ impl AnalyticsRepository {
     }
 
     /// Get device outliers (z-score > threshold)
-    pub async fn get_device_outliers(&self, threshold: f64) -> Result<Vec<DeviceOutlier>> {
+    pub async fn get_device_outliers(&self, threshold: f64) -> Result<Vec<AircraftOutlier>> {
         let pool = self.pool.clone();
 
         tokio::task::spawn_blocking(move || {
@@ -175,7 +175,7 @@ impl AnalyticsRepository {
             #[derive(QueryableByName)]
             struct Row {
                 #[diesel(sql_type = diesel::sql_types::Uuid)]
-                device_id: Uuid,
+                aircraft_id: Uuid,
                 #[diesel(sql_type = Nullable<Text>)]
                 registration: Option<String>,
                 #[diesel(sql_type = Nullable<Text>)]
@@ -197,8 +197,8 @@ impl AnalyticsRepository {
 
             Ok(results
                 .into_iter()
-                .map(|r| DeviceOutlier {
-                    device_id: r.device_id,
+                .map(|r| AircraftOutlier {
+                    aircraft_id: r.aircraft_id,
                     registration: r.registration,
                     aircraft_model: r.aircraft_model,
                     flight_count_30d: r.flight_count_30d,
@@ -219,7 +219,7 @@ impl AnalyticsRepository {
             #[derive(QueryableByName)]
             struct Row {
                 #[diesel(sql_type = diesel::sql_types::Uuid)]
-                device_id: Uuid,
+                aircraft_id: Uuid,
                 #[diesel(sql_type = Nullable<Text>)]
                 registration: Option<String>,
                 #[diesel(sql_type = Nullable<Text>)]
@@ -255,7 +255,7 @@ impl AnalyticsRepository {
             Ok(results
                 .into_iter()
                 .map(|r| TopDevice {
-                    device_id: r.device_id,
+                    aircraft_id: r.aircraft_id,
                     registration: r.registration,
                     aircraft_model: r.aircraft_model,
                     flight_count: r.flight_count,

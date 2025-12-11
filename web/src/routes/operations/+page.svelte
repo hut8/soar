@@ -10,16 +10,16 @@
 	import SettingsModal from '$lib/components/SettingsModal.svelte';
 	import AircraftStatusModal from '$lib/components/AircraftStatusModal.svelte';
 	import AirportModal from '$lib/components/AirportModal.svelte';
-	import { DeviceRegistry } from '$lib/services/DeviceRegistry';
+	import { AircraftRegistry } from '$lib/services/AircraftRegistry';
 	import { FixFeed } from '$lib/services/FixFeed';
-	import type { Device, Receiver } from '$lib/types';
+	import type { Aircraft, Receiver } from '$lib/types';
 	import { toaster } from '$lib/toaster';
 	import { debugStatus } from '$lib/stores/watchlist';
 	import { browser } from '$app/environment';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
 	import type { Fix } from '$lib/types';
-	import type { DeviceRegistryEvent } from '$lib/services/DeviceRegistry';
+	import type { AircraftRegistryEvent } from '$lib/services/AircraftRegistry';
 	import { GOOGLE_MAPS_API_KEY } from '$lib/config';
 
 	// Extend dayjs with relative time plugin
@@ -111,7 +111,7 @@
 
 	// Aircraft status modal state
 	let showAircraftStatusModal = $state(false);
-	let selectedAircraft: Device | null = $state(null);
+	let selectedAircraft: Aircraft | null = $state(null);
 
 	// Airport modal state
 	let showAirportModal = $state(false);
@@ -159,9 +159,9 @@
 	}
 
 	// Handle aircraft marker click
-	function handleAircraftClick(device: Device) {
-		console.log('[AIRCRAFT CLICK] Aircraft clicked:', device.registration || device.address);
-		selectedAircraft = device;
+	function handleAircraftClick(aircraft: Aircraft) {
+		console.log('[AIRCRAFT CLICK] Aircraft clicked:', aircraft.registration || aircraft.address);
+		selectedAircraft = aircraft;
 		showAircraftStatusModal = true;
 	}
 
@@ -406,11 +406,11 @@
 	});
 
 	// Get singleton instances
-	const deviceRegistry = DeviceRegistry.getInstance();
+	const deviceRegistry = AircraftRegistry.getInstance();
 	const fixFeed = FixFeed.getInstance();
 
 	// Subscribe to device registry and update aircraft markers
-	let activeDevices: Device[] = $state([]);
+	let activeDevices: Aircraft[] = $state([]);
 	let initialMarkersRendered = false;
 
 	// Area tracker state
@@ -422,29 +422,29 @@
 	let mapType = $state<'satellite' | 'roadmap'>('satellite');
 
 	$effect(() => {
-		const unsubscribeRegistry = deviceRegistry.subscribe((event: DeviceRegistryEvent) => {
-			if (event.type === 'devices_changed') {
-				activeDevices = event.devices;
-			} else if (event.type === 'device_updated') {
+		const unsubscribeRegistry = deviceRegistry.subscribe((event: AircraftRegistryEvent) => {
+			if (event.type === 'aircraft_changed') {
+				activeDevices = event.aircraft;
+			} else if (event.type === 'aircraft_updated') {
 				// When a device is updated, create or update its marker if we have a map
 				if (map) {
-					const fixes = event.device.fixes || [];
+					const fixes = event.aircraft.fixes || [];
 					const latestFix = fixes.length > 0 ? fixes[0] : null;
 					if (latestFix) {
-						updateAircraftMarkerFromDevice(event.device, latestFix);
+						updateAircraftMarkerFromDevice(event.aircraft, latestFix);
 					}
 				}
 			} else if (event.type === 'fix_added') {
-				console.log('Fix added to device:', event.device.id, event.fix);
+				console.log('Fix added to aircraft:', event.aircraft.id, event.fix);
 				// Update the aircraft marker immediately when a new fix is added
 				if (map && event.fix) {
-					updateAircraftMarkerFromDevice(event.device, event.fix);
+					updateAircraftMarkerFromDevice(event.aircraft, event.fix);
 				}
 			}
 		});
 
 		// Initialize active devices
-		activeDevices = deviceRegistry.getAllDevices();
+		activeDevices = deviceRegistry.getAllAircraft();
 
 		return () => {
 			unsubscribeRegistry();
@@ -1175,10 +1175,10 @@
 		});
 	}
 
-	function updateAircraftMarkerFromDevice(device: Device, latestFix: Fix): void {
+	function updateAircraftMarkerFromDevice(aircraft: Aircraft, latestFix: Fix): void {
 		console.log('[MARKER] updateAircraftMarkerFromDevice called:', {
-			deviceId: device.id,
-			registration: device.registration,
+			deviceId: aircraft.id,
+			registration: aircraft.registration,
 			latestFix: {
 				lat: latestFix.latitude,
 				lng: latestFix.longitude,
@@ -1193,7 +1193,7 @@
 			return;
 		}
 
-		const deviceKey = device.id;
+		const deviceKey = aircraft.id;
 		if (!deviceKey) {
 			console.warn('[MARKER] No device ID available');
 			return;
@@ -1201,35 +1201,35 @@
 
 		// Update latest fix for this device
 		latestFixes.set(deviceKey, latestFix);
-		console.log('[MARKER] Updated latest fix for device:', deviceKey);
+		console.log('[MARKER] Updated latest fix for aircraft:', deviceKey);
 
 		// Get or create marker for this aircraft
 		let marker = aircraftMarkers.get(deviceKey);
 
 		if (!marker) {
-			console.log('[MARKER] Creating new marker for device:', deviceKey);
+			console.log('[MARKER] Creating new marker for aircraft:', deviceKey);
 			// Create new aircraft marker with device info
-			marker = createAircraftMarkerFromDevice(device, latestFix);
+			marker = createAircraftMarkerFromDevice(aircraft, latestFix);
 			aircraftMarkers.set(deviceKey, marker);
 			console.log('[MARKER] New marker created and stored. Total markers:', aircraftMarkers.size);
 		} else {
-			console.log('[MARKER] Updating existing marker for device:', deviceKey);
+			console.log('[MARKER] Updating existing marker for aircraft:', deviceKey);
 			// Update existing marker position and info
-			updateAircraftMarkerPositionFromDevice(marker, device, latestFix);
+			updateAircraftMarkerPositionFromDevice(marker, aircraft, latestFix);
 		}
 
 		// Update trail for this aircraft
-		updateAircraftTrail(device);
+		updateAircraftTrail(aircraft);
 	}
 
 	function createAircraftMarkerFromDevice(
-		device: Device,
+		aircraft: Aircraft,
 		fix: Fix
 	): google.maps.marker.AdvancedMarkerElement {
-		console.log('[MARKER] Creating marker for device:', {
-			deviceId: device.id,
-			registration: device.registration,
-			address: device.address,
+		console.log('[MARKER] Creating marker for aircraft:', {
+			deviceId: aircraft.id,
+			registration: aircraft.registration,
+			address: aircraft.address,
 			position: { lat: fix.latitude, lng: fix.longitude },
 			track: fix.track_degrees
 		});
@@ -1265,10 +1265,10 @@
 		infoLabel.style.borderColor = markerColor;
 
 		// Use proper device registration, fallback to address
-		const tailNumber = device.registration || device.address || 'Unknown';
+		const tailNumber = aircraft.registration || aircraft.address || 'Unknown';
 		const { altitudeText, isOld } = formatAltitudeWithTime(fix.altitude_msl_feet, fix.timestamp);
 		// Use aircraft_model string from device, or detailed model name if available
-		const aircraftModel = device.aircraft_model || null;
+		const aircraftModel = aircraft.aircraft_model || null;
 
 		console.log('[MARKER] Aircraft info:', {
 			tailNumber,
@@ -1302,8 +1302,8 @@
 
 		// Create the marker with proper title including aircraft model and full timestamp
 		const fullTimestamp = dayjs(fix.timestamp).format('YYYY-MM-DD HH:mm:ss UTC');
-		const title = device.aircraft_model
-			? `${tailNumber} (${device.aircraft_model}) - ${altitudeText} - Last seen: ${fullTimestamp}`
+		const title = aircraft.aircraft_model
+			? `${tailNumber} (${aircraft.aircraft_model}) - ${altitudeText} - Last seen: ${fullTimestamp}`
 			: `${tailNumber} - ${altitudeText} - Last seen: ${fullTimestamp}`;
 
 		console.log('[MARKER] Creating AdvancedMarkerElement with:', {
@@ -1322,7 +1322,7 @@
 
 		// Add click event listener to open aircraft status modal
 		marker.addListener('click', () => {
-			handleAircraftClick(device);
+			handleAircraftClick(aircraft);
 		});
 
 		// Add hover listeners to bring marker to front when overlapping with other aircraft
@@ -1343,11 +1343,11 @@
 
 	function updateAircraftMarkerPositionFromDevice(
 		marker: google.maps.marker.AdvancedMarkerElement,
-		device: Device,
+		aircraft: Aircraft,
 		fix: Fix
 	): void {
 		console.log('[MARKER] Updating existing marker position:', {
-			deviceId: device.id,
+			deviceId: aircraft.id,
 			oldPosition: marker.position,
 			newPosition: { lat: fix.latitude, lng: fix.longitude }
 		});
@@ -1380,13 +1380,13 @@
 
 			if (tailDiv && altDiv) {
 				// Use proper device registration, fallback to address
-				const tailNumber = device.registration || device.address || 'Unknown';
+				const tailNumber = aircraft.registration || aircraft.address || 'Unknown';
 				const { altitudeText, isOld } = formatAltitudeWithTime(
 					fix.altitude_msl_feet,
 					fix.timestamp
 				);
 				// Use aircraft_model string from device
-				const aircraftModel = device.aircraft_model || null;
+				const aircraftModel = aircraft.aircraft_model || null;
 
 				// Include aircraft model after tail number if available
 				tailDiv.textContent = aircraftModel ? `${tailNumber} (${aircraftModel})` : tailNumber;
@@ -1422,9 +1422,9 @@
 		// Update the marker title with full timestamp
 		const { altitudeText } = formatAltitudeWithTime(fix.altitude_msl_feet, fix.timestamp);
 		const fullTimestamp = dayjs(fix.timestamp).format('YYYY-MM-DD HH:mm:ss UTC');
-		const title = device.aircraft_model
-			? `${device.registration || device.address} (${device.aircraft_model}) - ${altitudeText} - Last seen: ${fullTimestamp}`
-			: `${device.registration || device.address} - ${altitudeText} - Last seen: ${fullTimestamp}`;
+		const title = aircraft.aircraft_model
+			? `${aircraft.registration || aircraft.address} (${aircraft.aircraft_model}) - ${altitudeText} - Last seen: ${fullTimestamp}`
+			: `${aircraft.registration || aircraft.address} - ${altitudeText} - Last seen: ${fullTimestamp}`;
 
 		marker.title = title;
 		console.log('[MARKER] Updated marker title:', title);
@@ -1442,14 +1442,14 @@
 	}
 
 	// Aircraft trail functions
-	function updateAircraftTrail(device: Device): void {
+	function updateAircraftTrail(aircraft: Aircraft): void {
 		if (!map || currentSettings.positionFixWindow === 0) {
 			// Remove trail if disabled
-			clearTrailForDevice(device.id);
+			clearTrailForDevice(aircraft.id);
 			return;
 		}
 
-		const fixes = device.fixes || []; // Get all fixes from device
+		const fixes = aircraft.fixes || []; // Get all fixes from device
 
 		// Filter fixes to those within the position fix window
 		const cutoffTime = dayjs().subtract(currentSettings.positionFixWindow, 'hour');
@@ -1457,12 +1457,12 @@
 
 		if (trailFixes.length < 2) {
 			// Need at least 2 points to draw a trail
-			clearTrailForDevice(device.id);
+			clearTrailForDevice(aircraft.id);
 			return;
 		}
 
 		// Clear existing trail
-		clearTrailForDevice(device.id);
+		clearTrailForDevice(aircraft.id);
 
 		// Create polyline segments with progressive transparency
 		const polylines: google.maps.Polyline[] = [];
@@ -1512,7 +1512,7 @@
 		});
 
 		// Store trail data
-		aircraftTrails.set(device.id, { polylines, dots });
+		aircraftTrails.set(aircraft.id, { polylines, dots });
 	}
 
 	function clearTrailForDevice(deviceId: string): void {
@@ -1738,7 +1738,7 @@
 			// to make additional API calls for trail data
 			for (const aircraft of devicesWithFixes) {
 				// Register the aircraft with all its fixes
-				await deviceRegistry.updateDeviceFromAircraft(aircraft);
+				await deviceRegistry.updateAircraftFromAircraftData(aircraft);
 			}
 
 			console.log('[REST] Devices loaded with fixes from backend');
@@ -1943,10 +1943,7 @@
 <WatchlistModal bind:showModal={showWatchlistModal} />
 
 <!-- Aircraft Status Modal -->
-<AircraftStatusModal
-	bind:showModal={showAircraftStatusModal}
-	bind:selectedDevice={selectedAircraft}
-/>
+<AircraftStatusModal bind:showModal={showAircraftStatusModal} bind:selectedAircraft />
 
 <!-- Airport Modal -->
 <AirportModal bind:showModal={showAirportModal} bind:selectedAirport />

@@ -17,12 +17,19 @@
 	import { Progress } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall } from '$lib/api/server';
 	import { auth } from '$lib/stores/auth';
-	import type { Device, AircraftRegistration, AircraftModel, Fix, Flight, Club } from '$lib/types';
+	import type {
+		Aircraft,
+		AircraftRegistration,
+		AircraftModel,
+		Fix,
+		Flight,
+		Club
+	} from '$lib/types';
 	import FlightsList from '$lib/components/FlightsList.svelte';
 	import FixesList from '$lib/components/FixesList.svelte';
 	import {
 		formatTitleCase,
-		formatDeviceAddress,
+		formatAircraftAddress,
 		getStatusCodeDescription,
 		getAircraftTypeOgnDescription,
 		getAircraftTypeColor,
@@ -53,7 +60,7 @@
 		total_pages: number;
 	}
 
-	let device: Device | null = null;
+	let aircraft: Aircraft | null = null;
 	let aircraftRegistration: AircraftRegistration | null = null;
 	let aircraftModel: AircraftModel | null = null;
 	let fixes: Fix[] = [];
@@ -62,7 +69,7 @@
 	let loadingFixes = false;
 	let loadingFlights = false;
 	let error = '';
-	let deviceId = '';
+	let aircraftId = '';
 	let fixesPage = 1;
 	let flightsPage = 1;
 	let fixesTotalPages = 1;
@@ -72,7 +79,7 @@
 	let selectedClubId: string = '';
 	let savingClub = false;
 
-	$: deviceId = $page.params.id || '';
+	$: aircraftId = $page.params.id || '';
 	$: isAdmin = $auth.user?.access_level === 'admin';
 	$: userClubId = $auth.user?.club_id;
 
@@ -93,8 +100,8 @@
 	}
 
 	onMount(async () => {
-		if (deviceId) {
-			await loadDevice();
+		if (aircraftId) {
+			await loadAircraft();
 			await loadFixes();
 			await loadFlights();
 			if (isAdmin) {
@@ -103,34 +110,34 @@
 		}
 	});
 
-	async function loadDevice() {
+	async function loadAircraft() {
 		loading = true;
 		error = '';
 
 		try {
-			// Load device data
-			const deviceData = await serverCall<Device>(`/devices/${deviceId}`);
-			device = deviceData;
+			// Load aircraft data
+			const deviceData = await serverCall<Aircraft>(`/aircraft/${aircraftId}`);
+			aircraft = deviceData;
 
-			// Initialize selected club ID if device has one
-			if (device.club_id) {
-				selectedClubId = device.club_id;
+			// Initialize selected club ID if aircraft has one
+			if (aircraft.club_id) {
+				selectedClubId = aircraft.club_id;
 			}
 
 			// Load aircraft registration and model data in parallel
 			const [registration, model] = await Promise.all([
-				serverCall<AircraftRegistration>(`/devices/${deviceId}/aircraft/registration`).catch(
+				serverCall<AircraftRegistration>(`/aircraft/${aircraftId}/aircraft/registration`).catch(
 					() => null
 				),
-				serverCall<AircraftModel>(`/devices/${deviceId}/aircraft/model`).catch(() => null)
+				serverCall<AircraftModel>(`/aircraft/${aircraftId}/aircraft/model`).catch(() => null)
 			]);
 
 			aircraftRegistration = registration;
 			aircraftModel = model;
 		} catch (err) {
 			const errorMessage = extractErrorMessage(err);
-			error = `Failed to load device: ${errorMessage}`;
-			console.error('Error loading device:', err);
+			error = `Failed to load aircraft: ${errorMessage}`;
+			console.error('Error loading aircraft:', err);
 		} finally {
 			loading = false;
 		}
@@ -143,7 +150,7 @@
 			const twentyFourHoursAgo = dayjs().utc().subtract(24, 'hour');
 			const after = twentyFourHoursAgo.toISOString();
 
-			const response = await serverCall<FixesResponse>(`/devices/${deviceId}/fixes`, {
+			const response = await serverCall<FixesResponse>(`/aircraft/${aircraftId}/fixes`, {
 				params: {
 					page,
 					per_page: 50,
@@ -170,7 +177,7 @@
 		loadingFlights = true;
 		try {
 			const response = await serverCall<FlightsResponse>(
-				`/devices/${deviceId}/flights?page=${page}&per_page=100`
+				`/aircraft/${aircraftId}/flights?page=${page}&per_page=100`
 			);
 			flights = response.flights || [];
 			flightsPage = response.page || 1;
@@ -184,7 +191,7 @@
 	}
 
 	function goBack() {
-		goto(resolve('/devices'));
+		goto(resolve('/aircraft'));
 	}
 
 	async function loadClubs() {
@@ -203,23 +210,23 @@
 	}
 
 	async function updateDeviceClub() {
-		if (!deviceId || savingClub) return;
+		if (!aircraftId || savingClub) return;
 
 		savingClub = true;
 		try {
-			await serverCall(`/devices/${deviceId}/club`, {
+			await serverCall(`/aircraft/${aircraftId}/club`, {
 				method: 'PUT',
 				body: JSON.stringify({ club_id: selectedClubId || null })
 			});
 
 			toaster.success({ title: 'Device club assignment updated successfully' });
 
-			// Reload device to get updated data
-			await loadDevice();
+			// Reload aircraft to get updated data
+			await loadAircraft();
 		} catch (err) {
 			const errorMessage = extractErrorMessage(err);
 			toaster.error({ title: `Failed to update club assignment: ${errorMessage}` });
-			console.error('Error updating device club:', err);
+			console.error('Error updating aircraft club:', err);
 		} finally {
 			savingClub = false;
 		}
@@ -227,7 +234,7 @@
 </script>
 
 <svelte:head>
-	<title>{device?.registration || 'Device'} - Device Details</title>
+	<title>{aircraft?.registration || 'Device'} - Device Details</title>
 </svelte:head>
 
 <div class="container mx-auto max-w-6xl space-y-6 p-4">
@@ -244,7 +251,7 @@
 		<div class="card p-8">
 			<div class="flex items-center justify-center space-x-4">
 				<Progress class="h-8 w-8" />
-				<span class="text-lg">Loading device details...</span>
+				<span class="text-lg">Loading aircraft details...</span>
 			</div>
 		</div>
 	{/if}
@@ -256,14 +263,14 @@
 				<h3 class="h3">Error Loading Device</h3>
 				<p>{error}</p>
 				<div class="alert-actions">
-					<button class="btn preset-filled" onclick={loadDevice}> Try Again </button>
+					<button class="btn preset-filled" onclick={loadAircraft}> Try Again </button>
 				</div>
 			</div>
 		</div>
 	{/if}
 
 	<!-- Device Details -->
-	{#if !loading && !error && device}
+	{#if !loading && !error && aircraft}
 		<div class="space-y-6">
 			<!-- Header Card -->
 			<div class="card p-6">
@@ -273,60 +280,60 @@
 							<Radio class="h-8 w-8 text-primary-500" />
 							<div>
 								<h1 class="h1">
-									{device.registration || 'Unknown'}
-									{#if device.competition_number}
-										<span class="text-surface-600-300-token">({device.competition_number})</span>
+									{aircraft.registration || 'Unknown'}
+									{#if aircraft.competition_number}
+										<span class="text-surface-600-300-token">({aircraft.competition_number})</span>
 									{/if}
 								</h1>
-								{#if device.aircraft_model}
-									<p class="text-lg">{device.aircraft_model}</p>
+								{#if aircraft.aircraft_model}
+									<p class="text-lg">{aircraft.aircraft_model}</p>
 								{/if}
-								{#if device.icao_model_code}
+								{#if aircraft.icao_model_code}
 									<p class="text-surface-600-300-token text-sm">
-										ICAO Model Code: <span class="font-mono">{device.icao_model_code}</span>
+										ICAO Model Code: <span class="font-mono">{aircraft.icao_model_code}</span>
 									</p>
 								{/if}
 								<p class="text-surface-600-300-token font-mono text-sm">
-									Address: {formatDeviceAddress(device.address_type, device.address)}
+									Address: {formatAircraftAddress(aircraft.address_type, aircraft.address)}
 								</p>
 							</div>
 						</div>
 
 						<div class="mt-3 flex flex-wrap gap-2">
 							<span
-								class="badge {device.tracked
+								class="badge {aircraft.tracked
 									? 'preset-filled-success-500'
 									: 'preset-filled-surface-500'}"
 							>
-								{device.tracked ? 'Tracked' : 'Not Tracked'}
+								{aircraft.tracked ? 'Tracked' : 'Not Tracked'}
 							</span>
 							<span
-								class="badge {device.identified
+								class="badge {aircraft.identified
 									? 'preset-filled-primary-500'
 									: 'preset-filled-surface-500'}"
 							>
-								{device.identified ? 'Identified' : 'Unidentified'}
+								{aircraft.identified ? 'Identified' : 'Unidentified'}
 							</span>
 							<span
-								class="badge {device.from_ddb
+								class="badge {aircraft.from_ddb
 									? 'preset-filled-success-500'
 									: 'preset-filled-secondary-500'}"
 							>
-								{device.from_ddb ? 'From OGN DB' : 'Not in OGN DB'}
+								{aircraft.from_ddb ? 'From OGN DB' : 'Not in OGN DB'}
 							</span>
-							{#if device.aircraft_type_ogn}
-								<span class="badge {getAircraftTypeColor(device.aircraft_type_ogn)} text-xs">
-									{getAircraftTypeOgnDescription(device.aircraft_type_ogn)}
+							{#if aircraft.aircraft_type_ogn}
+								<span class="badge {getAircraftTypeColor(aircraft.aircraft_type_ogn)} text-xs">
+									{getAircraftTypeOgnDescription(aircraft.aircraft_type_ogn)}
 								</span>
 							{/if}
-							{#if device.tracker_device_type}
+							{#if aircraft.tracker_device_type}
 								<span class="preset-tonal-primary-500 badge text-xs">
-									{device.tracker_device_type}
+									{aircraft.tracker_device_type}
 								</span>
 							{/if}
-							{#if device.country_code}
+							{#if aircraft.country_code}
 								<span class="preset-tonal-tertiary-500 badge text-xs">
-									{device.country_code}
+									{aircraft.country_code}
 								</span>
 							{/if}
 						</div>
@@ -406,7 +413,7 @@
 								<div>
 									<p class="text-surface-600-300-token mb-1 text-sm">Registration Number</p>
 									<p class="font-mono font-semibold">
-										{device.registration || aircraftRegistration.n_number || 'Unknown'}
+										{aircraft.registration || aircraftRegistration.n_number || 'Unknown'}
 									</p>
 								</div>
 							</div>
@@ -494,7 +501,7 @@
 						<div class="text-surface-600-300-token py-8 text-center">
 							<Plane class="mx-auto mb-4 h-12 w-12 text-surface-400" />
 							<p>
-								No aircraft registration found for {device.registration || 'Unknown'}
+								No aircraft registration found for {aircraft.registration || 'Unknown'}
 								<br />
 								<i>Data is currently only available for aircraft registered in the USA</i>
 							</p>

@@ -131,7 +131,7 @@
 		}
 	}
 
-	function formatDeviceAddress(address: string, addressType: string): string {
+	function formatAircraftAddress(address: string, addressType: string): string {
 		const typePrefix = addressType === 'Flarm' ? 'F' : addressType === 'Ogn' ? 'O' : 'I';
 		return `${typePrefix}-${address}`;
 	}
@@ -323,9 +323,9 @@
 												<div class="flex flex-col gap-1">
 													{#if flight.aircraft_model && flight.registration}
 														<div class="flex items-center gap-2">
-															{#if flight.device_id}
+															{#if flight.aircraft_id}
 																<a
-																	href={`/devices/${flight.device_id}`}
+																	href={`/aircraft/${flight.aircraft_id}`}
 																	class="anchor font-medium text-primary-500 hover:text-primary-600"
 																>
 																	{flight.aircraft_model}
@@ -343,9 +343,9 @@
 															{/if}
 														</div>
 													{:else if flight.registration}
-														{#if flight.device_id}
+														{#if flight.aircraft_id}
 															<a
-																href={`/devices/${flight.device_id}`}
+																href={`/aircraft/${flight.aircraft_id}`}
 																class="anchor font-medium text-primary-500 hover:text-primary-600"
 															>
 																{flight.registration}
@@ -353,19 +353,19 @@
 														{:else}
 															<span class="font-medium">{flight.registration}</span>
 														{/if}
-													{:else if flight.device_id}
+													{:else if flight.aircraft_id}
 														<a
-															href={`/devices/${flight.device_id}`}
+															href={`/aircraft/${flight.aircraft_id}`}
 															class="text-surface-500-400-token anchor font-mono text-sm hover:text-primary-500"
 														>
-															{formatDeviceAddress(
+															{formatAircraftAddress(
 																flight.device_address,
 																flight.device_address_type
 															)}
 														</a>
 													{:else}
 														<span class="text-surface-500-400-token font-mono text-sm">
-															{formatDeviceAddress(
+															{formatAircraftAddress(
 																flight.device_address,
 																flight.device_address_type
 															)}
@@ -437,9 +437,9 @@
 								<div class="mb-3 flex items-start justify-between gap-2">
 									<div class="flex-1">
 										{#if flight.aircraft_model && flight.registration}
-											{#if flight.device_id}
+											{#if flight.aircraft_id}
 												<a
-													href={`/devices/${flight.device_id}`}
+													href={`/aircraft/${flight.aircraft_id}`}
 													class="font-medium text-primary-500 hover:text-primary-600"
 												>
 													{flight.aircraft_model}
@@ -456,9 +456,9 @@
 												</div>
 											{/if}
 										{:else if flight.registration}
-											{#if flight.device_id}
+											{#if flight.aircraft_id}
 												<a
-													href={`/devices/${flight.device_id}`}
+													href={`/aircraft/${flight.aircraft_id}`}
 													class="font-medium text-primary-500 hover:text-primary-600"
 												>
 													{flight.registration}
@@ -466,16 +466,16 @@
 											{:else}
 												<div class="font-medium">{flight.registration}</div>
 											{/if}
-										{:else if flight.device_id}
+										{:else if flight.aircraft_id}
 											<a
-												href={`/devices/${flight.device_id}`}
+												href={`/aircraft/${flight.aircraft_id}`}
 												class="text-surface-500-400-token font-mono text-sm hover:text-primary-500"
 											>
-												{formatDeviceAddress(flight.device_address, flight.device_address_type)}
+												{formatAircraftAddress(flight.device_address, flight.device_address_type)}
 											</a>
 										{:else}
 											<div class="text-surface-500-400-token font-mono text-sm">
-												{formatDeviceAddress(flight.device_address, flight.device_address_type)}
+												{formatAircraftAddress(flight.device_address, flight.device_address_type)}
 											</div>
 										{/if}
 									</div>
@@ -580,9 +580,9 @@
 											<div class="flex flex-col gap-1">
 												{#if flight.aircraft_model && flight.registration}
 													<div class="flex items-center gap-2">
-														{#if flight.device_id}
+														{#if flight.aircraft_id}
 															<a
-																href={`/devices/${flight.device_id}`}
+																href={`/aircraft/${flight.aircraft_id}`}
 																class="anchor font-medium text-primary-500 hover:text-primary-600"
 															>
 																{flight.aircraft_model}
@@ -598,7 +598,7 @@
 																></span
 															>
 														{/if}
-														{#if flight.towed_by_device_id}
+														{#if flight.towed_by_aircraft_id}
 															<span
 																class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
 																title="This aircraft was towed"
@@ -610,9 +610,9 @@
 													</div>
 												{:else if flight.registration}
 													<div class="flex items-center gap-2">
-														{#if flight.device_id}
+														{#if flight.aircraft_id}
 															<a
-																href={`/devices/${flight.device_id}`}
+																href={`/aircraft/${flight.aircraft_id}`}
 																class="anchor font-medium text-primary-500 hover:text-primary-600"
 															>
 																{flight.registration}
@@ -620,7 +620,7 @@
 														{:else}
 															<span class="font-medium">{flight.registration}</span>
 														{/if}
-														{#if flight.towed_by_device_id}
+														{#if flight.towed_by_aircraft_id}
 															<span
 																class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
 																title="This aircraft was towed"
@@ -632,25 +632,25 @@
 													</div>
 												{:else}
 													<div class="flex items-center gap-2">
-														{#if flight.device_id}
+														{#if flight.aircraft_id}
 															<a
-																href={`/devices/${flight.device_id}`}
+																href={`/aircraft/${flight.aircraft_id}`}
 																class="text-surface-500-400-token anchor font-mono text-sm hover:text-primary-500"
 															>
-																{formatDeviceAddress(
+																{formatAircraftAddress(
 																	flight.device_address,
 																	flight.device_address_type
 																)}
 															</a>
 														{:else}
 															<span class="text-surface-500-400-token font-mono text-sm">
-																{formatDeviceAddress(
+																{formatAircraftAddress(
 																	flight.device_address,
 																	flight.device_address_type
 																)}
 															</span>
 														{/if}
-														{#if flight.towed_by_device_id}
+														{#if flight.towed_by_aircraft_id}
 															<span
 																class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
 																title="This aircraft was towed"
@@ -719,8 +719,8 @@
 											{formatDistance(flight.total_distance_meters)}
 										</td>
 										<td>
-											{#if flight.towed_by_device_id}
-												<TowAircraftLink deviceId={flight.towed_by_device_id} size="sm" />
+											{#if flight.towed_by_aircraft_id}
+												<TowAircraftLink aircraftId={flight.towed_by_aircraft_id} size="sm" />
 											{:else}
 												<span class="text-surface-500">—</span>
 											{/if}
@@ -762,9 +762,9 @@
 							<div class="mb-3 flex items-start justify-between gap-2">
 								<div class="flex-1">
 									{#if flight.aircraft_model && flight.registration}
-										{#if flight.device_id}
+										{#if flight.aircraft_id}
 											<a
-												href={`/devices/${flight.device_id}`}
+												href={`/aircraft/${flight.aircraft_id}`}
 												class="font-medium text-primary-500 hover:text-primary-600"
 											>
 												{flight.aircraft_model}
@@ -781,9 +781,9 @@
 											</div>
 										{/if}
 									{:else if flight.registration}
-										{#if flight.device_id}
+										{#if flight.aircraft_id}
 											<a
-												href={`/devices/${flight.device_id}`}
+												href={`/aircraft/${flight.aircraft_id}`}
 												class="font-medium text-primary-500 hover:text-primary-600"
 											>
 												{flight.registration}
@@ -791,19 +791,19 @@
 										{:else}
 											<div class="font-medium">{flight.registration}</div>
 										{/if}
-									{:else if flight.device_id}
+									{:else if flight.aircraft_id}
 										<a
-											href={`/devices/${flight.device_id}`}
+											href={`/aircraft/${flight.aircraft_id}`}
 											class="text-surface-500-400-token font-mono text-sm hover:text-primary-500"
 										>
-											{formatDeviceAddress(flight.device_address, flight.device_address_type)}
+											{formatAircraftAddress(flight.device_address, flight.device_address_type)}
 										</a>
 									{:else}
 										<div class="text-surface-500-400-token font-mono text-sm">
-											{formatDeviceAddress(flight.device_address, flight.device_address_type)}
+											{formatAircraftAddress(flight.device_address, flight.device_address_type)}
 										</div>
 									{/if}
-									{#if flight.towed_by_device_id}
+									{#if flight.towed_by_aircraft_id}
 										<span
 											class="mt-1 badge flex inline-flex items-center gap-1 preset-filled-primary-500 text-xs"
 											title="This aircraft was towed"
@@ -873,11 +873,11 @@
 									<dt class="text-surface-600-300-token">Distance</dt>
 									<dd class="font-semibold">{formatDistance(flight.total_distance_meters)}</dd>
 								</div>
-								{#if flight.towed_by_device_id}
+								{#if flight.towed_by_aircraft_id}
 									<div class="flex justify-between gap-4">
 										<dt class="text-surface-600-300-token">Tow Aircraft</dt>
 										<dd>
-											<TowAircraftLink deviceId={flight.towed_by_device_id} size="sm" />
+											<TowAircraftLink aircraftId={flight.towed_by_aircraft_id} size="sm" />
 										</dd>
 									</div>
 								{/if}

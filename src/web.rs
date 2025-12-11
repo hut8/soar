@@ -389,7 +389,7 @@ async fn metrics_middleware(request: Request<Body>, next: Next) -> Response {
     let start = Instant::now();
     let method = request.method().clone();
 
-    // Extract the matched route pattern (e.g., "/data/devices/{id}" instead of "/data/devices/123")
+    // Extract the matched route pattern (e.g., "/data/aircraft/{id}" instead of "/data/aircraft/123")
     let raw_path = request
         .extensions()
         .get::<MatchedPath>()
@@ -415,14 +415,14 @@ async fn metrics_middleware(request: Request<Body>, next: Next) -> Response {
         // Static assets (JS, CSS, fonts, images)
         "/static_files".to_string()
     } else if raw_path.starts_with("/data/") {
-        // API routes - keep the matched path pattern (e.g., "/data/devices/{id}")
+        // API routes - keep the matched path pattern (e.g., "/data/aircraft/{id}")
         raw_path
     } else if raw_path == "/robots.txt" || raw_path.starts_with("/sitemap") {
         // Keep robots.txt and sitemap routes as-is
         raw_path
     } else {
         // Everything else is served by the fallback handler (client-side routing via index.html)
-        // This includes /, /devices/uuid, /flights/uuid, etc.
+        // This includes /, /aircraft/uuid, /flights/uuid, etc.
         "/[...fallback]".to_string()
     };
 
@@ -555,8 +555,8 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
     metrics::counter!("websocket_messages_sent").absolute(0);
     metrics::counter!("websocket_send_errors").absolute(0);
     metrics::counter!("websocket_serialization_errors").absolute(0);
-    metrics::counter!("websocket_device_subscribes").absolute(0);
-    metrics::counter!("websocket_device_unsubscribes").absolute(0);
+    metrics::counter!("websocket_aircraft_subscribes").absolute(0);
+    metrics::counter!("websocket_aircraft_unsubscribes").absolute(0);
     metrics::counter!("websocket_area_subscribes").absolute(0);
     metrics::counter!("websocket_area_unsubscribes").absolute(0);
 
@@ -637,20 +637,18 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         )
         // Aircraft routes
         .route("/clubs/{id}/aircraft", get(actions::get_aircraft_by_club))
-        .route("/clubs/{id}/devices", get(actions::get_devices_by_club))
-        // Device routes
-        .route("/devices", get(actions::search_devices))
-        .route("/devices/bulk", get(actions::get_devices_bulk))
-        .route("/devices/{id}", get(actions::get_device_by_id))
-        .route("/devices/{id}/fixes", get(actions::get_device_fixes))
-        .route("/devices/{id}/flights", get(actions::get_device_flights))
-        .route("/devices/{id}/club", put(actions::update_device_club))
+        .route("/aircraft", get(actions::search_aircraft))
+        .route("/aircraft/bulk", get(actions::get_aircraft_bulk))
+        .route("/aircraft/{id}", get(actions::get_aircraft_by_id))
+        .route("/aircraft/{id}/fixes", get(actions::get_aircraft_fixes))
+        .route("/aircraft/{id}/flights", get(actions::get_aircraft_flights))
+        .route("/aircraft/{id}/club", put(actions::update_aircraft_club))
         .route(
-            "/devices/{id}/aircraft/registration",
+            "/aircraft/{id}/aircraft/registration",
             get(actions::aircraft::get_device_aircraft_registration),
         )
         .route(
-            "/devices/{id}/aircraft/model",
+            "/aircraft/{id}/aircraft/model",
             get(actions::aircraft::get_device_aircraft_model),
         )
         // Receiver routes
@@ -712,10 +710,10 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
             get(actions::get_duration_distribution),
         )
         .route(
-            "/analytics/devices/outliers",
-            get(actions::get_device_outliers),
+            "/analytics/aircraft/outliers",
+            get(actions::get_aircraft_outliers),
         )
-        .route("/analytics/devices/top", get(actions::get_top_devices))
+        .route("/analytics/aircraft/top", get(actions::get_top_aircraft))
         .route("/analytics/clubs/daily", get(actions::get_club_analytics))
         .route(
             "/analytics/airports/activity",

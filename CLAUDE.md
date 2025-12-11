@@ -55,7 +55,7 @@ SOAR is a comprehensive aircraft tracking and club management system built with:
 - **Remove obsolete dashboard queries** - If a metric is removed from code, remove it from dashboards too
 
 **Recent Metric Changes:**
-- `aprs.aircraft.device_lookup_ms` → `aprs.aircraft.device_upsert_ms` (2025-01-07, PR #312)
+- `aprs.aircraft.aircraft_lookup_ms` → `aprs.aircraft.aircraft_upsert_ms` (2025-01-07, PR #312)
   - Updated in code and Grafana dashboard (2025-01-12)
 - **REMOVED**: `aprs.elevation.dropped` and `nats_publisher.dropped_fixes` (2025-01-12)
   - These metrics were removed from dashboard as messages can no longer be dropped
@@ -262,7 +262,7 @@ pub struct AppState {
 }
 
 //  Handler patterns
-pub async fn get_devices(
+pub async fn get_aircraft(
     State(state): State<AppState>,
     Query(params): Query<DeviceSearchParams>,
 ) -> Result<impl IntoResponse, ApiError> {
@@ -295,7 +295,7 @@ pub async fn get_devices(
 //  NATS message patterns
 #[derive(Serialize, Deserialize)]
 pub struct LiveFix {
-    pub device_id: String,
+    pub aircraft_id: String,
     pub latitude: f64,
     pub longitude: f64,
     pub timestamp: String,
@@ -342,7 +342,7 @@ metrics::counter!("analytics.cache.hit").increment(1);
 // Background task updates these gauges every 60 seconds
 metrics::gauge!("analytics.flights.today").set(summary.flights_today as f64);
 metrics::gauge!("analytics.flights.last_7d").set(summary.flights_7d as f64);
-metrics::gauge!("analytics.devices.active_7d").set(summary.active_devices_7d as f64);
+metrics::gauge!("analytics.aircraft.active_7d").set(summary.active_aircraft_7d as f64);
 ```
 
 **Grafana Dashboard:**
@@ -410,7 +410,7 @@ pub async fn process_data() -> Result<ProcessedData> {
 ```typescript
 //  TypeScript error handling
 try {
-    const response = await serverCall<DeviceResponse>('/devices');
+    const response = await serverCall<AircraftResponse>('/devices');
     devices = response.devices || [];
 } catch (err) {
     const errorMessage = err instanceof Error ? err.message : 'Unknown error';
@@ -424,9 +424,9 @@ try {
 <script lang="ts">
     import { writable } from 'svelte/store';
 
-    const deviceStore = writable<Device[]>([]);
+    const aircraftStore = writable<Aircraft[]>([]);
 
-    // Use $deviceStore for reactive access
+    // Use $aircraftStore for reactive access
 </script>
 ```
 
@@ -435,7 +435,7 @@ try {
 //  Server communication
 import { serverCall } from '$lib/api/server';
 
-const response = await serverCall<DeviceListResponse>('/devices', {
+const response = await serverCall<AircraftListResponse>('/devices', {
     method: 'GET',
     params: { limit: 50 }
 });
@@ -458,7 +458,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn test_device_search() {
+    async fn test_aircraft_search() {
         // Test implementation
     }
 }
@@ -492,9 +492,9 @@ e2e/
 │   ├── login.test.ts
 │   ├── register.test.ts
 │   └── logout.test.ts
-└── devices/            # Device tests
-    ├── device-list.test.ts
-    └── device-detail.test.ts
+└── devices/            # Aircraft tests
+    ├── aircraft-list.test.ts
+    └── aircraft-detail.test.ts
 ```
 
 #### Writing E2E Tests

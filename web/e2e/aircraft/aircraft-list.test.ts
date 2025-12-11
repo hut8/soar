@@ -1,13 +1,13 @@
 import { test, expect } from '../fixtures/auth.fixture';
-import { goToDevices, searchDevicesByRegistration } from '../utils/navigation';
-import { testDevices } from '../fixtures/data.fixture';
+import { goToAircraft, searchAircraftByRegistration } from '../utils/navigation';
+import { testAircraft } from '../fixtures/data.fixture';
 
-test.describe('Device List', () => {
+test.describe('Aircraft List', () => {
 	test('should display device list page with correct elements', async ({ authenticatedPage }) => {
-		await goToDevices(authenticatedPage);
+		await goToAircraft(authenticatedPage);
 
 		// Check page title
-		await expect(authenticatedPage).toHaveTitle(/devices/i);
+		await expect(authenticatedPage).toHaveTitle(/aircraft/i);
 
 		// Check main heading (use level 1 to be specific to h1)
 		await expect(
@@ -28,11 +28,11 @@ test.describe('Device List', () => {
 		await expect(authenticatedPage.getByRole('button', { name: /search devices/i })).toBeVisible();
 
 		// Take screenshot for visual regression testing
-		await expect(authenticatedPage).toHaveScreenshot('device-list-authenticatedPage.png');
+		await expect(authenticatedPage).toHaveScreenshot('aircraft-list-authenticatedPage.png');
 	});
 
 	test('should show search type selector with all options', async ({ authenticatedPage }) => {
-		await goToDevices(authenticatedPage);
+		await goToAircraft(authenticatedPage);
 
 		// Check that all search type options are visible
 		// Filter for visible elements since both mobile and desktop versions exist
@@ -48,7 +48,7 @@ test.describe('Device List', () => {
 	});
 
 	test.skip('should switch between search types', async ({ authenticatedPage }) => {
-		await goToDevices(authenticatedPage);
+		await goToAircraft(authenticatedPage);
 
 		// Initially should show registration search
 		await expect(
@@ -100,12 +100,12 @@ test.describe('Device List', () => {
 	});
 
 	test('should search for devices by registration', async ({ authenticatedPage }) => {
-		await goToDevices(authenticatedPage);
+		await goToAircraft(authenticatedPage);
 
 		// Fill in registration
 		await authenticatedPage
 			.locator('input[placeholder*="Aircraft registration"]:visible')
-			.fill(testDevices.validRegistration);
+			.fill(testAircraft.validRegistration);
 
 		// Click search
 		await authenticatedPage.getByRole('button', { name: /search devices/i }).click();
@@ -143,7 +143,7 @@ test.describe('Device List', () => {
 	});
 
 	test('should show error when searching with empty query', async ({ authenticatedPage }) => {
-		await goToDevices(authenticatedPage);
+		await goToAircraft(authenticatedPage);
 
 		// Don't fill in any search query
 		// Click search directly
@@ -157,12 +157,12 @@ test.describe('Device List', () => {
 	});
 
 	test('should handle "no devices found" gracefully', async ({ authenticatedPage }) => {
-		await goToDevices(authenticatedPage);
+		await goToAircraft(authenticatedPage);
 
 		// Search for a registration that definitely doesn't exist
 		await authenticatedPage
 			.locator('input[placeholder*="Aircraft registration"]:visible')
-			.fill(testDevices.invalidRegistration);
+			.fill(testAircraft.invalidRegistration);
 
 		// Click search
 		await authenticatedPage.getByRole('button', { name: /search devices/i }).click();
@@ -178,17 +178,17 @@ test.describe('Device List', () => {
 	});
 
 	test('should display device cards with correct information', async ({ authenticatedPage }) => {
-		await goToDevices(authenticatedPage);
+		await goToAircraft(authenticatedPage);
 
 		// Search for devices
-		await searchDevicesByRegistration(authenticatedPage, testDevices.validRegistration);
+		await searchAircraftByRegistration(authenticatedPage, testAircraft.validRegistration);
 
 		// Check if results were found
 		const hasResults = await authenticatedPage.getByText(/search results/i).isVisible();
 
 		if (hasResults) {
 			// Should show device cards
-			const deviceCards = authenticatedPage.locator('a[href^="/devices/"]');
+			const deviceCards = authenticatedPage.locator('a[href^="/aircraft/"]');
 			const count = await deviceCards.count();
 
 			// Should have at least one device card
@@ -213,39 +213,39 @@ test.describe('Device List', () => {
 	test('should navigate to device detail when clicking a device card', async ({
 		authenticatedPage
 	}) => {
-		await goToDevices(authenticatedPage);
+		await goToAircraft(authenticatedPage);
 
 		// Search for devices
-		await searchDevicesByRegistration(authenticatedPage, testDevices.validRegistration);
+		await searchAircraftByRegistration(authenticatedPage, testAircraft.validRegistration);
 
 		// Check if results were found
 		const hasResults = await authenticatedPage.getByText(/search results/i).isVisible();
 
 		if (hasResults) {
 			// Click on the first device card
-			const firstCard = authenticatedPage.locator('a[href^="/devices/"]').first();
+			const firstCard = authenticatedPage.locator('a[href^="/aircraft/"]').first();
 			await firstCard.click();
 
 			// Should navigate to device detail page
-			await expect(authenticatedPage).toHaveURL(/\/devices\/[^/]+/);
+			await expect(authenticatedPage).toHaveURL(/\/aircraft\/[^/]+/);
 
 			// Wait for page to load
 			await authenticatedPage.waitForLoadState('networkidle');
 
 			// Take screenshot of device detail page
-			await expect(authenticatedPage).toHaveScreenshot('device-detail-from-list.png');
+			await expect(authenticatedPage).toHaveScreenshot('aircraft-detail-from-list.png');
 		}
 	});
 
 	// Skipping this test as it's prone to race conditions in CI
 	// The backend is fast enough that the loading state often completes before Playwright can detect it
 	test.skip('should show loading state during search', async ({ authenticatedPage }) => {
-		await goToDevices(authenticatedPage);
+		await goToAircraft(authenticatedPage);
 
 		// Fill in registration
 		await authenticatedPage
 			.locator('input[placeholder*="Aircraft registration"]:visible')
-			.fill(testDevices.validRegistration);
+			.fill(testAircraft.validRegistration);
 
 		// Start search (don't await - we want to check loading state)
 		const searchPromise = authenticatedPage
@@ -262,7 +262,7 @@ test.describe('Device List', () => {
 	});
 
 	test('should show pagination when results exceed page size', async ({ authenticatedPage }) => {
-		await goToDevices(authenticatedPage);
+		await goToAircraft(authenticatedPage);
 
 		// Search for a query likely to return many results
 		// Note: This depends on having sufficient test data
@@ -280,7 +280,7 @@ test.describe('Device List', () => {
 
 		if (hasPagination) {
 			// Take screenshot of pagination
-			await expect(authenticatedPage).toHaveScreenshot('device-list-with-pagination.png');
+			await expect(authenticatedPage).toHaveScreenshot('aircraft-list-with-pagination.png');
 
 			// Test pagination functionality
 			const nextButton = authenticatedPage.getByRole('button', { name: /next/i });

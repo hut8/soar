@@ -64,8 +64,8 @@ pub async fn handle_seed_test_data(pool: &PgPool) -> Result<()> {
     info!("Creating test pilots");
     create_test_pilots(&mut conn, test_club_id, seed_count)?;
 
-    // Create test devices
-    info!("Creating test devices");
+    // Create test aircraft
+    info!("Creating test aircraft");
     let device_ids = create_test_devices(&mut conn, seed_count)?;
 
     // Create test flights and fixes for the first test device
@@ -255,12 +255,12 @@ fn create_test_pilots(conn: &mut PgConnection, club_id_value: Uuid, count: usize
 }
 
 fn create_test_devices(conn: &mut PgConnection, count: usize) -> Result<Vec<Uuid>> {
-    use soar::devices::AddressType;
-    use soar::schema::devices::dsl::*;
+    use soar::aircraft::AddressType;
+    use soar::schema::aircraft::dsl::*;
 
     let mut device_ids = Vec::new();
 
-    // Define known test devices
+    // Define known test aircraft
     let known_devices = vec![
         ("N12345", "ABC123", "ASK-21"),
         ("N54321", "DEF456", "Discus-2c"),
@@ -268,12 +268,12 @@ fn create_test_devices(conn: &mut PgConnection, count: usize) -> Result<Vec<Uuid
     ];
 
     for (reg, addr, model) in known_devices {
-        let device_id = Uuid::new_v4();
+        let aircraft_id = Uuid::new_v4();
         let addr_int: i32 = i32::from_str_radix(addr, 16).unwrap_or(0);
 
-        let result = diesel::insert_into(devices)
+        let result = diesel::insert_into(aircraft)
             .values((
-                id.eq(device_id),
+                id.eq(aircraft_id),
                 address.eq(addr_int),
                 address_type.eq(AddressType::Icao),
                 registration.eq(reg),
@@ -298,7 +298,7 @@ fn create_test_devices(conn: &mut PgConnection, count: usize) -> Result<Vec<Uuid
             Ok(_) => {
                 info!("Created/updated test device: {} ({})", reg, addr);
                 // Query back the actual device ID after upsert
-                let actual_device_id: Uuid = devices
+                let actual_device_id: Uuid = aircraft
                     .filter(address_type.eq(AddressType::Icao))
                     .filter(address.eq(addr_int))
                     .select(id)
@@ -310,9 +310,9 @@ fn create_test_devices(conn: &mut PgConnection, count: usize) -> Result<Vec<Uuid
         }
     }
 
-    // Create additional random devices
+    // Create additional random aircraft
     for i in 0..count {
-        let device_id = Uuid::new_v4();
+        let aircraft_id = Uuid::new_v4();
         let reg_number = format!("N{:05}", 10000 + i);
         let hex_addr = format!("{:06X}", 100000 + i);
         let addr_int: i32 = i32::from_str_radix(&hex_addr, 16).unwrap_or(0);
@@ -326,9 +326,9 @@ fn create_test_devices(conn: &mut PgConnection, count: usize) -> Result<Vec<Uuid
         ];
         let model = models[i % models.len()];
 
-        diesel::insert_into(devices)
+        diesel::insert_into(aircraft)
             .values((
-                id.eq(device_id),
+                id.eq(aircraft_id),
                 address.eq(addr_int),
                 address_type.eq(AddressType::Icao),
                 registration.eq(reg_number.clone()),
@@ -356,7 +356,7 @@ fn create_test_devices(conn: &mut PgConnection, count: usize) -> Result<Vec<Uuid
 
 fn create_test_flights_and_fixes(conn: &mut PgConnection, test_device_id: Uuid) -> Result<()> {
     use chrono::{Duration, Utc};
-    use soar::devices::AddressType;
+    use soar::aircraft::AddressType;
     use soar::schema::fixes;
     use soar::schema::flights;
 
@@ -368,7 +368,7 @@ fn create_test_flights_and_fixes(conn: &mut PgConnection, test_device_id: Uuid) 
     diesel::insert_into(flights::table)
         .values((
             flights::id.eq(new_flight_id),
-            flights::device_id.eq(Some(test_device_id)),
+            flights::aircraft_id.eq(Some(test_device_id)),
             flights::device_address.eq("ABC123"),
             flights::device_address_type.eq(AddressType::Icao),
             flights::takeoff_time.eq(Some(flight_start)),
@@ -391,7 +391,7 @@ fn create_test_flights_and_fixes(conn: &mut PgConnection, test_device_id: Uuid) 
 
         diesel::insert_into(fixes::table)
             .values((
-                fixes::device_id.eq(test_device_id),
+                fixes::aircraft_id.eq(test_device_id),
                 fixes::flight_id.eq(Some(new_flight_id)),
                 fixes::timestamp.eq(fix_time),
                 fixes::latitude.eq(lat),

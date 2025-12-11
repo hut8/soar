@@ -3,7 +3,7 @@
 	import { X, Trash2 } from '@lucide/svelte';
 	import { browser } from '$app/environment';
 	import { onMount } from 'svelte';
-	import { DeviceRegistry } from '$lib/services/DeviceRegistry';
+	import { AircraftRegistry } from '$lib/services/AircraftRegistry';
 	import { toaster } from '$lib/toaster';
 	import { auth } from '$lib/stores/auth';
 	import { serverCall } from '$lib/api/server';
@@ -140,16 +140,16 @@
 		}
 	});
 
-	function clearDevicesCache() {
+	function clearAircraftCache() {
 		if (
 			confirm(
 				'Are you sure you want to clear all cached device data? This will remove all stored devices from your browser.'
 			)
 		) {
 			try {
-				DeviceRegistry.getInstance().clear();
+				AircraftRegistry.getInstance().clear();
 				toaster.success({
-					title: 'Device cache cleared successfully'
+					title: 'Aircraft cache cleared successfully'
 				});
 			} catch (error) {
 				console.error('Failed to clear device cache:', error);
@@ -299,11 +299,11 @@
 						</p>
 						<button
 							class="btn w-full preset-filled-error-500"
-							onclick={clearDevicesCache}
+							onclick={clearAircraftCache}
 							type="button"
 						>
 							<Trash2 size={16} />
-							<span>Clear Devices Cache</span>
+							<span>Clear Aircraft Cache</span>
 						</button>
 					</div>
 				</section>

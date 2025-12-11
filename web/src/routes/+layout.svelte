@@ -40,7 +40,7 @@
 	const base = resolve('/');
 	const clubsPath = resolve('/clubs');
 	const operationsPath = resolve('/operations');
-	const devicesPath = resolve('/devices');
+	const aircraftPath = resolve('/aircraft');
 	const receiversPath = resolve('/receivers');
 	const airportsPath = resolve('/airports');
 	const flightsPath = resolve('/flights');
@@ -144,8 +144,8 @@
 						<div
 							class="flex items-center space-x-1 rounded bg-white/90 px-2 py-1 text-success-700 shadow-sm dark:bg-success-500/20 dark:text-success-400"
 							title="Connected - Tracking {$debugStatus.activeWatchlistEntries
-								.length} from watchlist, {$debugStatus.subscribedDevices
-								.length} device subscriptions, {$debugStatus.activeAreaSubscriptions} area subscriptions{$debugStatus.operationsPageActive
+								.length} from watchlist, {$debugStatus.subscribedAircraft
+								.length} aircraft subscriptions, {$debugStatus.activeAreaSubscriptions} area subscriptions{$debugStatus.operationsPageActive
 								? ', Operations page active'
 								: ''}"
 						>
@@ -201,7 +201,7 @@
 						<a href={operationsPath} class="btn preset-filled-primary-500 btn-sm">
 							<Radar /> Operations
 						</a>
-						<a href={devicesPath} class="btn preset-filled-primary-500 btn-sm">
+						<a href={aircraftPath} class="btn preset-filled-primary-500 btn-sm">
 							<Plane /> Aircraft
 						</a>
 						<a href={receiversPath} class="btn preset-filled-primary-500 btn-sm">
@@ -350,7 +350,7 @@
 					<Radar size={16} /> Operations
 				</a>
 				<a
-					href={devicesPath}
+					href={aircraftPath}
 					class="btn w-full justify-start preset-filled-primary-500"
 					onclick={() => (showMobileMenu = false)}
 				>

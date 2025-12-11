@@ -47,6 +47,54 @@ pub mod sql_types {
 }
 
 diesel::table! {
+    use diesel::sql_types::*;
+    use super::sql_types::AddressType;
+    use super::sql_types::AircraftTypeOgn;
+    use super::sql_types::AdsbEmitterCategory;
+
+    aircraft (id) {
+        address -> Int4,
+        address_type -> AddressType,
+        aircraft_model -> Text,
+        registration -> Text,
+        competition_number -> Text,
+        tracked -> Bool,
+        identified -> Bool,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+        id -> Uuid,
+        from_ddb -> Bool,
+        frequency_mhz -> Nullable<Numeric>,
+        pilot_name -> Nullable<Text>,
+        home_base_airport_ident -> Nullable<Text>,
+        aircraft_type_ogn -> Nullable<AircraftTypeOgn>,
+        last_fix_at -> Nullable<Timestamptz>,
+        club_id -> Nullable<Uuid>,
+        icao_model_code -> Nullable<Text>,
+        adsb_emitter_category -> Nullable<AdsbEmitterCategory>,
+        tracker_device_type -> Nullable<Text>,
+        #[max_length = 2]
+        country_code -> Nullable<Bpchar>,
+    }
+}
+
+diesel::table! {
+    aircraft_analytics (aircraft_id) {
+        aircraft_id -> Uuid,
+        registration -> Nullable<Varchar>,
+        aircraft_model -> Nullable<Varchar>,
+        flight_count_total -> Int4,
+        flight_count_30d -> Int4,
+        flight_count_7d -> Int4,
+        last_flight_at -> Nullable<Timestamptz>,
+        avg_flight_duration_seconds -> Int4,
+        total_distance_meters -> Int8,
+        z_score_30d -> Nullable<Numeric>,
+        updated_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
     aircraft_approved_operations (id) {
         id -> Uuid,
         #[max_length = 6]
@@ -121,7 +169,7 @@ diesel::table! {
         home_base_airport_id -> Nullable<Int4>,
         location_id -> Nullable<Uuid>,
         airworthiness_class -> Nullable<AirworthinessClass>,
-        device_id -> Nullable<Uuid>,
+        aircraft_id -> Nullable<Uuid>,
         #[max_length = 3]
         manufacturer_code -> Varchar,
         #[max_length = 2]
@@ -373,54 +421,6 @@ diesel::table! {
 }
 
 diesel::table! {
-    device_analytics (device_id) {
-        device_id -> Uuid,
-        registration -> Nullable<Varchar>,
-        aircraft_model -> Nullable<Varchar>,
-        flight_count_total -> Int4,
-        flight_count_30d -> Int4,
-        flight_count_7d -> Int4,
-        last_flight_at -> Nullable<Timestamptz>,
-        avg_flight_duration_seconds -> Int4,
-        total_distance_meters -> Int8,
-        z_score_30d -> Nullable<Numeric>,
-        updated_at -> Timestamptz,
-    }
-}
-
-diesel::table! {
-    use diesel::sql_types::*;
-    use super::sql_types::AddressType;
-    use super::sql_types::AircraftTypeOgn;
-    use super::sql_types::AdsbEmitterCategory;
-
-    devices (id) {
-        address -> Int4,
-        address_type -> AddressType,
-        aircraft_model -> Text,
-        registration -> Text,
-        competition_number -> Text,
-        tracked -> Bool,
-        identified -> Bool,
-        created_at -> Timestamptz,
-        updated_at -> Timestamptz,
-        id -> Uuid,
-        from_ddb -> Bool,
-        frequency_mhz -> Nullable<Numeric>,
-        pilot_name -> Nullable<Text>,
-        home_base_airport_ident -> Nullable<Text>,
-        aircraft_type_ogn -> Nullable<AircraftTypeOgn>,
-        last_fix_at -> Nullable<Timestamptz>,
-        club_id -> Nullable<Uuid>,
-        icao_model_code -> Nullable<Text>,
-        adsb_emitter_category -> Nullable<AdsbEmitterCategory>,
-        tracker_device_type -> Nullable<Text>,
-        #[max_length = 2]
-        country_code -> Nullable<Bpchar>,
-    }
-}
-
-diesel::table! {
     use diesel::sql_types::*;
     use super::sql_types::Geography;
     use super::sql_types::Geometry;
@@ -446,7 +446,7 @@ diesel::table! {
         climb_fpm -> Nullable<Int4>,
         turn_rate_rot -> Nullable<Float4>,
         flight_id -> Nullable<Uuid>,
-        device_id -> Uuid,
+        aircraft_id -> Uuid,
         received_at -> Timestamptz,
         is_active -> Bool,
         altitude_agl_feet -> Nullable<Int4>,
@@ -485,7 +485,7 @@ diesel::table! {
         climb_fpm -> Nullable<Int4>,
         turn_rate_rot -> Nullable<Float4>,
         flight_id -> Nullable<Uuid>,
-        device_id -> Uuid,
+        aircraft_id -> Uuid,
         received_at -> Timestamptz,
         is_active -> Bool,
         altitude_agl_feet -> Nullable<Int4>,
@@ -527,7 +527,7 @@ diesel::table! {
         bit_errors_corrected -> Nullable<Int4>,
         freq_offset_khz -> Nullable<Float4>,
         flight_id -> Nullable<Uuid>,
-        device_id -> Uuid,
+        aircraft_id -> Uuid,
         received_at -> Timestamptz,
         is_active -> Bool,
         altitude_agl_feet -> Nullable<Int4>,
@@ -567,7 +567,7 @@ diesel::table! {
         climb_fpm -> Nullable<Int4>,
         turn_rate_rot -> Nullable<Float4>,
         flight_id -> Nullable<Uuid>,
-        device_id -> Uuid,
+        aircraft_id -> Uuid,
         received_at -> Timestamptz,
         is_active -> Bool,
         altitude_agl_feet -> Nullable<Int4>,
@@ -606,7 +606,7 @@ diesel::table! {
         climb_fpm -> Nullable<Int4>,
         turn_rate_rot -> Nullable<Float4>,
         flight_id -> Nullable<Uuid>,
-        device_id -> Uuid,
+        aircraft_id -> Uuid,
         received_at -> Timestamptz,
         is_active -> Bool,
         altitude_agl_feet -> Nullable<Int4>,
@@ -645,7 +645,7 @@ diesel::table! {
         climb_fpm -> Nullable<Int4>,
         turn_rate_rot -> Nullable<Float4>,
         flight_id -> Nullable<Uuid>,
-        device_id -> Uuid,
+        aircraft_id -> Uuid,
         received_at -> Timestamptz,
         is_active -> Bool,
         altitude_agl_feet -> Nullable<Int4>,
@@ -684,7 +684,7 @@ diesel::table! {
         climb_fpm -> Nullable<Int4>,
         turn_rate_rot -> Nullable<Float4>,
         flight_id -> Nullable<Uuid>,
-        device_id -> Uuid,
+        aircraft_id -> Uuid,
         received_at -> Timestamptz,
         is_active -> Bool,
         altitude_agl_feet -> Nullable<Int4>,
@@ -723,7 +723,7 @@ diesel::table! {
         climb_fpm -> Nullable<Int4>,
         turn_rate_rot -> Nullable<Float4>,
         flight_id -> Nullable<Uuid>,
-        device_id -> Uuid,
+        aircraft_id -> Uuid,
         received_at -> Timestamptz,
         is_active -> Bool,
         altitude_agl_feet -> Nullable<Int4>,
@@ -762,7 +762,7 @@ diesel::table! {
         climb_fpm -> Nullable<Int4>,
         turn_rate_rot -> Nullable<Float4>,
         flight_id -> Nullable<Uuid>,
-        device_id -> Uuid,
+        aircraft_id -> Uuid,
         received_at -> Timestamptz,
         is_active -> Bool,
         altitude_agl_feet -> Nullable<Int4>,
@@ -801,7 +801,7 @@ diesel::table! {
         climb_fpm -> Nullable<Int4>,
         turn_rate_rot -> Nullable<Float4>,
         flight_id -> Nullable<Uuid>,
-        device_id -> Uuid,
+        aircraft_id -> Uuid,
         received_at -> Timestamptz,
         is_active -> Bool,
         altitude_agl_feet -> Nullable<Int4>,
@@ -876,7 +876,7 @@ diesel::table! {
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
         device_address_type -> AddressType,
-        device_id -> Nullable<Uuid>,
+        aircraft_id -> Nullable<Uuid>,
         takeoff_altitude_offset_ft -> Nullable<Int4>,
         landing_altitude_offset_ft -> Nullable<Int4>,
         takeoff_runway_ident -> Nullable<Text>,
@@ -885,7 +885,7 @@ diesel::table! {
         maximum_displacement_meters -> Nullable<Float8>,
         departure_airport_id -> Nullable<Int4>,
         arrival_airport_id -> Nullable<Int4>,
-        towed_by_device_id -> Nullable<Uuid>,
+        towed_by_aircraft_id -> Nullable<Uuid>,
         towed_by_flight_id -> Nullable<Uuid>,
         tow_release_altitude_msl_ft -> Nullable<Int4>,
         tow_release_time -> Nullable<Timestamptz>,
@@ -1186,11 +1186,12 @@ diesel::table! {
     }
 }
 
+diesel::joinable!(aircraft -> clubs (club_id));
 diesel::joinable!(aircraft_approved_operations -> aircraft_registrations (aircraft_registration_id));
 diesel::joinable!(aircraft_other_names -> aircraft_registrations (registration_number));
+diesel::joinable!(aircraft_registrations -> aircraft (aircraft_id));
 diesel::joinable!(aircraft_registrations -> airports (home_base_airport_id));
 diesel::joinable!(aircraft_registrations -> clubs (club_id));
-diesel::joinable!(aircraft_registrations -> devices (device_id));
 diesel::joinable!(aircraft_registrations -> locations (location_id));
 diesel::joinable!(aircraft_registrations -> status_codes (status_code));
 diesel::joinable!(aircraft_registrations -> type_engines (type_engine_code));
@@ -1205,36 +1206,35 @@ diesel::joinable!(aprs_messages_p20251119 -> receivers (receiver_id));
 diesel::joinable!(aprs_messages_p20251120 -> receivers (receiver_id));
 diesel::joinable!(clubs -> airports (home_base_airport_id));
 diesel::joinable!(clubs -> locations (location_id));
-diesel::joinable!(devices -> clubs (club_id));
-diesel::joinable!(fixes -> devices (device_id));
+diesel::joinable!(fixes -> aircraft (aircraft_id));
 diesel::joinable!(fixes -> flights (flight_id));
 diesel::joinable!(fixes -> receivers (receiver_id));
-diesel::joinable!(fixes_default -> devices (device_id));
+diesel::joinable!(fixes_default -> aircraft (aircraft_id));
 diesel::joinable!(fixes_default -> flights (flight_id));
 diesel::joinable!(fixes_default -> receivers (receiver_id));
+diesel::joinable!(fixes_old -> aircraft (aircraft_id));
 diesel::joinable!(fixes_old -> aprs_messages_old (aprs_message_id));
-diesel::joinable!(fixes_old -> devices (device_id));
 diesel::joinable!(fixes_old -> flights (flight_id));
 diesel::joinable!(fixes_old -> receivers (receiver_id));
-diesel::joinable!(fixes_p20251114 -> devices (device_id));
+diesel::joinable!(fixes_p20251114 -> aircraft (aircraft_id));
 diesel::joinable!(fixes_p20251114 -> flights (flight_id));
 diesel::joinable!(fixes_p20251114 -> receivers (receiver_id));
-diesel::joinable!(fixes_p20251115 -> devices (device_id));
+diesel::joinable!(fixes_p20251115 -> aircraft (aircraft_id));
 diesel::joinable!(fixes_p20251115 -> flights (flight_id));
 diesel::joinable!(fixes_p20251115 -> receivers (receiver_id));
-diesel::joinable!(fixes_p20251116 -> devices (device_id));
+diesel::joinable!(fixes_p20251116 -> aircraft (aircraft_id));
 diesel::joinable!(fixes_p20251116 -> flights (flight_id));
 diesel::joinable!(fixes_p20251116 -> receivers (receiver_id));
-diesel::joinable!(fixes_p20251117 -> devices (device_id));
+diesel::joinable!(fixes_p20251117 -> aircraft (aircraft_id));
 diesel::joinable!(fixes_p20251117 -> flights (flight_id));
 diesel::joinable!(fixes_p20251117 -> receivers (receiver_id));
-diesel::joinable!(fixes_p20251118 -> devices (device_id));
+diesel::joinable!(fixes_p20251118 -> aircraft (aircraft_id));
 diesel::joinable!(fixes_p20251118 -> flights (flight_id));
 diesel::joinable!(fixes_p20251118 -> receivers (receiver_id));
-diesel::joinable!(fixes_p20251119 -> devices (device_id));
+diesel::joinable!(fixes_p20251119 -> aircraft (aircraft_id));
 diesel::joinable!(fixes_p20251119 -> flights (flight_id));
 diesel::joinable!(fixes_p20251119 -> receivers (receiver_id));
-diesel::joinable!(fixes_p20251120 -> devices (device_id));
+diesel::joinable!(fixes_p20251120 -> aircraft (aircraft_id));
 diesel::joinable!(fixes_p20251120 -> flights (flight_id));
 diesel::joinable!(fixes_p20251120 -> receivers (receiver_id));
 diesel::joinable!(flight_pilots -> flights (flight_id));
@@ -1250,6 +1250,8 @@ diesel::joinable!(user_fixes -> users (user_id));
 diesel::joinable!(users -> clubs (club_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
+    aircraft,
+    aircraft_analytics,
     aircraft_approved_operations,
     aircraft_models,
     aircraft_other_names,
@@ -1269,8 +1271,6 @@ diesel::allow_tables_to_appear_in_same_query!(
     clubs,
     countries,
     data_quality_metrics_daily,
-    device_analytics,
-    devices,
     fixes,
     fixes_default,
     fixes_old,

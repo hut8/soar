@@ -4,30 +4,35 @@
 	import {
 		getAircraftTypeOgnDescription,
 		getAircraftTypeColor,
-		getDeviceTitle
+		getAircraftTitle
 	} from '$lib/formatters';
-	import type { Device } from '$lib/types';
+	import type { Aircraft } from '$lib/types';
 
-	let { device }: { device: Device } = $props();
+	let { aircraft }: { aircraft: Aircraft } = $props();
 
 	// Build the operations map URL with location parameters from latest fix
 	let mapUrl = $derived(
-		device.latest_latitude && device.latest_longitude
-			? `/operations?lat=${device.latest_latitude}&lng=${device.latest_longitude}&zoom=13`
+		aircraft.latest_latitude && aircraft.latest_longitude
+			? `/operations?lat=${aircraft.latest_latitude}&lng=${aircraft.latest_longitude}&zoom=13`
 			: null
 	);
 
 	// Build the flight detail URL from active flight ID
-	let flightUrl = $derived(device.active_flight_id ? `/flights/${device.active_flight_id}` : null);
+	let flightUrl = $derived(
+		aircraft.active_flight_id ? `/flights/${aircraft.active_flight_id}` : null
+	);
 </script>
 
 <div class="card preset-tonal-primary p-4">
-	<a href={resolve(`/devices/${device.id}`)} class="group block transition-all hover:scale-[1.02]">
+	<a
+		href={resolve(`/aircraft/${aircraft.id}`)}
+		class="group block transition-all hover:scale-[1.02]"
+	>
 		<!-- Header Section -->
 		<div class="mb-4 flex items-start justify-between">
 			<div class="flex items-center gap-2">
 				<Radio class="h-5 w-5 text-primary-500" />
-				<h3 class="text-lg font-semibold">{getDeviceTitle(device)}</h3>
+				<h3 class="text-lg font-semibold">{getAircraftTitle(aircraft)}</h3>
 			</div>
 		</div>
 
@@ -38,7 +43,7 @@
 				<div>
 					<p class="text-surface-600-300-token text-xs">Registration</p>
 					<p class="text-sm font-semibold">
-						{device.registration || 'Unknown'}
+						{aircraft.registration || 'Unknown'}
 					</p>
 				</div>
 			</div>
@@ -46,15 +51,15 @@
 				<Antenna class="h-4 w-4 text-surface-500" />
 				<div>
 					<p class="text-surface-600-300-token text-xs">Aircraft Model</p>
-					<p class="text-sm">{device.aircraft_model || 'Unknown'}</p>
+					<p class="text-sm">{aircraft.aircraft_model || 'Unknown'}</p>
 				</div>
 			</div>
-			{#if device.competition_number}
+			{#if aircraft.competition_number}
 				<div class="flex items-center gap-2">
 					<Activity class="h-4 w-4 text-surface-500" />
 					<div>
 						<p class="text-surface-600-300-token text-xs">Competition Number</p>
-						<p class="font-mono text-sm">{device.competition_number}</p>
+						<p class="font-mono text-sm">{aircraft.competition_number}</p>
 					</div>
 				</div>
 			{/if}
@@ -63,38 +68,38 @@
 		<!-- Status Badges -->
 		<div class="flex flex-wrap gap-2">
 			<span
-				class="badge text-xs {device.tracked
+				class="badge text-xs {aircraft.tracked
 					? 'preset-filled-success-500'
 					: 'preset-filled-surface-500'}"
 			>
-				{#if device.tracked}
+				{#if aircraft.tracked}
 					<Check class="mr-1 h-3 w-3" />
 				{:else}
 					<X class="mr-1 h-3 w-3" />
 				{/if}
-				{device.tracked ? 'Tracked' : 'Not Tracked'}
+				{aircraft.tracked ? 'Tracked' : 'Not Tracked'}
 			</span>
 			<span
-				class="badge text-xs {device.identified
+				class="badge text-xs {aircraft.identified
 					? 'preset-filled-primary-500'
 					: 'preset-filled-surface-500'}"
 			>
-				{#if device.identified}
+				{#if aircraft.identified}
 					<Check class="mr-1 h-3 w-3" />
 				{:else}
 					<X class="mr-1 h-3 w-3" />
 				{/if}
-				{device.identified ? 'Identified' : 'Unidentified'}
+				{aircraft.identified ? 'Identified' : 'Unidentified'}
 			</span>
-			{#if device.from_ddb}
+			{#if aircraft.from_ddb}
 				<span class="badge preset-filled-success-500 text-xs">
 					<Check class="mr-1 h-3 w-3" />
 					OGN DB
 				</span>
 			{/if}
-			{#if device.aircraft_type_ogn}
-				<span class="badge {getAircraftTypeColor(device.aircraft_type_ogn)} text-xs">
-					{getAircraftTypeOgnDescription(device.aircraft_type_ogn)}
+			{#if aircraft.aircraft_type_ogn}
+				<span class="badge {getAircraftTypeColor(aircraft.aircraft_type_ogn)} text-xs">
+					{getAircraftTypeOgnDescription(aircraft.aircraft_type_ogn)}
 				</span>
 			{/if}
 		</div>

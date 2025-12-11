@@ -37,9 +37,9 @@ export const testUsers = {
  * These correspond to devices created by the seed-test-data command.
  * Known test devices: N12345, N54321, N98765
  */
-export const testDevices = {
+export const testAircraft = {
 	validRegistration: 'N12345', // Known test device from seed data
-	validDeviceAddress: {
+	validAircraftAddress: {
 		type: 'I', // ICAO
 		address: 'ABC123' // Corresponds to N12345
 	},

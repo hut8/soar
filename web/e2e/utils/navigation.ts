@@ -12,8 +12,8 @@ import { type Page } from '@playwright/test';
  * @param page - Playwright page object
  * @returns Promise that resolves when navigation is complete
  */
-export async function goToDevices(page: Page): Promise<void> {
-	await page.goto('/devices');
+export async function goToAircraft(page: Page): Promise<void> {
+	await page.goto('/aircraft');
 	await page.waitForLoadState('networkidle');
 }
 
@@ -25,7 +25,7 @@ export async function goToDevices(page: Page): Promise<void> {
  * @returns Promise that resolves when navigation is complete
  */
 export async function goToDeviceDetail(page: Page, deviceId: string): Promise<void> {
-	await page.goto(`/devices/${deviceId}`);
+	await page.goto(`/aircraft/${deviceId}`);
 	await page.waitForLoadState('networkidle');
 }
 
@@ -58,9 +58,12 @@ export async function goToHome(page: Page): Promise<void> {
  * @param registration - Aircraft registration to search for
  * @returns Promise that resolves when search is complete
  */
-export async function searchDevicesByRegistration(page: Page, registration: string): Promise<void> {
+export async function searchAircraftByRegistration(
+	page: Page,
+	registration: string
+): Promise<void> {
 	// Make sure we're on the devices page
-	await goToDevices(page);
+	await goToAircraft(page);
 
 	// Fill in the search input (registration is the default search type)
 	// Use locator with :visible to only interact with the visible input (mobile or desktop)
@@ -81,13 +84,13 @@ export async function searchDevicesByRegistration(page: Page, registration: stri
  * @param addressType - Address type ('I' for ICAO, 'O' for OGN, 'F' for FLARM)
  * @returns Promise that resolves when search is complete
  */
-export async function searchDevicesByAddress(
+export async function searchAircraftByAddress(
 	page: Page,
 	address: string,
 	addressType: 'I' | 'O' | 'F' = 'I'
 ): Promise<void> {
 	// Make sure we're on the devices page
-	await goToDevices(page);
+	await goToAircraft(page);
 
 	// Click the "Device Address" search type (need to switch from default "Registration")
 	await page.getByRole('button', { name: /device address/i }).click();

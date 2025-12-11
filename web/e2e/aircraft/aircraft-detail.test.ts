@@ -1,8 +1,8 @@
 import { test, expect, type Page } from '../fixtures/auth.fixture';
-import { goToDevices, searchDevicesByRegistration } from '../utils/navigation';
-import { testDevices } from '../fixtures/data.fixture';
+import { goToAircraft, searchAircraftByRegistration } from '../utils/navigation';
+import { testAircraft } from '../fixtures/data.fixture';
 
-test.describe('Device Detail', () => {
+test.describe('Aircraft Detail', () => {
 	// Helper function to navigate to a test device detail page
 	// Searches for a known test device and navigates to it
 	async function navigateToTestDevice(page: Page) {
@@ -10,15 +10,15 @@ test.describe('Device Detail', () => {
 		// Use baseURL from playwright config (respects PLAYWRIGHT_BASE_URL in CI)
 		const backendUrl = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:4173';
 		const apiResponse = await page.request.get(
-			`${backendUrl}/data/devices?registration=${testDevices.validRegistration}`
+			`${backendUrl}/data/aircraft?registration=${testAircraft.validRegistration}`
 		);
 		const apiData = await apiResponse.json();
 		console.log('Backend API response:', JSON.stringify(apiData, null, 2));
 		console.log('API status:', apiResponse.status());
 		console.log('Device count from API:', apiData.devices?.length || 0);
 
-		await goToDevices(page);
-		await searchDevicesByRegistration(page, testDevices.validRegistration);
+		await goToAircraft(page);
+		await searchAircraftByRegistration(page, testAircraft.validRegistration);
 
 		// Wait for search results
 		await page.waitForLoadState('networkidle');
@@ -26,7 +26,7 @@ test.describe('Device Detail', () => {
 		// Debug: Check what's actually on the page
 		console.log('Page title:', await page.title());
 		console.log('Page URL:', page.url());
-		console.log('Device cards found:', await page.locator('a[href^="/devices/"]').count());
+		console.log('Device cards found:', await page.locator('a[href^="/aircraft/"]').count());
 
 		// Check if there's an error message
 		const errorText = await page
@@ -38,7 +38,7 @@ test.describe('Device Detail', () => {
 		}
 
 		// Find and click the first device card
-		const deviceCard = page.locator('a[href^="/devices/"]').first();
+		const deviceCard = page.locator('a[href^="/aircraft/"]').first();
 		await expect(deviceCard).toBeVisible();
 		await deviceCard.click();
 
@@ -61,7 +61,7 @@ test.describe('Device Detail', () => {
 		).toBeVisible();
 
 		// Take screenshot for visual regression testing
-		await expect(authenticatedPage).toHaveScreenshot('device-detail-authenticatedPage.png', {
+		await expect(authenticatedPage).toHaveScreenshot('aircraft-detail-authenticatedPage.png', {
 			// Device data may vary, so use a larger threshold
 			maxDiffPixelRatio: 0.1
 		});
@@ -104,7 +104,7 @@ test.describe('Device Detail', () => {
 		).toBeVisible();
 
 		// Take screenshot of fixes section
-		await expect(authenticatedPage).toHaveScreenshot('device-detail-fixes.png', {
+		await expect(authenticatedPage).toHaveScreenshot('aircraft-detail-fixes.png', {
 			maxDiffPixelRatio: 0.1
 		});
 	});
@@ -119,7 +119,7 @@ test.describe('Device Detail', () => {
 		await expect(authenticatedPage.getByRole('heading', { name: /flight history/i })).toBeVisible();
 
 		// Take screenshot of flights section
-		await expect(authenticatedPage).toHaveScreenshot('device-detail-flights.png', {
+		await expect(authenticatedPage).toHaveScreenshot('aircraft-detail-flights.png', {
 			maxDiffPixelRatio: 0.1
 		});
 	});
@@ -131,12 +131,12 @@ test.describe('Device Detail', () => {
 		await authenticatedPage.getByRole('button', { name: /back to devices/i }).click();
 
 		// Should navigate back to devices authenticatedPage
-		await expect(authenticatedPage).toHaveURL(/\/devices$/);
+		await expect(authenticatedPage).toHaveURL(/\/aircraft$/);
 	});
 
 	test('should handle invalid device ID gracefully', async ({ authenticatedPage }) => {
 		// Try to navigate to a device that doesn't exist using an invalid UUID
-		await authenticatedPage.goto('/devices/00000000-0000-0000-0000-000000000000');
+		await authenticatedPage.goto('/aircraft/00000000-0000-0000-0000-000000000000');
 
 		// Wait for page to load
 		await authenticatedPage.waitForLoadState('networkidle');
@@ -147,7 +147,7 @@ test.describe('Device Detail', () => {
 		).toBeVisible();
 
 		// Take screenshot of error state
-		await expect(authenticatedPage).toHaveScreenshot('device-detail-not-found.png');
+		await expect(authenticatedPage).toHaveScreenshot('aircraft-detail-not-found.png');
 	});
 
 	test.skip('should show loading state while fetching data', async ({ authenticatedPage }) => {
@@ -188,7 +188,7 @@ test.describe('Device Detail', () => {
 
 				// Should load next authenticatedPage of fixes
 				await expect(authenticatedPage).toHaveScreenshot(
-					'device-detail-fixes-authenticatedPage-2.png',
+					'aircraft-detail-fixes-authenticatedPage-2.png',
 					{
 						maxDiffPixelRatio: 0.1
 					}
@@ -218,7 +218,7 @@ test.describe('Device Detail', () => {
 
 				// Should load next authenticatedPage of flights
 				await expect(authenticatedPage).toHaveScreenshot(
-					'device-detail-flights-authenticatedPage-2.png',
+					'aircraft-detail-flights-authenticatedPage-2.png',
 					{
 						maxDiffPixelRatio: 0.1
 					}

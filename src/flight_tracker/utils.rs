@@ -9,5 +9,5 @@ use super::CurrentFlightState;
 pub(crate) fn update_flight_tracker_metrics(active_flights: &HashMap<Uuid, CurrentFlightState>) {
     let total_active = active_flights.len();
 
-    gauge!("flight_tracker_active_devices").set(total_active as f64);
+    gauge!("flight_tracker_active_aircraft").set(total_active as f64);
 }

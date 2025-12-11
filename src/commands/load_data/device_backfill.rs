@@ -5,28 +5,28 @@ use r2d2::Pool;
 use std::time::Instant;
 use tracing::{info, warn};
 
-use soar::devices::{AddressType, Device, DeviceModel};
+use soar::aircraft::{AddressType, Aircraft, AircraftModel};
 use soar::email_reporter::EntityMetrics;
 
 type PgPool = Pool<ConnectionManager<PgConnection>>;
 
-/// Backfill country codes for ICAO devices that don't have one
-/// This should be called after devices are loaded
+/// Backfill country codes for ICAO aircraft that don't have one
+/// This should be called after aircraft are loaded
 pub async fn backfill_country_codes_with_metrics(pool: PgPool) -> EntityMetrics {
     let start = Instant::now();
-    let mut metrics = EntityMetrics::new("Backfill Device Country Codes");
+    let mut metrics = EntityMetrics::new("Backfill Aircraft Country Codes");
 
-    info!("Backfilling country codes for ICAO devices...");
+    info!("Backfilling country codes for ICAO aircraft...");
 
     match backfill_country_codes(&pool).await {
         Ok(count) => {
             info!(
-                "Successfully backfilled country codes for {} devices",
+                "Successfully backfilled country codes for {} aircraft",
                 count
             );
             metrics.records_loaded = count;
 
-            // Get total count of devices with country_code set
+            // Get total count of aircraft with country_code set
             match get_devices_with_country_code_count(&pool).await {
                 Ok(total) => {
                     metrics.records_in_db = Some(total);
@@ -48,20 +48,23 @@ pub async fn backfill_country_codes_with_metrics(pool: PgPool) -> EntityMetrics 
     metrics
 }
 
-/// Backfill tail numbers for US ICAO devices that don't have a registration
+/// Backfill tail numbers for US ICAO aircraft that don't have a registration
 /// This should be called after country codes are backfilled
 pub async fn backfill_tail_numbers_with_metrics(pool: PgPool) -> EntityMetrics {
     let start = Instant::now();
-    let mut metrics = EntityMetrics::new("Backfill US Device Tail Numbers");
+    let mut metrics = EntityMetrics::new("Backfill US Aircraft Tail Numbers");
 
-    info!("Backfilling tail numbers for US ICAO devices...");
+    info!("Backfilling tail numbers for US ICAO aircraft...");
 
     match backfill_tail_numbers(&pool).await {
         Ok(count) => {
-            info!("Successfully backfilled tail numbers for {} devices", count);
+            info!(
+                "Successfully backfilled tail numbers for {} aircraft",
+                count
+            );
             metrics.records_loaded = count;
 
-            // Get total count of US ICAO devices with registration set
+            // Get total count of US ICAO aircraft with registration set
             match get_us_icao_devices_with_registration_count(&pool).await {
                 Ok(total) => {
                     metrics.records_in_db = Some(total);
@@ -83,23 +86,23 @@ pub async fn backfill_tail_numbers_with_metrics(pool: PgPool) -> EntityMetrics {
     metrics
 }
 
-/// Backfill country codes for ICAO devices that don't have one
+/// Backfill country codes for ICAO aircraft that don't have one
 async fn backfill_country_codes(pool: &PgPool) -> Result<usize> {
-    use soar::schema::devices::dsl::*;
+    use soar::schema::aircraft::dsl::*;
 
     let pool = pool.clone();
 
     tokio::task::spawn_blocking(move || {
         let mut conn = pool.get()?;
 
-        // Load all ICAO devices without country_code
-        let devices_to_update: Vec<DeviceModel> = devices
+        // Load all ICAO aircraft without country_code
+        let devices_to_update: Vec<AircraftModel> = aircraft
             .filter(address_type.eq(AddressType::Icao))
             .filter(country_code.is_null())
-            .load::<DeviceModel>(&mut conn)?;
+            .load::<AircraftModel>(&mut conn)?;
 
         info!(
-            "Found {} ICAO devices without country codes",
+            "Found {} ICAO aircraft without country codes",
             devices_to_update.len()
         );
 
@@ -107,12 +110,12 @@ async fn backfill_country_codes(pool: &PgPool) -> Result<usize> {
 
         // Iterate over each device and extract country code
         for device_model in devices_to_update {
-            if let Some(extracted_country_code) = Device::extract_country_code_from_icao(
+            if let Some(extracted_country_code) = Aircraft::extract_country_code_from_icao(
                 device_model.address as u32,
                 AddressType::Icao,
             ) {
                 // Update the device with the extracted country code
-                match diesel::update(devices.filter(id.eq(device_model.id)))
+                match diesel::update(aircraft.filter(id.eq(device_model.id)))
                     .set(country_code.eq(&extracted_country_code))
                     .execute(&mut conn)
                 {
@@ -143,24 +146,24 @@ async fn backfill_country_codes(pool: &PgPool) -> Result<usize> {
     .await?
 }
 
-/// Backfill tail numbers for US ICAO devices that don't have a registration
+/// Backfill tail numbers for US ICAO aircraft that don't have a registration
 async fn backfill_tail_numbers(pool: &PgPool) -> Result<usize> {
-    use soar::schema::devices::dsl::*;
+    use soar::schema::aircraft::dsl::*;
 
     let pool = pool.clone();
 
     tokio::task::spawn_blocking(move || {
         let mut conn = pool.get()?;
 
-        // Load all US ICAO devices without registration
-        let devices_to_update: Vec<DeviceModel> = devices
+        // Load all US ICAO aircraft without registration
+        let devices_to_update: Vec<AircraftModel> = aircraft
             .filter(address_type.eq(AddressType::Icao))
             .filter(country_code.eq("US"))
             .filter(registration.eq(""))
-            .load::<DeviceModel>(&mut conn)?;
+            .load::<AircraftModel>(&mut conn)?;
 
         info!(
-            "Found {} US ICAO devices without registrations",
+            "Found {} US ICAO aircraft without registrations",
             devices_to_update.len()
         );
 
@@ -168,12 +171,12 @@ async fn backfill_tail_numbers(pool: &PgPool) -> Result<usize> {
 
         // Iterate over each device and extract tail number
         for device_model in devices_to_update {
-            if let Some(tail_number) = Device::extract_tail_number_from_icao(
+            if let Some(tail_number) = Aircraft::extract_tail_number_from_icao(
                 device_model.address as u32,
                 AddressType::Icao,
             ) {
                 // Update the device with the extracted tail number
-                match diesel::update(devices.filter(id.eq(device_model.id)))
+                match diesel::update(aircraft.filter(id.eq(device_model.id)))
                     .set(registration.eq(&tail_number))
                     .execute(&mut conn)
                 {
@@ -204,17 +207,17 @@ async fn backfill_tail_numbers(pool: &PgPool) -> Result<usize> {
     .await?
 }
 
-/// Get count of devices with country_code set
+/// Get count of aircraft with country_code set
 async fn get_devices_with_country_code_count(pool: &PgPool) -> Result<i64> {
     use diesel::dsl::count_star;
-    use soar::schema::devices::dsl::*;
+    use soar::schema::aircraft::dsl::*;
 
     let pool = pool.clone();
 
     tokio::task::spawn_blocking(move || {
         let mut conn = pool.get()?;
 
-        let count = devices
+        let count = aircraft
             .filter(country_code.is_not_null())
             .select(count_star())
             .first::<i64>(&mut conn)?;
@@ -224,17 +227,17 @@ async fn get_devices_with_country_code_count(pool: &PgPool) -> Result<i64> {
     .await?
 }
 
-/// Get count of US ICAO devices with registration set
+/// Get count of US ICAO aircraft with registration set
 async fn get_us_icao_devices_with_registration_count(pool: &PgPool) -> Result<i64> {
     use diesel::dsl::count_star;
-    use soar::schema::devices::dsl::*;
+    use soar::schema::aircraft::dsl::*;
 
     let pool = pool.clone();
 
     tokio::task::spawn_blocking(move || {
         let mut conn = pool.get()?;
 
-        let count = devices
+        let count = aircraft
             .filter(address_type.eq(AddressType::Icao))
             .filter(country_code.eq("US"))
             .filter(registration.ne(""))

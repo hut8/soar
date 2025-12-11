@@ -23,9 +23,9 @@
 	import { serverCall } from '$lib/api/server';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
-	import type { Device, Receiver, Fix, FixesResponse } from '$lib/types';
+	import type { Aircraft, Receiver, Fix, FixesResponse } from '$lib/types';
 	import {
-		formatDeviceAddress,
+		formatAircraftAddress,
 		getAircraftTypeOgnDescription,
 		getAircraftTypeColor
 	} from '$lib/formatters';
@@ -74,10 +74,10 @@
 		count: number;
 	}
 
-	interface DeviceFixCount {
-		device_id: string;
+	interface AircraftFixCount {
+		aircraft_id: string;
 		count: number;
-		device?: Device | null; // Device details fetched separately
+		aircraft?: Aircraft | null; // Aircraft details fetched separately
 	}
 
 	interface ReceiverStatistics {
@@ -88,7 +88,7 @@
 
 	interface AggregateStatsResponse {
 		fix_counts_by_aprs_type: AprsTypeCount[];
-		fix_counts_by_device: DeviceFixCount[];
+		fix_counts_by_aircraft: AircraftFixCount[];
 	}
 
 	let receiver = $state<Receiver | null>(null);
@@ -97,7 +97,7 @@
 	let rawMessages = $state<RawMessage[] | null>(null);
 	let statistics = $state<ReceiverStatistics | null>(null);
 	let aggregateStats = $state<AggregateStatsResponse | null>(null);
-	let devicesMap = $state<Record<string, Device>>({});
+	let devicesMap = $state<Record<string, Aircraft>>({});
 	let loading = $state(true);
 	let loadingFixes = $state(false);
 	let loadingStatuses = $state(false);
@@ -199,7 +199,7 @@
 
 	async function loadDevicesForFixes(fixesList: Fix[]) {
 		// Extract unique device IDs from fixes
-		const deviceIds = [...new Set(fixesList.map((fix) => fix.device_id).filter(Boolean))];
+		const deviceIds = [...new Set(fixesList.map((fix) => fix.aircraft_id).filter(Boolean))];
 
 		if (deviceIds.length === 0) return;
 
@@ -213,8 +213,8 @@
 		try {
 			for (const batch of batches) {
 				const idsParam = batch.join(',');
-				const response = await serverCall<{ devices: Record<string, Device> }>(
-					`/devices/bulk?ids=${encodeURIComponent(idsParam)}`
+				const response = await serverCall<{ devices: Record<string, Aircraft> }>(
+					`/aircraft/bulk?ids=${encodeURIComponent(idsParam)}`
 				);
 				// Merge the devices into the map
 				Object.assign(devicesMap, response.devices);
@@ -270,16 +270,19 @@
 			);
 			aggregateStats = response;
 
-			// Fetch device details for each device
-			if (aggregateStats && aggregateStats.fix_counts_by_device.length > 0) {
+			// Fetch aircraft details for each aircraft
+			if (aggregateStats && aggregateStats.fix_counts_by_aircraft.length > 0) {
 				await Promise.all(
-					aggregateStats.fix_counts_by_device.map(async (deviceCount) => {
+					aggregateStats.fix_counts_by_aircraft.map(async (aircraftCount) => {
 						try {
-							const device = await serverCall<Device>(`/devices/${deviceCount.device_id}`);
-							deviceCount.device = device;
+							const aircraft = await serverCall<Aircraft>(`/aircraft/${aircraftCount.aircraft_id}`);
+							aircraftCount.aircraft = aircraft;
 						} catch (err) {
-							console.warn(`Failed to load device details for ${deviceCount.device_id}:`, err);
-							deviceCount.device = null;
+							console.warn(
+								`Failed to load aircraft details for ${aircraftCount.aircraft_id}:`,
+								err
+							);
+							aircraftCount.aircraft = null;
 						}
 					})
 				);
@@ -290,7 +293,7 @@
 			console.error('Error loading aggregate statistics:', err);
 			aggregateStats = {
 				fix_counts_by_aprs_type: [],
-				fix_counts_by_device: []
+				fix_counts_by_aircraft: []
 			}; // Set to default on error to prevent retry loop
 		} finally {
 			loadingAggregateStats = false;
@@ -425,24 +428,24 @@
 	 * 3. Model only if just that is available
 	 * 4. Fallback: Address type + 24-bit code (e.g., "ICAO-A59CDC")
 	 */
-	function formatDeviceLabel(device: Device | null | undefined, deviceId: string): string {
-		if (!device) {
-			// Fallback to device ID if no device details
-			return deviceId;
+	function formatDeviceLabel(aircraft: Aircraft | null | undefined, aircraftId: string): string {
+		if (!aircraft) {
+			// Fallback to aircraft ID if no aircraft details
+			return aircraftId;
 		}
 
-		const hasRegistration = device.registration && device.registration.trim() !== '';
-		const hasModel = device.aircraft_model && device.aircraft_model.trim() !== '';
+		const hasRegistration = aircraft.registration && aircraft.registration.trim() !== '';
+		const hasModel = aircraft.aircraft_model && aircraft.aircraft_model.trim() !== '';
 
 		if (hasRegistration && hasModel) {
-			return `${device.registration} - ${device.aircraft_model}`;
+			return `${aircraft.registration} - ${aircraft.aircraft_model}`;
 		} else if (hasRegistration) {
-			return device.registration;
+			return aircraft.registration;
 		} else if (hasModel) {
-			return device.aircraft_model;
+			return aircraft.aircraft_model;
 		} else {
 			// Fallback to address type + 24-bit code
-			return formatDeviceAddress(device.address_type, device.address);
+			return formatAircraftAddress(aircraft.address_type, aircraft.address);
 		}
 	}
 </script>
@@ -921,7 +924,7 @@
 								{/if}
 
 								<!-- Fixes by Device -->
-								{#if aggregateStats && aggregateStats.fix_counts_by_device.length > 0}
+								{#if aggregateStats && aggregateStats.fix_counts_by_aircraft.length > 0}
 									<div class="mt-6 space-y-4">
 										<h3 class="h3">Fixes Received by Device</h3>
 
@@ -936,28 +939,28 @@
 														</tr>
 													</thead>
 													<tbody>
-														{#each aggregateStats.fix_counts_by_device as deviceCount (deviceCount.device_id)}
+														{#each aggregateStats.fix_counts_by_aircraft as aircraftCount (aircraftCount.aircraft_id)}
 															<tr>
 																<td>
 																	<a
-																		href={resolve(`/devices/${deviceCount.device_id}`)}
+																		href={resolve(`/aircraft/${aircraftCount.aircraft_id}`)}
 																		class="text-primary-500 hover:text-primary-600"
 																	>
 																		<div class="flex items-center gap-2">
 																			<span class="font-semibold">
 																				{formatDeviceLabel(
-																					deviceCount.device,
-																					deviceCount.device_id
+																					aircraftCount.aircraft,
+																					aircraftCount.aircraft_id
 																				)}
 																			</span>
-																			{#if deviceCount.device?.aircraft_type_ogn}
+																			{#if aircraftCount.aircraft?.aircraft_type_ogn}
 																				<span
 																					class="badge {getAircraftTypeColor(
-																						deviceCount.device.aircraft_type_ogn
+																						aircraftCount.aircraft.aircraft_type_ogn
 																					)} text-xs"
 																				>
 																					{getAircraftTypeOgnDescription(
-																						deviceCount.device.aircraft_type_ogn
+																						aircraftCount.aircraft.aircraft_type_ogn
 																					)}
 																				</span>
 																			{/if}
@@ -965,7 +968,7 @@
 																	</a>
 																</td>
 																<td class="text-right font-semibold">
-																	{deviceCount.count.toLocaleString()}
+																	{aircraftCount.count.toLocaleString()}
 																</td>
 															</tr>
 														{/each}
@@ -976,31 +979,34 @@
 
 										<!-- Mobile: Cards -->
 										<div class="space-y-3 md:hidden">
-											{#each aggregateStats.fix_counts_by_device as deviceCount (deviceCount.device_id)}
+											{#each aggregateStats.fix_counts_by_aircraft as aircraftCount (aircraftCount.aircraft_id)}
 												<a
-													href={resolve(`/devices/${deviceCount.device_id}`)}
+													href={resolve(`/aircraft/${aircraftCount.aircraft_id}`)}
 													class="block card p-4 hover:ring-2 hover:ring-primary-500"
 												>
 													<div class="flex items-start justify-between gap-3">
 														<div class="min-w-0 flex-1">
 															<div class="truncate font-semibold text-primary-500">
-																{formatDeviceLabel(deviceCount.device, deviceCount.device_id)}
+																{formatDeviceLabel(
+																	aircraftCount.aircraft,
+																	aircraftCount.aircraft_id
+																)}
 															</div>
-															{#if deviceCount.device?.aircraft_type_ogn}
+															{#if aircraftCount.aircraft?.aircraft_type_ogn}
 																<span
 																	class="badge {getAircraftTypeColor(
-																		deviceCount.device.aircraft_type_ogn
+																		aircraftCount.aircraft.aircraft_type_ogn
 																	)} mt-1 text-xs"
 																>
 																	{getAircraftTypeOgnDescription(
-																		deviceCount.device.aircraft_type_ogn
+																		aircraftCount.aircraft.aircraft_type_ogn
 																	)}
 																</span>
 															{/if}
 														</div>
 														<div class="text-right">
 															<div class="text-lg font-bold">
-																{deviceCount.count.toLocaleString()}
+																{aircraftCount.count.toLocaleString()}
 															</div>
 															<div class="text-surface-500-400-token text-xs">fixes</div>
 														</div>
@@ -1303,7 +1309,7 @@
 							{:else if aggregateStats !== null}
 								<div class="space-y-6">
 									<!-- Fixes by APRS Type -->
-									{#if aggregateStats.fix_counts_by_aprs_type.length === 0 && aggregateStats.fix_counts_by_device.length === 0}
+									{#if aggregateStats.fix_counts_by_aprs_type.length === 0 && aggregateStats.fix_counts_by_aircraft.length === 0}
 										<p class="text-surface-500-400-token p-4 text-center">
 											No fix data available for this receiver
 										</p>
@@ -1358,7 +1364,7 @@
 											{/if}
 
 											<!-- Fixes by Device -->
-											{#if aggregateStats && aggregateStats.fix_counts_by_device.length > 0}
+											{#if aggregateStats && aggregateStats.fix_counts_by_aircraft.length > 0}
 												<div class="space-y-4">
 													<h3 class="h3">Fixes Received by Device</h3>
 
@@ -1373,18 +1379,18 @@
 																	</tr>
 																</thead>
 																<tbody>
-																	{#each aggregateStats.fix_counts_by_device as deviceCount (deviceCount.device_id)}
+																	{#each aggregateStats.fix_counts_by_aircraft as aircraftCount (aircraftCount.aircraft_id)}
 																		<tr>
 																			<td>
 																				<a
-																					href={resolve(`/devices/${deviceCount.device_id}`)}
+																					href={resolve(`/aircraft/${aircraftCount.aircraft_id}`)}
 																					class="font-mono text-primary-500 hover:text-primary-600"
 																				>
-																					{deviceCount.device_id}
+																					{aircraftCount.aircraft_id}
 																				</a>
 																			</td>
 																			<td class="text-right font-semibold">
-																				{deviceCount.count.toLocaleString()}
+																				{aircraftCount.count.toLocaleString()}
 																			</td>
 																		</tr>
 																	{/each}
@@ -1395,18 +1401,18 @@
 
 													<!-- Mobile: Cards -->
 													<div class="space-y-3 md:hidden">
-														{#each aggregateStats.fix_counts_by_device as deviceCount (deviceCount.device_id)}
+														{#each aggregateStats.fix_counts_by_aircraft as aircraftCount (aircraftCount.aircraft_id)}
 															<a
-																href={resolve(`/devices/${deviceCount.device_id}`)}
+																href={resolve(`/aircraft/${aircraftCount.aircraft_id}`)}
 																class="block card p-4 hover:ring-2 hover:ring-primary-500"
 															>
 																<div class="flex items-center justify-between gap-4">
 																	<div class="font-mono font-medium text-primary-500">
-																		{deviceCount.device_id}
+																		{aircraftCount.aircraft_id}
 																	</div>
 																	<div class="text-right">
 																		<div class="text-lg font-bold">
-																			{deviceCount.count.toLocaleString()}
+																			{aircraftCount.count.toLocaleString()}
 																		</div>
 																		<div class="text-surface-500-400-token text-xs">fixes</div>
 																	</div>

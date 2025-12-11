@@ -73,16 +73,16 @@ pub(crate) async fn process_state_transition(
     // Fetch device once for use throughout the function
     let device = ctx
         .device_repo
-        .get_device_by_uuid(fix.device_id)
+        .get_device_by_uuid(fix.aircraft_id)
         .await?
-        .ok_or_else(|| anyhow::anyhow!("Device {} not found", fix.device_id))?;
+        .ok_or_else(|| anyhow::anyhow!("Aircraft {} not found", fix.aircraft_id))?;
 
     let is_towtug = device.aircraft_type_ogn == Some(AircraftType::TowTug);
 
     // Get current flight state
     let current_flight_state = {
         let flights = ctx.active_flights.read().await;
-        flights.get(&fix.device_id).cloned()
+        flights.get(&fix.aircraft_id).cloned()
     };
 
     match (current_flight_state, is_active) {
@@ -97,8 +97,8 @@ pub(crate) async fn process_state_transition(
                     if let Some(current_callsign) = &current_flight.callsign {
                         if current_callsign != new_callsign {
                             info!(
-                                "Device {} active flight {} has callsign '{}' but new fix has callsign '{}' - ending flight and creating new one",
-                                fix.device_id, state.flight_id, current_callsign, new_callsign
+                                "Aircraft {} active flight {} has callsign '{}' but new fix has callsign '{}' - ending flight and creating new one",
+                                fix.aircraft_id, state.flight_id, current_callsign, new_callsign
                             );
                             true
                         } else {
@@ -136,7 +136,7 @@ pub(crate) async fn process_state_transition(
                     Ok(flight_id) => {
                         info!(
                             "Created new flight {} for device {} with callsign {:?}",
-                            flight_id, fix.device_id, fix.flight_number
+                            flight_id, fix.aircraft_id, fix.flight_number
                         );
 
                         // Assign the new flight_id to this fix
@@ -148,20 +148,20 @@ pub(crate) async fn process_state_transition(
 
                         // Add to active flights
                         let mut flights = ctx.active_flights.write().await;
-                        flights.insert(fix.device_id, new_state);
+                        flights.insert(fix.aircraft_id, new_state);
                     }
                     Err(e) => {
                         error!(
                             "Failed to create new flight for device {} after callsign change: {}",
-                            fix.device_id, e
+                            fix.aircraft_id, e
                         );
                     }
                 }
             } else {
                 // Callsign hasn't changed (or not applicable), continue existing flight
                 trace!(
-                    "Device {} has active flight {} - continuing flight",
-                    fix.device_id, state.flight_id
+                    "Aircraft {} has active flight {} - continuing flight",
+                    fix.aircraft_id, state.flight_id
                 );
 
                 // Assign existing flight_id to this fix
@@ -179,7 +179,7 @@ pub(crate) async fn process_state_transition(
                 if is_towtug && let Some(climb_fpm) = fix.climb_fpm {
                     // Update aircraft tracker with climb rate and check for release
                     let mut trackers = ctx.aircraft_trackers.write().await;
-                    let tracker = trackers.entry(fix.device_id).or_insert_with(|| {
+                    let tracker = trackers.entry(fix.aircraft_id).or_insert_with(|| {
                         aircraft_tracker::AircraftTracker::new(
                             aircraft_tracker::AircraftState::Active,
                         )
@@ -227,7 +227,7 @@ pub(crate) async fn process_state_transition(
 
                 // Write back updated state
                 let mut flights = ctx.active_flights.write().await;
-                flights.insert(fix.device_id, state);
+                flights.insert(fix.aircraft_id, state);
             }
         }
 
@@ -239,7 +239,7 @@ pub(crate) async fn process_state_transition(
             // we would create two separate flights. With coalescing, we resume the original flight.
             if let Ok(Some(timed_out_flight)) = ctx
                 .flights_repo
-                .find_recent_timed_out_flight(fix.device_id)
+                .find_recent_timed_out_flight(fix.aircraft_id)
                 .await
             {
                 // Check if callsigns differ - if both flights have callsigns and they differ,
@@ -247,8 +247,8 @@ pub(crate) async fn process_state_transition(
                 let should_coalesce = match (&timed_out_flight.callsign, &fix.flight_number) {
                     (Some(prev_callsign), Some(new_callsign)) if prev_callsign != new_callsign => {
                         debug!(
-                            "Device {} came back into range but callsigns differ (previous: '{}', new: '{}') - NOT coalescing, will create new flight",
-                            fix.device_id, prev_callsign, new_callsign
+                            "Aircraft {} came back into range but callsigns differ (previous: '{}', new: '{}') - NOT coalescing, will create new flight",
+                            fix.aircraft_id, prev_callsign, new_callsign
                         );
                         metrics::counter!("flight_tracker.coalesce.callsign_mismatch").increment(1);
                         false
@@ -260,8 +260,8 @@ pub(crate) async fn process_state_transition(
                     // Resume the timed-out flight
                     let flight_id = timed_out_flight.id;
                     debug!(
-                        "Device {} came back into range - resuming timed-out flight {} (was timed out at {})",
-                        fix.device_id,
+                        "Aircraft {} came back into range - resuming timed-out flight {} (was timed out at {})",
+                        fix.aircraft_id,
                         flight_id,
                         timed_out_flight
                             .timed_out_at
@@ -291,7 +291,7 @@ pub(crate) async fn process_state_transition(
                     let state = CurrentFlightState::new(flight_id, fix.timestamp, is_active);
                     {
                         let mut flights = ctx.active_flights.write().await;
-                        flights.insert(fix.device_id, state);
+                        flights.insert(fix.aircraft_id, state);
                     }
 
                     // Assign fix to the resumed flight
@@ -314,7 +314,7 @@ pub(crate) async fn process_state_transition(
             metrics::counter!("flight_tracker.coalesce.no_timeout_flight").increment(1);
             let recent_fixes = ctx
                 .fixes_repo
-                .get_fixes_for_device(fix.device_id, Some(3), None)
+                .get_fixes_for_device(fix.aircraft_id, Some(3), None)
                 .await
                 .unwrap_or_default();
 
@@ -333,8 +333,8 @@ pub(crate) async fn process_state_transition(
             if is_takeoff {
                 // Case 2a: Taking off - last fixes were inactive
                 debug!(
-                    "Device {} is taking off (recent fixes were inactive) - creating flight {} with airport lookup",
-                    fix.device_id, flight_id
+                    "Aircraft {} is taking off (recent fixes were inactive) - creating flight {} with airport lookup",
+                    fix.aircraft_id, flight_id
                 );
 
                 // Calculate altitude offset and check if reasonable for takeoff
@@ -344,7 +344,7 @@ pub(crate) async fn process_state_transition(
                 {
                     info!(
                         "Flight is initialized while airborne: {} ft for device {} at ({:.6}, {:.6}). Aircraft should be on ground at takeoff.",
-                        offset, fix.device_id, fix.latitude, fix.longitude
+                        offset, fix.aircraft_id, fix.latitude, fix.longitude
                     );
                 }
 
@@ -352,7 +352,7 @@ pub(crate) async fn process_state_transition(
                 let state = CurrentFlightState::new(flight_id, fix.timestamp, is_active);
                 {
                     let mut flights = ctx.active_flights.write().await;
-                    flights.insert(fix.device_id, state);
+                    flights.insert(fix.aircraft_id, state);
                 }
 
                 // Create flight WITH airport/runway lookup
@@ -369,10 +369,10 @@ pub(crate) async fn process_state_transition(
                         if is_towtug {
                             debug!(
                                 "Towplane {} taking off - spawning towing detection task",
-                                fix.device_id
+                                fix.aircraft_id
                             );
                             towing::spawn_towing_detection_task(
-                                fix.device_id,
+                                fix.aircraft_id,
                                 flight_id,
                                 ctx.fixes_repo.clone(),
                                 ctx.flights_repo.clone(),
@@ -384,21 +384,21 @@ pub(crate) async fn process_state_transition(
                     Err(e) => {
                         warn!("Failed to create flight: {}", e);
                         let mut flights = ctx.active_flights.write().await;
-                        flights.remove(&fix.device_id);
+                        flights.remove(&fix.aircraft_id);
                     }
                 }
             } else {
                 // Case 2b: First fix is active OR recent fixes were also active - appearing mid-flight
                 debug!(
-                    "Device {} appearing in-flight (first fix or recent fixes active) - creating flight {} without airport lookup (ground speed: {:?} kts, altitude MSL: {:?} ft)",
-                    fix.device_id, flight_id, fix.ground_speed_knots, fix.altitude_msl_feet
+                    "Aircraft {} appearing in-flight (first fix or recent fixes active) - creating flight {} without airport lookup (ground speed: {:?} kts, altitude MSL: {:?} ft)",
+                    fix.aircraft_id, flight_id, fix.ground_speed_knots, fix.altitude_msl_feet
                 );
 
                 // Create flight state and add to map
                 let state = CurrentFlightState::new(flight_id, fix.timestamp, is_active);
                 {
                     let mut flights = ctx.active_flights.write().await;
-                    flights.insert(fix.device_id, state);
+                    flights.insert(fix.aircraft_id, state);
                 }
 
                 // Create flight WITHOUT airport/runway lookup (skip_airport_runway_lookup = true)
@@ -416,7 +416,7 @@ pub(crate) async fn process_state_transition(
                     Err(e) => {
                         warn!("Failed to create flight: {}", e);
                         let mut flights = ctx.active_flights.write().await;
-                        flights.remove(&fix.device_id);
+                        flights.remove(&fix.aircraft_id);
                     }
                 }
             }
@@ -425,8 +425,8 @@ pub(crate) async fn process_state_transition(
         // Case 3a: No flight and fix is inactive - idle aircraft on ground
         (None, false) => {
             trace!(
-                "Device {} is idle on ground with no active flight",
-                fix.device_id
+                "Aircraft {} is idle on ground with no active flight",
+                fix.aircraft_id
             );
             // Just save the fix without a flight_id
         }
@@ -443,8 +443,8 @@ pub(crate) async fn process_state_transition(
                     // Case 3b2: Still airborne (>= 250 ft AGL) - slow moving aircraft
                     let speed_knots = fix.ground_speed_knots.unwrap_or(0.0);
                     info!(
-                        "Device {} slow but still airborne at {} ft AGL ({:.1} knots) - continuing flight {}",
-                        fix.device_id, altitude_agl, speed_knots, flight_id
+                        "Aircraft {} slow but still airborne at {} ft AGL ({:.1} knots) - continuing flight {}",
+                        fix.aircraft_id, altitude_agl, speed_knots, flight_id
                     );
 
                     // Keep the flight active, assign flight_id to fix
@@ -465,7 +465,7 @@ pub(crate) async fn process_state_transition(
                     state.update(fix.timestamp, true); // Force active since airborne
 
                     let mut flights = ctx.active_flights.write().await;
-                    flights.insert(fix.device_id, state);
+                    flights.insert(fix.aircraft_id, state);
                 }
                 _ => {
                     // Case 3b1: Landing (< 250 ft AGL OR elevation unknown)
@@ -475,8 +475,8 @@ pub(crate) async fn process_state_transition(
                     // Check if we have 5 consecutive inactive fixes
                     if state.has_five_consecutive_inactive() {
                         debug!(
-                            "Device {} landing after 5 consecutive inactive fixes (AGL: {:?} ft) - completing flight {}",
-                            fix.device_id, agl, flight_id
+                            "Aircraft {} landing after 5 consecutive inactive fixes (AGL: {:?} ft) - completing flight {}",
+                            fix.aircraft_id, agl, flight_id
                         );
 
                         // Assign flight_id to this landing fix
@@ -510,7 +510,7 @@ pub(crate) async fn process_state_transition(
                         if !flight_completed {
                             info!(
                                 "Flight {} was spurious - clearing flight_id from landing fix for device {}",
-                                flight_id, fix.device_id
+                                flight_id, fix.aircraft_id
                             );
                             fix.flight_id = None;
                         }
@@ -519,24 +519,24 @@ pub(crate) async fn process_state_transition(
                         // Note: For spurious flights, this was already done inside complete_flight
                         {
                             let mut flights = ctx.active_flights.write().await;
-                            flights.remove(&fix.device_id);
+                            flights.remove(&fix.aircraft_id);
                         }
 
                         // Clean up the device lock after flight completion
                         {
                             let mut locks = ctx.device_locks.write().await;
-                            if locks.remove(&fix.device_id).is_some() {
+                            if locks.remove(&fix.aircraft_id).is_some() {
                                 trace!(
                                     "Cleaned up device lock for device {} after landing",
-                                    fix.device_id
+                                    fix.aircraft_id
                                 );
                             }
                         }
                     } else {
                         // Not enough consecutive inactive fixes yet - keep flight active
                         debug!(
-                            "Device {} inactive (AGL: {:?} ft) but waiting for more inactive fixes ({}/5) - continuing flight {}",
-                            fix.device_id,
+                            "Aircraft {} inactive (AGL: {:?} ft) but waiting for more inactive fixes ({}/5) - continuing flight {}",
+                            fix.aircraft_id,
                             agl,
                             state
                                 .recent_fix_history
@@ -564,7 +564,7 @@ pub(crate) async fn process_state_transition(
 
                         // Keep the updated state in the map
                         let mut flights = ctx.active_flights.write().await;
-                        flights.insert(fix.device_id, state);
+                        flights.insert(fix.aircraft_id, state);
                     }
                 }
             }

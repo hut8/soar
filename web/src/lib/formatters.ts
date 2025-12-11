@@ -33,10 +33,10 @@ export function getAddressTypeLabel(addressType: string): string {
 }
 
 /**
- * Format device address with appropriate prefix based on type
+ * Format aircraft address with appropriate prefix based on type
  * O -> OGN-XXXXXX, F -> FLARM-XXXXXX, I -> ICAO-XXXXXX
  */
-export function formatDeviceAddress(addressType: string, address: string): string {
+export function formatAircraftAddress(addressType: string, address: string): string {
 	if (!address) return 'Unknown';
 
 	const hexAddress = address.toUpperCase();
@@ -186,7 +186,7 @@ export function formatTransponderCode(transponderCode: number | null | undefined
 }
 
 /**
- * Get the title/display name for a device card
+ * Get the title/display name for an aircraft card
  * Priority:
  * 1. If both registration and aircraft_model: "Model - Registration" (e.g., "Piper Pawnee - N4606Y")
  * 2. If only registration: registration
@@ -194,36 +194,36 @@ export function formatTransponderCode(transponderCode: number | null | undefined
  * 4. If no registration but has competition_number: competition_number
  * 5. Otherwise: device_address (e.g., "FLARM-A0B380")
  */
-export function getDeviceTitle(device: {
+export function getAircraftTitle(aircraft: {
 	registration?: string | null;
 	aircraft_model?: string | null;
 	competition_number?: string | null;
 	device_address: string;
 }): string {
-	const hasRegistration = device.registration && device.registration.trim() !== '';
-	const hasModel = device.aircraft_model && device.aircraft_model.trim() !== '';
-	const hasCompetition = device.competition_number && device.competition_number.trim() !== '';
+	const hasRegistration = aircraft.registration && aircraft.registration.trim() !== '';
+	const hasModel = aircraft.aircraft_model && aircraft.aircraft_model.trim() !== '';
+	const hasCompetition = aircraft.competition_number && aircraft.competition_number.trim() !== '';
 
 	// If both registration and model are available
 	if (hasRegistration && hasModel) {
-		return `${device.aircraft_model} - ${device.registration}`;
+		return `${aircraft.aircraft_model} - ${aircraft.registration}`;
 	}
 
 	// If only registration
 	if (hasRegistration) {
-		return device.registration!;
+		return aircraft.registration!;
 	}
 
 	// If only model
 	if (hasModel) {
-		return device.aircraft_model!;
+		return aircraft.aircraft_model!;
 	}
 
 	// If no registration but has competition number
 	if (hasCompetition) {
-		return device.competition_number!;
+		return aircraft.competition_number!;
 	}
 
 	// Default to device address
-	return device.device_address;
+	return aircraft.device_address;
 }

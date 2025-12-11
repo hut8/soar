@@ -9,8 +9,8 @@ mod towing;
 pub(crate) mod utils;
 
 use crate::Fix;
+use crate::aircraft_repo::AircraftRepository;
 use crate::airports_repo::AirportsRepository;
-use crate::device_repo::DeviceRepository;
 use crate::elevation::ElevationDB;
 use crate::fixes_repo::FixesRepository;
 use crate::flights_repo::FlightsRepository;
@@ -72,43 +72,43 @@ impl CurrentFlightState {
     }
 }
 
-/// Type alias for active flights map: device_id -> CurrentFlightState
+/// Type alias for active flights map: aircraft_id -> CurrentFlightState
 pub(crate) type ActiveFlightsMap = Arc<RwLock<HashMap<Uuid, CurrentFlightState>>>;
 
-/// Type alias for device locks map: device_id -> Arc<Mutex<()>>
-pub(crate) type DeviceLocksMap = Arc<RwLock<HashMap<Uuid, Arc<Mutex<()>>>>>;
+/// Type alias for device locks map: aircraft_id -> Arc<Mutex<()>>
+pub(crate) type AircraftLocksMap = Arc<RwLock<HashMap<Uuid, Arc<Mutex<()>>>>>;
 
-/// Type alias for aircraft trackers map: device_id -> AircraftTracker
+/// Type alias for aircraft trackers map: aircraft_id -> AircraftTracker
 pub(crate) type AircraftTrackersMap = Arc<RwLock<HashMap<Uuid, aircraft_tracker::AircraftTracker>>>;
 
 /// Context for flight processing operations
 /// Contains all repositories and state needed for flight lifecycle management
 pub(crate) struct FlightProcessorContext<'a> {
     pub flights_repo: &'a FlightsRepository,
-    pub device_repo: &'a DeviceRepository,
+    pub device_repo: &'a AircraftRepository,
     pub airports_repo: &'a AirportsRepository,
     pub locations_repo: &'a LocationsRepository,
     pub runways_repo: &'a RunwaysRepository,
     pub fixes_repo: &'a FixesRepository,
     pub elevation_db: &'a ElevationDB,
     pub active_flights: &'a ActiveFlightsMap,
-    pub device_locks: &'a DeviceLocksMap,
+    pub device_locks: &'a AircraftLocksMap,
     pub aircraft_trackers: &'a AircraftTrackersMap,
 }
 
 /// Simple flight tracker - just tracks which device is currently on which flight
 pub struct FlightTracker {
     flights_repo: FlightsRepository,
-    device_repo: DeviceRepository,
+    device_repo: AircraftRepository,
     airports_repo: AirportsRepository,
     runways_repo: RunwaysRepository,
     fixes_repo: FixesRepository,
     locations_repo: LocationsRepository,
     elevation_db: ElevationDB,
-    // Simple map: device_id -> (flight_id, last_fix_timestamp, last_update_time)
+    // Simple map: aircraft_id -> (flight_id, last_fix_timestamp, last_update_time)
     active_flights: ActiveFlightsMap,
     // Per-device mutexes to ensure sequential processing per device
-    device_locks: DeviceLocksMap,
+    device_locks: AircraftLocksMap,
     // Aircraft trackers for towplane towing detection
     aircraft_trackers: AircraftTrackersMap,
 }
@@ -135,7 +135,7 @@ impl FlightTracker {
         let elevation_db = ElevationDB::new().expect("Failed to initialize ElevationDB");
         Self {
             flights_repo: FlightsRepository::new(pool.clone()),
-            device_repo: DeviceRepository::new(pool.clone()),
+            device_repo: AircraftRepository::new(pool.clone()),
             airports_repo: AirportsRepository::new(pool.clone()),
             runways_repo: RunwaysRepository::new(pool.clone()),
             fixes_repo: FixesRepository::new(pool.clone()),
@@ -209,8 +209,8 @@ impl FlightTracker {
             let mut active_flights = self.active_flights.write().await;
 
             for flight in active_flights_from_db {
-                // We need the device_id to populate the map
-                if let Some(device_id) = flight.device_id {
+                // We need the aircraft_id to populate the map
+                if let Some(aircraft_id) = flight.aircraft_id {
                     // Create a CurrentFlightState from the database flight
                     // Initialize with empty history - it will be populated as new fixes arrive
                     let mut history = VecDeque::with_capacity(5);
@@ -224,10 +224,10 @@ impl FlightTracker {
                         recent_fix_history: history,
                     };
 
-                    active_flights.insert(device_id, state);
+                    active_flights.insert(aircraft_id, state);
                     trace!(
                         "Loaded flight {} for device {} into tracker (last fix: {})",
-                        flight.id, device_id, flight.last_fix_at
+                        flight.id, aircraft_id, flight.last_fix_at
                     );
                 }
             }
@@ -290,10 +290,10 @@ impl FlightTracker {
 
     /// Clean up the device lock for a specific device
     /// This should be called when a flight completes or times out
-    pub async fn cleanup_device_lock(&self, device_id: Uuid) {
+    pub async fn cleanup_device_lock(&self, aircraft_id: Uuid) {
         let mut locks = self.device_locks.write().await;
-        if locks.remove(&device_id).is_some() {
-            trace!("Cleaned up device lock for device {}", device_id);
+        if locks.remove(&aircraft_id).is_some() {
+            trace!("Cleaned up device lock for device {}", aircraft_id);
         }
     }
 
@@ -308,16 +308,16 @@ impl FlightTracker {
             let active_flights = self.active_flights.read().await;
             active_flights
                 .iter()
-                .filter_map(|(device_id, state)| {
+                .filter_map(|(aircraft_id, state)| {
                     let elapsed = now.signed_duration_since(state.last_update_time);
                     if elapsed > timeout_threshold {
                         info!(
                             "Flight {} for device {} is stale (last update {} seconds ago)",
                             state.flight_id,
-                            device_id,
+                            aircraft_id,
                             elapsed.num_seconds()
                         );
-                        return Some((state.flight_id, *device_id));
+                        return Some((state.flight_id, *aircraft_id));
                     }
                     None
                 })
@@ -333,13 +333,13 @@ impl FlightTracker {
         let timeout_count = flights_to_timeout.len();
 
         // Timeout each stale flight
-        for (flight_id, device_id) in flights_to_timeout {
+        for (flight_id, aircraft_id) in flights_to_timeout {
             // Double-check that the flight still exists in the map before timing it out
             // (it may have already landed and been removed)
             let should_timeout = {
                 let active_flights = self.active_flights.read().await;
                 active_flights
-                    .get(&device_id)
+                    .get(&aircraft_id)
                     .map(|state| state.flight_id == flight_id)
                     .unwrap_or(false)
             };
@@ -353,17 +353,17 @@ impl FlightTracker {
                 &self.flights_repo,
                 &self.active_flights,
                 flight_id,
-                device_id,
+                aircraft_id,
             )
             .await
             {
                 error!(
                     "Failed to timeout flight {} for device {}: {}",
-                    flight_id, device_id, e
+                    flight_id, aircraft_id, e
                 );
             } else {
                 // Clean up the device lock after successful timeout
-                self.cleanup_device_lock(device_id).await;
+                self.cleanup_device_lock(aircraft_id).await;
                 // Increment timeout counter
                 metrics::counter!("flight_tracker_timeouts_detected").increment(1);
             }
@@ -384,13 +384,13 @@ impl FlightTracker {
         // Get or create the per-device lock
         let device_lock = {
             let locks_read = self.device_locks.read().await;
-            if let Some(lock) = locks_read.get(&fix.device_id) {
+            if let Some(lock) = locks_read.get(&fix.aircraft_id) {
                 Arc::clone(lock)
             } else {
                 drop(locks_read);
                 let mut locks_write = self.device_locks.write().await;
                 locks_write
-                    .entry(fix.device_id)
+                    .entry(fix.aircraft_id)
                     .or_insert_with(|| Arc::new(Mutex::new(())))
                     .clone()
             }
@@ -402,7 +402,7 @@ impl FlightTracker {
         // Check for duplicate fixes (within 1 second)
         let is_duplicate = {
             let active_flights = self.active_flights.read().await;
-            if let Some(state) = active_flights.get(&fix.device_id) {
+            if let Some(state) = active_flights.get(&fix.aircraft_id) {
                 let time_diff = fix
                     .timestamp
                     .signed_duration_since(state.last_fix_timestamp);
@@ -415,14 +415,14 @@ impl FlightTracker {
         if is_duplicate {
             trace!(
                 "Discarding duplicate fix for aircraft {} (less than 1 second from previous)",
-                fix.device_id
+                fix.aircraft_id
             );
             return None;
         }
 
         trace!(
             "Processing fix for aircraft {} at {:.6}, {:.6} (speed: {:?} knots)",
-            fix.device_id, fix.latitude, fix.longitude, fix.ground_speed_knots
+            fix.aircraft_id, fix.latitude, fix.longitude, fix.ground_speed_knots
         );
 
         // Process state transition
@@ -440,14 +440,14 @@ impl FlightTracker {
             Ok(_) => {
                 trace!(
                     "Successfully saved fix to database for device {}",
-                    updated_fix.device_id
+                    updated_fix.aircraft_id
                 );
                 Some(updated_fix)
             }
             Err(e) => {
                 error!(
                     "Failed to save fix: device={}, flight_id={:?}, speed={:?}kts, alt_msl={:?}ft, error={}",
-                    updated_fix.device_id,
+                    updated_fix.aircraft_id,
                     updated_fix.flight_id,
                     updated_fix.ground_speed_knots,
                     updated_fix.altitude_msl_feet,

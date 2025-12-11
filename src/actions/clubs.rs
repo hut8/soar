@@ -7,14 +7,14 @@ use serde::Deserialize;
 use tracing::error;
 use uuid::Uuid;
 
+use crate::aircraft_repo::AircraftRepository;
 use crate::clubs_repo::ClubsRepository;
-use crate::device_repo::DeviceRepository;
 use crate::flights_repo::FlightsRepository;
 use crate::web::AppState;
 
 use super::{
     json_error,
-    views::{ClubView, DeviceInfo, FlightView},
+    views::{AircraftInfo, ClubView, FlightView},
 };
 
 #[derive(Debug, Deserialize)]
@@ -156,7 +156,7 @@ pub async fn get_club_flights(
     Query(params): Query<ClubFlightsQueryParams>,
 ) -> impl IntoResponse {
     let flights_repo = FlightsRepository::new(state.pool.clone());
-    let device_repo = DeviceRepository::new(state.pool);
+    let device_repo = AircraftRepository::new(state.pool);
 
     // Parse date if provided
     let date = if let Some(date_str) = params.date {
@@ -184,9 +184,9 @@ pub async fn get_club_flights(
 
             for flight in flights {
                 // Look up device information if device_id is present
-                let device_info = if let Some(device_id) = flight.device_id {
-                    match device_repo.get_device_by_uuid(device_id).await {
-                        Ok(Some(device)) => Some(DeviceInfo {
+                let device_info = if let Some(aircraft_id) = flight.aircraft_id {
+                    match device_repo.get_device_by_uuid(aircraft_id).await {
+                        Ok(Some(device)) => Some(AircraftInfo {
                             aircraft_model: Some(device.aircraft_model),
                             registration: Some(device.registration),
                             aircraft_type_ogn: device.aircraft_type_ogn,
