@@ -273,17 +273,17 @@ Add the following secrets:
 |------------|-------|---------|
 | `TAILSCALE_OAUTH_CLIENT_ID` | OAuth Client ID from Step 4.1 | `k123abc...` |
 | `TAILSCALE_OAUTH_SECRET` | OAuth Client Secret from Step 4.1 | `tskey-client-k123abc...` |
-| `ADSB_SERVER_SSH_KEY` | Private key from Step 5.1 | `-----BEGIN OPENSSH PRIVATE KEY-----\n...` |
+| `SSH_PRIVATE_KEY` | SSH private key (already exists for main deployments) | `-----BEGIN OPENSSH PRIVATE KEY-----\n...` |
 | `ADSB_SERVER_HOSTNAME` | Tailscale hostname or IP | `100.x.x.x` or `adsb.tailnet.ts.net` |
 
-**Security Note**: These secrets are encrypted and only accessible to GitHub Actions workflows.
+**Security Note**: These secrets are encrypted and only accessible to GitHub Actions workflows. The `SSH_PRIVATE_KEY` secret is reused from existing main/staging deployments.
 
 ### 5.3 Verify Secrets
 
 After adding secrets, verify they appear in the secrets list:
 
 - Go to **Settings** → **Secrets and variables** → **Actions**
-- You should see all 4 secrets listed (values are hidden)
+- You should see `TAILSCALE_OAUTH_CLIENT_ID`, `TAILSCALE_OAUTH_SECRET`, and `ADSB_SERVER_HOSTNAME` (SSH_PRIVATE_KEY should already exist)
 
 ## Step 6: Test Deployment
 

@@ -55,7 +55,7 @@ jobs:
       - name: Setup SSH key for deployment
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.ADSB_SERVER_SSH_KEY }}" > ~/.ssh/adsb_deploy
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/adsb_deploy
           chmod 600 ~/.ssh/adsb_deploy
 
           # Add ADS-B server to known hosts (skip host key verification for Tailscale)

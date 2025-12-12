@@ -160,7 +160,7 @@ The ADS-B deployment workflow:
 |-------------|-------------|
 | `TAILSCALE_OAUTH_CLIENT_ID` | Tailscale OAuth client ID for GitHub Actions |
 | `TAILSCALE_OAUTH_SECRET` | Tailscale OAuth secret |
-| `ADSB_SERVER_SSH_KEY` | SSH private key for soar user on ADS-B server |
+| `SSH_PRIVATE_KEY` | SSH private key for soar user (reused from existing deployments) |
 | `ADSB_SERVER_HOSTNAME` | Tailscale hostname or IP (e.g., `100.x.x.x`) |
 
 ### Deployment Triggers
