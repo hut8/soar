@@ -67,7 +67,7 @@ zstd = "0.13"
 csv = "1.3"
 axum-tungstenite = "0.3.0"
 futures-util = "0.3.31"
-sentry = { version = "0.46.0", features = ["tracing", "logs", "rustls"], default-features = false }
+sentry = { version = "0.46.0", features = ["tracing", "logs", "rustls", "reqwest", "backtrace", "contexts", "debug-images", "panic", "release-health"], default-features = false }
 # Note: Continuous profiling for Rust is not yet available in sentry-rust 0.45.0
 # Tracking issue: https://github.com/getsentry/sentry-rust/issues
 # For now, use performance monitoring (traces_sample_rate) and Sentry's server-side profiling
