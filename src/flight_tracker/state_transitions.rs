@@ -382,7 +382,10 @@ pub(crate) async fn process_state_transition(
                         }
                     }
                     Err(e) => {
-                        warn!("Failed to create flight: {}", e);
+                        error!(
+                            "Failed to create flight for aircraft {}: {}",
+                            fix.aircraft_id, e
+                        );
                         let mut flights = ctx.active_flights.write().await;
                         flights.remove(&fix.aircraft_id);
                     }
@@ -414,7 +417,10 @@ pub(crate) async fn process_state_transition(
                         // Note: last_fix_at is already set during flight creation
                     }
                     Err(e) => {
-                        warn!("Failed to create flight: {}", e);
+                        error!(
+                            "Failed to create flight for aircraft {}: {}",
+                            fix.aircraft_id, e
+                        );
                         let mut flights = ctx.active_flights.write().await;
                         flights.remove(&fix.aircraft_id);
                     }
