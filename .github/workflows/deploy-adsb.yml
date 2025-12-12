@@ -23,11 +23,134 @@ on:
   #     - 'infrastructure/soar-deploy-adsb'
 
 jobs:
+  test-sveltekit:
+    name: Test SvelteKit Project
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./web
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run linter
+        run: npm run lint
+
+      - name: Run type check
+        run: npm run check
+
+      - name: Build SvelteKit project
+        run: npm run build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-build
+          path: web/build/
+          retention-days: 1
+
+  build-release:
+    name: Build Release Binary
+    runs-on: ubuntu-22.04
+    needs: test-sveltekit
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download web build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: web-build
+          path: web/build/
+
+      - name: Setup Node.js (for npm build during Rust build)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install web dependencies
+        working-directory: ./web
+        run: npm ci
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Install GDAL and mold linker
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgdal-dev mold clang
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          shared-key: "release-build"
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          cache-all-crates: true
+
+      - name: Build release binary
+        env:
+          RUSTFLAGS: "-C link-arg=-fuse-ld=mold -C linker=clang --cfg tokio_unstable"
+        run: cargo build --release
+
+      - name: Verify runtime initialization
+        run: |
+          echo "Testing runtime initialization (Sentry, tracing, tokio-console on port 7779)..."
+          timeout 10s ./target/release/soar verify-runtime || EXIT_CODE=$?
+          if [ ${EXIT_CODE:-0} -eq 124 ]; then
+            echo "ERROR: verify-runtime command timed out (likely hung)"
+            exit 1
+          elif [ ${EXIT_CODE:-0} -ne 0 ]; then
+            echo "ERROR: verify-runtime command failed with exit code $EXIT_CODE"
+            exit $EXIT_CODE
+          fi
+          echo "✓ Runtime verification passed"
+
+      - name: Create binary archive
+        run: |
+          rm -f -rf release
+          mkdir -p release
+          cp target/release/soar release/
+          cp README.md release/ || echo "No README.md found"
+          tar -czf soar-linux-x64.tar.gz -C release .
+
+      - name: Upload release binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: soar-linux-x64
+          path: soar-linux-x64.tar.gz
+          retention-days: 30
+
+      - name: Show binary info
+        run: |
+          echo "Binary size:"
+          ls -lh target/release/soar
+          echo ""
+          echo "Binary info:"
+          file target/release/soar
+          echo ""
+          echo "Help output:"
+          ./target/release/soar --help || true
+
   deploy-adsb:
     name: Deploy to ADS-B Server
     runs-on: ubuntu-22.04
-    # Wait for build to complete and tests to pass
-    needs: []  # Will be filled in when integrating with ci.yml
+    needs: [test-sveltekit, build-release]
+    continue-on-error: true  # Allow deployment to fail without failing the workflow
 
     steps:
       - name: Checkout code
