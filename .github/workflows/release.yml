@@ -57,7 +57,7 @@ jobs:
 
   build-release:
     name: Build Release (Linux x64)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs: create-release
 
     steps:
@@ -67,27 +67,51 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
           cache-dependency-path: web/package-lock.json
 
       - name: Install web dependencies
-        run: |
-          cd web
-          npm ci
+        working-directory: ./web
+        run: npm ci
 
       - name: Build web project
-        run: |
-          cd web
-          npm run build
+        working-directory: ./web
+        run: npm run build
 
       - name: Install Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Install GDAL and mold linker
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgdal-dev mold clang
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
         with:
-          target: x86_64-unknown-linux-gnu
+          cache-on-failure: true
+          shared-key: "release-build"
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          cache-all-crates: true
 
       - name: Build release binary
-        run: cargo build --release --target x86_64-unknown-linux-gnu --verbose
+        env:
+          RUSTFLAGS: "-C link-arg=-fuse-ld=mold -C linker=clang --cfg tokio_unstable"
+        run: cargo build --release
+
+      - name: Verify runtime initialization
+        run: |
+          echo "Testing runtime initialization (Sentry, tracing, tokio-console on port 7779)..."
+          timeout 10s ./target/release/soar verify-runtime || EXIT_CODE=$?
+          if [ ${EXIT_CODE:-0} -eq 124 ]; then
+            echo "ERROR: verify-runtime command timed out (likely hung)"
+            exit 1
+          elif [ ${EXIT_CODE:-0} -ne 0 ]; then
+            echo "ERROR: verify-runtime command failed with exit code $EXIT_CODE"
+            exit $EXIT_CODE
+          fi
+          echo "✓ Runtime verification passed"
 
       - name: Install sentry-cli
         run: |
@@ -99,10 +123,11 @@ jobs:
           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
         run: |
+          # Upload the binary with embedded debug symbols
           sentry-cli debug-files upload \
             --org "$SENTRY_ORG" \
             --project "$SENTRY_PROJECT" \
-            target/x86_64-unknown-linux-gnu/release/
+            ./target/release/soar
 
       - name: Create Sentry release
         env:
@@ -110,11 +135,12 @@ jobs:
           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
         run: |
+          # Use release tag as version (e.g., v1.0.0)
           export VERSION="${GITHUB_REF#refs/tags/}"
           sentry-cli releases new "$VERSION" \
             --org "$SENTRY_ORG" \
             --project "$SENTRY_PROJECT"
-          sentry-cli releases set-commits "$VERSION" --auto \
+          sentry-cli releases set-commits "$VERSION" --auto --ignore-missing \
             --org "$SENTRY_ORG" \
             --project "$SENTRY_PROJECT"
           sentry-cli releases finalize "$VERSION" \
@@ -123,9 +149,9 @@ jobs:
 
       - name: Create release archive
         run: |
-          rm -rf release
+          rm -f -rf release
           mkdir -p release
-          cp target/x86_64-unknown-linux-gnu/release/soar release/
+          cp target/release/soar release/
           cp README.md release/ || echo "No README.md found"
           tar -czf soar-linux-x64.tar.gz -C release .
 
@@ -139,9 +165,27 @@ jobs:
           asset_name: soar-linux-x64.tar.gz
           asset_content_type: application/gzip
 
+      - name: Upload binary artifact for deployment
+        uses: actions/upload-artifact@v4
+        with:
+          name: soar-linux-x64
+          path: soar-linux-x64.tar.gz
+          retention-days: 30
+
+      - name: Show binary info
+        run: |
+          echo "Binary size:"
+          ls -lh target/release/soar
+          echo ""
+          echo "Binary info:"
+          file target/release/soar
+          echo ""
+          echo "Help output:"
+          ./target/release/soar --help || true
+
   build-release-arm64:
     name: Build Release (Linux ARM64)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs: create-release
 
     steps:
@@ -151,32 +195,43 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
           cache-dependency-path: web/package-lock.json
 
       - name: Install web dependencies
-        run: |
-          cd web
-          npm ci
+        working-directory: ./web
+        run: npm ci
 
       - name: Build web project
-        run: |
-          cd web
-          npm run build
+        working-directory: ./web
+        run: npm run build
 
       - name: Install Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           target: aarch64-unknown-linux-gnu
 
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang
+
       - name: Install cross
         run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          shared-key: "release-build-arm64"
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          cache-all-crates: true
 
       - name: Build release binary (ARM64)
         env:
           CROSS_CONTAINER_ENGINE: docker
-          SKIP_WEB_BUILD: "1"  # Frontend already built above
+          SKIP_WEB_BUILD: "1"  # Frontend already built via downloaded artifacts
         run: cross build --release --target aarch64-unknown-linux-gnu
 
       - name: Install sentry-cli
@@ -196,7 +251,7 @@ jobs:
 
       - name: Create release archive
         run: |
-          rm -rf release
+          rm -f -rf release
           mkdir -p release
           cp target/aarch64-unknown-linux-gnu/release/soar release/
           cp README.md release/ || echo "No README.md found"
@@ -211,6 +266,21 @@ jobs:
           asset_path: ./soar-linux-arm64.tar.gz
           asset_name: soar-linux-arm64.tar.gz
           asset_content_type: application/gzip
+
+      - name: Upload binary artifact for deployment
+        uses: actions/upload-artifact@v4
+        with:
+          name: soar-linux-arm64
+          path: soar-linux-arm64.tar.gz
+          retention-days: 30
+
+      - name: Show binary info
+        run: |
+          echo "Binary size:"
+          ls -lh target/aarch64-unknown-linux-gnu/release/soar
+          echo ""
+          echo "Binary info:"
+          file target/aarch64-unknown-linux-gnu/release/soar
 
   build-docker:
     name: Build and Push Docker Image
@@ -245,3 +315,227 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/soar:${{ steps.get_version.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [build-release, build-docker]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download release binary
+        uses: actions/download-artifact@v4
+        with:
+          name: soar-linux-x64
+          path: ./
+
+      - name: Extract binary
+        run: |
+          tar -xzf soar-linux-x64.tar.gz
+          chmod +x soar
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H glider.flights >> ~/.ssh/known_hosts
+
+      - name: Prepare deployment package
+        run: |
+          # Create timestamped deployment directory name
+          TIMESTAMP=$(date +%Y%m%d%H%M%S)
+          echo "DEPLOY_TIMESTAMP=$TIMESTAMP" >> $GITHUB_ENV
+
+          # Create local deployment directory
+          mkdir -p deploy-pkg
+          cp soar deploy-pkg/
+          cp infrastructure/soar-deploy deploy-pkg/
+          cp infrastructure/systemd/*.service deploy-pkg/ || echo "No service files found"
+          cp infrastructure/systemd/*.timer deploy-pkg/ || echo "No timer files found"
+
+          # Copy Prometheus job configuration files
+          if [ -d infrastructure/prometheus-jobs ]; then
+            cp -r infrastructure/prometheus-jobs deploy-pkg/
+            echo "Prometheus job files included in deployment package"
+          fi
+
+          # Copy Grafana provisioning configuration
+          if [ -d infrastructure/grafana-provisioning ]; then
+            cp -r infrastructure/grafana-provisioning deploy-pkg/
+            echo "Grafana provisioning configuration included in deployment package"
+          fi
+
+          # Copy Grafana dashboard files
+          if compgen -G "infrastructure/grafana-dashboard-*.json" > /dev/null; then
+            cp infrastructure/grafana-dashboard-*.json deploy-pkg/
+            DASHBOARD_COUNT=$(ls -1 infrastructure/grafana-dashboard-*.json | wc -l)
+            echo "Grafana dashboards included in deployment package: $DASHBOARD_COUNT"
+          fi
+
+          # Copy backup scripts directory
+          if [ -d scripts/backup ]; then
+            mkdir -p deploy-pkg/scripts
+            cp -r scripts/backup deploy-pkg/scripts/
+            echo "Backup scripts included in deployment package"
+          fi
+
+          # Create version file with release tag
+          echo "${GITHUB_REF#refs/tags/}" > deploy-pkg/VERSION
+
+          echo "Deployment package prepared for timestamp: $TIMESTAMP"
+          echo "Release tag: ${GITHUB_REF#refs/tags/}"
+          ls -lh deploy-pkg/
+          if [ -d deploy-pkg/prometheus-jobs ]; then
+            echo "Prometheus jobs:"
+            ls -lh deploy-pkg/prometheus-jobs/
+          fi
+          if [ -d deploy-pkg/grafana-provisioning ]; then
+            echo "Grafana provisioning:"
+            ls -lh deploy-pkg/grafana-provisioning/dashboards/
+          fi
+          if [ -d deploy-pkg/scripts/backup ]; then
+            echo "Backup scripts:"
+            ls -lh deploy-pkg/scripts/backup/
+          fi
+
+      - name: Upload deployment package
+        run: |
+          DEPLOY_DIR="/tmp/soar/deploy/${{ env.DEPLOY_TIMESTAMP }}"
+
+          echo "Creating deployment directory on server: $DEPLOY_DIR"
+          ssh soar@glider.flights "mkdir -p $DEPLOY_DIR"
+
+          echo "Uploading deployment package..."
+          scp -r deploy-pkg/* soar@glider.flights:$DEPLOY_DIR/
+
+          echo "Deployment package uploaded successfully"
+
+      - name: Execute deployment to production
+        run: |
+          DEPLOY_DIR="/tmp/soar/deploy/${{ env.DEPLOY_TIMESTAMP }}"
+          echo "Executing deployment script for production..."
+          ssh soar@glider.flights "sudo /usr/local/bin/soar-deploy production $DEPLOY_DIR"
+
+      - name: Cleanup SSH
+        if: always()
+        run: |
+          rm -f ~/.ssh/id_rsa
+
+  deploy-adsb:
+    name: Deploy to ADS-B Server (Production)
+    runs-on: ubuntu-22.04
+    needs: [build-release, build-docker]
+    continue-on-error: true  # Allow deployment to fail without failing the workflow
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download release binary artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: soar-linux-x64
+          path: ./
+
+      - name: Extract binary from archive
+        run: |
+          tar -xzf soar-linux-x64.tar.gz
+          chmod +x soar
+          ./soar --version || echo "Binary extracted successfully"
+
+      - name: Setup Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TAILSCALE_OAUTH_SECRET }}
+          tags: tag:github-actions
+
+      - name: Setup SSH key for deployment
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/adsb_deploy
+          chmod 600 ~/.ssh/adsb_deploy
+
+          # Add ADS-B server to known hosts (skip host key verification for Tailscale)
+          ssh-keyscan -H "${{ secrets.ADSB_SERVER_HOSTNAME }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Create deployment directory on ADS-B server
+        run: |
+          TIMESTAMP=$(date +%Y%m%d%H%M%S)
+          echo "DEPLOY_TIMESTAMP=$TIMESTAMP" >> $GITHUB_ENV
+
+          ssh -i ~/.ssh/adsb_deploy \
+            -o StrictHostKeyChecking=no \
+            soar@"${{ secrets.ADSB_SERVER_HOSTNAME }}" \
+            "mkdir -p /tmp/soar/deploy/$TIMESTAMP"
+
+      - name: Create deployment package
+        run: |
+          mkdir -p deploy-pkg
+
+          # Copy binary
+          cp soar deploy-pkg/
+
+          # Copy service file
+          cp infrastructure/systemd/soar-beast-ingest.service deploy-pkg/
+
+          # Copy deployment script
+          cp infrastructure/soar-deploy-adsb deploy-pkg/
+
+          # Create version file
+          echo "${GITHUB_REF#refs/tags/}" > deploy-pkg/VERSION
+
+          # List package contents
+          echo "Deployment package contents:"
+          ls -lh deploy-pkg/
+
+      - name: Upload deployment package to ADS-B server
+        run: |
+          scp -i ~/.ssh/adsb_deploy \
+            -o StrictHostKeyChecking=no \
+            -r deploy-pkg/* \
+            soar@"${{ secrets.ADSB_SERVER_HOSTNAME }}":/tmp/soar/deploy/${{ env.DEPLOY_TIMESTAMP }}/
+
+      - name: Execute deployment on ADS-B server
+        run: |
+          ssh -i ~/.ssh/adsb_deploy \
+            -o StrictHostKeyChecking=no \
+            soar@"${{ secrets.ADSB_SERVER_HOSTNAME }}" \
+            "sudo /usr/local/bin/soar-deploy-adsb /tmp/soar/deploy/${{ env.DEPLOY_TIMESTAMP }}"
+
+      - name: Verify deployment
+        run: |
+          echo "Checking service status..."
+          ssh -i ~/.ssh/adsb_deploy \
+            -o StrictHostKeyChecking=no \
+            soar@"${{ secrets.ADSB_SERVER_HOSTNAME }}" \
+            "systemctl is-active soar-beast-ingest && echo 'Service is ACTIVE' || echo 'Service is NOT ACTIVE'"
+
+          echo ""
+          echo "Recent service logs:"
+          ssh -i ~/.ssh/adsb_deploy \
+            -o StrictHostKeyChecking=no \
+            soar@"${{ secrets.ADSB_SERVER_HOSTNAME }}" \
+            "sudo journalctl -u soar-beast-ingest --no-pager --lines=30"
+
+      - name: Cleanup SSH key
+        if: always()
+        run: |
+          rm -f ~/.ssh/adsb_deploy
+
+      - name: Report deployment status
+        if: success()
+        run: |
+          echo "✅ ADS-B ingester deployed successfully to ${{ secrets.ADSB_SERVER_HOSTNAME }}"
+          echo "Deployment timestamp: ${{ env.DEPLOY_TIMESTAMP }}"
+          echo "Release tag: ${GITHUB_REF#refs/tags/}"
+
+      - name: Report deployment failure
+        if: failure()
+        run: |
+          echo "❌ ADS-B ingester deployment failed"
+          echo "Check the logs above for details"
+          exit 1

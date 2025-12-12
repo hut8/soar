@@ -1,0 +1,579 @@
+#!/bin/bash
+#
+# SOAR Uninstall Script
+#
+# This script removes SOAR installations and their associated files.
+# It must be run with sudo privileges.
+#
+# Usage:
+#   sudo ./uninstall [production|staging|all]
+#
+# Environments:
+#   production - Remove only production environment files
+#   staging    - Remove only staging environment files
+#   all        - Remove both environments and all shared files
+#
+
+set -e
+set -u
+set -o pipefail
+
+# Color codes for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+BOLD='\033[1m'
+NC='\033[0m' # No Color
+
+log_info() {
+    echo -e "${GREEN}[INFO]${NC} $1"
+}
+
+log_warn() {
+    echo -e "${YELLOW}[WARN]${NC} $1"
+}
+
+log_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+log_action() {
+    echo -e "${BLUE}  →${NC} $1"
+}
+
+# Check if running as root
+if [ "$EUID" -ne 0 ]; then
+    log_error "This script must be run with sudo"
+    exit 1
+fi
+
+# Parse arguments
+if [ $# -ne 1 ]; then
+    log_error "Usage: $0 [production|staging|all]"
+    exit 1
+fi
+
+ENVIRONMENT="$1"
+
+# Validate environment
+if [ "$ENVIRONMENT" != "production" ] && [ "$ENVIRONMENT" != "staging" ] && [ "$ENVIRONMENT" != "all" ]; then
+    log_error "Invalid environment: $ENVIRONMENT (must be 'production', 'staging', or 'all')"
+    exit 1
+fi
+
+log_info "SOAR Uninstall - Environment: ${BOLD}${ENVIRONMENT}${NC}"
+echo
+
+# Initialize action tracking arrays
+declare -a SERVICES_TO_STOP=()
+declare -a SERVICES_TO_DISABLE=()
+declare -a TIMERS_TO_STOP=()
+declare -a TIMERS_TO_DISABLE=()
+declare -a SERVICE_FILES_TO_REMOVE=()
+declare -a TIMER_FILES_TO_REMOVE=()
+declare -a BINARIES_TO_REMOVE=()
+declare -a FILES_TO_REMOVE=()
+declare -a DIRS_TO_REMOVE=()
+declare -a DATABASES_TO_NOTE=()
+declare -a PROMETHEUS_JOBS_TO_REMOVE=()
+
+# Helper function to add items to arrays if they exist
+add_service() {
+    local service="$1"
+    if systemctl list-unit-files "$service" &>/dev/null; then
+        if systemctl is-active --quiet "$service" 2>/dev/null; then
+            SERVICES_TO_STOP+=("$service")
+        fi
+        if systemctl is-enabled --quiet "$service" 2>/dev/null; then
+            SERVICES_TO_DISABLE+=("$service")
+        fi
+    fi
+    if [ -f "/etc/systemd/system/$service" ]; then
+        SERVICE_FILES_TO_REMOVE+=("/etc/systemd/system/$service")
+    fi
+}
+
+add_timer() {
+    local timer="$1"
+    if systemctl list-unit-files "$timer" &>/dev/null; then
+        if systemctl is-active --quiet "$timer" 2>/dev/null; then
+            TIMERS_TO_STOP+=("$timer")
+        fi
+        if systemctl is-enabled --quiet "$timer" 2>/dev/null; then
+            TIMERS_TO_DISABLE+=("$timer")
+        fi
+    fi
+    if [ -f "/etc/systemd/system/$timer" ]; then
+        TIMER_FILES_TO_REMOVE+=("/etc/systemd/system/$timer")
+    fi
+}
+
+add_file() {
+    local file="$1"
+    if [ -f "$file" ]; then
+        FILES_TO_REMOVE+=("$file")
+    fi
+}
+
+add_dir() {
+    local dir="$1"
+    if [ -d "$dir" ]; then
+        DIRS_TO_REMOVE+=("$dir")
+    fi
+}
+
+add_binary() {
+    local binary="$1"
+    if [ -f "$binary" ]; then
+        BINARIES_TO_REMOVE+=("$binary")
+    fi
+}
+
+# Build removal plan based on environment
+if [ "$ENVIRONMENT" = "production" ] || [ "$ENVIRONMENT" = "all" ]; then
+    log_info "Planning production environment removal..."
+
+    # Production services
+    add_service "soar-run.service"
+    add_service "soar-web.service"
+    add_service "soar-aprs-ingest.service"
+    add_service "soar-beast-ingest.service"
+    add_service "soar-pull-data.service"
+    add_service "soar-sitemap.service"
+    add_service "soar-archive.service"
+    add_service "soar-backup-base.service"
+    add_service "soar-backup-verify.service"
+    add_service "partman-maintenance.service"
+
+    # Production timers
+    add_timer "soar-pull-data.timer"
+    add_timer "soar-sitemap.timer"
+    add_timer "soar-archive.timer"
+    add_timer "soar-backup-base.timer"
+    add_timer "soar-backup-verify.timer"
+    add_timer "partman-maintenance.timer"
+
+    # Production binary
+    add_binary "/usr/local/bin/soar"
+
+    # Production environment file
+    add_file "/etc/soar/env"
+
+    # Production backups directory
+    add_dir "/home/soar/backups/production"
+
+    # Production Prometheus jobs
+    if [ -f "/etc/prometheus/jobs/soar-run.yml" ]; then
+        PROMETHEUS_JOBS_TO_REMOVE+=("/etc/prometheus/jobs/soar-run.yml")
+    fi
+    if [ -f "/etc/prometheus/jobs/soar-web.yml" ]; then
+        PROMETHEUS_JOBS_TO_REMOVE+=("/etc/prometheus/jobs/soar-web.yml")
+    fi
+    if [ -f "/etc/prometheus/jobs/soar-aprs-ingest.yml" ]; then
+        PROMETHEUS_JOBS_TO_REMOVE+=("/etc/prometheus/jobs/soar-aprs-ingest.yml")
+    fi
+    if [ -f "/etc/prometheus/jobs/soar-pull-data.yml" ]; then
+        PROMETHEUS_JOBS_TO_REMOVE+=("/etc/prometheus/jobs/soar-pull-data.yml")
+    fi
+
+    # Note database
+    DATABASES_TO_NOTE+=("soar (production)")
+fi
+
+if [ "$ENVIRONMENT" = "staging" ] || [ "$ENVIRONMENT" = "all" ]; then
+    log_info "Planning staging environment removal..."
+
+    # Staging services
+    add_service "soar-run-staging.service"
+    add_service "soar-web-staging.service"
+    add_service "soar-aprs-ingest-staging.service"
+    add_service "soar-beast-ingest-staging.service"
+    add_service "soar-pull-data-staging.service"
+    add_service "soar-sitemap-staging.service"
+    add_service "soar-archive-staging.service"
+    add_service "partman-maintenance-staging.service"
+
+    # Staging timers
+    add_timer "soar-pull-data-staging.timer"
+    add_timer "soar-sitemap-staging.timer"
+    add_timer "soar-archive-staging.timer"
+    add_timer "partman-maintenance-staging.timer"
+
+    # Staging binary
+    add_binary "/usr/local/bin/soar-staging"
+
+    # Staging environment file
+    add_file "/etc/soar/env-staging"
+
+    # Staging-specific directories
+    add_dir "/var/soar/archive-staging"
+    add_dir "/var/soar/sitemap-staging"
+    add_dir "/home/soar/backups/staging"
+
+    # Staging Prometheus jobs
+    if [ -f "/etc/prometheus/jobs/soar-run-staging.yml" ]; then
+        PROMETHEUS_JOBS_TO_REMOVE+=("/etc/prometheus/jobs/soar-run-staging.yml")
+    fi
+    if [ -f "/etc/prometheus/jobs/soar-web-staging.yml" ]; then
+        PROMETHEUS_JOBS_TO_REMOVE+=("/etc/prometheus/jobs/soar-web-staging.yml")
+    fi
+    if [ -f "/etc/prometheus/jobs/soar-aprs-ingest-staging.yml" ]; then
+        PROMETHEUS_JOBS_TO_REMOVE+=("/etc/prometheus/jobs/soar-aprs-ingest-staging.yml")
+    fi
+    if [ -f "/etc/prometheus/jobs/soar-pull-data-staging.yml" ]; then
+        PROMETHEUS_JOBS_TO_REMOVE+=("/etc/prometheus/jobs/soar-pull-data-staging.yml")
+    fi
+
+    # Note database
+    DATABASES_TO_NOTE+=("soar_staging")
+fi
+
+# Shared resources - only remove with "all"
+if [ "$ENVIRONMENT" = "all" ]; then
+    log_info "Planning shared resources removal..."
+
+    # Shared directories
+    add_dir "/var/soar/bin"
+    add_dir "/var/soar/logs"
+    add_dir "/var/soar"
+    add_dir "/home/soar/backups"
+    add_dir "/etc/soar"
+
+    # Deployment script
+    add_binary "/usr/local/bin/soar-deploy"
+
+    # Backup scripts
+    add_binary "/usr/local/bin/soar-wal-archive"
+    add_binary "/usr/local/bin/soar-base-backup"
+    add_binary "/usr/local/bin/soar-backup-verify"
+    add_binary "/usr/local/bin/soar-restore"
+
+    # Sudoers configuration
+    add_file "/etc/sudoers.d/soar"
+
+    # Systemd target
+    add_service "soar.target"
+
+    # Grafana dashboards
+    if [ -d "/etc/grafana/dashboards" ]; then
+        for dashboard in /etc/grafana/dashboards/grafana-dashboard-*.json; do
+            if [ -f "$dashboard" ]; then
+                FILES_TO_REMOVE+=("$dashboard")
+            fi
+        done
+        # Only remove directory if it would be empty
+        if [ -d "/etc/grafana/dashboards" ]; then
+            DIRS_TO_REMOVE+=("/etc/grafana/dashboards")
+        fi
+    fi
+
+    # Grafana provisioning
+    if [ -d "/etc/grafana/provisioning/dashboards" ]; then
+        add_file "/etc/grafana/provisioning/dashboards/dashboards.yml"
+        # Note: Not removing the provisioning directory itself as Grafana may need it
+    fi
+
+    # Prometheus jobs directory (only if empty after removing job files)
+    if [ -d "/etc/prometheus/jobs" ]; then
+        DIRS_TO_REMOVE+=("/etc/prometheus/jobs")
+    fi
+fi
+
+# Display removal plan
+echo
+echo -e "${BOLD}═══════════════════════════════════════════════════════════════${NC}"
+echo -e "${BOLD}                    REMOVAL PLAN SUMMARY                       ${NC}"
+echo -e "${BOLD}═══════════════════════════════════════════════════════════════${NC}"
+echo
+
+HAS_ACTIONS=false
+
+if [ ${#SERVICES_TO_STOP[@]} -gt 0 ]; then
+    HAS_ACTIONS=true
+    echo -e "${YELLOW}Services to stop (${#SERVICES_TO_STOP[@]}):${NC}"
+    for service in "${SERVICES_TO_STOP[@]}"; do
+        log_action "systemctl stop $service"
+    done
+    echo
+fi
+
+if [ ${#TIMERS_TO_STOP[@]} -gt 0 ]; then
+    HAS_ACTIONS=true
+    echo -e "${YELLOW}Timers to stop (${#TIMERS_TO_STOP[@]}):${NC}"
+    for timer in "${TIMERS_TO_STOP[@]}"; do
+        log_action "systemctl stop $timer"
+    done
+    echo
+fi
+
+if [ ${#SERVICES_TO_DISABLE[@]} -gt 0 ]; then
+    HAS_ACTIONS=true
+    echo -e "${YELLOW}Services to disable (${#SERVICES_TO_DISABLE[@]}):${NC}"
+    for service in "${SERVICES_TO_DISABLE[@]}"; do
+        log_action "systemctl disable $service"
+    done
+    echo
+fi
+
+if [ ${#TIMERS_TO_DISABLE[@]} -gt 0 ]; then
+    HAS_ACTIONS=true
+    echo -e "${YELLOW}Timers to disable (${#TIMERS_TO_DISABLE[@]}):${NC}"
+    for timer in "${TIMERS_TO_DISABLE[@]}"; do
+        log_action "systemctl disable $timer"
+    done
+    echo
+fi
+
+if [ ${#BINARIES_TO_REMOVE[@]} -gt 0 ]; then
+    HAS_ACTIONS=true
+    echo -e "${YELLOW}Binaries to remove (${#BINARIES_TO_REMOVE[@]}):${NC}"
+    for binary in "${BINARIES_TO_REMOVE[@]}"; do
+        log_action "rm -f $binary"
+    done
+    echo
+fi
+
+if [ ${#SERVICE_FILES_TO_REMOVE[@]} -gt 0 ]; then
+    HAS_ACTIONS=true
+    echo -e "${YELLOW}Service files to remove (${#SERVICE_FILES_TO_REMOVE[@]}):${NC}"
+    for file in "${SERVICE_FILES_TO_REMOVE[@]}"; do
+        log_action "rm -f $file"
+    done
+    echo
+fi
+
+if [ ${#TIMER_FILES_TO_REMOVE[@]} -gt 0 ]; then
+    HAS_ACTIONS=true
+    echo -e "${YELLOW}Timer files to remove (${#TIMER_FILES_TO_REMOVE[@]}):${NC}"
+    for file in "${TIMER_FILES_TO_REMOVE[@]}"; do
+        log_action "rm -f $file"
+    done
+    echo
+fi
+
+if [ ${#PROMETHEUS_JOBS_TO_REMOVE[@]} -gt 0 ]; then
+    HAS_ACTIONS=true
+    echo -e "${YELLOW}Prometheus job files to remove (${#PROMETHEUS_JOBS_TO_REMOVE[@]}):${NC}"
+    for file in "${PROMETHEUS_JOBS_TO_REMOVE[@]}"; do
+        log_action "rm -f $file"
+    done
+    echo
+fi
+
+if [ ${#FILES_TO_REMOVE[@]} -gt 0 ]; then
+    HAS_ACTIONS=true
+    echo -e "${YELLOW}Files to remove (${#FILES_TO_REMOVE[@]}):${NC}"
+    for file in "${FILES_TO_REMOVE[@]}"; do
+        log_action "rm -f $file"
+    done
+    echo
+fi
+
+if [ ${#DIRS_TO_REMOVE[@]} -gt 0 ]; then
+    HAS_ACTIONS=true
+    echo -e "${YELLOW}Directories to remove (${#DIRS_TO_REMOVE[@]}):${NC}"
+    for dir in "${DIRS_TO_REMOVE[@]}"; do
+        log_action "rm -rf $dir"
+    done
+    echo
+fi
+
+if [ ${#DATABASES_TO_NOTE[@]} -gt 0 ]; then
+    echo -e "${RED}${BOLD}Databases NOT removed (manual action required):${NC}"
+    for db in "${DATABASES_TO_NOTE[@]}"; do
+        log_action "Database: $db"
+    done
+    echo -e "${YELLOW}To manually remove databases:${NC}"
+    for db in "${DATABASES_TO_NOTE[@]}"; do
+        db_name=$(echo "$db" | cut -d' ' -f1)
+        log_action "sudo -u postgres dropdb $db_name"
+    done
+    echo
+fi
+
+if [ "$HAS_ACTIONS" = false ]; then
+    log_info "No files or services found for environment: $ENVIRONMENT"
+    echo
+    log_info "Nothing to remove. Exiting."
+    exit 0
+fi
+
+echo -e "${BOLD}═══════════════════════════════════════════════════════════════${NC}"
+echo
+
+# Prompt for confirmation
+echo -e "${RED}${BOLD}WARNING: This action cannot be undone!${NC}"
+echo
+read -p "Do you want to proceed with the removal? (y/N): " -n 1 -r
+echo
+if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    log_info "Uninstall cancelled by user"
+    exit 0
+fi
+
+echo
+log_info "Starting uninstall process..."
+echo
+
+# Execute removal plan
+
+# 1. Stop timers first
+if [ ${#TIMERS_TO_STOP[@]} -gt 0 ]; then
+    log_info "Stopping timers..."
+    for timer in "${TIMERS_TO_STOP[@]}"; do
+        log_action "Stopping $timer"
+        systemctl stop "$timer" || log_warn "Failed to stop $timer"
+    done
+fi
+
+# 2. Stop services
+if [ ${#SERVICES_TO_STOP[@]} -gt 0 ]; then
+    log_info "Stopping services..."
+    for service in "${SERVICES_TO_STOP[@]}"; do
+        log_action "Stopping $service"
+        systemctl stop "$service" || log_warn "Failed to stop $service"
+    done
+fi
+
+# Wait for services to fully terminate
+if [ ${#SERVICES_TO_STOP[@]} -gt 0 ]; then
+    log_info "Waiting for services to fully terminate..."
+    sleep 3
+fi
+
+# 3. Disable timers
+if [ ${#TIMERS_TO_DISABLE[@]} -gt 0 ]; then
+    log_info "Disabling timers..."
+    for timer in "${TIMERS_TO_DISABLE[@]}"; do
+        log_action "Disabling $timer"
+        systemctl disable "$timer" || log_warn "Failed to disable $timer"
+    done
+fi
+
+# 4. Disable services
+if [ ${#SERVICES_TO_DISABLE[@]} -gt 0 ]; then
+    log_info "Disabling services..."
+    for service in "${SERVICES_TO_DISABLE[@]}"; do
+        log_action "Disabling $service"
+        systemctl disable "$service" || log_warn "Failed to disable $service"
+    done
+fi
+
+# 5. Remove service files
+if [ ${#SERVICE_FILES_TO_REMOVE[@]} -gt 0 ]; then
+    log_info "Removing service files..."
+    for file in "${SERVICE_FILES_TO_REMOVE[@]}"; do
+        log_action "Removing $file"
+        rm -f "$file"
+    done
+fi
+
+# 6. Remove timer files
+if [ ${#TIMER_FILES_TO_REMOVE[@]} -gt 0 ]; then
+    log_info "Removing timer files..."
+    for file in "${TIMER_FILES_TO_REMOVE[@]}"; do
+        log_action "Removing $file"
+        rm -f "$file"
+    done
+fi
+
+# 7. Reload systemd daemon
+if [ ${#SERVICE_FILES_TO_REMOVE[@]} -gt 0 ] || [ ${#TIMER_FILES_TO_REMOVE[@]} -gt 0 ]; then
+    log_info "Reloading systemd daemon..."
+    systemctl daemon-reload
+fi
+
+# 8. Remove binaries
+if [ ${#BINARIES_TO_REMOVE[@]} -gt 0 ]; then
+    log_info "Removing binaries..."
+    for binary in "${BINARIES_TO_REMOVE[@]}"; do
+        log_action "Removing $binary"
+        rm -f "$binary"
+    done
+fi
+
+# 9. Remove Prometheus job files
+if [ ${#PROMETHEUS_JOBS_TO_REMOVE[@]} -gt 0 ]; then
+    log_info "Removing Prometheus job files..."
+    for file in "${PROMETHEUS_JOBS_TO_REMOVE[@]}"; do
+        log_action "Removing $file"
+        rm -f "$file"
+    done
+
+    # Reload Prometheus if it's running
+    if systemctl is-active --quiet prometheus 2>/dev/null; then
+        log_info "Reloading Prometheus configuration..."
+        systemctl reload prometheus || log_warn "Failed to reload Prometheus"
+    fi
+fi
+
+# 10. Remove other files
+if [ ${#FILES_TO_REMOVE[@]} -gt 0 ]; then
+    log_info "Removing configuration files..."
+    for file in "${FILES_TO_REMOVE[@]}"; do
+        log_action "Removing $file"
+        rm -f "$file"
+    done
+fi
+
+# 11. Remove directories (in reverse order to handle nested directories)
+if [ ${#DIRS_TO_REMOVE[@]} -gt 0 ]; then
+    log_info "Removing directories..."
+    # Sort directories by depth (deepest first) to avoid errors
+    IFS=$'\n' sorted_dirs=($(printf '%s\n' "${DIRS_TO_REMOVE[@]}" | awk '{ print length, $0 }' | sort -rn | cut -d' ' -f2-))
+    for dir in "${sorted_dirs[@]}"; do
+        if [ -d "$dir" ]; then
+            # Check if directory is empty or force remove
+            if [ "$dir" = "/etc/prometheus/jobs" ]; then
+                # Only remove if empty
+                if [ -z "$(ls -A "$dir" 2>/dev/null)" ]; then
+                    log_action "Removing empty directory $dir"
+                    rmdir "$dir" 2>/dev/null || log_warn "Failed to remove $dir (not empty or in use)"
+                else
+                    log_warn "Skipping $dir (not empty)"
+                fi
+            else
+                log_action "Removing $dir"
+                rm -rf "$dir"
+            fi
+        fi
+    done
+fi
+
+# 12. Restart Grafana if dashboards were removed
+if [ "$ENVIRONMENT" = "all" ] && systemctl is-active --quiet grafana-server 2>/dev/null; then
+    log_info "Restarting Grafana to unload removed dashboards..."
+    systemctl restart grafana-server || log_warn "Failed to restart Grafana"
+fi
+
+echo
+echo -e "${BOLD}═══════════════════════════════════════════════════════════════${NC}"
+log_info "${GREEN}${BOLD}Uninstall completed successfully!${NC}"
+echo -e "${BOLD}═══════════════════════════════════════════════════════════════${NC}"
+echo
+
+# Final notes
+if [ ${#DATABASES_TO_NOTE[@]} -gt 0 ]; then
+    echo -e "${YELLOW}${BOLD}REMINDER:${NC} The following databases were NOT removed:"
+    for db in "${DATABASES_TO_NOTE[@]}"; do
+        echo -e "  ${BLUE}→${NC} $db"
+    done
+    echo
+    echo "To remove databases manually, run:"
+    for db in "${DATABASES_TO_NOTE[@]}"; do
+        db_name=$(echo "$db" | cut -d' ' -f1)
+        echo -e "  ${BLUE}→${NC} sudo -u postgres dropdb $db_name"
+    done
+    echo
+fi
+
+if [ "$ENVIRONMENT" = "all" ]; then
+    echo -e "${YELLOW}NOTE:${NC} You may also want to:"
+    echo -e "  ${BLUE}→${NC} Remove the 'soar' user: sudo userdel -r soar"
+    echo -e "  ${BLUE}→${NC} Remove NATS streams if no longer needed"
+    echo -e "  ${BLUE}→${NC} Update reverse proxy configuration (Caddy/nginx)"
+    echo
+fi
+
+log_info "Uninstall complete for environment: ${BOLD}${ENVIRONMENT}${NC}"
