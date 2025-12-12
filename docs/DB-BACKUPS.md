@@ -66,7 +66,7 @@ We implement a **physical backup strategy** using PostgreSQL's continuous archiv
 
 ### Base Backups
 
-**Frequency**: Weekly (every Sunday at 2:00 AM)
+**Frequency**: Weekly (every Sunday at midnight)
 **Method**: `pg_basebackup` - creates a physical copy of the database cluster
 **Compression**: gzip compression (reduces size ~60-70%)
 **Retention**: Keep 4 weekly backups (28 days)
@@ -474,7 +474,7 @@ sudo -u postgres /usr/local/bin/soar-wal-archive \
 
 **Location**: `/usr/local/bin/soar-base-backup`
 
-**Scheduled**: Weekly via systemd timer (Sunday 2:00 AM)
+**Scheduled**: Weekly via systemd timer (Sunday midnight)
 
 **What it does**:
 1. Creates base backup using `pg_basebackup`
@@ -1325,7 +1325,7 @@ Recovery can take 15-60 minutes depending on amount of WAL to replay.
 | Task | Frequency | Time | Systemd Timer |
 |------|-----------|------|---------------|
 | WAL archiving | Continuous | - | (automatic) |
-| Base backup | Weekly | Sunday 2:00 AM | `soar-backup-base.timer` |
+| Base backup | Weekly | Sunday midnight | `soar-backup-base.timer` |
 | Backup verification | Weekly | Monday 3:00 AM | `soar-backup-verify.timer` |
 | Restore testing | Quarterly | First Sunday | (manual) |
 | Cost review | Monthly | - | (manual) |

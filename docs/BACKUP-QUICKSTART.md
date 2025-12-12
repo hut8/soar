@@ -197,7 +197,7 @@ sudo systemctl start soar-backup-base.service
 sudo journalctl -u soar-backup-base.service -f
 ```
 
-Or wait for the weekly timer (Sunday 2 AM).
+Or wait for the weekly timer (Sunday midnight).
 
 ### Test Verification
 

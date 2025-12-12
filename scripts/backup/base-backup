@@ -19,7 +19,7 @@
 #   Source credentials from /etc/soar/backup-env
 #
 # Scheduling:
-#   Run via systemd timer: soar-backup-base.timer (weekly, Sunday 2 AM)
+#   Run via systemd timer: soar-backup-base.timer (weekly, Sunday midnight)
 
 set -euo pipefail
 
