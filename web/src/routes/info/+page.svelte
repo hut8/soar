@@ -1,32 +1,35 @@
 <script lang="ts">
 	import { BarChart3, Activity, Radio, Inbox } from '@lucide/svelte';
+	import { getGrafanaUrl } from '$lib/config';
 
-	const metrics = [
+	// Generate metrics with environment-specific Grafana URLs
+	const grafanaBase = $derived(getGrafanaUrl());
+	const metrics = $derived([
 		{
 			title: 'Web Performance',
-			url: 'https://grafana.glider.flights/public-dashboards/9c476a10e31f48bf9a9e0edd13f4285c',
+			url: `${grafanaBase}/public-dashboards/9c476a10e31f48bf9a9e0edd13f4285c`,
 			icon: BarChart3,
 			description: 'HTTP request metrics, WebSocket connections, and endpoint performance'
 		},
 		{
 			title: 'APRS Queue Performance',
-			url: 'https://grafana.glider.flights/public-dashboards/30a74b108e014a00831374a302711e58',
+			url: `${grafanaBase}/public-dashboards/30a74b108e014a00831374a302711e58`,
 			icon: Inbox,
 			description: 'NATS JetStream queue depths, consumer lag, and message flow rates'
 		},
 		{
 			title: 'Processor Performance',
-			url: 'https://grafana.glider.flights/public-dashboards/15160e9b72244eab82a2031e16d17a97',
+			url: `${grafanaBase}/public-dashboards/15160e9b72244eab82a2031e16d17a97`,
 			icon: Activity,
 			description: 'APRS message processing, elevation lookups, and flight tracking metrics'
 		},
 		{
 			title: 'APRS Ingest Performance',
-			url: 'https://grafana.glider.flights/public-dashboards/6ad16fc10c5941b5b09a0ff086309bd8',
+			url: `${grafanaBase}/public-dashboards/6ad16fc10c5941b5b09a0ff086309bd8`,
 			icon: Radio,
 			description: 'OGN APRS-IS connection status and message publishing metrics'
 		}
-	];
+	]);
 </script>
 
 <svelte:head>
