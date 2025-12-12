@@ -1,4 +1,4 @@
-# Cross-compilation configuration for ARM64 (Raspberry Pi 4)
+# Cross-compilation configuration for ARM64 (Raspberry Pi 4) and static musl builds
 # https://github.com/cross-rs/cross
 
 [build.env]
@@ -14,4 +14,20 @@ pre-build = [
     "dpkg --add-architecture arm64",
     # Install clang for build scripts (they compile for host and .cargo/config.toml sets linker = clang)
     "apt-get update && apt-get install -y clang libpq-dev:arm64 libssl-dev:arm64",
+]
+
+[target.x86_64-unknown-linux-musl]
+# Static musl build for x86_64 - fully portable binary
+# Uses Alpine-based image with static libraries
+image = "ghcr.io/cross-rs/x86_64-unknown-linux-musl:edge"
+pre-build = [
+    "apk add --no-cache gdal-dev gdal-static postgresql-dev pkgconfig",
+]
+
+[target.aarch64-unknown-linux-musl]
+# Static musl build for aarch64 - fully portable binary
+# Uses Alpine-based image with static libraries
+image = "ghcr.io/cross-rs/aarch64-unknown-linux-musl:edge"
+pre-build = [
+    "apk add --no-cache gdal-dev gdal-static postgresql-dev pkgconfig",
 ]

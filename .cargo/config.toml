@@ -13,6 +13,22 @@ rustflags = ["--cfg", "tokio_unstable"]
 linker = "clang"
 # rustflags = ["-C", "link-arg=-fuse-ld=mold"]
 
+[target.x86_64-unknown-linux-musl]
+# Static linking configuration for musl
+rustflags = [
+    "--cfg", "tokio_unstable",
+    "-C", "target-feature=+crt-static",
+    "-C", "link-arg=-static",
+]
+
+[target.aarch64-unknown-linux-musl]
+# Static linking configuration for musl (ARM64)
+rustflags = [
+    "--cfg", "tokio_unstable",
+    "-C", "target-feature=+crt-static",
+    "-C", "link-arg=-static",
+]
+
 # Optimization flags for development builds
 [profile.dev]
 # Split debuginfo to reduce binary size and link time
