@@ -77,10 +77,10 @@ export async function searchAircraftByRegistration(
 }
 
 /**
- * Search for devices by device address
+ * Search for aircraft by aircraft address
  *
  * @param page - Playwright page object
- * @param address - Device address to search for
+ * @param address - Aircraft address to search for
  * @param addressType - Address type ('I' for ICAO, 'O' for OGN, 'F' for FLARM)
  * @returns Promise that resolves when search is complete
  */
@@ -89,22 +89,22 @@ export async function searchAircraftByAddress(
 	address: string,
 	addressType: 'I' | 'O' | 'F' = 'I'
 ): Promise<void> {
-	// Make sure we're on the devices page
+	// Make sure we're on the aircraft page
 	await goToAircraft(page);
 
-	// Click the "Device Address" search type (need to switch from default "Registration")
-	await page.getByRole('button', { name: /device address/i }).click();
+	// Click the "Aircraft Address" search type (need to switch from default "Registration")
+	await page.getByRole('button', { name: /aircraft address/i }).click();
 
 	// Select the address type (ICAO, OGN, or FLARM)
 	const addressTypeLabels = { I: 'ICAO', O: 'OGN', F: 'FLARM' };
 	await page.getByRole('button', { name: addressTypeLabels[addressType] }).click();
 
-	// Fill in the device address
+	// Fill in the aircraft address
 	// Use locator with :visible to only interact with the visible input (mobile or desktop)
-	await page.locator('input[placeholder="Device address"]:visible').fill(address);
+	await page.locator('input[placeholder="Aircraft address"]:visible').fill(address);
 
 	// Click the search button
-	await page.getByRole('button', { name: /search devices/i }).click();
+	await page.getByRole('button', { name: /search aircraft/i }).click();
 
 	// Wait for results to load
 	await page.waitForLoadState('networkidle');

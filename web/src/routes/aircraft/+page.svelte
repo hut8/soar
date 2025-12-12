@@ -205,7 +205,7 @@
 </script>
 
 <svelte:head>
-	<title>Devices - Aircraft Tracking</title>
+	<title>Aircraft - SOAR Tracking</title>
 </svelte:head>
 
 <div class="container mx-auto max-w-7xl space-y-6 p-4">
@@ -213,7 +213,7 @@
 	<header class="space-y-2 text-center">
 		<h1 class="flex items-center justify-center gap-2 h1">
 			<Radio class="h-8 w-8" />
-			Aircraft Devices
+			Aircraft
 		</h1>
 	</header>
 
@@ -221,7 +221,7 @@
 	<section class="space-y-4 card p-6">
 		<h3 class="mb-3 flex items-center gap-2 text-lg font-semibold">
 			<Search class="h-5 w-5" />
-			Search Aircraft Devices
+			Search Aircraft
 		</h3>
 		<div class="space-y-3 rounded-lg border p-3">
 			<!-- Mobile: Vertical layout (segment above inputs) -->
@@ -257,7 +257,7 @@
 							<SegmentedControl.ItemText>
 								<div class="flex flex-row items-center">
 									<Antenna size={16} />
-									<span class="ml-1">Device Address</span>
+									<span class="ml-1">Aircraft Address</span>
 								</div>
 							</SegmentedControl.ItemText>
 							<SegmentedControl.ItemHiddenInput />
@@ -373,7 +373,7 @@
 								<SegmentedControl.ItemText>
 									<div class="flex flex-row items-center">
 										<Antenna size={16} />
-										<span class="ml-1">Device Address</span>
+										<span class="ml-1">Aircraft Address</span>
 									</div>
 								</SegmentedControl.ItemText>
 								<SegmentedControl.ItemHiddenInput />
@@ -470,7 +470,7 @@
 						Searching...
 					{:else}
 						<Search class="mr-2 h-4 w-4" />
-						Search Devices
+						Search Aircraft
 					{/if}
 				</button>
 			{/if}
