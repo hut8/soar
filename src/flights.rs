@@ -267,7 +267,7 @@ impl Flight {
             timed_out_at: None,
             last_fix_at: fix.timestamp,
             callsign: None,
-            created_at: now,
+            created_at: fix.timestamp,
             updated_at: now,
         }
     }
@@ -321,7 +321,7 @@ impl Flight {
             timed_out_at: None,
             last_fix_at: fix.timestamp,
             callsign: None,
-            created_at: now,
+            created_at: fix.timestamp,
             updated_at: now,
         }
     }
