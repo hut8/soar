@@ -2,19 +2,23 @@
 set -e
 
 # SOAR Release Script
-# Automates version bumping via release branch and PR workflow
+# Fully automated version bumping and release process
 #
 # This script respects branch protection on main by:
 # 1. Creating a release branch from main
 # 2. Bumping versions and committing to the release branch
-# 3. Pushing the release branch and creating a PR
-# 4. After PR merge, you manually create and push the git tag
+# 3. Pushing the release branch and creating a PR with auto-merge enabled
+# 4. Waiting for CI checks to pass and PR to auto-merge
+# 5. Automatically creating and pushing the git tag after merge
+# 6. GitHub Actions then builds and publishes the release
+#
+# The entire process is automated - just run the script and wait!
 #
 # Usage:
-#   ./release patch        # 0.1.0 → 0.1.1
-#   ./release minor        # 0.1.0 → 0.2.0
-#   ./release major        # 0.1.0 → 1.0.0
-#   ./release 1.2.3        # Set explicit version
+#   ./release patch        # 0.1.0 → 0.1.1 (fully automated)
+#   ./release minor        # 0.1.0 → 0.2.0 (fully automated)
+#   ./release major        # 0.1.0 → 1.0.0 (fully automated)
+#   ./release 1.2.3        # Set explicit version (fully automated)
 #   ./release patch --dry-run  # Test without pushing
 
 # Colors for output
@@ -136,8 +140,8 @@ else
     echo -e "${BLUE}Pushing release branch...${NC}"
     git push -u origin "$RELEASE_BRANCH"
 
-    # Create PR using gh CLI
-    echo -e "${BLUE}Creating pull request...${NC}"
+    # Create PR using gh CLI with auto-merge enabled
+    echo -e "${BLUE}Creating pull request with auto-merge...${NC}"
     PR_URL=$(gh pr create \
         --title "chore: Release v$NEW_VERSION" \
         --body "$(cat <<EOF
@@ -150,21 +154,75 @@ This PR bumps the version to **v$NEW_VERSION** in preparation for release.
 - Updated version in \`web/package.json\`
 - Updated \`Cargo.lock\`
 
-### Post-Merge Steps
-After this PR is merged, the release tag will be created automatically by the release script.
+### Automated Release Process
+This PR is configured to auto-merge when all checks pass. After merge, the release script will automatically create and push the git tag.
 EOF
 )" \
         --base main \
         --head "$RELEASE_BRANCH")
 
-    echo -e "\n${GREEN}✓ Release PR created successfully!${NC}"
-    echo -e "${BLUE}PR URL: $PR_URL${NC}"
-    echo -e "\n${YELLOW}Next steps:${NC}"
-    echo "1. Review and merge the PR: $PR_URL"
-    echo "2. After merge, run the following commands to create and push the release tag:"
-    echo -e "   ${GREEN}git checkout main${NC}"
-    echo -e "   ${GREEN}git pull${NC}"
-    echo -e "   ${GREEN}git tag -a v$NEW_VERSION -m \"Release v$NEW_VERSION\"${NC}"
-    echo -e "   ${GREEN}git push origin v$NEW_VERSION${NC}"
-    echo -e "\n${BLUE}The tag push will trigger GitHub Actions to build and publish the release${NC}"
+    echo -e "${GREEN}✓ Release PR created: $PR_URL${NC}"
+
+    # Extract PR number from URL
+    PR_NUMBER=$(echo "$PR_URL" | grep -oE '[0-9]+$')
+
+    # Enable auto-merge
+    echo -e "${BLUE}Enabling auto-merge...${NC}"
+    gh pr merge "$PR_NUMBER" --auto --merge
+
+    echo -e "${YELLOW}Waiting for CI checks to pass and PR to merge...${NC}"
+    echo -e "${BLUE}This may take a few minutes. You can watch progress at: $PR_URL${NC}\n"
+
+    # Poll for PR merge status
+    POLL_INTERVAL=10
+    MAX_WAIT=1800  # 30 minutes max
+    ELAPSED=0
+
+    while [ $ELAPSED -lt $MAX_WAIT ]; do
+        PR_STATE=$(gh pr view "$PR_NUMBER" --json state --jq .state)
+
+        if [ "$PR_STATE" = "MERGED" ]; then
+            echo -e "\n${GREEN}✓ PR merged successfully!${NC}"
+            break
+        elif [ "$PR_STATE" = "CLOSED" ]; then
+            echo -e "\n${RED}Error: PR was closed without merging${NC}"
+            exit 1
+        fi
+
+        # Show status update every minute
+        if [ $((ELAPSED % 60)) -eq 0 ]; then
+            CHECK_STATUS=$(gh pr checks "$PR_NUMBER" --json state --jq '.[].state' | sort | uniq -c)
+            echo -e "${BLUE}[$((ELAPSED / 60))m] Waiting for checks... Current status:${NC}"
+            echo "$CHECK_STATUS" | sed 's/^/  /'
+        fi
+
+        sleep $POLL_INTERVAL
+        ELAPSED=$((ELAPSED + POLL_INTERVAL))
+    done
+
+    if [ $ELAPSED -ge $MAX_WAIT ]; then
+        echo -e "\n${YELLOW}Timeout waiting for PR to merge${NC}"
+        echo -e "${YELLOW}PR is still open at: $PR_URL${NC}"
+        echo -e "${YELLOW}You can manually create the tag after merge with:${NC}"
+        echo -e "  ${GREEN}git checkout main && git pull${NC}"
+        echo -e "  ${GREEN}git tag -a v$NEW_VERSION -m \"Release v$NEW_VERSION\"${NC}"
+        echo -e "  ${GREEN}git push origin v$NEW_VERSION${NC}"
+        exit 1
+    fi
+
+    # PR merged, now create and push the tag
+    TAG="v$NEW_VERSION"
+    echo -e "\n${BLUE}Switching to main and pulling latest changes...${NC}"
+    git checkout main
+    git pull
+
+    echo -e "${BLUE}Creating and pushing release tag: ${GREEN}$TAG${NC}"
+    git tag -a "$TAG" -m "Release $TAG"
+    git push origin "$TAG"
+
+    echo -e "\n${GREEN}✓ Release $TAG completed successfully!${NC}"
+    echo -e "${BLUE}GitHub Actions will now build and publish the release${NC}"
+    REPO_URL=$(git remote get-url origin | sed 's/.*github.com[:/]\(.*\)\.git/\1/')
+    echo -e "${BLUE}Watch progress at: https://github.com/$REPO_URL/actions${NC}"
+    echo -e "${BLUE}Release page: https://github.com/$REPO_URL/releases/tag/$TAG${NC}"
 fi
