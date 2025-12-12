@@ -146,8 +146,8 @@ export interface AircraftModel {
 	type_certificate_data_holder: string | null;
 }
 
-// Device interface matching backend DeviceView exactly
-export interface Device {
+// Aircraft interface matching backend AircraftView exactly
+export interface Aircraft {
 	id: string;
 	device_address: string; // Formatted like "FLARM-A0B380"
 	address_type: string; // F, O, I, or empty string
@@ -175,9 +175,8 @@ export interface Device {
 	fixes?: Fix[];
 }
 
-// Aircraft extends Device with optional aircraft registration and detailed model information
-// This matches the backend Aircraft struct
-export interface Aircraft extends Device {
+// AircraftWithRegistration extends Aircraft with optional aircraft registration and detailed model information
+export interface AircraftWithRegistration extends Aircraft {
 	aircraft_registration?: AircraftRegistration;
 	// Detailed aircraft model information from FAA database
 	aircraft_model_details?: AircraftModel;
@@ -185,7 +184,7 @@ export interface Aircraft extends Device {
 
 export interface Fix {
 	id: string;
-	device_id?: string;
+	aircraft_id?: string;
 	device_address_hex?: string;
 	timestamp: string;
 	latitude: number;
@@ -225,7 +224,7 @@ export interface User {
 // Flight interface matching backend FlightView
 export interface Flight {
 	id: string;
-	device_id?: string; // UUID foreign key to devices table
+	aircraft_id?: string; // UUID foreign key to aircraft table
 	device_address: string; // Hex format like "39D304" - kept for compatibility
 	device_address_type: string; // F, O, I, or empty string - kept for compatibility
 	takeoff_time?: string; // ISO datetime string - null for flights first seen airborne
@@ -239,7 +238,7 @@ export interface Flight {
 	arrival_airport?: string; // Airport identifier
 	arrival_airport_id?: number; // Airport ID in database
 	arrival_airport_country?: string; // Country code
-	towed_by_device_id?: string; // UUID of towplane device that towed this glider
+	towed_by_aircraft_id?: string; // UUID of towplane aircraft that towed this glider
 	towed_by_flight_id?: string; // UUID of towplane flight that towed this glider
 	club_id?: string; // UUID of club that owns the aircraft
 	takeoff_altitude_offset_ft?: number; // Altitude offset at takeoff
@@ -251,7 +250,7 @@ export interface Flight {
 	runways_inferred?: boolean; // Whether runways were inferred from heading vs matched to airport data
 	created_at: string; // ISO datetime string
 	updated_at: string; // ISO datetime string
-	// Device information (merged into FlightView from DeviceInfo)
+	// Aircraft information (merged into FlightView from AircraftInfo)
 	aircraft_model?: string;
 	registration?: string;
 	aircraft_type_ogn?: string;
@@ -259,7 +258,7 @@ export interface Flight {
 	latest_altitude_msl_feet: number | null;
 	latest_altitude_agl_feet: number | null;
 	latest_fix_timestamp: string | null;
-	// Navigation to previous/next flights for the same device (chronologically by takeoff time)
+	// Navigation to previous/next flights for the same aircraft (chronologically by takeoff time)
 	previous_flight_id?: string;
 	next_flight_id?: string;
 	// Flight callsign (from APRS packets)
@@ -268,7 +267,7 @@ export interface Flight {
 
 export interface WatchlistEntry {
 	id: string;
-	deviceId: string; // Only store device ID, not full device object
+	aircraftId: string; // Only store aircraft ID, not full aircraft object
 	active: boolean;
 }
 

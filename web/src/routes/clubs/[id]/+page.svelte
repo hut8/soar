@@ -417,7 +417,7 @@
 								<div class="mb-3 flex flex-wrap gap-2">
 									{#if plane.device_id}
 										<a
-											href={`/devices/${plane.device_id}`}
+											href={`/aircraft/${plane.device_id}`}
 											target="_blank"
 											rel="noopener noreferrer"
 											class="preset-tonal-primary-500 btn btn-sm"

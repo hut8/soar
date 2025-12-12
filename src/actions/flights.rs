@@ -7,9 +7,9 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::actions::json_error;
-use crate::actions::views::{AirportInfo, DeviceInfo, FlightView};
+use crate::actions::views::{AircraftInfo, AirportInfo, FlightView};
+use crate::aircraft_repo::AircraftRepository;
 use crate::airports_repo::AirportsRepository;
-use crate::device_repo::DeviceRepository;
 use crate::fixes::FixWithRawPacket;
 use crate::fixes_repo::FixesRepository;
 use crate::flights::Flight;
@@ -95,7 +95,7 @@ pub async fn get_flight_by_id(
                 None
             };
 
-            // Device information is now fetched separately via /flights/{id}/device
+            // Aircraft information is now fetched separately via /flights/{id}/device
             // We don't include it in the flight response anymore
 
             // For active flights, calculate distance metrics dynamically
@@ -114,10 +114,11 @@ pub async fn get_flight_by_id(
                 }
             }
 
-            // Get previous and next flights for navigation in a single query (if device_id is present)
-            let (previous_flight_id, next_flight_id) = if let Some(device_id) = flight.device_id {
+            // Get previous and next flights for navigation in a single query (if aircraft_id is present)
+            let (previous_flight_id, next_flight_id) = if let Some(aircraft_id) = flight.aircraft_id
+            {
                 flights_repo
-                    .get_adjacent_flights_for_device(id, device_id, flight.takeoff_time)
+                    .get_adjacent_flights_for_device(id, aircraft_id, flight.takeoff_time)
                     .await
                     .unwrap_or((None, None))
             } else {
@@ -154,20 +155,20 @@ pub async fn get_flight_device(
     State(state): State<AppState>,
 ) -> impl IntoResponse {
     let flights_repo = FlightsRepository::new(state.pool.clone());
-    let device_repo = DeviceRepository::new(state.pool.clone());
+    let device_repo = AircraftRepository::new(state.pool.clone());
 
     // First verify the flight exists and get its device_id
     match flights_repo.get_flight_by_id(id).await {
         Ok(Some(flight)) => {
-            if let Some(device_id) = flight.device_id {
+            if let Some(aircraft_id) = flight.aircraft_id {
                 // Look up device information
-                match device_repo.get_device_by_uuid(device_id).await {
+                match device_repo.get_device_by_uuid(aircraft_id).await {
                     Ok(Some(device)) => Json(device).into_response(),
                     Ok(None) => {
-                        json_error(StatusCode::NOT_FOUND, "Device not found").into_response()
+                        json_error(StatusCode::NOT_FOUND, "Aircraft not found").into_response()
                     }
                     Err(e) => {
-                        tracing::error!("Failed to get device {}: {}", device_id, e);
+                        tracing::error!("Failed to get device {}: {}", aircraft_id, e);
                         json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get device")
                             .into_response()
                     }
@@ -191,7 +192,7 @@ pub async fn get_flight_kml(
 ) -> impl IntoResponse {
     let flights_repo = FlightsRepository::new(state.pool.clone());
     let fixes_repo = FixesRepository::new(state.pool.clone());
-    let device_repo = DeviceRepository::new(state.pool.clone());
+    let device_repo = AircraftRepository::new(state.pool.clone());
 
     // First get the flight
     let flight = match flights_repo.get_flight_by_id(id).await {
@@ -205,9 +206,9 @@ pub async fn get_flight_kml(
     };
 
     // Get device info for better KML naming
-    let device = if let Some(device_id) = flight.device_id {
+    let device = if let Some(aircraft_id) = flight.aircraft_id {
         device_repo
-            .get_device_by_uuid(device_id)
+            .get_device_by_uuid(aircraft_id)
             .await
             .ok()
             .flatten()
@@ -280,7 +281,7 @@ pub async fn get_flight_fixes(
 
     match fixes_repo
         .get_fixes_for_aircraft_with_time_range(
-            &flight.device_id.unwrap_or(Uuid::nil()),
+            &flight.aircraft_id.unwrap_or(Uuid::nil()),
             start_time,
             end_time,
             None, // No limit
@@ -328,7 +329,7 @@ pub async fn get_flight_spline_path(
 
     let fixes = match fixes_repo
         .get_fixes_for_aircraft_with_time_range(
-            &flight.device_id.unwrap_or(Uuid::nil()),
+            &flight.aircraft_id.unwrap_or(Uuid::nil()),
             start_time,
             end_time,
             None,
@@ -406,7 +407,7 @@ pub async fn search_flights(
     Query(params): Query<FlightsQueryParams>,
 ) -> impl IntoResponse {
     let flights_repo = FlightsRepository::new(state.pool.clone());
-    let device_repo = DeviceRepository::new(state.pool.clone());
+    let device_repo = AircraftRepository::new(state.pool.clone());
 
     let completed = params.completed.unwrap_or(false);
     let limit = params.limit.unwrap_or(50);
@@ -423,9 +424,9 @@ pub async fn search_flights(
 
                 for flight in flights {
                     // Look up device information if device_id is present
-                    let device_info = if let Some(device_id) = flight.device_id {
-                        match device_repo.get_device_by_uuid(device_id).await {
-                            Ok(Some(device)) => Some(DeviceInfo {
+                    let device_info = if let Some(aircraft_id) = flight.aircraft_id {
+                        match device_repo.get_device_by_uuid(aircraft_id).await {
+                            Ok(Some(device)) => Some(AircraftInfo {
                                 aircraft_model: Some(device.aircraft_model),
                                 registration: Some(device.registration),
                                 aircraft_type_ogn: device.aircraft_type_ogn,
@@ -467,9 +468,9 @@ pub async fn search_flights(
 
                 for flight in flights {
                     // Look up device information if device_id is present
-                    let device_info = if let Some(device_id) = flight.device_id {
-                        match device_repo.get_device_by_uuid(device_id).await {
-                            Ok(Some(device)) => Some(DeviceInfo {
+                    let device_info = if let Some(aircraft_id) = flight.aircraft_id {
+                        match device_repo.get_device_by_uuid(aircraft_id).await {
+                            Ok(Some(device)) => Some(AircraftInfo {
                                 aircraft_model: Some(device.aircraft_model),
                                 registration: Some(device.registration),
                                 aircraft_type_ogn: device.aircraft_type_ogn,
@@ -482,10 +483,10 @@ pub async fn search_flights(
 
                     // Get latest altitude and timestamp information for active flights
                     let (latest_altitude_msl, latest_altitude_agl, latest_fix_timestamp) =
-                        if let Some(device_id) = flight.device_id {
+                        if let Some(aircraft_id) = flight.aircraft_id {
                             let start_time = flight.takeoff_time.unwrap_or(flight.created_at);
                             match fixes_repo
-                                .get_latest_fix_for_device(device_id, start_time)
+                                .get_latest_fix_for_device(aircraft_id, start_time)
                                 .await
                             {
                                 Ok(Some(fix)) => (
@@ -536,7 +537,7 @@ pub async fn get_airport_flights(
 ) -> impl IntoResponse {
     let flights_repo = FlightsRepository::new(state.pool.clone());
     let airports_repo = AirportsRepository::new(state.pool.clone());
-    let device_repo = DeviceRepository::new(state.pool);
+    let device_repo = AircraftRepository::new(state.pool);
 
     // Calculate 24 hours ago
     let since = chrono::Utc::now() - chrono::Duration::hours(24);
@@ -576,9 +577,9 @@ pub async fn get_airport_flights(
                 };
 
                 // For list views, include device info in FlightView for display purposes
-                let device_info = if let Some(device_id) = flight.device_id {
-                    match device_repo.get_device_by_uuid(device_id).await {
-                        Ok(Some(dev)) => Some(DeviceInfo {
+                let device_info = if let Some(aircraft_id) = flight.aircraft_id {
+                    match device_repo.get_device_by_uuid(aircraft_id).await {
+                        Ok(Some(dev)) => Some(AircraftInfo {
                             aircraft_model: Some(dev.aircraft_model),
                             registration: Some(dev.registration),
                             aircraft_type_ogn: dev.aircraft_type_ogn,
@@ -620,7 +621,7 @@ pub async fn get_nearby_flights(
     State(state): State<AppState>,
 ) -> impl IntoResponse {
     let flights_repo = FlightsRepository::new(state.pool.clone());
-    let device_repo = DeviceRepository::new(state.pool);
+    let device_repo = AircraftRepository::new(state.pool);
 
     match flights_repo.get_nearby_flights(id).await {
         Ok(flights) => {
@@ -629,9 +630,9 @@ pub async fn get_nearby_flights(
 
             for flight in flights {
                 // Look up device information if device_id is present
-                let device_info = if let Some(device_id) = flight.device_id {
-                    match device_repo.get_device_by_uuid(device_id).await {
-                        Ok(Some(device)) => Some(DeviceInfo {
+                let device_info = if let Some(aircraft_id) = flight.aircraft_id {
+                    match device_repo.get_device_by_uuid(aircraft_id).await {
+                        Ok(Some(device)) => Some(AircraftInfo {
                             aircraft_model: Some(device.aircraft_model),
                             registration: Some(device.registration),
                             aircraft_type_ogn: device.aircraft_type_ogn,

@@ -80,7 +80,7 @@ pub struct Fix {
 
     /// Associations
     pub flight_id: Option<Uuid>,
-    pub device_id: Uuid,
+    pub aircraft_id: Uuid,
 
     /// Timestamp when we received/processed the packet
     pub received_at: DateTime<Utc>,
@@ -178,7 +178,7 @@ impl Fix {
     pub fn from_aprs_packet(
         packet: AprsPacket,
         received_at: DateTime<Utc>,
-        device_id: Uuid,
+        aircraft_id: Uuid,
         receiver_id: Uuid,
         raw_message_id: Uuid,
     ) -> Result<Option<Self>> {
@@ -221,7 +221,7 @@ impl Fix {
                     .and_then(|f| f.to_string().parse::<f32>().ok());
 
                 // Note: OGN parameters (device_address, address_type, aircraft_type) are now
-                // parsed and stored on the Device record by fix_processor, not on individual fixes
+                // parsed and stored on the Aircraft record by fix_processor, not on individual fixes
 
                 // Parse GPS quality field (format: "AxB" where A=horizontal_resolution, B=vertical_resolution, in meters)
                 let (gnss_horizontal_resolution, gnss_vertical_resolution) =
@@ -292,7 +292,7 @@ impl Fix {
                     turn_rate_rot,
                     source_metadata,
                     flight_id: None, // Will be set by flight detection processor
-                    device_id,
+                    aircraft_id,
                     received_at,
                     is_active,
                     receiver_id,

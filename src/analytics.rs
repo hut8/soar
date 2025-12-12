@@ -36,10 +36,10 @@ pub struct FlightAnalyticsHourly {
     pub updated_at: DateTime<Utc>,
 }
 
-/// Device analytics with anomaly detection
+/// Aircraft analytics with anomaly detection
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeviceAnalytics {
-    pub device_id: Uuid,
+    pub aircraft_id: Uuid,
     pub registration: Option<String>,
     pub aircraft_model: Option<String>,
     pub flight_count_total: i32,
@@ -102,10 +102,10 @@ pub struct AnalyticsSummary {
     pub data_quality_score: Option<f64>,
 }
 
-/// Device outlier for anomaly detection
+/// Aircraft outlier for anomaly detection
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DeviceOutlier {
-    pub device_id: Uuid,
+pub struct AircraftOutlier {
+    pub aircraft_id: Uuid,
     pub registration: Option<String>,
     pub aircraft_model: Option<String>,
     pub flight_count_30d: i32,
@@ -115,7 +115,7 @@ pub struct DeviceOutlier {
 /// Top device by flight count
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TopDevice {
-    pub device_id: Uuid,
+    pub aircraft_id: Uuid,
     pub registration: Option<String>,
     pub aircraft_model: Option<String>,
     pub flight_count: i32,

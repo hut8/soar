@@ -3,7 +3,7 @@ use std::fs::File;
 use std::io::Write;
 use tracing::info;
 
-use soar::devices::read_flarmnet_file;
+use soar::aircraft::read_flarmnet_file;
 
 const DDB_URL_UNIFIED_FLARMNET: &str = "https://turbo87.github.io/united-flarmnet/united.fln";
 

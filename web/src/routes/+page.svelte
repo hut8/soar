@@ -5,7 +5,7 @@
 
 	const clubsPath = resolve('/clubs');
 	const operationsPath = resolve('/operations');
-	const devicesPath = resolve('/devices');
+	const aircraftPath = resolve('/aircraft');
 	const receiversPath = resolve('/receivers');
 	const airportsPath = resolve('/airports');
 	const flightsPath = resolve('/flights');
@@ -99,7 +99,7 @@
 
 				<!-- Aircraft Button -->
 				<a
-					href={devicesPath}
+					href={aircraftPath}
 					class="group flex w-64 items-center justify-center border border-white/30 bg-white/20 p-8 backdrop-blur-md transition-all duration-200 hover:bg-white/30 hover:shadow-xl"
 				>
 					<div class="space-y-6 text-center">

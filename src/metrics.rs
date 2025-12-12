@@ -233,8 +233,9 @@ pub async fn analytics_metrics_task(pool: crate::web::PgPool) {
             metrics::gauge!("analytics.flights.today").set(summary.flights_today as f64);
             metrics::gauge!("analytics.flights.last_7d").set(summary.flights_7d as f64);
             metrics::gauge!("analytics.flights.last_30d").set(summary.flights_30d as f64);
-            metrics::gauge!("analytics.devices.active_7d").set(summary.active_devices_7d as f64);
-            metrics::gauge!("analytics.devices.outliers").set(summary.outlier_devices_count as f64);
+            metrics::gauge!("analytics.aircraft.active_7d").set(summary.active_devices_7d as f64);
+            metrics::gauge!("analytics.aircraft.outliers")
+                .set(summary.outlier_devices_count as f64);
             if let Some(score) = summary.data_quality_score {
                 metrics::gauge!("analytics.data_quality_score").set(score);
             }
@@ -348,7 +349,7 @@ pub fn initialize_beast_consumer_metrics() {
 pub fn initialize_run_metrics() {
     // Flight tracker metrics
     metrics::counter!("flight_tracker_timeouts_detected").absolute(0);
-    metrics::gauge!("flight_tracker_active_devices").set(0.0);
+    metrics::gauge!("flight_tracker_active_aircraft").set(0.0);
 
     // Flight coalescing metrics
     metrics::counter!("flight_tracker.coalesce.resumed").absolute(0);
@@ -419,7 +420,7 @@ pub fn initialize_run_metrics() {
     metrics::counter!("aprs.messages.processed.total").absolute(0);
 
     // Aircraft position processing latency metrics
-    metrics::histogram!("aprs.aircraft.device_lookup_ms").record(0.0);
+    metrics::histogram!("aprs.aircraft.lookup_ms").record(0.0);
     metrics::histogram!("aprs.aircraft.fix_creation_ms").record(0.0);
     metrics::histogram!("aprs.aircraft.process_fix_internal_ms").record(0.0);
     metrics::histogram!("aprs.aircraft.total_processing_ms").record(0.0);
@@ -441,8 +442,8 @@ pub fn initialize_analytics_metrics() {
     metrics::histogram!("analytics.query.daily_flights_ms").record(0.0);
     metrics::histogram!("analytics.query.hourly_flights_ms").record(0.0);
     metrics::histogram!("analytics.query.duration_distribution_ms").record(0.0);
-    metrics::histogram!("analytics.query.device_outliers_ms").record(0.0);
-    metrics::histogram!("analytics.query.top_devices_ms").record(0.0);
+    metrics::histogram!("analytics.query.aircraft_outliers_ms").record(0.0);
+    metrics::histogram!("analytics.query.top_aircraft_ms").record(0.0);
     metrics::histogram!("analytics.query.club_analytics_ms").record(0.0);
     metrics::histogram!("analytics.query.airport_activity_ms").record(0.0);
     metrics::histogram!("analytics.query.summary_ms").record(0.0);
@@ -451,8 +452,8 @@ pub fn initialize_analytics_metrics() {
     metrics::counter!("analytics.api.daily_flights.requests").absolute(0);
     metrics::counter!("analytics.api.hourly_flights.requests").absolute(0);
     metrics::counter!("analytics.api.duration_distribution.requests").absolute(0);
-    metrics::counter!("analytics.api.device_outliers.requests").absolute(0);
-    metrics::counter!("analytics.api.top_devices.requests").absolute(0);
+    metrics::counter!("analytics.api.aircraft_outliers.requests").absolute(0);
+    metrics::counter!("analytics.api.top_aircraft.requests").absolute(0);
     metrics::counter!("analytics.api.club_analytics.requests").absolute(0);
     metrics::counter!("analytics.api.airport_activity.requests").absolute(0);
     metrics::counter!("analytics.api.summary.requests").absolute(0);
@@ -464,8 +465,8 @@ pub fn initialize_analytics_metrics() {
     metrics::gauge!("analytics.flights.today").set(0.0);
     metrics::gauge!("analytics.flights.last_7d").set(0.0);
     metrics::gauge!("analytics.flights.last_30d").set(0.0);
-    metrics::gauge!("analytics.devices.active_7d").set(0.0);
-    metrics::gauge!("analytics.devices.outliers").set(0.0);
+    metrics::gauge!("analytics.aircraft.active_7d").set(0.0);
+    metrics::gauge!("analytics.aircraft.outliers").set(0.0);
     metrics::gauge!("analytics.data_quality_score").set(0.0);
 }
 

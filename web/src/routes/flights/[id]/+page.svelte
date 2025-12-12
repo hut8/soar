@@ -31,7 +31,7 @@
 	import relativeTime from 'dayjs/plugin/relativeTime';
 	import {
 		getAircraftTypeOgnDescription,
-		formatDeviceAddress,
+		formatAircraftAddress,
 		getAircraftTypeColor
 	} from '$lib/formatters';
 	import { GOOGLE_MAPS_API_KEY } from '$lib/config';
@@ -1331,15 +1331,18 @@
 							</span>
 							<span class="text-surface-400-500-token">•</span>
 						{/if}
-						{#if data.flight.device_id && data.flight.device_address && data.flight.device_address_type}
+						{#if data.flight.aircraft_id && data.flight.device_address && data.flight.device_address_type}
 							<a
-								href="/devices/{data.flight.device_id}"
+								href="/aircraft/{data.flight.aircraft_id}"
 								target="_blank"
 								rel="noopener noreferrer"
 								class="btn flex items-center gap-1 preset-filled-primary-500 btn-sm"
 							>
 								<span class="font-mono text-xs">
-									{formatDeviceAddress(data.flight.device_address_type, data.flight.device_address)}
+									{formatAircraftAddress(
+										data.flight.device_address_type,
+										data.flight.device_address
+									)}
 								</span>
 								<ExternalLink class="h-3 w-3" />
 							</a>
@@ -1554,13 +1557,13 @@
 			{/if}
 
 			<!-- Tow Aircraft -->
-			{#if data.flight.towed_by_device_id}
+			{#if data.flight.towed_by_aircraft_id}
 				<div class="flex items-start gap-3">
 					<TrendingUp class="mt-1 h-5 w-5 text-primary-500" />
 					<div>
 						<div class="text-surface-600-300-token text-sm">Tow Aircraft</div>
 						<div class="font-semibold">
-							<TowAircraftLink deviceId={data.flight.towed_by_device_id} size="md" />
+							<TowAircraftLink aircraftId={data.flight.towed_by_aircraft_id} size="md" />
 						</div>
 					</div>
 				</div>

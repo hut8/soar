@@ -4,18 +4,18 @@
 	import { SvelteSet } from 'svelte/reactivity';
 	import { serverCall } from '$lib/api/server';
 	import ClubSelector from '$lib/components/ClubSelector.svelte';
-	import DeviceTile from '$lib/components/DeviceTile.svelte';
+	import AircraftTile from '$lib/components/AircraftTile.svelte';
 	import { onMount } from 'svelte';
-	import type { Device } from '$lib/types';
+	import type { Aircraft } from '$lib/types';
 
-	let devices = $state<Device[]>([]);
+	let aircraft = $state<Aircraft[]>([]);
 	let loading = $state(false);
 	let error = $state('');
 	let searchQuery = $state('');
 	let searchType = $state<'registration' | 'device' | 'club'>('registration');
 	let deviceAddressType = $state('I'); // ICAO, OGN, FLARM
 
-	// Aircraft type filter state (for recently active devices only)
+	// Aircraft type filter state (for recently active aircraft only)
 	let selectedAircraftTypes = new SvelteSet<string>();
 	let filterExpanded = $state(false); // Track whether filter panel is expanded
 
@@ -41,43 +41,43 @@
 	let pageSize = 50;
 
 	// Pagination - no filtering on frontend, backend handles it
-	let totalPages = $derived(Math.ceil(devices.length / pageSize));
-	let paginatedDevices = $derived(
-		devices.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
+	let totalPages = $derived(Math.ceil(aircraft.length / pageSize));
+	let paginatedAircraft = $derived(
+		aircraft.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
 	);
 
 	// Club search state
 	let selectedClub = $state<string[]>([]);
-	let clubDevices = $state<Device[]>([]);
+	let clubAircraft = $state<Aircraft[]>([]);
 	let clubSearchInProgress = $state(false);
 	let clubErrorMessage = $state('');
 
-	async function loadRecentDevices() {
+	async function loadRecentAircraft() {
 		loading = true;
 		error = '';
 		currentPage = 0;
 
 		try {
 			// Build query parameters
-			let endpoint = '/devices';
+			let endpoint = '/aircraft';
 			if (selectedAircraftTypes.size > 0) {
 				const typesParam = Array.from(selectedAircraftTypes).join(',');
 				endpoint += `?aircraft-types=${encodeURIComponent(typesParam)}`;
 			}
 
-			const response = await serverCall<{ devices: Device[] }>(endpoint);
-			devices = response.devices || [];
+			const response = await serverCall<{ aircraft: Aircraft[] }>(endpoint);
+			aircraft = response.aircraft || [];
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-			error = `Failed to load recent devices: ${errorMessage}`;
-			console.error('Error loading recent devices:', err);
-			devices = [];
+			error = `Failed to load recent aircraft: ${errorMessage}`;
+			console.error('Error loading recent aircraft:', err);
+			aircraft = [];
 		} finally {
 			loading = false;
 		}
 	}
 
-	async function searchDevices() {
+	async function searchAircraft() {
 		if (!searchQuery.trim()) {
 			error = 'Please enter a search query';
 			return;
@@ -88,30 +88,30 @@
 		currentPage = 0; // Reset to first page on new search
 
 		try {
-			let endpoint = '/devices?';
+			let endpoint = '/aircraft?';
 
 			if (searchType === 'registration') {
 				endpoint += `registration=${encodeURIComponent(searchQuery.trim())}`;
 			} else {
-				// Device address search
+				// Aircraft address search
 				const address = searchQuery.trim().toUpperCase();
 				endpoint += `address=${encodeURIComponent(address)}&address-type=${encodeURIComponent(deviceAddressType)}`;
 			}
 
-			const response = await serverCall<{ devices: Device[] }>(endpoint);
-			devices = response.devices || [];
+			const response = await serverCall<{ aircraft: Aircraft[] }>(endpoint);
+			aircraft = response.aircraft || [];
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-			error = `Failed to search devices: ${errorMessage}`;
-			console.error('Error searching devices:', err);
-			devices = [];
+			error = `Failed to search aircraft: ${errorMessage}`;
+			console.error('Error searching aircraft:', err);
+			aircraft = [];
 		} finally {
 			loading = false;
 		}
 	}
 
 	onMount(() => {
-		loadRecentDevices();
+		loadRecentAircraft();
 	});
 
 	// Clear club error message
@@ -119,7 +119,7 @@
 		clubErrorMessage = '';
 	}
 
-	// Load devices for selected club
+	// Load aircraft for selected club
 	async function loadClubDevices() {
 		if (!selectedClub.length || clubSearchInProgress) return;
 
@@ -131,20 +131,20 @@
 		currentPage = 0; // Reset to first page on new search
 
 		try {
-			const response = await serverCall<{ devices: Device[] }>(`/clubs/${clubId}/devices`);
+			const response = await serverCall<{ aircraft: Aircraft[] }>(`/clubs/${clubId}/aircraft`);
 			// Only update if we're still looking at the same club
 			if (selectedClub.length > 0 && selectedClub[0] === clubId) {
-				clubDevices = response.devices || [];
-				// Set the main devices list to show club devices
-				devices = clubDevices;
+				clubAircraft = response.aircraft || [];
+				// Set the main aircraft list to show club aircraft
+				aircraft = clubAircraft;
 			}
 		} catch (err) {
-			console.warn(`Failed to fetch devices for club:`, err);
+			console.warn(`Failed to fetch aircraft for club:`, err);
 			// Only show error if we're still looking at the same club
 			if (selectedClub.length > 0 && selectedClub[0] === clubId) {
-				clubErrorMessage = 'Failed to load club devices. Please try again.';
-				clubDevices = [];
-				devices = [];
+				clubErrorMessage = 'Failed to load club aircraft. Please try again.';
+				clubAircraft = [];
+				aircraft = [];
 			}
 		} finally {
 			clubSearchInProgress = false;
@@ -159,14 +159,14 @@
 		if (selectedClub.length > 0) {
 			loadClubDevices();
 		} else {
-			clubDevices = [];
-			devices = [];
+			clubAircraft = [];
+			aircraft = [];
 		}
 	}
 
 	function handleKeydown(event: KeyboardEvent) {
 		if (event.key === 'Enter') {
-			searchDevices();
+			searchAircraft();
 		}
 	}
 
@@ -183,16 +183,16 @@
 			selectedAircraftTypes.add(type);
 		}
 		currentPage = 0; // Reset to first page when filter changes
-		loadRecentDevices(); // Reload from backend with new filter
+		loadRecentAircraft(); // Reload from backend with new filter
 	}
 
 	function toggleFilterExpanded() {
 		if (filterExpanded) {
-			// Collapsing - clear all filters and reload all devices
+			// Collapsing - clear all filters and reload all aircraft
 			filterExpanded = false;
 			selectedAircraftTypes.clear();
 			currentPage = 0;
-			loadRecentDevices();
+			loadRecentAircraft();
 		} else {
 			// Expanding - show filter options (starting with nothing selected)
 			filterExpanded = true;
@@ -201,11 +201,11 @@
 		}
 	}
 
-	// Don't load devices automatically on mount - wait for user search
+	// Don't load aircraft automatically on mount - wait for user search
 </script>
 
 <svelte:head>
-	<title>Devices - Aircraft Tracking</title>
+	<title>Aircraft - SOAR Tracking</title>
 </svelte:head>
 
 <div class="container mx-auto max-w-7xl space-y-6 p-4">
@@ -213,7 +213,7 @@
 	<header class="space-y-2 text-center">
 		<h1 class="flex items-center justify-center gap-2 h1">
 			<Radio class="h-8 w-8" />
-			Aircraft Devices
+			Aircraft
 		</h1>
 	</header>
 
@@ -221,7 +221,7 @@
 	<section class="space-y-4 card p-6">
 		<h3 class="mb-3 flex items-center gap-2 text-lg font-semibold">
 			<Search class="h-5 w-5" />
-			Search Aircraft Devices
+			Search Aircraft
 		</h3>
 		<div class="space-y-3 rounded-lg border p-3">
 			<!-- Mobile: Vertical layout (segment above inputs) -->
@@ -257,7 +257,7 @@
 							<SegmentedControl.ItemText>
 								<div class="flex flex-row items-center">
 									<Antenna size={16} />
-									<span class="ml-1">Device Address</span>
+									<span class="ml-1">Aircraft Address</span>
 								</div>
 							</SegmentedControl.ItemText>
 							<SegmentedControl.ItemHiddenInput />
@@ -373,7 +373,7 @@
 								<SegmentedControl.ItemText>
 									<div class="flex flex-row items-center">
 										<Antenna size={16} />
-										<span class="ml-1">Device Address</span>
+										<span class="ml-1">Aircraft Address</span>
 									</div>
 								</SegmentedControl.ItemText>
 								<SegmentedControl.ItemHiddenInput />
@@ -460,7 +460,7 @@
 			{#if searchType !== 'club'}
 				<button
 					class="btn w-full preset-filled-primary-500"
-					onclick={searchDevices}
+					onclick={searchAircraft}
 					disabled={loading}
 				>
 					{#if loading}
@@ -470,7 +470,7 @@
 						Searching...
 					{:else}
 						<Search class="mr-2 h-4 w-4" />
-						Search Devices
+						Search Aircraft
 					{/if}
 				</button>
 			{/if}
@@ -484,7 +484,7 @@
 		</div>
 	</section>
 
-	<!-- Aircraft Type Filter (only for recently active devices) -->
+	<!-- Aircraft Type Filter (only for recently active aircraft) -->
 	{#if !searchQuery && searchType !== 'club' && !loading}
 		<section class="space-y-4 card p-6">
 			<!-- Filter toggle button -->
@@ -517,7 +517,7 @@
 	{/if}
 
 	<!-- Results Cards -->
-	{#if !loading && devices.length > 0}
+	{#if !loading && aircraft.length > 0}
 		<section class="space-y-4">
 			<!-- Results Header -->
 			<div class="flex items-center justify-between">
@@ -533,10 +533,10 @@
 				</h2>
 			</div>
 
-			<!-- Device Cards Grid -->
+			<!-- Aircraft Cards Grid -->
 			<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-				{#each paginatedDevices as device (device.id || device.address)}
-					<DeviceTile {device} />
+				{#each paginatedAircraft as aircraft (aircraft.id || aircraft.address)}
+					<AircraftTile {aircraft} />
 				{/each}
 			</div>
 
@@ -579,21 +579,21 @@
 				</div>
 			{/if}
 		</section>
-	{:else if !loading && devices.length === 0 && searchQuery}
+	{:else if !loading && aircraft.length === 0 && searchQuery}
 		<div class="space-y-4 card p-12 text-center">
 			<Search class="mx-auto mb-4 h-16 w-16 text-surface-400" />
 			<div class="space-y-2">
-				<h3 class="h3">No devices found</h3>
+				<h3 class="h3">No aircraft found</h3>
 				<p class="text-surface-500-400-token">
 					Try adjusting your search criteria or search for a different device.
 				</p>
 			</div>
 		</div>
-	{:else if !loading && devices.length === 0 && searchType === 'club' && selectedClub.length > 0}
+	{:else if !loading && aircraft.length === 0 && searchType === 'club' && selectedClub.length > 0}
 		<div class="space-y-4 card p-12 text-center">
 			<Search class="mx-auto mb-4 h-16 w-16 text-surface-400" />
 			<div class="space-y-2">
-				<h3 class="h3">No devices found</h3>
+				<h3 class="h3">No aircraft found</h3>
 				<p class="text-surface-500-400-token">No aircraft found for the selected club.</p>
 			</div>
 		</div>

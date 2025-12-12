@@ -74,7 +74,7 @@ pub struct FlightAnalyticsHourlyResponse {
 
 #[derive(Debug, Serialize)]
 pub struct DeviceOutliersResponse {
-    pub data: Vec<DeviceOutlier>,
+    pub data: Vec<AircraftOutlier>,
 }
 
 #[derive(Debug, Serialize)]
@@ -178,11 +178,11 @@ pub async fn get_duration_distribution(State(state): State<AppState>) -> impl In
 
 /// GET /data/analytics/devices/outliers
 /// Get device outliers (z-score > threshold)
-pub async fn get_device_outliers(
+pub async fn get_aircraft_outliers(
     Query(params): Query<OutliersParams>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    metrics::counter!("analytics.api.device_outliers.requests").increment(1);
+    metrics::counter!("analytics.api.aircraft_outliers.requests").increment(1);
 
     let threshold = params.threshold.unwrap_or(3.0);
 
@@ -203,11 +203,11 @@ pub async fn get_device_outliers(
 
 /// GET /data/analytics/devices/top
 /// Get top devices by flight count
-pub async fn get_top_devices(
+pub async fn get_top_aircraft(
     Query(params): Query<TopDevicesParams>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    metrics::counter!("analytics.api.top_devices.requests").increment(1);
+    metrics::counter!("analytics.api.top_aircraft.requests").increment(1);
 
     let limit = params.limit.unwrap_or(10);
     let period_days = match params.period.as_deref() {

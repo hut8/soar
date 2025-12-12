@@ -7,20 +7,20 @@ use tracing::error;
 use uuid::Uuid;
 
 use crate::aircraft_registrations_repo::AircraftRegistrationsRepository;
-use crate::device_repo::DeviceRepository;
+use crate::aircraft_repo::AircraftRepository;
 use crate::faa::aircraft_model_repo::AircraftModelRepository;
 use crate::web::AppState;
 
 use super::json_error;
 use super::views::{AircraftRegistrationView, club::AircraftModelView};
 
-pub async fn get_aircraft_by_club(
+pub async fn get_aircraft_registrations_by_club(
     State(state): State<AppState>,
     Path(club_id): Path<Uuid>,
 ) -> impl IntoResponse {
     let aircraft_repo = AircraftRegistrationsRepository::new(state.pool.clone());
     let aircraft_model_repo = AircraftModelRepository::new(state.pool.clone());
-    let device_repo = DeviceRepository::new(state.pool.clone());
+    let device_repo = AircraftRepository::new(state.pool.clone());
 
     // First get all devices for this club
     let devices = match device_repo.search_by_club_id(club_id).await {
@@ -101,7 +101,7 @@ pub async fn get_device_aircraft_registration(
     State(state): State<AppState>,
 ) -> impl IntoResponse {
     let aircraft_repo = AircraftRegistrationsRepository::new(state.pool.clone());
-    let device_repo = DeviceRepository::new(state.pool.clone());
+    let device_repo = AircraftRepository::new(state.pool.clone());
 
     // First try to query aircraft_registrations table for a record with the given device_id
     match aircraft_repo
@@ -168,7 +168,7 @@ pub async fn get_device_aircraft_model(
 ) -> impl IntoResponse {
     let aircraft_repo = AircraftRegistrationsRepository::new(state.pool.clone());
     let aircraft_model_repo = AircraftModelRepository::new(state.pool.clone());
-    let device_repo = DeviceRepository::new(state.pool.clone());
+    let device_repo = AircraftRepository::new(state.pool.clone());
 
     // First try to get the aircraft registration for this device by device_id
     let aircraft_registration = match aircraft_repo

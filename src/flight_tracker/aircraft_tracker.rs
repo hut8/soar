@@ -106,7 +106,7 @@ mod tests {
             climb_fpm: None,
             turn_rate_rot: None,
             source_metadata: None,
-            device_id: uuid::Uuid::now_v7(),
+            aircraft_id: uuid::Uuid::now_v7(),
             is_active: true, // 50 knots is active
             receiver_id: uuid::Uuid::now_v7(),
             raw_message_id: uuid::Uuid::now_v7(),

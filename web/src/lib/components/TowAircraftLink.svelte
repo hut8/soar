@@ -1,14 +1,14 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { Plane, ExternalLink } from '@lucide/svelte';
-	import { DeviceRegistry } from '$lib/services/DeviceRegistry';
+	import { AircraftRegistry } from '$lib/services/AircraftRegistry';
 	import { serverCall } from '$lib/api/server';
-	import type { Device } from '$lib/types';
+	import type { Aircraft } from '$lib/types';
 
-	export let deviceId: string;
+	export let aircraftId: string;
 	export let size: 'sm' | 'md' | 'lg' = 'md';
 
-	let device: Device | null = null;
+	let aircraft: Aircraft | null = null;
 	let loading = true;
 
 	// Size classes
@@ -25,21 +25,21 @@
 	};
 
 	onMount(async () => {
-		// Try to get device from registry cache first
-		const registry = DeviceRegistry.getInstance();
-		device = registry.getDevice(deviceId);
+		// Try to get aircraft from registry cache first
+		const registry = AircraftRegistry.getInstance();
+		aircraft = registry.getAircraft(aircraftId);
 
-		if (device) {
+		if (aircraft) {
 			loading = false;
 			return;
 		}
 
 		// If not in cache, fetch from server
 		try {
-			device = await serverCall<Device>(`/devices/${deviceId}`);
+			aircraft = await serverCall<Aircraft>(`/aircraft/${aircraftId}`);
 			loading = false;
 		} catch (error) {
-			console.error(`Failed to load device ${deviceId}:`, error);
+			console.error(`Failed to load aircraft ${aircraftId}:`, error);
 			loading = false;
 		}
 	});
@@ -47,16 +47,16 @@
 
 {#if loading}
 	<span class="text-surface-500 {sizeClasses[size]}">Loading...</span>
-{:else if device}
+{:else if aircraft}
 	<a
-		href="/devices/{deviceId}"
+		href="/aircraft/{aircraftId}"
 		target="_blank"
 		rel="noopener noreferrer"
 		class="inline-flex items-center gap-1 anchor {sizeClasses[size]}"
-		title="View towplane device: {device.registration || deviceId}"
+		title="View towplane aircraft: {aircraft.registration || aircraftId}"
 	>
-		{#if device.registration}
-			<span>{device.registration}</span>
+		{#if aircraft.registration}
+			<span>{aircraft.registration}</span>
 		{:else}
 			<Plane class={iconSizes[size]} />
 		{/if}
@@ -64,11 +64,11 @@
 	</a>
 {:else}
 	<a
-		href="/devices/{deviceId}"
+		href="/aircraft/{aircraftId}"
 		target="_blank"
 		rel="noopener noreferrer"
 		class="inline-flex items-center gap-1 anchor {sizeClasses[size]}"
-		title="View towplane device"
+		title="View towplane aircraft"
 	>
 		<Plane class={iconSizes[size]} />
 		<ExternalLink class={iconSizes[size]} />

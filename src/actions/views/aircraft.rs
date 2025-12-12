@@ -34,7 +34,7 @@ pub struct AircraftRegistrationView {
     pub kit_model_name: Option<String>,
     pub other_names: Vec<String>,
     pub light_sport_type: Option<LightSportType>,
-    pub device_id: Option<Uuid>,
+    pub aircraft_id: Option<Uuid>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<AircraftModelView>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -68,7 +68,7 @@ impl From<AircraftDomain> for AircraftRegistrationView {
             kit_model_name: aircraft.kit_model_name,
             other_names: aircraft.other_names,
             light_sport_type: aircraft.light_sport_type,
-            device_id: aircraft.device_id,
+            aircraft_id: aircraft.aircraft_id,
             model: None,             // Will be set when fetching with model data
             aircraft_type_ogn: None, // Will be set when fetching with device data
         }
@@ -79,11 +79,11 @@ impl From<AircraftDomain> for AircraftRegistrationView {
 pub struct AircraftWithDeviceView {
     #[serde(flatten)]
     pub aircraft: AircraftRegistrationView,
-    pub device: Option<DeviceView>,
+    pub device: Option<AircraftView>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DeviceView {
+pub struct AircraftView {
     pub id: uuid::Uuid,
 
     /// Formatted device address with prefix (e.g., "OGN-8B570F", "FLARM-123456", "ICAO-ABCDEF")
@@ -118,17 +118,17 @@ pub struct DeviceView {
     pub fixes: Option<Vec<crate::fixes::Fix>>,
 }
 
-impl DeviceView {
-    pub fn from_device(device: crate::devices::Device) -> Self {
+impl AircraftView {
+    pub fn from_device(device: crate::aircraft::Aircraft) -> Self {
         // Format address as 6-digit hex
         let address_hex = format!("{:06X}", device.address);
 
         // Create prefix based on address type
         let prefix = match device.address_type {
-            crate::devices::AddressType::Ogn => "OGN",
-            crate::devices::AddressType::Flarm => "FLARM",
-            crate::devices::AddressType::Icao => "ICAO",
-            crate::devices::AddressType::Unknown => "UNKNOWN",
+            crate::aircraft::AddressType::Ogn => "OGN",
+            crate::aircraft::AddressType::Flarm => "FLARM",
+            crate::aircraft::AddressType::Icao => "ICAO",
+            crate::aircraft::AddressType::Unknown => "UNKNOWN",
         };
 
         // Combine prefix and address
@@ -136,17 +136,17 @@ impl DeviceView {
 
         // Address type as single character for backward compatibility
         let address_type = match device.address_type {
-            crate::devices::AddressType::Ogn => "O",
-            crate::devices::AddressType::Flarm => "F",
-            crate::devices::AddressType::Icao => "I",
-            crate::devices::AddressType::Unknown => "",
+            crate::aircraft::AddressType::Ogn => "O",
+            crate::aircraft::AddressType::Flarm => "F",
+            crate::aircraft::AddressType::Icao => "I",
+            crate::aircraft::AddressType::Unknown => "",
         }
         .to_string();
 
         Self {
             id: device
                 .id
-                .expect("Device must have an ID to create DeviceView"),
+                .expect("Aircraft must have an ID to create AircraftView"),
             device_address,
             address_type,
             address: address_hex,
@@ -174,16 +174,16 @@ impl DeviceView {
         }
     }
 
-    pub fn from_device_model(device_model: crate::devices::DeviceModel) -> Self {
+    pub fn from_device_model(device_model: crate::aircraft::AircraftModel) -> Self {
         // Format address as 6-digit hex
         let address_hex = format!("{:06X}", device_model.address as u32);
 
         // Create prefix based on address type
         let prefix = match device_model.address_type {
-            crate::devices::AddressType::Ogn => "OGN",
-            crate::devices::AddressType::Flarm => "FLARM",
-            crate::devices::AddressType::Icao => "ICAO",
-            crate::devices::AddressType::Unknown => "UNKNOWN",
+            crate::aircraft::AddressType::Ogn => "OGN",
+            crate::aircraft::AddressType::Flarm => "FLARM",
+            crate::aircraft::AddressType::Icao => "ICAO",
+            crate::aircraft::AddressType::Unknown => "UNKNOWN",
         };
 
         // Combine prefix and address
@@ -191,10 +191,10 @@ impl DeviceView {
 
         // Address type as single character for backward compatibility
         let address_type = match device_model.address_type {
-            crate::devices::AddressType::Ogn => "O",
-            crate::devices::AddressType::Flarm => "F",
-            crate::devices::AddressType::Icao => "I",
-            crate::devices::AddressType::Unknown => "",
+            crate::aircraft::AddressType::Ogn => "O",
+            crate::aircraft::AddressType::Flarm => "F",
+            crate::aircraft::AddressType::Icao => "I",
+            crate::aircraft::AddressType::Unknown => "",
         }
         .to_string();
 
@@ -230,14 +230,14 @@ impl DeviceView {
     }
 }
 
-impl From<crate::devices::Device> for DeviceView {
-    fn from(device: crate::devices::Device) -> Self {
+impl From<crate::aircraft::Aircraft> for AircraftView {
+    fn from(device: crate::aircraft::Aircraft) -> Self {
         Self::from_device(device)
     }
 }
 
-impl From<crate::devices::DeviceModel> for DeviceView {
-    fn from(device_model: crate::devices::DeviceModel) -> Self {
+impl From<crate::aircraft::AircraftModel> for AircraftView {
+    fn from(device_model: crate::aircraft::AircraftModel) -> Self {
         Self::from_device_model(device_model)
     }
 }
@@ -247,11 +247,11 @@ impl From<crate::devices::DeviceModel> for DeviceView {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Aircraft {
     #[serde(flatten)]
-    pub device: DeviceView,
+    pub device: AircraftView,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub aircraft_registration: Option<crate::aircraft_registrations::AircraftRegistrationModel>,
     /// Detailed aircraft model information from FAA database
-    /// Renamed from aircraft_model to aircraft_model_details to avoid conflict with DeviceView.aircraft_model string
+    /// Renamed from aircraft_model to aircraft_model_details to avoid conflict with AircraftView.aircraft_model string
     #[serde(skip_serializing_if = "Option::is_none")]
     pub aircraft_model_details: Option<crate::faa::aircraft_models::AircraftModel>,
 }

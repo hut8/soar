@@ -5,8 +5,10 @@
 
 pub mod actions;
 pub mod agl_batch_writer;
+pub mod aircraft;
 pub mod aircraft_registrations;
 pub mod aircraft_registrations_repo;
+pub mod aircraft_repo;
 pub mod aircraft_types;
 pub mod airports;
 pub mod airports_repo;
@@ -26,8 +28,6 @@ pub mod beast_jetstream_consumer;
 pub mod beast_jetstream_publisher;
 pub mod clubs;
 pub mod clubs_repo;
-pub mod device_repo;
-pub mod devices;
 pub mod elevation;
 pub mod email;
 pub mod email_reporter;

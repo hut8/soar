@@ -4,10 +4,10 @@
 	import { browser } from '$app/environment';
 	import { serverCall } from '$lib/api/server';
 	import { watchlist } from '$lib/stores/watchlist';
-	import { DeviceRegistry } from '$lib/services/DeviceRegistry';
+	import { AircraftRegistry } from '$lib/services/AircraftRegistry';
 	import ClubSelector from '$lib/components/ClubSelector.svelte';
 	import { getAddressTypeLabel } from '$lib/formatters';
-	import type { Device } from '$lib/types';
+	import type { Aircraft } from '$lib/types';
 	let { showModal = $bindable() } = $props();
 
 	// State
@@ -22,7 +22,7 @@
 
 	// Club tab state
 	let selectedClub = $state<string[]>([]);
-	let clubDevices = $state<Device[]>([]);
+	let clubAircraft = $state<Aircraft[]>([]);
 	let clubSearchInProgress = $state(false);
 	let clubErrorMessage = $state('');
 
@@ -46,26 +46,26 @@
 		// Clear any previous error messages
 		clearError();
 
-		let device: Device | null = null;
+		let aircraft: Aircraft | null = null;
 
 		if (newWatchlistEntry.type === 'registration') {
 			const registration = newWatchlistEntry.registration.trim().toUpperCase();
 			if (!registration) return;
 
-			// Search for device by registration
+			// Search for aircraft by registration
 			searchInProgress = true;
 			try {
-				const response = await serverCall<{ devices: Device[] }>(
-					`/devices?registration=${encodeURIComponent(registration)}`
+				const response = await serverCall<{ aircraft: Aircraft[] }>(
+					`/aircraft?registration=${encodeURIComponent(registration)}`
 				);
-				if (response.devices && response.devices.length > 0) {
-					device = response.devices[0];
+				if (response.aircraft && response.aircraft.length > 0) {
+					aircraft = response.aircraft[0];
 				} else {
 					errorMessage = `Aircraft with registration "${registration}" not found`;
 				}
 			} catch (error) {
-				console.warn(`Failed to fetch device for registration ${registration}:`, error);
-				errorMessage = 'Failed to search for device. Please try again.';
+				console.warn(`Failed to fetch aircraft for registration ${registration}:`, error);
+				errorMessage = 'Failed to search for aircraft. Please try again.';
 			} finally {
 				searchInProgress = false;
 			}
@@ -74,37 +74,37 @@
 			const address = newWatchlistEntry.deviceAddress.trim().toUpperCase();
 			if (!addressType || !address) return;
 
-			// Search for device by address and type
+			// Search for aircraft by address and type
 			searchInProgress = true;
 			try {
-				const response = await serverCall<{ devices: Device[] }>(
-					`/devices?address=${encodeURIComponent(address)}&address-type=${encodeURIComponent(addressType)}`
+				const response = await serverCall<{ aircraft: Aircraft[] }>(
+					`/aircraft?address=${encodeURIComponent(address)}&address-type=${encodeURIComponent(addressType)}`
 				);
-				if (response.devices && response.devices.length > 0) {
-					device = response.devices[0];
+				if (response.aircraft && response.aircraft.length > 0) {
+					aircraft = response.aircraft[0];
 				} else {
-					errorMessage = `Device with address "${address}" (${addressType}) not found`;
+					errorMessage = `Aircraft with address "${address}" (${addressType}) not found`;
 				}
 			} catch (error) {
-				console.warn(`Failed to fetch device for address ${address} (${addressType}):`, error);
-				errorMessage = 'Failed to search for device. Please try again.';
+				console.warn(`Failed to fetch aircraft for address ${address} (${addressType}):`, error);
+				errorMessage = 'Failed to search for aircraft. Please try again.';
 			} finally {
 				searchInProgress = false;
 			}
 		}
 
-		// Only add to watchlist if device was found
-		if (device && device.id) {
+		// Only add to watchlist if aircraft was found
+		if (aircraft && aircraft.id) {
 			// Check for duplicates
-			const existingEntry = $watchlist.entries.find((entry) => entry.deviceId === device.id);
+			const existingEntry = $watchlist.entries.find((entry) => entry.aircraftId === aircraft.id);
 			if (existingEntry) {
 				errorMessage = 'This aircraft is already in your watchlist';
 				return;
 			}
 
-			// Add the device to the registry and watchlist
-			DeviceRegistry.getInstance().setDevice(device);
-			watchlist.add(device.id);
+			// Add the aircraft to the registry and watchlist
+			AircraftRegistry.getInstance().setAircraft(aircraft);
+			watchlist.add(aircraft.id);
 			// Clear the search inputs on success
 			newWatchlistEntry = {
 				type: 'registration',
@@ -125,8 +125,8 @@
 		watchlist.toggleActive(id);
 	}
 
-	// Load devices for selected club
-	async function loadClubDevices() {
+	// Load aircraft for selected club
+	async function loadClubAircraft() {
 		if (!selectedClub.length || clubSearchInProgress) return;
 
 		const clubId = selectedClub[0];
@@ -136,47 +136,47 @@
 		clubErrorMessage = '';
 
 		try {
-			const response = await serverCall<{ devices: Device[] }>(`/clubs/${clubId}/devices`);
+			const response = await serverCall<{ aircraft: Aircraft[] }>(`/clubs/${clubId}/aircraft`);
 			// Only update if we're still looking at the same club
 			if (selectedClub.length > 0 && selectedClub[0] === clubId) {
-				clubDevices = response.devices || [];
+				clubAircraft = response.aircraft || [];
 			}
 		} catch (error) {
-			console.warn(`Failed to fetch devices for club:`, error);
+			console.warn(`Failed to fetch aircraft for club:`, error);
 			// Only show error if we're still looking at the same club
 			if (selectedClub.length > 0 && selectedClub[0] === clubId) {
-				clubErrorMessage = 'Failed to load club devices. Please try again.';
-				clubDevices = [];
+				clubErrorMessage = 'Failed to load club aircraft. Please try again.';
+				clubAircraft = [];
 			}
 		} finally {
 			clubSearchInProgress = false;
 		}
 	}
 
-	// Add individual device to watchlist
-	function addDeviceToWatchlist(device: Device) {
+	// Add individual aircraft to watchlist
+	function addAircraftToWatchlist(aircraft: Aircraft) {
 		// Check for duplicates
-		const existingEntry = $watchlist.entries.find((entry) => entry.deviceId === device.id);
+		const existingEntry = $watchlist.entries.find((entry) => entry.aircraftId === aircraft.id);
 		if (existingEntry) {
 			return; // Already in watchlist
 		}
 
-		DeviceRegistry.getInstance().setDevice(device);
-		watchlist.add(device.id);
+		AircraftRegistry.getInstance().setAircraft(aircraft);
+		watchlist.add(aircraft.id);
 	}
 
-	// Add all club devices to watchlist
-	function addAllClubDevices() {
-		if (!clubDevices.length) return;
+	// Add all club aircraft to watchlist
+	function addAllClubAircraft() {
+		if (!clubAircraft.length) return;
 
-		clubDevices.forEach((device) => {
-			addDeviceToWatchlist(device);
+		clubAircraft.forEach((aircraft) => {
+			addAircraftToWatchlist(aircraft);
 		});
 	}
 
-	// Check if device is already in watchlist
-	function isDeviceInWatchlist(deviceId: string): boolean {
-		return $watchlist.entries.some((entry) => entry.deviceId === deviceId);
+	// Check if aircraft is already in watchlist
+	function isAircraftInWatchlist(aircraftId: string): boolean {
+		return $watchlist.entries.some((entry) => entry.aircraftId === aircraftId);
 	}
 
 	// Handle club selection change
@@ -185,9 +185,9 @@
 		clearClubError();
 
 		if (selectedClub.length > 0) {
-			loadClubDevices();
+			loadClubAircraft();
 		} else {
-			clubDevices = [];
+			clubAircraft = [];
 		}
 	}
 
@@ -198,15 +198,15 @@
 		}
 	});
 
-	// Get devices from registry for watchlist entries
-	const deviceRegistry = $derived(DeviceRegistry.getInstance());
-	const entriesWithDevices = $derived(
+	// Get aircraft from registry for watchlist entries
+	const aircraftRegistry = $derived(AircraftRegistry.getInstance());
+	const entriesWithAircraft = $derived(
 		$watchlist.entries.map((entry) => {
-			const device = deviceRegistry.getDevice(entry.deviceId);
+			const aircraft = aircraftRegistry.getAircraft(entry.aircraftId);
 			return {
 				...entry,
-				device: device || {
-					id: entry.deviceId,
+				aircraft: aircraft || {
+					id: entry.aircraftId,
 					registration: 'Unknown',
 					aircraft_model: 'Unknown',
 					address_type: 'Unknown',
@@ -223,7 +223,7 @@
 		})
 	);
 
-	// Fetch club name for a device
+	// Fetch club name for an aircraft
 	async function fetchClubName(clubId: string): Promise<void> {
 		if (clubNames.has(clubId)) {
 			return; // Already fetched
@@ -240,11 +240,11 @@
 
 	// Effect to fetch club names when entries change
 	$effect(() => {
-		// Get unique club IDs from all devices
+		// Get unique club IDs from all aircraft
 		const clubIds: string[] = [];
-		for (const entry of entriesWithDevices) {
-			if (entry.device.club_id && !clubIds.includes(entry.device.club_id)) {
-				clubIds.push(entry.device.club_id);
+		for (const entry of entriesWithAircraft) {
+			if (entry.aircraft.club_id && !clubIds.includes(entry.aircraft.club_id)) {
+				clubIds.push(entry.aircraft.club_id);
 			}
 		}
 
@@ -392,15 +392,15 @@
 										onValueChange={handleClubChange}
 									/>
 
-									{#if clubDevices.length > 0}
+									{#if clubAircraft.length > 0}
 										<div class="space-y-2">
 											<div class="flex items-center justify-between">
 												<span class="text-sm font-medium text-surface-700 dark:text-surface-200">
-													Club Aircraft ({clubDevices.length})
+													Club Aircraft ({clubAircraft.length})
 												</span>
 												<button
 													class="btn preset-filled-primary-500 btn-sm"
-													onclick={addAllClubDevices}
+													onclick={addAllClubAircraft}
 													disabled={clubSearchInProgress}
 												>
 													<Plus size={16} />
@@ -412,21 +412,21 @@
 												class="max-h-48 overflow-y-auto rounded border border-surface-300 bg-surface-100 p-2 dark:border-surface-600 dark:bg-surface-800"
 											>
 												<div class="grid gap-2">
-													{#each clubDevices as device (device.id)}
+													{#each clubAircraft as aircraft (aircraft.id)}
 														<div
 															class="flex items-center justify-between rounded bg-surface-50 p-2 shadow-sm dark:bg-surface-700"
 														>
 															<div class="min-w-0 flex-1">
 																<div class="truncate text-sm font-medium">
-																	{device.registration || 'Unknown Registration'}
+																	{aircraft.registration || 'Unknown Registration'}
 																</div>
 																<div
 																	class="truncate text-xs text-surface-600 dark:text-surface-400"
 																>
-																	{device.aircraft_model || 'Unknown Model'}
+																	{aircraft.aircraft_model || 'Unknown Model'}
 																</div>
 															</div>
-															{#if isDeviceInWatchlist(device.id)}
+															{#if isAircraftInWatchlist(aircraft.id)}
 																<span
 																	class="rounded bg-green-100 px-2 py-1 text-xs font-medium text-green-800 dark:bg-green-900 dark:text-green-100"
 																>
@@ -435,7 +435,7 @@
 															{:else}
 																<button
 																	class="btn preset-filled-primary-500 btn-sm"
-																	onclick={() => addDeviceToWatchlist(device)}
+																	onclick={() => addAircraftToWatchlist(aircraft)}
 																>
 																	<Plus size={14} />
 																	Watch
@@ -576,17 +576,17 @@
 												onValueChange={handleClubChange}
 											/>
 
-											{#if clubDevices.length > 0}
+											{#if clubAircraft.length > 0}
 												<div class="space-y-2">
 													<div class="flex items-center justify-between">
 														<span
 															class="text-sm font-medium text-surface-700 dark:text-surface-200"
 														>
-															Club Aircraft ({clubDevices.length})
+															Club Aircraft ({clubAircraft.length})
 														</span>
 														<button
 															class="btn preset-filled-primary-500 btn-sm"
-															onclick={addAllClubDevices}
+															onclick={addAllClubAircraft}
 															disabled={clubSearchInProgress}
 														>
 															<Plus size={16} />
@@ -598,21 +598,21 @@
 														class="max-h-48 overflow-y-auto rounded border border-surface-300 bg-surface-100 p-2 dark:border-surface-600 dark:bg-surface-800"
 													>
 														<div class="grid gap-2">
-															{#each clubDevices as device (device.id)}
+															{#each clubAircraft as aircraft (aircraft.id)}
 																<div
 																	class="flex items-center justify-between rounded bg-surface-50 p-2 shadow-sm dark:bg-surface-700"
 																>
 																	<div class="min-w-0 flex-1">
 																		<div class="truncate text-sm font-medium">
-																			{device.registration || 'Unknown Registration'}
+																			{aircraft.registration || 'Unknown Registration'}
 																		</div>
 																		<div
 																			class="truncate text-xs text-surface-600 dark:text-surface-400"
 																		>
-																			{device.aircraft_model || 'Unknown Model'}
+																			{aircraft.aircraft_model || 'Unknown Model'}
 																		</div>
 																	</div>
-																	{#if isDeviceInWatchlist(device.id)}
+																	{#if isAircraftInWatchlist(aircraft.id)}
 																		<span
 																			class="rounded bg-green-100 px-2 py-1 text-xs font-medium text-green-800 dark:bg-green-900 dark:text-green-100"
 																		>
@@ -621,7 +621,7 @@
 																	{:else}
 																		<button
 																			class="btn preset-filled-primary-500 btn-sm"
-																			onclick={() => addDeviceToWatchlist(device)}
+																			onclick={() => addAircraftToWatchlist(aircraft)}
 																		>
 																			<Plus size={14} />
 																			Watch
@@ -697,12 +697,12 @@
 					<h3
 						class="mb-3 flex flex-shrink-0 flex-row items-center align-middle text-lg font-semibold"
 					>
-						<Eye size={16} /> Watched Aircraft ({entriesWithDevices.length})
+						<Eye size={16} /> Watched Aircraft ({entriesWithAircraft.length})
 					</h3>
-					{#if entriesWithDevices.length > 0}
+					{#if entriesWithAircraft.length > 0}
 						<div class="flex-1 overflow-y-auto">
 							<div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-								{#each entriesWithDevices as entry (entry.deviceId)}
+								{#each entriesWithAircraft as entry (entry.aircraftId)}
 									<div
 										class="rounded border border-surface-300 p-3 dark:border-surface-600 {entry.active
 											? 'bg-surface-50 dark:bg-surface-800'
@@ -714,33 +714,33 @@
 													<div class="space-y-1">
 														<div class="flex items-center gap-2">
 															<span class="truncate text-lg font-medium"
-																>{entry.device.registration || 'Unknown Registration'}</span
+																>{entry.aircraft.registration || 'Unknown Registration'}</span
 															>
-															{#if entry.device.competition_number}
+															{#if entry.aircraft.competition_number}
 																<span
 																	class="flex-shrink-0 rounded bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800 dark:bg-blue-900 dark:text-blue-100"
-																	>{entry.device.competition_number}</span
+																	>{entry.aircraft.competition_number}</span
 																>
 															{/if}
 														</div>
 														<div class="truncate text-sm text-surface-700 dark:text-surface-300">
-															{entry.device.aircraft_model || 'Unknown Aircraft Model'}
+															{entry.aircraft.aircraft_model || 'Unknown Aircraft Model'}
 														</div>
-														{#if entry.device.club_id}
+														{#if entry.aircraft.club_id}
 															<div class="truncate text-xs text-surface-600 dark:text-surface-400">
-																Club: {clubNames.get(entry.device.club_id) || 'Loading...'}
+																Club: {clubNames.get(entry.aircraft.club_id) || 'Loading...'}
 															</div>
 														{/if}
 														<div class="text-xs text-surface-600 dark:text-surface-400">
 															<div class="truncate">
-																{getAddressTypeLabel(entry.device.address_type)}: {entry.device
+																{getAddressTypeLabel(entry.aircraft.address_type)}: {entry.aircraft
 																	.address}
 															</div>
 															<div class="mt-1 flex flex-wrap gap-1">
-																{#if entry.device.tracked}
+																{#if entry.aircraft.tracked}
 																	<span class="text-green-600">• Tracked</span>
 																{/if}
-																{#if entry.device.identified}
+																{#if entry.aircraft.identified}
 																	<span class="text-blue-600">• Identified</span>
 																{/if}
 															</div>

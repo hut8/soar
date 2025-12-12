@@ -12,7 +12,7 @@ use crate::ogn_aprs_aircraft::{
 use crate::web::PgPool;
 
 // Import the main AddressType from devices module
-use crate::devices::AddressType;
+use crate::aircraft::AddressType;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, DbEnum)]
 #[db_enum(existing_type_path = "crate::schema::sql_types::AircraftTypeOgn")]
@@ -120,7 +120,7 @@ struct FixDslRow {
     turn_rate_rot: Option<f32>,
     source_metadata: Option<serde_json::Value>,
     flight_id: Option<Uuid>,
-    device_id: Uuid,
+    aircraft_id: Uuid,
     received_at: DateTime<Utc>,
     is_active: bool,
     altitude_agl_feet: Option<i32>,
@@ -151,7 +151,7 @@ impl From<FixDslRow> for Fix {
             climb_fpm: row.climb_fpm,
             turn_rate_rot: row.turn_rate_rot,
             source_metadata: row.source_metadata,
-            device_id: row.device_id, // Now directly a Uuid
+            aircraft_id: row.aircraft_id, // Now directly a Uuid
             is_active: row.is_active,
             receiver_id: row.receiver_id,
             raw_message_id: row.raw_message_id,
@@ -178,7 +178,7 @@ impl FixesRepository {
         let new_fix = fix.clone();
         let pool = self.pool.clone();
 
-        // Note: device_id, receiver_id, and raw_message_id are already populated in the Fix
+        // Note: aircraft_id, receiver_id, and raw_message_id are already populated in the Fix
         // by the generic processor context before Fix creation
 
         tokio::task::spawn_blocking(move || {
@@ -191,8 +191,8 @@ impl FixesRepository {
                 Ok(_) => {
                     metrics::counter!("aprs.fixes.inserted").increment(1);
                     trace!(
-                        "Inserted fix | Device: {:?} | {:.6},{:.6} @ {}ft | https://maps.google.com/maps?q={:.6},{:.6}",
-                        new_fix.device_id,
+                        "Inserted fix | Aircraft: {:?} | {:.6},{:.6} @ {}ft | https://maps.google.com/maps?q={:.6},{:.6}",
+                        new_fix.aircraft_id,
                         new_fix.latitude,
                         new_fix.longitude,
                         new_fix.altitude_msl_feet.map_or("Unknown".to_string(), |a| a.to_string()),
@@ -208,7 +208,7 @@ impl FixesRepository {
                     // Duplicate fix on redelivery - this is expected after crashes
                     debug!(
                         "Duplicate fix detected for device {} at {}",
-                        new_fix.device_id, new_fix.timestamp
+                        new_fix.aircraft_id, new_fix.timestamp
                     );
                     metrics::counter!("aprs.fixes.duplicate_on_redelivery").increment(1);
                     // Not an error - just skip the duplicate
@@ -302,12 +302,12 @@ impl FixesRepository {
     /// Get fixes for a specific aircraft ID within a time range (original method)
     pub async fn get_fixes_for_aircraft_with_time_range(
         &self,
-        device_id: &uuid::Uuid,
+        aircraft_id: &uuid::Uuid,
         start_time: DateTime<Utc>,
         end_time: DateTime<Utc>,
         limit: Option<i64>,
     ) -> Result<Vec<crate::fixes::FixWithRawPacket>> {
-        let device_id_param = *device_id;
+        let device_id_param = *aircraft_id;
 
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
@@ -320,7 +320,7 @@ impl FixesRepository {
                         .eq(raw_messages::id)
                         .and(fixes::received_at.eq(raw_messages::received_at))),
                 )
-                .filter(fixes::device_id.eq(device_id_param))
+                .filter(fixes::aircraft_id.eq(device_id_param))
                 .filter(fixes::received_at.between(start_time, end_time))
                 .order(fixes::received_at.desc())
                 .into_boxed();
@@ -373,7 +373,7 @@ impl FixesRepository {
             let mut conn = pool.get()?;
 
             let results = fixes
-                .filter(device_id.eq(device_uuid))
+                .filter(aircraft_id.eq(device_uuid))
                 .filter(received_at.ge(cutoff_time))
                 .order(received_at.desc())
                 .limit(limit)
@@ -421,7 +421,7 @@ impl FixesRepository {
         let result = tokio::task::spawn_blocking(move || {
             use crate::schema::fixes::dsl::*;
             let mut conn = pool.get()?;
-            let mut query = fixes.filter(device_id.eq(device_uuid)).into_boxed();
+            let mut query = fixes.filter(aircraft_id.eq(device_uuid)).into_boxed();
             if let Some(after_timestamp) = after {
                 query = query.filter(received_at.gt(after_timestamp));
             }
@@ -448,7 +448,7 @@ impl FixesRepository {
             use crate::schema::fixes::dsl::*;
             let mut conn = pool.get()?;
             let fix_result = fixes
-                .filter(device_id.eq(device_uuid))
+                .filter(aircraft_id.eq(device_uuid))
                 .filter(received_at.gt(after))
                 .order(received_at.desc())
                 .limit(1)
@@ -477,7 +477,7 @@ impl FixesRepository {
 
             // Build base query for count
             let mut count_query = fixes::table
-                .filter(fixes::device_id.eq(device_uuid))
+                .filter(fixes::aircraft_id.eq(device_uuid))
                 .into_boxed();
             if let Some(after_timestamp) = after {
                 count_query = count_query.filter(fixes::received_at.gt(after_timestamp));
@@ -494,7 +494,7 @@ impl FixesRepository {
                         .eq(raw_messages::id)
                         .and(fixes::received_at.eq(raw_messages::received_at))),
                 )
-                .filter(fixes::device_id.eq(device_uuid))
+                .filter(fixes::aircraft_id.eq(device_uuid))
                 .into_boxed();
             if let Some(after_timestamp) = after {
                 query = query.filter(fixes::received_at.gt(after_timestamp));
@@ -619,7 +619,7 @@ impl FixesRepository {
         se_lng: f64,
         cutoff_time: DateTime<Utc>,
         fixes_per_device: Option<i64>,
-    ) -> Result<Vec<(crate::devices::DeviceModel, Vec<Fix>)>> {
+    ) -> Result<Vec<(crate::aircraft::AircraftModel, Vec<Fix>)>> {
         info!("Starting bounding box query");
         let pool = self.pool.clone();
         let fixes_per_device = fixes_per_device.unwrap_or(5);
@@ -660,7 +660,7 @@ impl FixesRepository {
                 WHERE EXISTS (
                     SELECT 1
                     FROM fixes f, params p, parts
-                    WHERE f.device_id = d.id
+                    WHERE f.aircraft_id = d.id
                       AND f.received_at >= p.since_ts
                       AND (
                           f.location_geom && parts.boxes[1]
@@ -671,11 +671,11 @@ impl FixesRepository {
             "#;
 
             #[derive(QueryableByName)]
-            struct DeviceRow {
+            struct AircraftRow {
                 #[diesel(sql_type = diesel::sql_types::Int4)]
                 address: i32,
                 #[diesel(sql_type = crate::schema::sql_types::AddressType)]
-                address_type: crate::devices::AddressType,
+                address_type: crate::aircraft::AddressType,
                 #[diesel(sql_type = diesel::sql_types::Text)]
                 aircraft_model: String,
                 #[diesel(sql_type = diesel::sql_types::Text)]
@@ -716,7 +716,7 @@ impl FixesRepository {
                 country_code: Option<String>,
             }
 
-            let device_rows: Vec<DeviceRow> = diesel::sql_query(devices_sql)
+            let device_rows: Vec<AircraftRow> = diesel::sql_query(devices_sql)
                 .bind::<diesel::sql_types::Double, _>(nw_lng)  // min_lon
                 .bind::<diesel::sql_types::Double, _>(se_lat)  // min_lat
                 .bind::<diesel::sql_types::Double, _>(se_lng)  // max_lon
@@ -733,10 +733,10 @@ impl FixesRepository {
             // Extract device IDs for the second query
             let device_ids: Vec<uuid::Uuid> = device_rows.iter().map(|row| row.id).collect();
 
-            // Convert rows to DeviceModel
-            let device_models: Vec<crate::devices::DeviceModel> = device_rows
+            // Convert rows to AircraftModel
+            let device_models: Vec<crate::aircraft::AircraftModel> = device_rows
                 .into_iter()
-                .map(|row| crate::devices::DeviceModel {
+                .map(|row| crate::aircraft::AircraftModel {
                     address: row.address,
                     address_type: row.address_type,
                     aircraft_model: row.aircraft_model,
@@ -763,21 +763,21 @@ impl FixesRepository {
 
             info!("Executing second query for fixes with {} device IDs", device_ids.len());
 
-            // Second query: Get recent fixes for the devices using the device_id index
+            // Second query: Get recent fixes for the devices using the aircraft_id index
             // This is much faster than repeating the spatial query
             // Time-based pruning filter reduces rows before windowing for better performance
             let fixes_sql = r#"
                 WITH ranked AS (
                     SELECT f.*,
-                           ROW_NUMBER() OVER (PARTITION BY f.device_id ORDER BY f.received_at DESC) AS rn
+                           ROW_NUMBER() OVER (PARTITION BY f.aircraft_id ORDER BY f.received_at DESC) AS rn
                     FROM fixes f
-                    WHERE f.device_id = ANY($1)
+                    WHERE f.aircraft_id = ANY($1)
                       AND f.received_at >= $3
                 )
                 SELECT *
                 FROM ranked
                 WHERE rn <= $2
-                ORDER BY device_id, received_at DESC
+                ORDER BY aircraft_id, received_at DESC
             "#;
 
             // QueryableByName version of FixDslRow for raw SQL query
@@ -817,7 +817,7 @@ impl FixesRepository {
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
                 flight_id: Option<uuid::Uuid>,
                 #[diesel(sql_type = diesel::sql_types::Uuid)]
-                device_id: uuid::Uuid,
+                aircraft_id: uuid::Uuid,
                 #[diesel(sql_type = diesel::sql_types::Timestamptz)]
                 received_at: DateTime<Utc>,
                 #[diesel(sql_type = diesel::sql_types::Bool)]
@@ -842,11 +842,11 @@ impl FixesRepository {
 
             info!("Second query returned {} fix rows", fix_rows.len());
 
-            // Group fixes by device_id
+            // Group fixes by aircraft_id
             let mut fixes_by_device: std::collections::HashMap<uuid::Uuid, Vec<Fix>> =
                 std::collections::HashMap::new();
             for fix_row in fix_rows {
-                let device_id = fix_row.device_id;
+                let aircraft_id = fix_row.aircraft_id;
                 // Convert FixRow to Fix
                 let fix = Fix {
                     id: fix_row.id,
@@ -867,7 +867,7 @@ impl FixesRepository {
                     climb_fpm: fix_row.climb_fpm,
                     turn_rate_rot: fix_row.turn_rate_rot,
                     source_metadata: fix_row.source_metadata,
-                    device_id: fix_row.device_id,
+                    aircraft_id: fix_row.aircraft_id,
                     is_active: fix_row.is_active,
                     receiver_id: fix_row.receiver_id,
                     raw_message_id: fix_row.raw_message_id,
@@ -875,13 +875,13 @@ impl FixesRepository {
                     time_gap_seconds: fix_row.time_gap_seconds,
                 };
                 fixes_by_device
-                    .entry(device_id)
+                    .entry(aircraft_id)
                     .or_default()
                     .push(fix);
             }
 
             // Combine devices with their fixes
-            let results: Vec<(crate::devices::DeviceModel, Vec<Fix>)> = device_models
+            let results: Vec<(crate::aircraft::AircraftModel, Vec<Fix>)> = device_models
                 .into_iter()
                 .map(|device| {
                     let fixes = fixes_by_device.remove(&device.id).unwrap_or_default();
@@ -889,7 +889,7 @@ impl FixesRepository {
                 })
                 .collect();
 
-            Ok::<Vec<(crate::devices::DeviceModel, Vec<Fix>)>, anyhow::Error>(results)
+            Ok::<Vec<(crate::aircraft::AircraftModel, Vec<Fix>)>, anyhow::Error>(results)
         })
         .await??;
 
@@ -900,13 +900,13 @@ impl FixesRepository {
     /// This is used by flight detection processor to link fixes to flights after they're created
     pub async fn update_flight_id_by_device_and_time(
         &self,
-        device_id: Uuid,
+        aircraft_id: Uuid,
         flight_id: Uuid,
         start_time: DateTime<Utc>,
         end_time: Option<DateTime<Utc>>,
     ) -> Result<usize, anyhow::Error> {
         let pool = self.pool.clone();
-        let device_id_param = device_id;
+        let device_id_param = aircraft_id;
         let flight_id_param = flight_id;
 
         let result = tokio::task::spawn_blocking(move || {
@@ -915,7 +915,7 @@ impl FixesRepository {
 
             let updated_count = if let Some(end_time) = end_time {
                 diesel::update(fixes)
-                    .filter(device_id.eq(device_id_param))
+                    .filter(aircraft_id.eq(device_id_param))
                     .filter(timestamp.ge(start_time))
                     .filter(timestamp.le(end_time))
                     .filter(flight_id.is_null())
@@ -923,7 +923,7 @@ impl FixesRepository {
                     .execute(&mut conn)?
             } else {
                 diesel::update(fixes)
-                    .filter(device_id.eq(device_id_param))
+                    .filter(aircraft_id.eq(device_id_param))
                     .filter(timestamp.ge(start_time))
                     .filter(flight_id.is_null())
                     .set(flight_id.eq(flight_id_param))
@@ -1041,7 +1041,7 @@ impl FixesRepository {
     pub async fn get_fix_counts_by_device_for_receiver(
         &self,
         receiver_uuid: Uuid,
-    ) -> Result<Vec<crate::actions::receivers::DeviceFixCount>> {
+    ) -> Result<Vec<crate::actions::receivers::AircraftFixCount>> {
         let pool = self.pool.clone();
 
         let result = tokio::task::spawn_blocking(move || {
@@ -1052,27 +1052,27 @@ impl FixesRepository {
             // Only get fixes from the last 24 hours
             let cutoff_time = chrono::Utc::now() - chrono::Duration::hours(24);
 
-            // Group by device_id and count
+            // Group by aircraft_id and count
             let counts = fixes
                 .filter(receiver_id.eq(receiver_uuid))
                 .filter(received_at.gt(cutoff_time))
-                .group_by(device_id)
-                .select((device_id, count_star()))
+                .group_by(aircraft_id)
+                .select((aircraft_id, count_star()))
                 .order_by(count_star().desc())
                 .load::<(uuid::Uuid, i64)>(&mut conn)?;
 
-            // Convert to DeviceFixCount structs
-            let result: Vec<crate::actions::receivers::DeviceFixCount> = counts
+            // Convert to AircraftFixCount structs
+            let result: Vec<crate::actions::receivers::AircraftFixCount> = counts
                 .into_iter()
                 .map(
-                    |(dev_id, count)| crate::actions::receivers::DeviceFixCount {
-                        device_id: dev_id,
+                    |(dev_id, count)| crate::actions::receivers::AircraftFixCount {
+                        aircraft_id: dev_id,
                         count,
                     },
                 )
                 .collect();
 
-            Ok::<Vec<crate::actions::receivers::DeviceFixCount>, anyhow::Error>(result)
+            Ok::<Vec<crate::actions::receivers::AircraftFixCount>, anyhow::Error>(result)
         })
         .await??;
 

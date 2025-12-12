@@ -1,5 +1,5 @@
 use crate::Fix;
-use crate::devices::Device;
+use crate::aircraft::Aircraft;
 use crate::flights::Flight;
 use crate::flights_repo::FlightsRepository;
 use anyhow::Result;
@@ -22,19 +22,19 @@ pub(crate) async fn create_flight(
     skip_airport_runway_lookup: bool,
 ) -> Result<Uuid> {
     // Fetch device first as we need it for Flight creation
-    let device = match ctx.device_repo.get_device_by_uuid(fix.device_id).await {
+    let device = match ctx.device_repo.get_device_by_uuid(fix.aircraft_id).await {
         Ok(Some(device)) => device,
         Ok(None) => {
             warn!(
-                "Device {} not found when creating flight {}",
-                fix.device_id, flight_id
+                "Aircraft {} not found when creating flight {}",
+                fix.aircraft_id, flight_id
             );
-            return Err(anyhow::anyhow!("Device not found"));
+            return Err(anyhow::anyhow!("Aircraft not found"));
         }
         Err(e) => {
             error!(
                 "Error fetching device {} for flight {}: {}",
-                fix.device_id, flight_id, e
+                fix.aircraft_id, flight_id, e
             );
             return Err(anyhow::anyhow!("Failed to fetch device: {}", e));
         }
@@ -88,7 +88,7 @@ pub(crate) async fn create_flight(
 
     debug!(
         "Created flight {} for device {} (takeoff at {:.6}, {:.6})",
-        flight_id, fix.device_id, fix.latitude, fix.longitude
+        flight_id, fix.aircraft_id, fix.latitude, fix.longitude
     );
 
     Ok(flight_id)
@@ -101,11 +101,11 @@ pub(crate) async fn timeout_flight(
     flights_repo: &FlightsRepository,
     active_flights: &ActiveFlightsMap,
     flight_id: Uuid,
-    device_id: Uuid,
+    aircraft_id: Uuid,
 ) -> Result<()> {
     debug!(
         "Timing out flight {} for device {} (no beacons for 1+ hour)",
-        flight_id, device_id
+        flight_id, aircraft_id
     );
 
     // Fetch the flight to get the last_fix_at timestamp
@@ -115,7 +115,7 @@ pub(crate) async fn timeout_flight(
             error!("Flight {} not found when timing out", flight_id);
             // Remove from active flights even if flight doesn't exist
             let mut flights = active_flights.write().await;
-            flights.remove(&device_id);
+            flights.remove(&aircraft_id);
             return Ok(());
         }
     };
@@ -133,7 +133,7 @@ pub(crate) async fn timeout_flight(
 
             // Remove from active flights
             let mut flights = active_flights.write().await;
-            flights.remove(&device_id);
+            flights.remove(&aircraft_id);
 
             metrics::counter!("flight_tracker.flight_ended.timed_out").increment(1);
 
@@ -158,7 +158,7 @@ pub(crate) async fn timeout_flight(
 /// Returns Ok(true) if flight was completed normally, Ok(false) if flight was deleted as spurious
 pub(crate) async fn complete_flight(
     ctx: &FlightProcessorContext<'_>,
-    device: &Device,
+    device: &Aircraft,
     flight_id: Uuid,
     fix: &Fix,
 ) -> Result<bool> {
@@ -312,7 +312,7 @@ pub(crate) async fn complete_flight(
 
             warn!(
                 "Spurious flight {} detected - reasons: [{}]. Duration={}s, altitude_range={:?}ft, max_agl={:?}ft, avg_speed={:?}mph. Deleting.",
-                fix.device_id,
+                fix.aircraft_id,
                 reasons.join(", "),
                 duration_seconds,
                 altitude_range,
@@ -324,7 +324,7 @@ pub(crate) async fn complete_flight(
             // where new fixes arrive and get assigned this flight_id while we're deleting it
             {
                 let mut flights = ctx.active_flights.write().await;
-                flights.remove(&fix.device_id);
+                flights.remove(&fix.aircraft_id);
             }
 
             // Clear flight_id from all associated fixes

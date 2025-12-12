@@ -444,10 +444,10 @@ async fn get_geocoded_clubs_count(
 /// Query for devices that have duplicate addresses (same address, different address_type)
 async fn query_duplicate_devices(
     diesel_pool: Pool<ConnectionManager<PgConnection>>,
-) -> Result<Vec<soar::devices::DeviceModel>> {
+) -> Result<Vec<soar::aircraft::AircraftModel>> {
     use diesel::prelude::*;
     use diesel::sql_types::Integer;
-    use soar::schema::devices;
+    use soar::schema::aircraft;
 
     tokio::task::spawn_blocking(move || {
         let mut conn = diesel_pool.get()?;
@@ -471,10 +471,10 @@ async fn query_duplicate_devices(
         }
 
         // Now fetch all device rows for those duplicate addresses
-        let duplicate_devices = devices::table
-            .filter(devices::address.eq_any(duplicate_addresses))
-            .order((devices::address.asc(), devices::address_type.asc()))
-            .load::<soar::devices::DeviceModel>(&mut conn)?;
+        let duplicate_devices = aircraft::table
+            .filter(aircraft::address.eq_any(duplicate_addresses))
+            .order((aircraft::address.asc(), aircraft::address_type.asc()))
+            .load::<soar::aircraft::AircraftModel>(&mut conn)?;
 
         Ok(duplicate_devices)
     })

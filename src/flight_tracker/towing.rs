@@ -1,5 +1,5 @@
 use crate::Fix;
-use crate::device_repo::DeviceRepository;
+use crate::aircraft_repo::AircraftRepository;
 use crate::fixes_repo::FixesRepository;
 use crate::flights_repo::FlightsRepository;
 use crate::ogn_aprs_aircraft::AircraftType;
@@ -32,7 +32,7 @@ pub fn spawn_towing_detection_task(
     towplane_flight_id: Uuid,
     fixes_repo: FixesRepository,
     flights_repo: FlightsRepository,
-    device_repo: DeviceRepository,
+    device_repo: AircraftRepository,
     aircraft_trackers: AircraftTrackersMap,
 ) {
     tokio::spawn(async move {
@@ -88,7 +88,7 @@ async fn find_towed_glider(
     towplane_device_id: Uuid,
     fixes_repo: &FixesRepository,
     flights_repo: &FlightsRepository,
-    device_repo: &DeviceRepository,
+    device_repo: &AircraftRepository,
     aircraft_trackers: &AircraftTrackersMap,
 ) -> Result<Option<TowingInfo>> {
     // Get the latest fix for the towplane
@@ -186,7 +186,7 @@ async fn find_nearby_gliders(
     towplane_device_id: Uuid,
     aircraft_trackers: &AircraftTrackersMap,
     fixes_repo: &FixesRepository,
-    device_repo: &DeviceRepository,
+    device_repo: &AircraftRepository,
 ) -> Result<Vec<(Uuid, Uuid)>> {
     let mut candidate_gliders = Vec::new();
 
@@ -195,25 +195,25 @@ async fn find_nearby_gliders(
         let trackers = aircraft_trackers.read().await;
         trackers
             .iter()
-            .filter_map(|(device_id, tracker)| {
+            .filter_map(|(aircraft_id, tracker)| {
                 // Skip the towplane itself
-                if *device_id == towplane_device_id {
+                if *aircraft_id == towplane_device_id {
                     return None;
                 }
                 // Only consider aircraft with active flights
                 tracker
                     .current_flight_id
-                    .map(|flight_id| (*device_id, flight_id))
+                    .map(|flight_id| (*aircraft_id, flight_id))
             })
             .collect()
     };
 
     // Check each aircraft to see if it's a glider near the towplane
-    for (device_id, flight_id) in active_aircraft {
+    for (aircraft_id, flight_id) in active_aircraft {
         // Get the latest fix for this device
         let device_fix = match fixes_repo
             .get_latest_fix_for_device(
-                device_id,
+                aircraft_id,
                 chrono::Utc::now() - chrono::Duration::seconds(30),
             )
             .await?
@@ -224,7 +224,7 @@ async fn find_nearby_gliders(
 
         // Check if this is a glider (aircraft_type_ogn is now on device, not fix)
         let is_glider = device_repo
-            .get_device_by_uuid(device_id)
+            .get_device_by_uuid(aircraft_id)
             .await
             .ok()
             .flatten()
@@ -246,9 +246,9 @@ async fn find_nearby_gliders(
         if distance <= VICINITY_RADIUS_METERS {
             debug!(
                 "Found glider {} at {:.0}m from towplane {}",
-                device_id, distance, towplane_device_id
+                aircraft_id, distance, towplane_device_id
             );
-            candidate_gliders.push((device_id, flight_id));
+            candidate_gliders.push((aircraft_id, flight_id));
         }
     }
 

@@ -20,7 +20,7 @@ const DDB_URL_FLARMNET: &str = "https://www.flarmnet.org/files/ddb.json";
 const DDB_URL_UNIFIED_FLARMNET: &str = "https://turbo87.github.io/united-flarmnet/united.fln";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum DeviceSource {
+pub enum AircraftSource {
     Glidernet,
     Flarmnet,
 }
@@ -117,7 +117,7 @@ pub enum RegistrationCountry {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Device {
+pub struct Aircraft {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<uuid::Uuid>,
     #[serde(
@@ -164,9 +164,9 @@ pub struct Device {
     pub country_code: Option<String>,
 }
 
-impl Device {
+impl Aircraft {
     /// Convert device address to canonical 6-character uppercase hex format
-    pub fn device_address_hex(&self) -> String {
+    pub fn aircraft_address_hex(&self) -> String {
         format!("{:06X}", self.address)
     }
 }
@@ -183,9 +183,9 @@ impl Device {
     Serialize,
     Deserialize,
 )]
-#[diesel(table_name = crate::schema::devices)]
+#[diesel(table_name = crate::schema::aircraft)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
-pub struct DeviceModel {
+pub struct AircraftModel {
     pub address: i32,
     pub address_type: AddressType,
     pub aircraft_model: String,
@@ -209,17 +209,17 @@ pub struct DeviceModel {
     pub country_code: Option<String>,
 }
 
-impl DeviceModel {
+impl AircraftModel {
     /// Convert device address to canonical 6-character uppercase hex format
-    pub fn device_address_hex(&self) -> String {
+    pub fn aircraft_address_hex(&self) -> String {
         format!("{:06X}", self.address)
     }
 }
 
 // For inserting new devices (without timestamps which are set by DB)
 #[derive(Debug, Insertable, AsChangeset)]
-#[diesel(table_name = crate::schema::devices)]
-pub struct NewDevice {
+#[diesel(table_name = crate::schema::aircraft)]
+pub struct NewAircraft {
     pub address: i32,
     pub address_type: AddressType,
     pub aircraft_model: String,
@@ -240,11 +240,11 @@ pub struct NewDevice {
     pub country_code: Option<String>,
 }
 
-impl From<Device> for NewDevice {
-    fn from(device: Device) -> Self {
+impl From<Aircraft> for NewAircraft {
+    fn from(device: Aircraft) -> Self {
         // Extract country code from ICAO address if not already present
         let country_code = device.country_code.or_else(|| {
-            Device::extract_country_code_from_icao(device.address, device.address_type)
+            Aircraft::extract_country_code_from_icao(device.address, device.address_type)
         });
 
         Self {
@@ -272,8 +272,8 @@ impl From<Device> for NewDevice {
     }
 }
 
-impl From<DeviceModel> for Device {
-    fn from(model: DeviceModel) -> Self {
+impl From<AircraftModel> for Aircraft {
+    fn from(model: AircraftModel) -> Self {
         Self {
             id: Some(model.id),
             address_type: model.address_type,
@@ -300,22 +300,22 @@ impl From<DeviceModel> for Device {
 }
 
 #[derive(Debug, Deserialize)]
-struct DeviceResponse {
-    devices: Vec<Device>,
+struct AircraftResponse {
+    devices: Vec<Aircraft>,
 }
 
 #[derive(Debug, Clone)]
-pub struct DeviceWithSource {
-    pub device: Device,
-    pub source: DeviceSource,
+pub struct AircraftWithSource {
+    pub device: Aircraft,
+    pub source: AircraftSource,
 }
 
-/// Fetcher for devices from the DDB (Device Database)
+/// Fetcher for devices from the DDB (Aircraft Database)
 /// This struct is responsible only for fetching and parsing device data
 #[derive(Debug, Default)]
-pub struct DeviceFetcher;
+pub struct AircraftFetcher;
 
-impl Device {
+impl Aircraft {
     /// Extracts the two-letter country code from an ICAO address
     /// Returns Some(country_code) if the address is ICAO and a country can be identified
     /// Returns None for non-ICAO addresses (FLARM, OGN) or if parsing fails
@@ -459,7 +459,7 @@ pub enum DeviceSearchCriteria {
 }
 
 /// Read and decode unified FlarmNet file from disk
-pub fn read_flarmnet_file(path: &str) -> Result<Vec<Device>> {
+pub fn read_flarmnet_file(path: &str) -> Result<Vec<Aircraft>> {
     use rayon::prelude::*;
     use std::cell::RefCell;
 
@@ -480,8 +480,8 @@ pub fn read_flarmnet_file(path: &str) -> Result<Vec<Device>> {
                 static PARSER: RefCell<flydent::Parser> = RefCell::new(flydent::Parser::new());
             }
 
-            // Convert FlarmNet records to Device structs in parallel
-            let devices: Vec<Device> = decoded
+            // Convert FlarmNet records to Aircraft structs in parallel
+            let devices: Vec<Aircraft> = decoded
                 .records
                 .into_par_iter() // Parallel iteration for performance
                 .filter_map(|result| {
@@ -502,7 +502,7 @@ pub fn read_flarmnet_file(path: &str) -> Result<Vec<Device>> {
                                 }
                             });
 
-                            Some(Device {
+                            Some(Aircraft {
                                 id: None, // Will be set by database
                                 address_type: AddressType::Flarm,
                                 address,
@@ -552,19 +552,19 @@ pub fn read_flarmnet_file(path: &str) -> Result<Vec<Device>> {
     }
 }
 
-impl DeviceFetcher {
+impl AircraftFetcher {
     pub fn new() -> Self {
         Self
     }
 
     /// Fetch devices from Glidernet DDB
-    async fn fetch_glidernet(&self) -> Result<Vec<Device>> {
+    async fn fetch_glidernet(&self) -> Result<Vec<Aircraft>> {
         info!("Fetching devices from Glidernet DDB...");
 
         // Try primary URL first
         match reqwest::get(DDB_URL_GLIDERNET).await {
             Ok(response) if response.status().is_success() => {
-                match response.json::<DeviceResponse>().await {
+                match response.json::<AircraftResponse>().await {
                     Ok(device_response) => {
                         info!(
                             "Successfully fetched {} devices from Glidernet (primary)",
@@ -596,7 +596,7 @@ impl DeviceFetcher {
         info!("Trying backup Glidernet URL...");
         match reqwest::get(DDB_URL_GLIDERNET_WORKERS).await {
             Ok(response) if response.status().is_success() => {
-                let device_response: DeviceResponse = response.json().await?;
+                let device_response: AircraftResponse = response.json().await?;
                 info!(
                     "Successfully fetched {} devices from Glidernet (backup)",
                     device_response.devices.len()
@@ -619,10 +619,10 @@ impl DeviceFetcher {
     }
 
     /// Fetch devices from Flarmnet DDB
-    async fn fetch_flarmnet(&self) -> Result<Vec<Device>> {
+    async fn fetch_flarmnet(&self) -> Result<Vec<Aircraft>> {
         info!("Fetching devices from Flarmnet DDB...");
         let response = reqwest::get(DDB_URL_FLARMNET).await?;
-        let device_response: DeviceResponse = response.json().await?;
+        let device_response: AircraftResponse = response.json().await?;
         info!(
             "Successfully fetched {} devices from Flarmnet",
             device_response.devices.len()
@@ -632,7 +632,7 @@ impl DeviceFetcher {
 
     /// Fetch and decode unified FlarmNet file from XCSoar format
     /// This replaces the existing Glidernet/Flarmnet sources
-    pub async fn fetch_unified_flarmnet(&self) -> Result<Vec<Device>> {
+    pub async fn fetch_unified_flarmnet(&self) -> Result<Vec<Aircraft>> {
         use rayon::prelude::*;
         use std::cell::RefCell;
 
@@ -663,8 +663,8 @@ impl DeviceFetcher {
                     static PARSER: RefCell<flydent::Parser> = RefCell::new(flydent::Parser::new());
                 }
 
-                // Convert FlarmNet records to Device structs in parallel
-                let devices: Vec<Device> = decoded
+                // Convert FlarmNet records to Aircraft structs in parallel
+                let devices: Vec<Aircraft> = decoded
                     .records
                     .into_par_iter() // Parallel iteration for performance
                     .filter_map(|result| {
@@ -686,7 +686,7 @@ impl DeviceFetcher {
                                     }
                                 });
 
-                                Some(Device {
+                                Some(Aircraft {
                                     id: None, // Will be set by database
                                     address_type: AddressType::Flarm,
                                     address,
@@ -738,7 +738,7 @@ impl DeviceFetcher {
 
     /// Fetch all devices from both DDB sources and merge them
     /// In case of conflicts (same device_id), Glidernet takes precedence
-    pub async fn fetch_all(&self) -> Result<Vec<Device>> {
+    pub async fn fetch_all(&self) -> Result<Vec<Aircraft>> {
         // Fetch from both sources in parallel
         let (glidernet_result, flarmnet_result) =
             tokio::join!(self.fetch_glidernet(), self.fetch_flarmnet());
@@ -768,7 +768,7 @@ impl DeviceFetcher {
 
         let reg_parser = flydent::Parser::new();
 
-        let device_normalizer = |mut d: Device| {
+        let device_normalizer = |mut d: Aircraft| {
             let reg = reg_parser.parse(&d.registration, false, false);
             match reg {
                 Some(r) => {
@@ -783,25 +783,25 @@ impl DeviceFetcher {
         };
 
         // Canonicalize registrations using "flydent" crate
-        let flarmnet_devices: Vec<Device> = flarmnet_devices
+        let flarmnet_devices: Vec<Aircraft> = flarmnet_devices
             .into_iter()
             .map(device_normalizer)
             .collect();
-        let glidernet_devices: Vec<Device> = glidernet_devices
+        let glidernet_devices: Vec<Aircraft> = glidernet_devices
             .into_iter()
             .map(device_normalizer)
             .collect();
 
-        // Create a map of device_id -> Device for conflict resolution
-        let mut device_map: HashMap<u32, DeviceWithSource> = HashMap::new();
+        // Create a map of device_id -> Aircraft for conflict resolution
+        let mut device_map: HashMap<u32, AircraftWithSource> = HashMap::new();
 
         // Add Flarmnet devices first (lower priority)
         for device in flarmnet_devices {
             device_map.insert(
                 device.address,
-                DeviceWithSource {
+                AircraftWithSource {
                     device,
-                    source: DeviceSource::Flarmnet,
+                    source: AircraftSource::Flarmnet,
                 },
             );
         }
@@ -810,7 +810,7 @@ impl DeviceFetcher {
         let mut conflicts = 0;
         for glidernet_device in glidernet_devices {
             if let Some(flarmnet_device_src) = device_map.get(&glidernet_device.address)
-                && flarmnet_device_src.source == DeviceSource::Flarmnet
+                && flarmnet_device_src.source == AircraftSource::Flarmnet
             {
                 let flarmnet_device = flarmnet_device_src.device.clone();
                 // Only log a warning if the devices actually have different data
@@ -819,33 +819,34 @@ impl DeviceFetcher {
                         glidernet_device.registration.is_empty(),
                         flarmnet_device.registration.is_empty(),
                     ) {
-                        (true, true) => ("".to_string(), DeviceSource::Glidernet),
-                        (true, false) => {
-                            (flarmnet_device.registration.clone(), DeviceSource::Flarmnet)
-                        }
+                        (true, true) => ("".to_string(), AircraftSource::Glidernet),
+                        (true, false) => (
+                            flarmnet_device.registration.clone(),
+                            AircraftSource::Flarmnet,
+                        ),
                         (false, _) => (
                             glidernet_device.registration.clone(),
-                            DeviceSource::Glidernet,
+                            AircraftSource::Glidernet,
                         ),
                     };
 
                     conflicts += 1;
                     let better_label = match source {
-                        DeviceSource::Glidernet => "OGN",
-                        DeviceSource::Flarmnet => "FLARM",
+                        AircraftSource::Glidernet => "OGN",
+                        AircraftSource::Flarmnet => "FLARM",
                     };
                     warn!(
-                        "Device conflict for ID {}: using {} data: {} (over {})",
+                        "Aircraft conflict for ID {}: using {} data: {} (over {})",
                         glidernet_device.address,
                         better_label,
                         registration,
-                        if source == DeviceSource::Glidernet {
+                        if source == AircraftSource::Glidernet {
                             &flarmnet_device.registration
                         } else {
                             &glidernet_device.registration
                         }
                     );
-                    let merged_device = Device {
+                    let merged_device = Aircraft {
                         id: None, // Merged devices from external sources don't have our database ID
                         address_type: glidernet_device.address_type,
                         address: glidernet_device.address,
@@ -877,9 +878,9 @@ impl DeviceFetcher {
                     };
                     device_map.insert(
                         glidernet_device.address,
-                        DeviceWithSource {
+                        AircraftWithSource {
                             device: merged_device,
-                            source: DeviceSource::Glidernet, // TODO: Really this is both
+                            source: AircraftSource::Glidernet, // TODO: Really this is both
                         },
                     );
                 }
@@ -887,9 +888,9 @@ impl DeviceFetcher {
             } else {
                 device_map.insert(
                     glidernet_device.address,
-                    DeviceWithSource {
+                    AircraftWithSource {
                         device: glidernet_device,
-                        source: DeviceSource::Glidernet,
+                        source: AircraftSource::Glidernet,
                     },
                 );
             }
@@ -912,37 +913,37 @@ mod tests {
 
     #[tokio::test]
     async fn test_device_fetcher_creation() {
-        let fetcher = DeviceFetcher::new();
+        let fetcher = AircraftFetcher::new();
         // Just test that it can be created - actual fetch requires network
         assert_eq!(std::mem::size_of_val(&fetcher), 0); // Zero-sized struct
     }
 
     #[test]
     fn test_device_source_enum() {
-        // Test that DeviceSource enum works correctly
-        let glidernet = DeviceSource::Glidernet;
-        let flarmnet = DeviceSource::Flarmnet;
+        // Test that AircraftSource enum works correctly
+        let glidernet = AircraftSource::Glidernet;
+        let flarmnet = AircraftSource::Flarmnet;
 
-        assert_eq!(glidernet, DeviceSource::Glidernet);
-        assert_eq!(flarmnet, DeviceSource::Flarmnet);
+        assert_eq!(glidernet, AircraftSource::Glidernet);
+        assert_eq!(flarmnet, AircraftSource::Flarmnet);
         assert_ne!(glidernet, flarmnet);
     }
 
     #[test]
     fn test_device_with_source() {
         let device = create_test_device("N123AB");
-        let device_with_source = DeviceWithSource {
+        let device_with_source = AircraftWithSource {
             device: device.clone(),
-            source: DeviceSource::Glidernet,
+            source: AircraftSource::Glidernet,
         };
 
         assert_eq!(device_with_source.device, device);
-        assert_eq!(device_with_source.source, DeviceSource::Glidernet);
+        assert_eq!(device_with_source.source, AircraftSource::Glidernet);
     }
 
     #[test]
     fn test_device_serialization_with_booleans() {
-        let device = Device {
+        let device = Aircraft {
             id: None, // Test device without database ID
             address_type: AddressType::Flarm,
             address: 0x000000,
@@ -965,7 +966,7 @@ mod tests {
 
         // Test that the device can be serialized/deserialized
         let json = serde_json::to_string(&device).unwrap();
-        let deserialized: Device = serde_json::from_str(&json).unwrap();
+        let deserialized: Aircraft = serde_json::from_str(&json).unwrap();
         assert_eq!(device, deserialized);
 
         // Also test that it includes the competition_number field (cn)
@@ -976,7 +977,7 @@ mod tests {
     fn test_device_response_parsing() {
         let json_data = r#"{"devices":[{"device_type":"F","device_id":"000000","aircraft_model":"SZD-41 Jantar Std","registration":"HA-4403","cn":"J","tracked":"Y","identified":""}]}"#;
 
-        let response: DeviceResponse = serde_json::from_str(json_data).unwrap();
+        let response: AircraftResponse = serde_json::from_str(json_data).unwrap();
         assert_eq!(response.devices.len(), 1);
         assert_eq!(response.devices[0].address, 0x000000);
         assert_eq!(response.devices[0].aircraft_model, "SZD-41 Jantar Std");
@@ -989,22 +990,22 @@ mod tests {
     fn test_address_type_deserialization() {
         // Test Flarm address type
         let flarm_json = r#"{"device_type":"F","device_id":"123456","aircraft_model":"Test","registration":"","cn":"","tracked":"Y","identified":"Y"}"#;
-        let flarm_device: Device = serde_json::from_str(flarm_json).unwrap();
+        let flarm_device: Aircraft = serde_json::from_str(flarm_json).unwrap();
         assert_eq!(flarm_device.address_type, AddressType::Flarm);
 
         // Test OGN address type
         let ogn_json = r#"{"device_type":"O","device_id":"123456","aircraft_model":"Test","registration":"","cn":"","tracked":"Y","identified":"Y"}"#;
-        let ogn_device: Device = serde_json::from_str(ogn_json).unwrap();
+        let ogn_device: Aircraft = serde_json::from_str(ogn_json).unwrap();
         assert_eq!(ogn_device.address_type, AddressType::Ogn);
 
         // Test ICAO address type
         let icao_json = r#"{"device_type":"I","device_id":"123456","aircraft_model":"Test","registration":"","cn":"","tracked":"Y","identified":"Y"}"#;
-        let icao_device: Device = serde_json::from_str(icao_json).unwrap();
+        let icao_device: Aircraft = serde_json::from_str(icao_json).unwrap();
         assert_eq!(icao_device.address_type, AddressType::Icao);
 
         // Test empty string (Unknown)
         let unknown_json = r#"{"device_type":"","device_id":"123456","aircraft_model":"Test","registration":"","cn":"","tracked":"Y","identified":"Y"}"#;
-        let unknown_device: Device = serde_json::from_str(unknown_json).unwrap();
+        let unknown_device: Aircraft = serde_json::from_str(unknown_json).unwrap();
         assert_eq!(unknown_device.address_type, AddressType::Unknown);
     }
 
@@ -1012,13 +1013,13 @@ mod tests {
     fn test_boolean_string_conversion() {
         // Test tracked and identified field conversions
         let json_data = r#"{"device_type":"F","device_id":"123456","aircraft_model":"Test","registration":"","cn":"","tracked":"Y","identified":""}"#;
-        let device: Device = serde_json::from_str(json_data).unwrap();
+        let device: Aircraft = serde_json::from_str(json_data).unwrap();
         assert!(device.tracked);
         assert!(!device.identified);
 
         // Test case insensitive
         let json_data2 = r#"{"device_type":"F","device_id":"123456","aircraft_model":"Test","registration":"","cn":"","tracked":"y","identified":"N"}"#;
-        let device2: Device = serde_json::from_str(json_data2).unwrap();
+        let device2: Aircraft = serde_json::from_str(json_data2).unwrap();
         assert!(device2.tracked);
         assert!(!device2.identified);
     }
@@ -1223,56 +1224,56 @@ mod tests {
     #[test]
     fn test_extract_country_code_from_icao() {
         // Test US ICAO address
-        let us_code = Device::extract_country_code_from_icao(0xA00001, AddressType::Icao);
+        let us_code = Aircraft::extract_country_code_from_icao(0xA00001, AddressType::Icao);
         assert_eq!(us_code, Some("US".to_string()));
 
         // Test German ICAO address
-        let de_code = Device::extract_country_code_from_icao(0x3C0001, AddressType::Icao);
+        let de_code = Aircraft::extract_country_code_from_icao(0x3C0001, AddressType::Icao);
         assert_eq!(de_code, Some("DE".to_string()));
 
         // Test UK ICAO address
-        let gb_code = Device::extract_country_code_from_icao(0x400001, AddressType::Icao);
+        let gb_code = Aircraft::extract_country_code_from_icao(0x400001, AddressType::Icao);
         assert_eq!(gb_code, Some("GB".to_string()));
 
         // Test Canadian ICAO address
-        let ca_code = Device::extract_country_code_from_icao(0xC00001, AddressType::Icao);
+        let ca_code = Aircraft::extract_country_code_from_icao(0xC00001, AddressType::Icao);
         assert_eq!(ca_code, Some("CA".to_string()));
 
         // Test FLARM address (should return None)
-        let flarm_code = Device::extract_country_code_from_icao(0x123456, AddressType::Flarm);
+        let flarm_code = Aircraft::extract_country_code_from_icao(0x123456, AddressType::Flarm);
         assert_eq!(flarm_code, None);
 
         // Test OGN address (should return None)
-        let ogn_code = Device::extract_country_code_from_icao(0x123456, AddressType::Ogn);
+        let ogn_code = Aircraft::extract_country_code_from_icao(0x123456, AddressType::Ogn);
         assert_eq!(ogn_code, None);
     }
 
     #[test]
     fn test_extract_tail_number_from_icao() {
         // Test US ICAO address - N841X (AB859D)
-        let n841x = Device::extract_tail_number_from_icao(0xAB859D, AddressType::Icao);
+        let n841x = Aircraft::extract_tail_number_from_icao(0xAB859D, AddressType::Icao);
         assert_eq!(n841x, Some("N841X".to_string()));
 
         // Test another US ICAO address
-        let n1 = Device::extract_tail_number_from_icao(0xA00001, AddressType::Icao);
+        let n1 = Aircraft::extract_tail_number_from_icao(0xA00001, AddressType::Icao);
         assert_eq!(n1, Some("N1".to_string()));
 
         // Test non-US ICAO address (German - should return None)
-        let de_tail = Device::extract_tail_number_from_icao(0x3C0001, AddressType::Icao);
+        let de_tail = Aircraft::extract_tail_number_from_icao(0x3C0001, AddressType::Icao);
         assert_eq!(de_tail, None);
 
         // Test FLARM address (should return None)
-        let flarm_tail = Device::extract_tail_number_from_icao(0x123456, AddressType::Flarm);
+        let flarm_tail = Aircraft::extract_tail_number_from_icao(0x123456, AddressType::Flarm);
         assert_eq!(flarm_tail, None);
 
         // Test OGN address (should return None)
-        let ogn_tail = Device::extract_tail_number_from_icao(0x123456, AddressType::Ogn);
+        let ogn_tail = Aircraft::extract_tail_number_from_icao(0x123456, AddressType::Ogn);
         assert_eq!(ogn_tail, None);
     }
 
     // Helper function to create a test device with a specific registration
-    fn create_test_device(registration: &str) -> Device {
-        Device {
+    fn create_test_device(registration: &str) -> Aircraft {
+        Aircraft {
             id: None, // Test devices don't have database IDs
             address_type: AddressType::Flarm,
             address: 0x123456,

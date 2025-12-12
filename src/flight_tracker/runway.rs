@@ -1,4 +1,4 @@
-use crate::devices::Device;
+use crate::aircraft::Aircraft;
 use crate::fixes_repo::FixesRepository;
 use crate::runways_repo::RunwaysRepository;
 use chrono::{DateTime, Utc};
@@ -58,7 +58,7 @@ pub(crate) fn uses_runways(aircraft_type: &crate::ogn_aprs_aircraft::AircraftTyp
 pub(crate) async fn determine_runway_identifier(
     fixes_repo: &FixesRepository,
     runways_repo: &RunwaysRepository,
-    device: &Device,
+    device: &Aircraft,
     event_time: DateTime<Utc>,
     latitude: f64,
     longitude: f64,
@@ -67,7 +67,7 @@ pub(crate) async fn determine_runway_identifier(
     // Extract device ID (devices from database always have an ID)
     let device_id = device
         .id
-        .expect("Device fetched from database should have ID");
+        .expect("Aircraft fetched from database should have ID");
 
     // Get fixes from 20 seconds before to 20 seconds after the event
     let start_time = event_time - chrono::Duration::seconds(20);
@@ -78,7 +78,7 @@ pub(crate) async fn determine_runway_identifier(
         && !uses_runways(&aircraft_type)
     {
         debug!(
-            "Device {} is type {:?} which doesn't use runways, skipping runway detection",
+            "Aircraft {} is type {:?} which doesn't use runways, skipping runway detection",
             device_id, aircraft_type
         );
         return None;
@@ -227,11 +227,11 @@ pub(crate) async fn determine_runway_identifier(
         // If we found a match and we're searching at a specific airport (airport_ref provided),
         // always use the best match from the database since we know runway data exists
         if let Some((ident, diff)) = best_match {
-            if let Some(airport_id) = airport_ref {
+            if let Some(airport) = airport_ref {
                 // Airport-specific search: always use the closest runway from database
                 debug!(
                     "Matched runway {} from database for device {} at airport {} (heading diff: {:.1}°)",
-                    ident, device_id, airport_id, diff
+                    ident, device_id, airport, diff
                 );
                 return Some((ident, false)); // false = from database, not inferred
             } else if diff < 30.0 {

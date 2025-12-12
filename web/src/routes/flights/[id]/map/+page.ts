@@ -1,7 +1,7 @@
 import { error } from '@sveltejs/kit';
 import type { PageLoad } from './$types';
 import { serverCall } from '$lib/api/server';
-import type { Flight, Device, Fix } from '$lib/types';
+import type { Flight, Aircraft, Fix } from '$lib/types';
 
 interface FlightResponse {
 	flight: Flight;
@@ -23,8 +23,8 @@ export const load: PageLoad = async ({ params, fetch }) => {
 		]);
 
 		// Then fetch device separately if the flight has one
-		const device = flightResponse.flight.device_id
-			? await serverCall<Device>(`/flights/${id}/device`, { fetch }).catch(() => undefined)
+		const device = flightResponse.flight.aircraft_id
+			? await serverCall<Aircraft>(`/flights/${id}/device`, { fetch }).catch(() => undefined)
 			: undefined;
 
 		return {

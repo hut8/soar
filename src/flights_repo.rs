@@ -129,7 +129,7 @@ impl FlightsRepository {
             let mut conn = pool.get()?;
 
             let flight_models: Vec<FlightModel> = flights
-                .filter(device_id.eq(device_id_val))
+                .filter(aircraft_id.eq(device_id_val))
                 .order(takeoff_time.desc())
                 .select(FlightModel::as_select())
                 .load(&mut conn)?;
@@ -157,14 +157,14 @@ impl FlightsRepository {
 
             // Get total count
             let total_count = flights
-                .filter(device_id.eq(device_id_val))
+                .filter(aircraft_id.eq(device_id_val))
                 .count()
                 .get_result::<i64>(&mut conn)?;
 
             // Get paginated results
             let offset = (page - 1) * per_page;
             let flight_models: Vec<FlightModel> = flights
-                .filter(device_id.eq(device_id_val))
+                .filter(aircraft_id.eq(device_id_val))
                 .order(takeoff_time.desc())
                 .limit(per_page)
                 .offset(offset)
@@ -221,7 +221,7 @@ impl FlightsRepository {
             let mut conn = pool.get()?;
 
             let flight_models: Vec<FlightModel> = flights
-                .filter(device_id.eq(device_id_val))
+                .filter(aircraft_id.eq(device_id_val))
                 .filter(landing_time.is_null())
                 .filter(timed_out_at.is_null())
                 .order(takeoff_time.desc())
@@ -264,7 +264,7 @@ impl FlightsRepository {
 
             // Get the most recent flight for this device (by last_fix_at, which is always set)
             let most_recent_flight: Option<FlightModel> = flights
-                .filter(device_id.eq(device_id_val))
+                .filter(aircraft_id.eq(device_id_val))
                 .order(last_fix_at.desc())
                 .select(FlightModel::as_select())
                 .first(&mut conn)
@@ -464,7 +464,7 @@ impl FlightsRepository {
 
             let rows = diesel::update(flights.filter(id.eq(glider_flight_id)))
                 .set((
-                    towed_by_device_id.eq(Some(towplane_device_id)),
+                    towed_by_aircraft_id.eq(Some(towplane_device_id)),
                     towed_by_flight_id.eq(Some(towplane_flight_id)),
                     updated_at.eq(Utc::now()),
                 ))
@@ -999,7 +999,7 @@ impl FlightsRepository {
             let query = r#"
                 SELECT 'prev' as direction, id
                 FROM flights
-                WHERE device_id = $1
+                WHERE aircraft_id = $1
                   AND id != $2
                   AND (
                     takeoff_time < $3
@@ -1012,7 +1012,7 @@ impl FlightsRepository {
 
                 SELECT 'next' as direction, id
                 FROM flights
-                WHERE device_id = $1
+                WHERE aircraft_id = $1
                   AND id != $2
                   AND (
                     takeoff_time > $3

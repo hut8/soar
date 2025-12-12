@@ -5,7 +5,7 @@ use lettre::{Message, SmtpTransport, Transport};
 use std::time::Duration;
 use tracing::{info, warn};
 
-use crate::devices::DeviceModel;
+use crate::aircraft::AircraftModel;
 
 #[derive(Debug, Clone)]
 pub struct EmailConfig {
@@ -84,7 +84,7 @@ pub struct DataLoadReport {
     pub total_duration_secs: f64,
     pub entities: Vec<EntityMetrics>,
     pub overall_success: bool,
-    pub duplicate_devices: Vec<DeviceModel>,
+    pub duplicate_devices: Vec<AircraftModel>,
 }
 
 impl Default for DataLoadReport {
@@ -264,7 +264,7 @@ impl DataLoadReport {
         if !self.duplicate_devices.is_empty() {
             html.push_str(
                 r#"
-        <h2 style="margin-top: 30px; color: #dc3545;">⚠ Duplicate Device Addresses</h2>
+        <h2 style="margin-top: 30px; color: #dc3545;">⚠ Duplicate Aircraft Addresses</h2>
         <p style="color: #666; margin-bottom: 15px;">
             The following addresses appear multiple times with different address types:
         </p>

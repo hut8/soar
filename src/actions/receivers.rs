@@ -461,8 +461,8 @@ pub struct AprsTypeCount {
 }
 
 #[derive(Debug, Serialize)]
-pub struct DeviceFixCount {
-    pub device_id: uuid::Uuid,
+pub struct AircraftFixCount {
+    pub aircraft_id: uuid::Uuid,
     pub count: i64,
 }
 
@@ -606,5 +606,5 @@ pub async fn get_receiver_aggregate_stats(
 #[derive(Debug, Serialize)]
 pub struct ReceiverAggregateStatsResponse {
     pub fix_counts_by_aprs_type: Vec<AprsTypeCount>,
-    pub fix_counts_by_device: Vec<DeviceFixCount>,
+    pub fix_counts_by_device: Vec<AircraftFixCount>,
 }

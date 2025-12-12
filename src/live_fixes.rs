@@ -19,7 +19,7 @@ fn get_topic_prefix() -> &'static str {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LiveFix {
     pub id: String,
-    pub device_id: String,
+    pub aircraft_id: String,
     pub timestamp: String, // ISO 8601 string format for frontend compatibility
     pub latitude: f64,
     pub longitude: f64,
@@ -39,7 +39,7 @@ pub enum WebSocketMessage {
     Fix(Box<crate::fixes::FixWithFlightInfo>),
 
     #[serde(rename = "device")]
-    Device(Box<Aircraft>),
+    Aircraft(Box<Aircraft>),
 }
 
 // Subscription management structure (used for both device and area subscriptions)
@@ -78,40 +78,40 @@ impl LiveFixService {
     // Subscribe to a specific device - creates NATS subscription on-demand
     pub async fn subscribe_to_device(
         &self,
-        device_id: &str,
+        aircraft_id: &str,
     ) -> Result<broadcast::Receiver<WebSocketMessage>> {
         let mut subscriptions = self.subscriptions.lock().await;
 
         // If we already have a subscription for this device, just create a new receiver
-        if let Some(subscription) = subscriptions.get_mut(device_id) {
+        if let Some(subscription) = subscriptions.get_mut(aircraft_id) {
             subscription.subscriber_count += 1;
             info!(
                 "Added subscriber for device {} (total: {})",
-                device_id, subscription.subscriber_count
+                aircraft_id, subscription.subscriber_count
             );
             return Ok(subscription.broadcaster.subscribe());
         }
 
         // Create new NATS subscription for this specific device
         let topic_prefix = get_topic_prefix();
-        let subject = format!("{}.fix.{}", topic_prefix, device_id);
+        let subject = format!("{}.fix.{}", topic_prefix, aircraft_id);
         let subscriber = self.nats_client.subscribe(subject.clone()).await?;
         let (broadcaster, receiver) = broadcast::channel(100);
 
         info!(
             "Creating new NATS subscription for device: {} on subject: {}",
-            device_id, subject
+            aircraft_id, subject
         );
 
         // Spawn task to handle messages for this device
-        let device_id_clone = device_id.to_string();
+        let device_id_clone = aircraft_id.to_string();
         let broadcaster_clone = broadcaster.clone();
 
         let task_handle = tokio::spawn(
             async move {
                 Self::handle_device_messages(subscriber, device_id_clone, broadcaster_clone).await;
             }
-            .instrument(tracing::info_span!("live_fix_device_handler", device_id = %device_id)),
+            .instrument(tracing::info_span!("live_fix_device_handler", aircraft_id = %aircraft_id)),
         );
 
         // Store the subscription
@@ -121,7 +121,7 @@ impl LiveFixService {
             task_handle,
         };
 
-        subscriptions.insert(device_id.to_string(), subscription);
+        subscriptions.insert(aircraft_id.to_string(), subscription);
 
         Ok(receiver)
     }
@@ -182,15 +182,15 @@ impl LiveFixService {
     // Handle messages for a specific device
     async fn handle_device_messages(
         mut subscriber: Subscriber,
-        device_id: String,
+        aircraft_id: String,
         broadcaster: broadcast::Sender<WebSocketMessage>,
     ) {
-        info!("Started message handler for device: {}", device_id);
+        info!("Started message handler for device: {}", aircraft_id);
         let mut consecutive_no_receivers = 0;
         const MAX_NO_RECEIVER_ATTEMPTS: usize = 3;
 
         while let Some(msg) = subscriber.next().await {
-            match Self::process_fix_message(msg, &device_id).await {
+            match Self::process_fix_message(msg, &aircraft_id).await {
                 Ok(fix_with_flight) => {
                     let websocket_message = WebSocketMessage::Fix(Box::new(fix_with_flight));
                     match broadcaster.send(websocket_message) {
@@ -198,21 +198,21 @@ impl LiveFixService {
                             consecutive_no_receivers = 0; // Reset counter on successful send
                             info!(
                                 "Broadcasted live fix for device {} to {} receivers",
-                                device_id, receiver_count
+                                aircraft_id, receiver_count
                             );
                         }
                         Err(broadcast::error::SendError(_)) => {
                             consecutive_no_receivers += 1;
                             info!(
                                 "No active receivers for device {}, fix dropped ({}/{} consecutive failures)",
-                                device_id, consecutive_no_receivers, MAX_NO_RECEIVER_ATTEMPTS
+                                aircraft_id, consecutive_no_receivers, MAX_NO_RECEIVER_ATTEMPTS
                             );
 
                             // Stop processing if consistently no receivers
                             if consecutive_no_receivers >= MAX_NO_RECEIVER_ATTEMPTS {
                                 warn!(
-                                    "Device {} has no active receivers after {} consecutive messages, stopping message handler",
-                                    device_id, MAX_NO_RECEIVER_ATTEMPTS
+                                    "Aircraft {} has no active receivers after {} consecutive messages, stopping message handler",
+                                    aircraft_id, MAX_NO_RECEIVER_ATTEMPTS
                                 );
                                 break;
                             }
@@ -222,13 +222,13 @@ impl LiveFixService {
                 Err(e) => {
                     error!(
                         "Failed to process fix message for device {}: {}",
-                        device_id, e
+                        aircraft_id, e
                     );
                 }
             }
         }
 
-        warn!("Message handler for device {} has stopped", device_id);
+        warn!("Message handler for device {} has stopped", aircraft_id);
     }
 
     // Handle messages for a specific area
@@ -312,7 +312,7 @@ impl LiveFixService {
         info!(
             "Processing live fix from area {} for device {} at ({}, {}) alt={}ft",
             area_key,
-            fix_with_flight.device_id,
+            fix_with_flight.aircraft_id,
             fix_with_flight.latitude,
             fix_with_flight.longitude,
             fix_with_flight.altitude_msl_feet.unwrap_or(0)
@@ -322,33 +322,33 @@ impl LiveFixService {
     }
 
     // Unsubscribe from a device - removes NATS subscription when no more clients
-    pub async fn unsubscribe_from_device(&self, device_id: &str) -> Result<()> {
+    pub async fn unsubscribe_from_device(&self, aircraft_id: &str) -> Result<()> {
         let mut subscriptions = self.subscriptions.lock().await;
 
-        if let Some(subscription) = subscriptions.get_mut(device_id) {
+        if let Some(subscription) = subscriptions.get_mut(aircraft_id) {
             subscription.subscriber_count -= 1;
             info!(
                 "Removed subscriber for device {} (remaining: {})",
-                device_id, subscription.subscriber_count
+                aircraft_id, subscription.subscriber_count
             );
 
             // If no more subscribers, clean up the subscription
             if subscription.subscriber_count == 0 {
                 info!(
                     "No more subscribers for device {}, cleaning up NATS subscription",
-                    device_id
+                    aircraft_id
                 );
 
                 // Cancel the message handler task
                 subscription.task_handle.abort();
 
                 // Remove from our subscriptions map
-                subscriptions.remove(device_id);
+                subscriptions.remove(aircraft_id);
             }
         } else {
             warn!(
                 "Attempted to unsubscribe from device {} but no subscription found",
-                device_id
+                aircraft_id
             );
         }
 

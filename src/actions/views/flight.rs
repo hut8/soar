@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::devices::AddressType;
+use crate::aircraft::AddressType;
 use crate::flights::{Flight, FlightState};
 use crate::ogn_aprs_aircraft::AircraftType;
 
@@ -15,7 +15,7 @@ pub struct AirportInfo {
 
 /// Helper struct for device information when constructing FlightView
 #[derive(Debug, Clone, Default)]
-pub struct DeviceInfo {
+pub struct AircraftInfo {
     pub aircraft_model: Option<String>,
     pub registration: Option<String>,
     pub aircraft_type_ogn: Option<AircraftType>,
@@ -25,7 +25,7 @@ pub struct DeviceInfo {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FlightView {
     pub id: Uuid,
-    pub device_id: Option<Uuid>,
+    pub aircraft_id: Option<Uuid>,
     pub device_address: String,
     pub device_address_type: AddressType,
     pub takeoff_time: Option<DateTime<Utc>>,
@@ -55,7 +55,7 @@ pub struct FlightView {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 
-    // Device information
+    // Aircraft information
     pub aircraft_model: Option<String>,
     pub registration: Option<String>,
     pub aircraft_type_ogn: Option<AircraftType>,
@@ -81,7 +81,7 @@ impl FlightView {
         flight: Flight,
         departure_airport: Option<AirportInfo>,
         arrival_airport: Option<AirportInfo>,
-        device_info: Option<DeviceInfo>,
+        device_info: Option<AircraftInfo>,
     ) -> Self {
         Self::from_flight_with_altitude(
             flight,
@@ -100,7 +100,7 @@ impl FlightView {
         flight: Flight,
         departure_airport: Option<AirportInfo>,
         arrival_airport: Option<AirportInfo>,
-        device_info: Option<DeviceInfo>,
+        device_info: Option<AircraftInfo>,
         latest_altitude_msl_feet: Option<i32>,
         latest_altitude_agl_feet: Option<i32>,
         latest_fix_timestamp: Option<DateTime<Utc>>,
@@ -122,7 +122,7 @@ impl FlightView {
 
         Self {
             id: flight.id,
-            device_id: flight.device_id,
+            aircraft_id: flight.aircraft_id,
             device_address: flight.device_address,
             device_address_type: flight.device_address_type,
             takeoff_time: flight.takeoff_time,
@@ -164,7 +164,7 @@ impl FlightView {
         flight: Flight,
         departure_airport: Option<AirportInfo>,
         arrival_airport: Option<AirportInfo>,
-        device_info: Option<DeviceInfo>,
+        device_info: Option<AircraftInfo>,
         latest_altitude_msl_feet: Option<i32>,
         latest_altitude_agl_feet: Option<i32>,
         latest_fix_timestamp: Option<DateTime<Utc>>,

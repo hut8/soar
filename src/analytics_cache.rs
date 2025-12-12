@@ -14,8 +14,8 @@ enum CacheKey {
     DailyFlights(NaiveDate, NaiveDate),
     DurationDistribution,
     HourlyFlights(i32),
-    DeviceOutliers(String), // threshold as string to avoid float equality issues
-    TopDevices(i32, i32),   // limit, period_days
+    AircraftOutliers(String), // threshold as string to avoid float equality issues
+    TopAircraft(i32, i32),    // limit, period_days
     ClubAnalytics(NaiveDate, NaiveDate, Option<Uuid>),
     AirportActivity(NaiveDate, NaiveDate, i32),
     Summary,
@@ -28,7 +28,7 @@ pub struct AnalyticsCache {
     daily_flights_cache: Cache<CacheKey, Vec<FlightAnalyticsDaily>>,
     duration_cache: Cache<CacheKey, Vec<FlightDurationBucket>>,
     hourly_cache: Cache<CacheKey, Vec<FlightAnalyticsHourly>>,
-    outliers_cache: Cache<CacheKey, Vec<DeviceOutlier>>,
+    outliers_cache: Cache<CacheKey, Vec<AircraftOutlier>>,
     top_devices_cache: Cache<CacheKey, Vec<TopDevice>>,
     club_cache: Cache<CacheKey, Vec<ClubAnalyticsDaily>>,
     airport_cache: Cache<CacheKey, Vec<AirportActivity>>,
@@ -126,14 +126,14 @@ impl AnalyticsCache {
         Ok(result)
     }
 
-    pub async fn get_device_outliers(&self, threshold: f64) -> Result<Vec<DeviceOutlier>> {
+    pub async fn get_device_outliers(&self, threshold: f64) -> Result<Vec<AircraftOutlier>> {
         let start = Instant::now();
-        let key = CacheKey::DeviceOutliers(format!("{:.2}", threshold));
+        let key = CacheKey::AircraftOutliers(format!("{:.2}", threshold));
 
         if let Some(cached) = self.outliers_cache.get(&key).await {
             metrics::counter!("analytics.cache.hit").increment(1);
             let duration_ms = start.elapsed().as_secs_f64() * 1000.0;
-            metrics::histogram!("analytics.query.device_outliers_ms").record(duration_ms);
+            metrics::histogram!("analytics.query.aircraft_outliers_ms").record(duration_ms);
             return Ok(cached);
         }
 
@@ -142,18 +142,18 @@ impl AnalyticsCache {
         self.outliers_cache.insert(key, result.clone()).await;
 
         let duration_ms = start.elapsed().as_secs_f64() * 1000.0;
-        metrics::histogram!("analytics.query.device_outliers_ms").record(duration_ms);
+        metrics::histogram!("analytics.query.aircraft_outliers_ms").record(duration_ms);
         Ok(result)
     }
 
     pub async fn get_top_devices(&self, limit: i32, period_days: i32) -> Result<Vec<TopDevice>> {
         let start = Instant::now();
-        let key = CacheKey::TopDevices(limit, period_days);
+        let key = CacheKey::TopAircraft(limit, period_days);
 
         if let Some(cached) = self.top_devices_cache.get(&key).await {
             metrics::counter!("analytics.cache.hit").increment(1);
             let duration_ms = start.elapsed().as_secs_f64() * 1000.0;
-            metrics::histogram!("analytics.query.top_devices_ms").record(duration_ms);
+            metrics::histogram!("analytics.query.top_aircraft_ms").record(duration_ms);
             return Ok(cached);
         }
 
@@ -162,7 +162,7 @@ impl AnalyticsCache {
         self.top_devices_cache.insert(key, result.clone()).await;
 
         let duration_ms = start.elapsed().as_secs_f64() * 1000.0;
-        metrics::histogram!("analytics.query.top_devices_ms").record(duration_ms);
+        metrics::histogram!("analytics.query.top_aircraft_ms").record(duration_ms);
         Ok(result)
     }
 

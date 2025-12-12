@@ -5,9 +5,9 @@ use diesel::upsert::excluded;
 use tracing::{info, warn};
 use uuid::Uuid;
 
-use crate::devices::{AddressType, Device, DeviceModel, NewDevice};
+use crate::aircraft::{AddressType, Aircraft, AircraftModel, NewAircraft};
 use crate::ogn_aprs_aircraft::{AdsbEmitterCategory, AircraftType};
-use crate::schema::devices;
+use crate::schema::aircraft;
 use chrono::{DateTime, Utc};
 
 pub type PgPool = Pool<ConnectionManager<PgConnection>>;
@@ -15,7 +15,7 @@ pub type PgPooledConnection = PooledConnection<ConnectionManager<PgConnection>>;
 
 /// Fields extracted from packet for device creation/update
 #[derive(Debug, Clone)]
-pub struct DevicePacketFields {
+pub struct AircraftPacketFields {
     pub aircraft_type: Option<AircraftType>,
     pub icao_model_code: Option<String>,
     pub adsb_emitter_category: Option<AdsbEmitterCategory>,
@@ -24,11 +24,11 @@ pub struct DevicePacketFields {
 }
 
 #[derive(Clone)]
-pub struct DeviceRepository {
+pub struct AircraftRepository {
     pool: PgPool,
 }
 
-impl DeviceRepository {
+impl AircraftRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
@@ -40,49 +40,49 @@ impl DeviceRepository {
     }
 
     /// Upsert devices into the database
-    /// This will insert new devices or update existing ones based on device_id
+    /// This will insert new devices or update existing ones based on aircraft_id
     pub async fn upsert_devices<I>(&self, devices_iter: I) -> Result<usize>
     where
-        I: IntoIterator<Item = Device>,
+        I: IntoIterator<Item = Aircraft>,
     {
         let mut conn = self.get_connection()?;
         let mut upserted_count = 0;
 
-        // Convert devices to NewDevice structs for insertion
-        let new_devices: Vec<NewDevice> = devices_iter.into_iter().map(|d| d.into()).collect();
+        // Convert devices to NewAircraft structs for insertion
+        let new_devices: Vec<NewAircraft> = devices_iter.into_iter().map(|d| d.into()).collect();
 
         for new_device in new_devices {
-            let result = diesel::insert_into(devices::table)
+            let result = diesel::insert_into(aircraft::table)
                 .values(&new_device)
-                .on_conflict((devices::address_type, devices::address))
+                .on_conflict((aircraft::address_type, aircraft::address))
                 .do_update()
                 .set((
                     // Update fields from DDB, but preserve existing values if DDB value is empty
                     // Use COALESCE(NULLIF(new, ''), old) to keep existing data when DDB has empty strings
-                    devices::address_type.eq(excluded(devices::address_type)),
-                    devices::aircraft_model.eq(diesel::dsl::sql(
+                    aircraft::address_type.eq(excluded(aircraft::address_type)),
+                    aircraft::aircraft_model.eq(diesel::dsl::sql(
                         "COALESCE(NULLIF(EXCLUDED.aircraft_model, ''), devices.aircraft_model)"
                     )),
-                    devices::registration.eq(diesel::dsl::sql(
+                    aircraft::registration.eq(diesel::dsl::sql(
                         "COALESCE(NULLIF(EXCLUDED.registration, ''), devices.registration)"
                     )),
-                    devices::competition_number.eq(diesel::dsl::sql(
+                    aircraft::competition_number.eq(diesel::dsl::sql(
                         "COALESCE(NULLIF(EXCLUDED.competition_number, ''), devices.competition_number)"
                     )),
-                    devices::tracked.eq(excluded(devices::tracked)),
-                    devices::identified.eq(excluded(devices::identified)),
-                    devices::from_ddb.eq(excluded(devices::from_ddb)),
+                    aircraft::tracked.eq(excluded(aircraft::tracked)),
+                    aircraft::identified.eq(excluded(aircraft::identified)),
+                    aircraft::from_ddb.eq(excluded(aircraft::from_ddb)),
                     // For Option fields, use COALESCE to prefer new value over NULL, but keep old if new is NULL
-                    devices::frequency_mhz.eq(diesel::dsl::sql(
+                    aircraft::frequency_mhz.eq(diesel::dsl::sql(
                         "COALESCE(EXCLUDED.frequency_mhz, devices.frequency_mhz)"
                     )),
-                    devices::pilot_name.eq(diesel::dsl::sql(
+                    aircraft::pilot_name.eq(diesel::dsl::sql(
                         "COALESCE(EXCLUDED.pilot_name, devices.pilot_name)"
                     )),
-                    devices::home_base_airport_ident.eq(diesel::dsl::sql(
+                    aircraft::home_base_airport_ident.eq(diesel::dsl::sql(
                         "COALESCE(EXCLUDED.home_base_airport_ident, devices.home_base_airport_ident)"
                     )),
-                    devices::updated_at.eq(diesel::dsl::now),
+                    aircraft::updated_at.eq(diesel::dsl::now),
                     // NOTE: We do NOT update the following fields because they come from real-time packets:
                     // - aircraft_type_ogn (from OGN packets)
                     // - icao_model_code (from ADSB packets)
@@ -112,28 +112,28 @@ impl DeviceRepository {
     /// Get the total count of devices in the database
     pub async fn get_device_count(&self) -> Result<i64> {
         let mut conn = self.get_connection()?;
-        let count = devices::table.count().get_result::<i64>(&mut conn)?;
+        let count = aircraft::table.count().get_result::<i64>(&mut conn)?;
         Ok(count)
     }
 
     /// Get a device by its address
     /// Address is unique across all devices
-    pub async fn get_device_by_address(&self, address: u32) -> Result<Option<Device>> {
+    pub async fn get_device_by_address(&self, address: u32) -> Result<Option<Aircraft>> {
         let mut conn = self.get_connection()?;
-        let device_model = devices::table
-            .filter(devices::address.eq(address as i32))
-            .first::<DeviceModel>(&mut conn)
+        let device_model = aircraft::table
+            .filter(aircraft::address.eq(address as i32))
+            .first::<AircraftModel>(&mut conn)
             .optional()?;
 
         Ok(device_model.map(|model| model.into()))
     }
 
     /// Get a device model (with UUID) by address
-    pub async fn get_device_model_by_address(&self, address: i32) -> Result<Option<DeviceModel>> {
+    pub async fn get_device_model_by_address(&self, address: i32) -> Result<Option<AircraftModel>> {
         let mut conn = self.get_connection()?;
-        let device_model = devices::table
-            .filter(devices::address.eq(address))
-            .first::<DeviceModel>(&mut conn)
+        let device_model = aircraft::table
+            .filter(aircraft::address.eq(address))
+            .first::<AircraftModel>(&mut conn)
             .optional()?;
         Ok(device_model)
     }
@@ -145,17 +145,17 @@ impl DeviceRepository {
         &self,
         address: i32,
         address_type: AddressType,
-    ) -> Result<DeviceModel> {
+    ) -> Result<AircraftModel> {
         let mut conn = self.get_connection()?;
 
         // Extract country code from ICAO address if applicable
-        let country_code = Device::extract_country_code_from_icao(address as u32, address_type);
+        let country_code = Aircraft::extract_country_code_from_icao(address as u32, address_type);
 
         // Extract tail number from ICAO address if it's a US aircraft
-        let registration =
-            Device::extract_tail_number_from_icao(address as u32, address_type).unwrap_or_default();
+        let registration = Aircraft::extract_tail_number_from_icao(address as u32, address_type)
+            .unwrap_or_default();
 
-        let new_device = NewDevice {
+        let new_device = NewAircraft {
             address,
             address_type,
             aircraft_model: String::new(),
@@ -177,14 +177,14 @@ impl DeviceRepository {
         };
 
         // Use INSERT ... ON CONFLICT ... DO UPDATE RETURNING to atomically handle race conditions
-        // This ensures we always get a device_id, even if concurrent inserts happen
+        // This ensures we always get a aircraft_id, even if concurrent inserts happen
         // The DO UPDATE with a no-op ensures RETURNING gives us the existing row on conflict
-        let device_model = diesel::insert_into(devices::table)
+        let device_model = diesel::insert_into(aircraft::table)
             .values(&new_device)
-            .on_conflict((devices::address_type, devices::address))
+            .on_conflict((aircraft::address_type, aircraft::address))
             .do_update()
-            .set(devices::address.eq(excluded(devices::address))) // No-op update to trigger RETURNING
-            .get_result::<DeviceModel>(&mut conn)?;
+            .set(aircraft::address.eq(excluded(aircraft::address))) // No-op update to trigger RETURNING
+            .get_result::<AircraftModel>(&mut conn)?;
 
         Ok(device_model)
     }
@@ -203,15 +203,16 @@ impl DeviceRepository {
         address: i32,
         address_type: AddressType,
         fix_timestamp: DateTime<Utc>,
-        packet_fields: DevicePacketFields,
-    ) -> Result<DeviceModel> {
+        packet_fields: AircraftPacketFields,
+    ) -> Result<AircraftModel> {
         let pool = self.pool.clone();
 
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
             // Extract country code from ICAO address if applicable
-            let country_code = Device::extract_country_code_from_icao(address as u32, address_type);
+            let country_code =
+                Aircraft::extract_country_code_from_icao(address as u32, address_type);
 
             // Extract tail number from ICAO address if it's a US aircraft
             // Use packet registration if available and non-empty, otherwise try to extract from ICAO
@@ -220,10 +221,10 @@ impl DeviceRepository {
                 .as_ref()
                 .filter(|r| !r.is_empty())
                 .cloned()
-                .or_else(|| Device::extract_tail_number_from_icao(address as u32, address_type))
+                .or_else(|| Aircraft::extract_tail_number_from_icao(address as u32, address_type))
                 .unwrap_or_default();
 
-            let new_device = NewDevice {
+            let new_device = NewAircraft {
                 address,
                 address_type,
                 aircraft_model: String::new(),
@@ -247,45 +248,45 @@ impl DeviceRepository {
             // Use INSERT ... ON CONFLICT ... DO UPDATE RETURNING to atomically handle race conditions
             // On conflict, update all packet-derived fields atomically in one operation
             // This eliminates the need for separate async update tasks
-            let device_model = diesel::insert_into(devices::table)
+            let device_model = diesel::insert_into(aircraft::table)
                 .values(&new_device)
-                .on_conflict((devices::address_type, devices::address))
+                .on_conflict((aircraft::address_type, aircraft::address))
                 .do_update()
                 .set((
-                    devices::last_fix_at.eq(fix_timestamp),
-                    devices::aircraft_type_ogn.eq(packet_fields.aircraft_type),
-                    devices::icao_model_code.eq(packet_fields.icao_model_code),
-                    devices::adsb_emitter_category.eq(packet_fields.adsb_emitter_category),
-                    devices::tracker_device_type.eq(packet_fields.tracker_device_type),
-                    devices::registration.eq(&registration),
-                    devices::country_code.eq(&country_code),
+                    aircraft::last_fix_at.eq(fix_timestamp),
+                    aircraft::aircraft_type_ogn.eq(packet_fields.aircraft_type),
+                    aircraft::icao_model_code.eq(packet_fields.icao_model_code),
+                    aircraft::adsb_emitter_category.eq(packet_fields.adsb_emitter_category),
+                    aircraft::tracker_device_type.eq(packet_fields.tracker_device_type),
+                    aircraft::registration.eq(&registration),
+                    aircraft::country_code.eq(&country_code),
                 ))
-                .get_result::<DeviceModel>(&mut conn)?;
+                .get_result::<AircraftModel>(&mut conn)?;
 
-            Ok::<DeviceModel, anyhow::Error>(device_model)
+            Ok::<AircraftModel, anyhow::Error>(device_model)
         })
         .await?
     }
 
     /// Get a device by its UUID
-    pub async fn get_device_by_uuid(&self, device_uuid: Uuid) -> Result<Option<Device>> {
+    pub async fn get_device_by_uuid(&self, device_uuid: Uuid) -> Result<Option<Aircraft>> {
         let mut conn = self.get_connection()?;
-        let device_model = devices::table
-            .filter(devices::id.eq(device_uuid))
-            .first::<DeviceModel>(&mut conn)
+        let device_model = aircraft::table
+            .filter(aircraft::id.eq(device_uuid))
+            .first::<AircraftModel>(&mut conn)
             .optional()?;
 
         Ok(device_model.map(|model| model.into()))
     }
 
     /// Search for all devices (aircraft) assigned to a specific club
-    pub async fn search_by_club_id(&self, club_id: Uuid) -> Result<Vec<Device>> {
+    pub async fn search_by_club_id(&self, club_id: Uuid) -> Result<Vec<Aircraft>> {
         let mut conn = self.get_connection()?;
 
-        let device_models = devices::table
-            .filter(devices::club_id.eq(club_id))
-            .order_by(devices::registration)
-            .load::<DeviceModel>(&mut conn)?;
+        let device_models = aircraft::table
+            .filter(aircraft::club_id.eq(club_id))
+            .order_by(aircraft::registration)
+            .load::<AircraftModel>(&mut conn)?;
 
         Ok(device_models
             .into_iter()
@@ -295,23 +296,23 @@ impl DeviceRepository {
 
     /// Search devices by address
     /// Returns a single device since address is unique
-    pub async fn search_by_address(&self, address: u32) -> Result<Option<Device>> {
+    pub async fn search_by_address(&self, address: u32) -> Result<Option<Aircraft>> {
         let mut conn = self.get_connection()?;
-        let device_model = devices::table
-            .filter(devices::address.eq(address as i32))
-            .first::<DeviceModel>(&mut conn)
+        let device_model = aircraft::table
+            .filter(aircraft::address.eq(address as i32))
+            .first::<AircraftModel>(&mut conn)
             .optional()?;
 
         Ok(device_model.map(|model| model.into()))
     }
 
     /// Search devices by registration
-    pub async fn search_by_registration(&self, registration: &str) -> Result<Vec<Device>> {
+    pub async fn search_by_registration(&self, registration: &str) -> Result<Vec<Aircraft>> {
         let mut conn = self.get_connection()?;
         let search_pattern = format!("%{}%", registration);
-        let device_models = devices::table
-            .filter(devices::registration.ilike(&search_pattern))
-            .load::<DeviceModel>(&mut conn)?;
+        let device_models = aircraft::table
+            .filter(aircraft::registration.ilike(&search_pattern))
+            .load::<AircraftModel>(&mut conn)?;
 
         Ok(device_models
             .into_iter()
@@ -325,13 +326,13 @@ impl DeviceRepository {
         &self,
         limit: i64,
         aircraft_types: Option<Vec<String>>,
-    ) -> Result<Vec<Device>> {
+    ) -> Result<Vec<Aircraft>> {
         use diesel::ExpressionMethods;
 
         let mut conn = self.get_connection()?;
 
-        let mut query = devices::table
-            .filter(devices::last_fix_at.is_not_null())
+        let mut query = aircraft::table
+            .filter(aircraft::last_fix_at.is_not_null())
             .into_boxed();
 
         // Apply aircraft type filter if provided
@@ -362,14 +363,14 @@ impl DeviceRepository {
                 .collect();
 
             if !aircraft_type_enums.is_empty() {
-                query = query.filter(devices::aircraft_type_ogn.eq_any(aircraft_type_enums));
+                query = query.filter(aircraft::aircraft_type_ogn.eq_any(aircraft_type_enums));
             }
         }
 
         let device_models = query
-            .order(devices::last_fix_at.desc())
+            .order(aircraft::last_fix_at.desc())
             .limit(limit)
-            .load::<DeviceModel>(&mut conn)?;
+            .load::<AircraftModel>(&mut conn)?;
 
         Ok(device_models
             .into_iter()
@@ -383,7 +384,7 @@ impl DeviceRepository {
         &self,
         limit: i64,
         aircraft_types: Option<Vec<String>>,
-    ) -> Result<Vec<(DeviceModel, Option<f64>, Option<f64>, Option<Uuid>)>> {
+    ) -> Result<Vec<(AircraftModel, Option<f64>, Option<f64>, Option<Uuid>)>> {
         let pool = self.pool.clone();
         let aircraft_types_filter = aircraft_types.clone();
 
@@ -415,13 +416,13 @@ impl DeviceRepository {
                 LEFT JOIN LATERAL (
                     SELECT latitude, longitude
                     FROM fixes
-                    WHERE device_id = d.id
+                    WHERE aircraft_id = d.id
                     AND received_at >= NOW() - INTERVAL '24 hours'
                     ORDER BY received_at DESC
                     LIMIT 1
                 ) latest_fix ON true
                 LEFT JOIN flights active_flight ON (
-                    active_flight.device_id = d.id
+                    active_flight.aircraft_id = d.id
                     AND active_flight.landing_time IS NULL
                     AND active_flight.timed_out_at IS NULL
                 )
@@ -443,7 +444,7 @@ impl DeviceRepository {
                 #[diesel(sql_type = Int4)]
                 address: i32,
                 #[diesel(sql_type = crate::schema::sql_types::AddressType)]
-                address_type: crate::devices::AddressType,
+                address_type: crate::aircraft::AddressType,
                 #[diesel(sql_type = Text)]
                 aircraft_model: String,
                 #[diesel(sql_type = Text)]
@@ -496,7 +497,7 @@ impl DeviceRepository {
             Ok(results
                 .into_iter()
                 .map(|row| {
-                    let device_model = DeviceModel {
+                    let device_model = AircraftModel {
                         id: row.id,
                         address: row.address,
                         address_type: row.address_type,
@@ -532,21 +533,21 @@ impl DeviceRepository {
     }
 
     /// Update the club assignment for a device
-    pub async fn update_club_id(&self, device_id: Uuid, club_id: Option<Uuid>) -> Result<bool> {
+    pub async fn update_club_id(&self, aircraft_id: Uuid, club_id: Option<Uuid>) -> Result<bool> {
         let mut conn = self.get_connection()?;
 
-        let rows_updated = diesel::update(devices::table.filter(devices::id.eq(device_id)))
-            .set(devices::club_id.eq(club_id))
+        let rows_updated = diesel::update(aircraft::table.filter(aircraft::id.eq(aircraft_id)))
+            .set(aircraft::club_id.eq(club_id))
             .execute(&mut conn)?;
 
         if rows_updated > 0 {
             info!(
                 "Updated device {} club assignment to {:?}",
-                device_id, club_id
+                aircraft_id, club_id
             );
             Ok(true)
         } else {
-            warn!("No device found with ID {}", device_id);
+            warn!("No device found with ID {}", aircraft_id);
             Ok(false)
         }
     }
@@ -571,7 +572,7 @@ mod tests {
     async fn test_device_repository_creation() {
         // Just test that we can create the repository
         if let Ok(pool) = create_test_pool() {
-            let _repo = DeviceRepository::new(pool);
+            let _repo = AircraftRepository::new(pool);
         } else {
             // Skip test if we can't connect to test database
             println!("Skipping test - no test database connection");

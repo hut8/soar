@@ -6,7 +6,7 @@ use tracing::{debug, info};
 use uuid::Uuid;
 
 use crate::Fix;
-use crate::devices::{AddressType, Device};
+use crate::aircraft::{AddressType, Aircraft};
 use crate::geometry::spline::{GeoPoint, calculate_spline_distance, generate_spline_path};
 
 /// Flight state enum representing the current status of a flight
@@ -46,13 +46,13 @@ pub struct Flight {
     /// Unique identifier for this flight
     pub id: Uuid,
 
-    /// Device UUID (foreign key to devices table)
-    pub device_id: Option<Uuid>,
+    /// Aircraft UUID (foreign key to devices table)
+    pub aircraft_id: Option<Uuid>,
 
-    /// Device address (hex ID like "39D304") - kept for compatibility
+    /// Aircraft address (hex ID like "39D304") - kept for compatibility
     pub device_address: String,
 
-    /// Device address type (ICAO, FLARM, OGN, etc.) - kept for compatibility
+    /// Aircraft address type (ICAO, FLARM, OGN, etc.) - kept for compatibility
     pub device_address_type: AddressType,
 
     /// Takeoff time (optional - null for flights first seen airborne)
@@ -67,8 +67,8 @@ pub struct Flight {
     /// Arrival airport ID (foreign key to airports table - may be same as departure for local flights)
     pub arrival_airport_id: Option<i32>,
 
-    /// Device ID of the towplane that towed this glider (if this is a glider flight)
-    pub towed_by_device_id: Option<Uuid>,
+    /// Aircraft ID of the towplane that towed this glider (if this is a glider flight)
+    pub towed_by_aircraft_id: Option<Uuid>,
 
     /// Flight ID of the towplane flight that towed this glider (if this is a glider flight)
     pub towed_by_flight_id: Option<Uuid>,
@@ -159,14 +159,14 @@ impl Flight {
         let now = Utc::now();
         Self {
             id: Uuid::now_v7(),
-            device_id: None,
+            aircraft_id: None,
             device_address,
             device_address_type: AddressType::Unknown,
             takeoff_time,
             landing_time: None,
             departure_airport_id: None,
             arrival_airport_id: None,
-            towed_by_device_id: None,
+            towed_by_aircraft_id: None,
             towed_by_flight_id: None,
             tow_release_altitude_msl_ft: None,
             tow_release_time: None,
@@ -189,11 +189,11 @@ impl Flight {
         }
     }
 
-    pub fn new_from_fix(fix: &Fix, device: &Device, takeoff_time: Option<DateTime<Utc>>) -> Self {
+    pub fn new_from_fix(fix: &Fix, device: &Aircraft, takeoff_time: Option<DateTime<Utc>>) -> Self {
         let now = Utc::now();
         info!(
             "Creating flight for {} from fix {} with climb: {:?} alt: {:?} speed: {:?}",
-            device.device_address_hex(),
+            device.aircraft_address_hex(),
             fix.id,
             fix.climb_fpm,
             fix.altitude_msl_feet,
@@ -201,14 +201,14 @@ impl Flight {
         );
         Self {
             id: Uuid::now_v7(),
-            device_id: fix.device_id.into(),
-            device_address: device.device_address_hex(),
+            aircraft_id: fix.aircraft_id.into(),
+            device_address: device.aircraft_address_hex(),
             device_address_type: device.address_type,
             takeoff_time,
             landing_time: None,
             departure_airport_id: None,
             arrival_airport_id: None,
-            towed_by_device_id: None,
+            towed_by_aircraft_id: None,
             towed_by_flight_id: None,
             tow_release_altitude_msl_ft: None,
             tow_release_time: None,
@@ -231,25 +231,25 @@ impl Flight {
         }
     }
     /// Create a new flight for device already airborne (no takeoff time)
-    pub fn new_airborne_from_fix(fix: &Fix, device: &Device) -> Self {
+    pub fn new_airborne_from_fix(fix: &Fix, device: &Aircraft) -> Self {
         Self::new_from_fix(fix, device, None)
     }
 
     /// Create a new flight for device already airborne with a pre-generated UUID
     /// This is used to prevent race conditions when creating flights asynchronously
-    pub fn new_airborne_from_fix_with_id(fix: &Fix, device: &Device, flight_id: Uuid) -> Self {
+    pub fn new_airborne_from_fix_with_id(fix: &Fix, device: &Aircraft, flight_id: Uuid) -> Self {
         let now = Utc::now();
         debug!("Creating airborne flight {} from fix: {:?}", flight_id, fix);
         Self {
             id: flight_id,
-            device_id: fix.device_id.into(),
-            device_address: device.device_address_hex(),
+            aircraft_id: fix.aircraft_id.into(),
+            device_address: device.aircraft_address_hex(),
             device_address_type: device.address_type,
             takeoff_time: None,
             landing_time: None,
             departure_airport_id: None,
             arrival_airport_id: None,
-            towed_by_device_id: None,
+            towed_by_aircraft_id: None,
             towed_by_flight_id: None,
             tow_release_altitude_msl_ft: None,
             tow_release_time: None,
@@ -275,7 +275,7 @@ impl Flight {
     /// Create a new flight with known takeoff time
     pub fn new_with_takeoff_from_fix(
         fix: &Fix,
-        device: &Device,
+        device: &Aircraft,
         takeoff_time: DateTime<Utc>,
     ) -> Self {
         Self::new_from_fix(fix, device, Some(takeoff_time))
@@ -285,7 +285,7 @@ impl Flight {
     /// This is used to prevent race conditions when creating flights asynchronously
     pub fn new_with_takeoff_from_fix_with_id(
         fix: &Fix,
-        device: &Device,
+        device: &Aircraft,
         flight_id: Uuid,
         takeoff_time: DateTime<Utc>,
     ) -> Self {
@@ -296,14 +296,14 @@ impl Flight {
         );
         Self {
             id: flight_id,
-            device_id: fix.device_id.into(),
-            device_address: device.device_address_hex(),
+            aircraft_id: fix.aircraft_id.into(),
+            device_address: device.aircraft_address_hex(),
             device_address_type: device.address_type,
             takeoff_time: Some(takeoff_time),
             landing_time: None,
             departure_airport_id: None,
             arrival_airport_id: None,
-            towed_by_device_id: None,
+            towed_by_aircraft_id: None,
             towed_by_flight_id: None,
             tow_release_altitude_msl_ft: None,
             tow_release_time: None,
@@ -344,7 +344,7 @@ impl Flight {
 
     /// Check if this flight used a tow plane
     pub fn has_tow(&self) -> bool {
-        self.towed_by_device_id.is_some() || self.towed_by_flight_id.is_some()
+        self.towed_by_aircraft_id.is_some() || self.towed_by_flight_id.is_some()
     }
 
     /// Calculate the total distance flown during this flight
@@ -371,7 +371,7 @@ impl Flight {
             // Extract just the Fix objects
             fixes_repo
                 .get_fixes_for_aircraft_with_time_range(
-                    &self.device_id.unwrap_or(Uuid::nil()),
+                    &self.aircraft_id.unwrap_or(Uuid::nil()),
                     start_time,
                     end_time,
                     None,
@@ -400,7 +400,7 @@ impl Flight {
 
     /// Generate a human-readable aircraft identifier for display
     /// Priority: 1) Model + Registration, 2) Registration only, 3) Model only, 4) ICAO-XXYYZZ format
-    fn get_aircraft_identifier(&self, device: Option<&crate::devices::Device>) -> String {
+    fn get_aircraft_identifier(&self, device: Option<&crate::aircraft::Aircraft>) -> String {
         if let Some(device) = device {
             let has_model = !device.aircraft_model.is_empty();
             let has_registration = !device.registration.is_empty();
@@ -421,12 +421,12 @@ impl Flight {
                 (false, false) => {
                     // Neither available, fall back to ICAO-XXYYZZ format
                     let type_prefix = match device.address_type {
-                        crate::devices::AddressType::Icao => "ICAO",
-                        crate::devices::AddressType::Flarm => "FLARM",
-                        crate::devices::AddressType::Ogn => "OGN",
-                        crate::devices::AddressType::Unknown => "Unknown",
+                        crate::aircraft::AddressType::Icao => "ICAO",
+                        crate::aircraft::AddressType::Flarm => "FLARM",
+                        crate::aircraft::AddressType::Ogn => "OGN",
+                        crate::aircraft::AddressType::Unknown => "Unknown",
                     };
-                    format!("{}-{}", type_prefix, device.device_address_hex())
+                    format!("{}-{}", type_prefix, device.aircraft_address_hex())
                 }
             }
         } else {
@@ -484,7 +484,7 @@ impl Flight {
             // Extract just the Fix objects
             fixes_repo
                 .get_fixes_for_aircraft_with_time_range(
-                    &self.device_id.unwrap_or(Uuid::nil()),
+                    &self.aircraft_id.unwrap_or(Uuid::nil()),
                     start_time,
                     end_time,
                     None,
@@ -524,7 +524,7 @@ impl Flight {
     pub async fn make_kml(
         &self,
         fixes_repo: &crate::fixes_repo::FixesRepository,
-        device: Option<&crate::devices::Device>,
+        device: Option<&crate::aircraft::Aircraft>,
     ) -> Result<String> {
         use kml::types::{
             AltitudeMode, Coord, IconStyle, LineString, LineStyle, Placemark, Point, Style,
@@ -538,7 +538,7 @@ impl Flight {
 
         let fixes = fixes_repo
             .get_fixes_for_aircraft_with_time_range(
-                &self.device_id.unwrap_or(Uuid::nil()),
+                &self.aircraft_id.unwrap_or(Uuid::nil()),
                 start_time,
                 end_time,
                 None,
@@ -844,7 +844,7 @@ pub struct FlightModel {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub device_address_type: AddressType,
-    pub device_id: Option<Uuid>,
+    pub aircraft_id: Option<Uuid>,
     pub takeoff_altitude_offset_ft: Option<i32>,
     pub landing_altitude_offset_ft: Option<i32>,
     pub takeoff_runway_ident: Option<String>,
@@ -853,7 +853,7 @@ pub struct FlightModel {
     pub maximum_displacement_meters: Option<f64>,
     pub departure_airport_id: Option<i32>,
     pub arrival_airport_id: Option<i32>,
-    pub towed_by_device_id: Option<Uuid>,
+    pub towed_by_aircraft_id: Option<Uuid>,
     pub towed_by_flight_id: Option<Uuid>,
     pub tow_release_altitude_msl_ft: Option<i32>,
     pub tow_release_time: Option<DateTime<Utc>>,
@@ -876,7 +876,7 @@ pub struct NewFlightModel {
     pub landing_time: Option<DateTime<Utc>>,
     pub club_id: Option<Uuid>,
     pub device_address_type: AddressType,
-    pub device_id: Option<Uuid>,
+    pub aircraft_id: Option<Uuid>,
     pub takeoff_altitude_offset_ft: Option<i32>,
     pub landing_altitude_offset_ft: Option<i32>,
     pub takeoff_runway_ident: Option<String>,
@@ -885,7 +885,7 @@ pub struct NewFlightModel {
     pub maximum_displacement_meters: Option<f64>,
     pub departure_airport_id: Option<i32>,
     pub arrival_airport_id: Option<i32>,
-    pub towed_by_device_id: Option<Uuid>,
+    pub towed_by_aircraft_id: Option<Uuid>,
     pub towed_by_flight_id: Option<Uuid>,
     pub tow_release_altitude_msl_ft: Option<i32>,
     pub tow_release_time: Option<DateTime<Utc>>,
@@ -910,7 +910,7 @@ impl From<Flight> for FlightModel {
             club_id: flight.club_id,
             created_at: flight.created_at,
             updated_at: flight.updated_at,
-            device_id: flight.device_id,
+            aircraft_id: flight.aircraft_id,
             takeoff_altitude_offset_ft: flight.takeoff_altitude_offset_ft,
             landing_altitude_offset_ft: flight.landing_altitude_offset_ft,
             takeoff_runway_ident: flight.takeoff_runway_ident,
@@ -919,7 +919,7 @@ impl From<Flight> for FlightModel {
             maximum_displacement_meters: flight.maximum_displacement_meters,
             departure_airport_id: flight.departure_airport_id,
             arrival_airport_id: flight.arrival_airport_id,
-            towed_by_device_id: flight.towed_by_device_id,
+            towed_by_aircraft_id: flight.towed_by_aircraft_id,
             towed_by_flight_id: flight.towed_by_flight_id,
             tow_release_altitude_msl_ft: flight.tow_release_altitude_msl_ft,
             tow_release_time: flight.tow_release_time,
@@ -944,7 +944,7 @@ impl From<Flight> for NewFlightModel {
             takeoff_time: flight.takeoff_time,
             landing_time: flight.landing_time,
             club_id: flight.club_id,
-            device_id: flight.device_id,
+            aircraft_id: flight.aircraft_id,
             takeoff_altitude_offset_ft: flight.takeoff_altitude_offset_ft,
             landing_altitude_offset_ft: flight.landing_altitude_offset_ft,
             takeoff_runway_ident: flight.takeoff_runway_ident,
@@ -953,7 +953,7 @@ impl From<Flight> for NewFlightModel {
             maximum_displacement_meters: flight.maximum_displacement_meters,
             departure_airport_id: flight.departure_airport_id,
             arrival_airport_id: flight.arrival_airport_id,
-            towed_by_device_id: flight.towed_by_device_id,
+            towed_by_aircraft_id: flight.towed_by_aircraft_id,
             towed_by_flight_id: flight.towed_by_flight_id,
             tow_release_altitude_msl_ft: flight.tow_release_altitude_msl_ft,
             tow_release_time: flight.tow_release_time,
@@ -972,7 +972,7 @@ impl From<FlightModel> for Flight {
     fn from(model: FlightModel) -> Self {
         Self {
             id: model.id,
-            device_id: model.device_id,
+            aircraft_id: model.aircraft_id,
             device_address: model.device_address,
             device_address_type: model.device_address_type,
             takeoff_time: model.takeoff_time,
@@ -986,7 +986,7 @@ impl From<FlightModel> for Flight {
             landing_runway_ident: model.landing_runway_ident,
             total_distance_meters: model.total_distance_meters,
             maximum_displacement_meters: model.maximum_displacement_meters,
-            towed_by_device_id: model.towed_by_device_id,
+            towed_by_aircraft_id: model.towed_by_aircraft_id,
             towed_by_flight_id: model.towed_by_flight_id,
             tow_release_altitude_msl_ft: model.tow_release_altitude_msl_ft,
             tow_release_time: model.tow_release_time,

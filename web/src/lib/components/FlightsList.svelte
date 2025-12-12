@@ -16,7 +16,7 @@
 
 	let { flights, showEnd = false, showAircraft = true }: Props = $props();
 
-	function formatDeviceAddress(address: string, addressType: string): string {
+	function formatAircraftAddress(address: string, addressType: string): string {
 		const typePrefix = addressType === 'Flarm' ? 'F' : addressType === 'Ogn' ? 'O' : 'I';
 		return `${typePrefix}-${address}`;
 	}
@@ -134,9 +134,9 @@
 								<div class="flex flex-col gap-1">
 									{#if flight.aircraft_model && flight.registration}
 										<div class="flex items-center gap-2">
-											{#if flight.device_id}
+											{#if flight.aircraft_id}
 												<a
-													href={`/devices/${flight.device_id}`}
+													href={`/aircraft/${flight.aircraft_id}`}
 													class="anchor font-medium text-primary-500 hover:text-primary-600"
 												>
 													{flight.aircraft_model}
@@ -152,7 +152,7 @@
 													></span
 												>
 											{/if}
-											{#if flight.towed_by_device_id}
+											{#if flight.towed_by_aircraft_id}
 												<span
 													class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
 													title="This aircraft was towed"
@@ -164,9 +164,9 @@
 										</div>
 									{:else if flight.registration}
 										<div class="flex items-center gap-2">
-											{#if flight.device_id}
+											{#if flight.aircraft_id}
 												<a
-													href={`/devices/${flight.device_id}`}
+													href={`/aircraft/${flight.aircraft_id}`}
 													class="anchor font-medium text-primary-500 hover:text-primary-600"
 												>
 													{flight.registration}
@@ -174,7 +174,7 @@
 											{:else}
 												<span class="font-medium">{flight.registration}</span>
 											{/if}
-											{#if flight.towed_by_device_id}
+											{#if flight.towed_by_aircraft_id}
 												<span
 													class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
 													title="This aircraft was towed"
@@ -186,19 +186,19 @@
 										</div>
 									{:else}
 										<div class="flex items-center gap-2">
-											{#if flight.device_id}
+											{#if flight.aircraft_id}
 												<a
-													href={`/devices/${flight.device_id}`}
+													href={`/aircraft/${flight.aircraft_id}`}
 													class="text-surface-500-400-token anchor font-mono text-sm hover:text-primary-500"
 												>
-													{formatDeviceAddress(flight.device_address, flight.device_address_type)}
+													{formatAircraftAddress(flight.device_address, flight.device_address_type)}
 												</a>
 											{:else}
 												<span class="text-surface-500-400-token font-mono text-sm">
-													{formatDeviceAddress(flight.device_address, flight.device_address_type)}
+													{formatAircraftAddress(flight.device_address, flight.device_address_type)}
 												</span>
 											{/if}
-											{#if flight.towed_by_device_id}
+											{#if flight.towed_by_aircraft_id}
 												<span
 													class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
 													title="This aircraft was towed"
@@ -317,8 +317,8 @@
 							</td>
 						{/if}
 						<td>
-							{#if flight.towed_by_device_id}
-								<TowAircraftLink deviceId={flight.towed_by_device_id} size="sm" />
+							{#if flight.towed_by_aircraft_id}
+								<TowAircraftLink aircraftId={flight.towed_by_aircraft_id} size="sm" />
 							{:else}
 								<span class="text-surface-500">—</span>
 							{/if}
@@ -350,9 +350,9 @@
 				<div class="flex flex-wrap items-center gap-2">
 					{#if showAircraft}
 						{#if flight.aircraft_model && flight.registration}
-							{#if flight.device_id}
+							{#if flight.aircraft_id}
 								<a
-									href={`/devices/${flight.device_id}`}
+									href={`/aircraft/${flight.aircraft_id}`}
 									class="relative z-10 anchor font-semibold text-primary-500 hover:text-primary-600"
 								>
 									{flight.aircraft_model} ({flight.registration})
@@ -361,9 +361,9 @@
 								<span class="font-semibold">{flight.aircraft_model} ({flight.registration})</span>
 							{/if}
 						{:else if flight.registration}
-							{#if flight.device_id}
+							{#if flight.aircraft_id}
 								<a
-									href={`/devices/${flight.device_id}`}
+									href={`/aircraft/${flight.aircraft_id}`}
 									class="relative z-10 anchor font-semibold text-primary-500 hover:text-primary-600"
 								>
 									{flight.registration}
@@ -371,16 +371,16 @@
 							{:else}
 								<span class="font-semibold">{flight.registration}</span>
 							{/if}
-						{:else if flight.device_id}
+						{:else if flight.aircraft_id}
 							<a
-								href={`/devices/${flight.device_id}`}
+								href={`/aircraft/${flight.aircraft_id}`}
 								class="text-surface-500-400-token relative z-10 anchor font-mono text-sm hover:text-primary-500"
 							>
-								{formatDeviceAddress(flight.device_address, flight.device_address_type)}
+								{formatAircraftAddress(flight.device_address, flight.device_address_type)}
 							</a>
 						{:else}
 							<span class="text-surface-500-400-token font-mono text-sm">
-								{formatDeviceAddress(flight.device_address, flight.device_address_type)}
+								{formatAircraftAddress(flight.device_address, flight.device_address_type)}
 							</span>
 						{/if}
 					{/if}
@@ -389,7 +389,7 @@
 							{getAircraftTypeOgnDescription(flight.aircraft_type_ogn)}
 						</span>
 					{/if}
-					{#if flight.towed_by_device_id}
+					{#if flight.towed_by_aircraft_id}
 						<span
 							class="badge flex items-center gap-1 preset-filled-primary-500 text-xs"
 							title="This aircraft was towed"

@@ -22,7 +22,7 @@ use super::json_error;
 
 #[derive(Debug, Deserialize)]
 pub struct FixesQueryParams {
-    pub device_id: Option<uuid::Uuid>,
+    pub aircraft_id: Option<uuid::Uuid>,
     pub flight_id: Option<uuid::Uuid>,
     pub limit: Option<i64>,
     pub latitude_max: Option<f64>,
@@ -36,9 +36,9 @@ pub struct FixesQueryParams {
 #[serde(tag = "type")]
 pub enum SubscriptionMessage {
     #[serde(rename = "device")]
-    Device {
+    Aircraft {
         action: String, // "subscribe" or "unsubscribe"
-        id: String,     // Device UUID
+        id: String,     // Aircraft UUID
     },
     #[serde(rename = "area")]
     Area {
@@ -216,7 +216,7 @@ async fn handle_subscriptions(
                 match sub_msg {
                     Ok(sub_msg) => {
                         match sub_msg {
-                            SubscriptionMessage::Device { action, id } => {
+                            SubscriptionMessage::Aircraft { action, id } => {
                                 match action.as_str() {
                                     "subscribe" => {
                                         info!("Client subscribing to device: {}", id);
@@ -226,7 +226,7 @@ async fn handle_subscriptions(
                                                     subscribed_aircraft.push(id.clone());
                                                     receivers.insert(id.clone(), receiver);
                                                     metrics::gauge!("websocket_active_subscriptions").increment(1.0);
-                                                    metrics::counter!("websocket_device_subscribes").increment(1);
+                                                    metrics::counter!("websocket_aircraft_subscribes").increment(1);
                                                     info!("Successfully subscribed to device: {}", id);
                                                 }
                                                 Err(e) => {
@@ -241,7 +241,7 @@ async fn handle_subscriptions(
                                             subscribed_aircraft.retain(|device_id| device_id != &id);
                                             receivers.remove(&id);
                                             metrics::gauge!("websocket_active_subscriptions").decrement(1.0);
-                                            metrics::counter!("websocket_device_unsubscribes").increment(1);
+                                            metrics::counter!("websocket_aircraft_unsubscribes").increment(1);
                                             if let Err(e) = live_fix_service.unsubscribe_from_device(&id).await {
                                                 error!("Failed to unsubscribe from device {}: {}", id, e);
                                             } else {
@@ -376,7 +376,7 @@ async fn handle_subscriptions(
                 error!("Invalid area subscription key format: {}", subscription_key);
             }
         } else {
-            // Device subscription
+            // Aircraft subscription
             if let Err(e) = live_fix_service
                 .unsubscribe_from_device(subscription_key)
                 .await
@@ -480,14 +480,14 @@ async fn search_fixes_by_bbox(
 
 /// Get fixes for a specific device
 async fn get_fixes_by_device_id(
-    device_id: uuid::Uuid,
+    aircraft_id: uuid::Uuid,
     limit: Option<i64>,
     pool: crate::web::PgPool,
 ) -> impl IntoResponse {
     let fixes_repo = FixesRepository::new(pool);
 
     match fixes_repo
-        .get_fixes_for_device(device_id, Some(limit.unwrap_or(1000)), None)
+        .get_fixes_for_device(aircraft_id, Some(limit.unwrap_or(1000)), None)
         .await
     {
         Ok(fixes) => Json(fixes).into_response(),
@@ -545,7 +545,7 @@ async fn get_recent_fixes_default(
 
 #[instrument(skip(state), fields(
     has_bbox = params.latitude_max.is_some(),
-    has_device = params.device_id.is_some(),
+    has_device = params.aircraft_id.is_some(),
     has_flight = params.flight_id.is_some()
 ))]
 pub async fn search_fixes(
@@ -561,7 +561,7 @@ pub async fn search_fixes(
         || params.longitude_min.is_some();
 
     // Check if device or flight parameters are provided
-    let has_device_or_flight = params.device_id.is_some() || params.flight_id.is_some();
+    let has_device_or_flight = params.aircraft_id.is_some() || params.flight_id.is_some();
 
     // Validate mutual exclusivity
     if has_bounding_box && has_device_or_flight {
@@ -598,8 +598,8 @@ pub async fn search_fixes(
             )
             .into_response(),
         }
-    } else if let Some(device_id) = params.device_id {
-        get_fixes_by_device_id(device_id, params.limit, state.pool)
+    } else if let Some(aircraft_id) = params.aircraft_id {
+        get_fixes_by_device_id(aircraft_id, params.limit, state.pool)
             .await
             .into_response()
     } else if let Some(flight_id) = params.flight_id {
