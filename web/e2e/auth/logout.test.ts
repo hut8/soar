@@ -24,15 +24,15 @@ test.describe('Logout', () => {
 		// Log in
 		await login(page, testUsers.validUser.email, testUsers.validUser.password);
 
-		// Navigate to protected page (devices)
-		await page.goto('/devices');
-		await expect(page).toHaveURL('/devices');
+		// Navigate to protected page (aircraft)
+		await page.goto('/aircraft');
+		await expect(page).toHaveURL('/aircraft');
 
 		// Log out
 		await logout(page);
 
 		// Try to access protected page again
-		await page.goto('/devices');
+		await page.goto('/aircraft');
 
 		// Should be redirected to login page
 		await expect(page).toHaveURL(/\/login/);
