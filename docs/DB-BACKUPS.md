@@ -389,8 +389,7 @@ export BACKUP_REMOTE="soar-db:soar-backup-prod"
 export RCLONE_CONFIG="/etc/soar/rclone.conf"
 
 # Backup retention
-export BACKUP_RETENTION_DAYS=30
-export BASE_BACKUP_MIN_COUNT=2
+export BASE_BACKUP_KEEP_COUNT=5
 export WAL_RETENTION_DAYS=30
 
 # PostgreSQL connection (usually local)
