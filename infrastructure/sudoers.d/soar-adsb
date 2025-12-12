@@ -1,0 +1,17 @@
+# SOAR ADS-B Deployment Privileges
+#
+# This file grants the soar user minimal sudo privileges required for
+# deploying ADS-B ingester updates on the ADS-B server.
+#
+# Installation:
+#   sudo install -m 440 soar-adsb /etc/sudoers.d/soar
+#   sudo visudo -c
+#
+# Security:
+#   - Only allows execution of the ADS-B deployment script
+#   - No password required (deployment runs via GitHub Actions)
+#   - Restricted to deployment directory path pattern
+#
+
+# Allow soar user to execute the ADS-B deployment script
+soar ALL=(root) NOPASSWD: /usr/local/bin/soar-deploy-adsb /tmp/soar/deploy/*
