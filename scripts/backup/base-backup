@@ -19,7 +19,7 @@
 #   Source credentials from /etc/soar/backup-env
 #
 # Scheduling:
-#   Run via systemd timer: soar-backup-base.timer (weekly, Sunday 2 AM)
+#   Run via systemd timer: soar-backup-base.timer (weekly, Sunday midnight)
 
 set -euo pipefail
 
@@ -303,7 +303,9 @@ EOF
 
     # Cleanup old backups if enabled
     if [[ "$CLEANUP" == "true" ]]; then
-        log INFO "Cleaning up old backups (retention: $RETENTION_DAYS days, minimum: ${BASE_BACKUP_MIN_COUNT:-2})..."
+        # Number of most recent backups to keep (default: 5)
+        local keep_count=${BASE_BACKUP_KEEP_COUNT:-5}
+        log INFO "Cleaning up old backups (keeping most recent: $keep_count)..."
 
         # List all base backups (sorted newest first)
         local all_backups=$(ssh $SSH_OPTS "${SSH_USER}@${SSH_HOST}" \
@@ -316,36 +318,23 @@ EOF
             local backup_count=$(echo "$all_backups" | wc -l)
             log INFO "Found $backup_count total backups"
 
-            # Minimum number of backups to keep (default: 2)
-            local min_backups=${BASE_BACKUP_MIN_COUNT:-2}
-
-            # Calculate cutoff date (default: 21 days for 3 weeks)
-            local cutoff_date=$(date -u -d "$RETENTION_DAYS days ago" +"%Y-%m-%d")
-            log INFO "Cutoff date: $cutoff_date (keeping backups newer than this)"
-
-            # Count valid recent backups
-            local recent_count=0
-            for backup_date in $all_backups; do
-                if [[ "$backup_date" > "$cutoff_date" || "$backup_date" == "$cutoff_date" ]]; then
-                    ((recent_count++))
-                fi
-            done
-
-            log INFO "Recent backups (within retention): $recent_count"
-
-            # Only proceed with deletion if we have enough recent backups
-            if [[ $backup_count -le $min_backups ]]; then
-                log INFO "Only $backup_count backups exist, keeping all (minimum: $min_backups)"
-            elif [[ $recent_count -lt $min_backups ]]; then
-                log WARN "Only $recent_count recent backups, need at least $min_backups. Skipping cleanup for safety."
+            if [[ $backup_count -le $keep_count ]]; then
+                log INFO "Only $backup_count backups exist, keeping all (configured to keep: $keep_count)"
             else
-                # Safe to delete old backups
-                log INFO "Have $recent_count recent backups (>= $min_backups), proceeding with cleanup"
+                # Delete old backups beyond the keep count
+                log INFO "Will keep $keep_count most recent backups, deleting $((backup_count - keep_count)) old backups"
 
+                local skip_count=0
                 local deleted_count=0
+
                 for backup_date in $all_backups; do
-                    if [[ "$backup_date" < "$cutoff_date" ]]; then
-                        log INFO "Deleting old backup: $backup_date (older than $cutoff_date)"
+                    if [[ $skip_count -lt $keep_count ]]; then
+                        # Keep this backup
+                        ((skip_count++))
+                        log INFO "Keeping backup: $backup_date ($skip_count of $keep_count)"
+                    else
+                        # Delete this backup
+                        log INFO "Deleting old backup: $backup_date"
 
                         if ssh $SSH_OPTS "${SSH_USER}@${SSH_HOST}" \
                             "rm -rf ${SSH_PATH}/base/${backup_date}"; then
@@ -357,7 +346,7 @@ EOF
                     fi
                 done
 
-                log INFO "Cleanup completed: deleted $deleted_count old backups, kept $recent_count recent backups"
+                log INFO "Cleanup completed: deleted $deleted_count old backups, kept $keep_count recent backups"
             fi
         fi
     fi
