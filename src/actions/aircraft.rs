@@ -3,9 +3,11 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Json},
 };
+use serde::Serialize;
 use tracing::error;
 use uuid::Uuid;
 
+use crate::aircraft::AircraftModel;
 use crate::aircraft_registrations_repo::AircraftRegistrationsRepository;
 use crate::aircraft_repo::AircraftRepository;
 use crate::faa::aircraft_model_repo::AircraftModelRepository;
@@ -13,6 +15,12 @@ use crate::web::AppState;
 
 use super::json_error;
 use super::views::{AircraftRegistrationView, club::AircraftModelView};
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AircraftIssuesResponse {
+    pub duplicate_device_addresses: Vec<AircraftModel>,
+}
 
 pub async fn get_aircraft_registrations_by_club(
     State(state): State<AppState>,
@@ -255,6 +263,26 @@ pub async fn get_device_aircraft_model(
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to get aircraft model",
+            )
+            .into_response()
+        }
+    }
+}
+
+/// Get aircraft issues including duplicate device addresses
+pub async fn get_aircraft_issues(State(state): State<AppState>) -> impl IntoResponse {
+    let aircraft_repo = AircraftRepository::new(state.pool.clone());
+
+    match aircraft_repo.get_duplicate_devices().await {
+        Ok(duplicate_devices) => Json(AircraftIssuesResponse {
+            duplicate_device_addresses: duplicate_devices,
+        })
+        .into_response(),
+        Err(e) => {
+            error!("Failed to get aircraft issues: {}", e);
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to get aircraft issues",
             )
             .into_response()
         }

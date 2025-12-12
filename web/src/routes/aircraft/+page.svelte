@@ -1,5 +1,14 @@
 <script lang="ts">
-	import { Search, Radio, Plane, Antenna, Building2, Activity, Filter } from '@lucide/svelte';
+	import {
+		Search,
+		Radio,
+		Plane,
+		Antenna,
+		Building2,
+		Activity,
+		Filter,
+		AlertTriangle
+	} from '@lucide/svelte';
 	import { SegmentedControl } from '@skeletonlabs/skeleton-svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { serverCall } from '$lib/api/server';
@@ -216,6 +225,14 @@
 			Aircraft
 		</h1>
 	</header>
+
+	<!-- Issues Button -->
+	<div class="flex justify-center">
+		<a href="/aircraft/issues" class="btn preset-filled-warning-500">
+			<AlertTriangle class="h-5 w-5" />
+			View Aircraft Issues
+		</a>
+	</div>
 
 	<!-- Search Section -->
 	<section class="space-y-4 card p-6">

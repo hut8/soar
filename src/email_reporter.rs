@@ -260,60 +260,6 @@ impl DataLoadReport {
         </table>"#,
         );
 
-        // Add duplicate devices table if any exist
-        if !self.duplicate_devices.is_empty() {
-            html.push_str(
-                r#"
-        <h2 style="margin-top: 30px; color: #dc3545;">⚠ Duplicate Aircraft Addresses</h2>
-        <p style="color: #666; margin-bottom: 15px;">
-            The following addresses appear multiple times with different address types:
-        </p>
-        <table>
-            <tr>
-                <th>Address (Hex)</th>
-                <th>Address Type</th>
-                <th>Registration</th>
-                <th>Aircraft Model</th>
-                <th>From DDB</th>
-                <th>Tracked</th>
-                <th>Last Fix</th>
-            </tr>"#,
-            );
-
-            for device in &self.duplicate_devices {
-                let address_hex = format!("{:06X}", device.address);
-                let last_fix = device
-                    .last_fix_at
-                    .map(|ts| ts.format("%Y-%m-%d %H:%M").to_string())
-                    .unwrap_or_else(|| "-".to_string());
-
-                html.push_str(&format!(
-                    r#"
-            <tr>
-                <td><strong>{}</strong></td>
-                <td>{:?}</td>
-                <td>{}</td>
-                <td>{}</td>
-                <td>{}</td>
-                <td>{}</td>
-                <td>{}</td>
-            </tr>"#,
-                    address_hex,
-                    device.address_type,
-                    device.registration,
-                    device.aircraft_model,
-                    if device.from_ddb { "Yes" } else { "No" },
-                    if device.tracked { "Yes" } else { "No" },
-                    last_fix
-                ));
-            }
-
-            html.push_str(
-                r#"
-        </table>"#,
-            );
-        }
-
         html.push_str(
             r#"
         <div class="footer">
