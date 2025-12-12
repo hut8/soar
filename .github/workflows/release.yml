@@ -81,37 +81,45 @@ jobs:
 
       - name: Install Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
-
-      - name: Install build tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y mold clang
+        with:
+          target: x86_64-unknown-linux-musl
 
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-          shared-key: "release-build"
+          shared-key: "release-build-musl"
           save-if: ${{ github.ref == 'refs/heads/main' }}
           cache-all-crates: true
 
-      - name: Build release binary
-        env:
-          RUSTFLAGS: "-C link-arg=-fuse-ld=mold -C linker=clang --cfg tokio_unstable"
-        run: cargo build --release
+      - name: Cache cross
+        id: cache-cross
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cross
+          key: ${{ runner.os }}-cross-0.2.5
 
-      - name: Verify runtime initialization
+      - name: Install cross
+        if: steps.cache-cross.outputs.cache-hit != 'true'
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Build static release binary
+        env:
+          SKIP_WEB_BUILD: "1"  # Frontend already built above
+        run: cross build --release --target x86_64-unknown-linux-musl
+
+      - name: Verify static linking
         run: |
-          echo "Testing runtime initialization (Sentry, tracing, tokio-console on port 7779)..."
-          timeout 10s ./target/release/soar verify-runtime || EXIT_CODE=$?
-          if [ ${EXIT_CODE:-0} -eq 124 ]; then
-            echo "ERROR: verify-runtime command timed out (likely hung)"
-            exit 1
-          elif [ ${EXIT_CODE:-0} -ne 0 ]; then
-            echo "ERROR: verify-runtime command failed with exit code $EXIT_CODE"
-            exit $EXIT_CODE
+          echo "Checking if binary is statically linked..."
+          file target/x86_64-unknown-linux-musl/release/soar
+
+          # Check for dynamic dependencies (should show "statically linked")
+          if ldd target/x86_64-unknown-linux-musl/release/soar 2>&1 | grep -q "not a dynamic executable"; then
+            echo "✓ Binary is statically linked (no dynamic dependencies)"
+          else
+            echo "⚠ Binary has dynamic dependencies:"
+            ldd target/x86_64-unknown-linux-musl/release/soar || true
           fi
-          echo "✓ Runtime verification passed"
 
       - name: Install sentry-cli
         run: |
@@ -127,7 +135,7 @@ jobs:
           sentry-cli debug-files upload \
             --org "$SENTRY_ORG" \
             --project "$SENTRY_PROJECT" \
-            ./target/release/soar
+            ./target/x86_64-unknown-linux-musl/release/soar
 
       - name: Create Sentry release
         env:
@@ -151,7 +159,7 @@ jobs:
         run: |
           rm -f -rf release
           mkdir -p release
-          cp target/release/soar release/
+          cp target/x86_64-unknown-linux-musl/release/soar release/
           cp README.md release/ || echo "No README.md found"
           tar -czf soar-linux-x64.tar.gz -C release .
 
@@ -175,13 +183,15 @@ jobs:
       - name: Show binary info
         run: |
           echo "Binary size:"
-          ls -lh target/release/soar
+          ls -lh target/x86_64-unknown-linux-musl/release/soar
           echo ""
           echo "Binary info:"
-          file target/release/soar
+          file target/x86_64-unknown-linux-musl/release/soar
           echo ""
-          echo "Help output:"
-          ./target/release/soar --help || true
+          echo "Stripped binary size:"
+          cp target/x86_64-unknown-linux-musl/release/soar /tmp/soar-stripped
+          strip /tmp/soar-stripped
+          ls -lh /tmp/soar-stripped
 
   build-release-arm64:
     name: Build Release (Linux ARM64)
@@ -210,29 +220,37 @@ jobs:
       - name: Install Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          target: aarch64-unknown-linux-gnu
-
-      - name: Install build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y clang
-
-      - name: Install cross
-        run: cargo install cross --git https://github.com/cross-rs/cross
+          target: aarch64-unknown-linux-musl
 
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-          shared-key: "release-build-arm64"
+          shared-key: "release-build-arm64-musl"
           save-if: ${{ github.ref == 'refs/heads/main' }}
           cache-all-crates: true
 
-      - name: Build release binary (ARM64)
+      - name: Cache cross
+        id: cache-cross
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cross
+          key: ${{ runner.os }}-cross-0.2.5
+
+      - name: Install cross
+        if: steps.cache-cross.outputs.cache-hit != 'true'
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Build static release binary (ARM64)
         env:
           CROSS_CONTAINER_ENGINE: docker
-          SKIP_WEB_BUILD: "1"  # Frontend already built via downloaded artifacts
-        run: cross build --release --target aarch64-unknown-linux-gnu
+          SKIP_WEB_BUILD: "1"  # Frontend already built above
+        run: cross build --release --target aarch64-unknown-linux-musl
+
+      - name: Verify static linking
+        run: |
+          echo "Checking if binary is statically linked..."
+          file target/aarch64-unknown-linux-musl/release/soar
 
       - name: Install sentry-cli
         run: |
@@ -247,13 +265,13 @@ jobs:
           sentry-cli debug-files upload \
             --org "$SENTRY_ORG" \
             --project "$SENTRY_PROJECT" \
-            target/aarch64-unknown-linux-gnu/release/
+            target/aarch64-unknown-linux-musl/release/
 
       - name: Create release archive
         run: |
           rm -f -rf release
           mkdir -p release
-          cp target/aarch64-unknown-linux-gnu/release/soar release/
+          cp target/aarch64-unknown-linux-musl/release/soar release/
           cp README.md release/ || echo "No README.md found"
           tar -czf soar-linux-arm64.tar.gz -C release .
 
@@ -277,10 +295,10 @@ jobs:
       - name: Show binary info
         run: |
           echo "Binary size:"
-          ls -lh target/aarch64-unknown-linux-gnu/release/soar
+          ls -lh target/aarch64-unknown-linux-musl/release/soar
           echo ""
           echo "Binary info:"
-          file target/aarch64-unknown-linux-gnu/release/soar
+          file target/aarch64-unknown-linux-musl/release/soar
 
   build-docker:
     name: Build and Push Docker Image

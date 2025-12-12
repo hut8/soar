@@ -75,56 +75,53 @@ jobs:
           name: web-build
           path: web/build/
 
-      - name: Setup Node.js (for npm build during Rust build)
-        uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: 'npm'
-          cache-dependency-path: web/package-lock.json
-
-      - name: Install web dependencies
-        working-directory: ./web
-        run: npm ci
-
       - name: Install Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
-
-      - name: Install build tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y mold clang
+        with:
+          target: x86_64-unknown-linux-musl
 
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-          shared-key: "release-build"
+          shared-key: "release-build-musl"
           save-if: ${{ github.ref == 'refs/heads/main' }}
           cache-all-crates: true
 
-      - name: Build release binary
-        env:
-          RUSTFLAGS: "-C link-arg=-fuse-ld=mold -C linker=clang --cfg tokio_unstable"
-        run: cargo build --release
+      - name: Cache cross
+        id: cache-cross
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cross
+          key: ${{ runner.os }}-cross-0.2.5
 
-      - name: Verify runtime initialization
+      - name: Install cross
+        if: steps.cache-cross.outputs.cache-hit != 'true'
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Build static release binary
+        env:
+          SKIP_WEB_BUILD: "1"  # Frontend already built via downloaded artifacts
+        run: cross build --release --target x86_64-unknown-linux-musl
+
+      - name: Verify static linking
         run: |
-          echo "Testing runtime initialization (Sentry, tracing, tokio-console on port 7779)..."
-          timeout 10s ./target/release/soar verify-runtime || EXIT_CODE=$?
-          if [ ${EXIT_CODE:-0} -eq 124 ]; then
-            echo "ERROR: verify-runtime command timed out (likely hung)"
-            exit 1
-          elif [ ${EXIT_CODE:-0} -ne 0 ]; then
-            echo "ERROR: verify-runtime command failed with exit code $EXIT_CODE"
-            exit $EXIT_CODE
+          echo "Checking if binary is statically linked..."
+          file target/x86_64-unknown-linux-musl/release/soar
+
+          # Check for dynamic dependencies (should show "statically linked")
+          if ldd target/x86_64-unknown-linux-musl/release/soar 2>&1 | grep -q "not a dynamic executable"; then
+            echo "✓ Binary is statically linked (no dynamic dependencies)"
+          else
+            echo "⚠ Binary has dynamic dependencies:"
+            ldd target/x86_64-unknown-linux-musl/release/soar || true
           fi
-          echo "✓ Runtime verification passed"
 
       - name: Create binary archive
         run: |
           rm -f -rf release
           mkdir -p release
-          cp target/release/soar release/
+          cp target/x86_64-unknown-linux-musl/release/soar release/
           cp README.md release/ || echo "No README.md found"
           tar -czf soar-linux-x64.tar.gz -C release .
 

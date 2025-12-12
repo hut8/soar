@@ -7,11 +7,8 @@ incremental = true
 rustflags = ["--cfg", "tokio_unstable"]
 
 [target.x86_64-unknown-linux-gnu]
-# Fast linker configuration using mold
-# Requires: sudo apt install mold clang
-# If mold is not installed, cargo will fall back to the default linker
-linker = "clang"
-# rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+# Using default linker (ld)
+# Note: mold was previously configured here but is not currently used
 
 [target.x86_64-unknown-linux-musl]
 # Static linking configuration for musl
