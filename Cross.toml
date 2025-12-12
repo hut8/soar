@@ -17,17 +17,18 @@ pre-build = [
 ]
 
 [target.x86_64-unknown-linux-musl]
-# Static musl build for x86_64 - fully portable binary
-# Uses Alpine-based image with static libraries
-image = "ghcr.io/cross-rs/x86_64-unknown-linux-musl:edge"
+# Musl build for x86_64 - aims for maximum static linking
+# Uses cross's default Debian-based musl image
 pre-build = [
-    "apk add --no-cache gdal-dev gdal-static postgresql-dev pkgconfig",
+    "apt-get update",
+    "apt-get install -y pkg-config libpq-dev",
 ]
 
 [target.aarch64-unknown-linux-musl]
-# Static musl build for aarch64 - fully portable binary
-# Uses Alpine-based image with static libraries
-image = "ghcr.io/cross-rs/aarch64-unknown-linux-musl:edge"
+# Musl build for aarch64 - aims for maximum static linking
+# Uses cross's default Debian-based musl image
 pre-build = [
-    "apk add --no-cache gdal-dev gdal-static postgresql-dev pkgconfig",
+    "dpkg --add-architecture arm64",
+    "apt-get update",
+    "apt-get install -y pkg-config libpq-dev:arm64",
 ]
