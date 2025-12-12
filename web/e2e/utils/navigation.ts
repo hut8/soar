@@ -70,7 +70,7 @@ export async function searchAircraftByRegistration(
 	await page.locator('input[placeholder*="Aircraft registration"]:visible').fill(registration);
 
 	// Click the search button
-	await page.getByRole('button', { name: /search devices/i }).click();
+	await page.getByRole('button', { name: /search aircraft/i }).click();
 
 	// Wait for results to load
 	await page.waitForLoadState('networkidle');
