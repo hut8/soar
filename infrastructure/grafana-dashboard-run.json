@@ -37,7 +37,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -95,7 +95,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "process_uptime_seconds{component=\"run\"} and on() up{job=\"soar-run\",component=\"run\"}",
@@ -110,7 +110,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -180,7 +180,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "up{job=\"soar-run\",component=\"run\"} or on() vector(0)",
@@ -195,7 +195,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -279,7 +279,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "process_memory_bytes{component=\"run\"}",
@@ -294,7 +294,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -417,7 +417,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_aircraft_processed[1m])",
@@ -428,7 +428,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_receiver_status_processed[1m])",
@@ -439,7 +439,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_receiver_position_processed[1m])",
@@ -450,7 +450,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_server_status_processed[1m])",
@@ -461,7 +461,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_raw_message_queue_full[1m]) + rate(aprs_aircraft_queue_full[1m]) + rate(aprs_receiver_status_queue_full[1m]) + rate(aprs_receiver_position_queue_full[1m]) + rate(aprs_server_status_queue_full[1m])",
@@ -472,7 +472,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_aircraft_queue_full[1m])",
@@ -483,7 +483,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_receiver_status_queue_full[1m])",
@@ -494,7 +494,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_receiver_position_queue_full[1m])",
@@ -505,7 +505,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_server_status_queue_full[1m])",
@@ -516,7 +516,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_raw_message_queue_full[1m])",
@@ -531,7 +531,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -623,7 +623,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_jetstream_intake_queue_depth",
@@ -634,7 +634,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_aircraft_queue_depth",
@@ -645,7 +645,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_receiver_status_queue_depth",
@@ -656,7 +656,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_receiver_position_queue_depth",
@@ -667,7 +667,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_server_status_queue_depth",
@@ -678,7 +678,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_elevation_queue_depth",
@@ -689,7 +689,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "agl_backfill_pending_fixes",
@@ -717,7 +717,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -801,7 +801,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_jetstream_consumed[5m])",
@@ -816,7 +816,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -916,7 +916,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_jetstream_process_error[5m])",
@@ -927,7 +927,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_jetstream_receive_error[5m])",
@@ -938,7 +938,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_jetstream_decode_error[5m])",
@@ -949,7 +949,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_jetstream_ack_error[5m])",
@@ -964,7 +964,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -1048,7 +1048,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_messages_processed_total[5m])",
@@ -1059,7 +1059,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_messages_processed_aircraft[5m])",
@@ -1070,7 +1070,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_messages_processed_server[5m])",
@@ -1081,7 +1081,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_messages_processed_receiver_status[5m])",
@@ -1092,7 +1092,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_messages_processed_receiver_position[5m])",
@@ -1107,7 +1107,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -1199,7 +1199,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_jetstream_queue_depth",
@@ -1214,7 +1214,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -1306,7 +1306,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_jetstream_lag_seconds",
@@ -1334,7 +1334,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -1434,7 +1434,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_parse_success{component=\"run\"}[5m])",
@@ -1445,7 +1445,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_parse_failed{component=\"run\"}[5m])",
@@ -1460,7 +1460,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -1544,7 +1544,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_router_packet_type_position{component=\"run\"}[5m])",
@@ -1555,7 +1555,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_router_packet_type_status{component=\"run\"}[5m])",
@@ -1570,7 +1570,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -1670,7 +1670,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_router_routed_aircraft{component=\"run\"}[5m])",
@@ -1681,7 +1681,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_router_generic_processor_success{component=\"run\"}[5m])",
@@ -1692,7 +1692,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_router_generic_processor_failed{component=\"run\"}[5m])",
@@ -1707,7 +1707,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "description": "Tracks fixes inserted into the database, duplicates detected on redelivery, and fixes suppressed due to high frequency",
       "fieldConfig": {
@@ -1838,7 +1838,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_fixes_inserted{component=\"run\"}[5m])",
@@ -1849,7 +1849,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_fixes_duplicate_on_redelivery{component=\"run\"}[5m])",
@@ -1860,7 +1860,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_fixes_suppressed{component=\"run\"}[5m])",
@@ -1875,7 +1875,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "description": "Monitors router internal queue depth and disconnection events",
       "fieldConfig": {
@@ -1976,7 +1976,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_router_internal_queue_depth{component=\"run\"}",
@@ -1987,7 +1987,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_router_internal_queue_disconnected{component=\"run\"}[5m])",
@@ -2002,7 +2002,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "description": "Detailed router processing metrics and aircraft position routing",
       "fieldConfig": {
@@ -2103,7 +2103,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_router_process_packet_called{component=\"run\"}[5m])",
@@ -2114,7 +2114,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_router_process_packet_internal_called{component=\"run\"}[5m])",
@@ -2125,7 +2125,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_router_position_source_aircraft{component=\"run\"}[5m])",
@@ -2136,7 +2136,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_router_no_queue_aircraft{component=\"run\"}[5m])",
@@ -2151,7 +2151,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -2233,7 +2233,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_type_received{component=\"run\"}[5m])",
@@ -2261,7 +2261,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -2345,7 +2345,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_aircraft_total_processing_ms{component=\"run\",quantile=\"0.5\"}",
@@ -2356,7 +2356,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_aircraft_upsert_ms{component=\"run\",quantile=\"0.5\"}",
@@ -2367,7 +2367,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_aircraft_fix_creation_ms{component=\"run\",quantile=\"0.5\"}",
@@ -2378,7 +2378,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_aircraft_process_fix_internal_ms{component=\"run\",quantile=\"0.5\"}",
@@ -2389,7 +2389,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_aircraft_flight_insert_ms{component=\"run\",quantile=\"0.5\"}",
@@ -2400,7 +2400,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_aircraft_callsign_update_ms{component=\"run\",quantile=\"0.5\"}",
@@ -2411,7 +2411,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_aircraft_elevation_queue_ms{component=\"run\",quantile=\"0.5\"}",
@@ -2422,7 +2422,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_aircraft_nats_publish_ms{component=\"run\",quantile=\"0.5\"}",
@@ -2437,7 +2437,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -2521,7 +2521,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_aircraft_total_processing_ms{component=\"run\",quantile=\"0.95\"}",
@@ -2532,7 +2532,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_aircraft_upsert_ms{component=\"run\",quantile=\"0.95\"}",
@@ -2543,7 +2543,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_aircraft_fix_creation_ms{component=\"run\",quantile=\"0.95\"}",
@@ -2554,7 +2554,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_aircraft_process_fix_internal_ms{component=\"run\",quantile=\"0.95\"}",
@@ -2565,7 +2565,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_aircraft_flight_insert_ms{component=\"run\",quantile=\"0.95\"}",
@@ -2576,7 +2576,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_aircraft_callsign_update_ms{component=\"run\",quantile=\"0.95\"}",
@@ -2587,7 +2587,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_aircraft_elevation_queue_ms{component=\"run\",quantile=\"0.95\"}",
@@ -2598,7 +2598,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_aircraft_nats_publish_ms{component=\"run\",quantile=\"0.95\"}",
@@ -2613,7 +2613,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -2743,7 +2743,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_elevation_sync_processed[5m])",
@@ -2754,7 +2754,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "sum(rate(aprs_elevation_processed[5m]))",
@@ -2765,7 +2765,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_elevation_queued[5m])",
@@ -2776,7 +2776,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_elevation_channel_closed[5m])",
@@ -2791,7 +2791,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -2875,7 +2875,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_elevation_sync_duration_ms{component=\"run\",quantile=\"0.5\"}",
@@ -2886,7 +2886,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_elevation_sync_duration_ms{component=\"run\",quantile=\"0.95\"}",
@@ -2897,7 +2897,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_elevation_sync_duration_ms{component=\"run\",quantile=\"0.99\"}",
@@ -2908,7 +2908,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_elevation_duration_ms{component=\"run\",quantile=\"0.5\"}",
@@ -2919,7 +2919,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_elevation_duration_ms{component=\"run\",quantile=\"0.95\"}",
@@ -2930,7 +2930,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_elevation_duration_ms{component=\"run\",quantile=\"0.99\"}",
@@ -2958,7 +2958,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -3042,7 +3042,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(elevation_cache_hits[5m])",
@@ -3053,7 +3053,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(elevation_cache_misses[5m])",
@@ -3068,7 +3068,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -3126,7 +3126,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(elevation_cache_hits[5m]) / (rate(elevation_cache_hits[5m]) + rate(elevation_cache_misses[5m]))",
@@ -3141,7 +3141,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -3199,7 +3199,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "elevation_cache_entries",
@@ -3214,7 +3214,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -3298,7 +3298,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(elevation_tile_cache_hits[5m])",
@@ -3309,7 +3309,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(elevation_tile_cache_misses[5m])",
@@ -3324,7 +3324,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -3382,7 +3382,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(elevation_tile_cache_hits[5m]) / (rate(elevation_tile_cache_hits[5m]) + rate(elevation_tile_cache_misses[5m]))",
@@ -3397,7 +3397,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -3457,7 +3457,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "elevation_tile_cache_entries",
@@ -3472,7 +3472,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -3530,7 +3530,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(generic_processor_receiver_cache_hit[5m]) / (rate(generic_processor_receiver_cache_hit[5m]) + rate(generic_processor_receiver_cache_miss[5m]))",
@@ -3545,7 +3545,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -3629,7 +3629,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(generic_processor_receiver_cache_hit[5m])",
@@ -3640,7 +3640,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(generic_processor_receiver_cache_miss[5m])",
@@ -3655,7 +3655,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -3753,7 +3753,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(receiver_repo_latest_packet_at_skipped{component=\"run\"}[5m])",
@@ -3764,7 +3764,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(receiver_repo_latest_packet_at_updated{component=\"run\"}[5m])",
@@ -3779,7 +3779,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -3863,7 +3863,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "elevation_tile_load_duration_seconds{component=\"run\",quantile=\"0.95\"}",
@@ -3874,7 +3874,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "elevation_interpolation_duration_seconds{component=\"run\",quantile=\"0.95\"}",
@@ -3885,7 +3885,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "elevation_lookup_duration_seconds{component=\"run\",quantile=\"0.95\"}",
@@ -3913,7 +3913,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -4013,7 +4013,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(nats_publisher_fixes_published[5m])",
@@ -4024,7 +4024,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(nats_publisher_errors[5m])",
@@ -4039,7 +4039,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -4097,7 +4097,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "nats_publisher_queue_depth",
@@ -4125,7 +4125,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -4183,7 +4183,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "flight_tracker_active_aircraft",
@@ -4198,7 +4198,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -4282,7 +4282,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(flight_tracker_timeouts_detected[5m])",
@@ -4297,7 +4297,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -4381,7 +4381,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(flight_tracker_flight_created_takeoff[5m])",
@@ -4392,7 +4392,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(flight_tracker_flight_created_airborne[5m])",
@@ -4407,7 +4407,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -4491,7 +4491,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(flight_tracker_flight_ended_landed[5m])",
@@ -4502,7 +4502,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(flight_tracker_flight_ended_timed_out[5m])",
@@ -4530,7 +4530,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -4614,7 +4614,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(receiver_status_updates_total[5m])",
@@ -4642,7 +4642,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -4726,7 +4726,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_db_pool_total_connections",
@@ -4737,7 +4737,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_db_pool_active_connections",
@@ -4748,7 +4748,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_db_pool_idle_connections",
@@ -4763,7 +4763,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -4851,7 +4851,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_aircraft_queue_closed[5m])",
@@ -4862,7 +4862,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_receiver_status_queue_closed[5m])",
@@ -4873,7 +4873,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_receiver_position_queue_closed[5m])",
@@ -4884,7 +4884,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_server_status_queue_closed[5m])",
