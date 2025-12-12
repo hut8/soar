@@ -2,7 +2,13 @@
 set -e
 
 # SOAR Release Script
-# Automates version bumping, tagging, and triggering release workflow
+# Automates version bumping via release branch and PR workflow
+#
+# This script respects branch protection on main by:
+# 1. Creating a release branch from main
+# 2. Bumping versions and committing to the release branch
+# 3. Pushing the release branch and creating a PR
+# 4. After PR merge, you manually create and push the git tag
 #
 # Usage:
 #   ./release patch        # 0.1.0 → 0.1.1
@@ -33,7 +39,7 @@ if [ "$2" = "--dry-run" ] || [ "$BUMP_TYPE" = "--dry-run" ]; then
     echo -e "${YELLOW}DRY RUN MODE - No changes will be pushed${NC}\n"
 fi
 
-# Validate we're on main branch
+# Validate we're on main branch and it's clean
 CURRENT_BRANCH=$(git branch --show-current)
 if [ "$CURRENT_BRANCH" != "main" ]; then
     echo -e "${RED}Error: Must be on main branch (currently on: $CURRENT_BRANCH)${NC}"
@@ -107,31 +113,58 @@ cargo check --quiet
 echo -e "\n${BLUE}Changes to be committed:${NC}"
 git diff --stat
 
+# Create release branch
+RELEASE_BRANCH="release/v$NEW_VERSION"
+echo -e "\n${BLUE}Creating release branch: ${GREEN}$RELEASE_BRANCH${NC}"
+git checkout -b "$RELEASE_BRANCH"
+
 # Commit changes
-echo -e "\n${BLUE}Committing version bump...${NC}"
+echo -e "${BLUE}Committing version bump...${NC}"
 git add Cargo.toml Cargo.lock web/package.json web/package-lock.json
 git commit -m "chore: bump version to $NEW_VERSION"
 
-# Create git tag
-TAG="v$NEW_VERSION"
-echo -e "${BLUE}Creating git tag: ${GREEN}$TAG${NC}"
-git tag -a "$TAG" -m "Release $TAG"
-
-# Push changes
+# Push changes and create PR
 if [ "$DRY_RUN" = true ]; then
-    echo -e "\n${YELLOW}DRY RUN: Skipping push${NC}"
+    echo -e "\n${YELLOW}DRY RUN: Skipping push and PR creation${NC}"
     echo "Would have pushed:"
+    echo "  - Branch: $RELEASE_BRANCH"
     echo "  - Commit: $(git log -1 --oneline)"
-    echo "  - Tag: $TAG"
     echo -e "\n${YELLOW}To undo dry run changes:${NC}"
-    echo "  git reset --hard HEAD~1"
-    echo "  git tag -d $TAG"
+    echo "  git checkout main"
+    echo "  git branch -D $RELEASE_BRANCH"
 else
-    echo -e "${BLUE}Pushing commit and tag...${NC}"
-    git push origin main
-    git push origin "$TAG"
+    echo -e "${BLUE}Pushing release branch...${NC}"
+    git push -u origin "$RELEASE_BRANCH"
 
-    echo -e "\n${GREEN}✓ Release $TAG created successfully!${NC}"
-    echo -e "${BLUE}GitHub Actions will now build and publish the release${NC}"
-    echo -e "${BLUE}Watch progress at: https://github.com/$(git remote get-url origin | sed 's/.*github.com[:/]\(.*\)\.git/\1/')/actions${NC}"
+    # Create PR using gh CLI
+    echo -e "${BLUE}Creating pull request...${NC}"
+    PR_URL=$(gh pr create \
+        --title "chore: Release v$NEW_VERSION" \
+        --body "$(cat <<EOF
+## Release v$NEW_VERSION
+
+This PR bumps the version to **v$NEW_VERSION** in preparation for release.
+
+### Changes
+- Updated version in \`Cargo.toml\`
+- Updated version in \`web/package.json\`
+- Updated \`Cargo.lock\`
+
+### Post-Merge Steps
+After this PR is merged, the release tag will be created automatically by the release script.
+EOF
+)" \
+        --base main \
+        --head "$RELEASE_BRANCH")
+
+    echo -e "\n${GREEN}✓ Release PR created successfully!${NC}"
+    echo -e "${BLUE}PR URL: $PR_URL${NC}"
+    echo -e "\n${YELLOW}Next steps:${NC}"
+    echo "1. Review and merge the PR: $PR_URL"
+    echo "2. After merge, run the following commands to create and push the release tag:"
+    echo -e "   ${GREEN}git checkout main${NC}"
+    echo -e "   ${GREEN}git pull${NC}"
+    echo -e "   ${GREEN}git tag -a v$NEW_VERSION -m \"Release v$NEW_VERSION\"${NC}"
+    echo -e "   ${GREEN}git push origin v$NEW_VERSION${NC}"
+    echo -e "\n${BLUE}The tag push will trigger GitHub Actions to build and publish the release${NC}"
 fi
