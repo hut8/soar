@@ -13,7 +13,7 @@ Type=simple
 User=soar
 Group=soar
 WorkingDirectory=/var/soar
-ExecStart=/usr/local/bin/soar ingest-beast --server localhost --port 30005
+ExecStart=/usr/local/bin/soar ingest-beast --server ${BEAST_SERVER:-localhost} --port ${BEAST_PORT:-30005} --nats-url ${NATS_URL}
 ExecReload=/bin/kill -s HUP $MAINPID
 
 # Environment variables
@@ -42,5 +42,5 @@ LimitNOFILE=65536
 MemoryMax=2G
 
 [Install]
-# NOTE: Service is disabled by default until Beast ingestion is ready for production
-# WantedBy=multi-user.target soar.target
+# Enabled by default for ADS-B deployment
+WantedBy=multi-user.target

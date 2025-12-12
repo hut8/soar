@@ -1,0 +1,140 @@
+name: Deploy ADS-B Ingester
+
+on:
+  # Manual deployment trigger (recommended for initial rollout)
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        type: choice
+        options:
+          - production
+          - staging
+        default: production
+
+  # Automatic deployment (uncomment after testing)
+  # push:
+  #   branches: [main]
+  #   paths:
+  #     - 'src/commands/ingest_beast.rs'
+  #     - 'src/beast/**'
+  #     - 'infrastructure/systemd/soar-beast-ingest.service'
+  #     - 'infrastructure/soar-deploy-adsb'
+
+jobs:
+  deploy-adsb:
+    name: Deploy to ADS-B Server
+    runs-on: ubuntu-22.04
+    # Wait for build to complete and tests to pass
+    needs: []  # Will be filled in when integrating with ci.yml
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download release binary artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: soar-linux-x64
+          path: ./
+
+      - name: Extract binary from archive
+        run: |
+          tar -xzf soar-linux-x64.tar.gz
+          chmod +x soar
+          ./soar --version || echo "Binary extracted successfully"
+
+      - name: Setup Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TAILSCALE_OAUTH_SECRET }}
+          tags: tag:github-actions
+
+      - name: Setup SSH key for deployment
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.ADSB_SERVER_SSH_KEY }}" > ~/.ssh/adsb_deploy
+          chmod 600 ~/.ssh/adsb_deploy
+
+          # Add ADS-B server to known hosts (skip host key verification for Tailscale)
+          ssh-keyscan -H "${{ secrets.ADSB_SERVER_HOSTNAME }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Create deployment directory on ADS-B server
+        run: |
+          TIMESTAMP=$(date +%Y%m%d%H%M%S)
+          echo "DEPLOY_TIMESTAMP=$TIMESTAMP" >> $GITHUB_ENV
+
+          ssh -i ~/.ssh/adsb_deploy \
+            -o StrictHostKeyChecking=no \
+            soar@"${{ secrets.ADSB_SERVER_HOSTNAME }}" \
+            "mkdir -p /tmp/soar/deploy/$TIMESTAMP"
+
+      - name: Create deployment package
+        run: |
+          mkdir -p deploy-pkg
+
+          # Copy binary
+          cp soar deploy-pkg/
+
+          # Copy service file
+          cp infrastructure/systemd/soar-beast-ingest.service deploy-pkg/
+
+          # Copy deployment script
+          cp infrastructure/soar-deploy-adsb deploy-pkg/
+
+          # Create version file
+          echo "$(git rev-parse --short HEAD)" > deploy-pkg/VERSION
+
+          # List package contents
+          echo "Deployment package contents:"
+          ls -lh deploy-pkg/
+
+      - name: Upload deployment package to ADS-B server
+        run: |
+          scp -i ~/.ssh/adsb_deploy \
+            -o StrictHostKeyChecking=no \
+            -r deploy-pkg/* \
+            soar@"${{ secrets.ADSB_SERVER_HOSTNAME }}":/tmp/soar/deploy/${{ env.DEPLOY_TIMESTAMP }}/
+
+      - name: Execute deployment on ADS-B server
+        run: |
+          ssh -i ~/.ssh/adsb_deploy \
+            -o StrictHostKeyChecking=no \
+            soar@"${{ secrets.ADSB_SERVER_HOSTNAME }}" \
+            "sudo /usr/local/bin/soar-deploy-adsb /tmp/soar/deploy/${{ env.DEPLOY_TIMESTAMP }}"
+
+      - name: Verify deployment
+        run: |
+          echo "Checking service status..."
+          ssh -i ~/.ssh/adsb_deploy \
+            -o StrictHostKeyChecking=no \
+            soar@"${{ secrets.ADSB_SERVER_HOSTNAME }}" \
+            "systemctl is-active soar-beast-ingest && echo 'Service is ACTIVE' || echo 'Service is NOT ACTIVE'"
+
+          echo ""
+          echo "Recent service logs:"
+          ssh -i ~/.ssh/adsb_deploy \
+            -o StrictHostKeyChecking=no \
+            soar@"${{ secrets.ADSB_SERVER_HOSTNAME }}" \
+            "sudo journalctl -u soar-beast-ingest --no-pager --lines=30"
+
+      - name: Cleanup SSH key
+        if: always()
+        run: |
+          rm -f ~/.ssh/adsb_deploy
+
+      - name: Report deployment status
+        if: success()
+        run: |
+          echo "✅ ADS-B ingester deployed successfully to ${{ secrets.ADSB_SERVER_HOSTNAME }}"
+          echo "Deployment timestamp: ${{ env.DEPLOY_TIMESTAMP }}"
+          echo "Git commit: $(git rev-parse --short HEAD)"
+
+      - name: Report deployment failure
+        if: failure()
+        run: |
+          echo "❌ ADS-B ingester deployment failed"
+          echo "Check the logs above for details"
+          exit 1
