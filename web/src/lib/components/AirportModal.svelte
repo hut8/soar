@@ -108,7 +108,7 @@
 		role="presentation"
 	>
 		<div
-			class="max-h-[calc(90vh-5rem)] w-full max-w-4xl overflow-y-auto card bg-white text-gray-900 shadow-xl"
+			class="max-h-[calc(90vh-5rem)] w-full max-w-4xl overflow-y-auto card bg-surface-50 text-surface-900 shadow-xl dark:bg-surface-900 dark:text-surface-50"
 			onclick={(e) => e.stopPropagation()}
 			onkeydown={(e) => e.key === 'Escape' && closeModal()}
 			role="dialog"
@@ -117,7 +117,9 @@
 			tabindex="-1"
 		>
 			<!-- Header -->
-			<div class="flex items-center justify-between border-b border-gray-200 p-6">
+			<div
+				class="flex items-center justify-between border-b border-surface-300 p-6 dark:border-surface-600"
+			>
 				<div class="flex items-center gap-3">
 					<div
 						class="flex h-10 w-10 items-center justify-center rounded-full bg-blue-500 text-white"
@@ -138,7 +140,7 @@
 								Details
 							</a>
 						</div>
-						<p class="text-sm text-gray-600">
+						<p class="text-sm text-surface-600 dark:text-surface-400">
 							{selectedAirport.ident}
 							{#if selectedAirport.municipality}
 								• {selectedAirport.municipality}
@@ -163,39 +165,51 @@
 						<div class="space-y-3">
 							<div class="grid grid-cols-2 gap-4">
 								<div>
-									<dt class="text-sm font-medium text-gray-600">Type</dt>
+									<dt class="text-sm font-medium text-surface-600 dark:text-surface-400">Type</dt>
 									<dd class="text-sm">{getAirportTypeDisplay(selectedAirport.airport_type)}</dd>
 								</div>
 								<div>
-									<dt class="text-sm font-medium text-gray-600">Elevation</dt>
+									<dt class="text-sm font-medium text-surface-600 dark:text-surface-400">
+										Elevation
+									</dt>
 									<dd class="text-sm">{formatElevation(selectedAirport.elevation_ft)}</dd>
 								</div>
 							</div>
 
 							<div class="grid grid-cols-2 gap-4">
 								<div>
-									<dt class="text-sm font-medium text-gray-600">ICAO Code</dt>
+									<dt class="text-sm font-medium text-surface-600 dark:text-surface-400">
+										ICAO Code
+									</dt>
 									<dd class="font-mono text-sm">{selectedAirport.icao_code || 'N/A'}</dd>
 								</div>
 								<div>
-									<dt class="text-sm font-medium text-gray-600">IATA Code</dt>
+									<dt class="text-sm font-medium text-surface-600 dark:text-surface-400">
+										IATA Code
+									</dt>
 									<dd class="font-mono text-sm">{selectedAirport.iata_code || 'N/A'}</dd>
 								</div>
 							</div>
 
 							<div class="grid grid-cols-2 gap-4">
 								<div>
-									<dt class="text-sm font-medium text-gray-600">GPS Code</dt>
+									<dt class="text-sm font-medium text-surface-600 dark:text-surface-400">
+										GPS Code
+									</dt>
 									<dd class="font-mono text-sm">{selectedAirport.gps_code || 'N/A'}</dd>
 								</div>
 								<div>
-									<dt class="text-sm font-medium text-gray-600">Local Code</dt>
+									<dt class="text-sm font-medium text-surface-600 dark:text-surface-400">
+										Local Code
+									</dt>
 									<dd class="font-mono text-sm">{selectedAirport.local_code || 'N/A'}</dd>
 								</div>
 							</div>
 
 							<div>
-								<dt class="text-sm font-medium text-gray-600">Coordinates</dt>
+								<dt class="text-sm font-medium text-surface-600 dark:text-surface-400">
+									Coordinates
+								</dt>
 								<dd class="font-mono text-sm">
 									{formatCoordinates(selectedAirport.latitude_deg, selectedAirport.longitude_deg)}
 								</dd>
@@ -203,17 +217,21 @@
 
 							<div class="grid grid-cols-2 gap-4">
 								<div>
-									<dt class="text-sm font-medium text-gray-600">Country</dt>
+									<dt class="text-sm font-medium text-surface-600 dark:text-surface-400">
+										Country
+									</dt>
 									<dd class="text-sm">{selectedAirport.iso_country || 'Unknown'}</dd>
 								</div>
 								<div>
-									<dt class="text-sm font-medium text-gray-600">Region</dt>
+									<dt class="text-sm font-medium text-surface-600 dark:text-surface-400">Region</dt>
 									<dd class="text-sm">{selectedAirport.iso_region || 'Unknown'}</dd>
 								</div>
 							</div>
 
 							<div>
-								<dt class="text-sm font-medium text-gray-600">Scheduled Service</dt>
+								<dt class="text-sm font-medium text-surface-600 dark:text-surface-400">
+									Scheduled Service
+								</dt>
 								<dd class="text-sm">
 									<span
 										class="badge preset-filled-{selectedAirport.scheduled_service
@@ -227,15 +245,15 @@
 
 							<!-- Links -->
 							{#if selectedAirport.home_link || selectedAirport.wikipedia_link}
-								<div class="space-y-2 border-t border-gray-200 pt-4">
-									<h4 class="text-sm font-medium text-gray-900">Links</h4>
+								<div class="space-y-2 border-t border-surface-300 pt-4 dark:border-surface-600">
+									<h4 class="text-sm font-medium text-surface-900 dark:text-surface-100">Links</h4>
 									<div class="flex flex-col gap-2">
 										{#if selectedAirport.home_link}
 											<a
 												href={selectedAirport.home_link}
 												target="_blank"
 												rel="noopener noreferrer"
-												class="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 hover:underline"
+												class="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 hover:underline dark:text-blue-400 dark:hover:text-blue-300"
 											>
 												<ExternalLink size={14} />
 												Airport Website
@@ -246,7 +264,7 @@
 												href={selectedAirport.wikipedia_link}
 												target="_blank"
 												rel="noopener noreferrer"
-												class="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 hover:underline"
+												class="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 hover:underline dark:text-blue-400 dark:hover:text-blue-300"
 											>
 												<ExternalLink size={14} />
 												Wikipedia
@@ -263,20 +281,22 @@
 						<h3 class="flex items-center gap-2 text-lg font-semibold">
 							<MapPin size={20} />
 							Runways
-							<span class="text-sm font-normal text-gray-600">
+							<span class="text-sm font-normal text-surface-600 dark:text-surface-400">
 								({selectedAirport.runways.length})
 							</span>
 						</h3>
 
 						{#if selectedAirport.runways.length === 0}
-							<div class="py-8 text-center text-gray-500">
+							<div class="py-8 text-center text-surface-500 dark:text-surface-500">
 								<MapPin size={48} class="mx-auto mb-2 opacity-50" />
 								<p>No runway information available</p>
 							</div>
 						{:else}
 							<div class="space-y-3">
 								{#each selectedAirport.runways as runway (runway.id)}
-									<div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+									<div
+										class="rounded-lg border border-surface-300 bg-surface-100 p-4 dark:border-surface-600 dark:bg-surface-800"
+									>
 										<div class="mb-3 flex items-center justify-between">
 											<h4 class="font-mono font-semibold">
 												{formatRunwayEnds(runway.low, runway.high)}
@@ -314,15 +334,21 @@
 												<table class="table-compact table-hover table">
 													<tbody>
 														<tr>
-															<td class="w-1/3 font-medium text-gray-600">Length</td>
+															<td class="w-1/3 font-medium text-surface-600 dark:text-surface-400"
+																>Length</td
+															>
 															<td>{formatRunwayLength(runway.length_ft)}</td>
 														</tr>
 														<tr>
-															<td class="w-1/3 font-medium text-gray-600">Width</td>
+															<td class="w-1/3 font-medium text-surface-600 dark:text-surface-400"
+																>Width</td
+															>
 															<td>{formatRunwayWidth(runway.width_ft)}</td>
 														</tr>
 														<tr>
-															<td class="w-1/3 font-medium text-gray-600">Surface</td>
+															<td class="w-1/3 font-medium text-surface-600 dark:text-surface-400"
+																>Surface</td
+															>
 															<td>{runway.surface || 'Unknown'}</td>
 														</tr>
 													</tbody>
@@ -333,15 +359,15 @@
 										<!-- Mobile: Definition List -->
 										<dl class="mb-3 space-y-2 text-sm md:hidden">
 											<div class="flex justify-between gap-4">
-												<dt class="font-medium text-gray-600">Length</dt>
+												<dt class="font-medium text-surface-600 dark:text-surface-400">Length</dt>
 												<dd class="font-semibold">{formatRunwayLength(runway.length_ft)}</dd>
 											</div>
 											<div class="flex justify-between gap-4">
-												<dt class="font-medium text-gray-600">Width</dt>
+												<dt class="font-medium text-surface-600 dark:text-surface-400">Width</dt>
 												<dd class="font-semibold">{formatRunwayWidth(runway.width_ft)}</dd>
 											</div>
 											<div class="flex justify-between gap-4">
-												<dt class="font-medium text-gray-600">Surface</dt>
+												<dt class="font-medium text-surface-600 dark:text-surface-400">Surface</dt>
 												<dd class="font-semibold">{runway.surface || 'Unknown'}</dd>
 											</div>
 										</dl>
@@ -362,7 +388,9 @@
 																<tbody>
 																	{#if runway.low.heading_degt !== null}
 																		<tr>
-																			<td class="text-xs text-gray-600">True Hdg</td>
+																			<td class="text-xs text-surface-600 dark:text-surface-400"
+																				>True Hdg</td
+																			>
 																			<td class="text-xs font-medium"
 																				>{formatHeading(runway.low.heading_degt)}</td
 																			>
@@ -370,7 +398,9 @@
 																	{/if}
 																	{#if runway.low.displaced_threshold_ft}
 																		<tr>
-																			<td class="text-xs text-gray-600">Displaced</td>
+																			<td class="text-xs text-surface-600 dark:text-surface-400"
+																				>Displaced</td
+																			>
 																			<td class="text-xs font-medium"
 																				>{runway.low.displaced_threshold_ft} ft</td
 																			>
@@ -385,7 +415,7 @@
 													<dl class="space-y-1 text-xs md:hidden">
 														{#if runway.low.heading_degt !== null}
 															<div class="flex justify-between gap-2">
-																<dt class="text-gray-600">True Heading</dt>
+																<dt class="text-surface-600 dark:text-surface-400">True Heading</dt>
 																<dd class="font-medium">
 																	{formatHeading(runway.low.heading_degt)}
 																</dd>
@@ -393,7 +423,7 @@
 														{/if}
 														{#if runway.low.displaced_threshold_ft}
 															<div class="flex justify-between gap-2">
-																<dt class="text-gray-600">Displaced</dt>
+																<dt class="text-surface-600 dark:text-surface-400">Displaced</dt>
 																<dd class="font-medium">{runway.low.displaced_threshold_ft} ft</dd>
 															</div>
 														{/if}
@@ -413,7 +443,9 @@
 																<tbody>
 																	{#if runway.high.heading_degt !== null}
 																		<tr>
-																			<td class="text-xs text-gray-600">True Hdg</td>
+																			<td class="text-xs text-surface-600 dark:text-surface-400"
+																				>True Hdg</td
+																			>
 																			<td class="text-xs font-medium"
 																				>{formatHeading(runway.high.heading_degt)}</td
 																			>
@@ -421,7 +453,9 @@
 																	{/if}
 																	{#if runway.high.displaced_threshold_ft}
 																		<tr>
-																			<td class="text-xs text-gray-600">Displaced</td>
+																			<td class="text-xs text-surface-600 dark:text-surface-400"
+																				>Displaced</td
+																			>
 																			<td class="text-xs font-medium"
 																				>{runway.high.displaced_threshold_ft} ft</td
 																			>
@@ -436,7 +470,7 @@
 													<dl class="space-y-1 text-xs md:hidden">
 														{#if runway.high.heading_degt !== null}
 															<div class="flex justify-between gap-2">
-																<dt class="text-gray-600">True Heading</dt>
+																<dt class="text-surface-600 dark:text-surface-400">True Heading</dt>
 																<dd class="font-medium">
 																	{formatHeading(runway.high.heading_degt)}
 																</dd>
@@ -444,7 +478,7 @@
 														{/if}
 														{#if runway.high.displaced_threshold_ft}
 															<div class="flex justify-between gap-2">
-																<dt class="text-gray-600">Displaced</dt>
+																<dt class="text-surface-600 dark:text-surface-400">Displaced</dt>
 																<dd class="font-medium">{runway.high.displaced_threshold_ft} ft</dd>
 															</div>
 														{/if}
