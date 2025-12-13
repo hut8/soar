@@ -74,27 +74,27 @@ impl AprsClient {
         }
     }
 
-    /// Start the APRS client with JetStream publisher
-    /// This connects to APRS-IS and publishes all messages to a durable NATS JetStream queue
-    #[tracing::instrument(skip(self, jetstream_publisher))]
+    /// Start the APRS client with NATS publisher
+    /// This connects to APRS-IS and publishes all messages to NATS
+    #[tracing::instrument(skip(self, nats_publisher))]
     pub async fn start_jetstream(
         &mut self,
-        jetstream_publisher: crate::aprs_jetstream_publisher::JetStreamPublisher,
+        nats_publisher: crate::aprs_nats_publisher::NatsPublisher,
     ) -> Result<()> {
         let (_shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
         let health_state = crate::metrics::init_aprs_health();
-        self.start_jetstream_with_shutdown(jetstream_publisher, shutdown_rx, health_state)
+        self.start_jetstream_with_shutdown(nats_publisher, shutdown_rx, health_state)
             .await
     }
 
-    /// Start the APRS client with JetStream publisher and external shutdown signal
-    /// This connects to APRS-IS and publishes all messages to a durable NATS JetStream queue
+    /// Start the APRS client with NATS publisher and external shutdown signal
+    /// This connects to APRS-IS and publishes all messages to NATS
     /// Supports graceful shutdown when shutdown_rx receives a signal
     /// Updates health_state with connection status for health checks
-    #[tracing::instrument(skip(self, jetstream_publisher, shutdown_rx, health_state))]
+    #[tracing::instrument(skip(self, nats_publisher, shutdown_rx, health_state))]
     pub async fn start_jetstream_with_shutdown(
         &mut self,
-        jetstream_publisher: crate::aprs_jetstream_publisher::JetStreamPublisher,
+        nats_publisher: crate::aprs_nats_publisher::NatsPublisher,
         shutdown_rx: tokio::sync::oneshot::Receiver<()>,
         health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::AprsIngestHealth>>,
     ) -> Result<()> {
@@ -107,12 +107,12 @@ impl AprsClient {
         // Create bounded channel for raw APRS messages from TCP socket
         let (raw_message_tx, raw_message_rx) = flume::bounded::<String>(RAW_MESSAGE_QUEUE_SIZE);
         info!(
-            "Created raw message queue with capacity {} for JetStream publishing",
+            "Created raw message queue with capacity {} for NATS publishing",
             RAW_MESSAGE_QUEUE_SIZE
         );
 
         // Spawn message publishing task
-        let publisher = jetstream_publisher.clone();
+        let publisher = nats_publisher.clone();
         let mut shutdown_rx_for_publisher = shutdown_rx;
         let publisher_handle = tokio::spawn(
             async move {
@@ -123,61 +123,20 @@ impl AprsClient {
                 let mut last_log_time = std::time::Instant::now();
                 let mut last_receive_time = std::time::Instant::now();
 
-                // Limit concurrent publishes to prevent spawning too many tasks
-                let publish_semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(100));
-
                 loop {
                     tokio::select! {
                         Ok(message) = raw_message_rx.recv_async() => {
                             last_receive_time = std::time::Instant::now();
                             attempted_count += 1;
 
-                            // Use semaphore to limit concurrent publishes to 100
-                            let permit = publish_semaphore.clone().acquire_owned().await.unwrap();
-                            let pub_clone = publisher.clone();
-
-                            tokio::spawn(async move {
-                                let _permit = permit; // Hold permit until publish completes
-                                let publish_start = std::time::Instant::now();
-
-                                // Add 5-second timeout to prevent indefinite blocking
-                                match tokio::time::timeout(
-                                    Duration::from_secs(5),
-                                    pub_clone.publish_fire_and_forget(&message)
-                                ).await {
-                                    Ok(_) => {
-                                        let publish_duration = publish_start.elapsed();
-
-                                        // Warn if publish took more than 100ms
-                                        if publish_duration.as_millis() > 100 {
-                                            warn!(
-                                                "Slow JetStream publish: {}ms",
-                                                publish_duration.as_millis()
-                                            );
-                                            metrics::counter!("aprs.jetstream.slow_publish").increment(1);
-                                        }
-                                    }
-                                    Err(_) => {
-                                        error!("JetStream publish timed out after 5 seconds - NATS may be blocked");
-                                        metrics::counter!("aprs.jetstream.publish_timeout").increment(1);
-
-                                        // Report timeout to Sentry (throttled)
-                                        sentry::capture_message(
-                                            "JetStream publish timed out after 5 seconds",
-                                            sentry::Level::Error
-                                        );
-                                    }
-                                }
-                            });
+                            // Publish to NATS - truly fire-and-forget (spawns its own task)
+                            publisher.publish_fire_and_forget(&message);
                         }
                         _ = stats_timer.tick() => {
                             // Report raw message queue depth every 10 seconds
                             let queue_depth = raw_message_rx.len();
-                            let available_permits = publish_semaphore.available_permits();
-                            let in_flight_publishes = 100 - available_permits;
 
-                            metrics::gauge!("aprs.jetstream.queue_depth").set(queue_depth as f64);
-                            metrics::gauge!("aprs.jetstream.in_flight").set(in_flight_publishes as f64);
+                            metrics::gauge!("aprs.nats.queue_depth").set(queue_depth as f64);
 
                             // Log publishing rate and queue status
                             let elapsed = last_log_time.elapsed().as_secs_f64();
@@ -186,8 +145,8 @@ impl AprsClient {
                             if elapsed > 0.0 {
                                 let rate = attempted_count as f64 / elapsed;
                                 info!(
-                                    "JetStream stats: {:.1} msg/s attempted (queue: {}, in-flight: {}, last receive: {:.1}s ago)",
-                                    rate, queue_depth, in_flight_publishes, time_since_last_receive
+                                    "NATS stats: {:.1} msg/s attempted (queue: {}, last receive: {:.1}s ago)",
+                                    rate, queue_depth, time_since_last_receive
                                 );
                                 attempted_count = 0;
                                 last_log_time = std::time::Instant::now();
@@ -195,7 +154,7 @@ impl AprsClient {
 
                             if queue_depth > queue_warning_threshold(RAW_MESSAGE_QUEUE_SIZE) {
                                 warn!(
-                                    "JetStream publish queue building up: {} messages (80% full)",
+                                    "NATS publish queue building up: {} messages (80% full)",
                                     queue_depth
                                 );
 
@@ -216,17 +175,6 @@ impl AprsClient {
                                     time_since_last_receive
                                 );
                             }
-
-                            // Detect if all publish permits are taken (publishing is completely blocked)
-                            if available_permits == 0 {
-                                error!(
-                                    "All 100 publish permits taken - JetStream publishing is completely blocked"
-                                );
-                                sentry::capture_message(
-                                    "All JetStream publish permits taken - publishing completely blocked",
-                                    sentry::Level::Error
-                                );
-                            }
                         }
                         Ok(_) = &mut shutdown_rx_for_publisher => {
                             info!("Shutdown signal received by publisher, flushing queue...");
@@ -244,7 +192,7 @@ impl AprsClient {
                                 flush_timeout.saturating_sub(flush_start.elapsed()),
                                 raw_message_rx.recv_async()
                             ).await {
-                                publisher.publish_with_retry(&message).await;
+                                let _ = publisher.publish(&message).await;
                                 flushed_count += 1;
                             }
 
@@ -264,7 +212,7 @@ impl AprsClient {
 
                 info!("Publisher task shutting down gracefully");
             }
-            .instrument(tracing::info_span!("jetstream_publisher")),
+            .instrument(tracing::info_span!("nats_publisher")),
         );
 
         // Spawn connection management task (same as regular start)
@@ -277,7 +225,7 @@ impl AprsClient {
                 loop {
                     // Check if shutdown was requested
                     if internal_shutdown_rx.try_recv().is_ok() {
-                        info!("Shutdown requested, stopping APRS JetStream ingestion");
+                        info!("Shutdown requested, stopping APRS NATS ingestion");
                         // Mark as disconnected in health state
                         {
                             let mut health = health_for_connection.write().await;
