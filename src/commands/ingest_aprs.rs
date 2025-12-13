@@ -182,67 +182,24 @@ pub async fn handle_ingest_aprs(
             }
         };
 
-        let jetstream = async_nats::jetstream::new(nats_client);
+        info!("NATS ready - will publish to subject '{}'", final_subject);
 
-        // Create or get the stream for raw APRS messages
-        info!(
-            "Setting up JetStream stream '{}' for subject '{}'...",
-            final_stream_name, final_subject
-        );
-
-        let stream = match jetstream.get_stream(&final_stream_name).await {
-            Ok(stream) => {
-                info!("JetStream stream '{}' already exists", final_stream_name);
-                stream
-            }
-            Err(_) => {
-                info!("Creating new JetStream stream '{}'...", final_stream_name);
-                match jetstream
-                    .create_stream(async_nats::jetstream::stream::Config {
-                        name: final_stream_name.clone(),
-                        subjects: vec![final_subject.clone()],
-                        max_messages: 100_000_000, // Store up to 100M messages
-                        storage: async_nats::jetstream::stream::StorageType::File,
-                        num_replicas: 1,
-                        ..Default::default()
-                    })
-                    .await
-                {
-                    Ok(stream) => stream,
-                    Err(e) => {
-                        error!("Failed to create JetStream stream: {} - retrying in 1s", e);
-                        metrics::counter!("aprs.jetstream.stream_setup_failed").increment(1);
-                        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-                        continue;
-                    }
-                }
-            }
-        };
-
-        info!(
-            "JetStream stream ready - will publish to subject '{}'",
-            final_subject
-        );
-
-        // Create a custom "router" that just publishes to JetStream
-        let jetstream_publisher = soar::aprs_jetstream_publisher::JetStreamPublisher::new(
-            jetstream,
-            final_subject.clone(),
-            stream,
-        );
+        // Create NATS publisher for raw APRS messages
+        let nats_publisher =
+            soar::aprs_nats_publisher::NatsPublisher::new(nats_client, final_subject.clone());
 
         let mut client = AprsClient::new(config.clone());
 
-        // Mark JetStream as connected in health state
+        // Mark NATS as connected in health state
         {
             let mut health = health_state.write().await;
-            health.jetstream_connected = true;
+            health.jetstream_connected = true; // Keep same field name for now
         }
 
         info!("Starting APRS client for ingestion...");
 
         // Run APRS client - this will block until failure or shutdown
-        match client.start_jetstream(jetstream_publisher).await {
+        match client.start_jetstream(nats_publisher).await {
             Ok(_) => {
                 info!("APRS ingestion stopped normally");
                 break;
@@ -251,10 +208,10 @@ pub async fn handle_ingest_aprs(
                 error!("APRS ingestion failed: {} - retrying in 1s", e);
                 metrics::counter!("aprs.ingest_failed").increment(1);
 
-                // Mark JetStream as disconnected
+                // Mark NATS as disconnected
                 {
                     let mut health = health_state.write().await;
-                    health.jetstream_connected = false;
+                    health.jetstream_connected = false; // Keep same field name for now
                 }
 
                 tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
