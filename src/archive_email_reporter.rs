@@ -2,6 +2,25 @@ use anyhow::Result;
 use chrono::{NaiveDate, Utc};
 use std::collections::HashMap;
 
+/// Get the environment name for display purposes
+/// Returns "Production", "Staging", or "Development"
+fn get_environment_name() -> String {
+    match std::env::var("SOAR_ENV").unwrap_or_default().as_str() {
+        "production" => "Production".to_string(),
+        "staging" => "Staging".to_string(),
+        _ => "Development".to_string(),
+    }
+}
+
+/// Get the staging prefix for email subjects
+/// Returns "[STAGING] " if SOAR_ENV=staging, empty string otherwise
+fn get_staging_prefix() -> &'static str {
+    match std::env::var("SOAR_ENV").unwrap_or_default().as_str() {
+        "staging" => "[STAGING] ",
+        _ => "",
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct TableArchiveMetrics {
     pub table_name: String,
@@ -114,6 +133,7 @@ impl ArchiveReport {
     }
 
     pub fn to_html(&self) -> String {
+        let environment = get_environment_name();
         let mut html = format!(
             r#"<!DOCTYPE html>
 <html>
@@ -142,9 +162,10 @@ impl ArchiveReport {
 </head>
 <body>
     <div class="container">
-        <h1>SOAR Archive Report</h1>
+        <h1>SOAR Archive Report - {}</h1>
         <div class="status">✓ SUCCESS</div>
         <div class="summary">
+            <strong>Environment:</strong> {}<br>
             <strong>Total Duration:</strong> {}<br>
             <strong>Tables Processed:</strong> {}<br>
             <strong>Total Rows Archived:</strong> {}<br>
@@ -162,6 +183,8 @@ impl ArchiveReport {
                 <th>Oldest Remaining</th>
                 <th>Relative</th>
             </tr>"#,
+            environment,
+            environment,
             Self::format_duration(self.total_duration_secs),
             self.tables.len(),
             Self::format_number(self.tables.iter().map(|t| t.rows_deleted).sum()),
@@ -328,8 +351,10 @@ pub fn send_archive_email_report(
     use std::time::Duration;
     use tracing::info;
 
+    let staging_prefix = get_staging_prefix();
     let subject = format!(
-        "✓ SOAR Archive Complete - {}",
+        "{}✓ SOAR Archive Complete - {}",
+        staging_prefix,
         chrono::Local::now().format("%Y-%m-%d")
     );
 

@@ -5,6 +5,15 @@ use lettre::{
     transport::smtp::{authentication::Credentials, response::Response},
 };
 
+/// Get the staging prefix for email subjects
+/// Returns "[STAGING] " if SOAR_ENV=staging, empty string otherwise
+fn get_staging_prefix() -> &'static str {
+    match std::env::var("SOAR_ENV").unwrap_or_default().as_str() {
+        "staging" => "[STAGING] ",
+        _ => "",
+    }
+}
+
 pub struct EmailService {
     mailer: AsyncSmtpTransport<Tokio1Executor>,
     from_email: String,
@@ -70,7 +79,7 @@ impl EmailService {
 
         let reset_url = format!("{}/reset-password?token={}", base_url, reset_token);
 
-        let subject = "Password Reset Request - SOAR";
+        let subject = format!("{}Password Reset Request - SOAR", get_staging_prefix());
         let body = format!(
             r#"Hello {},
 
@@ -110,7 +119,7 @@ The SOAR Team"#,
 
         let verification_url = format!("{}/verify-email?token={}", base_url, verification_token);
 
-        let subject = "Verify Your Email Address - SOAR";
+        let subject = format!("{}Verify Your Email Address - SOAR", get_staging_prefix());
         let body = format!(
             r#"Hello {},
 
