@@ -4,6 +4,11 @@ version = "0.1.3"
 edition = "2024"
 resolver = "2"
 
+[features]
+# Feature for musl static builds - bundles libpq and OpenSSL from source
+# This includes all static libraries needed for fully static binaries
+bundled-postgres = ["pq-sys/bundled", "dep:openssl", "openssl/vendored"]
+
 [dependencies]
 anyhow = "1.0"
 argon2 = "0.5"
@@ -52,6 +57,11 @@ diesel = { version = "2.3", features = [
     "r2d2",
     "numeric",
 ] }
+# For musl static builds: compile libpq from source with all internal static libraries
+# This avoids the missing libpgcommon.a and libpgport.a that aren't in system packages
+pq-sys = { version = "0.6", default-features = false }
+# OpenSSL is needed by bundled libpq - we use vendored feature for musl static builds
+openssl = { version = "0.10", optional = true }
 diesel_migrations = "2.2"
 diesel-derive-enum = { version = "3.0.0-beta.1", features = ["postgres"] }
 r2d2 = "0.8"

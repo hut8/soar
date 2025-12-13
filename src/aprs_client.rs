@@ -628,10 +628,16 @@ impl AprsClient {
                                 let timestamped_message =
                                     format!("{} {}", received_at.to_rfc3339(), trimmed_line);
 
-                                // Send message to channel for processing (blocking)
-                                // This will block if queue is full, applying backpressure to APRS-IS stream
-                                match raw_message_tx.send_async(timestamped_message).await {
-                                    Ok(()) => {
+                                // Send message to channel for processing with timeout
+                                // Use timeout to prevent indefinite blocking if JetStream publisher is stuck
+                                // If send doesn't complete within 10 seconds, disconnect and reconnect
+                                match timeout(
+                                    Duration::from_secs(10),
+                                    raw_message_tx.send_async(timestamped_message),
+                                )
+                                .await
+                                {
+                                    Ok(Ok(())) => {
                                         if is_server_message {
                                             trace!("Queued server message for JetStream");
                                             metrics::counter!("aprs.raw_message.queued.server")
@@ -649,10 +655,30 @@ impl AprsClient {
                                             }
                                         }
                                     }
-                                    Err(flume::SendError(_)) => {
+                                    Ok(Err(flume::SendError(_))) => {
                                         error!("Raw message queue is closed - stopping connection");
                                         return ConnectionResult::OperationFailed(anyhow::anyhow!(
                                             "Raw message queue closed"
+                                        ));
+                                    }
+                                    Err(_) => {
+                                        // Timeout: queue send blocked for 10+ seconds
+                                        // This indicates JetStream publisher is stuck (all permits exhausted)
+                                        let duration = connection_start.elapsed();
+                                        error!(
+                                            "Queue send blocked for 10+ seconds after {:.1}s - JetStream publisher stuck, reconnecting",
+                                            duration.as_secs_f64()
+                                        );
+                                        metrics::counter!("aprs.queue_send_timeout").increment(1);
+
+                                        sentry::capture_message(
+                                            "APRS queue send timed out - JetStream publisher stuck",
+                                            sentry::Level::Error,
+                                        );
+
+                                        return ConnectionResult::OperationFailed(anyhow::anyhow!(
+                                            "Queue send timeout after {:.1}s - publisher stuck",
+                                            duration.as_secs_f64()
                                         ));
                                     }
                                 }
