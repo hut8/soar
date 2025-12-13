@@ -7,6 +7,25 @@ use tracing::{info, warn};
 
 use crate::aircraft::AircraftModel;
 
+/// Get the environment name for display purposes
+/// Returns "Production", "Staging", or "Development"
+fn get_environment_name() -> String {
+    match std::env::var("SOAR_ENV").unwrap_or_default().as_str() {
+        "production" => "Production".to_string(),
+        "staging" => "Staging".to_string(),
+        _ => "Development".to_string(),
+    }
+}
+
+/// Get the staging prefix for email subjects
+/// Returns "[STAGING] " if SOAR_ENV=staging, empty string otherwise
+fn get_staging_prefix() -> &'static str {
+    match std::env::var("SOAR_ENV").unwrap_or_default().as_str() {
+        "staging" => "[STAGING] ",
+        _ => "",
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct EmailConfig {
     pub smtp_server: String,
@@ -121,6 +140,7 @@ impl DataLoadReport {
     }
 
     pub fn to_html(&self) -> String {
+        let environment = get_environment_name();
         let status_color = if self.overall_success {
             "#28a745"
         } else {
@@ -154,9 +174,10 @@ impl DataLoadReport {
 </head>
 <body>
     <div class="container">
-        <h1>SOAR Data Load Report</h1>
+        <h1>SOAR Data Load Report - {}</h1>
         <div class="status">{}</div>
         <div class="summary">
+            <strong>Environment:</strong> {}<br>
             <strong>Total Duration:</strong> {}<br>
             <strong>Entities Processed:</strong> {}<br>
             <strong>Time:</strong> {}
@@ -170,7 +191,9 @@ impl DataLoadReport {
                 <th>Total in DB</th>
             </tr>"#,
             status_color,
+            environment,
             status_text,
+            environment,
             Self::format_duration(self.total_duration_secs),
             self.entities.len(),
             chrono::Local::now().format("%Y-%m-%d %H:%M:%S")
@@ -275,14 +298,17 @@ impl DataLoadReport {
 }
 
 pub fn send_email_report(config: &EmailConfig, report: &DataLoadReport) -> Result<()> {
+    let staging_prefix = get_staging_prefix();
     let subject = if report.overall_success {
         format!(
-            "✓ SOAR Data Load Complete - {}",
+            "{}✓ SOAR Data Load Complete - {}",
+            staging_prefix,
             chrono::Local::now().format("%Y-%m-%d")
         )
     } else {
         format!(
-            "✗ SOAR Data Load FAILED - {}",
+            "{}✗ SOAR Data Load FAILED - {}",
+            staging_prefix,
             chrono::Local::now().format("%Y-%m-%d")
         )
     };
