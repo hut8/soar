@@ -101,6 +101,7 @@ impl JetStreamPublisher {
 
         // Convert message to owned bytes for JetStream
         let bytes = message.as_bytes().to_vec();
+        let after_conversion = std::time::Instant::now();
 
         // Publish to JetStream - fire and forget
         // Only await the first future (sends the message), skip the second (acknowledgment)
@@ -111,9 +112,24 @@ impl JetStreamPublisher {
         {
             Ok(_ack_future) => {
                 // Message sent successfully, but we don't wait for the ack
-                let duration_ms = start.elapsed().as_millis() as f64;
-                metrics::histogram!("aprs.jetstream.publish_duration_ms").record(duration_ms);
+                let after_publish = std::time::Instant::now();
+                let total_duration_ms = start.elapsed().as_millis() as f64;
+                let conversion_ms = after_conversion.duration_since(start).as_millis() as f64;
+                let publish_call_ms =
+                    after_publish.duration_since(after_conversion).as_millis() as f64;
+
+                metrics::histogram!("aprs.jetstream.publish_duration_ms").record(total_duration_ms);
+                metrics::histogram!("aprs.jetstream.publish_call_only_ms").record(publish_call_ms);
+                metrics::histogram!("aprs.jetstream.conversion_ms").record(conversion_ms);
                 metrics::counter!("aprs.jetstream.published").increment(1);
+
+                // Log slow publishes with breakdown
+                if total_duration_ms > 100.0 {
+                    warn!(
+                        "Slow publish: total={:.1}ms (conversion={:.1}ms, publish_call={:.1}ms)",
+                        total_duration_ms, conversion_ms, publish_call_ms
+                    );
+                }
             }
             Err(e) => {
                 // Failed to even send the message
