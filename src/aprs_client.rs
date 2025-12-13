@@ -132,43 +132,9 @@ impl AprsClient {
                             last_receive_time = std::time::Instant::now();
                             attempted_count += 1;
 
-                            // Use semaphore to limit concurrent publishes to 100
-                            let permit = publish_semaphore.clone().acquire_owned().await.unwrap();
-                            let pub_clone = publisher.clone();
-
-                            tokio::spawn(async move {
-                                let _permit = permit; // Hold permit until publish completes
-                                let publish_start = std::time::Instant::now();
-
-                                // Add 5-second timeout to prevent indefinite blocking
-                                match tokio::time::timeout(
-                                    Duration::from_secs(5),
-                                    pub_clone.publish_fire_and_forget(&message)
-                                ).await {
-                                    Ok(_) => {
-                                        let publish_duration = publish_start.elapsed();
-
-                                        // Warn if publish took more than 100ms
-                                        if publish_duration.as_millis() > 100 {
-                                            warn!(
-                                                "Slow JetStream publish: {}ms",
-                                                publish_duration.as_millis()
-                                            );
-                                            metrics::counter!("aprs.jetstream.slow_publish").increment(1);
-                                        }
-                                    }
-                                    Err(_) => {
-                                        error!("JetStream publish timed out after 5 seconds - NATS may be blocked");
-                                        metrics::counter!("aprs.jetstream.publish_timeout").increment(1);
-
-                                        // Report timeout to Sentry (throttled)
-                                        sentry::capture_message(
-                                            "JetStream publish timed out after 5 seconds",
-                                            sentry::Level::Error
-                                        );
-                                    }
-                                }
-                            });
+                            // Publish without waiting - truly fire-and-forget
+                            // The publisher spawns its own task and returns immediately
+                            publisher.publish_fire_and_forget(&message);
                         }
                         _ = stats_timer.tick() => {
                             // Report raw message queue depth every 10 seconds

@@ -96,46 +96,33 @@ impl JetStreamPublisher {
     /// This version sends the message to JetStream but does not wait for acknowledgment.
     /// This maximizes throughput at the cost of not knowing if the message was persisted.
     /// Acceptable for high-volume streaming data where message loss during crashes is tolerable.
-    pub async fn publish_fire_and_forget(&self, message: &str) {
-        let start = std::time::Instant::now();
+    pub fn publish_fire_and_forget(&self, message: &str) {
+        // Truly fire-and-forget: spawn task and return immediately without awaiting
+        let jetstream = self.jetstream.clone();
+        let subject = self.subject.clone();
+        let message_bytes = message.as_bytes().to_vec();
 
-        // Convert message to owned bytes for JetStream
-        let bytes = message.as_bytes().to_vec();
-        let after_conversion = std::time::Instant::now();
+        tokio::spawn(async move {
+            let start = std::time::Instant::now();
 
-        // Publish to JetStream - fire and forget
-        // Only await the first future (sends the message), skip the second (acknowledgment)
-        match self
-            .jetstream
-            .publish(self.subject.clone(), bytes.into())
-            .await
-        {
-            Ok(_ack_future) => {
-                // Message sent successfully, but we don't wait for the ack
-                let after_publish = std::time::Instant::now();
-                let total_duration_ms = start.elapsed().as_millis() as f64;
-                let conversion_ms = after_conversion.duration_since(start).as_millis() as f64;
-                let publish_call_ms =
-                    after_publish.duration_since(after_conversion).as_millis() as f64;
+            // Publish to JetStream - don't even wait for the ack future
+            match jetstream.publish(subject, message_bytes.into()).await {
+                Ok(_ack_future) => {
+                    // Message sent successfully, don't wait for ack
+                    let duration_ms = start.elapsed().as_millis() as f64;
+                    metrics::histogram!("aprs.jetstream.publish_duration_ms").record(duration_ms);
+                    metrics::counter!("aprs.jetstream.published").increment(1);
 
-                metrics::histogram!("aprs.jetstream.publish_duration_ms").record(total_duration_ms);
-                metrics::histogram!("aprs.jetstream.publish_call_only_ms").record(publish_call_ms);
-                metrics::histogram!("aprs.jetstream.conversion_ms").record(conversion_ms);
-                metrics::counter!("aprs.jetstream.published").increment(1);
-
-                // Log slow publishes with breakdown
-                if total_duration_ms > 100.0 {
-                    warn!(
-                        "Slow publish: total={:.1}ms (conversion={:.1}ms, publish_call={:.1}ms)",
-                        total_duration_ms, conversion_ms, publish_call_ms
-                    );
+                    // Log slow publishes
+                    if duration_ms > 100.0 {
+                        warn!("Slow publish: {:.1}ms", duration_ms);
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to send message to JetStream: {}", e);
+                    metrics::counter!("aprs.jetstream.publish_error").increment(1);
                 }
             }
-            Err(e) => {
-                // Failed to even send the message
-                error!("Failed to send message to JetStream: {}", e);
-                metrics::counter!("aprs.jetstream.publish_error").increment(1);
-            }
-        }
+        });
     }
 }
