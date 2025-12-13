@@ -71,22 +71,17 @@
 	type ColorScheme = 'altitude' | 'time';
 	let colorScheme = $state<ColorScheme>('altitude');
 
-	// Nearby flights data - using full Flight type
+	// Nearby flights data - shared between map and section
 	let nearbyFlights = $state<Flight[]>([]);
 	let nearbyFlightsFixes = $state<Map<string, typeof data.fixes>>(new Map());
-
 	let nearbyFlightPaths = $state<google.maps.Polyline[]>([]);
 	let isLoadingNearbyFlights = $state(false);
+	let showNearbyFlightsSection = $state(false);
 
 	// Receiver data
 	let receivers = $state<Receiver[]>([]);
 	let receiverMarkers = $state<google.maps.marker.AdvancedMarkerElement[]>([]);
 	let isLoadingReceivers = $state(false);
-
-	// Standalone nearby flights section (not tied to map)
-	let standaloneNearbyFlights = $state<Flight[]>([]);
-	let isLoadingStandaloneNearby = $state(false);
-	let showStandaloneNearby = $state(false);
 
 	// Reverse fixes to show chronologically (earliest first, landing last)
 	const reversedFixes = $derived([...data.fixes].reverse());
@@ -438,12 +433,12 @@
 	function handleNearbyFlightsToggle() {
 		if (includeNearbyFlights) {
 			fetchNearbyFlights();
+			// Also show the nearby flights section
+			showNearbyFlightsSection = true;
 		} else {
-			// Clear nearby flights from map
+			// Clear nearby flights from map only (keep the data cached)
 			nearbyFlightPaths.forEach((path) => path.setMap(null));
 			nearbyFlightPaths = [];
-			nearbyFlights = [];
-			nearbyFlightsFixes.clear();
 		}
 	}
 
@@ -461,17 +456,24 @@
 		}
 	}
 
-	// Fetch nearby flights for standalone section (no map paths)
-	async function fetchStandaloneNearbyFlights() {
-		isLoadingStandaloneNearby = true;
-		showStandaloneNearby = true;
+	// Show nearby flights section and fetch data if needed
+	async function showNearbyFlights() {
+		showNearbyFlightsSection = true;
+
+		// If data is already cached, no need to fetch again
+		if (nearbyFlights.length > 0) {
+			return;
+		}
+
+		// Otherwise fetch the data
+		isLoadingNearbyFlights = true;
 		try {
 			const flights = await serverCall<Flight[]>(`/flights/${data.flight.id}/nearby`);
-			standaloneNearbyFlights = flights;
+			nearbyFlights = flights;
 		} catch (err) {
 			console.error('Failed to fetch nearby flights:', err);
 		} finally {
-			isLoadingStandaloneNearby = false;
+			isLoadingNearbyFlights = false;
 		}
 	}
 
@@ -571,11 +573,22 @@
 
 	// Fetch nearby flights and their fixes
 	async function fetchNearbyFlights() {
+		// If data is already cached, just render the map paths
+		if (nearbyFlights.length > 0 && map) {
+			// Check if we already have fixes cached
+			if (nearbyFlightsFixes.size > 0) {
+				updateNearbyFlightPaths();
+				return;
+			}
+		}
+
 		isLoadingNearbyFlights = true;
 		try {
-			// Fetch nearby flights
-			const flights = await serverCall<Flight[]>(`/flights/${data.flight.id}/nearby`);
-			nearbyFlights = flights;
+			// Fetch nearby flights only if not already cached
+			if (nearbyFlights.length === 0) {
+				const flights = await serverCall<Flight[]>(`/flights/${data.flight.id}/nearby`);
+				nearbyFlights = flights;
+			}
 
 			if (map) {
 				// Fetch all fixes in parallel for better performance
@@ -1711,15 +1724,11 @@
 	<div class="card p-6">
 		<h2 class="mb-4 h2">Nearby Flights</h2>
 
-		{#if !showStandaloneNearby}
-			<button
-				onclick={fetchStandaloneNearbyFlights}
-				class="btn preset-filled-primary-500"
-				type="button"
-			>
+		{#if !showNearbyFlightsSection}
+			<button onclick={showNearbyFlights} class="btn preset-filled-primary-500" type="button">
 				Find nearby flights
 			</button>
-		{:else if isLoadingStandaloneNearby}
+		{:else if isLoadingNearbyFlights && nearbyFlights.length === 0}
 			<div class="flex flex-col items-center gap-4 py-8">
 				<div class="flex items-center gap-3">
 					<RadarLoader />
@@ -1733,13 +1742,13 @@
 					</p>
 				</div>
 			</div>
-		{:else if standaloneNearbyFlights.length === 0}
+		{:else if nearbyFlights.length === 0}
 			<div class="text-surface-600-300-token py-8 text-center">
 				<Plane class="mx-auto mb-4 h-12 w-12 text-surface-400" />
 				<p>No nearby flights found.</p>
 			</div>
 		{:else}
-			<FlightsList flights={standaloneNearbyFlights} showEnd={true} showAircraft={true} />
+			<FlightsList flights={nearbyFlights} showEnd={true} showAircraft={true} />
 		{/if}
 	</div>
 
@@ -1821,18 +1830,6 @@
 			{/if}
 		{/if}
 	</div>
-
-	<!-- Nearby Flights List (shown on map) -->
-	{#if includeNearbyFlights && nearbyFlights.length > 0}
-		<div class="card p-6">
-			<h2 class="mb-4 h2">Nearby Flights ({nearbyFlights.length})</h2>
-			<div class="text-surface-600-300-token mb-4 text-sm">
-				These flights are shown on the map in different colors (blue, green, orange, purple, pink,
-				cyan)
-			</div>
-			<FlightsList flights={nearbyFlights} showEnd={true} showAircraft={true} />
-		</div>
-	{/if}
 </div>
 
 <style>
