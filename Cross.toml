@@ -17,18 +17,33 @@ pre-build = [
 ]
 
 [target.x86_64-unknown-linux-musl]
-# Musl build for x86_64 - aims for maximum static linking
-# Uses cross's default Debian-based musl image
+# Musl build for x86_64 - fully static binary
+# We use pq-sys bundled feature to compile libpq from source, which includes all static libs
 pre-build = [
     "apt-get update",
-    "apt-get install -y pkg-config libpq-dev",
+    # Build dependencies for compiling PostgreSQL and OpenSSL from source
+    # build-essential: gcc, g++, make for compiling C code
+    # pkg-config: for finding libraries
+    # perl: required for building OpenSSL from source
+    # clang: needed by some build scripts
+    # zlib1g-dev: compression library
+    # Use DEBIAN_FRONTEND=noninteractive to prevent prompts
+    "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq build-essential pkg-config perl clang zlib1g-dev",
 ]
 
 [target.aarch64-unknown-linux-musl]
-# Musl build for aarch64 - aims for maximum static linking
-# Uses cross's default Debian-based musl image
+# Musl build for aarch64 - fully static binary
+# We use pq-sys bundled feature to compile libpq from source, which includes all static libs
 pre-build = [
     "dpkg --add-architecture arm64",
     "apt-get update",
-    "apt-get install -y pkg-config libpq-dev:arm64",
+    # Build dependencies for compiling PostgreSQL and OpenSSL from source
+    # build-essential: gcc, g++, make for compiling C code
+    # crossbuild-essential-arm64: cross-compilation toolchain
+    # pkg-config: for finding libraries
+    # perl: required for building OpenSSL from source
+    # clang: needed by some build scripts
+    # zlib1g-dev:arm64: ARM64 compression library
+    # Use DEBIAN_FRONTEND=noninteractive to prevent tzdata prompts during install
+    "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq build-essential crossbuild-essential-arm64 pkg-config perl clang zlib1g-dev:arm64",
 ]

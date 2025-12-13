@@ -432,7 +432,7 @@ jobs:
       - name: Build static release binary
         env:
           SKIP_WEB_BUILD: "1"  # Frontend already built via downloaded artifacts
-        run: cross build --release --target x86_64-unknown-linux-musl
+        run: cross build --release --target x86_64-unknown-linux-musl --features bundled-postgres
 
       - name: Verify static linking
         run: |
@@ -518,7 +518,7 @@ jobs:
         env:
           CROSS_CONTAINER_ENGINE: docker
           SKIP_WEB_BUILD: "1"  # Frontend already built via downloaded artifacts
-        run: cross build --release --target aarch64-unknown-linux-musl
+        run: cross build --release --target aarch64-unknown-linux-musl --features bundled-postgres
 
       - name: Verify static linking
         run: |
