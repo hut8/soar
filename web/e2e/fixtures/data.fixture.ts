@@ -49,10 +49,11 @@ export const testAircraft = {
 /**
  * Test club data
  *
- * The primary test club is created by the seed-test-data command.
+ * The primary test club is created by the seed-test-data command with a deterministic UUID.
  */
 export const testClubs = {
-	validClubName: 'Test Soaring Club' // Created by seed data
+	validClubName: 'Test Soaring Club', // Created by seed data
+	validClubId: '00000000-0000-0000-0000-000000000001' // Deterministic UUID from seed data
 };
 
 /**
