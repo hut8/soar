@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::actions::json_error;
+use crate::auth::AuthUser;
 use crate::pilots::{FlightPilot, Pilot};
 use crate::pilots_repo::PilotsRepository;
 use crate::web::AppState;
@@ -72,10 +73,21 @@ pub async fn get_pilot_by_id(
 }
 
 /// Get all pilots for a specific club
+/// Requires authentication and user must belong to the requested club
 pub async fn get_pilots_by_club(
     Path(club_id): Path<Uuid>,
     State(state): State<AppState>,
+    AuthUser(user): AuthUser,
 ) -> impl IntoResponse {
+    // Verify that the user belongs to the requested club
+    if user.club_id != Some(club_id) {
+        return json_error(
+            StatusCode::FORBIDDEN,
+            "You must be a member of this club to view its pilots",
+        )
+        .into_response();
+    }
+
     let pilots_repo = PilotsRepository::new(state.pool.clone());
 
     match pilots_repo.get_pilots_by_club(club_id).await {
