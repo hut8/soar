@@ -27,7 +27,8 @@ pre-build = [
     # perl: required for building OpenSSL from source
     # clang: needed by some build scripts
     # zlib1g-dev: compression library
-    "apt-get install -y build-essential pkg-config perl clang zlib1g-dev",
+    # Use DEBIAN_FRONTEND=noninteractive to prevent prompts
+    "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq build-essential pkg-config perl clang zlib1g-dev",
 ]
 
 [target.aarch64-unknown-linux-musl]
@@ -43,5 +44,6 @@ pre-build = [
     # perl: required for building OpenSSL from source
     # clang: needed by some build scripts
     # zlib1g-dev:arm64: ARM64 compression library
-    "apt-get install -y build-essential crossbuild-essential-arm64 pkg-config perl clang zlib1g-dev:arm64",
+    # Use DEBIAN_FRONTEND=noninteractive to prevent tzdata prompts during install
+    "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq build-essential crossbuild-essential-arm64 pkg-config perl clang zlib1g-dev:arm64",
 ]
