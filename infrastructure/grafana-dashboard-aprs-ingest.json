@@ -37,7 +37,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -95,7 +95,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "process_uptime_seconds{component=\"aprs-ingest\"}",
@@ -110,7 +110,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -180,7 +180,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "process_is_up{component=\"aprs-ingest\"}",
@@ -195,7 +195,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -253,7 +253,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "process_memory_bytes{component=\"aprs-ingest\"}",
@@ -281,7 +281,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -351,7 +351,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_connection_connected{component=\"aprs-ingest\"}",
@@ -366,7 +366,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -448,7 +448,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_connection_established{component=\"aprs-ingest\"}",
@@ -459,7 +459,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_connection_failed{component=\"aprs-ingest\"}",
@@ -470,7 +470,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_connection_ended{component=\"aprs-ingest\"}",
@@ -485,7 +485,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -567,7 +567,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_keepalive_sent{component=\"aprs-ingest\"}",
@@ -595,7 +595,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -677,7 +677,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_jetstream_published{component=\"aprs-ingest\"}[1m]) * 60",
@@ -692,7 +692,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -748,7 +748,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_jetstream_queue_depth{component=\"aprs-ingest\"}",
@@ -763,7 +763,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -845,7 +845,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_jetstream_publish_error{component=\"aprs-ingest\"}",
@@ -860,7 +860,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "description": "Tracks slow JetStream publish operations and timeouts",
       "fieldConfig": {
@@ -974,7 +974,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_jetstream_slow_publish{component=\"ingest-aprs\"}[5m])",
@@ -985,7 +985,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "rate(aprs_jetstream_publish_timeout{component=\"ingest-aprs\"}[5m])",
@@ -1000,7 +1000,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "description": "Number of messages currently being published to JetStream",
       "fieldConfig": {
@@ -1083,7 +1083,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "aprs_jetstream_in_flight{component=\"ingest-aprs\"}",
@@ -1098,7 +1098,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "fe4qj1bybjncwc"
+        "uid": "Prometheus"
       },
       "fieldConfig": {
         "defaults": {
@@ -1178,7 +1178,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.50, sum(rate(aprs_jetstream_publish_duration_ms_bucket{component=\"ingest-aprs\"}[5m])) by (le))",
@@ -1189,7 +1189,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.95, sum(rate(aprs_jetstream_publish_duration_ms_bucket{component=\"ingest-aprs\"}[5m])) by (le))",
@@ -1201,7 +1201,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "fe4qj1bybjncwc"
+            "uid": "Prometheus"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.99, sum(rate(aprs_jetstream_publish_duration_ms_bucket{component=\"ingest-aprs\"}[5m])) by (le))",

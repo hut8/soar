@@ -4,6 +4,11 @@ version = "0.1.3"
 edition = "2024"
 resolver = "2"
 
+[features]
+# Feature for musl static builds - bundles libpq and OpenSSL from source
+# This includes all static libraries needed for fully static binaries
+bundled-postgres = ["pq-sys/bundled", "dep:openssl", "openssl/vendored"]
+
 [dependencies]
 anyhow = "1.0"
 argon2 = "0.5"
@@ -40,7 +45,7 @@ num-traits = "0.2"
 ogn-parser = { git = "https://github.com/hut8/ogn-parser-rs", branch = "master" }
 once_cell = "1.19"
 regex = "1.12"
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
 rs1090 = "0.4.14"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
@@ -52,6 +57,11 @@ diesel = { version = "2.3", features = [
     "r2d2",
     "numeric",
 ] }
+# For musl static builds: compile libpq from source with all internal static libraries
+# This avoids the missing libpgcommon.a and libpgport.a that aren't in system packages
+pq-sys = { version = "0.6", default-features = false }
+# OpenSSL is needed by bundled libpq - we use vendored feature for musl static builds
+openssl = { version = "0.10", optional = true }
 diesel_migrations = "2.2"
 diesel-derive-enum = { version = "3.0.0-beta.1", features = ["postgres"] }
 r2d2 = "0.8"
@@ -67,7 +77,7 @@ zstd = "0.13"
 csv = "1.3"
 axum-tungstenite = "0.3.0"
 futures-util = "0.3.31"
-sentry = { version = "0.46.0", features = ["tracing", "logs"] }
+sentry = { version = "0.46.0", features = ["tracing", "logs", "rustls", "reqwest", "backtrace", "contexts", "debug-images", "panic", "release-health"], default-features = false }
 # Note: Continuous profiling for Rust is not yet available in sentry-rust 0.45.0
 # Tracking issue: https://github.com/getsentry/sentry-rust/issues
 # For now, use performance monitoring (traces_sample_rate) and Sentry's server-side profiling

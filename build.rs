@@ -1,3 +1,4 @@
+use std::env;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
@@ -7,6 +8,12 @@ pub fn main() {
     println!("cargo:rerun-if-changed=web/src");
     println!("cargo:rerun-if-changed=web/package.json");
     println!("cargo:rerun-if-changed=web/package-lock.json");
+
+    // Configure static linking for musl targets (used by cross for static builds)
+    let target = env::var("TARGET").unwrap_or_default();
+    if target.contains("musl") {
+        configure_musl_static_linking();
+    }
 
     // Always ensure web/build directory exists for include_dir! macro
     // This is required even in dev mode because include_dir! runs at compile time
@@ -74,5 +81,21 @@ pub fn main() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         let stdout = String::from_utf8_lossy(&output.stdout);
         panic!("npm run build failed:\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
+    }
+}
+
+/// Configure static linking for musl targets
+///
+/// For musl targets, we build libpq from source (bundled mode) to get all the necessary
+/// static libraries including libpgcommon.a and libpgport.a which aren't available in
+/// system packages. This is enabled via the bundled-postgres feature.
+fn configure_musl_static_linking() {
+    println!("cargo:warning=Configuring bundled PostgreSQL build for musl static linking");
+
+    // Check if bundled-postgres feature is enabled
+    #[cfg(not(feature = "bundled-postgres"))]
+    {
+        println!("cargo:warning=bundled-postgres feature not enabled - build may fail!");
+        println!("cargo:warning=Use: cargo build --features bundled-postgres");
     }
 }

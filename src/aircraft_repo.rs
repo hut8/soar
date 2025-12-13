@@ -551,6 +551,38 @@ impl AircraftRepository {
             Ok(false)
         }
     }
+
+    /// Query for devices that have duplicate addresses (same address, different address_type)
+    pub async fn get_duplicate_devices(&self) -> Result<Vec<AircraftModel>> {
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            // Find addresses that appear more than once with different address types
+            // Use a subquery to get addresses where COUNT(DISTINCT address_type) > 1
+            let duplicate_addresses: Vec<i32> = aircraft::table
+                .select(aircraft::address)
+                .group_by(aircraft::address)
+                .having(diesel::dsl::sql::<diesel::sql_types::Bool>(
+                    "COUNT(DISTINCT address_type) > 1",
+                ))
+                .load(&mut conn)?;
+
+            if duplicate_addresses.is_empty() {
+                return Ok(Vec::new());
+            }
+
+            // Now fetch all device rows for those duplicate addresses
+            let duplicate_devices = aircraft::table
+                .filter(aircraft::address.eq_any(duplicate_addresses))
+                .order((aircraft::address.asc(), aircraft::address_type.asc()))
+                .load::<AircraftModel>(&mut conn)?;
+
+            Ok::<Vec<AircraftModel>, anyhow::Error>(duplicate_devices)
+        })
+        .await?
+    }
 }
 
 #[cfg(test)]
