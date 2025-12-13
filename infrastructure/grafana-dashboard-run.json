@@ -98,7 +98,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "process_uptime_seconds{component=\"run\"} and on() up{job=\"soar-run\",component=\"run\"}",
+          "expr": "process_uptime_seconds{component=\"run\",environment=\"$environment\"} and on() up{job=\"soar-run\",component=\"run\",environment=\"$environment\"}",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -183,7 +183,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "up{job=\"soar-run\",component=\"run\"} or on() vector(0)",
+          "expr": "up{job=\"soar-run\",component=\"run\",environment=\"$environment\"} or on() vector(0)",
           "legendFormat": "SOAR Run",
           "range": true,
           "refId": "A"
@@ -282,7 +282,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "process_memory_bytes{component=\"run\"}",
+          "expr": "process_memory_bytes{component=\"run\",environment=\"$environment\"}",
           "legendFormat": "SOAR Run",
           "range": true,
           "refId": "A"
@@ -1437,7 +1437,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_parse_success{component=\"run\"}[5m])",
+          "expr": "rate(aprs_parse_success{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Parse Success/sec",
           "range": true,
           "refId": "A"
@@ -1448,7 +1448,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_parse_failed{component=\"run\"}[5m])",
+          "expr": "rate(aprs_parse_failed{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Parse Failed/sec",
           "range": true,
           "refId": "B"
@@ -1547,7 +1547,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_router_packet_type_position{component=\"run\"}[5m])",
+          "expr": "rate(aprs_router_packet_type_position{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Position Packets/sec",
           "range": true,
           "refId": "A"
@@ -1558,7 +1558,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_router_packet_type_status{component=\"run\"}[5m])",
+          "expr": "rate(aprs_router_packet_type_status{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Status Packets/sec",
           "range": true,
           "refId": "B"
@@ -1673,7 +1673,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_router_routed_aircraft{component=\"run\"}[5m])",
+          "expr": "rate(aprs_router_routed_aircraft{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Routed to Aircraft/sec",
           "range": true,
           "refId": "A"
@@ -1684,7 +1684,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_router_generic_processor_success{component=\"run\"}[5m])",
+          "expr": "rate(aprs_router_generic_processor_success{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Generic Success/sec",
           "range": true,
           "refId": "B"
@@ -1695,7 +1695,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_router_generic_processor_failed{component=\"run\"}[5m])",
+          "expr": "rate(aprs_router_generic_processor_failed{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Generic Failed/sec",
           "range": true,
           "refId": "C"
@@ -1841,7 +1841,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_fixes_inserted{component=\"run\"}[5m])",
+          "expr": "rate(aprs_fixes_inserted{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Fixes Inserted/sec",
           "range": true,
           "refId": "A"
@@ -1852,7 +1852,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_fixes_duplicate_on_redelivery{component=\"run\"}[5m])",
+          "expr": "rate(aprs_fixes_duplicate_on_redelivery{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Duplicates Detected/sec",
           "range": true,
           "refId": "B"
@@ -1863,7 +1863,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_fixes_suppressed{component=\"run\"}[5m])",
+          "expr": "rate(aprs_fixes_suppressed{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Fixes Suppressed/sec",
           "range": true,
           "refId": "C"
@@ -1979,7 +1979,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "aprs_router_internal_queue_depth{component=\"run\"}",
+          "expr": "aprs_router_internal_queue_depth{component=\"run\",environment=\"$environment\"}",
           "legendFormat": "Internal Queue Depth",
           "range": true,
           "refId": "A"
@@ -1990,7 +1990,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_router_internal_queue_disconnected{component=\"run\"}[5m])",
+          "expr": "rate(aprs_router_internal_queue_disconnected{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Queue Disconnected/sec",
           "range": true,
           "refId": "B"
@@ -2106,7 +2106,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_router_process_packet_called{component=\"run\"}[5m])",
+          "expr": "rate(aprs_router_process_packet_called{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Process Packet Called/sec",
           "range": true,
           "refId": "A"
@@ -2117,7 +2117,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_router_process_packet_internal_called{component=\"run\"}[5m])",
+          "expr": "rate(aprs_router_process_packet_internal_called{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Internal Processing/sec",
           "range": true,
           "refId": "B"
@@ -2128,7 +2128,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_router_position_source_aircraft{component=\"run\"}[5m])",
+          "expr": "rate(aprs_router_position_source_aircraft{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Aircraft Position Source/sec",
           "range": true,
           "refId": "C"
@@ -2139,7 +2139,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_router_no_queue_aircraft{component=\"run\"}[5m])",
+          "expr": "rate(aprs_router_no_queue_aircraft{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "No Queue Available/sec",
           "range": true,
           "refId": "D"
@@ -2236,7 +2236,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_type_received{component=\"run\"}[5m])",
+          "expr": "rate(aprs_type_received{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "{{type}}",
           "range": true,
           "refId": "A"
@@ -2348,7 +2348,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "aprs_aircraft_total_processing_ms{component=\"run\",quantile=\"0.5\"}",
+          "expr": "aprs_aircraft_total_processing_ms{component=\"run\",environment=\"$environment\",quantile=\"0.5\"}",
           "legendFormat": "Total Processing (P50)",
           "range": true,
           "refId": "A"
@@ -2359,7 +2359,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "aprs_aircraft_upsert_ms{component=\"run\",quantile=\"0.5\"}",
+          "expr": "aprs_aircraft_upsert_ms{component=\"run\",environment=\"$environment\",quantile=\"0.5\"}",
           "legendFormat": "Device Upsert (P50)",
           "range": true,
           "refId": "B"
@@ -2370,7 +2370,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "aprs_aircraft_fix_creation_ms{component=\"run\",quantile=\"0.5\"}",
+          "expr": "aprs_aircraft_fix_creation_ms{component=\"run\",environment=\"$environment\",quantile=\"0.5\"}",
           "legendFormat": "Fix Creation (P50)",
           "range": true,
           "refId": "C"
@@ -2381,7 +2381,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "aprs_aircraft_process_fix_internal_ms{component=\"run\",quantile=\"0.5\"}",
+          "expr": "aprs_aircraft_process_fix_internal_ms{component=\"run\",environment=\"$environment\",quantile=\"0.5\"}",
           "legendFormat": "Process Fix Internal (P50)",
           "range": true,
           "refId": "D"
@@ -2392,7 +2392,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "aprs_aircraft_flight_insert_ms{component=\"run\",quantile=\"0.5\"}",
+          "expr": "aprs_aircraft_flight_insert_ms{component=\"run\",environment=\"$environment\",quantile=\"0.5\"}",
           "legendFormat": "Flight Insert (P50)",
           "range": true,
           "refId": "E"
@@ -2403,7 +2403,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "aprs_aircraft_callsign_update_ms{component=\"run\",quantile=\"0.5\"}",
+          "expr": "aprs_aircraft_callsign_update_ms{component=\"run\",environment=\"$environment\",quantile=\"0.5\"}",
           "legendFormat": "Callsign Update (P50)",
           "range": true,
           "refId": "F"
@@ -2414,7 +2414,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "aprs_aircraft_elevation_queue_ms{component=\"run\",quantile=\"0.5\"}",
+          "expr": "aprs_aircraft_elevation_queue_ms{component=\"run\",environment=\"$environment\",quantile=\"0.5\"}",
           "legendFormat": "Elevation Queue Latency (async, P50)",
           "range": true,
           "refId": "G"
@@ -2425,7 +2425,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "aprs_aircraft_nats_publish_ms{component=\"run\",quantile=\"0.5\"}",
+          "expr": "aprs_aircraft_nats_publish_ms{component=\"run\",environment=\"$environment\",quantile=\"0.5\"}",
           "legendFormat": "NATS Publish (P50)",
           "range": true,
           "refId": "H"
@@ -2524,7 +2524,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "aprs_aircraft_total_processing_ms{component=\"run\",quantile=\"0.95\"}",
+          "expr": "aprs_aircraft_total_processing_ms{component=\"run\",environment=\"$environment\",quantile=\"0.95\"}",
           "legendFormat": "Total Processing (P95)",
           "range": true,
           "refId": "A"
@@ -2535,7 +2535,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "aprs_aircraft_upsert_ms{component=\"run\",quantile=\"0.95\"}",
+          "expr": "aprs_aircraft_upsert_ms{component=\"run\",environment=\"$environment\",quantile=\"0.95\"}",
           "legendFormat": "Device Upsert (P95)",
           "range": true,
           "refId": "B"
@@ -2546,7 +2546,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "aprs_aircraft_fix_creation_ms{component=\"run\",quantile=\"0.95\"}",
+          "expr": "aprs_aircraft_fix_creation_ms{component=\"run\",environment=\"$environment\",quantile=\"0.95\"}",
           "legendFormat": "Fix Creation (P95)",
           "range": true,
           "refId": "C"
@@ -2557,7 +2557,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "aprs_aircraft_process_fix_internal_ms{component=\"run\",quantile=\"0.95\"}",
+          "expr": "aprs_aircraft_process_fix_internal_ms{component=\"run\",environment=\"$environment\",quantile=\"0.95\"}",
           "legendFormat": "Process Fix Internal (P95)",
           "range": true,
           "refId": "D"
@@ -2568,7 +2568,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "aprs_aircraft_flight_insert_ms{component=\"run\",quantile=\"0.95\"}",
+          "expr": "aprs_aircraft_flight_insert_ms{component=\"run\",environment=\"$environment\",quantile=\"0.95\"}",
           "legendFormat": "Flight Insert (P95)",
           "range": true,
           "refId": "E"
@@ -2579,7 +2579,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "aprs_aircraft_callsign_update_ms{component=\"run\",quantile=\"0.95\"}",
+          "expr": "aprs_aircraft_callsign_update_ms{component=\"run\",environment=\"$environment\",quantile=\"0.95\"}",
           "legendFormat": "Callsign Update (P95)",
           "range": true,
           "refId": "F"
@@ -2590,7 +2590,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "aprs_aircraft_elevation_queue_ms{component=\"run\",quantile=\"0.95\"}",
+          "expr": "aprs_aircraft_elevation_queue_ms{component=\"run\",environment=\"$environment\",quantile=\"0.95\"}",
           "legendFormat": "Elevation Queue Latency (async, P95)",
           "range": true,
           "refId": "G"
@@ -2601,7 +2601,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "aprs_aircraft_nats_publish_ms{component=\"run\",quantile=\"0.95\"}",
+          "expr": "aprs_aircraft_nats_publish_ms{component=\"run\",environment=\"$environment\",quantile=\"0.95\"}",
           "legendFormat": "NATS Publish (P95)",
           "range": true,
           "refId": "H"
@@ -2878,7 +2878,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "aprs_elevation_sync_duration_ms{component=\"run\",quantile=\"0.5\"}",
+          "expr": "aprs_elevation_sync_duration_ms{component=\"run\",environment=\"$environment\",quantile=\"0.5\"}",
           "legendFormat": "Sync P50",
           "range": true,
           "refId": "A"
@@ -2889,7 +2889,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "aprs_elevation_sync_duration_ms{component=\"run\",quantile=\"0.95\"}",
+          "expr": "aprs_elevation_sync_duration_ms{component=\"run\",environment=\"$environment\",quantile=\"0.95\"}",
           "legendFormat": "Sync P95",
           "range": true,
           "refId": "B"
@@ -2900,7 +2900,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "aprs_elevation_sync_duration_ms{component=\"run\",quantile=\"0.99\"}",
+          "expr": "aprs_elevation_sync_duration_ms{component=\"run\",environment=\"$environment\",quantile=\"0.99\"}",
           "legendFormat": "Sync P99",
           "range": true,
           "refId": "C"
@@ -2911,7 +2911,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "aprs_elevation_duration_ms{component=\"run\",quantile=\"0.5\"}",
+          "expr": "aprs_elevation_duration_ms{component=\"run\",environment=\"$environment\",quantile=\"0.5\"}",
           "legendFormat": "Async P50",
           "range": true,
           "refId": "D"
@@ -2922,7 +2922,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "aprs_elevation_duration_ms{component=\"run\",quantile=\"0.95\"}",
+          "expr": "aprs_elevation_duration_ms{component=\"run\",environment=\"$environment\",quantile=\"0.95\"}",
           "legendFormat": "Async P95",
           "range": true,
           "refId": "E"
@@ -2933,7 +2933,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "aprs_elevation_duration_ms{component=\"run\",quantile=\"0.99\"}",
+          "expr": "aprs_elevation_duration_ms{component=\"run\",environment=\"$environment\",quantile=\"0.99\"}",
           "legendFormat": "Async P99",
           "range": true,
           "refId": "F"
@@ -3756,7 +3756,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "rate(receiver_repo_latest_packet_at_skipped{component=\"run\"}[5m])",
+          "expr": "rate(receiver_repo_latest_packet_at_skipped{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Updates Skipped (Cached)",
           "range": true,
           "refId": "A"
@@ -3767,7 +3767,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "rate(receiver_repo_latest_packet_at_updated{component=\"run\"}[5m])",
+          "expr": "rate(receiver_repo_latest_packet_at_updated{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Database Updates",
           "range": true,
           "refId": "B"
@@ -3866,7 +3866,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "elevation_tile_load_duration_seconds{component=\"run\",quantile=\"0.95\"}",
+          "expr": "elevation_tile_load_duration_seconds{component=\"run\",environment=\"$environment\",quantile=\"0.95\"}",
           "legendFormat": "P95 Tile Load Time",
           "range": true,
           "refId": "A"
@@ -3877,7 +3877,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "elevation_interpolation_duration_seconds{component=\"run\",quantile=\"0.95\"}",
+          "expr": "elevation_interpolation_duration_seconds{component=\"run\",environment=\"$environment\",quantile=\"0.95\"}",
           "legendFormat": "P95 Interpolation Time",
           "range": true,
           "refId": "B"
@@ -3888,7 +3888,7 @@
             "uid": "fe4qj1bybjncwc"
           },
           "editorMode": "code",
-          "expr": "elevation_lookup_duration_seconds{component=\"run\",quantile=\"0.95\"}",
+          "expr": "elevation_lookup_duration_seconds{component=\"run\",environment=\"$environment\",quantile=\"0.95\"}",
           "legendFormat": "P95 Total Lookup Time",
           "range": true,
           "refId": "C"
@@ -4907,7 +4907,37 @@
     "monitoring"
   ],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "current": {
+          "selected": true,
+          "text": "Production",
+          "value": "production"
+        },
+        "description": "Select environment (production or staging)",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Environment",
+        "multi": false,
+        "name": "environment",
+        "options": [
+          {
+            "selected": true,
+            "text": "Production",
+            "value": "production"
+          },
+          {
+            "selected": false,
+            "text": "Staging",
+            "value": "staging"
+          }
+        ],
+        "query": "production,staging",
+        "queryValue": "",
+        "skipUrlSync": false,
+        "type": "custom"
+      }
+    ]
   },
   "time": {
     "from": "now-3h",
