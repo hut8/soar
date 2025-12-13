@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { login, logout } from '../utils/auth';
-import { testUsers } from '../fixtures/data.fixture';
+import { testUsers, testClubs } from '../fixtures/data.fixture';
 
 test.describe('Logout', () => {
 	test('should successfully logout user', async ({ page }) => {
@@ -24,15 +24,16 @@ test.describe('Logout', () => {
 		// Log in
 		await login(page, testUsers.validUser.email, testUsers.validUser.password);
 
-		// Navigate to protected page (aircraft)
-		await page.goto('/aircraft');
-		await expect(page).toHaveURL('/aircraft');
+		// Navigate to protected page (club operations)
+		const protectedPage = `/clubs/${testClubs.validClubId}/operations`;
+		await page.goto(protectedPage);
+		await expect(page).toHaveURL(protectedPage);
 
 		// Log out
 		await logout(page);
 
 		// Try to access protected page again
-		await page.goto('/aircraft');
+		await page.goto(protectedPage);
 
 		// Should be redirected to login page
 		await expect(page).toHaveURL(/\/login/);
