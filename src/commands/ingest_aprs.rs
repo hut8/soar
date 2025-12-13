@@ -164,6 +164,8 @@ pub async fn handle_ingest_aprs(
         info!("Connecting to NATS at {}...", nats_url);
         let nats_result = async_nats::ConnectOptions::new()
             .name("soar-aprs-ingester")
+            .client_capacity(65536) // Increase from default 2048 to prevent blocking on publish
+            .subscription_capacity(1024 * 128) // Increase subscription buffer
             .connect(&nats_url)
             .await;
 
