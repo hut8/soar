@@ -152,8 +152,13 @@ pub async fn handle_ingest_beast(
         }
 
         info!("Connecting to NATS at {}...", nats_url);
+        let nats_client_name = if std::env::var("SOAR_ENV") == Ok("production".into()) {
+            "soar-beast-ingester"
+        } else {
+            "soar-beast-ingester-staging"
+        };
         let nats_result = async_nats::ConnectOptions::new()
-            .name("soar-beast-ingester")
+            .name(nats_client_name)
             .connect(&nats_url)
             .await;
 
