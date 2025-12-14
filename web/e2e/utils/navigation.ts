@@ -7,7 +7,7 @@ import { type Page } from '@playwright/test';
  */
 
 /**
- * Navigate to the devices page
+ * Navigate to the aircraft page
  *
  * @param page - Playwright page object
  * @returns Promise that resolves when navigation is complete
@@ -18,10 +18,10 @@ export async function goToAircraft(page: Page): Promise<void> {
 }
 
 /**
- * Navigate to a specific device detail page
+ * Navigate to a specific aircraft detail page
  *
  * @param page - Playwright page object
- * @param deviceId - Device ID
+ * @param deviceId - Aircraft ID
  * @returns Promise that resolves when navigation is complete
  */
 export async function goToDeviceDetail(page: Page, deviceId: string): Promise<void> {
@@ -52,7 +52,7 @@ export async function goToHome(page: Page): Promise<void> {
 }
 
 /**
- * Search for devices by registration
+ * Search for aircraft by registration
  *
  * @param page - Playwright page object
  * @param registration - Aircraft registration to search for
@@ -62,7 +62,7 @@ export async function searchAircraftByRegistration(
 	page: Page,
 	registration: string
 ): Promise<void> {
-	// Make sure we're on the devices page
+	// Make sure we're on the aircraft page
 	await goToAircraft(page);
 
 	// Fill in the search input (registration is the default search type)
