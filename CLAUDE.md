@@ -643,14 +643,19 @@ git checkout main
 Use the simplified release script:
 
 ```bash
-# Create a new release (triggers production deployment)
+# Semantic version bump (recommended)
+./scripts/create-release patch    # 0.1.4 → 0.1.5
+./scripts/create-release minor    # 0.1.4 → 0.2.0
+./scripts/create-release major    # 0.1.4 → 1.0.0
+
+# Explicit version (if needed)
 ./scripts/create-release v0.1.5
 
 # Create as draft (for review before publishing)
-./scripts/create-release v0.1.5 --draft
+./scripts/create-release patch --draft
 
 # Create with custom release notes
-./scripts/create-release v0.1.5 --notes "Custom release notes here"
+./scripts/create-release patch --notes "Custom release notes here"
 ```
 
 **What happens automatically:**
