@@ -14,10 +14,6 @@ pub async fn handle_ingest_aprs(
     retry_delay: u64,
     nats_url: String,
 ) -> Result<()> {
-    use soar::queue_config::{
-        APRS_RAW_STREAM, APRS_RAW_STREAM_STAGING, APRS_RAW_SUBJECT, APRS_RAW_SUBJECT_STAGING,
-    };
-
     sentry::configure_scope(|scope| {
         scope.set_tag("operation", "ingest-aprs");
     });
@@ -29,36 +25,32 @@ pub async fn handle_ingest_aprs(
         port = 10152;
     }
 
-    // Determine environment and use appropriate stream/subject names
-    // Production: "APRS_RAW" and "aprs.raw"
-    // Staging: "STAGING_APRS_RAW" and "staging.aprs.raw"
+    // Determine environment and use appropriate NATS subject
+    // Production: "aprs.raw"
+    // Staging: "staging.aprs.raw"
     let soar_env = env::var("SOAR_ENV").unwrap_or_default();
     let is_production = soar_env == "production";
     let is_staging = soar_env == "staging";
 
-    let (final_stream_name, final_subject) = if is_production {
-        (APRS_RAW_STREAM.to_string(), APRS_RAW_SUBJECT.to_string())
+    let nats_subject = if is_production {
+        "aprs.raw"
     } else {
-        (
-            APRS_RAW_STREAM_STAGING.to_string(),
-            APRS_RAW_SUBJECT_STAGING.to_string(),
-        )
+        "staging.aprs.raw"
     };
 
     info!(
-        "Starting APRS ingestion service - server: {}:{}, NATS: {}, stream: {}, subject: {}",
-        server, port, nats_url, final_stream_name, final_subject
+        "Starting APRS ingestion service - server: {}:{}, NATS: {}, subject: {}",
+        server, port, nats_url, nats_subject
     );
 
     info!(
-        "Environment: {}, using stream '{}' and subject '{}'",
+        "Environment: {}, using NATS subject '{}'",
         if is_production {
             "production"
         } else {
             "staging"
         },
-        final_stream_name,
-        final_subject
+        nats_subject
     );
 
     // Initialize health state for this ingester
@@ -187,11 +179,11 @@ pub async fn handle_ingest_aprs(
             }
         };
 
-        info!("NATS ready - will publish to subject '{}'", final_subject);
+        info!("NATS ready - will publish to subject '{}'", nats_subject);
 
         // Create NATS publisher for raw APRS messages
         let nats_publisher =
-            soar::aprs_nats_publisher::NatsPublisher::new(nats_client, final_subject.clone());
+            soar::aprs_nats_publisher::NatsPublisher::new(nats_client, nats_subject.to_string());
 
         let mut client = AprsClient::new(config.clone());
 

@@ -1,4 +1,3 @@
-use crate::queue_config::{RAW_MESSAGE_QUEUE_SIZE, queue_warning_threshold};
 use anyhow::{Context, Result};
 use std::time::Duration;
 use tokio::io::{AsyncWriteExt, BufReader};
@@ -7,7 +6,14 @@ use tokio::time::{sleep, timeout};
 use tracing::Instrument;
 use tracing::{error, info, trace, warn};
 
-// AprsClient only publishes raw messages to JetStream - all parsing happens in the consumer
+// Queue size for raw APRS messages
+const RAW_MESSAGE_QUEUE_SIZE: usize = 1000;
+
+fn queue_warning_threshold(queue_size: usize) -> usize {
+    queue_size / 2
+}
+
+// AprsClient only publishes raw messages to NATS - all parsing happens in the consumer
 
 /// Result type for connection attempts
 enum ConnectionResult {
