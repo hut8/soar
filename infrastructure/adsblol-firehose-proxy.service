@@ -1,0 +1,12 @@
+[Unit]
+Description=Proxy adsb.lol firehose to Tailscale
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/bin/socat TCP-LISTEN:41365,fork,reuseaddr TCP:out.adsb.lol:1365
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
