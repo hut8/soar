@@ -77,7 +77,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  (SELECT flight_count FROM flight_analytics_daily WHERE date = CURRENT_DATE) as \"Flights Today\",\n  (SELECT SUM(flight_count) FROM flight_analytics_daily WHERE date >= CURRENT_DATE - 7) as \"Flights (7d)\",\n  (SELECT SUM(flight_count) FROM flight_analytics_daily WHERE date >= CURRENT_DATE - 30) as \"Flights (30d)\",\n  (SELECT COUNT(*) FROM device_analytics WHERE flight_count_7d > 0) as \"Active Devices (7d)\",\n  (SELECT COUNT(*) FROM device_analytics WHERE z_score_30d > 3.0) as \"Outlier Devices\",\n  (SELECT ROUND(quality_score::numeric, 1) FROM data_quality_metrics_daily ORDER BY metric_date DESC LIMIT 1) as \"Data Quality Score\"",
+          "rawSql": "SELECT\n  (SELECT flight_count FROM flight_analytics_daily WHERE date = CURRENT_DATE) as \"Flights Today\",\n  (SELECT SUM(flight_count) FROM flight_analytics_daily WHERE date >= CURRENT_DATE - 7) as \"Flights (7d)\",\n  (SELECT SUM(flight_count) FROM flight_analytics_daily WHERE date >= CURRENT_DATE - 30) as \"Flights (30d)\",\n  (SELECT COUNT(*) FROM aircraft_analytics WHERE flight_count_7d > 0) as \"Active Devices (7d)\",\n  (SELECT COUNT(*) FROM aircraft_analytics WHERE z_score_30d > 3.0) as \"Outlier Devices\",\n  (SELECT ROUND(quality_score::numeric, 1) FROM data_quality_metrics_daily ORDER BY metric_date DESC LIMIT 1) as \"Data Quality Score\"",
           "refId": "A",
           "sql": {
             "columns": [],
@@ -484,7 +484,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  registration as \"Registration\",\n  aircraft_model as \"Model\",\n  flight_count_30d as \"Flights (30d)\",\n  ROUND(total_distance_meters / 1000.0) as \"Total Distance (km)\",\n  ROUND(avg_flight_duration_seconds / 60.0) as \"Avg Duration (min)\"\nFROM device_analytics\nWHERE flight_count_30d > 0\nORDER BY flight_count_30d DESC\nLIMIT 10",
+          "rawSql": "SELECT\n  registration as \"Registration\",\n  aircraft_model as \"Model\",\n  flight_count_30d as \"Flights (30d)\",\n  ROUND(total_distance_meters / 1000.0) as \"Total Distance (km)\",\n  ROUND(avg_flight_duration_seconds / 60.0) as \"Avg Duration (min)\"\nFROM aircraft_analytics\nWHERE flight_count_30d > 0\nORDER BY flight_count_30d DESC\nLIMIT 10",
           "refId": "A",
           "sql": {
             "columns": [],
@@ -1185,7 +1185,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  registration as \"Registration\",\n  aircraft_model as \"Model\",\n  flight_count_30d as \"Flights (30d)\",\n  z_score_30d as \"Z-Score\"\nFROM device_analytics\nWHERE z_score_30d > 3.0\nORDER BY z_score_30d DESC\nLIMIT 10",
+          "rawSql": "SELECT\n  registration as \"Registration\",\n  aircraft_model as \"Model\",\n  flight_count_30d as \"Flights (30d)\",\n  z_score_30d as \"Z-Score\"\nFROM aircraft_analytics\nWHERE z_score_30d > 3.0\nORDER BY z_score_30d DESC\nLIMIT 10",
           "refId": "A",
           "sql": {
             "columns": [],
