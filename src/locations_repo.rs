@@ -131,19 +131,31 @@ impl LocationsRepository {
                 .execute(&mut conn)?;
 
             // Now select the location (either the one we just created or the existing one)
-            // Use direct nullable comparisons matching the simplified unique index
-            use crate::schema::locations::dsl::*;
+            // Use COALESCE to match the expression-based unique index
+            use diesel::sql_types::Text;
 
-            // Use direct nullable comparisons - no COALESCE needed
-            let location_model = locations
-                .filter(street1.eq(&param_street1))
-                .filter(street2.eq(&param_street2))
-                .filter(city.eq(&param_city))
-                .filter(state.eq(&param_state))
-                .filter(zip_code.eq(&param_zip_code))
-                .filter(country_mail_code.eq(&param_country_mail_code))
-                .select(LocationModel::as_select())
-                .first::<LocationModel>(&mut conn)?;
+            // Use raw SQL with COALESCE to match the unique index exactly
+            let location_model: LocationModel = diesel::sql_query(
+                r#"
+                SELECT id, street1, street2, city, state, zip_code, region_code, country_mail_code,
+                       geolocation, created_at, updated_at
+                FROM locations
+                WHERE COALESCE(street1, '') = COALESCE($1, '')
+                  AND COALESCE(street2, '') = COALESCE($2, '')
+                  AND COALESCE(city, '') = COALESCE($3, '')
+                  AND COALESCE(state, '') = COALESCE($4, '')
+                  AND COALESCE(zip_code, '') = COALESCE($5, '')
+                  AND COALESCE(country_mail_code, '') = COALESCE($6, '')
+                LIMIT 1
+                "#,
+            )
+            .bind::<diesel::sql_types::Nullable<Text>, _>(&param_street1)
+            .bind::<diesel::sql_types::Nullable<Text>, _>(&param_street2)
+            .bind::<diesel::sql_types::Nullable<Text>, _>(&param_city)
+            .bind::<diesel::sql_types::Nullable<Text>, _>(&param_state)
+            .bind::<diesel::sql_types::Nullable<Text>, _>(&param_zip_code)
+            .bind::<diesel::sql_types::Nullable<Text>, _>(&param_country_mail_code)
+            .get_result::<LocationModel>(&mut conn)?;
 
             Ok::<Location, anyhow::Error>(location_model.into())
         })

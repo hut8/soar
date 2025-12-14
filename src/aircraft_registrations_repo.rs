@@ -75,6 +75,15 @@ impl AircraftRegistrationsRepository {
                     region_code: aircraft_reg.region_code.clone(),
                     country_mail_code: aircraft_reg.country_mail_code.clone(),
                 };
+                info!(
+                    "Aircraft {}: registrant '{}' -> club '{}'",
+                    aircraft_reg.n_number,
+                    aircraft_reg
+                        .registrant_name
+                        .as_ref()
+                        .unwrap_or(&"NONE".to_string()),
+                    club_name
+                );
                 unique_clubs.push((club_name, location_params));
             }
         }
@@ -84,11 +93,19 @@ impl AircraftRegistrationsRepository {
         // Batch create all unique clubs and populate cache
         let clubs_repo = ClubsRepository::new(self.pool.clone());
         for (club_name, location_params) in unique_clubs {
+            info!(
+                "Creating club: '{}' with location: {:?}, {:?}, {:?}",
+                club_name, location_params.street1, location_params.city, location_params.state
+            );
             match clubs_repo
                 .find_or_create_club(&club_name, location_params)
                 .await
             {
                 Ok(club) => {
+                    info!(
+                        "Successfully created/found club: '{}' (id: {})",
+                        club_name, club.id
+                    );
                     club_cache.insert(club_name.clone(), club.id);
                 }
                 Err(e) => {

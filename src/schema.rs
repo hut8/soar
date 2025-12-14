@@ -242,137 +242,6 @@ diesel::table! {
 }
 
 diesel::table! {
-    use diesel::sql_types::*;
-    use super::sql_types::MessageSource;
-
-    aprs_messages_default (id, received_at) {
-        id -> Uuid,
-        received_at -> Timestamptz,
-        receiver_id -> Uuid,
-        unparsed -> Nullable<Text>,
-        raw_message_hash -> Bytea,
-        raw_message -> Bytea,
-        source -> MessageSource,
-    }
-}
-
-diesel::table! {
-    aprs_messages_old (id) {
-        id -> Uuid,
-        raw_message -> Text,
-        received_at -> Timestamptz,
-        receiver_id -> Uuid,
-        unparsed -> Nullable<Text>,
-        raw_message_hash -> Bytea,
-    }
-}
-
-diesel::table! {
-    use diesel::sql_types::*;
-    use super::sql_types::MessageSource;
-
-    aprs_messages_p20251114 (id, received_at) {
-        id -> Uuid,
-        received_at -> Timestamptz,
-        receiver_id -> Uuid,
-        unparsed -> Nullable<Text>,
-        raw_message_hash -> Bytea,
-        raw_message -> Bytea,
-        source -> MessageSource,
-    }
-}
-
-diesel::table! {
-    use diesel::sql_types::*;
-    use super::sql_types::MessageSource;
-
-    aprs_messages_p20251115 (id, received_at) {
-        id -> Uuid,
-        received_at -> Timestamptz,
-        receiver_id -> Uuid,
-        unparsed -> Nullable<Text>,
-        raw_message_hash -> Bytea,
-        raw_message -> Bytea,
-        source -> MessageSource,
-    }
-}
-
-diesel::table! {
-    use diesel::sql_types::*;
-    use super::sql_types::MessageSource;
-
-    aprs_messages_p20251116 (id, received_at) {
-        id -> Uuid,
-        received_at -> Timestamptz,
-        receiver_id -> Uuid,
-        unparsed -> Nullable<Text>,
-        raw_message_hash -> Bytea,
-        raw_message -> Bytea,
-        source -> MessageSource,
-    }
-}
-
-diesel::table! {
-    use diesel::sql_types::*;
-    use super::sql_types::MessageSource;
-
-    aprs_messages_p20251117 (id, received_at) {
-        id -> Uuid,
-        received_at -> Timestamptz,
-        receiver_id -> Uuid,
-        unparsed -> Nullable<Text>,
-        raw_message_hash -> Bytea,
-        raw_message -> Bytea,
-        source -> MessageSource,
-    }
-}
-
-diesel::table! {
-    use diesel::sql_types::*;
-    use super::sql_types::MessageSource;
-
-    aprs_messages_p20251118 (id, received_at) {
-        id -> Uuid,
-        received_at -> Timestamptz,
-        receiver_id -> Uuid,
-        unparsed -> Nullable<Text>,
-        raw_message_hash -> Bytea,
-        raw_message -> Bytea,
-        source -> MessageSource,
-    }
-}
-
-diesel::table! {
-    use diesel::sql_types::*;
-    use super::sql_types::MessageSource;
-
-    aprs_messages_p20251119 (id, received_at) {
-        id -> Uuid,
-        received_at -> Timestamptz,
-        receiver_id -> Uuid,
-        unparsed -> Nullable<Text>,
-        raw_message_hash -> Bytea,
-        raw_message -> Bytea,
-        source -> MessageSource,
-    }
-}
-
-diesel::table! {
-    use diesel::sql_types::*;
-    use super::sql_types::MessageSource;
-
-    aprs_messages_p20251120 (id, received_at) {
-        id -> Uuid,
-        received_at -> Timestamptz,
-        receiver_id -> Uuid,
-        unparsed -> Nullable<Text>,
-        raw_message_hash -> Bytea,
-        raw_message -> Bytea,
-        source -> MessageSource,
-    }
-}
-
-diesel::table! {
     club_analytics_daily (club_id, date) {
         club_id -> Uuid,
         date -> Date,
@@ -546,7 +415,7 @@ diesel::table! {
     use super::sql_types::Geography;
     use super::sql_types::Geometry;
 
-    fixes_p20251114 (id, received_at) {
+    fixes_p20251209 (id, received_at) {
         id -> Uuid,
         #[max_length = 9]
         source -> Varchar,
@@ -585,7 +454,7 @@ diesel::table! {
     use super::sql_types::Geography;
     use super::sql_types::Geometry;
 
-    fixes_p20251115 (id, received_at) {
+    fixes_p20251210 (id, received_at) {
         id -> Uuid,
         #[max_length = 9]
         source -> Varchar,
@@ -624,7 +493,7 @@ diesel::table! {
     use super::sql_types::Geography;
     use super::sql_types::Geometry;
 
-    fixes_p20251116 (id, received_at) {
+    fixes_p20251211 (id, received_at) {
         id -> Uuid,
         #[max_length = 9]
         source -> Varchar,
@@ -663,7 +532,7 @@ diesel::table! {
     use super::sql_types::Geography;
     use super::sql_types::Geometry;
 
-    fixes_p20251117 (id, received_at) {
+    fixes_p20251212 (id, received_at) {
         id -> Uuid,
         #[max_length = 9]
         source -> Varchar,
@@ -702,7 +571,7 @@ diesel::table! {
     use super::sql_types::Geography;
     use super::sql_types::Geometry;
 
-    fixes_p20251118 (id, received_at) {
+    fixes_p20251213 (id, received_at) {
         id -> Uuid,
         #[max_length = 9]
         source -> Varchar,
@@ -741,7 +610,7 @@ diesel::table! {
     use super::sql_types::Geography;
     use super::sql_types::Geometry;
 
-    fixes_p20251119 (id, received_at) {
+    fixes_p20251214 (id, received_at) {
         id -> Uuid,
         #[max_length = 9]
         source -> Varchar,
@@ -780,7 +649,7 @@ diesel::table! {
     use super::sql_types::Geography;
     use super::sql_types::Geometry;
 
-    fixes_p20251120 (id, received_at) {
+    fixes_p20251215 (id, received_at) {
         id -> Uuid,
         #[max_length = 9]
         source -> Varchar,
@@ -944,6 +813,126 @@ diesel::table! {
     use super::sql_types::MessageSource;
 
     raw_messages (id, received_at) {
+        id -> Uuid,
+        received_at -> Timestamptz,
+        receiver_id -> Uuid,
+        unparsed -> Nullable<Text>,
+        raw_message_hash -> Bytea,
+        raw_message -> Bytea,
+        source -> MessageSource,
+    }
+}
+
+diesel::table! {
+    use diesel::sql_types::*;
+    use super::sql_types::MessageSource;
+
+    raw_messages_default (id, received_at) {
+        id -> Uuid,
+        received_at -> Timestamptz,
+        receiver_id -> Uuid,
+        unparsed -> Nullable<Text>,
+        raw_message_hash -> Bytea,
+        raw_message -> Bytea,
+        source -> MessageSource,
+    }
+}
+
+diesel::table! {
+    use diesel::sql_types::*;
+    use super::sql_types::MessageSource;
+
+    raw_messages_p20251209 (id, received_at) {
+        id -> Uuid,
+        received_at -> Timestamptz,
+        receiver_id -> Uuid,
+        unparsed -> Nullable<Text>,
+        raw_message_hash -> Bytea,
+        raw_message -> Bytea,
+        source -> MessageSource,
+    }
+}
+
+diesel::table! {
+    use diesel::sql_types::*;
+    use super::sql_types::MessageSource;
+
+    raw_messages_p20251210 (id, received_at) {
+        id -> Uuid,
+        received_at -> Timestamptz,
+        receiver_id -> Uuid,
+        unparsed -> Nullable<Text>,
+        raw_message_hash -> Bytea,
+        raw_message -> Bytea,
+        source -> MessageSource,
+    }
+}
+
+diesel::table! {
+    use diesel::sql_types::*;
+    use super::sql_types::MessageSource;
+
+    raw_messages_p20251211 (id, received_at) {
+        id -> Uuid,
+        received_at -> Timestamptz,
+        receiver_id -> Uuid,
+        unparsed -> Nullable<Text>,
+        raw_message_hash -> Bytea,
+        raw_message -> Bytea,
+        source -> MessageSource,
+    }
+}
+
+diesel::table! {
+    use diesel::sql_types::*;
+    use super::sql_types::MessageSource;
+
+    raw_messages_p20251212 (id, received_at) {
+        id -> Uuid,
+        received_at -> Timestamptz,
+        receiver_id -> Uuid,
+        unparsed -> Nullable<Text>,
+        raw_message_hash -> Bytea,
+        raw_message -> Bytea,
+        source -> MessageSource,
+    }
+}
+
+diesel::table! {
+    use diesel::sql_types::*;
+    use super::sql_types::MessageSource;
+
+    raw_messages_p20251213 (id, received_at) {
+        id -> Uuid,
+        received_at -> Timestamptz,
+        receiver_id -> Uuid,
+        unparsed -> Nullable<Text>,
+        raw_message_hash -> Bytea,
+        raw_message -> Bytea,
+        source -> MessageSource,
+    }
+}
+
+diesel::table! {
+    use diesel::sql_types::*;
+    use super::sql_types::MessageSource;
+
+    raw_messages_p20251214 (id, received_at) {
+        id -> Uuid,
+        received_at -> Timestamptz,
+        receiver_id -> Uuid,
+        unparsed -> Nullable<Text>,
+        raw_message_hash -> Bytea,
+        raw_message -> Bytea,
+        source -> MessageSource,
+    }
+}
+
+diesel::table! {
+    use diesel::sql_types::*;
+    use super::sql_types::MessageSource;
+
+    raw_messages_p20251215 (id, received_at) {
         id -> Uuid,
         received_at -> Timestamptz,
         receiver_id -> Uuid,
@@ -1195,15 +1184,6 @@ diesel::joinable!(aircraft_registrations -> clubs (club_id));
 diesel::joinable!(aircraft_registrations -> locations (location_id));
 diesel::joinable!(aircraft_registrations -> status_codes (status_code));
 diesel::joinable!(aircraft_registrations -> type_engines (type_engine_code));
-diesel::joinable!(aprs_messages_default -> receivers (receiver_id));
-diesel::joinable!(aprs_messages_old -> receivers (receiver_id));
-diesel::joinable!(aprs_messages_p20251114 -> receivers (receiver_id));
-diesel::joinable!(aprs_messages_p20251115 -> receivers (receiver_id));
-diesel::joinable!(aprs_messages_p20251116 -> receivers (receiver_id));
-diesel::joinable!(aprs_messages_p20251117 -> receivers (receiver_id));
-diesel::joinable!(aprs_messages_p20251118 -> receivers (receiver_id));
-diesel::joinable!(aprs_messages_p20251119 -> receivers (receiver_id));
-diesel::joinable!(aprs_messages_p20251120 -> receivers (receiver_id));
 diesel::joinable!(clubs -> airports (home_base_airport_id));
 diesel::joinable!(clubs -> locations (location_id));
 diesel::joinable!(fixes -> aircraft (aircraft_id));
@@ -1213,36 +1193,43 @@ diesel::joinable!(fixes_default -> aircraft (aircraft_id));
 diesel::joinable!(fixes_default -> flights (flight_id));
 diesel::joinable!(fixes_default -> receivers (receiver_id));
 diesel::joinable!(fixes_old -> aircraft (aircraft_id));
-diesel::joinable!(fixes_old -> aprs_messages_old (aprs_message_id));
 diesel::joinable!(fixes_old -> flights (flight_id));
 diesel::joinable!(fixes_old -> receivers (receiver_id));
-diesel::joinable!(fixes_p20251114 -> aircraft (aircraft_id));
-diesel::joinable!(fixes_p20251114 -> flights (flight_id));
-diesel::joinable!(fixes_p20251114 -> receivers (receiver_id));
-diesel::joinable!(fixes_p20251115 -> aircraft (aircraft_id));
-diesel::joinable!(fixes_p20251115 -> flights (flight_id));
-diesel::joinable!(fixes_p20251115 -> receivers (receiver_id));
-diesel::joinable!(fixes_p20251116 -> aircraft (aircraft_id));
-diesel::joinable!(fixes_p20251116 -> flights (flight_id));
-diesel::joinable!(fixes_p20251116 -> receivers (receiver_id));
-diesel::joinable!(fixes_p20251117 -> aircraft (aircraft_id));
-diesel::joinable!(fixes_p20251117 -> flights (flight_id));
-diesel::joinable!(fixes_p20251117 -> receivers (receiver_id));
-diesel::joinable!(fixes_p20251118 -> aircraft (aircraft_id));
-diesel::joinable!(fixes_p20251118 -> flights (flight_id));
-diesel::joinable!(fixes_p20251118 -> receivers (receiver_id));
-diesel::joinable!(fixes_p20251119 -> aircraft (aircraft_id));
-diesel::joinable!(fixes_p20251119 -> flights (flight_id));
-diesel::joinable!(fixes_p20251119 -> receivers (receiver_id));
-diesel::joinable!(fixes_p20251120 -> aircraft (aircraft_id));
-diesel::joinable!(fixes_p20251120 -> flights (flight_id));
-diesel::joinable!(fixes_p20251120 -> receivers (receiver_id));
+diesel::joinable!(fixes_p20251209 -> aircraft (aircraft_id));
+diesel::joinable!(fixes_p20251209 -> flights (flight_id));
+diesel::joinable!(fixes_p20251209 -> receivers (receiver_id));
+diesel::joinable!(fixes_p20251210 -> aircraft (aircraft_id));
+diesel::joinable!(fixes_p20251210 -> flights (flight_id));
+diesel::joinable!(fixes_p20251210 -> receivers (receiver_id));
+diesel::joinable!(fixes_p20251211 -> aircraft (aircraft_id));
+diesel::joinable!(fixes_p20251211 -> flights (flight_id));
+diesel::joinable!(fixes_p20251211 -> receivers (receiver_id));
+diesel::joinable!(fixes_p20251212 -> aircraft (aircraft_id));
+diesel::joinable!(fixes_p20251212 -> flights (flight_id));
+diesel::joinable!(fixes_p20251212 -> receivers (receiver_id));
+diesel::joinable!(fixes_p20251213 -> aircraft (aircraft_id));
+diesel::joinable!(fixes_p20251213 -> flights (flight_id));
+diesel::joinable!(fixes_p20251213 -> receivers (receiver_id));
+diesel::joinable!(fixes_p20251214 -> aircraft (aircraft_id));
+diesel::joinable!(fixes_p20251214 -> flights (flight_id));
+diesel::joinable!(fixes_p20251214 -> receivers (receiver_id));
+diesel::joinable!(fixes_p20251215 -> aircraft (aircraft_id));
+diesel::joinable!(fixes_p20251215 -> flights (flight_id));
+diesel::joinable!(fixes_p20251215 -> receivers (receiver_id));
 diesel::joinable!(flight_pilots -> flights (flight_id));
 diesel::joinable!(flight_pilots -> pilots (pilot_id));
 diesel::joinable!(flights -> clubs (club_id));
 diesel::joinable!(pilots -> clubs (club_id));
 diesel::joinable!(pilots -> users (user_id));
 diesel::joinable!(raw_messages -> receivers (receiver_id));
+diesel::joinable!(raw_messages_default -> receivers (receiver_id));
+diesel::joinable!(raw_messages_p20251209 -> receivers (receiver_id));
+diesel::joinable!(raw_messages_p20251210 -> receivers (receiver_id));
+diesel::joinable!(raw_messages_p20251211 -> receivers (receiver_id));
+diesel::joinable!(raw_messages_p20251212 -> receivers (receiver_id));
+diesel::joinable!(raw_messages_p20251213 -> receivers (receiver_id));
+diesel::joinable!(raw_messages_p20251214 -> receivers (receiver_id));
+diesel::joinable!(raw_messages_p20251215 -> receivers (receiver_id));
 diesel::joinable!(receiver_statuses -> receivers (receiver_id));
 diesel::joinable!(receivers_links -> receivers (receiver_id));
 diesel::joinable!(receivers_photos -> receivers (receiver_id));
@@ -1258,15 +1245,6 @@ diesel::allow_tables_to_appear_in_same_query!(
     aircraft_registrations,
     airport_analytics_daily,
     airports,
-    aprs_messages_default,
-    aprs_messages_old,
-    aprs_messages_p20251114,
-    aprs_messages_p20251115,
-    aprs_messages_p20251116,
-    aprs_messages_p20251117,
-    aprs_messages_p20251118,
-    aprs_messages_p20251119,
-    aprs_messages_p20251120,
     club_analytics_daily,
     clubs,
     countries,
@@ -1274,13 +1252,13 @@ diesel::allow_tables_to_appear_in_same_query!(
     fixes,
     fixes_default,
     fixes_old,
-    fixes_p20251114,
-    fixes_p20251115,
-    fixes_p20251116,
-    fixes_p20251117,
-    fixes_p20251118,
-    fixes_p20251119,
-    fixes_p20251120,
+    fixes_p20251209,
+    fixes_p20251210,
+    fixes_p20251211,
+    fixes_p20251212,
+    fixes_p20251213,
+    fixes_p20251214,
+    fixes_p20251215,
     flight_analytics_daily,
     flight_analytics_hourly,
     flight_duration_buckets,
@@ -1289,6 +1267,14 @@ diesel::allow_tables_to_appear_in_same_query!(
     locations,
     pilots,
     raw_messages,
+    raw_messages_default,
+    raw_messages_p20251209,
+    raw_messages_p20251210,
+    raw_messages_p20251211,
+    raw_messages_p20251212,
+    raw_messages_p20251213,
+    raw_messages_p20251214,
+    raw_messages_p20251215,
     receiver_statuses,
     receivers,
     receivers_links,
