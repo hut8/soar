@@ -12,7 +12,7 @@ Type=simple
 User=soar
 Group=soar
 WorkingDirectory=/var/soar
-ExecStart=/usr/local/bin/soar run --archive --skip-ogn-aircraft-type JetTurboprop
+ExecStart=/usr/local/bin/soar run --archive
 ExecReload=/bin/kill -s HUP $MAINPID
 
 # Environment variables
