@@ -24,11 +24,8 @@
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
 	import type { Aircraft, Receiver, Fix, FixesResponse } from '$lib/types';
-	import {
-		formatAircraftAddress,
-		getAircraftTypeOgnDescription,
-		getAircraftTypeColor
-	} from '$lib/formatters';
+	import { getAircraftTypeOgnDescription, getAircraftTypeColor } from '$lib/formatters';
+	import AircraftLink from '$lib/components/AircraftLink.svelte';
 
 	dayjs.extend(relativeTime);
 
@@ -418,34 +415,6 @@
 			return `${minutes}m ${secs}s`;
 		} else {
 			return `${secs}s`;
-		}
-	}
-
-	/**
-	 * Format device label for display according to the pattern:
-	 * 1. Registration + Model (e.g., "N12345 - Cessna 182") if both available
-	 * 2. Registration only if just that is available
-	 * 3. Model only if just that is available
-	 * 4. Fallback: Address type + 24-bit code (e.g., "ICAO-A59CDC")
-	 */
-	function formatDeviceLabel(aircraft: Aircraft | null | undefined, aircraftId: string): string {
-		if (!aircraft) {
-			// Fallback to aircraft ID if no aircraft details
-			return aircraftId;
-		}
-
-		const hasRegistration = aircraft.registration && aircraft.registration.trim() !== '';
-		const hasModel = aircraft.aircraft_model && aircraft.aircraft_model.trim() !== '';
-
-		if (hasRegistration && hasModel) {
-			return `${aircraft.registration} - ${aircraft.aircraft_model}`;
-		} else if (hasRegistration) {
-			return aircraft.registration;
-		} else if (hasModel) {
-			return aircraft.aircraft_model;
-		} else {
-			// Fallback to address type + 24-bit code
-			return formatAircraftAddress(aircraft.address_type, aircraft.address);
 		}
 	}
 </script>
@@ -942,30 +911,24 @@
 														{#each aggregateStats.fix_counts_by_aircraft as aircraftCount (aircraftCount.aircraft_id)}
 															<tr>
 																<td>
-																	<a
-																		href={resolve(`/aircraft/${aircraftCount.aircraft_id}`)}
-																		class="text-primary-500 hover:text-primary-600"
-																	>
-																		<div class="flex items-center gap-2">
-																			<span class="font-semibold">
-																				{formatDeviceLabel(
-																					aircraftCount.aircraft,
-																					aircraftCount.aircraft_id
+																	<div class="flex items-center gap-2">
+																		{#if aircraftCount.aircraft}
+																			<AircraftLink aircraft={aircraftCount.aircraft} size="sm" />
+																		{:else}
+																			<span class="font-semibold">{aircraftCount.aircraft_id}</span>
+																		{/if}
+																		{#if aircraftCount.aircraft?.aircraft_type_ogn}
+																			<span
+																				class="badge {getAircraftTypeColor(
+																					aircraftCount.aircraft.aircraft_type_ogn
+																				)} text-xs"
+																			>
+																				{getAircraftTypeOgnDescription(
+																					aircraftCount.aircraft.aircraft_type_ogn
 																				)}
 																			</span>
-																			{#if aircraftCount.aircraft?.aircraft_type_ogn}
-																				<span
-																					class="badge {getAircraftTypeColor(
-																						aircraftCount.aircraft.aircraft_type_ogn
-																					)} text-xs"
-																				>
-																					{getAircraftTypeOgnDescription(
-																						aircraftCount.aircraft.aircraft_type_ogn
-																					)}
-																				</span>
-																			{/if}
-																		</div>
-																	</a>
+																		{/if}
+																	</div>
 																</td>
 																<td class="text-right font-semibold">
 																	{aircraftCount.count.toLocaleString()}
@@ -980,17 +943,15 @@
 										<!-- Mobile: Cards -->
 										<div class="space-y-3 md:hidden">
 											{#each aggregateStats.fix_counts_by_aircraft as aircraftCount (aircraftCount.aircraft_id)}
-												<a
-													href={resolve(`/aircraft/${aircraftCount.aircraft_id}`)}
-													class="block card p-4 hover:ring-2 hover:ring-primary-500"
-												>
+												<div class="card p-4">
 													<div class="flex items-start justify-between gap-3">
 														<div class="min-w-0 flex-1">
-															<div class="truncate font-semibold text-primary-500">
-																{formatDeviceLabel(
-																	aircraftCount.aircraft,
-																	aircraftCount.aircraft_id
-																)}
+															<div class="truncate font-semibold">
+																{#if aircraftCount.aircraft}
+																	<AircraftLink aircraft={aircraftCount.aircraft} size="sm" />
+																{:else}
+																	<span>{aircraftCount.aircraft_id}</span>
+																{/if}
 															</div>
 															{#if aircraftCount.aircraft?.aircraft_type_ogn}
 																<span
@@ -1011,7 +972,7 @@
 															<div class="text-surface-500-400-token text-xs">fixes</div>
 														</div>
 													</div>
-												</a>
+												</div>
 											{/each}
 										</div>
 									</div>
@@ -1382,12 +1343,19 @@
 																	{#each aggregateStats.fix_counts_by_aircraft as aircraftCount (aircraftCount.aircraft_id)}
 																		<tr>
 																			<td>
-																				<a
-																					href={resolve(`/aircraft/${aircraftCount.aircraft_id}`)}
-																					class="font-mono text-primary-500 hover:text-primary-600"
-																				>
-																					{aircraftCount.aircraft_id}
-																				</a>
+																				{#if aircraftCount.aircraft}
+																					<AircraftLink
+																						aircraft={aircraftCount.aircraft}
+																						size="sm"
+																					/>
+																				{:else}
+																					<a
+																						href={resolve(`/aircraft/${aircraftCount.aircraft_id}`)}
+																						class="font-mono text-primary-500 hover:text-primary-600"
+																					>
+																						{aircraftCount.aircraft_id}
+																					</a>
+																				{/if}
 																			</td>
 																			<td class="text-right font-semibold">
 																				{aircraftCount.count.toLocaleString()}
@@ -1402,13 +1370,19 @@
 													<!-- Mobile: Cards -->
 													<div class="space-y-3 md:hidden">
 														{#each aggregateStats.fix_counts_by_aircraft as aircraftCount (aircraftCount.aircraft_id)}
-															<a
-																href={resolve(`/aircraft/${aircraftCount.aircraft_id}`)}
-																class="block card p-4 hover:ring-2 hover:ring-primary-500"
-															>
+															<div class="card p-4">
 																<div class="flex items-center justify-between gap-4">
-																	<div class="font-mono font-medium text-primary-500">
-																		{aircraftCount.aircraft_id}
+																	<div class="font-medium">
+																		{#if aircraftCount.aircraft}
+																			<AircraftLink aircraft={aircraftCount.aircraft} size="sm" />
+																		{:else}
+																			<a
+																				href={resolve(`/aircraft/${aircraftCount.aircraft_id}`)}
+																				class="font-mono text-primary-500 hover:text-primary-600"
+																			>
+																				{aircraftCount.aircraft_id}
+																			</a>
+																		{/if}
 																	</div>
 																	<div class="text-right">
 																		<div class="text-lg font-bold">
@@ -1417,7 +1391,7 @@
 																		<div class="text-surface-500-400-token text-xs">fixes</div>
 																	</div>
 																</div>
-															</a>
+															</div>
 														{/each}
 													</div>
 												</div>

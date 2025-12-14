@@ -4,6 +4,7 @@
 	import { AircraftRegistry } from '$lib/services/AircraftRegistry';
 	import { serverCall } from '$lib/api/server';
 	import type { Aircraft } from '$lib/types';
+	import AircraftLink from '$lib/components/AircraftLink.svelte';
 
 	export let aircraftId: string;
 	export let size: 'sm' | 'md' | 'lg' = 'md';
@@ -48,20 +49,7 @@
 {#if loading}
 	<span class="text-surface-500 {sizeClasses[size]}">Loading...</span>
 {:else if aircraft}
-	<a
-		href="/aircraft/{aircraftId}"
-		target="_blank"
-		rel="noopener noreferrer"
-		class="inline-flex items-center gap-1 anchor {sizeClasses[size]}"
-		title="View towplane aircraft: {aircraft.registration || aircraftId}"
-	>
-		{#if aircraft.registration}
-			<span>{aircraft.registration}</span>
-		{:else}
-			<Plane class={iconSizes[size]} />
-		{/if}
-		<ExternalLink class={iconSizes[size]} />
-	</a>
+	<AircraftLink {aircraft} {size} openInNewTab={true} showIcon={true} />
 {:else}
 	<a
 		href="/aircraft/{aircraftId}"
