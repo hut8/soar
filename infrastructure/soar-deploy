@@ -204,16 +204,10 @@ for service in "${ALL_SERVICES[@]}"; do
     fi
 done
 
-# Stop all timers
-log_info "Stopping SOAR timers..."
-for timer in "${TIMERS[@]}"; do
-    if systemctl is-active --quiet "$timer"; then
-        log_info "Stopping $timer..."
-        systemctl stop "$timer" || log_warn "Failed to stop $timer"
-    else
-        log_info "$timer is not running"
-    fi
-done
+# Note: We intentionally do NOT stop timers during deployment
+# Timers pick up configuration changes via daemon-reload without needing to be stopped/started
+# Stopping and restarting timers with Persistent=yes can trigger immediate runs
+log_info "Skipping timer stop (timers will continue on their schedule)"
 
 # Wait for services to fully terminate
 log_info "Waiting for services to fully terminate..."
@@ -392,15 +386,21 @@ done
 # Timer-invoked services are installed but not enabled or started
 log_info "Timer-invoked services (${TIMER_SERVICES[*]}) will only be invoked by their timers"
 
-# Enable and start timers to ensure they are properly scheduled
-log_info "Enabling and starting SOAR timers..."
+# Enable and start timers only if they're not already running
+# Timers pick up configuration changes via daemon-reload without restart
+log_info "Ensuring SOAR timers are enabled and active..."
 for timer in "${TIMERS[@]}"; do
     if [ -f "/etc/systemd/system/$timer" ]; then
-        log_info "Enabling $timer..."
+        # Enable timer for automatic start on boot
         systemctl enable "$timer" || log_warn "Failed to enable $timer"
 
-        log_info "Starting $timer..."
-        systemctl restart "$timer" || log_warn "Failed to restart $timer"
+        # Start timer only if it's not already active (never restart to avoid triggering Persistent logic)
+        if ! systemctl is-active --quiet "$timer"; then
+            log_info "Starting $timer (was not active)..."
+            systemctl start "$timer" || log_warn "Failed to start $timer"
+        else
+            log_info "$timer is already active and will continue on schedule"
+        fi
     fi
 done
 
