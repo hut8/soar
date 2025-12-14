@@ -162,6 +162,11 @@ enum Commands {
         #[arg(long)]
         suppress_aprs_type: Vec<String>,
 
+        /// OGN aircraft type(s) to skip processing (e.g., JetTurboprop, Glider)
+        /// Can be specified multiple times to skip multiple types
+        #[arg(long)]
+        skip_ogn_aircraft_type: Vec<String>,
+
         /// Enable tokio-console for async task monitoring (port 6669)
         #[arg(long)]
         enable_tokio_console: bool,
@@ -992,6 +997,7 @@ async fn main() -> Result<()> {
             archive,
             nats_url,
             suppress_aprs_type,
+            skip_ogn_aircraft_type,
             enable_tokio_console: _,
         } => {
             // Determine archive directory if --archive flag is used
@@ -1005,6 +1011,7 @@ async fn main() -> Result<()> {
                 final_archive_dir,
                 nats_url,
                 &suppress_aprs_type,
+                &skip_ogn_aircraft_type,
                 diesel_pool,
             )
             .await

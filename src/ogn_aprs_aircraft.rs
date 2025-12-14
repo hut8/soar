@@ -66,6 +66,54 @@ impl From<u8> for AddressType {
     }
 }
 
+impl fmt::Display for AircraftType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            AircraftType::Reserved => "Reserved",
+            AircraftType::Glider => "Glider",
+            AircraftType::TowTug => "TowTug",
+            AircraftType::HelicopterGyro => "HelicopterGyro",
+            AircraftType::SkydiverParachute => "SkydiverParachute",
+            AircraftType::DropPlane => "DropPlane",
+            AircraftType::HangGlider => "HangGlider",
+            AircraftType::Paraglider => "Paraglider",
+            AircraftType::RecipEngine => "RecipEngine",
+            AircraftType::JetTurboprop => "JetTurboprop",
+            AircraftType::Unknown => "Unknown",
+            AircraftType::Balloon => "Balloon",
+            AircraftType::Airship => "Airship",
+            AircraftType::Uav => "Uav",
+            AircraftType::StaticObstacle => "StaticObstacle",
+        };
+        write!(f, "{}", s)
+    }
+}
+
+impl FromStr for AircraftType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Reserved" => Ok(AircraftType::Reserved),
+            "Glider" => Ok(AircraftType::Glider),
+            "TowTug" => Ok(AircraftType::TowTug),
+            "HelicopterGyro" => Ok(AircraftType::HelicopterGyro),
+            "SkydiverParachute" => Ok(AircraftType::SkydiverParachute),
+            "DropPlane" => Ok(AircraftType::DropPlane),
+            "HangGlider" => Ok(AircraftType::HangGlider),
+            "Paraglider" => Ok(AircraftType::Paraglider),
+            "RecipEngine" => Ok(AircraftType::RecipEngine),
+            "JetTurboprop" => Ok(AircraftType::JetTurboprop),
+            "Unknown" => Ok(AircraftType::Unknown),
+            "Balloon" => Ok(AircraftType::Balloon),
+            "Airship" => Ok(AircraftType::Airship),
+            "Uav" => Ok(AircraftType::Uav),
+            "StaticObstacle" => Ok(AircraftType::StaticObstacle),
+            _ => Err(format!("Invalid OGN aircraft type: {}", s)),
+        }
+    }
+}
+
 /// ADS-B emitter category codes as per DO-260B specification
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum)]
 #[db_enum(existing_type_path = "crate::schema::sql_types::AdsbEmitterCategory")]

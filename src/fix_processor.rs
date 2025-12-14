@@ -37,6 +37,8 @@ pub struct FixProcessor {
     elevation_mode: Option<ElevationMode>,
     /// APRS types to suppress from processing (e.g., OGADSB, OGFLR)
     suppressed_aprs_types: Vec<String>,
+    /// OGN aircraft types to skip from processing (e.g., JetTurboprop)
+    suppressed_ogn_aircraft_types: Vec<crate::ogn_aprs_aircraft::AircraftType>,
 }
 
 impl FixProcessor {
@@ -49,6 +51,7 @@ impl FixProcessor {
             nats_publisher: None,
             elevation_mode: None,
             suppressed_aprs_types: Vec::new(),
+            suppressed_ogn_aircraft_types: Vec::new(),
         }
     }
 
@@ -72,6 +75,15 @@ impl FixProcessor {
         self
     }
 
+    /// Set OGN aircraft types to skip from processing
+    pub fn with_suppressed_ogn_aircraft_types(
+        mut self,
+        types: Vec<crate::ogn_aprs_aircraft::AircraftType>,
+    ) -> Self {
+        self.suppressed_ogn_aircraft_types = types;
+        self
+    }
+
     /// Create a new FixProcessor with NATS publisher
     pub async fn new_with_nats(
         diesel_pool: Pool<ConnectionManager<PgConnection>>,
@@ -87,6 +99,7 @@ impl FixProcessor {
             nats_publisher: Some(nats_publisher),
             elevation_mode: None,
             suppressed_aprs_types: Vec::new(),
+            suppressed_ogn_aircraft_types: Vec::new(),
         })
     }
 
@@ -103,6 +116,7 @@ impl FixProcessor {
             nats_publisher: None,
             elevation_mode: None,
             suppressed_aprs_types: Vec::new(),
+            suppressed_ogn_aircraft_types: Vec::new(),
         }
     }
 
@@ -122,6 +136,7 @@ impl FixProcessor {
             nats_publisher: Some(nats_publisher),
             elevation_mode: None,
             suppressed_aprs_types: Vec::new(),
+            suppressed_ogn_aircraft_types: Vec::new(),
         })
     }
 
@@ -187,6 +202,19 @@ impl FixProcessor {
                 {
                     trace!("Suppressing fix from APRS type: {}", tracker_device_type);
                     metrics::counter!("aprs.fixes.suppressed").increment(1);
+                    return;
+                }
+
+                // Check if this OGN aircraft type should be skipped
+                if let Some(ref ac_type) = aircraft_type
+                    && self
+                        .suppressed_ogn_aircraft_types
+                        .iter()
+                        .any(|t| t == ac_type)
+                {
+                    trace!("Skipping fix from OGN aircraft type: {:?}", ac_type);
+                    metrics::counter!("aprs.fixes.skipped_aircraft_type", "aircraft_type" => ac_type.to_string())
+                        .increment(1);
                     return;
                 }
 
