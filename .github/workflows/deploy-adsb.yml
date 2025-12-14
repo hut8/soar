@@ -33,6 +33,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -68,6 +70,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
 
       - name: Download web build artifacts
         uses: actions/download-artifact@v4
@@ -152,6 +156,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for git tags (needed for vergen version)
 
       - name: Download release binary artifact
         uses: actions/download-artifact@v4

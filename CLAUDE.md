@@ -626,3 +626,68 @@ git checkout main
 - Any time that you have enter a filename in the shell, use quotes. We are using zsh, and shell expansion treats our Svelte pages incorrectly if you do not because "[]" has a special meaning.
 - Whenever you commit, you should also push with -u to set the upstream branch.
 - When opening a PR, do not set it to squash commits. Set it to create a merge commit.
+
+## Release Process
+
+**IMPORTANT**: Version numbers are automatically derived from git tags. Do NOT manually edit version numbers in `Cargo.toml` or `package.json`.
+
+### How Versioning Works
+
+- **Rust**: Version is derived from git tags at build time using the `vergen` crate
+- **SvelteKit**: Version is generated from git tags by `web/scripts/generate-version.js` during prebuild
+- **Source of Truth**: Git tags (format: `v0.1.5`)
+- **No Version Commits**: Version files (`Cargo.toml`, `package.json`) contain placeholder values only
+
+### Creating a Release
+
+Use the simplified release script:
+
+```bash
+# Create a new release (triggers production deployment)
+./scripts/create-release v0.1.5
+
+# Create as draft (for review before publishing)
+./scripts/create-release v0.1.5 --draft
+
+# Create with custom release notes
+./scripts/create-release v0.1.5 --notes "Custom release notes here"
+```
+
+**What happens automatically:**
+1. ✅ Script creates GitHub Release with tag `v0.1.5`
+2. ✅ CI builds x64 and ARM64 static binaries (version derived from tag)
+3. ✅ CI runs all tests and security audits
+4. ✅ CI deploys to production automatically (via `ci.yml` `deploy-production` job)
+
+### Manual Release via GitHub CLI
+
+```bash
+# Alternative: Use gh CLI directly
+gh release create v0.1.5 --generate-notes
+```
+
+### Version Format
+
+- **Tagged release**: `v0.1.4`
+- **Development build**: `v0.1.4-2-ge930185` (2 commits after v0.1.4)
+- **Dirty working tree**: `v0.1.4-dirty`
+- **No git repo**: `0.0.0-dev`
+
+### Checking Current Version
+
+```bash
+# Binary version (shows git-derived version)
+./target/release/soar --version
+
+# Git describe (shows current version from git)
+git describe --tags --always --dirty
+```
+
+### Old Release Process (Deprecated)
+
+The old `./scripts/release` script has been archived to `./scripts/archive/release-old`. It is no longer needed because:
+- ❌ Required creating release branch → PR → auto-merge → tag push
+- ❌ Manually edited version files and committed changes
+- ❌ Complex multi-step process with potential for errors
+
+The new process eliminates all of this complexity.

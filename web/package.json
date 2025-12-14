@@ -1,7 +1,7 @@
 {
 	"name": "web",
 	"private": true,
-	"version": "0.1.4",
+	"version": "0.0.0-git",
 	"type": "module",
 	"engines": {
 		"node": ">=24.0.0",
@@ -9,6 +9,7 @@
 	},
 	"scripts": {
 		"dev": "vite dev",
+		"prebuild": "node scripts/generate-version.js",
 		"build": "vite build",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
