@@ -6,6 +6,7 @@ use soar::fix_processor::FixProcessor;
 use soar::fixes_repo::FixesRepository;
 use soar::flight_tracker::FlightTracker;
 use soar::instance_lock::InstanceLock;
+use soar::ogn_aprs_aircraft::AircraftType;
 use soar::packet_processors::{
     AircraftPositionProcessor, GenericProcessor, PacketRouter, ReceiverPositionProcessor,
     ReceiverStatusProcessor, ServerStatusProcessor,
@@ -116,6 +117,7 @@ pub async fn handle_run(
     archive_dir: Option<String>,
     nats_url: String,
     suppress_aprs_types: &[String],
+    skip_ogn_aircraft_types: &[String],
     diesel_pool: Pool<ConnectionManager<PgConnection>>,
 ) -> Result<()> {
     sentry::configure_scope(|scope| {
@@ -262,6 +264,28 @@ pub async fn handle_run(
         );
     }
 
+    // Parse and validate OGN aircraft types to skip
+    let parsed_aircraft_types: Vec<AircraftType> = skip_ogn_aircraft_types
+        .iter()
+        .filter_map(|type_str| {
+            type_str
+                .parse::<AircraftType>()
+                .map_err(|e| {
+                    warn!("Invalid OGN aircraft type '{}': {}", type_str, e);
+                    e
+                })
+                .ok()
+        })
+        .collect();
+
+    // Log skipped OGN aircraft types if any
+    if !parsed_aircraft_types.is_empty() {
+        info!(
+            "Skipping OGN aircraft types from processing: {:?}",
+            parsed_aircraft_types
+        );
+    }
+
     // Create database fix processor to save all valid fixes to the database
     // Try to create with NATS first, fall back to without NATS if connection fails
     let fix_processor = match FixProcessor::with_flight_tracker_and_nats(
@@ -273,8 +297,9 @@ pub async fn handle_run(
     {
         Ok(processor_with_nats) => {
             info!("Created FixProcessor with NATS publisher");
-            let processor =
-                processor_with_nats.with_suppressed_aprs_types(suppress_aprs_types.to_vec());
+            let processor = processor_with_nats
+                .with_suppressed_aprs_types(suppress_aprs_types.to_vec())
+                .with_suppressed_ogn_aircraft_types(parsed_aircraft_types.clone());
 
             // Configure elevation processing mode
             if let Some((elevation_tx, _, _)) = &elevation_tx_opt {
@@ -290,7 +315,8 @@ pub async fn handle_run(
             );
             let processor =
                 FixProcessor::with_flight_tracker(diesel_pool.clone(), flight_tracker.clone())
-                    .with_suppressed_aprs_types(suppress_aprs_types.to_vec());
+                    .with_suppressed_aprs_types(suppress_aprs_types.to_vec())
+                    .with_suppressed_ogn_aircraft_types(parsed_aircraft_types.clone());
 
             // Configure elevation processing mode
             if let Some((elevation_tx, _, _)) = &elevation_tx_opt {
