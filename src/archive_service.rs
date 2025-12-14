@@ -1,6 +1,8 @@
-use crate::queue_config::ARCHIVE_QUEUE_SIZE;
 use anyhow::Result;
 use tracing::{error, info, warn};
+
+// Queue size for archive messages
+const ARCHIVE_QUEUE_SIZE: usize = 10000;
 
 /// Archive service for managing daily log files and compression
 #[derive(Clone)]

@@ -1,10 +1,16 @@
-use crate::queue_config::{RAW_MESSAGE_QUEUE_SIZE, queue_warning_threshold};
 use anyhow::Result;
 use std::time::Duration;
 use tokio::io::AsyncReadExt;
 use tokio::net::TcpStream;
 use tokio::time::sleep;
 use tracing::{error, info, trace, warn};
+
+// Queue size for raw Beast messages from TCP socket
+const RAW_MESSAGE_QUEUE_SIZE: usize = 10000;
+
+fn queue_warning_threshold(queue_size: usize) -> usize {
+    queue_size * 4 / 5 // 80% threshold
+}
 
 /// Result type for connection attempts
 enum ConnectionResult {
@@ -59,27 +65,27 @@ impl BeastClient {
         }
     }
 
-    /// Start the Beast client with JetStream publisher
-    /// This connects to the Beast server and publishes all messages to a durable NATS JetStream queue
-    #[tracing::instrument(skip(self, jetstream_publisher))]
-    pub async fn start_jetstream(
+    /// Start the Beast client with a publisher (JetStream or plain NATS)
+    /// This connects to the Beast server and publishes all messages to NATS
+    #[tracing::instrument(skip(self, publisher))]
+    pub async fn start_jetstream<P: crate::beast::BeastPublisher>(
         &mut self,
-        jetstream_publisher: crate::beast_jetstream_publisher::JetStreamPublisher,
+        publisher: P,
     ) -> Result<()> {
         let (_shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
         let health_state = crate::metrics::init_beast_health();
-        self.start_jetstream_with_shutdown(jetstream_publisher, shutdown_rx, health_state)
+        self.start_jetstream_with_shutdown(publisher, shutdown_rx, health_state)
             .await
     }
 
-    /// Start the Beast client with JetStream publisher and external shutdown signal
-    /// This connects to the Beast server and publishes all messages to a durable NATS JetStream queue
+    /// Start the Beast client with a publisher and external shutdown signal
+    /// This connects to the Beast server and publishes all messages to NATS
     /// Supports graceful shutdown when shutdown_rx receives a signal
     /// Updates health_state with connection status for health checks
-    #[tracing::instrument(skip(self, jetstream_publisher, shutdown_rx, health_state))]
-    pub async fn start_jetstream_with_shutdown(
+    #[tracing::instrument(skip(self, publisher, shutdown_rx, health_state))]
+    pub async fn start_jetstream_with_shutdown<P: crate::beast::BeastPublisher>(
         &mut self,
-        jetstream_publisher: crate::beast_jetstream_publisher::JetStreamPublisher,
+        publisher: P,
         shutdown_rx: tokio::sync::oneshot::Receiver<()>,
         health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::BeastIngestHealth>>,
     ) -> Result<()> {
@@ -97,9 +103,10 @@ impl BeastClient {
         );
 
         // Spawn message publishing task
-        let publisher = jetstream_publisher.clone();
+        let publisher_for_task = publisher.clone();
         let mut shutdown_rx_for_publisher = shutdown_rx;
         let publisher_handle = tokio::spawn(async move {
+            let publisher = publisher_for_task;
             let mut stats_timer = tokio::time::interval(Duration::from_secs(10));
             stats_timer.tick().await; // First tick completes immediately
 

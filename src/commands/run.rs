@@ -1,6 +1,7 @@
 use anyhow::Result;
 use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
+use futures_util::StreamExt;
 use soar::fix_processor::FixProcessor;
 use soar::fixes_repo::FixesRepository;
 use soar::flight_tracker::FlightTracker;
@@ -9,12 +10,6 @@ use soar::packet_processors::{
     AircraftPositionProcessor, GenericProcessor, PacketRouter, ReceiverPositionProcessor,
     ReceiverStatusProcessor, ServerStatusProcessor,
 };
-use soar::queue_config::{
-    AGL_DATABASE_QUEUE_SIZE, AIRCRAFT_QUEUE_SIZE, APRS_RAW_STREAM, APRS_RAW_STREAM_STAGING,
-    APRS_RAW_SUBJECT, APRS_RAW_SUBJECT_STAGING, ELEVATION_QUEUE_SIZE, JETSTREAM_INTAKE_QUEUE_SIZE,
-    RECEIVER_POSITION_QUEUE_SIZE, RECEIVER_STATUS_QUEUE_SIZE, SERVER_STATUS_QUEUE_SIZE,
-    SOAR_RUN_CONSUMER, SOAR_RUN_CONSUMER_STAGING, queue_warning_threshold,
-};
 use soar::receiver_repo::ReceiverRepository;
 use soar::receiver_status_repo::ReceiverStatusRepository;
 use soar::server_messages_repo::ServerMessagesRepository;
@@ -22,10 +17,22 @@ use std::env;
 use tracing::Instrument;
 use tracing::{debug, error, info, trace, warn};
 
+// Queue size constants
+const NATS_INTAKE_QUEUE_SIZE: usize = 1000;
+const AIRCRAFT_QUEUE_SIZE: usize = 1000;
+const RECEIVER_STATUS_QUEUE_SIZE: usize = 50;
+const RECEIVER_POSITION_QUEUE_SIZE: usize = 50;
+const SERVER_STATUS_QUEUE_SIZE: usize = 50;
+const ELEVATION_QUEUE_SIZE: usize = 1000;
+const AGL_DATABASE_QUEUE_SIZE: usize = 1000;
+
+fn queue_warning_threshold(queue_size: usize) -> usize {
+    queue_size / 2
+}
+
 /// Process a received APRS message by parsing and routing through PacketRouter
 /// The message format is: "YYYY-MM-DDTHH:MM:SS.SSSZ <original_message>"
 /// We extract the timestamp and pass it through the processing pipeline
-/// NOTE: With AckPolicy::None, messages are implicitly ACKed when delivered from JetStream
 async fn process_aprs_message(
     message: &str,
     packet_router: &soar::packet_processors::PacketRouter,
@@ -57,7 +64,7 @@ async fn process_aprs_message(
     // Calculate and record lag (difference between now and packet timestamp)
     let now = chrono::Utc::now();
     let lag_seconds = (now - received_at).num_milliseconds() as f64 / 1000.0;
-    metrics::gauge!("aprs.jetstream.lag_seconds").set(lag_seconds);
+    metrics::gauge!("aprs.nats.lag_seconds").set(lag_seconds);
 
     // Route server messages (starting with #) differently
     // Server messages don't create PacketContext
@@ -115,28 +122,20 @@ pub async fn handle_run(
         scope.set_tag("operation", "run");
     });
 
-    // Determine environment and use appropriate stream/subject/consumer names
+    // Determine environment and use appropriate NATS subject
     let soar_env = env::var("SOAR_ENV").unwrap_or_default();
     let is_production = soar_env == "production";
     let is_staging = soar_env == "staging";
 
-    let (final_stream_name, final_subject, final_consumer_name) = if is_production {
-        (
-            APRS_RAW_STREAM.to_string(),
-            APRS_RAW_SUBJECT.to_string(),
-            SOAR_RUN_CONSUMER.to_string(),
-        )
+    let nats_subject = if is_production {
+        "aprs.raw"
     } else {
-        (
-            APRS_RAW_STREAM_STAGING.to_string(),
-            APRS_RAW_SUBJECT_STAGING.to_string(),
-            SOAR_RUN_CONSUMER_STAGING.to_string(),
-        )
+        "staging.aprs.raw"
     };
 
     info!(
-        "Starting APRS processing service consuming from JetStream stream: {}, subject: {}, consumer: {}",
-        final_stream_name, final_subject, final_consumer_name
+        "Starting APRS processing service consuming from NATS subject: {}",
+        nats_subject
     );
 
     // Initialize all soar-run metrics to zero so they appear in Grafana even before events occur
@@ -191,15 +190,13 @@ pub async fn handle_run(
     );
 
     info!(
-        "Environment: {}, using stream '{}', subject '{}', consumer '{}'",
+        "Environment: {}, using NATS subject '{}'",
         if is_production {
             "production"
         } else {
             "staging"
         },
-        final_stream_name,
-        final_subject,
-        final_consumer_name
+        nats_subject
     );
 
     // Create FlightTracker
@@ -371,13 +368,12 @@ pub async fn handle_run(
         SERVER_STATUS_QUEUE_SIZE
     );
 
-    // JetStream intake queue: buffers raw APRS messages from JetStream consumer
-    // This allows graceful shutdown by stopping JetStream reads and draining this queue
-    let (jetstream_intake_tx, jetstream_intake_rx) =
-        flume::bounded::<String>(JETSTREAM_INTAKE_QUEUE_SIZE);
+    // NATS intake queue: buffers raw APRS messages from NATS subscriber
+    // This allows graceful shutdown by stopping NATS reads and draining this queue
+    let (nats_intake_tx, nats_intake_rx) = flume::bounded::<String>(NATS_INTAKE_QUEUE_SIZE);
     info!(
-        "Created JetStream intake queue with capacity {}",
-        JETSTREAM_INTAKE_QUEUE_SIZE
+        "Created NATS intake queue with capacity {}",
+        NATS_INTAKE_QUEUE_SIZE
     );
 
     // Create PacketRouter with per-processor queues and internal worker pool
@@ -396,20 +392,19 @@ pub async fn handle_run(
 
     // Spawn intake queue processor
     // This task reads raw APRS messages from the intake queue and processes them
-    // Separating JetStream consumption from processing allows graceful shutdown
+    // Separating NATS consumption from processing allows graceful shutdown
     let intake_router = packet_router.clone();
     tokio::spawn(
         async move {
             info!("Intake queue processor started");
             let mut messages_processed = 0u64;
-            while let Ok(message) = jetstream_intake_rx.recv_async().await {
+            while let Ok(message) = nats_intake_rx.recv_async().await {
                 process_aprs_message(&message, &intake_router).await;
                 messages_processed += 1;
                 metrics::counter!("aprs.intake.processed").increment(1);
 
                 // Update intake queue depth metric
-                metrics::gauge!("aprs.jetstream.intake_queue_depth")
-                    .set(jetstream_intake_rx.len() as f64);
+                metrics::gauge!("aprs.nats.intake_queue_depth").set(nats_intake_rx.len() as f64);
             }
             info!(
                 "Intake queue processor stopped after processing {} messages",
@@ -677,14 +672,14 @@ pub async fn handle_run(
     let shutdown_receiver_position_rx = receiver_position_rx.clone();
     let shutdown_server_status_rx = server_status_rx.clone();
     let shutdown_elevation_rx_opt = elevation_rx_opt.clone();
-    let shutdown_intake_rx = jetstream_intake_tx.clone(); // Use tx to check queue depth
+    let shutdown_intake_rx = nats_intake_tx.clone(); // Use tx to check queue depth
 
     tokio::spawn(
         async move {
             match tokio::signal::ctrl_c().await {
                 Ok(()) => {
                     info!("Received shutdown signal (Ctrl+C), initiating graceful shutdown...");
-                    info!("JetStream consumer will stop reading, allowing queues to drain...");
+                    info!("NATS subscriber will stop reading, allowing queues to drain...");
 
                     // Wait for queues to drain (check every second, max 10 minutes)
                     for i in 1..=600 {
@@ -722,7 +717,7 @@ pub async fn handle_run(
     );
     info!("Graceful shutdown handler configured");
 
-    // Retry loop for JetStream consumer connection and consumption
+    // Retry loop for NATS subscriber connection and consumption
     loop {
         info!("Connecting to NATS at {}...", nats_url);
         let nats_client_name = if std::env::var("SOAR_ENV") == Ok("production".into()) {
@@ -742,38 +737,27 @@ pub async fn handle_run(
             }
             Err(e) => {
                 error!("Failed to connect to NATS: {} - retrying in 1s", e);
-                metrics::counter!("aprs.jetstream.connection_failed").increment(1);
+                metrics::counter!("aprs.nats.connection_failed").increment(1);
                 tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
                 continue;
             }
         };
 
-        let jetstream = async_nats::jetstream::new(nats_client);
+        // Subscribe to NATS subject
+        info!("Subscribing to NATS subject '{}'...", nats_subject);
+        let subscriber_result = nats_client.subscribe(nats_subject.to_string()).await;
 
-        // Create JetStream consumer
-        info!(
-            "Creating JetStream consumer '{}' for stream '{}', subject '{}'...",
-            final_consumer_name, final_stream_name, final_subject
-        );
-
-        let consumer = match soar::aprs_jetstream_consumer::JetStreamConsumer::new(
-            jetstream,
-            final_stream_name.clone(),
-            final_subject.clone(),
-            final_consumer_name.clone(),
-        )
-        .await
-        {
-            Ok(consumer) => {
-                info!("JetStream consumer ready, starting message processing...");
-                consumer
+        let mut subscriber = match subscriber_result {
+            Ok(sub) => {
+                info!("NATS subscriber ready, starting message processing...");
+                sub
             }
             Err(e) => {
                 error!(
-                    "Failed to create JetStream consumer: {} - retrying in 1s",
+                    "Failed to subscribe to NATS subject: {} - retrying in 1s",
                     e
                 );
-                metrics::counter!("aprs.jetstream.consumer_setup_failed").increment(1);
+                metrics::counter!("aprs.nats.subscription_failed").increment(1);
                 tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
                 continue;
             }
@@ -781,43 +765,42 @@ pub async fn handle_run(
 
         info!("APRS client started. Press Ctrl+C to stop.");
 
-        // Start consuming messages from JetStream and sending them to the intake queue
-        // Messages are explicitly ACKed after successful queueing
+        // Start consuming messages from NATS and sending them to the intake queue
         // The intake queue processor will handle parsing and routing
-        // Blocking sends to the intake queue provide natural backpressure to JetStream
-        let intake_tx_clone = jetstream_intake_tx.clone();
-        let consume_result = consumer
-            .consume(move |message, _jetstream_msg| {
-                let intake_tx = intake_tx_clone.clone();
-                async move {
-                    // Send message to intake queue (blocking send for backpressure)
-                    // When intake queue is full, this will block and stop reading from JetStream
-                    match intake_tx.send_async(message).await {
-                        Ok(_) => {
-                            metrics::counter!("aprs.jetstream.received").increment(1);
-                            Ok(())
-                        }
-                        Err(e) => {
-                            warn!("Failed to send message to intake queue: {}", e);
-                            metrics::counter!("aprs.jetstream.send_errors").increment(1);
-                            Ok(()) // Still ack the message to JetStream
-                        }
-                    }
-                }
-            })
-            .await;
+        // Blocking sends to the intake queue provide natural backpressure to NATS
+        let intake_tx_clone = nats_intake_tx.clone();
 
-        // If we reach here, the consumer stream ended (either normally or with error)
-        match consume_result {
-            Ok(_) => {
-                warn!("JetStream consumer stopped normally - reconnecting in 1s");
-            }
-            Err(e) => {
-                error!("JetStream consumer failed: {} - reconnecting in 1s", e);
-                metrics::counter!("aprs.jetstream.consume_failed").increment(1);
+        while let Some(msg) = subscriber.next().await {
+            // Convert message payload to String
+            let message = match String::from_utf8(msg.payload.to_vec()) {
+                Ok(s) => s,
+                Err(e) => {
+                    warn!("Failed to decode NATS message as UTF-8: {}", e);
+                    metrics::counter!("aprs.nats.decode_error").increment(1);
+                    continue;
+                }
+            };
+
+            // Send message to intake queue (blocking send for backpressure)
+            // When intake queue is full, this will block and stop reading from NATS
+            match intake_tx_clone.send_async(message).await {
+                Ok(_) => {
+                    metrics::counter!("aprs.nats.consumed").increment(1);
+                }
+                Err(e) => {
+                    // Channel closed - intake processor stopped, likely due to shutdown
+                    warn!(
+                        "Failed to send message to intake queue (channel closed): {}",
+                        e
+                    );
+                    break;
+                }
             }
         }
 
+        // If we reach here, the subscriber stream ended (either normally or with error)
+        warn!("NATS subscriber stopped - reconnecting in 1s");
+        metrics::counter!("aprs.nats.subscription_ended").increment(1);
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
     }
 }

@@ -1,22 +1,24 @@
-use anyhow::Result;
+use anyhow::{Context as _, Result};
+use async_nats::Client;
 use chrono::{DateTime, Utc};
+use futures_util::StreamExt;
 use tokio::time::{Duration, sleep};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use crate::beast::decoder::{decode_beast_frame, message_to_json};
-use crate::beast_jetstream_consumer::JetStreamConsumer;
 use crate::raw_messages_repo::{BeastMessagesRepository, NewBeastMessage};
 
-/// Task that consumes Beast messages from JetStream and stores them in the database
+/// Task that consumes Beast messages from NATS and stores them in the database
 ///
 /// This task:
-/// 1. Reads binary messages from JetStream (8-byte timestamp + Beast frame)
+/// 1. Reads binary messages from NATS (8-byte timestamp + Beast frame)
 /// 2. Decodes the timestamp and frame
 /// 3. Stores the message in the raw_messages table via BeastMessagesRepository
 /// 4. Provides backpressure by blocking when database writes are slow
 pub struct BeastConsumerTask {
-    consumer: JetStreamConsumer,
+    nats_client: Client,
+    subject: String,
     repository: BeastMessagesRepository,
     receiver_id: Uuid,
     batch_size: usize,
@@ -24,12 +26,14 @@ pub struct BeastConsumerTask {
 
 impl BeastConsumerTask {
     pub fn new(
-        consumer: JetStreamConsumer,
+        nats_client: Client,
+        subject: String,
         repository: BeastMessagesRepository,
         receiver_id: Uuid,
     ) -> Self {
         Self {
-            consumer,
+            nats_client,
+            subject,
             repository,
             receiver_id,
             batch_size: 100, // Process messages in batches
@@ -38,13 +42,22 @@ impl BeastConsumerTask {
 
     /// Start consuming and storing Beast messages
     ///
-    /// This will run indefinitely, consuming messages from JetStream and storing them
+    /// This will run indefinitely, consuming messages from NATS and storing them
     /// in the database. Messages are processed in batches for efficiency.
     pub async fn run(&self) -> Result<()> {
         info!(
             "Starting Beast consumer task for receiver {}",
             self.receiver_id
         );
+
+        // Subscribe to NATS subject
+        let mut subscriber = self
+            .nats_client
+            .subscribe(self.subject.clone())
+            .await
+            .context("Failed to subscribe to NATS subject")?;
+
+        info!("Subscribed to NATS subject '{}'", self.subject);
 
         // Create bounded channel for batch processing
         let (batch_tx, batch_rx) = flume::bounded::<NewBeastMessage>(self.batch_size * 2);
@@ -55,94 +68,82 @@ impl BeastConsumerTask {
             Self::batch_writer_task(batch_rx, repository).await;
         });
 
-        // Start consuming messages from JetStream
+        // Start consuming messages from NATS
         let receiver_id = self.receiver_id;
-        let consume_result = self
-            .consumer
-            .consume(move |payload, _jetstream_msg| {
-                let batch_tx = batch_tx.clone();
-                async move {
-                    // Decode message: 8-byte timestamp + Beast frame
-                    if payload.len() < 9 {
-                        warn!(
-                            "Invalid Beast message: too short ({} bytes, expected at least 9)",
-                            payload.len()
-                        );
-                        metrics::counter!("beast.consumer.invalid_message").increment(1);
-                        return Ok(()); // ACK invalid messages
-                    }
+        while let Some(msg) = subscriber.next().await {
+            let payload = msg.payload.to_vec();
 
-                    // Extract timestamp (first 8 bytes, big-endian i64 microseconds)
-                    let timestamp_bytes: [u8; 8] = payload[0..8].try_into().unwrap();
-                    let timestamp_micros = i64::from_be_bytes(timestamp_bytes);
-                    let received_at =
-                        DateTime::from_timestamp_micros(timestamp_micros).unwrap_or_else(Utc::now);
+            // Decode message: 8-byte timestamp + Beast frame
+            if payload.len() < 9 {
+                warn!(
+                    "Invalid Beast message: too short ({} bytes, expected at least 9)",
+                    payload.len()
+                );
+                metrics::counter!("beast.nats.invalid_message").increment(1);
+                continue;
+            }
 
-                    // Extract Beast frame (remaining bytes)
-                    let raw_frame = &payload[8..];
+            // Extract timestamp (first 8 bytes, big-endian i64 microseconds)
+            let timestamp_bytes: [u8; 8] = payload[0..8].try_into().unwrap();
+            let timestamp_micros = i64::from_be_bytes(timestamp_bytes);
+            let received_at =
+                DateTime::from_timestamp_micros(timestamp_micros).unwrap_or_else(Utc::now);
 
-                    // Decode the Beast frame using rs1090
-                    let decoded_json = match decode_beast_frame(raw_frame, received_at) {
-                        Ok(decoded) => {
-                            metrics::counter!("beast.consumer.decoded").increment(1);
-                            // Convert to JSON for storage
-                            match message_to_json(&decoded.message) {
-                                Ok(json) => {
-                                    debug!("Decoded Beast message: {:?}", json);
-                                    Some(json.to_string())
-                                }
-                                Err(e) => {
-                                    warn!("Failed to serialize decoded message to JSON: {}", e);
-                                    metrics::counter!("beast.consumer.json_error").increment(1);
-                                    None
-                                }
-                            }
+            // Extract Beast frame (remaining bytes)
+            let raw_frame = &payload[8..];
+
+            // Decode the Beast frame using rs1090
+            let decoded_json = match decode_beast_frame(raw_frame, received_at) {
+                Ok(decoded) => {
+                    metrics::counter!("beast.nats.decoded").increment(1);
+                    // Convert to JSON for storage
+                    match message_to_json(&decoded.message) {
+                        Ok(json) => {
+                            debug!("Decoded Beast message: {:?}", json);
+                            Some(json.to_string())
                         }
                         Err(e) => {
-                            // Log decode errors but still store the raw frame
-                            debug!("Failed to decode Beast frame: {}", e);
-                            metrics::counter!("beast.consumer.decode_error").increment(1);
+                            warn!("Failed to serialize decoded message to JSON: {}", e);
+                            metrics::counter!("beast.nats.json_error").increment(1);
                             None
-                        }
-                    };
-
-                    // Create new Beast message with decoded JSON in unparsed field
-                    let message = NewBeastMessage::new(
-                        raw_frame.to_vec(),
-                        received_at,
-                        receiver_id,
-                        decoded_json,
-                    );
-
-                    // Send to batch writer (blocking send for backpressure)
-                    match batch_tx.send_async(message).await {
-                        Ok(_) => {
-                            metrics::counter!("beast.consumer.received").increment(1);
-                            Ok(())
-                        }
-                        Err(e) => {
-                            error!("Failed to send message to batch writer: {}", e);
-                            metrics::counter!("beast.consumer.send_errors").increment(1);
-                            Ok(()) // Still ACK to JetStream
                         }
                     }
                 }
-            })
-            .await;
+                Err(e) => {
+                    // Log decode errors but still store the raw frame
+                    debug!("Failed to decode Beast frame: {}", e);
+                    metrics::counter!("beast.nats.decode_error").increment(1);
+                    None
+                }
+            };
 
-        // If we reach here, the consumer stopped
-        match consume_result {
-            Ok(_) => {
-                info!("Beast consumer stopped normally");
-            }
-            Err(e) => {
-                error!("Beast consumer failed: {}", e);
+            // Create new Beast message with decoded JSON in unparsed field
+            let message =
+                NewBeastMessage::new(raw_frame.to_vec(), received_at, receiver_id, decoded_json);
+
+            // Send to batch writer (blocking send for backpressure)
+            match batch_tx.send_async(message).await {
+                Ok(_) => {
+                    metrics::counter!("beast.nats.consumed").increment(1);
+                }
+                Err(e) => {
+                    // Channel closed - batch writer stopped
+                    error!(
+                        "Failed to send message to batch writer (channel closed): {}",
+                        e
+                    );
+                    break;
+                }
             }
         }
 
+        // If we reach here, the subscriber stopped
+        info!("Beast NATS subscriber stopped");
+
+        // Drop batch_tx to signal batch writer to stop
+        drop(batch_tx);
+
         // Wait for batch writer to finish
-        // batch_tx is dropped when consume() returns, which closes the channel
-        // causing batch_writer_task to exit gracefully
         batch_writer_handle.await?;
 
         Ok(())
