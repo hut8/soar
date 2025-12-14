@@ -98,7 +98,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "process_uptime_seconds{component=\"run\",environment=\"$environment\"} and on() up{job=\"soar-run\",component=\"run\",environment=\"$environment\"}",
+          "expr": "process_uptime_seconds{component=\"run\",environment=\"$environment\"}",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -183,7 +183,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "up{job=\"soar-run\",component=\"run\",environment=\"$environment\"} or on() vector(0)",
+          "expr": "process_is_up{component=\"run\",environment=\"$environment\"} or on() vector(0)",
           "legendFormat": "SOAR Run",
           "range": true,
           "refId": "A"
@@ -420,7 +420,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_aircraft_processed[1m])",
+          "expr": "rate(aprs_aircraft_processed{component=\"run\",environment=\"$environment\"}[1m])",
           "legendFormat": "Aircraft Enqueued",
           "range": true,
           "refId": "A"
@@ -431,7 +431,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_receiver_status_processed[1m])",
+          "expr": "rate(aprs_receiver_status_processed{component=\"run\",environment=\"$environment\"}[1m])",
           "legendFormat": "Receiver Status Enqueued",
           "range": true,
           "refId": "B"
@@ -442,7 +442,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_receiver_position_processed[1m])",
+          "expr": "rate(aprs_receiver_position_processed{component=\"run\",environment=\"$environment\"}[1m])",
           "legendFormat": "Receiver Position Enqueued",
           "range": true,
           "refId": "C"
@@ -453,7 +453,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_server_status_processed[1m])",
+          "expr": "rate(aprs_server_status_processed{component=\"run\",environment=\"$environment\"}[1m])",
           "legendFormat": "Server Status Enqueued",
           "range": true,
           "refId": "D"
@@ -464,7 +464,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_raw_message_queue_full[1m]) + rate(aprs_aircraft_queue_full[1m]) + rate(aprs_receiver_status_queue_full[1m]) + rate(aprs_receiver_position_queue_full[1m]) + rate(aprs_server_status_queue_full[1m])",
+          "expr": "rate(aprs_raw_message_queue_full{component=\"run\",environment=\"$environment\"}[1m]) + rate(aprs_aircraft_queue_full{component=\"run\",environment=\"$environment\"}[1m]) + rate(aprs_receiver_status_queue_full{component=\"run\",environment=\"$environment\"}[1m]) + rate(aprs_receiver_position_queue_full{component=\"run\",environment=\"$environment\"}[1m]) + rate(aprs_server_status_queue_full{component=\"run\",environment=\"$environment\"}[1m])",
           "legendFormat": "Total Dropped",
           "range": true,
           "refId": "E"
@@ -475,7 +475,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_aircraft_queue_full[1m])",
+          "expr": "rate(aprs_aircraft_queue_full{component=\"run\",environment=\"$environment\"}[1m])",
           "legendFormat": "Aircraft Dropped",
           "range": true,
           "refId": "F"
@@ -486,7 +486,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_receiver_status_queue_full[1m])",
+          "expr": "rate(aprs_receiver_status_queue_full{component=\"run\",environment=\"$environment\"}[1m])",
           "legendFormat": "Receiver Status Dropped",
           "range": true,
           "refId": "G"
@@ -497,7 +497,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_receiver_position_queue_full[1m])",
+          "expr": "rate(aprs_receiver_position_queue_full{component=\"run\",environment=\"$environment\"}[1m])",
           "legendFormat": "Receiver Position Dropped",
           "range": true,
           "refId": "H"
@@ -508,7 +508,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_server_status_queue_full[1m])",
+          "expr": "rate(aprs_server_status_queue_full{component=\"run\",environment=\"$environment\"}[1m])",
           "legendFormat": "Server Status Dropped",
           "range": true,
           "refId": "I"
@@ -519,7 +519,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_raw_message_queue_full[1m])",
+          "expr": "rate(aprs_raw_message_queue_full{component=\"run\",environment=\"$environment\"}[1m])",
           "legendFormat": "Raw Message Queue Dropped",
           "range": true,
           "refId": "J"
@@ -626,7 +626,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "aprs_jetstream_intake_queue_depth",
+          "expr": "aprs_jetstream_intake_queue_depth{component=\"run\",environment=\"$environment\"}",
           "legendFormat": "JetStream Intake Queue (cap: 1K)",
           "range": true,
           "refId": "Z"
@@ -637,7 +637,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "aprs_aircraft_queue_depth",
+          "expr": "aprs_aircraft_queue_depth{component=\"run\",environment=\"$environment\"}",
           "legendFormat": "Aircraft Queue (cap: 50K)",
           "range": true,
           "refId": "B"
@@ -648,7 +648,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "aprs_receiver_status_queue_depth",
+          "expr": "aprs_receiver_status_queue_depth{component=\"run\",environment=\"$environment\"}",
           "legendFormat": "Receiver Status Queue (cap: 10K)",
           "range": true,
           "refId": "C"
@@ -659,7 +659,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "aprs_receiver_position_queue_depth",
+          "expr": "aprs_receiver_position_queue_depth{component=\"run\",environment=\"$environment\"}",
           "legendFormat": "Receiver Position Queue (cap: 5K)",
           "range": true,
           "refId": "D"
@@ -670,7 +670,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "aprs_server_status_queue_depth",
+          "expr": "aprs_server_status_queue_depth{component=\"run\",environment=\"$environment\"}",
           "legendFormat": "Server Status Queue (cap: 1K)",
           "range": true,
           "refId": "E"
@@ -681,7 +681,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "aprs_elevation_queue_depth",
+          "expr": "aprs_elevation_queue_depth{component=\"run\",environment=\"$environment\"}",
           "legendFormat": "Elevation Queue (async mode, cap: 100K)",
           "range": true,
           "refId": "F"
@@ -692,7 +692,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "agl_backfill_pending_fixes",
+          "expr": "agl_backfill_pending_fixes{component=\"run\",environment=\"$environment\"}",
           "legendFormat": "AGL Backfill Queue",
           "range": true,
           "refId": "G"
@@ -804,7 +804,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_jetstream_consumed[5m])",
+          "expr": "rate(aprs_jetstream_consumed{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Messages Consumed/sec",
           "range": true,
           "refId": "A"
@@ -919,7 +919,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_jetstream_process_error[5m])",
+          "expr": "rate(aprs_jetstream_process_error{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Process Errors/sec",
           "range": true,
           "refId": "A"
@@ -930,7 +930,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_jetstream_receive_error[5m])",
+          "expr": "rate(aprs_jetstream_receive_error{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Receive Errors/sec",
           "range": true,
           "refId": "B"
@@ -941,7 +941,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_jetstream_decode_error[5m])",
+          "expr": "rate(aprs_jetstream_decode_error{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Decode Errors/sec",
           "range": true,
           "refId": "C"
@@ -952,7 +952,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_jetstream_ack_error[5m])",
+          "expr": "rate(aprs_jetstream_ack_error{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Ack Errors/sec",
           "range": true,
           "refId": "D"
@@ -1051,7 +1051,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_messages_processed_total[5m])",
+          "expr": "rate(aprs_messages_processed_total{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Total",
           "range": true,
           "refId": "A"
@@ -1062,7 +1062,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_messages_processed_aircraft[5m])",
+          "expr": "rate(aprs_messages_processed_aircraft{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Aircraft Positions",
           "range": true,
           "refId": "B"
@@ -1073,7 +1073,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_messages_processed_server[5m])",
+          "expr": "rate(aprs_messages_processed_server{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Server Messages",
           "range": true,
           "refId": "C"
@@ -1084,7 +1084,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_messages_processed_receiver_status[5m])",
+          "expr": "rate(aprs_messages_processed_receiver_status{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Receiver Status",
           "range": true,
           "refId": "D"
@@ -1095,7 +1095,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_messages_processed_receiver_position[5m])",
+          "expr": "rate(aprs_messages_processed_receiver_position{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Receiver Position",
           "range": true,
           "refId": "E"
@@ -1202,7 +1202,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "aprs_jetstream_queue_depth",
+          "expr": "aprs_jetstream_queue_depth{component=\"run\",environment=\"$environment\"}",
           "legendFormat": "JetStream Queue Depth",
           "range": true,
           "refId": "A"
@@ -1309,7 +1309,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "aprs_jetstream_lag_seconds",
+          "expr": "aprs_jetstream_lag_seconds{component=\"run\",environment=\"$environment\"}",
           "legendFormat": "Processing Lag",
           "range": true,
           "refId": "A"
@@ -2834,7 +2834,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_elevation_sync_processed[5m])",
+          "expr": "rate(aprs_elevation_sync_processed{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Sync Processed/sec",
           "range": true,
           "refId": "A"
@@ -2845,7 +2845,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(rate(aprs_elevation_processed[5m]))",
+          "expr": "sum(rate(aprs_elevation_processed{component=\"run\",environment=\"$environment\"}[5m]))",
           "legendFormat": "Async Processed/sec",
           "range": true,
           "refId": "B"
@@ -2856,7 +2856,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_elevation_queued[5m])",
+          "expr": "rate(aprs_elevation_queued{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Async Queued/sec",
           "range": true,
           "refId": "C"
@@ -2867,7 +2867,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_elevation_channel_closed[5m])",
+          "expr": "rate(aprs_elevation_channel_closed{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Async Channel Closed Errors/sec",
           "range": true,
           "refId": "E"
@@ -3133,7 +3133,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(elevation_cache_hits[5m])",
+          "expr": "rate(elevation_cache_hits{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Hits/sec",
           "range": true,
           "refId": "A"
@@ -3144,7 +3144,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(elevation_cache_misses[5m])",
+          "expr": "rate(elevation_cache_misses{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Misses/sec",
           "range": true,
           "refId": "B"
@@ -3217,7 +3217,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(elevation_cache_hits[5m]) / (rate(elevation_cache_hits[5m]) + rate(elevation_cache_misses[5m]))",
+          "expr": "rate(elevation_cache_hits{component=\"run\",environment=\"$environment\"}[5m]) / (rate(elevation_cache_hits{component=\"run\",environment=\"$environment\"}[5m]) + rate(elevation_cache_misses{component=\"run\",environment=\"$environment\"}[5m]))",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -3290,7 +3290,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "elevation_cache_entries",
+          "expr": "elevation_cache_entries{component=\"run\",environment=\"$environment\"}",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -3389,7 +3389,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(elevation_tile_cache_hits[5m])",
+          "expr": "rate(elevation_tile_cache_hits{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Hits/sec",
           "range": true,
           "refId": "A"
@@ -3400,7 +3400,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(elevation_tile_cache_misses[5m])",
+          "expr": "rate(elevation_tile_cache_misses{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Misses/sec",
           "range": true,
           "refId": "B"
@@ -3473,7 +3473,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(elevation_tile_cache_hits[5m]) / (rate(elevation_tile_cache_hits[5m]) + rate(elevation_tile_cache_misses[5m]))",
+          "expr": "rate(elevation_tile_cache_hits{component=\"run\",environment=\"$environment\"}[5m]) / (rate(elevation_tile_cache_hits{component=\"run\",environment=\"$environment\"}[5m]) + rate(elevation_tile_cache_misses{component=\"run\",environment=\"$environment\"}[5m]))",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -3548,7 +3548,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "elevation_tile_cache_entries",
+          "expr": "elevation_tile_cache_entries{component=\"run\",environment=\"$environment\"}",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -3621,7 +3621,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(generic_processor_receiver_cache_hit[5m]) / (rate(generic_processor_receiver_cache_hit[5m]) + rate(generic_processor_receiver_cache_miss[5m]))",
+          "expr": "rate(generic_processor_receiver_cache_hit{component=\"run\",environment=\"$environment\"}[5m]) / (rate(generic_processor_receiver_cache_hit{component=\"run\",environment=\"$environment\"}[5m]) + rate(generic_processor_receiver_cache_miss{component=\"run\",environment=\"$environment\"}[5m]))",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -3720,7 +3720,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(generic_processor_receiver_cache_hit[5m])",
+          "expr": "rate(generic_processor_receiver_cache_hit{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Hits/sec",
           "range": true,
           "refId": "A"
@@ -3731,7 +3731,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(generic_processor_receiver_cache_miss[5m])",
+          "expr": "rate(generic_processor_receiver_cache_miss{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Misses/sec",
           "range": true,
           "refId": "B"
@@ -4104,7 +4104,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(nats_publisher_fixes_published[5m])",
+          "expr": "rate(nats_publisher_fixes_published{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Published/sec",
           "range": true,
           "refId": "A"
@@ -4115,7 +4115,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(nats_publisher_errors[5m])",
+          "expr": "rate(nats_publisher_errors{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Errors/sec",
           "range": true,
           "refId": "C"
@@ -4188,7 +4188,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "nats_publisher_queue_depth",
+          "expr": "nats_publisher_queue_depth{component=\"run\",environment=\"$environment\"}",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -4274,7 +4274,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "flight_tracker_active_aircraft",
+          "expr": "flight_tracker_active_aircraft{component=\"run\",environment=\"$environment\"}",
           "legendFormat": "Active",
           "range": true,
           "refId": "A"
@@ -4373,7 +4373,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(flight_tracker_timeouts_detected[5m])",
+          "expr": "rate(flight_tracker_timeouts_detected{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Timeouts/sec",
           "range": true,
           "refId": "A"
@@ -4472,7 +4472,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(flight_tracker_flight_created_takeoff[5m])",
+          "expr": "rate(flight_tracker_flight_created_takeoff{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Takeoff",
           "range": true,
           "refId": "A"
@@ -4483,7 +4483,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(flight_tracker_flight_created_airborne[5m])",
+          "expr": "rate(flight_tracker_flight_created_airborne{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Airborne",
           "range": true,
           "refId": "B"
@@ -4582,7 +4582,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(flight_tracker_flight_ended_landed[5m])",
+          "expr": "rate(flight_tracker_flight_ended_landed{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Landed",
           "range": true,
           "refId": "A"
@@ -4593,7 +4593,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(flight_tracker_flight_ended_timed_out[5m])",
+          "expr": "rate(flight_tracker_flight_ended_timed_out{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Timed Out",
           "range": true,
           "refId": "B"
@@ -4705,7 +4705,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(receiver_status_updates_total[5m])",
+          "expr": "rate(receiver_status_updates_total{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Status Updates/sec",
           "range": true,
           "refId": "A"
@@ -4817,7 +4817,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "aprs_db_pool_total_connections",
+          "expr": "aprs_db_pool_total_connections{component=\"run\",environment=\"$environment\"}",
           "legendFormat": "Total Connections",
           "range": true,
           "refId": "A"
@@ -4828,7 +4828,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "aprs_db_pool_active_connections",
+          "expr": "aprs_db_pool_active_connections{component=\"run\",environment=\"$environment\"}",
           "legendFormat": "Active Connections",
           "range": true,
           "refId": "B"
@@ -4839,7 +4839,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "aprs_db_pool_idle_connections",
+          "expr": "aprs_db_pool_idle_connections{component=\"run\",environment=\"$environment\"}",
           "legendFormat": "Idle Connections",
           "range": true,
           "refId": "C"
@@ -4942,7 +4942,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_aircraft_queue_closed[5m])",
+          "expr": "rate(aprs_aircraft_queue_closed{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Aircraft Queue Closed",
           "range": true,
           "refId": "A"
@@ -4953,7 +4953,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_receiver_status_queue_closed[5m])",
+          "expr": "rate(aprs_receiver_status_queue_closed{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Receiver Status Queue Closed",
           "range": true,
           "refId": "B"
@@ -4964,7 +4964,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_receiver_position_queue_closed[5m])",
+          "expr": "rate(aprs_receiver_position_queue_closed{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Receiver Position Queue Closed",
           "range": true,
           "refId": "C"
@@ -4975,7 +4975,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_server_status_queue_closed[5m])",
+          "expr": "rate(aprs_server_status_queue_closed{component=\"run\",environment=\"$environment\"}[5m])",
           "legendFormat": "Server Status Queue Closed",
           "range": true,
           "refId": "D"
