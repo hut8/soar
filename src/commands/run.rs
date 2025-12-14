@@ -725,8 +725,13 @@ pub async fn handle_run(
     // Retry loop for JetStream consumer connection and consumption
     loop {
         info!("Connecting to NATS at {}...", nats_url);
+        let nats_client_name = if std::env::var("SOAR_ENV") == Ok("production".into()) {
+            "soar-run"
+        } else {
+            "soar-run-staging"
+        };
         let nats_result = async_nats::ConnectOptions::new()
-            .name("soar-run")
+            .name(nats_client_name)
             .connect(&nats_url)
             .await;
 

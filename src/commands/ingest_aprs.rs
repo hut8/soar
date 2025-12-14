@@ -162,8 +162,13 @@ pub async fn handle_ingest_aprs(
         }
 
         info!("Connecting to NATS at {}...", nats_url);
+        let nats_client_name = if std::env::var("SOAR_ENV") == Ok("production".into()) {
+            "soar-aprs-ingester"
+        } else {
+            "soar-aprs-ingester-staging"
+        };
         let nats_result = async_nats::ConnectOptions::new()
-            .name("soar-aprs-ingester")
+            .name(nats_client_name)
             .client_capacity(65536) // Increase from default 2048 to prevent blocking on publish
             .subscription_capacity(1024 * 128) // Increase subscription buffer
             .connect(&nats_url)
