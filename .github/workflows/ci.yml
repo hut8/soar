@@ -759,6 +759,11 @@ jobs:
             soar@"${{ secrets.ADSB_SERVER_HOSTNAME }}" \
             "mkdir -p /tmp/soar/deploy/$ADSB_TIMESTAMP"
 
+      - name: Install rsync
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rsync
+
       - name: Create ADSB deployment package
         run: |
           mkdir -p adsb-deploy-pkg
@@ -771,9 +776,9 @@ jobs:
 
       - name: Upload ADSB deployment package
         run: |
-          scp -i ~/.ssh/adsb_deploy \
-            -o StrictHostKeyChecking=no \
-            -r adsb-deploy-pkg/* \
+          rsync -avz --progress \
+            -e "ssh -i ~/.ssh/adsb_deploy -o StrictHostKeyChecking=no" \
+            adsb-deploy-pkg/ \
             soar@"${{ secrets.ADSB_SERVER_HOSTNAME }}":/tmp/soar/deploy/${{ env.ADSB_DEPLOY_TIMESTAMP }}/
 
       - name: Execute ADSB deployment
@@ -972,6 +977,11 @@ jobs:
             soar@"${{ secrets.ADSB_SERVER_HOSTNAME }}" \
             "mkdir -p /tmp/soar/deploy/$ADSB_TIMESTAMP"
 
+      - name: Install rsync
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rsync
+
       - name: Create ADSB deployment package
         run: |
           mkdir -p adsb-deploy-pkg
@@ -984,9 +994,9 @@ jobs:
 
       - name: Upload ADSB deployment package
         run: |
-          scp -i ~/.ssh/adsb_deploy \
-            -o StrictHostKeyChecking=no \
-            -r adsb-deploy-pkg/* \
+          rsync -avz --progress \
+            -e "ssh -i ~/.ssh/adsb_deploy -o StrictHostKeyChecking=no" \
+            adsb-deploy-pkg/ \
             soar@"${{ secrets.ADSB_SERVER_HOSTNAME }}":/tmp/soar/deploy/${{ env.ADSB_DEPLOY_TIMESTAMP }}/
 
       - name: Execute ADSB deployment
