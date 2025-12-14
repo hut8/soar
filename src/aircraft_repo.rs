@@ -412,7 +412,7 @@ impl AircraftRepository {
                     latest_fix.latitude AS latest_latitude,
                     latest_fix.longitude AS latest_longitude,
                     active_flight.id AS active_flight_id
-                FROM devices d
+                FROM aircraft d
                 LEFT JOIN LATERAL (
                     SELECT latitude, longitude
                     FROM fixes

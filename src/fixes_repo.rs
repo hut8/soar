@@ -656,7 +656,7 @@ impl FixesRepository {
                     FROM params
                 )
                 SELECT d.*
-                FROM devices d
+                FROM aircraft d
                 WHERE EXISTS (
                     SELECT 1
                     FROM fixes f, params p, parts

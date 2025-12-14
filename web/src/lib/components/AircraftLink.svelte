@@ -48,7 +48,7 @@
 	// Get aircraft ID and title
 	const id = $derived(
 		aircraftId ||
-			('id' in (aircraft || {}) ? aircraft!.id : (aircraft as Flight)?.aircraft_id) ||
+			('aircraft_id' in (aircraft || {}) ? (aircraft as Flight)?.aircraft_id : aircraft!.id) ||
 			''
 	);
 

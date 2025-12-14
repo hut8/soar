@@ -460,7 +460,7 @@ async fn query_duplicate_devices(
         }
 
         let duplicate_addresses: Vec<i32> =
-            diesel::sql_query("SELECT address FROM devices GROUP BY address HAVING COUNT(*) > 1")
+            diesel::sql_query("SELECT address FROM aircraft GROUP BY address HAVING COUNT(*) > 1")
                 .load::<DuplicateAddressRow>(&mut conn)?
                 .into_iter()
                 .map(|row| row.address)
