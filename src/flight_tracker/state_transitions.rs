@@ -20,12 +20,15 @@ async fn update_flight_timestamp(
     flight_id: Uuid,
     timestamp: chrono::DateTime<chrono::Utc>,
 ) {
+    let start = std::time::Instant::now();
     if let Err(e) = flights_repo.update_last_fix_at(flight_id, timestamp).await {
         error!(
             "Failed to update last_fix_at for flight {}: {}",
             flight_id, e
         );
     }
+    metrics::histogram!("aprs.aircraft.flight_update_last_fix_ms")
+        .record(start.elapsed().as_micros() as f64 / 1000.0);
 }
 
 /// Determine if aircraft should be active based on fix data
@@ -71,11 +74,14 @@ pub(crate) async fn process_state_transition(
     let is_active = should_be_active(&fix);
 
     // Fetch device once for use throughout the function
+    let device_lookup_start = std::time::Instant::now();
     let device = ctx
         .device_repo
         .get_device_by_uuid(fix.aircraft_id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("Aircraft {} not found", fix.aircraft_id))?;
+    metrics::histogram!("aprs.aircraft.device_lookup_ms")
+        .record(device_lookup_start.elapsed().as_micros() as f64 / 1000.0);
 
     let is_towtug = device.aircraft_type_ogn == Some(AircraftType::TowTug);
 

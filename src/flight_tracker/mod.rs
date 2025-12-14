@@ -426,6 +426,7 @@ impl FlightTracker {
         );
 
         // Process state transition
+        let state_transition_start = std::time::Instant::now();
         let updated_fix =
             match state_transitions::process_state_transition(&self.context(), fix).await {
                 Ok(updated_fix) => updated_fix,
@@ -434,9 +435,12 @@ impl FlightTracker {
                     return None;
                 }
             };
+        metrics::histogram!("aprs.aircraft.state_transition_ms")
+            .record(state_transition_start.elapsed().as_micros() as f64 / 1000.0);
 
         // Insert the fix into the database WHILE STILL HOLDING THE LOCK
-        match fixes_repo.insert(&updated_fix).await {
+        let fix_insert_start = std::time::Instant::now();
+        let result = match fixes_repo.insert(&updated_fix).await {
             Ok(_) => {
                 trace!(
                     "Successfully saved fix to database for device {}",
@@ -455,7 +459,10 @@ impl FlightTracker {
                 );
                 None
             }
-        }
+        };
+        metrics::histogram!("aprs.aircraft.fix_db_insert_ms")
+            .record(fix_insert_start.elapsed().as_micros() as f64 / 1000.0);
+        result
     }
 
     /// Get a flight by its ID

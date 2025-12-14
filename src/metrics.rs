@@ -428,6 +428,12 @@ pub fn initialize_run_metrics() {
     metrics::histogram!("aprs.aircraft.callsign_update_ms").record(0.0);
     metrics::histogram!("aprs.aircraft.elevation_queue_ms").record(0.0);
     metrics::histogram!("aprs.aircraft.nats_publish_ms").record(0.0);
+
+    // Granular flight insert breakdown metrics
+    metrics::histogram!("aprs.aircraft.state_transition_ms").record(0.0);
+    metrics::histogram!("aprs.aircraft.fix_db_insert_ms").record(0.0);
+    metrics::histogram!("aprs.aircraft.device_lookup_ms").record(0.0);
+    metrics::histogram!("aprs.aircraft.flight_update_last_fix_ms").record(0.0);
 }
 
 /// Initialize analytics metrics to zero/default values

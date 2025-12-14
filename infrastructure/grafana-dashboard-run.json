@@ -2403,6 +2403,50 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
+          "expr": "aprs_aircraft_state_transition_ms{component=\"run\",environment=\"$environment\",quantile=\"0.5\"}",
+          "legendFormat": "  ⤷ State Transition (P50)",
+          "range": true,
+          "refId": "E1"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "expr": "aprs_aircraft_device_lookup_ms{component=\"run\",environment=\"$environment\",quantile=\"0.5\"}",
+          "legendFormat": "    ⤷ Device Lookup (P50)",
+          "range": true,
+          "refId": "E2"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "expr": "aprs_aircraft_flight_update_last_fix_ms{component=\"run\",environment=\"$environment\",quantile=\"0.5\"}",
+          "legendFormat": "    ⤷ Flight Update + Triggers (P50)",
+          "range": true,
+          "refId": "E3"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "expr": "aprs_aircraft_fix_db_insert_ms{component=\"run\",environment=\"$environment\",quantile=\"0.5\"}",
+          "legendFormat": "  ⤷ Fix DB Insert (P50)",
+          "range": true,
+          "refId": "E4"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
           "expr": "aprs_aircraft_callsign_update_ms{component=\"run\",environment=\"$environment\",quantile=\"0.5\"}",
           "legendFormat": "Callsign Update (P50)",
           "range": true,
@@ -2572,6 +2616,50 @@
           "legendFormat": "Flight Insert (P95)",
           "range": true,
           "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "expr": "aprs_aircraft_state_transition_ms{component=\"run\",environment=\"$environment\",quantile=\"0.95\"}",
+          "legendFormat": "  ⤷ State Transition (P95)",
+          "range": true,
+          "refId": "E1"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "expr": "aprs_aircraft_device_lookup_ms{component=\"run\",environment=\"$environment\",quantile=\"0.95\"}",
+          "legendFormat": "    ⤷ Device Lookup (P95)",
+          "range": true,
+          "refId": "E2"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "expr": "aprs_aircraft_flight_update_last_fix_ms{component=\"run\",environment=\"$environment\",quantile=\"0.95\"}",
+          "legendFormat": "    ⤷ Flight Update + Triggers (P95)",
+          "range": true,
+          "refId": "E3"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "expr": "aprs_aircraft_fix_db_insert_ms{component=\"run\",environment=\"$environment\",quantile=\"0.95\"}",
+          "legendFormat": "  ⤷ Fix DB Insert (P95)",
+          "range": true,
+          "refId": "E4"
         },
         {
           "datasource": {
