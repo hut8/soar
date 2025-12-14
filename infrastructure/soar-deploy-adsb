@@ -6,11 +6,12 @@
 # It must be installed at /usr/local/bin/soar-deploy-adsb with permissions 755.
 #
 # Usage:
-#   sudo /usr/local/bin/soar-deploy-adsb /tmp/soar/deploy/YYYYMMDDHHMMSS
+#   sudo /usr/local/bin/soar-deploy-adsb [production|staging] /tmp/soar/deploy/YYYYMMDDHHMMSS
+#   sudo /usr/local/bin/soar-deploy-adsb /tmp/soar/deploy/YYYYMMDDHHMMSS  (defaults to production)
 #
 # The deployment directory should contain:
 #   - soar (the binary)
-#   - soar-beast-ingest.service (the service file)
+#   - soar-beast-ingest.service (production) or soar-beast-ingest-staging.service (staging)
 #
 
 set -e
@@ -35,13 +36,25 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Parse arguments: deploy directory
-if [ $# -ne 1 ]; then
-    log_error "Usage: $0 /tmp/soar/deploy/YYYYMMDDHHMMSS"
+# Parse arguments: environment and deploy directory
+# Supports both: "soar-deploy-adsb staging /path" and "soar-deploy-adsb /path" (defaults to production)
+if [ $# -eq 2 ]; then
+    ENVIRONMENT="$1"
+    DEPLOY_DIR="$2"
+elif [ $# -eq 1 ]; then
+    ENVIRONMENT="production"
+    DEPLOY_DIR="$1"
+else
+    log_error "Usage: $0 [production|staging] /tmp/soar/deploy/YYYYMMDDHHMMSS"
+    log_error "   or: $0 /tmp/soar/deploy/YYYYMMDDHHMMSS  (defaults to production)"
     exit 1
 fi
 
-DEPLOY_DIR="$1"
+# Validate environment
+if [ "$ENVIRONMENT" != "production" ] && [ "$ENVIRONMENT" != "staging" ]; then
+    log_error "Invalid environment: $ENVIRONMENT (must be 'production' or 'staging')"
+    exit 1
+fi
 
 # Verify deployment directory exists
 if [ ! -d "$DEPLOY_DIR" ]; then
@@ -49,14 +62,25 @@ if [ ! -d "$DEPLOY_DIR" ]; then
     exit 1
 fi
 
-log_info "Starting SOAR ADS-B ingester deployment from: $DEPLOY_DIR"
+log_info "Starting SOAR ADS-B ingester deployment for $ENVIRONMENT from: $DEPLOY_DIR"
 
 # Set environment-specific variables
-ENV_FILE="/etc/soar/env"
-BINARY_PATH="/usr/local/bin/soar"
-BACKUP_DIR="/home/soar/backups"
-SERVICE_NAME="soar-beast-ingest.service"
+if [ "$ENVIRONMENT" = "staging" ]; then
+    SERVICE_SUFFIX="-staging"
+    ENV_FILE="/etc/soar/env-staging"
+    BINARY_PATH="/usr/local/bin/soar-staging"
+    BACKUP_DIR="/home/soar/backups/staging"
+    SERVICE_NAME="soar-beast-ingest-staging.service"
+else
+    SERVICE_SUFFIX=""
+    ENV_FILE="/etc/soar/env"
+    BINARY_PATH="/usr/local/bin/soar"
+    BACKUP_DIR="/home/soar/backups/production"
+    SERVICE_NAME="soar-beast-ingest.service"
+fi
 
+log_info "Environment: $ENVIRONMENT"
+log_info "Service suffix: '$SERVICE_SUFFIX'"
 log_info "Environment file: $ENV_FILE"
 log_info "Binary path: $BINARY_PATH"
 log_info "Service: $SERVICE_NAME"

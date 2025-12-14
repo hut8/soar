@@ -763,7 +763,7 @@ jobs:
         run: |
           mkdir -p adsb-deploy-pkg
           cp arm64/soar adsb-deploy-pkg/
-          cp infrastructure/systemd/soar-beast-ingest.service adsb-deploy-pkg/
+          cp infrastructure/systemd/soar-beast-ingest-staging.service adsb-deploy-pkg/
           cp infrastructure/soar-deploy-adsb adsb-deploy-pkg/
           echo "${GITHUB_SHA:0:7}" > adsb-deploy-pkg/VERSION
           echo "ADSB deployment package contents:"
@@ -781,7 +781,7 @@ jobs:
           ssh -i ~/.ssh/adsb_deploy \
             -o StrictHostKeyChecking=no \
             soar@"${{ secrets.ADSB_SERVER_HOSTNAME }}" \
-            "sudo /usr/local/bin/soar-deploy-adsb /tmp/soar/deploy/${{ env.ADSB_DEPLOY_TIMESTAMP }}"
+            "sudo /usr/local/bin/soar-deploy-adsb staging /tmp/soar/deploy/${{ env.ADSB_DEPLOY_TIMESTAMP }}"
 
       - name: Verify ADSB deployment
         run: |
@@ -789,7 +789,7 @@ jobs:
           ssh -i ~/.ssh/adsb_deploy \
             -o StrictHostKeyChecking=no \
             soar@"${{ secrets.ADSB_SERVER_HOSTNAME }}" \
-            "systemctl is-active soar-beast-ingest && echo 'ADSB Service is ACTIVE' || echo 'ADSB Service is NOT ACTIVE'"
+            "systemctl is-active soar-beast-ingest-staging && echo 'ADSB Service is ACTIVE' || echo 'ADSB Service is NOT ACTIVE'"
 
       - name: Cleanup SSH
         if: always()
@@ -994,7 +994,7 @@ jobs:
           ssh -i ~/.ssh/adsb_deploy \
             -o StrictHostKeyChecking=no \
             soar@"${{ secrets.ADSB_SERVER_HOSTNAME }}" \
-            "sudo /usr/local/bin/soar-deploy-adsb /tmp/soar/deploy/${{ env.ADSB_DEPLOY_TIMESTAMP }}"
+            "sudo /usr/local/bin/soar-deploy-adsb production /tmp/soar/deploy/${{ env.ADSB_DEPLOY_TIMESTAMP }}"
 
       - name: Verify ADSB deployment
         run: |
