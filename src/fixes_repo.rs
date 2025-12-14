@@ -11,7 +11,7 @@ use crate::ogn_aprs_aircraft::{
 };
 use crate::web::PgPool;
 
-// Import the main AddressType from devices module
+// Import the main AddressType from aircraft module
 use crate::aircraft::AddressType;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, DbEnum)]
@@ -608,7 +608,7 @@ impl FixesRepository {
         Ok(result)
     }
 
-    /// Get devices with their recent fixes in a bounding box for efficient area subscriptions
+    /// Get aircraft with their recent fixes in a bounding box for efficient area subscriptions
     /// This replaces the inefficient global fetch + filter approach
     #[instrument(skip(self), fields(fixes_per_device = fixes_per_device.unwrap_or(5)))]
     pub async fn get_devices_with_fixes_in_bounding_box(
@@ -627,9 +627,9 @@ impl FixesRepository {
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            info!("Got database connection, executing first query for devices");
+            info!("Got database connection, executing first query for aircraft");
 
-            // First query: Get devices with fixes in the bounding box
+            // First query: Get aircraft with fixes in the bounding box
             // Optimized with EXISTS + LIMIT 1 pattern and geometry casting for performance
             // Handles antimeridian (international date line) crossing by splitting into two boxes
             let devices_sql = r#"
@@ -761,9 +761,9 @@ impl FixesRepository {
                 })
                 .collect();
 
-            info!("Executing second query for fixes with {} device IDs", device_ids.len());
+            info!("Executing second query for fixes with {} aircraft IDs", device_ids.len());
 
-            // Second query: Get recent fixes for the devices using the aircraft_id index
+            // Second query: Get recent fixes for the aircraft using the aircraft_id index
             // This is much faster than repeating the spatial query
             // Time-based pruning filter reduces rows before windowing for better performance
             let fixes_sql = r#"
@@ -880,7 +880,7 @@ impl FixesRepository {
                     .push(fix);
             }
 
-            // Combine devices with their fixes
+            // Combine aircraft with their fixes
             let results: Vec<(crate::aircraft::AircraftModel, Vec<Fix>)> = device_models
                 .into_iter()
                 .map(|device| {

@@ -209,7 +209,7 @@ impl AnalyticsRepository {
         .await?
     }
 
-    /// Get top devices by flight count
+    /// Get top aircraft by flight count
     pub async fn get_top_devices(&self, limit: i32, period_days: i32) -> Result<Vec<TopDevice>> {
         let pool = self.pool.clone();
 

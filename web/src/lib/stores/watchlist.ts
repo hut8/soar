@@ -216,7 +216,7 @@ function createAircraftRegistryStore() {
 	return {
 		subscribe,
 
-		// Add fixes to appropriate devices
+		// Add fixes to appropriate aircraft
 		addFixes: (newFixes: Fix[]) => {
 			update((state) => {
 				// Log each fix to console

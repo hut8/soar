@@ -213,7 +213,7 @@
 				const response = await serverCall<{ devices: Record<string, Aircraft> }>(
 					`/aircraft/bulk?ids=${encodeURIComponent(idsParam)}`
 				);
-				// Merge the devices into the map
+				// Merge the aircraft into the map
 				Object.assign(devicesMap, response.devices);
 			}
 		} catch (err) {

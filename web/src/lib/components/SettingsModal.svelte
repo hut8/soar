@@ -143,7 +143,7 @@
 	function clearAircraftCache() {
 		if (
 			confirm(
-				'Are you sure you want to clear all cached device data? This will remove all stored devices from your browser.'
+				'Are you sure you want to clear all cached aircraft data? This will remove all stored aircraft from your browser.'
 			)
 		) {
 			try {
@@ -253,7 +253,7 @@
 				<section>
 					<h3 class="mb-3 text-lg font-semibold">Position Fix Window</h3>
 					<p class="mb-3 text-sm text-surface-600 dark:text-surface-400">
-						Only show devices that have been seen within this time window
+						Only show aircraft that have been seen within this time window
 					</p>
 					<div class="space-y-4">
 						<div class="text-sm font-medium">

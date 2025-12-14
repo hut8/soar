@@ -389,9 +389,9 @@ export class FixFeed {
 		};
 	}
 
-	// Subscribe to multiple devices from watchlist
+	// Subscribe to multiple aircraft from watchlist
 	public async subscribeToWatchlist(deviceIds: string[]): Promise<void> {
-		// Unsubscribe from devices no longer in the list
+		// Unsubscribe from aircraft no longer in the list
 		const devicesToUnsubscribe = Array.from(this.subscribedAircraft).filter(
 			(aircraftId) => !deviceIds.includes(aircraftId)
 		);
@@ -400,7 +400,7 @@ export class FixFeed {
 			this.unsubscribeFromAircraft(aircraftId);
 		}
 
-		// Subscribe to new devices
+		// Subscribe to new aircraft
 		const devicesToSubscribe = deviceIds.filter(
 			(aircraftId) => !this.subscribedAircraft.has(aircraftId)
 		);
@@ -410,7 +410,7 @@ export class FixFeed {
 		}
 	}
 
-	// Fetch devices in bounding box via REST API
+	// Fetch aircraft in bounding box via REST API
 	public async fetchDevicesInBoundingBox(
 		latMin: number,
 		latMax: number,
@@ -422,7 +422,7 @@ export class FixFeed {
 
 		try {
 			const { serverCall } = await import('$lib/api/server');
-			const response = await serverCall('/devices', {
+			const response = await serverCall('/aircraft', {
 				params: {
 					latitude_min: latMin,
 					latitude_max: latMax,
@@ -433,7 +433,7 @@ export class FixFeed {
 			});
 			return response as Aircraft[];
 		} catch (error) {
-			console.error('Failed to fetch devices in bounding box:', error);
+			console.error('Failed to fetch aircraft in bounding box:', error);
 			return [];
 		}
 	}
