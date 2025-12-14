@@ -3,6 +3,7 @@
 	import { serverCall } from '$lib/api/server';
 	import { onMount } from 'svelte';
 	import type { Aircraft } from '$lib/types';
+	import AircraftLink from '$lib/components/AircraftLink.svelte';
 
 	interface AircraftIssuesResponse {
 		duplicateDeviceAddresses: Aircraft[];
@@ -121,9 +122,7 @@
 									<td class="p-3">{device.address_type}</td>
 									<td class="p-3">
 										{#if device.id}
-											<a href="/aircraft/{device.id}" class="text-primary-500 hover:underline">
-												{device.registration}
-											</a>
+											<AircraftLink aircraft={device} size="sm" />
 										{:else}
 											{device.registration}
 										{/if}

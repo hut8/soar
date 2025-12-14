@@ -190,9 +190,7 @@ export function formatTransponderCode(transponderCode: number | null | undefined
  * Priority:
  * 1. If both registration and aircraft_model: "Model - Registration" (e.g., "Piper Pawnee - N4606Y")
  * 2. If only registration: registration
- * 3. If only aircraft_model: aircraft_model
- * 4. If no registration but has competition_number: competition_number
- * 5. Otherwise: device_address (e.g., "FLARM-A0B380")
+ * 3. Otherwise: device_address (e.g., "FLARM-A0B380")
  */
 export function getAircraftTitle(aircraft: {
 	registration?: string | null;
@@ -202,7 +200,6 @@ export function getAircraftTitle(aircraft: {
 }): string {
 	const hasRegistration = aircraft.registration && aircraft.registration.trim() !== '';
 	const hasModel = aircraft.aircraft_model && aircraft.aircraft_model.trim() !== '';
-	const hasCompetition = aircraft.competition_number && aircraft.competition_number.trim() !== '';
 
 	// If both registration and model are available
 	if (hasRegistration && hasModel) {
@@ -212,16 +209,6 @@ export function getAircraftTitle(aircraft: {
 	// If only registration
 	if (hasRegistration) {
 		return aircraft.registration!;
-	}
-
-	// If only model
-	if (hasModel) {
-		return aircraft.aircraft_model!;
-	}
-
-	// If no registration but has competition number
-	if (hasCompetition) {
-		return aircraft.competition_number!;
 	}
 
 	// Default to device address

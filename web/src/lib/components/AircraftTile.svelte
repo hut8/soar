@@ -21,6 +21,20 @@
 	let flightUrl = $derived(
 		aircraft.active_flight_id ? `/flights/${aircraft.active_flight_id}` : null
 	);
+
+	// Get country code for flag display
+	const countryCode = $derived(() => {
+		const code = aircraft.country_code;
+		return code && code.trim() !== '' ? code.toUpperCase() : null;
+	});
+
+	// Flag SVG URL from hampusborgos/country-flags repository
+	const flagUrl = $derived(() => {
+		const code = countryCode();
+		return code
+			? `https://cdn.jsdelivr.net/gh/hampusborgos/country-flags@main/svg/${code}.svg`
+			: null;
+	});
 </script>
 
 <div class="card preset-tonal-primary p-4">
@@ -32,6 +46,9 @@
 		<div class="mb-4 flex items-start justify-between">
 			<div class="flex items-center gap-2">
 				<Radio class="h-5 w-5 text-primary-500" />
+				{#if flagUrl()}
+					<img src={flagUrl()} alt="" class="inline-block h-4 rounded-sm" />
+				{/if}
 				<h3 class="text-lg font-semibold">{getAircraftTitle(aircraft)}</h3>
 			</div>
 		</div>
