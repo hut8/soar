@@ -587,7 +587,7 @@ jobs:
   deploy-staging:
     name: Deploy to Staging
     runs-on: ubuntu-latest
-    needs: [test-sveltekit, test-e2e, test-rust, build-release, security-audit]
+    needs: [test-sveltekit, test-e2e, test-rust, build-release, build-release-arm64, security-audit]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
     steps:
@@ -724,15 +724,83 @@ jobs:
           echo "Executing deployment script for staging..."
           ssh soar@staging.glider.flights "sudo /usr/local/bin/soar-deploy staging $DEPLOY_DIR"
 
+      - name: Download ARM64 release binary
+        uses: actions/download-artifact@v4
+        with:
+          name: soar-linux-arm64
+          path: ./arm64
+
+      - name: Extract ARM64 binary
+        run: |
+          cd arm64
+          tar -xzf soar-linux-arm64.tar.gz
+          chmod +x soar
+          cd ..
+
+      - name: Setup Tailscale for ADSB deployment
+        uses: tailscale/github-action@v2
+        with:
+          oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TAILSCALE_OAUTH_SECRET }}
+          tags: tag:github-actions
+
+      - name: Setup SSH key for ADSB deployment
+        run: |
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/adsb_deploy
+          chmod 600 ~/.ssh/adsb_deploy
+          ssh-keyscan -H "${{ secrets.ADSB_SERVER_HOSTNAME }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Create ADSB deployment directory
+        run: |
+          ADSB_TIMESTAMP=$(date +%Y%m%d%H%M%S)
+          echo "ADSB_DEPLOY_TIMESTAMP=$ADSB_TIMESTAMP" >> $GITHUB_ENV
+          ssh -i ~/.ssh/adsb_deploy \
+            -o StrictHostKeyChecking=no \
+            soar@"${{ secrets.ADSB_SERVER_HOSTNAME }}" \
+            "mkdir -p /tmp/soar/deploy/$ADSB_TIMESTAMP"
+
+      - name: Create ADSB deployment package
+        run: |
+          mkdir -p adsb-deploy-pkg
+          cp arm64/soar adsb-deploy-pkg/
+          cp infrastructure/systemd/soar-beast-ingest.service adsb-deploy-pkg/
+          cp infrastructure/soar-deploy-adsb adsb-deploy-pkg/
+          echo "${GITHUB_SHA:0:7}" > adsb-deploy-pkg/VERSION
+          echo "ADSB deployment package contents:"
+          ls -lh adsb-deploy-pkg/
+
+      - name: Upload ADSB deployment package
+        run: |
+          scp -i ~/.ssh/adsb_deploy \
+            -o StrictHostKeyChecking=no \
+            -r adsb-deploy-pkg/* \
+            soar@"${{ secrets.ADSB_SERVER_HOSTNAME }}":/tmp/soar/deploy/${{ env.ADSB_DEPLOY_TIMESTAMP }}/
+
+      - name: Execute ADSB deployment
+        run: |
+          ssh -i ~/.ssh/adsb_deploy \
+            -o StrictHostKeyChecking=no \
+            soar@"${{ secrets.ADSB_SERVER_HOSTNAME }}" \
+            "sudo /usr/local/bin/soar-deploy-adsb /tmp/soar/deploy/${{ env.ADSB_DEPLOY_TIMESTAMP }}"
+
+      - name: Verify ADSB deployment
+        run: |
+          echo "Checking ADSB service status..."
+          ssh -i ~/.ssh/adsb_deploy \
+            -o StrictHostKeyChecking=no \
+            soar@"${{ secrets.ADSB_SERVER_HOSTNAME }}" \
+            "systemctl is-active soar-beast-ingest && echo 'ADSB Service is ACTIVE' || echo 'ADSB Service is NOT ACTIVE'"
+
       - name: Cleanup SSH
         if: always()
         run: |
           rm -f ~/.ssh/id_rsa
+          rm -f ~/.ssh/adsb_deploy
 
   deploy-production:
     name: Deploy to Production
     runs-on: ubuntu-latest
-    needs: [test-sveltekit, test-rust, build-release, security-audit]
+    needs: [test-sveltekit, test-rust, build-release, build-release-arm64, security-audit]
     if: github.event_name == 'release' && github.event.action == 'published'
 
     steps:
@@ -869,7 +937,75 @@ jobs:
           echo "Executing deployment script for production..."
           ssh soar@glider.flights "sudo /usr/local/bin/soar-deploy production $DEPLOY_DIR"
 
+      - name: Download ARM64 release binary
+        uses: actions/download-artifact@v4
+        with:
+          name: soar-linux-arm64
+          path: ./arm64
+
+      - name: Extract ARM64 binary
+        run: |
+          cd arm64
+          tar -xzf soar-linux-arm64.tar.gz
+          chmod +x soar
+          cd ..
+
+      - name: Setup Tailscale for ADSB deployment
+        uses: tailscale/github-action@v2
+        with:
+          oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TAILSCALE_OAUTH_SECRET }}
+          tags: tag:github-actions
+
+      - name: Setup SSH key for ADSB deployment
+        run: |
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/adsb_deploy
+          chmod 600 ~/.ssh/adsb_deploy
+          ssh-keyscan -H "${{ secrets.ADSB_SERVER_HOSTNAME }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Create ADSB deployment directory
+        run: |
+          ADSB_TIMESTAMP=$(date +%Y%m%d%H%M%S)
+          echo "ADSB_DEPLOY_TIMESTAMP=$ADSB_TIMESTAMP" >> $GITHUB_ENV
+          ssh -i ~/.ssh/adsb_deploy \
+            -o StrictHostKeyChecking=no \
+            soar@"${{ secrets.ADSB_SERVER_HOSTNAME }}" \
+            "mkdir -p /tmp/soar/deploy/$ADSB_TIMESTAMP"
+
+      - name: Create ADSB deployment package
+        run: |
+          mkdir -p adsb-deploy-pkg
+          cp arm64/soar adsb-deploy-pkg/
+          cp infrastructure/systemd/soar-beast-ingest.service adsb-deploy-pkg/
+          cp infrastructure/soar-deploy-adsb adsb-deploy-pkg/
+          echo "${GITHUB_REF#refs/tags/}" > adsb-deploy-pkg/VERSION
+          echo "ADSB deployment package contents:"
+          ls -lh adsb-deploy-pkg/
+
+      - name: Upload ADSB deployment package
+        run: |
+          scp -i ~/.ssh/adsb_deploy \
+            -o StrictHostKeyChecking=no \
+            -r adsb-deploy-pkg/* \
+            soar@"${{ secrets.ADSB_SERVER_HOSTNAME }}":/tmp/soar/deploy/${{ env.ADSB_DEPLOY_TIMESTAMP }}/
+
+      - name: Execute ADSB deployment
+        run: |
+          ssh -i ~/.ssh/adsb_deploy \
+            -o StrictHostKeyChecking=no \
+            soar@"${{ secrets.ADSB_SERVER_HOSTNAME }}" \
+            "sudo /usr/local/bin/soar-deploy-adsb /tmp/soar/deploy/${{ env.ADSB_DEPLOY_TIMESTAMP }}"
+
+      - name: Verify ADSB deployment
+        run: |
+          echo "Checking ADSB service status..."
+          ssh -i ~/.ssh/adsb_deploy \
+            -o StrictHostKeyChecking=no \
+            soar@"${{ secrets.ADSB_SERVER_HOSTNAME }}" \
+            "systemctl is-active soar-beast-ingest && echo 'ADSB Service is ACTIVE' || echo 'ADSB Service is NOT ACTIVE'"
+
       - name: Cleanup SSH
         if: always()
         run: |
           rm -f ~/.ssh/id_rsa
+          rm -f ~/.ssh/adsb_deploy
