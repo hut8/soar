@@ -16,7 +16,7 @@ use soar::packet_processors::{
     AircraftPositionProcessor, GenericProcessor, PacketRouter, ReceiverPositionProcessor,
     ReceiverStatusProcessor, ServerStatusProcessor,
 };
-use soar::raw_messages_repo::{BeastMessagesRepository, NewBeastMessage};
+use soar::raw_messages_repo::{NewBeastMessage, RawMessagesRepository};
 use soar::receiver_repo::ReceiverRepository;
 use soar::receiver_status_repo::ReceiverStatusRepository;
 use soar::server_messages_repo::ServerMessagesRepository;
@@ -125,7 +125,7 @@ async fn process_aprs_message(
 async fn process_beast_message(
     message_bytes: &[u8],
     aircraft_repo: &AircraftRepository,
-    beast_repo: &BeastMessagesRepository,
+    beast_repo: &RawMessagesRepository,
     fix_processor: &FixProcessor,
     cpr_decoder: &Arc<CprDecoder>,
     receiver_id: Uuid,
@@ -200,7 +200,7 @@ async fn process_beast_message(
 
     // Store raw Beast message in database
     let raw_message_id = match beast_repo
-        .insert(NewBeastMessage::new(
+        .insert_beast(NewBeastMessage::new(
             raw_frame.to_vec(),
             received_at,
             receiver_id,
@@ -524,7 +524,7 @@ pub async fn handle_run(
 
     // Create Beast processing infrastructure
     let aircraft_repo = AircraftRepository::new(diesel_pool.clone());
-    let beast_repo = BeastMessagesRepository::new(diesel_pool.clone());
+    let beast_repo = RawMessagesRepository::new(diesel_pool.clone());
 
     // Create CPR decoder for ADS-B position decoding
     // TODO: Configure reference position from receiver location if available

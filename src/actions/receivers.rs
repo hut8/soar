@@ -384,10 +384,10 @@ pub async fn get_receiver_raw_messages(
     Query(params): Query<ReceiverRawMessagesQuery>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    use crate::raw_messages_repo::AprsMessagesRepository;
+    use crate::raw_messages_repo::RawMessagesRepository;
 
     let receiver_repo = ReceiverRepository::new(state.pool.clone());
-    let messages_repo = AprsMessagesRepository::new(state.pool.clone());
+    let messages_repo = RawMessagesRepository::new(state.pool.clone());
 
     // First verify the receiver exists
     match receiver_repo.get_receiver_by_id(id).await {
