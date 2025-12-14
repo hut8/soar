@@ -1,7 +1,12 @@
 use anyhow::Result;
+use chrono::DateTime;
 use diesel::PgConnection;
 use diesel::r2d2::{ConnectionManager, Pool};
 use futures_util::StreamExt;
+use soar::aircraft::AddressType;
+use soar::aircraft_repo::AircraftRepository;
+use soar::beast::cpr_decoder::CprDecoder;
+use soar::beast::{adsb_message_to_fix, decode_beast_frame};
 use soar::fix_processor::FixProcessor;
 use soar::fixes_repo::FixesRepository;
 use soar::flight_tracker::FlightTracker;
@@ -11,15 +16,19 @@ use soar::packet_processors::{
     AircraftPositionProcessor, GenericProcessor, PacketRouter, ReceiverPositionProcessor,
     ReceiverStatusProcessor, ServerStatusProcessor,
 };
+use soar::raw_messages_repo::{BeastMessagesRepository, NewBeastMessage};
 use soar::receiver_repo::ReceiverRepository;
 use soar::receiver_status_repo::ReceiverStatusRepository;
 use soar::server_messages_repo::ServerMessagesRepository;
 use std::env;
+use std::sync::Arc;
 use tracing::Instrument;
 use tracing::{debug, error, info, trace, warn};
+use uuid::Uuid;
 
 // Queue size constants
 const NATS_INTAKE_QUEUE_SIZE: usize = 1000;
+const BEAST_INTAKE_QUEUE_SIZE: usize = 1000;
 const AIRCRAFT_QUEUE_SIZE: usize = 1000;
 const RECEIVER_STATUS_QUEUE_SIZE: usize = 50;
 const RECEIVER_POSITION_QUEUE_SIZE: usize = 50;
@@ -109,6 +118,161 @@ async fn process_aprs_message(
     // Record processing latency
     let elapsed_micros = start_time.elapsed().as_micros() as f64 / 1000.0; // Convert to milliseconds
     metrics::histogram!("aprs.message_processing_latency_ms").record(elapsed_micros);
+}
+
+/// Process a received Beast (ADS-B) message from NATS
+/// The message format is binary: 8-byte timestamp (big-endian i64 microseconds) + Beast frame
+async fn process_beast_message(
+    message_bytes: &[u8],
+    aircraft_repo: &AircraftRepository,
+    beast_repo: &BeastMessagesRepository,
+    fix_processor: &FixProcessor,
+    cpr_decoder: &Arc<CprDecoder>,
+    receiver_id: Uuid,
+) {
+    let start_time = std::time::Instant::now();
+
+    // Track that we're processing a message
+    metrics::counter!("beast.run.process_beast_message.called").increment(1);
+
+    // Validate minimum message length (8-byte timestamp + at least 7-byte frame)
+    if message_bytes.len() < 15 {
+        warn!(
+            "Invalid Beast message: too short ({} bytes, expected at least 15)",
+            message_bytes.len()
+        );
+        metrics::counter!("beast.run.invalid_message").increment(1);
+        return;
+    }
+
+    // Extract timestamp (first 8 bytes, big-endian i64 microseconds)
+    let timestamp_bytes: [u8; 8] = message_bytes[0..8].try_into().unwrap();
+    let timestamp_micros = i64::from_be_bytes(timestamp_bytes);
+    let received_at =
+        DateTime::from_timestamp_micros(timestamp_micros).unwrap_or_else(chrono::Utc::now);
+
+    // Calculate and record lag (difference between now and packet timestamp)
+    let now = chrono::Utc::now();
+    let lag_seconds = (now - received_at).num_milliseconds() as f64 / 1000.0;
+    metrics::gauge!("beast.run.nats.lag_seconds").set(lag_seconds);
+
+    // Extract Beast frame (remaining bytes)
+    let raw_frame = &message_bytes[8..];
+
+    // Decode the Beast frame using rs1090
+    let decoded = match decode_beast_frame(raw_frame, received_at) {
+        Ok(decoded) => {
+            metrics::counter!("beast.run.decode.success").increment(1);
+            decoded
+        }
+        Err(e) => {
+            debug!("Failed to decode Beast frame: {}", e);
+            metrics::counter!("beast.run.decode.failed").increment(1);
+            return;
+        }
+    };
+
+    // Extract ICAO address from the decoded message for aircraft lookup
+    let icao_address = match extract_icao_from_message(&decoded.message) {
+        Ok(icao) => icao,
+        Err(e) => {
+            debug!("Failed to extract ICAO address: {}", e);
+            metrics::counter!("beast.run.icao_extraction_failed").increment(1);
+            return;
+        }
+    };
+
+    // Get or create aircraft by ICAO address
+    let aircraft = match aircraft_repo
+        .get_or_insert_device_by_address(icao_address as i32, AddressType::Icao)
+        .await
+    {
+        Ok(aircraft) => aircraft,
+        Err(e) => {
+            warn!(
+                "Failed to get/create aircraft for ICAO {:06X}: {}",
+                icao_address, e
+            );
+            metrics::counter!("beast.run.aircraft_lookup_failed").increment(1);
+            return;
+        }
+    };
+
+    // Store raw Beast message in database
+    let raw_message_id = match beast_repo
+        .insert(NewBeastMessage::new(
+            raw_frame.to_vec(),
+            received_at,
+            receiver_id,
+            None, // unparsed field (could add decoded JSON if needed)
+        ))
+        .await
+    {
+        Ok(id) => {
+            metrics::counter!("beast.run.raw_message_stored").increment(1);
+            id
+        }
+        Err(e) => {
+            warn!("Failed to store raw Beast message: {}", e);
+            metrics::counter!("beast.run.raw_message_store_failed").increment(1);
+            return;
+        }
+    };
+
+    // Convert ADS-B message to Fix using CPR decoder for position
+    let fix_opt = match adsb_message_to_fix(
+        &decoded.message,
+        raw_frame,
+        received_at,
+        receiver_id,
+        aircraft.id,
+        raw_message_id,
+        Some(cpr_decoder.as_ref()),
+    ) {
+        Ok(fix_opt) => fix_opt,
+        Err(e) => {
+            debug!("Failed to convert ADS-B message to fix: {}", e);
+            metrics::counter!("beast.run.adsb_to_fix_failed").increment(1);
+            return;
+        }
+    };
+
+    // If we got a Fix, process it through FixProcessor
+    if let Some(fix) = fix_opt {
+        match fix_processor.process_fix(fix).await {
+            Ok(_) => {
+                metrics::counter!("beast.run.fixes_processed").increment(1);
+            }
+            Err(e) => {
+                warn!("Failed to process Beast fix: {}", e);
+                metrics::counter!("beast.run.fix_processing_failed").increment(1);
+            }
+        }
+    } else {
+        // No fix created (message didn't contain position/velocity data)
+        debug!("ADS-B message did not produce a fix (no position/velocity)");
+        metrics::counter!("beast.run.no_fix_created").increment(1);
+    }
+
+    // Record processing latency
+    let elapsed_ms = start_time.elapsed().as_millis() as f64;
+    metrics::histogram!("beast.run.message_processing_latency_ms").record(elapsed_ms);
+}
+
+/// Extract ICAO address from decoded ADS-B message
+fn extract_icao_from_message(message: &rs1090::prelude::Message) -> Result<u32> {
+    // Serialize to JSON to access icao24 field
+    let json = serde_json::to_value(message)?;
+
+    if let Some(icao_str) = json.get("icao24").and_then(|v| v.as_str()) {
+        // Parse hex string to u32
+        u32::from_str_radix(icao_str, 16)
+            .map_err(|e| anyhow::anyhow!("Failed to parse ICAO address '{}': {}", icao_str, e))
+    } else {
+        // Fallback to CRC for non-ADS-B messages
+        debug!("No icao24 field in message, using CRC: {}", message.crc);
+        Ok(message.crc)
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -358,6 +522,33 @@ pub async fn handle_run(
     let aircraft_position_processor =
         AircraftPositionProcessor::new().with_fix_processor(fix_processor.clone());
 
+    // Create Beast processing infrastructure
+    let aircraft_repo = AircraftRepository::new(diesel_pool.clone());
+    let beast_repo = BeastMessagesRepository::new(diesel_pool.clone());
+
+    // Create CPR decoder for ADS-B position decoding
+    // TODO: Configure reference position from receiver location if available
+    let cpr_decoder = Arc::new(CprDecoder::new(None));
+
+    // Get Beast receiver ID from environment or use default
+    // This allows multiple Beast receivers to be configured via BEAST_RECEIVER_ID env var
+    let beast_receiver_id = env::var("BEAST_RECEIVER_ID")
+        .ok()
+        .and_then(|s| Uuid::parse_str(&s).ok())
+        .unwrap_or_else(|| {
+            // Use a deterministic UUID for the default Beast receiver
+            // This ensures the same receiver ID is used across restarts
+            let namespace = Uuid::NAMESPACE_DNS;
+            let name = if is_production {
+                "adsb-receiver-production"
+            } else {
+                "adsb-receiver-staging"
+            };
+            Uuid::new_v5(&namespace, name.as_bytes())
+        });
+
+    info!("Beast receiver ID: {}", beast_receiver_id);
+
     info!(
         "Setting up APRS client with PacketRouter - archive directory: {:?}, NATS URL: {}",
         archive_dir, nats_url
@@ -402,6 +593,13 @@ pub async fn handle_run(
         NATS_INTAKE_QUEUE_SIZE
     );
 
+    // Beast intake queue: buffers raw Beast messages from NATS subscriber
+    let (beast_intake_tx, beast_intake_rx) = flume::bounded::<Vec<u8>>(BEAST_INTAKE_QUEUE_SIZE);
+    info!(
+        "Created Beast intake queue with capacity {}",
+        BEAST_INTAKE_QUEUE_SIZE
+    );
+
     // Create PacketRouter with per-processor queues and internal worker pool
     const PACKET_ROUTER_WORKERS: usize = 10;
     let packet_router = PacketRouter::new(generic_processor)
@@ -440,6 +638,42 @@ pub async fn handle_run(
         .instrument(tracing::info_span!("intake_processor")),
     );
     info!("Spawned intake queue processor");
+
+    // Spawn Beast intake queue processor
+    // This task reads raw Beast messages from the intake queue and processes them
+    let beast_aircraft_repo = aircraft_repo.clone();
+    let beast_repo_clone = beast_repo.clone();
+    let beast_fix_processor = fix_processor.clone();
+    let beast_cpr_decoder = cpr_decoder.clone();
+    tokio::spawn(
+        async move {
+            info!("Beast intake queue processor started");
+            let mut messages_processed = 0u64;
+            while let Ok(message_bytes) = beast_intake_rx.recv_async().await {
+                process_beast_message(
+                    &message_bytes,
+                    &beast_aircraft_repo,
+                    &beast_repo_clone,
+                    &beast_fix_processor,
+                    &beast_cpr_decoder,
+                    beast_receiver_id,
+                )
+                .await;
+                messages_processed += 1;
+                metrics::counter!("beast.run.intake.processed").increment(1);
+
+                // Update Beast intake queue depth metric
+                metrics::gauge!("beast.run.nats.intake_queue_depth")
+                    .set(beast_intake_rx.len() as f64);
+            }
+            info!(
+                "Beast intake queue processor stopped after processing {} messages",
+                messages_processed
+            );
+        }
+        .instrument(tracing::info_span!("beast_intake_processor")),
+    );
+    info!("Spawned Beast intake queue processor");
 
     // Conditionally spawn elevation workers and batch writer (async mode only)
     if let (Some((_, agl_db_tx, agl_db_rx)), Some(elevation_rx)) =
@@ -699,24 +933,26 @@ pub async fn handle_run(
     let shutdown_server_status_rx = server_status_rx.clone();
     let shutdown_elevation_rx_opt = elevation_rx_opt.clone();
     let shutdown_intake_rx = nats_intake_tx.clone(); // Use tx to check queue depth
+    let shutdown_beast_intake_rx = beast_intake_tx.clone(); // Use tx to check queue depth
 
     tokio::spawn(
         async move {
             match tokio::signal::ctrl_c().await {
                 Ok(()) => {
                     info!("Received shutdown signal (Ctrl+C), initiating graceful shutdown...");
-                    info!("NATS subscriber will stop reading, allowing queues to drain...");
+                    info!("NATS subscribers will stop reading, allowing queues to drain...");
 
                     // Wait for queues to drain (check every second, max 10 minutes)
                     for i in 1..=600 {
                         let intake_depth = shutdown_intake_rx.len();
+                        let beast_intake_depth = shutdown_beast_intake_rx.len();
                         let aircraft_depth = shutdown_aircraft_rx.len();
                         let receiver_status_depth = shutdown_receiver_status_rx.len();
                         let receiver_position_depth = shutdown_receiver_position_rx.len();
                         let server_status_depth = shutdown_server_status_rx.len();
                         let elevation_depth = shutdown_elevation_rx_opt.as_ref().map_or(0, |rx| rx.len());
 
-                        let total_queued = intake_depth + aircraft_depth + receiver_status_depth + receiver_position_depth + server_status_depth + elevation_depth;
+                        let total_queued = intake_depth + beast_intake_depth + aircraft_depth + receiver_status_depth + receiver_position_depth + server_status_depth + elevation_depth;
 
                         if total_queued == 0 {
                             info!("All queues drained, shutting down now");
@@ -724,8 +960,8 @@ pub async fn handle_run(
                         }
 
                         info!(
-                            "Waiting for queues to drain ({}/600s): {} intake, {} aircraft, {} rx_status, {} rx_pos, {} server, {} elevation",
-                            i, intake_depth, aircraft_depth, receiver_status_depth, receiver_position_depth, server_status_depth, elevation_depth
+                            "Waiting for queues to drain ({}/600s): {} intake, {} beast_intake, {} aircraft, {} rx_status, {} rx_pos, {} server, {} elevation",
+                            i, intake_depth, beast_intake_depth, aircraft_depth, receiver_status_depth, receiver_position_depth, server_status_depth, elevation_depth
                         );
 
                         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
@@ -743,7 +979,113 @@ pub async fn handle_run(
     );
     info!("Graceful shutdown handler configured");
 
-    // Retry loop for NATS subscriber connection and consumption
+    // Determine Beast NATS subject based on environment
+    let beast_subject = if is_production {
+        "beast.raw"
+    } else {
+        "staging.beast.raw"
+    };
+
+    info!("Will subscribe to Beast NATS subject: {}", beast_subject);
+
+    // Spawn Beast NATS subscriber task
+    // This runs concurrently with the APRS subscriber
+    let beast_nats_url = nats_url.clone();
+    let beast_intake_tx_clone = beast_intake_tx.clone();
+    let beast_subject_clone = beast_subject.to_string();
+    tokio::spawn(
+        async move {
+            // Retry loop for Beast NATS subscriber
+            loop {
+                info!(
+                    "Connecting to NATS for Beast messages at {}...",
+                    beast_nats_url
+                );
+                let nats_client_name = if std::env::var("SOAR_ENV") == Ok("production".into()) {
+                    "soar-run-beast"
+                } else {
+                    "soar-run-beast-staging"
+                };
+                let nats_result = async_nats::ConnectOptions::new()
+                    .name(nats_client_name)
+                    .connect(&beast_nats_url)
+                    .await;
+
+                let nats_client = match nats_result {
+                    Ok(client) => {
+                        info!("Connected to NATS for Beast messages successfully");
+                        client
+                    }
+                    Err(e) => {
+                        error!(
+                            "Failed to connect to NATS for Beast: {} - retrying in 1s",
+                            e
+                        );
+                        metrics::counter!("beast.run.nats.connection_failed").increment(1);
+                        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                        continue;
+                    }
+                };
+
+                // Subscribe to Beast NATS subject
+                info!(
+                    "Subscribing to Beast NATS subject '{}'...",
+                    beast_subject_clone
+                );
+                let subscriber_result = nats_client.subscribe(beast_subject_clone.clone()).await;
+
+                let mut subscriber = match subscriber_result {
+                    Ok(sub) => {
+                        info!("Beast NATS subscriber ready, starting message processing...");
+                        sub
+                    }
+                    Err(e) => {
+                        error!(
+                            "Failed to subscribe to Beast NATS subject: {} - retrying in 1s",
+                            e
+                        );
+                        metrics::counter!("beast.run.nats.subscription_failed").increment(1);
+                        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                        continue;
+                    }
+                };
+
+                info!("Beast subscriber started");
+
+                // Start consuming Beast messages from NATS and sending them to the Beast intake queue
+                let intake_tx = beast_intake_tx_clone.clone();
+
+                while let Some(msg) = subscriber.next().await {
+                    // Beast messages are binary (timestamp + frame)
+                    let message_bytes = msg.payload.to_vec();
+
+                    // Send message to Beast intake queue (blocking send for backpressure)
+                    match intake_tx.send_async(message_bytes).await {
+                        Ok(_) => {
+                            metrics::counter!("beast.run.nats.consumed").increment(1);
+                        }
+                        Err(e) => {
+                            // Channel closed - intake processor stopped, likely due to shutdown
+                            warn!(
+                                "Failed to send Beast message to intake queue (channel closed): {}",
+                                e
+                            );
+                            break;
+                        }
+                    }
+                }
+
+                // If we reach here, the subscriber stream ended (either normally or with error)
+                warn!("Beast NATS subscriber stopped - reconnecting in 1s");
+                metrics::counter!("beast.run.nats.subscription_ended").increment(1);
+                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+            }
+        }
+        .instrument(tracing::info_span!("beast_nats_subscriber")),
+    );
+    info!("Spawned Beast NATS subscriber task");
+
+    // Retry loop for APRS NATS subscriber connection and consumption
     loop {
         info!("Connecting to NATS at {}...", nats_url);
         let nats_client_name = if std::env::var("SOAR_ENV") == Ok("production".into()) {
@@ -769,18 +1111,18 @@ pub async fn handle_run(
             }
         };
 
-        // Subscribe to NATS subject
-        info!("Subscribing to NATS subject '{}'...", nats_subject);
+        // Subscribe to APRS NATS subject
+        info!("Subscribing to APRS NATS subject '{}'...", nats_subject);
         let subscriber_result = nats_client.subscribe(nats_subject.to_string()).await;
 
         let mut subscriber = match subscriber_result {
             Ok(sub) => {
-                info!("NATS subscriber ready, starting message processing...");
+                info!("APRS NATS subscriber ready, starting message processing...");
                 sub
             }
             Err(e) => {
                 error!(
-                    "Failed to subscribe to NATS subject: {} - retrying in 1s",
+                    "Failed to subscribe to APRS NATS subject: {} - retrying in 1s",
                     e
                 );
                 metrics::counter!("aprs.nats.subscription_failed").increment(1);
@@ -791,7 +1133,7 @@ pub async fn handle_run(
 
         info!("APRS client started. Press Ctrl+C to stop.");
 
-        // Start consuming messages from NATS and sending them to the intake queue
+        // Start consuming APRS messages from NATS and sending them to the intake queue
         // The intake queue processor will handle parsing and routing
         // Blocking sends to the intake queue provide natural backpressure to NATS
         let intake_tx_clone = nats_intake_tx.clone();
@@ -825,7 +1167,7 @@ pub async fn handle_run(
         }
 
         // If we reach here, the subscriber stream ended (either normally or with error)
-        warn!("NATS subscriber stopped - reconnecting in 1s");
+        warn!("APRS NATS subscriber stopped - reconnecting in 1s");
         metrics::counter!("aprs.nats.subscription_ended").increment(1);
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
     }

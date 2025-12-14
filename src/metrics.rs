@@ -434,6 +434,28 @@ pub fn initialize_run_metrics() {
     metrics::histogram!("aprs.aircraft.fix_db_insert_ms").record(0.0);
     metrics::histogram!("aprs.aircraft.device_lookup_ms").record(0.0);
     metrics::histogram!("aprs.aircraft.flight_update_last_fix_ms").record(0.0);
+
+    // Beast (ADS-B) processing metrics
+    metrics::counter!("beast.run.process_beast_message.called").absolute(0);
+    metrics::counter!("beast.run.invalid_message").absolute(0);
+    metrics::counter!("beast.run.decode.success").absolute(0);
+    metrics::counter!("beast.run.decode.failed").absolute(0);
+    metrics::counter!("beast.run.icao_extraction_failed").absolute(0);
+    metrics::counter!("beast.run.aircraft_lookup_failed").absolute(0);
+    metrics::counter!("beast.run.raw_message_stored").absolute(0);
+    metrics::counter!("beast.run.raw_message_store_failed").absolute(0);
+    metrics::counter!("beast.run.adsb_to_fix_failed").absolute(0);
+    metrics::counter!("beast.run.fixes_processed").absolute(0);
+    metrics::counter!("beast.run.fix_processing_failed").absolute(0);
+    metrics::counter!("beast.run.no_fix_created").absolute(0);
+    metrics::counter!("beast.run.intake.processed").absolute(0);
+    metrics::counter!("beast.run.nats.consumed").absolute(0);
+    metrics::counter!("beast.run.nats.connection_failed").absolute(0);
+    metrics::counter!("beast.run.nats.subscription_failed").absolute(0);
+    metrics::counter!("beast.run.nats.subscription_ended").absolute(0);
+    metrics::gauge!("beast.run.nats.lag_seconds").set(0.0);
+    metrics::gauge!("beast.run.nats.intake_queue_depth").set(0.0);
+    metrics::histogram!("beast.run.message_processing_latency_ms").record(0.0);
 }
 
 /// Initialize analytics metrics to zero/default values
