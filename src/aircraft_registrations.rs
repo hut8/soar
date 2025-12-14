@@ -1664,6 +1664,12 @@ mod tests {
         );
         assert_eq!(first.registrant_type(), RegistrantType::Corporation);
 
+        // Verify location data is present
+        assert_eq!(first.street1, Some("2017 BARRETT RD".to_string()));
+        assert_eq!(first.city, Some("BALLSTON SPA".to_string()));
+        assert_eq!(first.state, Some("NY".to_string()));
+        assert_eq!(first.zip_code, Some("12020-2816".to_string()));
+
         // Should return normalized club name (contains "SOAR" and is Corporation)
         let club_name = first.club_name();
         assert_eq!(
