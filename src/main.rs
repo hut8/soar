@@ -28,7 +28,7 @@ struct LockResult {
 #[derive(Parser)]
 #[command(name = "soar")]
 #[command(about = "SOAR - Soaring Observation And Records")]
-#[command(version = "0.1.0")]
+#[command(version = env!("VERGEN_GIT_DESCRIBE"))]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -562,11 +562,11 @@ async fn main() -> Result<()> {
         } else if let Ok(parsed_dsn) = sentry_dsn.parse() {
             info!("Initializing Sentry with DSN");
 
-            // Use SENTRY_RELEASE env var if set (for deployed versions with commit SHA),
-            // otherwise fall back to CARGO_PKG_VERSION for local development
+            // Use SENTRY_RELEASE env var if set (for deployed versions),
+            // otherwise fall back to VERGEN_GIT_DESCRIBE (git-derived version from build.rs)
             let release = env::var("SENTRY_RELEASE")
                 .ok()
-                .or_else(|| Some(env!("CARGO_PKG_VERSION").to_string()))
+                .or_else(|| Some(env!("VERGEN_GIT_DESCRIBE").to_string()))
                 .map(Into::into);
 
             if let Some(ref r) = release {

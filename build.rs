@@ -4,6 +4,10 @@ use std::path::Path;
 use std::process::Command;
 
 pub fn main() {
+    // Generate git version info using vergen
+    // This must run before any other build steps to ensure version is available
+    generate_version_info();
+
     println!("cargo:rerun-if-changed=migrations");
     println!("cargo:rerun-if-changed=web/src");
     println!("cargo:rerun-if-changed=web/package.json");
@@ -98,4 +102,48 @@ fn configure_musl_static_linking() {
         println!("cargo:warning=bundled-postgres feature not enabled - build may fail!");
         println!("cargo:warning=Use: cargo build --features bundled-postgres");
     }
+}
+
+/// Generate version information from git tags using vergen
+///
+/// This function uses vergen-git2 to generate build-time constants from git metadata.
+/// The version is derived from `git describe --tags --always --dirty`, which provides:
+/// - For tagged commits: the tag name (e.g., "v0.1.4")
+/// - For commits after a tag: tag + commits + hash (e.g., "v0.1.4-2-ge930185")
+/// - For dirty working trees: appends "-dirty" (e.g., "v0.1.4-dirty")
+/// - For non-git environments: falls back to "0.0.0-dev"
+///
+/// The generated constants can be accessed via:
+/// - `env!("VERGEN_GIT_DESCRIBE")` - Full version with git metadata
+/// - `env!("VERGEN_GIT_SHA")` - Commit SHA
+fn generate_version_info() {
+    use vergen_git2::{BuildBuilder, CargoBuilder, Emitter, Git2Builder};
+
+    let build = BuildBuilder::default()
+        .build_timestamp(true)
+        .build()
+        .expect("Failed to configure build info");
+
+    let cargo = CargoBuilder::default()
+        .target_triple(true)
+        .build()
+        .expect("Failed to configure cargo info");
+
+    let git2 = Git2Builder::default()
+        .describe(true, true, None) // Enable describe with dirty flag, no pattern match
+        .sha(true) // Include commit SHA
+        .build()
+        .expect("Failed to configure git info");
+
+    Emitter::default()
+        .add_instructions(&build)
+        .expect("Failed to add build instructions")
+        .add_instructions(&cargo)
+        .expect("Failed to add cargo instructions")
+        .add_instructions(&git2)
+        .expect("Failed to add git instructions")
+        .emit()
+        .expect("Failed to emit version info");
+
+    println!("cargo:warning=Version info generated from git");
 }

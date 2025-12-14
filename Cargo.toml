@@ -1,6 +1,8 @@
 [package]
 name = "soar"
-version = "0.1.4"
+# Version is derived from git tags at build time via vergen in build.rs
+# This placeholder is required by Cargo but not used at runtime
+version = "0.0.0-git"
 edition = "2024"
 resolver = "2"
 
@@ -99,6 +101,9 @@ hex = "0.4.3"
 
 [dev-dependencies]
 hex-literal = "0.4"
+
+[build-dependencies]
+vergen-git2 = { version = "1.0", features = ["build", "cargo"] }
 
 # Optimized development profile with light optimization
 # Use with: cargo build --profile dev-fast

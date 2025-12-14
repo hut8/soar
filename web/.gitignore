@@ -9,6 +9,9 @@ node_modules
 /.svelte-kit
 /build
 
+# Generated files
+src/lib/version.ts
+
 # OS
 .DS_Store
 Thumbs.db
