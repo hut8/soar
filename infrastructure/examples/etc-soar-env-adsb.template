@@ -1,5 +1,5 @@
 # SOAR ADS-B Ingester Environment Configuration
-# Copy this file to /etc/soar/env on the ADS-B server
+# Copy this file to /etc/soar/env on the production/staging server
 #
 # Installation:
 #   sudo cp etc-soar-env-adsb.template /etc/soar/env
@@ -12,22 +12,23 @@
 # NATS Configuration (REQUIRED)
 # ============================================================================
 
-# NATS server URL - Connect to main server via Tailscale
-# Example: nats://glider-flights.your-tailnet.ts.net:4222
-# Example: nats://100.x.x.x:4222 (Tailscale IP)
-NATS_URL=nats://<TAILSCALE_HOSTNAME_OR_IP>:4222
+# NATS server URL - Connect to NATS on localhost
+# The ingest service now runs on the same server as NATS
+NATS_URL=nats://localhost:4222
 
 # ============================================================================
 # Beast Server Configuration
 # ============================================================================
 
 # Beast protocol server hostname/IP
-# Default: localhost (dump1090 running on same machine)
-BEAST_SERVER=localhost
+# NOTE: The service files hardcode --server radar --port 41365
+# These environment variables are not currently used but kept for reference
+BEAST_SERVER=radar
 
 # Beast protocol port
-# Default: 30005 (standard Beast port)
-BEAST_PORT=30005
+# NOTE: The service files hardcode --server radar --port 41365
+# These environment variables are not currently used but kept for reference
+BEAST_PORT=41365
 
 # ============================================================================
 # Application Configuration
@@ -58,8 +59,9 @@ SENTRY_DSN=
 # ============================================================================
 #
 # 1. This service only needs NATS connectivity - no database required
-# 2. Beast server typically runs on the same machine (localhost)
-# 3. NATS URL must be accessible via Tailscale network
-# 4. Verify connectivity: telnet <NATS_HOST> 4222
-# 5. After editing, restart service: sudo systemctl restart soar-beast-ingest
+# 2. Beast server is "radar" on port 41365 (hardcoded in service files)
+# 3. NATS runs on localhost (same server as this ingest service)
+# 4. Verify NATS connectivity: telnet localhost 4222
+# 5. Verify Beast connectivity: telnet radar 41365
+# 6. After editing, restart service: sudo systemctl restart soar-beast-ingest
 #

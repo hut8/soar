@@ -13,7 +13,7 @@ Type=simple
 User=soar
 Group=soar
 WorkingDirectory=/var/soar
-ExecStart=/usr/local/bin/soar ingest-beast --server out.adsb.lol --port 1365 --nats-url ${NATS_URL}
+ExecStart=/usr/local/bin/soar ingest-beast --server radar --port 41365 --nats-url ${NATS_URL}
 ExecReload=/bin/kill -s HUP $MAINPID
 
 # Environment variables
