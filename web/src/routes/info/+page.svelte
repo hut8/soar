@@ -1,31 +1,27 @@
 <script lang="ts">
-	import { BarChart3, Activity, Radio, Inbox } from '@lucide/svelte';
-	import { getGrafanaUrl } from '$lib/config';
+	import { BarChart3, Activity, Radio } from '@lucide/svelte';
+	import { getGrafanaUrl, isStaging } from '$lib/config';
 
 	// Generate metrics with environment-specific Grafana URLs
 	const grafanaBase = $derived(getGrafanaUrl());
+	const staging = $derived(isStaging());
+
 	const metrics = $derived([
 		{
 			title: 'Web Performance',
-			url: `${grafanaBase}/public-dashboards/9c476a10e31f48bf9a9e0edd13f4285c`,
+			url: `${grafanaBase}/public-dashboards/${staging ? '9c476a10e31f48bf9a9e0edd13f4285c' : '3ba212e4a59f44a48669e546ca62389b'}`,
 			icon: BarChart3,
 			description: 'HTTP request metrics, WebSocket connections, and endpoint performance'
 		},
 		{
-			title: 'APRS Queue Performance',
-			url: `${grafanaBase}/public-dashboards/30a74b108e014a00831374a302711e58`,
-			icon: Inbox,
-			description: 'NATS JetStream queue depths, consumer lag, and message flow rates'
-		},
-		{
 			title: 'Processor Performance',
-			url: `${grafanaBase}/public-dashboards/15160e9b72244eab82a2031e16d17a97`,
+			url: `${grafanaBase}/public-dashboards/${staging ? '15160e9b72244eab82a2031e16d17a97' : 'cbc0efd7f06f45a38815503dca1ff356'}`,
 			icon: Activity,
 			description: 'APRS message processing, elevation lookups, and flight tracking metrics'
 		},
 		{
 			title: 'APRS Ingest Performance',
-			url: `${grafanaBase}/public-dashboards/6ad16fc10c5941b5b09a0ff086309bd8`,
+			url: `${grafanaBase}/public-dashboards/${staging ? '6ad16fc10c5941b5b09a0ff086309bd8' : 'c3f6fb97f4c04001a04e6f85394a6164'}`,
 			icon: Radio,
 			description: 'OGN APRS-IS connection status and message publishing metrics'
 		}
@@ -118,10 +114,6 @@
 						reports from aircraft equipped with APRS transmitters
 					</li>
 					<li>
-						<strong>Message Queue:</strong> NATS JetStream buffers incoming messages and ensures reliable
-						delivery to processors
-					</li>
-					<li>
 						<strong>Processing:</strong> Rust-based processor decodes APRS packets, enriches data with
 						elevation information, and maintains flight state
 					</li>
@@ -140,7 +132,6 @@
 						<ul class="text-surface-600-300-token space-y-1 text-sm">
 							<li>• Rust with Axum web framework</li>
 							<li>• PostgreSQL with PostGIS for spatial data</li>
-							<li>• NATS JetStream for message queuing</li>
 							<li>• Prometheus for metrics collection</li>
 						</ul>
 					</div>
