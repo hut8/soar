@@ -38,11 +38,11 @@ pub enum WebSocketMessage {
     #[serde(rename = "fix")]
     Fix(Box<crate::fixes::FixWithFlightInfo>),
 
-    #[serde(rename = "device")]
+    #[serde(rename = "aircraft")]
     Aircraft(Box<Aircraft>),
 }
 
-// Subscription management structure (used for both device and area subscriptions)
+// Subscription management structure (used for both aircraft and area subscriptions)
 struct Subscription {
     broadcaster: broadcast::Sender<WebSocketMessage>,
     subscriber_count: usize,
@@ -75,43 +75,46 @@ impl LiveFixService {
         })
     }
 
-    // Subscribe to a specific device - creates NATS subscription on-demand
-    pub async fn subscribe_to_device(
+    // Subscribe to a specific aircraft - creates NATS subscription on-demand
+    pub async fn subscribe_to_aircraft(
         &self,
         aircraft_id: &str,
     ) -> Result<broadcast::Receiver<WebSocketMessage>> {
         let mut subscriptions = self.subscriptions.lock().await;
 
-        // If we already have a subscription for this device, just create a new receiver
+        // If we already have a subscription for this aircraft, just create a new receiver
         if let Some(subscription) = subscriptions.get_mut(aircraft_id) {
             subscription.subscriber_count += 1;
             info!(
-                "Added subscriber for device {} (total: {})",
+                "Added subscriber for aircraft {} (total: {})",
                 aircraft_id, subscription.subscriber_count
             );
             return Ok(subscription.broadcaster.subscribe());
         }
 
-        // Create new NATS subscription for this specific device
+        // Create new NATS subscription for this specific aircraft
         let topic_prefix = get_topic_prefix();
         let subject = format!("{}.fix.{}", topic_prefix, aircraft_id);
         let subscriber = self.nats_client.subscribe(subject.clone()).await?;
         let (broadcaster, receiver) = broadcast::channel(100);
 
         info!(
-            "Creating new NATS subscription for device: {} on subject: {}",
+            "Creating new NATS subscription for aircraft: {} on subject: {}",
             aircraft_id, subject
         );
 
-        // Spawn task to handle messages for this device
-        let device_id_clone = aircraft_id.to_string();
+        // Spawn task to handle messages for this aircraft
+        let aircraft_id_clone = aircraft_id.to_string();
         let broadcaster_clone = broadcaster.clone();
 
         let task_handle = tokio::spawn(
             async move {
-                Self::handle_device_messages(subscriber, device_id_clone, broadcaster_clone).await;
+                Self::handle_aircraft_messages(subscriber, aircraft_id_clone, broadcaster_clone)
+                    .await;
             }
-            .instrument(tracing::info_span!("live_fix_device_handler", aircraft_id = %aircraft_id)),
+            .instrument(
+                tracing::info_span!("live_fix_aircraft_handler", aircraft_id = %aircraft_id),
+            ),
         );
 
         // Store the subscription
@@ -179,13 +182,13 @@ impl LiveFixService {
         Ok(receiver)
     }
 
-    // Handle messages for a specific device
-    async fn handle_device_messages(
+    // Handle messages for a specific aircraft
+    async fn handle_aircraft_messages(
         mut subscriber: Subscriber,
         aircraft_id: String,
         broadcaster: broadcast::Sender<WebSocketMessage>,
     ) {
-        info!("Started message handler for device: {}", aircraft_id);
+        info!("Started message handler for aircraft: {}", aircraft_id);
         let mut consecutive_no_receivers = 0;
         const MAX_NO_RECEIVER_ATTEMPTS: usize = 3;
 
@@ -197,14 +200,14 @@ impl LiveFixService {
                         Ok(receiver_count) => {
                             consecutive_no_receivers = 0; // Reset counter on successful send
                             info!(
-                                "Broadcasted live fix for device {} to {} receivers",
+                                "Broadcasted live fix for aircraft {} to {} receivers",
                                 aircraft_id, receiver_count
                             );
                         }
                         Err(broadcast::error::SendError(_)) => {
                             consecutive_no_receivers += 1;
                             info!(
-                                "No active receivers for device {}, fix dropped ({}/{} consecutive failures)",
+                                "No active receivers for aircraft {}, fix dropped ({}/{} consecutive failures)",
                                 aircraft_id, consecutive_no_receivers, MAX_NO_RECEIVER_ATTEMPTS
                             );
 
@@ -221,14 +224,14 @@ impl LiveFixService {
                 }
                 Err(e) => {
                     error!(
-                        "Failed to process fix message for device {}: {}",
+                        "Failed to process fix message for aircraft {}: {}",
                         aircraft_id, e
                     );
                 }
             }
         }
 
-        warn!("Message handler for device {} has stopped", aircraft_id);
+        warn!("Message handler for aircraft {} has stopped", aircraft_id);
     }
 
     // Handle messages for a specific area
@@ -321,21 +324,21 @@ impl LiveFixService {
         Ok(fix_with_flight)
     }
 
-    // Unsubscribe from a device - removes NATS subscription when no more clients
-    pub async fn unsubscribe_from_device(&self, aircraft_id: &str) -> Result<()> {
+    // Unsubscribe from an aircraft - removes NATS subscription when no more clients
+    pub async fn unsubscribe_from_aircraft(&self, aircraft_id: &str) -> Result<()> {
         let mut subscriptions = self.subscriptions.lock().await;
 
         if let Some(subscription) = subscriptions.get_mut(aircraft_id) {
             subscription.subscriber_count -= 1;
             info!(
-                "Removed subscriber for device {} (remaining: {})",
+                "Removed subscriber for aircraft {} (remaining: {})",
                 aircraft_id, subscription.subscriber_count
             );
 
             // If no more subscribers, clean up the subscription
             if subscription.subscriber_count == 0 {
                 info!(
-                    "No more subscribers for device {}, cleaning up NATS subscription",
+                    "No more subscribers for aircraft {}, cleaning up NATS subscription",
                     aircraft_id
                 );
 

@@ -219,38 +219,38 @@ async fn handle_subscriptions(
                             SubscriptionMessage::Aircraft { action, id } => {
                                 match action.as_str() {
                                     "subscribe" => {
-                                        info!("Client subscribing to device: {}", id);
+                                        info!("Client subscribing to aircraft: {}", id);
                                         if !subscribed_aircraft.contains(&id) {
-                                            match live_fix_service.subscribe_to_device(&id).await {
+                                            match live_fix_service.subscribe_to_aircraft(&id).await {
                                                 Ok(receiver) => {
                                                     subscribed_aircraft.push(id.clone());
                                                     receivers.insert(id.clone(), receiver);
                                                     metrics::gauge!("websocket_active_subscriptions").increment(1.0);
                                                     metrics::counter!("websocket_aircraft_subscribes").increment(1);
-                                                    info!("Successfully subscribed to device: {}", id);
+                                                    info!("Successfully subscribed to aircraft: {}", id);
                                                 }
                                                 Err(e) => {
-                                                    error!("Failed to subscribe to device {}: {}", id, e);
+                                                    error!("Failed to subscribe to aircraft {}: {}", id, e);
                                                 }
                                             }
                                         }
                                     }
                                     "unsubscribe" => {
-                                        info!("Client unsubscribing from device: {}", id);
+                                        info!("Client unsubscribing from aircraft: {}", id);
                                         if subscribed_aircraft.contains(&id) {
-                                            subscribed_aircraft.retain(|device_id| device_id != &id);
+                                            subscribed_aircraft.retain(|aircraft_id| aircraft_id != &id);
                                             receivers.remove(&id);
                                             metrics::gauge!("websocket_active_subscriptions").decrement(1.0);
                                             metrics::counter!("websocket_aircraft_unsubscribes").increment(1);
-                                            if let Err(e) = live_fix_service.unsubscribe_from_device(&id).await {
-                                                error!("Failed to unsubscribe from device {}: {}", id, e);
+                                            if let Err(e) = live_fix_service.unsubscribe_from_aircraft(&id).await {
+                                                error!("Failed to unsubscribe from aircraft {}: {}", id, e);
                                             } else {
-                                                info!("Successfully unsubscribed from device: {}", id);
+                                                info!("Successfully unsubscribed from aircraft: {}", id);
                                             }
                                         }
                                     }
                                     _ => {
-                                        warn!("Unknown device subscription action: {}", action);
+                                        warn!("Unknown aircraft subscription action: {}", action);
                                     }
                                 }
                             }
@@ -378,16 +378,16 @@ async fn handle_subscriptions(
         } else {
             // Aircraft subscription
             if let Err(e) = live_fix_service
-                .unsubscribe_from_device(subscription_key)
+                .unsubscribe_from_aircraft(subscription_key)
                 .await
             {
                 error!(
-                    "Failed to cleanup device subscription {}: {}",
+                    "Failed to cleanup aircraft subscription {}: {}",
                     subscription_key, e
                 );
             } else {
                 metrics::gauge!("websocket_active_subscriptions").decrement(1.0);
-                info!("Cleaned up device subscription: {}", subscription_key);
+                info!("Cleaned up aircraft subscription: {}", subscription_key);
             }
         }
     }
