@@ -181,104 +181,116 @@ ssh soar@your-server "sudo /usr/local/bin/soar-deploy $DEPLOY_DIR"
 
 ## ADS-B Ingester Deployment
 
-The ADS-B ingester (`soar ingest-beast`) runs on a separate server accessible only via Tailscale, using a simplified deployment workflow.
+The ADS-B ingester (`soar ingest-beast`) now runs directly on the production and staging servers, simplifying the deployment architecture.
 
 ### Overview
 
-The ADS-B deployment differs from the main deployment in several ways:
+The ADS-B ingester is deployed alongside other SOAR services:
 
-- **Separate server**: Runs on a different machine (not the main SOAR server)
-- **Tailscale-only access**: Server is not publicly accessible, only via Tailscale network
-- **Single service**: Only deploys `soar-beast-ingest.service`
+- **Production**: `soar-beast-ingest.service` runs on the production server
+- **Staging**: `soar-beast-ingest-staging.service` runs on the staging server
+- **Beast Server**: Both connect to `radar:41365` (external Beast data source)
+- **NATS**: Connects to localhost NATS (same server)
 - **No database**: The ingester only publishes to NATS JetStream, no database access required
-- **Simplified script**: Uses `soar-deploy-adsb` instead of the full `soar-deploy` script
 
 ### Architecture
 
 ```
-┌─────────────────┐         ┌──────────────────┐         ┌─────────────────┐
-│  dump1090/      │         │  SOAR ADS-B      │         │  Main Server    │
-│  readsb         │────────>│  Ingester        │────────>│  (NATS)         │
-│  (Beast:30005)  │         │  ingest-beast    │         │  glider.flights │
-└─────────────────┘         └──────────────────┘         └─────────────────┘
-                                    │
-                                    │ via Tailscale
-                                    │
-                            ┌──────────────────┐
-                            │  GitHub Actions  │
-                            │  (Deployment)    │
-                            └──────────────────┘
+┌─────────────────┐         ┌──────────────────────────────────────┐
+│  Beast Server   │         │  Production/Staging Server           │
+│  "radar"        │────────>│  ┌────────────────────────────────┐  │
+│  (Port 41365)   │         │  │  soar-beast-ingest.service     │  │
+└─────────────────┘         │  │  (ingest-beast command)        │  │
+                            │  └────────────────────────────────┘  │
+                            │                 │                     │
+                            │                 ↓                     │
+                            │  ┌────────────────────────────────┐  │
+                            │  │  NATS JetStream (localhost)    │  │
+                            │  └────────────────────────────────┘  │
+                            │                 │                     │
+                            │                 ↓                     │
+                            │  ┌────────────────────────────────┐  │
+                            │  │  SOAR Processing Services      │  │
+                            │  │  (run, web, etc.)              │  │
+                            │  └────────────────────────────────┘  │
+                            └──────────────────────────────────────┘
 ```
 
-### Initial Setup
+### Deployment Process
 
-For first-time setup of the ADS-B server, see **[ADSB-SETUP.md](ADSB-SETUP.md)** which covers:
+The ADS-B ingester is deployed through the standard CI/CD pipeline:
 
-1. Server provisioning (user, directories, permissions)
-2. Installing deployment script and sudoers configuration
-3. Environment configuration (`/etc/soar/env`)
-4. Tailscale setup and OAuth configuration
-5. GitHub Secrets configuration
-6. First deployment test
-7. Verification and monitoring setup
+1. **CI/CD builds** the binary with all components (including `ingest-beast`)
+2. **Deployment script** (`soar-deploy`) installs both the binary and service files
+3. **Systemd** manages the service lifecycle (start, stop, restart)
 
-### Deployment Workflow
+The service files are located at:
+- `infrastructure/systemd/soar-beast-ingest.service` (production)
+- `infrastructure/systemd/soar-beast-ingest-staging.service` (staging)
 
-**File**: `.github/workflows/deploy-adsb.yml`
+### Service Configuration
 
-The ADS-B deployment workflow:
+Both services are configured to connect to:
 
-1. **Reuses build artifacts** from the main CI/CD build job
-2. **Connects via Tailscale** using OAuth credentials (ephemeral connection)
-3. **Deploys via SSH** over Tailscale network (no public SSH exposure)
-4. **Executes deployment script**: `sudo /usr/local/bin/soar-deploy-adsb`
+- **Beast Server**: `radar:41365` (hardcoded in service file)
+- **NATS**: `nats://localhost:4222` (from environment file)
 
-### GitHub Secrets Required
-
-| Secret Name | Description |
-|-------------|-------------|
-| `TAILSCALE_OAUTH_CLIENT_ID` | Tailscale OAuth client ID for GitHub Actions |
-| `TAILSCALE_OAUTH_SECRET` | Tailscale OAuth secret |
-| `SSH_PRIVATE_KEY` | SSH private key for soar user (reused from existing deployments) |
-| `ADSB_SERVER_HOSTNAME` | Tailscale hostname or IP (e.g., `100.x.x.x`) |
-
-### Deployment Triggers
-
-**Manual Deployment** (default):
-```
-GitHub Actions → Deploy ADS-B Ingester → Run workflow → Select environment
+**Production service command**:
+```bash
+/usr/local/bin/soar ingest-beast --server radar --port 41365 --nats-url ${NATS_URL}
 ```
 
-**Automatic Deployment** (optional, uncomment in workflow file):
-- Triggers on push to `main` branch
-- Only when ADS-B-related files change
+**Staging service command**:
+```bash
+/usr/local/bin/soar-staging ingest-beast --server radar --port 41365 --nats-url ${NATS_URL}
+```
 
-### Files Deployed
+### Environment Configuration
 
-The ADS-B deployment package includes:
-- `soar` binary
-- `soar-beast-ingest.service` service file
-- `soar-deploy-adsb` deployment script
-- `VERSION` file (git commit hash)
+Create or update `/etc/soar/env` (production) or `/etc/soar/env-staging` (staging):
 
-### Monitoring ADS-B Deployment
+```bash
+# NATS server URL (localhost since it runs on the same server)
+NATS_URL=nats://localhost:4222
+
+# Environment name
+SOAR_ENV=production  # or staging
+
+# Metrics server port
+METRICS_PORT=9094    # production uses 9094, staging uses 9096
+
+# Logging level
+RUST_LOG=info
+
+# Optional: Error tracking
+SENTRY_DSN=
+```
+
+### Monitoring
 
 **Check service status**:
 ```bash
-# Via SSH (over Tailscale)
-ssh soar@ADSB_SERVER
-
-# Check service
+# Production
 sudo systemctl status soar-beast-ingest
+
+# Staging
+sudo systemctl status soar-beast-ingest-staging
 
 # View logs
 sudo journalctl -u soar-beast-ingest -f
-
-# Check metrics
-curl http://localhost:9094/metrics | grep beast
+sudo journalctl -u soar-beast-ingest-staging -f
 ```
 
-**Verify data flow on main server**:
+**Check metrics**:
+```bash
+# Production metrics (port 9094)
+curl http://localhost:9094/metrics | grep beast
+
+# Staging metrics (port 9096)
+curl http://localhost:9096/metrics | grep beast
+```
+
+**Verify data flow**:
 ```bash
 # Check NATS stream is receiving data
 nats stream info BEAST_RAW
@@ -286,57 +298,59 @@ nats stream info BEAST_RAW
 # Should show increasing message count
 ```
 
-### Troubleshooting ADS-B Deployment
-
-**Deployment fails - Tailscale connection**:
-```bash
-# Verify OAuth credentials in GitHub Secrets
-# Check Tailscale ACLs allow tag:github-actions → adsb-server
-```
+### Troubleshooting
 
 **Service won't start**:
 ```bash
-# Check NATS connectivity
-telnet <NATS_TAILSCALE_IP> 4222
+# Check NATS connectivity (should be localhost)
+telnet localhost 4222
 
 # Verify environment file
 sudo cat /etc/soar/env | grep NATS_URL
 
 # Check Beast server connectivity
-telnet localhost 30005
+telnet radar 41365
 ```
 
 **No data in NATS stream**:
 ```bash
-# Verify Beast server (dump1090) is running and producing data
-ss -tlnp | grep 30005
-nc localhost 30005 | head -c 100  # Should see binary data
+# Verify radar server is reachable
+ping radar
+telnet radar 41365
 
-# Check ADS-B ingester logs for errors
-sudo journalctl -u soar-beast-ingest -n 100
+# Check ingester logs for connection errors
+sudo journalctl -u soar-beast-ingest -n 100 --no-pager
+
+# Test Beast connection manually
+nc radar 41365 | head -c 100  # Should see binary data
 ```
 
-### Differences from Main Deployment
+**Connection to Beast server fails**:
+```bash
+# Verify DNS resolution
+host radar
 
-| Aspect | Main Deployment | ADS-B Deployment |
-|--------|----------------|------------------|
-| Deployment script | `soar-deploy` | `soar-deploy-adsb` |
-| Services deployed | All SOAR services | Only `soar-beast-ingest` |
-| Database access | Required | Not required |
-| Access method | Public SSH | Tailscale SSH only |
-| Workflow file | `ci.yml` | `deploy-adsb.yml` |
-| Binary location | `/usr/local/bin/soar` | `/usr/local/bin/soar` |
-| Environment file | `/etc/soar/env` | `/etc/soar/env` |
+# Check firewall rules
+sudo iptables -L -n | grep 41365
 
-### Security Notes
+# Verify no network issues
+traceroute radar
+```
 
-- **No public access**: ADS-B server only accessible via Tailscale
-- **Minimal privileges**: Sudoers only allows deployment script execution
-- **Ephemeral connections**: GitHub Actions nodes automatically removed from Tailscale
-- **Non-root service**: Service runs as `soar` user
-- **ACL restrictions**: Tailscale ACLs limit access to required ports only
+### Migration Notes
 
-For detailed setup instructions, see **[ADSB-SETUP.md](ADSB-SETUP.md)**.
+**Previous Architecture (DEPRECATED)**:
+- ADS-B ingester ran on a separate ARM64 server
+- Connected via Tailscale to main server
+- Used separate deployment workflow (`.github/workflows/deploy-adsb.yml`)
+
+**New Architecture (CURRENT)**:
+- ADS-B ingester runs on production/staging servers
+- Connects to NATS on localhost
+- Deployed via standard CI/CD pipeline
+- No separate deployment workflow needed
+
+For details on the migration, see `.github/workflows/ADSB-DEPLOYMENT-ARCHIVED.md`.
 
 ## Service Files
 
@@ -348,6 +362,8 @@ The deployment manages these systemd services:
 - **soar-pull-data.service**: Data collection service
 - **soar-sitemap.service**: Sitemap generation service
 - **soar-archive.service**: Old fixes data archival service
+- **soar-beast-ingest.service**: ADS-B Beast ingester (production)
+- **soar-beast-ingest-staging.service**: ADS-B Beast ingester (staging)
 
 ### Timers
 - **soar-pull-data.timer**: Periodic data collection
