@@ -66,7 +66,7 @@ if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
 
     # Install PostgreSQL 18 and PostGIS
     sudo apt-get update
-    sudo apt-get install -y postgresql-18 postgresql-client-18 postgresql-18-postgis-3 postgresql-18-partman
+    sudo apt-get install -y postgresql-18 postgresql-client-18 postgresql-18-postgis-3 postgresql-18-partman uuid-runtime
 
 elif [[ "$OS" == "centos" ]] || [[ "$OS" == "rhel" ]] || [[ "$OS" == "rocky" ]] || [[ "$OS" == "almalinux" ]]; then
     # Install PostgreSQL repository
@@ -76,7 +76,7 @@ elif [[ "$OS" == "centos" ]] || [[ "$OS" == "rhel" ]] || [[ "$OS" == "rocky" ]] 
     sudo dnf -qy module disable postgresql
 
     # Install PostgreSQL 18 and extensions
-    sudo dnf install -y postgresql18-server postgresql18-contrib postgis34_18 pg_partman_18
+    sudo dnf install -y postgresql18-server postgresql18-contrib postgis34_18 pg_partman_18 util-linux
 
     # Initialize database if not already initialized
     if [ ! -f /var/lib/pgsql/18/data/PG_VERSION ]; then
@@ -425,6 +425,7 @@ sudo mkdir -p /var/soar/archive
 sudo mkdir -p /var/soar/elevation
 sudo mkdir -p /etc/soar
 sudo mkdir -p /var/lib/nats/jetstream
+sudo mkdir -p /var/lib/soar/backup-temp
 
 # Set ownership for soar user
 echo -e "${BLUE}Setting ownership for soar user...${NC}"
@@ -432,6 +433,11 @@ sudo chown -R soar:soar /var/soar
 sudo chown -R soar:soar /var/soar/archive
 sudo chown soar:soar /home/soar
 sudo chmod 755 /home/soar
+
+# Set ownership for backup temp directory (used by postgres user)
+echo -e "${BLUE}Setting ownership for backup temp directory...${NC}"
+sudo chown -R postgres:postgres /var/lib/soar/backup-temp
+sudo chmod 750 /var/lib/soar/backup-temp
 
 # Download elevation data with rclone
 echo -e "${BLUE}Setting up elevation data...${NC}"
