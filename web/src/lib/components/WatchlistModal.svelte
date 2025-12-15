@@ -14,8 +14,8 @@
 	let newWatchlistEntry = $state({
 		type: 'registration',
 		registration: '',
-		deviceAddressType: 'I',
-		deviceAddress: ''
+		aircraftAddressType: 'I',
+		aircraftAddress: ''
 	});
 	let searchInProgress = $state(false);
 	let errorMessage = $state('');
@@ -70,8 +70,8 @@
 				searchInProgress = false;
 			}
 		} else {
-			const addressType = newWatchlistEntry.deviceAddressType.trim();
-			const address = newWatchlistEntry.deviceAddress.trim().toUpperCase();
+			const addressType = newWatchlistEntry.aircraftAddressType.trim();
+			const address = newWatchlistEntry.aircraftAddress.trim().toUpperCase();
 			if (!addressType || !address) return;
 
 			// Search for aircraft by address and type
@@ -109,8 +109,8 @@
 			newWatchlistEntry = {
 				type: 'registration',
 				registration: '',
-				deviceAddressType: 'I',
-				deviceAddress: ''
+				aircraftAddressType: 'I',
+				aircraftAddress: ''
 			};
 		}
 	}
@@ -320,7 +320,7 @@
 										<SegmentedControl.ItemText>
 											<div class="flex flex-row items-center">
 												<Radio size={16} />
-												<span class="ml-1">Device</span>
+												<span class="ml-1">Aircraft</span>
 											</div>
 										</SegmentedControl.ItemText>
 										<SegmentedControl.ItemHiddenInput />
@@ -350,11 +350,11 @@
 								<div class="space-y-3">
 									<SegmentedControl
 										name="address-type-mobile"
-										value={newWatchlistEntry.deviceAddressType}
+										value={newWatchlistEntry.aircraftAddressType}
 										orientation="vertical"
 										onValueChange={(details) => {
 											if (details.value) {
-												newWatchlistEntry.deviceAddressType = details.value;
+												newWatchlistEntry.aircraftAddressType = details.value;
 												clearError();
 											}
 										}}
@@ -377,8 +377,8 @@
 									</SegmentedControl>
 									<input
 										class="input"
-										placeholder="Device address"
-										bind:value={newWatchlistEntry.deviceAddress}
+										placeholder="Aircraft address"
+										bind:value={newWatchlistEntry.aircraftAddress}
 										onkeydown={(e) => e.key === 'Enter' && addWatchlistEntry()}
 										oninput={() => clearError()}
 										disabled={searchInProgress}
@@ -502,7 +502,7 @@
 											<SegmentedControl.ItemText>
 												<div class="flex flex-row items-center">
 													<Radio size={16} />
-													<span class="ml-1">Device</span>
+													<span class="ml-1">Aircraft</span>
 												</div>
 											</SegmentedControl.ItemText>
 											<SegmentedControl.ItemHiddenInput />
@@ -534,11 +534,11 @@
 										<div class="space-y-3">
 											<SegmentedControl
 												name="address-type-desktop"
-												value={newWatchlistEntry.deviceAddressType}
+												value={newWatchlistEntry.aircraftAddressType}
 												orientation="vertical"
 												onValueChange={(details) => {
 													if (details.value) {
-														newWatchlistEntry.deviceAddressType = details.value;
+														newWatchlistEntry.aircraftAddressType = details.value;
 														clearError();
 													}
 												}}
@@ -561,8 +561,8 @@
 											</SegmentedControl>
 											<input
 												class="input"
-												placeholder="Device address"
-												bind:value={newWatchlistEntry.deviceAddress}
+												placeholder="Aircraft address"
+												bind:value={newWatchlistEntry.aircraftAddress}
 												onkeydown={(e) => e.key === 'Enter' && addWatchlistEntry()}
 												oninput={() => clearError()}
 												disabled={searchInProgress}

@@ -368,7 +368,7 @@ export class FixFeed {
 		console.log('Stopping live fixes feed for operations page');
 		this.operationsPageActive = false;
 
-		// Only disconnect if there are no active device subscriptions
+		// Only disconnect if there are no active aircraft subscriptions
 		if (this.subscribedAircraft.size === 0) {
 			this.disconnect();
 		}
@@ -390,28 +390,28 @@ export class FixFeed {
 	}
 
 	// Subscribe to multiple aircraft from watchlist
-	public async subscribeToWatchlist(deviceIds: string[]): Promise<void> {
+	public async subscribeToWatchlist(aircraftIds: string[]): Promise<void> {
 		// Unsubscribe from aircraft no longer in the list
-		const devicesToUnsubscribe = Array.from(this.subscribedAircraft).filter(
-			(aircraftId) => !deviceIds.includes(aircraftId)
+		const aircraftToUnsubscribe = Array.from(this.subscribedAircraft).filter(
+			(aircraftId) => !aircraftIds.includes(aircraftId)
 		);
 
-		for (const aircraftId of devicesToUnsubscribe) {
+		for (const aircraftId of aircraftToUnsubscribe) {
 			this.unsubscribeFromAircraft(aircraftId);
 		}
 
 		// Subscribe to new aircraft
-		const devicesToSubscribe = deviceIds.filter(
+		const aircraftToSubscribe = aircraftIds.filter(
 			(aircraftId) => !this.subscribedAircraft.has(aircraftId)
 		);
 
-		for (const aircraftId of devicesToSubscribe) {
+		for (const aircraftId of aircraftToSubscribe) {
 			await this.subscribeToAircraft(aircraftId);
 		}
 	}
 
 	// Fetch aircraft in bounding box via REST API
-	public async fetchDevicesInBoundingBox(
+	public async fetchAircraftInBoundingBox(
 		latMin: number,
 		latMax: number,
 		lonMin: number,
