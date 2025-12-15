@@ -109,7 +109,7 @@ After=postgresql.service
 [Service]
 Type=oneshot
 User=soar
-ExecStart=/usr/bin/psql postgres://localhost/soar -c "SELECT partman.run_maintenance_proc()"
+ExecStart=/usr/bin/psql postgres://localhost/soar -c "CALL partman.run_maintenance_proc()"
 StandardOutput=append:/var/soar/logs/partman.log
 StandardError=append:/var/soar/logs/partman.log
 ```
@@ -160,7 +160,7 @@ sudo apt-get install postgresql-16-cron
 ```sql
 -- Run partition maintenance daily at 3 AM for both tables
 SELECT cron.schedule('partman-maintenance', '0 3 * * *',
-    $$SELECT partman.run_maintenance_proc()$$
+    $$CALL partman.run_maintenance_proc()$$
 );
 ```
 
