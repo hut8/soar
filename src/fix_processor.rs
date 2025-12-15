@@ -144,6 +144,14 @@ impl FixProcessor {
     pub fn flight_tracker(&self) -> &FlightTracker {
         &self.flight_detection_processor
     }
+
+    /// Process a pre-created Fix (e.g., from ADS-B)
+    /// This is used when the fix has already been created from a non-APRS source
+    pub async fn process_fix(&self, fix: Fix) -> anyhow::Result<()> {
+        // Use an empty raw message for non-APRS fixes
+        self.process_fix_internal(fix, "").await;
+        Ok(())
+    }
 }
 
 impl FixProcessor {

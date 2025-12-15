@@ -7,19 +7,19 @@ use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use crate::beast::decoder::{decode_beast_frame, message_to_json};
-use crate::raw_messages_repo::{BeastMessagesRepository, NewBeastMessage};
+use crate::raw_messages_repo::{NewBeastMessage, RawMessagesRepository};
 
 /// Task that consumes Beast messages from NATS and stores them in the database
 ///
 /// This task:
 /// 1. Reads binary messages from NATS (8-byte timestamp + Beast frame)
 /// 2. Decodes the timestamp and frame
-/// 3. Stores the message in the raw_messages table via BeastMessagesRepository
+/// 3. Stores the message in the raw_messages table via RawMessagesRepository
 /// 4. Provides backpressure by blocking when database writes are slow
 pub struct BeastConsumerTask {
     nats_client: Client,
     subject: String,
-    repository: BeastMessagesRepository,
+    repository: RawMessagesRepository,
     receiver_id: Uuid,
     batch_size: usize,
 }
@@ -28,7 +28,7 @@ impl BeastConsumerTask {
     pub fn new(
         nats_client: Client,
         subject: String,
-        repository: BeastMessagesRepository,
+        repository: RawMessagesRepository,
         receiver_id: Uuid,
     ) -> Self {
         Self {
@@ -154,7 +154,7 @@ impl BeastConsumerTask {
     /// This improves database throughput by reducing the number of transactions
     async fn batch_writer_task(
         batch_rx: flume::Receiver<NewBeastMessage>,
-        repository: BeastMessagesRepository,
+        repository: RawMessagesRepository,
     ) {
         info!("Starting Beast batch writer task");
 
@@ -197,7 +197,7 @@ impl BeastConsumerTask {
     }
 
     async fn write_batch(
-        repository: &BeastMessagesRepository,
+        repository: &RawMessagesRepository,
         batch: &mut Vec<NewBeastMessage>,
         last_write: &mut std::time::Instant,
     ) {
@@ -208,7 +208,7 @@ impl BeastConsumerTask {
         let start = std::time::Instant::now();
         let batch_size = batch.len();
 
-        match repository.insert_batch(batch).await {
+        match repository.insert_beast_batch(batch).await {
             Ok(_) => {
                 let duration = start.elapsed();
                 metrics::histogram!("beast.consumer.batch_write_ms")

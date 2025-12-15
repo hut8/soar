@@ -155,12 +155,14 @@ impl<'de> Deserialize<'de> for AprsMessage {
     }
 }
 
+/// Unified repository for raw messages (both APRS and Beast/ADS-B)
+/// Provides type-safe methods to insert and query messages from the raw_messages table
 #[derive(Clone)]
-pub struct AprsMessagesRepository {
+pub struct RawMessagesRepository {
     pool: PgPool,
 }
 
-impl AprsMessagesRepository {
+impl RawMessagesRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
@@ -168,7 +170,7 @@ impl AprsMessagesRepository {
     /// Insert a new APRS message into the database
     /// Returns the ID of the inserted message
     /// On duplicate (redelivery after crash), returns the existing message ID
-    pub async fn insert(&self, new_message: NewAprsMessage) -> Result<Uuid> {
+    pub async fn insert_aprs(&self, new_message: NewAprsMessage) -> Result<Uuid> {
         use crate::schema::raw_messages::dsl::*;
 
         let message_id = new_message.id;
@@ -214,103 +216,10 @@ impl AprsMessagesRepository {
         Ok(result)
     }
 
-    /// Get paginated raw messages for a receiver from the last 24 hours
-    /// Returns (messages, total_count)
-    pub async fn get_messages_by_receiver_paginated(
-        &self,
-        receiver_uuid: Uuid,
-        page: i64,
-        per_page: i64,
-    ) -> Result<(Vec<AprsMessage>, i64)> {
-        use crate::schema::raw_messages::dsl::*;
-
-        let pool = self.pool.clone();
-        let offset = (page - 1) * per_page;
-
-        // Calculate 24 hours ago
-        let twenty_four_hours_ago = Utc::now() - Duration::hours(24);
-
-        tokio::task::spawn_blocking(move || {
-            let mut conn = pool.get()?;
-
-            // Get total count
-            let total_count: i64 = raw_messages
-                .filter(receiver_id.eq(receiver_uuid))
-                .filter(received_at.ge(twenty_four_hours_ago))
-                .count()
-                .get_result(&mut conn)?;
-
-            // Get paginated messages
-            let messages: Vec<AprsMessage> = raw_messages
-                .filter(receiver_id.eq(receiver_uuid))
-                .filter(received_at.ge(twenty_four_hours_ago))
-                .order(received_at.desc())
-                .limit(per_page)
-                .offset(offset)
-                .select(AprsMessage::as_select())
-                .load(&mut conn)?;
-
-            Ok::<(Vec<AprsMessage>, i64), anyhow::Error>((messages, total_count))
-        })
-        .await?
-    }
-
-    /// Get a single APRS message by ID
-    pub async fn get_by_id(&self, message_id: Uuid) -> Result<Option<AprsMessage>> {
-        use crate::schema::raw_messages::dsl::*;
-
-        let pool = self.pool.clone();
-
-        tokio::task::spawn_blocking(move || {
-            let mut conn = pool.get()?;
-
-            let message = raw_messages
-                .filter(id.eq(message_id))
-                .select(AprsMessage::as_select())
-                .first(&mut conn)
-                .optional()?;
-
-            Ok::<Option<AprsMessage>, anyhow::Error>(message)
-        })
-        .await?
-    }
-
-    /// Get multiple APRS messages by their IDs
-    pub async fn get_by_ids(&self, message_ids: Vec<Uuid>) -> Result<Vec<AprsMessage>> {
-        use crate::schema::raw_messages::dsl::*;
-
-        let pool = self.pool.clone();
-
-        tokio::task::spawn_blocking(move || {
-            let mut conn = pool.get()?;
-
-            let messages = raw_messages
-                .filter(id.eq_any(message_ids))
-                .select(AprsMessage::as_select())
-                .load(&mut conn)?;
-
-            Ok::<Vec<AprsMessage>, anyhow::Error>(messages)
-        })
-        .await?
-    }
-}
-
-/// Repository for Beast messages
-/// Provides methods to insert and query Beast messages from the raw_messages table
-#[derive(Clone)]
-pub struct BeastMessagesRepository {
-    pool: PgPool,
-}
-
-impl BeastMessagesRepository {
-    pub fn new(pool: PgPool) -> Self {
-        Self { pool }
-    }
-
-    /// Insert a new Beast message into the database
+    /// Insert a new Beast (ADS-B) message into the database
     /// Returns the ID of the inserted message
     /// On duplicate (redelivery after crash), returns the existing message ID
-    pub async fn insert(&self, new_message: NewBeastMessage) -> Result<Uuid> {
+    pub async fn insert_beast(&self, new_message: NewBeastMessage) -> Result<Uuid> {
         let message_id = new_message.id;
         let pool = self.pool.clone();
         let receiver = new_message.receiver_id;
@@ -369,7 +278,7 @@ impl BeastMessagesRepository {
 
     /// Insert a batch of Beast messages into the database
     /// Uses a transaction for atomicity and ignores duplicates
-    pub async fn insert_batch(&self, messages: &[NewBeastMessage]) -> Result<()> {
+    pub async fn insert_beast_batch(&self, messages: &[NewBeastMessage]) -> Result<()> {
         if messages.is_empty() {
             return Ok(());
         }
@@ -411,7 +320,91 @@ impl BeastMessagesRepository {
 
         Ok(())
     }
+
+    /// Get paginated raw messages for a receiver from the last 24 hours
+    /// Returns (messages, total_count)
+    pub async fn get_messages_by_receiver_paginated(
+        &self,
+        receiver_uuid: Uuid,
+        page: i64,
+        per_page: i64,
+    ) -> Result<(Vec<AprsMessage>, i64)> {
+        use crate::schema::raw_messages::dsl::*;
+
+        let pool = self.pool.clone();
+        let offset = (page - 1) * per_page;
+
+        // Calculate 24 hours ago
+        let twenty_four_hours_ago = Utc::now() - Duration::hours(24);
+
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            // Get total count
+            let total_count: i64 = raw_messages
+                .filter(receiver_id.eq(receiver_uuid))
+                .filter(received_at.ge(twenty_four_hours_ago))
+                .count()
+                .get_result(&mut conn)?;
+
+            // Get paginated messages
+            let messages: Vec<AprsMessage> = raw_messages
+                .filter(receiver_id.eq(receiver_uuid))
+                .filter(received_at.ge(twenty_four_hours_ago))
+                .order(received_at.desc())
+                .limit(per_page)
+                .offset(offset)
+                .select(AprsMessage::as_select())
+                .load(&mut conn)?;
+
+            Ok::<(Vec<AprsMessage>, i64), anyhow::Error>((messages, total_count))
+        })
+        .await?
+    }
+
+    /// Get a single raw message by ID
+    pub async fn get_by_id(&self, message_id: Uuid) -> Result<Option<AprsMessage>> {
+        use crate::schema::raw_messages::dsl::*;
+
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            let message = raw_messages
+                .filter(id.eq(message_id))
+                .select(AprsMessage::as_select())
+                .first(&mut conn)
+                .optional()?;
+
+            Ok::<Option<AprsMessage>, anyhow::Error>(message)
+        })
+        .await?
+    }
+
+    /// Get multiple raw messages by their IDs
+    pub async fn get_by_ids(&self, message_ids: Vec<Uuid>) -> Result<Vec<AprsMessage>> {
+        use crate::schema::raw_messages::dsl::*;
+
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            let messages = raw_messages
+                .filter(id.eq_any(message_ids))
+                .select(AprsMessage::as_select())
+                .load(&mut conn)?;
+
+            Ok::<Vec<AprsMessage>, anyhow::Error>(messages)
+        })
+        .await?
+    }
 }
+
+// Type aliases for backward compatibility during migration
+pub type AprsMessagesRepository = RawMessagesRepository;
+pub type BeastMessagesRepository = RawMessagesRepository;
 
 #[cfg(test)]
 mod tests {
@@ -477,7 +470,10 @@ mod tests {
         );
         let message_id = new_message.id;
 
-        let inserted_id = repo.insert(new_message).await.expect("Failed to insert");
+        let inserted_id = repo
+            .insert_aprs(new_message)
+            .await
+            .expect("Failed to insert");
         assert_eq!(inserted_id, message_id);
 
         // Retrieve the message by ID
@@ -539,7 +535,9 @@ mod tests {
                 None,
             );
             message_ids.push(new_message.id);
-            repo.insert(new_message).await.expect("Failed to insert");
+            repo.insert_aprs(new_message)
+                .await
+                .expect("Failed to insert");
         }
 
         // Retrieve all messages by their IDs
@@ -583,7 +581,9 @@ mod tests {
             None,
         );
         let existing_id = new_message.id;
-        repo.insert(new_message).await.expect("Failed to insert");
+        repo.insert_aprs(new_message)
+            .await
+            .expect("Failed to insert");
 
         // Request both existing and non-existing IDs
         let non_existing_id = Uuid::new_v4();

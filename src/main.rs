@@ -167,6 +167,14 @@ enum Commands {
         #[arg(long)]
         skip_ogn_aircraft_type: Vec<String>,
 
+        /// Disable APRS/OGN message consumption from NATS
+        #[arg(long)]
+        no_aprs: bool,
+
+        /// Disable ADS-B (Beast) message consumption from NATS
+        #[arg(long)]
+        no_adsb: bool,
+
         /// Enable tokio-console for async task monitoring (port 6669)
         #[arg(long)]
         enable_tokio_console: bool,
@@ -998,6 +1006,8 @@ async fn main() -> Result<()> {
             nats_url,
             suppress_aprs_type,
             skip_ogn_aircraft_type,
+            no_aprs,
+            no_adsb,
             enable_tokio_console: _,
         } => {
             // Determine archive directory if --archive flag is used
@@ -1012,6 +1022,8 @@ async fn main() -> Result<()> {
                 nats_url,
                 &suppress_aprs_type,
                 &skip_ogn_aircraft_type,
+                no_aprs,
+                no_adsb,
                 diesel_pool,
             )
             .await

@@ -6,7 +6,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::raw_messages_repo::{AprsMessage, AprsMessagesRepository};
+use crate::raw_messages_repo::{AprsMessage, RawMessagesRepository};
 use crate::web::AppState;
 
 use super::json_error;
@@ -35,7 +35,7 @@ pub async fn get_aprs_message(
     Path(id): Path<Uuid>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    let messages_repo = AprsMessagesRepository::new(state.pool.clone());
+    let messages_repo = RawMessagesRepository::new(state.pool.clone());
 
     match messages_repo.get_by_id(id).await {
         Ok(Some(message)) => Json(AprsMessageResponse { message }).into_response(),
@@ -57,7 +57,7 @@ pub async fn get_aprs_messages_bulk(
     State(state): State<AppState>,
     Json(request): Json<AprsMessageBulkRequest>,
 ) -> impl IntoResponse {
-    let messages_repo = AprsMessagesRepository::new(state.pool.clone());
+    let messages_repo = RawMessagesRepository::new(state.pool.clone());
 
     // Validate that we have at least one ID
     if request.ids.is_empty() {

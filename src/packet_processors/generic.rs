@@ -1,5 +1,5 @@
 use crate::ArchiveService;
-use crate::raw_messages_repo::{AprsMessagesRepository, NewAprsMessage};
+use crate::raw_messages_repo::{NewAprsMessage, RawMessagesRepository};
 use crate::receiver_repo::ReceiverRepository;
 use moka::sync::Cache;
 use ogn_parser::{AprsData, AprsPacket};
@@ -25,7 +25,7 @@ pub struct PacketContext {
 #[derive(Clone)]
 pub struct GenericProcessor {
     receiver_repo: ReceiverRepository,
-    aprs_messages_repo: AprsMessagesRepository,
+    aprs_messages_repo: RawMessagesRepository,
     archive_service: Option<ArchiveService>,
     /// Cache mapping receiver callsign to receiver ID
     /// This avoids repeated database lookups for the same receiver
@@ -36,7 +36,7 @@ impl GenericProcessor {
     /// Create a new GenericProcessor
     pub fn new(
         receiver_repo: ReceiverRepository,
-        aprs_messages_repo: AprsMessagesRepository,
+        aprs_messages_repo: RawMessagesRepository,
     ) -> Self {
         // Create a cache with 100,000 entry capacity and 24 hour TTL
         // Receivers don't change often, so we can cache them for a long time
@@ -122,7 +122,7 @@ impl GenericProcessor {
             NewAprsMessage::new(raw_message.to_string(), received_at, receiver_id, unparsed);
 
         let received_at_timestamp = new_aprs_message.received_at;
-        match self.aprs_messages_repo.insert(new_aprs_message).await {
+        match self.aprs_messages_repo.insert_aprs(new_aprs_message).await {
             Ok(id) => {
                 trace!(
                     "Inserted APRS message {} for receiver {}",
