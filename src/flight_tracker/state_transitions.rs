@@ -74,17 +74,17 @@ pub(crate) async fn process_state_transition(
 ) -> Result<Fix> {
     let is_active = should_be_active(&fix);
 
-    // Fetch device once for use throughout the function
-    let device_lookup_start = std::time::Instant::now();
-    let device = ctx
-        .device_repo
-        .get_device_by_uuid(fix.aircraft_id)
+    // Fetch aircraft once for use throughout the function
+    let aircraft_lookup_start = std::time::Instant::now();
+    let aircraft = ctx
+        .aircraft_repo
+        .get_aircraft_by_id(fix.aircraft_id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("Aircraft {} not found", fix.aircraft_id))?;
-    metrics::histogram!("aprs.aircraft.device_lookup_ms")
-        .record(device_lookup_start.elapsed().as_micros() as f64 / 1000.0);
+    metrics::histogram!("aprs.aircraft.aircraft_lookup_ms")
+        .record(aircraft_lookup_start.elapsed().as_micros() as f64 / 1000.0);
 
-    let is_towtug = device.aircraft_type_ogn == Some(AircraftType::TowTug);
+    let is_towtug = aircraft.aircraft_type_ogn == Some(AircraftType::TowTug);
 
     // Get current flight state
     let current_flight_state = {
@@ -123,7 +123,7 @@ pub(crate) async fn process_state_transition(
 
             if should_end_flight {
                 // End the current flight
-                if let Err(e) = complete_flight(ctx, &device, state.flight_id, &fix).await {
+                if let Err(e) = complete_flight(ctx, &aircraft, state.flight_id, &fix).await {
                     error!(
                         "Failed to complete flight {} due to callsign change: {}",
                         state.flight_id, e
@@ -469,7 +469,7 @@ pub(crate) async fn process_state_transition(
                                 flight_id,
                                 ctx.fixes_repo.clone(),
                                 ctx.flights_repo.clone(),
-                                ctx.device_repo.clone(),
+                                ctx.aircraft_repo.clone(),
                                 Arc::clone(ctx.aircraft_trackers),
                             );
                         }
@@ -606,7 +606,7 @@ pub(crate) async fn process_state_transition(
                         // to prevent race condition where new fixes arrive and get assigned the spurious flight_id
                         // For normal landings, we remove from ctx.active_flights AFTER complete_flight finishes
                         let flight_completed =
-                            match complete_flight(ctx, &device, flight_id, &fix).await {
+                            match complete_flight(ctx, &aircraft, flight_id, &fix).await {
                                 Ok(completed) => completed,
                                 Err(e) => {
                                     warn!("Failed to complete flight {}: {}", flight_id, e);
@@ -630,12 +630,12 @@ pub(crate) async fn process_state_transition(
                             flights.remove(&fix.aircraft_id);
                         }
 
-                        // Clean up the device lock after flight completion
+                        // Clean up the aircraft lock after flight completion
                         {
-                            let mut locks = ctx.device_locks.write().await;
+                            let mut locks = ctx.aircraft_locks.write().await;
                             if locks.remove(&fix.aircraft_id).is_some() {
                                 trace!(
-                                    "Cleaned up device lock for device {} after landing",
+                                    "Cleaned up aircraft lock for aircraft {} after landing",
                                     fix.aircraft_id
                                 );
                             }

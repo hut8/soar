@@ -28,16 +28,16 @@ pub async fn get_aircraft_registrations_by_club(
 ) -> impl IntoResponse {
     let aircraft_repo = AircraftRegistrationsRepository::new(state.pool.clone());
     let aircraft_model_repo = AircraftModelRepository::new(state.pool.clone());
-    let device_repo = AircraftRepository::new(state.pool.clone());
+    let aircraft_repository = AircraftRepository::new(state.pool.clone());
 
-    // First get all devices for this club
-    let devices = match device_repo.search_by_club_id(club_id).await {
-        Ok(devices) => devices,
+    // First get all aircraft for this club
+    let aircraft_list = match aircraft_repository.search_by_club_id(club_id).await {
+        Ok(aircraft) => aircraft,
         Err(e) => {
-            error!("Failed to get devices by club: {}", e);
+            error!("Failed to get aircraft by club: {}", e);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to get devices by club",
+                "Failed to get aircraft by club",
             )
                 .into_response();
         }
@@ -45,19 +45,19 @@ pub async fn get_aircraft_registrations_by_club(
 
     let mut aircraft_views: Vec<AircraftRegistrationView> = Vec::new();
 
-    // For each device, get its aircraft registration and model
-    for device in devices {
+    // For each aircraft, get its aircraft registration and model
+    for aircraft in aircraft_list {
         // Get aircraft registration if it exists
-        let aircraft = match aircraft_repo
-            .get_aircraft_registration_by_device_id(device.id.unwrap())
+        let aircraft_registration = match aircraft_repo
+            .get_aircraft_registration_by_device_id(aircraft.id.unwrap())
             .await
         {
             Ok(Some(reg)) => reg,
-            Ok(None) => continue, // No aircraft registration for this device
+            Ok(None) => continue, // No aircraft registration for this aircraft
             Err(e) => {
                 error!(
-                    "Failed to get aircraft registration for device {}: {}",
-                    device.id.unwrap(),
+                    "Failed to get aircraft registration for aircraft {}: {}",
+                    aircraft.id.unwrap(),
                     e
                 );
                 continue;
@@ -65,17 +65,18 @@ pub async fn get_aircraft_registrations_by_club(
         };
 
         // Convert AircraftRegistrationModel to Aircraft, then to view
-        let aircraft_domain: crate::aircraft_registrations::Aircraft = aircraft.clone().into();
+        let aircraft_domain: crate::aircraft_registrations::Aircraft =
+            aircraft_registration.clone().into();
         let mut view = AircraftRegistrationView::from(aircraft_domain);
         view.club_id = Some(club_id);
-        view.aircraft_type_ogn = device.aircraft_type_ogn;
+        view.aircraft_type_ogn = aircraft.aircraft_type_ogn;
 
         // Get aircraft model if available
         match aircraft_model_repo
             .get_aircraft_model_by_key(
-                &aircraft.manufacturer_code,
-                &aircraft.model_code,
-                &aircraft.series_code,
+                &aircraft_registration.manufacturer_code,
+                &aircraft_registration.model_code,
+                &aircraft_registration.series_code,
             )
             .await
         {
@@ -91,7 +92,7 @@ pub async fn get_aircraft_registrations_by_club(
             Err(e) => {
                 error!(
                     "Failed to get aircraft model for {}: {}",
-                    aircraft.registration_number, e
+                    aircraft_registration.registration_number, e
                 );
                 // Continue without model data
             }
@@ -103,15 +104,15 @@ pub async fn get_aircraft_registrations_by_club(
     Json(aircraft_views).into_response()
 }
 
-/// Get aircraft registration for a device by device ID
+/// Get aircraft registration for an aircraft by aircraft ID
 pub async fn get_device_aircraft_registration(
     Path(id): Path<Uuid>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
     let aircraft_repo = AircraftRegistrationsRepository::new(state.pool.clone());
-    let device_repo = AircraftRepository::new(state.pool.clone());
+    let aircraft_repository = AircraftRepository::new(state.pool.clone());
 
-    // First try to query aircraft_registrations table for a record with the given device_id
+    // First try to query aircraft_registrations table for a record with the given aircraft_id
     match aircraft_repo
         .get_aircraft_registration_by_device_id(id)
         .await
@@ -120,36 +121,36 @@ pub async fn get_device_aircraft_registration(
             return Json(aircraft_registration).into_response();
         }
         Ok(None) => {
-            // Fallback: try to find device and then look up by registration number
+            // Fallback: try to find aircraft and then look up by registration number
             tracing::debug!(
-                "No aircraft registration found by device_id {}, trying registration lookup",
+                "No aircraft registration found by aircraft_id {}, trying registration lookup",
                 id
             );
         }
         Err(e) => {
             tracing::error!(
-                "Failed to get aircraft registration by device_id {}: {}",
+                "Failed to get aircraft registration by aircraft_id {}: {}",
                 id,
                 e
             );
         }
     }
 
-    // Fallback: Get device and look up aircraft by registration number
-    match device_repo.get_device_by_uuid(id).await {
-        Ok(Some(device)) => {
+    // Fallback: Get aircraft and look up by registration number
+    match aircraft_repository.get_aircraft_by_id(id).await {
+        Ok(Some(aircraft)) => {
             // Try to find aircraft registration by registration number
             match aircraft_repo
-                .get_aircraft_registration_model_by_n_number(&device.registration)
+                .get_aircraft_registration_model_by_n_number(&aircraft.registration)
                 .await
             {
                 Ok(Some(aircraft_model)) => Json(aircraft_model).into_response(),
                 Ok(None) => (StatusCode::NOT_FOUND).into_response(),
                 Err(e) => {
                     tracing::error!(
-                        "Failed to get aircraft registration for device {} by n-number {}: {}",
+                        "Failed to get aircraft registration for aircraft {} by n-number {}: {}",
                         id,
-                        device.registration,
+                        aircraft.registration,
                         e
                     );
                     json_error(
@@ -162,13 +163,13 @@ pub async fn get_device_aircraft_registration(
         }
         Ok(None) => (StatusCode::NOT_FOUND).into_response(),
         Err(e) => {
-            tracing::error!("Failed to get device by ID {}: {}", id, e);
-            json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get device").into_response()
+            tracing::error!("Failed to get aircraft by ID {}: {}", id, e);
+            json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get aircraft").into_response()
         }
     }
 }
 
-/// Get aircraft model for a device by device ID
+/// Get aircraft model for an aircraft by aircraft ID
 /// This joins aircraft_registrations to aircraft_models using manufacturer_code, model_code, and series_code
 pub async fn get_device_aircraft_model(
     Path(id): Path<Uuid>,
@@ -176,25 +177,25 @@ pub async fn get_device_aircraft_model(
 ) -> impl IntoResponse {
     let aircraft_repo = AircraftRegistrationsRepository::new(state.pool.clone());
     let aircraft_model_repo = AircraftModelRepository::new(state.pool.clone());
-    let device_repo = AircraftRepository::new(state.pool.clone());
+    let aircraft_repository = AircraftRepository::new(state.pool.clone());
 
-    // First try to get the aircraft registration for this device by device_id
+    // First try to get the aircraft registration for this aircraft by aircraft_id
     let aircraft_registration = match aircraft_repo
         .get_aircraft_registration_by_device_id(id)
         .await
     {
         Ok(Some(registration)) => registration,
         Ok(None) => {
-            // Fallback: try to find device and then look up by registration number
+            // Fallback: try to find aircraft and then look up by registration number
             tracing::debug!(
-                "No aircraft registration found by device_id {}, trying registration lookup",
+                "No aircraft registration found by aircraft_id {}, trying registration lookup",
                 id
             );
 
-            match device_repo.get_device_by_uuid(id).await {
-                Ok(Some(device)) => {
+            match aircraft_repository.get_aircraft_by_id(id).await {
+                Ok(Some(aircraft)) => {
                     match aircraft_repo
-                        .get_aircraft_registration_model_by_n_number(&device.registration)
+                        .get_aircraft_registration_model_by_n_number(&aircraft.registration)
                         .await
                     {
                         Ok(Some(aircraft_model)) => aircraft_model,
@@ -203,9 +204,9 @@ pub async fn get_device_aircraft_model(
                         }
                         Err(e) => {
                             tracing::error!(
-                                "Failed to get aircraft registration for device {} by n-number {}: {}",
+                                "Failed to get aircraft registration for aircraft {} by n-number {}: {}",
                                 id,
-                                device.registration,
+                                aircraft.registration,
                                 e
                             );
                             return json_error(
@@ -220,15 +221,15 @@ pub async fn get_device_aircraft_model(
                     return (StatusCode::NOT_FOUND).into_response();
                 }
                 Err(e) => {
-                    tracing::error!("Failed to get device by ID {}: {}", id, e);
-                    return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get device")
+                    tracing::error!("Failed to get aircraft by ID {}: {}", id, e);
+                    return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get aircraft")
                         .into_response();
                 }
             }
         }
         Err(e) => {
             tracing::error!(
-                "Failed to get aircraft registration for device {}: {}",
+                "Failed to get aircraft registration for aircraft {}: {}",
                 id,
                 e
             );
@@ -253,7 +254,7 @@ pub async fn get_device_aircraft_model(
         Ok(None) => (StatusCode::NOT_FOUND).into_response(),
         Err(e) => {
             tracing::error!(
-                "Failed to get aircraft model for device {} with codes {}-{}-{}: {}",
+                "Failed to get aircraft model for aircraft {} with codes {}-{}-{}: {}",
                 id,
                 aircraft_registration.manufacturer_code,
                 aircraft_registration.model_code,
@@ -269,13 +270,13 @@ pub async fn get_device_aircraft_model(
     }
 }
 
-/// Get aircraft issues including duplicate device addresses
+/// Get aircraft issues including duplicate aircraft addresses
 pub async fn get_aircraft_issues(State(state): State<AppState>) -> impl IntoResponse {
     let aircraft_repo = AircraftRepository::new(state.pool.clone());
 
-    match aircraft_repo.get_duplicate_devices().await {
-        Ok(duplicate_devices) => Json(AircraftIssuesResponse {
-            duplicate_device_addresses: duplicate_devices,
+    match aircraft_repo.get_duplicate_aircraft().await {
+        Ok(duplicate_aircraft) => Json(AircraftIssuesResponse {
+            duplicate_device_addresses: duplicate_aircraft,
         })
         .into_response(),
         Err(e) => {

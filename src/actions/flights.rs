@@ -149,32 +149,33 @@ pub async fn get_flight_by_id(
     }
 }
 
-/// Get device information for a flight
+/// Get aircraft information for a flight
 pub async fn get_flight_device(
     Path(id): Path<Uuid>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
     let flights_repo = FlightsRepository::new(state.pool.clone());
-    let device_repo = AircraftRepository::new(state.pool.clone());
+    let aircraft_repo = AircraftRepository::new(state.pool.clone());
 
-    // First verify the flight exists and get its device_id
+    // First verify the flight exists and get its aircraft_id
     match flights_repo.get_flight_by_id(id).await {
         Ok(Some(flight)) => {
             if let Some(aircraft_id) = flight.aircraft_id {
-                // Look up device information
-                match device_repo.get_device_by_uuid(aircraft_id).await {
-                    Ok(Some(device)) => Json(device).into_response(),
+                // Look up aircraft information
+                match aircraft_repo.get_aircraft_by_id(aircraft_id).await {
+                    Ok(Some(aircraft)) => Json(aircraft).into_response(),
                     Ok(None) => {
                         json_error(StatusCode::NOT_FOUND, "Aircraft not found").into_response()
                     }
                     Err(e) => {
-                        tracing::error!("Failed to get device {}: {}", aircraft_id, e);
-                        json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get device")
+                        tracing::error!("Failed to get aircraft {}: {}", aircraft_id, e);
+                        json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get aircraft")
                             .into_response()
                     }
                 }
             } else {
-                json_error(StatusCode::NOT_FOUND, "Flight has no associated device").into_response()
+                json_error(StatusCode::NOT_FOUND, "Flight has no associated aircraft")
+                    .into_response()
             }
         }
         Ok(None) => json_error(StatusCode::NOT_FOUND, "Flight not found").into_response(),
@@ -192,7 +193,7 @@ pub async fn get_flight_kml(
 ) -> impl IntoResponse {
     let flights_repo = FlightsRepository::new(state.pool.clone());
     let fixes_repo = FixesRepository::new(state.pool.clone());
-    let device_repo = AircraftRepository::new(state.pool.clone());
+    let aircraft_repo = AircraftRepository::new(state.pool.clone());
 
     // First get the flight
     let flight = match flights_repo.get_flight_by_id(id).await {
@@ -205,10 +206,10 @@ pub async fn get_flight_kml(
         }
     };
 
-    // Get device info for better KML naming
-    let device = if let Some(aircraft_id) = flight.aircraft_id {
-        device_repo
-            .get_device_by_uuid(aircraft_id)
+    // Get aircraft info for better KML naming
+    let aircraft = if let Some(aircraft_id) = flight.aircraft_id {
+        aircraft_repo
+            .get_aircraft_by_id(aircraft_id)
             .await
             .ok()
             .flatten()
@@ -217,7 +218,7 @@ pub async fn get_flight_kml(
     };
 
     // Generate KML
-    match flight.make_kml(&fixes_repo, device.as_ref()).await {
+    match flight.make_kml(&fixes_repo, aircraft.as_ref()).await {
         Ok(kml_content) => {
             let mut headers = HeaderMap::new();
             headers.insert(
@@ -407,14 +408,14 @@ pub async fn search_flights(
     Query(params): Query<FlightsQueryParams>,
 ) -> impl IntoResponse {
     let flights_repo = FlightsRepository::new(state.pool.clone());
-    let device_repo = AircraftRepository::new(state.pool.clone());
+    let aircraft_repo = AircraftRepository::new(state.pool.clone());
 
     let completed = params.completed.unwrap_or(false);
     let limit = params.limit.unwrap_or(50);
     let offset = params.offset.unwrap_or(0);
 
     if completed {
-        // Get completed flights with device info and total count
+        // Get completed flights with aircraft info and total count
         let total_count_result = flights_repo.get_completed_flights_count().await;
         let flights_result = flights_repo.get_completed_flights(limit, offset).await;
 
@@ -423,13 +424,13 @@ pub async fn search_flights(
                 let mut flight_views = Vec::new();
 
                 for flight in flights {
-                    // Look up device information if device_id is present
-                    let device_info = if let Some(aircraft_id) = flight.aircraft_id {
-                        match device_repo.get_device_by_uuid(aircraft_id).await {
-                            Ok(Some(device)) => Some(AircraftInfo {
-                                aircraft_model: Some(device.aircraft_model),
-                                registration: Some(device.registration),
-                                aircraft_type_ogn: device.aircraft_type_ogn,
+                    // Look up aircraft information if aircraft_id is present
+                    let aircraft_info = if let Some(aircraft_id) = flight.aircraft_id {
+                        match aircraft_repo.get_aircraft_by_id(aircraft_id).await {
+                            Ok(Some(aircraft)) => Some(AircraftInfo {
+                                aircraft_model: Some(aircraft.aircraft_model),
+                                registration: Some(aircraft.registration),
+                                aircraft_type_ogn: aircraft.aircraft_type_ogn,
                             }),
                             _ => None,
                         }
@@ -437,7 +438,7 @@ pub async fn search_flights(
                         None
                     };
 
-                    let flight_view = FlightView::from_flight(flight, None, None, device_info);
+                    let flight_view = FlightView::from_flight(flight, None, None, aircraft_info);
                     flight_views.push(flight_view);
                 }
 
@@ -467,13 +468,13 @@ pub async fn search_flights(
                 let mut flight_views = Vec::new();
 
                 for flight in flights {
-                    // Look up device information if device_id is present
-                    let device_info = if let Some(aircraft_id) = flight.aircraft_id {
-                        match device_repo.get_device_by_uuid(aircraft_id).await {
-                            Ok(Some(device)) => Some(AircraftInfo {
-                                aircraft_model: Some(device.aircraft_model),
-                                registration: Some(device.registration),
-                                aircraft_type_ogn: device.aircraft_type_ogn,
+                    // Look up aircraft information if aircraft_id is present
+                    let aircraft_info = if let Some(aircraft_id) = flight.aircraft_id {
+                        match aircraft_repo.get_aircraft_by_id(aircraft_id).await {
+                            Ok(Some(aircraft)) => Some(AircraftInfo {
+                                aircraft_model: Some(aircraft.aircraft_model),
+                                registration: Some(aircraft.registration),
+                                aircraft_type_ogn: aircraft.aircraft_type_ogn,
                             }),
                             _ => None,
                         }
@@ -504,7 +505,7 @@ pub async fn search_flights(
                         flight,
                         None,
                         None,
-                        device_info,
+                        aircraft_info,
                         latest_altitude_msl,
                         latest_altitude_agl,
                         latest_fix_timestamp,
@@ -537,7 +538,7 @@ pub async fn get_airport_flights(
 ) -> impl IntoResponse {
     let flights_repo = FlightsRepository::new(state.pool.clone());
     let airports_repo = AirportsRepository::new(state.pool.clone());
-    let device_repo = AircraftRepository::new(state.pool);
+    let aircraft_repo = AircraftRepository::new(state.pool);
 
     // Calculate 24 hours ago
     let since = chrono::Utc::now() - chrono::Duration::hours(24);
@@ -576,13 +577,13 @@ pub async fn get_airport_flights(
                     None
                 };
 
-                // For list views, include device info in FlightView for display purposes
-                let device_info = if let Some(aircraft_id) = flight.aircraft_id {
-                    match device_repo.get_device_by_uuid(aircraft_id).await {
-                        Ok(Some(dev)) => Some(AircraftInfo {
-                            aircraft_model: Some(dev.aircraft_model),
-                            registration: Some(dev.registration),
-                            aircraft_type_ogn: dev.aircraft_type_ogn,
+                // For list views, include aircraft info in FlightView for display purposes
+                let aircraft_info = if let Some(aircraft_id) = flight.aircraft_id {
+                    match aircraft_repo.get_aircraft_by_id(aircraft_id).await {
+                        Ok(Some(aircraft)) => Some(AircraftInfo {
+                            aircraft_model: Some(aircraft.aircraft_model),
+                            registration: Some(aircraft.registration),
+                            aircraft_type_ogn: aircraft.aircraft_type_ogn,
                         }),
                         _ => None,
                     }
@@ -594,7 +595,7 @@ pub async fn get_airport_flights(
                     flight,
                     departure_airport,
                     arrival_airport,
-                    device_info,
+                    aircraft_info,
                 );
                 flight_responses.push(FlightResponse {
                     flight: flight_view,
@@ -621,21 +622,21 @@ pub async fn get_nearby_flights(
     State(state): State<AppState>,
 ) -> impl IntoResponse {
     let flights_repo = FlightsRepository::new(state.pool.clone());
-    let device_repo = AircraftRepository::new(state.pool);
+    let aircraft_repo = AircraftRepository::new(state.pool);
 
     match flights_repo.get_nearby_flights(id).await {
         Ok(flights) => {
-            // Build flight views with device info
+            // Build flight views with aircraft info
             let mut flight_views = Vec::new();
 
             for flight in flights {
-                // Look up device information if device_id is present
-                let device_info = if let Some(aircraft_id) = flight.aircraft_id {
-                    match device_repo.get_device_by_uuid(aircraft_id).await {
-                        Ok(Some(device)) => Some(AircraftInfo {
-                            aircraft_model: Some(device.aircraft_model),
-                            registration: Some(device.registration),
-                            aircraft_type_ogn: device.aircraft_type_ogn,
+                // Look up aircraft information if aircraft_id is present
+                let aircraft_info = if let Some(aircraft_id) = flight.aircraft_id {
+                    match aircraft_repo.get_aircraft_by_id(aircraft_id).await {
+                        Ok(Some(aircraft)) => Some(AircraftInfo {
+                            aircraft_model: Some(aircraft.aircraft_model),
+                            registration: Some(aircraft.registration),
+                            aircraft_type_ogn: aircraft.aircraft_type_ogn,
                         }),
                         _ => None,
                     }
@@ -643,7 +644,7 @@ pub async fn get_nearby_flights(
                     None
                 };
 
-                let flight_view = FlightView::from_flight(flight, None, None, device_info);
+                let flight_view = FlightView::from_flight(flight, None, None, aircraft_info);
                 flight_views.push(flight_view);
             }
 
