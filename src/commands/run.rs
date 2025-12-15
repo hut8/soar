@@ -184,7 +184,7 @@ async fn process_beast_message(
 
     // Get or create aircraft by ICAO address
     let aircraft = match aircraft_repo
-        .get_or_insert_device_by_address(icao_address as i32, AddressType::Icao)
+        .get_or_insert_aircraft_by_address(icao_address as i32, AddressType::Icao)
         .await
     {
         Ok(aircraft) => aircraft,

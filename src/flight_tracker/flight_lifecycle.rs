@@ -21,9 +21,9 @@ pub(crate) async fn create_flight(
     flight_id: Uuid,
     skip_airport_runway_lookup: bool,
 ) -> Result<Uuid> {
-    // Fetch device first as we need it for Flight creation
-    let device = match ctx.device_repo.get_device_by_uuid(fix.aircraft_id).await {
-        Ok(Some(device)) => device,
+    // Fetch aircraft first as we need it for Flight creation
+    let aircraft = match ctx.aircraft_repo.get_aircraft_by_id(fix.aircraft_id).await {
+        Ok(Some(aircraft)) => aircraft,
         Ok(None) => {
             warn!(
                 "Aircraft {} not found when creating flight {}",
@@ -33,16 +33,16 @@ pub(crate) async fn create_flight(
         }
         Err(e) => {
             error!(
-                "Error fetching device {} for flight {}: {}",
+                "Error fetching aircraft {} for flight {}: {}",
                 fix.aircraft_id, flight_id, e
             );
-            return Err(anyhow::anyhow!("Failed to fetch device: {}", e));
+            return Err(anyhow::anyhow!("Failed to fetch aircraft: {}", e));
         }
     };
 
     let mut flight = if skip_airport_runway_lookup {
         // Mid-flight appearance - no takeoff observed
-        Flight::new_airborne_from_fix_with_id(fix, &device, flight_id)
+        Flight::new_airborne_from_fix_with_id(fix, &aircraft, flight_id)
     } else {
         // Actual takeoff - calculate altitude offset and look up airport/runway
         let takeoff_altitude_offset_ft = calculate_altitude_offset_ft(ctx.elevation_db, fix).await;
@@ -62,7 +62,7 @@ pub(crate) async fn create_flight(
         let takeoff_runway_info = determine_runway_identifier(
             ctx.fixes_repo,
             ctx.runways_repo,
-            &device,
+            &aircraft,
             fix.timestamp,
             fix.latitude,
             fix.longitude,
@@ -73,7 +73,7 @@ pub(crate) async fn create_flight(
         let takeoff_runway = takeoff_runway_info.map(|(runway, _)| runway);
 
         let mut flight =
-            Flight::new_with_takeoff_from_fix_with_id(fix, &device, flight_id, fix.timestamp);
+            Flight::new_with_takeoff_from_fix_with_id(fix, &aircraft, flight_id, fix.timestamp);
         flight.departure_airport_id = departure_airport_id;
         flight.takeoff_location_id = takeoff_location_id;
         flight.takeoff_runway_ident = takeoff_runway;
@@ -81,8 +81,8 @@ pub(crate) async fn create_flight(
         flight
     };
 
-    // Copy device's club_id to the flight
-    flight.club_id = device.club_id;
+    // Copy aircraft's club_id to the flight
+    flight.club_id = aircraft.club_id;
 
     ctx.flights_repo.create_flight(flight).await?;
 

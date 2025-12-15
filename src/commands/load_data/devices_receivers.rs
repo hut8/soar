@@ -69,16 +69,16 @@ pub async fn load_devices(
     info!("Loading devices from: {}", devices_path);
 
     let devices = read_flarmnet_file(devices_path)?;
-    info!("Successfully loaded {} devices", devices.len());
+    info!("Successfully loaded {} aircraft", devices.len());
 
-    let device_repo = AircraftRepository::new(diesel_pool);
-    info!("Upserting {} devices into database...", devices.len());
+    let aircraft_repo = AircraftRepository::new(diesel_pool);
+    info!("Upserting {} aircraft into database...", devices.len());
 
-    let upserted_count = device_repo.upsert_devices(devices).await?;
-    info!("Successfully upserted {} devices", upserted_count);
+    let upserted_count = aircraft_repo.upsert_aircraft(devices).await?;
+    info!("Successfully upserted {} aircraft", upserted_count);
 
-    let total_count = device_repo.get_device_count().await?;
-    info!("Total devices in database: {}", total_count);
+    let total_count = aircraft_repo.get_aircraft_count().await?;
+    info!("Total aircraft in database: {}", total_count);
 
     Ok((upserted_count, total_count))
 }

@@ -17,7 +17,7 @@ use crate::fixes_repo::FixesRepository;
 use crate::live_fixes::WebSocketMessage;
 use crate::web::AppState;
 
-use super::devices::enrich_devices_with_aircraft_data;
+use super::devices::enrich_aircraft_with_registration_data;
 use super::json_error;
 
 #[derive(Debug, Deserialize)]
@@ -457,21 +457,24 @@ async fn search_fixes_by_bbox(
         )
         .await
     {
-        Ok(devices_with_fixes) => {
-            info!("Found {} devices in bounding box", devices_with_fixes.len());
+        Ok(aircraft_with_fixes) => {
+            info!(
+                "Found {} aircraft in bounding box",
+                aircraft_with_fixes.len()
+            );
 
             // Enrich with aircraft registration and model data
             let enriched =
-                enrich_devices_with_aircraft_data(devices_with_fixes, pool.clone()).await;
+                enrich_aircraft_with_registration_data(aircraft_with_fixes, pool.clone()).await;
 
-            info!("Enriched {} devices, returning response", enriched.len());
+            info!("Enriched {} aircraft, returning response", enriched.len());
             Json(enriched).into_response()
         }
         Err(e) => {
-            error!("Failed to get devices with fixes in bounding box: {}", e);
+            error!("Failed to get aircraft with fixes in bounding box: {}", e);
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to get devices with fixes in bounding box",
+                "Failed to get aircraft with fixes in bounding box",
             )
             .into_response()
         }

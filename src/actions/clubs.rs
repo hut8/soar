@@ -156,7 +156,7 @@ pub async fn get_club_flights(
     Query(params): Query<ClubFlightsQueryParams>,
 ) -> impl IntoResponse {
     let flights_repo = FlightsRepository::new(state.pool.clone());
-    let device_repo = AircraftRepository::new(state.pool);
+    let aircraft_repo = AircraftRepository::new(state.pool);
 
     // Parse date if provided
     let date = if let Some(date_str) = params.date {
@@ -183,13 +183,13 @@ pub async fn get_club_flights(
             let mut flight_views = Vec::new();
 
             for flight in flights {
-                // Look up device information if device_id is present
-                let device_info = if let Some(aircraft_id) = flight.aircraft_id {
-                    match device_repo.get_device_by_uuid(aircraft_id).await {
-                        Ok(Some(device)) => Some(AircraftInfo {
-                            aircraft_model: Some(device.aircraft_model),
-                            registration: Some(device.registration),
-                            aircraft_type_ogn: device.aircraft_type_ogn,
+                // Look up aircraft information if aircraft_id is present
+                let aircraft_info = if let Some(aircraft_id) = flight.aircraft_id {
+                    match aircraft_repo.get_aircraft_by_id(aircraft_id).await {
+                        Ok(Some(aircraft)) => Some(AircraftInfo {
+                            aircraft_model: Some(aircraft.aircraft_model),
+                            registration: Some(aircraft.registration),
+                            aircraft_type_ogn: aircraft.aircraft_type_ogn,
                         }),
                         _ => None,
                     }
@@ -197,7 +197,7 @@ pub async fn get_club_flights(
                     None
                 };
 
-                let flight_view = FlightView::from_flight(flight, None, None, device_info);
+                let flight_view = FlightView::from_flight(flight, None, None, aircraft_info);
                 flight_views.push(flight_view);
             }
 

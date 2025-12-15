@@ -85,14 +85,14 @@ pub(crate) type AircraftTrackersMap = Arc<RwLock<HashMap<Uuid, aircraft_tracker:
 /// Contains all repositories and state needed for flight lifecycle management
 pub(crate) struct FlightProcessorContext<'a> {
     pub flights_repo: &'a FlightsRepository,
-    pub device_repo: &'a AircraftRepository,
+    pub aircraft_repo: &'a AircraftRepository,
     pub airports_repo: &'a AirportsRepository,
     pub locations_repo: &'a LocationsRepository,
     pub runways_repo: &'a RunwaysRepository,
     pub fixes_repo: &'a FixesRepository,
     pub elevation_db: &'a ElevationDB,
     pub active_flights: &'a ActiveFlightsMap,
-    pub device_locks: &'a AircraftLocksMap,
+    pub aircraft_locks: &'a AircraftLocksMap,
     pub aircraft_trackers: &'a AircraftTrackersMap,
 }
 
@@ -152,14 +152,14 @@ impl FlightTracker {
     fn context(&self) -> FlightProcessorContext<'_> {
         FlightProcessorContext {
             flights_repo: &self.flights_repo,
-            device_repo: &self.device_repo,
+            aircraft_repo: &self.device_repo,
             airports_repo: &self.airports_repo,
             locations_repo: &self.locations_repo,
             runways_repo: &self.runways_repo,
             fixes_repo: &self.fixes_repo,
             elevation_db: &self.elevation_db,
             active_flights: &self.active_flights,
-            device_locks: &self.device_locks,
+            aircraft_locks: &self.device_locks,
             aircraft_trackers: &self.aircraft_trackers,
         }
     }
