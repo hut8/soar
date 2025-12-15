@@ -43,8 +43,10 @@ impl EmailService {
 
         let creds = Credentials::new(smtp_username, smtp_password);
 
-        // For test/development environments (like Mailpit), allow insecure SMTP
-        // Check if we're using a local/test SMTP server (port 1025 is Mailpit's default)
+        // Configure SMTP transport based on port:
+        // - Port 1025: Insecure (Mailpit for local testing)
+        // - Port 465: Implicit TLS (TLS wrapper - immediate TLS connection)
+        // - Port 587: STARTTLS (start plain, upgrade to TLS)
         let mailer = if smtp_port == 1025 {
             // Use builder for insecure local SMTP (Mailpit)
             // Mailpit doesn't support TLS, so we need to disable it completely
@@ -53,8 +55,21 @@ impl EmailService {
                 .port(smtp_port)
                 .tls(lettre::transport::smtp::client::Tls::None)
                 .build()
+        } else if smtp_port == 465 {
+            // Port 465 uses implicit TLS (TLS wrapper)
+            // Connection starts with TLS immediately, no STARTTLS upgrade
+            tracing::info!("Using implicit TLS (TLS wrapper) for port 465");
+            AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(&smtp_server)
+                .port(smtp_port)
+                .credentials(creds)
+                .tls(lettre::transport::smtp::client::Tls::Wrapper(
+                    lettre::transport::smtp::client::TlsParameters::new(smtp_server.clone())?,
+                ))
+                .build()
         } else {
-            // Use relay (with TLS) for production SMTP servers
+            // Port 587 and others use STARTTLS
+            // Connection starts plain and upgrades to TLS
+            tracing::info!("Using STARTTLS for port {}", smtp_port);
             AsyncSmtpTransport::<Tokio1Executor>::relay(&smtp_server)?
                 .port(smtp_port)
                 .credentials(creds)
