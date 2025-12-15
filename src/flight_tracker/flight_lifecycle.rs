@@ -108,6 +108,24 @@ pub(crate) async fn timeout_flight(
         flight_id, aircraft_id
     );
 
+    // Get current flight state to determine phase
+    let flight_phase = {
+        let flights = active_flights.read().await;
+        flights
+            .get(&aircraft_id)
+            .map(|state| state.determine_flight_phase())
+            .unwrap_or(super::FlightPhase::Unknown)
+    };
+
+    let phase_str = match flight_phase {
+        super::FlightPhase::Climbing => "climbing",
+        super::FlightPhase::Cruising => "cruising",
+        super::FlightPhase::Descending => "descending",
+        super::FlightPhase::Unknown => "unknown",
+    };
+
+    debug!("Flight {} phase at timeout: {}", flight_id, phase_str);
+
     // Fetch the flight to get the last_fix_at timestamp
     let flight = match flights_repo.get_flight_by_id(flight_id).await? {
         Some(f) => f,
@@ -123,8 +141,11 @@ pub(crate) async fn timeout_flight(
     // Use last_fix_at as the timeout time
     let timeout_time = flight.last_fix_at;
 
-    // Mark flight as timed out in database
-    match flights_repo.timeout_flight(flight_id, timeout_time).await {
+    // Mark flight as timed out in database WITH phase information
+    match flights_repo
+        .timeout_flight_with_phase(flight_id, timeout_time, phase_str)
+        .await
+    {
         Ok(true) => {
             // Calculate and update bounding box now that flight is timed out
             flights_repo
@@ -136,6 +157,7 @@ pub(crate) async fn timeout_flight(
             flights.remove(&aircraft_id);
 
             metrics::counter!("flight_tracker.flight_ended.timed_out").increment(1);
+            metrics::counter!("flight_tracker.timeout.phase", "phase" => phase_str).increment(1);
 
             Ok(())
         }

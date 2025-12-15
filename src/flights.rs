@@ -119,6 +119,11 @@ pub struct Flight {
     /// Mutually exclusive with landing_time - a flight is either landed or timed out, not both
     pub timed_out_at: Option<DateTime<Utc>>,
 
+    /// Flight phase when timeout occurred ("climbing", "cruising", "descending", "unknown")
+    /// Used to determine coalescing behavior when aircraft reappears
+    /// NULL if flight has not timed out or if timeout occurred before this field was added
+    pub timeout_phase: Option<String>,
+
     /// Timestamp of the last fix received for this flight
     /// Updated whenever a fix is assigned to this flight
     pub last_fix_at: DateTime<Utc>,
@@ -182,6 +187,7 @@ impl Flight {
             takeoff_location_id: None,
             landing_location_id: None,
             timed_out_at: None,
+            timeout_phase: None,
             last_fix_at: now,
             callsign: None,
             created_at: now,
@@ -224,6 +230,7 @@ impl Flight {
             takeoff_location_id: None,
             landing_location_id: None,
             timed_out_at: None,
+            timeout_phase: None,
             last_fix_at: fix.timestamp,
             callsign: None,
             created_at: now,
@@ -265,6 +272,7 @@ impl Flight {
             takeoff_location_id: None,
             landing_location_id: None,
             timed_out_at: None,
+            timeout_phase: None,
             last_fix_at: fix.timestamp,
             callsign: None,
             created_at: fix.timestamp,
@@ -319,6 +327,7 @@ impl Flight {
             takeoff_location_id: None,
             landing_location_id: None,
             timed_out_at: None,
+            timeout_phase: None,
             last_fix_at: fix.timestamp,
             callsign: None,
             created_at: fix.timestamp,
@@ -861,6 +870,7 @@ pub struct FlightModel {
     pub takeoff_location_id: Option<Uuid>,
     pub landing_location_id: Option<Uuid>,
     pub timed_out_at: Option<DateTime<Utc>>,
+    pub timeout_phase: Option<String>,
     pub last_fix_at: DateTime<Utc>,
     pub tow_release_height_delta_ft: Option<i32>,
     pub callsign: Option<String>,
@@ -893,6 +903,7 @@ pub struct NewFlightModel {
     pub takeoff_location_id: Option<Uuid>,
     pub landing_location_id: Option<Uuid>,
     pub timed_out_at: Option<DateTime<Utc>>,
+    pub timeout_phase: Option<String>,
     pub last_fix_at: DateTime<Utc>,
     // Note: callsign and tow_release_height_delta_ft are not included in NewFlightModel
     // as they are not set during initial flight creation
@@ -927,6 +938,7 @@ impl From<Flight> for FlightModel {
             takeoff_location_id: flight.takeoff_location_id,
             landing_location_id: flight.landing_location_id,
             timed_out_at: flight.timed_out_at,
+            timeout_phase: flight.timeout_phase,
             last_fix_at: flight.last_fix_at,
             callsign: flight.callsign,
             tow_release_height_delta_ft: flight.tow_release_height_delta_ft,
@@ -961,6 +973,7 @@ impl From<Flight> for NewFlightModel {
             takeoff_location_id: flight.takeoff_location_id,
             landing_location_id: flight.landing_location_id,
             timed_out_at: flight.timed_out_at,
+            timeout_phase: flight.timeout_phase,
             last_fix_at: flight.last_fix_at,
             // Note: callsign and tow_release_height_delta_ft omitted - not set on creation
         }
@@ -994,6 +1007,7 @@ impl From<FlightModel> for Flight {
             takeoff_location_id: model.takeoff_location_id,
             landing_location_id: model.landing_location_id,
             timed_out_at: model.timed_out_at,
+            timeout_phase: model.timeout_phase,
             last_fix_at: model.last_fix_at,
             callsign: model.callsign,
             tow_release_height_delta_ft: model.tow_release_height_delta_ft,

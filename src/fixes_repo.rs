@@ -1078,4 +1078,28 @@ impl FixesRepository {
 
         Ok(result)
     }
+
+    /// Get the last fix for a specific flight (most recent by timestamp)
+    /// Used for coalescing validation to compare positions between timeout and reappearance
+    pub async fn get_last_fix_for_flight(&self, flight_id_val: Uuid) -> Result<Option<Fix>> {
+        use crate::schema::fixes::dsl::*;
+
+        let pool = self.pool.clone();
+
+        let result = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            let fix_row: Option<Fix> = fixes
+                .filter(flight_id.eq(flight_id_val))
+                .order(timestamp.desc())
+                .select(Fix::as_select())
+                .first(&mut conn)
+                .optional()?;
+
+            Ok::<Option<Fix>, anyhow::Error>(fix_row)
+        })
+        .await??;
+
+        Ok(result)
+    }
 }

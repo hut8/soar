@@ -689,6 +689,37 @@ impl FlightsRepository {
         Ok(rows_affected > 0)
     }
 
+    /// Timeout a flight and record the flight phase when timeout occurred
+    /// This helps determine coalescing behavior when aircraft reappears
+    pub async fn timeout_flight_with_phase(
+        &self,
+        flight_id: Uuid,
+        timeout_time: DateTime<Utc>,
+        phase: &str,
+    ) -> Result<bool> {
+        use crate::schema::flights::dsl::*;
+
+        let pool = self.pool.clone();
+        let phase_string = phase.to_string();
+
+        let rows_affected = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            let rows = diesel::update(flights.filter(id.eq(flight_id)))
+                .set((
+                    timed_out_at.eq(Some(timeout_time)),
+                    timeout_phase.eq(Some(phase_string)),
+                    updated_at.eq(Utc::now()),
+                ))
+                .execute(&mut conn)?;
+
+            Ok::<usize, anyhow::Error>(rows)
+        })
+        .await??;
+
+        Ok(rows_affected > 0)
+    }
+
     /// Clear the timed_out_at field for a flight (set it to NULL).
     /// This is used for flight coalescing when resuming tracking of a timed-out flight.
     pub async fn clear_timeout(&self, flight_id: Uuid) -> Result<bool> {

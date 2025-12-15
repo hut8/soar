@@ -893,6 +893,7 @@ diesel::table! {
         takeoff_location_id -> Nullable<Uuid>,
         landing_location_id -> Nullable<Uuid>,
         timed_out_at -> Nullable<Timestamptz>,
+        timeout_phase -> Nullable<Text>,
         last_fix_at -> Timestamptz,
         callsign -> Nullable<Text>,
         tow_release_height_delta_ft -> Nullable<Int4>,
