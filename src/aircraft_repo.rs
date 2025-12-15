@@ -39,8 +39,8 @@ impl AircraftRepository {
             .map_err(|e| anyhow::anyhow!("Failed to get database connection: {}", e))
     }
 
-    /// Upsert devices into the database
-    /// This will insert new devices or update existing ones based on aircraft_id
+    /// Upsert aircraft into the database
+    /// This will insert new aircraft or update existing ones based on aircraft_id
     pub async fn upsert_devices<I>(&self, devices_iter: I) -> Result<usize>
     where
         I: IntoIterator<Item = Aircraft>,
@@ -48,7 +48,7 @@ impl AircraftRepository {
         let mut conn = self.get_connection()?;
         let mut upserted_count = 0;
 
-        // Convert devices to NewAircraft structs for insertion
+        // Convert aircraft to NewAircraft structs for insertion
         let new_devices: Vec<NewAircraft> = devices_iter.into_iter().map(|d| d.into()).collect();
 
         for new_device in new_devices {
@@ -61,26 +61,26 @@ impl AircraftRepository {
                     // Use COALESCE(NULLIF(new, ''), old) to keep existing data when DDB has empty strings
                     aircraft::address_type.eq(excluded(aircraft::address_type)),
                     aircraft::aircraft_model.eq(diesel::dsl::sql(
-                        "COALESCE(NULLIF(EXCLUDED.aircraft_model, ''), devices.aircraft_model)"
+                        "COALESCE(NULLIF(EXCLUDED.aircraft_model, ''), aircraft.aircraft_model)"
                     )),
                     aircraft::registration.eq(diesel::dsl::sql(
-                        "COALESCE(NULLIF(EXCLUDED.registration, ''), devices.registration)"
+                        "COALESCE(NULLIF(EXCLUDED.registration, ''), aircraft.registration)"
                     )),
                     aircraft::competition_number.eq(diesel::dsl::sql(
-                        "COALESCE(NULLIF(EXCLUDED.competition_number, ''), devices.competition_number)"
+                        "COALESCE(NULLIF(EXCLUDED.competition_number, ''), aircraft.competition_number)"
                     )),
                     aircraft::tracked.eq(excluded(aircraft::tracked)),
                     aircraft::identified.eq(excluded(aircraft::identified)),
                     aircraft::from_ddb.eq(excluded(aircraft::from_ddb)),
                     // For Option fields, use COALESCE to prefer new value over NULL, but keep old if new is NULL
                     aircraft::frequency_mhz.eq(diesel::dsl::sql(
-                        "COALESCE(EXCLUDED.frequency_mhz, devices.frequency_mhz)"
+                        "COALESCE(EXCLUDED.frequency_mhz, aircraft.frequency_mhz)"
                     )),
                     aircraft::pilot_name.eq(diesel::dsl::sql(
-                        "COALESCE(EXCLUDED.pilot_name, devices.pilot_name)"
+                        "COALESCE(EXCLUDED.pilot_name, aircraft.pilot_name)"
                     )),
                     aircraft::home_base_airport_ident.eq(diesel::dsl::sql(
-                        "COALESCE(EXCLUDED.home_base_airport_ident, devices.home_base_airport_ident)"
+                        "COALESCE(EXCLUDED.home_base_airport_ident, aircraft.home_base_airport_ident)"
                     )),
                     aircraft::updated_at.eq(diesel::dsl::now),
                     // NOTE: We do NOT update the following fields because they come from real-time packets:
@@ -100,24 +100,24 @@ impl AircraftRepository {
                 }
                 Err(e) => {
                     warn!("Failed to upsert device {}: {}", new_device.address, e);
-                    // Continue with other devices rather than failing the entire batch
+                    // Continue with other aircraft rather than failing the entire batch
                 }
             }
         }
 
-        info!("Successfully upserted {} devices", upserted_count);
+        info!("Successfully upserted {} aircraft", upserted_count);
         Ok(upserted_count)
     }
 
-    /// Get the total count of devices in the database
+    /// Get the total count of aircraft in the database
     pub async fn get_device_count(&self) -> Result<i64> {
         let mut conn = self.get_connection()?;
         let count = aircraft::table.count().get_result::<i64>(&mut conn)?;
         Ok(count)
     }
 
-    /// Get a device by its address
-    /// Address is unique across all devices
+    /// Get an aircraft by its address
+    /// Address is unique across all aircraft
     pub async fn get_device_by_address(&self, address: u32) -> Result<Option<Aircraft>> {
         let mut conn = self.get_connection()?;
         let device_model = aircraft::table
@@ -412,7 +412,7 @@ impl AircraftRepository {
                     latest_fix.latitude AS latest_latitude,
                     latest_fix.longitude AS latest_longitude,
                     active_flight.id AS active_flight_id
-                FROM devices d
+                FROM aircraft d
                 LEFT JOIN LATERAL (
                     SELECT latitude, longitude
                     FROM fixes

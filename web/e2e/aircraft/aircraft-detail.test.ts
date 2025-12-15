@@ -3,10 +3,10 @@ import { goToAircraft, searchAircraftByRegistration } from '../utils/navigation'
 import { testAircraft } from '../fixtures/data.fixture';
 
 test.describe('Aircraft Detail', () => {
-	// Helper function to navigate to a test device detail page
-	// Searches for a known test device and navigates to it
+	// Helper function to navigate to a test aircraft detail page
+	// Searches for a known test aircraft and navigates to it
 	async function navigateToTestDevice(page: Page) {
-		// First, directly query the backend API to verify devices exist
+		// First, directly query the backend API to verify aircraft exist
 		// Use baseURL from playwright config (respects PLAYWRIGHT_BASE_URL in CI)
 		const backendUrl = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:4173';
 		const apiResponse = await page.request.get(
@@ -15,7 +15,7 @@ test.describe('Aircraft Detail', () => {
 		const apiData = await apiResponse.json();
 		console.log('Backend API response:', JSON.stringify(apiData, null, 2));
 		console.log('API status:', apiResponse.status());
-		console.log('Device count from API:', apiData.devices?.length || 0);
+		console.log('Aircraft count from API:', apiData.aircraft?.length || 0);
 
 		await goToAircraft(page);
 		await searchAircraftByRegistration(page, testAircraft.validRegistration);
@@ -26,7 +26,7 @@ test.describe('Aircraft Detail', () => {
 		// Debug: Check what's actually on the page
 		console.log('Page title:', await page.title());
 		console.log('Page URL:', page.url());
-		console.log('Device cards found:', await page.locator('a[href^="/aircraft/"]').count());
+		console.log('Aircraft cards found:', await page.locator('a[href^="/aircraft/"]').count());
 
 		// Check if there's an error message
 		const errorText = await page
@@ -37,23 +37,25 @@ test.describe('Aircraft Detail', () => {
 			console.log('Error message on page:', errorText);
 		}
 
-		// Find and click the first device card
-		const deviceCard = page.locator('a[href^="/aircraft/"]').first();
-		await expect(deviceCard).toBeVisible();
-		await deviceCard.click();
+		// Find and click the first aircraft card
+		const aircraftCard = page.locator('a[href^="/aircraft/"]').first();
+		await expect(aircraftCard).toBeVisible();
+		await aircraftCard.click();
 
-		// Wait for device detail page to load
+		// Wait for aircraft detail page to load
 		await page.waitForLoadState('networkidle');
 	}
 
-	test.skip('should display device detail authenticatedPage', async ({ authenticatedPage }) => {
+	test.skip('should display aircraft detail authenticatedPage', async ({ authenticatedPage }) => {
 		await navigateToTestDevice(authenticatedPage);
 
-		// Check page has device-related content
+		// Check page has aircraft-related content
 		await expect(authenticatedPage.getByRole('heading', { level: 1 })).toBeVisible();
 
 		// Should have a back button
-		await expect(authenticatedPage.getByRole('button', { name: /back to devices/i })).toBeVisible();
+		await expect(
+			authenticatedPage.getByRole('button', { name: /back to aircraft/i })
+		).toBeVisible();
 
 		// Should show aircraft registration section
 		await expect(
@@ -62,15 +64,17 @@ test.describe('Aircraft Detail', () => {
 
 		// Take screenshot for visual regression testing
 		await expect(authenticatedPage).toHaveScreenshot('aircraft-detail-authenticatedPage.png', {
-			// Device data may vary, so use a larger threshold
+			// Aircraft data may vary, so use a larger threshold
 			maxDiffPixelRatio: 0.1
 		});
 	});
 
-	test.skip('should display device address and type information', async ({ authenticatedPage }) => {
+	test.skip('should display aircraft address and type information', async ({
+		authenticatedPage
+	}) => {
 		await navigateToTestDevice(authenticatedPage);
 
-		// Should show device address in the format "Address: ICAO-ABC123" or similar
+		// Should show aircraft address in the format "Address: ICAO-ABC123" or similar
 		await expect(authenticatedPage.getByText(/Address:/i)).toBeVisible();
 
 		// Should show address type information (ICAO, OGN, or FLARM) in the address string
@@ -124,18 +128,18 @@ test.describe('Aircraft Detail', () => {
 		});
 	});
 
-	test.skip('should navigate back to device list', async ({ authenticatedPage }) => {
+	test.skip('should navigate back to aircraft list', async ({ authenticatedPage }) => {
 		await navigateToTestDevice(authenticatedPage);
 
 		// Click the back button
-		await authenticatedPage.getByRole('button', { name: /back to devices/i }).click();
+		await authenticatedPage.getByRole('button', { name: /back to aircraft/i }).click();
 
-		// Should navigate back to devices authenticatedPage
+		// Should navigate back to aircraft page
 		await expect(authenticatedPage).toHaveURL(/\/aircraft$/);
 	});
 
-	test('should handle invalid device ID gracefully', async ({ authenticatedPage }) => {
-		// Try to navigate to a device that doesn't exist using an invalid UUID
+	test('should handle invalid aircraft ID gracefully', async ({ authenticatedPage }) => {
+		// Try to navigate to an aircraft that doesn't exist using an invalid UUID
 		await authenticatedPage.goto('/aircraft/00000000-0000-0000-0000-000000000000');
 
 		// Wait for page to load
@@ -143,7 +147,7 @@ test.describe('Aircraft Detail', () => {
 
 		// Should show error message (both heading and paragraph match, use first())
 		await expect(
-			authenticatedPage.getByText(/error loading device|failed to load/i).first()
+			authenticatedPage.getByText(/error loading aircraft|failed to load/i).first()
 		).toBeVisible();
 
 		// Take screenshot of error state
@@ -152,11 +156,11 @@ test.describe('Aircraft Detail', () => {
 
 	test.skip('should show loading state while fetching data', async ({ authenticatedPage }) => {
 		// This test is skipped because loading states are too fast to reliably test
-		// and the test uses dynamic device navigation which adds complexity
+		// and the test uses dynamic aircraft navigation which adds complexity
 		await navigateToTestDevice(authenticatedPage);
 	});
 
-	test.skip('should display device status badges if available', async ({ authenticatedPage }) => {
+	test.skip('should display aircraft status badges if available', async ({ authenticatedPage }) => {
 		await navigateToTestDevice(authenticatedPage);
 
 		await authenticatedPage.waitForLoadState('networkidle');
@@ -164,7 +168,7 @@ test.describe('Aircraft Detail', () => {
 		// Look for status badges (tracked, identified, etc.)
 		const hasBadges = await authenticatedPage.locator('.badge').count();
 
-		// Device should have at least some status information
+		// Aircraft should have at least some status information
 		expect(hasBadges).toBeGreaterThanOrEqual(0);
 	});
 

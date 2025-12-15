@@ -443,7 +443,7 @@
 			}
 		});
 
-		// Initialize active devices
+		// Initialize active aircraft
 		activeDevices = deviceRegistry.getAllAircraft();
 
 		return () => {
@@ -455,11 +455,11 @@
 	$effect(() => {
 		if (!map || initialMarkersRendered) return;
 
-		// When map first becomes available, render markers for all active devices
+		// When map first becomes available, render markers for all active aircraft
 		console.log(
 			'[EFFECT] Map available, initializing markers for',
 			activeDevices.length,
-			'devices'
+			'aircraft'
 		);
 		activeDevices.forEach((device) => {
 			const fixes = device.fixes || [];
@@ -1716,7 +1716,7 @@
 		const sw = bounds.getSouthWest();
 
 		try {
-			console.log('[REST] Fetching devices in viewport...');
+			console.log('[REST] Fetching aircraft in viewport...');
 
 			// Calculate "after" timestamp based on position fix window
 			const afterTime = dayjs().utc().subtract(currentSettings.positionFixWindow, 'hour');
@@ -1731,19 +1731,19 @@
 				afterTimestamp
 			);
 
-			console.log(`[REST] Received ${devicesWithFixes.length} devices`);
+			console.log(`[REST] Received ${devicesWithFixes.length} aircraft`);
 
-			// Process each device and add to registry
-			// The backend now includes the last 10 fixes per device, so we don't need
+			// Process each aircraft and add to registry
+			// The backend now includes the last 10 fixes per aircraft, so we don't need
 			// to make additional API calls for trail data
 			for (const aircraft of devicesWithFixes) {
 				// Register the aircraft with all its fixes
 				await deviceRegistry.updateAircraftFromAircraftData(aircraft);
 			}
 
-			console.log('[REST] Devices loaded with fixes from backend');
+			console.log('[REST] Aircraft loaded with fixes from backend');
 		} catch (error) {
-			console.error('[REST] Failed to fetch devices in viewport:', error);
+			console.error('[REST] Failed to fetch aircraft in viewport:', error);
 		}
 	}
 </script>

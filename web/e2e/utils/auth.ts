@@ -66,7 +66,7 @@ export async function isLoggedIn(page: Page): Promise<boolean> {
 	// Check for presence of authenticated content
 	// This is a simple check - adjust based on your app's structure
 	// For example, check if we're redirected to login when accessing a protected page
-	await page.goto('/devices');
+	await page.goto('/aircraft');
 	const currentUrl = page.url();
 	return !currentUrl.includes('/login');
 }

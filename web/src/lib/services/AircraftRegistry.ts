@@ -458,7 +458,7 @@ export class AircraftRegistry {
 
 		console.log(`[REGISTRY] Refreshing ${staleAircraftIds.length} stale aircraft`);
 
-		// Refresh devices in parallel with rate limiting (max 5 at a time)
+		// Refresh aircraft in parallel with rate limiting (max 5 at a time)
 		const batchSize = 5;
 		for (let i = 0; i < staleAircraftIds.length; i += batchSize) {
 			const batch = staleAircraftIds.slice(i, i + batchSize);

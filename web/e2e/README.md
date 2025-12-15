@@ -20,7 +20,7 @@ Tests are run automatically in CI on every pull request.
 Our E2E tests use **Playwright** to test the application in real browsers (Chromium by default). Tests cover critical user journeys including:
 
 - **Authentication**: Login, registration, logout flows
-- **Devices**: Searching, listing, and viewing aircraft devices
+- **Aircraft**: Searching, listing, and viewing aircraft
 - **Flights**: Flight tracking and details (TODO)
 - **Clubs**: Club management (TODO)
 
@@ -67,7 +67,7 @@ The seed command creates:
 
 - **Test User**: `test@example.com` / `testpassword123` (configurable)
 - **Test Club**: "Test Soaring Club"
-- **Test Devices**: N12345, N54321, N98765 (plus random devices)
+- **Test Aircraft**: N12345, N54321, N98765 (plus random aircraft)
 - **Test Pilots**: Mix of licensed/unlicensed, instructors, tow pilots
 - **Fake Users**: Realistic test users with random names/emails
 
@@ -157,7 +157,7 @@ import { test, expect } from '../fixtures/auth.fixture';
 
 test('authenticated test', async ({ authenticatedPage }) => {
 	// This page is already logged in
-	await authenticatedPage.goto('/devices');
+	await authenticatedPage.goto('/aircraft');
 	// ... test protected functionality
 });
 ```
@@ -165,7 +165,7 @@ test('authenticated test', async ({ authenticatedPage }) => {
 ### Using Test Data
 
 ```typescript
-import { testUsers, testDevices } from '../fixtures/data.fixture';
+import { testUsers, testAircraft } from '../fixtures/data.fixture';
 
 test('login with test user', async ({ page }) => {
 	await login(page, testUsers.validUser.email, testUsers.validUser.password);
@@ -176,11 +176,11 @@ test('login with test user', async ({ page }) => {
 
 ```typescript
 import { login } from '../utils/auth';
-import { goToDevices, searchDevicesByRegistration } from '../utils/navigation';
+import { goToAircraft, searchAircraftByRegistration } from '../utils/navigation';
 
-test('search for devices', async ({ page }) => {
+test('search for aircraft', async ({ page }) => {
 	await login(page, 'test@example.com', 'password');
-	await searchDevicesByRegistration(page, 'N12345');
+	await searchAircraftByRegistration(page, 'N12345');
 	// ... assertions
 });
 ```
@@ -199,9 +199,9 @@ e2e/
 │   ├── login.test.ts
 │   ├── register.test.ts
 │   └── logout.test.ts
-└── devices/            # Device-related tests
-    ├── device-list.test.ts
-    └── device-detail.test.ts
+└── aircraft/           # Aircraft-related tests
+    ├── aircraft-list.test.ts
+    └── aircraft-detail.test.ts
 ```
 
 ## Visual Regression Testing
@@ -275,7 +275,7 @@ await page.locator('#email-input').fill('test@example.com');
 
 ```typescript
 test('wait for data loading', async ({ page }) => {
-	await page.goto('/devices');
+	await page.goto('/aircraft');
 	await page.waitForLoadState('networkidle');
 	// Now safe to assert on loaded data
 });
@@ -307,7 +307,7 @@ test.afterEach(async () => {
 
 ### Tests Failing Due to Missing Data
 
-**Symptom**: Login fails, devices not found, "no results" everywhere
+**Symptom**: Login fails, aircraft not found, "no results" everywhere
 
 **Solution**: Reset the test database
 
@@ -358,7 +358,7 @@ psql -U postgres -c "\l" | grep soar_test
 
 # Check test data was seeded
 psql -U postgres -d soar_test -c "SELECT COUNT(*) FROM users;"
-psql -U postgres -d soar_test -c "SELECT COUNT(*) FROM devices;"
+psql -U postgres -d soar_test -c "SELECT COUNT(*) FROM aircraft;"
 ```
 
 ### Build takes too long
@@ -381,7 +381,7 @@ CI=true npm test
 
 ## Adding New Tests
 
-1. **Create test file** in appropriate directory (`auth/`, `devices/`, etc.)
+1. **Create test file** in appropriate directory (`auth/`, `aircraft/`, etc.)
 2. **Import necessary utilities** from `fixtures/` and `utils/`
 3. **Write tests** following existing patterns
 4. **Add screenshots** for visual regression testing

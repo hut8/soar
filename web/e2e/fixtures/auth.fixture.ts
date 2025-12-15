@@ -11,7 +11,7 @@ import { login } from '../utils/auth';
  *
  * test('my authenticated test', async ({ authenticatedPage }) => {
  *   // This page is already logged in
- *   await authenticatedPage.goto('/devices');
+ *   await authenticatedPage.goto('/aircraft');
  * });
  */
 
