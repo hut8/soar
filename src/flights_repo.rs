@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use uuid::Uuid;
 
-use crate::flights::{Flight, FlightModel};
+use crate::flights::{Flight, FlightModel, TimeoutPhase};
 use crate::web::PgPool;
 
 #[derive(Clone)]
@@ -695,12 +695,11 @@ impl FlightsRepository {
         &self,
         flight_id: Uuid,
         timeout_time: DateTime<Utc>,
-        phase: &str,
+        phase: TimeoutPhase,
     ) -> Result<bool> {
         use crate::schema::flights::dsl::*;
 
         let pool = self.pool.clone();
-        let phase_string = phase.to_string();
 
         let rows_affected = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
@@ -708,7 +707,7 @@ impl FlightsRepository {
             let rows = diesel::update(flights.filter(id.eq(flight_id)))
                 .set((
                     timed_out_at.eq(Some(timeout_time)),
-                    timeout_phase.eq(Some(phase_string)),
+                    timeout_phase.eq(Some(phase)),
                     updated_at.eq(Utc::now()),
                 ))
                 .execute(&mut conn)?;

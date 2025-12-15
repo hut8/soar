@@ -1,6 +1,7 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
+use diesel_derive_enum::DbEnum;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 use uuid::Uuid;
@@ -21,6 +22,21 @@ pub enum FlightState {
     Complete,
     /// Flight timed out due to no beacons for 1+ hour (has timed_out_at)
     TimedOut,
+}
+
+/// Flight phase at timeout - used to determine flight coalescing behavior
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum)]
+#[serde(rename_all = "snake_case")]
+#[db_enum(existing_type_path = "crate::schema::sql_types::TimeoutPhase")]
+pub enum TimeoutPhase {
+    /// Flight was climbing when it timed out
+    Climbing,
+    /// Flight was cruising when it timed out
+    Cruising,
+    /// Flight was descending when it timed out
+    Descending,
+    /// Flight phase could not be determined
+    Unknown,
 }
 
 /// Calculate the distance between two points using the Haversine formula
@@ -119,10 +135,10 @@ pub struct Flight {
     /// Mutually exclusive with landing_time - a flight is either landed or timed out, not both
     pub timed_out_at: Option<DateTime<Utc>>,
 
-    /// Flight phase when timeout occurred ("climbing", "cruising", "descending", "unknown")
+    /// Flight phase when timeout occurred
     /// Used to determine coalescing behavior when aircraft reappears
     /// NULL if flight has not timed out or if timeout occurred before this field was added
-    pub timeout_phase: Option<String>,
+    pub timeout_phase: Option<TimeoutPhase>,
 
     /// Timestamp of the last fix received for this flight
     /// Updated whenever a fix is assigned to this flight
@@ -870,7 +886,7 @@ pub struct FlightModel {
     pub takeoff_location_id: Option<Uuid>,
     pub landing_location_id: Option<Uuid>,
     pub timed_out_at: Option<DateTime<Utc>>,
-    pub timeout_phase: Option<String>,
+    pub timeout_phase: Option<TimeoutPhase>,
     pub last_fix_at: DateTime<Utc>,
     pub tow_release_height_delta_ft: Option<i32>,
     pub callsign: Option<String>,
@@ -903,7 +919,7 @@ pub struct NewFlightModel {
     pub takeoff_location_id: Option<Uuid>,
     pub landing_location_id: Option<Uuid>,
     pub timed_out_at: Option<DateTime<Utc>>,
-    pub timeout_phase: Option<String>,
+    pub timeout_phase: Option<TimeoutPhase>,
     pub last_fix_at: DateTime<Utc>,
     // Note: callsign and tow_release_height_delta_ft are not included in NewFlightModel
     // as they are not set during initial flight creation

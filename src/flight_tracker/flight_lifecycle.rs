@@ -1,6 +1,6 @@
 use crate::Fix;
 use crate::aircraft::Aircraft;
-use crate::flights::Flight;
+use crate::flights::{Flight, TimeoutPhase};
 use crate::flights_repo::FlightsRepository;
 use anyhow::Result;
 use tracing::{debug, error, info, warn};
@@ -117,14 +117,14 @@ pub(crate) async fn timeout_flight(
             .unwrap_or(super::FlightPhase::Unknown)
     };
 
-    let phase_str = match flight_phase {
-        super::FlightPhase::Climbing => "climbing",
-        super::FlightPhase::Cruising => "cruising",
-        super::FlightPhase::Descending => "descending",
-        super::FlightPhase::Unknown => "unknown",
+    let timeout_phase = match flight_phase {
+        super::FlightPhase::Climbing => TimeoutPhase::Climbing,
+        super::FlightPhase::Cruising => TimeoutPhase::Cruising,
+        super::FlightPhase::Descending => TimeoutPhase::Descending,
+        super::FlightPhase::Unknown => TimeoutPhase::Unknown,
     };
 
-    debug!("Flight {} phase at timeout: {}", flight_id, phase_str);
+    debug!("Flight {} phase at timeout: {:?}", flight_id, timeout_phase);
 
     // Fetch the flight to get the last_fix_at timestamp
     let flight = match flights_repo.get_flight_by_id(flight_id).await? {
@@ -143,7 +143,7 @@ pub(crate) async fn timeout_flight(
 
     // Mark flight as timed out in database WITH phase information
     match flights_repo
-        .timeout_flight_with_phase(flight_id, timeout_time, phase_str)
+        .timeout_flight_with_phase(flight_id, timeout_time, timeout_phase)
         .await
     {
         Ok(true) => {
@@ -157,7 +157,13 @@ pub(crate) async fn timeout_flight(
             flights.remove(&aircraft_id);
 
             metrics::counter!("flight_tracker.flight_ended.timed_out").increment(1);
-            metrics::counter!("flight_tracker.timeout.phase", "phase" => phase_str).increment(1);
+            let phase_label = match timeout_phase {
+                TimeoutPhase::Climbing => "climbing",
+                TimeoutPhase::Cruising => "cruising",
+                TimeoutPhase::Descending => "descending",
+                TimeoutPhase::Unknown => "unknown",
+            };
+            metrics::counter!("flight_tracker.timeout.phase", "phase" => phase_label).increment(1);
 
             Ok(())
         }

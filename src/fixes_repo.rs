@@ -1083,14 +1083,19 @@ impl FixesRepository {
     /// Used for coalescing validation to compare positions between timeout and reappearance
     pub async fn get_last_fix_for_flight(&self, flight_id_val: Uuid) -> Result<Option<Fix>> {
         use crate::schema::fixes::dsl::*;
+        use chrono::{Duration, Utc};
 
         let pool = self.pool.clone();
+
+        // Only look at fixes from the last 48 hours for partition pruning
+        let cutoff_time = Utc::now() - Duration::hours(48);
 
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
             let fix_row: Option<Fix> = fixes
                 .filter(flight_id.eq(flight_id_val))
+                .filter(timestamp.ge(cutoff_time))
                 .order(timestamp.desc())
                 .select(Fix::as_select())
                 .first(&mut conn)

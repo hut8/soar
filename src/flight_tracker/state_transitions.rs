@@ -1,4 +1,5 @@
 use crate::Fix;
+use crate::flights::TimeoutPhase;
 use crate::flights_repo::FlightsRepository;
 use crate::ogn_aprs_aircraft::AircraftType;
 use anyhow::Result;
@@ -289,8 +290,8 @@ pub(crate) async fn process_state_transition(
                     };
 
                     // Check 3: Phase-based validation - determine if this looks like a landing + new takeoff
-                    let looks_like_landing = match timed_out_flight.timeout_phase.as_deref() {
-                        Some("descending") => {
+                    let looks_like_landing = match timed_out_flight.timeout_phase {
+                        Some(TimeoutPhase::Descending) => {
                             // Aircraft was descending when it timed out
                             // Check if new fix is at low altitude climbing (indicates new takeoff)
                             let new_fix_low_altitude =
@@ -304,16 +305,16 @@ pub(crate) async fn process_state_transition(
                             // If at low altitude, climbing, and far from timeout position → landed
                             new_fix_low_altitude && new_fix_climbing && far_apart
                         }
-                        Some("cruising") => {
+                        Some(TimeoutPhase::Cruising) => {
                             // Aircraft was cruising - only reject if VERY far apart
                             // This allows trans-Atlantic flights
                             distance_km > 3000.0 // More than 3000km suggests different flight
                         }
-                        Some("climbing") => {
+                        Some(TimeoutPhase::Climbing) => {
                             // Climbing phase timeout is unusual, be conservative
                             distance_km > 500.0
                         }
-                        _ => {
+                        Some(TimeoutPhase::Unknown) | None => {
                             // Unknown phase - use conservative distance threshold
                             distance_km > 500.0
                         }
