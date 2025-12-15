@@ -44,6 +44,10 @@ pub mod sql_types {
     #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "registrant_type"))]
     pub struct RegistrantType;
+
+    #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
+    #[diesel(postgres_type(name = "timeout_phase"))]
+    pub struct TimeoutPhase;
 }
 
 diesel::table! {
@@ -734,6 +738,7 @@ diesel::table! {
 diesel::table! {
     use diesel::sql_types::*;
     use super::sql_types::AddressType;
+    use super::sql_types::TimeoutPhase;
 
     flights (id) {
         id -> Uuid,
@@ -762,6 +767,7 @@ diesel::table! {
         takeoff_location_id -> Nullable<Uuid>,
         landing_location_id -> Nullable<Uuid>,
         timed_out_at -> Nullable<Timestamptz>,
+        timeout_phase -> Nullable<TimeoutPhase>,
         last_fix_at -> Timestamptz,
         callsign -> Nullable<Text>,
         tow_release_height_delta_ft -> Nullable<Int4>,

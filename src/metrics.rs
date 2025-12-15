@@ -355,6 +355,16 @@ pub fn initialize_run_metrics() {
     metrics::counter!("flight_tracker.coalesce.resumed").absolute(0);
     metrics::counter!("flight_tracker.coalesce.callsign_mismatch").absolute(0);
     metrics::counter!("flight_tracker.coalesce.no_timeout_flight").absolute(0);
+    metrics::counter!("flight_tracker.coalesce.rejected.callsign").absolute(0);
+    metrics::counter!("flight_tracker.coalesce.rejected.probable_landing").absolute(0);
+    metrics::histogram!("flight_tracker.coalesce.rejected.distance_km").record(0.0);
+    metrics::histogram!("flight_tracker.coalesce.resumed.distance_km").record(0.0);
+
+    // Flight timeout phase tracking
+    metrics::counter!("flight_tracker.timeout.phase", "phase" => "climbing").absolute(0);
+    metrics::counter!("flight_tracker.timeout.phase", "phase" => "cruising").absolute(0);
+    metrics::counter!("flight_tracker.timeout.phase", "phase" => "descending").absolute(0);
+    metrics::counter!("flight_tracker.timeout.phase", "phase" => "unknown").absolute(0);
 
     // Flight creation metrics
     metrics::counter!("flight_tracker.flight_created.takeoff").absolute(0);

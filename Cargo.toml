@@ -59,6 +59,7 @@ diesel = { version = "2.3", features = [
     "serde_json",
     "r2d2",
     "numeric",
+    "64-column-tables",
 ] }
 # For musl static builds: compile libpq from source with all internal static libraries
 # This avoids the missing libpgcommon.a and libpgport.a that aren't in system packages
