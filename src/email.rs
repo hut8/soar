@@ -2,7 +2,9 @@ use anyhow::Result;
 use lettre::{
     AsyncSmtpTransport, AsyncTransport, Tokio1Executor,
     message::{Message, header::ContentType},
-    transport::smtp::{authentication::Credentials, response::Response},
+    transport::smtp::{
+        authentication::Credentials, client::TlsParametersBuilder, response::Response,
+    },
 };
 
 /// Get the staging prefix for email subjects
@@ -56,23 +58,30 @@ impl EmailService {
                 .tls(lettre::transport::smtp::client::Tls::None)
                 .build()
         } else if smtp_port == 465 {
-            // Port 465 uses implicit TLS (TLS wrapper)
+            // Port 465 uses implicit TLS (TLS wrapper - SMTPS)
             // Connection starts with TLS immediately, no STARTTLS upgrade
-            tracing::info!("Using implicit TLS (TLS wrapper) for port 465");
-            AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(&smtp_server)
+            tracing::info!("Using implicit TLS (SMTPS) for port 465");
+            let tls_params = TlsParametersBuilder::new(smtp_server.clone())
+                .dangerous_accept_invalid_certs(true)
+                .build()
+                .map_err(|e| anyhow::anyhow!("Failed to create TLS parameters: {}", e))?;
+            AsyncSmtpTransport::<Tokio1Executor>::relay(&smtp_server)?
                 .port(smtp_port)
                 .credentials(creds)
-                .tls(lettre::transport::smtp::client::Tls::Wrapper(
-                    lettre::transport::smtp::client::TlsParameters::new(smtp_server.clone())?,
-                ))
+                .tls(lettre::transport::smtp::client::Tls::Wrapper(tls_params))
                 .build()
         } else {
             // Port 587 and others use STARTTLS
             // Connection starts plain and upgrades to TLS
             tracing::info!("Using STARTTLS for port {}", smtp_port);
+            let tls_params = TlsParametersBuilder::new(smtp_server.clone())
+                .dangerous_accept_invalid_certs(true)
+                .build()
+                .map_err(|e| anyhow::anyhow!("Failed to create TLS parameters: {}", e))?;
             AsyncSmtpTransport::<Tokio1Executor>::relay(&smtp_server)?
                 .port(smtp_port)
                 .credentials(creds)
+                .tls(lettre::transport::smtp::client::Tls::Required(tls_params))
                 .build()
         };
 
