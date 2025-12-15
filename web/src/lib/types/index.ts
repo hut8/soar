@@ -304,3 +304,30 @@ export interface Receiver {
 	latest_packet_at: string | null;
 	from_ogn_db: boolean;
 }
+
+// Airspace interface - GeoJSON Feature format
+export interface Airspace {
+	type: 'Feature';
+	geometry: {
+		type: 'Polygon' | 'MultiPolygon';
+		coordinates: number[][][] | number[][][][];
+	};
+	properties: {
+		id: string;
+		openaip_id: number;
+		name: string;
+		airspace_class: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'SUA' | null;
+		airspace_type: string;
+		lower_limit: string;
+		upper_limit: string;
+		remarks: string | null;
+		country_code: string | null;
+		activity_type: string | null;
+	};
+}
+
+// Airspace collection - GeoJSON FeatureCollection format
+export interface AirspaceFeatureCollection {
+	type: 'FeatureCollection';
+	features: Airspace[];
+}

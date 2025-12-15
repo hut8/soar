@@ -12,7 +12,7 @@
 	import AirportModal from '$lib/components/AirportModal.svelte';
 	import { AircraftRegistry } from '$lib/services/AircraftRegistry';
 	import { FixFeed } from '$lib/services/FixFeed';
-	import type { Aircraft, Receiver } from '$lib/types';
+	import type { Aircraft, Receiver, Airspace, AirspaceFeatureCollection } from '$lib/types';
 	import { toaster } from '$lib/toaster';
 	import { debugStatus } from '$lib/stores/watchlist';
 	import { browser } from '$app/environment';
@@ -94,6 +94,11 @@
 	let shouldShowReceivers: boolean = false;
 	let receiverUpdateDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
+	// Airspace display variables
+	let airspacePolygons: google.maps.Polygon[] = [];
+	let shouldShowAirspaces: boolean = false;
+	let airspaceUpdateDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
 	// Aircraft display variables
 	let aircraftMarkers = new SvelteMap<string, google.maps.marker.AdvancedMarkerElement>();
 	let latestFixes = new SvelteMap<string, Fix>();
@@ -122,6 +127,7 @@
 		showCompassRose: true,
 		showAirportMarkers: true,
 		showReceiverMarkers: true,
+		showAirspaceMarkers: true,
 		showRunwayOverlays: false,
 		positionFixWindow: 8
 	});
@@ -144,6 +150,7 @@
 		showCompassRose: boolean;
 		showAirportMarkers: boolean;
 		showReceiverMarkers: boolean;
+		showAirspaceMarkers: boolean;
 		showRunwayOverlays: boolean;
 		positionFixWindow: number;
 	}) {
@@ -405,6 +412,16 @@
 		}
 	});
 
+	$effect(() => {
+		if (!currentSettings.showAirspaceMarkers && shouldShowAirspaces) {
+			clearAirspacePolygons();
+			shouldShowAirspaces = false;
+		} else if (currentSettings.showAirspaceMarkers && map) {
+			// Re-check if we should show airspaces
+			checkAndUpdateAirspaces();
+		}
+	});
+
 	// Get singleton instances
 	const deviceRegistry = AircraftRegistry.getInstance();
 	const fixFeed = FixFeed.getInstance();
@@ -556,6 +573,7 @@
 		map.addListener('zoom_changed', () => {
 			setTimeout(checkAndUpdateAirports, 100); // Small delay to ensure bounds are updated
 			setTimeout(checkAndUpdateReceivers, 100); // Check receivers as well
+			setTimeout(checkAndUpdateAirspaces, 100); // Check airspaces as well
 			// Update aircraft marker scaling on zoom change
 			updateAllAircraftMarkersScale();
 			// Update area tracker availability and subscriptions
@@ -574,6 +592,7 @@
 		map.addListener('dragend', async () => {
 			checkAndUpdateAirports();
 			checkAndUpdateReceivers();
+			checkAndUpdateAirspaces();
 			// Update area subscriptions after panning
 			if (areaTrackerActive) {
 				// Hybrid approach: Fetch immediate snapshot then update WebSocket subscriptions
@@ -584,9 +603,10 @@
 			saveMapState();
 		});
 
-		// Initial check for airports and receivers
+		// Initial check for airports, receivers, and airspaces
 		setTimeout(checkAndUpdateAirports, 1000); // Give map time to fully initialize
 		setTimeout(checkAndUpdateReceivers, 1000);
+		setTimeout(checkAndUpdateAirspaces, 1000);
 
 		// Initial area tracker availability check
 		setTimeout(updateAreaTrackerAvailability, 1000);
@@ -1095,6 +1115,160 @@
 
 			receiverUpdateDebounceTimer = null;
 		}, 100);
+	}
+
+	// Airspace functions
+	function getAirspaceColor(airspaceClass: string | null): string {
+		switch (airspaceClass) {
+			case 'A':
+			case 'B':
+			case 'C':
+			case 'D':
+				return '#DC2626'; // Red - Controlled airspace
+			case 'E':
+				return '#F59E0B'; // Amber - Class E
+			case 'F':
+			case 'G':
+				return '#10B981'; // Green - Uncontrolled
+			default:
+				return '#6B7280'; // Gray - Other/SUA
+		}
+	}
+
+	async function fetchAirspacesInViewport(): Promise<void> {
+		if (!map) return;
+
+		const bounds = map.getBounds();
+		if (!bounds) return;
+
+		const ne = bounds.getNorthEast();
+		const sw = bounds.getSouthWest();
+
+		try {
+			const params = new URLSearchParams({
+				west: sw.lng().toString(),
+				south: sw.lat().toString(),
+				east: ne.lng().toString(),
+				north: ne.lat().toString(),
+				limit: '500'
+			});
+
+			const data = await serverCall<AirspaceFeatureCollection>(`/data/airspaces?${params}`);
+
+			if (data && data.type === 'FeatureCollection' && Array.isArray(data.features)) {
+				displayAirspacesOnMap(data.features);
+			}
+		} catch (error) {
+			console.error('Error fetching airspaces:', error);
+		}
+	}
+
+	function displayAirspacesOnMap(airspaces: Airspace[]): void {
+		// Clear existing airspace polygons
+		clearAirspacePolygons();
+
+		airspaces.forEach((airspace) => {
+			const color = getAirspaceColor(airspace.properties.airspace_class);
+
+			// Convert GeoJSON coordinates to Google Maps LatLng format
+			const paths: google.maps.LatLngLiteral[][] = [];
+
+			if (airspace.geometry.type === 'Polygon') {
+				// Single polygon: coordinates is number[][][]
+				const coords = airspace.geometry.coordinates as number[][][];
+				coords.forEach((ring) => {
+					const path = ring.map((coord) => ({ lat: coord[1], lng: coord[0] }));
+					paths.push(path);
+				});
+			} else if (airspace.geometry.type === 'MultiPolygon') {
+				// MultiPolygon: coordinates is number[][][][]
+				const coords = airspace.geometry.coordinates as number[][][][];
+				coords.forEach((polygon) => {
+					polygon.forEach((ring) => {
+						const path = ring.map((coord) => ({ lat: coord[1], lng: coord[0] }));
+						paths.push(path);
+					});
+				});
+			}
+
+			// Create polygon for each path
+			paths.forEach((path) => {
+				const polygon = new google.maps.Polygon({
+					paths: path,
+					strokeColor: color,
+					strokeOpacity: 0.8,
+					strokeWeight: 2,
+					fillColor: color,
+					fillOpacity: 0.15,
+					map: map,
+					zIndex: 50 // Below airports (100) and receivers (150)
+				});
+
+				// Add click listener to show airspace info
+				polygon.addListener('click', (event: google.maps.PolyMouseEvent) => {
+					if (!event.latLng) return;
+
+					const infoWindow = new google.maps.InfoWindow({
+						content: `
+							<div style="padding: 8px;">
+								<h3 style="margin: 0 0 8px 0; font-weight: bold;">${airspace.properties.name}</h3>
+								<div style="font-size: 13px;">
+									<div><strong>Class:</strong> ${airspace.properties.airspace_class || 'N/A'}</div>
+									<div><strong>Type:</strong> ${airspace.properties.airspace_type}</div>
+									<div><strong>Lower:</strong> ${airspace.properties.lower_limit}</div>
+									<div><strong>Upper:</strong> ${airspace.properties.upper_limit}</div>
+									${airspace.properties.remarks ? `<div style="margin-top: 4px;"><strong>Remarks:</strong> ${airspace.properties.remarks}</div>` : ''}
+								</div>
+							</div>
+						`,
+						position: event.latLng
+					});
+
+					infoWindow.open(map);
+				});
+
+				airspacePolygons.push(polygon);
+			});
+		});
+
+		console.log(
+			`[AIRSPACES] Displayed ${airspaces.length} airspaces (${airspacePolygons.length} polygons)`
+		);
+	}
+
+	function clearAirspacePolygons(): void {
+		airspacePolygons.forEach((polygon) => {
+			polygon.setMap(null);
+		});
+		airspacePolygons = [];
+	}
+
+	function checkAndUpdateAirspaces(): void {
+		// Clear any existing debounce timer
+		if (airspaceUpdateDebounceTimer !== null) {
+			clearTimeout(airspaceUpdateDebounceTimer);
+		}
+
+		// Debounce airspace updates by 500ms to prevent excessive API calls
+		airspaceUpdateDebounceTimer = setTimeout(() => {
+			const area = calculateViewportArea();
+			const shouldShow = area < 100000 && currentSettings.showAirspaceMarkers;
+
+			if (shouldShow !== shouldShowAirspaces) {
+				shouldShowAirspaces = shouldShow;
+
+				if (shouldShowAirspaces) {
+					fetchAirspacesInViewport();
+				} else {
+					clearAirspacePolygons();
+				}
+			} else if (shouldShowAirspaces) {
+				// Still showing airspaces, update them for the new viewport
+				fetchAirspacesInViewport();
+			}
+
+			airspaceUpdateDebounceTimer = null;
+		}, 500);
 	}
 
 	function handleOrientationChange(event: DeviceOrientationEvent): void {

@@ -508,6 +508,21 @@ pub fn initialize_analytics_metrics() {
     metrics::gauge!("analytics.data_quality_score").set(0.0);
 }
 
+/// Initialize airspace-related metrics
+pub fn initialize_airspace_metrics() {
+    // Airspace sync metrics (for pull-airspaces command)
+    metrics::counter!("airspace_sync.total_fetched").absolute(0);
+    metrics::counter!("airspace_sync.total_inserted").absolute(0);
+    metrics::gauge!("airspace_sync.last_run_timestamp").set(0.0);
+    metrics::gauge!("airspace_sync.success").set(0.0);
+
+    // Airspace API endpoint metrics
+    metrics::counter!("api.airspaces.requests").absolute(0);
+    metrics::counter!("api.airspaces.errors").absolute(0);
+    metrics::histogram!("api.airspaces.duration_ms").record(0.0);
+    metrics::gauge!("api.airspaces.results_count").set(0.0);
+}
+
 /// Health check handler for APRS ingestion service
 /// Returns 200 OK if service is healthy and ready to receive traffic
 /// Returns 503 Service Unavailable if not ready
