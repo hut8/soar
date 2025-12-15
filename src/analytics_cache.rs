@@ -29,7 +29,7 @@ pub struct AnalyticsCache {
     duration_cache: Cache<CacheKey, Vec<FlightDurationBucket>>,
     hourly_cache: Cache<CacheKey, Vec<FlightAnalyticsHourly>>,
     outliers_cache: Cache<CacheKey, Vec<AircraftOutlier>>,
-    top_devices_cache: Cache<CacheKey, Vec<TopDevice>>,
+    top_aircraft_cache: Cache<CacheKey, Vec<TopAircraft>>,
     club_cache: Cache<CacheKey, Vec<ClubAnalyticsDaily>>,
     airport_cache: Cache<CacheKey, Vec<AirportActivity>>,
     summary_cache: Cache<CacheKey, AnalyticsSummary>,
@@ -49,7 +49,7 @@ impl AnalyticsCache {
             duration_cache: Cache::builder().max_capacity(10).time_to_live(ttl).build(),
             hourly_cache: Cache::builder().max_capacity(20).time_to_live(ttl).build(),
             outliers_cache: Cache::builder().max_capacity(20).time_to_live(ttl).build(),
-            top_devices_cache: Cache::builder().max_capacity(50).time_to_live(ttl).build(),
+            top_aircraft_cache: Cache::builder().max_capacity(50).time_to_live(ttl).build(),
             club_cache: Cache::builder()
                 .max_capacity(max_capacity)
                 .time_to_live(ttl)
@@ -146,11 +146,11 @@ impl AnalyticsCache {
         Ok(result)
     }
 
-    pub async fn get_top_devices(&self, limit: i32, period_days: i32) -> Result<Vec<TopDevice>> {
+    pub async fn get_top_aircraft(&self, limit: i32, period_days: i32) -> Result<Vec<TopAircraft>> {
         let start = Instant::now();
         let key = CacheKey::TopAircraft(limit, period_days);
 
-        if let Some(cached) = self.top_devices_cache.get(&key).await {
+        if let Some(cached) = self.top_aircraft_cache.get(&key).await {
             metrics::counter!("analytics.cache.hit").increment(1);
             let duration_ms = start.elapsed().as_secs_f64() * 1000.0;
             metrics::histogram!("analytics.query.top_aircraft_ms").record(duration_ms);
@@ -158,8 +158,8 @@ impl AnalyticsCache {
         }
 
         metrics::counter!("analytics.cache.miss").increment(1);
-        let result = self.repo.get_top_devices(limit, period_days).await?;
-        self.top_devices_cache.insert(key, result.clone()).await;
+        let result = self.repo.get_top_aircraft(limit, period_days).await?;
+        self.top_aircraft_cache.insert(key, result.clone()).await;
 
         let duration_ms = start.elapsed().as_secs_f64() * 1000.0;
         metrics::histogram!("analytics.query.top_aircraft_ms").record(duration_ms);
@@ -248,7 +248,7 @@ impl AnalyticsCache {
         self.duration_cache.invalidate_all();
         self.hourly_cache.invalidate_all();
         self.outliers_cache.invalidate_all();
-        self.top_devices_cache.invalidate_all();
+        self.top_aircraft_cache.invalidate_all();
         self.club_cache.invalidate_all();
         self.airport_cache.invalidate_all();
         self.summary_cache.invalidate_all();

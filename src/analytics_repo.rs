@@ -210,7 +210,7 @@ impl AnalyticsRepository {
     }
 
     /// Get top aircraft by flight count
-    pub async fn get_top_devices(&self, limit: i32, period_days: i32) -> Result<Vec<TopDevice>> {
+    pub async fn get_top_aircraft(&self, limit: i32, period_days: i32) -> Result<Vec<TopAircraft>> {
         let pool = self.pool.clone();
 
         tokio::task::spawn_blocking(move || {
@@ -254,7 +254,7 @@ impl AnalyticsRepository {
 
             Ok(results
                 .into_iter()
-                .map(|r| TopDevice {
+                .map(|r| TopAircraft {
                     aircraft_id: r.aircraft_id,
                     registration: r.registration,
                     aircraft_model: r.aircraft_model,

@@ -78,8 +78,8 @@ pub struct DeviceOutliersResponse {
 }
 
 #[derive(Debug, Serialize)]
-pub struct TopDevicesResponse {
-    pub data: Vec<TopDevice>,
+pub struct TopAircraftResponse {
+    pub data: Vec<TopAircraft>,
 }
 
 #[derive(Debug, Serialize)]
@@ -218,13 +218,13 @@ pub async fn get_top_aircraft(
 
     let cache = AnalyticsCache::new(AnalyticsRepository::new(state.pool.clone()));
 
-    match cache.get_top_devices(limit, period_days).await {
-        Ok(data) => (StatusCode::OK, Json(TopDevicesResponse { data })).into_response(),
+    match cache.get_top_aircraft(limit, period_days).await {
+        Ok(data) => (StatusCode::OK, Json(TopAircraftResponse { data })).into_response(),
         Err(e) => {
             metrics::counter!("analytics.api.errors").increment(1);
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                &format!("Failed to get top devices: {}", e),
+                &format!("Failed to get top aircraft: {}", e),
             )
             .into_response()
         }
