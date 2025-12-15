@@ -12,8 +12,8 @@ use tracing::{info, warn};
 mod commands;
 use commands::{
     handle_archive, handle_dump_unified_ddb, handle_ingest_aprs, handle_ingest_beast,
-    handle_load_data, handle_pull_data, handle_resurrect, handle_run, handle_seed_test_data,
-    handle_sitemap_generation,
+    handle_load_data, handle_pull_airspaces, handle_pull_data, handle_resurrect, handle_run,
+    handle_seed_test_data, handle_sitemap_generation,
 };
 
 // Embed migrations at compile time
@@ -85,6 +85,21 @@ enum Commands {
     /// Downloads airports and runways data from ourairports-data, creates a temporary directory,
     /// and then invokes the same procedures as load-data.
     PullData {},
+    /// Pull airspace data from OpenAIP
+    ///
+    /// Downloads airspace boundaries from OpenAIP API and stores them in the database.
+    /// Requires OPENAIP_API_KEY environment variable.
+    /// Data is licensed under CC BY-NC 4.0 (non-commercial use only).
+    PullAirspaces {
+        /// Perform incremental sync (only fetch updated airspaces since last successful sync)
+        #[arg(long)]
+        incremental: bool,
+
+        /// Filter by specific countries (ISO 3166-1 alpha-2 codes, comma-separated)
+        /// Example: --countries US,CA,MX
+        #[arg(long, value_delimiter = ',')]
+        countries: Option<Vec<String>>,
+    },
     /// Ingest APRS messages into NATS JetStream (durable queue service)
     ///
     /// This service connects to APRS-IS and publishes all messages to a durable NATS JetStream queue.
@@ -992,6 +1007,10 @@ async fn main() -> Result<()> {
             .await
         }
         Commands::PullData {} => handle_pull_data(diesel_pool).await,
+        Commands::PullAirspaces {
+            incremental,
+            countries,
+        } => handle_pull_airspaces(diesel_pool, incremental, countries).await,
         Commands::IngestAprs { .. } => {
             // This should never be reached due to early return above
             unreachable!("IngestAprs should be handled before database setup")

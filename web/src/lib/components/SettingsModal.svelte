@@ -16,6 +16,7 @@
 		showCompassRose?: boolean;
 		showAirportMarkers?: boolean;
 		showReceiverMarkers?: boolean;
+		showAirspaceMarkers?: boolean;
 		showRunwayOverlays?: boolean;
 		positionFixWindow?: number;
 		// Legacy support for old settings
@@ -26,6 +27,7 @@
 	let showCompassRose = $state(true);
 	let showAirportMarkers = $state(true);
 	let showReceiverMarkers = $state(true);
+	let showAirspaceMarkers = $state(true);
 	let showRunwayOverlays = $state(false);
 	let positionFixWindow = $state(8); // Hours - default 8 hours
 
@@ -47,6 +49,7 @@
 					showCompassRose = backendSettings.showCompassRose ?? true;
 					showAirportMarkers = backendSettings.showAirportMarkers ?? true;
 					showReceiverMarkers = backendSettings.showReceiverMarkers ?? true;
+					showAirspaceMarkers = backendSettings.showAirspaceMarkers ?? true;
 					showRunwayOverlays = backendSettings.showRunwayOverlays ?? false;
 					// Use positionFixWindow, or fallback to trailLength for legacy support
 					positionFixWindow =
@@ -67,6 +70,7 @@
 				showCompassRose = settings.showCompassRose ?? true;
 				showAirportMarkers = settings.showAirportMarkers ?? true;
 				showReceiverMarkers = settings.showReceiverMarkers ?? true;
+				showAirspaceMarkers = settings.showAirspaceMarkers ?? true;
 				showRunwayOverlays = settings.showRunwayOverlays ?? false;
 				// Use positionFixWindow, or fallback to trailLength for legacy support
 				positionFixWindow =
@@ -87,6 +91,7 @@
 			showCompassRose,
 			showAirportMarkers,
 			showReceiverMarkers,
+			showAirspaceMarkers,
 			showRunwayOverlays,
 			positionFixWindow
 		};
@@ -118,6 +123,7 @@
 				showCompassRose,
 				showAirportMarkers,
 				showReceiverMarkers,
+				showAirspaceMarkers,
 				showRunwayOverlays,
 				positionFixWindow
 			});
@@ -133,6 +139,7 @@
 					showCompassRose,
 					showAirportMarkers,
 					showReceiverMarkers,
+					showAirspaceMarkers,
 					showRunwayOverlays,
 					positionFixWindow
 				});
@@ -231,6 +238,20 @@
 								<Switch.Thumb />
 							</Switch.Control>
 							<Switch.HiddenInput name="receivers-toggle" />
+						</Switch>
+						<Switch
+							class="flex justify-between p-2"
+							checked={showAirspaceMarkers}
+							onCheckedChange={(details) => {
+								showAirspaceMarkers = details.checked;
+								saveSettings();
+							}}
+						>
+							<Switch.Label class="text-sm font-medium">Show Airspace Boundaries</Switch.Label>
+							<Switch.Control>
+								<Switch.Thumb />
+							</Switch.Control>
+							<Switch.HiddenInput name="airspaces-toggle" />
 						</Switch>
 						<Switch
 							class="flex justify-between p-2"
