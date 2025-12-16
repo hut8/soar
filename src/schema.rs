@@ -278,7 +278,7 @@ diesel::table! {
 
     airspaces (id) {
         id -> Uuid,
-        openaip_id -> Int4,
+        openaip_id -> Text,
         name -> Text,
         airspace_class -> Nullable<AirspaceClass>,
         airspace_type -> AirspaceType,

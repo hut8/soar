@@ -29,12 +29,12 @@ pub struct AirspacesResponse {
 #[derive(Debug, Deserialize)]
 pub struct OpenAipAirspace {
     #[serde(rename = "_id")]
-    pub id: i32,
+    pub id: String, // MongoDB ObjectId as string
     pub name: String,
     #[serde(rename = "type")]
     pub airspace_type: i32, // Type code (0-36)
     #[serde(rename = "icaoClass")]
-    pub icao_class: Option<String>, // "A", "B", "C", etc.
+    pub icao_class: Option<i32>, // ICAO class code (0-8)
     pub country: String,             // ISO 3166-1 alpha-2
     pub geometry: serde_json::Value, // GeoJSON geometry
 
@@ -46,7 +46,7 @@ pub struct OpenAipAirspace {
 
     // Optional fields
     pub remarks: Option<String>,
-    pub activity: Option<String>,
+    pub activity: Option<i32>,
     #[serde(rename = "updatedAt")]
     pub updated_at: Option<DateTime<Utc>>,
 }
@@ -54,9 +54,9 @@ pub struct OpenAipAirspace {
 #[derive(Debug, Deserialize)]
 pub struct AltitudeLimit {
     pub value: Option<f64>,
-    pub unit: Option<String>, // "FT", "FL", "M"
+    pub unit: Option<i32>, // Unit code: 1=FT, 6=FL, etc.
     #[serde(rename = "referenceDatum")]
-    pub reference_datum: Option<String>, // "MSL", "AGL", "STD", "GND", "UNL"
+    pub reference_datum: Option<i32>, // Reference code: 1=MSL, 2=AGL, etc.
 }
 
 impl OpenAipClient {
@@ -226,33 +226,120 @@ pub fn map_airspace_type(type_code: i32) -> crate::airspace::AirspaceType {
     }
 }
 
-/// Convert OpenAIP ICAO class string to our enum
-pub fn map_icao_class(class_str: Option<&str>) -> Option<crate::airspace::AirspaceClass> {
+/// Convert OpenAIP ICAO class code to our enum
+pub fn map_icao_class(class_code: Option<i32>) -> Option<crate::airspace::AirspaceClass> {
     use crate::airspace::AirspaceClass;
 
-    match class_str {
-        Some("A") => Some(AirspaceClass::A),
-        Some("B") => Some(AirspaceClass::B),
-        Some("C") => Some(AirspaceClass::C),
-        Some("D") => Some(AirspaceClass::D),
-        Some("E") => Some(AirspaceClass::E),
-        Some("F") => Some(AirspaceClass::F),
-        Some("G") => Some(AirspaceClass::G),
-        Some("SUA") => Some(AirspaceClass::Sua),
+    match class_code {
+        Some(0) => Some(AirspaceClass::A),
+        Some(1) => Some(AirspaceClass::B),
+        Some(2) => Some(AirspaceClass::C),
+        Some(3) => Some(AirspaceClass::D),
+        Some(4) => Some(AirspaceClass::E),
+        Some(5) => Some(AirspaceClass::F),
+        Some(6) => Some(AirspaceClass::G),
+        Some(8) => Some(AirspaceClass::Sua), // SUA
         _ => None,
     }
 }
 
-/// Convert OpenAIP altitude reference to our enum
-pub fn map_altitude_reference(ref_str: Option<&str>) -> Option<crate::airspace::AltitudeReference> {
+/// Convert OpenAIP altitude reference code to our enum
+pub fn map_altitude_reference(ref_code: Option<i32>) -> Option<crate::airspace::AltitudeReference> {
     use crate::airspace::AltitudeReference;
 
-    match ref_str {
-        Some("MSL") => Some(AltitudeReference::Msl),
-        Some("AGL") => Some(AltitudeReference::Agl),
-        Some("STD") => Some(AltitudeReference::Std),
-        Some("GND") => Some(AltitudeReference::Gnd),
-        Some("UNL") => Some(AltitudeReference::Unl),
+    match ref_code {
+        Some(1) => Some(AltitudeReference::Msl),
+        Some(2) => Some(AltitudeReference::Agl),
+        Some(3) => Some(AltitudeReference::Std),
+        Some(4) => Some(AltitudeReference::Gnd),
+        Some(5) => Some(AltitudeReference::Unl),
         _ => None,
+    }
+}
+
+/// Convert OpenAIP altitude unit code to string
+pub fn map_altitude_unit(unit_code: Option<i32>) -> Option<String> {
+    match unit_code {
+        Some(1) => Some("FT".to_string()),
+        Some(2) => Some("M".to_string()),
+        Some(3) => Some("SM".to_string()),
+        Some(4) => Some("NM".to_string()),
+        Some(5) => Some("KM".to_string()),
+        Some(6) => Some("FL".to_string()),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_openaip_response() {
+        // Load test response from file
+        let test_json = include_str!("openaip_test_response.json");
+
+        // Parse the response
+        let result: Result<AirspacesResponse, _> = serde_json::from_str(test_json);
+
+        // Assert parsing succeeds
+        assert!(
+            result.is_ok(),
+            "Failed to parse OpenAIP response: {:?}",
+            result.err()
+        );
+
+        let response = result.unwrap();
+
+        // Verify pagination fields
+        assert_eq!(response.limit, 500);
+        assert_eq!(response.total_count, 26142);
+        assert_eq!(response.total_pages, 53);
+        assert_eq!(response.page, 1);
+        assert_eq!(response.next_page, Some(2));
+
+        // Verify we have at least one item
+        assert!(
+            !response.items.is_empty(),
+            "Expected at least one airspace item"
+        );
+
+        // Verify first item structure
+        let first = &response.items[0];
+        assert_eq!(first.id, "674c9e07d0501f5781b4c372");
+        assert_eq!(first.name, "22 MITT");
+        assert_eq!(first.airspace_type, 21); // UIR
+        assert_eq!(first.icao_class, Some(8)); // SUA
+        assert_eq!(first.country, "SE");
+
+        // Verify altitude limits
+        assert!(first.lower_limit.is_some());
+        let lower = first.lower_limit.as_ref().unwrap();
+        assert_eq!(lower.value, Some(1600.0));
+        assert_eq!(lower.unit, Some(1)); // FT
+        assert_eq!(lower.reference_datum, Some(1)); // MSL
+
+        assert!(first.upper_limit.is_some());
+        let upper = first.upper_limit.as_ref().unwrap();
+        assert_eq!(upper.value, Some(90.0));
+        assert_eq!(upper.unit, Some(6)); // FL
+        assert_eq!(upper.reference_datum, Some(2)); // AGL
+
+        // Test mapping functions
+        assert_eq!(map_airspace_type(21), crate::airspace::AirspaceType::Uir);
+        assert_eq!(
+            map_icao_class(Some(8)),
+            Some(crate::airspace::AirspaceClass::Sua)
+        );
+        assert_eq!(map_altitude_unit(Some(1)), Some("FT".to_string()));
+        assert_eq!(map_altitude_unit(Some(6)), Some("FL".to_string()));
+        assert_eq!(
+            map_altitude_reference(Some(1)),
+            Some(crate::airspace::AltitudeReference::Msl)
+        );
+        assert_eq!(
+            map_altitude_reference(Some(2)),
+            Some(crate::airspace::AltitudeReference::Agl)
+        );
     }
 }

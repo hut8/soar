@@ -104,7 +104,7 @@ pub enum AltitudeReference {
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct AirspaceModel {
     pub id: Uuid,
-    pub openaip_id: i32,
+    pub openaip_id: String,
     pub name: String,
     pub airspace_class: Option<AirspaceClass>,
     pub airspace_type: AirspaceType,
@@ -127,7 +127,7 @@ pub struct AirspaceModel {
 /// Insertable airspace for upserts (geometry handled via raw SQL)
 #[derive(Debug, Clone)]
 pub struct NewAirspace {
-    pub openaip_id: i32,
+    pub openaip_id: String,
     pub name: String,
     pub airspace_class: Option<AirspaceClass>,
     pub airspace_type: AirspaceType,
@@ -155,7 +155,7 @@ pub struct AirspaceGeoJson {
 #[derive(Debug, Serialize)]
 pub struct AirspaceProperties {
     pub id: Uuid,
-    pub openaip_id: i32,
+    pub openaip_id: String,
     pub name: String,
     pub airspace_class: Option<AirspaceClass>,
     pub airspace_type: AirspaceType,

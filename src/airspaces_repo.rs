@@ -68,7 +68,7 @@ impl AirspacesRepository {
                         updated_at = NOW()
                     "#,
                 )
-                .bind::<sql_types::Integer, _>(airspace.openaip_id)
+                .bind::<sql_types::Text, _>(&airspace.openaip_id)
                 .bind::<sql_types::Text, _>(&airspace.name)
                 .bind::<sql_types::Nullable<crate::schema::sql_types::AirspaceClass>, _>(
                     airspace.airspace_class,
@@ -127,8 +127,8 @@ impl AirspacesRepository {
             struct AirspaceGeoJsonRow {
                 #[diesel(sql_type = sql_types::Uuid)]
                 id: Uuid,
-                #[diesel(sql_type = sql_types::Integer)]
-                openaip_id: i32,
+                #[diesel(sql_type = sql_types::Text)]
+                openaip_id: String,
                 #[diesel(sql_type = sql_types::Text)]
                 name: String,
                 #[diesel(sql_type = sql_types::Nullable<crate::schema::sql_types::AirspaceClass>)]

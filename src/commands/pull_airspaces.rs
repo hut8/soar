@@ -10,7 +10,7 @@ use tracing::{error, info};
 use soar::airspace::NewAirspace;
 use soar::airspaces_repo::AirspacesRepository;
 use soar::openaip_client::{
-    OpenAipClient, map_airspace_type, map_altitude_reference, map_icao_class,
+    OpenAipClient, map_airspace_type, map_altitude_reference, map_altitude_unit, map_icao_class,
 };
 use soar::schema::airspace_sync_log;
 
@@ -193,7 +193,7 @@ fn convert_airspaces(
             let airspace = NewAirspace {
                 openaip_id: oa.id,
                 name: oa.name,
-                airspace_class: map_icao_class(oa.icao_class.as_deref()),
+                airspace_class: map_icao_class(oa.icao_class),
                 airspace_type: map_airspace_type(oa.airspace_type),
                 country_code: Some(oa.country),
                 lower_value,
@@ -203,7 +203,7 @@ fn convert_airspaces(
                 upper_unit,
                 upper_reference: upper_ref,
                 remarks: oa.remarks,
-                activity_type: oa.activity,
+                activity_type: oa.activity.map(|a| a.to_string()),
                 openaip_updated_at: oa.updated_at,
             };
 
@@ -223,8 +223,8 @@ fn convert_altitude_limit(
     match limit {
         Some(l) => {
             let value = l.value.map(|v| v as i32);
-            let unit = l.unit.clone();
-            let reference = map_altitude_reference(l.reference_datum.as_deref());
+            let unit = map_altitude_unit(l.unit);
+            let reference = map_altitude_reference(l.reference_datum);
             (value, unit, reference)
         }
         None => (None, None, None),
