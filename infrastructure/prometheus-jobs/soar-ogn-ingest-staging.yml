@@ -1,8 +1,8 @@
-# SOAR APRS Ingest Metrics (Staging - ingest-aprs subcommand)
-# This file defines a complete scrape job configuration for the SOAR APRS ingest service (staging).
+# SOAR OGN Ingest Metrics (Staging - ingest-ogn subcommand)
+# This file defines a complete scrape job configuration for the SOAR OGN ingest service (staging).
 # Prometheus will automatically load this file when using scrape_config_files.
 
-job_name: 'soar-aprs-ingest-staging'
+job_name: 'soar-ogn-ingest-staging'
 metrics_path: '/metrics'
 scrape_interval: 10s
 scrape_timeout: 5s
@@ -12,5 +12,5 @@ static_configs:
       - 'localhost:9094'
     labels:
       instance: 'soar-staging'
-      component: 'aprs-ingest'
+      component: 'ogn-ingest'
       environment: 'staging'

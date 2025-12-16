@@ -1,7 +1,7 @@
 pub mod archive;
 pub mod dump_unified_ddb;
-pub mod ingest_aprs;
-pub mod ingest_beast;
+pub mod ingest_adsb;
+pub mod ingest_ogn;
 pub mod load_data;
 pub mod pull_airspaces;
 pub mod pull_data;
@@ -11,8 +11,8 @@ pub mod sitemap;
 
 pub use archive::{handle_archive, handle_resurrect};
 pub use dump_unified_ddb::handle_dump_unified_ddb;
-pub use ingest_aprs::handle_ingest_aprs;
-pub use ingest_beast::handle_ingest_beast;
+pub use ingest_adsb::handle_ingest_adsb;
+pub use ingest_ogn::handle_ingest_ogn;
 pub use load_data::handle_load_data;
 pub use pull_airspaces::handle_pull_airspaces;
 pub use pull_data::handle_pull_data;

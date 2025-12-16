@@ -11,7 +11,7 @@ use tracing::{info, warn};
 
 mod commands;
 use commands::{
-    handle_archive, handle_dump_unified_ddb, handle_ingest_aprs, handle_ingest_beast,
+    handle_archive, handle_dump_unified_ddb, handle_ingest_adsb, handle_ingest_ogn,
     handle_load_data, handle_pull_airspaces, handle_pull_data, handle_resurrect, handle_run,
     handle_seed_test_data, handle_sitemap_generation,
 };
@@ -100,11 +100,11 @@ enum Commands {
         #[arg(long, value_delimiter = ',')]
         countries: Option<Vec<String>>,
     },
-    /// Ingest APRS messages into NATS JetStream (durable queue service)
+    /// Ingest OGN (APRS) messages into NATS (durable queue service)
     ///
-    /// This service connects to APRS-IS and publishes all messages to a durable NATS JetStream queue.
+    /// This service connects to OGN APRS-IS and publishes all messages to NATS.
     /// It is designed to run independently and survive restarts without dropping messages.
-    IngestAprs {
+    IngestOgn {
         /// APRS server hostname
         #[arg(long, default_value = "aprs.glidernet.org")]
         server: String,
@@ -133,11 +133,11 @@ enum Commands {
         #[arg(long, default_value = "nats://localhost:4222")]
         nats_url: String,
     },
-    /// Ingest Beast (ADS-B) messages into NATS JetStream (durable queue service)
+    /// Ingest ADS-B (Beast) messages into NATS (durable queue service)
     ///
-    /// This service connects to a Beast-format ADS-B server and publishes all messages to a durable NATS JetStream queue.
+    /// This service connects to a Beast-format ADS-B server and publishes all messages to NATS.
     /// It is designed to run independently and survive restarts without dropping messages.
-    IngestBeast {
+    IngestAdsb {
         /// Beast server hostname
         #[arg(long, default_value = "localhost")]
         server: String,
@@ -872,7 +872,7 @@ async fn main() -> Result<()> {
             info!("Runtime verification PASSED");
             return Ok(());
         }
-        Commands::IngestAprs {
+        Commands::IngestOgn {
             server,
             port,
             callsign,
@@ -881,8 +881,8 @@ async fn main() -> Result<()> {
             retry_delay,
             nats_url,
         } => {
-            // IngestAprs only uses NATS, doesn't need database
-            return handle_ingest_aprs(
+            // IngestOgn only uses NATS, doesn't need database
+            return handle_ingest_ogn(
                 server.clone(),
                 *port,
                 callsign.clone(),
@@ -893,15 +893,15 @@ async fn main() -> Result<()> {
             )
             .await;
         }
-        Commands::IngestBeast {
+        Commands::IngestAdsb {
             server,
             port,
             max_retries,
             retry_delay,
             nats_url,
         } => {
-            // IngestBeast only uses NATS, doesn't need database
-            return handle_ingest_beast(
+            // IngestAdsb only uses NATS, doesn't need database
+            return handle_ingest_adsb(
                 server.clone(),
                 *port,
                 *max_retries,
@@ -1011,13 +1011,13 @@ async fn main() -> Result<()> {
             incremental,
             countries,
         } => handle_pull_airspaces(diesel_pool, incremental, countries).await,
-        Commands::IngestAprs { .. } => {
+        Commands::IngestOgn { .. } => {
             // This should never be reached due to early return above
-            unreachable!("IngestAprs should be handled before database setup")
+            unreachable!("IngestOgn should be handled before database setup")
         }
-        Commands::IngestBeast { .. } => {
+        Commands::IngestAdsb { .. } => {
             // This should never be reached due to early return above
-            unreachable!("IngestBeast should be handled before database setup")
+            unreachable!("IngestAdsb should be handled before database setup")
         }
         Commands::Run {
             archive_dir,

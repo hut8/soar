@@ -1,6 +1,6 @@
 # ADS-B Ingester Initial Server Setup
 
-This document describes the one-time manual setup required for deploying the SOAR ADS-B ingester (`soar ingest-beast`) to a separate server accessible only via Tailscale.
+This document describes the one-time manual setup required for deploying the SOAR ADS-B ingester (`soar ingest-adsb`) to a separate server accessible only via Tailscale.
 
 ## Prerequisites
 
@@ -17,7 +17,7 @@ This document describes the one-time manual setup required for deploying the SOA
 ┌─────────────────┐         ┌──────────────────┐         ┌─────────────────┐
 │  dump1090/      │         │  SOAR ADS-B      │         │  Main Server    │
 │  readsb         │────────>│  Ingester        │────────>│  (NATS)         │
-│  (Beast:30005)  │         │  soar-beast-     │         │  glider.flights │
+│  (Beast:30005)  │         │  soar-adsb-      │         │  glider.flights │
 └─────────────────┘         │  ingest.service  │         └─────────────────┘
                             └──────────────────┘
                                     │
@@ -312,12 +312,12 @@ Watch the workflow progress in the Actions tab. The deployment should:
 ssh soar@ADSB_SERVER
 
 # Check service status
-sudo systemctl status soar-beast-ingest
+sudo systemctl status soar-adsb-ingest
 
 # Expected: "Active: active (running)"
 
 # Check recent logs
-sudo journalctl -u soar-beast-ingest -n 50
+sudo journalctl -u soar-adsb-ingest -n 50
 
 # Look for:
 # - "Connected to NATS"
@@ -355,7 +355,7 @@ On the main server, add ADS-B metrics endpoint to Prometheus:
 # /etc/prometheus/prometheus.yml
 
 scrape_configs:
-  - job_name: 'soar-beast-ingest'
+  - job_name: 'soar-adsb-ingest'
     static_configs:
       - targets: ['100.x.x.x:9094']  # ADS-B server Tailscale IP
         labels:
@@ -378,10 +378,10 @@ See `infrastructure/grafana-dashboard-aprs-ingest.json` as a template for creati
 
 ```bash
 # Check service status
-sudo systemctl status soar-beast-ingest
+sudo systemctl status soar-adsb-ingest
 
 # Check full logs
-sudo journalctl -u soar-beast-ingest -n 100 --no-pager
+sudo journalctl -u soar-adsb-ingest -n 100 --no-pager
 
 # Common issues:
 # 1. Binary not found: Check /usr/local/bin/soar exists
@@ -450,10 +450,10 @@ nc localhost 30005 | head -c 100
 sudo nano /etc/soar/env
 
 # Restart service to apply changes
-sudo systemctl restart soar-beast-ingest
+sudo systemctl restart soar-adsb-ingest
 
 # Verify service started successfully
-sudo systemctl status soar-beast-ingest
+sudo systemctl status soar-adsb-ingest
 ```
 
 ### Manual Deployment
@@ -469,7 +469,7 @@ ssh soar@ADSB_SERVER "mkdir -p /tmp/soar/deploy/$TIMESTAMP"
 
 # Copy files
 scp target/release/soar soar@ADSB_SERVER:/tmp/soar/deploy/$TIMESTAMP/
-scp infrastructure/systemd/soar-beast-ingest.service soar@ADSB_SERVER:/tmp/soar/deploy/$TIMESTAMP/
+scp infrastructure/systemd/soar-adsb-ingest.service soar@ADSB_SERVER:/tmp/soar/deploy/$TIMESTAMP/
 scp infrastructure/soar-deploy-adsb soar@ADSB_SERVER:/tmp/soar/deploy/$TIMESTAMP/
 
 # Execute deployment
@@ -480,16 +480,16 @@ ssh soar@ADSB_SERVER "sudo /usr/local/bin/soar-deploy-adsb /tmp/soar/deploy/$TIM
 
 ```bash
 # Real-time logs
-sudo journalctl -u soar-beast-ingest -f
+sudo journalctl -u soar-adsb-ingest -f
 
 # Last 100 lines
-sudo journalctl -u soar-beast-ingest -n 100
+sudo journalctl -u soar-adsb-ingest -n 100
 
 # Logs from specific time
-sudo journalctl -u soar-beast-ingest --since "1 hour ago"
+sudo journalctl -u soar-adsb-ingest --since "1 hour ago"
 
 # Logs with specific level
-sudo journalctl -u soar-beast-ingest -p err
+sudo journalctl -u soar-adsb-ingest -p err
 ```
 
 ### Rollback Deployment
@@ -499,16 +499,16 @@ sudo journalctl -u soar-beast-ingest -p err
 ls -lt /home/soar/backups/
 
 # Stop service
-sudo systemctl stop soar-beast-ingest
+sudo systemctl stop soar-adsb-ingest
 
 # Restore backup
 sudo cp /home/soar/backups/soar.backup.TIMESTAMP /usr/local/bin/soar
 
 # Start service
-sudo systemctl start soar-beast-ingest
+sudo systemctl start soar-adsb-ingest
 
 # Verify
-sudo systemctl status soar-beast-ingest
+sudo systemctl status soar-adsb-ingest
 ```
 
 ## Security Checklist
@@ -537,6 +537,6 @@ After successful deployment:
 
 For issues or questions:
 - Check deployment logs: GitHub Actions → Deploy ADS-B Ingester
-- Check service logs: `sudo journalctl -u soar-beast-ingest`
+- Check service logs: `sudo journalctl -u soar-adsb-ingest`
 - Review this setup guide for missed steps
 - Check Tailscale connectivity: `tailscale status`
