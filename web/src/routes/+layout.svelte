@@ -23,6 +23,7 @@
 		PlaneTakeoff,
 		Antenna,
 		MapPin,
+		Globe,
 		Wifi,
 		WifiOff,
 		RotateCcw,
@@ -40,6 +41,7 @@
 	const base = resolve('/');
 	const clubsPath = resolve('/clubs');
 	const operationsPath = resolve('/operations');
+	const globePath = resolve('/globe');
 	const aircraftPath = resolve('/aircraft');
 	const receiversPath = resolve('/receivers');
 	const airportsPath = resolve('/airports');
@@ -201,6 +203,9 @@
 						<a href={operationsPath} class="btn preset-filled-primary-500 btn-sm">
 							<Radar /> Operations
 						</a>
+						<a href={globePath} class="btn preset-filled-primary-500 btn-sm">
+							<Globe /> 3D Globe
+						</a>
 						<a href={aircraftPath} class="btn preset-filled-primary-500 btn-sm">
 							<Plane /> Aircraft
 						</a>
@@ -348,6 +353,13 @@
 					onclick={() => (showMobileMenu = false)}
 				>
 					<Radar size={16} /> Operations
+				</a>
+				<a
+					href={globePath}
+					class="btn w-full justify-start preset-filled-primary-500"
+					onclick={() => (showMobileMenu = false)}
+				>
+					<Globe size={16} /> 3D Globe
 				</a>
 				<a
 					href={aircraftPath}
