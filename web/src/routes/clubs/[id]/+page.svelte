@@ -140,7 +140,8 @@
 		aircraftError = '';
 
 		try {
-			aircraft = await serverCall<Aircraft[]>(`/clubs/${clubId}/aircraft`);
+			const response = await serverCall<{ aircraft: Aircraft[] }>(`/clubs/${clubId}/aircraft`);
+			aircraft = response.aircraft || [];
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			aircraftError = `Failed to load aircraft: ${errorMessage}`;
