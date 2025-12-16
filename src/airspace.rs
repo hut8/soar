@@ -33,8 +33,11 @@ pub enum AirspaceClass {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum)]
 #[db_enum(existing_type_path = "crate::schema::sql_types::AirspaceType")]
 pub enum AirspaceType {
+    #[db_enum(rename = "Restricted")]
     Restricted,
+    #[db_enum(rename = "Danger")]
     Danger,
+    #[db_enum(rename = "Prohibited")]
     Prohibited,
     #[serde(rename = "CTR")]
     #[db_enum(rename = "CTR")]
@@ -54,20 +57,29 @@ pub enum AirspaceType {
     #[serde(rename = "MATZ")]
     #[db_enum(rename = "MATZ")]
     Matz,
+    #[db_enum(rename = "Airway")]
     Airway,
     #[serde(rename = "MTR")]
     #[db_enum(rename = "MTR")]
     Mtr,
+    #[db_enum(rename = "AlertArea")]
     AlertArea,
+    #[db_enum(rename = "WarningArea")]
     WarningArea,
+    #[db_enum(rename = "ProtectedArea")]
     ProtectedArea,
     #[serde(rename = "HTZ")]
     #[db_enum(rename = "HTZ")]
     Htz,
+    #[db_enum(rename = "GliderProhibited")]
     GliderProhibited,
+    #[db_enum(rename = "GliderSector")]
     GliderSector,
+    #[db_enum(rename = "NoGliders")]
     NoGliders,
+    #[db_enum(rename = "WaveWindow")]
     WaveWindow,
+    #[db_enum(rename = "Other")]
     Other,
     #[serde(rename = "FIR")]
     #[db_enum(rename = "FIR")]
@@ -102,10 +114,15 @@ pub enum AirspaceType {
     #[serde(rename = "RFFS")]
     #[db_enum(rename = "RFFS")]
     Rffs,
+    #[db_enum(rename = "Sport")]
     Sport,
+    #[db_enum(rename = "DropZone")]
     DropZone,
+    #[db_enum(rename = "Gliding")]
     Gliding,
+    #[db_enum(rename = "MilitaryOps")]
     MilitaryOps,
+    #[db_enum(rename = "NotAssigned")]
     NotAssigned,
 }
 
