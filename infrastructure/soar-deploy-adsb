@@ -11,7 +11,7 @@
 #
 # The deployment directory should contain:
 #   - soar (the binary)
-#   - soar-beast-ingest.service (production) or soar-beast-ingest-staging.service (staging)
+#   - soar-adsb-ingest.service (production) or soar-adsb-ingest-staging.service (staging)
 #
 
 set -e
@@ -70,13 +70,13 @@ if [ "$ENVIRONMENT" = "staging" ]; then
     ENV_FILE="/etc/soar/env-staging"
     BINARY_PATH="/usr/local/bin/soar-staging"
     BACKUP_DIR="/home/soar/backups/staging"
-    SERVICE_NAME="soar-beast-ingest-staging.service"
+    SERVICE_NAME="soar-adsb-ingest-staging.service"
 else
     SERVICE_SUFFIX=""
     ENV_FILE="/etc/soar/env"
     BINARY_PATH="/usr/local/bin/soar"
     BACKUP_DIR="/home/soar/backups/production"
-    SERVICE_NAME="soar-beast-ingest.service"
+    SERVICE_NAME="soar-adsb-ingest.service"
 fi
 
 log_info "Environment: $ENVIRONMENT"

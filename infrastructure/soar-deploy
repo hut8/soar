@@ -95,7 +95,7 @@ fi
 # Define services and timers based on environment
 # Active services that should be enabled and started
 ACTIVE_SERVICES=(
-    "soar-aprs-ingest${SERVICE_SUFFIX}.service"
+    "soar-ogn-ingest${SERVICE_SUFFIX}.service"
     "soar-run${SERVICE_SUFFIX}.service"
     "soar-web${SERVICE_SUFFIX}.service"
 )
@@ -352,16 +352,16 @@ fi
 log_info "Reloading systemd daemon..."
 systemctl daemon-reload
 
-# Enable and start services - start aprs-ingest first, then others
+# Enable and start services - start ogn-ingest first, then others
 log_info "Enabling and starting SOAR services..."
 
-# Start soar-aprs-ingest first
-if [ -f "/etc/systemd/system/soar-aprs-ingest${SERVICE_SUFFIX}.service" ]; then
-    log_info "Enabling soar-aprs-ingest${SERVICE_SUFFIX}.service..."
-    systemctl enable "soar-aprs-ingest${SERVICE_SUFFIX}.service" || log_warn "Failed to enable soar-aprs-ingest${SERVICE_SUFFIX}.service"
+# Start soar-ogn-ingest first
+if [ -f "/etc/systemd/system/soar-ogn-ingest${SERVICE_SUFFIX}.service" ]; then
+    log_info "Enabling soar-ogn-ingest${SERVICE_SUFFIX}.service..."
+    systemctl enable "soar-ogn-ingest${SERVICE_SUFFIX}.service" || log_warn "Failed to enable soar-ogn-ingest${SERVICE_SUFFIX}.service"
 
-    log_info "Starting soar-aprs-ingest${SERVICE_SUFFIX}.service..."
-    systemctl start "soar-aprs-ingest${SERVICE_SUFFIX}.service" || log_warn "Failed to start soar-aprs-ingest${SERVICE_SUFFIX}.service"
+    log_info "Starting soar-ogn-ingest${SERVICE_SUFFIX}.service..."
+    systemctl start "soar-ogn-ingest${SERVICE_SUFFIX}.service" || log_warn "Failed to start soar-ogn-ingest${SERVICE_SUFFIX}.service"
 
     # Give it a moment to initialize
     sleep 2
@@ -369,8 +369,8 @@ fi
 
 # Start the rest of the active services
 for service in "${ACTIVE_SERVICES[@]}"; do
-    # Skip aprs-ingest since we already started it
-    if [ "$service" = "soar-aprs-ingest${SERVICE_SUFFIX}.service" ]; then
+    # Skip ogn-ingest since we already started it
+    if [ "$service" = "soar-ogn-ingest${SERVICE_SUFFIX}.service" ]; then
         continue
     fi
 
