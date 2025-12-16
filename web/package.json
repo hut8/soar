@@ -23,7 +23,7 @@
 	"devDependencies": {
 		"@eslint/compat": "^1.4.1",
 		"@eslint/js": "^9.39.1",
-		"@playwright/test": "^1.56.1",
+		"@playwright/test": "^1.57.0",
 		"@skeletonlabs/skeleton-svelte": "^4.5.1",
 		"@sveltejs/adapter-static": "^3.0.10",
 		"@sveltejs/kit": "^2.48.0",
