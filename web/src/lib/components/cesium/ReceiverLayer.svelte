@@ -11,7 +11,6 @@
 
 	// State
 	let receiverEntities = $state<Map<string, Entity>>(new Map()); // Map of receiver ID -> Entity
-	let isLoading = $state(false);
 
 	// Debounce timer
 	let debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -65,8 +64,6 @@
 		const bounds = getVisibleBounds();
 		if (!bounds) return;
 
-		isLoading = true;
-
 		try {
 			const receivers = await serverCall<Receiver[]>('/receivers', {
 				params: {
@@ -110,8 +107,6 @@
 			console.log(`Loaded ${receivers.length} receivers in viewport`);
 		} catch (error) {
 			console.error('Error loading receivers:', error);
-		} finally {
-			isLoading = false;
 		}
 	}
 
@@ -168,25 +163,3 @@
 </script>
 
 <!-- No visual output - this component manages entities in the Cesium viewer -->
-
-{#if isLoading && enabled}
-	<div class="loading-indicator">
-		<span>Loading receivers...</span>
-	</div>
-{/if}
-
-<style>
-	.loading-indicator {
-		position: fixed;
-		top: 130px;
-		left: 50%;
-		transform: translateX(-50%);
-		background: rgba(0, 0, 0, 0.7);
-		color: white;
-		padding: 8px 16px;
-		border-radius: 4px;
-		font-size: 14px;
-		z-index: 1000;
-		pointer-events: none;
-	}
-</style>
