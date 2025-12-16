@@ -629,8 +629,8 @@ impl FixesRepository {
 
             info!("Got database connection, executing first query for aircraft");
 
-            // First query: Get aircraft with fixes in the bounding box
-            // Optimized with EXISTS + LIMIT 1 pattern and geometry casting for performance
+            // First query: Get aircraft with cached location in the bounding box
+            // Uses cached location_geom column for fast spatial queries with GIST index
             // Handles antimeridian (international date line) crossing by splitting into two boxes
             let aircraft_sql = r#"
                 WITH params AS (
@@ -638,8 +638,7 @@ impl FixesRepository {
                         $1::double precision AS left_lng,
                         $2::double precision AS bottom_lat,
                         $3::double precision AS right_lng,
-                        $4::double precision AS top_lat,
-                        $5::timestamptz AS since_ts
+                        $4::double precision AS top_lat
                 ),
                 parts AS (
                     SELECT
@@ -656,19 +655,13 @@ impl FixesRepository {
                     FROM params
                 )
                 SELECT d.*
-                FROM aircraft d, params p
+                FROM aircraft d, parts
                 WHERE d.last_fix_at >= NOW() - INTERVAL '1 hour'
-                  AND EXISTS (
-                    SELECT 1
-                    FROM fixes f, parts
-                    WHERE f.aircraft_id = d.id
-                      AND f.received_at >= p.since_ts
-                      AND (
-                          f.location_geom && parts.boxes[1]
-                          OR (array_length(parts.boxes, 1) = 2 AND f.location_geom && parts.boxes[2])
-                      )
-                    LIMIT 1
-                )
+                  AND d.location_geom IS NOT NULL
+                  AND (
+                      d.location_geom && parts.boxes[1]
+                      OR (array_length(parts.boxes, 1) = 2 AND d.location_geom && parts.boxes[2])
+                  )
             "#;
 
             #[derive(QueryableByName)]
@@ -726,7 +719,6 @@ impl FixesRepository {
                 .bind::<diesel::sql_types::Double, _>(se_lat)  // min_lat
                 .bind::<diesel::sql_types::Double, _>(se_lng)  // max_lon
                 .bind::<diesel::sql_types::Double, _>(nw_lat)  // max_lat
-                .bind::<diesel::sql_types::Timestamptz, _>(cutoff_time)
                 .load(&mut conn)?;
 
             info!("First query returned {} aircraft rows", aircraft_rows.len());
