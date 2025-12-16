@@ -61,7 +61,7 @@ impl OpenAipClient {
         Self {
             client: Client::new(),
             api_key,
-            base_url: "https://api.core.openaip.net".to_string(),
+            base_url: "https://api.core.openaip.net/api".to_string(),
         }
     }
 

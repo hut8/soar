@@ -145,6 +145,66 @@ CREATE TYPE public.aircraft_type_ogn AS ENUM (
 
 
 --
+-- Name: airspace_class; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.airspace_class AS ENUM (
+    'A',
+    'B',
+    'C',
+    'D',
+    'E',
+    'F',
+    'G',
+    'SUA'
+);
+
+
+--
+-- Name: airspace_type; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.airspace_type AS ENUM (
+    'Restricted',
+    'Danger',
+    'Prohibited',
+    'CTR',
+    'TMZ',
+    'RMZ',
+    'TMA',
+    'ATZ',
+    'MATZ',
+    'Airway',
+    'MTR',
+    'AlertArea',
+    'WarningArea',
+    'ProtectedArea',
+    'HTZ',
+    'GliderProhibited',
+    'GliderSector',
+    'NoGliders',
+    'WaveWindow',
+    'Other',
+    'FIR',
+    'UIR',
+    'ADIZ',
+    'ATZ_P',
+    'ATZ_MBZ',
+    'TFR',
+    'TRA',
+    'TSA',
+    'FIS',
+    'UAS',
+    'RFFS',
+    'Sport',
+    'DropZone',
+    'Gliding',
+    'MilitaryOps',
+    'NotAssigned'
+);
+
+
+--
 -- Name: airworthiness_class; Type: TYPE; Schema: public; Owner: -
 --
 
@@ -158,6 +218,19 @@ CREATE TYPE public.airworthiness_class AS ENUM (
     'primary',
     'special_flight_permit',
     'light_sport'
+);
+
+
+--
+-- Name: altitude_reference; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.altitude_reference AS ENUM (
+    'MSL',
+    'AGL',
+    'STD',
+    'GND',
+    'UNL'
 );
 
 
@@ -1026,20 +1099,6 @@ $$;
 SET default_table_access_method = heap;
 
 --
--- Name: template_public_aprs_messages; Type: TABLE; Schema: partman; Owner: -
---
-
-CREATE TABLE partman.template_public_aprs_messages (
-    id uuid NOT NULL,
-    raw_message text NOT NULL,
-    received_at timestamp with time zone NOT NULL,
-    receiver_id uuid NOT NULL,
-    unparsed text,
-    raw_message_hash bytea NOT NULL
-);
-
-
---
 -- Name: template_public_fixes; Type: TABLE; Schema: partman; Owner: -
 --
 
@@ -1074,6 +1133,20 @@ CREATE TABLE partman.template_public_fixes (
     altitude_agl_valid boolean NOT NULL,
     location_geom public.geometry(Point,4326),
     time_gap_seconds integer
+);
+
+
+--
+-- Name: template_public_raw_messages; Type: TABLE; Schema: partman; Owner: -
+--
+
+CREATE TABLE partman.template_public_raw_messages (
+    id uuid NOT NULL,
+    raw_message text NOT NULL,
+    received_at timestamp with time zone NOT NULL,
+    receiver_id uuid NOT NULL,
+    unparsed text,
+    raw_message_hash bytea NOT NULL
 );
 
 
@@ -1268,152 +1341,47 @@ CREATE TABLE public.airports (
 
 
 --
--- Name: raw_messages; Type: TABLE; Schema: public; Owner: -
+-- Name: airspace_sync_log; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.raw_messages (
+CREATE TABLE public.airspace_sync_log (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
-    received_at timestamp with time zone NOT NULL,
-    receiver_id uuid NOT NULL,
-    unparsed text,
-    raw_message_hash bytea NOT NULL,
-    raw_message bytea NOT NULL,
-    source public.message_source DEFAULT 'ogn'::public.message_source NOT NULL
-)
-PARTITION BY RANGE (received_at);
-
-
---
--- Name: aprs_messages_default; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.aprs_messages_default (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    received_at timestamp with time zone NOT NULL,
-    receiver_id uuid NOT NULL,
-    unparsed text,
-    raw_message_hash bytea NOT NULL,
-    raw_message bytea NOT NULL,
-    source public.message_source DEFAULT 'ogn'::public.message_source NOT NULL
+    started_at timestamp with time zone DEFAULT now() NOT NULL,
+    completed_at timestamp with time zone,
+    success boolean,
+    airspaces_fetched integer DEFAULT 0,
+    airspaces_inserted integer DEFAULT 0,
+    airspaces_updated integer DEFAULT 0,
+    error_message text,
+    countries_filter text[],
+    updated_after timestamp with time zone
 );
 
 
 --
--- Name: aprs_messages_old; Type: TABLE; Schema: public; Owner: -
+-- Name: airspaces; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.aprs_messages_old (
+CREATE TABLE public.airspaces (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
-    raw_message text NOT NULL,
-    received_at timestamp with time zone NOT NULL,
-    receiver_id uuid NOT NULL,
-    unparsed text,
-    raw_message_hash bytea NOT NULL
-);
-
-
---
--- Name: aprs_messages_p20251211; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.aprs_messages_p20251211 (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    received_at timestamp with time zone NOT NULL,
-    receiver_id uuid NOT NULL,
-    unparsed text,
-    raw_message_hash bytea NOT NULL,
-    raw_message bytea NOT NULL,
-    source public.message_source DEFAULT 'ogn'::public.message_source NOT NULL
-);
-
-
---
--- Name: aprs_messages_p20251212; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.aprs_messages_p20251212 (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    received_at timestamp with time zone NOT NULL,
-    receiver_id uuid NOT NULL,
-    unparsed text,
-    raw_message_hash bytea NOT NULL,
-    raw_message bytea NOT NULL,
-    source public.message_source DEFAULT 'ogn'::public.message_source NOT NULL
-);
-
-
---
--- Name: aprs_messages_p20251213; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.aprs_messages_p20251213 (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    received_at timestamp with time zone NOT NULL,
-    receiver_id uuid NOT NULL,
-    unparsed text,
-    raw_message_hash bytea NOT NULL,
-    raw_message bytea NOT NULL,
-    source public.message_source DEFAULT 'ogn'::public.message_source NOT NULL
-);
-
-
---
--- Name: aprs_messages_p20251214; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.aprs_messages_p20251214 (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    received_at timestamp with time zone NOT NULL,
-    receiver_id uuid NOT NULL,
-    unparsed text,
-    raw_message_hash bytea NOT NULL,
-    raw_message bytea NOT NULL,
-    source public.message_source DEFAULT 'ogn'::public.message_source NOT NULL
-);
-
-
---
--- Name: aprs_messages_p20251215; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.aprs_messages_p20251215 (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    received_at timestamp with time zone NOT NULL,
-    receiver_id uuid NOT NULL,
-    unparsed text,
-    raw_message_hash bytea NOT NULL,
-    raw_message bytea NOT NULL,
-    source public.message_source DEFAULT 'ogn'::public.message_source NOT NULL
-);
-
-
---
--- Name: aprs_messages_p20251216; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.aprs_messages_p20251216 (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    received_at timestamp with time zone NOT NULL,
-    receiver_id uuid NOT NULL,
-    unparsed text,
-    raw_message_hash bytea NOT NULL,
-    raw_message bytea NOT NULL,
-    source public.message_source DEFAULT 'ogn'::public.message_source NOT NULL
-);
-
-
---
--- Name: aprs_messages_p20251217; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.aprs_messages_p20251217 (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    received_at timestamp with time zone NOT NULL,
-    receiver_id uuid NOT NULL,
-    unparsed text,
-    raw_message_hash bytea NOT NULL,
-    raw_message bytea NOT NULL,
-    source public.message_source DEFAULT 'ogn'::public.message_source NOT NULL
+    openaip_id integer NOT NULL,
+    name text NOT NULL,
+    airspace_class public.airspace_class,
+    airspace_type public.airspace_type NOT NULL,
+    country_code character(2),
+    lower_value integer,
+    lower_unit text,
+    lower_reference public.altitude_reference,
+    upper_value integer,
+    upper_unit text,
+    upper_reference public.altitude_reference,
+    geometry public.geography(MultiPolygon,4326) NOT NULL,
+    geometry_geom public.geometry(MultiPolygon,4326) GENERATED ALWAYS AS ((geometry)::public.geometry) STORED,
+    remarks text,
+    activity_type text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    openaip_updated_at timestamp with time zone
 );
 
 
@@ -1977,6 +1945,142 @@ CREATE TABLE public.pilots (
 
 
 --
+-- Name: raw_messages; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.raw_messages (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    received_at timestamp with time zone NOT NULL,
+    receiver_id uuid NOT NULL,
+    unparsed text,
+    raw_message_hash bytea NOT NULL,
+    raw_message bytea NOT NULL,
+    source public.message_source DEFAULT 'ogn'::public.message_source NOT NULL
+)
+PARTITION BY RANGE (received_at);
+
+
+--
+-- Name: raw_messages_default; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.raw_messages_default (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    received_at timestamp with time zone NOT NULL,
+    receiver_id uuid NOT NULL,
+    unparsed text,
+    raw_message_hash bytea NOT NULL,
+    raw_message bytea NOT NULL,
+    source public.message_source DEFAULT 'ogn'::public.message_source NOT NULL
+);
+
+
+--
+-- Name: raw_messages_p20251211; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.raw_messages_p20251211 (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    received_at timestamp with time zone NOT NULL,
+    receiver_id uuid NOT NULL,
+    unparsed text,
+    raw_message_hash bytea NOT NULL,
+    raw_message bytea NOT NULL,
+    source public.message_source DEFAULT 'ogn'::public.message_source NOT NULL
+);
+
+
+--
+-- Name: raw_messages_p20251212; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.raw_messages_p20251212 (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    received_at timestamp with time zone NOT NULL,
+    receiver_id uuid NOT NULL,
+    unparsed text,
+    raw_message_hash bytea NOT NULL,
+    raw_message bytea NOT NULL,
+    source public.message_source DEFAULT 'ogn'::public.message_source NOT NULL
+);
+
+
+--
+-- Name: raw_messages_p20251213; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.raw_messages_p20251213 (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    received_at timestamp with time zone NOT NULL,
+    receiver_id uuid NOT NULL,
+    unparsed text,
+    raw_message_hash bytea NOT NULL,
+    raw_message bytea NOT NULL,
+    source public.message_source DEFAULT 'ogn'::public.message_source NOT NULL
+);
+
+
+--
+-- Name: raw_messages_p20251214; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.raw_messages_p20251214 (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    received_at timestamp with time zone NOT NULL,
+    receiver_id uuid NOT NULL,
+    unparsed text,
+    raw_message_hash bytea NOT NULL,
+    raw_message bytea NOT NULL,
+    source public.message_source DEFAULT 'ogn'::public.message_source NOT NULL
+);
+
+
+--
+-- Name: raw_messages_p20251215; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.raw_messages_p20251215 (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    received_at timestamp with time zone NOT NULL,
+    receiver_id uuid NOT NULL,
+    unparsed text,
+    raw_message_hash bytea NOT NULL,
+    raw_message bytea NOT NULL,
+    source public.message_source DEFAULT 'ogn'::public.message_source NOT NULL
+);
+
+
+--
+-- Name: raw_messages_p20251216; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.raw_messages_p20251216 (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    received_at timestamp with time zone NOT NULL,
+    receiver_id uuid NOT NULL,
+    unparsed text,
+    raw_message_hash bytea NOT NULL,
+    raw_message bytea NOT NULL,
+    source public.message_source DEFAULT 'ogn'::public.message_source NOT NULL
+);
+
+
+--
+-- Name: raw_messages_p20251217; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.raw_messages_p20251217 (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    received_at timestamp with time zone NOT NULL,
+    receiver_id uuid NOT NULL,
+    unparsed text,
+    raw_message_hash bytea NOT NULL,
+    raw_message bytea NOT NULL,
+    source public.message_source DEFAULT 'ogn'::public.message_source NOT NULL
+);
+
+
+--
 -- Name: receiver_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2257,62 +2361,6 @@ CREATE TABLE public.users (
 
 
 --
--- Name: aprs_messages_default; Type: TABLE ATTACH; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.raw_messages ATTACH PARTITION public.aprs_messages_default DEFAULT;
-
-
---
--- Name: aprs_messages_p20251211; Type: TABLE ATTACH; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.raw_messages ATTACH PARTITION public.aprs_messages_p20251211 FOR VALUES FROM ('2025-12-11 00:00:00+00') TO ('2025-12-12 00:00:00+00');
-
-
---
--- Name: aprs_messages_p20251212; Type: TABLE ATTACH; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.raw_messages ATTACH PARTITION public.aprs_messages_p20251212 FOR VALUES FROM ('2025-12-12 00:00:00+00') TO ('2025-12-13 00:00:00+00');
-
-
---
--- Name: aprs_messages_p20251213; Type: TABLE ATTACH; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.raw_messages ATTACH PARTITION public.aprs_messages_p20251213 FOR VALUES FROM ('2025-12-13 00:00:00+00') TO ('2025-12-14 00:00:00+00');
-
-
---
--- Name: aprs_messages_p20251214; Type: TABLE ATTACH; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.raw_messages ATTACH PARTITION public.aprs_messages_p20251214 FOR VALUES FROM ('2025-12-14 00:00:00+00') TO ('2025-12-15 00:00:00+00');
-
-
---
--- Name: aprs_messages_p20251215; Type: TABLE ATTACH; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.raw_messages ATTACH PARTITION public.aprs_messages_p20251215 FOR VALUES FROM ('2025-12-15 00:00:00+00') TO ('2025-12-16 00:00:00+00');
-
-
---
--- Name: aprs_messages_p20251216; Type: TABLE ATTACH; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.raw_messages ATTACH PARTITION public.aprs_messages_p20251216 FOR VALUES FROM ('2025-12-16 00:00:00+00') TO ('2025-12-17 00:00:00+00');
-
-
---
--- Name: aprs_messages_p20251217; Type: TABLE ATTACH; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.raw_messages ATTACH PARTITION public.aprs_messages_p20251217 FOR VALUES FROM ('2025-12-17 00:00:00+00') TO ('2025-12-18 00:00:00+00');
-
-
---
 -- Name: fixes_default; Type: TABLE ATTACH; Schema: public; Owner: -
 --
 
@@ -2366,6 +2414,62 @@ ALTER TABLE ONLY public.fixes ATTACH PARTITION public.fixes_p20251216 FOR VALUES
 --
 
 ALTER TABLE ONLY public.fixes ATTACH PARTITION public.fixes_p20251217 FOR VALUES FROM ('2025-12-17 00:00:00+00') TO ('2025-12-18 00:00:00+00');
+
+
+--
+-- Name: raw_messages_default; Type: TABLE ATTACH; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_messages ATTACH PARTITION public.raw_messages_default DEFAULT;
+
+
+--
+-- Name: raw_messages_p20251211; Type: TABLE ATTACH; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_messages ATTACH PARTITION public.raw_messages_p20251211 FOR VALUES FROM ('2025-12-11 00:00:00+00') TO ('2025-12-12 00:00:00+00');
+
+
+--
+-- Name: raw_messages_p20251212; Type: TABLE ATTACH; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_messages ATTACH PARTITION public.raw_messages_p20251212 FOR VALUES FROM ('2025-12-12 00:00:00+00') TO ('2025-12-13 00:00:00+00');
+
+
+--
+-- Name: raw_messages_p20251213; Type: TABLE ATTACH; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_messages ATTACH PARTITION public.raw_messages_p20251213 FOR VALUES FROM ('2025-12-13 00:00:00+00') TO ('2025-12-14 00:00:00+00');
+
+
+--
+-- Name: raw_messages_p20251214; Type: TABLE ATTACH; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_messages ATTACH PARTITION public.raw_messages_p20251214 FOR VALUES FROM ('2025-12-14 00:00:00+00') TO ('2025-12-15 00:00:00+00');
+
+
+--
+-- Name: raw_messages_p20251215; Type: TABLE ATTACH; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_messages ATTACH PARTITION public.raw_messages_p20251215 FOR VALUES FROM ('2025-12-15 00:00:00+00') TO ('2025-12-16 00:00:00+00');
+
+
+--
+-- Name: raw_messages_p20251216; Type: TABLE ATTACH; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_messages ATTACH PARTITION public.raw_messages_p20251216 FOR VALUES FROM ('2025-12-16 00:00:00+00') TO ('2025-12-17 00:00:00+00');
+
+
+--
+-- Name: raw_messages_p20251217; Type: TABLE ATTACH; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.raw_messages ATTACH PARTITION public.raw_messages_p20251217 FOR VALUES FROM ('2025-12-17 00:00:00+00') TO ('2025-12-18 00:00:00+00');
 
 
 --
@@ -2471,83 +2575,99 @@ ALTER TABLE ONLY public.airports
 
 
 --
--- Name: raw_messages aprs_messages_pkey1; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: airspace_sync_log airspace_sync_log_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.airspace_sync_log
+    ADD CONSTRAINT airspace_sync_log_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: airspaces airspaces_openaip_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.airspaces
+    ADD CONSTRAINT airspaces_openaip_id_key UNIQUE (openaip_id);
+
+
+--
+-- Name: airspaces airspaces_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.airspaces
+    ADD CONSTRAINT airspaces_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: raw_messages raw_messages_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.raw_messages
-    ADD CONSTRAINT aprs_messages_pkey1 PRIMARY KEY (id, received_at);
+    ADD CONSTRAINT raw_messages_pkey PRIMARY KEY (id, received_at);
 
 
 --
--- Name: aprs_messages_default aprs_messages_default_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: raw_messages_default aprs_messages_default_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.aprs_messages_default
+ALTER TABLE ONLY public.raw_messages_default
     ADD CONSTRAINT aprs_messages_default_pkey PRIMARY KEY (id, received_at);
 
 
 --
--- Name: aprs_messages_p20251211 aprs_messages_p20251211_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: raw_messages_p20251211 aprs_messages_p20251211_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.aprs_messages_p20251211
+ALTER TABLE ONLY public.raw_messages_p20251211
     ADD CONSTRAINT aprs_messages_p20251211_pkey PRIMARY KEY (id, received_at);
 
 
 --
--- Name: aprs_messages_p20251212 aprs_messages_p20251212_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: raw_messages_p20251212 aprs_messages_p20251212_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.aprs_messages_p20251212
+ALTER TABLE ONLY public.raw_messages_p20251212
     ADD CONSTRAINT aprs_messages_p20251212_pkey PRIMARY KEY (id, received_at);
 
 
 --
--- Name: aprs_messages_p20251213 aprs_messages_p20251213_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: raw_messages_p20251213 aprs_messages_p20251213_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.aprs_messages_p20251213
+ALTER TABLE ONLY public.raw_messages_p20251213
     ADD CONSTRAINT aprs_messages_p20251213_pkey PRIMARY KEY (id, received_at);
 
 
 --
--- Name: aprs_messages_p20251214 aprs_messages_p20251214_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: raw_messages_p20251214 aprs_messages_p20251214_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.aprs_messages_p20251214
+ALTER TABLE ONLY public.raw_messages_p20251214
     ADD CONSTRAINT aprs_messages_p20251214_pkey PRIMARY KEY (id, received_at);
 
 
 --
--- Name: aprs_messages_p20251215 aprs_messages_p20251215_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: raw_messages_p20251215 aprs_messages_p20251215_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.aprs_messages_p20251215
+ALTER TABLE ONLY public.raw_messages_p20251215
     ADD CONSTRAINT aprs_messages_p20251215_pkey PRIMARY KEY (id, received_at);
 
 
 --
--- Name: aprs_messages_p20251216 aprs_messages_p20251216_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: raw_messages_p20251216 aprs_messages_p20251216_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.aprs_messages_p20251216
+ALTER TABLE ONLY public.raw_messages_p20251216
     ADD CONSTRAINT aprs_messages_p20251216_pkey PRIMARY KEY (id, received_at);
 
 
 --
--- Name: aprs_messages_p20251217 aprs_messages_p20251217_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: raw_messages_p20251217 aprs_messages_p20251217_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.aprs_messages_p20251217
+ALTER TABLE ONLY public.raw_messages_p20251217
     ADD CONSTRAINT aprs_messages_p20251217_pkey PRIMARY KEY (id, received_at);
-
-
---
--- Name: aprs_messages_old aprs_messages_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.aprs_messages_old
-    ADD CONSTRAINT aprs_messages_pkey PRIMARY KEY (id);
 
 
 --
@@ -3682,6 +3802,62 @@ CREATE INDEX idx_airports_type ON public.airports USING btree (type);
 
 
 --
+-- Name: idx_airspace_sync_log_completed; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_airspace_sync_log_completed ON public.airspace_sync_log USING btree (completed_at DESC);
+
+
+--
+-- Name: idx_airspace_sync_log_success; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_airspace_sync_log_success ON public.airspace_sync_log USING btree (success) WHERE (success = true);
+
+
+--
+-- Name: idx_airspaces_class; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_airspaces_class ON public.airspaces USING btree (airspace_class);
+
+
+--
+-- Name: idx_airspaces_country; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_airspaces_country ON public.airspaces USING btree (country_code);
+
+
+--
+-- Name: idx_airspaces_geometry; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_airspaces_geometry ON public.airspaces USING gist (geometry);
+
+
+--
+-- Name: idx_airspaces_geometry_geom; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_airspaces_geometry_geom ON public.airspaces USING gist (geometry_geom);
+
+
+--
+-- Name: idx_airspaces_openaip_updated; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_airspaces_openaip_updated ON public.airspaces USING btree (openaip_updated_at);
+
+
+--
+-- Name: idx_airspaces_type; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_airspaces_type ON public.airspaces USING btree (airspace_type);
+
+
+--
 -- Name: idx_club_analytics_daily_club_date; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3875,20 +4051,6 @@ CREATE INDEX idx_pilots_club_id ON public.pilots USING btree (club_id);
 --
 
 CREATE INDEX idx_pilots_deleted_at ON public.pilots USING btree (deleted_at) WHERE (deleted_at IS NULL);
-
-
---
--- Name: idx_raw_messages_received_at; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_raw_messages_received_at ON public.aprs_messages_old USING btree (received_at);
-
-
---
--- Name: idx_raw_messages_receiver_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_raw_messages_receiver_id ON public.aprs_messages_old USING btree (receiver_id);
 
 
 --
@@ -4105,56 +4267,56 @@ CREATE INDEX users_password_reset_token_idx ON public.users USING btree (passwor
 -- Name: aprs_messages_default_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.aprs_messages_pkey1 ATTACH PARTITION public.aprs_messages_default_pkey;
+ALTER INDEX public.raw_messages_pkey ATTACH PARTITION public.aprs_messages_default_pkey;
 
 
 --
 -- Name: aprs_messages_p20251211_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.aprs_messages_pkey1 ATTACH PARTITION public.aprs_messages_p20251211_pkey;
+ALTER INDEX public.raw_messages_pkey ATTACH PARTITION public.aprs_messages_p20251211_pkey;
 
 
 --
 -- Name: aprs_messages_p20251212_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.aprs_messages_pkey1 ATTACH PARTITION public.aprs_messages_p20251212_pkey;
+ALTER INDEX public.raw_messages_pkey ATTACH PARTITION public.aprs_messages_p20251212_pkey;
 
 
 --
 -- Name: aprs_messages_p20251213_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.aprs_messages_pkey1 ATTACH PARTITION public.aprs_messages_p20251213_pkey;
+ALTER INDEX public.raw_messages_pkey ATTACH PARTITION public.aprs_messages_p20251213_pkey;
 
 
 --
 -- Name: aprs_messages_p20251214_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.aprs_messages_pkey1 ATTACH PARTITION public.aprs_messages_p20251214_pkey;
+ALTER INDEX public.raw_messages_pkey ATTACH PARTITION public.aprs_messages_p20251214_pkey;
 
 
 --
 -- Name: aprs_messages_p20251215_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.aprs_messages_pkey1 ATTACH PARTITION public.aprs_messages_p20251215_pkey;
+ALTER INDEX public.raw_messages_pkey ATTACH PARTITION public.aprs_messages_p20251215_pkey;
 
 
 --
 -- Name: aprs_messages_p20251216_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.aprs_messages_pkey1 ATTACH PARTITION public.aprs_messages_p20251216_pkey;
+ALTER INDEX public.raw_messages_pkey ATTACH PARTITION public.aprs_messages_p20251216_pkey;
 
 
 --
 -- Name: aprs_messages_p20251217_pkey; Type: INDEX ATTACH; Schema: public; Owner: -
 --
 
-ALTER INDEX public.aprs_messages_pkey1 ATTACH PARTITION public.aprs_messages_p20251217_pkey;
+ALTER INDEX public.raw_messages_pkey ATTACH PARTITION public.aprs_messages_p20251217_pkey;
 
 
 --
@@ -4606,13 +4768,6 @@ ALTER INDEX public.idx_fixes_source_metadata ATTACH PARTITION public.fixes_p2025
 
 
 --
--- Name: aprs_messages_old ensure_aprs_message_hash; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER ensure_aprs_message_hash BEFORE INSERT ON public.aprs_messages_old FOR EACH ROW EXECUTE FUNCTION public.compute_aprs_message_hash();
-
-
---
 -- Name: pilots set_club_pilots_updated_at; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -4687,6 +4842,13 @@ CREATE TRIGGER update_airport_location_trigger BEFORE INSERT OR UPDATE OF latitu
 --
 
 CREATE TRIGGER update_airports_updated_at BEFORE UPDATE ON public.airports FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+
+--
+-- Name: airspaces update_airspaces_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER update_airspaces_updated_at BEFORE UPDATE ON public.airspaces FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 
 --
@@ -4782,22 +4944,6 @@ ALTER TABLE ONLY public.aircraft_registrations
 
 
 --
--- Name: aprs_messages_old aprs_messages_receiver_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.aprs_messages_old
-    ADD CONSTRAINT aprs_messages_receiver_id_fkey FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE CASCADE;
-
-
---
--- Name: raw_messages aprs_messages_receiver_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE public.raw_messages
-    ADD CONSTRAINT aprs_messages_receiver_id_fkey FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE CASCADE;
-
-
---
 -- Name: clubs clubs_home_base_airport_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4819,14 +4965,6 @@ ALTER TABLE ONLY public.clubs
 
 ALTER TABLE public.fixes
     ADD CONSTRAINT fixes_aircraft_id_fkey FOREIGN KEY (aircraft_id) REFERENCES public.aircraft(id) ON DELETE SET NULL;
-
-
---
--- Name: fixes_old fixes_aprs_message_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.fixes_old
-    ADD CONSTRAINT fixes_aprs_message_id_fkey FOREIGN KEY (aprs_message_id) REFERENCES public.aprs_messages_old(id) ON DELETE SET NULL;
 
 
 --
@@ -4995,6 +5133,14 @@ ALTER TABLE ONLY public.pilots
 
 ALTER TABLE ONLY public.pilots
     ADD CONSTRAINT pilots_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: raw_messages raw_messages_receiver_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE public.raw_messages
+    ADD CONSTRAINT raw_messages_receiver_id_fkey FOREIGN KEY (receiver_id) REFERENCES public.receivers(id) ON DELETE CASCADE;
 
 
 --
