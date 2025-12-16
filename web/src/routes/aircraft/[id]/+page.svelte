@@ -180,6 +180,12 @@
 				`/aircraft/${aircraftId}/flights?page=${page}&per_page=100`
 			);
 			flights = response.flights || [];
+			// Sort by takeoff_time descending (most recent first)
+			flights.sort((a, b) => {
+				const timeA = a.takeoff_time ? new Date(a.takeoff_time).getTime() : 0;
+				const timeB = b.takeoff_time ? new Date(b.takeoff_time).getTime() : 0;
+				return timeB - timeA;
+			});
 			flightsPage = response.page || 1;
 			flightsTotalPages = response.total_pages || 1;
 		} catch (err) {
