@@ -65,7 +65,11 @@
 		if (!bounds) return;
 
 		try {
-			const receivers = await serverCall<Receiver[]>('/receivers', {
+			interface ReceiverSearchResponse {
+				receivers: Receiver[];
+			}
+
+			const response = await serverCall<ReceiverSearchResponse>('/receivers', {
 				params: {
 					latitude_min: bounds.latMin,
 					latitude_max: bounds.latMax,
@@ -78,7 +82,7 @@
 			// eslint-disable-next-line svelte/prefer-svelte-reactivity
 			const newReceiverIds = new Set<string>();
 
-			for (const receiver of receivers) {
+			for (const receiver of response.receivers) {
 				// Skip if already rendered
 				if (receiverEntities.has(receiver.id)) {
 					newReceiverIds.add(receiver.id);
@@ -104,7 +108,7 @@
 				}
 			}
 
-			console.log(`Loaded ${receivers.length} receivers in viewport`);
+			console.log(`Loaded ${response.receivers.length} receivers in viewport`);
 		} catch (error) {
 			console.error('Error loading receivers:', error);
 		}
