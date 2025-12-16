@@ -62,7 +62,7 @@ impl std::fmt::Display for AddressType {
 }
 
 // Custom deserializer for AddressType to handle single character strings
-fn address_type_from_str<'de, D>(deserializer: D) -> Result<AddressType, D::Error>
+pub fn address_type_from_str<'de, D>(deserializer: D) -> Result<AddressType, D::Error>
 where
     D: Deserializer<'de>,
 {
@@ -71,7 +71,7 @@ where
 }
 
 // Custom serializer for AddressType to output single character strings
-fn address_type_to_str<S>(address_type: &AddressType, serializer: S) -> Result<S::Ok, S::Error>
+pub fn address_type_to_str<S>(address_type: &AddressType, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {

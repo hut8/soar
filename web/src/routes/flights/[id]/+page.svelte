@@ -33,7 +33,8 @@
 		getAircraftTypeOgnDescription,
 		formatAircraftAddress,
 		getAircraftTypeColor,
-		getFlagPath
+		getFlagPath,
+		getCountryName
 	} from '$lib/formatters';
 	import { GOOGLE_MAPS_API_KEY } from '$lib/config';
 	import { serverCall } from '$lib/api/server';
@@ -1346,6 +1347,14 @@
 							<span class="text-surface-400-500-token">•</span>
 						{/if}
 						{#if data.flight.aircraft_id && data.flight.device_address && data.flight.device_address_type}
+							{#if data.flight.aircraft_country_code}
+								<img
+									src={getFlagPath(data.flight.aircraft_country_code)}
+									alt={getCountryName(data.flight.aircraft_country_code) || ''}
+									title={getCountryName(data.flight.aircraft_country_code) || ''}
+									class="h-4 rounded-sm"
+								/>
+							{/if}
 							<a
 								href="/aircraft/{data.flight.aircraft_id}"
 								target="_blank"
@@ -1638,7 +1647,14 @@
 							<!-- Desktop: relative time with full datetime -->
 							<span class="hidden md:inline">{formatDateTime(data.fixes[0].timestamp)}</span>
 						</div>
-						<div class="text-surface-600-300-token text-sm">Most recent position update</div>
+						<div class="text-surface-600-300-token text-sm">
+							Most recent position update
+							{#if data.flight.callsign}
+								<span class="text-surface-500-400-token ml-1"
+									>• Callsign: {data.flight.callsign}</span
+								>
+							{/if}
+						</div>
 					</div>
 				</div>
 			{/if}

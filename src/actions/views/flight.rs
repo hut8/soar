@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::aircraft::AddressType;
+use crate::aircraft::{AddressType, address_type_from_str, address_type_to_str};
 use crate::flights::{Flight, FlightState};
 use crate::ogn_aprs_aircraft::AircraftType;
 
@@ -28,6 +28,10 @@ pub struct FlightView {
     pub id: Uuid,
     pub aircraft_id: Option<Uuid>,
     pub device_address: String,
+    #[serde(
+        deserialize_with = "address_type_from_str",
+        serialize_with = "address_type_to_str"
+    )]
     pub device_address_type: AddressType,
     pub takeoff_time: Option<DateTime<Utc>>,
     pub landing_time: Option<DateTime<Utc>>,
