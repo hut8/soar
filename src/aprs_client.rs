@@ -83,13 +83,13 @@ impl AprsClient {
     /// Start the APRS client with NATS publisher
     /// This connects to APRS-IS and publishes all messages to NATS
     #[tracing::instrument(skip(self, nats_publisher))]
-    pub async fn start_jetstream(
+    pub async fn start(
         &mut self,
         nats_publisher: crate::aprs_nats_publisher::NatsPublisher,
     ) -> Result<()> {
         let (_shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
         let health_state = crate::metrics::init_aprs_health();
-        self.start_jetstream_with_shutdown(nats_publisher, shutdown_rx, health_state)
+        self.start_with_shutdown(nats_publisher, shutdown_rx, health_state)
             .await
     }
 
@@ -98,7 +98,7 @@ impl AprsClient {
     /// Supports graceful shutdown when shutdown_rx receives a signal
     /// Updates health_state with connection status for health checks
     #[tracing::instrument(skip(self, nats_publisher, shutdown_rx, health_state))]
-    pub async fn start_jetstream_with_shutdown(
+    pub async fn start_with_shutdown(
         &mut self,
         nats_publisher: crate::aprs_nats_publisher::NatsPublisher,
         shutdown_rx: tokio::sync::oneshot::Receiver<()>,

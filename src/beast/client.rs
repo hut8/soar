@@ -65,16 +65,13 @@ impl BeastClient {
         }
     }
 
-    /// Start the Beast client with a publisher (JetStream or plain NATS)
+    /// Start the Beast client with a publisher
     /// This connects to the Beast server and publishes all messages to NATS
     #[tracing::instrument(skip(self, publisher))]
-    pub async fn start_jetstream<P: crate::beast::BeastPublisher>(
-        &mut self,
-        publisher: P,
-    ) -> Result<()> {
+    pub async fn start<P: crate::beast::BeastPublisher>(&mut self, publisher: P) -> Result<()> {
         let (_shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
         let health_state = crate::metrics::init_beast_health();
-        self.start_jetstream_with_shutdown(publisher, shutdown_rx, health_state)
+        self.start_with_shutdown(publisher, shutdown_rx, health_state)
             .await
     }
 
@@ -83,7 +80,7 @@ impl BeastClient {
     /// Supports graceful shutdown when shutdown_rx receives a signal
     /// Updates health_state with connection status for health checks
     #[tracing::instrument(skip(self, publisher, shutdown_rx, health_state))]
-    pub async fn start_jetstream_with_shutdown<P: crate::beast::BeastPublisher>(
+    pub async fn start_with_shutdown<P: crate::beast::BeastPublisher>(
         &mut self,
         publisher: P,
         shutdown_rx: tokio::sync::oneshot::Receiver<()>,
@@ -145,16 +142,16 @@ impl BeastClient {
                                             "Slow JetStream publish: {}ms",
                                             publish_duration.as_millis()
                                         );
-                                        metrics::counter!("beast.jetstream.slow_publish").increment(1);
+                                        metrics::counter!("beast.nats.slow_publish").increment(1);
                                     }
                                 }
                                 Err(_) => {
                                     error!("JetStream publish timed out after 5 seconds - NATS may be blocked");
-                                    metrics::counter!("beast.jetstream.publish_timeout").increment(1);
+                                    metrics::counter!("beast.nats.publish_timeout").increment(1);
 
                                     // Report timeout to Sentry (throttled)
                                     sentry::capture_message(
-                                        "Beast JetStream publish timed out after 5 seconds",
+                                        "Beast NATS publish timed out after 5 seconds",
                                         sentry::Level::Error
                                     );
                                 }
@@ -167,8 +164,8 @@ impl BeastClient {
                         let available_permits = publish_semaphore.available_permits();
                         let in_flight_publishes = 100 - available_permits;
 
-                        metrics::gauge!("beast.jetstream.queue_depth").set(queue_depth as f64);
-                        metrics::gauge!("beast.jetstream.in_flight").set(in_flight_publishes as f64);
+                        metrics::gauge!("beast.nats.queue_depth").set(queue_depth as f64);
+                        metrics::gauge!("beast.nats.in_flight").set(in_flight_publishes as f64);
 
                         // Log publishing rate and queue status
                         let elapsed = last_log_time.elapsed().as_secs_f64();
@@ -177,7 +174,7 @@ impl BeastClient {
                         if elapsed > 0.0 {
                             let rate = attempted_count as f64 / elapsed;
                             info!(
-                                "Beast JetStream stats: {:.1} msg/s attempted (queue: {}, in-flight: {}, last receive: {:.1}s ago)",
+                                "Beast NATS stats: {:.1} msg/s attempted (queue: {}, in-flight: {}, last receive: {:.1}s ago)",
                                 rate, queue_depth, in_flight_publishes, time_since_last_receive
                             );
                             attempted_count = 0;
@@ -186,7 +183,7 @@ impl BeastClient {
 
                         if queue_depth > queue_warning_threshold(RAW_MESSAGE_QUEUE_SIZE) {
                             warn!(
-                                "Beast JetStream publish queue building up: {} messages (80% full)",
+                                "Beast NATS publish queue building up: {} messages (80% full)",
                                 queue_depth
                             );
                         }
