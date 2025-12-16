@@ -17,8 +17,12 @@ pub struct AirspacesResponse {
     pub items: Vec<OpenAipAirspace>,
     #[serde(rename = "totalCount")]
     pub total_count: i32,
+    #[serde(rename = "totalPages")]
+    pub total_pages: i32,
     pub page: i32,
     pub limit: i32,
+    #[serde(rename = "nextPage")]
+    pub next_page: Option<i32>,
 }
 
 /// Single airspace from OpenAIP API
@@ -110,16 +114,29 @@ impl OpenAipClient {
             anyhow::bail!("OpenAIP API error {}: {}", status, body);
         }
 
-        let data: AirspacesResponse = response
-            .json()
+        // Read response body as text first for better error reporting
+        let response_text = response
+            .text()
             .await
-            .context("Failed to parse OpenAIP API response")?;
+            .context("Failed to read response body")?;
+
+        debug!(
+            "OpenAIP API response (first 500 chars): {}",
+            &response_text.chars().take(500).collect::<String>()
+        );
+
+        let data: AirspacesResponse = serde_json::from_str(&response_text).with_context(|| {
+            format!(
+                "Failed to parse OpenAIP API response. Response: {}",
+                &response_text.chars().take(1000).collect::<String>()
+            )
+        })?;
 
         info!(
             "Fetched {} airspaces (page {}/{}, total {})",
             data.items.len(),
             data.page,
-            (data.total_count as f64 / data.limit as f64).ceil() as i32,
+            data.total_pages,
             data.total_count
         );
 

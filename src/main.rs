@@ -692,11 +692,11 @@ async fn main() -> Result<()> {
     // Use RUST_LOG if set, otherwise default based on environment
     let fmt_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
         if is_production {
-            EnvFilter::new("warn")
+            EnvFilter::new("warn,hyper_util=info,rustls=info")
         } else if is_staging {
-            EnvFilter::new("info")
+            EnvFilter::new("info,hyper_util=info,rustls=info")
         } else {
-            EnvFilter::new("debug")
+            EnvFilter::new("debug,hyper_util=info,rustls=info")
         }
     });
 
