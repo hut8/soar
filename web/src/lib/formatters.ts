@@ -1,4 +1,5 @@
 // Shared formatting utility functions for aircraft data
+import countryCodes from '$lib/data/countries.json';
 
 /**
  * Convert TitleCase strings to Title Case with spaces
@@ -213,4 +214,26 @@ export function getAircraftTitle(aircraft: {
 
 	// Default to device address
 	return aircraft.device_address;
+}
+
+/**
+ * Get country name from ISO 3166-1 alpha-2 country code
+ * Example: "US" -> "United States"
+ */
+export function getCountryName(countryCode: string | null | undefined): string | null {
+	if (!countryCode) return null;
+
+	const upperCode = countryCode.toUpperCase();
+	return countryCodes[upperCode as keyof typeof countryCodes] || null;
+}
+
+/**
+ * Get flag SVG path for a country code
+ * Example: "US" -> "/flags/us.svg"
+ */
+export function getFlagPath(countryCode: string | null | undefined): string | null {
+	if (!countryCode) return null;
+
+	const lowerCode = countryCode.toLowerCase();
+	return `/flags/${lowerCode}.svg`;
 }
