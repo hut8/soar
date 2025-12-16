@@ -23,7 +23,8 @@
 		Clock,
 		Expand,
 		LocateFixed,
-		Palette
+		Palette,
+		Globe
 	} from '@lucide/svelte';
 	import type { PageData } from './$types';
 	import type { Flight, Receiver } from '$lib/types';
@@ -1629,6 +1630,13 @@
 						>
 							<Expand class="h-3 w-3" />
 							<span>Full Screen</span>
+						</a>
+						<a
+							href="/globe?flight={data.flight.id}"
+							class="btn flex items-center gap-1 preset-filled-primary-500 btn-sm"
+						>
+							<Globe class="h-3 w-3" />
+							<span>Globe</span>
 						</a>
 					</div>
 					<div class="flex flex-wrap items-center gap-4">

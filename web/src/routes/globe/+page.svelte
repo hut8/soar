@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { page } from '$app/state';
 	import { Ion, Viewer, Cartesian3, Math as CesiumMath } from 'cesium';
 	import { CESIUM_ION_TOKEN } from '$lib/config';
 	import AircraftLayer from '$lib/components/cesium/AircraftLayer.svelte';
@@ -22,8 +23,8 @@
 	let selectedFlightIds = $state<string[]>([]);
 	let flightColorScheme = $state<'altitude' | 'time'>('altitude');
 
-	// Timeline playback state
-	let playbackFlightId = $state<string | null>(null);
+	// Timeline playback state - read from URL parameter if present
+	let playbackFlightId = $state<string | null>(page.url.searchParams.get('flight'));
 
 	onMount(() => {
 		// Set Cesium Ion access token
