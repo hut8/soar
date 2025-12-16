@@ -1364,7 +1364,7 @@ CREATE TABLE public.airspace_sync_log (
 
 CREATE TABLE public.airspaces (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
-    openaip_id integer NOT NULL,
+    openaip_id text NOT NULL,
     name text NOT NULL,
     airspace_class public.airspace_class,
     airspace_type public.airspace_type NOT NULL,
