@@ -1,6 +1,6 @@
 use crate::Fix;
 use crate::aircraft::Aircraft;
-use crate::flights::Flight;
+use crate::flights::{Flight, TimeoutPhase};
 use crate::flights_repo::FlightsRepository;
 use anyhow::Result;
 use tracing::{debug, error, info, warn};
@@ -21,9 +21,9 @@ pub(crate) async fn create_flight(
     flight_id: Uuid,
     skip_airport_runway_lookup: bool,
 ) -> Result<Uuid> {
-    // Fetch device first as we need it for Flight creation
-    let device = match ctx.device_repo.get_device_by_uuid(fix.aircraft_id).await {
-        Ok(Some(device)) => device,
+    // Fetch aircraft first as we need it for Flight creation
+    let aircraft = match ctx.aircraft_repo.get_aircraft_by_id(fix.aircraft_id).await {
+        Ok(Some(aircraft)) => aircraft,
         Ok(None) => {
             warn!(
                 "Aircraft {} not found when creating flight {}",
@@ -33,16 +33,16 @@ pub(crate) async fn create_flight(
         }
         Err(e) => {
             error!(
-                "Error fetching device {} for flight {}: {}",
+                "Error fetching aircraft {} for flight {}: {}",
                 fix.aircraft_id, flight_id, e
             );
-            return Err(anyhow::anyhow!("Failed to fetch device: {}", e));
+            return Err(anyhow::anyhow!("Failed to fetch aircraft: {}", e));
         }
     };
 
     let mut flight = if skip_airport_runway_lookup {
         // Mid-flight appearance - no takeoff observed
-        Flight::new_airborne_from_fix_with_id(fix, &device, flight_id)
+        Flight::new_airborne_from_fix_with_id(fix, &aircraft, flight_id)
     } else {
         // Actual takeoff - calculate altitude offset and look up airport/runway
         let takeoff_altitude_offset_ft = calculate_altitude_offset_ft(ctx.elevation_db, fix).await;
@@ -62,7 +62,7 @@ pub(crate) async fn create_flight(
         let takeoff_runway_info = determine_runway_identifier(
             ctx.fixes_repo,
             ctx.runways_repo,
-            &device,
+            &aircraft,
             fix.timestamp,
             fix.latitude,
             fix.longitude,
@@ -73,7 +73,7 @@ pub(crate) async fn create_flight(
         let takeoff_runway = takeoff_runway_info.map(|(runway, _)| runway);
 
         let mut flight =
-            Flight::new_with_takeoff_from_fix_with_id(fix, &device, flight_id, fix.timestamp);
+            Flight::new_with_takeoff_from_fix_with_id(fix, &aircraft, flight_id, fix.timestamp);
         flight.departure_airport_id = departure_airport_id;
         flight.takeoff_location_id = takeoff_location_id;
         flight.takeoff_runway_ident = takeoff_runway;
@@ -81,8 +81,8 @@ pub(crate) async fn create_flight(
         flight
     };
 
-    // Copy device's club_id to the flight
-    flight.club_id = device.club_id;
+    // Copy aircraft's club_id to the flight
+    flight.club_id = aircraft.club_id;
 
     ctx.flights_repo.create_flight(flight).await?;
 
@@ -108,6 +108,24 @@ pub(crate) async fn timeout_flight(
         flight_id, aircraft_id
     );
 
+    // Get current flight state to determine phase
+    let flight_phase = {
+        let flights = active_flights.read().await;
+        flights
+            .get(&aircraft_id)
+            .map(|state| state.determine_flight_phase())
+            .unwrap_or(super::FlightPhase::Unknown)
+    };
+
+    let timeout_phase = match flight_phase {
+        super::FlightPhase::Climbing => TimeoutPhase::Climbing,
+        super::FlightPhase::Cruising => TimeoutPhase::Cruising,
+        super::FlightPhase::Descending => TimeoutPhase::Descending,
+        super::FlightPhase::Unknown => TimeoutPhase::Unknown,
+    };
+
+    debug!("Flight {} phase at timeout: {:?}", flight_id, timeout_phase);
+
     // Fetch the flight to get the last_fix_at timestamp
     let flight = match flights_repo.get_flight_by_id(flight_id).await? {
         Some(f) => f,
@@ -123,8 +141,11 @@ pub(crate) async fn timeout_flight(
     // Use last_fix_at as the timeout time
     let timeout_time = flight.last_fix_at;
 
-    // Mark flight as timed out in database
-    match flights_repo.timeout_flight(flight_id, timeout_time).await {
+    // Mark flight as timed out in database WITH phase information
+    match flights_repo
+        .timeout_flight_with_phase(flight_id, timeout_time, timeout_phase)
+        .await
+    {
         Ok(true) => {
             // Calculate and update bounding box now that flight is timed out
             flights_repo
@@ -136,6 +157,13 @@ pub(crate) async fn timeout_flight(
             flights.remove(&aircraft_id);
 
             metrics::counter!("flight_tracker.flight_ended.timed_out").increment(1);
+            let phase_label = match timeout_phase {
+                TimeoutPhase::Climbing => "climbing",
+                TimeoutPhase::Cruising => "cruising",
+                TimeoutPhase::Descending => "descending",
+                TimeoutPhase::Unknown => "unknown",
+            };
+            metrics::counter!("flight_tracker.timeout.phase", "phase" => phase_label).increment(1);
 
             Ok(())
         }

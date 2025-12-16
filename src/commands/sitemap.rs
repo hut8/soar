@@ -37,12 +37,15 @@ pub async fn handle_sitemap_generation(pool: PgPool, static_root: String) -> Res
     // Generate club URLs
     let club_urls = generate_club_urls(&club_ids)?;
 
-    // Get all device IDs from database
-    let device_ids = get_all_device_ids(pool.clone()).await?;
-    info!("Found {} aircraft for sitemap generation", device_ids.len());
+    // Get all aircraft IDs from database
+    let aircraft_ids = get_all_aircraft_ids(pool.clone()).await?;
+    info!(
+        "Found {} aircraft for sitemap generation",
+        aircraft_ids.len()
+    );
 
-    // Generate device URLs
-    let device_urls = generate_device_urls(&device_ids)?;
+    // Generate aircraft URLs
+    let aircraft_urls = generate_aircraft_urls(&aircraft_ids)?;
 
     // Get all airport IDs from database
     let airport_ids = get_all_airport_ids(pool.clone()).await?;
@@ -67,7 +70,7 @@ pub async fn handle_sitemap_generation(pool: PgPool, static_root: String) -> Res
     // Combine all URLs
     let mut all_urls = static_urls;
     all_urls.extend(club_urls);
-    all_urls.extend(device_urls);
+    all_urls.extend(aircraft_urls);
     all_urls.extend(airport_urls);
     all_urls.extend(receiver_urls);
 
@@ -160,33 +163,33 @@ async fn get_all_club_ids(pool: PgPool) -> Result<Vec<Uuid>> {
     Ok(result)
 }
 
-/// Generate device page URLs
-fn generate_device_urls(device_ids: &[Uuid]) -> Result<Vec<Url>> {
+/// Generate aircraft page URLs
+fn generate_aircraft_urls(aircraft_ids: &[Uuid]) -> Result<Vec<Url>> {
     let mut urls = Vec::new();
 
-    for aircraft_id in device_ids {
-        let device_url = format!("{}/aircraft/{}", BASE_URL, aircraft_id);
-        let url = Url::builder(device_url).priority(0.5).build()?;
+    for aircraft_id in aircraft_ids {
+        let aircraft_url = format!("{}/aircraft/{}", BASE_URL, aircraft_id);
+        let url = Url::builder(aircraft_url).priority(0.5).build()?;
         urls.push(url);
     }
 
     Ok(urls)
 }
 
-/// Get all device IDs from the database
-async fn get_all_device_ids(pool: PgPool) -> Result<Vec<Uuid>> {
+/// Get all aircraft IDs from the database
+async fn get_all_aircraft_ids(pool: PgPool) -> Result<Vec<Uuid>> {
     let result = tokio::task::spawn_blocking(move || {
         use soar::schema::aircraft::dsl::*;
 
         let mut conn = pool.get()?;
 
-        // Get all device IDs (UUIDs)
-        let device_ids: Vec<Uuid> = aircraft
+        // Get all aircraft IDs (UUIDs)
+        let aircraft_ids: Vec<Uuid> = aircraft
             .order(id.asc())
             .select(id)
             .load::<Uuid>(&mut conn)?;
 
-        Ok::<Vec<Uuid>, anyhow::Error>(device_ids)
+        Ok::<Vec<Uuid>, anyhow::Error>(aircraft_ids)
     })
     .await??;
 

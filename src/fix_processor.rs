@@ -29,7 +29,7 @@ pub enum ElevationMode {
 #[derive(Clone)]
 pub struct FixProcessor {
     fixes_repo: FixesRepository,
-    device_repo: AircraftRepository,
+    aircraft_repo: AircraftRepository,
     receiver_repo: ReceiverRepository,
     flight_detection_processor: FlightTracker,
     nats_publisher: Option<NatsFixPublisher>,
@@ -45,7 +45,7 @@ impl FixProcessor {
     pub fn new(diesel_pool: Pool<ConnectionManager<PgConnection>>) -> Self {
         Self {
             fixes_repo: FixesRepository::new(diesel_pool.clone()),
-            device_repo: AircraftRepository::new(diesel_pool.clone()),
+            aircraft_repo: AircraftRepository::new(diesel_pool.clone()),
             receiver_repo: ReceiverRepository::new(diesel_pool.clone()),
             flight_detection_processor: FlightTracker::new(&diesel_pool),
             nats_publisher: None,
@@ -93,7 +93,7 @@ impl FixProcessor {
 
         Ok(Self {
             fixes_repo: FixesRepository::new(diesel_pool.clone()),
-            device_repo: AircraftRepository::new(diesel_pool.clone()),
+            aircraft_repo: AircraftRepository::new(diesel_pool.clone()),
             receiver_repo: ReceiverRepository::new(diesel_pool.clone()),
             flight_detection_processor: FlightTracker::new(&diesel_pool),
             nats_publisher: Some(nats_publisher),
@@ -110,7 +110,7 @@ impl FixProcessor {
     ) -> Self {
         Self {
             fixes_repo: FixesRepository::new(diesel_pool.clone()),
-            device_repo: AircraftRepository::new(diesel_pool.clone()),
+            aircraft_repo: AircraftRepository::new(diesel_pool.clone()),
             receiver_repo: ReceiverRepository::new(diesel_pool.clone()),
             flight_detection_processor: flight_tracker,
             nats_publisher: None,
@@ -130,7 +130,7 @@ impl FixProcessor {
 
         Ok(Self {
             fixes_repo: FixesRepository::new(diesel_pool.clone()),
-            device_repo: AircraftRepository::new(diesel_pool.clone()),
+            aircraft_repo: AircraftRepository::new(diesel_pool.clone()),
             receiver_repo: ReceiverRepository::new(diesel_pool.clone()),
             flight_detection_processor: flight_tracker,
             nats_publisher: Some(nats_publisher),
@@ -256,13 +256,13 @@ impl FixProcessor {
                     registration: registration.clone(),
                 };
 
-                // Look up or create device based on device_address
+                // Look up or create aircraft based on device_address
                 // When creating spontaneously, use address_type derived from tracker_device_type
-                // Use device_for_fix to atomically update last_fix_at and insert all available fields
-                let device_lookup_start = std::time::Instant::now();
+                // Use aircraft_for_fix to atomically update last_fix_at and insert all available fields
+                let aircraft_lookup_start = std::time::Instant::now();
                 match self
-                    .device_repo
-                    .device_for_fix(
+                    .aircraft_repo
+                    .aircraft_for_fix(
                         device_address,
                         spontaneous_address_type,
                         received_at,
@@ -270,19 +270,19 @@ impl FixProcessor {
                     )
                     .await
                 {
-                    Ok(device_model) => {
+                    Ok(aircraft_model) => {
                         metrics::histogram!("aprs.aircraft.upsert_ms")
-                            .record(device_lookup_start.elapsed().as_micros() as f64 / 1000.0);
+                            .record(aircraft_lookup_start.elapsed().as_micros() as f64 / 1000.0);
 
-                        // All device fields (including ICAO, ADS-B, tracker type, registration)
-                        // are now updated atomically in device_for_fix - no separate update needed
+                        // All aircraft fields (including ICAO, ADS-B, tracker type, registration)
+                        // are now updated atomically in aircraft_for_fix - no separate update needed
 
-                        // Aircraft exists or was just created, create fix with proper device_id
+                        // Aircraft exists or was just created, create fix with proper aircraft_id
                         let fix_creation_start = std::time::Instant::now();
                         match Fix::from_aprs_packet(
                             packet,
                             received_at,
-                            device_model.id,
+                            aircraft_model.id,
                             context.receiver_id,
                             context.raw_message_id,
                         ) {

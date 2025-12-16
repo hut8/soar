@@ -112,9 +112,9 @@ pub struct AircraftOutlier {
     pub z_score: f64,
 }
 
-/// Top device by flight count
+/// Top aircraft by flight count
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TopDevice {
+pub struct TopAircraft {
     pub aircraft_id: Uuid,
     pub registration: Option<String>,
     pub aircraft_model: Option<String>,

@@ -77,3 +77,94 @@ pub use packet_processors::{
     AircraftPositionProcessor, PacketRouter, PositionPacketProcessor, ReceiverPositionProcessor,
     ReceiverStatusProcessor, ServerStatusProcessor,
 };
+
+/// Get the NATS client name for a given process based on the environment.
+///
+/// Environment detection:
+/// - SOAR_ENV=production -> "soar-{process}"
+/// - SOAR_ENV=staging -> "soar-{process}-staging"
+/// - SOAR_ENV unset or other -> "soar-{process}-dev"
+///
+/// # Examples
+///
+/// ```
+/// std::env::set_var("SOAR_ENV", "production");
+/// assert_eq!(soar::nats_client_name("web"), "soar-web");
+///
+/// std::env::set_var("SOAR_ENV", "staging");
+/// assert_eq!(soar::nats_client_name("web"), "soar-web-staging");
+///
+/// std::env::remove_var("SOAR_ENV");
+/// assert_eq!(soar::nats_client_name("web"), "soar-web-dev");
+/// ```
+pub fn nats_client_name(process_name: &str) -> String {
+    match std::env::var("SOAR_ENV").as_deref() {
+        Ok("production") => format!("soar-{}", process_name),
+        Ok("staging") => format!("soar-{}-staging", process_name),
+        _ => format!("soar-{}-dev", process_name),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serial_test::serial;
+
+    #[test]
+    #[serial]
+    fn test_nats_client_name_production() {
+        unsafe {
+            std::env::set_var("SOAR_ENV", "production");
+        }
+        assert_eq!(nats_client_name("web"), "soar-web");
+        assert_eq!(nats_client_name("run"), "soar-run");
+        unsafe {
+            std::env::remove_var("SOAR_ENV");
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn test_nats_client_name_staging() {
+        unsafe {
+            std::env::set_var("SOAR_ENV", "staging");
+        }
+        assert_eq!(nats_client_name("web"), "soar-web-staging");
+        assert_eq!(
+            nats_client_name("aprs-ingester"),
+            "soar-aprs-ingester-staging"
+        );
+        unsafe {
+            std::env::remove_var("SOAR_ENV");
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn test_nats_client_name_dev_unset() {
+        unsafe {
+            std::env::remove_var("SOAR_ENV");
+        }
+        assert_eq!(nats_client_name("web"), "soar-web-dev");
+        assert_eq!(nats_client_name("run"), "soar-run-dev");
+    }
+
+    #[test]
+    #[serial]
+    fn test_nats_client_name_dev_other() {
+        unsafe {
+            std::env::set_var("SOAR_ENV", "development");
+        }
+        assert_eq!(nats_client_name("web"), "soar-web-dev");
+        unsafe {
+            std::env::set_var("SOAR_ENV", "local");
+        }
+        assert_eq!(
+            nats_client_name("beast-ingester"),
+            "soar-beast-ingester-dev"
+        );
+        unsafe {
+            std::env::remove_var("SOAR_ENV");
+        }
+    }
+}

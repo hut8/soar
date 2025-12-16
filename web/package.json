@@ -23,10 +23,10 @@
 	"devDependencies": {
 		"@eslint/compat": "^1.4.1",
 		"@eslint/js": "^9.39.1",
-		"@playwright/test": "^1.56.1",
+		"@playwright/test": "^1.57.0",
 		"@skeletonlabs/skeleton-svelte": "^4.5.1",
 		"@sveltejs/adapter-static": "^3.0.10",
-		"@sveltejs/kit": "^2.48.0",
+		"@sveltejs/kit": "^2.49.2",
 		"@sveltejs/vite-plugin-svelte": "^6.2.1",
 		"@tailwindcss/forms": "^0.5.9",
 		"@tailwindcss/postcss": "^4.1.14",
@@ -36,7 +36,7 @@
 		"@types/plotly.js": "^3.0.6",
 		"eslint": "^9.39.0",
 		"eslint-config-prettier": "^10.0.1",
-		"eslint-plugin-svelte": "^3.12.5",
+		"eslint-plugin-svelte": "^3.13.1",
 		"globals": "^16.5.0",
 		"prettier": "^3.4.2",
 		"prettier-plugin-svelte": "^3.3.3",
@@ -51,13 +51,15 @@
 	},
 	"dependencies": {
 		"@googlemaps/js-api-loader": "^2.0.2",
-		"@lucide/svelte": "^0.552.0",
+		"@lucide/svelte": "^0.561.0",
 		"@sentry/sveltekit": "^10.29.0",
 		"@skeletonlabs/skeleton": "^4.2.4",
 		"@skeletonlabs/tw-plugin": "^0.4.1",
 		"autoprefixer": "^10.4.21",
+		"cesium": "^1.136.0",
 		"country-flag-icons": "^1.6.4",
 		"dayjs": "^1.11.18",
-		"plotly.js-dist-min": "^3.1.2"
+		"plotly.js-dist-min": "^3.1.2",
+		"vite-plugin-cesium": "^1.2.23"
 	}
 }

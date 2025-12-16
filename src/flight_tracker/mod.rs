@@ -27,6 +27,20 @@ use tracing::Instrument;
 use tracing::{error, info, trace};
 use uuid::Uuid;
 
+/// Represents the flight state when timeout occurs
+/// Used to determine coalescing strategy when aircraft reappears
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum FlightPhase {
+    /// Aircraft is climbing (climb_fpm > 300)
+    Climbing,
+    /// Aircraft is cruising (altitude > 10,000 ft, |climb_fpm| < 500)
+    Cruising,
+    /// Aircraft is descending (climb_fpm < -300)
+    Descending,
+    /// Aircraft state is unknown (insufficient data)
+    Unknown,
+}
+
 /// Tracks the current flight state for a device
 #[derive(Debug, Clone)]
 pub(crate) struct CurrentFlightState {
@@ -39,6 +53,12 @@ pub(crate) struct CurrentFlightState {
     /// History of the last 5 fixes' is_active status (most recent last)
     /// Used to detect takeoff (inactive -> active transition) and landing debounce
     pub recent_fix_history: VecDeque<bool>,
+    /// Last known altitude MSL in feet (for phase determination)
+    pub last_altitude_msl_ft: Option<i32>,
+    /// Last known climb rate in fpm (for phase determination)
+    pub last_climb_fpm: Option<i32>,
+    /// Last known position (latitude, longitude) for distance calculations
+    pub last_position: (f64, f64),
 }
 
 impl CurrentFlightState {
@@ -51,6 +71,9 @@ impl CurrentFlightState {
             last_fix_timestamp: fix_timestamp,
             last_update_time: Utc::now(),
             recent_fix_history: history,
+            last_altitude_msl_ft: None,
+            last_climb_fpm: None,
+            last_position: (0.0, 0.0), // Will be updated with first fix
         }
     }
 
@@ -70,6 +93,31 @@ impl CurrentFlightState {
     pub fn has_five_consecutive_inactive(&self) -> bool {
         self.recent_fix_history.len() >= 5 && self.recent_fix_history.iter().all(|&active| !active)
     }
+
+    /// Determine the flight phase based on current state
+    /// Used to decide coalescing behavior when flight times out
+    pub fn determine_flight_phase(&self) -> FlightPhase {
+        // Check climb rate first (most specific indicator)
+        if let Some(climb) = self.last_climb_fpm {
+            if climb > 300 {
+                return FlightPhase::Climbing;
+            }
+            if climb < -300 {
+                return FlightPhase::Descending;
+            }
+        }
+
+        // If at high altitude with stable or gentle climb/descent, assume cruising
+        if let Some(alt) = self.last_altitude_msl_ft
+            && alt > 10_000
+            && self.last_climb_fpm.map(|c| c.abs() < 500).unwrap_or(true)
+        {
+            return FlightPhase::Cruising;
+        }
+
+        // Insufficient data to determine phase
+        FlightPhase::Unknown
+    }
 }
 
 /// Type alias for active flights map: aircraft_id -> CurrentFlightState
@@ -85,14 +133,14 @@ pub(crate) type AircraftTrackersMap = Arc<RwLock<HashMap<Uuid, aircraft_tracker:
 /// Contains all repositories and state needed for flight lifecycle management
 pub(crate) struct FlightProcessorContext<'a> {
     pub flights_repo: &'a FlightsRepository,
-    pub device_repo: &'a AircraftRepository,
+    pub aircraft_repo: &'a AircraftRepository,
     pub airports_repo: &'a AirportsRepository,
     pub locations_repo: &'a LocationsRepository,
     pub runways_repo: &'a RunwaysRepository,
     pub fixes_repo: &'a FixesRepository,
     pub elevation_db: &'a ElevationDB,
     pub active_flights: &'a ActiveFlightsMap,
-    pub device_locks: &'a AircraftLocksMap,
+    pub aircraft_locks: &'a AircraftLocksMap,
     pub aircraft_trackers: &'a AircraftTrackersMap,
 }
 
@@ -152,14 +200,14 @@ impl FlightTracker {
     fn context(&self) -> FlightProcessorContext<'_> {
         FlightProcessorContext {
             flights_repo: &self.flights_repo,
-            device_repo: &self.device_repo,
+            aircraft_repo: &self.device_repo,
             airports_repo: &self.airports_repo,
             locations_repo: &self.locations_repo,
             runways_repo: &self.runways_repo,
             fixes_repo: &self.fixes_repo,
             elevation_db: &self.elevation_db,
             active_flights: &self.active_flights,
-            device_locks: &self.device_locks,
+            aircraft_locks: &self.device_locks,
             aircraft_trackers: &self.aircraft_trackers,
         }
     }
@@ -222,6 +270,9 @@ impl FlightTracker {
                         last_fix_timestamp: flight.last_fix_at,
                         last_update_time: Utc::now(),
                         recent_fix_history: history,
+                        last_altitude_msl_ft: None,
+                        last_climb_fpm: None,
+                        last_position: (0.0, 0.0), // Will be updated when next fix arrives
                     };
 
                     active_flights.insert(aircraft_id, state);

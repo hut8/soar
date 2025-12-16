@@ -69,14 +69,17 @@ export async function serverCall<T>(endpoint: string, options?: ServerCallOption
 		if (!response.ok) {
 			// Try to parse error as JSON first (standard format: {"errors": "message"})
 			const errorText = await response.text();
+			let errorMessage = errorText || 'Request failed';
+
 			try {
 				const errorData = JSON.parse(errorText);
-				const errorMessage = errorData.errors || errorData.message || errorText;
-				throw new ServerError(errorMessage, response.status);
+				// Extract the actual error message from the JSON response
+				errorMessage = errorData.errors || errorData.message || errorText;
 			} catch {
-				// If JSON parsing fails, use the raw text
-				throw new ServerError(errorText || 'Request failed', response.status);
+				// If JSON parsing fails, use the raw text (already set above)
 			}
+
+			throw new ServerError(errorMessage, response.status);
 		}
 
 		if (response.status === 204) {

@@ -16,7 +16,7 @@ anyhow = "1.0"
 argon2 = "0.5"
 async-nats = "0.45"
 async-trait = "0.1"
-bcrypt = "0.16"
+bcrypt = "0.17"
 bigdecimal = { version = "0.4", features = ["serde"] }
 axum = { version = "0.8.7", features = ["macros", "ws"] }
 axum-extra = { version = "0.12.1", features = ["typed-header"] }
@@ -59,6 +59,7 @@ diesel = { version = "2.3", features = [
     "serde_json",
     "r2d2",
     "numeric",
+    "64-column-tables",
 ] }
 # For musl static builds: compile libpq from source with all internal static libraries
 # This avoids the missing libpgcommon.a and libpgport.a that aren't in system packages
@@ -88,7 +89,7 @@ postgis_diesel = { version = "3.0.2", features = ["serde", "serde_geojson"] }
 rust_decimal = "1.39"
 zip = "6"
 flydent = "0.6.0"
-flume = { version = "0.11", features = ["async"] }
+flume = { version = "0.12", features = ["async"] }
 sitemap-rs = "0.4.0"
 metrics = "0.24"
 metrics-exporter-prometheus = "0.17"
@@ -101,7 +102,8 @@ kml = "0.12"
 hex = "0.4.3"
 
 [dev-dependencies]
-hex-literal = "0.4"
+hex-literal = "1.1"
+serial_test = "3.2"
 
 [build-dependencies]
 vergen-git2 = { version = "1.0", features = ["build", "cargo"] }

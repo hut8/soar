@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use uuid::Uuid;
 
-use crate::flights::{Flight, FlightModel};
+use crate::flights::{Flight, FlightModel, TimeoutPhase};
 use crate::web::PgPool;
 
 #[derive(Clone)]
@@ -678,6 +678,36 @@ impl FlightsRepository {
             let rows = diesel::update(flights.filter(id.eq(flight_id)))
                 .set((
                     timed_out_at.eq(Some(timeout_time)),
+                    updated_at.eq(Utc::now()),
+                ))
+                .execute(&mut conn)?;
+
+            Ok::<usize, anyhow::Error>(rows)
+        })
+        .await??;
+
+        Ok(rows_affected > 0)
+    }
+
+    /// Timeout a flight and record the flight phase when timeout occurred
+    /// This helps determine coalescing behavior when aircraft reappears
+    pub async fn timeout_flight_with_phase(
+        &self,
+        flight_id: Uuid,
+        timeout_time: DateTime<Utc>,
+        phase: TimeoutPhase,
+    ) -> Result<bool> {
+        use crate::schema::flights::dsl::*;
+
+        let pool = self.pool.clone();
+
+        let rows_affected = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            let rows = diesel::update(flights.filter(id.eq(flight_id)))
+                .set((
+                    timed_out_at.eq(Some(timeout_time)),
+                    timeout_phase.eq(Some(phase)),
                     updated_at.eq(Utc::now()),
                 ))
                 .execute(&mut conn)?;

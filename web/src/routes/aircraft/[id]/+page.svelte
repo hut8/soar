@@ -33,7 +33,9 @@
 		getStatusCodeDescription,
 		getAircraftTypeOgnDescription,
 		getAircraftTypeColor,
-		formatTransponderCode
+		formatTransponderCode,
+		getCountryName,
+		getFlagPath
 	} from '$lib/formatters';
 	import { toaster } from '$lib/toaster';
 	import dayjs from 'dayjs';
@@ -332,8 +334,19 @@
 								</span>
 							{/if}
 							{#if aircraft.country_code}
-								<span class="preset-tonal-tertiary-500 badge text-xs">
-									{aircraft.country_code}
+								{@const countryName = getCountryName(aircraft.country_code)}
+								{@const flagPath = getFlagPath(aircraft.country_code)}
+								<span class="preset-tonal-tertiary-500 badge flex items-center gap-1.5 text-xs">
+									{#if flagPath}
+										<img
+											src={flagPath}
+											alt="{aircraft.country_code} flag"
+											class="h-3 w-4 object-cover"
+										/>
+									{/if}
+									{countryName
+										? `${countryName} (${aircraft.country_code})`
+										: aircraft.country_code}
 								</span>
 							{/if}
 						</div>

@@ -86,23 +86,23 @@ pub struct AircraftFixesResponse {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct BulkDevicesQuery {
-    /// Comma-separated list of device UUIDs (max 10)
+pub struct BulkAircraftQuery {
+    /// Comma-separated list of aircraft UUIDs (max 10)
     pub ids: String,
 }
 
 #[derive(Debug, Serialize)]
-pub struct BulkDevicesResponse {
-    pub devices: HashMap<String, AircraftView>,
+pub struct BulkAircraftResponse {
+    pub aircraft: HashMap<String, AircraftView>,
 }
 
-/// Get multiple devices by their UUIDs (max 10)
+/// Get multiple aircraft by their UUIDs (max 10)
 #[instrument(skip(state))]
 pub async fn get_aircraft_bulk(
-    Query(query): Query<BulkDevicesQuery>,
+    Query(query): Query<BulkAircraftQuery>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    let device_repo = AircraftRepository::new(state.pool);
+    let aircraft_repo = AircraftRepository::new(state.pool);
 
     // Parse the comma-separated IDs
     let id_strings: Vec<&str> = query.ids.split(',').map(|s| s.trim()).collect();
@@ -131,54 +131,54 @@ pub async fn get_aircraft_bulk(
         }
     }
 
-    // Fetch devices
-    let mut devices_map = HashMap::new();
+    // Fetch aircraft
+    let mut aircraft_map = HashMap::new();
     for uuid in uuids {
-        if let Ok(Some(device)) = device_repo.get_device_by_uuid(uuid).await {
-            let device_view: AircraftView = device.into();
-            devices_map.insert(uuid.to_string(), device_view);
+        if let Ok(Some(aircraft)) = aircraft_repo.get_aircraft_by_id(uuid).await {
+            let aircraft_view: AircraftView = aircraft.into();
+            aircraft_map.insert(uuid.to_string(), aircraft_view);
         }
     }
 
-    Json(BulkDevicesResponse {
-        devices: devices_map,
+    Json(BulkAircraftResponse {
+        aircraft: aircraft_map,
     })
     .into_response()
 }
 
-/// Get a device by its UUID
+/// Get an aircraft by its UUID
 pub async fn get_aircraft_by_id(
     Path(id): Path<Uuid>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    let device_repo = AircraftRepository::new(state.pool);
+    let aircraft_repo = AircraftRepository::new(state.pool);
 
-    // First try to find the device by UUID in the devices table
-    match device_repo.get_device_by_uuid(id).await {
-        Ok(Some(device)) => {
-            let device_view: AircraftView = device.into();
-            Json(device_view).into_response()
+    // First try to find the aircraft by UUID in the aircraft table
+    match aircraft_repo.get_aircraft_by_id(id).await {
+        Ok(Some(aircraft)) => {
+            let aircraft_view: AircraftView = aircraft.into();
+            Json(aircraft_view).into_response()
         }
         Ok(None) => json_error(StatusCode::NOT_FOUND, "Aircraft not found").into_response(),
         Err(e) => {
-            tracing::error!("Failed to get device by ID {}: {}", id, e);
-            json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get device").into_response()
+            tracing::error!("Failed to get aircraft by ID {}: {}", id, e);
+            json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to get aircraft").into_response()
         }
     }
 }
 
-/// Get fixes for a device with optional after parameter
+/// Get fixes for an aircraft with optional after parameter
 pub async fn get_aircraft_fixes(
     Path(id): Path<Uuid>,
     Query(query): Query<FixesQuery>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    let device_repo = AircraftRepository::new(state.pool.clone());
+    let aircraft_repo = AircraftRepository::new(state.pool.clone());
     let fixes_repo = FixesRepository::new(state.pool.clone());
 
-    // First verify the device exists
-    match device_repo.get_device_by_uuid(id).await {
-        Ok(Some(_device)) => {
+    // First verify the aircraft exists
+    match aircraft_repo.get_aircraft_by_id(id).await {
+        Ok(Some(_aircraft)) => {
             // Aircraft exists, get fixes
             let page = query.page.unwrap_or(1).max(1);
             let per_page = query.per_page.unwrap_or(50).clamp(1, 100);
@@ -280,14 +280,17 @@ async fn search_devices_by_bbox(
         )
         .await
     {
-        Ok(devices_with_fixes) => {
-            info!("Found {} devices in bounding box", devices_with_fixes.len());
+        Ok(aircraft_with_fixes) => {
+            info!(
+                "Found {} aircraft in bounding box",
+                aircraft_with_fixes.len()
+            );
 
             // Enrich with aircraft registration and model data
             let enriched =
-                enrich_devices_with_aircraft_data(devices_with_fixes, pool.clone()).await;
+                enrich_aircraft_with_registration_data(aircraft_with_fixes, pool.clone()).await;
 
-            info!("Enriched {} devices, returning response", enriched.len());
+            info!("Enriched {} aircraft, returning response", enriched.len());
             Json(enriched).into_response()
         }
         Err(e) => {
@@ -418,7 +421,7 @@ pub async fn search_aircraft(
             }
             (None, None, None) => {
                 // No search criteria - return 10 most recently heard from devices
-                get_recent_devices_response(state.pool, query.aircraft_types).await.into_response()
+                get_recent_aircraft_response(state.pool, query.aircraft_types).await.into_response()
             }
             _ => json_error(
                 StatusCode::BAD_REQUEST,
@@ -429,12 +432,12 @@ pub async fn search_aircraft(
     }
 }
 
-/// Get 10 most recently heard from devices
-async fn get_recent_devices_response(
+/// Get 10 most recently heard from aircraft
+async fn get_recent_aircraft_response(
     pool: crate::web::PgPool,
     aircraft_types: Option<String>,
 ) -> impl IntoResponse {
-    let device_repo = AircraftRepository::new(pool);
+    let aircraft_repo = AircraftRepository::new(pool);
 
     // Parse aircraft types from comma-separated string
     let aircraft_type_filters = aircraft_types.as_ref().map(|types_str| {
@@ -445,47 +448,49 @@ async fn get_recent_devices_response(
             .collect::<Vec<String>>()
     });
 
-    match device_repo
-        .get_recent_devices_with_location(10, aircraft_type_filters)
+    match aircraft_repo
+        .get_recent_aircraft_with_location(10, aircraft_type_filters)
         .await
     {
-        Ok(devices_with_location) => {
-            let device_views: Vec<AircraftView> = devices_with_location
+        Ok(aircraft_with_location) => {
+            let aircraft_views: Vec<AircraftView> = aircraft_with_location
                 .into_iter()
-                .map(|(device_model, latest_lat, latest_lng, active_flight_id)| {
-                    let mut device_view: AircraftView = device_model.into();
-                    device_view.latest_latitude = latest_lat;
-                    device_view.latest_longitude = latest_lng;
-                    device_view.active_flight_id = active_flight_id;
-                    device_view
-                })
+                .map(
+                    |(aircraft_model, latest_lat, latest_lng, active_flight_id)| {
+                        let mut aircraft_view: AircraftView = aircraft_model.into();
+                        aircraft_view.latest_latitude = latest_lat;
+                        aircraft_view.latest_longitude = latest_lng;
+                        aircraft_view.active_flight_id = active_flight_id;
+                        aircraft_view
+                    },
+                )
                 .collect();
             Json(AircraftSearchResponse {
-                devices: device_views,
+                devices: aircraft_views,
             })
             .into_response()
         }
         Err(e) => {
-            tracing::error!("Failed to get recent devices: {}", e);
+            tracing::error!("Failed to get recent aircraft: {}", e);
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to get recent devices",
+                "Failed to get recent aircraft",
             )
             .into_response()
         }
     }
 }
 
-/// Helper function to enrich devices with aircraft registration and model data
+/// Helper function to enrich aircraft with registration and model data
 /// Optimized with batch queries to avoid N+1 query problem
-#[instrument(skip(pool, devices_with_fixes), fields(device_count = devices_with_fixes.len()))]
-pub(crate) async fn enrich_devices_with_aircraft_data(
-    devices_with_fixes: Vec<(crate::aircraft::AircraftModel, Vec<crate::fixes::Fix>)>,
+#[instrument(skip(pool, aircraft_with_fixes), fields(aircraft_count = aircraft_with_fixes.len()))]
+pub(crate) async fn enrich_aircraft_with_registration_data(
+    aircraft_with_fixes: Vec<(crate::aircraft::AircraftModel, Vec<crate::fixes::Fix>)>,
     pool: crate::web::PgPool,
 ) -> Vec<Aircraft> {
     use std::collections::HashMap;
 
-    if devices_with_fixes.is_empty() {
+    if aircraft_with_fixes.is_empty() {
         return Vec::new();
     }
 
@@ -493,10 +498,10 @@ pub(crate) async fn enrich_devices_with_aircraft_data(
         crate::aircraft_registrations_repo::AircraftRegistrationsRepository::new(pool.clone());
     let aircraft_model_repo = crate::faa::aircraft_model_repo::AircraftModelRepository::new(pool);
 
-    // Step 1: Collect all device IDs
-    let device_ids: Vec<uuid::Uuid> = devices_with_fixes
+    // Step 1: Collect all aircraft IDs
+    let device_ids: Vec<uuid::Uuid> = aircraft_with_fixes
         .iter()
-        .map(|(device, _)| device.id)
+        .map(|(aircraft, _)| aircraft.id)
         .collect();
 
     // Step 2: Batch fetch all aircraft registrations
@@ -559,10 +564,10 @@ pub(crate) async fn enrich_devices_with_aircraft_data(
     // Step 7: Build enriched results
     info!("Building enriched results");
     let mut enriched = Vec::new();
-    for (device_model, device_fixes) in devices_with_fixes {
-        let aircraft_registration = registration_map.get(&device_model.id).cloned();
+    for (aircraft_model, aircraft_fixes) in aircraft_with_fixes {
+        let aircraft_registration = registration_map.get(&aircraft_model.id).cloned();
 
-        let aircraft_model = aircraft_registration.as_ref().and_then(|reg| {
+        let faa_aircraft_model = aircraft_registration.as_ref().and_then(|reg| {
             model_map
                 .get(&(
                     reg.manufacturer_code.clone(),
@@ -573,14 +578,14 @@ pub(crate) async fn enrich_devices_with_aircraft_data(
         });
 
         // Convert AircraftModel to AircraftView
-        let mut device_view = AircraftView::from_device_model(device_model);
-        // Add the fixes to the device view
-        device_view.fixes = Some(device_fixes);
+        let mut aircraft_view = AircraftView::from_device_model(aircraft_model);
+        // Add the fixes to the aircraft view
+        aircraft_view.fixes = Some(aircraft_fixes);
 
         enriched.push(Aircraft {
-            device: device_view,
+            device: aircraft_view,
             aircraft_registration,
-            aircraft_model_details: aircraft_model,
+            aircraft_model_details: faa_aircraft_model,
         });
     }
 
