@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use reqwest::Client;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
 /// OpenAIP API client for fetching airspace data
@@ -26,7 +26,7 @@ pub struct AirspacesResponse {
 }
 
 /// Single airspace from OpenAIP API
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct OpenAipAirspace {
     #[serde(rename = "_id")]
     pub id: String, // MongoDB ObjectId as string
@@ -51,7 +51,7 @@ pub struct OpenAipAirspace {
     pub updated_at: Option<DateTime<Utc>>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct AltitudeLimit {
     pub value: Option<f64>,
     pub unit: Option<i32>, // Unit code: 1=FT, 6=FL, etc.
