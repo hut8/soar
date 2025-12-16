@@ -1,18 +1,38 @@
 use anyhow::{Context, Result};
-use chrono::Utc;
+use chrono::{Local, Utc};
 use diesel::PgConnection;
 use diesel::prelude::*;
 use diesel::r2d2::ConnectionManager;
 use r2d2::Pool;
 use std::env;
+use std::fs;
+use std::path::Path;
 use tracing::{error, info};
 
 use soar::airspace::NewAirspace;
 use soar::airspaces_repo::AirspacesRepository;
 use soar::openaip_client::{
-    OpenAipClient, map_airspace_type, map_altitude_reference, map_icao_class,
+    OpenAipClient, map_airspace_type, map_altitude_reference, map_altitude_unit, map_icao_class,
 };
 use soar::schema::airspace_sync_log;
+
+/// Get the airspaces data directory based on environment
+fn get_airspaces_directory(date: &str) -> Result<String> {
+    let soar_env = env::var("SOAR_ENV").unwrap_or_default();
+    let is_production = soar_env == "production";
+    let is_staging = soar_env == "staging";
+
+    if is_production {
+        Ok(format!("/tmp/soar/airspaces-{}", date))
+    } else if is_staging {
+        Ok(format!("/tmp/soar/staging/airspaces-{}", date))
+    } else {
+        // Use ~/.cache/soar for development
+        let home_dir =
+            env::var("HOME").map_err(|_| anyhow::anyhow!("HOME environment variable not set"))?;
+        Ok(format!("{}/.cache/soar/airspaces-{}", home_dir, date))
+    }
+}
 
 pub async fn handle_pull_airspaces(
     diesel_pool: Pool<ConnectionManager<PgConnection>>,
@@ -29,6 +49,12 @@ pub async fn handle_pull_airspaces(
         "OPENAIP_API_KEY environment variable not set. \
          Get your API key from https://www.openaip.net/users/clients",
     )?;
+
+    // Create temporary directory with date
+    let date = Local::now().format("%Y%m%d").to_string();
+    let temp_dir = get_airspaces_directory(&date)?;
+    info!("Creating airspaces directory: {}", temp_dir);
+    fs::create_dir_all(&temp_dir)?;
 
     // Create sync log entry
     let sync_id = create_sync_log(&diesel_pool, countries.as_ref())?;
@@ -50,7 +76,7 @@ pub async fn handle_pull_airspaces(
         info!("Performing full sync");
     }
 
-    // Fetch airspaces
+    // Fetch airspaces and save to temp directory
     let mut total_fetched = 0;
     let mut total_inserted = 0;
     let mut errors = Vec::new();
@@ -61,23 +87,66 @@ pub async fn handle_pull_airspaces(
             for country in country_list {
                 info!("Fetching airspaces for country: {}", country);
 
-                match client
-                    .fetch_all_airspaces(Some(country), updated_after)
-                    .await
-                {
-                    Ok(airspaces) => {
-                        total_fetched += airspaces.len();
+                let airspaces_file = format!("{}/airspaces_{}.json", temp_dir, country);
 
-                        // Convert and upsert
-                        match convert_airspaces(airspaces) {
-                            Ok(converted) => match repo.upsert_airspaces(converted).await {
-                                Ok(count) => {
-                                    total_inserted += count;
-                                    info!("Upserted {} airspaces for {}", count, country);
-                                }
+                // Check if file already exists
+                if Path::new(&airspaces_file).exists() {
+                    info!(
+                        "Airspaces file already exists for {}, skipping fetch: {}",
+                        country, airspaces_file
+                    );
+                } else {
+                    match client
+                        .fetch_all_airspaces(Some(country), updated_after)
+                        .await
+                    {
+                        Ok(airspaces) => {
+                            total_fetched += airspaces.len();
+
+                            // Save to JSON file
+                            let json = serde_json::to_string_pretty(&airspaces)?;
+                            fs::write(&airspaces_file, json)?;
+                            info!(
+                                "Saved {} airspaces for {} to {}",
+                                airspaces.len(),
+                                country,
+                                airspaces_file
+                            );
+                        }
+                        Err(e) => {
+                            let msg = format!("Failed to fetch airspaces for {}: {}", country, e);
+                            error!("{}", msg);
+                            errors.push(msg);
+                            continue;
+                        }
+                    }
+                }
+
+                // Now process the saved file
+                info!("Processing airspaces from {}", airspaces_file);
+                match fs::read_to_string(&airspaces_file) {
+                    Ok(json_content) => {
+                        match serde_json::from_str::<Vec<soar::openaip_client::OpenAipAirspace>>(
+                            &json_content,
+                        ) {
+                            Ok(airspaces) => match convert_airspaces(airspaces) {
+                                Ok(converted) => match repo.upsert_airspaces(converted).await {
+                                    Ok(count) => {
+                                        total_inserted += count;
+                                        info!("Upserted {} airspaces for {}", count, country);
+                                    }
+                                    Err(e) => {
+                                        let msg = format!(
+                                            "Failed to upsert airspaces for {}: {}",
+                                            country, e
+                                        );
+                                        error!("{}", msg);
+                                        errors.push(msg);
+                                    }
+                                },
                                 Err(e) => {
                                     let msg = format!(
-                                        "Failed to upsert airspaces for {}: {}",
+                                        "Failed to convert airspaces for {}: {}",
                                         country, e
                                     );
                                     error!("{}", msg);
@@ -85,15 +154,17 @@ pub async fn handle_pull_airspaces(
                                 }
                             },
                             Err(e) => {
-                                let msg =
-                                    format!("Failed to convert airspaces for {}: {}", country, e);
+                                let msg = format!(
+                                    "Failed to parse airspaces JSON for {}: {}",
+                                    country, e
+                                );
                                 error!("{}", msg);
                                 errors.push(msg);
                             }
                         }
                     }
                     Err(e) => {
-                        let msg = format!("Failed to fetch airspaces for {}: {}", country, e);
+                        let msg = format!("Failed to read airspaces file for {}: {}", country, e);
                         error!("{}", msg);
                         errors.push(msg);
                     }
@@ -104,37 +175,78 @@ pub async fn handle_pull_airspaces(
             // Global sync - no country filter
             info!("Fetching all airspaces globally (this may take 10-20 minutes)");
 
-            match client.fetch_all_airspaces(None, updated_after).await {
-                Ok(airspaces) => {
-                    total_fetched = airspaces.len();
+            let airspaces_file = format!("{}/airspaces_global.json", temp_dir);
 
-                    match convert_airspaces(airspaces) {
-                        Ok(converted) => match repo.upsert_airspaces(converted).await {
-                            Ok(count) => {
-                                total_inserted = count;
-                                info!("Upserted {} airspaces", total_inserted);
-                            }
+            // Check if file already exists
+            if Path::new(&airspaces_file).exists() {
+                info!(
+                    "Airspaces file already exists, skipping fetch: {}",
+                    airspaces_file
+                );
+            } else {
+                match client.fetch_all_airspaces(None, updated_after).await {
+                    Ok(airspaces) => {
+                        total_fetched = airspaces.len();
+
+                        // Save to JSON file
+                        let json = serde_json::to_string_pretty(&airspaces)?;
+                        fs::write(&airspaces_file, json)?;
+                        info!("Saved {} airspaces to {}", airspaces.len(), airspaces_file);
+                    }
+                    Err(e) => {
+                        let msg = format!("Failed to fetch airspaces: {}", e);
+                        error!("{}", msg);
+                        errors.push(msg);
+                    }
+                }
+            }
+
+            // Now process the saved file
+            if !errors.is_empty() {
+                // Skip processing if fetch failed
+            } else {
+                info!("Processing airspaces from {}", airspaces_file);
+                match fs::read_to_string(&airspaces_file) {
+                    Ok(json_content) => {
+                        match serde_json::from_str::<Vec<soar::openaip_client::OpenAipAirspace>>(
+                            &json_content,
+                        ) {
+                            Ok(airspaces) => match convert_airspaces(airspaces) {
+                                Ok(converted) => match repo.upsert_airspaces(converted).await {
+                                    Ok(count) => {
+                                        total_inserted = count;
+                                        info!("Upserted {} airspaces", total_inserted);
+                                    }
+                                    Err(e) => {
+                                        let msg = format!("Failed to upsert airspaces: {}", e);
+                                        error!("{}", msg);
+                                        errors.push(msg);
+                                    }
+                                },
+                                Err(e) => {
+                                    let msg = format!("Failed to convert airspaces: {}", e);
+                                    error!("{}", msg);
+                                    errors.push(msg);
+                                }
+                            },
                             Err(e) => {
-                                let msg = format!("Failed to upsert airspaces: {}", e);
+                                let msg = format!("Failed to parse airspaces JSON: {}", e);
                                 error!("{}", msg);
                                 errors.push(msg);
                             }
-                        },
-                        Err(e) => {
-                            let msg = format!("Failed to convert airspaces: {}", e);
-                            error!("{}", msg);
-                            errors.push(msg);
                         }
                     }
-                }
-                Err(e) => {
-                    let msg = format!("Failed to fetch airspaces: {}", e);
-                    error!("{}", msg);
-                    errors.push(msg);
+                    Err(e) => {
+                        let msg = format!("Failed to read airspaces file: {}", e);
+                        error!("{}", msg);
+                        errors.push(msg);
+                    }
                 }
             }
         }
     }
+
+    info!("Airspaces data saved to: {}", temp_dir);
 
     // Update sync log
     let success = errors.is_empty();
@@ -193,7 +305,7 @@ fn convert_airspaces(
             let airspace = NewAirspace {
                 openaip_id: oa.id,
                 name: oa.name,
-                airspace_class: map_icao_class(oa.icao_class.as_deref()),
+                airspace_class: map_icao_class(oa.icao_class),
                 airspace_type: map_airspace_type(oa.airspace_type),
                 country_code: Some(oa.country),
                 lower_value,
@@ -203,7 +315,7 @@ fn convert_airspaces(
                 upper_unit,
                 upper_reference: upper_ref,
                 remarks: oa.remarks,
-                activity_type: oa.activity,
+                activity_type: oa.activity.map(|a| a.to_string()),
                 openaip_updated_at: oa.updated_at,
             };
 
@@ -223,8 +335,8 @@ fn convert_altitude_limit(
     match limit {
         Some(l) => {
             let value = l.value.map(|v| v as i32);
-            let unit = l.unit.clone();
-            let reference = map_altitude_reference(l.reference_datum.as_deref());
+            let unit = map_altitude_unit(l.unit);
+            let reference = map_altitude_reference(l.reference_datum);
             (value, unit, reference)
         }
         None => (None, None, None),

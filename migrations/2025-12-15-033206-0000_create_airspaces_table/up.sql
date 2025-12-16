@@ -67,7 +67,7 @@ CREATE TYPE altitude_reference AS ENUM (
 -- Main airspaces table
 CREATE TABLE airspaces (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    openaip_id INTEGER NOT NULL UNIQUE,
+    openaip_id TEXT NOT NULL UNIQUE,
 
     -- Basic information
     name TEXT NOT NULL,
