@@ -85,9 +85,9 @@ export function createAircraftEntity(aircraft: Aircraft, fix: Fix): Entity {
 		label: {
 			text: `${aircraft.registration || aircraft.device_address}\n${altitudeText}`,
 			font: '12px sans-serif',
-			fillColor: isOld ? Color.GRAY : Color.WHITE,
+			fillColor: Color.WHITE,
 			outlineColor: Color.BLACK,
-			outlineWidth: 2,
+			outlineWidth: 3,
 			pixelOffset: { x: 0, y: -40 } as unknown as Cartesian2,
 			heightReference: HeightReference.NONE,
 			disableDepthTestDistance: Number.POSITIVE_INFINITY // Always show label
@@ -209,7 +209,7 @@ export function createAirportEntity(airport: Airport): Entity {
 			font: '11px sans-serif',
 			fillColor: Color.WHITE,
 			outlineColor: Color.BLACK,
-			outlineWidth: 1,
+			outlineWidth: 2,
 			pixelOffset: { x: 0, y: -25 } as unknown as Cartesian2,
 			disableDepthTestDistance: 50000 // Hide when far away
 		},
@@ -260,9 +260,9 @@ export function createReceiverEntity(receiver: Receiver): Entity {
 		label: {
 			text: receiver.callsign,
 			font: '10px sans-serif',
-			fillColor: Color.LIGHTBLUE,
+			fillColor: Color.WHITE,
 			outlineColor: Color.BLACK,
-			outlineWidth: 1,
+			outlineWidth: 2,
 			pixelOffset: { x: 0, y: -25 } as unknown as Cartesian2,
 			disableDepthTestDistance: 50000 // Hide when far away
 		},
@@ -295,7 +295,7 @@ export function createTakeoffMarker(latitude: number, longitude: number, altitud
 			font: '11px sans-serif',
 			fillColor: Color.WHITE,
 			outlineColor: Color.BLACK,
-			outlineWidth: 1,
+			outlineWidth: 2,
 			pixelOffset: { x: 0, y: -20 } as unknown as Cartesian2
 		}
 	});
@@ -318,7 +318,7 @@ export function createLandingMarker(latitude: number, longitude: number, altitud
 			font: '11px sans-serif',
 			fillColor: Color.WHITE,
 			outlineColor: Color.BLACK,
-			outlineWidth: 1,
+			outlineWidth: 2,
 			pixelOffset: { x: 0, y: -20 } as unknown as Cartesian2
 		}
 	});

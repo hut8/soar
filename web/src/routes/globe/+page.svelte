@@ -153,6 +153,31 @@
 		right: auto;
 	}
 
+	/* InfoBox dark mode styling */
+	:global(.cesium-infoBox) {
+		background: rgba(255, 255, 255, 0.95);
+		color: #000;
+	}
+
+	:global(.dark .cesium-infoBox) {
+		background: rgba(30, 30, 30, 0.95);
+		color: #fff;
+	}
+
+	:global(.cesium-infoBox-title) {
+		background: rgba(0, 0, 0, 0.1);
+		color: inherit;
+	}
+
+	:global(.dark .cesium-infoBox-title) {
+		background: rgba(255, 255, 255, 0.1);
+		color: inherit;
+	}
+
+	:global(.cesium-infoBox-description) {
+		color: inherit;
+	}
+
 	/* Adjust mobile positioning */
 	@media (max-width: 640px) {
 		:global(.cesium-infoBox) {
