@@ -1,24 +1,27 @@
 <script lang="ts">
 	import type { Viewer } from 'cesium';
 	import { Cartesian3, Math as CesiumMath } from 'cesium';
-	import { MapPin, Antenna, Home, Eye, EyeOff, ChevronDown, ChevronUp } from '@lucide/svelte';
+	import { MapPin, Antenna, Home, Eye, EyeOff, ChevronDown, ChevronUp, Play } from '@lucide/svelte';
 
 	// Props
 	let {
 		viewer,
 		showAirports = $bindable(true),
 		showReceivers = $bindable(true),
-		flightColorScheme = $bindable<'altitude' | 'time'>('altitude')
+		flightColorScheme = $bindable<'altitude' | 'time'>('altitude'),
+		playbackFlightId = $bindable<string | null>(null)
 	}: {
 		viewer: Viewer;
 		showAirports?: boolean;
 		showReceivers?: boolean;
 		flightColorScheme?: 'altitude' | 'time';
+		playbackFlightId?: string | null;
 	} = $props();
 
 	// State
 	let showControls = $state(true);
 	let showLegend = $state(false);
+	let flightIdInput = $state('');
 
 	/**
 	 * Reset camera to CONUS center
@@ -33,6 +36,15 @@
 			},
 			duration: 2.0
 		});
+	}
+
+	/**
+	 * Start flight playback
+	 */
+	function startPlayback(): void {
+		if (flightIdInput.trim()) {
+			playbackFlightId = flightIdInput.trim();
+		}
 	}
 </script>
 
@@ -103,6 +115,28 @@
 						Time
 					</button>
 				</div>
+			</div>
+
+			<!-- Flight Playback -->
+			<div class="space-y-2">
+				<h4 class="text-sm font-semibold">Flight Playback</h4>
+				<div class="flex space-x-2">
+					<input
+						type="text"
+						bind:value={flightIdInput}
+						placeholder="Enter Flight ID"
+						class="input flex-1"
+						onkeydown={(e) => e.key === 'Enter' && startPlayback()}
+					/>
+					<button
+						onclick={startPlayback}
+						class="btn preset-filled-primary-500"
+						title="Start playback"
+					>
+						<Play size={16} />
+					</button>
+				</div>
+				<p class="text-xs opacity-75">Enter a flight ID to replay the flight path</p>
 			</div>
 
 			<!-- Legend Toggle -->

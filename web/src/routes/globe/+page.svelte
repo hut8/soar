@@ -7,19 +7,23 @@
 	import AirportLayer from '$lib/components/cesium/AirportLayer.svelte';
 	import ReceiverLayer from '$lib/components/cesium/ReceiverLayer.svelte';
 	import GlobeControls from '$lib/components/cesium/GlobeControls.svelte';
+	import TimelineController from '$lib/components/cesium/TimelineController.svelte';
 	import 'cesium/Build/Cesium/Widgets/widgets.css';
 
 	let cesiumContainer: HTMLDivElement;
 	let viewer = $state<Viewer | null>(null);
 	let viewerReady = $state(false);
 
-	// Layer visibility state (will be controlled by UI in Phase 7)
+	// Layer visibility state
 	let showAirports = $state(true);
 	let showReceivers = $state(true);
 
-	// Flight path state (will be controlled by UI in Phase 7)
+	// Flight path state
 	let selectedFlightIds = $state<string[]>([]);
 	let flightColorScheme = $state<'altitude' | 'time'>('altitude');
+
+	// Timeline playback state
+	let playbackFlightId = $state<string | null>(null);
 
 	onMount(() => {
 		// Set Cesium Ion access token
@@ -98,7 +102,20 @@
 		<ReceiverLayer {viewer} bind:enabled={showReceivers} />
 
 		<!-- UI Controls -->
-		<GlobeControls {viewer} bind:showAirports bind:showReceivers bind:flightColorScheme />
+		<GlobeControls
+			{viewer}
+			bind:showAirports
+			bind:showReceivers
+			bind:flightColorScheme
+			bind:playbackFlightId
+		/>
+
+		<!-- Timeline Controller for flight playback -->
+		<TimelineController
+			{viewer}
+			bind:flightId={playbackFlightId}
+			onClose={() => (playbackFlightId = null)}
+		/>
 	{/if}
 </div>
 
