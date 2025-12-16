@@ -580,7 +580,7 @@ pub async fn get_receiver_aggregate_stats(
     };
 
     // Get fix counts grouped by device (last 24 hours only)
-    let device_fix_counts = match fixes_repo.get_fix_counts_by_device_for_receiver(id).await {
+    let device_fix_counts = match fixes_repo.get_fix_counts_by_aircraft_for_receiver(id).await {
         Ok(counts) => counts,
         Err(e) => {
             tracing::error!(

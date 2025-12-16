@@ -93,7 +93,7 @@ async fn find_towed_glider(
 ) -> Result<Option<TowingInfo>> {
     // Get the latest fix for the towplane
     let towplane_fix = match fixes_repo
-        .get_latest_fix_for_device(
+        .get_latest_fix_for_aircraft(
             towplane_aircraft_id,
             chrono::Utc::now() - chrono::Duration::seconds(30),
         )
@@ -212,7 +212,7 @@ async fn find_nearby_gliders(
     for (aircraft_id, flight_id) in active_aircraft {
         // Get the latest fix for this aircraft
         let aircraft_fix = match fixes_repo
-            .get_latest_fix_for_device(
+            .get_latest_fix_for_aircraft(
                 aircraft_id,
                 chrono::Utc::now() - chrono::Duration::seconds(30),
             )

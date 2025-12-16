@@ -489,7 +489,7 @@ pub async fn search_flights(
                         if let Some(aircraft_id) = flight.aircraft_id {
                             let start_time = flight.takeoff_time.unwrap_or(flight.created_at);
                             match fixes_repo
-                                .get_latest_fix_for_device(aircraft_id, start_time)
+                                .get_latest_fix_for_aircraft(aircraft_id, start_time)
                                 .await
                             {
                                 Ok(Some(fix)) => (

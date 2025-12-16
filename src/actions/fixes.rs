@@ -447,7 +447,7 @@ async fn search_fixes_by_bbox(
 
     // Perform bounding box search
     match fixes_repo
-        .get_devices_with_fixes_in_bounding_box(
+        .get_aircraft_with_fixes_in_bounding_box(
             lat_max,
             lon_min,
             lat_min,
@@ -490,7 +490,7 @@ async fn get_fixes_by_device_id(
     let fixes_repo = FixesRepository::new(pool);
 
     match fixes_repo
-        .get_fixes_for_device(aircraft_id, Some(limit.unwrap_or(1000)), None)
+        .get_fixes_for_aircraft(aircraft_id, Some(limit.unwrap_or(1000)), None)
         .await
     {
         Ok(fixes) => Json(fixes).into_response(),

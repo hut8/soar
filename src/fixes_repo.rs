@@ -207,7 +207,7 @@ impl FixesRepository {
                 )) => {
                     // Duplicate fix on redelivery - this is expected after crashes
                     debug!(
-                        "Duplicate fix detected for device {} at {}",
+                        "Duplicate fix detected for aircraft {} at {}",
                         new_fix.aircraft_id, new_fix.timestamp
                     );
                     metrics::counter!("aprs.fixes.duplicate_on_redelivery").increment(1);
@@ -307,7 +307,7 @@ impl FixesRepository {
         end_time: DateTime<Utc>,
         limit: Option<i64>,
     ) -> Result<Vec<crate::fixes::FixWithRawPacket>> {
-        let device_id_param = *aircraft_id;
+        let aircraft_id_param = *aircraft_id;
 
         let pool = self.pool.clone();
         let result = tokio::task::spawn_blocking(move || {
@@ -320,7 +320,7 @@ impl FixesRepository {
                         .eq(raw_messages::id)
                         .and(fixes::received_at.eq(raw_messages::received_at))),
                 )
-                .filter(fixes::aircraft_id.eq(device_id_param))
+                .filter(fixes::aircraft_id.eq(aircraft_id_param))
                 .filter(fixes::received_at.between(start_time, end_time))
                 .order(fixes::received_at.desc())
                 .into_boxed();
@@ -350,15 +350,15 @@ impl FixesRepository {
         Ok(result)
     }
 
-    /// Get recent fixes for a device with optional lookback period
+    /// Get recent fixes for an aircraft with optional lookback period
     ///
     /// # Arguments
-    /// * `device_uuid` - The device UUID to query
+    /// * `aircraft_uuid` - The aircraft UUID to query
     /// * `limit` - Maximum number of fixes to return (default: 100)
     /// * `lookback_hours` - How many hours back to search (default: 24)
-    pub async fn get_fixes_for_device(
+    pub async fn get_fixes_for_aircraft(
         &self,
-        device_uuid: uuid::Uuid,
+        aircraft_uuid: uuid::Uuid,
         limit: Option<i64>,
         lookback_hours: Option<i64>,
     ) -> Result<Vec<Fix>> {
@@ -373,7 +373,7 @@ impl FixesRepository {
             let mut conn = pool.get()?;
 
             let results = fixes
-                .filter(aircraft_id.eq(device_uuid))
+                .filter(aircraft_id.eq(aircraft_uuid))
                 .filter(received_at.ge(cutoff_time))
                 .order(received_at.desc())
                 .limit(limit)
@@ -410,10 +410,10 @@ impl FixesRepository {
         Ok(result)
     }
 
-    /// Get fixes for a specific device with optional after timestamp and limit
-    pub async fn get_fixes_by_device(
+    /// Get fixes for a specific aircraft with optional after timestamp and limit
+    pub async fn get_fixes_by_aircraft(
         &self,
-        device_uuid: Uuid,
+        aircraft_uuid: Uuid,
         after: Option<DateTime<Utc>>,
         limit: i64,
     ) -> Result<Vec<Fix>> {
@@ -421,7 +421,7 @@ impl FixesRepository {
         let result = tokio::task::spawn_blocking(move || {
             use crate::schema::fixes::dsl::*;
             let mut conn = pool.get()?;
-            let mut query = fixes.filter(aircraft_id.eq(device_uuid)).into_boxed();
+            let mut query = fixes.filter(aircraft_id.eq(aircraft_uuid)).into_boxed();
             if let Some(after_timestamp) = after {
                 query = query.filter(received_at.gt(after_timestamp));
             }
@@ -437,10 +437,10 @@ impl FixesRepository {
         Ok(result)
     }
 
-    /// Get the most recent fix for a device after a given timestamp
-    pub async fn get_latest_fix_for_device(
+    /// Get the most recent fix for an aircraft after a given timestamp
+    pub async fn get_latest_fix_for_aircraft(
         &self,
-        device_uuid: Uuid,
+        aircraft_uuid: Uuid,
         after: DateTime<Utc>,
     ) -> Result<Option<Fix>> {
         let pool = self.pool.clone();
@@ -448,7 +448,7 @@ impl FixesRepository {
             use crate::schema::fixes::dsl::*;
             let mut conn = pool.get()?;
             let fix_result = fixes
-                .filter(aircraft_id.eq(device_uuid))
+                .filter(aircraft_id.eq(aircraft_uuid))
                 .filter(received_at.gt(after))
                 .order(received_at.desc())
                 .limit(1)
@@ -462,9 +462,9 @@ impl FixesRepository {
         Ok(result)
     }
 
-    pub async fn get_fixes_by_device_paginated(
+    pub async fn get_fixes_by_aircraft_paginated(
         &self,
-        device_uuid: Uuid,
+        aircraft_uuid: Uuid,
         after: Option<DateTime<Utc>>,
         page: i64,
         per_page: i64,
@@ -477,7 +477,7 @@ impl FixesRepository {
 
             // Build base query for count
             let mut count_query = fixes::table
-                .filter(fixes::aircraft_id.eq(device_uuid))
+                .filter(fixes::aircraft_id.eq(aircraft_uuid))
                 .into_boxed();
             if let Some(after_timestamp) = after {
                 count_query = count_query.filter(fixes::received_at.gt(after_timestamp));
@@ -494,7 +494,7 @@ impl FixesRepository {
                         .eq(raw_messages::id)
                         .and(fixes::received_at.eq(raw_messages::received_at))),
                 )
-                .filter(fixes::aircraft_id.eq(device_uuid))
+                .filter(fixes::aircraft_id.eq(aircraft_uuid))
                 .into_boxed();
             if let Some(after_timestamp) = after {
                 query = query.filter(fixes::received_at.gt(after_timestamp));
@@ -610,19 +610,19 @@ impl FixesRepository {
 
     /// Get aircraft with their recent fixes in a bounding box for efficient area subscriptions
     /// This replaces the inefficient global fetch + filter approach
-    #[instrument(skip(self), fields(fixes_per_device = fixes_per_device.unwrap_or(5)))]
-    pub async fn get_devices_with_fixes_in_bounding_box(
+    #[instrument(skip(self), fields(fixes_per_aircraft = fixes_per_aircraft.unwrap_or(5)))]
+    pub async fn get_aircraft_with_fixes_in_bounding_box(
         &self,
         nw_lat: f64,
         nw_lng: f64,
         se_lat: f64,
         se_lng: f64,
         cutoff_time: DateTime<Utc>,
-        fixes_per_device: Option<i64>,
+        fixes_per_aircraft: Option<i64>,
     ) -> Result<Vec<(crate::aircraft::AircraftModel, Vec<Fix>)>> {
         info!("Starting bounding box query");
         let pool = self.pool.clone();
-        let fixes_per_device = fixes_per_device.unwrap_or(5);
+        let fixes_per_aircraft = fixes_per_aircraft.unwrap_or(5);
 
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
@@ -632,7 +632,7 @@ impl FixesRepository {
             // First query: Get aircraft with fixes in the bounding box
             // Optimized with EXISTS + LIMIT 1 pattern and geometry casting for performance
             // Handles antimeridian (international date line) crossing by splitting into two boxes
-            let devices_sql = r#"
+            let aircraft_sql = r#"
                 WITH params AS (
                     SELECT
                         $1::double precision AS left_lng,
@@ -721,7 +721,7 @@ impl FixesRepository {
                 longitude: Option<f64>,
             }
 
-            let device_rows: Vec<AircraftRow> = diesel::sql_query(devices_sql)
+            let aircraft_rows: Vec<AircraftRow> = diesel::sql_query(aircraft_sql)
                 .bind::<diesel::sql_types::Double, _>(nw_lng)  // min_lon
                 .bind::<diesel::sql_types::Double, _>(se_lat)  // min_lat
                 .bind::<diesel::sql_types::Double, _>(se_lng)  // max_lon
@@ -729,17 +729,17 @@ impl FixesRepository {
                 .bind::<diesel::sql_types::Timestamptz, _>(cutoff_time)
                 .load(&mut conn)?;
 
-            info!("First query returned {} device rows", device_rows.len());
+            info!("First query returned {} aircraft rows", aircraft_rows.len());
 
-            if device_rows.is_empty() {
+            if aircraft_rows.is_empty() {
                 return Ok(Vec::new());
             }
 
-            // Extract device IDs for the second query
-            let device_ids: Vec<uuid::Uuid> = device_rows.iter().map(|row| row.id).collect();
+            // Extract aircraft IDs for the second query
+            let aircraft_ids: Vec<uuid::Uuid> = aircraft_rows.iter().map(|row| row.id).collect();
 
             // Convert rows to AircraftModel
-            let device_models: Vec<crate::aircraft::AircraftModel> = device_rows
+            let aircraft_models: Vec<crate::aircraft::AircraftModel> = aircraft_rows
                 .into_iter()
                 .map(|row| crate::aircraft::AircraftModel {
                     address: row.address,
@@ -768,7 +768,7 @@ impl FixesRepository {
                 })
                 .collect();
 
-            info!("Executing second query for fixes with {} aircraft IDs", device_ids.len());
+            info!("Executing second query for fixes with {} aircraft IDs", aircraft_ids.len());
 
             // Second query: Get recent fixes for the aircraft using the aircraft_id index
             // This is much faster than repeating the spatial query
@@ -842,15 +842,15 @@ impl FixesRepository {
             }
 
             let fix_rows: Vec<FixRow> = diesel::sql_query(fixes_sql)
-                .bind::<diesel::sql_types::Array<diesel::sql_types::Uuid>, _>(&device_ids)
-                .bind::<diesel::sql_types::BigInt, _>(fixes_per_device)
+                .bind::<diesel::sql_types::Array<diesel::sql_types::Uuid>, _>(&aircraft_ids)
+                .bind::<diesel::sql_types::BigInt, _>(fixes_per_aircraft)
                 .bind::<diesel::sql_types::Timestamptz, _>(cutoff_time)
                 .load(&mut conn)?;
 
             info!("Second query returned {} fix rows", fix_rows.len());
 
             // Group fixes by aircraft_id
-            let mut fixes_by_device: std::collections::HashMap<uuid::Uuid, Vec<Fix>> =
+            let mut fixes_by_aircraft: std::collections::HashMap<uuid::Uuid, Vec<Fix>> =
                 std::collections::HashMap::new();
             for fix_row in fix_rows {
                 let aircraft_id = fix_row.aircraft_id;
@@ -881,18 +881,18 @@ impl FixesRepository {
                     altitude_agl_valid: fix_row.altitude_agl_valid,
                     time_gap_seconds: fix_row.time_gap_seconds,
                 };
-                fixes_by_device
+                fixes_by_aircraft
                     .entry(aircraft_id)
                     .or_default()
                     .push(fix);
             }
 
             // Combine aircraft with their fixes
-            let results: Vec<(crate::aircraft::AircraftModel, Vec<Fix>)> = device_models
+            let results: Vec<(crate::aircraft::AircraftModel, Vec<Fix>)> = aircraft_models
                 .into_iter()
-                .map(|device| {
-                    let fixes = fixes_by_device.remove(&device.id).unwrap_or_default();
-                    (device, fixes)
+                .map(|aircraft| {
+                    let fixes = fixes_by_aircraft.remove(&aircraft.id).unwrap_or_default();
+                    (aircraft, fixes)
                 })
                 .collect();
 
@@ -903,9 +903,9 @@ impl FixesRepository {
         Ok(result)
     }
 
-    /// Update flight_id for fixes by device_address within a time range
+    /// Update flight_id for fixes by aircraft_address within a time range
     /// This is used by flight detection processor to link fixes to flights after they're created
-    pub async fn update_flight_id_by_device_and_time(
+    pub async fn update_flight_id_by_aircraft_and_time(
         &self,
         aircraft_id: Uuid,
         flight_id: Uuid,
@@ -913,7 +913,7 @@ impl FixesRepository {
         end_time: Option<DateTime<Utc>>,
     ) -> Result<usize, anyhow::Error> {
         let pool = self.pool.clone();
-        let device_id_param = aircraft_id;
+        let aircraft_id_param = aircraft_id;
         let flight_id_param = flight_id;
 
         let result = tokio::task::spawn_blocking(move || {
@@ -922,7 +922,7 @@ impl FixesRepository {
 
             let updated_count = if let Some(end_time) = end_time {
                 diesel::update(fixes)
-                    .filter(aircraft_id.eq(device_id_param))
+                    .filter(aircraft_id.eq(aircraft_id_param))
                     .filter(timestamp.ge(start_time))
                     .filter(timestamp.le(end_time))
                     .filter(flight_id.is_null())
@@ -930,7 +930,7 @@ impl FixesRepository {
                     .execute(&mut conn)?
             } else {
                 diesel::update(fixes)
-                    .filter(aircraft_id.eq(device_id_param))
+                    .filter(aircraft_id.eq(aircraft_id_param))
                     .filter(timestamp.ge(start_time))
                     .filter(flight_id.is_null())
                     .set(flight_id.eq(flight_id_param))
@@ -942,8 +942,8 @@ impl FixesRepository {
         .await??;
 
         debug!(
-            "Updated {} fixes with flight_id {} for device {}",
-            result, flight_id_param, device_id_param
+            "Updated {} fixes with flight_id {} for aircraft {}",
+            result, flight_id_param, aircraft_id_param
         );
 
         Ok(result)
@@ -1044,8 +1044,8 @@ impl FixesRepository {
         Ok(result)
     }
 
-    /// Get fix counts grouped by device for a specific receiver ID (last 24 hours only)
-    pub async fn get_fix_counts_by_device_for_receiver(
+    /// Get fix counts grouped by aircraft for a specific receiver ID (last 24 hours only)
+    pub async fn get_fix_counts_by_aircraft_for_receiver(
         &self,
         receiver_uuid: Uuid,
     ) -> Result<Vec<crate::actions::receivers::AircraftFixCount>> {
