@@ -1051,13 +1051,9 @@ pub async fn handle_run(
                         "Connecting to NATS for Beast messages at {}...",
                         beast_nats_url
                     );
-                    let nats_client_name = if std::env::var("SOAR_ENV") == Ok("production".into()) {
-                        "soar-run-beast"
-                    } else {
-                        "soar-run-beast-staging"
-                    };
+                    let nats_client_name = soar::nats_client_name("run-beast");
                     let nats_result = async_nats::ConnectOptions::new()
-                        .name(nats_client_name)
+                        .name(&nats_client_name)
                         .connect(&beast_nats_url)
                         .await;
 
@@ -1140,13 +1136,9 @@ pub async fn handle_run(
     if let Some((nats_intake_tx, _)) = aprs_intake_opt.as_ref() {
         loop {
             info!("Connecting to NATS at {}...", nats_url);
-            let nats_client_name = if std::env::var("SOAR_ENV") == Ok("production".into()) {
-                "soar-run"
-            } else {
-                "soar-run-staging"
-            };
+            let nats_client_name = soar::nats_client_name("run");
             let nats_result = async_nats::ConnectOptions::new()
-                .name(nats_client_name)
+                .name(&nats_client_name)
                 .connect(&nats_url)
                 .await;
 

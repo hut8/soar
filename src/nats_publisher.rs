@@ -70,13 +70,9 @@ impl NatsFixPublisher {
     /// Create a new NATS publisher for position fixes
     pub async fn new(nats_url: &str) -> Result<Self> {
         info!("Connecting to NATS server at {}", nats_url);
-        let nats_client_name = if std::env::var("SOAR_ENV") == Ok("production".into()) {
-            "soar-aprs-ingester"
-        } else {
-            "soar-aprs-ingester-staging"
-        };
+        let nats_client_name = crate::nats_client_name("nats-publisher");
         let nats_client = async_nats::ConnectOptions::new()
-            .name(nats_client_name)
+            .name(&nats_client_name)
             .connect(nats_url)
             .await?;
 
