@@ -153,29 +153,32 @@
 		right: auto;
 	}
 
-	/* InfoBox dark mode styling */
+	/* InfoBox dark mode styling - light mode default */
 	:global(.cesium-infoBox) {
-		background: rgba(255, 255, 255, 0.95);
-		color: #000;
-	}
-
-	:global(.dark .cesium-infoBox) {
-		background: rgba(30, 30, 30, 0.95);
-		color: #fff;
+		background: rgba(255, 255, 255, 0.95) !important;
 	}
 
 	:global(.cesium-infoBox-title) {
-		background: rgba(0, 0, 0, 0.1);
-		color: inherit;
-	}
-
-	:global(.dark .cesium-infoBox-title) {
-		background: rgba(255, 255, 255, 0.1);
-		color: inherit;
+		background: rgba(0, 0, 0, 0.1) !important;
+		color: #000 !important;
 	}
 
 	:global(.cesium-infoBox-description) {
-		color: inherit;
+		color: #000 !important;
+	}
+
+	/* Dark mode overrides */
+	:global(html.dark) :global(.cesium-infoBox) {
+		background: rgba(30, 30, 30, 0.95) !important;
+	}
+
+	:global(html.dark) :global(.cesium-infoBox-title) {
+		background: rgba(255, 255, 255, 0.1) !important;
+		color: #fff !important;
+	}
+
+	:global(html.dark) :global(.cesium-infoBox-description) {
+		color: #fff !important;
 	}
 
 	/* Adjust mobile positioning */
