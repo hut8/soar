@@ -72,11 +72,47 @@
 		viewer.scene.fog.enabled = true;
 		viewer.scene.fog.density = 0.0002;
 
+		// Apply dark/light mode styles to InfoBox iframe content
+		function applyInfoBoxStyles() {
+			const infoBoxFrame = document.querySelector('.cesium-infoBox-iframe') as HTMLIFrameElement;
+			if (infoBoxFrame && infoBoxFrame.contentDocument) {
+				const isDark = document.documentElement.classList.contains('dark');
+				const frameDoc = infoBoxFrame.contentDocument;
+
+				// Inject or update style tag in iframe
+				let styleTag = frameDoc.getElementById('theme-styles') as HTMLStyleElement;
+				if (!styleTag) {
+					styleTag = frameDoc.createElement('style');
+					styleTag.id = 'theme-styles';
+					frameDoc.head.appendChild(styleTag);
+				}
+
+				styleTag.textContent = isDark
+					? 'body { background-color: rgba(30, 30, 30, 0.95) !important; color: #fff !important; }'
+					: 'body { background-color: rgba(255, 255, 255, 0.95) !important; color: #000 !important; }';
+			}
+		}
+
+		// Watch for InfoBox changes and theme changes
+		const observer = new MutationObserver(() => {
+			applyInfoBoxStyles();
+		});
+
+		// Observe InfoBox visibility changes
+		const infoBox = document.querySelector('.cesium-infoBox');
+		if (infoBox) {
+			observer.observe(infoBox, { attributes: true, childList: true, subtree: true });
+		}
+
+		// Observe theme changes on document root
+		observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+
 		// Mark viewer as ready for child components
 		viewerReady = true;
 
 		// Cleanup on component destroy
 		return () => {
+			observer.disconnect();
 			if (viewer && !viewer.isDestroyed()) {
 				viewer.destroy();
 			}
