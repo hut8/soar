@@ -303,9 +303,9 @@ pub async fn handle_run(
     let is_staging = soar_env == "staging";
 
     let nats_subject = if is_production {
-        "aprs.raw"
+        "ogn.raw"
     } else {
-        "staging.aprs.raw"
+        "staging.ogn.raw"
     };
 
     // Log which consumers are enabled
