@@ -254,6 +254,7 @@ export interface Flight {
 	aircraft_model?: string;
 	registration?: string;
 	aircraft_type_ogn?: string;
+	aircraft_country_code?: string;
 	// Latest fix information (for active flights)
 	latest_altitude_msl_feet: number | null;
 	latest_altitude_agl_feet: number | null;
