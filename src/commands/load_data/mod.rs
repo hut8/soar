@@ -474,7 +474,8 @@ async fn query_duplicate_devices(
         let duplicate_devices = aircraft::table
             .filter(aircraft::address.eq_any(duplicate_addresses))
             .order((aircraft::address.asc(), aircraft::address_type.asc()))
-            .load::<soar::aircraft::AircraftModel>(&mut conn)?;
+            .select(soar::aircraft::AircraftModel::as_select())
+            .load(&mut conn)?;
 
         Ok(duplicate_devices)
     })

@@ -67,6 +67,8 @@ diesel::table! {
     use super::sql_types::AddressType;
     use super::sql_types::AircraftTypeOgn;
     use super::sql_types::AdsbEmitterCategory;
+    use super::sql_types::Geometry;
+    use super::sql_types::Geography;
 
     aircraft (id) {
         address -> Int4,
@@ -91,6 +93,10 @@ diesel::table! {
         tracker_device_type -> Nullable<Text>,
         #[max_length = 2]
         country_code -> Nullable<Bpchar>,
+        latitude -> Nullable<Float8>,
+        longitude -> Nullable<Float8>,
+        location_geom -> Nullable<Geometry>,
+        location_geog -> Nullable<Geography>,
     }
 }
 

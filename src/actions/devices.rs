@@ -185,7 +185,7 @@ pub async fn get_aircraft_fixes(
             let active_only = query.active;
 
             match fixes_repo
-                .get_fixes_by_device_paginated(id, query.after, page, per_page, active_only)
+                .get_fixes_by_aircraft_paginated(id, query.after, page, per_page, active_only)
                 .await
             {
                 Ok((fixes, total_count)) => {
@@ -270,7 +270,7 @@ async fn search_devices_by_bbox(
     // Perform bounding box search - fetch the 10 most recent fixes per device
     // This provides enough data for trail rendering without additional API calls
     match fixes_repo
-        .get_devices_with_fixes_in_bounding_box(
+        .get_aircraft_with_fixes_in_bounding_box(
             lat_max,
             lon_min,
             lat_min,

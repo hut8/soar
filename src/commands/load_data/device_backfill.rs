@@ -99,7 +99,8 @@ async fn backfill_country_codes(pool: &PgPool) -> Result<usize> {
         let devices_to_update: Vec<AircraftModel> = aircraft
             .filter(address_type.eq(AddressType::Icao))
             .filter(country_code.is_null())
-            .load::<AircraftModel>(&mut conn)?;
+            .select(AircraftModel::as_select())
+            .load(&mut conn)?;
 
         info!(
             "Found {} ICAO aircraft without country codes",
@@ -160,7 +161,8 @@ async fn backfill_tail_numbers(pool: &PgPool) -> Result<usize> {
             .filter(address_type.eq(AddressType::Icao))
             .filter(country_code.eq("US"))
             .filter(registration.eq(""))
-            .load::<AircraftModel>(&mut conn)?;
+            .select(AircraftModel::as_select())
+            .load(&mut conn)?;
 
         info!(
             "Found {} US ICAO aircraft without registrations",

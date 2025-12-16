@@ -404,7 +404,7 @@ pub(crate) async fn process_state_transition(
             metrics::counter!("flight_tracker.coalesce.no_timeout_flight").increment(1);
             let recent_fixes = ctx
                 .fixes_repo
-                .get_fixes_for_device(fix.aircraft_id, Some(3), None)
+                .get_fixes_for_aircraft(fix.aircraft_id, Some(3), None)
                 .await
                 .unwrap_or_default();
 

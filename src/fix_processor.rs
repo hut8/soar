@@ -258,7 +258,10 @@ impl FixProcessor {
 
                 // Look up or create aircraft based on device_address
                 // When creating spontaneously, use address_type derived from tracker_device_type
-                // Use aircraft_for_fix to atomically update last_fix_at and insert all available fields
+                // Use aircraft_for_fix to atomically update last_fix_at and cached location
+                let latitude = pos_packet.latitude.as_();
+                let longitude = pos_packet.longitude.as_();
+
                 let aircraft_lookup_start = std::time::Instant::now();
                 match self
                     .aircraft_repo
@@ -267,6 +270,8 @@ impl FixProcessor {
                         spontaneous_address_type,
                         received_at,
                         packet_fields,
+                        latitude,
+                        longitude,
                     )
                     .await
                 {
