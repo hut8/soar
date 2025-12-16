@@ -238,7 +238,7 @@ pub async fn handle_pull_data(diesel_pool: Pool<ConnectionManager<PgConnection>>
     // Invoke handle_load_data with all downloaded files
     info!("Invoking load data procedures...");
     super::load_data::handle_load_data(
-        diesel_pool,
+        diesel_pool.clone(),
         Some(acftref_path), // aircraft_models
         Some(master_path),  // aircraft_registrations
         Some(airports_path),
@@ -248,5 +248,26 @@ pub async fn handle_pull_data(diesel_pool: Pool<ConnectionManager<PgConnection>>
         true,
         true,
     )
-    .await
+    .await?;
+
+    // Pull airspaces from OpenAIP (if API key is available)
+    if env::var("OPENAIP_API_KEY").is_ok() {
+        info!("Pulling airspaces from OpenAIP...");
+        match super::pull_airspaces::handle_pull_airspaces(
+            diesel_pool,
+            false, // full sync, not incremental
+            None,  // global, not country-specific
+        )
+        .await
+        {
+            Ok(_) => info!("Airspaces sync completed successfully"),
+            Err(e) => {
+                warn!("Airspaces sync failed (non-fatal): {}", e);
+            }
+        }
+    } else {
+        info!("Skipping airspaces sync - OPENAIP_API_KEY not set");
+    }
+
+    Ok(())
 }
