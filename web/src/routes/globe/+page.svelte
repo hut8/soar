@@ -146,4 +146,18 @@
 		top: 10px;
 		right: 10px;
 	}
+
+	/* Move InfoBox to the left side */
+	:global(.cesium-infoBox) {
+		left: 10px;
+		right: auto;
+	}
+
+	/* Adjust mobile positioning */
+	@media (max-width: 640px) {
+		:global(.cesium-infoBox) {
+			left: 8px;
+			top: 60px;
+		}
+	}
 </style>

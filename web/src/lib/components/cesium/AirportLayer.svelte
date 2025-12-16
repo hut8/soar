@@ -75,9 +75,9 @@
 			const response = await serverCall<AirportSearchResponse>('/airports', {
 				params: {
 					nw_lat: bounds.latMax,
-					nw_lon: bounds.lonMin,
+					nw_lng: bounds.lonMin,
 					se_lat: bounds.latMin,
-					se_lon: bounds.lonMax
+					se_lng: bounds.lonMax
 				}
 			});
 
