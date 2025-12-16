@@ -1033,9 +1033,9 @@ pub async fn handle_run(
     // This runs concurrently with the APRS subscriber
     if let Some((beast_intake_tx, _)) = beast_intake_opt.as_ref() {
         let beast_subject = if is_production {
-            "beast.raw"
+            "adsb.raw"
         } else {
-            "staging.beast.raw"
+            "staging.adsb.raw"
         };
 
         info!("Will subscribe to Beast NATS subject: {}", beast_subject);
