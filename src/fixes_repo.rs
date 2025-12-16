@@ -656,10 +656,11 @@ impl FixesRepository {
                     FROM params
                 )
                 SELECT d.*
-                FROM aircraft d
-                WHERE EXISTS (
+                FROM aircraft d, params p
+                WHERE d.last_fix_at >= NOW() - INTERVAL '1 hour'
+                  AND EXISTS (
                     SELECT 1
-                    FROM fixes f, params p, parts
+                    FROM fixes f, parts
                     WHERE f.aircraft_id = d.id
                       AND f.received_at >= p.since_ts
                       AND (
@@ -714,6 +715,10 @@ impl FixesRepository {
                 tracker_device_type: Option<String>,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Bpchar>)]
                 country_code: Option<String>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Double>)]
+                latitude: Option<f64>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Double>)]
+                longitude: Option<f64>,
             }
 
             let device_rows: Vec<AircraftRow> = diesel::sql_query(devices_sql)
@@ -758,8 +763,8 @@ impl FixesRepository {
                     adsb_emitter_category: row.adsb_emitter_category,
                     tracker_device_type: row.tracker_device_type,
                     country_code: row.country_code,
-                    latitude: None, // Not selected in this query
-                    longitude: None, // Not selected in this query
+                    latitude: row.latitude,
+                    longitude: row.longitude,
                 })
                 .collect();
 
