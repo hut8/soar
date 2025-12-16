@@ -68,11 +68,7 @@
 		isLoading = true;
 
 		try {
-			interface AirportSearchResponse {
-				airports: Airport[];
-			}
-
-			const response = await serverCall<AirportSearchResponse>('/airports', {
+			const airports = await serverCall<Airport[]>('/airports', {
 				params: {
 					nw_lat: bounds.latMax,
 					nw_lng: bounds.lonMin,
@@ -85,7 +81,7 @@
 			// eslint-disable-next-line svelte/prefer-svelte-reactivity
 			const newAirportIds = new Set<number>();
 
-			for (const airport of response.airports) {
+			for (const airport of airports) {
 				// Skip if already rendered
 				if (airportEntities.has(airport.id)) {
 					newAirportIds.add(airport.id);
@@ -111,7 +107,7 @@
 				}
 			}
 
-			console.log(`Loaded ${response.airports.length} airports in viewport`);
+			console.log(`Loaded ${airports.length} airports in viewport`);
 		} catch (error) {
 			console.error('Error loading airports:', error);
 		} finally {
