@@ -10,12 +10,19 @@ use crate::schema::airspaces;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum)]
 #[db_enum(existing_type_path = "crate::schema::sql_types::AirspaceClass")]
 pub enum AirspaceClass {
+    #[db_enum(rename = "A")]
     A,
+    #[db_enum(rename = "B")]
     B,
+    #[db_enum(rename = "C")]
     C,
+    #[db_enum(rename = "D")]
     D,
+    #[db_enum(rename = "E")]
     E,
+    #[db_enum(rename = "F")]
     F,
+    #[db_enum(rename = "G")]
     G,
     #[serde(rename = "SUA")]
     #[db_enum(rename = "SUA")]

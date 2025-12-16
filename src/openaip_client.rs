@@ -248,6 +248,7 @@ pub fn map_altitude_reference(ref_code: Option<i32>) -> Option<crate::airspace::
     use crate::airspace::AltitudeReference;
 
     match ref_code {
+        Some(0) => Some(AltitudeReference::Gnd), // Ground (0 ft)
         Some(1) => Some(AltitudeReference::Msl),
         Some(2) => Some(AltitudeReference::Agl),
         Some(3) => Some(AltitudeReference::Std),
@@ -260,6 +261,7 @@ pub fn map_altitude_reference(ref_code: Option<i32>) -> Option<crate::airspace::
 /// Convert OpenAIP altitude unit code to string
 pub fn map_altitude_unit(unit_code: Option<i32>) -> Option<String> {
     match unit_code {
+        Some(0) => Some("FT".to_string()), // Feet (or unknown, treating as feet)
         Some(1) => Some("FT".to_string()),
         Some(2) => Some("M".to_string()),
         Some(3) => Some("SM".to_string()),
