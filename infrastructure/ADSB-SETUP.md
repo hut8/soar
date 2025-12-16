@@ -1,6 +1,10 @@
 # ADS-B Ingester Initial Server Setup
 
-This document describes the one-time manual setup required for deploying the SOAR ADS-B ingester (`soar ingest-adsb`) to a separate server accessible only via Tailscale.
+> **⚠️ DEPRECATED**: This deployment model is no longer in use. The ADS-B ingester now runs on the main/staging servers alongside other SOAR services and is deployed via the standard `soar-deploy` script.
+>
+> This document is kept for historical reference only.
+
+This document describes the one-time manual setup that was previously required for deploying the SOAR ADS-B ingester (`soar ingest-adsb`) to a separate server accessible only via Tailscale.
 
 ## Prerequisites
 
