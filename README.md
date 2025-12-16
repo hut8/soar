@@ -289,7 +289,7 @@ BEAST_PORT=30005
 
 Then start the Beast ingestion service:
 ```bash
-soar ingest-beast --host localhost --port 30005
+soar ingest-adsb --server localhost --port 30005
 ```
 
 ### Notes
@@ -309,7 +309,7 @@ If the relay host and SOAR host are on different networks, use SSH port forwardi
 ssh -L 30005:localhost:30005 user@relay-host.example.com -N
 
 # Then connect SOAR to localhost:30005
-soar ingest-beast --host localhost --port 30005
+soar ingest-adsb --server localhost --port 30005
 ```
 
 ## Development

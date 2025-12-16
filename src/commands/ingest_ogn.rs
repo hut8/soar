@@ -5,7 +5,7 @@ use std::env;
 use tracing::Instrument;
 use tracing::{error, info};
 
-pub async fn handle_ingest_aprs(
+pub async fn handle_ingest_ogn(
     server: String,
     mut port: u16,
     callsign: String,
@@ -15,7 +15,7 @@ pub async fn handle_ingest_aprs(
     nats_url: String,
 ) -> Result<()> {
     sentry::configure_scope(|scope| {
-        scope.set_tag("operation", "ingest-aprs");
+        scope.set_tag("operation", "ingest-ogn");
     });
 
     // Automatically switch to port 10152 for full feed if no filter specified
@@ -26,20 +26,20 @@ pub async fn handle_ingest_aprs(
     }
 
     // Determine environment and use appropriate NATS subject
-    // Production: "aprs.raw"
-    // Staging: "staging.aprs.raw"
+    // Production: "ogn.raw"
+    // Staging: "staging.ogn.raw"
     let soar_env = env::var("SOAR_ENV").unwrap_or_default();
     let is_production = soar_env == "production";
     let is_staging = soar_env == "staging";
 
     let nats_subject = if is_production {
-        "aprs.raw"
+        "ogn.raw"
     } else {
-        "staging.aprs.raw"
+        "staging.ogn.raw"
     };
 
     info!(
-        "Starting APRS ingestion service - server: {}:{}, NATS: {}, subject: {}",
+        "Starting OGN ingestion service - server: {}:{}, NATS: {}, subject: {}",
         server, port, nats_url, nats_subject
     );
 
@@ -57,12 +57,12 @@ pub async fn handle_ingest_aprs(
     let health_state = soar::metrics::init_aprs_health();
     soar::metrics::set_aprs_health(health_state.clone());
 
-    // Initialize all APRS ingester metrics to zero so they appear in Grafana even before events occur
+    // Initialize all OGN ingester metrics to zero so they appear in Grafana even before events occur
     // This MUST happen before starting the metrics server to avoid race conditions where
     // Prometheus scrapes before metrics are initialized
-    info!("Initializing APRS ingester metrics...");
+    info!("Initializing OGN ingester metrics...");
     soar::metrics::initialize_aprs_ingest_metrics();
-    info!("APRS ingester metrics initialized");
+    info!("OGN ingester metrics initialized");
 
     // Start metrics server in production/staging mode (AFTER metrics are initialized)
     if is_production || is_staging {
@@ -85,17 +85,17 @@ pub async fn handle_ingest_aprs(
 
     // Acquire instance lock to prevent multiple ingest instances from running
     let lock_name = if is_production {
-        "aprs-ingest-production"
+        "ogn-ingest-production"
     } else {
-        "aprs-ingest-dev"
+        "ogn-ingest-dev"
     };
     let _lock = InstanceLock::new(lock_name)
-        .context("Failed to acquire instance lock - is another aprs-ingest instance running?")?;
+        .context("Failed to acquire instance lock - is another ogn-ingest instance running?")?;
     info!("Instance lock acquired for {}", lock_name);
 
     // Set up signal handling for immediate shutdown
     info!("Setting up shutdown handlers...");
-    let (shutdown_tx, mut shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
 
     // Spawn signal handler task for both SIGINT and SIGTERM
     tokio::spawn(async move {
@@ -135,7 +135,7 @@ pub async fn handle_ingest_aprs(
         let _ = shutdown_tx.send(());
     });
 
-    // Create APRS client config
+    // Create OGN (APRS) client config
     let config = AprsClientConfigBuilder::new()
         .server(server)
         .port(port)
@@ -145,16 +145,10 @@ pub async fn handle_ingest_aprs(
         .retry_delay_seconds(retry_delay)
         .build();
 
-    // Retry loop for JetStream connection and APRS ingestion
+    // Retry loop for NATS connection
     loop {
-        // Check if shutdown was requested
-        if shutdown_rx.try_recv().is_ok() {
-            info!("Shutdown requested, exiting...");
-            std::process::exit(0);
-        }
-
         info!("Connecting to NATS at {}...", nats_url);
-        let nats_client_name = soar::nats_client_name("aprs-ingester");
+        let nats_client_name = soar::nats_client_name("ogn-ingester");
         let nats_result = async_nats::ConnectOptions::new()
             .name(&nats_client_name)
             .client_capacity(65536) // Increase from default 2048 to prevent blocking on publish
@@ -169,7 +163,7 @@ pub async fn handle_ingest_aprs(
             }
             Err(e) => {
                 error!("Failed to connect to NATS: {} - retrying in 1s", e);
-                metrics::counter!("aprs.jetstream.connection_failed").increment(1);
+                metrics::counter!("aprs.nats.connection_failed").increment(1);
                 tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
                 continue;
             }
@@ -177,7 +171,7 @@ pub async fn handle_ingest_aprs(
 
         info!("NATS ready - will publish to subject '{}'", nats_subject);
 
-        // Create NATS publisher for raw APRS messages
+        // Create NATS publisher for raw OGN messages
         let nats_publisher =
             soar::aprs_nats_publisher::NatsPublisher::new(nats_client, nats_subject.to_string());
 
@@ -186,30 +180,37 @@ pub async fn handle_ingest_aprs(
         // Mark NATS as connected in health state
         {
             let mut health = health_state.write().await;
-            health.jetstream_connected = true; // Keep same field name for now
+            health.nats_connected = true;
         }
 
-        info!("Starting APRS client for ingestion...");
+        info!("Starting OGN (APRS) client for ingestion...");
 
-        // Run APRS client - this will block until failure or shutdown
-        match client.start_jetstream(nats_publisher).await {
+        // Run OGN (APRS) client with shutdown signal - this will exit immediately on SIGINT/SIGTERM
+        match client
+            .start_with_shutdown(nats_publisher, shutdown_rx, health_state.clone())
+            .await
+        {
             Ok(_) => {
-                info!("APRS ingestion stopped normally");
+                info!("OGN ingestion stopped normally");
                 break;
             }
             Err(e) => {
-                error!("APRS ingestion failed: {} - retrying in 1s", e);
+                error!("OGN ingestion failed: {} - retrying in 1s", e);
                 metrics::counter!("aprs.ingest_failed").increment(1);
 
                 // Mark NATS as disconnected
                 {
                     let mut health = health_state.write().await;
-                    health.jetstream_connected = false; // Keep same field name for now
+                    health.nats_connected = false;
                 }
 
                 tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
             }
         }
+
+        // If we get here, either shutdown was requested or connection failed
+        // In either case, exit the loop
+        break;
     }
 
     Ok(())

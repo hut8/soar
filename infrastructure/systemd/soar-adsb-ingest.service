@@ -1,9 +1,9 @@
 [Unit]
-Description=SOAR APRS Ingest (Staging) - Durable APRS Message Queue Service
+Description=SOAR ADS-B Ingest - Durable ADS-B Message Queue Service
 Documentation=https://github.com/hut8/soar
 After=network-online.target nats-server.service
 Wants=network-online.target nats-server.service
-# This service ingests APRS messages and publishes them to NATS JetStream
+# This service ingests ADS-B (Beast format) messages and publishes them to NATS
 # It is designed to run independently from the main processing service
 # Wants=nats-server.service ensures NATS starts when this service starts
 # Service will reconnect automatically via built-in retry logic if NATS restarts
@@ -13,11 +13,11 @@ Type=simple
 User=soar
 Group=soar
 WorkingDirectory=/var/soar
-ExecStart=/usr/local/bin/soar-staging ingest-aprs
+ExecStart=/usr/local/bin/soar ingest-adsb --server radar --port 41365 --nats-url ${NATS_URL}
 ExecReload=/bin/kill -s HUP $MAINPID
 
-# Environment variables (staging environment)
-EnvironmentFile=/etc/soar/env-staging
+# Environment variables
+EnvironmentFile=/etc/soar/env
 
 # Security settings
 NoNewPrivileges=yes
@@ -42,4 +42,5 @@ LimitNOFILE=65536
 MemoryMax=2G
 
 [Install]
-WantedBy=multi-user.target soar.target
+# Enabled by default for ADS-B deployment
+WantedBy=multi-user.target

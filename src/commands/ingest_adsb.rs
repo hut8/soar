@@ -5,7 +5,7 @@ use std::env;
 use tracing::Instrument;
 use tracing::{error, info};
 
-pub async fn handle_ingest_beast(
+pub async fn handle_ingest_adsb(
     server: String,
     port: u16,
     max_retries: u32,
@@ -13,24 +13,24 @@ pub async fn handle_ingest_beast(
     nats_url: String,
 ) -> Result<()> {
     sentry::configure_scope(|scope| {
-        scope.set_tag("operation", "ingest-beast");
+        scope.set_tag("operation", "ingest-adsb");
     });
 
     // Determine environment and use appropriate NATS subject
-    // Production: "beast.raw"
-    // Staging: "staging.beast.raw"
+    // Production: "adsb.raw"
+    // Staging: "staging.adsb.raw"
     let soar_env = env::var("SOAR_ENV").unwrap_or_default();
     let is_production = soar_env == "production";
     let is_staging = soar_env == "staging";
 
     let nats_subject = if is_production {
-        "beast.raw"
+        "adsb.raw"
     } else {
-        "staging.beast.raw"
+        "staging.adsb.raw"
     };
 
     info!(
-        "Starting Beast ingestion service - server: {}:{}, NATS: {}, subject: {}",
+        "Starting ADS-B ingestion service - server: {}:{}, NATS: {}, subject: {}",
         server, port, nats_url, nats_subject
     );
 
@@ -48,12 +48,12 @@ pub async fn handle_ingest_beast(
     let health_state = soar::metrics::init_beast_health();
     soar::metrics::set_beast_health(health_state.clone());
 
-    // Initialize all Beast ingester metrics to zero so they appear in Grafana even before events occur
+    // Initialize all ADS-B ingester metrics to zero so they appear in Grafana even before events occur
     // This MUST happen before starting the metrics server to avoid race conditions where
     // Prometheus scrapes before metrics are initialized
-    info!("Initializing Beast ingester metrics...");
+    info!("Initializing ADS-B ingester metrics...");
     soar::metrics::initialize_beast_ingest_metrics();
-    info!("Beast ingester metrics initialized");
+    info!("ADS-B ingester metrics initialized");
 
     // Start metrics server in production/staging mode (AFTER metrics are initialized)
     if is_production || is_staging {
@@ -76,17 +76,17 @@ pub async fn handle_ingest_beast(
 
     // Acquire instance lock to prevent multiple ingest instances from running
     let lock_name = if is_production {
-        "beast-ingest-production"
+        "adsb-ingest-production"
     } else {
-        "beast-ingest-dev"
+        "adsb-ingest-dev"
     };
     let _lock = InstanceLock::new(lock_name)
-        .context("Failed to acquire instance lock - is another beast-ingest instance running?")?;
+        .context("Failed to acquire instance lock - is another adsb-ingest instance running?")?;
     info!("Instance lock acquired for {}", lock_name);
 
     // Set up signal handling for immediate shutdown
     info!("Setting up shutdown handlers...");
-    let (shutdown_tx, mut shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
 
     // Spawn signal handler task for both SIGINT and SIGTERM
     tokio::spawn(async move {
@@ -135,16 +135,10 @@ pub async fn handle_ingest_beast(
         max_retry_delay_seconds: 60,
     };
 
-    // Retry loop for NATS connection and Beast ingestion
+    // Retry loop for NATS connection
     loop {
-        // Check if shutdown was requested
-        if shutdown_rx.try_recv().is_ok() {
-            info!("Shutdown requested, exiting...");
-            std::process::exit(0);
-        }
-
         info!("Connecting to NATS at {}...", nats_url);
-        let nats_client_name = soar::nats_client_name("beast-ingester");
+        let nats_client_name = soar::nats_client_name("adsb-ingester");
         let nats_result = async_nats::ConnectOptions::new()
             .name(&nats_client_name)
             .connect(&nats_url)
@@ -164,11 +158,11 @@ pub async fn handle_ingest_beast(
         };
 
         info!(
-            "NATS ready - will publish Beast messages to subject '{}'",
+            "NATS ready - will publish ADS-B messages to subject '{}'",
             nats_subject
         );
 
-        // Create Beast NATS publisher
+        // Create ADS-B (Beast) NATS publisher
         let nats_publisher =
             soar::beast_nats_publisher::NatsPublisher::new(nats_client, nats_subject.to_string());
 
@@ -177,30 +171,37 @@ pub async fn handle_ingest_beast(
         // Mark NATS as connected in health state
         {
             let mut health = health_state.write().await;
-            health.jetstream_connected = true; // Reusing jetstream_connected field for NATS connection status
+            health.nats_connected = true;
         }
 
-        info!("Starting Beast client for ingestion...");
+        info!("Starting ADS-B (Beast) client for ingestion...");
 
-        // Run Beast client - this will block until failure or shutdown
-        match client.start_jetstream(nats_publisher).await {
+        // Run Beast client with shutdown signal - this will exit immediately on SIGINT/SIGTERM
+        match client
+            .start_with_shutdown(nats_publisher, shutdown_rx, health_state.clone())
+            .await
+        {
             Ok(_) => {
-                info!("Beast ingestion stopped normally");
+                info!("ADS-B ingestion stopped normally");
                 break;
             }
             Err(e) => {
-                error!("Beast ingestion failed: {} - retrying in 1s", e);
+                error!("ADS-B ingestion failed: {} - retrying in 1s", e);
                 metrics::counter!("beast.ingest_failed").increment(1);
 
                 // Mark NATS as disconnected
                 {
                     let mut health = health_state.write().await;
-                    health.jetstream_connected = false;
+                    health.nats_connected = false;
                 }
 
                 tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
             }
         }
+
+        // If we get here, either shutdown was requested or connection failed
+        // In either case, exit the loop
+        break;
     }
 
     Ok(())
