@@ -19,6 +19,7 @@ pub struct AircraftInfo {
     pub aircraft_model: Option<String>,
     pub registration: Option<String>,
     pub aircraft_type_ogn: Option<AircraftType>,
+    pub country_code: Option<String>,
 }
 
 /// Flight view for API responses with computed fields
@@ -59,6 +60,7 @@ pub struct FlightView {
     pub aircraft_model: Option<String>,
     pub registration: Option<String>,
     pub aircraft_type_ogn: Option<AircraftType>,
+    pub aircraft_country_code: Option<String>,
 
     // Latest altitude information (for active flights)
     pub latest_altitude_msl_feet: Option<i32>,
@@ -149,6 +151,7 @@ impl FlightView {
             aircraft_model: device_info.aircraft_model,
             registration: device_info.registration,
             aircraft_type_ogn: device_info.aircraft_type_ogn,
+            aircraft_country_code: device_info.country_code,
             latest_altitude_msl_feet,
             latest_altitude_agl_feet,
             latest_fix_timestamp,

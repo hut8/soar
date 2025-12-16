@@ -32,7 +32,8 @@
 	import {
 		getAircraftTypeOgnDescription,
 		formatAircraftAddress,
-		getAircraftTypeColor
+		getAircraftTypeColor,
+		getFlagPath
 	} from '$lib/formatters';
 	import { GOOGLE_MAPS_API_KEY } from '$lib/config';
 	import { serverCall } from '$lib/api/server';
@@ -1427,10 +1428,24 @@
 					</div>
 					<div class="text-surface-600-300-token text-sm">
 						{#if data.flight.departure_airport && data.flight.departure_airport_id}
+							{#if data.flight.departure_airport_country}
+								<img
+									src={getFlagPath(data.flight.departure_airport_country)}
+									alt=""
+									class="mr-1 inline-block h-3.5 rounded-sm"
+								/>
+							{/if}
 							<a href="/airports/{data.flight.departure_airport_id}" class="anchor">
 								{data.flight.departure_airport}
 							</a>
 						{:else if data.flight.departure_airport}
+							{#if data.flight.departure_airport_country}
+								<img
+									src={getFlagPath(data.flight.departure_airport_country)}
+									alt=""
+									class="mr-1 inline-block h-3.5 rounded-sm"
+								/>
+							{/if}
 							{data.flight.departure_airport}
 						{:else}
 							Unknown
@@ -1481,10 +1496,24 @@
 								No beacons received for 5+ minutes
 							{:else if data.flight.landing_time}
 								{#if data.flight.arrival_airport && data.flight.arrival_airport_id}
+									{#if data.flight.arrival_airport_country}
+										<img
+											src={getFlagPath(data.flight.arrival_airport_country)}
+											alt=""
+											class="mr-1 inline-block h-3.5 rounded-sm"
+										/>
+									{/if}
 									<a href="/airports/{data.flight.arrival_airport_id}" class="anchor">
 										{data.flight.arrival_airport}
 									</a>
 								{:else if data.flight.arrival_airport}
+									{#if data.flight.arrival_airport_country}
+										<img
+											src={getFlagPath(data.flight.arrival_airport_country)}
+											alt=""
+											class="mr-1 inline-block h-3.5 rounded-sm"
+										/>
+									{/if}
 									{data.flight.arrival_airport}
 								{:else}
 									Unknown
