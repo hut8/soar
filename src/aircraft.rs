@@ -207,6 +207,8 @@ pub struct AircraftModel {
     pub adsb_emitter_category: Option<AdsbEmitterCategory>,
     pub tracker_device_type: Option<String>,
     pub country_code: Option<String>,
+    pub latitude: Option<f64>,
+    pub longitude: Option<f64>,
 }
 
 impl AircraftModel {
@@ -238,6 +240,8 @@ pub struct NewAircraft {
     pub adsb_emitter_category: Option<AdsbEmitterCategory>,
     pub tracker_device_type: Option<String>,
     pub country_code: Option<String>,
+    pub latitude: Option<f64>,
+    pub longitude: Option<f64>,
 }
 
 impl From<Aircraft> for NewAircraft {
@@ -268,6 +272,8 @@ impl From<Aircraft> for NewAircraft {
             adsb_emitter_category: device.adsb_emitter_category,
             tracker_device_type: None, // Not provided by DDB
             country_code,
+            latitude: None,  // Not provided by DDB
+            longitude: None, // Not provided by DDB
         }
     }
 }

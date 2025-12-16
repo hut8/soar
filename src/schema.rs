@@ -67,6 +67,8 @@ diesel::table! {
     use super::sql_types::AddressType;
     use super::sql_types::AircraftTypeOgn;
     use super::sql_types::AdsbEmitterCategory;
+    use super::sql_types::Geometry;
+    use super::sql_types::Geography;
 
     aircraft (id) {
         address -> Int4,
@@ -91,6 +93,10 @@ diesel::table! {
         tracker_device_type -> Nullable<Text>,
         #[max_length = 2]
         country_code -> Nullable<Bpchar>,
+        latitude -> Nullable<Float8>,
+        longitude -> Nullable<Float8>,
+        location_geom -> Nullable<Geometry>,
+        location_geog -> Nullable<Geography>,
     }
 }
 
@@ -826,7 +832,6 @@ diesel::table! {
         takeoff_location_id -> Nullable<Uuid>,
         landing_location_id -> Nullable<Uuid>,
         timed_out_at -> Nullable<Timestamptz>,
-        timeout_phase -> Nullable<TimeoutPhase>,
         last_fix_at -> Timestamptz,
         callsign -> Nullable<Text>,
         tow_release_height_delta_ft -> Nullable<Int4>,
@@ -834,6 +839,7 @@ diesel::table! {
         max_latitude -> Nullable<Float8>,
         min_longitude -> Nullable<Float8>,
         max_longitude -> Nullable<Float8>,
+        timeout_phase -> Nullable<TimeoutPhase>,
     }
 }
 

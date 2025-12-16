@@ -758,6 +758,8 @@ impl FixesRepository {
                     adsb_emitter_category: row.adsb_emitter_category,
                     tracker_device_type: row.tracker_device_type,
                     country_code: row.country_code,
+                    latitude: None, // Not selected in this query
+                    longitude: None, // Not selected in this query
                 })
                 .collect();
 
