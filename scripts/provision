@@ -5,7 +5,11 @@
 # setting up deployment privileges, and configuring the environment.
 #
 # Usage:
-#   sudo ./provision.sh
+#   sudo ./provision <staging|production>
+#
+# Arguments:
+#   staging     - Provision for staging environment (soar_staging database, staging.glider.flights)
+#   production  - Provision for production environment (soar database, glider.flights)
 
 set -e
 
@@ -16,13 +20,53 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# Check for required argument
+if [ $# -ne 1 ]; then
+    echo -e "${RED}Error: Environment argument required${NC}"
+    echo "Usage: $0 <staging|production>"
+    echo ""
+    echo "Arguments:"
+    echo "  staging     - Provision for staging environment (soar_staging database)"
+    echo "  production  - Provision for production environment (soar database)"
+    exit 1
+fi
+
+ENVIRONMENT="$1"
+
+# Validate environment argument
+if [[ "$ENVIRONMENT" != "staging" ]] && [[ "$ENVIRONMENT" != "production" ]]; then
+    echo -e "${RED}Error: Invalid environment '$ENVIRONMENT'${NC}"
+    echo "Must be either 'staging' or 'production'"
+    exit 1
+fi
+
+# Set environment-specific variables
+if [[ "$ENVIRONMENT" == "production" ]]; then
+    DB_NAME="soar"
+    ENV_FILE="/etc/soar/env"
+    CADDYFILE_SOURCE="infrastructure/Caddyfile.production"
+    WEB_PORT="61225"
+    DOMAIN="glider.flights"
+else
+    DB_NAME="soar_staging"
+    ENV_FILE="/etc/soar/env-staging"
+    CADDYFILE_SOURCE="infrastructure/Caddyfile.staging"
+    WEB_PORT="61226"
+    DOMAIN="staging.glider.flights"
+fi
+
+echo -e "${GREEN}Provisioning SOAR server for ${ENVIRONMENT} environment...${NC}"
+echo -e "${BLUE}Database: $DB_NAME${NC}"
+echo -e "${BLUE}Environment file: $ENV_FILE${NC}"
+echo -e "${BLUE}Web port: $WEB_PORT${NC}"
+echo -e "${BLUE}Domain: $DOMAIN${NC}"
+echo ""
+
 # Check if running as root
 if [[ $EUID -ne 0 ]]; then
    echo -e "${RED}Error: This script must be run as root (use sudo)${NC}"
    exit 1
 fi
-
-echo -e "${GREEN}Provisioning SOAR server...${NC}"
 
 # Detect OS
 if [ -f /etc/os-release ]; then
@@ -36,7 +80,7 @@ fi
 
 echo -e "${BLUE}Detected OS: $OS $OS_VERSION${NC}"
 
-# Check if OS is Debian or Ubuntu
+# Check if OS is Debian or Ubuntu - EXIT IMMEDIATELY IF NOT
 if [[ "$OS" != "ubuntu" ]] && [[ "$OS" != "debian" ]]; then
     echo -e "${RED}Error: This script only supports Debian and Ubuntu.${NC}"
     echo -e "${RED}Detected OS: $OS${NC}"
@@ -47,50 +91,25 @@ fi
 # Install PostgreSQL 18
 echo -e "${BLUE}Installing PostgreSQL 18...${NC}"
 
-if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
-    # Add PostgreSQL APT repository
-    echo "Adding PostgreSQL APT repository..."
-    sudo apt-get update
-    sudo apt-get install -y wget ca-certificates lsb-release gnupg
+# Add PostgreSQL APT repository
+echo "Adding PostgreSQL APT repository..."
+sudo apt-get update
+sudo apt-get install -y wget ca-certificates lsb-release gnupg
 
-    # Add PostgreSQL GPG key (modern method, not using deprecated apt-key)
-    sudo mkdir -p /etc/apt/keyrings
-    if [ ! -f /etc/apt/keyrings/postgresql.gpg ]; then
-        wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | \
-            sudo gpg --dearmor -o /etc/apt/keyrings/postgresql.gpg
-    fi
-
-    # Add PostgreSQL repository with signed-by
-    echo "deb [signed-by=/etc/apt/keyrings/postgresql.gpg] http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | \
-        sudo tee /etc/apt/sources.list.d/pgdg.list
-
-    # Install PostgreSQL 18 and PostGIS
-    sudo apt-get update
-    sudo apt-get install -y postgresql-18 postgresql-client-18 postgresql-18-postgis-3 postgresql-18-partman uuid-runtime
-
-elif [[ "$OS" == "centos" ]] || [[ "$OS" == "rhel" ]] || [[ "$OS" == "rocky" ]] || [[ "$OS" == "almalinux" ]]; then
-    # Install PostgreSQL repository
-    sudo dnf install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-${OS_VERSION%%.*}-x86_64/pgdg-redhat-repo-latest.noarch.rpm
-
-    # Disable built-in PostgreSQL module
-    sudo dnf -qy module disable postgresql
-
-    # Install PostgreSQL 18 and extensions
-    sudo dnf install -y postgresql18-server postgresql18-contrib postgis34_18 pg_partman_18 util-linux
-
-    # Initialize database if not already initialized
-    if [ ! -f /var/lib/pgsql/18/data/PG_VERSION ]; then
-        sudo /usr/pgsql-18/bin/postgresql-18-setup initdb
-    fi
-
-    # Enable and start PostgreSQL
-    sudo systemctl enable postgresql-18
-    sudo systemctl start postgresql-18
-else
-    echo -e "${RED}Error: Unsupported OS: $OS${NC}"
-    echo "Please install PostgreSQL 18, PostGIS, and pg_partman manually."
-    exit 1
+# Add PostgreSQL GPG key (modern method, not using deprecated apt-key)
+sudo mkdir -p /etc/apt/keyrings
+if [ ! -f /etc/apt/keyrings/postgresql.gpg ]; then
+    wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | \
+        sudo gpg --dearmor -o /etc/apt/keyrings/postgresql.gpg
 fi
+
+# Add PostgreSQL repository with signed-by
+echo "deb [signed-by=/etc/apt/keyrings/postgresql.gpg] http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | \
+    sudo tee /etc/apt/sources.list.d/pgdg.list
+
+# Install PostgreSQL 18 and PostGIS
+sudo apt-get update
+sudo apt-get install -y postgresql-18 postgresql-client-18 postgresql-18-postgis-3 postgresql-18-partman uuid-runtime
 
 echo -e "${GREEN}PostgreSQL 18 installed successfully${NC}"
 
@@ -141,121 +160,53 @@ fi
 
 # Install Prometheus
 echo -e "${BLUE}Installing Prometheus...${NC}"
-
-if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
-    sudo apt-get update
-    sudo apt-get install -y prometheus
-elif [[ "$OS" == "centos" ]] || [[ "$OS" == "rhel" ]] || [[ "$OS" == "rocky" ]] || [[ "$OS" == "almalinux" ]]; then
-    # Create prometheus user
-    if ! id "prometheus" &>/dev/null; then
-        sudo useradd --no-create-home --shell /bin/false prometheus
-    fi
-
-    # Download and install Prometheus
-    if [ ! -f /usr/local/bin/prometheus ]; then
-        PROMETHEUS_VERSION="2.48.1"
-        (
-            cd /tmp
-            wget -q "https://github.com/prometheus/prometheus/releases/download/v${PROMETHEUS_VERSION}/prometheus-${PROMETHEUS_VERSION}.linux-amd64.tar.gz"
-            tar -xzf "prometheus-${PROMETHEUS_VERSION}.linux-amd64.tar.gz"
-            sudo cp "prometheus-${PROMETHEUS_VERSION}.linux-amd64/prometheus" /usr/local/bin/
-            sudo cp "prometheus-${PROMETHEUS_VERSION}.linux-amd64/promtool" /usr/local/bin/
-            sudo mkdir -p /etc/prometheus /var/lib/prometheus
-            sudo chown prometheus:prometheus /etc/prometheus /var/lib/prometheus
-            rm -rf "prometheus-${PROMETHEUS_VERSION}.linux-amd64" "prometheus-${PROMETHEUS_VERSION}.linux-amd64.tar.gz"
-        )
-
-        # Create systemd service for RHEL-based systems
-        cat <<'EOF' | sudo tee /etc/systemd/system/prometheus.service
-[Unit]
-Description=Prometheus
-Wants=network-online.target
-After=network-online.target
-
-[Service]
-User=prometheus
-Group=prometheus
-Type=simple
-ExecStart=/usr/local/bin/prometheus \
-    --config.file=/etc/prometheus/prometheus.yml \
-    --storage.tsdb.path=/var/lib/prometheus/ \
-    --web.console.templates=/etc/prometheus/consoles \
-    --web.console.libraries=/etc/prometheus/console_libraries
-
-[Install]
-WantedBy=multi-user.target
-EOF
-    fi
-fi
-
+sudo apt-get update
+sudo apt-get install -y prometheus
 echo -e "${GREEN}Prometheus installed successfully${NC}"
 
 # Install Grafana
 echo -e "${BLUE}Installing Grafana...${NC}"
 
-if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
-    # Add Grafana APT repository
-    # Note: apt-transport-https not needed on modern Debian/Ubuntu (apt 1.5+)
-    # software-properties-common is Ubuntu-specific and not needed here
-    sudo apt-get install -y gnupg
+# Add Grafana APT repository
+sudo apt-get install -y gnupg
 
-    # Add Grafana GPG key (modern method, not using deprecated apt-key)
-    sudo mkdir -p /etc/apt/keyrings
-    if [ ! -f /etc/apt/keyrings/grafana.gpg ]; then
-        wget -q -O - https://apt.grafana.com/gpg.key | \
-            sudo gpg --dearmor -o /etc/apt/keyrings/grafana.gpg
-    fi
-
-    # Add Grafana repository with signed-by
-    echo "deb [signed-by=/etc/apt/keyrings/grafana.gpg] https://apt.grafana.com stable main" | \
-        sudo tee /etc/apt/sources.list.d/grafana.list
-
-    sudo apt-get update
-    sudo apt-get install -y grafana
-
-elif [[ "$OS" == "centos" ]] || [[ "$OS" == "rhel" ]] || [[ "$OS" == "rocky" ]] || [[ "$OS" == "almalinux" ]]; then
-    # Add Grafana YUM repository
-    cat <<'EOF' | sudo tee /etc/yum.repos.d/grafana.repo
-[grafana]
-name=grafana
-baseurl=https://rpm.grafana.com
-repo_gpgcheck=1
-enabled=1
-gpgcheck=1
-gpgkey=https://rpm.grafana.com/gpg.key
-sslverify=1
-sslcacert=/etc/pki/tls/certs/ca-bundle.crt
-EOF
-    sudo dnf install -y grafana
+# Add Grafana GPG key (modern method, not using deprecated apt-key)
+sudo mkdir -p /etc/apt/keyrings
+if [ ! -f /etc/apt/keyrings/grafana.gpg ]; then
+    wget -q -O - https://apt.grafana.com/gpg.key | \
+        sudo gpg --dearmor -o /etc/apt/keyrings/grafana.gpg
 fi
+
+# Add Grafana repository with signed-by
+echo "deb [signed-by=/etc/apt/keyrings/grafana.gpg] https://apt.grafana.com stable main" | \
+    sudo tee /etc/apt/sources.list.d/grafana.list
+
+sudo apt-get update
+sudo apt-get install -y grafana
 
 echo -e "${GREEN}Grafana installed successfully${NC}"
 
-# Install Caddy (Debian/Ubuntu only)
+# Install Caddy
 echo -e "${BLUE}Installing Caddy web server...${NC}"
 
-if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
-    # Install Caddy from official Cloudsmith repository
-    sudo apt-get install -y debian-keyring debian-archive-keyring curl
+# Install Caddy from official Cloudsmith repository
+sudo apt-get install -y debian-keyring debian-archive-keyring curl
 
-    # Add Caddy GPG key (Cloudsmith expects it in /usr/share/keyrings/)
-    sudo mkdir -p /usr/share/keyrings
-    if [ ! -f /usr/share/keyrings/caddy-stable-archive-keyring.gpg ]; then
-        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | \
-            sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-    fi
-
-    # Add Caddy repository (uses signed-by pointing to /usr/share/keyrings/)
-    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | \
-        sudo tee /etc/apt/sources.list.d/caddy-stable.list
-
-    sudo apt-get update
-    sudo apt-get install -y caddy
-
-    echo -e "${GREEN}Caddy installed successfully${NC}"
-else
-    echo -e "${YELLOW}Caddy installation skipped (Debian/Ubuntu only)${NC}"
+# Add Caddy GPG key (Cloudsmith expects it in /usr/share/keyrings/)
+sudo mkdir -p /usr/share/keyrings
+if [ ! -f /usr/share/keyrings/caddy-stable-archive-keyring.gpg ]; then
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | \
+        sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
 fi
+
+# Add Caddy repository (uses signed-by pointing to /usr/share/keyrings/)
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | \
+    sudo tee /etc/apt/sources.list.d/caddy-stable.list
+
+sudo apt-get update
+sudo apt-get install -y caddy
+
+echo -e "${GREEN}Caddy installed successfully${NC}"
 
 # Install prometheus-nats-exporter binary if not already installed
 if [ ! -f /usr/local/bin/prometheus-nats-exporter ]; then
@@ -281,23 +232,15 @@ echo -e "${BLUE}Installing Photon geocoding server...${NC}"
 # Install Java and dependencies if not already installed
 if ! command -v java &> /dev/null; then
     echo "Installing Java..."
-    if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
-        sudo apt-get update
-        sudo apt-get install -y openjdk-21-jre-headless wget curl pbzip2
-    elif [[ "$OS" == "centos" ]] || [[ "$OS" == "rhel" ]] || [[ "$OS" == "rocky" ]] || [[ "$OS" == "almalinux" ]]; then
-        sudo dnf install -y java-21-openjdk-headless wget curl pbzip2
-    fi
+    sudo apt-get update
+    sudo apt-get install -y openjdk-21-jre-headless wget curl pbzip2
     echo -e "${GREEN}Java and dependencies installed successfully${NC}"
 else
     echo -e "${BLUE}Java already installed: $(java -version 2>&1 | head -n 1)${NC}"
     # Ensure pbzip2 is installed for faster decompression
     if ! command -v pbzip2 &> /dev/null; then
         echo "Installing pbzip2 for faster decompression..."
-        if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
-            sudo apt-get install -y pbzip2 curl
-        elif [[ "$OS" == "centos" ]] || [[ "$OS" == "rhel" ]] || [[ "$OS" == "rocky" ]] || [[ "$OS" == "almalinux" ]]; then
-            sudo dnf install -y pbzip2 curl
-        fi
+        sudo apt-get install -y pbzip2 curl
     fi
 fi
 
@@ -392,13 +335,8 @@ sudo mkdir -p /etc/prometheus/jobs
 sudo cp infrastructure/prometheus.yml /etc/prometheus/prometheus.yml
 
 # Set Prometheus ownership
-if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
-    sudo chown prometheus:prometheus /etc/prometheus/prometheus.yml
-    sudo chown prometheus:prometheus /etc/prometheus/jobs
-elif [[ "$OS" == "centos" ]] || [[ "$OS" == "rhel" ]] || [[ "$OS" == "rocky" ]] || [[ "$OS" == "almalinux" ]]; then
-    sudo chown prometheus:prometheus /etc/prometheus/prometheus.yml
-    sudo chown prometheus:prometheus /etc/prometheus/jobs
-fi
+sudo chown prometheus:prometheus /etc/prometheus/prometheus.yml
+sudo chown prometheus:prometheus /etc/prometheus/jobs
 
 echo -e "${GREEN}Prometheus configured${NC}"
 
@@ -415,24 +353,14 @@ if [ -f infrastructure/grafana-provisioning/dashboards/dashboards.yml ]; then
     echo "Grafana dashboard provisioning configuration installed"
 fi
 
-# Create Prometheus datasource provisioning configuration
-cat <<'EOF' | sudo tee /etc/grafana/provisioning/datasources/prometheus.yml
-apiVersion: 1
-
-datasources:
-  - name: Prometheus
-    type: prometheus
-    access: proxy
-    url: http://localhost:9090
-    isDefault: true
-    editable: true
-    jsonData:
-      httpMethod: POST
-      timeInterval: 15s
-EOF
-
-sudo chown grafana:grafana /etc/grafana/provisioning/datasources/prometheus.yml
-echo "Grafana Prometheus datasource provisioning installed"
+# Copy Grafana Prometheus datasource provisioning configuration
+if [ -f infrastructure/grafana-provisioning/datasources/prometheus.yml ]; then
+    sudo cp infrastructure/grafana-provisioning/datasources/prometheus.yml /etc/grafana/provisioning/datasources/
+    sudo chown grafana:grafana /etc/grafana/provisioning/datasources/prometheus.yml
+    echo "Grafana Prometheus datasource provisioning installed"
+else
+    echo -e "${YELLOW}Warning: infrastructure/grafana-provisioning/datasources/prometheus.yml not found${NC}"
+fi
 
 # Copy Grafana dashboards
 DASHBOARD_COUNT=0
@@ -446,25 +374,24 @@ fi
 echo -e "${GREEN}Grafana configured with $DASHBOARD_COUNT dashboards and Prometheus datasource${NC}"
 
 # Configure Caddy
-if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
-    echo -e "${BLUE}Configuring Caddy web server...${NC}"
+echo -e "${BLUE}Configuring Caddy web server...${NC}"
 
-    # Create Caddy log directory
-    sudo mkdir -p /var/log/caddy
-    sudo chown caddy:caddy /var/log/caddy
+# Create Caddy log directory
+sudo mkdir -p /var/log/caddy
+sudo chown caddy:caddy /var/log/caddy
 
-    # Copy Caddyfile to /etc/caddy/
-    if [ -f infrastructure/Caddyfile ]; then
-        sudo cp infrastructure/Caddyfile /etc/caddy/Caddyfile
-        sudo chown root:root /etc/caddy/Caddyfile
-        sudo chmod 644 /etc/caddy/Caddyfile
-        echo "Caddyfile installed to /etc/caddy/Caddyfile"
-    else
-        echo -e "${YELLOW}Warning: infrastructure/Caddyfile not found, skipping Caddyfile installation${NC}"
-    fi
-
-    echo -e "${GREEN}Caddy configured${NC}"
+# Copy environment-specific Caddyfile to /etc/caddy/
+if [ -f "$CADDYFILE_SOURCE" ]; then
+    sudo cp "$CADDYFILE_SOURCE" /etc/caddy/Caddyfile
+    sudo chown root:root /etc/caddy/Caddyfile
+    sudo chmod 644 /etc/caddy/Caddyfile
+    echo "Caddyfile installed to /etc/caddy/Caddyfile (from $CADDYFILE_SOURCE)"
+else
+    echo -e "${RED}Error: $CADDYFILE_SOURCE not found${NC}"
+    exit 1
 fi
+
+echo -e "${GREEN}Caddy configured for $ENVIRONMENT environment${NC}"
 
 # Enable infrastructure services
 # Note: SOAR application services are enabled by soar-deploy
@@ -474,10 +401,7 @@ sudo systemctl enable prometheus-nats-exporter.service
 sudo systemctl enable photon.service
 sudo systemctl enable prometheus
 sudo systemctl enable grafana-server
-
-if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
-    sudo systemctl enable caddy
-fi
+sudo systemctl enable caddy
 
 # Start Prometheus if not already running
 if ! systemctl is-active --quiet prometheus; then
@@ -505,19 +429,17 @@ else
     echo -e "${BLUE}Grafana is already running${NC}"
 fi
 
-# Start Caddy if not already running (Debian/Ubuntu only)
-if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
-    if ! systemctl is-active --quiet caddy; then
-        echo -e "${BLUE}Starting Caddy...${NC}"
-        sudo systemctl start caddy
-        if systemctl is-active --quiet caddy; then
-            echo -e "${GREEN}Caddy started successfully${NC}"
-        else
-            echo -e "${YELLOW}Warning: Failed to start Caddy. Check logs with: journalctl -u caddy -n 50${NC}"
-        fi
+# Start Caddy if not already running
+if ! systemctl is-active --quiet caddy; then
+    echo -e "${BLUE}Starting Caddy...${NC}"
+    sudo systemctl start caddy
+    if systemctl is-active --quiet caddy; then
+        echo -e "${GREEN}Caddy started successfully${NC}"
     else
-        echo -e "${BLUE}Caddy is already running${NC}"
+        echo -e "${YELLOW}Warning: Failed to start Caddy. Check logs with: journalctl -u caddy -n 50${NC}"
     fi
+else
+    echo -e "${BLUE}Caddy is already running${NC}"
 fi
 
 # Start Photon if not already running
@@ -561,14 +483,8 @@ echo -e "${BLUE}Setting up elevation data...${NC}"
 # Check if rclone is installed
 if ! command -v rclone &> /dev/null; then
     echo "Installing rclone..."
-    if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
-        sudo apt-get update
-        sudo apt-get install -y rclone
-    elif [[ "$OS" == "centos" ]] || [[ "$OS" == "rhel" ]] || [[ "$OS" == "rocky" ]] || [[ "$OS" == "almalinux" ]]; then
-        sudo dnf install -y rclone
-    else
-        echo -e "${YELLOW}Warning: Could not install rclone automatically. Please install manually.${NC}"
-    fi
+    sudo apt-get update
+    sudo apt-get install -y rclone
 fi
 
 # Download elevation tiles
@@ -601,14 +517,9 @@ echo -e "${GREEN}NATS JetStream storage configured${NC}"
 # Configure PostgreSQL authentication
 echo -e "${BLUE}Configuring PostgreSQL authentication...${NC}"
 
-# Determine pg_hba.conf location based on OS
-if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
-    PG_HBA_CONF="/etc/postgresql/18/main/pg_hba.conf"
-    PG_CONF_DIR="/etc/postgresql/18/main"
-elif [[ "$OS" == "centos" ]] || [[ "$OS" == "rhel" ]] || [[ "$OS" == "rocky" ]] || [[ "$OS" == "almalinux" ]]; then
-    PG_HBA_CONF="/var/lib/pgsql/18/data/pg_hba.conf"
-    PG_CONF_DIR="/var/lib/pgsql/18/data"
-fi
+# Determine pg_hba.conf location
+PG_HBA_CONF="/etc/postgresql/18/main/pg_hba.conf"
+PG_CONF_DIR="/etc/postgresql/18/main"
 
 if [ ! -f "$PG_HBA_CONF" ]; then
     echo -e "${RED}Error: pg_hba.conf not found at $PG_HBA_CONF${NC}"
@@ -649,7 +560,7 @@ else
 fi
 
 # Create PostgreSQL databases and enable extensions
-echo -e "${BLUE}Creating PostgreSQL databases...${NC}"
+echo -e "${BLUE}Creating PostgreSQL database: $DB_NAME...${NC}"
 
 # Create soar database user if it doesn't exist (without password)
 sudo -u postgres psql -tc "SELECT 1 FROM pg_user WHERE usename = 'soar'" | grep -q 1 || \
@@ -658,74 +569,49 @@ sudo -u postgres psql -tc "SELECT 1 FROM pg_user WHERE usename = 'soar'" | grep 
 echo -e "${GREEN}PostgreSQL 'soar' user configured with trust authentication${NC}"
 echo
 
-# Create production database
-if sudo -u postgres psql -lqt | cut -d \| -f 1 | grep -qw soar; then
-    echo -e "${BLUE}Database 'soar' already exists${NC}"
+# Create environment-specific database
+if sudo -u postgres psql -lqt | cut -d \| -f 1 | grep -qw "$DB_NAME"; then
+    echo -e "${BLUE}Database '$DB_NAME' already exists${NC}"
 else
-    echo "Creating 'soar' database..."
-    sudo -u postgres psql -c "CREATE DATABASE soar OWNER soar;"
-    echo -e "${GREEN}Database 'soar' created${NC}"
+    echo "Creating '$DB_NAME' database..."
+    sudo -u postgres psql -c "CREATE DATABASE $DB_NAME OWNER soar;"
+    echo -e "${GREEN}Database '$DB_NAME' created${NC}"
 fi
 
-# Create staging database
-if sudo -u postgres psql -lqt | cut -d \| -f 1 | grep -qw soar_staging; then
-    echo -e "${BLUE}Database 'soar_staging' already exists${NC}"
-else
-    echo "Creating 'soar_staging' database..."
-    sudo -u postgres psql -c "CREATE DATABASE soar_staging OWNER soar;"
-    echo -e "${GREEN}Database 'soar_staging' created${NC}"
-fi
+# Enable PostGIS extension on database
+echo -e "${BLUE}Enabling PostGIS extension on '$DB_NAME' database...${NC}"
+sudo -u postgres psql -d "$DB_NAME" -c "CREATE EXTENSION IF NOT EXISTS postgis;"
+sudo -u postgres psql -d "$DB_NAME" -c "CREATE EXTENSION IF NOT EXISTS postgis_topology;"
+echo -e "${GREEN}PostGIS enabled on '$DB_NAME' database${NC}"
 
-# Enable PostGIS extension on soar database
-echo -e "${BLUE}Enabling PostGIS extension on 'soar' database...${NC}"
-sudo -u postgres psql -d soar -c "CREATE EXTENSION IF NOT EXISTS postgis;"
-sudo -u postgres psql -d soar -c "CREATE EXTENSION IF NOT EXISTS postgis_topology;"
-echo -e "${GREEN}PostGIS enabled on 'soar' database${NC}"
-
-# Enable PostGIS extension on soar_staging database
-echo -e "${BLUE}Enabling PostGIS extension on 'soar_staging' database...${NC}"
-sudo -u postgres psql -d soar_staging -c "CREATE EXTENSION IF NOT EXISTS postgis;"
-sudo -u postgres psql -d soar_staging -c "CREATE EXTENSION IF NOT EXISTS postgis_topology;"
-echo -e "${GREEN}PostGIS enabled on 'soar_staging' database${NC}"
-
-# Enable pg_partman extension on soar database
-echo -e "${BLUE}Enabling pg_partman extension on 'soar' database...${NC}"
-sudo -u postgres psql -d soar -c "CREATE SCHEMA IF NOT EXISTS partman;"
-sudo -u postgres psql -d soar -c "CREATE EXTENSION IF NOT EXISTS pg_partman SCHEMA partman;"
-echo -e "${GREEN}pg_partman enabled on 'soar' database${NC}"
-
-# Enable pg_partman extension on soar_staging database
-echo -e "${BLUE}Enabling pg_partman extension on 'soar_staging' database...${NC}"
-sudo -u postgres psql -d soar_staging -c "CREATE SCHEMA IF NOT EXISTS partman;"
-sudo -u postgres psql -d soar_staging -c "CREATE EXTENSION IF NOT EXISTS pg_partman SCHEMA partman;"
-echo -e "${GREEN}pg_partman enabled on 'soar_staging' database${NC}"
+# Enable pg_partman extension on database
+echo -e "${BLUE}Enabling pg_partman extension on '$DB_NAME' database...${NC}"
+sudo -u postgres psql -d "$DB_NAME" -c "CREATE SCHEMA IF NOT EXISTS partman;"
+sudo -u postgres psql -d "$DB_NAME" -c "CREATE EXTENSION IF NOT EXISTS pg_partman SCHEMA partman;"
+echo -e "${GREEN}pg_partman enabled on '$DB_NAME' database${NC}"
 
 echo -e "${GREEN}Database setup complete!${NC}"
 echo
 
-echo -e "${GREEN}Server provisioning complete!${NC}"
+echo -e "${GREEN}Server provisioning complete for $ENVIRONMENT environment!${NC}"
 echo
 echo -e "${YELLOW}═══════════════════════════════════════════════════════════════${NC}"
 echo -e "${YELLOW}IMPORTANT: Manual Configuration Steps Required${NC}"
 echo -e "${YELLOW}═══════════════════════════════════════════════════════════════${NC}"
 echo
 echo -e "${YELLOW}1. Configure environment variables:${NC}"
-echo "   Create/edit environment files and set:"
+echo "   Create/edit $ENV_FILE and set:"
 echo
-echo "   For production (/etc/soar/env):"
-echo "   DATABASE_URL=postgres://soar@localhost/soar"
+echo "   DATABASE_URL=postgres://soar@localhost/$DB_NAME"
 echo
-echo "   For staging (/etc/soar/env-staging):"
-echo "   DATABASE_URL=postgres://soar@localhost/soar_staging"
-echo
-echo -e "${YELLOW}2. Set up additional environment variables in /etc/soar/env (or env-staging):${NC}"
+echo -e "${YELLOW}2. Set up additional environment variables in $ENV_FILE:${NC}"
 echo "   - NATS_URL (e.g., nats://localhost:4222)"
 echo "   - APRS_CALLSIGN (for APRS-IS connection)"
 echo "   - Any other application-specific configuration"
 echo
 echo -e "${YELLOW}3. Run database migrations:${NC}"
 echo "   cd /path/to/soar"
-echo "   diesel migration run --database-url=\$DATABASE_URL"
+echo "   diesel migration run --database-url=postgres://soar@localhost/$DB_NAME"
 echo
 echo -e "${YELLOW}4. Deploy SOAR application:${NC}"
 echo "   Run the first deployment with soar-deploy to install SOAR services"
@@ -760,7 +646,7 @@ echo "  sudo journalctl -u caddy -f"
 echo
 echo -e "${YELLOW}Database verification:${NC}"
 echo "  sudo -u postgres psql -l  # List all databases"
-echo "  sudo -u postgres psql -d soar -c '\\dx'  # List extensions in soar database"
+echo "  sudo -u postgres psql -d $DB_NAME -c '\\dx'  # List extensions in database"
 echo
 echo -e "${YELLOW}Elevation Data:${NC}"
 echo "  Location: /var/soar/elevation"
@@ -801,27 +687,21 @@ echo "  Dashboards: $DASHBOARD_COUNT SOAR dashboards automatically installed in 
 echo "  Prometheus datasource: Automatically configured and ready to use"
 echo "  Configuration: /etc/grafana/grafana.ini"
 echo "  NOTE: After starting Grafana, dashboards will be immediately available"
-
-if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
-    echo
-    echo -e "${YELLOW}Caddy Web Server:${NC}"
-    echo "  Configuration: /etc/caddy/Caddyfile"
-    echo "  Configured sites:"
-    echo "    - glider.flights → http://localhost:61225 (production)"
-    echo "    - staging.glider.flights → http://localhost:61226 (staging)"
-    echo "    - grafana.glider.flights → http://localhost:3000"
-    echo "  Logs: /var/log/caddy/"
-    echo "  Verify configuration: sudo caddy validate --config /etc/caddy/Caddyfile"
-    echo
-    echo -e "${YELLOW}  IMPORTANT - DNS Configuration Required:${NC}"
-    echo "    Before Caddy can serve HTTPS, configure DNS A/AAAA records:"
-    echo "      glider.flights → <server-ip>"
-    echo "      staging.glider.flights → <server-ip>"
-    echo "      grafana.glider.flights → <server-ip>"
-    echo
-    echo "    Caddy will automatically obtain Let's Encrypt certificates once DNS is configured."
-    echo "    Test configuration: caddy run --config /etc/caddy/Caddyfile --adapter caddyfile"
-fi
+echo
+echo -e "${YELLOW}Caddy Web Server (${ENVIRONMENT^^}):${NC}"
+echo "  Configuration: /etc/caddy/Caddyfile (deployed from $CADDYFILE_SOURCE)"
+echo "  Configured for: $DOMAIN → http://localhost:$WEB_PORT"
+echo "  Grafana: grafana.glider.flights → http://localhost:3000"
+echo "  Logs: /var/log/caddy/"
+echo "  Verify configuration: sudo caddy validate --config /etc/caddy/Caddyfile"
+echo
+echo -e "${YELLOW}  IMPORTANT - DNS Configuration Required:${NC}"
+echo "    Before Caddy can serve HTTPS, configure DNS A/AAAA records:"
+echo "      $DOMAIN → <server-ip>"
+echo "      grafana.glider.flights → <server-ip>"
+echo
+echo "    Caddy will automatically obtain Let's Encrypt certificates once DNS is configured."
+echo "    Test configuration: caddy run --config /etc/caddy/Caddyfile --adapter caddyfile"
 echo
 echo -e "${YELLOW}Photon Geocoding Server:${NC}"
 echo "  API endpoint: http://localhost:2322"

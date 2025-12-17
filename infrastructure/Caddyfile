@@ -1,3 +1,7 @@
+# DEPRECATED: This file contains both production and staging configurations.
+# Use Caddyfile.production or Caddyfile.staging instead.
+# The provision script will deploy the appropriate file based on the environment.
+#
 # Caddy configuration for glider.flights
 # This file should be imported by the main Caddyfile on the server.
 #
