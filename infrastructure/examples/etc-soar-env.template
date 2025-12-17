@@ -19,6 +19,12 @@ SOAR_ENV=production
 # Optional: Google Maps API key for geocoding
 #GOOGLE_MAPS_API_KEY=your_google_maps_api_key_here
 
+# Photon geocoding service base URL
+# Production: https://photon.glider.flights
+# Staging: https://photon.glider.flights (shared service)
+# Development: http://localhost:2322
+PHOTON_BASE_URL=https://photon.glider.flights
+
 # Optional: Email configuration for notifications
 #SMTP_HOST=smtp.gmail.com
 #SMTP_PORT=587

@@ -17,3 +17,11 @@ grafana.glider.flights {
 		output file /var/log/caddy/grafana.glider.flights.log
 	}
 }
+
+# Photon geocoding service
+photon.glider.flights {
+	reverse_proxy localhost:2322
+	log {
+		output file /var/log/caddy/photon.glider.flights.log
+	}
+}

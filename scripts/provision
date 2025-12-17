@@ -684,6 +684,11 @@ echo
 echo -e "${YELLOW}2. Set up additional environment variables in $ENV_FILE:${NC}"
 echo "   - NATS_URL (e.g., nats://localhost:4222)"
 echo "   - APRS_CALLSIGN (for APRS-IS connection)"
+if [[ "$ENVIRONMENT" == "production" ]]; then
+    echo "   - PHOTON_BASE_URL=https://photon.glider.flights"
+else
+    echo "   - PHOTON_BASE_URL=https://photon.glider.flights (or http://localhost:2322 for dev)"
+fi
 echo "   - Any other application-specific configuration"
 echo
 echo -e "${YELLOW}3. Run database migrations:${NC}"
@@ -783,12 +788,18 @@ echo -e "${YELLOW}  IMPORTANT - DNS Configuration Required:${NC}"
 echo "    Before Caddy can serve HTTPS, configure DNS A/AAAA records:"
 echo "      $DOMAIN → <server-ip>"
 echo "      grafana.glider.flights → <server-ip>"
+if [[ "$ENVIRONMENT" == "production" ]]; then
+    echo "      photon.glider.flights → <server-ip>"
+fi
 echo
 echo "    Caddy will automatically obtain Let's Encrypt certificates once DNS is configured."
 echo "    Test configuration: caddy run --config /etc/caddy/Caddyfile --adapter caddyfile"
 echo
 echo -e "${YELLOW}Photon Geocoding Server:${NC}"
-echo "  API endpoint: http://localhost:2322"
+echo "  Local API endpoint: http://localhost:2322"
+if [[ "$ENVIRONMENT" == "production" ]]; then
+    echo "  Public API endpoint: https://photon.glider.flights"
+fi
 echo "  OpenSearch API: http://localhost:9201"
 echo "  Application directory: /opt/photon"
 echo "  Data directory: /var/lib/photon"
