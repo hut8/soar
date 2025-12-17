@@ -221,7 +221,7 @@
 				body: JSON.stringify({ club_id: selectedClubId || null })
 			});
 
-			toaster.success({ title: 'Device club assignment updated successfully' });
+			toaster.success({ title: 'Aircraft club assignment updated successfully' });
 
 			// Reload aircraft to get updated data
 			await loadAircraft();
@@ -236,7 +236,7 @@
 </script>
 
 <svelte:head>
-	<title>{aircraft?.registration || 'Device'} - Device Details</title>
+	<title>{aircraft?.registration || 'Aircraft'} - Aircraft Details</title>
 </svelte:head>
 
 <div class="container mx-auto max-w-6xl space-y-6 p-4">
@@ -244,7 +244,7 @@
 	<div class="flex items-center gap-4">
 		<button class="btn preset-tonal btn-sm" onclick={goBack}>
 			<ArrowLeft class="mr-2 h-4 w-4" />
-			Back to Devices
+			Back to Aircraft
 		</button>
 	</div>
 
@@ -262,7 +262,7 @@
 	{#if error}
 		<div class="alert preset-filled-error-500">
 			<div class="alert-message">
-				<h3 class="h3">Error Loading Device</h3>
+				<h3 class="h3">Error Loading Aircraft</h3>
 				<p>{error}</p>
 				<div class="alert-actions">
 					<button class="btn preset-filled" onclick={loadAircraft}> Try Again </button>
@@ -271,7 +271,7 @@
 		</div>
 	{/if}
 
-	<!-- Device Details -->
+	<!-- Aircraft Details -->
 	{#if !loading && !error && aircraft}
 		<div class="space-y-6">
 			<!-- Header Card -->
@@ -367,7 +367,7 @@
 						<div class="space-y-4">
 							<div>
 								<label for="club-select" class="text-surface-600-300-token mb-2 block text-sm">
-									Assign Device to Club
+									Assign Aircraft to Club
 								</label>
 								<select
 									id="club-select"

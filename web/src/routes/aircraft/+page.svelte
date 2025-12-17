@@ -542,7 +542,7 @@
 					{#if !searchQuery && searchType !== 'club'}
 						<div class="flex items-center gap-2">
 							<Activity class="h-6 w-6" />
-							Recently Active Devices
+							Recently Active Aircraft
 						</div>
 					{:else}
 						Search Results
@@ -602,7 +602,7 @@
 			<div class="space-y-2">
 				<h3 class="h3">No aircraft found</h3>
 				<p class="text-surface-500-400-token">
-					Try adjusting your search criteria or search for a different device.
+					Try adjusting your search criteria or search for a different aircraft.
 				</p>
 			</div>
 		</div>
