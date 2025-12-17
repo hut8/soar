@@ -1,0 +1,19 @@
+# Caddy configuration for glider.flights (STAGING)
+# This file is deployed to /etc/soar/caddy/soar-staging.conf by the provision script.
+# It is imported by the main /etc/caddy/Caddyfile via: import /etc/soar/caddy/*
+
+# Staging SOAR application
+staging.glider.flights {
+	reverse_proxy localhost:61226
+	log {
+		output file /var/log/caddy/staging.glider.flights.log
+	}
+}
+
+# Grafana monitoring dashboard
+grafana.glider.flights {
+	reverse_proxy localhost:3000
+	log {
+		output file /var/log/caddy/grafana.glider.flights.log
+	}
+}

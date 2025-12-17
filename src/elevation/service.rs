@@ -40,11 +40,11 @@ type CacheKey = (i32, i32);
 pub struct ElevationService {
     storage_path: PathBuf,
     /// Concurrent cache for elevation results: (rounded_lat, rounded_lon) -> elevation_meters
-    /// 500,000 entries ≈ 28MB of memory, provides excellent hit rate for multi-aircraft operations
+    /// 250,000 entries ≈ 14MB of memory, provides excellent hit rate for multi-aircraft operations
     /// Uses moka for lock-free concurrent access across multiple workers
     elevation_cache: Cache<CacheKey, Option<i16>>,
     /// Concurrent cache for HGT tiles: (lat_floor, lon_floor) -> HGT
-    /// 1000 entries ≈ 25GB for 1-arcsec tiles (25MB each), less for 3-arcsec
+    /// 500 entries ≈ 12.5GB for 1-arcsec tiles (25MB each), less for 3-arcsec
     /// Uses moka for lock-free concurrent access across multiple workers
     tile_cache: Cache<(i32, i32), Arc<HGT>>,
 }
@@ -66,8 +66,8 @@ impl ElevationService {
 
         Ok(Self {
             storage_path,
-            elevation_cache: Cache::builder().max_capacity(500_000).build(),
-            tile_cache: Cache::builder().max_capacity(1000).build(),
+            elevation_cache: Cache::builder().max_capacity(250_000).build(),
+            tile_cache: Cache::builder().max_capacity(500).build(),
         })
     }
 
@@ -82,8 +82,8 @@ impl ElevationService {
 
         Ok(Self {
             storage_path,
-            elevation_cache: Cache::builder().max_capacity(500_000).build(),
-            tile_cache: Cache::builder().max_capacity(1000).build(),
+            elevation_cache: Cache::builder().max_capacity(250_000).build(),
+            tile_cache: Cache::builder().max_capacity(500).build(),
         })
     }
 

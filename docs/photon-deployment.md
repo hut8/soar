@@ -20,7 +20,7 @@ Photon is a fast, scalable geocoding server built on OpenSearch/Elasticsearch. I
 
 ### Performance Considerations
 - More RAM = better performance under load
-- Consider increasing Java heap size for large datasets: `-Xmx16G` or higher
+- Consider increasing Java heap size for large datasets: `-Xmx12G` or higher
 - SSD storage recommended for data directory
 
 ## Installation Steps
@@ -130,7 +130,7 @@ WorkingDirectory=/opt/photon
 
 # Java heap size - adjust based on available RAM
 # Use 50-75% of available RAM for production
-Environment="JAVA_OPTS=-Xmx16G -Xms16G"
+Environment="JAVA_OPTS=-Xmx12G -Xms12G"
 
 # Photon command
 ExecStart=/usr/bin/java ${JAVA_OPTS} -jar /opt/photon/photon.jar \
