@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { page } from '$app/state';
 	import { Ion, Viewer, Cartesian3, Math as CesiumMath } from 'cesium';
 	import { CESIUM_ION_TOKEN } from '$lib/config';
 	import AircraftLayer from '$lib/components/cesium/AircraftLayer.svelte';
@@ -22,8 +23,8 @@
 	let selectedFlightIds = $state<string[]>([]);
 	let flightColorScheme = $state<'altitude' | 'time'>('altitude');
 
-	// Timeline playback state
-	let playbackFlightId = $state<string | null>(null);
+	// Timeline playback state - read from URL parameter if present
+	let playbackFlightId = $state<string | null>(page.url.searchParams.get('flight'));
 
 	onMount(() => {
 		// Set Cesium Ion access token
@@ -71,11 +72,47 @@
 		viewer.scene.fog.enabled = true;
 		viewer.scene.fog.density = 0.0002;
 
+		// Apply dark/light mode styles to InfoBox iframe content
+		function applyInfoBoxStyles() {
+			const infoBoxFrame = document.querySelector('.cesium-infoBox-iframe') as HTMLIFrameElement;
+			if (infoBoxFrame && infoBoxFrame.contentDocument) {
+				const isDark = document.documentElement.classList.contains('dark');
+				const frameDoc = infoBoxFrame.contentDocument;
+
+				// Inject or update style tag in iframe
+				let styleTag = frameDoc.getElementById('theme-styles') as HTMLStyleElement;
+				if (!styleTag) {
+					styleTag = frameDoc.createElement('style');
+					styleTag.id = 'theme-styles';
+					frameDoc.head.appendChild(styleTag);
+				}
+
+				styleTag.textContent = isDark
+					? 'body { background-color: rgba(30, 30, 30, 0.95) !important; color: #fff !important; }'
+					: 'body { background-color: rgba(255, 255, 255, 0.95) !important; color: #000 !important; }';
+			}
+		}
+
+		// Watch for InfoBox changes and theme changes
+		const observer = new MutationObserver(() => {
+			applyInfoBoxStyles();
+		});
+
+		// Observe InfoBox visibility changes
+		const infoBox = document.querySelector('.cesium-infoBox');
+		if (infoBox) {
+			observer.observe(infoBox, { attributes: true, childList: true, subtree: true });
+		}
+
+		// Observe theme changes on document root
+		observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+
 		// Mark viewer as ready for child components
 		viewerReady = true;
 
 		// Cleanup on component destroy
 		return () => {
+			observer.disconnect();
 			if (viewer && !viewer.isDestroyed()) {
 				viewer.destroy();
 			}
@@ -153,29 +190,32 @@
 		right: auto;
 	}
 
-	/* InfoBox dark mode styling */
+	/* InfoBox light mode styling */
 	:global(.cesium-infoBox) {
-		background: rgba(255, 255, 255, 0.95);
-		color: #000;
-	}
-
-	:global(.dark .cesium-infoBox) {
-		background: rgba(30, 30, 30, 0.95);
-		color: #fff;
+		background-color: rgba(255, 255, 255, 0.95);
 	}
 
 	:global(.cesium-infoBox-title) {
-		background: rgba(0, 0, 0, 0.1);
-		color: inherit;
+		background-color: rgba(0, 0, 0, 0.1);
 	}
 
-	:global(.dark .cesium-infoBox-title) {
-		background: rgba(255, 255, 255, 0.1);
-		color: inherit;
+	:global(.cesium-infoBox),
+	:global(.cesium-infoBox *) {
+		color: #000;
 	}
 
-	:global(.cesium-infoBox-description) {
-		color: inherit;
+	/* InfoBox dark mode styling */
+	:global(html.dark .cesium-infoBox) {
+		background-color: rgba(30, 30, 30, 0.95);
+	}
+
+	:global(html.dark .cesium-infoBox-title) {
+		background-color: rgba(255, 255, 255, 0.1);
+	}
+
+	:global(html.dark .cesium-infoBox),
+	:global(html.dark .cesium-infoBox *) {
+		color: #fff;
 	}
 
 	/* Adjust mobile positioning */

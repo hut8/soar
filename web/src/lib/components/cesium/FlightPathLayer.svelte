@@ -23,7 +23,6 @@
 	// State
 	let flightEntities = $state<Map<string, Entity[]>>(new Map()); // Map of flight ID -> [path entity, takeoff marker, landing marker]
 	let flightData = $state<Map<string, { flight: Flight; fixes: Fix[] }>>(new Map());
-	let isLoading = $state(false);
 
 	/**
 	 * Load flight path data from API
@@ -193,25 +192,3 @@
 </script>
 
 <!-- No visual output - this component manages entities in the Cesium viewer -->
-
-{#if isLoading}
-	<div class="loading-indicator">
-		<span>Loading flight paths...</span>
-	</div>
-{/if}
-
-<style>
-	.loading-indicator {
-		position: fixed;
-		top: 50px;
-		left: 50%;
-		transform: translateX(-50%);
-		background: rgba(0, 0, 0, 0.7);
-		color: white;
-		padding: 8px 16px;
-		border-radius: 4px;
-		font-size: 14px;
-		z-index: 1000;
-		pointer-events: none;
-	}
-</style>

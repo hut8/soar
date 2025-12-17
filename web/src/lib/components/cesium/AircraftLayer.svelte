@@ -82,7 +82,7 @@
 		lastBounds = bounds;
 
 		try {
-			// Fetch aircraft in bounding box (last 24 hours, with up to 10 recent fixes each)
+			// Fetch aircraft in bounding box (last hour, with up to 10 recent fixes each)
 			// API returns array directly, not wrapped in object
 			const aircraftList = await serverCall<Aircraft[]>('/aircraft', {
 				params: {
@@ -90,7 +90,7 @@
 					latitude_max: bounds.latMax,
 					longitude_min: bounds.lonMin,
 					longitude_max: bounds.lonMax,
-					after: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString() // 24 hours ago
+					after: new Date(Date.now() - 60 * 60 * 1000).toISOString() // 1 hour ago
 				}
 			});
 
