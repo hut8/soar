@@ -9,7 +9,7 @@
 	import { auth } from '$lib/stores/auth';
 	import { theme } from '$lib/stores/theme';
 	import { backendMode } from '$lib/stores/backend';
-	import { websocketStatus, debugStatus } from '$lib/stores/watchlist';
+	import { websocketStatus, debugStatus } from '$lib/stores/websocket-status';
 	import { onMount, onDestroy } from 'svelte';
 	import { startTracking, stopTracking } from '$lib/services/locationTracker';
 	import { dev } from '$app/environment';

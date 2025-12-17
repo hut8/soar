@@ -14,7 +14,7 @@
 	import { FixFeed } from '$lib/services/FixFeed';
 	import type { Aircraft, Receiver, Airspace, AirspaceFeatureCollection } from '$lib/types';
 	import { toaster } from '$lib/toaster';
-	import { debugStatus } from '$lib/stores/watchlist';
+	import { debugStatus } from '$lib/stores/websocket-status';
 	import { browser } from '$app/environment';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';

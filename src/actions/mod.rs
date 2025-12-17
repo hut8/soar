@@ -14,6 +14,7 @@ pub mod user_fixes;
 pub mod user_settings;
 pub mod users;
 pub mod views;
+pub mod watchlist;
 
 pub use aircraft::*;
 pub use airports::*;
@@ -30,6 +31,7 @@ pub use receivers::*;
 pub use user_fixes::*;
 pub use user_settings::*;
 pub use users::*;
+pub use watchlist::*;
 
 use axum::{
     http::StatusCode,
