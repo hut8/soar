@@ -67,6 +67,8 @@ pub mod user_fixes;
 pub mod user_fixes_repo;
 pub mod users;
 pub mod users_repo;
+pub mod watchlist;
+pub mod watchlist_repo;
 pub mod web;
 
 pub use aprs_client::{AprsClient, AprsClientConfig, AprsClientConfigBuilder};

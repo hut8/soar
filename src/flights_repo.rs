@@ -707,14 +707,20 @@ impl FlightsRepository {
         let rows_affected = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
 
-            let rows = diesel::update(flights.filter(id.eq(flight_id)))
-                .set((
-                    timed_out_at.eq(Some(timeout_time)),
-                    timeout_phase.eq(Some(phase)),
-                    end_location_id.eq(end_location),
-                    updated_at.eq(Utc::now()),
-                ))
-                .execute(&mut conn)?;
+            // Only timeout flights that haven't already landed
+            // This prevents violating the check_timed_out_or_landed constraint
+            let rows = diesel::update(
+                flights
+                    .filter(id.eq(flight_id))
+                    .filter(landing_time.is_null()),
+            )
+            .set((
+                timed_out_at.eq(Some(timeout_time)),
+                timeout_phase.eq(Some(phase)),
+                end_location_id.eq(end_location),
+                updated_at.eq(Utc::now()),
+            ))
+            .execute(&mut conn)?;
 
             Ok::<usize, anyhow::Error>(rows)
         })

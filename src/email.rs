@@ -171,4 +171,65 @@ The SOAR Team"#,
         let response = self.mailer.send(email).await?;
         Ok(response)
     }
+
+    /// Send flight completion notification with KML attachment
+    pub async fn send_flight_completion_email(
+        &self,
+        to_email: &str,
+        to_name: &str,
+        flight_id: uuid::Uuid,
+        device_address: &str,
+        kml_content: String,
+        kml_filename: &str,
+    ) -> Result<Response> {
+        let base_url =
+            std::env::var("BASE_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
+
+        let flight_url = format!("{}/flights/{}", base_url, flight_id);
+        let watchlist_url = format!("{}/watchlist", base_url);
+
+        let subject = format!(
+            "{}Flight Completed - {}",
+            get_staging_prefix(),
+            device_address
+        );
+        let body = format!(
+            r#"Hello {},
+
+An aircraft on your watchlist has completed a flight!
+
+Device: {}
+Flight Details: {}
+
+A KML file of the flight track is attached. You can open it in Google Earth or other mapping applications.
+
+Manage your watchlist and email preferences:
+{}
+
+Best regards,
+The SOAR Team"#,
+            to_name, device_address, flight_url, watchlist_url
+        );
+
+        // Create KML attachment
+        use lettre::message::{Attachment, MultiPart, SinglePart};
+
+        let kml_part = Attachment::new(kml_filename.to_string()).body(
+            kml_content,
+            ContentType::parse("application/vnd.google-earth.kml+xml")?,
+        );
+
+        let email = Message::builder()
+            .from(format!("{} <{}>", self.from_name, self.from_email).parse()?)
+            .to(format!("{} <{}>", to_name, to_email).parse()?)
+            .subject(subject)
+            .multipart(
+                MultiPart::mixed()
+                    .singlepart(SinglePart::plain(body))
+                    .singlepart(kml_part),
+            )?;
+
+        let response = self.mailer.send(email).await?;
+        Ok(response)
+    }
 }

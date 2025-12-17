@@ -267,9 +267,15 @@ export interface Flight {
 }
 
 export interface WatchlistEntry {
-	id: string;
-	aircraftId: string; // Only store aircraft ID, not full aircraft object
-	active: boolean;
+	user_id: string;
+	aircraft_id: string;
+	send_email: boolean;
+	created_at: string;
+	updated_at: string;
+}
+
+export interface WatchlistEntryWithAircraft extends WatchlistEntry {
+	aircraft?: Aircraft;
 }
 
 export interface Pilot {

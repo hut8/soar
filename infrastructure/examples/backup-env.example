@@ -21,27 +21,38 @@
 #   - Format: KEY=value (no 'export', no quotes unless needed)
 
 #------------------------------------------------------------------------------
-# SSH BACKUP STORAGE CONFIGURATION
+# WASABI S3 BACKUP STORAGE CONFIGURATION (via rclone)
 #------------------------------------------------------------------------------
 
-# SSH server hostname or IP address (REQUIRED)
-BACKUP_SSH_HOST=cryptobot
+# Rclone remote name (REQUIRED)
+# This should match a configured remote in your rclone config (~/.config/rclone/rclone.conf)
+# Default: wasabi
+BACKUP_RCLONE_REMOTE=wasabi
 
-# SSH user (default: root)
-BACKUP_SSH_USER=root
+# S3 bucket name (REQUIRED)
+# The Wasabi bucket where backups will be stored
+BACKUP_RCLONE_BUCKET=soar-backup-prod
 
-# Remote path on SSH server where backups will be stored
-BACKUP_SSH_PATH=/srv/soar-backups
+# Optional prefix path within the bucket
+# Leave empty to store backups at the root of the bucket
+# Example: BACKUP_RCLONE_PATH=production/database
+BACKUP_RCLONE_PATH=
 
-# Path to SSH private key for authentication
-# Default: /var/soar/keys/backup_key
-BACKUP_SSH_KEY=/var/soar/keys/backup_key
-
-# Note: The SSH public key must be added to the authorized_keys file
-# on the remote server:
-#   ssh-copy-id -i /var/soar/keys/backup_key.pub root@cryptobot
-# Or manually add the contents of /var/soar/keys/backup_key.pub to
-# ~/.ssh/authorized_keys on the remote server
+# Note: You must configure rclone with your Wasabi credentials first:
+#   rclone config
+#
+# Example rclone configuration for Wasabi:
+#   [wasabi]
+#   type = s3
+#   provider = Wasabi
+#   access_key_id = YOUR_ACCESS_KEY
+#   secret_access_key = YOUR_SECRET_KEY
+#   endpoint = s3.wasabisys.com
+#   acl = private
+#
+# The bucket must exist before running backups. The structure will be:
+#   s3://soar-backup-prod/base/YYYY-MM-DD/  (base backups)
+#   s3://soar-backup-prod/wal/              (WAL segments)
 
 #------------------------------------------------------------------------------
 # BACKUP RETENTION CONFIGURATION
@@ -78,8 +89,8 @@ PGUSER=postgres
 
 # PostgreSQL data directory and version (for restore operations)
 # Adjust based on your PostgreSQL installation
-PGDATA=/var/lib/postgresql/17/main
-PG_VERSION=17
+PGDATA=/var/lib/postgresql/18/main
+PG_VERSION=18
 
 #------------------------------------------------------------------------------
 # BACKUP PATHS
@@ -194,9 +205,9 @@ METRICS_PUSHGATEWAY=
 
 # After editing this file, verify the configuration:
 #
-# 1. Test SSH access to backup server:
+# 1. Test rclone access to Wasabi:
 #    source /etc/soar/backup-env
-#    ssh -i ${BACKUP_SSH_KEY} ${BACKUP_SSH_USER}@${BACKUP_SSH_HOST} "ls -la ${BACKUP_SSH_PATH}"
+#    rclone lsd ${BACKUP_RCLONE_REMOTE}:${BACKUP_RCLONE_BUCKET}
 #
 # 2. Test WAL archiving (as postgres user):
 #    sudo -u postgres /usr/local/bin/soar-wal-archive \
@@ -207,6 +218,7 @@ METRICS_PUSHGATEWAY=
 #    sudo systemctl start soar-backup-base.service
 #    sudo journalctl -u soar-backup-base.service -f
 #
-# 4. Verify backup on remote server:
-#    ssh -i ${BACKUP_SSH_KEY} ${BACKUP_SSH_USER}@${BACKUP_SSH_HOST} \
-#      "find ${BACKUP_SSH_PATH}/base -type d"
+# 4. Verify backup in Wasabi S3:
+#    source /etc/soar/backup-env
+#    rclone lsd ${BACKUP_RCLONE_REMOTE}:${BACKUP_RCLONE_BUCKET}/base
+#    rclone ls ${BACKUP_RCLONE_REMOTE}:${BACKUP_RCLONE_BUCKET}/wal | head

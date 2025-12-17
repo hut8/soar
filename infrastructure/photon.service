@@ -1,0 +1,52 @@
+[Unit]
+Description=Photon OpenSearch Geocoding Server
+Documentation=https://github.com/komoot/photon
+After=network.target
+
+[Service]
+Type=simple
+User=photon
+Group=photon
+
+# Working directory
+WorkingDirectory=/opt/photon
+
+# Java heap size - adjust based on available RAM
+# Recommended: Use 50-75% of available RAM for production
+# Requires Java 21+ for Photon OpenSearch 0.7.4
+# Examples:
+#   16GB RAM: -Xmx12G -Xms12G
+#   32GB RAM: -Xmx24G -Xms24G
+#   64GB RAM: -Xmx48G -Xms48G
+Environment="JAVA_OPTS=-Xmx16G -Xms16G"
+
+# Photon command with common options
+# Adjust parameters as needed for your deployment
+ExecStart=/usr/bin/java ${JAVA_OPTS} -jar /opt/photon/photon.jar \
+    -data-dir /var/lib/photon \
+    -listen-ip 127.0.0.1 \
+    -listen-port 2322 \
+    -cors-any
+
+# Logging to journald (systemd's logging system)
+# View logs with: journalctl -u photon -f
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=photon
+
+# Restart policy
+Restart=on-failure
+RestartSec=10s
+
+# Resource limits
+LimitNOFILE=65535
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/photon
+
+[Install]
+WantedBy=multi-user.target

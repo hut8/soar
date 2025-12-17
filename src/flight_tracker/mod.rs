@@ -142,10 +142,12 @@ pub(crate) struct FlightProcessorContext<'a> {
     pub active_flights: &'a ActiveFlightsMap,
     pub aircraft_locks: &'a AircraftLocksMap,
     pub aircraft_trackers: &'a AircraftTrackersMap,
+    pub pool: diesel::r2d2::Pool<diesel::r2d2::ConnectionManager<diesel::PgConnection>>,
 }
 
 /// Simple flight tracker - just tracks which device is currently on which flight
 pub struct FlightTracker {
+    pool: Pool<ConnectionManager<PgConnection>>,
     flights_repo: FlightsRepository,
     device_repo: AircraftRepository,
     airports_repo: AirportsRepository,
@@ -164,6 +166,7 @@ pub struct FlightTracker {
 impl Clone for FlightTracker {
     fn clone(&self) -> Self {
         Self {
+            pool: self.pool.clone(),
             flights_repo: self.flights_repo.clone(),
             device_repo: self.device_repo.clone(),
             airports_repo: self.airports_repo.clone(),
@@ -182,6 +185,7 @@ impl FlightTracker {
     pub fn new(pool: &Pool<ConnectionManager<PgConnection>>) -> Self {
         let elevation_db = ElevationDB::new().expect("Failed to initialize ElevationDB");
         Self {
+            pool: pool.clone(),
             flights_repo: FlightsRepository::new(pool.clone()),
             device_repo: AircraftRepository::new(pool.clone()),
             airports_repo: AirportsRepository::new(pool.clone()),
@@ -209,6 +213,7 @@ impl FlightTracker {
             active_flights: &self.active_flights,
             aircraft_locks: &self.device_locks,
             aircraft_trackers: &self.aircraft_trackers,
+            pool: self.pool.clone(),
         }
     }
 
@@ -412,6 +417,7 @@ impl FlightTracker {
                 active_flights: &self.active_flights,
                 aircraft_locks: &self.device_locks,
                 aircraft_trackers: &self.aircraft_trackers,
+                pool: self.pool.clone(),
             };
 
             if let Err(e) =

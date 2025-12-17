@@ -522,6 +522,143 @@ pub(crate) async fn complete_flight(
         flight_id, fix.latitude, fix.longitude
     );
 
+    // Send email notifications to users watching this aircraft
+    let pool_clone = ctx.pool.clone();
+    let device_id_opt = device.id;
+    let device_address = device.address;
+
+    tokio::spawn(async move {
+        use crate::aircraft_repo::AircraftRepository;
+        use crate::fixes_repo::FixesRepository;
+        use crate::flights_repo::FlightsRepository;
+        use crate::users_repo::UsersRepository;
+        use crate::watchlist_repo::WatchlistRepository;
+
+        // Get device_id, return early if not available
+        let device_id = match device_id_opt {
+            Some(id) => id,
+            None => {
+                tracing::warn!("Aircraft has no ID, cannot send email notifications");
+                return;
+            }
+        };
+
+        // Get users who want email notifications for this aircraft
+        let watchlist_repo = WatchlistRepository::new(pool_clone.clone());
+        match watchlist_repo.get_users_for_aircraft_email(device_id).await {
+            Ok(user_ids) if !user_ids.is_empty() => {
+                tracing::info!(
+                    "Sending flight completion emails to {} users for aircraft {}",
+                    user_ids.len(),
+                    device_address
+                );
+
+                // Get flight data for KML generation
+                let fixes_repo = FixesRepository::new(pool_clone.clone());
+                let flight_repo = FlightsRepository::new(pool_clone.clone());
+                let aircraft_repo = AircraftRepository::new(pool_clone.clone());
+                let users_repo = UsersRepository::new(pool_clone.clone());
+
+                // Get full aircraft info
+                let aircraft = match aircraft_repo.get_aircraft_by_address(device_address).await {
+                    Ok(Some(d)) => d,
+                    _ => {
+                        tracing::error!("Failed to get aircraft for KML generation");
+                        metrics::counter!("watchlist.emails.failed").increment(1);
+                        return;
+                    }
+                };
+
+                // Get flight for KML generation
+                let flight = match flight_repo.get_flight_by_id(flight_id).await {
+                    Ok(Some(f)) => f,
+                    _ => {
+                        tracing::error!("Failed to get flight for KML generation");
+                        metrics::counter!("watchlist.emails.failed").increment(1);
+                        return;
+                    }
+                };
+
+                // Generate KML
+                let kml_content = match flight.make_kml(&fixes_repo, Some(&aircraft)).await {
+                    Ok(kml) => kml,
+                    Err(e) => {
+                        tracing::error!("Failed to generate KML: {}", e);
+                        metrics::counter!("watchlist.emails.failed").increment(1);
+                        return;
+                    }
+                };
+
+                // Generate KML filename
+                let takeoff_time_str = flight
+                    .takeoff_time
+                    .map(|t| t.format("%Y%m%d-%H%M%S").to_string())
+                    .unwrap_or_else(|| "unknown".to_string());
+                let kml_filename = format!("flight-{}-{}.kml", takeoff_time_str, device_address);
+
+                // Send emails
+                let email_service = match crate::email::EmailService::new() {
+                    Ok(svc) => svc,
+                    Err(e) => {
+                        tracing::error!("Failed to create email service: {}", e);
+                        metrics::counter!("watchlist.emails.failed").increment(1);
+                        return;
+                    }
+                };
+
+                for user_id in user_ids {
+                    match users_repo.get_by_id(user_id).await {
+                        Ok(Some(user)) => {
+                            let to_name = format!("{} {}", user.first_name, user.last_name);
+                            match email_service
+                                .send_flight_completion_email(
+                                    &user.email,
+                                    &to_name,
+                                    flight_id,
+                                    &device_address.to_string(),
+                                    kml_content.clone(),
+                                    &kml_filename,
+                                )
+                                .await
+                            {
+                                Ok(_) => {
+                                    tracing::info!(
+                                        "Sent flight completion email to {}",
+                                        user.email
+                                    );
+                                    metrics::counter!("watchlist.emails.sent").increment(1);
+                                }
+                                Err(e) => {
+                                    tracing::error!(
+                                        "Failed to send email to {}: {}",
+                                        user.email,
+                                        e
+                                    );
+                                    metrics::counter!("watchlist.emails.failed").increment(1);
+                                }
+                            }
+                        }
+                        _ => {
+                            tracing::error!(
+                                "Failed to get user {} for email notification",
+                                user_id
+                            );
+                            metrics::counter!("watchlist.emails.failed").increment(1);
+                        }
+                    }
+                }
+            }
+            Ok(_) => {
+                // No users watching this aircraft with email enabled
+                tracing::debug!("No email watchers for aircraft {}", device_address);
+            }
+            Err(e) => {
+                tracing::error!("Failed to get watchlist users: {}", e);
+                metrics::counter!("watchlist.emails.failed").increment(1);
+            }
+        }
+    });
+
     metrics::counter!("flight_tracker.flight_ended.landed").increment(1);
 
     Ok(true) // Return true to indicate flight was completed normally

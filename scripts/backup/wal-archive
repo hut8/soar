@@ -1,10 +1,10 @@
 #!/bin/bash
 #
-# wal-archive - Archive PostgreSQL WAL segments to remote SSH server
+# wal-archive - Archive PostgreSQL WAL segments to Wasabi S3
 #
 # This script is called by PostgreSQL via archive_command for each completed
-# WAL segment (typically 16MB files). It uploads the WAL file to a remote
-# SSH server using rsync and verifies the upload succeeded.
+# WAL segment (typically 16MB files). It uploads the WAL file to Wasabi S3
+# using rclone and verifies the upload succeeded.
 #
 # Usage (called by PostgreSQL):
 #   wal-archive <wal_path> <wal_filename>
@@ -19,7 +19,7 @@
 #
 # Configuration:
 #   Source configuration from /etc/soar/backup-env
-#   SSH key at /var/soar/keys/backup_key (default)
+#   Requires rclone configured with Wasabi remote
 #
 # Example archive_command in postgresql.conf:
 #   archive_command = '/usr/local/bin/soar-wal-archive %p %f'
@@ -34,11 +34,10 @@ fi
 
 source /etc/soar/backup-env
 
-# SSH configuration
-SSH_KEY="${BACKUP_SSH_KEY:-/var/soar/keys/backup_key}"
-SSH_HOST="${BACKUP_SSH_HOST:-cryptobot}"
-SSH_PATH="${BACKUP_SSH_PATH:-/srv/soar-backups}"
-SSH_USER="${BACKUP_SSH_USER:-root}"
+# Rclone configuration
+RCLONE_REMOTE="${BACKUP_RCLONE_REMOTE:-wasabi}"
+RCLONE_BUCKET="${BACKUP_RCLONE_BUCKET:-soar-backup-prod}"
+RCLONE_PATH="${BACKUP_RCLONE_PATH:-}"  # Optional prefix within bucket
 
 # Arguments
 WAL_PATH="$1"
@@ -51,13 +50,26 @@ if [[ ! -f "$WAL_PATH" ]]; then
 fi
 
 # Validate configuration
-if [[ -z "${BACKUP_SSH_HOST:-}" ]]; then
-    echo "ERROR: BACKUP_SSH_HOST not set in /etc/soar/backup-env" >&2
+if [[ -z "${BACKUP_RCLONE_REMOTE:-}" ]]; then
+    echo "ERROR: BACKUP_RCLONE_REMOTE not set in /etc/soar/backup-env" >&2
     exit 1
 fi
 
-if [[ ! -f "$SSH_KEY" ]]; then
-    echo "ERROR: SSH key not found: $SSH_KEY" >&2
+if [[ -z "${BACKUP_RCLONE_BUCKET:-}" ]]; then
+    echo "ERROR: BACKUP_RCLONE_BUCKET not set in /etc/soar/backup-env" >&2
+    exit 1
+fi
+
+# Check rclone is available
+if ! command -v rclone >/dev/null 2>&1; then
+    echo "ERROR: rclone not found in PATH" >&2
+    exit 1
+fi
+
+# Verify rclone remote is configured
+if ! rclone listremotes | grep -q "^${RCLONE_REMOTE}:$"; then
+    echo "ERROR: rclone remote '${RCLONE_REMOTE}' not configured" >&2
+    echo "Run: rclone config" >&2
     exit 1
 fi
 
@@ -70,24 +82,23 @@ log() {
     echo "[$(date -u +"%Y-%m-%d %H:%M:%S UTC")] WAL Archive: $*" >> "$LOG_DIR/backup.log"
 }
 
-# Destination on remote server
-REMOTE_DEST="${SSH_USER}@${SSH_HOST}:${SSH_PATH}/wal/"
+# Construct rclone destination path
+if [[ -n "$RCLONE_PATH" ]]; then
+    REMOTE_DEST="${RCLONE_REMOTE}:${RCLONE_BUCKET}/${RCLONE_PATH}/wal/"
+else
+    REMOTE_DEST="${RCLONE_REMOTE}:${RCLONE_BUCKET}/wal/"
+fi
 
-# SSH options for rsync
-SSH_OPTS="-i $SSH_KEY -o StrictHostKeyChecking=accept-new -o BatchMode=yes"
-
-# Upload WAL file to remote server using rsync over SSH
+# Upload WAL file to Wasabi S3 using rclone
 log "Archiving WAL segment: $WAL_FILE ($(du -h "$WAL_PATH" | cut -f1))"
 
-if rsync -az \
-    -e "ssh $SSH_OPTS" \
+if rclone copyto \
     "$WAL_PATH" \
     "${REMOTE_DEST}${WAL_FILE}" \
     >> "$LOG_DIR/backup.log" 2>&1; then
 
-    # Verify upload by checking if file exists on remote server
-    if ssh $SSH_OPTS "${SSH_USER}@${SSH_HOST}" \
-        "test -f ${SSH_PATH}/wal/${WAL_FILE}" \
+    # Verify upload by checking if file exists in Wasabi S3
+    if rclone ls "${REMOTE_DEST}${WAL_FILE}" \
         >> "$LOG_DIR/backup.log" 2>&1; then
         log "Successfully archived WAL segment: $WAL_FILE"
         exit 0
