@@ -492,6 +492,13 @@ pub(crate) async fn complete_flight(
                     Ok(svc) => svc,
                     Err(e) => {
                         tracing::error!("Failed to create email service: {}", e);
+                        sentry::capture_message(
+                            &format!(
+                                "Failed to create email service for flight completion notifications: {}",
+                                e
+                            ),
+                            sentry::Level::Error,
+                        );
                         metrics::counter!("watchlist.emails.failed").increment(1);
                         return;
                     }
@@ -525,6 +532,13 @@ pub(crate) async fn complete_flight(
                                         user.email,
                                         e
                                     );
+                                    sentry::capture_message(
+                                        &format!(
+                                            "Failed to send flight completion email to {}: {}",
+                                            user.email, e
+                                        ),
+                                        sentry::Level::Error,
+                                    );
                                     metrics::counter!("watchlist.emails.failed").increment(1);
                                 }
                             }
@@ -545,6 +559,13 @@ pub(crate) async fn complete_flight(
             }
             Err(e) => {
                 tracing::error!("Failed to get watchlist users: {}", e);
+                sentry::capture_message(
+                    &format!(
+                        "Failed to get watchlist users for flight completion notifications: {}",
+                        e
+                    ),
+                    sentry::Level::Error,
+                );
                 metrics::counter!("watchlist.emails.failed").increment(1);
             }
         }
