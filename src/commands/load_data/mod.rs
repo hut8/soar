@@ -18,7 +18,7 @@ use soar::airports_repo::AirportsRepository;
 use soar::email_reporter::{
     DataLoadReport, EmailConfig, EntityMetrics, send_email_report, send_failure_email,
 };
-use soar::geocoding::geocode_components;
+use soar::geocoding::{GeocodingService, geocode_components};
 use soar::locations::Point;
 use soar::locations_repo::LocationsRepository;
 
@@ -217,6 +217,21 @@ pub async fn handle_load_data(
 
     // Geocoding (if requested)
     if geocode {
+        // Geocode aircraft registration addresses
+        if let Some(metrics) = geocode_aircraft_registration_locations(diesel_pool.clone()).await {
+            record_stage_metrics(&metrics, "geocoding_aircraft_registrations");
+            if !metrics.success
+                && let Some(ref config) = email_config
+            {
+                let _ = send_failure_email(
+                    config,
+                    &metrics.name,
+                    metrics.error_message.as_deref().unwrap_or("Unknown error"),
+                );
+            }
+            report.add_entity(metrics);
+        }
+
         // Geocode soaring clubs
         if let Some(metrics) = geocode_soaring_clubs(diesel_pool.clone()).await {
             record_stage_metrics(&metrics, "geocoding_clubs");
@@ -349,6 +364,191 @@ pub async fn handle_load_data(
     Ok(())
 }
 
+async fn geocode_aircraft_registration_locations(
+    diesel_pool: Pool<ConnectionManager<PgConnection>>,
+) -> Option<soar::email_reporter::EntityMetrics> {
+    use diesel::prelude::*;
+    use soar::email_reporter::EntityMetrics;
+    use tracing::error;
+
+    const BATCH_SIZE: usize = 1000;
+    const MAX_TOTAL_GEOCODE: usize = 10_000;
+    const MAX_GOOGLE_MAPS: usize = 100;
+
+    let start = Instant::now();
+    let mut metrics = EntityMetrics::new("Geocoding Aircraft Registration Addresses");
+
+    info!(
+        "Geocoding aircraft registration location addresses (max {}, Google Maps limit: {})...",
+        MAX_TOTAL_GEOCODE, MAX_GOOGLE_MAPS
+    );
+
+    // Query locations that don't have geolocation and are linked to aircraft registrations
+    let mut all_locations = match tokio::task::spawn_blocking({
+        let pool = diesel_pool.clone();
+        move || {
+            use soar::schema::{aircraft_registrations, locations};
+            let mut conn = pool.get()?;
+
+            let results = locations::table
+                .inner_join(
+                    aircraft_registrations::table
+                        .on(aircraft_registrations::location_id.eq(locations::id.nullable())),
+                )
+                .filter(locations::geolocation.is_null())
+                .filter(
+                    locations::street1
+                        .is_not_null()
+                        .or(locations::city.is_not_null())
+                        .or(locations::state.is_not_null()),
+                )
+                .select(soar::locations::LocationModel::as_select())
+                .distinct()
+                .limit(MAX_TOTAL_GEOCODE as i64)
+                .load(&mut conn)?;
+
+            Ok::<Vec<soar::locations::LocationModel>, anyhow::Error>(results)
+        }
+    })
+    .await
+    {
+        Ok(Ok(locations)) => locations,
+        Ok(Err(e)) => {
+            error!("Failed to query aircraft registration locations: {}", e);
+            metrics.success = false;
+            metrics.error_message = Some(e.to_string());
+            metrics.duration_secs = start.elapsed().as_secs_f64();
+            return Some(metrics);
+        }
+        Err(e) => {
+            error!(
+                "Task join error querying aircraft registration locations: {}",
+                e
+            );
+            metrics.success = false;
+            metrics.error_message = Some(e.to_string());
+            metrics.duration_secs = start.elapsed().as_secs_f64();
+            return Some(metrics);
+        }
+    };
+
+    let total_locations = all_locations.len();
+    info!(
+        "Found {} aircraft registration locations to geocode (limited to {})",
+        total_locations, MAX_TOTAL_GEOCODE
+    );
+    metrics.records_loaded = total_locations;
+
+    if total_locations == 0 {
+        metrics.success = true;
+        metrics.duration_secs = start.elapsed().as_secs_f64();
+        return Some(metrics);
+    }
+
+    let locations_repo = LocationsRepository::new(diesel_pool.clone());
+    let mut geocoded_count = 0;
+    let mut google_maps_count = 0;
+    let mut batch_number = 0;
+
+    // Process in batches
+    while !all_locations.is_empty() {
+        batch_number += 1;
+        let batch_size = BATCH_SIZE.min(all_locations.len());
+        let batch: Vec<_> = all_locations.drain(..batch_size).collect();
+
+        info!(
+            "Processing batch {} ({} locations, Google Maps used: {}/{})",
+            batch_number,
+            batch.len(),
+            google_maps_count,
+            MAX_GOOGLE_MAPS
+        );
+
+        for location_model in batch {
+            let location: soar::locations::Location = location_model.into();
+
+            // Check if we've hit Google Maps limit - stop processing entirely if so
+            if google_maps_count >= MAX_GOOGLE_MAPS {
+                warn!(
+                    "Reached Google Maps limit ({}/{}), stopping geocoding for this run. {} locations remaining.",
+                    google_maps_count,
+                    MAX_GOOGLE_MAPS,
+                    all_locations.len() + 1
+                );
+                break;
+            }
+
+            // geocode_components will try Photon → Nominatim → Google Maps
+            let geocode_result = geocode_components(
+                location.street1.as_deref(),
+                None, // street2
+                location.city.as_deref(),
+                location.state.as_deref(),
+                location.zip_code.as_deref(),
+                location.country_mail_code.as_deref(),
+            )
+            .await;
+
+            match geocode_result {
+                Ok(result) => {
+                    // Track which service was used
+                    if result.service == GeocodingService::GoogleMaps {
+                        google_maps_count += 1;
+                        info!(
+                            "Used Google Maps for location {} ({}/{})",
+                            location.id, google_maps_count, MAX_GOOGLE_MAPS
+                        );
+                    }
+
+                    let geolocation_point =
+                        Point::new(result.point.latitude, result.point.longitude);
+                    match locations_repo
+                        .update_geolocation(location.id, geolocation_point)
+                        .await
+                    {
+                        Ok(true) => {
+                            geocoded_count += 1;
+                            info!(
+                                "Geocoded aircraft registration location {} to ({}, {}) via {:?}",
+                                location.id,
+                                result.point.latitude,
+                                result.point.longitude,
+                                result.service
+                            );
+                        }
+                        Ok(false) => {
+                            warn!("Location {} not found for geolocation update", location.id)
+                        }
+                        Err(e) => {
+                            warn!("Failed to update geolocation for {}: {}", location.id, e)
+                        }
+                    }
+                }
+                Err(e) => warn!("Geocoding failed for location {}: {}", location.id, e),
+            }
+        }
+
+        // Break out of batch processing if we hit Google Maps limit
+        if google_maps_count >= MAX_GOOGLE_MAPS {
+            break;
+        }
+
+        info!(
+            "Completed batch {} - geocoded {} so far (Google Maps: {}/{})",
+            batch_number, geocoded_count, google_maps_count, MAX_GOOGLE_MAPS
+        );
+    }
+
+    info!(
+        "Successfully geocoded {} out of {} aircraft registration locations",
+        geocoded_count, total_locations
+    );
+
+    metrics.success = true;
+    metrics.duration_secs = start.elapsed().as_secs_f64();
+    Some(metrics)
+}
+
 async fn geocode_soaring_clubs(
     diesel_pool: Pool<ConnectionManager<PgConnection>>,
 ) -> Option<soar::email_reporter::EntityMetrics> {
@@ -362,7 +562,7 @@ async fn geocode_soaring_clubs(
 
     let locations_repo = LocationsRepository::new(diesel_pool.clone());
 
-    match locations_repo.get_locations_for_geocoding(Some(1000)).await {
+    match locations_repo.get_locations_for_geocoding(None).await {
         Ok(locations) => {
             let total_locations = locations.len();
             info!(
@@ -383,8 +583,9 @@ async fn geocode_soaring_clubs(
                 )
                 .await
                 {
-                    Ok(point) => {
-                        let geolocation_point = Point::new(point.latitude, point.longitude);
+                    Ok(result) => {
+                        let geolocation_point =
+                            Point::new(result.point.latitude, result.point.longitude);
                         match locations_repo
                             .update_geolocation(location.id, geolocation_point)
                             .await
@@ -392,8 +593,11 @@ async fn geocode_soaring_clubs(
                             Ok(true) => {
                                 geocoded_count += 1;
                                 info!(
-                                    "Geocoded location {} to ({}, {})",
-                                    location.id, point.latitude, point.longitude
+                                    "Geocoded soaring club location {} to ({}, {}) via {:?}",
+                                    location.id,
+                                    result.point.latitude,
+                                    result.point.longitude,
+                                    result.service
                                 );
                             }
                             Ok(false) => {

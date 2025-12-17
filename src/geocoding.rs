@@ -9,6 +9,27 @@ use tracing::{debug, info, warn};
 
 use crate::locations::Point;
 
+/// Geocoding service that was used to successfully geocode an address
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GeocodingService {
+    Photon,
+    Nominatim,
+    GoogleMaps,
+}
+
+/// Result from geocoding that includes both the coordinates and which service was used
+#[derive(Debug, Clone)]
+pub struct GeocodeResult {
+    pub point: Point,
+    pub service: GeocodingService,
+}
+
+impl GeocodeResult {
+    pub fn new(point: Point, service: GeocodingService) -> Self {
+        Self { point, service }
+    }
+}
+
 /// Enhanced geocoding module with Google Maps fallback capability
 ///
 /// This module provides geocoding functionality using Nominatim as the primary service
@@ -160,6 +181,7 @@ pub struct Geocoder {
     base_url: String,
     user_agent: String,
     google_maps_client: Option<GoogleMapsClient>,
+    photon_base_url: Option<String>,
 }
 
 impl Default for Geocoder {
@@ -175,6 +197,20 @@ impl Geocoder {
             .timeout(Duration::from_secs(30))
             .build()
             .expect("Failed to create HTTP client");
+
+        // Initialize Photon base URL if configured
+        let photon_base_url = if let Ok(url) = env::var("PHOTON_BASE_URL") {
+            if !url.trim().is_empty() {
+                info!("Using Photon geocoding server at: {}", url);
+                Some(url.trim().to_string())
+            } else {
+                debug!("PHOTON_BASE_URL is set but empty, skipping Photon");
+                None
+            }
+        } else {
+            debug!("PHOTON_BASE_URL not set, Photon geocoding unavailable");
+            None
+        };
 
         // Initialize Google Maps client if API key is available
         let google_maps_client = if let Ok(api_key) = env::var("GOOGLE_MAPS_API_KEY") {
@@ -201,6 +237,7 @@ impl Geocoder {
             base_url: "https://nominatim.openstreetmap.org".to_string(),
             user_agent: "SOAR Aircraft Geocoder/1.0 (https://github.com/hut8/soar)".to_string(),
             google_maps_client,
+            photon_base_url,
         }
     }
 
@@ -210,6 +247,20 @@ impl Geocoder {
             .timeout(Duration::from_secs(30))
             .build()
             .expect("Failed to create HTTP client");
+
+        // Initialize Photon base URL if configured
+        let photon_base_url = if let Ok(url) = env::var("PHOTON_BASE_URL") {
+            if !url.trim().is_empty() {
+                info!("Using Photon geocoding server at: {}", url);
+                Some(url.trim().to_string())
+            } else {
+                debug!("PHOTON_BASE_URL is set but empty, skipping Photon");
+                None
+            }
+        } else {
+            debug!("PHOTON_BASE_URL not set, Photon geocoding unavailable");
+            None
+        };
 
         // Initialize Google Maps client if API key is available
         let google_maps_client = if let Ok(api_key) = env::var("GOOGLE_MAPS_API_KEY") {
@@ -236,10 +287,77 @@ impl Geocoder {
             base_url,
             user_agent,
             google_maps_client,
+            photon_base_url,
         }
     }
 
-    /// Geocode an address using Nominatim
+    /// Geocode an address using Photon
+    async fn geocode_with_photon(&self, address: &str) -> Result<Point> {
+        let photon_url = self
+            .photon_base_url
+            .as_ref()
+            .ok_or_else(|| anyhow!("Photon base URL not configured"))?;
+
+        debug!("Geocoding address with Photon: {}", address);
+
+        let url = format!("{}/api", photon_url);
+
+        let params = [("q", address), ("limit", "1")];
+
+        let response = self
+            .client
+            .get(&url)
+            .query(&params)
+            .send()
+            .await
+            .map_err(|e| anyhow!("Failed to send Photon geocoding request: {}", e))?;
+
+        if !response.status().is_success() {
+            return Err(anyhow!(
+                "Photon geocoding request failed with status: {}",
+                response.status()
+            ));
+        }
+
+        let result: PhotonResponse = response
+            .json()
+            .await
+            .map_err(|e| anyhow!("Failed to parse Photon geocoding response: {}", e))?;
+
+        if result.features.is_empty() {
+            return Err(anyhow!(
+                "No Photon geocoding results found for address: {}",
+                address
+            ));
+        }
+
+        let feature = &result.features[0];
+        let coords = &feature.geometry.coordinates;
+
+        if coords.len() < 2 {
+            return Err(anyhow!("Invalid coordinates in Photon response"));
+        }
+
+        let longitude = coords[0];
+        let latitude = coords[1];
+
+        // Validate coordinates are reasonable
+        if !(-90.0..=90.0).contains(&latitude) {
+            return Err(anyhow!("Invalid latitude from Photon: {}", latitude));
+        }
+        if !(-180.0..=180.0).contains(&longitude) {
+            return Err(anyhow!("Invalid longitude from Photon: {}", longitude));
+        }
+
+        debug!(
+            "Photon geocoded '{}' to ({}, {})",
+            address, latitude, longitude
+        );
+
+        Ok(Point::new(latitude, longitude))
+    }
+
+    /// Geocode an address using Nominatim (with rate limiting respect)
     async fn geocode_with_nominatim(&self, address: &str) -> Result<Point> {
         debug!("Geocoding address with Nominatim: {}", address);
 
@@ -303,6 +421,9 @@ impl Geocoder {
             "Nominatim geocoded '{}' to ({}, {}) - {}",
             address, latitude, longitude, result.display_name
         );
+
+        // Respect Nominatim rate limit (1 request per second)
+        tokio::time::sleep(Duration::from_secs(1)).await;
 
         Ok(Point::new(latitude, longitude))
     }
@@ -388,18 +509,17 @@ impl Geocoder {
         latitude: f64,
         longitude: f64,
     ) -> Result<ReverseGeocodeResult> {
+        let photon_url = self
+            .photon_base_url
+            .as_ref()
+            .ok_or_else(|| anyhow!("Photon base URL not configured"))?;
+
         debug!(
             "Reverse geocoding coordinates with Photon: ({}, {})",
             latitude, longitude
         );
 
-        // Read Photon base URL from environment variable, default to localhost
-        let photon_base_url =
-            env::var("PHOTON_BASE_URL").unwrap_or_else(|_| "http://localhost:2322".to_string());
-
-        let photon_url = format!("{}/reverse", photon_base_url);
-
-        debug!("Using Photon URL: {}", photon_url);
+        let url = format!("{}/reverse", photon_url);
 
         let params = [
             ("lon", longitude.to_string()),
@@ -409,7 +529,7 @@ impl Geocoder {
 
         let response = self
             .client
-            .get(photon_url)
+            .get(&url)
             .query(&params)
             .send()
             .await
@@ -759,19 +879,36 @@ impl Geocoder {
         Ok(Point::new(latitude, longitude))
     }
 
-    /// Geocode an address string to a WGS84 coordinate with Google Maps fallback
-    pub async fn geocode_address(&self, address: &str) -> Result<Point> {
+    /// Geocode an address string to a WGS84 coordinate with Photon → Nominatim → Google Maps fallback
+    pub async fn geocode_address(&self, address: &str) -> Result<GeocodeResult> {
         if address.trim().is_empty() {
             return Err(anyhow!("Address cannot be empty"));
         }
 
         debug!("Geocoding address: {}", address);
 
-        // First try Nominatim
+        // First try Photon if configured
+        if self.photon_base_url.is_some() {
+            match self.geocode_with_photon(address).await {
+                Ok(point) => {
+                    debug!("Successfully geocoded with Photon: {}", address);
+                    return Ok(GeocodeResult::new(point, GeocodingService::Photon));
+                }
+                Err(photon_error) => {
+                    debug!(
+                        "Photon geocoding failed for '{}': {}",
+                        address, photon_error
+                    );
+                    // Continue to fallback services
+                }
+            }
+        }
+
+        // Fallback to Nominatim
         match self.geocode_with_nominatim(address).await {
             Ok(point) => {
                 debug!("Successfully geocoded with Nominatim: {}", address);
-                Ok(point)
+                Ok(GeocodeResult::new(point, GeocodingService::Nominatim))
             }
             Err(nominatim_error) => {
                 warn!(
@@ -779,7 +916,7 @@ impl Geocoder {
                     address, nominatim_error
                 );
 
-                // Try Google Maps as fallback if available
+                // Try Google Maps as final fallback if available
                 if self.google_maps_client.is_some() {
                     info!("Attempting Google Maps fallback for: {}", address);
                     match self.geocode_with_google_maps(address).await {
@@ -788,7 +925,7 @@ impl Geocoder {
                                 "Successfully geocoded with Google Maps fallback: {}",
                                 address
                             );
-                            Ok(point)
+                            Ok(GeocodeResult::new(point, GeocodingService::GoogleMaps))
                         }
                         Err(google_error) => {
                             warn!(
@@ -796,10 +933,8 @@ impl Geocoder {
                                 address, google_error
                             );
                             Err(anyhow!(
-                                "Both Nominatim and Google Maps geocoding failed for '{}'. Nominatim error: {}. Google Maps error: {}",
-                                address,
-                                nominatim_error,
-                                google_error
+                                "All geocoding services failed for '{}'. Photon/Nominatim/Google Maps all failed.",
+                                address
                             ))
                         }
                     }
@@ -815,13 +950,15 @@ impl Geocoder {
     }
 }
 
-/// Convenience function to geocode a single address
+/// Convenience function to geocode a single address (returns just the point for backwards compatibility)
 pub async fn geocode(address: &str) -> Result<Point> {
     let geocoder = Geocoder::new();
-    geocoder.geocode_address(address).await
+    let result = geocoder.geocode_address(address).await?;
+    Ok(result.point)
 }
 
 /// Geocode address components into a single address string and then to coordinates
+/// Returns both the point and which service was used
 pub async fn geocode_components(
     street1: Option<&str>,
     street2: Option<&str>,
@@ -829,7 +966,7 @@ pub async fn geocode_components(
     state: Option<&str>,
     zip_code: Option<&str>,
     country: Option<&str>,
-) -> Result<Point> {
+) -> Result<GeocodeResult> {
     let mut parts = Vec::new();
 
     if let Some(street1) = street1
@@ -877,7 +1014,8 @@ pub async fn geocode_components(
     }
 
     let address = parts.join(", ");
-    geocode(&address).await
+    let geocoder = Geocoder::new();
+    geocoder.geocode_address(&address).await
 }
 
 #[cfg(test)]
