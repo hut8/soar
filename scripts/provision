@@ -380,15 +380,58 @@ echo -e "${BLUE}Configuring Caddy web server...${NC}"
 sudo mkdir -p /var/log/caddy
 sudo chown caddy:caddy /var/log/caddy
 
-# Copy environment-specific Caddyfile to /etc/caddy/
+# Create SOAR Caddy configuration directory
+sudo mkdir -p /etc/soar/caddy
+sudo chown root:root /etc/soar/caddy
+sudo chmod 755 /etc/soar/caddy
+
+# Copy environment-specific Caddyfile to /etc/soar/caddy/
+CADDY_DEST="/etc/soar/caddy/soar-${ENVIRONMENT}.conf"
 if [ -f "$CADDYFILE_SOURCE" ]; then
-    sudo cp "$CADDYFILE_SOURCE" /etc/caddy/Caddyfile
-    sudo chown root:root /etc/caddy/Caddyfile
-    sudo chmod 644 /etc/caddy/Caddyfile
-    echo "Caddyfile installed to /etc/caddy/Caddyfile (from $CADDYFILE_SOURCE)"
+    sudo cp "$CADDYFILE_SOURCE" "$CADDY_DEST"
+    sudo chown root:root "$CADDY_DEST"
+    sudo chmod 644 "$CADDY_DEST"
+    echo "SOAR Caddy config installed to $CADDY_DEST (from $CADDYFILE_SOURCE)"
 else
     echo -e "${RED}Error: $CADDYFILE_SOURCE not found${NC}"
     exit 1
+fi
+
+# Ensure main Caddyfile imports SOAR configs
+MAIN_CADDYFILE="/etc/caddy/Caddyfile"
+IMPORT_LINE="import /etc/soar/caddy/*"
+
+# Create main Caddyfile if it doesn't exist
+if [ ! -f "$MAIN_CADDYFILE" ]; then
+    echo -e "${YELLOW}Creating main Caddyfile with import directive...${NC}"
+    echo "# Main Caddyfile - imports SOAR configurations" | sudo tee "$MAIN_CADDYFILE" > /dev/null
+    echo "$IMPORT_LINE" | sudo tee -a "$MAIN_CADDYFILE" > /dev/null
+    sudo chown root:root "$MAIN_CADDYFILE"
+    sudo chmod 644 "$MAIN_CADDYFILE"
+    echo "Created $MAIN_CADDYFILE with import directive"
+else
+    # Check if import directive already exists
+    if ! sudo grep -qF "$IMPORT_LINE" "$MAIN_CADDYFILE"; then
+        echo -e "${YELLOW}Adding import directive to existing Caddyfile...${NC}"
+        # Backup existing Caddyfile
+        sudo cp "$MAIN_CADDYFILE" "$MAIN_CADDYFILE.backup.$(date +%Y%m%d_%H%M%S)"
+        # Add import directive at the end
+        echo "" | sudo tee -a "$MAIN_CADDYFILE" > /dev/null
+        echo "# Import SOAR configurations" | sudo tee -a "$MAIN_CADDYFILE" > /dev/null
+        echo "$IMPORT_LINE" | sudo tee -a "$MAIN_CADDYFILE" > /dev/null
+        echo "Added import directive to $MAIN_CADDYFILE (backup created)"
+    else
+        echo -e "${BLUE}Import directive already exists in $MAIN_CADDYFILE${NC}"
+    fi
+fi
+
+# Validate Caddyfile syntax
+if command -v caddy &> /dev/null; then
+    if sudo caddy validate --config "$MAIN_CADDYFILE" 2>/dev/null; then
+        echo -e "${GREEN}Caddyfile validation passed${NC}"
+    else
+        echo -e "${YELLOW}Warning: Caddyfile validation failed. Check configuration manually.${NC}"
+    fi
 fi
 
 echo -e "${GREEN}Caddy configured for $ENVIRONMENT environment${NC}"
@@ -689,11 +732,18 @@ echo "  Configuration: /etc/grafana/grafana.ini"
 echo "  NOTE: After starting Grafana, dashboards will be immediately available"
 echo
 echo -e "${YELLOW}Caddy Web Server (${ENVIRONMENT^^}):${NC}"
-echo "  Configuration: /etc/caddy/Caddyfile (deployed from $CADDYFILE_SOURCE)"
+echo "  Main configuration: /etc/caddy/Caddyfile (imports from /etc/soar/caddy/*)"
+echo "  SOAR config directory: /etc/soar/caddy/"
+echo "  This environment: /etc/soar/caddy/soar-${ENVIRONMENT}.conf"
 echo "  Configured for: $DOMAIN → http://localhost:$WEB_PORT"
 echo "  Grafana: grafana.glider.flights → http://localhost:3000"
 echo "  Logs: /var/log/caddy/"
 echo "  Verify configuration: sudo caddy validate --config /etc/caddy/Caddyfile"
+echo
+echo -e "${YELLOW}  NOTE: Multiple environments can coexist on the same server${NC}"
+echo "    Production config: /etc/soar/caddy/soar-production.conf"
+echo "    Staging config: /etc/soar/caddy/soar-staging.conf"
+echo "    Both are imported by the main Caddyfile if present"
 echo
 echo -e "${YELLOW}  IMPORTANT - DNS Configuration Required:${NC}"
 echo "    Before Caddy can serve HTTPS, configure DNS A/AAAA records:"

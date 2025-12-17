@@ -1,5 +1,6 @@
 # Caddy configuration for glider.flights (STAGING)
-# This file is deployed to /etc/caddy/Caddyfile by the provision script.
+# This file is deployed to /etc/soar/caddy/soar-staging.conf by the provision script.
+# It is imported by the main /etc/caddy/Caddyfile via: import /etc/soar/caddy/*
 
 # Staging SOAR application
 staging.glider.flights {
