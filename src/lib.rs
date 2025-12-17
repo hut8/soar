@@ -90,13 +90,19 @@ pub use packet_processors::{
 /// # Examples
 ///
 /// ```
-/// std::env::set_var("SOAR_ENV", "production");
+/// unsafe {
+///     std::env::set_var("SOAR_ENV", "production");
+/// }
 /// assert_eq!(soar::nats_client_name("web"), "soar-web");
 ///
-/// std::env::set_var("SOAR_ENV", "staging");
+/// unsafe {
+///     std::env::set_var("SOAR_ENV", "staging");
+/// }
 /// assert_eq!(soar::nats_client_name("web"), "soar-web-staging");
 ///
-/// std::env::remove_var("SOAR_ENV");
+/// unsafe {
+///     std::env::remove_var("SOAR_ENV");
+/// }
 /// assert_eq!(soar::nats_client_name("web"), "soar-web-dev");
 /// ```
 pub fn nats_client_name(process_name: &str) -> String {
