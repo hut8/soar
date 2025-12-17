@@ -283,9 +283,9 @@ if ! command -v java &> /dev/null; then
     echo "Installing Java..."
     if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
         sudo apt-get update
-        sudo apt-get install -y openjdk-17-jre-headless wget curl pbzip2
+        sudo apt-get install -y openjdk-21-jre-headless wget curl pbzip2
     elif [[ "$OS" == "centos" ]] || [[ "$OS" == "rhel" ]] || [[ "$OS" == "rocky" ]] || [[ "$OS" == "almalinux" ]]; then
-        sudo dnf install -y java-17-openjdk-headless wget curl pbzip2
+        sudo dnf install -y java-21-openjdk-headless wget curl pbzip2
     fi
     echo -e "${GREEN}Java and dependencies installed successfully${NC}"
 else
@@ -320,11 +320,11 @@ sudo chown -R photon:photon /opt/photon
 sudo chown -R photon:photon /var/lib/photon
 
 # Download Photon JAR if not already installed
-PHOTON_VERSION="0.5.0"
-PHOTON_JAR="photon-${PHOTON_VERSION}.jar"
+PHOTON_VERSION="0.7.4"
+PHOTON_JAR="photon-opensearch-${PHOTON_VERSION}.jar"
 
 if [ ! -f "/opt/photon/${PHOTON_JAR}" ]; then
-    echo "Downloading Photon ${PHOTON_VERSION}..."
+    echo "Downloading Photon OpenSearch ${PHOTON_VERSION}..."
     PHOTON_URL="https://github.com/komoot/photon/releases/download/${PHOTON_VERSION}/${PHOTON_JAR}"
 
     (
@@ -356,12 +356,12 @@ if [ ! -d "/var/lib/photon/photon_data" ] || [ -z "$(ls -A /var/lib/photon 2>/de
         # Download, decompress with pbzip2, and extract in one pipeline
         # This is much faster than wget + tar xjf as it decompresses in parallel
         sudo -u photon bash -lc '
-          wget -O - https://download1.graphhopper.com/public/photon-db-planet-0.7OS-latest.tar.bz2 \
+          wget -O - https://download1.graphhopper.com/public/experimental/photon-db-planet-0.7OS-latest.tar.bz2 \
           | pbzip2 -cd \
           | tar -x
         ' || {
             echo -e "${YELLOW}Warning: Failed to download Photon data. You can download it manually later.${NC}"
-            echo -e "${YELLOW}Manual command: cd /var/lib/photon && sudo -u photon bash -lc 'wget -O - https://download1.graphhopper.com/public/photon-db-planet-0.7OS-latest.tar.bz2 | pbzip2 -cd | tar -x'${NC}"
+            echo -e "${YELLOW}Manual command: cd /var/lib/photon && sudo -u photon bash -lc 'wget -O - https://download1.graphhopper.com/public/experimental/photon-db-planet-0.7OS-latest.tar.bz2 | pbzip2 -cd | tar -x'${NC}"
             echo -e "${YELLOW}See infrastructure/DEPLOYMENT.md or docs/photon-deployment.md for instructions${NC}"
         }
 

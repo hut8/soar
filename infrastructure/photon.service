@@ -1,5 +1,5 @@
 [Unit]
-Description=Photon Geocoding Server
+Description=Photon OpenSearch Geocoding Server
 Documentation=https://github.com/komoot/photon
 After=network.target
 
@@ -13,6 +13,7 @@ WorkingDirectory=/opt/photon
 
 # Java heap size - adjust based on available RAM
 # Recommended: Use 50-75% of available RAM for production
+# Requires Java 21+ for Photon OpenSearch 0.7.4
 # Examples:
 #   16GB RAM: -Xmx12G -Xms12G
 #   32GB RAM: -Xmx24G -Xms24G
