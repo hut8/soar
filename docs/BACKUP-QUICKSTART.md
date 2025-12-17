@@ -45,13 +45,22 @@ sudo cp backup-env.example /etc/soar/backup-env
 sudo nano /etc/soar/backup-env
 ```
 
-**For Backblaze B2**, uncomment and configure:
+**Configure for Wasabi/rclone**:
 ```bash
-export AWS_ACCESS_KEY_ID="your-backblaze-keyID"
-export AWS_SECRET_ACCESS_KEY="your-backblaze-applicationKey"
-export AWS_ENDPOINT_URL="https://s3.us-west-004.backblazeb2.com"
-export BACKUP_BUCKET="s3://soar-backup-prod"
-export BACKUP_RETENTION_DAYS=30
+# Rclone configuration
+BACKUP_RCLONE_REMOTE=wasabi
+BACKUP_RCLONE_BUCKET=soar-backup-prod
+BACKUP_RCLONE_PATH=
+
+# Backup retention
+BASE_BACKUP_KEEP_COUNT=5
+WAL_RETENTION_DAYS=30
+
+# PostgreSQL connection
+PGHOST=localhost
+PGPORT=5432
+PGDATABASE=soar
+PGUSER=postgres
 ```
 
 **Set secure permissions:**
@@ -63,7 +72,7 @@ sudo chmod 600 /etc/soar/backup-env
 **Test cloud access:**
 ```bash
 source /etc/soar/backup-env
-rclone lsd ${BACKUP_REMOTE} --config /etc/soar/rclone.conf
+rclone lsd ${BACKUP_RCLONE_REMOTE}:${BACKUP_RCLONE_BUCKET}
 # Should show empty bucket or return without error
 ```
 
@@ -71,7 +80,7 @@ rclone lsd ${BACKUP_REMOTE} --config /etc/soar/rclone.conf
 
 Edit PostgreSQL configuration:
 ```bash
-sudo nano /etc/postgresql/15/main/postgresql.conf
+sudo nano /etc/postgresql/18/main/postgresql.conf
 ```
 
 Add these settings (or update if they exist):
@@ -100,7 +109,7 @@ The `soar-wal-archive` script will be automatically installed to `/usr/local/bin
 
 Edit `pg_hba.conf` to allow replication connections without password:
 ```bash
-sudo nano /etc/postgresql/17/main/pg_hba.conf
+sudo nano /etc/postgresql/18/main/pg_hba.conf
 ```
 
 Find the replication lines and ensure they use `trust` authentication for localhost:
@@ -182,7 +191,7 @@ psql -U postgres -d soar -c "SELECT * FROM pg_stat_archiver;"
 
 # Check cloud storage for WAL files
 source /etc/soar/backup-env
-rclone ls ${BACKUP_REMOTE}/wal/ --config /etc/soar/rclone.conf | tail -10
+rclone ls ${BACKUP_RCLONE_REMOTE}:${BACKUP_RCLONE_BUCKET}/wal/ | tail -10
 ```
 
 ✓ You should see recent WAL files in cloud storage.
@@ -221,13 +230,13 @@ sudo systemctl list-timers | grep backup
 
 # Check last base backup
 source /etc/soar/backup-env
-rclone lsd ${BACKUP_REMOTE}/base/ --config /etc/soar/rclone.conf
+rclone lsd ${BACKUP_RCLONE_REMOTE}:${BACKUP_RCLONE_BUCKET}/base/
 
 # Check WAL archiving status
 psql -U postgres -d soar -c "SELECT last_archived_wal, last_archived_time FROM pg_stat_archiver;"
 
 # Check pg_wal directory size (should stay under 1GB)
-du -sh /var/lib/postgresql/15/main/pg_wal/
+du -sh /var/lib/postgresql/18/main/pg_wal/
 ```
 
 ### Important Metrics to Monitor
@@ -248,7 +257,7 @@ du -sh /var/lib/postgresql/15/main/pg_wal/
 **Cause**: PostgreSQL `pg_hba.conf` requires password authentication for replication connections
 
 **Fix**:
-1. Edit `pg_hba.conf`: `sudo nano /etc/postgresql/17/main/pg_hba.conf`
+1. Edit `pg_hba.conf`: `sudo nano /etc/postgresql/18/main/pg_hba.conf`
 2. Change replication authentication from `scram-sha-256` to `trust` for localhost:
    ```
    host    replication     all             127.0.0.1/32            trust
@@ -264,9 +273,9 @@ du -sh /var/lib/postgresql/15/main/pg_wal/
 **Symptom**: `pg_wal/` directory growing, no files in cloud storage
 
 **Fix**:
-1. Check credentials: `source /etc/soar/backup-env && rclone lsd ${BACKUP_REMOTE} --config /etc/soar/rclone.conf`
-2. Check logs: `grep "archive command failed" /var/log/postgresql/postgresql-17-main.log`
-3. Test manually: `sudo -u postgres /usr/local/bin/soar-wal-archive /var/lib/postgresql/17/main/pg_wal/000000010000000000000001 000000010000000000000001`
+1. Check credentials: `source /etc/soar/backup-env && rclone lsd ${BACKUP_RCLONE_REMOTE}:${BACKUP_RCLONE_BUCKET}`
+2. Check logs: `grep "archive command failed" /var/log/postgresql/postgresql-18-main.log`
+3. Test manually: `sudo -u postgres /usr/local/bin/soar-wal-archive /var/lib/postgresql/18/main/pg_wal/000000010000000000000001 000000010000000000000001`
 
 ### Disk Space Running Low
 
