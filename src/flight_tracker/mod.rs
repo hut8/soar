@@ -405,13 +405,24 @@ impl FlightTracker {
                 continue;
             }
 
-            if let Err(e) = flight_lifecycle::timeout_flight(
-                &self.flights_repo,
-                &self.active_flights,
-                flight_id,
-                aircraft_id,
-            )
-            .await
+            // Create context for timeout processing
+            let ctx = FlightProcessorContext {
+                flights_repo: &self.flights_repo,
+                fixes_repo: &self.fixes_repo,
+                aircraft_repo: &self.device_repo,
+                airports_repo: &self.airports_repo,
+                runways_repo: &self.runways_repo,
+                locations_repo: &self.locations_repo,
+                elevation_db: &self.elevation_db,
+                active_flights: &self.active_flights,
+                aircraft_locks: &self.device_locks,
+                aircraft_trackers: &self.aircraft_trackers,
+                pool: self.pool.clone(),
+            };
+
+            if let Err(e) =
+                flight_lifecycle::timeout_flight(&ctx, &self.active_flights, flight_id, aircraft_id)
+                    .await
             {
                 error!(
                     "Failed to timeout flight {} for device {}: {}",

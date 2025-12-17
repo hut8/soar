@@ -70,6 +70,52 @@ struct NominatimReverseResponse {
     address: NominatimAddress,
 }
 
+// Photon reverse geocoding response structure (GeoJSON format)
+#[derive(Debug, Deserialize)]
+struct PhotonResponse {
+    features: Vec<PhotonFeature>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PhotonFeature {
+    properties: PhotonProperties,
+    #[allow(dead_code)]
+    geometry: PhotonGeometry,
+}
+
+#[derive(Debug, Deserialize)]
+struct PhotonGeometry {
+    #[allow(dead_code)]
+    coordinates: Vec<f64>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PhotonProperties {
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    street: Option<String>,
+    #[serde(default)]
+    housenumber: Option<String>,
+    #[serde(default)]
+    postcode: Option<String>,
+    #[serde(default)]
+    city: Option<String>,
+    #[serde(default)]
+    state: Option<String>,
+    #[serde(default)]
+    country: Option<String>,
+    #[allow(dead_code)]
+    #[serde(default)]
+    countrycode: Option<String>,
+    #[allow(dead_code)]
+    #[serde(default)]
+    osm_key: Option<String>,
+    #[allow(dead_code)]
+    #[serde(default)]
+    osm_value: Option<String>,
+}
+
 #[derive(Debug, Deserialize)]
 struct NominatimAddress {
     #[serde(default)]
@@ -336,6 +382,116 @@ impl Geocoder {
         })
     }
 
+    /// Reverse geocode coordinates using Photon (local geocoding server)
+    async fn reverse_geocode_with_photon(
+        &self,
+        latitude: f64,
+        longitude: f64,
+    ) -> Result<ReverseGeocodeResult> {
+        debug!(
+            "Reverse geocoding coordinates with Photon: ({}, {})",
+            latitude, longitude
+        );
+
+        // Determine Photon URL based on hostname
+        let hostname = env::var("HOSTNAME").unwrap_or_else(|_| String::from("localhost"));
+        let photon_url = if hostname.contains("glider.flights")
+            || hostname == "localhost"
+            || hostname.is_empty()
+        {
+            "http://localhost:8080/reverse"
+        } else {
+            // If not on production or localhost, skip Photon
+            return Err(anyhow!("Photon not available on this host: {}", hostname));
+        };
+
+        let params = [
+            ("lon", longitude.to_string()),
+            ("lat", latitude.to_string()),
+            ("limit", "1".to_string()),
+        ];
+
+        let response = self
+            .client
+            .get(photon_url)
+            .query(&params)
+            .send()
+            .await
+            .map_err(|e| anyhow!("Failed to send Photon reverse geocoding request: {}", e))?;
+
+        if !response.status().is_success() {
+            return Err(anyhow!(
+                "Photon reverse geocoding request failed with status: {}",
+                response.status()
+            ));
+        }
+
+        let result: PhotonResponse = response
+            .json()
+            .await
+            .map_err(|e| anyhow!("Failed to parse Photon reverse geocoding response: {}", e))?;
+
+        if result.features.is_empty() {
+            return Err(anyhow!(
+                "No Photon reverse geocoding results found for coordinates: ({}, {})",
+                latitude,
+                longitude
+            ));
+        }
+
+        let feature = &result.features[0];
+        let props = &feature.properties;
+
+        // Build street address from components
+        let street1 = if let Some(house) = &props.housenumber {
+            if let Some(street) = &props.street {
+                Some(format!("{} {}", house, street))
+            } else {
+                props.street.clone()
+            }
+        } else {
+            props.street.clone()
+        };
+
+        // Build display name from available components
+        let display_name = if let Some(name) = &props.name {
+            name.clone()
+        } else {
+            let mut parts = Vec::new();
+            if let Some(s) = &street1 {
+                parts.push(s.clone());
+            }
+            if let Some(c) = &props.city {
+                parts.push(c.clone());
+            }
+            if let Some(s) = &props.state {
+                parts.push(s.clone());
+            }
+            if let Some(country) = &props.country {
+                parts.push(country.clone());
+            }
+            if parts.is_empty() {
+                format!("{}, {}", latitude, longitude)
+            } else {
+                parts.join(", ")
+            }
+        };
+
+        debug!(
+            "Photon reverse geocoded ({}, {}) to {}",
+            latitude, longitude, display_name
+        );
+
+        Ok(ReverseGeocodeResult {
+            street1,
+            city: props.city.clone(),
+            state: props.state.clone(),
+            zip_code: props.postcode.clone(),
+            country: props.country.clone(),
+            display_name,
+        })
+    }
+
     /// Reverse geocode coordinates using Google Maps as fallback
     async fn reverse_geocode_with_google_maps(
         &self,
@@ -440,7 +596,27 @@ impl Geocoder {
         })
     }
 
-    /// Reverse geocode coordinates to address with Google Maps fallback
+    /// Reverse geocode coordinates using ONLY Photon (no fallbacks)
+    /// Used for high-frequency operations like flight start/end locations
+    /// Returns error if Photon is unavailable or fails
+    pub async fn reverse_geocode_with_photon_only(
+        &self,
+        latitude: f64,
+        longitude: f64,
+    ) -> Result<ReverseGeocodeResult> {
+        // Validate coordinates
+        if !(-90.0..=90.0).contains(&latitude) {
+            return Err(anyhow!("Invalid latitude: {}", latitude));
+        }
+        if !(-180.0..=180.0).contains(&longitude) {
+            return Err(anyhow!("Invalid longitude: {}", longitude));
+        }
+
+        // Only use Photon - no fallbacks
+        self.reverse_geocode_with_photon(latitude, longitude).await
+    }
+
+    /// Reverse geocode coordinates to address with Photon, Nominatim, and Google Maps fallback
     pub async fn reverse_geocode(
         &self,
         latitude: f64,
@@ -459,7 +635,25 @@ impl Geocoder {
             latitude, longitude
         );
 
-        // First try Nominatim
+        // First try Photon (local geocoding server on production/localhost)
+        match self.reverse_geocode_with_photon(latitude, longitude).await {
+            Ok(result) => {
+                debug!(
+                    "Successfully reverse geocoded with Photon: ({}, {})",
+                    latitude, longitude
+                );
+                return Ok(result);
+            }
+            Err(photon_error) => {
+                debug!(
+                    "Photon reverse geocoding failed for ({}, {}): {}",
+                    latitude, longitude, photon_error
+                );
+                // Continue to fallback services
+            }
+        }
+
+        // Fallback to Nominatim
         match self
             .reverse_geocode_with_nominatim(latitude, longitude)
             .await
@@ -477,7 +671,7 @@ impl Geocoder {
                     latitude, longitude, nominatim_error
                 );
 
-                // Try Google Maps as fallback if available
+                // Try Google Maps as final fallback if available
                 if self.google_maps_client.is_some() {
                     info!(
                         "Attempting Google Maps fallback for reverse geocoding: ({}, {})",
@@ -500,11 +694,9 @@ impl Geocoder {
                                 latitude, longitude, google_error
                             );
                             Err(anyhow!(
-                                "Both Nominatim and Google Maps reverse geocoding failed for ({}, {}). Nominatim error: {}. Google Maps error: {}",
+                                "All reverse geocoding services failed for ({}, {}). Photon, Nominatim and Google Maps all failed.",
                                 latitude,
-                                longitude,
-                                nominatim_error,
-                                google_error
+                                longitude
                             ))
                         }
                     }

@@ -50,6 +50,7 @@ impl FlightsRepository {
         landing_time_param: DateTime<Utc>,
         arrival_airport_id_param: Option<i32>,
         landing_location_id_param: Option<Uuid>,
+        end_location_id_param: Option<Uuid>,
         landing_altitude_offset_ft_param: Option<i32>,
         landing_runway_ident_param: Option<String>,
         total_distance_meters_param: Option<f64>,
@@ -67,12 +68,13 @@ impl FlightsRepository {
             // If last_fix_at not provided, use landing_time (by definition a flight has at least one fix)
             let last_fix_time = last_fix_at_param.unwrap_or(landing_time_param);
 
-            // Single UPDATE query with all fields including last_fix_at
+            // Single UPDATE query with all fields including last_fix_at and end_location_id
             let rows_affected = diesel::update(flights.filter(id.eq(flight_id)))
                 .set((
                     landing_time.eq(&Some(landing_time_param)),
                     arrival_airport_id.eq(&arrival_airport_id_param),
                     landing_location_id.eq(&landing_location_id_param),
+                    end_location_id.eq(&end_location_id_param),
                     landing_altitude_offset_ft.eq(&landing_altitude_offset_ft_param),
                     landing_runway_ident.eq(&landing_runway_ident_param),
                     total_distance_meters.eq(&total_distance_meters_param),
@@ -696,6 +698,7 @@ impl FlightsRepository {
         flight_id: Uuid,
         timeout_time: DateTime<Utc>,
         phase: TimeoutPhase,
+        end_location: Option<Uuid>,
     ) -> Result<bool> {
         use crate::schema::flights::dsl::*;
 
@@ -714,6 +717,7 @@ impl FlightsRepository {
             .set((
                 timed_out_at.eq(Some(timeout_time)),
                 timeout_phase.eq(Some(phase)),
+                end_location_id.eq(end_location),
                 updated_at.eq(Utc::now()),
             ))
             .execute(&mut conn)?;
