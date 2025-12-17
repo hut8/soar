@@ -393,17 +393,13 @@ impl Geocoder {
             latitude, longitude
         );
 
-        // Determine Photon URL based on hostname
-        let hostname = env::var("HOSTNAME").unwrap_or_else(|_| String::from("localhost"));
-        let photon_url = if hostname.contains("glider.flights")
-            || hostname == "localhost"
-            || hostname.is_empty()
-        {
-            "http://localhost:8080/reverse"
-        } else {
-            // If not on production or localhost, skip Photon
-            return Err(anyhow!("Photon not available on this host: {}", hostname));
-        };
+        // Read Photon base URL from environment variable, default to localhost
+        let photon_base_url =
+            env::var("PHOTON_BASE_URL").unwrap_or_else(|_| "http://localhost:2322".to_string());
+
+        let photon_url = format!("{}/reverse", photon_base_url);
+
+        debug!("Using Photon URL: {}", photon_url);
 
         let params = [
             ("lon", longitude.to_string()),
