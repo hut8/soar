@@ -275,11 +275,112 @@ else
     echo -e "${BLUE}prometheus-nats-exporter already installed${NC}"
 fi
 
+# Install Photon geocoding server
+echo -e "${BLUE}Installing Photon geocoding server...${NC}"
+
+# Install Java and dependencies if not already installed
+if ! command -v java &> /dev/null; then
+    echo "Installing Java..."
+    if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
+        sudo apt-get update
+        sudo apt-get install -y openjdk-21-jre-headless wget curl pbzip2
+    elif [[ "$OS" == "centos" ]] || [[ "$OS" == "rhel" ]] || [[ "$OS" == "rocky" ]] || [[ "$OS" == "almalinux" ]]; then
+        sudo dnf install -y java-21-openjdk-headless wget curl pbzip2
+    fi
+    echo -e "${GREEN}Java and dependencies installed successfully${NC}"
+else
+    echo -e "${BLUE}Java already installed: $(java -version 2>&1 | head -n 1)${NC}"
+    # Ensure pbzip2 is installed for faster decompression
+    if ! command -v pbzip2 &> /dev/null; then
+        echo "Installing pbzip2 for faster decompression..."
+        if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
+            sudo apt-get install -y pbzip2 curl
+        elif [[ "$OS" == "centos" ]] || [[ "$OS" == "rhel" ]] || [[ "$OS" == "rocky" ]] || [[ "$OS" == "almalinux" ]]; then
+            sudo dnf install -y pbzip2 curl
+        fi
+    fi
+fi
+
+# Create photon user if it doesn't exist
+if ! id "photon" &>/dev/null; then
+    echo "Creating 'photon' system user..."
+    sudo useradd --system --home-dir /opt/photon --shell /bin/false photon
+    echo -e "${GREEN}'photon' user created successfully${NC}"
+else
+    echo -e "${BLUE}'photon' user already exists${NC}"
+fi
+
+# Create directory structure
+echo "Creating Photon directories..."
+sudo mkdir -p /opt/photon
+sudo mkdir -p /var/lib/photon
+
+# Set ownership
+sudo chown -R photon:photon /opt/photon
+sudo chown -R photon:photon /var/lib/photon
+
+# Download Photon JAR if not already installed
+PHOTON_VERSION="0.7.4"
+PHOTON_JAR="photon-opensearch-${PHOTON_VERSION}.jar"
+
+if [ ! -f "/opt/photon/${PHOTON_JAR}" ]; then
+    echo "Downloading Photon OpenSearch ${PHOTON_VERSION}..."
+    PHOTON_URL="https://github.com/komoot/photon/releases/download/${PHOTON_VERSION}/${PHOTON_JAR}"
+
+    (
+        cd /opt/photon
+        sudo -u photon wget -q "$PHOTON_URL" || { echo -e "${RED}Failed to download Photon JAR${NC}"; exit 1; }
+        sudo -u photon ln -sf "${PHOTON_JAR}" photon.jar
+    )
+    echo -e "${GREEN}Photon JAR downloaded successfully${NC}"
+else
+    echo -e "${BLUE}Photon JAR already installed${NC}"
+    # Ensure symlink exists
+    if [ ! -L "/opt/photon/photon.jar" ]; then
+        sudo -u photon ln -sf "${PHOTON_JAR}" /opt/photon/photon.jar
+    fi
+fi
+
+# Download Photon data if not already downloaded
+if [ ! -d "/var/lib/photon/photon_data" ] || [ -z "$(ls -A /var/lib/photon 2>/dev/null)" ]; then
+    echo -e "${BLUE}Downloading Photon geocoding data (this may take a while)...${NC}"
+    echo -e "${YELLOW}Note: This will download ~50-100GB of worldwide geocoding data${NC}"
+    echo -e "${YELLOW}Using parallel decompression with pbzip2 for faster extraction${NC}"
+
+    # Ensure directory exists
+    sudo mkdir -p /var/lib/photon
+    sudo chown photon:photon /var/lib/photon
+
+    (
+        cd /var/lib/photon
+        # Download, decompress with pbzip2, and extract in one pipeline
+        # This is much faster than wget + tar xjf as it decompresses in parallel
+        sudo -u photon bash -lc '
+          wget -O - https://download1.graphhopper.com/public/experimental/photon-db-planet-0.7OS-latest.tar.bz2 \
+          | pbzip2 -cd \
+          | tar -x
+        ' || {
+            echo -e "${YELLOW}Warning: Failed to download Photon data. You can download it manually later.${NC}"
+            echo -e "${YELLOW}Manual command: cd /var/lib/photon && sudo -u photon bash -lc 'wget -O - https://download1.graphhopper.com/public/experimental/photon-db-planet-0.7OS-latest.tar.bz2 | pbzip2 -cd | tar -x'${NC}"
+            echo -e "${YELLOW}See infrastructure/DEPLOYMENT.md or docs/photon-deployment.md for instructions${NC}"
+        }
+
+        if [ -d "photon_data" ]; then
+            echo -e "${GREEN}Photon data extracted successfully${NC}"
+        fi
+    )
+else
+    echo -e "${BLUE}Photon data already exists${NC}"
+fi
+
+echo -e "${GREEN}Photon installation complete${NC}"
+
 # Copy infrastructure service files
 # Note: SOAR application service files (soar-run, soar-web, etc.) are installed by soar-deploy
 echo -e "${BLUE}Installing infrastructure systemd service files...${NC}"
 sudo cp infrastructure/nats-server.service /etc/systemd/system/
 sudo cp infrastructure/prometheus-nats-exporter.service /etc/systemd/system/
+sudo cp infrastructure/photon.service /etc/systemd/system/
 
 # Reload systemd daemon
 echo "Reloading systemd daemon..."
@@ -370,6 +471,7 @@ fi
 echo -e "${BLUE}Enabling infrastructure services...${NC}"
 sudo systemctl enable nats-server.service
 sudo systemctl enable prometheus-nats-exporter.service
+sudo systemctl enable photon.service
 sudo systemctl enable prometheus
 sudo systemctl enable grafana-server
 
@@ -416,6 +518,20 @@ if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
     else
         echo -e "${BLUE}Caddy is already running${NC}"
     fi
+fi
+
+# Start Photon if not already running
+if ! systemctl is-active --quiet photon; then
+    echo -e "${BLUE}Starting Photon...${NC}"
+    sudo systemctl start photon
+    if systemctl is-active --quiet photon; then
+        echo -e "${GREEN}Photon started successfully${NC}"
+    else
+        echo -e "${YELLOW}Warning: Failed to start Photon. Check logs with: journalctl -u photon -n 50${NC}"
+        echo -e "${YELLOW}Note: Photon requires geocoding data to be present in /var/lib/photon/photon_data${NC}"
+    fi
+else
+    echo -e "${BLUE}Photon is already running${NC}"
 fi
 
 # Create necessary directories
@@ -623,6 +739,7 @@ echo "    sudo systemctl start nats-server"
 echo "    sudo systemctl start prometheus"
 echo "    sudo systemctl start prometheus-nats-exporter"
 echo "    sudo systemctl start grafana-server"
+echo "    sudo systemctl start photon"
 echo "    sudo systemctl start caddy"
 echo
 echo "  Check service status:"
@@ -630,6 +747,7 @@ echo "    sudo systemctl status nats-server"
 echo "    sudo systemctl status prometheus"
 echo "    sudo systemctl status prometheus-nats-exporter"
 echo "    sudo systemctl status grafana-server"
+echo "    sudo systemctl status photon"
 echo "    sudo systemctl status caddy"
 echo
 echo -e "${YELLOW}Check infrastructure logs:${NC}"
@@ -637,6 +755,7 @@ echo "  sudo journalctl -u nats-server -f"
 echo "  sudo journalctl -u prometheus -f"
 echo "  sudo journalctl -u prometheus-nats-exporter -f"
 echo "  sudo journalctl -u grafana-server -f"
+echo "  sudo journalctl -u photon -f"
 echo "  sudo journalctl -u caddy -f"
 echo
 echo -e "${YELLOW}Database verification:${NC}"
@@ -702,4 +821,20 @@ if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
     echo
     echo "    Caddy will automatically obtain Let's Encrypt certificates once DNS is configured."
     echo "    Test configuration: caddy run --config /etc/caddy/Caddyfile --adapter caddyfile"
+fi
+echo
+echo -e "${YELLOW}Photon Geocoding Server:${NC}"
+echo "  API endpoint: http://localhost:2322"
+echo "  Application directory: /opt/photon"
+echo "  Data directory: /var/lib/photon"
+echo "  Logs: sudo journalctl -u photon -f"
+echo "  Test forward geocoding: curl 'http://localhost:2322/api?q=Berlin'"
+echo "  Test reverse geocoding: curl 'http://localhost:2322/reverse?lon=13.388860&lat=52.517037'"
+echo "  Configuration: /etc/systemd/system/photon.service"
+echo "  Documentation: docs/photon-deployment.md"
+if [ -d "/var/lib/photon/photon_data" ]; then
+    echo "  Status: Data installed ✓"
+else
+    echo "  Status: Data not installed (download manually)"
+    echo "  Download data: See docs/photon-deployment.md for instructions"
 fi
