@@ -1,23 +1,14 @@
 #!/bin/bash
-# SOAR ADS-B Node Provisioning Script
+# SOAR ADS-B Proxy Provisioning Script
 #
-# This script provisions an ADS-B server for SOAR by:
-# - Creating the soar user and required directories
-# - Installing the deployment script and sudoers configuration
-# - Setting up the environment file template
-#
-# This script is idempotent and can be run multiple times safely.
+# This script provisions an ADS-B proxy server for SOAR by:
+# - Creating the soar user and group
+# - Installing socat package
+# - Installing Tailscale
+# - Installing and enabling the adsblol-firehose-proxy service
 #
 # Usage:
 #   sudo ./provision-adsb
-#
-# Prerequisites:
-#   - Debian/Ubuntu Linux
-#   - Beast protocol data source (dump1090/readsb) running on port 30005
-#   - Tailscale installed and connected to your tailnet
-#   - Access to main SOAR server via Tailscale
-#
-# See infrastructure/ADSB-SETUP.md for complete setup documentation.
 
 set -e
 
@@ -34,309 +25,78 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
-echo -e "${GREEN}Provisioning SOAR ADS-B node...${NC}"
+echo -e "${GREEN}Provisioning SOAR ADS-B proxy...${NC}"
 
 # Detect OS
 if [ -f /etc/os-release ]; then
     . /etc/os-release
     OS=$ID
-    OS_VERSION=$VERSION_ID
 else
     echo -e "${RED}Error: Cannot detect OS. /etc/os-release not found.${NC}"
     exit 1
 fi
 
-echo -e "${BLUE}Detected OS: $OS $OS_VERSION${NC}"
+echo -e "${BLUE}Detected OS: $OS${NC}"
 
 # Check if OS is Debian or Ubuntu
 if [[ "$OS" != "ubuntu" ]] && [[ "$OS" != "debian" ]]; then
     echo -e "${RED}Error: This script only supports Debian and Ubuntu.${NC}"
-    echo -e "${RED}Detected OS: $OS${NC}"
-    echo -e "${YELLOW}Please run this script on a Debian or Ubuntu system.${NC}"
     exit 1
 fi
 
 # Create soar user if it doesn't exist
 if ! id "soar" &>/dev/null; then
     echo -e "${BLUE}Creating 'soar' system user...${NC}"
-    sudo useradd --system --user-group --create-home --home-dir /home/soar --shell /bin/bash soar
+    useradd --system --user-group --create-home --home-dir /home/soar --shell /bin/bash soar
     echo -e "${GREEN}'soar' user created successfully${NC}"
 else
     echo -e "${BLUE}'soar' user already exists${NC}"
 fi
 
-# Create necessary directories
-echo -e "${BLUE}Creating directories...${NC}"
-sudo mkdir -p /var/soar/logs
-sudo mkdir -p /var/soar/bin
-sudo mkdir -p /etc/soar
-sudo mkdir -p /tmp/soar/deploy
-sudo mkdir -p /home/soar/backups
-
-# Set ownership for soar user
-echo -e "${BLUE}Setting ownership for soar user...${NC}"
-sudo chown -R soar:soar /var/soar
-sudo chown -R soar:soar /tmp/soar
-sudo chown -R soar:soar /home/soar/backups
-sudo chown soar:soar /home/soar
-sudo chmod 755 /home/soar
-
-echo -e "${GREEN}Directories created and ownership set${NC}"
-
-# Install deployment script
-if [ -f infrastructure/soar-deploy-adsb ]; then
-    echo -e "${BLUE}Installing deployment script...${NC}"
-    sudo install -m 755 -o root -g root infrastructure/soar-deploy-adsb /usr/local/bin/soar-deploy-adsb
-    echo -e "${GREEN}Deployment script installed to /usr/local/bin/soar-deploy-adsb${NC}"
+# Install socat if not already installed
+if ! command -v socat &> /dev/null; then
+    echo -e "${BLUE}Installing socat...${NC}"
+    apt-get update
+    apt-get install -y socat
+    echo -e "${GREEN}socat installed successfully${NC}"
 else
-    echo -e "${RED}Error: infrastructure/soar-deploy-adsb not found${NC}"
-    echo -e "${YELLOW}Please run this script from the soar repository root${NC}"
-    exit 1
+    echo -e "${BLUE}socat is already installed${NC}"
 fi
 
-# Install sudoers configuration for deployment
-if [ -f infrastructure/sudoers.d/soar-adsb ]; then
-    echo -e "${BLUE}Installing deployment sudoers configuration...${NC}"
-    sudo install -m 440 infrastructure/sudoers.d/soar-adsb /etc/sudoers.d/soar
-
-    # Validate sudoers syntax
-    echo "Validating sudoers configuration..."
-    if ! sudo visudo -c -f /etc/sudoers.d/soar; then
-        echo -e "${RED}Error: Invalid sudoers syntax. Removing file.${NC}"
-        sudo rm -f /etc/sudoers.d/soar
-        exit 1
-    fi
-    echo -e "${GREEN}Sudoers configuration installed and validated${NC}"
-else
-    echo -e "${RED}Error: infrastructure/sudoers.d/soar-adsb not found${NC}"
-    exit 1
-fi
-
-# Create production environment file if it doesn't exist
-if [ ! -f /etc/soar/env ]; then
-    echo -e "${BLUE}Creating production environment file template...${NC}"
-
-    # Check if we have the template
-    if [ -f infrastructure/examples/etc-soar-env-adsb.template ]; then
-        sudo cp infrastructure/examples/etc-soar-env-adsb.template /etc/soar/env
-    else
-        # Create a basic template
-        sudo tee /etc/soar/env > /dev/null <<'EOF'
-# SOAR ADS-B Ingester Environment Configuration - PRODUCTION
-# Edit this file with your specific configuration
-
-# ============================================================================
-# NATS Configuration (REQUIRED)
-# ============================================================================
-
-# NATS server URL - Connect to PRODUCTION server via Tailscale
-# Example: nats://glider-flights.your-tailnet.ts.net:4222
-# Example: nats://100.x.x.x:4222 (Tailscale IP of production server)
-NATS_URL=nats://CHANGE_ME:4222
-
-# ============================================================================
-# Beast Server Configuration
-# ============================================================================
-
-# Beast protocol server hostname/IP
-# Default: localhost (dump1090 running on same machine)
-BEAST_SERVER=localhost
-
-# Beast protocol port
-# Default: 30005 (standard Beast port)
-BEAST_PORT=30005
-
-# ============================================================================
-# Application Configuration
-# ============================================================================
-
-# Logging level
-# Options: trace, debug, info, warn, error
-RUST_LOG=info
-
-# Environment name
-SOAR_ENV=production
-
-# Metrics server port (production)
-METRICS_PORT=9094
-
-# ============================================================================
-# Optional: Error Tracking
-# ============================================================================
-
-# Sentry DSN for error reporting (optional)
-# Leave empty to disable Sentry integration
-SENTRY_DSN=
-EOF
-    fi
-
-    # Set secure permissions
-    sudo chmod 600 /etc/soar/env
-    sudo chown root:soar /etc/soar/env
-
-    echo -e "${GREEN}Production environment file created at /etc/soar/env${NC}"
-    echo -e "${YELLOW}WARNING: You must edit /etc/soar/env and configure NATS_URL${NC}"
-else
-    echo -e "${BLUE}Production environment file already exists at /etc/soar/env${NC}"
-fi
-
-# Create staging environment file if it doesn't exist
-if [ ! -f /etc/soar/env-staging ]; then
-    echo -e "${BLUE}Creating staging environment file template...${NC}"
-
-    sudo tee /etc/soar/env-staging > /dev/null <<'EOF'
-# SOAR ADS-B Ingester Environment Configuration - STAGING
-# Edit this file with your specific configuration
-
-# ============================================================================
-# NATS Configuration (REQUIRED)
-# ============================================================================
-
-# NATS server URL - Connect to STAGING server via Tailscale
-# Example: nats://glider-flights-staging.your-tailnet.ts.net:4222
-# Example: nats://100.x.x.x:4222 (Tailscale IP of staging server)
-NATS_URL=nats://CHANGE_ME:4222
-
-# ============================================================================
-# Beast Server Configuration
-# ============================================================================
-
-# Beast protocol server hostname/IP
-# Default: localhost (dump1090 running on same machine)
-BEAST_SERVER=localhost
-
-# Beast protocol port
-# Default: 30005 (standard Beast port)
-BEAST_PORT=30005
-
-# ============================================================================
-# Application Configuration
-# ============================================================================
-
-# Logging level
-# Options: trace, debug, info, warn, error
-RUST_LOG=info
-
-# Environment name
-SOAR_ENV=staging
-
-# Metrics server port (staging)
-METRICS_PORT=9096
-
-# ============================================================================
-# Optional: Error Tracking
-# ============================================================================
-
-# Sentry DSN for error reporting (optional)
-# Leave empty to disable Sentry integration
-SENTRY_DSN=
-EOF
-
-    # Set secure permissions
-    sudo chmod 600 /etc/soar/env-staging
-    sudo chown root:soar /etc/soar/env-staging
-
-    echo -e "${GREEN}Staging environment file created at /etc/soar/env-staging${NC}"
-    echo -e "${YELLOW}WARNING: You must edit /etc/soar/env-staging and configure NATS_URL${NC}"
-else
-    echo -e "${BLUE}Staging environment file already exists at /etc/soar/env-staging${NC}"
-fi
-
-# Check if Tailscale is installed
+# Install Tailscale if not already installed
 if ! command -v tailscale &> /dev/null; then
-    echo -e "${YELLOW}Warning: Tailscale is not installed${NC}"
-    echo -e "${YELLOW}The SOAR ADS-B ingester requires Tailscale to connect to the main server${NC}"
-    echo -e "${YELLOW}Install Tailscale: https://tailscale.com/download${NC}"
+    echo -e "${BLUE}Installing Tailscale...${NC}"
+    curl -fsSL https://tailscale.com/install.sh | sh
+    echo -e "${GREEN}Tailscale installed successfully${NC}"
+    echo -e "${YELLOW}Run 'sudo tailscale up' to connect to your tailnet${NC}"
 else
-    echo -e "${GREEN}Tailscale is installed${NC}"
+    echo -e "${BLUE}Tailscale is already installed${NC}"
 
     # Check if Tailscale is connected
     if tailscale status &> /dev/null; then
         echo -e "${GREEN}Tailscale is connected${NC}"
-
-        # Show Tailscale IP
         TAILSCALE_IP=$(tailscale ip -4 2>/dev/null || echo "unknown")
         echo -e "${BLUE}This machine's Tailscale IP: $TAILSCALE_IP${NC}"
     else
-        echo -e "${YELLOW}Warning: Tailscale is not connected${NC}"
-        echo -e "${YELLOW}Connect to Tailscale: sudo tailscale up${NC}"
+        echo -e "${YELLOW}Tailscale is not connected. Run 'sudo tailscale up'${NC}"
     fi
 fi
 
-# Check if Beast server is accessible
-echo -e "${BLUE}Checking for Beast server...${NC}"
-if timeout 2 bash -c "</dev/tcp/localhost/30005" 2>/dev/null; then
-    echo -e "${GREEN}Beast server is accessible on localhost:30005${NC}"
+# Install adsblol-firehose-proxy service
+if [ -f infrastructure/adsblol-firehose-proxy.service ]; then
+    echo -e "${BLUE}Installing adsblol-firehose-proxy service...${NC}"
+    install -m 644 -o root -g root infrastructure/adsblol-firehose-proxy.service /etc/systemd/system/
+    systemctl daemon-reload
+    systemctl enable adsblol-firehose-proxy.service
+    systemctl start adsblol-firehose-proxy.service
+    echo -e "${GREEN}adsblol-firehose-proxy service installed and started${NC}"
 else
-    echo -e "${YELLOW}Warning: Cannot connect to Beast server on localhost:30005${NC}"
-    echo -e "${YELLOW}Ensure dump1090 or readsb is running and configured to serve Beast data${NC}"
-    echo -e "${YELLOW}Check with: ss -tlnp | grep 30005${NC}"
+    echo -e "${RED}Error: infrastructure/adsblol-firehose-proxy.service not found${NC}"
+    echo -e "${YELLOW}Please run this script from the soar repository root${NC}"
+    exit 1
 fi
 
-echo -e "${GREEN}SOAR ADS-B node provisioning complete!${NC}"
+echo -e "${GREEN}SOAR ADS-B proxy provisioning complete!${NC}"
 echo
-echo -e "${YELLOW}═══════════════════════════════════════════════════════════════${NC}"
-echo -e "${YELLOW}IMPORTANT: Manual Configuration Steps Required${NC}"
-echo -e "${YELLOW}═══════════════════════════════════════════════════════════════${NC}"
-echo
-echo -e "${YELLOW}1. Configure NATS connection for PRODUCTION (/etc/soar/env):${NC}"
-echo "   - Edit /etc/soar/env"
-echo "   - Set NATS_URL to your PRODUCTION server's Tailscale address"
-echo "   - Example: NATS_URL=nats://100.x.x.x:4222"
-echo
-echo -e "${YELLOW}2. Configure NATS connection for STAGING (/etc/soar/env-staging):${NC}"
-echo "   - Edit /etc/soar/env-staging"
-echo "   - Set NATS_URL to your STAGING server's Tailscale address"
-echo "   - Example: NATS_URL=nats://100.y.y.y:4222"
-echo
-echo -e "${YELLOW}3. Get your servers' Tailscale IPs:${NC}"
-echo "   - SSH to production server: tailscale ip -4"
-echo "   - SSH to staging server: tailscale ip -4"
-echo "   - Use these IPs in NATS_URL in respective env files"
-echo
-echo -e "${YELLOW}4. Verify NATS connectivity:${NC}"
-echo "   - Production: telnet PROD_SERVER_IP 4222"
-echo "   - Staging: telnet STAGING_SERVER_IP 4222"
-echo "   - Should connect and show NATS banner"
-echo
-echo -e "${YELLOW}5. Configure Tailscale ACLs:${NC}"
-echo "   - Ensure this server can access main servers on port 4222"
-echo "   - Ensure GitHub Actions can SSH to this server (port 22)"
-echo "   - See infrastructure/ADSB-SETUP.md for ACL examples"
-echo
-echo -e "${YELLOW}6. Set up GitHub deployment:${NC}"
-echo "   - Add GitHub secrets (see infrastructure/ADSB-SETUP.md)"
-echo "   - Run first deployment to install soar binary and service"
-echo
-echo -e "${YELLOW}═══════════════════════════════════════════════════════════════${NC}"
-echo
-echo -e "${YELLOW}Verification:${NC}"
-echo "  Deployment script: ls -la /usr/local/bin/soar-deploy-adsb"
-echo "  Sudoers config: sudo visudo -c"
-echo "  Production env: sudo cat /etc/soar/env"
-echo "  Staging env: sudo cat /etc/soar/env-staging"
-echo "  Test sudo: sudo /usr/local/bin/soar-deploy-adsb"
-echo "    (should show usage message without password prompt)"
-echo
-echo -e "${YELLOW}Tailscale Status:${NC}"
-if command -v tailscale &> /dev/null; then
-    echo "  Status: tailscale status"
-    echo "  IP address: tailscale ip -4"
-else
-    echo "  Install Tailscale: https://tailscale.com/download"
-fi
-echo
-echo -e "${YELLOW}Beast Server:${NC}"
-echo "  Check if running: ss -tlnp | grep 30005"
-echo "  Test connection: nc localhost 30005"
-echo "    (should see binary data if dump1090 is running)"
-echo
-echo -e "${YELLOW}Next Steps:${NC}"
-echo "  1. Edit /etc/soar/env and configure NATS_URL"
-echo "  2. Verify Tailscale connectivity to main server"
-echo "  3. Follow infrastructure/ADSB-SETUP.md for GitHub deployment setup"
-echo "  4. Deploy SOAR binary via GitHub Actions or manually"
-echo
-echo -e "${YELLOW}For complete setup instructions, see:${NC}"
-echo "  infrastructure/ADSB-SETUP.md"
-echo
+echo -e "${BLUE}Service Status:${NC}"
+systemctl status adsblol-firehose-proxy.service --no-pager

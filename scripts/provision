@@ -44,15 +44,17 @@ fi
 if [[ "$ENVIRONMENT" == "production" ]]; then
     DB_NAME="soar"
     ENV_FILE="/etc/soar/env"
-    CADDYFILE_SOURCE="infrastructure/Caddyfile.production"
     WEB_PORT="61225"
     DOMAIN="glider.flights"
+    # Caddy site configs to install for production
+    CADDY_SITES=("glider.flights" "photon.glider.flights" "grafana.glider.flights")
 else
     DB_NAME="soar_staging"
     ENV_FILE="/etc/soar/env-staging"
-    CADDYFILE_SOURCE="infrastructure/Caddyfile.staging"
     WEB_PORT="61226"
     DOMAIN="staging.glider.flights"
+    # Caddy site configs to install for staging
+    CADDY_SITES=("staging.glider.flights" "grafana.staging.glider.flights")
 fi
 
 echo -e "${GREEN}Provisioning SOAR server for ${ENVIRONMENT} environment...${NC}"
@@ -384,17 +386,32 @@ sudo mkdir -p /etc/soar/caddy
 sudo chown root:root /etc/soar/caddy
 sudo chmod 755 /etc/soar/caddy
 
-# Copy environment-specific Caddyfile to /etc/soar/caddy/
-CADDY_DEST="/etc/soar/caddy/soar-${ENVIRONMENT}.conf"
-if [ -f "$CADDYFILE_SOURCE" ]; then
-    sudo cp "$CADDYFILE_SOURCE" "$CADDY_DEST"
-    sudo chown root:root "$CADDY_DEST"
-    sudo chmod 644 "$CADDY_DEST"
-    echo "SOAR Caddy config installed to $CADDY_DEST (from $CADDYFILE_SOURCE)"
-else
-    echo -e "${RED}Error: $CADDYFILE_SOURCE not found${NC}"
-    exit 1
+# Remove old monolithic config files (from pre-modular setup)
+if [ -f "/etc/soar/caddy/soar-production.conf" ]; then
+    echo "Removing old monolithic config: soar-production.conf"
+    sudo rm -f /etc/soar/caddy/soar-production.conf
 fi
+if [ -f "/etc/soar/caddy/soar-staging.conf" ]; then
+    echo "Removing old monolithic config: soar-staging.conf"
+    sudo rm -f /etc/soar/caddy/soar-staging.conf
+fi
+
+# Install site-specific Caddy configs for this environment
+echo "Installing Caddy site configs for $ENVIRONMENT environment..."
+for site in "${CADDY_SITES[@]}"; do
+    SITE_SOURCE="infrastructure/caddy/${site}.conf"
+    SITE_DEST="/etc/soar/caddy/${site}.conf"
+
+    if [ -f "$SITE_SOURCE" ]; then
+        sudo cp "$SITE_SOURCE" "$SITE_DEST"
+        sudo chown root:root "$SITE_DEST"
+        sudo chmod 644 "$SITE_DEST"
+        echo "  Installed ${site}.conf"
+    else
+        echo -e "${RED}Error: $SITE_SOURCE not found${NC}"
+        exit 1
+    fi
+done
 
 # Ensure main Caddyfile imports SOAR configs
 MAIN_CADDYFILE="/etc/caddy/Caddyfile"
@@ -403,7 +420,7 @@ IMPORT_LINE="import /etc/soar/caddy/*"
 # Create main Caddyfile if it doesn't exist
 if [ ! -f "$MAIN_CADDYFILE" ]; then
     echo -e "${YELLOW}Creating main Caddyfile with import directive...${NC}"
-    echo "# Main Caddyfile - imports SOAR configurations" | sudo tee "$MAIN_CADDYFILE" > /dev/null
+    echo "# Main Caddyfile - imports SOAR site configurations" | sudo tee "$MAIN_CADDYFILE" > /dev/null
     echo "$IMPORT_LINE" | sudo tee -a "$MAIN_CADDYFILE" > /dev/null
     sudo chown root:root "$MAIN_CADDYFILE"
     sudo chmod 644 "$MAIN_CADDYFILE"
@@ -416,7 +433,7 @@ else
         sudo cp "$MAIN_CADDYFILE" "$MAIN_CADDYFILE.backup.$(date +%Y%m%d_%H%M%S)"
         # Add import directive at the end
         echo "" | sudo tee -a "$MAIN_CADDYFILE" > /dev/null
-        echo "# Import SOAR configurations" | sudo tee -a "$MAIN_CADDYFILE" > /dev/null
+        echo "# Import SOAR site configurations" | sudo tee -a "$MAIN_CADDYFILE" > /dev/null
         echo "$IMPORT_LINE" | sudo tee -a "$MAIN_CADDYFILE" > /dev/null
         echo "Added import directive to $MAIN_CADDYFILE (backup created)"
     else
@@ -433,7 +450,7 @@ if command -v caddy &> /dev/null; then
     fi
 fi
 
-echo -e "${GREEN}Caddy configured for $ENVIRONMENT environment${NC}"
+echo -e "${GREEN}Caddy configured for $ENVIRONMENT environment with ${#CADDY_SITES[@]} site(s)${NC}"
 
 # Enable infrastructure services
 # Note: SOAR application services are enabled by soar-deploy
@@ -616,15 +633,10 @@ if ! grep -q "^local.*soar.*soar.*trust" "$PG_HBA_CONF"; then
     NEEDS_RELOAD=true
 fi
 
-if ! grep -q "^host.*soar.*soar.*127.0.0.1/32.*trust" "$PG_HBA_CONF"; then
-    echo "Adding TCP localhost trust authentication for soar user to soar database..."
-    sudo sed -i "/^# IPv4 local connections:/a host    soar            soar            127.0.0.1/32            trust" "$PG_HBA_CONF"
-    NEEDS_RELOAD=true
-fi
-
-if ! grep -q "^host.*soar_staging.*soar.*127.0.0.1/32.*trust" "$PG_HBA_CONF"; then
-    echo "Adding TCP localhost trust authentication for soar user to soar_staging database..."
-    sudo sed -i "/^# IPv4 local connections:/a host    soar_staging    soar            127.0.0.1/32            trust" "$PG_HBA_CONF"
+# Only add TCP trust entry for the current environment's database
+if ! grep -q "^host.*${DB_NAME}.*soar.*127.0.0.1/32.*trust" "$PG_HBA_CONF"; then
+    echo "Adding TCP localhost trust authentication for soar user to ${DB_NAME} database..."
+    sudo sed -i "/^# IPv4 local connections:/a host    ${DB_NAME}      soar            127.0.0.1/32            trust" "$PG_HBA_CONF"
     NEEDS_RELOAD=true
 fi
 
@@ -772,25 +784,25 @@ echo "  NOTE: After starting Grafana, dashboards will be immediately available"
 echo
 echo -e "${YELLOW}Caddy Web Server (${ENVIRONMENT^^}):${NC}"
 echo "  Main configuration: /etc/caddy/Caddyfile (imports from /etc/soar/caddy/*)"
-echo "  SOAR config directory: /etc/soar/caddy/"
-echo "  This environment: /etc/soar/caddy/soar-${ENVIRONMENT}.conf"
-echo "  Configured for: $DOMAIN → http://localhost:$WEB_PORT"
-echo "  Grafana: grafana.glider.flights → http://localhost:3000"
+echo "  SOAR site configs directory: /etc/soar/caddy/"
+echo "  Installed sites for this environment:"
+for site in "${CADDY_SITES[@]}"; do
+    echo "    - /etc/soar/caddy/${site}.conf"
+done
 echo "  Logs: /var/log/caddy/"
 echo "  Verify configuration: sudo caddy validate --config /etc/caddy/Caddyfile"
 echo
-echo -e "${YELLOW}  NOTE: Multiple environments can coexist on the same server${NC}"
-echo "    Production config: /etc/soar/caddy/soar-production.conf"
-echo "    Staging config: /etc/soar/caddy/soar-staging.conf"
-echo "    Both are imported by the main Caddyfile if present"
+echo -e "${YELLOW}  NOTE: Site-based configuration (modular)${NC}"
+echo "    Each site has its own config file in /etc/soar/caddy/"
+echo "    Production sites: glider.flights, photon.glider.flights, grafana.glider.flights"
+echo "    Staging sites: staging.glider.flights, grafana.staging.glider.flights"
+echo "    Multiple environments can coexist - files are imported by main Caddyfile"
 echo
 echo -e "${YELLOW}  IMPORTANT - DNS Configuration Required:${NC}"
 echo "    Before Caddy can serve HTTPS, configure DNS A/AAAA records:"
-echo "      $DOMAIN → <server-ip>"
-echo "      grafana.glider.flights → <server-ip>"
-if [[ "$ENVIRONMENT" == "production" ]]; then
-    echo "      photon.glider.flights → <server-ip>"
-fi
+for site in "${CADDY_SITES[@]}"; do
+    echo "      ${site} → <server-ip>"
+done
 echo
 echo "    Caddy will automatically obtain Let's Encrypt certificates once DNS is configured."
 echo "    Test configuration: caddy run --config /etc/caddy/Caddyfile --adapter caddyfile"
