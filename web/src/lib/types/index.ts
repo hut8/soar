@@ -321,7 +321,7 @@ export interface Airspace {
 	};
 	properties: {
 		id: string;
-		openaip_id: number;
+		openaip_id: string;
 		name: string;
 		airspace_class: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'SUA' | null;
 		airspace_type: string;

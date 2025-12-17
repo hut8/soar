@@ -260,6 +260,7 @@ diesel::table! {
         keywords -> Nullable<Text>,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
+        location_id -> Nullable<Uuid>,
     }
 }
 
@@ -1267,6 +1268,7 @@ diesel::joinable!(aircraft_registrations -> clubs (club_id));
 diesel::joinable!(aircraft_registrations -> locations (location_id));
 diesel::joinable!(aircraft_registrations -> status_codes (status_code));
 diesel::joinable!(aircraft_registrations -> type_engines (type_engine_code));
+diesel::joinable!(airports -> locations (location_id));
 diesel::joinable!(clubs -> airports (home_base_airport_id));
 diesel::joinable!(clubs -> locations (location_id));
 diesel::joinable!(fixes -> aircraft (aircraft_id));

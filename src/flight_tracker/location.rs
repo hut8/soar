@@ -5,8 +5,9 @@ use crate::locations_repo::LocationsRepository;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
-/// Reverse geocoding is disabled for flight takeoffs and landings
+/// Reverse geocoding is disabled for flight takeoffs and landings (takeoff_location_id/landing_location_id)
 /// When this is false, create_or_find_location will not perform reverse geocoding
+/// Note: start_location_id and end_location_id always use reverse geocoding via create_start_end_location
 const GEOCODING_ENABLED_FOR_TAKEOFF_LANDING: bool = false;
 
 /// Find nearest airport within 2km of given coordinates
@@ -21,6 +22,18 @@ pub(crate) async fn find_nearby_airport(
         .await
     {
         Ok(airports) if !airports.is_empty() => Some(airports[0].0.id),
+        _ => None,
+    }
+}
+
+/// Get an airport's existing location_id if it has one
+/// Returns None if the airport doesn't exist or doesn't have a location_id
+pub(crate) async fn get_airport_location_id(
+    airports_repo: &AirportsRepository,
+    airport_id: i32,
+) -> Option<Uuid> {
+    match airports_repo.get_airport_by_id(airport_id).await {
+        Ok(Some(airport)) => airport.location_id,
         _ => None,
     }
 }
@@ -107,6 +120,94 @@ pub(crate) async fn create_or_find_location(
             warn!(
                 "Reverse geocoding failed for coordinates ({}, {}): {}",
                 latitude, longitude, e
+            );
+            None
+        }
+    }
+}
+
+/// Create a start or end location with reverse geocoding for flight start/end tracking
+/// This function ONLY uses Photon reverse geocoding (no fallbacks to avoid hitting external APIs frequently)
+/// Used for start_location_id and end_location_id fields to provide address context
+///
+/// # Arguments
+/// * `locations_repo` - Repository for location database operations
+/// * `latitude` - Latitude coordinate to reverse geocode
+/// * `longitude` - Longitude coordinate to reverse geocode
+/// * `context` - Description for logging (e.g., "takeoff", "landing", "timeout")
+///
+/// # Returns
+/// * `Some(Uuid)` - Location ID if reverse geocoding and creation succeeded
+/// * `None` - If reverse geocoding or location creation failed
+pub(crate) async fn create_start_end_location(
+    locations_repo: &LocationsRepository,
+    latitude: f64,
+    longitude: f64,
+    context: &str,
+) -> Option<Uuid> {
+    debug!(
+        "Creating {} location for coordinates ({}, {}) with Photon reverse geocoding",
+        context, latitude, longitude
+    );
+
+    let geocoder = Geocoder::new();
+    // Only use Photon - don't fall back to Nominatim or Google Maps for flight locations
+    match geocoder
+        .reverse_geocode_with_photon_only(latitude, longitude)
+        .await
+    {
+        Ok(result) => {
+            debug!(
+                "Reverse geocoded {} location ({}, {}) to: {}",
+                context, latitude, longitude, result.display_name
+            );
+
+            // Create a location with the reverse geocoded address
+            let location = Location::new(
+                result.street1,
+                None, // street2
+                result.city,
+                result.state,
+                result.zip_code,
+                None,                                                // region_code
+                result.country.map(|c| c.chars().take(2).collect()), // country code (first 2 chars)
+                Some(crate::locations::Point::new(latitude, longitude)),
+            );
+
+            // Use find_or_create to avoid duplicate locations
+            match locations_repo
+                .find_or_create(
+                    location.street1.clone(),
+                    location.street2.clone(),
+                    location.city.clone(),
+                    location.state.clone(),
+                    location.zip_code.clone(),
+                    location.region_code.clone(),
+                    location.country_mail_code.clone(),
+                    location.geolocation,
+                )
+                .await
+            {
+                Ok(created_location) => {
+                    info!(
+                        "Created/found {} location {} for coordinates ({}, {}): {}",
+                        context, created_location.id, latitude, longitude, result.display_name
+                    );
+                    Some(created_location.id)
+                }
+                Err(e) => {
+                    warn!(
+                        "Failed to create {} location for coordinates ({}, {}): {}",
+                        context, latitude, longitude, e
+                    );
+                    None
+                }
+            }
+        }
+        Err(e) => {
+            warn!(
+                "Reverse geocoding failed for {} location at coordinates ({}, {}): {}",
+                context, latitude, longitude, e
             );
             None
         }
