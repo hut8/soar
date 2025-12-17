@@ -386,6 +386,16 @@ sudo mkdir -p /etc/soar/caddy
 sudo chown root:root /etc/soar/caddy
 sudo chmod 755 /etc/soar/caddy
 
+# Remove old monolithic config files (from pre-modular setup)
+if [ -f "/etc/soar/caddy/soar-production.conf" ]; then
+    echo "Removing old monolithic config: soar-production.conf"
+    sudo rm -f /etc/soar/caddy/soar-production.conf
+fi
+if [ -f "/etc/soar/caddy/soar-staging.conf" ]; then
+    echo "Removing old monolithic config: soar-staging.conf"
+    sudo rm -f /etc/soar/caddy/soar-staging.conf
+fi
+
 # Install site-specific Caddy configs for this environment
 echo "Installing Caddy site configs for $ENVIRONMENT environment..."
 for site in "${CADDY_SITES[@]}"; do
