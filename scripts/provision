@@ -498,6 +498,41 @@ else
     echo -e "${BLUE}Photon is already running${NC}"
 fi
 
+# Configure Photon OpenSearch for single-node operation
+echo -e "${BLUE}Configuring Photon OpenSearch replica settings...${NC}"
+
+# Wait for Photon OpenSearch to be ready (max 60 seconds)
+PHOTON_READY=false
+for i in {1..12}; do
+    if curl -s -f "http://127.0.0.1:9201/_cluster/health" >/dev/null 2>&1; then
+        PHOTON_READY=true
+        break
+    fi
+    echo "Waiting for Photon OpenSearch to be ready... ($i/12)"
+    sleep 5
+done
+
+if [ "$PHOTON_READY" = true ]; then
+    # Set cluster default to 0 replicas for single-node operation
+    echo "Setting cluster default number_of_replicas to 0..."
+    curl -s -X PUT "http://127.0.0.1:9201/_cluster/settings" \
+        -H 'Content-Type: application/json' \
+        -d '{"persistent":{"cluster.default_number_of_replicas":0}}' >/dev/null 2>&1
+
+    # Update existing photon index if it exists
+    if curl -s -f "http://127.0.0.1:9201/photon" >/dev/null 2>&1; then
+        echo "Updating existing photon index to 0 replicas..."
+        curl -s -X PUT "http://127.0.0.1:9201/photon/_settings" \
+            -H 'Content-Type: application/json' \
+            -d '{"index":{"number_of_replicas":0}}' >/dev/null 2>&1
+    fi
+
+    echo -e "${GREEN}Photon OpenSearch configured for single-node operation${NC}"
+else
+    echo -e "${YELLOW}Warning: Photon OpenSearch not ready, skipping replica configuration${NC}"
+    echo -e "${YELLOW}You may need to manually configure replicas. See infrastructure/DEPLOYMENT.md${NC}"
+fi
+
 # Create necessary directories
 echo -e "${BLUE}Creating directories...${NC}"
 sudo mkdir -p /var/soar/logs
@@ -754,6 +789,7 @@ echo "    Test configuration: caddy run --config /etc/caddy/Caddyfile --adapter 
 echo
 echo -e "${YELLOW}Photon Geocoding Server:${NC}"
 echo "  API endpoint: http://localhost:2322"
+echo "  OpenSearch API: http://localhost:9201"
 echo "  Application directory: /opt/photon"
 echo "  Data directory: /var/lib/photon"
 echo "  Logs: sudo journalctl -u photon -f"
@@ -761,6 +797,11 @@ echo "  Test forward geocoding: curl 'http://localhost:2322/api?q=Berlin'"
 echo "  Test reverse geocoding: curl 'http://localhost:2322/reverse?lon=13.388860&lat=52.517037'"
 echo "  Configuration: /etc/systemd/system/photon.service"
 echo "  Documentation: docs/photon-deployment.md"
+echo ""
+echo "  OpenSearch Cluster Health:"
+echo "    Check cluster status: curl 'http://localhost:9201/_cluster/health?pretty'"
+echo "    View shards: curl 'http://localhost:9201/_cat/shards?v'"
+echo "    Single-node config: number_of_replicas set to 0 (green cluster health)"
 if [ -d "/var/lib/photon/photon_data" ]; then
     echo "  Status: Data installed ✓"
 else
