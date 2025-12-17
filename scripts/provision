@@ -263,12 +263,11 @@ sudo chown -R photon:photon /opt/photon
 sudo chown -R photon:photon /var/lib/photon
 
 # Download Photon JAR if not already installed
-PHOTON_VERSION="0.7.4"
-PHOTON_JAR="photon-opensearch-${PHOTON_VERSION}.jar"
+PHOTON_JAR="photon-opensearch-0.7.4.jar"
+PHOTON_URL="https://github.com/komoot/photon/releases/download/0.7.4/photon-opensearch-0.7.4.jar"
 
 if [ ! -f "/opt/photon/${PHOTON_JAR}" ]; then
-    echo "Downloading Photon OpenSearch ${PHOTON_VERSION}..."
-    PHOTON_URL="https://github.com/komoot/photon/releases/download/${PHOTON_VERSION}/${PHOTON_JAR}"
+    echo "Downloading Photon OpenSearch 0.7.4..."
 
     (
         cd /opt/photon
