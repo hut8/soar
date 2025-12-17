@@ -18,7 +18,7 @@ WorkingDirectory=/opt/photon
 #   16GB RAM: -Xmx12G -Xms12G
 #   32GB RAM: -Xmx24G -Xms24G
 #   64GB RAM: -Xmx48G -Xms48G
-Environment="JAVA_OPTS=-Xmx16G -Xms16G"
+Environment="JAVA_OPTS=-Xmx12G -Xms12G"
 
 # Photon command with common options
 # Adjust parameters as needed for your deployment
