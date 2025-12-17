@@ -76,7 +76,7 @@ pub struct AircraftSearchQuery {
 
 #[derive(Debug, Serialize)]
 pub struct AircraftSearchResponse {
-    pub devices: Vec<AircraftView>,
+    pub aircraft: Vec<AircraftView>,
 }
 
 #[derive(Debug, Serialize)]
@@ -185,7 +185,7 @@ pub async fn get_aircraft_fixes(
             let active_only = query.active;
 
             match fixes_repo
-                .get_fixes_by_device_paginated(id, query.after, page, per_page, active_only)
+                .get_fixes_by_aircraft_paginated(id, query.after, page, per_page, active_only)
                 .await
             {
                 Ok((fixes, total_count)) => {
@@ -270,7 +270,7 @@ async fn search_devices_by_bbox(
     // Perform bounding box search - fetch the 10 most recent fixes per device
     // This provides enough data for trail rendering without additional API calls
     match fixes_repo
-        .get_devices_with_fixes_in_bounding_box(
+        .get_aircraft_with_fixes_in_bounding_box(
             lat_max,
             lon_min,
             lat_min,
@@ -315,7 +315,7 @@ async fn search_devices_by_registration(
         Ok(devices) => {
             let device_views: Vec<AircraftView> = devices.into_iter().map(|d| d.into()).collect();
             Json(AircraftSearchResponse {
-                devices: device_views,
+                aircraft: device_views,
             })
             .into_response()
         }
@@ -360,11 +360,11 @@ async fn search_devices_by_address(
         Ok(Some(device)) => {
             let device_view: AircraftView = device.into();
             Json(AircraftSearchResponse {
-                devices: vec![device_view],
+                aircraft: vec![device_view],
             })
             .into_response()
         }
-        Ok(None) => Json(AircraftSearchResponse { devices: vec![] }).into_response(),
+        Ok(None) => Json(AircraftSearchResponse { aircraft: vec![] }).into_response(),
         Err(e) => {
             tracing::error!("Failed to search devices by address {}: {}", address, e);
             json_error(
@@ -466,7 +466,7 @@ async fn get_recent_aircraft_response(
                 )
                 .collect();
             Json(AircraftSearchResponse {
-                devices: aircraft_views,
+                aircraft: aircraft_views,
             })
             .into_response()
         }
@@ -603,7 +603,7 @@ pub async fn get_aircraft_by_club(
         Ok(devices) => {
             let device_views: Vec<AircraftView> = devices.into_iter().map(|d| d.into()).collect();
             Json(AircraftSearchResponse {
-                devices: device_views,
+                aircraft: device_views,
             })
             .into_response()
         }

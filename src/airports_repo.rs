@@ -48,6 +48,8 @@ struct AirportWithDistance {
     wikipedia_link: Option<String>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
     keywords: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
+    location_id: Option<uuid::Uuid>,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float8>)]
     distance_meters: Option<f64>,
 }
@@ -74,6 +76,7 @@ impl From<AirportWithDistance> for Airport {
             home_link: awd.home_link,
             wikipedia_link: awd.wikipedia_link,
             keywords: awd.keywords,
+            location_id: awd.location_id,
         }
     }
 }
@@ -221,6 +224,35 @@ impl AirportsRepository {
         Ok(result.map(|model| model.into()))
     }
 
+    /// Update an airport's location_id
+    /// Returns true if the airport was found and updated, false otherwise
+    pub async fn update_location_id(
+        &self,
+        airport_id: i32,
+        new_location_id: uuid::Uuid,
+    ) -> Result<bool> {
+        use crate::schema::airports::dsl::*;
+        use chrono::Utc;
+
+        let pool = self.pool.clone();
+
+        let rows_affected = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            let rows = diesel::update(airports.filter(id.eq(airport_id)))
+                .set((
+                    location_id.eq(Some(new_location_id)),
+                    updated_at.eq(Utc::now()),
+                ))
+                .execute(&mut conn)?;
+
+            Ok::<usize, anyhow::Error>(rows)
+        })
+        .await??;
+
+        Ok(rows_affected > 0)
+    }
+
     /// Search airports by name (case-insensitive partial match)
     pub async fn search_by_name(&self, search_name: &str) -> Result<Vec<Airport>> {
         use crate::schema::airports::dsl::*;
@@ -366,6 +398,8 @@ impl AirportsRepository {
                 wikipedia_link: Option<String>,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
                 keywords: Option<String>,
+                #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Uuid>)]
+                location_id: Option<uuid::Uuid>,
                 #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Float4>)]
                 #[allow(dead_code)]
                 similarity_score: Option<f32>,
@@ -396,6 +430,7 @@ impl AirportsRepository {
                 home_link: aws.home_link,
                 wikipedia_link: aws.wikipedia_link,
                 keywords: aws.keywords,
+                location_id: aws.location_id,
             }).collect();
 
             Ok::<Vec<Airport>, anyhow::Error>(airports)
@@ -563,6 +598,7 @@ mod tests {
             ),
             wikipedia_link: None,
             keywords: None,
+            location_id: None,
         }
     }
 

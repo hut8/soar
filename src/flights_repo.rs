@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use uuid::Uuid;
 
-use crate::flights::{Flight, FlightModel};
+use crate::flights::{Flight, FlightModel, TimeoutPhase};
 use crate::web::PgPool;
 
 #[derive(Clone)]
@@ -50,6 +50,7 @@ impl FlightsRepository {
         landing_time_param: DateTime<Utc>,
         arrival_airport_id_param: Option<i32>,
         landing_location_id_param: Option<Uuid>,
+        end_location_id_param: Option<Uuid>,
         landing_altitude_offset_ft_param: Option<i32>,
         landing_runway_ident_param: Option<String>,
         total_distance_meters_param: Option<f64>,
@@ -67,12 +68,13 @@ impl FlightsRepository {
             // If last_fix_at not provided, use landing_time (by definition a flight has at least one fix)
             let last_fix_time = last_fix_at_param.unwrap_or(landing_time_param);
 
-            // Single UPDATE query with all fields including last_fix_at
+            // Single UPDATE query with all fields including last_fix_at and end_location_id
             let rows_affected = diesel::update(flights.filter(id.eq(flight_id)))
                 .set((
                     landing_time.eq(&Some(landing_time_param)),
                     arrival_airport_id.eq(&arrival_airport_id_param),
                     landing_location_id.eq(&landing_location_id_param),
+                    end_location_id.eq(&end_location_id_param),
                     landing_altitude_offset_ft.eq(&landing_altitude_offset_ft_param),
                     landing_runway_ident.eq(&landing_runway_ident_param),
                     total_distance_meters.eq(&total_distance_meters_param),
@@ -681,6 +683,44 @@ impl FlightsRepository {
                     updated_at.eq(Utc::now()),
                 ))
                 .execute(&mut conn)?;
+
+            Ok::<usize, anyhow::Error>(rows)
+        })
+        .await??;
+
+        Ok(rows_affected > 0)
+    }
+
+    /// Timeout a flight and record the flight phase when timeout occurred
+    /// This helps determine coalescing behavior when aircraft reappears
+    pub async fn timeout_flight_with_phase(
+        &self,
+        flight_id: Uuid,
+        timeout_time: DateTime<Utc>,
+        phase: TimeoutPhase,
+        end_location: Option<Uuid>,
+    ) -> Result<bool> {
+        use crate::schema::flights::dsl::*;
+
+        let pool = self.pool.clone();
+
+        let rows_affected = tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            // Only timeout flights that haven't already landed
+            // This prevents violating the check_timed_out_or_landed constraint
+            let rows = diesel::update(
+                flights
+                    .filter(id.eq(flight_id))
+                    .filter(landing_time.is_null()),
+            )
+            .set((
+                timed_out_at.eq(Some(timeout_time)),
+                timeout_phase.eq(Some(phase)),
+                end_location_id.eq(end_location),
+                updated_at.eq(Utc::now()),
+            ))
+            .execute(&mut conn)?;
 
             Ok::<usize, anyhow::Error>(rows)
         })

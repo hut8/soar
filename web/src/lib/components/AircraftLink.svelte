@@ -81,12 +81,10 @@
 		return null;
 	});
 
-	// Flag SVG URL from hampusborgos/country-flags repository
+	// Flag SVG URL from local flags directory
 	const flagUrl = $derived(() => {
 		const code = countryCode();
-		return code
-			? `https://cdn.jsdelivr.net/gh/hampusborgos/country-flags@main/svg/${code}.svg`
-			: null;
+		return code ? `/flags/${code.toLowerCase()}.svg` : null;
 	});
 </script>
 

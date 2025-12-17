@@ -1,9 +1,9 @@
 #!/bin/bash
 #
-# base-backup - Create full PostgreSQL base backup and upload to remote SSH server
+# base-backup - Create full PostgreSQL base backup and upload to Wasabi S3
 #
 # This script creates a physical backup of the PostgreSQL database using
-# pg_basebackup, compresses it, uploads to remote SSH server, and manages retention.
+# pg_basebackup, compresses it, uploads to Wasabi S3 via rclone, and manages retention.
 #
 # Usage:
 #   base-backup [--no-cleanup]
@@ -17,6 +17,7 @@
 #
 # Configuration:
 #   Source credentials from /etc/soar/backup-env
+#   Requires rclone configured with Wasabi remote
 #
 # Scheduling:
 #   Run via systemd timer: soar-backup-base.timer (weekly, Sunday midnight)
@@ -46,20 +47,32 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# SSH configuration
-SSH_KEY="${BACKUP_SSH_KEY:-/var/soar/keys/backup_key}"
-SSH_HOST="${BACKUP_SSH_HOST:-cryptobot}"
-SSH_PATH="${BACKUP_SSH_PATH:-/srv/soar-backups}"
-SSH_USER="${BACKUP_SSH_USER:-root}"
+# Rclone configuration
+RCLONE_REMOTE="${BACKUP_RCLONE_REMOTE:-wasabi}"
+RCLONE_BUCKET="${BACKUP_RCLONE_BUCKET:-soar-backup-prod}"
+RCLONE_PATH="${BACKUP_RCLONE_PATH:-}"  # Optional prefix within bucket
 
 # Validate configuration
-if [[ -z "${BACKUP_SSH_HOST:-}" ]]; then
-    echo "ERROR: BACKUP_SSH_HOST not set in /etc/soar/backup-env" >&2
+if [[ -z "${BACKUP_RCLONE_REMOTE:-}" ]]; then
+    echo "ERROR: BACKUP_RCLONE_REMOTE not set in /etc/soar/backup-env" >&2
     exit 1
 fi
 
-if [[ ! -f "$SSH_KEY" ]]; then
-    echo "ERROR: SSH key not found: $SSH_KEY" >&2
+if [[ -z "${BACKUP_RCLONE_BUCKET:-}" ]]; then
+    echo "ERROR: BACKUP_RCLONE_BUCKET not set in /etc/soar/backup-env" >&2
+    exit 1
+fi
+
+# Check rclone is available
+if ! command -v rclone >/dev/null 2>&1; then
+    echo "ERROR: rclone not found in PATH" >&2
+    exit 1
+fi
+
+# Verify rclone remote is configured
+if ! rclone listremotes | grep -q "^${RCLONE_REMOTE}:$"; then
+    echo "ERROR: rclone remote '${RCLONE_REMOTE}' not configured" >&2
+    echo "Run: rclone config" >&2
     exit 1
 fi
 
@@ -83,10 +96,13 @@ BACKUP_DATE=$(date -u +"%Y-%m-%d")
 BACKUP_TIMESTAMP=$(date -u +"%Y-%m-%d_%H-%M-%S")
 BACKUP_NAME="backup-${BACKUP_TIMESTAMP}"
 BACKUP_LOCAL_DIR="$TEMP_DIR/$BACKUP_NAME"
-BACKUP_REMOTE_PATH="${SSH_PATH}/base/${BACKUP_DATE}"
 
-# SSH options for rsync
-SSH_OPTS="-i $SSH_KEY -o StrictHostKeyChecking=accept-new -o BatchMode=yes"
+# Construct rclone destination path
+if [[ -n "$RCLONE_PATH" ]]; then
+    BACKUP_REMOTE_PATH="${RCLONE_REMOTE}:${RCLONE_BUCKET}/${RCLONE_PATH}/base/${BACKUP_DATE}"
+else
+    BACKUP_REMOTE_PATH="${RCLONE_REMOTE}:${RCLONE_BUCKET}/base/${BACKUP_DATE}"
+fi
 
 # Metrics and notifications
 NOTIFY_EMAIL="${BACKUP_NOTIFY_EMAIL:-}"
@@ -191,7 +207,7 @@ main() {
     log INFO "Starting base backup: $BACKUP_NAME"
     log INFO "=========================================="
     log INFO "Database: ${PGUSER}@${PGHOST}:${PGPORT}/${PGDATABASE}"
-    log INFO "Destination: ${SSH_USER}@${SSH_HOST}:${BACKUP_REMOTE_PATH}"
+    log INFO "Destination: ${BACKUP_REMOTE_PATH}"
     log INFO "Compression: zstd (multi-threaded)"
     log INFO "Parallel jobs: $PARALLEL_JOBS"
 
@@ -245,22 +261,18 @@ main() {
     local backup_size=$(du -sb "$BACKUP_LOCAL_DIR" | cut -f1)
     log INFO "Backup size: $(numfmt --to=iec-i --suffix=B "$backup_size")"
 
-    # Create remote directory if it doesn't exist
-    log INFO "Creating remote directory..."
-    if ! ssh $SSH_OPTS "${SSH_USER}@${SSH_HOST}" \
-        "mkdir -p ${BACKUP_REMOTE_PATH}"; then
-        log ERROR "Failed to create remote directory"
-        exit 1
-    fi
+    # Upload to Wasabi S3 using rclone
+    log INFO "Uploading backup to Wasabi S3..."
 
-    # Upload to remote server
-    log INFO "Uploading backup to remote server..."
-
-    if ! rsync -avz --progress \
-        -e "ssh $SSH_OPTS" \
+    # Use rclone copy with progress and multiple transfers
+    if ! rclone copy \
+        --progress \
+        --transfers "$PARALLEL_JOBS" \
+        --s3-chunk-size 64M \
+        --s3-upload-concurrency "$PARALLEL_JOBS" \
         "$BACKUP_LOCAL_DIR/" \
-        "${SSH_USER}@${SSH_HOST}:${BACKUP_REMOTE_PATH}/"; then
-        log ERROR "Failed to upload backup to remote server"
+        "${BACKUP_REMOTE_PATH}/"; then
+        log ERROR "Failed to upload backup to Wasabi S3"
         exit 1
     fi
 
@@ -268,15 +280,14 @@ main() {
 
     # Verify uploaded files
     log INFO "Verifying uploaded files..."
-    local uploaded_count=$(ssh $SSH_OPTS "${SSH_USER}@${SSH_HOST}" \
-        "find ${BACKUP_REMOTE_PATH} -type f | wc -l" 2>&1)
+    local uploaded_count=$(rclone ls "${BACKUP_REMOTE_PATH}/" 2>/dev/null | wc -l)
 
     if [[ $uploaded_count -eq 0 ]]; then
-        log ERROR "Verification failed: no files found on remote server"
+        log ERROR "Verification failed: no files found in Wasabi S3"
         exit 1
     fi
 
-    log INFO "Verification passed: found $uploaded_count files on remote server"
+    log INFO "Verification passed: found $uploaded_count files in Wasabi S3"
 
     # Create metadata file
     log INFO "Creating backup metadata..."
@@ -296,10 +307,9 @@ main() {
 }
 EOF
 
-    rsync -az \
-        -e "ssh $SSH_OPTS" \
+    rclone copyto \
         "$TEMP_DIR/backup-metadata.json" \
-        "${SSH_USER}@${SSH_HOST}:${BACKUP_REMOTE_PATH}/backup-metadata.json"
+        "${BACKUP_REMOTE_PATH}/backup-metadata.json"
 
     # Cleanup old backups if enabled
     if [[ "$CLEANUP" == "true" ]]; then
@@ -307,10 +317,20 @@ EOF
         local keep_count=${BASE_BACKUP_KEEP_COUNT:-5}
         log INFO "Cleaning up old backups (keeping most recent: $keep_count)..."
 
-        # List all base backups (sorted newest first)
-        local all_backups=$(ssh $SSH_OPTS "${SSH_USER}@${SSH_HOST}" \
-            "find ${SSH_PATH}/base -maxdepth 1 -type d -name '20*' -printf '%f\n' | sort -r" \
-            2>/dev/null || echo "")
+        # Construct base path for listing backups
+        local base_path
+        if [[ -n "$RCLONE_PATH" ]]; then
+            base_path="${RCLONE_REMOTE}:${RCLONE_BUCKET}/${RCLONE_PATH}/base"
+        else
+            base_path="${RCLONE_REMOTE}:${RCLONE_BUCKET}/base"
+        fi
+
+        # List all base backups (directories starting with 20* for dates like 2025-01-*)
+        # rclone lsd lists directories only
+        local all_backups=$(rclone lsd "$base_path" 2>/dev/null | \
+            awk '{print $5}' | \
+            grep '^20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]$' | \
+            sort -r || echo "")
 
         if [[ -z "$all_backups" ]]; then
             log WARN "No backups found for cleanup"
@@ -336,8 +356,7 @@ EOF
                         # Delete this backup
                         log INFO "Deleting old backup: $backup_date"
 
-                        if ssh $SSH_OPTS "${SSH_USER}@${SSH_HOST}" \
-                            "rm -rf ${SSH_PATH}/base/${backup_date}"; then
+                        if rclone purge "${base_path}/${backup_date}"; then
                             ((deleted_count++))
                             log INFO "Successfully deleted backup: $backup_date"
                         else
@@ -359,7 +378,7 @@ EOF
     log INFO "=========================================="
     log INFO "Backup completed successfully!"
     log INFO "Duration: $duration_formatted"
-    log INFO "Backup location: ${SSH_USER}@${SSH_HOST}:${BACKUP_REMOTE_PATH}"
+    log INFO "Backup location: ${BACKUP_REMOTE_PATH}"
     log INFO "=========================================="
 
     # Send success notification
@@ -368,7 +387,7 @@ Backup: $BACKUP_NAME
 Duration: $duration_formatted
 Database size: $(numfmt --to=iec-i --suffix=B "$db_size")
 Backup size: $(numfmt --to=iec-i --suffix=B "$backup_size")
-Location: ${SSH_USER}@${SSH_HOST}:${BACKUP_REMOTE_PATH}"
+Location: ${BACKUP_REMOTE_PATH}"
 
     # Update metrics (if metrics endpoint is available)
     if [[ -n "${METRICS_PUSHGATEWAY:-}" ]] && command -v curl >/dev/null 2>&1; then

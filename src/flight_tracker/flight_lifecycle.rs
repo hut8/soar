@@ -1,7 +1,6 @@
 use crate::Fix;
 use crate::aircraft::Aircraft;
-use crate::flights::Flight;
-use crate::flights_repo::FlightsRepository;
+use crate::flights::{Flight, TimeoutPhase};
 use anyhow::Result;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
@@ -10,7 +9,10 @@ use super::ActiveFlightsMap;
 use super::FlightProcessorContext;
 use super::altitude::calculate_altitude_offset_ft;
 use super::geometry::haversine_distance;
-use super::location::{create_or_find_location, find_nearby_airport};
+use super::location::{
+    create_or_find_location, create_start_end_location, find_nearby_airport,
+    get_airport_location_id,
+};
 use super::runway::determine_runway_identifier;
 
 /// Create a new flight for takeoff
@@ -42,7 +44,18 @@ pub(crate) async fn create_flight(
 
     let mut flight = if skip_airport_runway_lookup {
         // Mid-flight appearance - no takeoff observed
-        Flight::new_airborne_from_fix_with_id(fix, &aircraft, flight_id)
+        let mut flight = Flight::new_airborne_from_fix_with_id(fix, &aircraft, flight_id);
+
+        // Create start location with Photon reverse geocoding for airborne detection point
+        flight.start_location_id = create_start_end_location(
+            ctx.locations_repo,
+            fix.latitude,
+            fix.longitude,
+            "start (airborne)",
+        )
+        .await;
+
+        flight
     } else {
         // Actual takeoff - calculate altitude offset and look up airport/runway
         let takeoff_altitude_offset_ft = calculate_altitude_offset_ft(ctx.elevation_db, fix).await;
@@ -72,10 +85,45 @@ pub(crate) async fn create_flight(
 
         let takeoff_runway = takeoff_runway_info.map(|(runway, _)| runway);
 
+        // Set start_location_id: use airport's location_id if at airport and it exists,
+        // otherwise create new location with Photon reverse geocoding
+        let start_location_id = if let Some(airport_id) = departure_airport_id {
+            // Check if airport has a location_id
+            match get_airport_location_id(ctx.airports_repo, airport_id).await {
+                Some(location_id) => {
+                    debug!(
+                        "Using airport {}'s existing location_id {} for takeoff",
+                        airport_id, location_id
+                    );
+                    Some(location_id)
+                }
+                None => {
+                    // Airport doesn't have location_id yet, reverse geocode the coordinates
+                    create_start_end_location(
+                        ctx.locations_repo,
+                        fix.latitude,
+                        fix.longitude,
+                        "start (takeoff)",
+                    )
+                    .await
+                }
+            }
+        } else {
+            // Not at an airport, reverse geocode the coordinates
+            create_start_end_location(
+                ctx.locations_repo,
+                fix.latitude,
+                fix.longitude,
+                "start (takeoff)",
+            )
+            .await
+        };
+
         let mut flight =
             Flight::new_with_takeoff_from_fix_with_id(fix, &aircraft, flight_id, fix.timestamp);
         flight.departure_airport_id = departure_airport_id;
         flight.takeoff_location_id = takeoff_location_id;
+        flight.start_location_id = start_location_id;
         flight.takeoff_runway_ident = takeoff_runway;
         flight.takeoff_altitude_offset_ft = takeoff_altitude_offset_ft;
         flight
@@ -95,10 +143,10 @@ pub(crate) async fn create_flight(
 }
 
 /// Timeout a flight that has not received beacons for 1+ hour
-/// Does NOT set landing location - this is a timeout, not a landing
+/// Sets end_location_id with reverse geocoded location of last known position
 /// Sets timed_out_at to the last_fix_at value from the flight
 pub(crate) async fn timeout_flight(
-    flights_repo: &FlightsRepository,
+    ctx: &FlightProcessorContext<'_>,
     active_flights: &ActiveFlightsMap,
     flight_id: Uuid,
     aircraft_id: Uuid,
@@ -108,8 +156,26 @@ pub(crate) async fn timeout_flight(
         flight_id, aircraft_id
     );
 
+    // Get current flight state to determine phase
+    let flight_phase = {
+        let flights = active_flights.read().await;
+        flights
+            .get(&aircraft_id)
+            .map(|state| state.determine_flight_phase())
+            .unwrap_or(super::FlightPhase::Unknown)
+    };
+
+    let timeout_phase = match flight_phase {
+        super::FlightPhase::Climbing => TimeoutPhase::Climbing,
+        super::FlightPhase::Cruising => TimeoutPhase::Cruising,
+        super::FlightPhase::Descending => TimeoutPhase::Descending,
+        super::FlightPhase::Unknown => TimeoutPhase::Unknown,
+    };
+
+    debug!("Flight {} phase at timeout: {:?}", flight_id, timeout_phase);
+
     // Fetch the flight to get the last_fix_at timestamp
-    let flight = match flights_repo.get_flight_by_id(flight_id).await? {
+    let flight = match ctx.flights_repo.get_flight_by_id(flight_id).await? {
         Some(f) => f,
         None => {
             error!("Flight {} not found when timing out", flight_id);
@@ -123,11 +189,40 @@ pub(crate) async fn timeout_flight(
     // Use last_fix_at as the timeout time
     let timeout_time = flight.last_fix_at;
 
-    // Mark flight as timed out in database
-    match flights_repo.timeout_flight(flight_id, timeout_time).await {
+    // Fetch last fix to get coordinates for reverse geocoding
+    let last_fix = ctx
+        .fixes_repo
+        .get_fixes_for_flight(flight_id, Some(1))
+        .await?
+        .into_iter()
+        .next();
+
+    // Create end location with reverse geocoding if we have the last fix
+    let end_location_id = if let Some(fix) = last_fix {
+        create_start_end_location(
+            ctx.locations_repo,
+            fix.latitude,
+            fix.longitude,
+            "end (timeout)",
+        )
+        .await
+    } else {
+        debug!(
+            "No fixes found for timed out flight {}, skipping end location creation",
+            flight_id
+        );
+        None
+    };
+
+    // Mark flight as timed out in database WITH phase information and end location
+    match ctx
+        .flights_repo
+        .timeout_flight_with_phase(flight_id, timeout_time, timeout_phase, end_location_id)
+        .await
+    {
         Ok(true) => {
             // Calculate and update bounding box now that flight is timed out
-            flights_repo
+            ctx.flights_repo
                 .calculate_and_update_bounding_box(flight_id)
                 .await?;
 
@@ -136,6 +231,13 @@ pub(crate) async fn timeout_flight(
             flights.remove(&aircraft_id);
 
             metrics::counter!("flight_tracker.flight_ended.timed_out").increment(1);
+            let phase_label = match timeout_phase {
+                TimeoutPhase::Climbing => "climbing",
+                TimeoutPhase::Cruising => "cruising",
+                TimeoutPhase::Descending => "descending",
+                TimeoutPhase::Unknown => "unknown",
+            };
+            metrics::counter!("flight_tracker.timeout.phase", "phase" => phase_label).increment(1);
 
             Ok(())
         }
@@ -198,6 +300,40 @@ pub(crate) async fn complete_flight(
         None => (None, None),
     };
     let landing_altitude_offset_ft = calculate_altitude_offset_ft(ctx.elevation_db, fix).await;
+
+    // Set end_location_id: use airport's location_id if at airport and it exists,
+    // otherwise create new location with Photon reverse geocoding
+    let end_location_id = if let Some(airport_id) = arrival_airport_id {
+        // Check if airport has a location_id
+        match get_airport_location_id(ctx.airports_repo, airport_id).await {
+            Some(location_id) => {
+                debug!(
+                    "Using airport {}'s existing location_id {} for landing",
+                    airport_id, location_id
+                );
+                Some(location_id)
+            }
+            None => {
+                // Airport doesn't have location_id yet, reverse geocode the coordinates
+                create_start_end_location(
+                    ctx.locations_repo,
+                    fix.latitude,
+                    fix.longitude,
+                    "end (landing)",
+                )
+                .await
+            }
+        }
+    } else {
+        // Not at an airport, reverse geocode the coordinates
+        create_start_end_location(
+            ctx.locations_repo,
+            fix.latitude,
+            fix.longitude,
+            "end (landing)",
+        )
+        .await
+    };
 
     // Fetch the flight to compute distance metrics
     let flight = match ctx.flights_repo.get_flight_by_id(flight_id).await? {
@@ -366,6 +502,7 @@ pub(crate) async fn complete_flight(
             fix.timestamp,
             arrival_airport_id,
             landing_location_id,
+            end_location_id, // Reverse geocoded end location
             landing_altitude_offset_ft,
             landing_runway,
             total_distance_meters,
@@ -384,6 +521,164 @@ pub(crate) async fn complete_flight(
         "Completed flight {} with landing at {:.6}, {:.6}",
         flight_id, fix.latitude, fix.longitude
     );
+
+    // Send email notifications to users watching this aircraft
+    let pool_clone = ctx.pool.clone();
+    let device_id_opt = device.id;
+    let device_address = device.address;
+
+    tokio::spawn(async move {
+        use crate::aircraft_repo::AircraftRepository;
+        use crate::fixes_repo::FixesRepository;
+        use crate::flights_repo::FlightsRepository;
+        use crate::users_repo::UsersRepository;
+        use crate::watchlist_repo::WatchlistRepository;
+
+        // Get device_id, return early if not available
+        let device_id = match device_id_opt {
+            Some(id) => id,
+            None => {
+                tracing::warn!("Aircraft has no ID, cannot send email notifications");
+                return;
+            }
+        };
+
+        // Get users who want email notifications for this aircraft
+        let watchlist_repo = WatchlistRepository::new(pool_clone.clone());
+        match watchlist_repo.get_users_for_aircraft_email(device_id).await {
+            Ok(user_ids) if !user_ids.is_empty() => {
+                tracing::info!(
+                    "Sending flight completion emails to {} users for aircraft {}",
+                    user_ids.len(),
+                    device_address
+                );
+
+                // Get flight data for KML generation
+                let fixes_repo = FixesRepository::new(pool_clone.clone());
+                let flight_repo = FlightsRepository::new(pool_clone.clone());
+                let aircraft_repo = AircraftRepository::new(pool_clone.clone());
+                let users_repo = UsersRepository::new(pool_clone.clone());
+
+                // Get full aircraft info
+                let aircraft = match aircraft_repo.get_aircraft_by_address(device_address).await {
+                    Ok(Some(d)) => d,
+                    _ => {
+                        tracing::error!("Failed to get aircraft for KML generation");
+                        metrics::counter!("watchlist.emails.failed").increment(1);
+                        return;
+                    }
+                };
+
+                // Get flight for KML generation
+                let flight = match flight_repo.get_flight_by_id(flight_id).await {
+                    Ok(Some(f)) => f,
+                    _ => {
+                        tracing::error!("Failed to get flight for KML generation");
+                        metrics::counter!("watchlist.emails.failed").increment(1);
+                        return;
+                    }
+                };
+
+                // Generate KML
+                let kml_content = match flight.make_kml(&fixes_repo, Some(&aircraft)).await {
+                    Ok(kml) => kml,
+                    Err(e) => {
+                        tracing::error!("Failed to generate KML: {}", e);
+                        metrics::counter!("watchlist.emails.failed").increment(1);
+                        return;
+                    }
+                };
+
+                // Generate KML filename
+                let takeoff_time_str = flight
+                    .takeoff_time
+                    .map(|t| t.format("%Y%m%d-%H%M%S").to_string())
+                    .unwrap_or_else(|| "unknown".to_string());
+                let kml_filename = format!("flight-{}-{}.kml", takeoff_time_str, device_address);
+
+                // Send emails
+                let email_service = match crate::email::EmailService::new() {
+                    Ok(svc) => svc,
+                    Err(e) => {
+                        tracing::error!("Failed to create email service: {}", e);
+                        sentry::capture_message(
+                            &format!(
+                                "Failed to create email service for flight completion notifications: {}",
+                                e
+                            ),
+                            sentry::Level::Error,
+                        );
+                        metrics::counter!("watchlist.emails.failed").increment(1);
+                        return;
+                    }
+                };
+
+                for user_id in user_ids {
+                    match users_repo.get_by_id(user_id).await {
+                        Ok(Some(user)) => {
+                            let to_name = format!("{} {}", user.first_name, user.last_name);
+                            match email_service
+                                .send_flight_completion_email(
+                                    &user.email,
+                                    &to_name,
+                                    flight_id,
+                                    &device_address.to_string(),
+                                    kml_content.clone(),
+                                    &kml_filename,
+                                )
+                                .await
+                            {
+                                Ok(_) => {
+                                    tracing::info!(
+                                        "Sent flight completion email to {}",
+                                        user.email
+                                    );
+                                    metrics::counter!("watchlist.emails.sent").increment(1);
+                                }
+                                Err(e) => {
+                                    tracing::error!(
+                                        "Failed to send email to {}: {}",
+                                        user.email,
+                                        e
+                                    );
+                                    sentry::capture_message(
+                                        &format!(
+                                            "Failed to send flight completion email to {}: {}",
+                                            user.email, e
+                                        ),
+                                        sentry::Level::Error,
+                                    );
+                                    metrics::counter!("watchlist.emails.failed").increment(1);
+                                }
+                            }
+                        }
+                        _ => {
+                            tracing::error!(
+                                "Failed to get user {} for email notification",
+                                user_id
+                            );
+                            metrics::counter!("watchlist.emails.failed").increment(1);
+                        }
+                    }
+                }
+            }
+            Ok(_) => {
+                // No users watching this aircraft with email enabled
+                tracing::debug!("No email watchers for aircraft {}", device_address);
+            }
+            Err(e) => {
+                tracing::error!("Failed to get watchlist users: {}", e);
+                sentry::capture_message(
+                    &format!(
+                        "Failed to get watchlist users for flight completion notifications: {}",
+                        e
+                    ),
+                    sentry::Level::Error,
+                );
+                metrics::counter!("watchlist.emails.failed").increment(1);
+            }
+        }
+    });
 
     metrics::counter!("flight_tracker.flight_ended.landed").increment(1);
 

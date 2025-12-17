@@ -96,7 +96,7 @@
 		// Only add to watchlist if aircraft was found
 		if (aircraft && aircraft.id) {
 			// Check for duplicates
-			const existingEntry = $watchlist.entries.find((entry) => entry.aircraftId === aircraft.id);
+			const existingEntry = $watchlist.entries.find((entry) => entry.aircraft_id === aircraft.id);
 			if (existingEntry) {
 				errorMessage = 'This aircraft is already in your watchlist';
 				return;
@@ -104,7 +104,7 @@
 
 			// Add the aircraft to the registry and watchlist
 			AircraftRegistry.getInstance().setAircraft(aircraft);
-			watchlist.add(aircraft.id);
+			await watchlist.add(aircraft.id, false);
 			// Clear the search inputs on success
 			newWatchlistEntry = {
 				type: 'registration',
@@ -116,13 +116,13 @@
 	}
 
 	// Remove entry from watchlist
-	function removeWatchlistEntry(id: string) {
-		watchlist.remove(id);
+	async function removeWatchlistEntry(id: string) {
+		await watchlist.remove(id);
 	}
 
-	// Toggle entry active state
-	function toggleWatchlistEntry(id: string) {
-		watchlist.toggleActive(id);
+	// Toggle email notification for entry
+	async function toggleEmailNotification(id: string, currentValue: boolean) {
+		await watchlist.updateEmailPreference(id, !currentValue);
 	}
 
 	// Load aircraft for selected club
@@ -154,15 +154,15 @@
 	}
 
 	// Add individual aircraft to watchlist
-	function addAircraftToWatchlist(aircraft: Aircraft) {
+	async function addAircraftToWatchlist(aircraft: Aircraft) {
 		// Check for duplicates
-		const existingEntry = $watchlist.entries.find((entry) => entry.aircraftId === aircraft.id);
+		const existingEntry = $watchlist.entries.find((entry) => entry.aircraft_id === aircraft.id);
 		if (existingEntry) {
 			return; // Already in watchlist
 		}
 
 		AircraftRegistry.getInstance().setAircraft(aircraft);
-		watchlist.add(aircraft.id);
+		await watchlist.add(aircraft.id, false);
 	}
 
 	// Add all club aircraft to watchlist
@@ -176,7 +176,7 @@
 
 	// Check if aircraft is already in watchlist
 	function isAircraftInWatchlist(aircraftId: string): boolean {
-		return $watchlist.entries.some((entry) => entry.aircraftId === aircraftId);
+		return $watchlist.entries.some((entry) => entry.aircraft_id === aircraftId);
 	}
 
 	// Handle club selection change
@@ -194,7 +194,7 @@
 	// Load watchlist on mount
 	$effect(() => {
 		if (browser) {
-			watchlist.loadFromStorage();
+			watchlist.load();
 		}
 	});
 
@@ -202,11 +202,11 @@
 	const aircraftRegistry = $derived(AircraftRegistry.getInstance());
 	const entriesWithAircraft = $derived(
 		$watchlist.entries.map((entry) => {
-			const aircraft = aircraftRegistry.getAircraft(entry.aircraftId);
+			const aircraft = entry.aircraft || aircraftRegistry.getAircraft(entry.aircraft_id);
 			return {
 				...entry,
 				aircraft: aircraft || {
-					id: entry.aircraftId,
+					id: entry.aircraft_id,
 					registration: 'Unknown',
 					aircraft_model: 'Unknown',
 					address_type: 'Unknown',
@@ -702,11 +702,9 @@
 					{#if entriesWithAircraft.length > 0}
 						<div class="flex-1 overflow-y-auto">
 							<div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-								{#each entriesWithAircraft as entry (entry.aircraftId)}
+								{#each entriesWithAircraft as entry (entry.aircraft_id)}
 									<div
-										class="rounded border border-surface-300 p-3 dark:border-surface-600 {entry.active
-											? 'bg-surface-50 dark:bg-surface-800'
-											: 'bg-surface-100 opacity-75 dark:bg-surface-700'}"
+										class="rounded border border-surface-300 bg-surface-50 p-3 dark:border-surface-600 dark:bg-surface-800"
 									>
 										<div class="flex flex-col space-y-2">
 											<div class="flex items-start justify-between">
@@ -751,18 +749,19 @@
 											<div class="flex items-center justify-between pt-1">
 												<Switch
 													class="flex justify-between p-2"
-													checked={entry.active}
-													onCheckedChange={() => toggleWatchlistEntry(entry.id)}
+													checked={entry.send_email}
+													onCheckedChange={() =>
+														toggleEmailNotification(entry.aircraft_id, entry.send_email)}
 												>
-													<Switch.Label class="text-sm font-medium">Active</Switch.Label>
+													<Switch.Label class="text-sm font-medium">Email</Switch.Label>
 													<Switch.Control>
 														<Switch.Thumb />
 													</Switch.Control>
-													<Switch.HiddenInput name="watchlist-{entry.id}" />
+													<Switch.HiddenInput name="watchlist-{entry.aircraft_id}" />
 												</Switch>
 												<button
 													class="preset-tonal-error-500 btn btn-sm"
-													onclick={() => removeWatchlistEntry(entry.id)}
+													onclick={() => removeWatchlistEntry(entry.aircraft_id)}
 												>
 													<X size={16} />
 												</button>

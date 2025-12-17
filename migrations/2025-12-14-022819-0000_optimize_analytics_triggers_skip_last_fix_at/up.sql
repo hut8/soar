@@ -255,7 +255,7 @@ BEGIN
         END IF;
 
         flight_duration := get_flight_duration_seconds(NEW.takeoff_time, NEW.landing_time);
-        bucket := get_flight_duration_bucket(flight_duration);
+        bucket := get_duration_bucket(flight_duration);
 
         UPDATE flight_duration_buckets SET
             flight_count = flight_count + 1,
@@ -271,8 +271,8 @@ BEGIN
 
         old_duration := get_flight_duration_seconds(OLD.takeoff_time, OLD.landing_time);
         flight_duration := get_flight_duration_seconds(NEW.takeoff_time, NEW.landing_time);
-        old_bucket := get_flight_duration_bucket(old_duration);
-        bucket := get_flight_duration_bucket(flight_duration);
+        old_bucket := get_duration_bucket(old_duration);
+        bucket := get_duration_bucket(flight_duration);
 
         -- If bucket changed, remove from old and add to new
         IF old_bucket != bucket THEN
@@ -295,7 +295,7 @@ BEGIN
         END IF;
 
         old_duration := get_flight_duration_seconds(OLD.takeoff_time, OLD.landing_time);
-        old_bucket := get_flight_duration_bucket(old_duration);
+        old_bucket := get_duration_bucket(old_duration);
 
         UPDATE flight_duration_buckets SET
             flight_count = GREATEST(0, flight_count - 1),

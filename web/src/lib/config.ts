@@ -7,6 +7,14 @@ import { browser } from '$app/environment';
 export const GOOGLE_MAPS_API_KEY =
 	import.meta.env.VITE_GOOGLE_MAPS_API_KEY || 'AIzaSyBaK8UU0l4z-k6b-UPlLzw3wv_Ti71XNy8';
 
+// Cesium Ion Access Token
+// Set via VITE_CESIUM_ION_TOKEN environment variable
+// Get a free token from https://cesium.com/ion
+// Free tier: 50,000 requests/month for terrain and imagery
+export const CESIUM_ION_TOKEN =
+	import.meta.env.VITE_CESIUM_ION_TOKEN ||
+	'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI3NWVkZmM1Yi1kMWIyLTRmY2QtOWZjNi05M2IyODFhNjBiNzkiLCJpZCI6MzY5OTY1LCJpYXQiOjE3NjU4MjM5Mjh9.W6K21mkvgIjRdfWqc8CQRdrz8Kajb5AVtFc3SWJa06I';
+
 // Environment detection
 export function isStaging(): boolean {
 	if (!browser) return false;

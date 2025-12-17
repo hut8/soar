@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::aircraft::AddressType;
+use crate::aircraft::{AddressType, address_type_from_str, address_type_to_str};
 use crate::flights::{Flight, FlightState};
 use crate::ogn_aprs_aircraft::AircraftType;
 
@@ -19,6 +19,7 @@ pub struct AircraftInfo {
     pub aircraft_model: Option<String>,
     pub registration: Option<String>,
     pub aircraft_type_ogn: Option<AircraftType>,
+    pub country_code: Option<String>,
 }
 
 /// Flight view for API responses with computed fields
@@ -27,6 +28,10 @@ pub struct FlightView {
     pub id: Uuid,
     pub aircraft_id: Option<Uuid>,
     pub device_address: String,
+    #[serde(
+        deserialize_with = "address_type_from_str",
+        serialize_with = "address_type_to_str"
+    )]
     pub device_address_type: AddressType,
     pub takeoff_time: Option<DateTime<Utc>>,
     pub landing_time: Option<DateTime<Utc>>,
@@ -59,6 +64,7 @@ pub struct FlightView {
     pub aircraft_model: Option<String>,
     pub registration: Option<String>,
     pub aircraft_type_ogn: Option<AircraftType>,
+    pub aircraft_country_code: Option<String>,
 
     // Latest altitude information (for active flights)
     pub latest_altitude_msl_feet: Option<i32>,
@@ -149,6 +155,7 @@ impl FlightView {
             aircraft_model: device_info.aircraft_model,
             registration: device_info.registration,
             aircraft_type_ogn: device_info.aircraft_type_ogn,
+            aircraft_country_code: device_info.country_code,
             latest_altitude_msl_feet,
             latest_altitude_agl_feet,
             latest_fix_timestamp,

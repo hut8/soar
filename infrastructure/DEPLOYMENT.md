@@ -181,14 +181,14 @@ ssh soar@your-server "sudo /usr/local/bin/soar-deploy $DEPLOY_DIR"
 
 ## ADS-B Ingester Deployment
 
-The ADS-B ingester (`soar ingest-beast`) now runs directly on the production and staging servers, simplifying the deployment architecture.
+The ADS-B ingester (`soar ingest-adsb`) now runs directly on the production and staging servers, simplifying the deployment architecture.
 
 ### Overview
 
 The ADS-B ingester is deployed alongside other SOAR services:
 
-- **Production**: `soar-beast-ingest.service` runs on the production server
-- **Staging**: `soar-beast-ingest-staging.service` runs on the staging server
+- **Production**: `soar-adsb-ingest.service` runs on the production server
+- **Staging**: `soar-adsb-ingest-staging.service` runs on the staging server
 - **Beast Server**: Both connect to `radar:41365` (external Beast data source)
 - **NATS**: Connects to localhost NATS (same server)
 - **No database**: The ingester only publishes to NATS JetStream, no database access required
@@ -199,7 +199,7 @@ The ADS-B ingester is deployed alongside other SOAR services:
 ┌─────────────────┐         ┌──────────────────────────────────────┐
 │  Beast Server   │         │  Production/Staging Server           │
 │  "radar"        │────────>│  ┌────────────────────────────────┐  │
-│  (Port 41365)   │         │  │  soar-beast-ingest.service     │  │
+│  (Port 41365)   │         │  │  soar-adsb-ingest.service     │  │
 └─────────────────┘         │  │  (ingest-beast command)        │  │
                             │  └────────────────────────────────┘  │
                             │                 │                     │
@@ -225,8 +225,8 @@ The ADS-B ingester is deployed through the standard CI/CD pipeline:
 3. **Systemd** manages the service lifecycle (start, stop, restart)
 
 The service files are located at:
-- `infrastructure/systemd/soar-beast-ingest.service` (production)
-- `infrastructure/systemd/soar-beast-ingest-staging.service` (staging)
+- `infrastructure/systemd/soar-adsb-ingest.service` (production)
+- `infrastructure/systemd/soar-adsb-ingest-staging.service` (staging)
 
 ### Service Configuration
 
@@ -237,7 +237,7 @@ Both services are configured to connect to:
 
 **Production service command**:
 ```bash
-/usr/local/bin/soar ingest-beast --server radar --port 41365 --nats-url ${NATS_URL}
+/usr/local/bin/soar ingest-adsb --server radar --port 41365 --nats-url ${NATS_URL}
 ```
 
 **Staging service command**:
@@ -271,14 +271,14 @@ SENTRY_DSN=
 **Check service status**:
 ```bash
 # Production
-sudo systemctl status soar-beast-ingest
+sudo systemctl status soar-adsb-ingest
 
 # Staging
-sudo systemctl status soar-beast-ingest-staging
+sudo systemctl status soar-adsb-ingest-staging
 
 # View logs
-sudo journalctl -u soar-beast-ingest -f
-sudo journalctl -u soar-beast-ingest-staging -f
+sudo journalctl -u soar-adsb-ingest -f
+sudo journalctl -u soar-adsb-ingest-staging -f
 ```
 
 **Check metrics**:
@@ -319,7 +319,7 @@ ping radar
 telnet radar 41365
 
 # Check ingester logs for connection errors
-sudo journalctl -u soar-beast-ingest -n 100 --no-pager
+sudo journalctl -u soar-adsb-ingest -n 100 --no-pager
 
 # Test Beast connection manually
 nc radar 41365 | head -c 100  # Should see binary data
@@ -362,8 +362,8 @@ The deployment manages these systemd services:
 - **soar-pull-data.service**: Data collection service
 - **soar-sitemap.service**: Sitemap generation service
 - **soar-archive.service**: Old fixes data archival service
-- **soar-beast-ingest.service**: ADS-B Beast ingester (production)
-- **soar-beast-ingest-staging.service**: ADS-B Beast ingester (staging)
+- **soar-adsb-ingest.service**: ADS-B Beast ingester (production)
+- **soar-adsb-ingest-staging.service**: ADS-B Beast ingester (staging)
 
 ### Timers
 - **soar-pull-data.timer**: Periodic data collection

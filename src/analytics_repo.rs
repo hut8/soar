@@ -187,8 +187,8 @@ impl AnalyticsRepository {
             }
 
             let results = diesel::sql_query(
-                "SELECT device_id, registration, aircraft_model, flight_count_30d, z_score_30d as z_score
-                 FROM device_analytics
+                "SELECT aircraft_id, registration, aircraft_model, flight_count_30d, z_score_30d as z_score
+                 FROM aircraft_analytics
                  WHERE z_score_30d > $1
                  ORDER BY z_score_30d DESC",
             )
@@ -231,18 +231,18 @@ impl AnalyticsRepository {
             }
 
             let query = match period_days {
-                7 => "SELECT device_id, registration, aircraft_model, flight_count_7d as flight_count, total_distance_meters
-                      FROM device_analytics
+                7 => "SELECT aircraft_id, registration, aircraft_model, flight_count_7d as flight_count, total_distance_meters
+                      FROM aircraft_analytics
                       WHERE flight_count_7d > 0
                       ORDER BY flight_count_7d DESC
                       LIMIT $1",
-                30 => "SELECT device_id, registration, aircraft_model, flight_count_30d as flight_count, total_distance_meters
-                       FROM device_analytics
+                30 => "SELECT aircraft_id, registration, aircraft_model, flight_count_30d as flight_count, total_distance_meters
+                       FROM aircraft_analytics
                        WHERE flight_count_30d > 0
                        ORDER BY flight_count_30d DESC
                        LIMIT $1",
-                _ => "SELECT device_id, registration, aircraft_model, flight_count_total as flight_count, total_distance_meters
-                      FROM device_analytics
+                _ => "SELECT aircraft_id, registration, aircraft_model, flight_count_total as flight_count, total_distance_meters
+                      FROM aircraft_analytics
                       WHERE flight_count_total > 0
                       ORDER BY flight_count_total DESC
                       LIMIT $1",
@@ -423,8 +423,8 @@ impl AnalyticsRepository {
                     COALESCE((SELECT flight_count FROM flight_analytics_daily WHERE date = CURRENT_DATE), 0) as flights_today,
                     COALESCE((SELECT SUM(flight_count) FROM flight_analytics_daily WHERE date >= CURRENT_DATE - 7), 0) as flights_7d,
                     COALESCE((SELECT SUM(flight_count) FROM flight_analytics_daily WHERE date >= CURRENT_DATE - 30), 0) as flights_30d,
-                    COALESCE((SELECT COUNT(*) FROM device_analytics WHERE flight_count_7d > 0), 0) as active_devices_7d,
-                    COALESCE((SELECT COUNT(*) FROM device_analytics WHERE z_score_30d > 3.0), 0) as outlier_devices_count,
+                    COALESCE((SELECT COUNT(*) FROM aircraft_analytics WHERE flight_count_7d > 0), 0) as active_devices_7d,
+                    COALESCE((SELECT COUNT(*) FROM aircraft_analytics WHERE z_score_30d > 3.0), 0) as outlier_devices_count,
                     (SELECT quality_score FROM data_quality_metrics_daily ORDER BY metric_date DESC LIMIT 1) as data_quality_score
                 ",
             )

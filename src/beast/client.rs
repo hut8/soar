@@ -65,16 +65,13 @@ impl BeastClient {
         }
     }
 
-    /// Start the Beast client with a publisher (JetStream or plain NATS)
+    /// Start the Beast client with a publisher
     /// This connects to the Beast server and publishes all messages to NATS
     #[tracing::instrument(skip(self, publisher))]
-    pub async fn start_jetstream<P: crate::beast::BeastPublisher>(
-        &mut self,
-        publisher: P,
-    ) -> Result<()> {
+    pub async fn start<P: crate::beast::BeastPublisher>(&mut self, publisher: P) -> Result<()> {
         let (_shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
         let health_state = crate::metrics::init_beast_health();
-        self.start_jetstream_with_shutdown(publisher, shutdown_rx, health_state)
+        self.start_with_shutdown(publisher, shutdown_rx, health_state)
             .await
     }
 
@@ -83,7 +80,7 @@ impl BeastClient {
     /// Supports graceful shutdown when shutdown_rx receives a signal
     /// Updates health_state with connection status for health checks
     #[tracing::instrument(skip(self, publisher, shutdown_rx, health_state))]
-    pub async fn start_jetstream_with_shutdown<P: crate::beast::BeastPublisher>(
+    pub async fn start_with_shutdown<P: crate::beast::BeastPublisher>(
         &mut self,
         publisher: P,
         shutdown_rx: tokio::sync::oneshot::Receiver<()>,
@@ -95,6 +92,10 @@ impl BeastClient {
 
         let config = self.config.clone();
 
+        // Use a broadcast channel to share shutdown signal with both publisher and connection loop
+        let (shutdown_broadcast_tx, _) = tokio::sync::broadcast::channel::<()>(1);
+        let mut shutdown_rx_for_loop = shutdown_broadcast_tx.subscribe();
+
         // Create bounded channel for raw Beast messages from TCP socket
         let (raw_message_tx, raw_message_rx) = flume::bounded::<Vec<u8>>(RAW_MESSAGE_QUEUE_SIZE);
         info!(
@@ -102,9 +103,17 @@ impl BeastClient {
             RAW_MESSAGE_QUEUE_SIZE
         );
 
+        // Spawn task to forward external shutdown signal to broadcast channel
+        let shutdown_broadcast_tx_clone = shutdown_broadcast_tx.clone();
+        tokio::spawn(async move {
+            let _ = shutdown_rx.await;
+            info!("External shutdown signal received, broadcasting to all tasks");
+            let _ = shutdown_broadcast_tx_clone.send(());
+        });
+
         // Spawn message publishing task
         let publisher_for_task = publisher.clone();
-        let mut shutdown_rx_for_publisher = shutdown_rx;
+        let mut shutdown_rx_for_publisher = shutdown_broadcast_tx.subscribe();
         let publisher_handle = tokio::spawn(async move {
             let publisher = publisher_for_task;
             let mut stats_timer = tokio::time::interval(Duration::from_secs(10));
@@ -145,16 +154,16 @@ impl BeastClient {
                                             "Slow JetStream publish: {}ms",
                                             publish_duration.as_millis()
                                         );
-                                        metrics::counter!("beast.jetstream.slow_publish").increment(1);
+                                        metrics::counter!("beast.nats.slow_publish").increment(1);
                                     }
                                 }
                                 Err(_) => {
                                     error!("JetStream publish timed out after 5 seconds - NATS may be blocked");
-                                    metrics::counter!("beast.jetstream.publish_timeout").increment(1);
+                                    metrics::counter!("beast.nats.publish_timeout").increment(1);
 
                                     // Report timeout to Sentry (throttled)
                                     sentry::capture_message(
-                                        "Beast JetStream publish timed out after 5 seconds",
+                                        "Beast NATS publish timed out after 5 seconds",
                                         sentry::Level::Error
                                     );
                                 }
@@ -167,8 +176,8 @@ impl BeastClient {
                         let available_permits = publish_semaphore.available_permits();
                         let in_flight_publishes = 100 - available_permits;
 
-                        metrics::gauge!("beast.jetstream.queue_depth").set(queue_depth as f64);
-                        metrics::gauge!("beast.jetstream.in_flight").set(in_flight_publishes as f64);
+                        metrics::gauge!("beast.nats.queue_depth").set(queue_depth as f64);
+                        metrics::gauge!("beast.nats.in_flight").set(in_flight_publishes as f64);
 
                         // Log publishing rate and queue status
                         let elapsed = last_log_time.elapsed().as_secs_f64();
@@ -177,7 +186,7 @@ impl BeastClient {
                         if elapsed > 0.0 {
                             let rate = attempted_count as f64 / elapsed;
                             info!(
-                                "Beast JetStream stats: {:.1} msg/s attempted (queue: {}, in-flight: {}, last receive: {:.1}s ago)",
+                                "Beast NATS stats: {:.1} msg/s attempted (queue: {}, in-flight: {}, last receive: {:.1}s ago)",
                                 rate, queue_depth, in_flight_publishes, time_since_last_receive
                             );
                             attempted_count = 0;
@@ -186,12 +195,12 @@ impl BeastClient {
 
                         if queue_depth > queue_warning_threshold(RAW_MESSAGE_QUEUE_SIZE) {
                             warn!(
-                                "Beast JetStream publish queue building up: {} messages (80% full)",
+                                "Beast NATS publish queue building up: {} messages (80% full)",
                                 queue_depth
                             );
                         }
                     }
-                    _ = &mut shutdown_rx_for_publisher => {
+                    _ = shutdown_rx_for_publisher.recv() => {
                         info!("Beast publisher received shutdown signal");
                         break;
                     }
@@ -226,10 +235,14 @@ impl BeastClient {
         loop {
             tokio::select! {
                 _ = &mut internal_shutdown_rx => {
-                    info!("Beast client received shutdown signal");
+                    info!("Beast client received internal shutdown signal");
                     break;
                 }
-                result = Self::connect_and_run(&config, raw_message_tx.clone(), health_state.clone()) => {
+                _ = shutdown_rx_for_loop.recv() => {
+                    info!("Beast client received external shutdown signal");
+                    break;
+                }
+                result = Self::connect_and_run(&config, raw_message_tx.clone(), health_state.clone(), shutdown_broadcast_tx.subscribe()) => {
                     match result {
                         ConnectionResult::Success => {
                             info!("Beast connection completed successfully");
@@ -322,11 +335,12 @@ impl BeastClient {
 
     /// Connect to the Beast server and run the message processing loop
     /// Messages are sent to raw_message_tx channel for processing
-    #[tracing::instrument(skip(config, raw_message_tx, health_state), fields(server = %config.server, port = %config.port))]
+    #[tracing::instrument(skip(config, raw_message_tx, health_state, shutdown_rx), fields(server = %config.server, port = %config.port))]
     async fn connect_and_run(
         config: &BeastClientConfig,
         raw_message_tx: flume::Sender<Vec<u8>>,
         health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::BeastIngestHealth>>,
+        shutdown_rx: tokio::sync::broadcast::Receiver<()>,
     ) -> ConnectionResult {
         info!(
             "Connecting to Beast server {}:{}",
@@ -386,6 +400,7 @@ impl BeastClient {
                         health_state,
                         connection_start,
                         addr.to_string(),
+                        shutdown_rx,
                     )
                     .await;
                 }
@@ -407,13 +422,14 @@ impl BeastClient {
 
     /// Process an established Beast connection
     /// Reads raw Beast frames and publishes them to JetStream
-    #[tracing::instrument(skip(stream, raw_message_tx, health_state, connection_start), fields(peer_addr = %peer_addr_str))]
+    #[tracing::instrument(skip(stream, raw_message_tx, health_state, connection_start, shutdown_rx), fields(peer_addr = %peer_addr_str))]
     async fn process_connection(
         mut stream: TcpStream,
         raw_message_tx: flume::Sender<Vec<u8>>,
         health_state: std::sync::Arc<tokio::sync::RwLock<crate::metrics::BeastIngestHealth>>,
         connection_start: std::time::Instant,
         peer_addr_str: String,
+        mut shutdown_rx: tokio::sync::broadcast::Receiver<()>,
     ) -> ConnectionResult {
         info!("Processing connection to Beast server at {}", peer_addr_str);
 
@@ -424,10 +440,21 @@ impl BeastClient {
         let mut last_stats_log = std::time::Instant::now();
 
         loop {
-            // Read data from stream with timeout
-            let read_result = tokio::time::timeout(message_timeout, stream.read(&mut buffer)).await;
+            tokio::select! {
+                _ = shutdown_rx.recv() => {
+                    info!("Beast connection received shutdown signal, closing connection");
+                    metrics::gauge!("beast.connection.connected").set(0.0);
 
-            match read_result {
+                    // Mark as disconnected in health state
+                    {
+                        let mut health = health_state.write().await;
+                        health.beast_connected = false;
+                    }
+
+                    return ConnectionResult::Success;
+                }
+                read_result = tokio::time::timeout(message_timeout, stream.read(&mut buffer)) => {
+                    match read_result {
                 Ok(Ok(0)) => {
                     // Connection closed
                     let duration = connection_start.elapsed();
@@ -519,6 +546,8 @@ impl BeastClient {
                         "No data received for {} seconds",
                         message_timeout.as_secs()
                     ));
+                }
+                    }
                 }
             }
         }

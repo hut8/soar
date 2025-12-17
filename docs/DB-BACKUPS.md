@@ -101,7 +101,7 @@ We implement a **physical backup strategy** using PostgreSQL's continuous archiv
 
 ### Required Configuration Changes
 
-Edit `/etc/postgresql/15/main/postgresql.conf` (adjust version number as needed):
+Edit `/etc/postgresql/18/main/postgresql.conf` (adjust version number as needed):
 
 ```conf
 #------------------------------------------------------------------------------
@@ -166,14 +166,14 @@ log_archive_command = on
 
 1. **Edit the configuration file**:
    ```bash
-   sudo nano /etc/postgresql/17/main/postgresql.conf
+   sudo nano /etc/postgresql/18/main/postgresql.conf
    ```
 
 2. **Configure authentication for backups**:
 
    Edit `pg_hba.conf` to allow replication connections without password:
    ```bash
-   sudo nano /etc/postgresql/17/main/pg_hba.conf
+   sudo nano /etc/postgresql/18/main/pg_hba.conf
    ```
 
    Ensure the replication lines use `trust` authentication for localhost:
@@ -191,7 +191,7 @@ log_archive_command = on
 
 3. **Verify configuration syntax**:
    ```bash
-   sudo -u postgres /usr/lib/postgresql/17/bin/postgres -C archive_mode -D /var/lib/postgresql/17/main
+   sudo -u postgres /usr/lib/postgresql/18/bin/postgres -C archive_mode -D /var/lib/postgresql/18/main
    ```
 
 4. **Restart PostgreSQL** (requires downtime):
@@ -252,10 +252,10 @@ With WAL archiving enabled, monitor `pg_wal/` directory:
 
 ```bash
 # Check WAL directory size (should stay under a few GB)
-du -sh /var/lib/postgresql/15/main/pg_wal/
+du -sh /var/lib/postgresql/18/main/pg_wal/
 
 # Count WAL files (normal: 10-20, concerning: >100)
-ls /var/lib/postgresql/15/main/pg_wal/ | wc -l
+ls /var/lib/postgresql/18/main/pg_wal/ | wc -l
 
 # Check if archiving is keeping up
 psql -U postgres -d soar -c "SELECT last_archived_wal, last_archived_time FROM pg_stat_archiver;"
@@ -382,43 +382,44 @@ s3://your-backup-bucket/
 Create `/etc/soar/backup-env` (restrict permissions!):
 
 ```bash
-# Rclone remote and bucket
-export BACKUP_REMOTE="soar-db:soar-backup-prod"
-
-# Rclone configuration file
-export RCLONE_CONFIG="/etc/soar/rclone.conf"
+# Rclone configuration
+BACKUP_RCLONE_REMOTE=wasabi
+BACKUP_RCLONE_BUCKET=soar-backup-prod
+BACKUP_RCLONE_PATH=
 
 # Backup retention
-export BASE_BACKUP_KEEP_COUNT=5
-export WAL_RETENTION_DAYS=30
+BASE_BACKUP_KEEP_COUNT=5
+WAL_RETENTION_DAYS=30
 
 # PostgreSQL connection (usually local)
-export PGHOST=localhost
-export PGPORT=5432
-export PGDATABASE=soar
-export PGUSER=postgres
-export PGDATA=/var/lib/postgresql/17/main
-export PG_VERSION=17
+PGHOST=localhost
+PGPORT=5432
+PGDATABASE=soar
+PGUSER=postgres
+PGDATA=/var/lib/postgresql/18/main
+PG_VERSION=18
 # Note: Use .pgpass for password, not environment variable
 
 # Backup paths
-export BACKUP_TEMP_DIR="/var/lib/soar/backup-temp"
-export BACKUP_LOG_DIR="/var/log/soar"
+BACKUP_TEMP_DIR=/var/lib/soar/backup-temp
+BACKUP_LOG_DIR=/var/log/soar
 
 # Backup compression
-export BACKUP_COMPRESSION=gzip
-export BACKUP_PARALLEL_JOBS=4
+BACKUP_COMPRESSION=gzip
+BACKUP_PARALLEL_JOBS=4
 
 # Notification (optional)
-# export BACKUP_NOTIFY_EMAIL="ops@example.com"
-# export BACKUP_NOTIFY_SLACK_WEBHOOK="https://hooks.slack.com/..."
+# BACKUP_NOTIFY_EMAIL=ops@example.com
+# BACKUP_NOTIFY_SLACK_WEBHOOK=https://hooks.slack.com/...
 ```
 
 **Set restrictive permissions**:
 ```bash
-sudo chown postgres:postgres /etc/soar/backup-env /etc/soar/rclone.conf
-sudo chmod 600 /etc/soar/backup-env /etc/soar/rclone.conf
+sudo chown postgres:postgres /etc/soar/backup-env
+sudo chmod 600 /etc/soar/backup-env
 ```
+
+**Note**: Rclone configuration should be in `~/.config/rclone/rclone.conf` (for the postgres user)
 
 ### Testing Cloud Access
 
@@ -426,20 +427,20 @@ sudo chmod 600 /etc/soar/backup-env /etc/soar/rclone.conf
 # Source credentials
 source /etc/soar/backup-env
 
-# Test listing buckets
-rclone lsd soar-db: --config /etc/soar/rclone.conf
+# Test listing bucket
+rclone lsd ${BACKUP_RCLONE_REMOTE}:${BACKUP_RCLONE_BUCKET}
 
 # Test upload
-echo "test" | rclone rcat ${BACKUP_REMOTE}/test.txt --config /etc/soar/rclone.conf
+echo "test" | rclone rcat ${BACKUP_RCLONE_REMOTE}:${BACKUP_RCLONE_BUCKET}/test.txt
 
 # Test download
-rclone cat ${BACKUP_REMOTE}/test.txt --config /etc/soar/rclone.conf
+rclone cat ${BACKUP_RCLONE_REMOTE}:${BACKUP_RCLONE_BUCKET}/test.txt
 
 # Test listing
-rclone lsf ${BACKUP_REMOTE}/ --config /etc/soar/rclone.conf
+rclone ls ${BACKUP_RCLONE_REMOTE}:${BACKUP_RCLONE_BUCKET}/
 
 # Cleanup
-rclone delete ${BACKUP_REMOTE}/test.txt --config /etc/soar/rclone.conf
+rclone delete ${BACKUP_RCLONE_REMOTE}:${BACKUP_RCLONE_BUCKET}/test.txt
 ```
 
 ## Backup Scripts
@@ -464,7 +465,7 @@ All scripts are installed to `/usr/local/bin/` with a `soar-` prefix.
 ```bash
 # Test archiving a WAL file (must be run as postgres user)
 sudo -u postgres /usr/local/bin/soar-wal-archive \
-  /var/lib/postgresql/15/main/pg_wal/000000010000000000000001 \
+  /var/lib/postgresql/18/main/pg_wal/000000010000000000000001 \
   000000010000000000000001
 ```
 
@@ -565,8 +566,8 @@ Before attempting any restore:
 1. **Verify backups exist**:
    ```bash
    source /etc/soar/backup-env
-   rclone lsd ${BACKUP_REMOTE}/base/ --config /etc/soar/rclone.conf
-   rclone ls ${BACKUP_REMOTE}/wal/ --config /etc/soar/rclone.conf | head -20
+   rclone lsd ${BACKUP_RCLONE_REMOTE}:${BACKUP_RCLONE_BUCKET}/base/
+   rclone ls ${BACKUP_RCLONE_REMOTE}:${BACKUP_RCLONE_BUCKET}/wal/ | head -20
    ```
 
 2. **Check backup age**:
@@ -714,17 +715,17 @@ Before attempting any restore:
    cd /tmp/restore
 
    # Find latest backup
-   LATEST_BACKUP=$(rclone lsd ${BACKUP_REMOTE}/base/ --config /etc/soar/rclone.conf | tail -1 | awk '{print $2}' | tr -d '/')
+   LATEST_BACKUP=$(rclone lsd ${BACKUP_RCLONE_REMOTE}:${BACKUP_RCLONE_BUCKET}/base/ | tail -1 | awk '{print $5}')
 
    # Download
-   rclone copyto ${BACKUP_REMOTE}/base/${LATEST_BACKUP}/backup.tar.gz --config /etc/soar/rclone.conf .
-   tar xzf backup.tar.gz
+   rclone copy ${BACKUP_RCLONE_REMOTE}:${BACKUP_RCLONE_BUCKET}/base/${LATEST_BACKUP}/ .
+   tar xzf *.tar.zst
    ```
 
 2. **Start temporary PostgreSQL instance**:
    ```bash
    # Use different port to avoid conflict
-   /usr/lib/postgresql/15/bin/pg_ctl \
+   /usr/lib/postgresql/18/bin/pg_ctl \
      -D /tmp/restore/data \
      -o "-p 5433" \
      start
@@ -749,7 +750,7 @@ Before attempting any restore:
 
 5. **Cleanup**:
    ```bash
-   /usr/lib/postgresql/15/bin/pg_ctl -D /tmp/restore/data stop
+   /usr/lib/postgresql/18/bin/pg_ctl -D /tmp/restore/data stop
    rm -rf /tmp/restore
    ```
 
@@ -847,16 +848,16 @@ Configure alerts for:
 
 **Backup logs**: `/var/log/soar/backup.log`
 
-**PostgreSQL logs**: `/var/log/postgresql/postgresql-15-main.log`
+**PostgreSQL logs**: `/var/log/postgresql/postgresql-18-main.log`
 
 **Important patterns to watch for**:
 
 ```bash
 # Archive command failures
-grep "archive command failed" /var/log/postgresql/postgresql-15-main.log
+grep "archive command failed" /var/log/postgresql/postgresql-18-main.log
 
 # Successful archives (should see continuous activity)
-grep "archived write-ahead log file" /var/log/postgresql/postgresql-15-main.log | tail
+grep "archived write-ahead log file" /var/log/postgresql/postgresql-18-main.log | tail
 
 # Base backup completion
 grep "backup completed" /var/log/soar/backup.log
@@ -897,7 +898,7 @@ EOF
 
 # Check if WAL files were archived
 source /etc/soar/backup-env
-rclone ls ${BACKUP_REMOTE}/wal/ --config /etc/soar/rclone.conf | tail -20
+rclone ls ${BACKUP_RCLONE_REMOTE}:${BACKUP_RCLONE_BUCKET}/wal/ | tail -20
 
 # Check PostgreSQL archiver status
 psql -U postgres -d soar -c "SELECT * FROM pg_stat_archiver;"
@@ -916,7 +917,7 @@ sudo journalctl -u soar-backup-base.service -f
 
 # Check results in cloud
 source /etc/soar/backup-env
-rclone lsd ${BACKUP_REMOTE}/base/ --config /etc/soar/rclone.conf --recursive --human-readable
+rclone lsd ${BACKUP_RCLONE_REMOTE}:${BACKUP_RCLONE_BUCKET}/base/
 ```
 
 **Expected**: Should complete in 2-4 hours and show ~150GB compressed backup in cloud.
@@ -1072,11 +1073,11 @@ Based on 420GB database, 30-day retention:
 psql -U postgres -d soar -c "SELECT * FROM pg_stat_archiver;"
 
 # Check last failure
-grep "archive command failed" /var/log/postgresql/postgresql-15-main.log | tail -5
+grep "archive command failed" /var/log/postgresql/postgresql-18-main.log | tail -5
 
 # Test archive command manually
 sudo -u postgres /usr/local/bin/soar-wal-archive \
-  /var/lib/postgresql/15/main/pg_wal/000000010000000000000001 \
+  /var/lib/postgresql/18/main/pg_wal/000000010000000000000001 \
   000000010000000000000001
 ```
 
@@ -1086,10 +1087,10 @@ sudo -u postgres /usr/local/bin/soar-wal-archive \
    ```bash
    # Test rclone credentials
    source /etc/soar/backup-env
-   rclone lsd soar-db: --config /etc/soar/rclone.conf
+   rclone lsd ${BACKUP_RCLONE_REMOTE}:${BACKUP_RCLONE_BUCKET}
    ```
 
-   **Fix**: Update credentials in `/etc/soar/rclone.conf`
+   **Fix**: Update credentials in `~/.config/rclone/rclone.conf`
 
 2. **Network connectivity issues**:
    ```bash
@@ -1103,7 +1104,7 @@ sudo -u postgres /usr/local/bin/soar-wal-archive \
 3. **Insufficient permissions**:
    ```bash
    # Test bucket access
-   rclone ls ${BACKUP_REMOTE}/wal/ --config /etc/soar/rclone.conf
+   rclone ls ${BACKUP_RCLONE_REMOTE}:${BACKUP_RCLONE_BUCKET}/wal/
    ```
 
    **Fix**: Verify rclone configuration has correct permissions
@@ -1111,7 +1112,7 @@ sudo -u postgres /usr/local/bin/soar-wal-archive \
 4. **Disk full on destination**:
    ```bash
    # Check storage usage
-   rclone size ${BACKUP_REMOTE} --config /etc/soar/rclone.conf --json
+   rclone size ${BACKUP_RCLONE_REMOTE}:${BACKUP_RCLONE_BUCKET} --json
    ```
 
    **Fix**: Verify lifecycle policy is working, manually clean old files
@@ -1124,7 +1125,7 @@ sudo systemctl reload postgresql
 
 # Clean up old WAL files (DANGEROUS - only if archiving is broken)
 # This will lose PITR capability!
-sudo -u postgres pg_archivecleanup /var/lib/postgresql/17/main/pg_wal 000000010000000000000064
+sudo -u postgres pg_archivecleanup /var/lib/postgresql/18/main/pg_wal 000000010000000000000064
 
 # Fix archiving issue, then re-enable
 sudo -u postgres psql -d soar -c "ALTER SYSTEM SET archive_command = '/usr/local/bin/soar-wal-archive %p %f';"
@@ -1185,7 +1186,7 @@ sudo journalctl -u soar-backup-base.service -f
    **Fix**:
    ```bash
    # Edit pg_hba.conf
-   sudo nano /etc/postgresql/17/main/pg_hba.conf
+   sudo nano /etc/postgresql/18/main/pg_hba.conf
 
    # Change these lines from scram-sha-256 to trust:
    host    replication     all             127.0.0.1/32            trust
@@ -1212,7 +1213,7 @@ sudo journalctl -u soar-backup-base.service -f
 sudo tail -100 /var/log/soar/backup.log
 
 # Check PostgreSQL logs
-sudo tail -100 /var/log/postgresql/postgresql-15-main.log
+sudo tail -100 /var/log/postgresql/postgresql-18-main.log
 
 # Check disk space
 df -h /var/lib/postgresql
@@ -1257,14 +1258,14 @@ df -h /var/lib/postgresql
 **Diagnosis**:
 ```bash
 # Check actual storage usage
-rclone size ${BACKUP_REMOTE} --config /etc/soar/rclone.conf --json
+rclone size ${BACKUP_RCLONE_REMOTE}:${BACKUP_RCLONE_BUCKET} --json
 
 # Check total size by directory
-rclone size ${BACKUP_REMOTE}/base/ --config /etc/soar/rclone.conf
-rclone size ${BACKUP_REMOTE}/wal/ --config /etc/soar/rclone.conf
+rclone size ${BACKUP_RCLONE_REMOTE}:${BACKUP_RCLONE_BUCKET}/base/
+rclone size ${BACKUP_RCLONE_REMOTE}:${BACKUP_RCLONE_BUCKET}/wal/
 
 # Find large files
-rclone ls ${BACKUP_REMOTE} --config /etc/soar/rclone.conf | sort -k1 -h | tail -20
+rclone ls ${BACKUP_RCLONE_REMOTE}:${BACKUP_RCLONE_BUCKET} | sort -k1 -h | tail -20
 ```
 
 **Common causes**:
@@ -1281,7 +1282,7 @@ rclone ls ${BACKUP_REMOTE} --config /etc/soar/rclone.conf | sort -k1 -h | tail -
 
 3. **WAL files not expiring**:
    ```bash
-   rclone ls ${BACKUP_REMOTE}/wal/ --config /etc/soar/rclone.conf | head -20
+   rclone ls ${BACKUP_RCLONE_REMOTE}:${BACKUP_RCLONE_BUCKET}/wal/ | head -20
    # Check oldest WAL file date
    ```
 
@@ -1306,7 +1307,7 @@ rclone ls ${BACKUP_REMOTE} --config /etc/soar/rclone.conf | sort -k1 -h | tail -
 psql -U postgres -d postgres -c "SELECT pg_is_in_recovery();"
 
 # Check recovery progress (approximate)
-tail -f /var/log/postgresql/postgresql-15-main.log | grep recovery
+tail -f /var/log/postgresql/postgresql-18-main.log | grep recovery
 ```
 
 Recovery can take 15-60 minutes depending on amount of WAL to replay.

@@ -14,7 +14,7 @@ static METRICS_HANDLE: OnceLock<PrometheusHandle> = OnceLock::new();
 #[derive(Clone, Debug, Default)]
 pub struct AprsIngestHealth {
     pub aprs_connected: bool,
-    pub jetstream_connected: bool,
+    pub nats_connected: bool,
     pub last_message_time: Option<Instant>,
 }
 
@@ -40,7 +40,7 @@ pub fn set_aprs_health(health: Arc<RwLock<AprsIngestHealth>>) {
 #[derive(Clone, Debug, Default)]
 pub struct BeastIngestHealth {
     pub beast_connected: bool,
-    pub jetstream_connected: bool,
+    pub nats_connected: bool,
     pub last_message_time: Option<Instant>,
     pub last_error: Option<String>,
 }
@@ -267,14 +267,14 @@ pub fn initialize_aprs_ingest_metrics() {
     metrics::counter!("aprs.raw_message.queued.server").absolute(0);
     metrics::counter!("aprs.raw_message.queued.aprs").absolute(0);
 
-    // JetStream publishing metrics (ingest-aprs publishes to JetStream)
-    metrics::counter!("aprs.jetstream.published").absolute(0);
-    metrics::counter!("aprs.jetstream.publish_error").absolute(0);
-    metrics::counter!("aprs.jetstream.slow_publish").absolute(0);
-    metrics::counter!("aprs.jetstream.publish_timeout").absolute(0);
-    metrics::gauge!("aprs.jetstream.queue_depth").set(0.0);
-    metrics::gauge!("aprs.jetstream.in_flight").set(0.0);
-    metrics::histogram!("aprs.jetstream.publish_duration_ms").record(0.0);
+    // NATS publishing metrics (ingest-ogn publishes to NATS)
+    metrics::counter!("aprs.nats.published").absolute(0);
+    metrics::counter!("aprs.nats.publish_error").absolute(0);
+    metrics::counter!("aprs.nats.slow_publish").absolute(0);
+    metrics::counter!("aprs.nats.publish_timeout").absolute(0);
+    metrics::gauge!("aprs.nats.queue_depth").set(0.0);
+    metrics::gauge!("aprs.nats.in_flight").set(0.0);
+    metrics::histogram!("aprs.nats.publish_duration_ms").record(0.0);
 
     // Connection timeout metric
     metrics::counter!("aprs.connection.timeout").absolute(0);
@@ -301,16 +301,16 @@ pub fn initialize_beast_ingest_metrics() {
     metrics::counter!("beast.frames.dropped").absolute(0);
     metrics::gauge!("beast.message_rate").set(0.0);
 
-    // JetStream publishing metrics (ingest-beast publishes to JetStream)
-    metrics::counter!("beast.jetstream.published").absolute(0);
-    metrics::counter!("beast.jetstream.publish_error").absolute(0);
-    metrics::counter!("beast.jetstream.slow_publish").absolute(0);
-    metrics::counter!("beast.jetstream.publish_timeout").absolute(0);
-    metrics::counter!("beast.jetstream.connection_failed").absolute(0);
-    metrics::counter!("beast.jetstream.stream_setup_failed").absolute(0);
-    metrics::gauge!("beast.jetstream.queue_depth").set(0.0);
-    metrics::gauge!("beast.jetstream.in_flight").set(0.0);
-    metrics::histogram!("beast.jetstream.publish_duration_ms").record(0.0);
+    // NATS publishing metrics (ingest-adsb publishes to NATS)
+    metrics::counter!("beast.nats.published").absolute(0);
+    metrics::counter!("beast.nats.publish_error").absolute(0);
+    metrics::counter!("beast.nats.slow_publish").absolute(0);
+    metrics::counter!("beast.nats.publish_timeout").absolute(0);
+    metrics::counter!("beast.nats.connection_failed").absolute(0);
+    metrics::counter!("beast.nats.stream_setup_failed").absolute(0);
+    metrics::gauge!("beast.nats.queue_depth").set(0.0);
+    metrics::gauge!("beast.nats.in_flight").set(0.0);
+    metrics::histogram!("beast.nats.publish_duration_ms").record(0.0);
 
     // General ingestion metrics
     metrics::counter!("beast.ingest_failed").absolute(0);
@@ -319,13 +319,13 @@ pub fn initialize_beast_ingest_metrics() {
 /// Initialize Beast consumer metrics to zero/default values
 /// This ensures metrics always appear in Prometheus queries even if no events have occurred
 pub fn initialize_beast_consumer_metrics() {
-    // JetStream consumer metrics (consume-beast consumes from JetStream)
-    metrics::counter!("beast.jetstream.consumed").absolute(0);
-    metrics::counter!("beast.jetstream.receive_error").absolute(0);
-    metrics::counter!("beast.jetstream.ack_error").absolute(0);
-    metrics::counter!("beast.jetstream.invalid_message").absolute(0);
-    metrics::counter!("beast.jetstream.connection_failed").absolute(0);
-    metrics::counter!("beast.jetstream.consumer_setup_failed").absolute(0);
+    // NATS consumer metrics (consume-beast consumes from NATS)
+    metrics::counter!("beast.nats.consumed").absolute(0);
+    metrics::counter!("beast.nats.receive_error").absolute(0);
+    metrics::counter!("beast.nats.ack_error").absolute(0);
+    metrics::counter!("beast.nats.invalid_message").absolute(0);
+    metrics::counter!("beast.nats.connection_failed").absolute(0);
+    metrics::counter!("beast.nats.consumer_setup_failed").absolute(0);
 
     // Beast consumer processing metrics
     metrics::counter!("beast.consumer.received").absolute(0);
@@ -355,6 +355,16 @@ pub fn initialize_run_metrics() {
     metrics::counter!("flight_tracker.coalesce.resumed").absolute(0);
     metrics::counter!("flight_tracker.coalesce.callsign_mismatch").absolute(0);
     metrics::counter!("flight_tracker.coalesce.no_timeout_flight").absolute(0);
+    metrics::counter!("flight_tracker.coalesce.rejected.callsign").absolute(0);
+    metrics::counter!("flight_tracker.coalesce.rejected.probable_landing").absolute(0);
+    metrics::histogram!("flight_tracker.coalesce.rejected.distance_km").record(0.0);
+    metrics::histogram!("flight_tracker.coalesce.resumed.distance_km").record(0.0);
+
+    // Flight timeout phase tracking
+    metrics::counter!("flight_tracker.timeout.phase", "phase" => "climbing").absolute(0);
+    metrics::counter!("flight_tracker.timeout.phase", "phase" => "cruising").absolute(0);
+    metrics::counter!("flight_tracker.timeout.phase", "phase" => "descending").absolute(0);
+    metrics::counter!("flight_tracker.timeout.phase", "phase" => "unknown").absolute(0);
 
     // Flight creation metrics
     metrics::counter!("flight_tracker.flight_created.takeoff").absolute(0);
@@ -402,15 +412,15 @@ pub fn initialize_run_metrics() {
     metrics::counter!("aprs.server_status_queue.full").absolute(0);
     metrics::counter!("aprs.server_status_queue.closed").absolute(0);
 
-    // JetStream consumer metrics (soar-run consumes from JetStream, doesn't publish)
-    metrics::gauge!("aprs.jetstream.intake_queue_depth").set(0.0);
-    metrics::counter!("aprs.jetstream.consumed").absolute(0);
-    metrics::counter!("aprs.jetstream.process_error").absolute(0);
-    metrics::counter!("aprs.jetstream.decode_error").absolute(0);
-    metrics::counter!("aprs.jetstream.ack_error").absolute(0);
-    metrics::counter!("aprs.jetstream.receive_error").absolute(0);
-    metrics::counter!("aprs.jetstream.acked_immediately").absolute(0);
-    metrics::counter!("aprs.jetstream.intake_queue_full").absolute(0);
+    // NATS consumer metrics (soar-run consumes from NATS, doesn't publish)
+    metrics::gauge!("aprs.nats.intake_queue_depth").set(0.0);
+    metrics::counter!("aprs.nats.consumed").absolute(0);
+    metrics::counter!("aprs.nats.process_error").absolute(0);
+    metrics::counter!("aprs.nats.decode_error").absolute(0);
+    metrics::counter!("aprs.nats.ack_error").absolute(0);
+    metrics::counter!("aprs.nats.receive_error").absolute(0);
+    metrics::counter!("aprs.nats.acked_immediately").absolute(0);
+    metrics::counter!("aprs.nats.intake_queue_full").absolute(0);
 
     // Message processing counters by type
     metrics::counter!("aprs.messages.processed.aircraft").absolute(0);
@@ -498,6 +508,21 @@ pub fn initialize_analytics_metrics() {
     metrics::gauge!("analytics.data_quality_score").set(0.0);
 }
 
+/// Initialize airspace-related metrics
+pub fn initialize_airspace_metrics() {
+    // Airspace sync metrics (for pull-airspaces command)
+    metrics::counter!("airspace_sync.total_fetched").absolute(0);
+    metrics::counter!("airspace_sync.total_inserted").absolute(0);
+    metrics::gauge!("airspace_sync.last_run_timestamp").set(0.0);
+    metrics::gauge!("airspace_sync.success").set(0.0);
+
+    // Airspace API endpoint metrics
+    metrics::counter!("api.airspaces.requests").absolute(0);
+    metrics::counter!("api.airspaces.errors").absolute(0);
+    metrics::histogram!("api.airspaces.duration_ms").record(0.0);
+    metrics::gauge!("api.airspaces.results_count").set(0.0);
+}
+
 /// Health check handler for APRS ingestion service
 /// Returns 200 OK if service is healthy and ready to receive traffic
 /// Returns 503 Service Unavailable if not ready
@@ -505,8 +530,8 @@ async fn health_check_handler() -> impl IntoResponse {
     if let Some(health) = get_aprs_health() {
         let health_state = health.read().await;
 
-        // Service is healthy if both APRS and JetStream are connected
-        let is_healthy = health_state.aprs_connected && health_state.jetstream_connected;
+        // Service is healthy if both APRS and NATS are connected
+        let is_healthy = health_state.aprs_connected && health_state.nats_connected;
 
         // Check if we've received messages recently (within last 60 seconds)
         let has_recent_messages = health_state
@@ -525,8 +550,8 @@ async fn health_check_handler() -> impl IntoResponse {
             (StatusCode::OK, status_msg)
         } else {
             let status_msg = format!(
-                "unhealthy - aprs_connected: {}, jetstream_connected: {}",
-                health_state.aprs_connected, health_state.jetstream_connected
+                "unhealthy - aprs_connected: {}, nats_connected: {}",
+                health_state.aprs_connected, health_state.nats_connected
             );
             warn!("Health check failed: {}", status_msg);
             (StatusCode::SERVICE_UNAVAILABLE, status_msg)
@@ -554,15 +579,15 @@ async fn readiness_check_handler() -> impl IntoResponse {
             .unwrap_or(false);
 
         let is_ready =
-            health_state.aprs_connected && health_state.jetstream_connected && has_recent_messages;
+            health_state.aprs_connected && health_state.nats_connected && has_recent_messages;
 
         if is_ready {
             info!("Readiness check: ready");
             (StatusCode::OK, "ready".to_string())
         } else {
             let status_msg = format!(
-                "not ready - aprs: {}, jetstream: {}, recent_messages: {}",
-                health_state.aprs_connected, health_state.jetstream_connected, has_recent_messages
+                "not ready - aprs: {}, nats: {}, recent_messages: {}",
+                health_state.aprs_connected, health_state.nats_connected, has_recent_messages
             );
             warn!("Readiness check failed: {}", status_msg);
             (StatusCode::SERVICE_UNAVAILABLE, status_msg)

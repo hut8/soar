@@ -125,7 +125,8 @@ impl AircraftRepository {
         let mut conn = self.get_connection()?;
         let model = aircraft::table
             .filter(aircraft::address.eq(address as i32))
-            .first::<AircraftModel>(&mut conn)
+            .select(AircraftModel::as_select())
+            .first(&mut conn)
             .optional()?;
 
         Ok(model.map(|model| model.into()))
@@ -139,7 +140,8 @@ impl AircraftRepository {
         let mut conn = self.get_connection()?;
         let model = aircraft::table
             .filter(aircraft::address.eq(address))
-            .first::<AircraftModel>(&mut conn)
+            .select(AircraftModel::as_select())
+            .first(&mut conn)
             .optional()?;
         Ok(model)
     }
@@ -180,6 +182,8 @@ impl AircraftRepository {
             adsb_emitter_category: None,
             tracker_device_type: None,
             country_code,
+            latitude: None,
+            longitude: None,
         };
 
         // Use INSERT ... ON CONFLICT ... DO UPDATE RETURNING to atomically handle race conditions
@@ -190,7 +194,8 @@ impl AircraftRepository {
             .on_conflict((aircraft::address_type, aircraft::address))
             .do_update()
             .set(aircraft::address.eq(excluded(aircraft::address))) // No-op update to trigger RETURNING
-            .get_result::<AircraftModel>(&mut conn)?;
+            .returning(AircraftModel::as_returning())
+            .get_result(&mut conn)?;
 
         Ok(model)
     }
@@ -210,6 +215,8 @@ impl AircraftRepository {
         address_type: AddressType,
         fix_timestamp: DateTime<Utc>,
         packet_fields: AircraftPacketFields,
+        latitude: f64,
+        longitude: f64,
     ) -> Result<AircraftModel> {
         let pool = self.pool.clone();
 
@@ -249,6 +256,8 @@ impl AircraftRepository {
                 adsb_emitter_category: packet_fields.adsb_emitter_category,
                 tracker_device_type: packet_fields.tracker_device_type.clone(),
                 country_code: country_code.clone(),
+                latitude: None,
+                longitude: None,
             };
 
             // Use INSERT ... ON CONFLICT ... DO UPDATE RETURNING to atomically handle race conditions
@@ -266,8 +275,11 @@ impl AircraftRepository {
                     aircraft::tracker_device_type.eq(packet_fields.tracker_device_type),
                     aircraft::registration.eq(&registration),
                     aircraft::country_code.eq(&country_code),
+                    aircraft::latitude.eq(latitude),
+                    aircraft::longitude.eq(longitude),
                 ))
-                .get_result::<AircraftModel>(&mut conn)?;
+                .returning(AircraftModel::as_returning())
+                .get_result(&mut conn)?;
 
             Ok::<AircraftModel, anyhow::Error>(model)
         })
@@ -279,7 +291,8 @@ impl AircraftRepository {
         let mut conn = self.get_connection()?;
         let model = aircraft::table
             .filter(aircraft::id.eq(aircraft_id))
-            .first::<AircraftModel>(&mut conn)
+            .select(AircraftModel::as_select())
+            .first(&mut conn)
             .optional()?;
 
         Ok(model.map(|model| model.into()))
@@ -292,7 +305,8 @@ impl AircraftRepository {
         let models = aircraft::table
             .filter(aircraft::club_id.eq(club_id))
             .order_by(aircraft::registration)
-            .load::<AircraftModel>(&mut conn)?;
+            .select(AircraftModel::as_select())
+            .load(&mut conn)?;
 
         Ok(models.into_iter().map(|model| model.into()).collect())
     }
@@ -303,7 +317,8 @@ impl AircraftRepository {
         let mut conn = self.get_connection()?;
         let model = aircraft::table
             .filter(aircraft::address.eq(address as i32))
-            .first::<AircraftModel>(&mut conn)
+            .select(AircraftModel::as_select())
+            .first(&mut conn)
             .optional()?;
 
         Ok(model.map(|model| model.into()))
@@ -315,7 +330,8 @@ impl AircraftRepository {
         let search_pattern = format!("%{}%", registration);
         let models = aircraft::table
             .filter(aircraft::registration.ilike(&search_pattern))
-            .load::<AircraftModel>(&mut conn)?;
+            .select(AircraftModel::as_select())
+            .load(&mut conn)?;
 
         Ok(models.into_iter().map(|model| model.into()).collect())
     }
@@ -370,7 +386,8 @@ impl AircraftRepository {
         let models = query
             .order(aircraft::last_fix_at.desc())
             .limit(limit)
-            .load::<AircraftModel>(&mut conn)?;
+            .select(AircraftModel::as_select())
+            .load(&mut conn)?;
 
         Ok(models.into_iter().map(|model| model.into()).collect())
     }
@@ -516,6 +533,8 @@ impl AircraftRepository {
                         adsb_emitter_category: row.adsb_emitter_category,
                         tracker_device_type: row.tracker_device_type,
                         country_code: row.country_code,
+                        latitude: None,  // Not selected in this query
+                        longitude: None, // Not selected in this query
                     };
                     (
                         model,
@@ -574,7 +593,8 @@ impl AircraftRepository {
             let duplicate_aircraft = aircraft::table
                 .filter(aircraft::address.eq_any(duplicate_addresses))
                 .order((aircraft::address.asc(), aircraft::address_type.asc()))
-                .load::<AircraftModel>(&mut conn)?;
+                .select(AircraftModel::as_select())
+                .load(&mut conn)?;
 
             Ok::<Vec<AircraftModel>, anyhow::Error>(duplicate_aircraft)
         })

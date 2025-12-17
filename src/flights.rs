@@ -1,6 +1,7 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
+use diesel_derive_enum::DbEnum;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 use uuid::Uuid;
@@ -21,6 +22,21 @@ pub enum FlightState {
     Complete,
     /// Flight timed out due to no beacons for 1+ hour (has timed_out_at)
     TimedOut,
+}
+
+/// Flight phase at timeout - used to determine flight coalescing behavior
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, DbEnum)]
+#[serde(rename_all = "snake_case")]
+#[db_enum(existing_type_path = "crate::schema::sql_types::TimeoutPhase")]
+pub enum TimeoutPhase {
+    /// Flight was climbing when it timed out
+    Climbing,
+    /// Flight was cruising when it timed out
+    Cruising,
+    /// Flight was descending when it timed out
+    Descending,
+    /// Flight phase could not be determined
+    Unknown,
 }
 
 /// Calculate the distance between two points using the Haversine formula
@@ -115,9 +131,22 @@ pub struct Flight {
     /// Landing location ID (foreign key to locations table)
     pub landing_location_id: Option<Uuid>,
 
+    /// Start location ID with reverse geocoded address (foreign key to locations table)
+    /// Set to airport location if takeoff from airport, or reverse geocoded detection point if airborne
+    pub start_location_id: Option<Uuid>,
+
+    /// End location ID with reverse geocoded address (foreign key to locations table)
+    /// Set to airport location if landing at airport, or reverse geocoded timeout point if timed out
+    pub end_location_id: Option<Uuid>,
+
     /// Timestamp when flight was timed out (no beacons for 1+ hour)
     /// Mutually exclusive with landing_time - a flight is either landed or timed out, not both
     pub timed_out_at: Option<DateTime<Utc>>,
+
+    /// Flight phase when timeout occurred
+    /// Used to determine coalescing behavior when aircraft reappears
+    /// NULL if flight has not timed out or if timeout occurred before this field was added
+    pub timeout_phase: Option<TimeoutPhase>,
 
     /// Timestamp of the last fix received for this flight
     /// Updated whenever a fix is assigned to this flight
@@ -181,7 +210,10 @@ impl Flight {
             runways_inferred: None,
             takeoff_location_id: None,
             landing_location_id: None,
+            start_location_id: None,
+            end_location_id: None,
             timed_out_at: None,
+            timeout_phase: None,
             last_fix_at: now,
             callsign: None,
             created_at: now,
@@ -223,7 +255,10 @@ impl Flight {
             runways_inferred: None,
             takeoff_location_id: None,
             landing_location_id: None,
+            start_location_id: None,
+            end_location_id: None,
             timed_out_at: None,
+            timeout_phase: None,
             last_fix_at: fix.timestamp,
             callsign: None,
             created_at: now,
@@ -264,7 +299,10 @@ impl Flight {
             runways_inferred: None,
             takeoff_location_id: None,
             landing_location_id: None,
+            start_location_id: None,
+            end_location_id: None,
             timed_out_at: None,
+            timeout_phase: None,
             last_fix_at: fix.timestamp,
             callsign: None,
             created_at: fix.timestamp,
@@ -318,7 +356,10 @@ impl Flight {
             runways_inferred: None,
             takeoff_location_id: None,
             landing_location_id: None,
+            start_location_id: None,
+            end_location_id: None,
             timed_out_at: None,
+            timeout_phase: None,
             last_fix_at: fix.timestamp,
             callsign: None,
             created_at: fix.timestamp,
@@ -860,7 +901,10 @@ pub struct FlightModel {
     pub runways_inferred: Option<bool>,
     pub takeoff_location_id: Option<Uuid>,
     pub landing_location_id: Option<Uuid>,
+    pub start_location_id: Option<Uuid>,
+    pub end_location_id: Option<Uuid>,
     pub timed_out_at: Option<DateTime<Utc>>,
+    pub timeout_phase: Option<TimeoutPhase>,
     pub last_fix_at: DateTime<Utc>,
     pub tow_release_height_delta_ft: Option<i32>,
     pub callsign: Option<String>,
@@ -892,7 +936,10 @@ pub struct NewFlightModel {
     pub runways_inferred: Option<bool>,
     pub takeoff_location_id: Option<Uuid>,
     pub landing_location_id: Option<Uuid>,
+    pub start_location_id: Option<Uuid>,
+    pub end_location_id: Option<Uuid>,
     pub timed_out_at: Option<DateTime<Utc>>,
+    pub timeout_phase: Option<TimeoutPhase>,
     pub last_fix_at: DateTime<Utc>,
     // Note: callsign and tow_release_height_delta_ft are not included in NewFlightModel
     // as they are not set during initial flight creation
@@ -926,7 +973,10 @@ impl From<Flight> for FlightModel {
             runways_inferred: flight.runways_inferred,
             takeoff_location_id: flight.takeoff_location_id,
             landing_location_id: flight.landing_location_id,
+            start_location_id: flight.start_location_id,
+            end_location_id: flight.end_location_id,
             timed_out_at: flight.timed_out_at,
+            timeout_phase: flight.timeout_phase,
             last_fix_at: flight.last_fix_at,
             callsign: flight.callsign,
             tow_release_height_delta_ft: flight.tow_release_height_delta_ft,
@@ -960,7 +1010,10 @@ impl From<Flight> for NewFlightModel {
             runways_inferred: flight.runways_inferred,
             takeoff_location_id: flight.takeoff_location_id,
             landing_location_id: flight.landing_location_id,
+            start_location_id: flight.start_location_id,
+            end_location_id: flight.end_location_id,
             timed_out_at: flight.timed_out_at,
+            timeout_phase: flight.timeout_phase,
             last_fix_at: flight.last_fix_at,
             // Note: callsign and tow_release_height_delta_ft omitted - not set on creation
         }
@@ -993,7 +1046,10 @@ impl From<FlightModel> for Flight {
             runways_inferred: model.runways_inferred,
             takeoff_location_id: model.takeoff_location_id,
             landing_location_id: model.landing_location_id,
+            start_location_id: model.start_location_id,
+            end_location_id: model.end_location_id,
             timed_out_at: model.timed_out_at,
+            timeout_phase: model.timeout_phase,
             last_fix_at: model.last_fix_at,
             callsign: model.callsign,
             tow_release_height_delta_ft: model.tow_release_height_delta_ft,

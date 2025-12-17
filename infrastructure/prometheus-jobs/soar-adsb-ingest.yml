@@ -1,0 +1,16 @@
+# SOAR ADS-B Ingest Metrics (ingest-adsb subcommand)
+# This file defines a complete scrape job configuration for the SOAR ADS-B ingest service.
+# Prometheus will automatically load this file when using scrape_config_files.
+
+job_name: 'soar-adsb-ingest'
+metrics_path: '/metrics'
+scrape_interval: 10s
+scrape_timeout: 5s
+
+static_configs:
+  - targets:
+      - 'localhost:9094'
+    labels:
+      instance: 'soar'
+      component: 'adsb-ingest'
+      environment: 'production'

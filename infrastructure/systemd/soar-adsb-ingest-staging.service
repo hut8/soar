@@ -1,0 +1,46 @@
+[Unit]
+Description=SOAR ADS-B Ingest (Staging) - Durable ADS-B Message Queue Service
+Documentation=https://github.com/hut8/soar
+After=network-online.target nats-server.service
+Wants=network-online.target nats-server.service
+# This service ingests ADS-B (Beast format) messages and publishes them to NATS
+# It is designed to run independently from the main processing service
+# Wants=nats-server.service ensures NATS starts when this service starts
+# Service will reconnect automatically via built-in retry logic if NATS restarts
+
+[Service]
+Type=simple
+User=soar
+Group=soar
+WorkingDirectory=/var/soar
+ExecStart=/usr/local/bin/soar-staging ingest-adsb --server radar --port 41365 --nats-url ${NATS_URL}
+ExecReload=/bin/kill -s HUP $MAINPID
+
+# Environment variables
+EnvironmentFile=/etc/soar/env-staging
+
+# Security settings
+NoNewPrivileges=yes
+
+# Graceful shutdown configuration
+# Allow 30 seconds for graceful shutdown (queue flush + connection cleanup)
+TimeoutStopSec=30
+# Send SIGTERM first, then SIGKILL after timeout
+KillMode=mixed
+KillSignal=SIGTERM
+
+# Restart configuration
+# Restart aggressively to minimize message loss during failures
+Restart=on-failure
+RestartSec=2
+StartLimitInterval=60s
+StartLimitBurst=5
+
+# Process limits
+LimitNOFILE=65536
+# Lower memory limit since this service only ingests, doesn't process
+MemoryMax=2G
+
+[Install]
+# Enabled by default for ADS-B deployment
+WantedBy=multi-user.target

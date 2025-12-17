@@ -254,6 +254,7 @@ export interface Flight {
 	aircraft_model?: string;
 	registration?: string;
 	aircraft_type_ogn?: string;
+	aircraft_country_code?: string;
 	// Latest fix information (for active flights)
 	latest_altitude_msl_feet: number | null;
 	latest_altitude_agl_feet: number | null;
@@ -266,9 +267,15 @@ export interface Flight {
 }
 
 export interface WatchlistEntry {
-	id: string;
-	aircraftId: string; // Only store aircraft ID, not full aircraft object
-	active: boolean;
+	user_id: string;
+	aircraft_id: string;
+	send_email: boolean;
+	created_at: string;
+	updated_at: string;
+}
+
+export interface WatchlistEntryWithAircraft extends WatchlistEntry {
+	aircraft?: Aircraft;
 }
 
 export interface Pilot {
@@ -303,4 +310,31 @@ export interface Receiver {
 	updated_at: string;
 	latest_packet_at: string | null;
 	from_ogn_db: boolean;
+}
+
+// Airspace interface - GeoJSON Feature format
+export interface Airspace {
+	type: 'Feature';
+	geometry: {
+		type: 'Polygon' | 'MultiPolygon';
+		coordinates: number[][][] | number[][][][];
+	};
+	properties: {
+		id: string;
+		openaip_id: string;
+		name: string;
+		airspace_class: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'SUA' | null;
+		airspace_type: string;
+		lower_limit: string;
+		upper_limit: string;
+		remarks: string | null;
+		country_code: string | null;
+		activity_type: string | null;
+	};
+}
+
+// Airspace collection - GeoJSON FeatureCollection format
+export interface AirspaceFeatureCollection {
+	type: 'FeatureCollection';
+	features: Airspace[];
 }

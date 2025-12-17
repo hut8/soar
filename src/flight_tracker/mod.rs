@@ -27,6 +27,20 @@ use tracing::Instrument;
 use tracing::{error, info, trace};
 use uuid::Uuid;
 
+/// Represents the flight state when timeout occurs
+/// Used to determine coalescing strategy when aircraft reappears
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum FlightPhase {
+    /// Aircraft is climbing (climb_fpm > 300)
+    Climbing,
+    /// Aircraft is cruising (altitude > 10,000 ft, |climb_fpm| < 500)
+    Cruising,
+    /// Aircraft is descending (climb_fpm < -300)
+    Descending,
+    /// Aircraft state is unknown (insufficient data)
+    Unknown,
+}
+
 /// Tracks the current flight state for a device
 #[derive(Debug, Clone)]
 pub(crate) struct CurrentFlightState {
@@ -39,6 +53,12 @@ pub(crate) struct CurrentFlightState {
     /// History of the last 5 fixes' is_active status (most recent last)
     /// Used to detect takeoff (inactive -> active transition) and landing debounce
     pub recent_fix_history: VecDeque<bool>,
+    /// Last known altitude MSL in feet (for phase determination)
+    pub last_altitude_msl_ft: Option<i32>,
+    /// Last known climb rate in fpm (for phase determination)
+    pub last_climb_fpm: Option<i32>,
+    /// Last known position (latitude, longitude) for distance calculations
+    pub last_position: (f64, f64),
 }
 
 impl CurrentFlightState {
@@ -51,6 +71,9 @@ impl CurrentFlightState {
             last_fix_timestamp: fix_timestamp,
             last_update_time: Utc::now(),
             recent_fix_history: history,
+            last_altitude_msl_ft: None,
+            last_climb_fpm: None,
+            last_position: (0.0, 0.0), // Will be updated with first fix
         }
     }
 
@@ -69,6 +92,31 @@ impl CurrentFlightState {
     /// Check if we have 5 consecutive inactive fixes (for landing debounce)
     pub fn has_five_consecutive_inactive(&self) -> bool {
         self.recent_fix_history.len() >= 5 && self.recent_fix_history.iter().all(|&active| !active)
+    }
+
+    /// Determine the flight phase based on current state
+    /// Used to decide coalescing behavior when flight times out
+    pub fn determine_flight_phase(&self) -> FlightPhase {
+        // Check climb rate first (most specific indicator)
+        if let Some(climb) = self.last_climb_fpm {
+            if climb > 300 {
+                return FlightPhase::Climbing;
+            }
+            if climb < -300 {
+                return FlightPhase::Descending;
+            }
+        }
+
+        // If at high altitude with stable or gentle climb/descent, assume cruising
+        if let Some(alt) = self.last_altitude_msl_ft
+            && alt > 10_000
+            && self.last_climb_fpm.map(|c| c.abs() < 500).unwrap_or(true)
+        {
+            return FlightPhase::Cruising;
+        }
+
+        // Insufficient data to determine phase
+        FlightPhase::Unknown
     }
 }
 
@@ -94,10 +142,12 @@ pub(crate) struct FlightProcessorContext<'a> {
     pub active_flights: &'a ActiveFlightsMap,
     pub aircraft_locks: &'a AircraftLocksMap,
     pub aircraft_trackers: &'a AircraftTrackersMap,
+    pub pool: diesel::r2d2::Pool<diesel::r2d2::ConnectionManager<diesel::PgConnection>>,
 }
 
 /// Simple flight tracker - just tracks which device is currently on which flight
 pub struct FlightTracker {
+    pool: Pool<ConnectionManager<PgConnection>>,
     flights_repo: FlightsRepository,
     device_repo: AircraftRepository,
     airports_repo: AirportsRepository,
@@ -116,6 +166,7 @@ pub struct FlightTracker {
 impl Clone for FlightTracker {
     fn clone(&self) -> Self {
         Self {
+            pool: self.pool.clone(),
             flights_repo: self.flights_repo.clone(),
             device_repo: self.device_repo.clone(),
             airports_repo: self.airports_repo.clone(),
@@ -134,6 +185,7 @@ impl FlightTracker {
     pub fn new(pool: &Pool<ConnectionManager<PgConnection>>) -> Self {
         let elevation_db = ElevationDB::new().expect("Failed to initialize ElevationDB");
         Self {
+            pool: pool.clone(),
             flights_repo: FlightsRepository::new(pool.clone()),
             device_repo: AircraftRepository::new(pool.clone()),
             airports_repo: AirportsRepository::new(pool.clone()),
@@ -161,6 +213,7 @@ impl FlightTracker {
             active_flights: &self.active_flights,
             aircraft_locks: &self.device_locks,
             aircraft_trackers: &self.aircraft_trackers,
+            pool: self.pool.clone(),
         }
     }
 
@@ -222,6 +275,9 @@ impl FlightTracker {
                         last_fix_timestamp: flight.last_fix_at,
                         last_update_time: Utc::now(),
                         recent_fix_history: history,
+                        last_altitude_msl_ft: None,
+                        last_climb_fpm: None,
+                        last_position: (0.0, 0.0), // Will be updated when next fix arrives
                     };
 
                     active_flights.insert(aircraft_id, state);
@@ -349,13 +405,24 @@ impl FlightTracker {
                 continue;
             }
 
-            if let Err(e) = flight_lifecycle::timeout_flight(
-                &self.flights_repo,
-                &self.active_flights,
-                flight_id,
-                aircraft_id,
-            )
-            .await
+            // Create context for timeout processing
+            let ctx = FlightProcessorContext {
+                flights_repo: &self.flights_repo,
+                fixes_repo: &self.fixes_repo,
+                aircraft_repo: &self.device_repo,
+                airports_repo: &self.airports_repo,
+                runways_repo: &self.runways_repo,
+                locations_repo: &self.locations_repo,
+                elevation_db: &self.elevation_db,
+                active_flights: &self.active_flights,
+                aircraft_locks: &self.device_locks,
+                aircraft_trackers: &self.aircraft_trackers,
+                pool: self.pool.clone(),
+            };
+
+            if let Err(e) =
+                flight_lifecycle::timeout_flight(&ctx, &self.active_flights, flight_id, aircraft_id)
+                    .await
             {
                 error!(
                     "Failed to timeout flight {} for device {}: {}",

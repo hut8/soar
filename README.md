@@ -12,6 +12,11 @@ SOAR is an application under active development that will automate many duty-man
 - **Midnight Rollover**: Automatically switches to new log files at UTC midnight
 - **Configurable Filters**: Support for APRS-IS filters to limit received messages
 - **Retry Logic**: Built-in connection retry with configurable parameters
+- **Airspace Boundaries**: Import and display airspace data from OpenAIP on the operations map
+  - Color-coded by classification (controlled, uncontrolled, special use)
+  - Interactive polygons with detailed information
+  - Incremental sync support for efficient updates
+  - See [OpenAIP Setup Guide](docs/OPENAIP_SETUP.md) for configuration
 
 ## Data Processing Flow
 
@@ -284,7 +289,7 @@ BEAST_PORT=30005
 
 Then start the Beast ingestion service:
 ```bash
-soar ingest-beast --host localhost --port 30005
+soar ingest-adsb --server localhost --port 30005
 ```
 
 ### Notes
@@ -304,7 +309,7 @@ If the relay host and SOAR host are on different networks, use SSH port forwardi
 ssh -L 30005:localhost:30005 user@relay-host.example.com -N
 
 # Then connect SOAR to localhost:30005
-soar ingest-beast --host localhost --port 30005
+soar ingest-adsb --server localhost --port 30005
 ```
 
 ## Development
@@ -380,11 +385,16 @@ cargo install diesel_cli --no-default-features --features postgres
 
 ## Data
 
-- Airport data should be pulled from https://www.openaip.net/data/exports?page=1&limit=50&sortBy=createdAt&sortDesc=true&contentType=airport&format=ndgeojson&country=US or directly from the bucket at https://console.cloud.google.com/storage/browser/29f98e10-a489-4c82-ae5e-489dbcd4912f;tab=objects?pli=1&prefix=&forceOnObjectsSortingFiltering=false
-- Alternative airport data: https://geodata.bts.gov/datasets/usdot::aviation-facilities/about (US only)
-- FAA Data (aircraft registrations and models) - https://www.faa.gov/licenses_certificates/aircraft_certification/aircraft_registry/releasable_aircraft_download
-- Ourairports (open, worldwide data) - https://ourairports.com/data/
-- FAA NASR: This seems like the best for the USA - https://www.faa.gov/air_traffic/flight_info/aeronav/aero_data/NASR_Subscription/2025-08-07/
+- **Airspace data** - Imported via OpenAIP API (requires free API key)
+  - Use `soar pull-airspaces` command for global or country-specific imports
+  - Supports incremental sync with `--incremental` flag
+  - Data licensed under CC BY-NC 4.0 (non-commercial use only)
+  - See [OpenAIP Setup Guide](docs/OPENAIP_SETUP.md) for detailed instructions
+- **Airport data** - https://www.openaip.net/data/exports?page=1&limit=50&sortBy=createdAt&sortDesc=true&contentType=airport&format=ndgeojson&country=US or directly from the bucket at https://console.cloud.google.com/storage/browser/29f98e10-a489-4c82-ae5e-489dbcd4912f;tab=objects?pli=1&prefix=&forceOnObjectsSortingFiltering=false
+- **Alternative airport data**: https://geodata.bts.gov/datasets/usdot::aviation-facilities/about (US only)
+- **FAA Data** (aircraft registrations and models) - https://www.faa.gov/licenses_certificates/aircraft_certification/aircraft_registry/releasable_aircraft_download
+- **Ourairports** (open, worldwide data) - https://ourairports.com/data/
+- **FAA NASR**: This seems like the best for the USA - https://www.faa.gov/air_traffic/flight_info/aeronav/aero_data/NASR_Subscription/2025-08-07/
 
 ## License
 

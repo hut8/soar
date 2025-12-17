@@ -2,7 +2,11 @@
 	import { MapPin, Clock, ExternalLink, MoveUp, AlertCircle } from '@lucide/svelte';
 	import dayjs from 'dayjs';
 	import relativeTime from 'dayjs/plugin/relativeTime';
-	import { getAircraftTypeOgnDescription, getAircraftTypeColor } from '$lib/formatters';
+	import {
+		getAircraftTypeOgnDescription,
+		getAircraftTypeColor,
+		getFlagPath
+	} from '$lib/formatters';
 	import type { Flight } from '$lib/types';
 	import TowAircraftLink from '$lib/components/TowAircraftLink.svelte';
 	import AircraftLink from '$lib/components/AircraftLink.svelte';
@@ -188,6 +192,13 @@
 								{#if flight.departure_airport}
 									<div class="text-surface-500-400-token flex items-center gap-1 text-xs">
 										<MapPin class="h-3 w-3" />
+										{#if flight.departure_airport_country}
+											<img
+												src={getFlagPath(flight.departure_airport_country)}
+												alt=""
+												class="inline-block h-3 rounded-sm"
+											/>
+										{/if}
 										{flight.departure_airport}
 									</div>
 								{/if}
@@ -230,6 +241,13 @@
 										{#if flight.arrival_airport}
 											<div class="text-surface-500-400-token flex items-center gap-1 text-xs">
 												<MapPin class="h-3 w-3" />
+												{#if flight.arrival_airport_country}
+													<img
+														src={getFlagPath(flight.arrival_airport_country)}
+														alt=""
+														class="inline-block h-3 rounded-sm"
+													/>
+												{/if}
 												{flight.arrival_airport}
 											</div>
 										{/if}
@@ -334,6 +352,13 @@
 					<span class="text-surface-500-400-token text-xs">Start:</span>
 					{#if flight.departure_airport}
 						<span class="font-medium">
+							{#if flight.departure_airport_country}
+								<img
+									src={getFlagPath(flight.departure_airport_country)}
+									alt=""
+									class="inline-block h-3 rounded-sm"
+								/>
+							{/if}
 							{flight.departure_airport}{#if flight.takeoff_runway_ident}/{flight.takeoff_runway_ident}{/if}
 						</span>
 					{/if}
@@ -372,6 +397,13 @@
 						{:else}
 							{#if flight.arrival_airport}
 								<span class="font-medium">
+									{#if flight.arrival_airport_country}
+										<img
+											src={getFlagPath(flight.arrival_airport_country)}
+											alt=""
+											class="inline-block h-3 rounded-sm"
+										/>
+									{/if}
 									{flight.arrival_airport}{#if flight.landing_runway_ident}/{flight.landing_runway_ident}{/if}
 								</span>
 							{/if}

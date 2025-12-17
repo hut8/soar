@@ -14,6 +14,7 @@ use r2d2::Pool;
 use std::time::Instant;
 use tracing::{info, warn};
 
+use soar::airports_repo::AirportsRepository;
 use soar::email_reporter::{
     DataLoadReport, EmailConfig, EntityMetrics, send_email_report, send_failure_email,
 };
@@ -215,18 +216,36 @@ pub async fn handle_load_data(
     }
 
     // Geocoding (if requested)
-    if geocode && let Some(metrics) = geocode_soaring_clubs(diesel_pool.clone()).await {
-        record_stage_metrics(&metrics, "geocoding");
-        if !metrics.success
-            && let Some(ref config) = email_config
-        {
-            let _ = send_failure_email(
-                config,
-                &metrics.name,
-                metrics.error_message.as_deref().unwrap_or("Unknown error"),
-            );
+    if geocode {
+        // Geocode soaring clubs
+        if let Some(metrics) = geocode_soaring_clubs(diesel_pool.clone()).await {
+            record_stage_metrics(&metrics, "geocoding_clubs");
+            if !metrics.success
+                && let Some(ref config) = email_config
+            {
+                let _ = send_failure_email(
+                    config,
+                    &metrics.name,
+                    metrics.error_message.as_deref().unwrap_or("Unknown error"),
+                );
+            }
+            report.add_entity(metrics);
         }
-        report.add_entity(metrics);
+
+        // Geocode airports
+        if let Some(metrics) = geocode_airports(diesel_pool.clone()).await {
+            record_stage_metrics(&metrics, "geocoding_airports");
+            if !metrics.success
+                && let Some(ref config) = email_config
+            {
+                let _ = send_failure_email(
+                    config,
+                    &metrics.name,
+                    metrics.error_message.as_deref().unwrap_or("Unknown error"),
+                );
+            }
+            report.add_entity(metrics);
+        }
     }
 
     // Link home bases (if requested)
@@ -417,6 +436,205 @@ async fn geocode_soaring_clubs(
     Some(metrics)
 }
 
+/// Geocode airports using reverse geocoding (coordinates -> address)
+/// Creates location records and links them to airports
+async fn geocode_airports(
+    diesel_pool: Pool<ConnectionManager<PgConnection>>,
+) -> Option<soar::email_reporter::EntityMetrics> {
+    use bigdecimal::ToPrimitive;
+    use soar::email_reporter::EntityMetrics;
+    use soar::geocoding::Geocoder;
+    use soar::locations::Location;
+    use tracing::error;
+
+    let start = Instant::now();
+    let mut metrics = EntityMetrics::new("Geocoding Airports");
+
+    info!("Reverse geocoding airport locations...");
+
+    let airports_repo = AirportsRepository::new(diesel_pool.clone());
+    let locations_repo = LocationsRepository::new(diesel_pool.clone());
+
+    // Get airports that don't have a location_id yet and have coordinates
+    match get_airports_for_geocoding(&diesel_pool).await {
+        Ok(airports) => {
+            let total_airports = airports.len();
+            info!("Found {} airports to reverse geocode", total_airports);
+            metrics.records_loaded = total_airports;
+
+            let geocoder = Geocoder::new();
+            let mut geocoded_count = 0;
+
+            for airport in airports {
+                // Convert BigDecimal to f64
+                let latitude = match airport.latitude_deg.as_ref().and_then(|lat| lat.to_f64()) {
+                    Some(lat) => lat,
+                    None => {
+                        warn!("Airport {} has invalid latitude, skipping", airport.id);
+                        continue;
+                    }
+                };
+
+                let longitude = match airport.longitude_deg.as_ref().and_then(|lon| lon.to_f64()) {
+                    Some(lon) => lon,
+                    None => {
+                        warn!("Airport {} has invalid longitude, skipping", airport.id);
+                        continue;
+                    }
+                };
+
+                // Reverse geocode the airport coordinates using Nominatim with Google Maps fallback
+                match geocoder.reverse_geocode(latitude, longitude).await {
+                    Ok(result) => {
+                        // Create a location with the reverse geocoded address
+                        let location = Location::new(
+                            result.street1,
+                            None, // street2
+                            result.city,
+                            result.state,
+                            result.zip_code,
+                            None,                                                // region_code
+                            result.country.map(|c| c.chars().take(2).collect()), // country code
+                            Some(soar::locations::Point::new(latitude, longitude)),
+                        );
+
+                        // Use find_or_create to avoid duplicate locations
+                        match locations_repo
+                            .find_or_create(
+                                location.street1.clone(),
+                                location.street2.clone(),
+                                location.city.clone(),
+                                location.state.clone(),
+                                location.zip_code.clone(),
+                                location.region_code.clone(),
+                                location.country_mail_code.clone(),
+                                location.geolocation,
+                            )
+                            .await
+                        {
+                            Ok(created_location) => {
+                                // Link the airport to the location
+                                match airports_repo
+                                    .update_location_id(airport.id, created_location.id)
+                                    .await
+                                {
+                                    Ok(true) => {
+                                        geocoded_count += 1;
+                                        info!(
+                                            "Reverse geocoded airport {} ({}) to location {}: {}",
+                                            airport.id,
+                                            airport.ident,
+                                            created_location.id,
+                                            result.display_name
+                                        );
+                                    }
+                                    Ok(false) => {
+                                        warn!(
+                                            "Airport {} not found for location_id update",
+                                            airport.id
+                                        )
+                                    }
+                                    Err(e) => {
+                                        warn!(
+                                            "Failed to update location_id for airport {}: {}",
+                                            airport.id, e
+                                        )
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                warn!(
+                                    "Failed to create location for airport {}: {}",
+                                    airport.id, e
+                                )
+                            }
+                        }
+                    }
+                    Err(e) => warn!(
+                        "Reverse geocoding failed for airport {} ({}, {}): {}",
+                        airport.id, latitude, longitude, e
+                    ),
+                }
+            }
+
+            info!(
+                "Successfully reverse geocoded {} out of {} airports",
+                geocoded_count, total_airports
+            );
+
+            // Get total count of airports with geocoded locations
+            match get_geocoded_airports_count(&diesel_pool).await {
+                Ok(total) => {
+                    metrics.records_in_db = Some(total);
+                }
+                Err(e) => {
+                    warn!("Failed to get geocoded airports count: {}", e);
+                    metrics.records_in_db = None;
+                }
+            }
+            metrics.success = true;
+        }
+        Err(e) => {
+            error!("Failed to get airports for geocoding: {}", e);
+            metrics.success = false;
+            metrics.error_message = Some(e.to_string());
+        }
+    }
+
+    metrics.duration_secs = start.elapsed().as_secs_f64();
+    Some(metrics)
+}
+
+/// Get airports that need geocoding (have coordinates but no location_id)
+async fn get_airports_for_geocoding(
+    diesel_pool: &Pool<ConnectionManager<PgConnection>>,
+) -> Result<Vec<soar::airports::Airport>> {
+    use diesel::prelude::*;
+    use soar::schema::airports;
+
+    let pool = diesel_pool.clone();
+
+    tokio::task::spawn_blocking(move || {
+        let mut conn = pool.get()?;
+
+        let results: Vec<soar::airports::AirportModel> = airports::table
+            .filter(airports::location_id.is_null())
+            .filter(airports::latitude_deg.is_not_null())
+            .filter(airports::longitude_deg.is_not_null())
+            .limit(1000) // Process in batches to avoid overwhelming the geocoding service
+            .select(soar::airports::AirportModel::as_select())
+            .load::<soar::airports::AirportModel>(&mut conn)?;
+
+        Ok::<Vec<soar::airports::Airport>, anyhow::Error>(
+            results.into_iter().map(|model| model.into()).collect(),
+        )
+    })
+    .await?
+}
+
+/// Get count of airports with geocoded locations
+async fn get_geocoded_airports_count(
+    diesel_pool: &Pool<ConnectionManager<PgConnection>>,
+) -> Result<i64> {
+    use diesel::dsl::count_star;
+    use diesel::prelude::*;
+    use soar::schema::airports;
+
+    let pool = diesel_pool.clone();
+
+    tokio::task::spawn_blocking(move || {
+        let mut conn = pool.get()?;
+
+        let result: i64 = airports::table
+            .filter(airports::location_id.is_not_null())
+            .select(count_star())
+            .get_result(&mut conn)?;
+
+        Ok(result)
+    })
+    .await?
+}
+
 /// Get count of clubs with geocoded locations (via join with locations table)
 async fn get_geocoded_clubs_count(
     diesel_pool: &Pool<ConnectionManager<PgConnection>>,
@@ -474,7 +692,8 @@ async fn query_duplicate_devices(
         let duplicate_devices = aircraft::table
             .filter(aircraft::address.eq_any(duplicate_addresses))
             .order((aircraft::address.asc(), aircraft::address_type.asc()))
-            .load::<soar::aircraft::AircraftModel>(&mut conn)?;
+            .select(soar::aircraft::AircraftModel::as_select())
+            .load(&mut conn)?;
 
         Ok(duplicate_devices)
     })
