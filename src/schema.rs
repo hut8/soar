@@ -260,6 +260,7 @@ diesel::table! {
         keywords -> Nullable<Text>,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
+        location_id -> Nullable<Uuid>,
     }
 }
 
@@ -840,6 +841,8 @@ diesel::table! {
         min_longitude -> Nullable<Float8>,
         max_longitude -> Nullable<Float8>,
         timeout_phase -> Nullable<TimeoutPhase>,
+        start_location_id -> Nullable<Uuid>,
+        end_location_id -> Nullable<Uuid>,
     }
 }
 
@@ -1246,6 +1249,16 @@ diesel::table! {
     }
 }
 
+diesel::table! {
+    watchlist (user_id, aircraft_id) {
+        user_id -> Uuid,
+        aircraft_id -> Uuid,
+        send_email -> Bool,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+    }
+}
+
 diesel::joinable!(aircraft -> clubs (club_id));
 diesel::joinable!(aircraft_approved_operations -> aircraft_registrations (aircraft_registration_id));
 diesel::joinable!(aircraft_other_names -> aircraft_registrations (registration_number));
@@ -1255,6 +1268,7 @@ diesel::joinable!(aircraft_registrations -> clubs (club_id));
 diesel::joinable!(aircraft_registrations -> locations (location_id));
 diesel::joinable!(aircraft_registrations -> status_codes (status_code));
 diesel::joinable!(aircraft_registrations -> type_engines (type_engine_code));
+diesel::joinable!(airports -> locations (location_id));
 diesel::joinable!(clubs -> airports (home_base_airport_id));
 diesel::joinable!(clubs -> locations (location_id));
 diesel::joinable!(fixes -> aircraft (aircraft_id));
@@ -1306,6 +1320,8 @@ diesel::joinable!(receivers_links -> receivers (receiver_id));
 diesel::joinable!(receivers_photos -> receivers (receiver_id));
 diesel::joinable!(user_fixes -> users (user_id));
 diesel::joinable!(users -> clubs (club_id));
+diesel::joinable!(watchlist -> aircraft (aircraft_id));
+diesel::joinable!(watchlist -> users (user_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     aircraft,
@@ -1363,4 +1379,5 @@ diesel::allow_tables_to_appear_in_same_query!(
     type_registrations,
     user_fixes,
     users,
+    watchlist,
 );

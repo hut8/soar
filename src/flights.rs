@@ -131,6 +131,14 @@ pub struct Flight {
     /// Landing location ID (foreign key to locations table)
     pub landing_location_id: Option<Uuid>,
 
+    /// Start location ID with reverse geocoded address (foreign key to locations table)
+    /// Set to airport location if takeoff from airport, or reverse geocoded detection point if airborne
+    pub start_location_id: Option<Uuid>,
+
+    /// End location ID with reverse geocoded address (foreign key to locations table)
+    /// Set to airport location if landing at airport, or reverse geocoded timeout point if timed out
+    pub end_location_id: Option<Uuid>,
+
     /// Timestamp when flight was timed out (no beacons for 1+ hour)
     /// Mutually exclusive with landing_time - a flight is either landed or timed out, not both
     pub timed_out_at: Option<DateTime<Utc>>,
@@ -202,6 +210,8 @@ impl Flight {
             runways_inferred: None,
             takeoff_location_id: None,
             landing_location_id: None,
+            start_location_id: None,
+            end_location_id: None,
             timed_out_at: None,
             timeout_phase: None,
             last_fix_at: now,
@@ -245,6 +255,8 @@ impl Flight {
             runways_inferred: None,
             takeoff_location_id: None,
             landing_location_id: None,
+            start_location_id: None,
+            end_location_id: None,
             timed_out_at: None,
             timeout_phase: None,
             last_fix_at: fix.timestamp,
@@ -287,6 +299,8 @@ impl Flight {
             runways_inferred: None,
             takeoff_location_id: None,
             landing_location_id: None,
+            start_location_id: None,
+            end_location_id: None,
             timed_out_at: None,
             timeout_phase: None,
             last_fix_at: fix.timestamp,
@@ -342,6 +356,8 @@ impl Flight {
             runways_inferred: None,
             takeoff_location_id: None,
             landing_location_id: None,
+            start_location_id: None,
+            end_location_id: None,
             timed_out_at: None,
             timeout_phase: None,
             last_fix_at: fix.timestamp,
@@ -885,6 +901,8 @@ pub struct FlightModel {
     pub runways_inferred: Option<bool>,
     pub takeoff_location_id: Option<Uuid>,
     pub landing_location_id: Option<Uuid>,
+    pub start_location_id: Option<Uuid>,
+    pub end_location_id: Option<Uuid>,
     pub timed_out_at: Option<DateTime<Utc>>,
     pub timeout_phase: Option<TimeoutPhase>,
     pub last_fix_at: DateTime<Utc>,
@@ -918,6 +936,8 @@ pub struct NewFlightModel {
     pub runways_inferred: Option<bool>,
     pub takeoff_location_id: Option<Uuid>,
     pub landing_location_id: Option<Uuid>,
+    pub start_location_id: Option<Uuid>,
+    pub end_location_id: Option<Uuid>,
     pub timed_out_at: Option<DateTime<Utc>>,
     pub timeout_phase: Option<TimeoutPhase>,
     pub last_fix_at: DateTime<Utc>,
@@ -953,6 +973,8 @@ impl From<Flight> for FlightModel {
             runways_inferred: flight.runways_inferred,
             takeoff_location_id: flight.takeoff_location_id,
             landing_location_id: flight.landing_location_id,
+            start_location_id: flight.start_location_id,
+            end_location_id: flight.end_location_id,
             timed_out_at: flight.timed_out_at,
             timeout_phase: flight.timeout_phase,
             last_fix_at: flight.last_fix_at,
@@ -988,6 +1010,8 @@ impl From<Flight> for NewFlightModel {
             runways_inferred: flight.runways_inferred,
             takeoff_location_id: flight.takeoff_location_id,
             landing_location_id: flight.landing_location_id,
+            start_location_id: flight.start_location_id,
+            end_location_id: flight.end_location_id,
             timed_out_at: flight.timed_out_at,
             timeout_phase: flight.timeout_phase,
             last_fix_at: flight.last_fix_at,
@@ -1022,6 +1046,8 @@ impl From<FlightModel> for Flight {
             runways_inferred: model.runways_inferred,
             takeoff_location_id: model.takeoff_location_id,
             landing_location_id: model.landing_location_id,
+            start_location_id: model.start_location_id,
+            end_location_id: model.end_location_id,
             timed_out_at: model.timed_out_at,
             timeout_phase: model.timeout_phase,
             last_fix_at: model.last_fix_at,

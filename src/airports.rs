@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
+use uuid::Uuid;
 
 fn to_opt_string(s: &str) -> Option<String> {
     let t = s.trim();
@@ -65,6 +66,7 @@ pub struct Airport {
     pub home_link: Option<String>,         // Airport website URL
     pub wikipedia_link: Option<String>,    // Wikipedia article URL
     pub keywords: Option<String>,          // Search keywords
+    pub location_id: Option<Uuid>,         // Foreign key to locations table
 }
 
 /// Diesel model for the airports table - used for database operations
@@ -93,6 +95,7 @@ pub struct AirportModel {
     pub keywords: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub location_id: Option<Uuid>,
 }
 
 /// Insert model for new airports (without created_at, updated_at, location)
@@ -145,6 +148,7 @@ impl From<Airport> for AirportModel {
             keywords: airport.keywords,
             created_at: Utc::now(),
             updated_at: Utc::now(),
+            location_id: airport.location_id,
         }
     }
 }
@@ -199,6 +203,7 @@ impl From<AirportModel> for Airport {
             home_link: model.home_link,
             wikipedia_link: model.wikipedia_link,
             keywords: model.keywords,
+            location_id: model.location_id,
         }
     }
 }
@@ -269,6 +274,7 @@ impl Airport {
             home_link,
             wikipedia_link,
             keywords,
+            location_id: None,
         })
     }
 }
