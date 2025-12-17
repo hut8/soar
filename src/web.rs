@@ -705,6 +705,18 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         // User settings routes
         .route("/user/settings", get(actions::get_user_settings))
         .route("/user/settings", put(actions::update_user_settings))
+        // Watchlist routes
+        .route("/watchlist", get(actions::get_watchlist))
+        .route("/watchlist", post(actions::add_to_watchlist))
+        .route(
+            "/watchlist/{aircraft_id}",
+            put(actions::update_watchlist_email),
+        )
+        .route(
+            "/watchlist/{aircraft_id}",
+            delete(actions::remove_from_watchlist),
+        )
+        .route("/watchlist/clear", delete(actions::clear_watchlist))
         // User location tracking
         .route("/user-fix", post(actions::create_user_fix))
         // Analytics routes
