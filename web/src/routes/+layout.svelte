@@ -35,7 +35,8 @@
 		User,
 		Sun,
 		Moon,
-		Info
+		Info,
+		Eye
 	} from '@lucide/svelte';
 
 	const base = resolve('/');
@@ -50,6 +51,7 @@
 	const loginPath = resolve('/login');
 	const registerPath = resolve('/register');
 	const profilePath = resolve('/profile');
+	const watchlistPath = resolve('/watchlist');
 
 	let { children } = $props();
 	let showUserMenu = $state(false);
@@ -218,6 +220,11 @@
 						<a href={flightsPath} class="btn preset-filled-primary-500 btn-sm">
 							<PlaneTakeoff /> Flights
 						</a>
+						{#if $auth.isAuthenticated}
+							<a href={watchlistPath} class="btn preset-filled-primary-500 btn-sm">
+								<Eye /> Watchlist
+							</a>
+						{/if}
 						<a
 							href={infoPath}
 							class="btn preset-filled-primary-500 btn-sm"
@@ -396,6 +403,16 @@
 				>
 					<Info size={16} /> System Info
 				</a>
+
+				{#if $auth.isAuthenticated}
+					<a
+						href={watchlistPath}
+						class="btn w-full justify-start preset-filled-primary-500"
+						onclick={() => (showMobileMenu = false)}
+					>
+						<Eye size={16} /> Watchlist
+					</a>
+				{/if}
 
 				{#if $auth.isAuthenticated && $auth.user}
 					<div class="space-y-4">

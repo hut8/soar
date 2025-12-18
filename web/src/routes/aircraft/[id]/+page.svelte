@@ -12,11 +12,14 @@
 		Info,
 		Activity,
 		Building2,
-		Save
+		Save,
+		Eye,
+		EyeOff
 	} from '@lucide/svelte';
 	import { Progress } from '@skeletonlabs/skeleton-svelte';
 	import { serverCall } from '$lib/api/server';
 	import { auth } from '$lib/stores/auth';
+	import { watchlist } from '$lib/stores/watchlist';
 	import type {
 		Aircraft,
 		AircraftRegistration,
@@ -84,6 +87,7 @@
 	$: aircraftId = $page.params.id || '';
 	$: isAdmin = $auth.user?.access_level === 'admin';
 	$: userClubId = $auth.user?.club_id;
+	$: isInWatchlist = watchlist.has(aircraftId);
 
 	function extractErrorMessage(err: unknown): string {
 		if (err instanceof Error) {
@@ -239,6 +243,26 @@
 			savingClub = false;
 		}
 	}
+
+	async function toggleWatchlist() {
+		if (!$auth.isAuthenticated) {
+			toaster.warning({ title: 'Please log in to use watchlist' });
+			return;
+		}
+
+		try {
+			if (isInWatchlist) {
+				await watchlist.remove(aircraftId);
+				toaster.success({ title: 'Removed from watchlist' });
+			} else {
+				await watchlist.add(aircraftId, false);
+				toaster.success({ title: 'Added to watchlist' });
+			}
+		} catch (err) {
+			const errorMessage = extractErrorMessage(err);
+			toaster.error({ title: 'Failed to update watchlist', description: errorMessage });
+		}
+	}
 </script>
 
 <svelte:head>
@@ -252,6 +276,23 @@
 			<ArrowLeft class="mr-2 h-4 w-4" />
 			Back to Aircraft
 		</button>
+
+		{#if $auth.isAuthenticated}
+			<button
+				class="btn {isInWatchlist
+					? 'preset-filled-warning-500'
+					: 'preset-tonal-primary-500'} btn-sm"
+				onclick={toggleWatchlist}
+			>
+				{#if isInWatchlist}
+					<Eye class="h-4 w-4" />
+					Watching
+				{:else}
+					<EyeOff class="h-4 w-4" />
+					Watch Aircraft
+				{/if}
+			</button>
+		{/if}
 	</div>
 
 	<!-- Loading State -->
