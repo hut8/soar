@@ -403,7 +403,7 @@ async fn geocode_aircraft_registration_locations(
                         .or(locations::state.is_not_null()),
                 )
                 .select(soar::locations::LocationModel::as_select())
-                .distinct()
+                .distinct_on(locations::id)
                 .limit(MAX_TOTAL_GEOCODE as i64)
                 .load(&mut conn)?;
 
