@@ -2,6 +2,7 @@
 .env
 .vscode/settings.json
 .logs
+.mcp.json
 
 # Web build artifacts
 web/build/

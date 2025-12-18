@@ -127,16 +127,9 @@ echo -e "${BOLD}${CYAN}Launching Claude Code...${NC}"
 echo ""
 
 # Launch Claude Code in the worktree directory
-# After Claude exits, spawn a shell so the user stays in the worktree
 if command -v claude &> /dev/null; then
     claude
-    echo ""
-    echo -e "${YELLOW}Claude Code exited. Spawning shell in worktree...${NC}"
-    echo -e "${CYAN}Current directory: $(pwd)${NC}"
-    exec $SHELL
 else
     echo -e "${YELLOW}Warning: 'claude' command not found${NC}"
-    echo -e "${YELLOW}Spawning shell in worktree instead...${NC}"
-    echo -e "${CYAN}Current directory: $(pwd)${NC}"
-    exec $SHELL
+    echo -e "${CYAN}Worktree is ready at: $(pwd)${NC}"
 fi

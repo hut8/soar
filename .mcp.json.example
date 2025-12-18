@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "soar-dev-db": {
+      "command": "/path/to/pgedge-postgres-mcp",
+      "env": {
+        "PGHOST": "localhost",
+        "PGPORT": "5432",
+        "PGDATABASE": "soar_dev",
+        "PGUSER": "your_username"
+      }
+    }
+  }
+}

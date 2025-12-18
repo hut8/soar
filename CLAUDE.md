@@ -391,6 +391,46 @@ git commit -m "feat: add new feature"  # Pre-commit runs automatically
 git push origin feature/new-feature
 ```
 
+### MCP Server Setup (Optional - For Claude Code Database Access)
+
+Claude Code can connect directly to the PostgreSQL database using the **pgEdge Postgres MCP Server**, enabling natural language database queries and schema introspection.
+
+**Installation:**
+
+1. **Clone and build the MCP server:**
+   ```bash
+   cd /tmp
+   git clone https://github.com/pgEdge/pgedge-postgres-mcp.git
+   cd pgedge-postgres-mcp
+   go build -v -o bin/pgedge-postgres-mcp ./cmd/pgedge-pg-mcp-svr
+   cp bin/pgedge-postgres-mcp ~/.local/bin/
+   ```
+
+2. **Configure for your project:**
+   ```bash
+   # Copy the example configuration
+   cp .mcp.json.example .mcp.json
+
+   # Edit .mcp.json with your settings
+   # Update the "command" path to where you installed the binary
+   # Update "PGUSER" to your PostgreSQL username
+   ```
+
+3. **Restart Claude Code** to load the MCP server
+
+**What you get:**
+- 🔍 Schema introspection - Query tables, columns, indexes, constraints
+- 📊 Database queries - Execute SQL queries (read-only for safety)
+- 📈 Performance metrics - Access `pg_stat_statements` and other stats
+- 🧠 Natural language queries - Ask questions about the database in plain English
+
+**Security Notes:**
+- The MCP server runs in **read-only mode** by default
+- `.mcp.json` is gitignored to prevent committing local paths and credentials
+- Use `.pgpass` file for password management instead of storing in `.mcp.json`
+
+**Documentation:** https://www.pgedge.com/blog/introducing-the-pgedge-postgres-mcp-server
+
 ## Common Patterns
 
 ### Error Handling
