@@ -18,8 +18,8 @@ use crate::{users::User, users_repo::UsersRepository, web::AppState};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Claims {
-    pub sub: String, // user ID
-    pub email: String,
+    pub sub: String,           // user ID
+    pub email: Option<String>, // Nullable for pilot-only users
     pub is_admin: bool,
     pub club_id: Option<Uuid>,
     pub exp: i64, // expiration timestamp

@@ -210,15 +210,26 @@ export interface FixesResponse {
 	total_pages: number;
 }
 
-// User authentication and profile
+// User authentication and profile (now includes pilot fields)
 export interface User {
 	id: string;
 	first_name: string;
 	last_name: string;
-	email: string;
-	access_level: 'standard' | 'admin';
+	email?: string | null; // Nullable - pilots without login don't have email
+	is_admin: boolean;
 	club_id?: string;
 	email_verified: boolean;
+	created_at: string;
+	updated_at: string;
+	settings: Record<string, unknown>;
+	// Pilot qualification fields
+	is_licensed: boolean;
+	is_instructor: boolean;
+	is_tow_pilot: boolean;
+	is_examiner: boolean;
+	// Derived fields
+	can_login: boolean; // True if user has email and password
+	is_pilot: boolean; // True if any pilot qualification is true
 }
 
 // Flight interface matching backend FlightView
@@ -278,18 +289,8 @@ export interface WatchlistEntryWithAircraft extends WatchlistEntry {
 	aircraft?: Aircraft;
 }
 
-export interface Pilot {
-	id: string;
-	first_name: string;
-	last_name: string;
-	is_licensed: boolean;
-	is_instructor: boolean;
-	is_tow_pilot: boolean;
-	is_examiner: boolean;
-	club_id?: string;
-	created_at: string;
-	updated_at: string;
-}
+// Pilot is now just an alias for User (for backwards compatibility)
+export type Pilot = User;
 
 // Receiver interface matching backend ReceiverView
 export interface Receiver {

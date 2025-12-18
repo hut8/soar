@@ -222,9 +222,9 @@ fn create_fake_users(conn: &mut PgConnection, club_id_value: Uuid, count: usize)
 }
 
 fn create_test_pilots(conn: &mut PgConnection, club_id_value: Uuid, count: usize) -> Result<()> {
-    use soar::schema::pilots::dsl::*;
+    use soar::schema::users::dsl::*;
 
-    // Create a mix of licensed/unlicensed, instructor/student pilots
+    // Create a mix of licensed/unlicensed, instructor/student pilots (no email/password - pilot-only users)
     for i in 0..count {
         let pilot_id = Uuid::new_v4();
         let pilot_first_name: String = FirstName().fake();
@@ -233,16 +233,21 @@ fn create_test_pilots(conn: &mut PgConnection, club_id_value: Uuid, count: usize
         let is_instructor_pilot = i % 5 == 0; // 1/5 are instructors
         let is_tow_pilot_flag = i % 7 == 0; // 1/7 are tow pilots
 
-        diesel::insert_into(pilots)
+        diesel::insert_into(users)
             .values((
                 id.eq(pilot_id),
                 first_name.eq(pilot_first_name),
                 last_name.eq(pilot_last_name),
+                email.eq(None::<String>), // No email - pilot-only user
+                password_hash.eq(None::<String>), // No password
+                is_admin.eq(false),
                 is_licensed.eq(is_licensed_pilot),
                 is_instructor.eq(is_instructor_pilot),
                 is_tow_pilot.eq(is_tow_pilot_flag),
                 is_examiner.eq(false),
                 club_id.eq(Some(club_id_value)),
+                email_verified.eq(false),
+                settings.eq(serde_json::json!({})),
                 created_at.eq(chrono::Utc::now()),
                 updated_at.eq(chrono::Utc::now()),
             ))

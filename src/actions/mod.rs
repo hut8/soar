@@ -26,7 +26,12 @@ pub use clubs::*;
 pub use devices::*;
 pub use fixes::*;
 pub use flights::*;
-pub use pilots::*;
+// Pilots module exports - only export non-conflicting functions
+// (create_pilot and get_pilots_by_club are now in users module)
+pub use pilots::{
+    delete_pilot, get_pilot_by_id, get_pilots_for_flight, link_pilot_to_flight,
+    unlink_pilot_from_flight,
+};
 pub use receivers::*;
 pub use user_fixes::*;
 pub use user_settings::*;

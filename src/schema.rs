@@ -792,7 +792,7 @@ diesel::table! {
     flight_pilots (id) {
         id -> Uuid,
         flight_id -> Uuid,
-        pilot_id -> Uuid,
+        user_id -> Uuid,
         is_tow_pilot -> Bool,
         is_student -> Bool,
         is_instructor -> Bool,
@@ -862,23 +862,6 @@ diesel::table! {
         geolocation -> Nullable<Point>,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
-    }
-}
-
-diesel::table! {
-    pilots (id) {
-        id -> Uuid,
-        first_name -> Text,
-        last_name -> Text,
-        is_licensed -> Bool,
-        created_at -> Timestamptz,
-        updated_at -> Timestamptz,
-        club_id -> Nullable<Uuid>,
-        is_instructor -> Bool,
-        is_tow_pilot -> Bool,
-        is_examiner -> Bool,
-        deleted_at -> Nullable<Timestamptz>,
-        user_id -> Nullable<Uuid>,
     }
 }
 
@@ -1231,9 +1214,9 @@ diesel::table! {
         #[max_length = 255]
         last_name -> Varchar,
         #[max_length = 320]
-        email -> Varchar,
+        email -> Nullable<Varchar>,
         #[max_length = 255]
-        password_hash -> Varchar,
+        password_hash -> Nullable<Varchar>,
         is_admin -> Bool,
         club_id -> Nullable<Uuid>,
         email_verified -> Bool,
@@ -1246,6 +1229,11 @@ diesel::table! {
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
         settings -> Jsonb,
+        is_licensed -> Bool,
+        is_instructor -> Bool,
+        is_tow_pilot -> Bool,
+        is_examiner -> Bool,
+        deleted_at -> Nullable<Timestamptz>,
     }
 }
 
@@ -1302,10 +1290,8 @@ diesel::joinable!(fixes_p20251217 -> aircraft (aircraft_id));
 diesel::joinable!(fixes_p20251217 -> flights (flight_id));
 diesel::joinable!(fixes_p20251217 -> receivers (receiver_id));
 diesel::joinable!(flight_pilots -> flights (flight_id));
-diesel::joinable!(flight_pilots -> pilots (pilot_id));
+diesel::joinable!(flight_pilots -> users (user_id));
 diesel::joinable!(flights -> clubs (club_id));
-diesel::joinable!(pilots -> clubs (club_id));
-diesel::joinable!(pilots -> users (user_id));
 diesel::joinable!(raw_messages -> receivers (receiver_id));
 diesel::joinable!(raw_messages_default -> receivers (receiver_id));
 diesel::joinable!(raw_messages_p20251211 -> receivers (receiver_id));
@@ -1354,7 +1340,6 @@ diesel::allow_tables_to_appear_in_same_query!(
     flight_pilots,
     flights,
     locations,
-    pilots,
     raw_messages,
     raw_messages_default,
     raw_messages_p20251211,

@@ -51,8 +51,9 @@ pub mod nats_publisher;
 pub mod ogn_aprs_aircraft;
 pub mod openaip_client;
 pub mod packet_processors;
-pub mod pilots;
-pub mod pilots_repo;
+// DEPRECATED: Pilots module merged into users - see migrations 2025-12-18
+// pub mod pilots;
+// pub mod pilots_repo;
 pub mod raw_messages_repo;
 pub mod receiver_repo;
 pub mod receiver_status_repo;
