@@ -1,9 +1,9 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Json},
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tracing::error;
 use uuid::Uuid;
 
@@ -16,10 +16,31 @@ use crate::web::AppState;
 use super::json_error;
 use super::views::{AircraftRegistrationView, club::AircraftModelView};
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AircraftIssuesParams {
+    #[serde(default = "default_page")]
+    pub page: i64,
+    #[serde(default = "default_per_page")]
+    pub per_page: i64,
+}
+
+fn default_page() -> i64 {
+    1
+}
+
+fn default_per_page() -> i64 {
+    50
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AircraftIssuesResponse {
     pub duplicate_device_addresses: Vec<AircraftModel>,
+    pub total_count: i64,
+    pub page: i64,
+    pub per_page: i64,
+    pub total_pages: i64,
 }
 
 pub async fn get_aircraft_registrations_by_club(
@@ -271,14 +292,33 @@ pub async fn get_device_aircraft_model(
 }
 
 /// Get aircraft issues including duplicate aircraft addresses
-pub async fn get_aircraft_issues(State(state): State<AppState>) -> impl IntoResponse {
+pub async fn get_aircraft_issues(
+    State(state): State<AppState>,
+    Query(params): Query<AircraftIssuesParams>,
+) -> impl IntoResponse {
     let aircraft_repo = AircraftRepository::new(state.pool.clone());
 
-    match aircraft_repo.get_duplicate_aircraft().await {
-        Ok(duplicate_aircraft) => Json(AircraftIssuesResponse {
-            duplicate_device_addresses: duplicate_aircraft,
-        })
-        .into_response(),
+    // Ensure page is at least 1
+    let page = params.page.max(1);
+    // Ensure per_page is between 1 and 100
+    let per_page = params.per_page.clamp(1, 100);
+
+    match aircraft_repo
+        .get_duplicate_aircraft_paginated(page, per_page)
+        .await
+    {
+        Ok((duplicate_aircraft, total_count)) => {
+            let total_pages = (total_count as f64 / per_page as f64).ceil() as i64;
+
+            Json(AircraftIssuesResponse {
+                duplicate_device_addresses: duplicate_aircraft,
+                total_count,
+                page,
+                per_page,
+                total_pages,
+            })
+            .into_response()
+        }
         Err(e) => {
             error!("Failed to get aircraft issues: {}", e);
             json_error(

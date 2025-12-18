@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { AlertTriangle, Radio } from '@lucide/svelte';
+	import { AlertTriangle, Radio, ChevronLeft, ChevronRight } from '@lucide/svelte';
 	import { serverCall } from '$lib/api/server';
 	import { onMount } from 'svelte';
 	import type { Aircraft } from '$lib/types';
@@ -7,19 +7,34 @@
 
 	interface AircraftIssuesResponse {
 		duplicateDeviceAddresses: Aircraft[];
+		totalCount: number;
+		page: number;
+		perPage: number;
+		totalPages: number;
 	}
 
 	let duplicateDevices = $state<Aircraft[]>([]);
 	let loading = $state(false);
 	let error = $state('');
+	let currentPage = $state(1);
+	let totalPages = $state(0);
+	let totalCount = $state(0);
+	let perPage = $state(50);
 
-	async function loadIssues() {
+	async function loadIssues(page: number = 1) {
 		loading = true;
 		error = '';
 
 		try {
-			const response = await serverCall<AircraftIssuesResponse>('/aircraft/issues');
+			const response = await serverCall<AircraftIssuesResponse>('/aircraft/issues', {
+				method: 'GET',
+				params: { page, perPage }
+			});
 			duplicateDevices = response.duplicateDeviceAddresses || [];
+			currentPage = response.page;
+			totalPages = response.totalPages;
+			totalCount = response.totalCount;
+			perPage = response.perPage;
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 			error = `Failed to load aircraft issues: ${errorMessage}`;
@@ -27,6 +42,12 @@
 			duplicateDevices = [];
 		} finally {
 			loading = false;
+		}
+	}
+
+	function goToPage(page: number) {
+		if (page >= 1 && page <= totalPages) {
+			loadIssues(page);
 		}
 	}
 
@@ -140,9 +161,78 @@
 				<div class="bg-surface-100-800-token mt-4 rounded p-4">
 					<p class="text-surface-600-300-token text-sm">
 						<strong>Total Devices with Duplicate Addresses:</strong>
-						{duplicateDevices.length}
+						{totalCount}
+					</p>
+					<p class="text-surface-600-300-token text-sm">
+						Showing {(currentPage - 1) * perPage + 1} - {Math.min(
+							currentPage * perPage,
+							totalCount
+						)} of {totalCount}
 					</p>
 				</div>
+
+				<!-- Pagination Controls -->
+				{#if totalPages > 1}
+					<div class="mt-6 flex items-center justify-center gap-2">
+						<button
+							onclick={() => goToPage(currentPage - 1)}
+							disabled={currentPage === 1 || loading}
+							class="variant-filled-surface btn disabled:opacity-50"
+							aria-label="Previous page"
+						>
+							<ChevronLeft class="h-5 w-5" />
+						</button>
+
+						<div class="flex items-center gap-1">
+							{#if currentPage > 3}
+								<button
+									onclick={() => goToPage(1)}
+									class="variant-filled-surface btn min-w-[2.5rem]"
+									disabled={loading}
+								>
+									1
+								</button>
+								{#if currentPage > 4}
+									<span class="px-2">...</span>
+								{/if}
+							{/if}
+
+							{#each Array.from({ length: totalPages }, (_, i) => i + 1).filter((page) => page >= currentPage - 2 && page <= currentPage + 2) as page (page)}
+								<button
+									onclick={() => goToPage(page)}
+									class="btn min-w-[2.5rem] {page === currentPage
+										? 'variant-filled-primary'
+										: 'variant-filled-surface'}"
+									disabled={loading}
+								>
+									{page}
+								</button>
+							{/each}
+
+							{#if currentPage < totalPages - 2}
+								{#if currentPage < totalPages - 3}
+									<span class="px-2">...</span>
+								{/if}
+								<button
+									onclick={() => goToPage(totalPages)}
+									class="variant-filled-surface btn min-w-[2.5rem]"
+									disabled={loading}
+								>
+									{totalPages}
+								</button>
+							{/if}
+						</div>
+
+						<button
+							onclick={() => goToPage(currentPage + 1)}
+							disabled={currentPage === totalPages || loading}
+							class="variant-filled-surface btn disabled:opacity-50"
+							aria-label="Next page"
+						>
+							<ChevronRight class="h-5 w-5" />
+						</button>
+					</div>
+				{/if}
 			</div>
 		{/if}
 	</section>
