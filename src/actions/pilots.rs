@@ -129,44 +129,131 @@ pub async fn create_pilot(
     }
 }
 
-// Flight-pilot linking functions are temporarily disabled until FlightPilot model is migrated
-// TODO: These need to be reimplemented with the new users-based architecture
-
-/// Get all pilots for a specific flight
+/// Get all pilots (users) for a specific flight
 pub async fn get_pilots_for_flight(
-    _flight_id: Path<Uuid>,
-    _state: State<AppState>,
+    Path(flight_id): Path<Uuid>,
+    State(state): State<AppState>,
 ) -> impl IntoResponse {
-    json_error(
-        StatusCode::NOT_IMPLEMENTED,
-        "Flight pilot linking temporarily disabled during migration",
-    )
-    .into_response()
+    use crate::pilots_repo::PilotsRepository;
+
+    let pilots_repo = PilotsRepository::new(state.pool.clone());
+
+    match pilots_repo.get_pilots_for_flight(flight_id).await {
+        Ok(user_links) => {
+            let flight_pilot_infos: Vec<FlightPilotInfo> = user_links
+                .into_iter()
+                .map(|(user, link)| FlightPilotInfo {
+                    pilot: user,
+                    role: link.role().to_string(),
+                    is_tow_pilot: link.is_tow_pilot,
+                    is_student: link.is_student,
+                    is_instructor: link.is_instructor,
+                })
+                .collect();
+
+            Json(FlightPilotsResponse {
+                pilots: flight_pilot_infos,
+            })
+            .into_response()
+        }
+        Err(e) => {
+            tracing::error!("Failed to get pilots for flight {}: {}", flight_id, e);
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to get pilots for flight",
+            )
+            .into_response()
+        }
+    }
 }
 
-/// Link a pilot to a flight with specific roles
+/// Link a pilot (user) to a flight with specific roles
 pub async fn link_pilot_to_flight(
-    _flight_id: Path<Uuid>,
-    _state: State<AppState>,
-    _request: Json<LinkPilotRequest>,
+    Path(flight_id): Path<Uuid>,
+    State(state): State<AppState>,
+    Json(request): Json<LinkPilotRequest>,
 ) -> impl IntoResponse {
-    json_error(
-        StatusCode::NOT_IMPLEMENTED,
-        "Flight pilot linking temporarily disabled during migration",
-    )
-    .into_response()
+    use crate::pilots::FlightPilot;
+    use crate::pilots_repo::PilotsRepository;
+
+    let pilots_repo = PilotsRepository::new(state.pool.clone());
+    let users_repo = UsersRepository::new(state.pool.clone());
+
+    // Verify the user exists and is a pilot
+    match users_repo.get_by_id(request.pilot_id).await {
+        Ok(Some(user)) => {
+            if !user.is_pilot() {
+                return json_error(StatusCode::BAD_REQUEST, "User is not configured as a pilot")
+                    .into_response();
+            }
+        }
+        Ok(None) => {
+            return json_error(StatusCode::NOT_FOUND, "Pilot not found").into_response();
+        }
+        Err(e) => {
+            tracing::error!("Failed to verify pilot {}: {}", request.pilot_id, e);
+            return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to verify pilot")
+                .into_response();
+        }
+    }
+
+    let flight_pilot = FlightPilot::new(
+        flight_id,
+        request.pilot_id,
+        request.is_tow_pilot,
+        request.is_student,
+        request.is_instructor,
+    );
+
+    match pilots_repo.link_pilot_to_flight(&flight_pilot).await {
+        Ok(_) => StatusCode::CREATED.into_response(),
+        Err(e) => {
+            tracing::error!(
+                "Failed to link pilot {} to flight {}: {}",
+                request.pilot_id,
+                flight_id,
+                e
+            );
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to link pilot to flight",
+            )
+            .into_response()
+        }
+    }
 }
 
 /// Remove a pilot from a flight
 pub async fn unlink_pilot_from_flight(
-    _path: Path<(Uuid, Uuid)>,
-    _state: State<AppState>,
+    Path((flight_id, pilot_id)): Path<(Uuid, Uuid)>,
+    State(state): State<AppState>,
 ) -> impl IntoResponse {
-    json_error(
-        StatusCode::NOT_IMPLEMENTED,
-        "Flight pilot linking temporarily disabled during migration",
-    )
-    .into_response()
+    use crate::pilots_repo::PilotsRepository;
+
+    let pilots_repo = PilotsRepository::new(state.pool.clone());
+
+    match pilots_repo
+        .unlink_pilot_from_flight(flight_id, pilot_id)
+        .await
+    {
+        Ok(true) => StatusCode::NO_CONTENT.into_response(),
+        Ok(false) => {
+            json_error(StatusCode::NOT_FOUND, "Flight-pilot link not found").into_response()
+        }
+        Err(e) => {
+            tracing::error!(
+                "Failed to unlink pilot {} from flight {}: {}",
+                pilot_id,
+                flight_id,
+                e
+            );
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to unlink pilot from flight",
+            )
+            .into_response()
+        }
+    }
 }
 
 /// Soft delete a pilot by ID
