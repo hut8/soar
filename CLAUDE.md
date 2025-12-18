@@ -13,6 +13,12 @@ SOAR is a comprehensive aircraft tracking and club management system built with:
 
 ## Critical Development Rules
 
+### DOCUMENTATION PRIORITY
+- **KEEP DOCUMENTATION UP TO DATE** - Documentation (including README.md, CLAUDE.md, and other docs) must be updated when features change
+- When renaming services, commands, or changing architecture, update all relevant documentation
+- Documentation changes should be part of the same PR that changes the implementation
+- Outdated documentation is a bug - treat it with the same priority as code bugs
+
 ### NO BYPASSING QUALITY CONTROLS
 - **NEVER commit directly to main** - The main branch is protected. ALWAYS create a feature/topic branch first
 - **NEVER use `git commit --no-verify`** - All commits must pass pre-commit hooks
@@ -44,9 +50,10 @@ SOAR is a comprehensive aircraft tracking and club management system built with:
 - **Verify dashboard queries after changes** - After updating code, search all dashboard files for the old metric name and update them
 - **Dashboard locations:**
   - `infrastructure/grafana-dashboard-run.json` - Main processing (`run` command)
-  - `infrastructure/grafana-dashboard-aprs-ingest.json` - APRS connection (`ingest-aprs` command)
+  - `infrastructure/grafana-dashboard-aprs-ingest.json` - OGN/APRS ingestion (`ingest-ogn` command)
+  - `infrastructure/grafana-dashboard-beast-ingest.json` - ADS-B Beast ingestion (`ingest-adsb` command)
   - `infrastructure/grafana-dashboard-web.json` - Web server (`web` command)
-  - `infrastructure/grafana-dashboard-nats-jetstream.json` - NATS/JetStream metrics
+  - `infrastructure/grafana-dashboard-nats.json` - NATS/JetStream metrics
   - `infrastructure/grafana-dashboard-analytics.json` - Analytics API and cache performance
 
 **Metric Standards:**

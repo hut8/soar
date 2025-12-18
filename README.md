@@ -28,19 +28,19 @@ flowchart TB
     APRS[OGN APRS-IS Network<br/>~500 msg/sec]
     WebClients[Web Clients<br/>WebSocket]
 
-    %% Ingestion Process (soar-aprs-ingest)
-    subgraph Ingest ["APRS Ingestion (soar-aprs-ingest)"]
+    %% Ingestion Process (soar ingest-ogn)
+    subgraph Ingest ["APRS Ingestion (soar ingest-ogn)"]
         AprsClient[APRS Client]
         RawQueue["Raw Message Queue<br/>(1,000 messages)"]
-        JetStreamPub[JetStream Publisher]
+        AprsNatsPublisher[NATS Publisher]
     end
 
-    %% NATS JetStream (Durable Storage)
-    JetStream["NATS JetStream<br/>APRS_RAW Stream<br/>(Durable Storage)"]
+    %% NATS Pub/Sub (Lightweight Message Bus)
+    NatsPubSub["NATS Pub/Sub<br/>Subject: ogn.raw<br/>(Fire-and-forget)"]
 
-    %% Processing Process (soar-run)
-    subgraph Processing ["Message Processing (soar-run)"]
-        JetStreamCon[JetStream Consumer<br/>soar-run-production]
+    %% Processing Process (soar run)
+    subgraph Processing ["Message Processing (soar run)"]
+        NatsSubscriber[NATS Subscriber]
 
         subgraph RouterBox ["Packet Router"]
             Router[Router Logic]
@@ -49,10 +49,10 @@ flowchart TB
 
         %% Processing Queues
         subgraph Queues ["Processing Queues"]
-            AircraftQueue["Aircraft Queue<br/>(100 messages)"]
-            RecvStatusQueue["Receiver Status Queue<br/>(100 messages)"]
-            RecvPosQueue["Receiver Position Queue<br/>(100 messages)"]
-            ServerQueue["Server Status Queue<br/>(100 messages)"]
+            AircraftQueue["Aircraft Queue<br/>(1,000 messages)"]
+            RecvStatusQueue["Receiver Status Queue<br/>(50 messages)"]
+            RecvPosQueue["Receiver Position Queue<br/>(50 messages)"]
+            ServerQueue["Server Status Queue<br/>(50 messages)"]
         end
 
         %% Processors
@@ -68,10 +68,11 @@ flowchart TB
         FlightTracker[Flight Tracker]
     end
 
-    %% Real-time Broadcasting
-    subgraph Broadcast ["Real-time Broadcasting"]
-        NatsQueue["NATS Publish Queue<br/>(1,000 messages)"]
-        NatsPublisher[NATS Publisher]
+    %% Real-time Broadcasting (within Fix Processor)
+    subgraph Broadcast ["Real-time Broadcasting to Web Clients"]
+        LiveFixQueue["Live Fix Queue<br/>(1,000 messages)"]
+        LiveFixPublisher[NATS Fix Publisher<br/>(in FixProcessor)]
+        LiveNats["NATS Pub/Sub<br/>Subjects: aircraft.fix.*<br/>aircraft.area.*"]
     end
 
     %% Batch Processes
@@ -86,12 +87,12 @@ flowchart TB
     %% Data Flow - Ingestion
     APRS --> AprsClient
     AprsClient --> RawQueue
-    RawQueue --> JetStreamPub
-    JetStreamPub --> JetStream
+    RawQueue --> AprsNatsPublisher
+    AprsNatsPublisher --> NatsPubSub
 
     %% Data Flow - Processing Entry
-    JetStream --> JetStreamCon
-    JetStreamCon --> Router
+    NatsPubSub --> NatsSubscriber
+    NatsSubscriber --> Router
 
     %% Data Flow - Router & Generic Processing
     Router --> GenericProc
@@ -121,9 +122,10 @@ flowchart TB
     ServerProc --> Database
 
     %% Data Flow - Real-time Broadcasting
-    AircraftProc --> NatsQueue
-    NatsQueue --> NatsPublisher
-    NatsPublisher --> WebClients
+    FixProc --> LiveFixQueue
+    LiveFixQueue --> LiveFixPublisher
+    LiveFixPublisher --> LiveNats
+    LiveNats --> WebClients
 
     %% Data Flow - Batch Processes
     Database --> Sitemap
@@ -135,38 +137,39 @@ flowchart TB
     classDef storageStyle fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
     classDef externalStyle fill:#c8e6c9,stroke:#1b5e20,stroke-width:2px
 
-    class RawQueue,AircraftQueue,RecvStatusQueue,RecvPosQueue,ServerQueue,NatsQueue queueStyle
-    class AprsClient,JetStreamPub,JetStreamCon,Router,GenericProc,AircraftProc,RecvStatusProc,RecvPosProc,ServerProc,FixProc,FlightTracker,NatsPublisher,Sitemap procStyle
-    class Database,JetStream,ArchiveFiles,SitemapFiles storageStyle
+    class RawQueue,AircraftQueue,RecvStatusQueue,RecvPosQueue,ServerQueue,LiveFixQueue queueStyle
+    class AprsClient,AprsNatsPublisher,NatsSubscriber,Router,GenericProc,AircraftProc,RecvStatusProc,RecvPosProc,ServerProc,FixProc,FlightTracker,LiveFixPublisher,Sitemap procStyle
+    class Database,NatsPubSub,LiveNats,ArchiveFiles,SitemapFiles storageStyle
     class APRS,WebClients externalStyle
 ```
 
 ### Key Components
 
-**Ingestion (`soar-aprs-ingest`)**
+**Ingestion (`soar ingest-ogn`)**
 - Connects to OGN APRS-IS network (~500 messages/sec)
 - Buffers messages in 1,000-message queue
-- Publishes to durable NATS JetStream for reliable delivery
+- Publishes to NATS pub/sub (subject: `ogn.raw`) using fire-and-forget for maximum throughput
 
-**Processing (`soar-run`)**
-- **JetStream Consumer**: Consumes from APRS_RAW stream with automatic retry
+**Processing (`soar run`)**
+- **NATS Subscriber**: Consumes messages from NATS pub/sub with automatic reconnection
 - **Packet Router**: Routes messages based on type
 - **Generic Processor**: Runs inline for every message
   - Archives all raw messages to compressed daily log files (.log.zst)
   - Inserts message records into `aprs_messages` table
   - Identifies and caches receiver information
-- **Type-specific Queues**: Small buffers (100 messages each) for specialized processing
+- **Type-specific Queues**: Buffers for specialized processing (aircraft: 1,000 messages; receiver/server: 50 messages each)
 - **Worker Processors**: Process aircraft positions, receiver status/position, and server messages
 - **Flight Tracking**: Fix Processor and Flight Tracker analyze aircraft movement patterns
 
 **Storage**
 - **PostgreSQL + PostGIS**: All processed data (devices, fixes, flights, receivers, airports)
-- **NATS JetStream**: Durable message queue (APRS_RAW stream)
+- **NATS Pub/Sub**: Lightweight message bus for decoupling ingestion from processing (subjects: `ogn.raw`, `beast.raw`)
 - **Daily Archive Files**: Compressed raw APRS messages (.log.zst) with UTC-based rotation
 
 **Real-time Broadcasting**
-- Aircraft position updates published to NATS
-- 1,000-message buffer for WebSocket delivery to web clients
+- Fix Processor contains embedded NATS Fix Publisher with 1,000-message buffer
+- Publishes aircraft positions to NATS (subjects: `aircraft.fix.{device_id}`, `aircraft.area.{lat}.{lon}`)
+- Web server's LiveFixService bridges NATS messages to WebSocket clients
 
 **Batch Processes**
 - **Sitemap Generator**: Runs via `soar sitemap` command
@@ -181,7 +184,9 @@ Needs PostgreSQL with PostGIS and pg_trgm. Tested on PostgreSQL 17 but should wo
 
 ### NATS
 
-NATS allows the OGN data ingester to relay updates to interested subscribers in the web server process. To install, head over to [the NATS releases on GitHub](https://github.com/nats-io/nats-server/releases/) and download the latest AMD64 .deb package and install it via `dpkg -i`. For example:
+NATS provides a lightweight message bus that decouples data ingestion from processing. The OGN and ADS-B ingesters publish messages to NATS pub/sub, which the processing service (`soar run`) subscribes to. This architecture uses fire-and-forget semantics for maximum throughput.
+
+To install, head over to [the NATS releases on GitHub](https://github.com/nats-io/nats-server/releases/) and download the latest AMD64 .deb package and install it via `dpkg -i`. For example:
 
 ```bash
 # Install nats-server to /usr/local/bin/
@@ -207,7 +212,14 @@ glider.flights {
 
 ## Deployment
 
-Deployment is accomplished via the `deploy` script in the root of the project. The first time this is run, a file is created with appropriate permissions at `/etc/soar/env` which contains necessary environment variables. Edit these as needed. Two systemd files will be installed: `soar-run.service` and `soar-web.service`. Their content is self-explanatory.
+Deployment is accomplished via the `deploy` script in the root of the project. The first time this is run, a file is created with appropriate permissions at `/etc/soar/env` which contains necessary environment variables. Edit these as needed.
+
+The following systemd services are available in `infrastructure/systemd/`:
+- `soar-ogn-ingest.service` - Ingests OGN/APRS messages from APRS-IS into NATS (`soar ingest-ogn`)
+- `soar-adsb-ingest.service` - Ingests ADS-B Beast format messages into NATS (`soar ingest-adsb`)
+- `soar-run.service` - Main processing service that consumes from NATS and processes messages (`soar run`)
+- `soar-web.service` - Web server for the frontend application (`soar web`)
+- Additional services for staging environments and batch jobs (sitemap, backups, etc.)
 
 ## ADS-B Beast Feed Setup
 
