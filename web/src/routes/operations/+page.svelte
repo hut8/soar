@@ -1619,7 +1619,7 @@
 	function updateAircraftTrail(aircraft: Aircraft): void {
 		if (!map || currentSettings.positionFixWindow === 0) {
 			// Remove trail if disabled
-			clearTrailForDevice(aircraft.id);
+			clearTrailForAircraft(aircraft.id);
 			return;
 		}
 
@@ -1631,12 +1631,12 @@
 
 		if (trailFixes.length < 2) {
 			// Need at least 2 points to draw a trail
-			clearTrailForDevice(aircraft.id);
+			clearTrailForAircraft(aircraft.id);
 			return;
 		}
 
 		// Clear existing trail
-		clearTrailForDevice(aircraft.id);
+		clearTrailForAircraft(aircraft.id);
 
 		// Create polyline segments with progressive transparency
 		const polylines: google.maps.Polyline[] = [];
@@ -1689,12 +1689,12 @@
 		aircraftTrails.set(aircraft.id, { polylines, dots });
 	}
 
-	function clearTrailForDevice(deviceId: string): void {
-		const trail = aircraftTrails.get(deviceId);
+	function clearTrailForAircraft(aircraftId: string): void {
+		const trail = aircraftTrails.get(aircraftId);
 		if (trail) {
 			trail.polylines.forEach((polyline) => polyline.setMap(null));
 			trail.dots.forEach((dot) => dot.setMap(null));
-			aircraftTrails.delete(deviceId);
+			aircraftTrails.delete(aircraftId);
 		}
 	}
 
@@ -1897,7 +1897,7 @@
 			const afterTimestamp = afterTime.toISOString();
 
 			// Fetch from REST endpoint
-			const devicesWithFixes = await fixFeed.fetchDevicesInBoundingBox(
+			const devicesWithFixes = await fixFeed.fetchAircraftInBoundingBox(
 				sw.lat(), // latMin
 				ne.lat(), // latMax
 				sw.lng(), // lonMin

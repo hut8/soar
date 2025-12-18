@@ -201,7 +201,7 @@ pub async fn get_aircraft_fixes(
                     tracing::error!("Failed to get fixes for device {}: {}", id, e);
                     json_error(
                         StatusCode::INTERNAL_SERVER_ERROR,
-                        "Failed to get device fixes",
+                        "Failed to get aircraft fixes",
                     )
                     .into_response()
                 }
@@ -210,7 +210,11 @@ pub async fn get_aircraft_fixes(
         Ok(None) => json_error(StatusCode::NOT_FOUND, "Aircraft not found").into_response(),
         Err(e) => {
             tracing::error!("Failed to verify device exists {}: {}", id, e);
-            json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to verify device").into_response()
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to verify aircraft",
+            )
+            .into_response()
         }
     }
 }
@@ -297,7 +301,7 @@ async fn search_devices_by_bbox(
             tracing::error!("Failed to get devices with fixes in bounding box: {}", e);
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to get devices with fixes in bounding box",
+                "Failed to get aircraft with fixes in bounding box",
             )
             .into_response()
         }
@@ -327,7 +331,7 @@ async fn search_devices_by_registration(
             );
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to search devices",
+                "Failed to search aircraft",
             )
             .into_response()
         }
@@ -369,7 +373,7 @@ async fn search_devices_by_address(
             tracing::error!("Failed to search devices by address {}: {}", address, e);
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to search devices",
+                "Failed to search aircraft",
             )
             .into_response()
         }
@@ -611,7 +615,7 @@ pub async fn get_aircraft_by_club(
             tracing::error!("Failed to get devices for club {}: {}", club_id, e);
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to get devices for club",
+                "Failed to get aircraft for club",
             )
             .into_response()
         }
@@ -684,7 +688,7 @@ pub async fn get_aircraft_flights(
             tracing::error!("Failed to get flights for device {}: {}", id, e);
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to get flights for device",
+                "Failed to get flights for aircraft",
             )
             .into_response()
         }
@@ -722,7 +726,7 @@ pub async fn update_aircraft_club(
             tracing::error!("Failed to update device club assignment: {}", e);
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to update device club assignment",
+                "Failed to update aircraft club assignment",
             )
             .into_response()
         }
