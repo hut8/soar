@@ -600,6 +600,54 @@ impl AircraftRepository {
         })
         .await?
     }
+
+    /// Query for aircraft that have duplicate addresses with pagination
+    /// Returns (results, total_count)
+    pub async fn get_duplicate_aircraft_paginated(
+        &self,
+        page: i64,
+        per_page: i64,
+    ) -> Result<(Vec<AircraftModel>, i64)> {
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || {
+            let mut conn = pool.get()?;
+
+            // Find addresses that appear more than once with different address types
+            let duplicate_addresses: Vec<i32> = aircraft::table
+                .select(aircraft::address)
+                .group_by(aircraft::address)
+                .having(diesel::dsl::sql::<diesel::sql_types::Bool>(
+                    "COUNT(DISTINCT address_type) > 1",
+                ))
+                .load(&mut conn)?;
+
+            if duplicate_addresses.is_empty() {
+                return Ok((Vec::new(), 0));
+            }
+
+            // Get total count of aircraft with duplicate addresses
+            let total_count = aircraft::table
+                .filter(aircraft::address.eq_any(duplicate_addresses.clone()))
+                .count()
+                .get_result::<i64>(&mut conn)?;
+
+            // Calculate offset
+            let offset = (page - 1) * per_page;
+
+            // Fetch paginated results
+            let duplicate_aircraft = aircraft::table
+                .filter(aircraft::address.eq_any(duplicate_addresses))
+                .order((aircraft::address.asc(), aircraft::address_type.asc()))
+                .limit(per_page)
+                .offset(offset)
+                .select(AircraftModel::as_select())
+                .load(&mut conn)?;
+
+            Ok::<(Vec<AircraftModel>, i64), anyhow::Error>((duplicate_aircraft, total_count))
+        })
+        .await?
+    }
 }
 
 #[cfg(test)]
