@@ -112,6 +112,7 @@ repos:
         stages: [pre-commit, pre-push]
       - id: check-added-large-files
         args: ["--maxkb=1000"]
+        exclude: ^tests/data/elevation/.*\.hgt\.gz$
         stages: [pre-commit, pre-push]
 
 # Performance optimizations
