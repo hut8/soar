@@ -628,10 +628,8 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
             get(actions::get_flight_spline_path),
         )
         .route("/flights/{id}/nearby", get(actions::get_nearby_flights))
-        // Pilot routes (now handled by users module)
+        // Pilot/User routes
         .route("/pilots", post(actions::users::create_pilot))
-        .route("/pilots/{id}", get(actions::pilots::get_pilot_by_id))
-        .route("/pilots/{id}", delete(actions::pilots::delete_pilot))
         .route(
             "/clubs/{id}/pilots",
             get(actions::users::get_pilots_by_club),
@@ -639,18 +637,6 @@ pub async fn start_web_server(interface: String, port: u16, pool: PgPool) -> Res
         .route(
             "/users/{id}/invite",
             post(actions::users::send_pilot_invitation),
-        )
-        .route(
-            "/flights/{id}/pilots",
-            get(actions::pilots::get_pilots_for_flight),
-        )
-        .route(
-            "/flights/{id}/pilots",
-            post(actions::pilots::link_pilot_to_flight),
-        )
-        .route(
-            "/flights/{flight_id}/pilots/{pilot_id}",
-            delete(actions::pilots::unlink_pilot_from_flight),
         )
         // Aircraft routes
         .route("/clubs/{id}/aircraft", get(actions::get_aircraft_by_club))

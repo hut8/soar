@@ -5,7 +5,7 @@
 	import { UserPlus, ArrowLeft, Check, X } from '@lucide/svelte';
 	import { serverCall } from '$lib/api/server';
 	import { auth } from '$lib/stores/auth';
-	import type { Pilot } from '$lib/types';
+	import type { User } from '$lib/types';
 
 	interface Club {
 		id: string;
@@ -13,7 +13,7 @@
 	}
 
 	let club = $state<Club | null>(null);
-	let pilots = $state<Pilot[]>([]);
+	let pilots = $state<User[]>([]);
 	let loadingClub = $state(true);
 	let loadingPilots = $state(true);
 	let error = $state('');
@@ -58,7 +58,7 @@
 		loadingPilots = true;
 
 		try {
-			const response = await serverCall<{ pilots: Pilot[] }>(`/clubs/${clubId}/pilots`);
+			const response = await serverCall<{ pilots: User[] }>(`/clubs/${clubId}/pilots`);
 			pilots = response.pilots || [];
 		} catch (err) {
 			console.error('Error loading pilots:', err);

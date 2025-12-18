@@ -1,6 +1,7 @@
 <script lang="ts">
-	import { User, X } from '@lucide/svelte';
+	import { User as UserIcon, X } from '@lucide/svelte';
 	import { serverCall } from '$lib/api/server';
+	import type { User } from '$lib/types';
 
 	let {
 		isOpen = $bindable(false),
@@ -14,15 +15,7 @@
 		onSuccess?: () => void;
 	} = $props();
 
-	interface Pilot {
-		id: string;
-		first_name: string;
-		last_name: string;
-		is_licensed: boolean;
-		club_id: string | null;
-	}
-
-	let pilots: Pilot[] = $state([]);
+	let pilots: User[] = $state([]);
 	let selectedPilotId = $state('');
 	let selectedRole = $state<'pilot' | 'student' | 'instructor' | 'tow_pilot'>('pilot');
 	let loading = $state(false);
@@ -43,7 +36,7 @@
 		error = '';
 
 		try {
-			const response = await serverCall<{ pilots: Pilot[] }>(`/clubs/${clubId}/pilots`);
+			const response = await serverCall<{ pilots: User[] }>(`/clubs/${clubId}/pilots`);
 			pilots = response.pilots || [];
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Unknown error';
@@ -125,7 +118,7 @@
 		>
 			<header class="mb-6 flex items-center justify-between">
 				<div class="flex items-center gap-3">
-					<User class="h-6 w-6 text-primary-500" />
+					<UserIcon class="h-6 w-6 text-primary-500" />
 					<h2 id="pilot-selection-title" class="h2">Add Pilot to Flight</h2>
 				</div>
 				<button

@@ -8,26 +8,23 @@ use uuid::Uuid;
 
 use crate::actions::json_error;
 use crate::auth::AuthUser;
-use crate::users::User; // Pilot is now User
+use crate::users::User;
 use crate::users_repo::UsersRepository;
 use crate::web::AppState;
 
-// Type alias for backwards compatibility
-pub type Pilot = User;
-
 #[derive(Debug, Serialize)]
 pub struct PilotResponse {
-    pub pilot: Pilot,
+    pub pilot: User,
 }
 
 #[derive(Debug, Serialize)]
 pub struct PilotsListResponse {
-    pub pilots: Vec<Pilot>,
+    pub pilots: Vec<User>,
 }
 
 #[derive(Debug, Serialize)]
 pub struct FlightPilotInfo {
-    pub pilot: Pilot,
+    pub pilot: User,
     pub role: String,
     pub is_tow_pilot: bool,
     pub is_student: bool,

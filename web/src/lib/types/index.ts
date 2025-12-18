@@ -289,9 +289,6 @@ export interface WatchlistEntryWithAircraft extends WatchlistEntry {
 	aircraft?: Aircraft;
 }
 
-// Pilot is now just an alias for User (for backwards compatibility)
-export type Pilot = User;
-
 // Receiver interface matching backend ReceiverView
 export interface Receiver {
 	id: string;
