@@ -170,13 +170,20 @@ fn create_test_user(
             is_admin.eq(false),
             club_id.eq(Some(club_id_value)),
             email_verified.eq(true),
+            is_licensed.eq(false),
+            is_instructor.eq(false),
+            is_tow_pilot.eq(false),
+            is_examiner.eq(false),
             settings.eq(serde_json::json!({})),
             created_at.eq(chrono::Utc::now()),
             updated_at.eq(chrono::Utc::now()),
         ))
-        .on_conflict(email)
+        .on_conflict(id)
         .do_update()
         .set((
+            first_name.eq(first_name_value),
+            last_name.eq(last_name_value),
+            email.eq(email_address),
             password_hash.eq(password_hash_value),
             club_id.eq(Some(club_id_value)),
             email_verified.eq(true),
@@ -209,6 +216,10 @@ fn create_fake_users(conn: &mut PgConnection, club_id_value: Uuid, count: usize)
                 is_admin.eq(false),
                 club_id.eq(Some(club_id_value)),
                 email_verified.eq(true),
+                is_licensed.eq(false),
+                is_instructor.eq(false),
+                is_tow_pilot.eq(false),
+                is_examiner.eq(false),
                 settings.eq(serde_json::json!({})),
                 created_at.eq(chrono::Utc::now()),
                 updated_at.eq(chrono::Utc::now()),
