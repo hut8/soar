@@ -27,11 +27,11 @@ sudo chmod 644 /etc/prometheus/jobs/*.yml
 ## Available Jobs
 
 - **soar-web.yml** - SOAR web server metrics (port 61225, `/data/metrics`)
-- **soar-aprs-ingest.yml** - APRS ingest service (port 9093, `/metrics`)
+- **soar-ingest-ogn.yml** - APRS ingest service (port 9093, `/metrics`)
 - **soar-run.yml** - APRS processing service (port 9091, `/metrics`)
 - **soar-pull-data.yml** - Data loading job (port 9092, `/metrics`)
-- **soar-beast-ingest.yml** - ADS-B Beast ingest service - production (port 9094, `/metrics`)
-- **soar-beast-ingest-staging.yml** - ADS-B Beast ingest service - staging (port 9096, `/metrics`)
+- **soar-ingest-adsb.yml** - ADS-B Beast ingest service - production (port 9094, `/metrics`)
+- **soar-ingest-adsb-staging.yml** - ADS-B Beast ingest service - staging (port 9096, `/metrics`)
 
 ## Adding New Jobs
 

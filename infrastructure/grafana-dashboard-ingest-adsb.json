@@ -31,7 +31,7 @@
       },
       "id": 50,
       "panels": [],
-      "title": "SOAR BEAST Ingest - Process Metrics",
+      "title": "SOAR ADS-B Ingest - Process Metrics",
       "type": "row"
     },
     {
@@ -98,7 +98,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "process_uptime_seconds{component=\"beast-ingest\"}",
+          "expr": "process_uptime_seconds{component=\"ingest-adsb\"}",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -183,7 +183,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "process_is_up{component=\"beast-ingest\"}",
+          "expr": "process_is_up{component=\"ingest-adsb\"}",
           "legendFormat": "SOAR BEAST Ingest",
           "range": true,
           "refId": "A"
@@ -256,7 +256,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "process_memory_bytes{component=\"beast-ingest\"}",
+          "expr": "process_memory_bytes{component=\"ingest-adsb\"}",
           "legendFormat": "SOAR BEAST Ingest",
           "range": true,
           "refId": "A"
@@ -354,7 +354,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "beast_connection_connected{component=\"beast-ingest\"}",
+          "expr": "beast_connection_connected{component=\"ingest-adsb\"}",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -451,7 +451,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "beast_connection_established{component=\"beast-ingest\"}",
+          "expr": "beast_connection_established{component=\"ingest-adsb\"}",
           "legendFormat": "Established",
           "range": true,
           "refId": "A"
@@ -462,7 +462,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "beast_connection_failed{component=\"beast-ingest\"}",
+          "expr": "beast_connection_failed{component=\"ingest-adsb\"}",
           "legendFormat": "Failed",
           "range": true,
           "refId": "B"
@@ -473,7 +473,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "beast_timeout{component=\"beast-ingest\"}",
+          "expr": "beast_timeout{component=\"ingest-adsb\"}",
           "legendFormat": "Timeout",
           "range": true,
           "refId": "C"
@@ -571,7 +571,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(beast_bytes_received{component=\"beast-ingest\"}[1m])",
+          "expr": "rate(beast_bytes_received{component=\"ingest-adsb\"}[1m])",
           "legendFormat": "Bytes/sec",
           "range": true,
           "refId": "A"
@@ -668,7 +668,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "beast_message_rate{component=\"beast-ingest\"}",
+          "expr": "beast_message_rate{component=\"ingest-adsb\"}",
           "legendFormat": "Messages/sec",
           "range": true,
           "refId": "A"
@@ -765,7 +765,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "beast_frames_published{component=\"beast-ingest\"}",
+          "expr": "beast_frames_published{component=\"ingest-adsb\"}",
           "legendFormat": "Published",
           "range": true,
           "refId": "A"
@@ -776,7 +776,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "beast_frames_dropped{component=\"beast-ingest\"}",
+          "expr": "beast_frames_dropped{component=\"ingest-adsb\"}",
           "legendFormat": "Dropped",
           "range": true,
           "refId": "B"

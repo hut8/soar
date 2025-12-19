@@ -118,7 +118,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_nats_published{component=\"aprs-ingest\",environment=\"$environment\"}[1m])",
+          "expr": "rate(aprs_nats_published{component=\"ingest-ogn\",environment=\"$environment\"}[1m])",
           "legendFormat": "Raw APRS Messages Published",
           "range": true,
           "refId": "A"
@@ -226,8 +226,8 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_nats_publish_error{component=\"aprs-ingest\",environment=\"$environment\"}[1m])",
-          "legendFormat": "Ingest-APRS Publish Errors",
+          "expr": "rate(aprs_nats_publish_error{component=\"ingest-ogn\",environment=\"$environment\"}[1m])",
+          "legendFormat": "Ingest-OGN Publish Errors",
           "range": true,
           "refId": "A"
         },
@@ -407,7 +407,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "aprs_nats_publish_duration_ms{component=\"aprs-ingest\",environment=\"$environment\",quantile=\"0.5\"}",
+          "expr": "aprs_nats_publish_duration_ms{component=\"ingest-ogn\",environment=\"$environment\",quantile=\"0.5\"}",
           "legendFormat": "P50 - Ingest APRS",
           "range": true,
           "refId": "A"
@@ -418,7 +418,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "aprs_nats_publish_duration_ms{component=\"aprs-ingest\",environment=\"$environment\",quantile=\"0.95\"}",
+          "expr": "aprs_nats_publish_duration_ms{component=\"ingest-ogn\",environment=\"$environment\",quantile=\"0.95\"}",
           "legendFormat": "P95 - Ingest APRS",
           "range": true,
           "refId": "B"
@@ -429,7 +429,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "aprs_nats_publish_duration_ms{component=\"aprs-ingest\",environment=\"$environment\",quantile=\"0.99\"}",
+          "expr": "aprs_nats_publish_duration_ms{component=\"ingest-ogn\",environment=\"$environment\",quantile=\"0.99\"}",
           "legendFormat": "P99 - Ingest APRS",
           "range": true,
           "refId": "C"
@@ -505,7 +505,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(increase(aprs_nats_published{component=\"aprs-ingest\",environment=\"$environment\"}[1h]))",
+          "expr": "sum(increase(aprs_nats_published{component=\"ingest-ogn\",environment=\"$environment\"}[1h]))",
           "legendFormat": "Last Hour",
           "range": true,
           "refId": "A"
@@ -646,7 +646,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(increase(aprs_nats_publish_error{component=\"aprs-ingest\",environment=\"$environment\"}[1h])) + sum(increase(nats_publisher_errors{component=\"run\",environment=\"$environment\"}[1h]))",
+          "expr": "sum(increase(aprs_nats_publish_error{component=\"ingest-ogn\",environment=\"$environment\"}[1h])) + sum(increase(nats_publisher_errors{component=\"run\",environment=\"$environment\"}[1h]))",
           "legendFormat": "Total Errors",
           "range": true,
           "refId": "A"
@@ -674,7 +674,7 @@
           "showLineNumbers": false,
           "showMiniMap": false
         },
-        "content": "# NATS Topics Published by SOAR\n\n## Production Topics\n- `aircraft.fix.{aircraft_id}` - Individual aircraft position fixes\n- `aircraft.area.{lat}.{lon}` - Position fixes grouped by geographic area (1° grid)\n\n## Staging Topics\n- `staging.aircraft.fix.{aircraft_id}` - Individual aircraft position fixes (staging)\n- `staging.aircraft.area.{lat}.{lon}` - Position fixes grouped by geographic area (staging)\n\n## Raw APRS Topic\n- `aprs.raw` - Raw APRS messages from APRS-IS (consumed by soar-run)\n\n## Message Flow\n1. **ingest-aprs** receives raw APRS from APRS-IS → publishes to `aprs.raw`\n2. **soar-run** consumes `aprs.raw` → processes → publishes to `aircraft.*` topics\n3. **Web clients** subscribe to `aircraft.fix.{id}` or `aircraft.area.{lat}.{lon}` for live updates",
+        "content": "# NATS Topics Published by SOAR\n\n## Production Topics\n- `aircraft.fix.{aircraft_id}` - Individual aircraft position fixes\n- `aircraft.area.{lat}.{lon}` - Position fixes grouped by geographic area (1° grid)\n\n## Staging Topics\n- `staging.aircraft.fix.{aircraft_id}` - Individual aircraft position fixes (staging)\n- `staging.aircraft.area.{lat}.{lon}` - Position fixes grouped by geographic area (staging)\n\n## Raw OGN Topic\n- `ogn.raw` - Raw OGN/APRS messages from APRS-IS (consumed by soar-run)\n\n## Message Flow\n1. **ingest-ogn** receives raw OGN/APRS from APRS-IS → publishes to `ogn.raw`\n2. **soar-run** consumes `ogn.raw` → processes → publishes to `aircraft.*` topics\n3. **Web clients** subscribe to `aircraft.fix.{id}` or `aircraft.area.{lat}.{lon}` for live updates",
         "mode": "markdown"
       },
       "pluginVersion": "12.2.1",

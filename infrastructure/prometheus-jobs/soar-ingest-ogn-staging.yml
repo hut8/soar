@@ -2,7 +2,7 @@
 # This file defines a complete scrape job configuration for the SOAR OGN ingest service (staging).
 # Prometheus will automatically load this file when using scrape_config_files.
 
-job_name: 'soar-ogn-ingest-staging'
+job_name: 'soar-ingest-ogn-staging'
 metrics_path: '/metrics'
 scrape_interval: 10s
 scrape_timeout: 5s
@@ -12,5 +12,5 @@ static_configs:
       - 'localhost:9094'
     labels:
       instance: 'soar-staging'
-      component: 'ogn-ingest'
+      component: 'ingest-ogn'
       environment: 'staging'

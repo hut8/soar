@@ -76,7 +76,7 @@ GOOGLE_MAPS_API_KEY=<copy_from_production>
 
 # Optional: Override metrics ports if needed (defaults should work)
 # METRICS_PORT=9092  # for soar-run-staging (default auto-assigns based on SOAR_ENV)
-# METRICS_PORT=9094  # for soar-aprs-ingest-staging
+# METRICS_PORT=9094  # for soar-ingest-ogn-staging
 ```
 
 Set proper permissions:
@@ -213,7 +213,7 @@ After setup and first deployment, verify all services are running:
 ```bash
 # Check service status
 sudo systemctl status soar-web-staging
-sudo systemctl status soar-aprs-ingest-staging
+sudo systemctl status soar-ingest-ogn-staging
 sudo systemctl status soar-run-staging
 
 # Check timer status
@@ -228,7 +228,7 @@ sudo -u soar bash -c 'source /etc/soar/env-staging && psql $DATABASE_URL -c "SEL
 
 # Check metrics endpoints
 curl http://localhost:9092/metrics  # soar-run-staging
-curl http://localhost:9094/metrics  # soar-aprs-ingest-staging
+curl http://localhost:9094/metrics  # soar-ingest-ogn-staging
 curl http://localhost:61226/data/metrics  # soar-web-staging
 ```
 
@@ -274,7 +274,7 @@ Staging metrics are available in Prometheus/Grafana with `environment="staging"`
 
 - **Prometheus jobs**:
   - `soar-run-staging` (localhost:9092)
-  - `soar-aprs-ingest-staging` (localhost:9094)
+  - `soar-ingest-ogn-staging` (localhost:9094)
   - `soar-web-staging` (localhost:61226)
 
 - **Grafana**: Filter dashboards by `environment="staging"` to view staging metrics
@@ -342,7 +342,7 @@ To remove staging environment:
 
 ```bash
 # Stop and disable all staging services
-for svc in soar-web-staging soar-aprs-ingest-staging soar-run-staging; do
+for svc in soar-web-staging soar-ingest-ogn-staging soar-run-staging; do
     sudo systemctl stop $svc
     sudo systemctl disable $svc
 done

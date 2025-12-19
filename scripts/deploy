@@ -301,7 +301,7 @@ if [ "$LOCAL_DEPLOY" = "1" ]; then
 
     log_info "Deployment will:"
     log_info "  1. Stop soar-run service"
-    log_info "  2. Run database migrations (aprs-ingest and web keep running)"
+    log_info "  2. Run database migrations (ogn-ingest and web keep running)"
     log_info "  3. Stop remaining services and install new binary"
     log_info "  4. Restart all services"
     echo
@@ -355,7 +355,7 @@ else
     log_info "Deploying to $DEPLOY_SERVER"
     log_info "Deployment will:"
     log_info "  1. Stop soar-run service"
-    log_info "  2. Run database migrations (aprs-ingest and web keep running)"
+    log_info "  2. Run database migrations (ogn-ingest and web keep running)"
     log_info "  3. Stop remaining services and install new binary"
     log_info "  4. Restart all services"
     echo

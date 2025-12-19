@@ -137,8 +137,8 @@ if [ "$ENVIRONMENT" = "production" ] || [ "$ENVIRONMENT" = "all" ]; then
     # Production services
     add_service "soar-run.service"
     add_service "soar-web.service"
-    add_service "soar-aprs-ingest.service"
-    add_service "soar-beast-ingest.service"
+    add_service "soar-ingest-ogn.service"
+    add_service "soar-ingest-adsb.service"
     add_service "soar-pull-data.service"
     add_service "soar-sitemap.service"
     add_service "soar-archive.service"
@@ -170,8 +170,8 @@ if [ "$ENVIRONMENT" = "production" ] || [ "$ENVIRONMENT" = "all" ]; then
     if [ -f "/etc/prometheus/jobs/soar-web.yml" ]; then
         PROMETHEUS_JOBS_TO_REMOVE+=("/etc/prometheus/jobs/soar-web.yml")
     fi
-    if [ -f "/etc/prometheus/jobs/soar-aprs-ingest.yml" ]; then
-        PROMETHEUS_JOBS_TO_REMOVE+=("/etc/prometheus/jobs/soar-aprs-ingest.yml")
+    if [ -f "/etc/prometheus/jobs/soar-ingest-ogn.yml" ]; then
+        PROMETHEUS_JOBS_TO_REMOVE+=("/etc/prometheus/jobs/soar-ingest-ogn.yml")
     fi
     if [ -f "/etc/prometheus/jobs/soar-pull-data.yml" ]; then
         PROMETHEUS_JOBS_TO_REMOVE+=("/etc/prometheus/jobs/soar-pull-data.yml")
@@ -187,8 +187,8 @@ if [ "$ENVIRONMENT" = "staging" ] || [ "$ENVIRONMENT" = "all" ]; then
     # Staging services
     add_service "soar-run-staging.service"
     add_service "soar-web-staging.service"
-    add_service "soar-aprs-ingest-staging.service"
-    add_service "soar-beast-ingest-staging.service"
+    add_service "soar-ingest-ogn-staging.service"
+    add_service "soar-ingest-adsb-staging.service"
     add_service "soar-pull-data-staging.service"
     add_service "soar-sitemap-staging.service"
     add_service "soar-archive-staging.service"
@@ -218,8 +218,8 @@ if [ "$ENVIRONMENT" = "staging" ] || [ "$ENVIRONMENT" = "all" ]; then
     if [ -f "/etc/prometheus/jobs/soar-web-staging.yml" ]; then
         PROMETHEUS_JOBS_TO_REMOVE+=("/etc/prometheus/jobs/soar-web-staging.yml")
     fi
-    if [ -f "/etc/prometheus/jobs/soar-aprs-ingest-staging.yml" ]; then
-        PROMETHEUS_JOBS_TO_REMOVE+=("/etc/prometheus/jobs/soar-aprs-ingest-staging.yml")
+    if [ -f "/etc/prometheus/jobs/soar-ingest-ogn-staging.yml" ]; then
+        PROMETHEUS_JOBS_TO_REMOVE+=("/etc/prometheus/jobs/soar-ingest-ogn-staging.yml")
     fi
     if [ -f "/etc/prometheus/jobs/soar-pull-data-staging.yml" ]; then
         PROMETHEUS_JOBS_TO_REMOVE+=("/etc/prometheus/jobs/soar-pull-data-staging.yml")

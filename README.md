@@ -215,8 +215,8 @@ glider.flights {
 Deployment is accomplished via the `deploy` script in the root of the project. The first time this is run, a file is created with appropriate permissions at `/etc/soar/env` which contains necessary environment variables. Edit these as needed.
 
 The following systemd services are available in `infrastructure/systemd/`:
-- `soar-ogn-ingest.service` - Ingests OGN/APRS messages from APRS-IS into NATS (`soar ingest-ogn`)
-- `soar-adsb-ingest.service` - Ingests ADS-B Beast format messages into NATS (`soar ingest-adsb`)
+- `soar-ingest-ogn.service` - Ingests OGN/APRS messages from APRS-IS into NATS (`soar ingest-ogn`)
+- `soar-ingest-adsb.service` - Ingests ADS-B Beast format messages into NATS (`soar ingest-adsb`)
 - `soar-run.service` - Main processing service that consumes from NATS and processes messages (`soar run`)
 - `soar-web.service` - Web server for the frontend application (`soar web`)
 - Additional services for staging environments and batch jobs (sitemap, backups, etc.)

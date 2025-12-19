@@ -7,7 +7,7 @@ This directory contains Grafana dashboard configurations for monitoring SOAR met
 - **grafana-dashboard-web.json** - Web server metrics (HTTP requests, elevation lookups)
 - **grafana-dashboard-run.json** - APRS processing service metrics
 - **grafana-dashboard-pull-data.json** - Data loading job metrics
-- **grafana-dashboard-aprs-ingest.json** - APRS ingest service metrics
+- **grafana-dashboard-ingest-ogn.json** - APRS ingest service metrics
 
 ## Automated Deployment (Recommended)
 
@@ -122,7 +122,7 @@ SOAR metrics are automatically configured via the Prometheus job files in `/etc/
 - **soar-web.yml** - Web server metrics (localhost:61225/data/metrics)
 - **soar-run.yml** - APRS processing service (localhost:9091/metrics)
 - **soar-pull-data.yml** - Data loading job (localhost:9092/metrics)
-- **soar-aprs-ingest.yml** - APRS ingest service (localhost:9093/metrics)
+- **soar-ingest-ogn.yml** - OGN/APRS ingest service (localhost:9093/metrics)
 
 Your Prometheus configuration should include:
 
