@@ -22,8 +22,8 @@ pub struct UserRecord {
     pub id: Uuid,
     pub first_name: String,
     pub last_name: String,
-    pub email: String,
-    pub password_hash: String,
+    pub email: Option<String>,         // Nullable
+    pub password_hash: Option<String>, // Nullable
     pub is_admin: bool,
     pub club_id: Option<Uuid>,
     pub email_verified: bool,
@@ -34,6 +34,11 @@ pub struct UserRecord {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub settings: JsonValue,
+    pub is_licensed: bool,
+    pub is_instructor: bool,
+    pub is_tow_pilot: bool,
+    pub is_examiner: bool,
+    pub deleted_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Insertable)]
@@ -43,10 +48,14 @@ pub struct NewUser {
     pub id: Uuid,
     pub first_name: String,
     pub last_name: String,
-    pub email: String,
-    pub password_hash: String,
+    pub email: Option<String>,
+    pub password_hash: Option<String>,
     pub is_admin: bool,
     pub club_id: Option<Uuid>,
+    pub is_licensed: bool,
+    pub is_instructor: bool,
+    pub is_tow_pilot: bool,
+    pub is_examiner: bool,
 }
 
 impl From<UserRecord> for User {
@@ -67,6 +76,11 @@ impl From<UserRecord> for User {
             created_at: record.created_at,
             updated_at: record.updated_at,
             settings: record.settings,
+            is_licensed: record.is_licensed,
+            is_instructor: record.is_instructor,
+            is_tow_pilot: record.is_tow_pilot,
+            is_examiner: record.is_examiner,
+            deleted_at: record.deleted_at,
         }
     }
 }
@@ -165,10 +179,14 @@ impl UsersRepository {
             id: user_id,
             first_name: request.first_name.clone(),
             last_name: request.last_name.clone(),
-            email: request.email.clone(),
-            password_hash,
+            email: Some(request.email.clone()),
+            password_hash: Some(password_hash),
             is_admin: false,
             club_id: request.club_id,
+            is_licensed: false,
+            is_instructor: false,
+            is_tow_pilot: false,
+            is_examiner: false,
         };
 
         tokio::task::spawn_blocking(move || -> Result<User> {
@@ -223,7 +241,7 @@ impl UsersRepository {
                         users::first_name
                             .eq(request_clone.first_name.unwrap_or(current.first_name)),
                         users::last_name.eq(request_clone.last_name.unwrap_or(current.last_name)),
-                        users::email.eq(request_clone.email.unwrap_or(current.email)),
+                        users::email.eq(request_clone.email.or(current.email)),
                         users::is_admin.eq(request_clone.is_admin.unwrap_or(current.is_admin)),
                         users::club_id.eq(request_clone.club_id.or(current.club_id)),
                         users::email_verified.eq(request_clone
@@ -266,9 +284,14 @@ impl UsersRepository {
         let user = self.get_by_email(email).await?;
 
         if let Some(user) = user {
-            if self.verify_password_hash(&user.password_hash, password)? {
-                Ok(Some(user))
+            if let Some(password_hash) = &user.password_hash {
+                if self.verify_password_hash(password_hash, password)? {
+                    Ok(Some(user))
+                } else {
+                    Ok(None)
+                }
             } else {
+                // User has no password (pilot-only account)
                 Ok(None)
             }
         } else {
@@ -443,6 +466,131 @@ impl UsersRepository {
                 .set((users::settings.eq(settings), users::updated_at.eq(now)))
                 .execute(&mut conn)?;
             Ok(rows_affected > 0)
+        })
+        .await?
+    }
+
+    // === NEW METHODS FOR PILOT MANAGEMENT ===
+
+    /// Create a pilot without login capability (no email/password)
+    pub async fn create_pilot(&self, pilot: User) -> Result<User> {
+        // Validate that this is a pilot-only user (no email/password)
+        if pilot.email.is_some() || pilot.password_hash.is_some() {
+            return Err(anyhow::anyhow!(
+                "Use create_user for users with login capability"
+            ));
+        }
+
+        let pool = self.pool.clone();
+        let new_pilot = NewUser {
+            id: pilot.id,
+            first_name: pilot.first_name.clone(),
+            last_name: pilot.last_name.clone(),
+            email: None,
+            password_hash: None,
+            is_admin: false,
+            club_id: pilot.club_id,
+            is_licensed: pilot.is_licensed,
+            is_instructor: pilot.is_instructor,
+            is_tow_pilot: pilot.is_tow_pilot,
+            is_examiner: pilot.is_examiner,
+        };
+
+        tokio::task::spawn_blocking(move || -> Result<User> {
+            let mut conn = pool.get()?;
+            let user = diesel::insert_into(users::table)
+                .values(&new_pilot)
+                .get_result::<UserRecord>(&mut conn)?;
+            Ok(user.into())
+        })
+        .await?
+    }
+
+    /// Get all pilots (users with pilot qualifications) for a club
+    /// Excludes soft-deleted users
+    pub async fn get_pilots_by_club(&self, club_id: Uuid) -> Result<Vec<User>> {
+        let pool = self.pool.clone();
+
+        tokio::task::spawn_blocking(move || -> Result<Vec<User>> {
+            let mut conn = pool.get()?;
+            let pilots = users::table
+                .filter(users::club_id.eq(Some(club_id)))
+                .filter(users::deleted_at.is_null())
+                .filter(
+                    users::is_licensed
+                        .eq(true)
+                        .or(users::is_instructor.eq(true))
+                        .or(users::is_tow_pilot.eq(true))
+                        .or(users::is_examiner.eq(true)),
+                )
+                .order((users::last_name.asc(), users::first_name.asc()))
+                .load::<UserRecord>(&mut conn)?;
+            Ok(pilots.into_iter().map(|r| r.into()).collect())
+        })
+        .await?
+    }
+
+    /// Soft delete a user
+    pub async fn soft_delete_user(&self, user_id: Uuid) -> Result<bool> {
+        let pool = self.pool.clone();
+        let now = Utc::now();
+
+        tokio::task::spawn_blocking(move || -> Result<bool> {
+            let mut conn = pool.get()?;
+            let rows = diesel::update(users::table.filter(users::id.eq(user_id)))
+                .set(users::deleted_at.eq(Some(now)))
+                .execute(&mut conn)?;
+            Ok(rows > 0)
+        })
+        .await?
+    }
+
+    /// Set email and generate verification token for a user (for invitation flow)
+    pub async fn set_email_and_generate_token(&self, user_id: Uuid, email: &str) -> Result<String> {
+        let token = self.generate_verification_token();
+        let expires_at = Utc::now() + chrono::Duration::hours(72); // 3 days for invitation
+        let pool = self.pool.clone();
+        let email = email.to_string();
+        let token_clone = token.clone();
+        let now = Utc::now();
+
+        tokio::task::spawn_blocking(move || -> Result<String> {
+            let mut conn = pool.get()?;
+            diesel::update(users::table.filter(users::id.eq(user_id)))
+                .set((
+                    users::email.eq(Some(email)),
+                    users::email_verification_token.eq(Some(token_clone.clone())),
+                    users::email_verification_expires_at.eq(Some(expires_at)),
+                    users::updated_at.eq(now),
+                ))
+                .execute(&mut conn)?;
+            Ok(token_clone)
+        })
+        .await?
+    }
+
+    /// Set password and verify email (for completing pilot registration)
+    pub async fn set_password_and_verify_email(
+        &self,
+        user_id: Uuid,
+        password: &str,
+    ) -> Result<bool> {
+        let password_hash = self.hash_password(password)?;
+        let pool = self.pool.clone();
+        let now = Utc::now();
+
+        tokio::task::spawn_blocking(move || -> Result<bool> {
+            let mut conn = pool.get()?;
+            let rows = diesel::update(users::table.filter(users::id.eq(user_id)))
+                .set((
+                    users::password_hash.eq(Some(password_hash)),
+                    users::email_verified.eq(true),
+                    users::email_verification_token.eq(None::<String>),
+                    users::email_verification_expires_at.eq(None::<DateTime<Utc>>),
+                    users::updated_at.eq(now),
+                ))
+                .execute(&mut conn)?;
+            Ok(rows > 0)
         })
         .await?
     }

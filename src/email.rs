@@ -172,6 +172,60 @@ The SOAR Team"#,
         Ok(response)
     }
 
+    /// Send pilot invitation email
+    /// This is sent to pilots who have been added to the club roster but don't have login access yet
+    pub async fn send_pilot_invitation_email(
+        &self,
+        to_email: &str,
+        to_name: &str,
+        verification_token: &str,
+    ) -> Result<Response> {
+        let base_url =
+            std::env::var("BASE_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
+
+        let registration_url = format!(
+            "{}/complete-registration?token={}",
+            base_url, verification_token
+        );
+
+        let subject = format!(
+            "{}You've been invited to join SOAR - Complete Your Registration",
+            get_staging_prefix()
+        );
+        let body = format!(
+            r#"Hello {},
+
+You've been added to your club's roster on SOAR! To access your account and manage your flight information, please complete your registration by setting a password.
+
+Click the following link to complete your registration:
+{}
+
+This link will expire in 72 hours for security reasons.
+
+Once you've set your password, you'll be able to:
+- View your flight history
+- Track your progress and achievements
+- Receive flight notifications
+- Access club information
+
+If you believe you received this email in error, please ignore it or contact your club administrator.
+
+Best regards,
+The SOAR Team"#,
+            to_name, registration_url
+        );
+
+        let email = Message::builder()
+            .from(format!("{} <{}>", self.from_name, self.from_email).parse()?)
+            .to(format!("{} <{}>", to_name, to_email).parse()?)
+            .subject(subject)
+            .header(ContentType::TEXT_PLAIN)
+            .body(body)?;
+
+        let response = self.mailer.send(email).await?;
+        Ok(response)
+    }
+
     /// Send flight completion notification with KML attachment
     pub async fn send_flight_completion_email(
         &self,

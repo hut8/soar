@@ -616,39 +616,35 @@ pub(crate) async fn complete_flight(
                 for user_id in user_ids {
                     match users_repo.get_by_id(user_id).await {
                         Ok(Some(user)) => {
-                            let to_name = format!("{} {}", user.first_name, user.last_name);
-                            match email_service
-                                .send_flight_completion_email(
-                                    &user.email,
-                                    &to_name,
-                                    flight_id,
-                                    &device_address.to_string(),
-                                    kml_content.clone(),
-                                    &kml_filename,
-                                )
-                                .await
-                            {
-                                Ok(_) => {
-                                    tracing::info!(
-                                        "Sent flight completion email to {}",
-                                        user.email
-                                    );
-                                    metrics::counter!("watchlist.emails.sent").increment(1);
-                                }
-                                Err(e) => {
-                                    tracing::error!(
-                                        "Failed to send email to {}: {}",
-                                        user.email,
-                                        e
-                                    );
-                                    sentry::capture_message(
-                                        &format!(
-                                            "Failed to send flight completion email to {}: {}",
-                                            user.email, e
-                                        ),
-                                        sentry::Level::Error,
-                                    );
-                                    metrics::counter!("watchlist.emails.failed").increment(1);
+                            // Only send email if user has an email address (not a pilot-only user)
+                            if let Some(email) = &user.email {
+                                let to_name = format!("{} {}", user.first_name, user.last_name);
+                                match email_service
+                                    .send_flight_completion_email(
+                                        email,
+                                        &to_name,
+                                        flight_id,
+                                        &device_address.to_string(),
+                                        kml_content.clone(),
+                                        &kml_filename,
+                                    )
+                                    .await
+                                {
+                                    Ok(_) => {
+                                        tracing::info!("Sent flight completion email to {}", email);
+                                        metrics::counter!("watchlist.emails.sent").increment(1);
+                                    }
+                                    Err(e) => {
+                                        tracing::error!("Failed to send email to {}: {}", email, e);
+                                        sentry::capture_message(
+                                            &format!(
+                                                "Failed to send flight completion email to {}: {}",
+                                                email, e
+                                            ),
+                                            sentry::Level::Error,
+                                        );
+                                        metrics::counter!("watchlist.emails.failed").increment(1);
+                                    }
                                 }
                             }
                         }

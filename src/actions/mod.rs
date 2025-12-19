@@ -26,7 +26,6 @@ pub use clubs::*;
 pub use devices::*;
 pub use fixes::*;
 pub use flights::*;
-pub use pilots::*;
 pub use receivers::*;
 pub use user_fixes::*;
 pub use user_settings::*;

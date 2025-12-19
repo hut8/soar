@@ -213,8 +213,8 @@
 
 				<div>
 					<div class="text-surface-700-200-token">
-						Access Level: {$auth.user.access_level === 'admin' ? 'Admin' : 'User'}
-						{#if $auth.user.access_level === 'admin'}
+						Access Level: {$auth.user.is_admin ? 'Admin' : 'User'}
+						{#if $auth.user.is_admin}
 							<span class="ml-2 badge preset-filled-primary-500">Administrator</span>
 						{/if}
 					</div>
@@ -284,7 +284,7 @@
 			<div class="card p-4 text-center">
 				<div class="text-surface-600-300-token text-sm">Access Level</div>
 				<div class="text-lg font-semibold">
-					{$auth.user.access_level === 'admin' ? 'Admin' : 'User'}
+					{$auth.user.is_admin ? 'Admin' : 'User'}
 				</div>
 			</div>
 

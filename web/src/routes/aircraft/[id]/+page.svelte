@@ -85,7 +85,7 @@
 	let savingClub = false;
 
 	$: aircraftId = $page.params.id || '';
-	$: isAdmin = $auth.user?.access_level === 'admin';
+	$: isAdmin = $auth.user?.is_admin === true;
 	$: userClubId = $auth.user?.club_id;
 	$: isInWatchlist = watchlist.has(aircraftId);
 
