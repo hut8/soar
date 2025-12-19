@@ -1,0 +1,32 @@
+# SOAR Staging Target - Group all SOAR staging services together
+#
+# This systemd target allows you to control all SOAR staging services as a group while
+# still maintaining individual control over each service.
+#
+# Usage:
+#   sudo systemctl start soar-staging      # Start all SOAR staging services
+#   sudo systemctl stop soar-staging       # Stop all SOAR staging services
+#   sudo systemctl restart soar-staging    # Restart all SOAR staging services
+#   sudo systemctl status soar-staging     # Check status of all SOAR staging services
+#   sudo systemctl enable soar-staging     # Enable all SOAR staging services to start on boot
+#   sudo systemctl disable soar-staging    # Disable all SOAR staging services from starting on boot
+#
+# Individual service control still works:
+#   sudo systemctl start soar-web-staging.service
+#   sudo systemctl stop soar-run-staging.service
+#   sudo systemctl restart soar-pull-data-staging.timer
+#
+# Installation:
+#   sudo cp soar-staging.target /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable soar-staging.target
+
+[Unit]
+Description=SOAR Staging - Soaring Observation And Records System (Staging Environment)
+Documentation=https://github.com/hut8/soar
+After=network-online.target postgresql.service nats-server.service
+Wants=soar-ogn-ingest-staging.service soar-run-staging.service soar-web-staging.service soar-pull-data-staging.timer soar-sitemap-staging.timer soar-archive-staging.timer
+Requires=postgresql.service nats-server.service
+
+[Install]
+WantedBy=multi-user.target

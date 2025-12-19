@@ -660,6 +660,7 @@ jobs:
           cp infrastructure/soar-deploy deploy-pkg/
           cp infrastructure/systemd/*.service deploy-pkg/ || echo "No service files found"
           cp infrastructure/systemd/*.timer deploy-pkg/ || echo "No timer files found"
+          cp infrastructure/systemd/*.target deploy-pkg/ || echo "No target files found"
 
           # Copy Prometheus job configuration files
           if [ -d infrastructure/prometheus-jobs ]; then
@@ -805,6 +806,7 @@ jobs:
           cp infrastructure/soar-deploy deploy-pkg/
           cp infrastructure/systemd/*.service deploy-pkg/ || echo "No service files found"
           cp infrastructure/systemd/*.timer deploy-pkg/ || echo "No timer files found"
+          cp infrastructure/systemd/*.target deploy-pkg/ || echo "No target files found"
 
           # Copy Prometheus job configuration files
           if [ -d infrastructure/prometheus-jobs ]; then
