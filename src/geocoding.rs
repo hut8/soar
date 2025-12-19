@@ -569,14 +569,10 @@ impl Geocoder {
             props.street.clone()
         };
 
-        // Build display name from available components
-        let display_name = if let Some(name) = &props.name {
-            name.clone()
-        } else {
+        // Build display name from city, state, country ONLY (ignore street addresses and generic names)
+        // This is appropriate for flight start/end locations where we want locality-level precision
+        let display_name = {
             let mut parts = Vec::new();
-            if let Some(s) = &street1 {
-                parts.push(s.clone());
-            }
             if let Some(c) = &props.city {
                 parts.push(c.clone());
             }
@@ -587,7 +583,12 @@ impl Geocoder {
                 parts.push(country.clone());
             }
             if parts.is_empty() {
-                format!("{}, {}", latitude, longitude)
+                // Fallback: use name if available, otherwise coordinates
+                if let Some(name) = &props.name {
+                    name.clone()
+                } else {
+                    format!("{}, {}", latitude, longitude)
+                }
             } else {
                 parts.join(", ")
             }

@@ -445,6 +445,16 @@ pub fn initialize_run_metrics() {
     metrics::histogram!("aprs.aircraft.device_lookup_ms").record(0.0);
     metrics::histogram!("aprs.aircraft.flight_update_last_fix_ms").record(0.0);
 
+    // Photon reverse geocoding metrics
+    metrics::counter!("flight_tracker.location.photon.success").absolute(0);
+    metrics::counter!("flight_tracker.location.photon.failure").absolute(0);
+    metrics::counter!("flight_tracker.location.photon.no_structured_data").absolute(0);
+    metrics::histogram!("flight_tracker.location.photon.latency_ms").record(0.0);
+    metrics::counter!("flight_tracker.location.created", "type" => "start_takeoff").absolute(0);
+    metrics::counter!("flight_tracker.location.created", "type" => "start_airborne").absolute(0);
+    metrics::counter!("flight_tracker.location.created", "type" => "end_landing").absolute(0);
+    metrics::counter!("flight_tracker.location.created", "type" => "end_timeout").absolute(0);
+
     // Beast (ADS-B) processing metrics
     metrics::counter!("beast.run.process_beast_message.called").absolute(0);
     metrics::counter!("beast.run.invalid_message").absolute(0);
