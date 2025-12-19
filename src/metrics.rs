@@ -450,6 +450,10 @@ pub fn initialize_run_metrics() {
     metrics::counter!("flight_tracker.location.photon.failure").absolute(0);
     metrics::counter!("flight_tracker.location.photon.no_structured_data").absolute(0);
     metrics::histogram!("flight_tracker.location.photon.latency_ms").record(0.0);
+    metrics::counter!("flight_tracker.location.photon.retry", "radius_km" => "exact").absolute(0);
+    metrics::counter!("flight_tracker.location.photon.retry", "radius_km" => "1").absolute(0);
+    metrics::counter!("flight_tracker.location.photon.retry", "radius_km" => "5").absolute(0);
+    metrics::counter!("flight_tracker.location.photon.retry", "radius_km" => "10").absolute(0);
     metrics::counter!("flight_tracker.location.created", "type" => "start_takeoff").absolute(0);
     metrics::counter!("flight_tracker.location.created", "type" => "start_airborne").absolute(0);
     metrics::counter!("flight_tracker.location.created", "type" => "end_landing").absolute(0);
