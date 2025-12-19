@@ -504,6 +504,8 @@ impl Geocoder {
     }
 
     /// Reverse geocode coordinates using Photon (local geocoding server)
+    /// Uses a progressive search radius strategy: tries exact location first,
+    /// then expands radius if no results found (1km, 5km, 10km)
     async fn reverse_geocode_with_photon(
         &self,
         latitude: f64,
@@ -519,40 +521,91 @@ impl Geocoder {
             latitude, longitude
         );
 
-        let url = format!("{}/reverse", photon_url);
+        // Try with increasing radius to be more tolerant of sparse OSM data
+        // This helps in rural areas or places without detailed mapping
+        let radii_km = [None, Some(1.0), Some(5.0), Some(10.0)];
 
-        let params = [
-            ("lon", longitude.to_string()),
-            ("lat", latitude.to_string()),
-            ("limit", "1".to_string()),
-        ];
+        for (attempt, radius) in radii_km.iter().enumerate() {
+            let url = format!("{}/reverse", photon_url);
 
-        let response = self
-            .client
-            .get(&url)
-            .query(&params)
-            .send()
-            .await
-            .map_err(|e| anyhow!("Failed to send Photon reverse geocoding request: {}", e))?;
+            let mut params = vec![
+                ("lon", longitude.to_string()),
+                ("lat", latitude.to_string()),
+                ("limit", "1".to_string()),
+            ];
 
-        if !response.status().is_success() {
-            return Err(anyhow!(
-                "Photon reverse geocoding request failed with status: {}",
-                response.status()
-            ));
+            if let Some(r) = radius {
+                params.push(("radius", r.to_string()));
+                if attempt > 0 {
+                    debug!(
+                        "Photon retry attempt {} with radius {}km for ({}, {})",
+                        attempt, r, latitude, longitude
+                    );
+                }
+            }
+
+            let response = self
+                .client
+                .get(&url)
+                .query(&params)
+                .send()
+                .await
+                .map_err(|e| anyhow!("Failed to send Photon reverse geocoding request: {}", e))?;
+
+            if !response.status().is_success() {
+                return Err(anyhow!(
+                    "Photon reverse geocoding request failed with status: {}",
+                    response.status()
+                ));
+            }
+
+            let result: PhotonResponse = response
+                .json()
+                .await
+                .map_err(|e| anyhow!("Failed to parse Photon reverse geocoding response: {}", e))?;
+
+            if !result.features.is_empty() {
+                // Success! Process the result and track which radius worked
+                let radius_label = match radius {
+                    None => "exact",
+                    Some(1.0) => "1",
+                    Some(5.0) => "5",
+                    Some(10.0) => "10",
+                    _ => "other",
+                };
+                metrics::counter!("flight_tracker.location.photon.retry", "radius_km" => radius_label)
+                    .increment(1);
+
+                if let Some(r) = radius {
+                    debug!(
+                        "Photon found result with radius {}km for ({}, {})",
+                        r, latitude, longitude
+                    );
+                }
+                return self.parse_photon_result(&result, latitude, longitude);
+            }
+
+            // No results with this radius, try next iteration
         }
 
-        let result: PhotonResponse = response
-            .json()
-            .await
-            .map_err(|e| anyhow!("Failed to parse Photon reverse geocoding response: {}", e))?;
+        // All attempts failed
+        Err(anyhow!(
+            "No Photon reverse geocoding results found for coordinates: ({}, {}) even with 10km radius",
+            latitude,
+            longitude
+        ))
+    }
 
+    /// Parse Photon response into ReverseGeocodeResult
+    /// Extracted to deduplicate code between retry attempts
+    fn parse_photon_result(
+        &self,
+        result: &PhotonResponse,
+        latitude: f64,
+        longitude: f64,
+    ) -> Result<ReverseGeocodeResult> {
         if result.features.is_empty() {
-            return Err(anyhow!(
-                "No Photon reverse geocoding results found for coordinates: ({}, {})",
-                latitude,
-                longitude
-            ));
+            return Err(anyhow!("No features in Photon response"));
         }
 
         let feature = &result.features[0];
@@ -569,14 +622,10 @@ impl Geocoder {
             props.street.clone()
         };
 
-        // Build display name from available components
-        let display_name = if let Some(name) = &props.name {
-            name.clone()
-        } else {
+        // Build display name from city, state, country ONLY (ignore street addresses and generic names)
+        // This is appropriate for flight start/end locations where we want locality-level precision
+        let display_name = {
             let mut parts = Vec::new();
-            if let Some(s) = &street1 {
-                parts.push(s.clone());
-            }
             if let Some(c) = &props.city {
                 parts.push(c.clone());
             }
@@ -587,7 +636,12 @@ impl Geocoder {
                 parts.push(country.clone());
             }
             if parts.is_empty() {
-                format!("{}, {}", latitude, longitude)
+                // Fallback: use name if available, otherwise coordinates
+                if let Some(name) = &props.name {
+                    name.clone()
+                } else {
+                    format!("{}, {}", latitude, longitude)
+                }
             } else {
                 parts.join(", ")
             }

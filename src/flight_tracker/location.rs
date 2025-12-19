@@ -145,26 +145,47 @@ pub(crate) async fn create_start_end_location(
     longitude: f64,
     context: &str,
 ) -> Option<Uuid> {
+    use std::time::Instant;
+
     debug!(
         "Creating {} location for coordinates ({}, {}) with Photon reverse geocoding",
         context, latitude, longitude
     );
 
     let geocoder = Geocoder::new();
+    let start = Instant::now();
+
     // Only use Photon - don't fall back to Nominatim or Google Maps for flight locations
     match geocoder
         .reverse_geocode_with_photon_only(latitude, longitude)
         .await
     {
         Ok(result) => {
+            let latency_ms = start.elapsed().as_millis() as f64;
+            metrics::histogram!("flight_tracker.location.photon.latency_ms").record(latency_ms);
+            metrics::counter!("flight_tracker.location.photon.success").increment(1);
+
+            // Check if we got structured data (city/state/country) vs just a generic name
+            let has_structured_data =
+                result.city.is_some() || result.state.is_some() || result.country.is_some();
+
+            if !has_structured_data {
+                metrics::counter!("flight_tracker.location.photon.no_structured_data").increment(1);
+                debug!(
+                    "Photon returned no structured data for {} location ({}, {}), only name: {}",
+                    context, latitude, longitude, result.display_name
+                );
+            }
             debug!(
                 "Reverse geocoded {} location ({}, {}) to: {}",
                 context, latitude, longitude, result.display_name
             );
 
             // Create a location with the reverse geocoded address
+            // NOTE: We intentionally omit street1 for flight start/end locations
+            // to keep them at city/state/country precision level only
             let location = Location::new(
-                result.street1,
+                None, // street1 - intentionally omitted for flight locations
                 None, // street2
                 result.city,
                 result.state,
@@ -193,6 +214,18 @@ pub(crate) async fn create_start_end_location(
                         "Created/found {} location {} for coordinates ({}, {}): {}",
                         context, created_location.id, latitude, longitude, result.display_name
                     );
+
+                    // Track location creation by type
+                    let metric_type = match context {
+                        "start (takeoff)" => "start_takeoff",
+                        "start (airborne)" => "start_airborne",
+                        "end (landing)" => "end_landing",
+                        "end (timeout)" => "end_timeout",
+                        _ => "unknown",
+                    };
+                    metrics::counter!("flight_tracker.location.created", "type" => metric_type)
+                        .increment(1);
+
                     Some(created_location.id)
                 }
                 Err(e) => {
@@ -205,6 +238,7 @@ pub(crate) async fn create_start_end_location(
             }
         }
         Err(e) => {
+            metrics::counter!("flight_tracker.location.photon.failure").increment(1);
             warn!(
                 "Reverse geocoding failed for {} location at coordinates ({}, {}): {}",
                 context, latitude, longitude, e
