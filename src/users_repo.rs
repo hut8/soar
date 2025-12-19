@@ -101,6 +101,7 @@ impl UsersRepository {
             let mut conn = pool.get()?;
             let user = users::table
                 .filter(users::id.eq(id))
+                .filter(users::deleted_at.is_null()) // Exclude soft-deleted users
                 .first::<UserRecord>(&mut conn)
                 .optional()?;
             Ok(user.map(|record| record.into()))

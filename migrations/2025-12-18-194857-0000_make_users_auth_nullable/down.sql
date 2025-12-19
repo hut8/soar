@@ -1,9 +1,6 @@
 -- Rollback: Restore authentication fields to NOT NULL
 -- WARNING: This will fail if there are users with NULL email/password
 
--- Remove the check constraint
-ALTER TABLE users DROP CONSTRAINT IF EXISTS users_auth_consistency_check;
-
 -- Drop the partial unique index
 DROP INDEX IF EXISTS users_email_unique_idx;
 
