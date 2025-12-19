@@ -12,13 +12,10 @@ ALTER TABLE users DROP CONSTRAINT users_email_key;
 -- This allows multiple NULL emails while ensuring uniqueness for actual email addresses
 CREATE UNIQUE INDEX users_email_unique_idx ON users(email) WHERE email IS NOT NULL;
 
--- Add a check constraint to ensure authentication consistency
--- If email exists, password_hash must exist too (and vice versa)
-ALTER TABLE users ADD CONSTRAINT users_auth_consistency_check
-  CHECK (
-    (email IS NULL AND password_hash IS NULL) OR
-    (email IS NOT NULL AND password_hash IS NOT NULL)
-  );
+-- Note: We intentionally do NOT add a constraint requiring email and password_hash
+-- to both be NULL or both be NOT NULL. The pilot invitation workflow requires an
+-- intermediate state where email is set (for sending invitation) but password is NULL
+-- (until the pilot completes registration). Application logic enforces consistency.
 
 -- Add comment documenting the architectural change
 COMMENT ON TABLE users IS 'Unified table for all people (users and pilots). Users without email/password cannot log in but can be assigned to flights.';
