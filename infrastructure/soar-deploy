@@ -260,6 +260,117 @@ log_info "Binary installed successfully at $BINARY_PATH"
 log_info "Cleaning up temporary binary: $TEMP_BIN_PATH"
 rm -f "$TEMP_BIN_PATH"
 
+# Clean up old systemd service and timer files that aren't in the deployment
+log_info "Cleaning up old systemd service and timer files..."
+SYSTEMD_FILES_REMOVED=0
+
+# Build list of expected files from deployment
+EXPECTED_FILES=()
+for service in "${ALL_SERVICES[@]}"; do
+    EXPECTED_FILES+=("$service")
+done
+for timer in "${TIMERS[@]}"; do
+    EXPECTED_FILES+=("$timer")
+done
+EXPECTED_FILES+=("soar${SERVICE_SUFFIX}.target")
+
+# Find and remove obsolete SOAR systemd files matching our environment
+# Check services
+for systemd_file in /etc/systemd/system/soar-*${SERVICE_SUFFIX}.service; do
+    if [ -f "$systemd_file" ]; then
+        file_basename=$(basename "$systemd_file")
+
+        # Check if this file is expected (in our deployment)
+        is_expected=false
+        for expected_file in "${EXPECTED_FILES[@]}"; do
+            if [ "$file_basename" = "$expected_file" ]; then
+                is_expected=true
+                break
+            fi
+        done
+
+        # If not expected, stop and remove it
+        if [ "$is_expected" = false ]; then
+            log_info "Removing obsolete systemd service: $file_basename"
+
+            if systemctl is-active --quiet "$file_basename" 2>/dev/null; then
+                log_info "Stopping $file_basename..."
+                systemctl stop "$file_basename" || log_warn "Failed to stop $file_basename"
+            fi
+
+            if systemctl is-enabled --quiet "$file_basename" 2>/dev/null; then
+                log_info "Disabling $file_basename..."
+                systemctl disable "$file_basename" || log_warn "Failed to disable $file_basename"
+            fi
+
+            rm -f "$systemd_file"
+            ((SYSTEMD_FILES_REMOVED++))
+        fi
+    fi
+done
+
+# Check timers
+for systemd_file in /etc/systemd/system/soar-*${SERVICE_SUFFIX}.timer; do
+    if [ -f "$systemd_file" ]; then
+        file_basename=$(basename "$systemd_file")
+
+        # Check if this file is expected (in our deployment)
+        is_expected=false
+        for expected_file in "${EXPECTED_FILES[@]}"; do
+            if [ "$file_basename" = "$expected_file" ]; then
+                is_expected=true
+                break
+            fi
+        done
+
+        # If not expected, stop and remove it
+        if [ "$is_expected" = false ]; then
+            log_info "Removing obsolete systemd timer: $file_basename"
+
+            if systemctl is-active --quiet "$file_basename" 2>/dev/null; then
+                log_info "Stopping $file_basename..."
+                systemctl stop "$file_basename" || log_warn "Failed to stop $file_basename"
+            fi
+
+            if systemctl is-enabled --quiet "$file_basename" 2>/dev/null; then
+                log_info "Disabling $file_basename..."
+                systemctl disable "$file_basename" || log_warn "Failed to disable $file_basename"
+            fi
+
+            rm -f "$systemd_file"
+            ((SYSTEMD_FILES_REMOVED++))
+        fi
+    fi
+done
+
+# Check target file
+systemd_file="/etc/systemd/system/soar${SERVICE_SUFFIX}.target"
+if [ -f "$systemd_file" ]; then
+    file_basename=$(basename "$systemd_file")
+
+    # Check if this file is expected (in our deployment)
+    is_expected=false
+    for expected_file in "${EXPECTED_FILES[@]}"; do
+        if [ "$file_basename" = "$expected_file" ]; then
+            is_expected=true
+            break
+        fi
+    done
+
+    # If not expected, remove it (targets don't need to be stopped/disabled)
+    if [ "$is_expected" = false ]; then
+        log_info "Removing obsolete systemd target: $file_basename"
+        rm -f "$systemd_file"
+        ((SYSTEMD_FILES_REMOVED++))
+    fi
+fi
+
+if [ $SYSTEMD_FILES_REMOVED -gt 0 ]; then
+    log_info "Removed $SYSTEMD_FILES_REMOVED obsolete systemd file(s)"
+else
+    log_info "No obsolete systemd files found"
+fi
+
 # Install service files
 log_info "Installing service files..."
 for service in "${ALL_SERVICES[@]}"; do
@@ -318,6 +429,21 @@ PROMETHEUS_NEEDS_RELOAD=false
 if [ -d "$DEPLOY_DIR/prometheus-jobs" ]; then
     log_info "Installing Prometheus job configuration files..."
     mkdir -p /etc/prometheus/jobs
+
+    # Remove old SOAR Prometheus job files that aren't in the deployment
+    if [ -d "/etc/prometheus/jobs" ]; then
+        log_info "Cleaning up old Prometheus job files..."
+        for old_job in /etc/prometheus/jobs/soar-*.yml; do
+            if [ -f "$old_job" ]; then
+                job_basename=$(basename "$old_job")
+                if [ ! -f "$DEPLOY_DIR/prometheus-jobs/$job_basename" ]; then
+                    log_info "Removing obsolete Prometheus job: $job_basename"
+                    rm -f "$old_job"
+                fi
+            fi
+        done
+    fi
+
     cp "$DEPLOY_DIR/prometheus-jobs"/*.yml /etc/prometheus/jobs/
     chmod 644 /etc/prometheus/jobs/*.yml
 
@@ -369,6 +495,21 @@ DASHBOARD_COUNT=0
 if compgen -G "$DEPLOY_DIR/grafana-dashboard-*.json" > /dev/null; then
     log_info "Installing Grafana dashboard files..."
     mkdir -p /etc/grafana/dashboards
+
+    # Remove old SOAR Grafana dashboards that aren't in the deployment
+    if [ -d "/etc/grafana/dashboards" ]; then
+        log_info "Cleaning up old Grafana dashboards..."
+        for old_dashboard in /etc/grafana/dashboards/grafana-dashboard-*.json; do
+            if [ -f "$old_dashboard" ]; then
+                dashboard_basename=$(basename "$old_dashboard")
+                if [ ! -f "$DEPLOY_DIR/$dashboard_basename" ]; then
+                    log_info "Removing obsolete Grafana dashboard: $dashboard_basename"
+                    rm -f "$old_dashboard"
+                fi
+            fi
+        done
+    fi
+
     cp "$DEPLOY_DIR"/grafana-dashboard-*.json /etc/grafana/dashboards/
     chmod 644 /etc/grafana/dashboards/*.json
 
