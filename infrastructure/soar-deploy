@@ -120,21 +120,21 @@ fi
 # Define services and timers based on environment
 # Active services that should be enabled and started
 ACTIVE_SERVICES=(
-    "soar-ogn-ingest${SERVICE_SUFFIX}.service"
+    "soar-ingest-ogn${SERVICE_SUFFIX}.service"
     "soar-run${SERVICE_SUFFIX}.service"
     "soar-web${SERVICE_SUFFIX}.service"
 )
 
 # Timer-invoked services (only installed, not enabled or started)
 # Skip backup services for staging environment
-# NOTE: soar-adsb-ingest.service is disabled by default until ready for production
+# NOTE: soar-ingest-adsb.service is disabled by default until ready for production
 if [ "$ENVIRONMENT" = "staging" ]; then
     TIMER_SERVICES=(
         "soar-pull-data${SERVICE_SUFFIX}.service"
         "soar-sitemap${SERVICE_SUFFIX}.service"
         "soar-archive${SERVICE_SUFFIX}.service"
         "partman-maintenance${SERVICE_SUFFIX}.service"
-        "soar-adsb-ingest${SERVICE_SUFFIX}.service"
+        "soar-ingest-adsb${SERVICE_SUFFIX}.service"
     )
     TIMERS=(
         "soar-pull-data${SERVICE_SUFFIX}.timer"
@@ -150,7 +150,7 @@ else
         "soar-backup-base${SERVICE_SUFFIX}.service"
         "soar-backup-verify${SERVICE_SUFFIX}.service"
         "partman-maintenance${SERVICE_SUFFIX}.service"
-        "soar-adsb-ingest${SERVICE_SUFFIX}.service"
+        "soar-ingest-adsb${SERVICE_SUFFIX}.service"
     )
     TIMERS=(
         "soar-pull-data${SERVICE_SUFFIX}.timer"
@@ -314,6 +314,7 @@ else
 fi
 
 # Install Prometheus job configuration files
+PROMETHEUS_NEEDS_RELOAD=false
 if [ -d "$DEPLOY_DIR/prometheus-jobs" ]; then
     log_info "Installing Prometheus job configuration files..."
     mkdir -p /etc/prometheus/jobs
@@ -324,12 +325,24 @@ if [ -d "$DEPLOY_DIR/prometheus-jobs" ]; then
     if id "prometheus" &>/dev/null; then
         chown -R prometheus:prometheus /etc/prometheus/jobs
         log_info "Prometheus job files installed and ownership set to prometheus:prometheus"
+        PROMETHEUS_NEEDS_RELOAD=true
     else
         log_warn "prometheus user not found, skipping ownership change"
         log_info "Prometheus job files installed"
     fi
 else
     log_warn "prometheus-jobs directory not found in deployment, skipping Prometheus configuration"
+fi
+
+# Reload Prometheus if job configurations were updated
+if [ "$PROMETHEUS_NEEDS_RELOAD" = true ]; then
+    if systemctl is-active --quiet prometheus; then
+        log_info "Reloading Prometheus to load new scrape configurations..."
+        systemctl reload prometheus || log_warn "Failed to reload Prometheus"
+        log_info "Prometheus reloaded successfully"
+    else
+        log_warn "Prometheus is not running, skipping reload"
+    fi
 fi
 
 # Install Grafana dashboards and provisioning configuration
@@ -396,13 +409,13 @@ fi
 # Enable and start services - start ogn-ingest first, then others
 log_info "Enabling and starting SOAR services..."
 
-# Start soar-ogn-ingest first
-if [ -f "/etc/systemd/system/soar-ogn-ingest${SERVICE_SUFFIX}.service" ]; then
-    log_info "Enabling soar-ogn-ingest${SERVICE_SUFFIX}.service..."
-    systemctl enable "soar-ogn-ingest${SERVICE_SUFFIX}.service" || log_warn "Failed to enable soar-ogn-ingest${SERVICE_SUFFIX}.service"
+# Start soar-ingest-ogn first
+if [ -f "/etc/systemd/system/soar-ingest-ogn${SERVICE_SUFFIX}.service" ]; then
+    log_info "Enabling soar-ingest-ogn${SERVICE_SUFFIX}.service..."
+    systemctl enable "soar-ingest-ogn${SERVICE_SUFFIX}.service" || log_warn "Failed to enable soar-ingest-ogn${SERVICE_SUFFIX}.service"
 
-    log_info "Starting soar-ogn-ingest${SERVICE_SUFFIX}.service..."
-    systemctl start "soar-ogn-ingest${SERVICE_SUFFIX}.service" || log_warn "Failed to start soar-ogn-ingest${SERVICE_SUFFIX}.service"
+    log_info "Starting soar-ingest-ogn${SERVICE_SUFFIX}.service..."
+    systemctl start "soar-ingest-ogn${SERVICE_SUFFIX}.service" || log_warn "Failed to start soar-ingest-ogn${SERVICE_SUFFIX}.service"
 
     # Give it a moment to initialize
     sleep 2
@@ -411,7 +424,7 @@ fi
 # Start the rest of the active services
 for service in "${ACTIVE_SERVICES[@]}"; do
     # Skip ogn-ingest since we already started it
-    if [ "$service" = "soar-ogn-ingest${SERVICE_SUFFIX}.service" ]; then
+    if [ "$service" = "soar-ingest-ogn${SERVICE_SUFFIX}.service" ]; then
         continue
     fi
 

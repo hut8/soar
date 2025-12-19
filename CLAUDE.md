@@ -50,8 +50,8 @@ SOAR is a comprehensive aircraft tracking and club management system built with:
 - **Verify dashboard queries after changes** - After updating code, search all dashboard files for the old metric name and update them
 - **Dashboard locations:**
   - `infrastructure/grafana-dashboard-run.json` - Main processing (`run` command)
-  - `infrastructure/grafana-dashboard-aprs-ingest.json` - OGN/APRS ingestion (`ingest-ogn` command)
-  - `infrastructure/grafana-dashboard-beast-ingest.json` - ADS-B Beast ingestion (`ingest-adsb` command)
+  - `infrastructure/grafana-dashboard-ingest-ogn.json` - OGN/APRS ingestion (`ingest-ogn` command)
+  - `infrastructure/grafana-dashboard-ingest-adsb.json` - ADS-B Beast ingestion (`ingest-adsb` command)
   - `infrastructure/grafana-dashboard-web.json` - Web server (`web` command)
   - `infrastructure/grafana-dashboard-nats.json` - NATS/JetStream metrics
   - `infrastructure/grafana-dashboard-analytics.json` - Analytics API and cache performance

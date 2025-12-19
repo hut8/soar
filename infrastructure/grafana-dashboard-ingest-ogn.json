@@ -31,7 +31,7 @@
       },
       "id": 50,
       "panels": [],
-      "title": "SOAR APRS Ingest - Process Metrics",
+      "title": "SOAR OGN Ingest - Process Metrics",
       "type": "row"
     },
     {
@@ -98,7 +98,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "process_uptime_seconds{component=\"aprs-ingest\"}",
+          "expr": "process_uptime_seconds{component=\"ingest-ogn\"}",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -183,8 +183,8 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "process_is_up{component=\"aprs-ingest\"}",
-          "legendFormat": "SOAR APRS Ingest",
+          "expr": "process_is_up{component=\"ingest-ogn\"}",
+          "legendFormat": "SOAR OGN Ingest",
           "range": true,
           "refId": "A"
         }
@@ -256,8 +256,8 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "process_memory_bytes{component=\"aprs-ingest\"}",
-          "legendFormat": "SOAR APRS Ingest",
+          "expr": "process_memory_bytes{component=\"ingest-ogn\"}",
+          "legendFormat": "SOAR OGN Ingest",
           "range": true,
           "refId": "A"
         }
@@ -275,7 +275,7 @@
       },
       "id": 100,
       "panels": [],
-      "title": "SOAR APRS Ingest - APRS Connection",
+      "title": "SOAR OGN Ingest - APRS Connection",
       "type": "row"
     },
     {
@@ -354,7 +354,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "aprs_connection_connected{component=\"aprs-ingest\"}",
+          "expr": "aprs_connection_connected{component=\"ingest-ogn\"}",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -451,7 +451,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "aprs_connection_established{component=\"aprs-ingest\"}",
+          "expr": "aprs_connection_established{component=\"ingest-ogn\"}",
           "legendFormat": "Established",
           "range": true,
           "refId": "A"
@@ -462,7 +462,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "aprs_connection_failed{component=\"aprs-ingest\"}",
+          "expr": "aprs_connection_failed{component=\"ingest-ogn\"}",
           "legendFormat": "Failed",
           "range": true,
           "refId": "B"
@@ -473,7 +473,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "aprs_connection_ended{component=\"aprs-ingest\"}",
+          "expr": "aprs_connection_ended{component=\"ingest-ogn\"}",
           "legendFormat": "Ended",
           "range": true,
           "refId": "C"
@@ -570,7 +570,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "aprs_keepalive_sent{component=\"aprs-ingest\"}",
+          "expr": "aprs_keepalive_sent{component=\"ingest-ogn\"}",
           "legendFormat": "Keepalive Messages",
           "range": true,
           "refId": "A"
@@ -589,7 +589,7 @@
       },
       "id": 110,
       "panels": [],
-      "title": "SOAR APRS Ingest - JetStream Publishing",
+      "title": "SOAR OGN Ingest - JetStream Publishing",
       "type": "row"
     },
     {
@@ -680,7 +680,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_jetstream_published{component=\"aprs-ingest\"}[1m]) * 60",
+          "expr": "rate(aprs_jetstream_published{component=\"ingest-ogn\"}[1m]) * 60",
           "legendFormat": "Messages/min",
           "range": true,
           "refId": "A"
@@ -751,7 +751,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "aprs_jetstream_queue_depth{component=\"aprs-ingest\"}",
+          "expr": "aprs_jetstream_queue_depth{component=\"ingest-ogn\"}",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -848,7 +848,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "aprs_jetstream_publish_error{component=\"aprs-ingest\"}",
+          "expr": "aprs_jetstream_publish_error{component=\"ingest-ogn\"}",
           "legendFormat": "Publish Errors",
           "range": true,
           "refId": "A"
@@ -977,7 +977,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_jetstream_slow_publish{component=\"ingest-aprs\"}[5m])",
+          "expr": "rate(aprs_jetstream_slow_publish{component=\"ingest-ogn\"}[5m])",
           "legendFormat": "Slow Publishes/sec",
           "range": true,
           "refId": "A"
@@ -988,7 +988,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(aprs_jetstream_publish_timeout{component=\"ingest-aprs\"}[5m])",
+          "expr": "rate(aprs_jetstream_publish_timeout{component=\"ingest-ogn\"}[5m])",
           "legendFormat": "Publish Timeouts/sec",
           "range": true,
           "refId": "B"
@@ -1086,7 +1086,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "aprs_jetstream_in_flight{component=\"ingest-aprs\"}",
+          "expr": "aprs_jetstream_in_flight{component=\"ingest-ogn\"}",
           "legendFormat": "Messages In-Flight",
           "range": true,
           "refId": "A"
@@ -1181,7 +1181,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.50, sum(rate(aprs_jetstream_publish_duration_ms_bucket{component=\"ingest-aprs\"}[5m])) by (le))",
+          "expr": "histogram_quantile(0.50, sum(rate(aprs_jetstream_publish_duration_ms_bucket{component=\"ingest-ogn\"}[5m])) by (le))",
           "legendFormat": "p50",
           "range": true,
           "refId": "A"
@@ -1192,7 +1192,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(aprs_jetstream_publish_duration_ms_bucket{component=\"ingest-aprs\"}[5m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(aprs_jetstream_publish_duration_ms_bucket{component=\"ingest-ogn\"}[5m])) by (le))",
           "hide": false,
           "legendFormat": "p95",
           "range": true,
@@ -1204,7 +1204,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.99, sum(rate(aprs_jetstream_publish_duration_ms_bucket{component=\"ingest-aprs\"}[5m])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate(aprs_jetstream_publish_duration_ms_bucket{component=\"ingest-ogn\"}[5m])) by (le))",
           "hide": false,
           "legendFormat": "p99",
           "range": true,
@@ -1220,7 +1220,7 @@
   "schemaVersion": 42,
   "tags": [
     "soar",
-    "aprs-ingest",
+    "ingest-ogn",
     "aprs",
     "monitoring"
   ],
@@ -1263,7 +1263,7 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "SOAR APRS Ingest",
-  "uid": "soar-aprs-ingest",
+  "title": "SOAR OGN Ingest",
+  "uid": "soar-ingest-ogn",
   "version": 1
 }
