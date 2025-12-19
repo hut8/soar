@@ -11,11 +11,18 @@
 #
 # The deployment directory should contain:
 #   - soar (the binary)
+#   - soar-deploy (this script - for self-update)
 #   - *.service files (production) or *-staging.service files (staging)
 #   - *.timer files (production) or *-staging.timer files (staging)
+#   - *.target files (soar.target or soar-staging.target)
 #   - prometheus-jobs/ directory (optional, contains Prometheus job configs)
 #   - grafana-provisioning/ directory (optional, contains Grafana provisioning configs)
 #   - grafana-dashboard-*.json files (optional, Grafana dashboards)
+#
+# Self-Update:
+#   This script will automatically update itself if the version in the deployment
+#   directory differs from /usr/local/bin/soar-deploy, then re-execute with the
+#   same arguments to ensure the latest deployment logic is used.
 #
 
 set -e
@@ -67,6 +74,24 @@ if [ ! -d "$DEPLOY_DIR" ]; then
 fi
 
 log_info "Starting SOAR deployment for $ENVIRONMENT from: $DEPLOY_DIR"
+
+# Self-update: Check if deployment script itself has changed
+if [ -f "$DEPLOY_DIR/soar-deploy" ]; then
+    if ! diff -q "$0" "$DEPLOY_DIR/soar-deploy" >/dev/null 2>&1; then
+        log_warn "Deployment script has changed - updating /usr/local/bin/soar-deploy and re-executing..."
+
+        # Install updated deployment script
+        install -m 755 -o root -g root "$DEPLOY_DIR/soar-deploy" /usr/local/bin/soar-deploy
+
+        log_info "Deployment script updated, re-executing with same arguments..."
+        # Re-exec the updated script with original arguments
+        exec /usr/local/bin/soar-deploy "$@"
+    else
+        log_info "Deployment script is up-to-date"
+    fi
+else
+    log_warn "No soar-deploy found in deployment directory, skipping self-update check"
+fi
 
 # Set environment-specific variables
 if [ "$ENVIRONMENT" = "staging" ]; then
@@ -259,6 +284,16 @@ for timer in "${TIMERS[@]}"; do
     fi
 done
 
+# Install target file
+TARGET_FILE="soar${SERVICE_SUFFIX}.target"
+if [ -f "$DEPLOY_DIR/$TARGET_FILE" ]; then
+    log_info "Installing $TARGET_FILE..."
+    cp "$DEPLOY_DIR/$TARGET_FILE" /etc/systemd/system/
+    chmod 644 "/etc/systemd/system/$TARGET_FILE"
+else
+    log_warn "$TARGET_FILE not found in deployment directory, skipping"
+fi
+
 # Install backup scripts
 if [ -d "$DEPLOY_DIR/scripts/backup" ]; then
     log_info "Installing backup scripts to /usr/local/bin/..."
@@ -351,6 +386,12 @@ fi
 # Reload systemd daemon
 log_info "Reloading systemd daemon..."
 systemctl daemon-reload
+
+# Enable target file
+if [ -f "/etc/systemd/system/$TARGET_FILE" ]; then
+    log_info "Enabling $TARGET_FILE..."
+    systemctl enable "$TARGET_FILE" || log_warn "Failed to enable $TARGET_FILE"
+fi
 
 # Enable and start services - start ogn-ingest first, then others
 log_info "Enabling and starting SOAR services..."

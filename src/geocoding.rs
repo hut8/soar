@@ -5,7 +5,7 @@ use reqwest;
 use serde::Deserialize;
 use std::env;
 use std::time::Duration;
-use tracing::{debug, info, warn};
+use tracing::{debug, info, trace, warn};
 
 use crate::locations::Point;
 
@@ -201,7 +201,7 @@ impl Geocoder {
         // Initialize Photon base URL if configured
         let photon_base_url = if let Ok(url) = env::var("PHOTON_BASE_URL") {
             if !url.trim().is_empty() {
-                info!("Using Photon geocoding server at: {}", url);
+                trace!("Using Photon geocoding server at: {}", url);
                 Some(url.trim().to_string())
             } else {
                 debug!("PHOTON_BASE_URL is set but empty, skipping Photon");
@@ -251,7 +251,7 @@ impl Geocoder {
         // Initialize Photon base URL if configured
         let photon_base_url = if let Ok(url) = env::var("PHOTON_BASE_URL") {
             if !url.trim().is_empty() {
-                info!("Using Photon geocoding server at: {}", url);
+                trace!("Using Photon geocoding server at: {}", url);
                 Some(url.trim().to_string())
             } else {
                 debug!("PHOTON_BASE_URL is set but empty, skipping Photon");
