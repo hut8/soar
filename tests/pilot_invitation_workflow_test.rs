@@ -7,7 +7,8 @@ use uuid::Uuid;
 type PgPool = Pool<ConnectionManager<PgConnection>>;
 
 fn setup_test_db() -> PgPool {
-    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set for tests");
+    let database_url =
+        std::env::var("TEST_DATABASE_URL").expect("TEST_DATABASE_URL must be set for tests");
     let manager = ConnectionManager::<PgConnection>::new(database_url);
     Pool::builder()
         .build(manager)
@@ -15,7 +16,6 @@ fn setup_test_db() -> PgPool {
 }
 
 #[tokio::test]
-#[ignore] // Requires test database
 async fn test_create_pilot_without_email() {
     let pool = setup_test_db();
     let repo = UsersRepository::new(pool.clone());
@@ -49,7 +49,6 @@ async fn test_create_pilot_without_email() {
 }
 
 #[tokio::test]
-#[ignore] // Requires test database
 async fn test_send_invitation_to_pilot() {
     let pool = setup_test_db();
     let repo = UsersRepository::new(pool.clone());
@@ -96,7 +95,6 @@ async fn test_send_invitation_to_pilot() {
 }
 
 #[tokio::test]
-#[ignore] // Requires test database
 async fn test_complete_pilot_registration() {
     let pool = setup_test_db();
     let repo = UsersRepository::new(pool.clone());
@@ -154,7 +152,6 @@ async fn test_complete_pilot_registration() {
 }
 
 #[tokio::test]
-#[ignore] // Requires test database
 async fn test_full_pilot_invitation_workflow() {
     let pool = setup_test_db();
     let repo = UsersRepository::new(pool.clone());
@@ -213,7 +210,6 @@ async fn test_full_pilot_invitation_workflow() {
 }
 
 #[tokio::test]
-#[ignore] // Requires test database
 async fn test_get_pilots_by_club() {
     let pool = setup_test_db();
     let repo = UsersRepository::new(pool.clone());
@@ -269,7 +265,6 @@ async fn test_get_pilots_by_club() {
 }
 
 #[tokio::test]
-#[ignore] // Requires test database
 async fn test_soft_delete_pilot() {
     let pool = setup_test_db();
     let repo = UsersRepository::new(pool.clone());
@@ -304,7 +299,6 @@ async fn test_soft_delete_pilot() {
 }
 
 #[tokio::test]
-#[ignore] // Requires test database
 async fn test_cannot_send_invitation_twice() {
     let pool = setup_test_db();
     let repo = UsersRepository::new(pool.clone());
