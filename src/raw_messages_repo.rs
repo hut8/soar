@@ -414,11 +414,11 @@ mod tests {
     use diesel::r2d2::{ConnectionManager, Pool};
 
     /// Helper to create a test database pool
-    /// Uses DATABASE_URL environment variable (set in CI) or defaults to local test database
+    /// Uses TEST_DATABASE_URL environment variable or defaults to local test database
     fn create_test_pool() -> PgPool {
         dotenvy::dotenv().ok();
-        let database_url = std::env::var("DATABASE_URL")
-            .expect("DATABASE_URL must be set for tests (e.g., postgres://postgres:postgres@localhost:5432/soar_test)");
+        let database_url = std::env::var("TEST_DATABASE_URL")
+            .unwrap_or_else(|_| "postgresql://localhost/soar_test".to_string());
 
         let manager = ConnectionManager::<PgConnection>::new(database_url);
         Pool::builder()

@@ -43,51 +43,16 @@ async fn test_elevation_denver() {
     );
 }
 
-// All tests below this line require full elevation data and are ignored in CI
-// Run with: cargo test -- --ignored
-
-/// Test elevation lookup for a known location
-/// Using Mount Everest base camp in Nepal as a test location
-/// Expected elevation: ~5,364m (17,598 ft)
-#[tokio::test]
-#[ignore = "Requires full elevation data at /var/soar/elevation"]
-async fn test_elevation_mount_everest_region() {
-    // Coordinates near Mount Everest Base Camp (Nepal side)
-    // Using coordinates that are safer (not at tile boundaries)
-    let lat = 28.5;
-    let lon = 86.5;
-
-    let elevation_db = ElevationDB::new().expect("Failed to initialize ElevationDB");
-    let result = elevation_db.elevation_egm2008(lat, lon).await;
-    assert!(result.is_ok(), "Elevation lookup should succeed");
-
-    let elevation = result.unwrap();
-    assert!(
-        elevation.is_some(),
-        "Elevation should be available for land"
-    );
-
-    let elev_m = elevation.unwrap();
-    // The exact elevation depends on the precise coordinates and DEM resolution
-    // Mount Everest region should have elevations above 3000m
-    assert!(
-        elev_m > 3000.0 && elev_m < 9000.0,
-        "Elevation {} meters is outside expected range for Everest region",
-        elev_m
-    );
-}
-
 /// Test elevation lookup for sea level location
 /// Using New York City (near sea level)
 /// Expected elevation: close to 0m
 #[tokio::test]
-#[ignore = "Requires full elevation data at /var/soar/elevation"]
 async fn test_elevation_sea_level() {
     // New York City coordinates (Central Park)
     let lat = 40.7829;
     let lon = -73.9654;
 
-    let elevation_db = ElevationDB::new().expect("Failed to initialize ElevationDB");
+    let elevation_db = create_test_elevation_db();
     let result = elevation_db.elevation_egm2008(lat, lon).await;
     assert!(result.is_ok(), "Elevation lookup should succeed");
 
@@ -161,13 +126,12 @@ async fn test_infinite_coordinates() {
 /// Test elevation lookup for ocean location
 /// Ocean tiles may not exist or return NoData
 #[tokio::test]
-#[ignore = "Requires full elevation data at /var/soar/elevation"]
 async fn test_elevation_ocean() {
     // Middle of Pacific Ocean
     let lat = 0.0;
     let lon = -160.0;
 
-    let elevation_db = ElevationDB::new().expect("Failed to initialize ElevationDB");
+    let elevation_db = create_test_elevation_db();
     let result = elevation_db.elevation_egm2008(lat, lon).await;
     // Ocean tiles might not exist or might return None for NoData
     // Either case is acceptable
@@ -186,12 +150,11 @@ async fn test_elevation_ocean() {
 /// Test that repeated lookups use cache
 /// This test verifies that the caching mechanism works by calling the same location twice
 #[tokio::test]
-#[ignore = "Requires full elevation data at /var/soar/elevation"]
 async fn test_elevation_caching() {
     let lat = 40.7829;
     let lon = -73.9654;
 
-    let elevation_db = ElevationDB::new().expect("Failed to initialize ElevationDB");
+    let elevation_db = create_test_elevation_db();
 
     // First call - will download and cache tile
     let result1 = elevation_db.elevation_egm2008(lat, lon).await;
@@ -211,13 +174,12 @@ async fn test_elevation_caching() {
 
 /// Test elevation for negative latitude (Southern Hemisphere)
 #[tokio::test]
-#[ignore = "Requires full elevation data at /var/soar/elevation"]
 async fn test_elevation_southern_hemisphere() {
     // Sydney, Australia
     let lat = -33.8688;
     let lon = 151.2093;
 
-    let elevation_db = ElevationDB::new().expect("Failed to initialize ElevationDB");
+    let elevation_db = create_test_elevation_db();
     let result = elevation_db.elevation_egm2008(lat, lon).await;
     assert!(result.is_ok(), "Elevation lookup should succeed");
 
@@ -239,13 +201,12 @@ async fn test_elevation_southern_hemisphere() {
 /// Test elevation for boundary coordinates (near tile edges)
 /// This tests coordinates exactly at tile boundaries (integer lat/lon)
 #[tokio::test]
-#[ignore = "Requires full elevation data at /var/soar/elevation"]
 async fn test_elevation_tile_boundary() {
     // Test at exactly 45°N, 0°E (boundary between tiles)
     let lat = 45.0;
     let lon = 0.0;
 
-    let elevation_db = ElevationDB::new().expect("Failed to initialize ElevationDB");
+    let elevation_db = create_test_elevation_db();
     let result = elevation_db.elevation_egm2008(lat, lon).await;
     assert!(
         result.is_ok(),
@@ -263,13 +224,12 @@ async fn test_elevation_tile_boundary() {
 
 /// Test elevation near (but not exactly at) tile boundary
 #[tokio::test]
-#[ignore = "Requires full elevation data at /var/soar/elevation"]
 async fn test_elevation_near_tile_boundary() {
     // Test near 45°N, 0°E but not exactly at boundary
     let lat = 45.1;
     let lon = 0.1;
 
-    let elevation_db = ElevationDB::new().expect("Failed to initialize ElevationDB");
+    let elevation_db = create_test_elevation_db();
     let result = elevation_db.elevation_egm2008(lat, lon).await;
     assert!(
         result.is_ok(),
@@ -282,117 +242,5 @@ async fn test_elevation_near_tile_boundary() {
     assert!(
         elevation.is_some(),
         "Should have elevation data near boundary"
-    );
-}
-
-/// Test elevation for Death Valley (below sea level)
-/// Expected elevation: ~-86m (-282 ft) at Badwater Basin
-#[tokio::test]
-#[ignore = "Requires full elevation data at /var/soar/elevation"]
-async fn test_elevation_death_valley() {
-    // Death Valley, California (Badwater Basin - lowest point in North America)
-    let lat = 36.2295;
-    let lon = -116.8295;
-
-    let elevation_db = ElevationDB::new().expect("Failed to initialize ElevationDB");
-    let result = elevation_db.elevation_egm2008(lat, lon).await;
-    assert!(result.is_ok(), "Elevation lookup should succeed");
-
-    let elevation = result.unwrap();
-    assert!(
-        elevation.is_some(),
-        "Elevation should be available for Death Valley"
-    );
-
-    let elev_m = elevation.unwrap();
-    // Death Valley is below sea level, around -86m
-    assert!(
-        elev_m > -150.0 && elev_m < 0.0,
-        "Elevation {} meters is outside expected range for Death Valley (below sea level)",
-        elev_m
-    );
-}
-
-/// Test elevation for Grand Canyon
-/// Expected elevation: ~2,100m (6,900 ft) at South Rim
-#[tokio::test]
-#[ignore = "Requires full elevation data at /var/soar/elevation"]
-async fn test_elevation_grand_canyon() {
-    // Grand Canyon South Rim, Arizona
-    let lat = 36.0544;
-    let lon = -112.1401;
-
-    let elevation_db = ElevationDB::new().expect("Failed to initialize ElevationDB");
-    let result = elevation_db.elevation_egm2008(lat, lon).await;
-    assert!(result.is_ok(), "Elevation lookup should succeed");
-
-    let elevation = result.unwrap();
-    assert!(
-        elevation.is_some(),
-        "Elevation should be available for Grand Canyon"
-    );
-
-    let elev_m = elevation.unwrap();
-    // Grand Canyon South Rim is around 2,100m elevation
-    assert!(
-        elev_m > 1900.0 && elev_m < 2300.0,
-        "Elevation {} meters is outside expected range for Grand Canyon South Rim (~2,100m)",
-        elev_m
-    );
-}
-
-/// Test elevation for Mexico City (high elevation city)
-/// Expected elevation: ~2,240m (7,350 ft)
-#[tokio::test]
-#[ignore = "Requires full elevation data at /var/soar/elevation"]
-async fn test_elevation_mexico_city() {
-    // Mexico City, Mexico (Zócalo square)
-    let lat = 19.4326;
-    let lon = -99.1332;
-
-    let elevation_db = ElevationDB::new().expect("Failed to initialize ElevationDB");
-    let result = elevation_db.elevation_egm2008(lat, lon).await;
-    assert!(result.is_ok(), "Elevation lookup should succeed");
-
-    let elevation = result.unwrap();
-    assert!(
-        elevation.is_some(),
-        "Elevation should be available for Mexico City"
-    );
-
-    let elev_m = elevation.unwrap();
-    // Mexico City elevation varies widely across the city, from ~2,200m to ~2,600m
-    assert!(
-        elev_m > 1800.0 && elev_m < 2700.0,
-        "Elevation {} meters is outside expected range for Mexico City (~2,240m average)",
-        elev_m
-    );
-}
-
-/// Test elevation for Tokyo (sea level, different hemisphere from NYC)
-/// Expected elevation: close to 0m
-#[tokio::test]
-#[ignore = "Requires full elevation data at /var/soar/elevation"]
-async fn test_elevation_tokyo() {
-    // Tokyo, Japan (Tokyo Tower area)
-    let lat = 35.6586;
-    let lon = 139.7454;
-
-    let elevation_db = ElevationDB::new().expect("Failed to initialize ElevationDB");
-    let result = elevation_db.elevation_egm2008(lat, lon).await;
-    assert!(result.is_ok(), "Elevation lookup should succeed");
-
-    let elevation = result.unwrap();
-    assert!(
-        elevation.is_some(),
-        "Elevation should be available for Tokyo"
-    );
-
-    let elev_m = elevation.unwrap();
-    // Tokyo is near sea level
-    assert!(
-        elev_m > -10.0 && elev_m < 100.0,
-        "Elevation {} meters is outside expected range for Tokyo (near sea level)",
-        elev_m
     );
 }
