@@ -67,6 +67,18 @@ SOAR is a comprehensive aircraft tracking and club management system built with:
 - **REMOVED**: `aprs.elevation.dropped` and `nats_publisher.dropped_fixes` (2025-01-12)
   - These metrics were removed from dashboard as messages can no longer be dropped
 
+**Grafana Alerting:**
+- **Alert Configuration** - Managed via infrastructure as code in `infrastructure/grafana-provisioning/alerting/`
+- **Email Notifications** - Alerts sent via SMTP (credentials from `/etc/soar/env` or `/etc/soar/env-staging`)
+- **Template Files** - Use `.template` suffix for files with credential placeholders (e.g., `contact-points.yml.template`)
+- **Deployment** - `soar-deploy` script automatically processes templates and installs configs
+- **Documentation** - See `infrastructure/GRAFANA-ALERTING.md` for complete guide
+- **Active Alerts:**
+  - OGN Message Ingestion Rate Too Low (critical: < 1 msg/min for 2 minutes)
+  - OGN Ingest Service Disconnected (critical: connection gauge = 0)
+  - OGN NATS Publishing Errors (warning: error rate > 0.1/min for 3 minutes)
+- **NEVER commit credentials** - Template files use placeholders, actual values extracted during deployment
+
 ### Frontend Development Standards
 
 #### Static Site Generation (CRITICAL)

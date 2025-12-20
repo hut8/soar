@@ -1,0 +1,200 @@
+# Grafana Alerting Rules Configuration
+# This defines the alert conditions and thresholds for SOAR monitoring
+
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: soar-ogn-ingest-alerts
+    folder: SOAR
+    interval: 1m
+    rules:
+      # Alert when OGN/APRS message ingestion rate drops below 1 message per minute
+      - uid: ogn_message_rate_low
+        title: OGN Message Ingestion Rate Too Low
+        condition: C
+        data:
+          # Query A: Get the rate of APRS messages processed per minute
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: Prometheus
+            model:
+              expr: rate(aprs_raw_message_processed_total[1m]) * 60
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+
+          # Query B: Get the rate of messages published to NATS per minute
+          - refId: B
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: Prometheus
+            model:
+              expr: rate(aprs_nats_published_total[1m]) * 60
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+
+          # Condition C: Alert if either metric is below 1 msg/min
+          - refId: C
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 1
+                    type: lt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              hide: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+
+        # Alert if condition persists for 2 minutes
+        for: 2m
+        noDataState: Alerting
+        execErrState: Alerting
+        annotations:
+          summary: OGN/APRS message ingestion rate is critically low
+          description: 'OGN ingestion rate: {{ printf "%.2f" $values.A.Value }} messages/min (threshold: 1.0 msg/min). Check if ingest-ogn service is running and connected to APRS-IS.'
+        labels:
+          severity: critical
+          service: ogn-ingest
+          team: ops
+
+      # Alert when OGN ingest service is disconnected
+      - uid: ogn_service_disconnected
+        title: OGN Ingest Service Disconnected
+        condition: B
+        data:
+          # Query A: Check if APRS connection is established
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: Prometheus
+            model:
+              expr: aprs_connection_connected
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+
+          # Condition B: Alert if connection gauge is 0 (disconnected)
+          - refId: B
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0.5
+                    type: lt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              hide: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: threshold
+
+        for: 1m
+        noDataState: Alerting
+        execErrState: Alerting
+        annotations:
+          summary: OGN/APRS ingest service is disconnected
+          description: 'The OGN ingest service has lost connection to APRS-IS. Check service status and network connectivity.'
+        labels:
+          severity: critical
+          service: ogn-ingest
+          team: ops
+
+      # Alert when NATS publishing errors are occurring
+      - uid: ogn_nats_publish_errors
+        title: OGN NATS Publishing Errors
+        condition: B
+        data:
+          # Query A: Get the rate of NATS publish errors
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: Prometheus
+            model:
+              expr: rate(aprs_nats_publish_error_total[5m]) * 60
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+
+          # Condition B: Alert if error rate > 0.1 errors/min
+          - refId: B
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0.1
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              hide: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: threshold
+
+        for: 3m
+        noDataState: OK
+        execErrState: Alerting
+        annotations:
+          summary: OGN ingest service is experiencing NATS publishing errors
+          description: 'NATS publish error rate: {{ printf "%.2f" $values.A.Value }} errors/min. Check NATS connectivity and queue depth.'
+        labels:
+          severity: warning
+          service: ogn-ingest
+          team: ops

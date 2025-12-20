@@ -443,6 +443,85 @@ if [ -d "$DEPLOY_DIR/grafana-provisioning" ]; then
     else
         log_warn "grafana user not found, skipping ownership change"
     fi
+
+    # Install Grafana alerting configuration with SMTP credentials substitution
+    if [ -d "$DEPLOY_DIR/grafana-provisioning/alerting" ]; then
+        log_info "Installing Grafana alerting configuration..."
+        mkdir -p /etc/grafana/provisioning/alerting
+
+        # Source environment file to get SMTP config and alert email
+        if [ -f "$ENV_FILE" ]; then
+            set -a
+            source "$ENV_FILE"
+            set +a
+
+            # Extract variables with defaults
+            ALERT_EMAIL="${EMAIL_TO:-ops@example.com}"
+            SMTP_HOST="${SMTP_SERVER:-smtp.example.com}"
+            SMTP_PORT_VAL="${SMTP_PORT:-587}"
+            SMTP_USER="${SMTP_USERNAME:-noreply}"
+            SMTP_PASS="${SMTP_PASSWORD:-}"
+            FROM_ADDR="${FROM_EMAIL:-noreply@example.com}"
+            FROM_NAME_VAL="${FROM_NAME:-SOAR System}"
+
+            # Process contact-points.yml.template if it exists
+            if [ -f "$DEPLOY_DIR/grafana-provisioning/alerting/contact-points.yml.template" ]; then
+                log_info "Processing contact-points.yml.template with SMTP config from $ENV_FILE..."
+                sed -e "s|{{ALERT_EMAIL}}|$ALERT_EMAIL|g" \
+                    "$DEPLOY_DIR/grafana-provisioning/alerting/contact-points.yml.template" \
+                    >! /etc/grafana/provisioning/alerting/contact-points.yml
+                chmod 640 /etc/grafana/provisioning/alerting/contact-points.yml
+                log_info "Alert contact point configured for: $ALERT_EMAIL"
+            fi
+
+            # Copy other alerting config files as-is (no template processing needed)
+            for alerting_file in "$DEPLOY_DIR/grafana-provisioning/alerting"/*.yml; do
+                if [ -f "$alerting_file" ]; then
+                    filename=$(basename "$alerting_file")
+                    # Skip template files
+                    if [[ "$filename" != *.template ]]; then
+                        cp "$alerting_file" /etc/grafana/provisioning/alerting/
+                        chmod 644 "/etc/grafana/provisioning/alerting/$filename"
+                        log_info "Installed alerting config: $filename"
+                    fi
+                fi
+            done
+
+            # Process Grafana SMTP configuration via systemd drop-in
+            if [ -f "$DEPLOY_DIR/systemd/grafana-server.service.d-smtp.conf.template" ]; then
+                log_info "Configuring Grafana SMTP settings..."
+                mkdir -p /etc/systemd/system/grafana-server.service.d
+
+                sed -e "s|{{SMTP_SERVER}}|$SMTP_HOST|g" \
+                    -e "s|{{SMTP_PORT}}|$SMTP_PORT_VAL|g" \
+                    -e "s|{{SMTP_USERNAME}}|$SMTP_USER|g" \
+                    -e "s|{{SMTP_PASSWORD}}|$SMTP_PASS|g" \
+                    -e "s|{{FROM_EMAIL}}|$FROM_ADDR|g" \
+                    -e "s|{{FROM_NAME}}|$FROM_NAME_VAL|g" \
+                    "$DEPLOY_DIR/systemd/grafana-server.service.d-smtp.conf.template" \
+                    >! /etc/systemd/system/grafana-server.service.d/smtp.conf
+                chmod 640 /etc/systemd/system/grafana-server.service.d/smtp.conf
+                log_info "Grafana SMTP configured: $SMTP_HOST:$SMTP_PORT_VAL as $FROM_ADDR"
+
+                # Need to reload systemd and restart Grafana for environment changes
+                systemctl daemon-reload
+                GRAFANA_NEEDS_RESTART=true
+            fi
+
+            # Set ownership to grafana user
+            if id "grafana" &>/dev/null; then
+                chown -R grafana:grafana /etc/grafana/provisioning/alerting
+                log_info "Grafana alerting configuration installed successfully"
+                GRAFANA_NEEDS_RESTART=true
+            else
+                log_warn "grafana user not found, skipping ownership change"
+            fi
+        else
+            log_warn "Environment file $ENV_FILE not found, skipping alerting configuration"
+        fi
+    else
+        log_info "No alerting configuration found in deployment, skipping"
+    fi
 fi
 
 # Install Grafana dashboard JSON files
