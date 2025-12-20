@@ -516,18 +516,48 @@ The responses should contain:
 
 ## Environment Variables for SOAR
 
-Add to your `.env` or environment configuration:
+Add the Pelias API endpoint to your environment configuration files:
+
+### Staging Configuration
+**File:** `/etc/soar/env-staging`
 
 ```bash
-# Pelias API endpoint
+PELIAS_BASE_URL=https://pelias.staging.glider.flights
+```
+
+### Production Configuration
+**File:** `/etc/soar/env`
+
+```bash
+PELIAS_BASE_URL=https://pelias.glider.flights
+```
+
+### Local Development
+**File:** `.env` or environment configuration
+
+```bash
+# For local development with Pelias running on localhost
 PELIAS_BASE_URL=http://localhost:4000
 ```
 
-If running on a separate server:
+**Important:** After adding or changing the `PELIAS_BASE_URL`, restart the SOAR services:
 
 ```bash
-PELIAS_BASE_URL=http://pelias.internal.example.com:4000
+# Staging
+sudo systemctl restart soar-run.service soar-web.service
+
+# Production
+sudo systemctl restart soar-run.service soar-web.service
 ```
+
+Verify Pelias is being used by checking the logs:
+```bash
+sudo journalctl -u soar-run.service -f | grep -i pelias
+```
+
+You should see:
+- `Using Pelias geocoding server at: <url>`
+- `Successfully reverse geocoded with Pelias: (lat, lon)`
 
 ## Maintenance
 
