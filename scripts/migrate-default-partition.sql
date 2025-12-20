@@ -26,9 +26,11 @@ FROM fixes_default;
 
 COMMIT;
 
--- Step 2: Detach the DEFAULT partition (CONCURRENTLY for non-blocking)
+-- Step 2: Detach the DEFAULT partition
+-- NOTE: Cannot use CONCURRENTLY when a DEFAULT partition exists (PostgreSQL limitation)
+-- This will briefly lock the parent table, but should be quick since we're just detaching
 SELECT 'Detaching fixes_default partition...' as step;
-ALTER TABLE fixes DETACH PARTITION fixes_default CONCURRENTLY;
+ALTER TABLE fixes DETACH PARTITION fixes_default;
 
 -- Verify detachment completed
 SELECT 'Verifying detachment...' as step;
@@ -53,33 +55,61 @@ FOR VALUES FROM ('2025-12-20 01:00:00+01') TO ('2025-12-21 01:00:00+01');
 
 -- Step 4: Move data from detached fixes_default into proper partitions
 -- We'll do this in batches to avoid long locks
+-- Note: Exclude generated columns (location, location_geom) - they'll be auto-generated
 
 SELECT 'Migrating data for 2025-12-18...' as step;
 WITH moved_rows AS (
     DELETE FROM fixes_default
     WHERE received_at >= '2025-12-18 01:00:00+01'
       AND received_at < '2025-12-19 01:00:00+01'
-    RETURNING *
+    RETURNING id, source, aprs_type, via, timestamp, latitude, longitude,
+              altitude_msl_feet, flight_number, squawk, ground_speed_knots, track_degrees,
+              climb_fpm, turn_rate_rot, flight_id, aircraft_id, received_at, is_active,
+              altitude_agl_feet, receiver_id, raw_message_id, altitude_agl_valid,
+              time_gap_seconds, source_metadata
 )
-INSERT INTO fixes SELECT * FROM moved_rows;
+INSERT INTO fixes (id, source, aprs_type, via, timestamp, latitude, longitude,
+                   altitude_msl_feet, flight_number, squawk, ground_speed_knots, track_degrees,
+                   climb_fpm, turn_rate_rot, flight_id, aircraft_id, received_at, is_active,
+                   altitude_agl_feet, receiver_id, raw_message_id, altitude_agl_valid,
+                   time_gap_seconds, source_metadata)
+SELECT * FROM moved_rows;
 
 SELECT 'Migrating data for 2025-12-19...' as step;
 WITH moved_rows AS (
     DELETE FROM fixes_default
     WHERE received_at >= '2025-12-19 01:00:00+01'
       AND received_at < '2025-12-20 01:00:00+01'
-    RETURNING *
+    RETURNING id, source, aprs_type, via, timestamp, latitude, longitude,
+              altitude_msl_feet, flight_number, squawk, ground_speed_knots, track_degrees,
+              climb_fpm, turn_rate_rot, flight_id, aircraft_id, received_at, is_active,
+              altitude_agl_feet, receiver_id, raw_message_id, altitude_agl_valid,
+              time_gap_seconds, source_metadata
 )
-INSERT INTO fixes SELECT * FROM moved_rows;
+INSERT INTO fixes (id, source, aprs_type, via, timestamp, latitude, longitude,
+                   altitude_msl_feet, flight_number, squawk, ground_speed_knots, track_degrees,
+                   climb_fpm, turn_rate_rot, flight_id, aircraft_id, received_at, is_active,
+                   altitude_agl_feet, receiver_id, raw_message_id, altitude_agl_valid,
+                   time_gap_seconds, source_metadata)
+SELECT * FROM moved_rows;
 
 SELECT 'Migrating data for 2025-12-20...' as step;
 WITH moved_rows AS (
     DELETE FROM fixes_default
     WHERE received_at >= '2025-12-20 01:00:00+01'
       AND received_at < '2025-12-21 01:00:00+01'
-    RETURNING *
+    RETURNING id, source, aprs_type, via, timestamp, latitude, longitude,
+              altitude_msl_feet, flight_number, squawk, ground_speed_knots, track_degrees,
+              climb_fpm, turn_rate_rot, flight_id, aircraft_id, received_at, is_active,
+              altitude_agl_feet, receiver_id, raw_message_id, altitude_agl_valid,
+              time_gap_seconds, source_metadata
 )
-INSERT INTO fixes SELECT * FROM moved_rows;
+INSERT INTO fixes (id, source, aprs_type, via, timestamp, latitude, longitude,
+                   altitude_msl_feet, flight_number, squawk, ground_speed_knots, track_degrees,
+                   climb_fpm, turn_rate_rot, flight_id, aircraft_id, received_at, is_active,
+                   altitude_agl_feet, receiver_id, raw_message_id, altitude_agl_valid,
+                   time_gap_seconds, source_metadata)
+SELECT * FROM moved_rows;
 
 -- Step 5: Verify migration
 SELECT 'Verification after migration:' as step;

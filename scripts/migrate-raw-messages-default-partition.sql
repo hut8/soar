@@ -26,9 +26,11 @@ FROM raw_messages_default;
 
 COMMIT;
 
--- Step 2: Detach the DEFAULT partition (CONCURRENTLY for non-blocking)
+-- Step 2: Detach the DEFAULT partition
+-- NOTE: Cannot use CONCURRENTLY when a DEFAULT partition exists (PostgreSQL limitation)
+-- This will briefly lock the parent table, but should be quick since we're just detaching
 SELECT 'Detaching raw_messages_default partition...' as step;
-ALTER TABLE raw_messages DETACH PARTITION raw_messages_default CONCURRENTLY;
+ALTER TABLE raw_messages DETACH PARTITION raw_messages_default;
 
 -- Verify detachment completed
 SELECT 'Verifying detachment...' as step;

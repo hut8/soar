@@ -27,27 +27,35 @@ Both tables are configured with `ignore_default_data = true`, meaning DEFAULT pa
 
 This migration will:
 1. ✅ **Preserve all data** (no data loss)
-2. ✅ Detach DEFAULT partitions non-blocking (CONCURRENTLY)
+2. ✅ Detach DEFAULT partitions (**NOTE**: Cannot use CONCURRENTLY when DEFAULT exists - PostgreSQL limitation)
 3. ✅ Create missing partitions (Dec 18, 19, 20)
-4. ✅ Move data from DEFAULT into proper partitions
+4. ✅ Move data from DEFAULT into proper partitions (excluding generated columns)
 5. ✅ Drop empty DEFAULT partitions
 6. ✅ Resume normal partman operation
 
+**Important Notes:**
+- `DETACH PARTITION CONCURRENTLY` is not supported when a DEFAULT partition exists on the parent table
+- The migration uses regular `DETACH PARTITION` which will briefly lock the parent table
+- Generated columns (`location`, `location_geom` in fixes table) are auto-generated and excluded from INSERT
+
 ## Execution Steps
 
-### Step 1: Test on Staging First (REQUIRED)
+### Step 1: Test on Staging First ✅ COMPLETED
 
-```bash
+**Test Results (2025-12-20):**
+- ✅ Successfully detached and dropped `fixes_default` (was empty on staging)
+- ✅ Successfully detached and dropped `raw_messages_default` (was empty on staging)
+- ✅ Partman maintenance runs without errors
+- ✅ New partitions created successfully (e.g., raw_messages_p20251224)
+- ✅ No DEFAULT partitions re-created (as expected with `ignore_default_data = true`)
+
+**Note:** Staging had empty DEFAULT partitions, so data migration was not tested. Production has 54M+94M rows that will be migrated.
+
+~~```bash
 # On your local machine
 psql -U soar -d soar_staging -f scripts/migrate-default-partition.sql
 psql -U soar -d soar_staging -f scripts/migrate-raw-messages-default-partition.sql
-```
-
-**Verify**:
-- Check that all data moved correctly
-- Confirm DEFAULT partitions are empty/dropped
-- Run partman maintenance: `CALL partman.run_maintenance_proc();`
-- Ensure no errors
+```~~
 
 ### Step 2: Execute on Production
 
