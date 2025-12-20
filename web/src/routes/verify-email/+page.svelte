@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { authApi } from '$lib/api/auth';
+	import { auth } from '$lib/stores/auth';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 
@@ -27,14 +28,16 @@
 			loading = true;
 			error = '';
 
-			await authApi.verifyEmail(token);
+			const response = await authApi.verifyEmail(token);
 			success = true;
 
-			// Redirect to login after 3 seconds
+			// Log the user in with the token from the response
+			auth.login(response.user, response.token);
+
+			// Redirect to home page after 2 seconds
 			setTimeout(() => {
-				const message = 'Email verified successfully. Please log in.';
-				goto(`/login?message=${encodeURIComponent(message)}`);
-			}, 3000);
+				goto(resolve('/'));
+			}, 2000);
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to verify email';
 			success = false;
@@ -68,8 +71,8 @@
 					</div>
 					<h2 class="text-xl font-semibold text-success-500">Email Verified!</h2>
 					<p class="text-surface-600-300-token">
-						Your email address has been successfully verified. You will be redirected to the login
-						page shortly.
+						Your email address has been successfully verified. You are now logged in and will be
+						redirected to the home page shortly.
 					</p>
 				</div>
 			{:else if error}
