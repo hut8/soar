@@ -316,7 +316,7 @@ for file_basename in "${ALL_SOAR_FILES[@]}"; do
         log_warn "  sudo systemctl stop $file_basename 2>/dev/null || true"
         log_warn "  sudo systemctl disable $file_basename 2>/dev/null || true"
         log_warn "  sudo rm -f /etc/systemd/system/$file_basename"
-        ((OBSOLETE_FILES_FOUND++))
+        ((OBSOLETE_FILES_FOUND++)) || true
     fi
 done
 
