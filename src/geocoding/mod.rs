@@ -1,5 +1,6 @@
 mod google_maps;
 mod nominatim;
+mod pelias;
 mod photon;
 
 use ::google_maps::Client as GoogleMapsClient;
@@ -13,12 +14,14 @@ use crate::locations::Point;
 
 use self::google_maps::GoogleMapsGeocoderClient;
 use nominatim::NominatimClient;
+use pelias::PeliasClient;
 use photon::PhotonClient;
 
 /// Geocoding service that was used to successfully geocode an address
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GeocodingService {
     Photon,
+    Pelias,
     Nominatim,
     GoogleMaps,
 }
@@ -86,6 +89,7 @@ pub struct ReverseGeocodeResult {
 pub struct Geocoder {
     nominatim: Option<NominatimClient>,
     photon: Option<PhotonClient>,
+    pelias: Option<PeliasClient>,
     google_maps: Option<GoogleMapsGeocoderClient>,
 }
 
@@ -114,6 +118,20 @@ impl Geocoder {
             }
         } else {
             debug!("PHOTON_BASE_URL not set, Photon geocoding unavailable");
+            None
+        };
+
+        // Initialize Pelias client if configured
+        let pelias = if let Ok(url) = env::var("PELIAS_BASE_URL") {
+            if !url.trim().is_empty() {
+                debug!("Using Pelias geocoding server at: {}", url);
+                Some(PeliasClient::new(client.clone(), url.trim().to_string()))
+            } else {
+                debug!("PELIAS_BASE_URL is set but empty, skipping Pelias");
+                None
+            }
+        } else {
+            debug!("PELIAS_BASE_URL not set, Pelias geocoding unavailable");
             None
         };
 
@@ -147,6 +165,7 @@ impl Geocoder {
         Self {
             nominatim,
             photon,
+            pelias,
             google_maps,
         }
     }
@@ -169,6 +188,20 @@ impl Geocoder {
             }
         } else {
             debug!("PHOTON_BASE_URL not set, Photon geocoding unavailable");
+            None
+        };
+
+        // Initialize Pelias client if configured
+        let pelias = if let Ok(url) = env::var("PELIAS_BASE_URL") {
+            if !url.trim().is_empty() {
+                debug!("Using Pelias geocoding server at: {}", url);
+                Some(PeliasClient::new(client.clone(), url.trim().to_string()))
+            } else {
+                debug!("PELIAS_BASE_URL is set but empty, skipping Pelias");
+                None
+            }
+        } else {
+            debug!("PELIAS_BASE_URL not set, Pelias geocoding unavailable");
             None
         };
 
@@ -198,6 +231,7 @@ impl Geocoder {
         Self {
             nominatim,
             photon,
+            pelias,
             google_maps,
         }
     }
@@ -266,6 +300,26 @@ impl Geocoder {
             }
         }
 
+        // Try Pelias (city-level geocoding with Who's on First data)
+        if let Some(pelias) = &self.pelias {
+            match pelias.reverse_geocode(latitude, longitude).await {
+                Ok(result) => {
+                    debug!(
+                        "Successfully reverse geocoded with Pelias: ({}, {})",
+                        latitude, longitude
+                    );
+                    return Ok(result);
+                }
+                Err(pelias_error) => {
+                    debug!(
+                        "Pelias reverse geocoding failed for ({}, {}): {}",
+                        latitude, longitude, pelias_error
+                    );
+                    // Continue to fallback services
+                }
+            }
+        }
+
         // Fallback to Nominatim
         if let Some(nominatim) = &self.nominatim {
             match nominatim.reverse_geocode(latitude, longitude).await {
@@ -306,7 +360,7 @@ impl Geocoder {
                         latitude, longitude, google_error
                     );
                     return Err(anyhow!(
-                        "All reverse geocoding services failed for ({}, {}). Photon, Nominatim and Google Maps all failed.",
+                        "All reverse geocoding services failed for ({}, {}). Photon, Pelias, Nominatim and Google Maps all failed.",
                         latitude,
                         longitude
                     ));
@@ -322,6 +376,7 @@ impl Geocoder {
     }
 
     /// Geocode an address string to a WGS84 coordinate with Photon → Nominatim → Google Maps fallback
+    /// Note: Pelias is not used for forward geocoding, only reverse geocoding
     pub async fn geocode_address(&self, address: &str) -> Result<GeocodeResult> {
         if address.trim().is_empty() {
             return Err(anyhow!("Address cannot be empty"));
