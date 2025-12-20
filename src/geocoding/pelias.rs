@@ -269,6 +269,21 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_pelias_london_center() {
+        let json_data = include_str!("test_data/pelias_london_center.json");
+        let result =
+            parse_test_response(json_data).expect("Failed to parse central London response");
+
+        // Coordinates 51.5007°N 0.1245°W should resolve to London
+        assert_eq!(result.city, Some("London".to_string()));
+        assert_eq!(result.state, Some("Greater London".to_string()));
+        assert_eq!(result.country, Some("GB".to_string()));
+        assert!(result.display_name.contains("London"));
+        assert_eq!(result.street1, None);
+        assert_eq!(result.zip_code, None);
+    }
+
+    #[test]
     fn test_parse_pelias_tokyo() {
         let json_data = include_str!("test_data/pelias_tokyo.json");
         let result = parse_test_response(json_data).expect("Failed to parse Tokyo response");
