@@ -52,151 +52,102 @@ Pelias is a modular geocoding platform with multiple services. For SOAR, we're u
 
 ## Installation Steps
 
-### 1. Install OpenSearch (Bare Metal)
+### 1. Install Elasticsearch or OpenSearch (Bare Metal)
 
-We run OpenSearch on bare metal for better performance and resource control.
+Pelias works with either **Elasticsearch** or **OpenSearch**. Both are essentially the same technology - OpenSearch is an open-source fork of Elasticsearch 7.10.2. Choose based on your preference:
 
-#### Install Java 17
+- **Elasticsearch**: Latest features, widely used, proprietary license
+- **OpenSearch**: Fully open source (Apache 2.0), AWS-backed
+
+#### Option A: Install Elasticsearch (Recommended for simplicity)
 
 ```bash
+# Install prerequisites
 sudo apt update
-sudo apt install openjdk-17-jdk
-java -version
-```
+sudo apt install apt-transport-https gpg
 
-#### Download and Install OpenSearch
+# Add Elasticsearch GPG key and repository
+wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | sudo gpg --dearmor -o /usr/share/keyrings/elasticsearch-keyring.gpg
 
-```bash
-# Download OpenSearch
-cd /tmp
-wget https://artifacts.opensearch.org/releases/bundle/opensearch/2.11.0/opensearch-2.11.0-linux-x64.tar.gz
+echo "deb [signed-by=/usr/share/keyrings/elasticsearch-keyring.gpg] https://artifacts.elastic.co/packages/8.x/apt stable main" | sudo tee /etc/apt/sources.list.d/elastic-8.x.list
 
-# Extract to /opt
-sudo tar -xzf opensearch-2.11.0-linux-x64.tar.gz -C /opt/
-sudo mv /opt/opensearch-2.11.0 /opt/opensearch
+# Install Elasticsearch
+sudo apt update
+sudo apt install elasticsearch
 
-# Create opensearch user
-sudo useradd --system --home-dir /opt/opensearch --shell /bin/false opensearch
-sudo chown -R opensearch:opensearch /opt/opensearch
+# Install required ICU analysis plugin
+sudo /usr/share/elasticsearch/bin/elasticsearch-plugin install analysis-icu
 
-# Create data and logs directories
-sudo mkdir -p /var/lib/opensearch
-sudo mkdir -p /var/log/opensearch
-sudo chown opensearch:opensearch /var/lib/opensearch
-sudo chown opensearch:opensearch /var/log/opensearch
-```
+# Configure for Pelias
+sudo tee -a /etc/elasticsearch/elasticsearch.yml > /dev/null <<EOF
 
-#### Configure OpenSearch for Pelias
-
-Edit `/opt/opensearch/config/opensearch.yml`:
-
-```yaml
-# Cluster name
-cluster.name: pelias-cluster
-
-# Node name
-node.name: pelias-node-1
-
-# Paths
-path.data: /var/lib/opensearch
-path.logs: /var/log/opensearch
-
-# Network
-network.host: 127.0.0.1
-http.port: 9200
-
-# Discovery (single node)
+# Pelias configuration
 discovery.type: single-node
-
-# Disable security for local development
-# WARNING: Enable security for production!
-plugins.security.disabled: true
-
-# Memory settings (adjust based on available RAM)
-# Set to 50% of available RAM, max 32GB
-# Configured via jvm.options
-
-# Performance tuning for Pelias
 indices.query.bool.max_clause_count: 4096
-```
 
-#### Configure JVM Options
+# Disable security for local development (WARNING: Enable for production!)
+xpack.security.enabled: false
+xpack.security.enrollment.enabled: false
+xpack.security.http.ssl.enabled: false
+xpack.security.transport.ssl.enabled: false
+EOF
 
-Edit `/opt/opensearch/config/jvm.options`:
+# Set JVM heap size (50% of RAM, max 32GB)
+# Edit /etc/elasticsearch/jvm.options.d/heap.options
+echo "-Xms8g" | sudo tee /etc/elasticsearch/jvm.options.d/heap.options
+echo "-Xmx8g" | sudo tee -a /etc/elasticsearch/jvm.options.d/heap.options
 
-```bash
-# Set heap size to 50% of available RAM (max 32GB)
-# For 32GB RAM system:
--Xms16g
--Xmx16g
-
-# For 16GB RAM system:
-# -Xms8g
-# -Xmx8g
-
-# GC settings for better performance
--XX:+UseG1GC
--XX:G1HeapRegionSize=32m
--XX:MaxGCPauseMillis=200
-```
-
-#### Create systemd Service
-
-Create `/etc/systemd/system/opensearch.service`:
-
-```ini
-[Unit]
-Description=OpenSearch
-Documentation=https://opensearch.org/docs/latest/
-Wants=network-online.target
-After=network-online.target
-
-[Service]
-Type=notify
-RuntimeDirectory=opensearch
-PrivateTmp=true
-Environment=OPENSEARCH_HOME=/opt/opensearch
-Environment=OPENSEARCH_PATH_CONF=/opt/opensearch/config
-Environment=OPENSEARCH_JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
-WorkingDirectory=/opt/opensearch
-
-User=opensearch
-Group=opensearch
-
-ExecStart=/opt/opensearch/bin/opensearch
-
-# Restart policy
-Restart=on-failure
-RestartSec=10s
-
-# File descriptor limits
-LimitNOFILE=65535
-LimitNPROC=4096
-LimitAS=infinity
-LimitFSIZE=infinity
-
-# Security settings
-PrivateDevices=true
-ProtectSystem=full
-ProtectHome=true
-NoNewPrivileges=true
-
-[Install]
-WantedBy=multi-user.target
-```
-
-#### Start OpenSearch
-
-```bash
-# Reload systemd
+# Enable and start service
 sudo systemctl daemon-reload
+sudo systemctl enable elasticsearch
+sudo systemctl start elasticsearch
 
-# Enable and start OpenSearch
+# Verify it's running
+curl http://localhost:9200
+```
+
+#### Option B: Install OpenSearch
+
+```bash
+# Install prerequisites
+sudo apt update
+sudo apt install apt-transport-https gpg
+
+# Add OpenSearch GPG key and repository
+curl -o- https://artifacts.opensearch.org/publickeys/opensearch.pgp | sudo gpg --dearmor --batch --yes -o /usr/share/keyrings/opensearch-keyring
+
+echo "deb [signed-by=/usr/share/keyrings/opensearch-keyring] https://artifacts.opensearch.org/releases/bundle/opensearch/2.x/apt stable main" | sudo tee /etc/apt/sources.list.d/opensearch-2.x.list
+
+# Install OpenSearch
+sudo apt update
+sudo apt install opensearch
+
+# Install required ICU analysis plugin
+sudo /usr/share/opensearch/bin/opensearch-plugin install analysis-icu
+
+# Configure for Pelias
+sudo tee -a /etc/opensearch/opensearch.yml > /dev/null <<EOF
+
+# Pelias configuration
+discovery.type: single-node
+indices.query.bool.max_clause_count: 4096
+
+# Disable security for local development (WARNING: Enable for production!)
+plugins.security.disabled: true
+EOF
+
+# Set JVM heap size (50% of RAM, max 32GB)
+# Edit /etc/opensearch/jvm.options
+echo "-Xms8g" | sudo tee /etc/opensearch/jvm.options.d/heap.options
+echo "-Xmx8g" | sudo tee -a /etc/opensearch/jvm.options.d/heap.options
+
+# Enable and start service
+sudo systemctl daemon-reload
 sudo systemctl enable opensearch
 sudo systemctl start opensearch
 
-# Check status
-sudo systemctl status opensearch
+# Verify it's running
+curl http://localhost:9200
 
 # Verify OpenSearch is running
 curl http://localhost:9200/
