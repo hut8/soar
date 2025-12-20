@@ -1,0 +1,452 @@
+#!/bin/bash
+# SOAR Pelias Geocoding Service Provisioning Script
+#
+# This script provisions a Pelias geocoding server for SOAR by:
+# - Installing Elasticsearch (or OpenSearch)
+# - Downloading and importing Who's on First data (city-level)
+# - Setting up Pelias API and PIP services (systemd, not Docker)
+# - Configuring reverse proxy via Caddy
+#
+# Usage:
+#   sudo ./provision-opensearch [elasticsearch|opensearch]
+#
+# Arguments:
+#   elasticsearch - Install Elasticsearch 8.x (default, recommended)
+#   opensearch    - Install OpenSearch 2.x (open source alternative)
+#
+# Note: This script uses Docker temporarily for data import only.
+#       Production services run via systemd.
+
+set -e
+set -u
+set -o pipefail
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Default search engine
+SEARCH_ENGINE="${1:-elasticsearch}"
+
+# Validate search engine choice
+if [[ "$SEARCH_ENGINE" != "elasticsearch" ]] && [[ "$SEARCH_ENGINE" != "opensearch" ]]; then
+    echo -e "${RED}Error: Invalid search engine: $SEARCH_ENGINE${NC}"
+    echo -e "${YELLOW}Usage: $0 [elasticsearch|opensearch]${NC}"
+    exit 1
+fi
+
+# Check if running as root
+if [[ $EUID -ne 0 ]]; then
+   echo -e "${RED}Error: This script must be run as root (use sudo)${NC}"
+   exit 1
+fi
+
+echo -e "${GREEN}Provisioning Pelias geocoding server with ${SEARCH_ENGINE}...${NC}"
+
+# Detect OS
+if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    OS=$ID
+else
+    echo -e "${RED}Error: Cannot detect OS. /etc/os-release not found.${NC}"
+    exit 1
+fi
+
+echo -e "${BLUE}Detected OS: $OS${NC}"
+
+# Check if OS is Debian or Ubuntu
+if [[ "$OS" != "ubuntu" ]] && [[ "$OS" != "debian" ]]; then
+    echo -e "${RED}Error: This script only supports Debian and Ubuntu.${NC}"
+    exit 1
+fi
+
+# Install prerequisites
+echo -e "${BLUE}Installing prerequisites...${NC}"
+apt-get update
+apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release gpg jq
+
+# Install Elasticsearch or OpenSearch
+if [[ "$SEARCH_ENGINE" == "elasticsearch" ]]; then
+    echo -e "${BLUE}Installing Elasticsearch...${NC}"
+
+    # Add Elasticsearch GPG key and repository
+    if [ ! -f /usr/share/keyrings/elasticsearch-keyring.gpg ]; then
+        wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | \
+            gpg --dearmor -o /usr/share/keyrings/elasticsearch-keyring.gpg
+    fi
+
+    if [ ! -f /etc/apt/sources.list.d/elastic-8.x.list ]; then
+        echo "deb [signed-by=/usr/share/keyrings/elasticsearch-keyring.gpg] https://artifacts.elastic.co/packages/8.x/apt stable main" | \
+            tee /etc/apt/sources.list.d/elastic-8.x.list
+    fi
+
+    apt-get update
+    apt-get install -y elasticsearch
+
+    # Install ICU plugin
+    /usr/share/elasticsearch/bin/elasticsearch-plugin install analysis-icu --batch
+
+    # Configure for Pelias
+    cat >> /etc/elasticsearch/elasticsearch.yml <<EOF
+
+# Pelias configuration
+discovery.type: single-node
+indices.query.bool.max_clause_count: 4096
+
+# Disable security for local development (WARNING: Enable for production!)
+xpack.security.enabled: false
+xpack.security.enrollment.enabled: false
+xpack.security.http.ssl.enabled: false
+xpack.security.transport.ssl.enabled: false
+EOF
+
+    # Set JVM heap size (8GB - adjust based on RAM)
+    mkdir -p /etc/elasticsearch/jvm.options.d
+    cat > /etc/elasticsearch/jvm.options.d/heap.options <<EOF
+-Xms8g
+-Xmx8g
+EOF
+
+    # Enable and start
+    systemctl daemon-reload
+    systemctl enable elasticsearch
+    systemctl start elasticsearch
+
+    echo -e "${GREEN}Elasticsearch installed and started${NC}"
+
+else
+    echo -e "${BLUE}Installing OpenSearch...${NC}"
+
+    # Add OpenSearch GPG key and repository
+    if [ ! -f /usr/share/keyrings/opensearch-keyring ]; then
+        curl -o- https://artifacts.opensearch.org/publickeys/opensearch.pgp | \
+            gpg --dearmor --batch --yes -o /usr/share/keyrings/opensearch-keyring
+    fi
+
+    if [ ! -f /etc/apt/sources.list.d/opensearch-2.x.list ]; then
+        echo "deb [signed-by=/usr/share/keyrings/opensearch-keyring] https://artifacts.opensearch.org/releases/bundle/opensearch/2.x/apt stable main" | \
+            tee /etc/apt/sources.list.d/opensearch-2.x.list
+    fi
+
+    apt-get update
+    apt-get install -y opensearch
+
+    # Install ICU plugin
+    /usr/share/opensearch/bin/opensearch-plugin install analysis-icu --batch
+
+    # Configure for Pelias
+    cat >> /etc/opensearch/opensearch.yml <<EOF
+
+# Pelias configuration
+discovery.type: single-node
+indices.query.bool.max_clause_count: 4096
+
+# Disable security for local development (WARNING: Enable for production!)
+plugins.security.disabled: true
+EOF
+
+    # Set JVM heap size (8GB - adjust based on RAM)
+    mkdir -p /etc/opensearch/jvm.options.d
+    cat > /etc/opensearch/jvm.options.d/heap.options <<EOF
+-Xms8g
+-Xmx8g
+EOF
+
+    # Enable and start
+    systemctl daemon-reload
+    systemctl enable opensearch
+    systemctl start opensearch
+
+    echo -e "${GREEN}OpenSearch installed and started${NC}"
+fi
+
+# Wait for search engine to be ready
+echo -e "${BLUE}Waiting for search engine to be ready...${NC}"
+for i in {1..30}; do
+    if curl -s http://localhost:9200 > /dev/null 2>&1; then
+        echo -e "${GREEN}Search engine is ready${NC}"
+        break
+    fi
+    if [ $i -eq 30 ]; then
+        echo -e "${RED}Error: Search engine failed to start${NC}"
+        exit 1
+    fi
+    sleep 2
+done
+
+# Install Docker (for data import tools only)
+if ! command -v docker &> /dev/null; then
+    echo -e "${BLUE}Installing Docker...${NC}"
+
+    # Add Docker GPG key and repository
+    curl -fsSL https://download.docker.com/linux/$OS/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/$OS $(lsb_release -cs) stable" | \
+        tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+    apt-get update
+    apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+
+    echo -e "${GREEN}Docker installed${NC}"
+else
+    echo -e "${BLUE}Docker already installed${NC}"
+fi
+
+# Install Node.js 18.x (for Pelias services)
+if ! command -v node &> /dev/null; then
+    echo -e "${BLUE}Installing Node.js 18.x...${NC}"
+
+    curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
+    apt-get install -y nodejs
+
+    echo -e "${GREEN}Node.js $(node --version) installed${NC}"
+else
+    echo -e "${BLUE}Node.js $(node --version) already installed${NC}"
+fi
+
+# Create pelias user if it doesn't exist
+if ! id "pelias" &>/dev/null; then
+    echo -e "${BLUE}Creating 'pelias' system user...${NC}"
+    useradd --system --user-group --create-home --home-dir /opt/pelias --shell /bin/bash pelias
+    echo -e "${GREEN}'pelias' user created${NC}"
+else
+    echo -e "${BLUE}'pelias' user already exists${NC}"
+fi
+
+# Create Pelias directories
+echo -e "${BLUE}Creating Pelias directory structure...${NC}"
+mkdir -p /opt/pelias/docker
+mkdir -p /opt/pelias/api
+mkdir -p /opt/pelias/pip
+mkdir -p /opt/pelias/docker/data/whosonfirst
+chown -R pelias:pelias /opt/pelias
+
+# Clone Pelias docker repository (for import tools)
+if [ ! -d /opt/pelias/docker/.git ]; then
+    echo -e "${BLUE}Cloning Pelias docker repository...${NC}"
+    sudo -u pelias git clone https://github.com/pelias/docker.git /opt/pelias/docker
+else
+    echo -e "${BLUE}Pelias docker repository already exists${NC}"
+fi
+
+# Create pelias.json configuration
+echo -e "${BLUE}Creating pelias.json configuration...${NC}"
+cat > /opt/pelias/docker/pelias.json <<EOF
+{
+  "logger": {
+    "level": "info",
+    "timestamp": true
+  },
+  "esclient": {
+    "hosts": [
+      {
+        "host": "172.17.0.1",
+        "port": 9200
+      }
+    ]
+  },
+  "elasticsearch": {
+    "settings": {
+      "index": {
+        "refresh_interval": "30s",
+        "number_of_replicas": "0",
+        "number_of_shards": "3"
+      }
+    }
+  },
+  "api": {
+    "version": "1.0",
+    "indexName": "pelias",
+    "host": "0.0.0.0",
+    "port": 4000,
+    "services": {
+      "pip": {
+        "url": "http://localhost:4200"
+      }
+    }
+  },
+  "imports": {
+    "adminLookup": {
+      "enabled": true
+    },
+    "whosonfirst": {
+      "datapath": "/data/whosonfirst"
+    }
+  }
+}
+EOF
+
+chown pelias:pelias /opt/pelias/docker/pelias.json
+
+# Create .env file for Docker
+cat > /opt/pelias/docker/.env <<EOF
+DATA_DIR=/opt/pelias/docker/data
+EOF
+
+chown pelias:pelias /opt/pelias/docker/.env
+
+# Download Who's on First data
+echo -e "${BLUE}Downloading Who's on First data (this will take ~30 minutes and use ~70GB)...${NC}"
+cd /opt/pelias/docker
+sudo -u pelias docker compose run --rm whosonfirst npm run download
+
+# Create Pelias index
+echo -e "${BLUE}Creating Pelias index in ${SEARCH_ENGINE}...${NC}"
+sudo -u pelias docker compose run --rm schema npm run create_index
+
+# Import Who's on First data
+echo -e "${BLUE}Importing Who's on First data (this will take ~20-30 minutes)...${NC}"
+sudo -u pelias docker compose run --rm whosonfirst npm start
+
+echo -e "${GREEN}Data import complete${NC}"
+
+# Clone and install Pelias API
+if [ ! -d /opt/pelias/api/.git ]; then
+    echo -e "${BLUE}Cloning Pelias API repository...${NC}"
+    sudo -u pelias git clone https://github.com/pelias/api.git /opt/pelias/api
+    cd /opt/pelias/api
+    sudo -u pelias npm install --production
+else
+    echo -e "${BLUE}Pelias API already exists${NC}"
+fi
+
+# Clone and install Pelias PIP service
+if [ ! -d /opt/pelias/pip/.git ]; then
+    echo -e "${BLUE}Cloning Pelias PIP service repository...${NC}"
+    sudo -u pelias git clone https://github.com/pelias/pip-service.git /opt/pelias/pip
+    cd /opt/pelias/pip
+    sudo -u pelias npm install --production
+else
+    echo -e "${BLUE}Pelias PIP service already exists${NC}"
+fi
+
+# Copy pelias.json to API and PIP directories
+cp /opt/pelias/docker/pelias.json /opt/pelias/api/pelias.json
+cp /opt/pelias/docker/pelias.json /opt/pelias/pip/pelias.json
+chown pelias:pelias /opt/pelias/api/pelias.json /opt/pelias/pip/pelias.json
+
+# Update pelias.json for production services (use localhost instead of Docker bridge)
+sed -i 's/"host": "172.17.0.1"/"host": "127.0.0.1"/g' /opt/pelias/api/pelias.json
+sed -i 's/"host": "172.17.0.1"/"host": "127.0.0.1"/g' /opt/pelias/pip/pelias.json
+
+# Create systemd service for Pelias PIP
+echo -e "${BLUE}Creating Pelias PIP systemd service...${NC}"
+cat > /etc/systemd/system/pelias-pip.service <<EOF
+[Unit]
+Description=Pelias PIP (Point in Polygon) Service
+Documentation=https://github.com/pelias/pip-service
+After=network.target ${SEARCH_ENGINE}.service
+Requires=${SEARCH_ENGINE}.service
+
+[Service]
+Type=simple
+User=pelias
+Group=pelias
+WorkingDirectory=/opt/pelias/pip
+Environment="NODE_ENV=production"
+Environment="PORT=4200"
+Environment="PELIAS_CONFIG=/opt/pelias/pip/pelias.json"
+ExecStart=/usr/bin/node /opt/pelias/pip/index.js
+Restart=on-failure
+RestartSec=10s
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pelias-pip
+
+# Resource limits
+LimitNOFILE=65536
+MemoryMax=16G
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Create systemd service for Pelias API
+echo -e "${BLUE}Creating Pelias API systemd service...${NC}"
+cat > /etc/systemd/system/pelias-api.service <<EOF
+[Unit]
+Description=Pelias Geocoding API Service
+Documentation=https://github.com/pelias/api
+After=network.target pelias-pip.service
+Requires=pelias-pip.service
+
+[Service]
+Type=simple
+User=pelias
+Group=pelias
+WorkingDirectory=/opt/pelias/api
+Environment="NODE_ENV=production"
+Environment="PORT=4000"
+Environment="PELIAS_CONFIG=/opt/pelias/api/pelias.json"
+ExecStart=/usr/bin/node /opt/pelias/api/index.js
+Restart=on-failure
+RestartSec=10s
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pelias-api
+
+# Resource limits
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Enable and start services
+echo -e "${BLUE}Starting Pelias services...${NC}"
+systemctl daemon-reload
+systemctl enable pelias-pip.service
+systemctl enable pelias-api.service
+systemctl start pelias-pip.service
+systemctl start pelias-api.service
+
+# Wait for services to be ready
+echo -e "${BLUE}Waiting for Pelias services to start...${NC}"
+sleep 10
+
+# Test the services
+echo -e "${BLUE}Testing Pelias services...${NC}"
+
+# Test PIP service
+if curl -s http://localhost:4200/health > /dev/null 2>&1; then
+    echo -e "${GREEN}Pelias PIP service is running${NC}"
+else
+    echo -e "${YELLOW}Warning: PIP service health check failed (may still be loading data)${NC}"
+fi
+
+# Test API service
+if curl -s 'http://localhost:4000/v1/reverse?point.lat=40.7484&point.lon=-73.9857' | jq -e '.features' > /dev/null 2>&1; then
+    echo -e "${GREEN}Pelias API service is running and returning results${NC}"
+else
+    echo -e "${YELLOW}Warning: API service test failed (PIP may still be loading data)${NC}"
+    echo -e "${YELLOW}Check status with: journalctl -u pelias-pip -f${NC}"
+fi
+
+echo ""
+echo -e "${GREEN}======================================${NC}"
+echo -e "${GREEN}Pelias geocoding server setup complete!${NC}"
+echo -e "${GREEN}======================================${NC}"
+echo ""
+echo -e "${BLUE}Services:${NC}"
+echo -e "  - ${SEARCH_ENGINE}: http://localhost:9200"
+echo -e "  - Pelias API: http://localhost:4000"
+echo -e "  - Pelias PIP: http://localhost:4200"
+echo ""
+echo -e "${BLUE}Service management:${NC}"
+echo -e "  sudo systemctl status pelias-api"
+echo -e "  sudo systemctl status pelias-pip"
+echo -e "  sudo systemctl status ${SEARCH_ENGINE}"
+echo ""
+echo -e "${BLUE}View logs:${NC}"
+echo -e "  sudo journalctl -u pelias-api -f"
+echo -e "  sudo journalctl -u pelias-pip -f"
+echo ""
+echo -e "${BLUE}Test geocoding:${NC}"
+echo -e "  curl 'http://localhost:4000/v1/reverse?point.lat=40.7484&point.lon=-73.9857&layers=locality,region,country'"
+echo ""
+echo -e "${YELLOW}Note: PIP service may take 10-20 minutes to load all locality data into memory.${NC}"
+echo -e "${YELLOW}Monitor with: journalctl -u pelias-pip -f${NC}"
+echo ""

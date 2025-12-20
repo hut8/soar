@@ -2,12 +2,47 @@
 
 This guide covers deploying [Pelias](https://github.com/pelias/pelias), an open-source geocoding platform, specifically configured for **reverse geocoding only** using city-level data from Who's on First.
 
+## Quick Start (Automated)
+
+**For Ubuntu/Debian systems, use the automated provisioning script:**
+
+```bash
+# Clone the SOAR repository
+git clone https://github.com/hut8/soar.git
+cd soar
+
+# Run the provisioning script with Elasticsearch (recommended)
+sudo ./scripts/provision-opensearch elasticsearch
+
+# Or use OpenSearch (open source alternative)
+sudo ./scripts/provision-opensearch opensearch
+```
+
+The script will:
+- ✅ Install and configure Elasticsearch/OpenSearch with required plugins
+- ✅ Download ~70GB of Who's on First data (cities, regions, countries)
+- ✅ Import data into the search engine (~30-40 minutes)
+- ✅ Install Pelias API and PIP services as systemd services
+- ✅ Start all services and verify they're working
+
+After completion:
+- Pelias API: `http://localhost:4000`
+- Test: `curl 'http://localhost:4000/v1/reverse?point.lat=40.7484&point.lon=-73.9857'`
+
+**Note**: The PIP service may take an additional 10-20 minutes after installation to load all locality data into memory. Monitor with: `sudo journalctl -u pelias-pip -f`
+
+---
+
+## Manual Installation (Advanced)
+
+If you prefer to install components manually or need to customize the setup, follow the detailed instructions below.
+
 ## Overview
 
 Pelias is a modular geocoding platform with multiple services. For SOAR, we're using:
 - **PIP Service** (Point in Polygon) for reverse geocoding
 - **Who's on First** dataset for city/locality/country-level boundaries
-- **OpenSearch** for storage and indexing
+- **Elasticsearch or OpenSearch** for storage and indexing
 - No street-level data (no OpenStreetMap, no OpenAddresses)
 
 ## Architecture
@@ -26,9 +61,9 @@ Pelias is a modular geocoding platform with multiple services. For SOAR, we're u
          │
          ▼
 ┌─────────────────┐        ┌──────────────────┐
-│  Pelias PIP     │◄──────►│  OpenSearch      │
-│  (Point in      │        │  (Bare Metal)    │
-│   Polygon)      │        │                  │
+│  Pelias PIP     │◄──────►│  Elasticsearch/  │
+│  (Point in      │        │  OpenSearch      │
+│   Polygon)      │        │  (systemd)       │
 └─────────────────┘        └──────────────────┘
          │
          ▼
@@ -40,17 +75,17 @@ Pelias is a modular geocoding platform with multiple services. For SOAR, we're u
 
 ### Hardware Requirements
 - **RAM**: 16GB minimum, **32GB recommended** for production
-- **Disk**: ~20GB for Who's on First data + OpenSearch index
+- **Disk**: ~20GB for Who's on First data + index storage
 - **CPU**: 4 cores minimum, 8+ cores recommended
 - **OS**: Linux (Ubuntu 22.04 LTS recommended)
 
 ### Software Requirements
-- **OpenSearch**: 2.11.0 or newer (bare metal installation)
-- **Docker**: 24.0+ (for data import only)
-- **Node.js**: 18.x or newer (for Pelias services)
+- **Elasticsearch 8.x** or **OpenSearch 2.x** (installed via deb package)
+- **Docker**: 24.0+ (for data import only, not required for runtime)
+- **Node.js**: 18.x or newer (for Pelias API and PIP services)
 - **Git**: For cloning Pelias repositories
 
-## Installation Steps
+## Manual Installation Steps
 
 ### 1. Install Elasticsearch or OpenSearch (Bare Metal)
 
