@@ -2,17 +2,13 @@
 # SOAR Pelias Geocoding Service Provisioning Script
 #
 # This script provisions a Pelias geocoding server for SOAR by:
-# - Installing Elasticsearch (or OpenSearch)
+# - Installing OpenSearch 2.x with required plugins
 # - Downloading and importing Who's on First data (city-level)
 # - Setting up Pelias API and PIP services (systemd, not Docker)
-# - Configuring reverse proxy via Caddy
+# - Installing and configuring Caddy reverse proxy
 #
 # Usage:
-#   sudo ./provision-opensearch [elasticsearch|opensearch]
-#
-# Arguments:
-#   elasticsearch - Install Elasticsearch 8.x (default, recommended)
-#   opensearch    - Install OpenSearch 2.x (open source alternative)
+#   sudo ./provision-opensearch
 #
 # Note: This script uses Docker temporarily for data import only.
 #       Production services run via systemd.
@@ -28,23 +24,13 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Default search engine
-SEARCH_ENGINE="${1:-elasticsearch}"
-
-# Validate search engine choice
-if [[ "$SEARCH_ENGINE" != "elasticsearch" ]] && [[ "$SEARCH_ENGINE" != "opensearch" ]]; then
-    echo -e "${RED}Error: Invalid search engine: $SEARCH_ENGINE${NC}"
-    echo -e "${YELLOW}Usage: $0 [elasticsearch|opensearch]${NC}"
-    exit 1
-fi
-
 # Check if running as root
 if [[ $EUID -ne 0 ]]; then
    echo -e "${RED}Error: This script must be run as root (use sudo)${NC}"
    exit 1
 fi
 
-echo -e "${GREEN}Provisioning Pelias geocoding server with ${SEARCH_ENGINE}...${NC}"
+echo -e "${GREEN}Provisioning Pelias geocoding server with OpenSearch...${NC}"
 
 # Detect OS
 if [ -f /etc/os-release ]; then
@@ -66,79 +52,30 @@ fi
 # Install prerequisites
 echo -e "${BLUE}Installing prerequisites...${NC}"
 apt-get update
-apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release gpg jq
+apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release gpg jq debian-keyring debian-archive-keyring
 
-# Install Elasticsearch or OpenSearch
-if [[ "$SEARCH_ENGINE" == "elasticsearch" ]]; then
-    echo -e "${BLUE}Installing Elasticsearch...${NC}"
+# Install OpenSearch
+echo -e "${BLUE}Installing OpenSearch...${NC}"
 
-    # Add Elasticsearch GPG key and repository
-    if [ ! -f /usr/share/keyrings/elasticsearch-keyring.gpg ]; then
-        wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | \
-            gpg --dearmor -o /usr/share/keyrings/elasticsearch-keyring.gpg
-    fi
+# Add OpenSearch GPG key and repository
+if [ ! -f /usr/share/keyrings/opensearch-keyring ]; then
+    curl -o- https://artifacts.opensearch.org/publickeys/opensearch.pgp | \
+        gpg --dearmor --batch --yes -o /usr/share/keyrings/opensearch-keyring
+fi
 
-    if [ ! -f /etc/apt/sources.list.d/elastic-8.x.list ]; then
-        echo "deb [signed-by=/usr/share/keyrings/elasticsearch-keyring.gpg] https://artifacts.elastic.co/packages/8.x/apt stable main" | \
-            tee /etc/apt/sources.list.d/elastic-8.x.list
-    fi
+if [ ! -f /etc/apt/sources.list.d/opensearch-2.x.list ]; then
+    echo "deb [signed-by=/usr/share/keyrings/opensearch-keyring] https://artifacts.opensearch.org/releases/bundle/opensearch/2.x/apt stable main" | \
+        tee /etc/apt/sources.list.d/opensearch-2.x.list
+fi
 
-    apt-get update
-    apt-get install -y elasticsearch
+apt-get update
+apt-get install -y opensearch
 
-    # Install ICU plugin
-    /usr/share/elasticsearch/bin/elasticsearch-plugin install analysis-icu --batch
+# Install ICU plugin
+/usr/share/opensearch/bin/opensearch-plugin install analysis-icu --batch
 
-    # Configure for Pelias
-    cat >> /etc/elasticsearch/elasticsearch.yml <<EOF
-
-# Pelias configuration
-discovery.type: single-node
-indices.query.bool.max_clause_count: 4096
-
-# Disable security for local development (WARNING: Enable for production!)
-xpack.security.enabled: false
-xpack.security.enrollment.enabled: false
-xpack.security.http.ssl.enabled: false
-xpack.security.transport.ssl.enabled: false
-EOF
-
-    # Set JVM heap size (8GB - adjust based on RAM)
-    mkdir -p /etc/elasticsearch/jvm.options.d
-    cat > /etc/elasticsearch/jvm.options.d/heap.options <<EOF
--Xms8g
--Xmx8g
-EOF
-
-    # Enable and start
-    systemctl daemon-reload
-    systemctl enable elasticsearch
-    systemctl start elasticsearch
-
-    echo -e "${GREEN}Elasticsearch installed and started${NC}"
-
-else
-    echo -e "${BLUE}Installing OpenSearch...${NC}"
-
-    # Add OpenSearch GPG key and repository
-    if [ ! -f /usr/share/keyrings/opensearch-keyring ]; then
-        curl -o- https://artifacts.opensearch.org/publickeys/opensearch.pgp | \
-            gpg --dearmor --batch --yes -o /usr/share/keyrings/opensearch-keyring
-    fi
-
-    if [ ! -f /etc/apt/sources.list.d/opensearch-2.x.list ]; then
-        echo "deb [signed-by=/usr/share/keyrings/opensearch-keyring] https://artifacts.opensearch.org/releases/bundle/opensearch/2.x/apt stable main" | \
-            tee /etc/apt/sources.list.d/opensearch-2.x.list
-    fi
-
-    apt-get update
-    apt-get install -y opensearch
-
-    # Install ICU plugin
-    /usr/share/opensearch/bin/opensearch-plugin install analysis-icu --batch
-
-    # Configure for Pelias
-    cat >> /etc/opensearch/opensearch.yml <<EOF
+# Configure for Pelias
+cat >> /etc/opensearch/opensearch.yml <<EOF
 
 # Pelias configuration
 discovery.type: single-node
@@ -148,20 +85,19 @@ indices.query.bool.max_clause_count: 4096
 plugins.security.disabled: true
 EOF
 
-    # Set JVM heap size (8GB - adjust based on RAM)
-    mkdir -p /etc/opensearch/jvm.options.d
-    cat > /etc/opensearch/jvm.options.d/heap.options <<EOF
+# Set JVM heap size (8GB - adjust based on RAM)
+mkdir -p /etc/opensearch/jvm.options.d
+cat > /etc/opensearch/jvm.options.d/heap.options <<EOF
 -Xms8g
 -Xmx8g
 EOF
 
-    # Enable and start
-    systemctl daemon-reload
-    systemctl enable opensearch
-    systemctl start opensearch
+# Enable and start
+systemctl daemon-reload
+systemctl enable opensearch
+systemctl start opensearch
 
-    echo -e "${GREEN}OpenSearch installed and started${NC}"
-fi
+echo -e "${GREEN}OpenSearch installed and started${NC}"
 
 # Wait for search engine to be ready
 echo -e "${BLUE}Waiting for search engine to be ready...${NC}"
@@ -294,7 +230,7 @@ cd /opt/pelias/docker
 sudo -u pelias docker compose run --rm whosonfirst npm run download
 
 # Create Pelias index
-echo -e "${BLUE}Creating Pelias index in ${SEARCH_ENGINE}...${NC}"
+echo -e "${BLUE}Creating Pelias index in OpenSearch...${NC}"
 sudo -u pelias docker compose run --rm schema npm run create_index
 
 # Import Who's on First data
@@ -338,8 +274,8 @@ cat > /etc/systemd/system/pelias-pip.service <<EOF
 [Unit]
 Description=Pelias PIP (Point in Polygon) Service
 Documentation=https://github.com/pelias/pip-service
-After=network.target ${SEARCH_ENGINE}.service
-Requires=${SEARCH_ENGINE}.service
+After=network.target opensearch.service
+Requires=opensearch.service
 
 [Service]
 Type=simple
@@ -425,28 +361,136 @@ else
     echo -e "${YELLOW}Check status with: journalctl -u pelias-pip -f${NC}"
 fi
 
+# Install Caddy
+echo -e "${BLUE}Installing Caddy web server...${NC}"
+
+# Add Caddy GPG key (Cloudsmith expects it in /usr/share/keyrings/)
+mkdir -p /usr/share/keyrings
+if [ ! -f /usr/share/keyrings/caddy-stable-archive-keyring.gpg ]; then
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | \
+        gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+fi
+
+# Add Caddy repository (uses signed-by pointing to /usr/share/keyrings/)
+if [ ! -f /etc/apt/sources.list.d/caddy-stable.list ]; then
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | \
+        tee /etc/apt/sources.list.d/caddy-stable.list
+fi
+
+apt-get update
+apt-get install -y caddy
+
+echo -e "${GREEN}Caddy installed successfully${NC}"
+
+# Configure Caddy
+echo -e "${BLUE}Configuring Caddy web server...${NC}"
+
+# Create Caddy log directory
+mkdir -p /var/log/caddy
+chown caddy:caddy /var/log/caddy
+
+# Create SOAR Caddy configuration directory
+mkdir -p /etc/soar/caddy
+chown root:root /etc/soar/caddy
+chmod 755 /etc/soar/caddy
+
+# Install Pelias Caddy site configs (both production and staging)
+PELIAS_CADDY_SITES=("pelias.glider.flights" "pelias.staging.glider.flights")
+
+echo "Installing Pelias Caddy site configs..."
+for site in "${PELIAS_CADDY_SITES[@]}"; do
+    SITE_SOURCE="infrastructure/caddy/${site}.conf"
+    SITE_DEST="/etc/soar/caddy/${site}.conf"
+
+    if [ -f "$SITE_SOURCE" ]; then
+        cp "$SITE_SOURCE" "$SITE_DEST"
+        chown root:root "$SITE_DEST"
+        chmod 644 "$SITE_DEST"
+        echo "  Installed ${site}.conf"
+    else
+        echo -e "${YELLOW}Warning: $SITE_SOURCE not found - skipping${NC}"
+    fi
+done
+
+# Ensure main Caddyfile imports SOAR configs
+MAIN_CADDYFILE="/etc/caddy/Caddyfile"
+IMPORT_LINE="import /etc/soar/caddy/*"
+
+# Create main Caddyfile if it doesn't exist
+if [ ! -f "$MAIN_CADDYFILE" ]; then
+    echo -e "${YELLOW}Creating main Caddyfile with import directive...${NC}"
+    echo "# Main Caddyfile - imports SOAR site configurations" | tee "$MAIN_CADDYFILE" > /dev/null
+    echo "$IMPORT_LINE" | tee -a "$MAIN_CADDYFILE" > /dev/null
+    chown root:root "$MAIN_CADDYFILE"
+    chmod 644 "$MAIN_CADDYFILE"
+    echo "Created $MAIN_CADDYFILE with import directive"
+else
+    # Check if import directive already exists
+    if ! grep -qF "$IMPORT_LINE" "$MAIN_CADDYFILE"; then
+        echo -e "${YELLOW}Adding import directive to existing Caddyfile...${NC}"
+        # Backup existing Caddyfile
+        cp "$MAIN_CADDYFILE" "$MAIN_CADDYFILE.backup.$(date +%Y%m%d_%H%M%S)"
+        # Add import directive at the end
+        echo "" | tee -a "$MAIN_CADDYFILE" > /dev/null
+        echo "# Import SOAR site configurations" | tee -a "$MAIN_CADDYFILE" > /dev/null
+        echo "$IMPORT_LINE" | tee -a "$MAIN_CADDYFILE" > /dev/null
+        echo "Added import directive to $MAIN_CADDYFILE (backup created)"
+    else
+        echo -e "${BLUE}Import directive already exists in $MAIN_CADDYFILE${NC}"
+    fi
+fi
+
+# Validate Caddyfile syntax
+if command -v caddy &> /dev/null; then
+    if caddy validate --config "$MAIN_CADDYFILE" 2>/dev/null; then
+        echo -e "${GREEN}Caddyfile validation passed${NC}"
+    else
+        echo -e "${YELLOW}Warning: Caddyfile validation failed. Check configuration manually.${NC}"
+    fi
+fi
+
+# Reload Caddy to pick up new configuration
+systemctl reload caddy
+
+echo -e "${GREEN}Caddy configured for Pelias with ${#PELIAS_CADDY_SITES[@]} site(s)${NC}"
+
 echo ""
 echo -e "${GREEN}======================================${NC}"
 echo -e "${GREEN}Pelias geocoding server setup complete!${NC}"
 echo -e "${GREEN}======================================${NC}"
 echo ""
 echo -e "${BLUE}Services:${NC}"
-echo -e "  - ${SEARCH_ENGINE}: http://localhost:9200"
+echo -e "  - OpenSearch: http://localhost:9200"
 echo -e "  - Pelias API: http://localhost:4000"
 echo -e "  - Pelias PIP: http://localhost:4200"
+echo -e "  - Caddy reverse proxy: http://localhost (configured)"
+echo ""
+echo -e "${BLUE}Public URLs (via Caddy):${NC}"
+echo -e "  - Production: https://pelias.glider.flights"
+echo -e "  - Staging: https://pelias.staging.glider.flights"
 echo ""
 echo -e "${BLUE}Service management:${NC}"
 echo -e "  sudo systemctl status pelias-api"
 echo -e "  sudo systemctl status pelias-pip"
-echo -e "  sudo systemctl status ${SEARCH_ENGINE}"
+echo -e "  sudo systemctl status opensearch"
+echo -e "  sudo systemctl status caddy"
 echo ""
 echo -e "${BLUE}View logs:${NC}"
 echo -e "  sudo journalctl -u pelias-api -f"
 echo -e "  sudo journalctl -u pelias-pip -f"
 echo ""
 echo -e "${BLUE}Test geocoding:${NC}"
+echo -e "  # Local:"
 echo -e "  curl 'http://localhost:4000/v1/reverse?point.lat=40.7484&point.lon=-73.9857&layers=locality,region,country'"
+echo -e ""
+echo -e "  # Via Caddy (once DNS is configured):"
+echo -e "  curl 'https://pelias.glider.flights/v1/reverse?point.lat=40.7484&point.lon=-73.9857'"
 echo ""
 echo -e "${YELLOW}Note: PIP service may take 10-20 minutes to load all locality data into memory.${NC}"
 echo -e "${YELLOW}Monitor with: journalctl -u pelias-pip -f${NC}"
+echo ""
+echo -e "${YELLOW}Next steps:${NC}"
+echo -e "  1. Configure DNS to point pelias.glider.flights and pelias.staging.glider.flights to this server"
+echo -e "  2. Set PELIAS_BASE_URL in SOAR backend environment configuration"
+echo -e "  3. Restart SOAR services to use Pelias geocoding"
 echo ""

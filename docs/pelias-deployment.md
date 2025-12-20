@@ -11,22 +11,22 @@ This guide covers deploying [Pelias](https://github.com/pelias/pelias), an open-
 git clone https://github.com/hut8/soar.git
 cd soar
 
-# Run the provisioning script with Elasticsearch (recommended)
-sudo ./scripts/provision-opensearch elasticsearch
-
-# Or use OpenSearch (open source alternative)
-sudo ./scripts/provision-opensearch opensearch
+# Run the provisioning script (installs OpenSearch)
+sudo ./scripts/provision-opensearch
 ```
 
 The script will:
-- ✅ Install and configure Elasticsearch/OpenSearch with required plugins
+- ✅ Install and configure OpenSearch 2.x with ICU analysis plugin
 - ✅ Download ~70GB of Who's on First data (cities, regions, countries)
-- ✅ Import data into the search engine (~30-40 minutes)
+- ✅ Import data into OpenSearch (~30-40 minutes)
 - ✅ Install Pelias API and PIP services as systemd services
+- ✅ Install and configure Caddy reverse proxy
 - ✅ Start all services and verify they're working
 
 After completion:
+- OpenSearch: `http://localhost:9200`
 - Pelias API: `http://localhost:4000`
+- Public URLs (via Caddy): `https://pelias.glider.flights` and `https://pelias.staging.glider.flights`
 - Test: `curl 'http://localhost:4000/v1/reverse?point.lat=40.7484&point.lon=-73.9857'`
 
 **Note**: The PIP service may take an additional 10-20 minutes after installation to load all locality data into memory. Monitor with: `sudo journalctl -u pelias-pip -f`
