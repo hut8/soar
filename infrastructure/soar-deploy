@@ -260,9 +260,9 @@ log_info "Binary installed successfully at $BINARY_PATH"
 log_info "Cleaning up temporary binary: $TEMP_BIN_PATH"
 rm -f "$TEMP_BIN_PATH"
 
-# Clean up old systemd service and timer files that aren't in the deployment
-log_info "Cleaning up old systemd service and timer files..."
-SYSTEMD_FILES_REMOVED=0
+# Check for obsolete systemd files that should be cleaned up
+log_info "Checking for obsolete systemd service and timer files..."
+OBSOLETE_FILES_FOUND=0
 
 # Build list of expected files from deployment
 EXPECTED_FILES=()
@@ -274,79 +274,31 @@ for timer in "${TIMERS[@]}"; do
 done
 EXPECTED_FILES+=("soar${SERVICE_SUFFIX}.target")
 
-# Find and remove obsolete SOAR systemd files matching our environment
-# Check services
-for systemd_file in /etc/systemd/system/soar-*${SERVICE_SUFFIX}.service; do
-    if [ -f "$systemd_file" ]; then
-        file_basename=$(basename "$systemd_file")
+# Find all SOAR-related systemd files in /etc/systemd/system
+ALL_SOAR_FILES=()
+shopt -s nullglob  # Make globs that don't match expand to nothing instead of literal pattern
+for pattern in "soar*.service" "soar*.timer" "soar*.target"; do
+    for file in /etc/systemd/system/$pattern; do
+        if [ -f "$file" ]; then
+            ALL_SOAR_FILES+=("$(basename "$file")")
+        fi
+    done
+done
+shopt -u nullglob
 
-        # Check if this file is expected (in our deployment)
-        is_expected=false
-        for expected_file in "${EXPECTED_FILES[@]}"; do
-            if [ "$file_basename" = "$expected_file" ]; then
-                is_expected=true
-                break
-            fi
-        done
-
-        # If not expected, stop and remove it
-        if [ "$is_expected" = false ]; then
-            log_info "Removing obsolete systemd service: $file_basename"
-
-            if systemctl is-active --quiet "$file_basename" 2>/dev/null; then
-                log_info "Stopping $file_basename..."
-                systemctl stop "$file_basename" || log_warn "Failed to stop $file_basename"
-            fi
-
-            if systemctl is-enabled --quiet "$file_basename" 2>/dev/null; then
-                log_info "Disabling $file_basename..."
-                systemctl disable "$file_basename" || log_warn "Failed to disable $file_basename"
-            fi
-
-            rm -f "$systemd_file"
-            ((SYSTEMD_FILES_REMOVED++))
+# Check each found file against expected files
+for file_basename in "${ALL_SOAR_FILES[@]}"; do
+    # For staging environment, only check files with -staging suffix
+    # For production, only check files without -staging suffix
+    if [ "$ENVIRONMENT" = "staging" ]; then
+        if [[ ! "$file_basename" =~ -staging\.(service|timer|target)$ ]]; then
+            continue  # Skip production files when in staging mode
+        fi
+    else
+        if [[ "$file_basename" =~ -staging\.(service|timer|target)$ ]]; then
+            continue  # Skip staging files when in production mode
         fi
     fi
-done
-
-# Check timers
-for systemd_file in /etc/systemd/system/soar-*${SERVICE_SUFFIX}.timer; do
-    if [ -f "$systemd_file" ]; then
-        file_basename=$(basename "$systemd_file")
-
-        # Check if this file is expected (in our deployment)
-        is_expected=false
-        for expected_file in "${EXPECTED_FILES[@]}"; do
-            if [ "$file_basename" = "$expected_file" ]; then
-                is_expected=true
-                break
-            fi
-        done
-
-        # If not expected, stop and remove it
-        if [ "$is_expected" = false ]; then
-            log_info "Removing obsolete systemd timer: $file_basename"
-
-            if systemctl is-active --quiet "$file_basename" 2>/dev/null; then
-                log_info "Stopping $file_basename..."
-                systemctl stop "$file_basename" || log_warn "Failed to stop $file_basename"
-            fi
-
-            if systemctl is-enabled --quiet "$file_basename" 2>/dev/null; then
-                log_info "Disabling $file_basename..."
-                systemctl disable "$file_basename" || log_warn "Failed to disable $file_basename"
-            fi
-
-            rm -f "$systemd_file"
-            ((SYSTEMD_FILES_REMOVED++))
-        fi
-    fi
-done
-
-# Check target file
-systemd_file="/etc/systemd/system/soar${SERVICE_SUFFIX}.target"
-if [ -f "$systemd_file" ]; then
-    file_basename=$(basename "$systemd_file")
 
     # Check if this file is expected (in our deployment)
     is_expected=false
@@ -357,16 +309,19 @@ if [ -f "$systemd_file" ]; then
         fi
     done
 
-    # If not expected, remove it (targets don't need to be stopped/disabled)
+    # If not expected, warn about it but don't delete
     if [ "$is_expected" = false ]; then
-        log_info "Removing obsolete systemd target: $file_basename"
-        rm -f "$systemd_file"
-        ((SYSTEMD_FILES_REMOVED++))
+        log_warn "Obsolete systemd file detected: $file_basename"
+        log_warn "  This file may need manual cleanup. To remove it, run:"
+        log_warn "  sudo systemctl stop $file_basename 2>/dev/null || true"
+        log_warn "  sudo systemctl disable $file_basename 2>/dev/null || true"
+        log_warn "  sudo rm -f /etc/systemd/system/$file_basename"
+        ((OBSOLETE_FILES_FOUND++))
     fi
-fi
+done
 
-if [ $SYSTEMD_FILES_REMOVED -gt 0 ]; then
-    log_info "Removed $SYSTEMD_FILES_REMOVED obsolete systemd file(s)"
+if [ $OBSOLETE_FILES_FOUND -gt 0 ]; then
+    log_warn "Found $OBSOLETE_FILES_FOUND obsolete systemd file(s) - manual cleanup recommended"
 else
     log_info "No obsolete systemd files found"
 fi
