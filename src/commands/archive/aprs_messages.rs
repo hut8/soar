@@ -10,7 +10,7 @@ use uuid::Uuid;
 use soar::raw_messages_repo::AprsMessage;
 use soar::schema::raw_messages;
 
-use super::archiver::{Archivable, PgPool, write_records_to_file};
+use super::archiver::{Archivable, PgPool, finalize_pending_detachment, write_records_to_file};
 
 /// CSV-serializable version of AprsMessage with hex-encoded hash
 /// This is used for archival to avoid CSV serialization issues with Vec<u8>
@@ -159,15 +159,20 @@ impl Archivable for AprsMessageCsv {
         day_start: chrono::DateTime<Utc>,
         _day_end: chrono::DateTime<Utc>,
     ) -> Result<()> {
+        // Calculate partition name from day_start
+        // Partitions are named like aprs_messages_p20251114 for 2025-11-14
+        let partition_date = day_start.format("%Y%m%d");
+        let partition_name = format!("aprs_messages_p{}", partition_date);
+
+        // First, check for and finalize any pending detachment from a previous interrupted operation
+        // This handles the edge case where a previous DETACH PARTITION CONCURRENTLY was interrupted
+        finalize_pending_detachment(pool, "aprs_messages", &partition_name).await?;
+
         let pool = pool.clone();
+        let partition_name_clone = partition_name.clone();
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
             use diesel::connection::SimpleConnection;
-
-            // Calculate partition name from day_start
-            // Partitions are named like aprs_messages_p20251114 for 2025-11-14
-            let partition_date = day_start.format("%Y%m%d");
-            let partition_name = format!("aprs_messages_p{}", partition_date);
 
             // Drop the partition directly - much faster than DELETE
             // This works because:
@@ -178,24 +183,28 @@ impl Archivable for AprsMessageCsv {
 
             // Detach partition using CONCURRENTLY for non-blocking operation
             // CONCURRENTLY cannot run inside a transaction, so we use SimpleConnection
+            // This command blocks until detachment completes (uses two-transaction process)
             let detach_sql = format!(
                 "ALTER TABLE aprs_messages DETACH PARTITION {} CONCURRENTLY",
-                partition_name
+                partition_name_clone
             );
-            conn.batch_execute(&detach_sql)
-                .context(format!("Failed to detach partition {}", partition_name))?;
+            conn.batch_execute(&detach_sql).context(format!(
+                "Failed to detach partition {}",
+                partition_name_clone
+            ))?;
             info!(
                 "Detached partition {} from aprs_messages table (CONCURRENTLY)",
-                partition_name
+                partition_name_clone
             );
 
             // Drop the detached partition table
-            let drop_sql = format!("DROP TABLE IF EXISTS {}", partition_name);
+            // Safe to do immediately because DETACH CONCURRENTLY waits for completion
+            let drop_sql = format!("DROP TABLE IF EXISTS {}", partition_name_clone);
             conn.batch_execute(&drop_sql)
-                .context(format!("Failed to drop partition {}", partition_name))?;
+                .context(format!("Failed to drop partition {}", partition_name_clone))?;
             info!(
                 "Dropped partition {} for day starting {}",
-                partition_name, day_start
+                partition_name_clone, day_start
             );
 
             Ok(())
