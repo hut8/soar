@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use chrono::{NaiveDate, TimeZone, Utc};
 use diesel::prelude::*;
 use std::path::Path;
@@ -12,6 +12,10 @@ use super::archiver::{Archivable, PgPool, write_records_to_file};
 impl Archivable for Fix {
     fn table_name() -> &'static str {
         "fixes"
+    }
+
+    fn is_partitioned() -> bool {
+        true // fixes table is partitioned by received_at date
     }
 
     async fn get_oldest_date(pool: &PgPool, before_date: NaiveDate) -> Result<Option<NaiveDate>> {
@@ -114,6 +118,7 @@ impl Archivable for Fix {
         let pool = pool.clone();
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
+            use diesel::connection::SimpleConnection;
 
             // Calculate partition name from day_start
             // Partitions are named like fixes_p20251114 for 2025-11-14
@@ -125,22 +130,29 @@ impl Archivable for Fix {
             // 1. Each partition contains exactly one day's data
             // 2. Foreign keys are enforced at the partition level
             // 3. We've already archived the data to disk
-            conn.transaction::<_, anyhow::Error, _>(|conn| {
-                // Detach the partition first (optional but makes it invisible to queries immediately)
-                let detach_sql = format!("ALTER TABLE fixes DETACH PARTITION {}", partition_name);
-                diesel::sql_query(&detach_sql).execute(conn)?;
-                info!("Detached partition {} from fixes table", partition_name);
 
-                // Drop the partition table
-                let drop_sql = format!("DROP TABLE IF EXISTS {}", partition_name);
-                diesel::sql_query(&drop_sql).execute(conn)?;
-                info!(
-                    "Dropped partition {} for day starting {}",
-                    partition_name, day_start
-                );
+            // Detach partition using CONCURRENTLY for non-blocking operation
+            // CONCURRENTLY cannot run inside a transaction, so we use SimpleConnection
+            let detach_sql = format!(
+                "ALTER TABLE fixes DETACH PARTITION {} CONCURRENTLY",
+                partition_name
+            );
+            conn.batch_execute(&detach_sql)
+                .context(format!("Failed to detach partition {}", partition_name))?;
+            info!(
+                "Detached partition {} from fixes table (CONCURRENTLY)",
+                partition_name
+            );
 
-                Ok(())
-            })?;
+            // Drop the detached partition table
+            let drop_sql = format!("DROP TABLE IF EXISTS {}", partition_name);
+            conn.batch_execute(&drop_sql)
+                .context(format!("Failed to drop partition {}", partition_name))?;
+            info!(
+                "Dropped partition {} for day starting {}",
+                partition_name, day_start
+            );
+
             Ok(())
         })
         .await?

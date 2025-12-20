@@ -26,6 +26,13 @@ pub trait Archivable: Sized + Serialize + for<'de> Deserialize<'de> + Send + 'st
         Self::table_name()
     }
 
+    /// Whether this table is partitioned (affects post-deletion cleanup)
+    /// - Partitioned tables (like fixes, aprs_messages) use ANALYZE only after dropping partitions
+    /// - Non-partitioned tables (like flights, receiver_statuses) use VACUUM ANALYZE after DELETE
+    fn is_partitioned() -> bool {
+        false // Default to non-partitioned for backwards compatibility
+    }
+
     /// Get the oldest date of records in the database that are eligible for archival.
     /// Only considers records before the given date to enable partition pruning.
     /// If the oldest record is newer than before_date, returns None.
@@ -192,8 +199,14 @@ pub async fn archive_day<T: Archivable>(
         .context("Failed to get file metadata")?
         .len();
 
-    // Run VACUUM ANALYZE on table after deletion
-    vacuum_analyze_table(pool, T::table_name()).await?;
+    // Update table statistics after deletion
+    // - Partitioned tables: Use ANALYZE only (no VACUUM needed after dropping partitions)
+    // - Non-partitioned tables: Use VACUUM ANALYZE to reclaim space and update stats
+    if T::is_partitioned() {
+        analyze_table(pool, T::table_name()).await?;
+    } else {
+        vacuum_analyze_table(pool, T::table_name()).await?;
+    }
 
     Ok((
         count as usize,
@@ -287,6 +300,29 @@ pub async fn vacuum_analyze_table(pool: &PgPool, table_name: &str) -> Result<()>
             "Successfully completed VACUUM ANALYZE on table '{}'",
             table_name
         );
+        Ok::<(), anyhow::Error>(())
+    })
+    .await??;
+
+    Ok(())
+}
+
+/// Run ANALYZE on a table to update statistics
+/// Use this after dropping partitions (no VACUUM needed since no rows were deleted)
+pub async fn analyze_table(pool: &PgPool, table_name: &str) -> Result<()> {
+    info!("Running ANALYZE on table '{}'...", table_name);
+    let pool = pool.clone();
+    let table_name = table_name.to_string();
+
+    tokio::task::spawn_blocking(move || {
+        let mut conn = pool.get()?;
+        // ANALYZE cannot run inside a transaction, so we use SimpleConnection
+        // which executes the command directly without a transaction
+        use diesel::connection::SimpleConnection;
+        let query = format!("ANALYZE {}", table_name);
+        conn.batch_execute(&query)
+            .context(format!("Failed to ANALYZE table '{}'", table_name))?;
+        info!("Successfully completed ANALYZE on table '{}'", table_name);
         Ok::<(), anyhow::Error>(())
     })
     .await??;

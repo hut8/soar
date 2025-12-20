@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use chrono::{DateTime, NaiveDate, TimeZone, Utc};
 use diesel::prelude::*;
 use hex;
@@ -53,6 +53,10 @@ impl From<AprsMessageCsv> for AprsMessage {
 impl Archivable for AprsMessageCsv {
     fn table_name() -> &'static str {
         "aprs_messages"
+    }
+
+    fn is_partitioned() -> bool {
+        true // aprs_messages table is partitioned by received_at date
     }
 
     async fn get_oldest_date(pool: &PgPool, before_date: NaiveDate) -> Result<Option<NaiveDate>> {
@@ -158,6 +162,7 @@ impl Archivable for AprsMessageCsv {
         let pool = pool.clone();
         tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
+            use diesel::connection::SimpleConnection;
 
             // Calculate partition name from day_start
             // Partitions are named like aprs_messages_p20251114 for 2025-11-14
@@ -170,28 +175,29 @@ impl Archivable for AprsMessageCsv {
             // 2. Foreign keys are enforced at the partition level
             // 3. We've already archived the data to disk
             // 4. Child tables (fixes, receiver_statuses) have already been cleaned up
-            conn.transaction::<_, anyhow::Error, _>(|conn| {
-                // Detach the partition first (optional but makes it invisible to queries immediately)
-                let detach_sql = format!(
-                    "ALTER TABLE aprs_messages DETACH PARTITION {}",
-                    partition_name
-                );
-                diesel::sql_query(&detach_sql).execute(conn)?;
-                info!(
-                    "Detached partition {} from aprs_messages table",
-                    partition_name
-                );
 
-                // Drop the partition table
-                let drop_sql = format!("DROP TABLE IF EXISTS {}", partition_name);
-                diesel::sql_query(&drop_sql).execute(conn)?;
-                info!(
-                    "Dropped partition {} for day starting {}",
-                    partition_name, day_start
-                );
+            // Detach partition using CONCURRENTLY for non-blocking operation
+            // CONCURRENTLY cannot run inside a transaction, so we use SimpleConnection
+            let detach_sql = format!(
+                "ALTER TABLE aprs_messages DETACH PARTITION {} CONCURRENTLY",
+                partition_name
+            );
+            conn.batch_execute(&detach_sql)
+                .context(format!("Failed to detach partition {}", partition_name))?;
+            info!(
+                "Detached partition {} from aprs_messages table (CONCURRENTLY)",
+                partition_name
+            );
 
-                Ok(())
-            })?;
+            // Drop the detached partition table
+            let drop_sql = format!("DROP TABLE IF EXISTS {}", partition_name);
+            conn.batch_execute(&drop_sql)
+                .context(format!("Failed to drop partition {}", partition_name))?;
+            info!(
+                "Dropped partition {} for day starting {}",
+                partition_name, day_start
+            );
+
             Ok(())
         })
         .await?
