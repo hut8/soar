@@ -4,7 +4,7 @@ This directory contains raw APRS message dumps from real flights, used for integ
 
 ## File Format
 
-Each file is named `[flight-id]-ogn-aprs.txt` and contains raw APRS messages in chronological order.
+Each file contains raw APRS messages in chronological order, with descriptive filenames based on the test scenario.
 
 **Format:** Each line contains a timestamp and raw APRS message separated by a single space:
 ```
@@ -15,36 +15,65 @@ Each file is named `[flight-id]-ogn-aprs.txt` and contains raw APRS messages in 
 - **Timestamp**: ISO 8601 format with UTC timezone (`YYYY-MM-DDTHH:MM:SS.SSSZ`)
 - **Raw Message**: Original APRS packet as received from APRS-IS
 
-## Generating Test Data
+## Generating Test Cases
 
-Use the `dump-flight-messages.sh` script to extract messages from staging or production databases:
+The `dump-flight-messages.sh` script automatically:
+1. Extracts messages from the database
+2. Generates a descriptive filename
+3. Creates a corresponding test case with arrange/act/assert structure
+
+### Usage
 
 ```bash
-# From staging database
-./scripts/dump-flight-messages.sh staging <flight-id>
-
-# From production database (via SSH to glider.flights)
+# Run the script with environment and flight ID
 ./scripts/dump-flight-messages.sh production <flight-id>
+
+# The script will prompt you for a description
+Description: timeout resurrection creates new flight
+
+# Output:
+# - Data file: tests/data/flights/timeout-resurrection-creates-new-flight.txt
+# - Test case: Added to tests/flight_detection_test.rs
 ```
 
-## Usage in Tests
+### Example Descriptions
 
-These files are used with `TestMessageSource` to replay real message sequences and verify flight detection logic:
+- `timeout resurrection creates new flight`
+- `missed landing detection`
+- `touch and go pattern`
+- `multiple thermals single flight`
+- `glider tow release detection`
+
+The script will convert these to valid filenames:
+- `timeout-resurrection-creates-new-flight.txt`
+- `missed-landing-detection.txt`
+- `touch-and-go-pattern.txt`
+- etc.
+
+## Generated Test Cases
+
+Each test case follows the arrange/act/assert pattern:
 
 ```rust
-use soar::message_sources::TestMessageSource;
-
 #[tokio::test]
-async fn test_flight_detection() {
-    let source = TestMessageSource::from_file(
-        "tests/data/flights/123e4567-e89b-12d3-a456-426614174000-ogn-aprs.txt"
-    ).await.unwrap();
+#[ignore] // Remove when ready to implement
+async fn test_timeout_resurrection_creates_new_flight() {
+    // ARRANGE: Set up test environment
+    let mut source = TestMessageSource::from_file(
+        "tests/data/flights/timeout-resurrection-creates-new-flight.txt"
+    ).await.expect("Failed to load test messages");
 
-    // Process messages and verify flight detection...
+    // ACT: Process all messages through the pipeline
+    while let Some(message) = source.next_message().await.unwrap() {
+        // Process message...
+    }
+
+    // ASSERT: Verify expected behavior
+    // TODO: Add assertions
 }
 ```
 
-## Test Case Selection
+## Test Scenarios
 
 Good test cases include:
 - **Timeout resurrection**: Flight times out, then aircraft reappears (should create new flight vs resume)
@@ -53,18 +82,11 @@ Good test cases include:
 - **Glider patterns**: Thermal climbing, straight glides, landing patterns
 - **Towplane patterns**: Tow climb, release, return to airport
 
-## File Organization
+## File Naming Convention
 
-Consider organizing files by test scenario:
-```
-flights/
-├── README.md
-├── timeout-resurrection/
-│   ├── abc123-should-create-new-flight.txt
-│   └── def456-should-resume-existing.txt
-├── landing-detection/
-│   ├── ghi789-out-of-range-while-landing.txt
-│   └── jkl012-clean-landing.txt
-└── complex-patterns/
-    └── mno345-multiple-thermals.txt
-```
+Files are named descriptively based on the test scenario, not the flight ID:
+- ✅ `timeout-resurrection-creates-new-flight.txt`
+- ✅ `glider-multiple-thermals.txt`
+- ❌ `123e4567-e89b-12d3-a456-426614174000-ogn-aprs.txt`
+
+This makes it easy to understand what each test case is testing without needing to look at the code.

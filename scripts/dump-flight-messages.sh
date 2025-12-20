@@ -1,9 +1,9 @@
 #!/bin/bash
 #
-# Dump raw APRS messages for a flight to a test data file
+# Dump raw APRS messages for a flight to a test data file and generate test case
 #
-# This script extracts all raw APRS messages associated with a flight
-# and saves them in a format suitable for integration testing.
+# This script extracts all raw APRS messages associated with a flight,
+# saves them to a test data file, and generates a new test case.
 #
 # Usage:
 #   ./scripts/dump-flight-messages.sh <environment> <flight_id>
@@ -16,9 +16,13 @@
 #   ./scripts/dump-flight-messages.sh staging 123e4567-e89b-12d3-a456-426614174000
 #   ./scripts/dump-flight-messages.sh production 123e4567-e89b-12d3-a456-426614174000
 #
+# Interactive:
+#   The script will prompt you for a short description of the test case.
+#   Example: "timeout resurrection creates new flight"
+#
 # Output:
-#   Creates file at tests/data/flights/[flight_id]-ogn-aprs.txt
-#   Format: Each line contains "YYYY-MM-DDTHH:MM:SS.SSSZ <raw_aprs_message>"
+#   - Test data file: tests/data/flights/[description].txt
+#   - Test case: Appended to tests/flight_detection_test.rs
 
 set -e  # Exit on error
 
@@ -67,17 +71,70 @@ GIT_ROOT="$(cd "$SCRIPT_DIR" && git rev-parse --show-toplevel 2>/dev/null)" || {
     exit 1
 }
 
-# Define output directory and file
-OUTPUT_DIR="$GIT_ROOT/tests/data/flights"
-OUTPUT_FILE="$OUTPUT_DIR/${FLIGHT_ID}-ogn-aprs.txt"
+# Prompt for test case description
+echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${BLUE}Flight Detection Test Case Generator${NC}"
+echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+echo -e "${YELLOW}Enter a short description for this test case:${NC}"
+echo -e "${BLUE}Examples:${NC}"
+echo -e "  - timeout resurrection creates new flight"
+echo -e "  - missed landing detection"
+echo -e "  - touch and go pattern"
+echo -e "  - multiple thermals single flight"
+echo ""
+read -r -p "Description: " DESCRIPTION
 
+# Validate description
+if [ -z "$DESCRIPTION" ]; then
+    echo -e "${RED}Error: Description cannot be empty${NC}"
+    exit 1
+fi
+
+# Convert description to filename (slugify)
+# - Convert to lowercase
+# - Replace spaces with dashes
+# - Remove special characters except dashes
+# - Remove consecutive dashes
+FILENAME=$(echo "$DESCRIPTION" | \
+    tr '[:upper:]' '[:lower:]' | \
+    sed 's/[^a-z0-9 -]//g' | \
+    sed 's/ \+/-/g' | \
+    sed 's/-\+/-/g' | \
+    sed 's/^-//' | \
+    sed 's/-$//')
+
+# Validate filename
+if [ -z "$FILENAME" ]; then
+    echo -e "${RED}Error: Could not generate valid filename from description${NC}"
+    exit 1
+fi
+
+# Define output files
+OUTPUT_DIR="$GIT_ROOT/tests/data/flights"
+OUTPUT_FILE="$OUTPUT_DIR/${FILENAME}.txt"
+TEST_FILE="$GIT_ROOT/tests/flight_detection_test.rs"
+
+echo ""
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${BLUE}Dumping flight messages${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "Environment: ${YELLOW}$ENVIRONMENT${NC}"
-echo -e "Flight ID:   ${YELLOW}$FLIGHT_ID${NC}"
-echo -e "Output:      ${YELLOW}$OUTPUT_FILE${NC}"
+echo -e "Environment:  ${YELLOW}$ENVIRONMENT${NC}"
+echo -e "Flight ID:    ${YELLOW}$FLIGHT_ID${NC}"
+echo -e "Description:  ${YELLOW}$DESCRIPTION${NC}"
+echo -e "Data file:    ${YELLOW}$OUTPUT_FILE${NC}"
+echo -e "Test file:    ${YELLOW}$TEST_FILE${NC}"
 echo ""
+
+# Check if file already exists
+if [ -f "$OUTPUT_FILE" ]; then
+    echo -e "${YELLOW}Warning: File already exists: $OUTPUT_FILE${NC}"
+    read -r -p "Overwrite? (y/N): " OVERWRITE
+    if [ "$OVERWRITE" != "y" ] && [ "$OVERWRITE" != "Y" ]; then
+        echo -e "${RED}Aborted${NC}"
+        exit 1
+    fi
+fi
 
 # Create output directory if it doesn't exist
 mkdir -p "$OUTPUT_DIR"
@@ -136,14 +193,91 @@ MESSAGE_COUNT=$(wc -l < "$OUTPUT_FILE")
 
 echo -e "${GREEN}✓ Query completed${NC}"
 echo ""
+
+# Generate test function name from filename
+TEST_FUNCTION_NAME="test_${FILENAME}"
+
+# Generate test case code
+echo -e "${YELLOW}Generating test case...${NC}"
+
+# Create test case template
+TEST_CASE=$(cat <<EOF
+
+/// Test case: $DESCRIPTION
+///
+/// Flight ID: $FLIGHT_ID
+/// Environment: $ENVIRONMENT
+/// Messages: $MESSAGE_COUNT
+/// Generated: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+#[tokio::test]
+#[ignore] // Remove this attribute once test is fully implemented
+async fn ${TEST_FUNCTION_NAME}() {
+    // ARRANGE: Set up test environment
+    // TODO: Set up test database
+    // let pool = setup_test_db().await;
+    // let flight_tracker = FlightTracker::new(&pool);
+    // let fix_processor = FixProcessor::new(...);
+
+    // Load test messages from file
+    let mut source = TestMessageSource::from_file("tests/data/flights/${FILENAME}.txt")
+        .await
+        .expect("Failed to load test messages");
+
+    // ACT: Process all messages through the pipeline
+    let mut messages_processed = 0;
+    while let Some(message) = source.next_message().await.unwrap() {
+        // TODO: Parse timestamp and APRS message
+        // let (timestamp_str, aprs_message) = message.split_once(' ')
+        //     .expect("Message should have timestamp");
+        // let timestamp = DateTime::parse_from_rfc3339(timestamp_str)
+        //     .expect("Valid RFC3339 timestamp")
+        //     .with_timezone(&Utc);
+
+        // TODO: Process through the full pipeline
+        // process_aprs_message(aprs_message, timestamp, &packet_router).await;
+
+        messages_processed += 1;
+    }
+
+    // ASSERT: Verify expected behavior
+    // TODO: Add assertions for expected flight detection behavior
+    // Examples:
+    // - Number of flights created
+    // - Flight start/end times
+    // - Flight state transitions
+    // - Correct handling of timeouts, landings, etc.
+
+    // Verify all messages were processed
+    assert_eq!(messages_processed, ${MESSAGE_COUNT}, "Should process all messages");
+
+    // TODO: Add specific assertions for this test case
+    // Example:
+    // let device_id = ...; // Extract from first message
+    // let flights = get_flights_for_device(&pool, device_id).await;
+    // assert_eq!(flights.len(), 2, "$DESCRIPTION");
+}
+EOF
+)
+
+# Append test case to test file
+echo "$TEST_CASE" >> "$TEST_FILE"
+
+echo -e "${GREEN}✓ Test case generated${NC}"
+echo ""
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}✓ Flight messages dumped successfully!${NC}"
+echo -e "${GREEN}✓ Test case created successfully!${NC}"
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 echo -e "Messages extracted: ${GREEN}$MESSAGE_COUNT${NC}"
-echo -e "Output file:        ${GREEN}$OUTPUT_FILE${NC}"
+echo -e "Data file:          ${GREEN}$OUTPUT_FILE${NC}"
+echo -e "Test function:      ${GREEN}${TEST_FUNCTION_NAME}${NC}"
 echo ""
 echo -e "First few messages:"
 echo -e "${BLUE}$(head -n 3 "$OUTPUT_FILE")${NC}"
 echo ""
-echo "You can now use this file in integration tests with TestMessageSource."
+echo -e "${YELLOW}Next steps:${NC}"
+echo "1. Review the generated test in: $TEST_FILE"
+echo "2. Implement the TODO sections (database setup, assertions)"
+echo "3. Remove the #[ignore] attribute when ready to run"
+echo "4. Run the test: cargo test ${TEST_FUNCTION_NAME}"
+echo ""

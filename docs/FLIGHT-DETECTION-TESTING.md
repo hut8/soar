@@ -16,6 +16,21 @@ This is particularly useful for debugging issues like:
 - **Touch-and-go patterns**: Brief landings followed by immediate takeoff
 - **Complex thermal patterns**: Multiple climbs and descents
 
+## Quick Start Workflow
+
+1. **Identify problematic flight** on Recent Flights page (copy flight UUID)
+2. **Run script**: `./scripts/dump-flight-messages.sh production <flight-id>`
+3. **Enter description** when prompted (e.g., "timeout resurrection creates new flight")
+4. **Review generated test** in `tests/flight_detection_test.rs`
+5. **Implement TODOs**: Add database setup, message processing, and assertions
+6. **Remove `#[ignore]`** attribute and run the test
+
+The script automatically:
+- Extracts messages from the database
+- Creates descriptively-named data file (e.g., `timeout-resurrection-creates-new-flight.txt`)
+- Generates test case with arrange/act/assert structure
+- Appends test to `tests/flight_detection_test.rs`
+
 ## Architecture
 
 ### Message Source Abstraction
@@ -58,9 +73,9 @@ Where:
 2. Find a flight that exhibits the problematic behavior
 3. Copy the flight UUID (visible in the URL or flight details)
 
-### Step 2: Dump Raw Messages
+### Step 2: Run the Test Case Generator
 
-Use the `dump-flight-messages.sh` script to extract all raw APRS messages associated with the flight:
+Use the `dump-flight-messages.sh` script to extract messages and automatically generate a test case:
 
 ```bash
 # From staging database (local)
@@ -73,95 +88,111 @@ Use the `dump-flight-messages.sh` script to extract all raw APRS messages associ
 **Example:**
 ```bash
 ./scripts/dump-flight-messages.sh production 123e4567-e89b-12d3-a456-426614174000
+
+# The script will prompt you:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Flight Detection Test Case Generator
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Enter a short description for this test case:
+Examples:
+  - timeout resurrection creates new flight
+  - missed landing detection
+  - touch and go pattern
+  - multiple thermals single flight
+
+Description: timeout resurrection creates new flight
 ```
+
+**What the script does:**
+1. Prompts for a descriptive name for the test case
+2. Converts description to a filename (e.g., `timeout-resurrection-creates-new-flight.txt`)
+3. Extracts all APRS messages from the database
+4. Saves to `tests/data/flights/<descriptive-name>.txt`
+5. Generates a test case with arrange/act/assert structure
+6. Appends the test case to `tests/flight_detection_test.rs`
 
 **Output:**
-- File: `tests/data/flights/<flight-id>-ogn-aprs.txt`
-- Format: One message per line, chronologically sorted
-- Contents: All APRS messages that were assigned to this flight
+```
+Messages extracted: 247
+Data file:          tests/data/flights/timeout-resurrection-creates-new-flight.txt
+Test function:      test_timeout_resurrection_creates_new_flight
 
-**Script behavior:**
-- Validates flight exists and has raw messages
-- Connects to the appropriate database (local or SSH)
-- Extracts timestamp and raw message from the database
-- Saves to the test data directory
-- Reports message count and preview
-
-### Step 3: Organize Test Cases
-
-Create descriptive subdirectories to organize test cases by scenario:
-
-```bash
-# Create directory for the test scenario
-mkdir -p tests/data/flights/timeout-resurrection
-
-# Move and rename the file descriptively
-mv tests/data/flights/123e4567-e89b-12d3-a456-426614174000-ogn-aprs.txt \
-   tests/data/flights/timeout-resurrection/should-create-new-flight.txt
+Next steps:
+1. Review the generated test in: tests/flight_detection_test.rs
+2. Implement the TODO sections (database setup, assertions)
+3. Remove the #[ignore] attribute when ready to run
+4. Run the test: cargo test test_timeout_resurrection_creates_new_flight
 ```
 
-**Recommended directory structure:**
-```
-tests/data/flights/
-├── README.md
-├── timeout-resurrection/
-│   ├── should-create-new-flight.txt
-│   └── should-resume-existing-flight.txt
-├── landing-detection/
-│   ├── out-of-range-while-landing.txt
-│   └── clean-landing-pattern.txt
-├── touch-and-go/
-│   └── brief-landing-then-takeoff.txt
-└── complex-patterns/
-    └── multiple-thermals.txt
-```
+### Step 3: Implement the Generated Test Case
 
-### Step 4: Write Integration Tests
+The script generates a test template with TODO sections that you need to fill in:
 
-Create integration tests in `tests/` that replay the messages and verify behavior:
+The generated test follows the arrange/act/assert pattern:
 
 ```rust
-use soar::message_sources::{RawMessageSource, TestMessageSource};
-
+/// Test case: timeout resurrection creates new flight
+///
+/// Flight ID: 123e4567-e89b-12d3-a456-426614174000
+/// Environment: production
+/// Messages: 247
+/// Generated: 2025-12-20 22:15:30 UTC
 #[tokio::test]
+#[ignore] // Remove this attribute once test is fully implemented
 async fn test_timeout_resurrection_creates_new_flight() {
-    // Setup test database
-    let pool = setup_test_db().await;
-
-    // Create flight tracker and processors
-    let flight_tracker = FlightTracker::new(&pool);
-    let fix_processor = FixProcessor::new(...);
+    // ARRANGE: Set up test environment
+    // TODO: Set up test database
+    // let pool = setup_test_db().await;
+    // let flight_tracker = FlightTracker::new(&pool);
+    // let fix_processor = FixProcessor::new(...);
 
     // Load test messages from file
     let mut source = TestMessageSource::from_file(
-        "tests/data/flights/timeout-resurrection/should-create-new-flight.txt"
-    ).await.unwrap();
+        "tests/data/flights/timeout-resurrection-creates-new-flight.txt"
+    ).await.expect("Failed to load test messages");
 
-    // Process all messages through the pipeline
+    // ACT: Process all messages through the pipeline
+    let mut messages_processed = 0;
     while let Some(message) = source.next_message().await.unwrap() {
-        // Parse timestamp and APRS message
-        let (timestamp, aprs_message) = parse_message(&message);
+        // TODO: Parse timestamp and APRS message
+        // let (timestamp_str, aprs_message) = message.split_once(' ')
+        //     .expect("Message should have timestamp");
+        // let timestamp = DateTime::parse_from_rfc3339(timestamp_str)
+        //     .expect("Valid RFC3339 timestamp")
+        //     .with_timezone(&Utc);
 
-        // Process through the full pipeline
-        process_aprs_message(aprs_message, timestamp, &packet_router).await;
+        // TODO: Process through the full pipeline
+        // process_aprs_message(aprs_message, timestamp, &packet_router).await;
+
+        messages_processed += 1;
     }
 
-    // Verify the correct behavior
-    let device_id = get_device_id_from_message(&first_message);
-    let flights = get_flights_for_device(&pool, device_id).await;
+    // ASSERT: Verify expected behavior
+    // TODO: Add assertions for expected flight detection behavior
+    // Examples:
+    // - Number of flights created
+    // - Flight start/end times
+    // - Flight state transitions
+    // - Correct handling of timeouts, landings, etc.
 
-    // This scenario should create 2 separate flights (not resume the timed-out one)
-    assert_eq!(flights.len(), 2, "Should create 2 separate flights");
+    // Verify all messages were processed
+    assert_eq!(messages_processed, 247, "Should process all messages");
 
-    // Verify the first flight timed out
-    assert!(flights[0].ended_at.is_some());
-    assert_eq!(flights[0].end_reason, Some("timeout"));
-
-    // Verify the second flight was created (not resumed)
-    assert_ne!(flights[0].id, flights[1].id);
-    assert!(flights[1].started_at > flights[0].ended_at.unwrap());
+    // TODO: Add specific assertions for this test case
+    // Example:
+    // let device_id = ...; // Extract from first message
+    // let flights = get_flights_for_device(&pool, device_id).await;
+    // assert_eq!(flights.len(), 2, "timeout resurrection creates new flight");
 }
 ```
+
+**Steps to complete the test:**
+1. Implement database setup (use existing test infrastructure or create new)
+2. Add message parsing and processing logic
+3. Add specific assertions for the expected behavior
+4. Remove the `#[ignore]` attribute
+5. Run the test: `cargo test test_timeout_resurrection_creates_new_flight`
 
 ## Using TestMessageSource
 
