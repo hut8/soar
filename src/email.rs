@@ -1,7 +1,7 @@
 use anyhow::Result;
 use lettre::{
     AsyncSmtpTransport, AsyncTransport, Tokio1Executor,
-    message::{Message, header::ContentType},
+    message::{Mailbox, Message, header::ContentType},
     transport::smtp::{
         authentication::Credentials, client::TlsParametersBuilder, response::Response,
     },
@@ -14,6 +14,13 @@ fn get_staging_prefix() -> &'static str {
         "staging" => "[STAGING] ",
         _ => "",
     }
+}
+
+/// Create a properly formatted Mailbox with display name
+/// This handles special characters in display names by using lettre's Mailbox type
+fn create_mailbox(name: &str, email: &str) -> Result<Mailbox> {
+    let address = email.parse()?;
+    Ok(Mailbox::new(Some(name.to_string()), address))
 }
 
 pub struct EmailService {
@@ -122,8 +129,8 @@ The SOAR Team"#,
         );
 
         let email = Message::builder()
-            .from(format!("{} <{}>", self.from_name, self.from_email).parse()?)
-            .to(format!("{} <{}>", to_name, to_email).parse()?)
+            .from(create_mailbox(&self.from_name, &self.from_email)?)
+            .to(create_mailbox(to_name, to_email)?)
             .subject(subject)
             .header(ContentType::TEXT_PLAIN)
             .body(body)?;
@@ -162,8 +169,8 @@ The SOAR Team"#,
         );
 
         let email = Message::builder()
-            .from(format!("{} <{}>", self.from_name, self.from_email).parse()?)
-            .to(format!("{} <{}>", to_name, to_email).parse()?)
+            .from(create_mailbox(&self.from_name, &self.from_email)?)
+            .to(create_mailbox(to_name, to_email)?)
             .subject(subject)
             .header(ContentType::TEXT_PLAIN)
             .body(body)?;
@@ -216,8 +223,8 @@ The SOAR Team"#,
         );
 
         let email = Message::builder()
-            .from(format!("{} <{}>", self.from_name, self.from_email).parse()?)
-            .to(format!("{} <{}>", to_name, to_email).parse()?)
+            .from(create_mailbox(&self.from_name, &self.from_email)?)
+            .to(create_mailbox(to_name, to_email)?)
             .subject(subject)
             .header(ContentType::TEXT_PLAIN)
             .body(body)?;
@@ -274,8 +281,8 @@ The SOAR Team"#,
         );
 
         let email = Message::builder()
-            .from(format!("{} <{}>", self.from_name, self.from_email).parse()?)
-            .to(format!("{} <{}>", to_name, to_email).parse()?)
+            .from(create_mailbox(&self.from_name, &self.from_email)?)
+            .to(create_mailbox(to_name, to_email)?)
             .subject(subject)
             .multipart(
                 MultiPart::mixed()
