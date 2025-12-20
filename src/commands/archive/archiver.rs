@@ -27,7 +27,7 @@ pub trait Archivable: Sized + Serialize + for<'de> Deserialize<'de> + Send + 'st
     }
 
     /// Whether this table is partitioned (affects post-deletion cleanup)
-    /// - Partitioned tables (like fixes, aprs_messages) use ANALYZE only after dropping partitions
+    /// - Partitioned tables (like fixes, raw_messages) use ANALYZE only after dropping partitions
     /// - Non-partitioned tables (like flights, receiver_statuses) use VACUUM ANALYZE after DELETE
     fn is_partitioned() -> bool {
         false // Default to non-partitioned for backwards compatibility

@@ -12,10 +12,11 @@ use soar::schema::raw_messages;
 
 use super::archiver::{Archivable, PgPool, finalize_pending_detachment, write_records_to_file};
 
-/// CSV-serializable version of AprsMessage with hex-encoded hash
+/// CSV-serializable version of RawMessage (AprsMessage) with hex-encoded hash
 /// This is used for archival to avoid CSV serialization issues with Vec<u8>
+/// Handles both APRS and ADS-B messages from the raw_messages table
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct AprsMessageCsv {
+pub struct RawMessageCsv {
     id: Uuid,
     raw_message: String,
     received_at: DateTime<Utc>,
@@ -24,7 +25,7 @@ pub struct AprsMessageCsv {
     raw_message_hash: String, // Hex-encoded instead of Vec<u8>
 }
 
-impl From<AprsMessage> for AprsMessageCsv {
+impl From<AprsMessage> for RawMessageCsv {
     fn from(msg: AprsMessage) -> Self {
         Self {
             id: msg.id,
@@ -37,8 +38,8 @@ impl From<AprsMessage> for AprsMessageCsv {
     }
 }
 
-impl From<AprsMessageCsv> for AprsMessage {
-    fn from(csv: AprsMessageCsv) -> Self {
+impl From<RawMessageCsv> for AprsMessage {
+    fn from(csv: RawMessageCsv) -> Self {
         Self {
             id: csv.id,
             raw_message: csv.raw_message.into_bytes(), // Encode UTF-8 text to bytes
@@ -50,13 +51,13 @@ impl From<AprsMessageCsv> for AprsMessage {
     }
 }
 
-impl Archivable for AprsMessageCsv {
+impl Archivable for RawMessageCsv {
     fn table_name() -> &'static str {
-        "aprs_messages"
+        "raw_messages"
     }
 
     fn is_partitioned() -> bool {
-        true // aprs_messages table is partitioned by received_at date
+        true // raw_messages table is partitioned by received_at date
     }
 
     async fn get_oldest_date(pool: &PgPool, before_date: NaiveDate) -> Result<Option<NaiveDate>> {
@@ -146,8 +147,8 @@ impl Archivable for AprsMessageCsv {
                 .select(AprsMessage::as_select())
                 .load_iter::<AprsMessage, diesel::pg::PgRowByRowLoadingMode>(&mut conn)?;
 
-            // Convert AprsMessage to AprsMessageCsv for CSV serialization
-            let csv_messages_iter = messages_iter.map(|result| result.map(AprsMessageCsv::from));
+            // Convert AprsMessage to RawMessageCsv for CSV serialization
+            let csv_messages_iter = messages_iter.map(|result| result.map(RawMessageCsv::from));
 
             write_records_to_file(csv_messages_iter, &file_path, Self::table_name())
         })
@@ -160,13 +161,13 @@ impl Archivable for AprsMessageCsv {
         _day_end: chrono::DateTime<Utc>,
     ) -> Result<()> {
         // Calculate partition name from day_start
-        // Partitions are named like aprs_messages_p20251114 for 2025-11-14
+        // Partitions are named like raw_messages_p20251114 for 2025-11-14
         let partition_date = day_start.format("%Y%m%d");
-        let partition_name = format!("aprs_messages_p{}", partition_date);
+        let partition_name = format!("raw_messages_p{}", partition_date);
 
         // First, check for and finalize any pending detachment from a previous interrupted operation
         // This handles the edge case where a previous DETACH PARTITION CONCURRENTLY was interrupted
-        finalize_pending_detachment(pool, "aprs_messages", &partition_name).await?;
+        finalize_pending_detachment(pool, "raw_messages", &partition_name).await?;
 
         let pool = pool.clone();
         let partition_name_clone = partition_name.clone();
@@ -185,7 +186,7 @@ impl Archivable for AprsMessageCsv {
             // CONCURRENTLY cannot run inside a transaction, so we use SimpleConnection
             // This command blocks until detachment completes (uses two-transaction process)
             let detach_sql = format!(
-                "ALTER TABLE aprs_messages DETACH PARTITION {} CONCURRENTLY",
+                "ALTER TABLE raw_messages DETACH PARTITION {} CONCURRENTLY",
                 partition_name_clone
             );
             conn.batch_execute(&detach_sql).context(format!(
@@ -193,7 +194,7 @@ impl Archivable for AprsMessageCsv {
                 partition_name_clone
             ))?;
             info!(
-                "Detached partition {} from aprs_messages table (CONCURRENTLY)",
+                "Detached partition {} from raw_messages table (CONCURRENTLY)",
                 partition_name_clone
             );
 
