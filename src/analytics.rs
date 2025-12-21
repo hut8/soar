@@ -99,7 +99,6 @@ pub struct AnalyticsSummary {
     pub flights_30d: i32,
     pub active_devices_7d: i32,
     pub outlier_devices_count: i32,
-    pub data_quality_score: Option<f64>,
 }
 
 /// Aircraft outlier for anomaly detection
