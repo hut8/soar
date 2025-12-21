@@ -215,7 +215,6 @@ impl FlightLocationProcessor {
                     result.city,
                     result.state,
                     result.zip_code,
-                    None, // region_code
                     result.country.map(|c| {
                         // Take first 2 characters for country code
                         c.chars().take(2).collect()
@@ -224,19 +223,16 @@ impl FlightLocationProcessor {
                 );
 
                 // Use find_or_create to avoid duplicate locations
-                match self
-                    .locations_repo
-                    .find_or_create(
-                        location.street1.clone(),
-                        location.street2.clone(),
-                        location.city.clone(),
-                        location.state.clone(),
-                        location.zip_code.clone(),
-                        location.region_code.clone(),
-                        location.country_mail_code.clone(),
-                        location.geolocation.clone(),
-                    )
-                    .await
+                let params = crate::locations_repo::LocationParams {
+                    street1: location.street1.clone(),
+                    street2: location.street2.clone(),
+                    city: location.city.clone(),
+                    state: location.state.clone(),
+                    zip_code: location.zip_code.clone(),
+                    country_code: location.country_code.clone(),
+                    geolocation: location.geolocation.clone(),
+                };
+                match self.locations_repo.find_or_create(params).await
                 {
                     Ok(created_location) => {
                         info!(

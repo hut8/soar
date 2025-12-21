@@ -43,6 +43,7 @@ pub struct ArchiveReport {
     pub total_duration_secs: f64,
     pub tables: Vec<TableArchiveMetrics>,
     pub daily_counts: HashMap<String, Vec<DailyCount>>, // table_name -> Vec<DailyCount>
+    pub unreferenced_locations_7d: Option<i64>, // Count of unreferenced locations created in last 7 days
 }
 
 impl Default for ArchiveReport {
@@ -57,6 +58,7 @@ impl ArchiveReport {
             total_duration_secs: 0.0,
             tables: Vec::new(),
             daily_counts: HashMap::new(),
+            unreferenced_locations_7d: None,
         }
     }
 
@@ -134,6 +136,31 @@ impl ArchiveReport {
 
     pub fn to_html(&self) -> String {
         let environment = get_environment_name();
+
+        // Build summary section with optional unreferenced locations
+        let mut summary_html = format!(
+            r#"<strong>Environment:</strong> {}<br>
+            <strong>Total Duration:</strong> {}<br>
+            <strong>Tables Processed:</strong> {}<br>
+            <strong>Total Rows Archived:</strong> {}<br>"#,
+            environment,
+            Self::format_duration(self.total_duration_secs),
+            self.tables.len(),
+            Self::format_number(self.tables.iter().map(|t| t.rows_deleted).sum())
+        );
+
+        if let Some(count) = self.unreferenced_locations_7d {
+            summary_html.push_str(&format!(
+                r#"<strong>Unreferenced Locations (last 7 days):</strong> {}<br>"#,
+                Self::format_count(count)
+            ));
+        }
+
+        summary_html.push_str(&format!(
+            r#"<strong>Time:</strong> {}"#,
+            chrono::Local::now().format("%Y-%m-%d %H:%M:%S")
+        ));
+
         let mut html = format!(
             r#"<!DOCTYPE html>
 <html>
@@ -165,11 +192,7 @@ impl ArchiveReport {
         <h1>SOAR Archive Report - {}</h1>
         <div class="status">✓ SUCCESS</div>
         <div class="summary">
-            <strong>Environment:</strong> {}<br>
-            <strong>Total Duration:</strong> {}<br>
-            <strong>Tables Processed:</strong> {}<br>
-            <strong>Total Rows Archived:</strong> {}<br>
-            <strong>Time:</strong> {}
+            {}
         </div>
 
         <h2>Archive Summary</h2>
@@ -183,12 +206,7 @@ impl ArchiveReport {
                 <th>Oldest Remaining</th>
                 <th>Relative</th>
             </tr>"#,
-            environment,
-            environment,
-            Self::format_duration(self.total_duration_secs),
-            self.tables.len(),
-            Self::format_number(self.tables.iter().map(|t| t.rows_deleted).sum()),
-            chrono::Local::now().format("%Y-%m-%d %H:%M:%S")
+            environment, summary_html
         );
 
         for table in &self.tables {

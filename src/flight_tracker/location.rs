@@ -81,25 +81,21 @@ pub(crate) async fn create_or_find_location(
                 result.city,
                 result.state,
                 result.zip_code,
-                None,                                                // region_code
                 result.country.map(|c| c.chars().take(2).collect()), // country code (first 2 chars)
                 Some(crate::locations::Point::new(latitude, longitude)),
             );
 
             // Use find_or_create to avoid duplicate locations
-            match locations_repo
-                .find_or_create(
-                    location.street1.clone(),
-                    location.street2.clone(),
-                    location.city.clone(),
-                    location.state.clone(),
-                    location.zip_code.clone(),
-                    location.region_code.clone(),
-                    location.country_mail_code.clone(),
-                    location.geolocation,
-                )
-                .await
-            {
+            let params = crate::locations_repo::LocationParams {
+                street1: location.street1.clone(),
+                street2: location.street2.clone(),
+                city: location.city.clone(),
+                state: location.state.clone(),
+                zip_code: location.zip_code.clone(),
+                country_code: location.country_code.clone(),
+                geolocation: location.geolocation,
+            };
+            match locations_repo.find_or_create(params).await {
                 Ok(created_location) => {
                     info!(
                         "Created/found location {} for coordinates ({}, {}): {}",
@@ -190,25 +186,21 @@ pub(crate) async fn create_start_end_location(
                 result.city,
                 result.state,
                 result.zip_code,
-                None,                                                // region_code
                 result.country.map(|c| c.chars().take(2).collect()), // country code (first 2 chars)
                 Some(crate::locations::Point::new(latitude, longitude)),
             );
 
             // Use find_or_create to avoid duplicate locations
-            match locations_repo
-                .find_or_create(
-                    location.street1.clone(),
-                    location.street2.clone(),
-                    location.city.clone(),
-                    location.state.clone(),
-                    location.zip_code.clone(),
-                    location.region_code.clone(),
-                    location.country_mail_code.clone(),
-                    location.geolocation,
-                )
-                .await
-            {
+            let params = crate::locations_repo::LocationParams {
+                street1: location.street1.clone(),
+                street2: location.street2.clone(),
+                city: location.city.clone(),
+                state: location.state.clone(),
+                zip_code: location.zip_code.clone(),
+                country_code: location.country_code.clone(),
+                geolocation: location.geolocation,
+            };
+            match locations_repo.find_or_create(params).await {
                 Ok(created_location) => {
                     info!(
                         "Created/found {} location {} for coordinates ({}, {}): {}",

@@ -273,6 +273,29 @@ pub async fn handle_archive(
     );
     report.add_daily_counts("raw_messages".to_string(), raw_messages_counts_result?);
 
+    // Count unreferenced locations created in the last 7 days
+    info!("Counting unreferenced locations from last 7 days...");
+    let seven_days_ago = today - chrono::Duration::days(7);
+    let locations_repo = soar::locations_repo::LocationsRepository::new(pool.clone());
+    match locations_repo
+        .count_unreferenced_locations_in_range(seven_days_ago, today)
+        .await
+    {
+        Ok(count) => {
+            info!(
+                "Found {} unreferenced locations created in last 7 days",
+                count
+            );
+            report.unreferenced_locations_7d = Some(count);
+        }
+        Err(e) => {
+            tracing::warn!(
+                "Failed to count unreferenced locations for email report: {}",
+                e
+            );
+        }
+    }
+
     info!("Archive process completed successfully");
 
     // Send email report
