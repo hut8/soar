@@ -10,6 +10,7 @@
 	import SettingsModal from '$lib/components/SettingsModal.svelte';
 	import AircraftStatusModal from '$lib/components/AircraftStatusModal.svelte';
 	import AirportModal from '$lib/components/AirportModal.svelte';
+	import AirspaceModal from '$lib/components/AirspaceModal.svelte';
 	import { AircraftRegistry } from '$lib/services/AircraftRegistry';
 	import { FixFeed } from '$lib/services/FixFeed';
 	import type { Aircraft, Receiver, Airspace, AirspaceFeatureCollection } from '$lib/types';
@@ -121,6 +122,10 @@
 	// Airport modal state
 	let showAirportModal = $state(false);
 	let selectedAirport: AirportView | null = $state(null);
+
+	// Airspace modal state
+	let showAirspaceModal = $state(false);
+	let selectedAirspace: Airspace | null = $state(null);
 
 	// Settings state - these will be updated by the SettingsModal
 	let currentSettings = $state({
@@ -1153,7 +1158,7 @@
 				limit: '500'
 			});
 
-			const data = await serverCall<AirspaceFeatureCollection>(`/data/airspaces?${params}`);
+			const data = await serverCall<AirspaceFeatureCollection>(`/airspaces?${params}`);
 
 			if (data && data.type === 'FeatureCollection' && Array.isArray(data.features)) {
 				displayAirspacesOnMap(data.features);
@@ -1204,27 +1209,10 @@
 					zIndex: 50 // Below airports (100) and receivers (150)
 				});
 
-				// Add click listener to show airspace info
-				polygon.addListener('click', (event: google.maps.PolyMouseEvent) => {
-					if (!event.latLng) return;
-
-					const infoWindow = new google.maps.InfoWindow({
-						content: `
-							<div style="padding: 8px;">
-								<h3 style="margin: 0 0 8px 0; font-weight: bold;">${airspace.properties.name}</h3>
-								<div style="font-size: 13px;">
-									<div><strong>Class:</strong> ${airspace.properties.airspace_class || 'N/A'}</div>
-									<div><strong>Type:</strong> ${airspace.properties.airspace_type}</div>
-									<div><strong>Lower:</strong> ${airspace.properties.lower_limit}</div>
-									<div><strong>Upper:</strong> ${airspace.properties.upper_limit}</div>
-									${airspace.properties.remarks ? `<div style="margin-top: 4px;"><strong>Remarks:</strong> ${airspace.properties.remarks}</div>` : ''}
-								</div>
-							</div>
-						`,
-						position: event.latLng
-					});
-
-					infoWindow.open(map);
+				// Add click listener to show airspace modal
+				polygon.addListener('click', () => {
+					selectedAirspace = airspace;
+					showAirspaceModal = true;
 				});
 
 				airspacePolygons.push(polygon);
@@ -2121,6 +2109,9 @@
 
 <!-- Airport Modal -->
 <AirportModal bind:showModal={showAirportModal} bind:selectedAirport />
+
+<!-- Airspace Modal -->
+<AirspaceModal bind:showModal={showAirspaceModal} bind:selectedAirspace />
 
 <style>
 	/* Location button styling */
