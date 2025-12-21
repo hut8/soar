@@ -122,6 +122,8 @@ if id soar &>/dev/null; then
 fi
 
 # Configure for Pelias
+OPENSEARCH_CONFIG_CHANGED=false
+
 if ! grep -q "# Pelias configuration" /etc/opensearch/opensearch.yml 2>/dev/null; then
     echo -e "${BLUE}Adding Pelias configuration to opensearch.yml...${NC}"
     cat >> /etc/opensearch/opensearch.yml <<EOF
@@ -130,7 +132,7 @@ if ! grep -q "# Pelias configuration" /etc/opensearch/opensearch.yml 2>/dev/null
 discovery.type: single-node
 indices.query.bool.max_clause_count: 4096
 
-# Network configuration - HTTP only
+# Network configuration - HTTP only (accessible from Docker bridge)
 network.host: 0.0.0.0
 http.port: 9200
 
@@ -139,8 +141,19 @@ plugins.security.disabled: true
 plugins.security.ssl.http.enabled: false
 plugins.security.ssl.transport.enabled: false
 EOF
+    OPENSEARCH_CONFIG_CHANGED=true
 else
-    echo -e "${BLUE}Pelias configuration already exists in opensearch.yml${NC}"
+    echo -e "${BLUE}Pelias configuration section found in opensearch.yml${NC}"
+    # Ensure network.host is set to 0.0.0.0 for Docker bridge access
+    if ! grep -q "^network.host: 0.0.0.0" /etc/opensearch/opensearch.yml; then
+        echo -e "${YELLOW}Updating network.host to 0.0.0.0 for Docker bridge access...${NC}"
+        if grep -q "^network.host:" /etc/opensearch/opensearch.yml; then
+            sed -i 's/^network.host:.*/network.host: 0.0.0.0/' /etc/opensearch/opensearch.yml
+        else
+            sed -i '/# Pelias configuration/a network.host: 0.0.0.0' /etc/opensearch/opensearch.yml
+        fi
+        OPENSEARCH_CONFIG_CHANGED=true
+    fi
 fi
 
 # Set JVM heap size (8GB - adjust based on RAM)
@@ -150,26 +163,46 @@ cat > /etc/opensearch/jvm.options.d/heap.options <<EOF
 -Xmx8g
 EOF
 
-# Enable and start
+# Enable and start/restart OpenSearch
 systemctl daemon-reload
 systemctl enable opensearch
-systemctl start opensearch
 
-echo -e "${GREEN}OpenSearch installed and started${NC}"
+if [ "$OPENSEARCH_CONFIG_CHANGED" = true ]; then
+    echo -e "${BLUE}Restarting OpenSearch to apply configuration changes...${NC}"
+    systemctl restart opensearch
+else
+    systemctl start opensearch 2>/dev/null || true
+fi
+
+echo -e "${GREEN}OpenSearch configured and running${NC}"
 
 # Wait for search engine to be ready
-echo -e "${BLUE}Waiting for search engine to be ready...${NC}"
+echo -e "${BLUE}Waiting for OpenSearch to be ready...${NC}"
 for i in {1..30}; do
     if curl -s http://localhost:9200 > /dev/null 2>&1; then
-        echo -e "${GREEN}Search engine is ready${NC}"
+        echo -e "${GREEN}OpenSearch is ready on localhost${NC}"
         break
     fi
     if [ $i -eq 30 ]; then
-        echo -e "${RED}Error: Search engine failed to start${NC}"
+        echo -e "${RED}Error: OpenSearch failed to start${NC}"
+        echo -e "${YELLOW}Check logs: journalctl -u opensearch -n 50${NC}"
         exit 1
     fi
     sleep 2
 done
+
+# Verify OpenSearch is accessible from Docker bridge network
+echo -e "${BLUE}Verifying OpenSearch is accessible from Docker bridge (172.17.0.1)...${NC}"
+if curl -s http://172.17.0.1:9200 > /dev/null 2>&1; then
+    echo -e "${GREEN}OpenSearch is accessible from Docker bridge${NC}"
+else
+    echo -e "${RED}Error: OpenSearch not accessible from Docker bridge${NC}"
+    echo -e "${YELLOW}Current network.host setting:${NC}"
+    grep "^network.host" /etc/opensearch/opensearch.yml || echo "  (not set)"
+    echo -e "${YELLOW}Listening ports:${NC}"
+    ss -tlnp | grep :9200 || echo "  (none found)"
+    exit 1
+fi
 
 # Install Docker (for data import tools only)
 if ! command -v docker &> /dev/null; then
