@@ -469,7 +469,7 @@ if [ -d "$DEPLOY_DIR/grafana-provisioning" ]; then
                 log_info "Processing contact-points.yml.template with SMTP config from $ENV_FILE..."
                 sed -e "s|{{ALERT_EMAIL}}|$ALERT_EMAIL|g" \
                     "$DEPLOY_DIR/grafana-provisioning/alerting/contact-points.yml.template" \
-                    >! /etc/grafana/provisioning/alerting/contact-points.yml
+                    > /etc/grafana/provisioning/alerting/contact-points.yml
                 chmod 640 /etc/grafana/provisioning/alerting/contact-points.yml
                 log_info "Alert contact point configured for: $ALERT_EMAIL"
             fi
@@ -499,7 +499,7 @@ if [ -d "$DEPLOY_DIR/grafana-provisioning" ]; then
                     -e "s|{{FROM_EMAIL}}|$FROM_ADDR|g" \
                     -e "s|{{FROM_NAME}}|$FROM_NAME_VAL|g" \
                     "$DEPLOY_DIR/systemd/grafana-server.service.d-smtp.conf.template" \
-                    >! /etc/systemd/system/grafana-server.service.d/smtp.conf
+                    > /etc/systemd/system/grafana-server.service.d/smtp.conf
                 chmod 640 /etc/systemd/system/grafana-server.service.d/smtp.conf
                 log_info "Grafana SMTP configured: $SMTP_HOST:$SMTP_PORT_VAL as $FROM_ADDR"
 
