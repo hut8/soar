@@ -372,11 +372,19 @@ else
 fi
 
 # Create Pelias index
-if curl -s "http://localhost:9200/pelias" | grep -q "pelias"; then
+if curl -s -o /dev/null -w "%{http_code}" "http://localhost:9200/pelias" | grep -q "200"; then
     echo -e "${BLUE}Pelias index already exists (skipping creation)${NC}"
 else
     echo -e "${BLUE}Creating Pelias index in OpenSearch...${NC}"
     su - pelias -c "cd /opt/pelias/docker && ./pelias elastic create"
+
+    # Verify index was created successfully
+    if curl -s -o /dev/null -w "%{http_code}" "http://localhost:9200/pelias" | grep -q "200"; then
+        echo -e "${GREEN}Pelias index created successfully${NC}"
+    else
+        echo -e "${RED}Error: Failed to create Pelias index${NC}"
+        exit 1
+    fi
 fi
 
 # Import Who's on First data
