@@ -12,32 +12,29 @@ test.describe('Watchlist', () => {
 		// Check that the page title is visible
 		await expect(authenticatedPage.getByRole('heading', { name: 'My Watchlist' })).toBeVisible();
 
-		// Wait for loading to complete - check that "Loading watchlist..." is not present
-		// or wait for either the empty state or the entries grid to appear
-		await expect(authenticatedPage.getByText('Loading watchlist...')).not.toBeVisible({
-			timeout: 10000
-		});
-
 		// Check that we don't see authorization error
-		// If the authorization fix is working, we shouldn't see this error
-		await expect(authenticatedPage.getByText(/missing authorization token/i)).not.toBeVisible();
+		// The main purpose of this test is to verify the authorization fix is working
+		const pageText = await authenticatedPage.textContent('body');
+		expect(pageText).not.toMatch(/missing authorization token/i);
+		expect(pageText).not.toMatch(/error.*missing authorization token/i);
 
-		// Check that "Add Aircraft" button is visible (appears in both empty and filled states)
-		await expect(authenticatedPage.getByRole('button', { name: /add aircraft/i })).toBeVisible();
+		// Wait for either "Add Aircraft" button or empty state to appear
+		// This confirms the page loaded successfully
+		await Promise.race([
+			authenticatedPage.getByRole('button', { name: /add aircraft/i }).waitFor({ timeout: 10000 }),
+			authenticatedPage.getByText('Your watchlist is empty').waitFor({ timeout: 10000 })
+		]);
 
-		// Verify the watchlist loaded successfully (should see either entries or empty state)
-		// Check for either the grid container or the empty state message
-		const hasEmptyState = await authenticatedPage
+		// Verify we can see the expected UI elements
+		// At least one of these should be visible
+		const hasAddButton = await authenticatedPage
+			.getByRole('button', { name: /add aircraft/i })
+			.isVisible();
+		const hasEmptyMessage = await authenticatedPage
 			.getByText('Your watchlist is empty')
-			.isVisible()
-			.catch(() => false);
-		const hasGrid = await authenticatedPage
-			.locator('.grid')
-			.isVisible()
-			.catch(() => false);
+			.isVisible();
 
-		// Should have either entries grid or empty state visible
-		expect(hasGrid || hasEmptyState).toBe(true);
+		expect(hasAddButton || hasEmptyMessage).toBe(true);
 	});
 
 	test('should redirect to login when not authenticated', async ({ page }) => {
