@@ -77,8 +77,8 @@ export const authApi = {
 		});
 	},
 
-	async verifyEmail(token: string): Promise<void> {
-		await serverCall<void>('/auth/verify-email', {
+	async verifyEmail(token: string): Promise<LoginResponse> {
+		return serverCall<LoginResponse>('/auth/verify-email', {
 			method: 'POST',
 			body: JSON.stringify({ token })
 		});

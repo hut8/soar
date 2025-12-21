@@ -1,0 +1,23 @@
+# Grafana SMTP Configuration (Template)
+# This file is processed by soar-deploy to substitute SMTP credentials from /etc/soar/env
+# DO NOT commit actual credentials to this file - use placeholders only
+#
+# This file should be deployed to:
+#   /etc/systemd/system/grafana-server.service.d/smtp.conf
+#
+# Placeholders:
+#   {{SMTP_SERVER}} - SMTP server hostname
+#   {{SMTP_PORT}} - SMTP server port
+#   {{SMTP_USERNAME}} - SMTP authentication username
+#   {{SMTP_PASSWORD}} - SMTP authentication password
+#   {{FROM_EMAIL}} - Sender email address
+#   {{FROM_NAME}} - Sender display name
+
+[Service]
+Environment="GF_SMTP_ENABLED=true"
+Environment="GF_SMTP_HOST={{SMTP_SERVER}}:{{SMTP_PORT}}"
+Environment="GF_SMTP_USER={{SMTP_USERNAME}}"
+Environment="GF_SMTP_PASSWORD={{SMTP_PASSWORD}}"
+Environment="GF_SMTP_FROM_ADDRESS={{FROM_EMAIL}}"
+Environment="GF_SMTP_FROM_NAME={{FROM_NAME}}"
+Environment="GF_SMTP_SKIP_VERIFY=false"

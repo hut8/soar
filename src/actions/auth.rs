@@ -208,10 +208,55 @@ pub async fn verify_email(
 
     match users_repo.get_by_verification_token(&payload.token).await {
         Ok(Some(user)) => match users_repo.verify_user_email(user.id).await {
-            Ok(true) => Json(serde_json::json!({
-                "message": "Email verified successfully"
-            }))
-            .into_response(),
+            Ok(true) => {
+                // Get the updated user with verified email
+                let verified_user = match users_repo.get_by_id(user.id).await {
+                    Ok(Some(user)) => user,
+                    Ok(None) => {
+                        return json_error(StatusCode::NOT_FOUND, "User not found").into_response();
+                    }
+                    Err(e) => {
+                        error!("Failed to get user after verification: {}", e);
+                        return json_error(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "Failed to verify email",
+                        )
+                        .into_response();
+                    }
+                };
+
+                // Generate JWT token for immediate login
+                match get_jwt_secret() {
+                    Ok(secret) => {
+                        let jwt_service = JwtService::new(&secret);
+                        match jwt_service.generate_token(&verified_user) {
+                            Ok(token) => {
+                                let response = LoginResponse {
+                                    token,
+                                    user: UserView::from(verified_user),
+                                };
+                                Json(response).into_response()
+                            }
+                            Err(e) => {
+                                error!("Failed to generate token: {}", e);
+                                json_error(
+                                    StatusCode::INTERNAL_SERVER_ERROR,
+                                    "Failed to generate authentication token",
+                                )
+                                .into_response()
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        error!("JWT secret not configured: {}", e);
+                        json_error(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "Authentication configuration error",
+                        )
+                        .into_response()
+                    }
+                }
+            }
             Ok(false) => (StatusCode::NOT_FOUND, "User not found").into_response(),
             Err(e) => {
                 error!("Failed to verify email: {}", e);
