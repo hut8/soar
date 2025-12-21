@@ -46,11 +46,17 @@
 # ==============================================================================
 #
 # This script resolves the DEFAULT partition problem by:
-# 1. Detaching the DEFAULT partition from the parent table
-# 2. Creating missing date-based partitions
-# 3. Moving data from the detached DEFAULT into proper partitions
-# 4. Dropping the empty DEFAULT partition
-# 5. Allowing partman maintenance to resume normal operation
+# 1. Creating missing date-based partitions (while DEFAULT is still attached)
+# 2. Moving data from DEFAULT into proper partitions (while still attached)
+# 3. Verifying DEFAULT is empty
+# 4. Detaching the empty DEFAULT partition from the parent table
+# 5. Dropping the empty DEFAULT partition
+# 6. Allowing partman maintenance to resume normal operation
+#
+# IMPORTANT: Data is migrated BEFORE detaching DEFAULT. This is critical
+# because foreign key constraints from other tables may reference data in
+# DEFAULT. By keeping DEFAULT attached during migration, PostgreSQL can
+# maintain FK integrity as data moves between partitions.
 #
 # ==============================================================================
 # WHEN TO USE THIS SCRIPT
@@ -62,12 +68,11 @@
 # - Partitions are missing for recent dates
 # - Connection exhaustion or other issues prevented partman from running
 #
-# IMPORTANT - Order of Operations for Tables with Foreign Keys:
-# - If migrating BOTH 'fixes' and 'raw_messages', migrate 'fixes' FIRST
-# - This is because fixes.aprs_message_id references raw_messages.raw_message_id
-# - If you try to detach raw_messages_default while fixes still references it, you'll get:
-#   "ERROR: removing partition violates foreign key constraint"
-# - Correct order: 1) fixes, then 2) raw_messages
+# NOTE - Tables with Foreign Keys:
+# - This script can handle tables with FK relationships in ANY order
+# - The script migrates data BEFORE detaching, which avoids FK constraint violations
+# - Example: 'raw_messages' can be migrated even if 'fixes' partitions reference it
+# - PostgreSQL maintains FK integrity as data moves between partitions within the same table
 #
 # ==============================================================================
 # PREREQUISITES
@@ -187,53 +192,10 @@ echo "Found ${ROW_COUNT} rows in ${DEFAULT_PARTITION}"
 echo "Date range: ${MIN_DATE} to ${MAX_DATE}"
 echo ""
 
-# Step 2: Detach DEFAULT partition (if still attached)
-echo "Step 2: Checking if DEFAULT partition is attached..."
-
-IS_ATTACHED=$(psql -U soar -d "${DATABASE}" -t -A -c "
-    SELECT EXISTS (
-        SELECT 1 FROM pg_inherits i
-        JOIN pg_class c ON c.oid = i.inhrelid
-        JOIN pg_class p ON p.oid = i.inhparent
-        WHERE c.relname = '${DEFAULT_PARTITION}' AND p.relname = '${TABLE_NAME}'
-    );
-")
-
-if [ "$IS_ATTACHED" = "t" ]; then
-    echo "DEFAULT partition is still attached. Detaching..."
-    echo "WARNING: This will briefly lock the parent table."
-    echo ""
-
-    # Note: Cannot use CONCURRENTLY when a DEFAULT partition exists (PostgreSQL limitation)
-    # Attempt to detach - if this fails due to foreign key constraints, provide helpful error
-    if ! psql -U soar -d "${DATABASE}" -c "ALTER TABLE ${TABLE_NAME} DETACH PARTITION ${DEFAULT_PARTITION};" 2>&1; then
-        echo ""
-        echo "ERROR: Failed to detach ${DEFAULT_PARTITION}"
-        echo ""
-        echo "This typically happens when other partitioned tables have foreign keys referencing this table."
-        echo "For example, if 'raw_messages_default' is referenced by 'fixes' partitions."
-        echo ""
-        echo "SOLUTION: Migrate the dependent table FIRST:"
-        echo "  1. If this is 'raw_messages', run './fix-partitioned-table soar fixes received_at' first"
-        echo "  2. Then run this script again for 'raw_messages'"
-        echo ""
-        echo "The foreign key relationships in SOAR:"
-        echo "  - fixes.aprs_message_id -> raw_messages.raw_message_id (with partition key)"
-        echo "  - fixes partitions reference raw_messages partitions (including DEFAULT)"
-        echo ""
-        exit 1
-    fi
-
-    echo "Successfully detached ${DEFAULT_PARTITION}"
-else
-    echo "DEFAULT partition is already detached (standalone table)."
-    echo "Continuing with data migration..."
-fi
-
-echo ""
-
-# Step 3: Create missing partitions
-echo "Step 3: Creating missing daily partitions..."
+# Step 2: Create missing partitions (BEFORE detaching DEFAULT)
+# This is critical: we create partitions while DEFAULT is still attached,
+# then migrate data, THEN detach. This avoids FK constraint violations.
+echo "Step 2: Creating missing daily partitions..."
 echo ""
 
 # Generate list of dates between MIN_DATE and MAX_DATE (inclusive)
@@ -272,8 +234,8 @@ echo ""
 echo "Partitions created successfully."
 echo ""
 
-# Step 4: Get column list (excluding generated columns)
-echo "Step 4: Preparing data migration (excluding generated columns)..."
+# Step 3: Get column list (excluding generated columns)
+echo "Step 3: Preparing data migration (excluding generated columns)..."
 
 COLUMNS=$(psql -U soar -d "${DATABASE}" -t -A -c "
     SELECT string_agg(column_name, ', ' ORDER BY ordinal_position)
@@ -294,9 +256,10 @@ fi
 echo "Columns to migrate: ${COLUMNS}"
 echo ""
 
-# Step 5: Migrate data day by day
-echo "Step 5: Migrating data from ${DEFAULT_PARTITION} to proper partitions..."
+# Step 4: Migrate data day by day (while DEFAULT is still attached)
+echo "Step 4: Migrating data from ${DEFAULT_PARTITION} to proper partitions..."
 echo "This may take a while for large datasets..."
+echo "NOTE: DEFAULT partition is still attached - this is intentional to avoid FK violations."
 echo ""
 
 CURRENT_DATE="$MIN_DATE"
@@ -344,8 +307,8 @@ echo ""
 echo "Data migration completed."
 echo ""
 
-# Step 6: Verify DEFAULT partition is empty
-echo "Step 6: Verifying migration..."
+# Step 5: Verify DEFAULT partition is empty
+echo "Step 5: Verifying migration..."
 
 REMAINING=$(psql -U soar -d "${DATABASE}" -t -A -c "SELECT COUNT(*) FROM ${DEFAULT_PARTITION};")
 
@@ -358,6 +321,29 @@ if [ "$REMAINING" -ne 0 ]; then
 fi
 
 echo "${DEFAULT_PARTITION} is empty (verified)."
+echo ""
+
+# Step 6: Detach DEFAULT partition (now that it's empty)
+echo "Step 6: Detaching empty ${DEFAULT_PARTITION}..."
+
+IS_ATTACHED=$(psql -U soar -d "${DATABASE}" -t -A -c "
+    SELECT EXISTS (
+        SELECT 1 FROM pg_inherits i
+        JOIN pg_class c ON c.oid = i.inhrelid
+        JOIN pg_class p ON p.oid = i.inhparent
+        WHERE c.relname = '${DEFAULT_PARTITION}' AND p.relname = '${TABLE_NAME}'
+    );
+")
+
+if [ "$IS_ATTACHED" = "t" ]; then
+    echo "DEFAULT partition is still attached. Detaching now that it's empty..."
+    # Note: Cannot use CONCURRENTLY when a DEFAULT partition exists (PostgreSQL limitation)
+    psql -U soar -d "${DATABASE}" -c "ALTER TABLE ${TABLE_NAME} DETACH PARTITION ${DEFAULT_PARTITION};"
+    echo "Successfully detached ${DEFAULT_PARTITION}"
+else
+    echo "DEFAULT partition is already detached."
+fi
+
 echo ""
 
 # Step 7: Drop the detached DEFAULT partition
