@@ -59,21 +59,21 @@ impl AircraftRegistrationsRepository {
         let mut club_cache: HashMap<String, Uuid> = HashMap::new();
 
         // Collect unique clubs
-        let mut unique_clubs: Vec<(String, crate::clubs_repo::LocationParams)> = Vec::new();
+        let mut unique_clubs: Vec<(String, crate::locations_repo::LocationParams)> = Vec::new();
         let mut club_set: std::collections::HashSet<String> = std::collections::HashSet::new();
 
         for aircraft_reg in &aircraft_vec {
             if let Some(club_name) = aircraft_reg.club_name()
                 && club_set.insert(club_name.clone())
             {
-                let location_params = crate::clubs_repo::LocationParams {
+                let location_params = crate::locations_repo::LocationParams {
                     street1: aircraft_reg.street1.clone(),
                     street2: aircraft_reg.street2.clone(),
                     city: aircraft_reg.city.clone(),
                     state: aircraft_reg.state.clone(),
                     zip_code: aircraft_reg.zip_code.clone(),
-                    region_code: aircraft_reg.region_code.clone(),
                     country_code: aircraft_reg.country_code.clone(),
+                    geolocation: None,
                 };
                 info!(
                     "Aircraft {}: registrant '{}' -> club '{}'",
@@ -354,19 +354,17 @@ impl AircraftRegistrationsRepository {
                 stream::iter(to_lookup.iter().map(|aircraft_reg| {
                     let reg_num = aircraft_reg.n_number.clone();
                     let locations_repo = self.locations_repo.clone();
-                    let street1 = aircraft_reg.street1.clone();
-                    let street2 = aircraft_reg.street2.clone();
-                    let city = aircraft_reg.city.clone();
-                    let state = aircraft_reg.state.clone();
-                    let zip = aircraft_reg.zip_code.clone();
-                    let region = aircraft_reg.region_code.clone();
-                    let country = aircraft_reg.country_code.clone();
+                    let params = crate::locations_repo::LocationParams {
+                        street1: aircraft_reg.street1.clone(),
+                        street2: aircraft_reg.street2.clone(),
+                        city: aircraft_reg.city.clone(),
+                        state: aircraft_reg.state.clone(),
+                        zip_code: aircraft_reg.zip_code.clone(),
+                        country_code: aircraft_reg.country_code.clone(),
+                        geolocation: None,
+                    };
                     async move {
-                        let result = locations_repo
-                            .find_or_create(
-                                street1, street2, city, state, zip, region, country, None,
-                            )
-                            .await;
+                        let result = locations_repo.find_or_create(params).await;
                         (reg_num, result)
                     }
                 }))

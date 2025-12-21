@@ -12,7 +12,6 @@ export interface Location {
 	city?: string;
 	state?: string;
 	zip_code?: string;
-	region_code?: string;
 	country_code?: string;
 	geolocation?: Point;
 	created_at: string;

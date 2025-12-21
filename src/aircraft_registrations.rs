@@ -710,8 +710,6 @@ pub struct Aircraft {
     #[serde(skip_serializing)]
     pub zip_code: Option<String>, // 200–209 (legacy, kept for parsing)
     #[serde(skip_serializing)]
-    pub region_code: Option<String>, // 211 (legacy, kept for parsing)
-    #[serde(skip_serializing)]
     pub county_mail_code: Option<String>, // 213–215 (legacy, kept for parsing)
     #[serde(skip_serializing)]
     pub country_code: Option<String>, // 217–218 (legacy, kept for parsing)
@@ -928,7 +926,6 @@ impl Aircraft {
         let city = to_opt_string(fw(line, 178, 195));
         let state = to_opt_string(fw(line, 197, 198));
         let zip_code = format_zip_code(fw(line, 200, 209));
-        let region_code = to_opt_string(fw(line, 211, 211));
         let county_mail_code = to_opt_string(fw(line, 213, 215));
         let country_code = to_opt_string(fw(line, 217, 218));
 
@@ -1004,7 +1001,6 @@ impl Aircraft {
             city,
             state,
             zip_code,
-            region_code,
             county_mail_code,
             country_code,
 
@@ -1170,7 +1166,6 @@ impl Aircraft {
         let city = to_opt_string(fields[9]);
         let state = to_opt_string(fields[10]);
         let zip_code = format_zip_code(fields[11]);
-        let region_code = to_opt_string(fields[12]);
         let county_mail_code = to_opt_string(fields[13]);
         let country_code = to_opt_string(fields[14]);
 
@@ -1225,7 +1220,6 @@ impl Aircraft {
             city,
             state,
             zip_code,
-            region_code,
             county_mail_code,
             country_code,
             last_action_date,
@@ -1420,7 +1414,6 @@ impl From<AircraftRegistrationModel> for Aircraft {
             city: None,
             state: None,
             zip_code: None,
-            region_code: None,
             county_mail_code: None,
             country_code: None,
             location_id: model.location_id,
@@ -1694,7 +1687,6 @@ mod tests {
             city: None,
             state: None,
             zip_code: None,
-            region_code: None,
             county_mail_code: None,
             country_code: None,
             last_action_date: None,

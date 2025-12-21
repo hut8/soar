@@ -16,7 +16,6 @@ pub struct Location {
     pub city: Option<String>,
     pub state: Option<String>,
     pub zip_code: Option<String>,
-    pub region_code: Option<String>,
     pub country_code: Option<String>,
     pub geolocation: Option<Point>,
     pub created_at: DateTime<Utc>,
@@ -82,7 +81,6 @@ pub struct LocationModel {
     pub city: Option<String>,
     pub state: Option<String>,
     pub zip_code: Option<String>,
-    pub region_code: Option<String>,
     pub country_code: Option<String>,
     pub geolocation: Option<Point>, // PostgreSQL point type
     pub created_at: DateTime<Utc>,
@@ -100,7 +98,6 @@ pub struct NewLocationModel {
     pub city: Option<String>,
     pub state: Option<String>,
     pub zip_code: Option<String>,
-    pub region_code: Option<String>,
     pub country_code: Option<String>,
     pub geolocation: Option<Point>, // PostgreSQL point type
 }
@@ -115,7 +112,6 @@ impl From<Location> for LocationModel {
             city: location.city,
             state: location.state,
             zip_code: location.zip_code,
-            region_code: location.region_code,
             country_code: location.country_code,
             geolocation: location.geolocation,
             created_at: location.created_at,
@@ -134,7 +130,6 @@ impl From<Location> for NewLocationModel {
             city: location.city,
             state: location.state,
             zip_code: location.zip_code,
-            region_code: location.region_code,
             country_code: location.country_code,
             geolocation: location.geolocation,
         }
@@ -151,7 +146,6 @@ impl From<LocationModel> for Location {
             city: model.city,
             state: model.state,
             zip_code: model.zip_code,
-            region_code: model.region_code,
             country_code: model.country_code,
             geolocation: model.geolocation,
             created_at: model.created_at,
@@ -162,14 +156,12 @@ impl From<LocationModel> for Location {
 
 impl Location {
     /// Create a new Location with generated UUID and current timestamps
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         street1: Option<String>,
         street2: Option<String>,
         city: Option<String>,
         state: Option<String>,
         zip_code: Option<String>,
-        region_code: Option<String>,
         country_code: Option<String>,
         geolocation: Option<Point>,
     ) -> Self {
@@ -181,7 +173,6 @@ impl Location {
             city,
             state,
             zip_code,
-            region_code,
             country_code: country_code.map(|c| c.to_uppercase()),
             geolocation,
             created_at: now,
@@ -256,7 +247,6 @@ mod tests {
             Some("Anytown".to_string()),
             Some("CA".to_string()),
             Some("12345".to_string()),
-            Some("4".to_string()),
             Some("US".to_string()),
             Some(Point::new(34.0522, -118.2437)),
         );
@@ -276,7 +266,6 @@ mod tests {
             Some("Anytown".to_string()),
             Some("CA".to_string()),
             Some("12345".to_string()),
-            None,
             Some("US".to_string()),
             None,
         );
@@ -295,7 +284,6 @@ mod tests {
             Some("Paris".to_string()),
             None,
             Some("75001".to_string()),
-            None,
             Some("FR".to_string()),
             None,
         );
@@ -308,7 +296,7 @@ mod tests {
 
     #[test]
     fn test_empty_address_string() {
-        let location = Location::new(None, None, None, None, None, None, None, None);
+        let location = Location::new(None, None, None, None, None, None, None);
 
         assert_eq!(location.address_string(), None);
     }
@@ -321,7 +309,6 @@ mod tests {
             Some("Berlin".to_string()),
             None,
             Some("10115".to_string()),
-            None,
             Some("de".to_string()), // lowercase
             None,
         );
@@ -337,7 +324,6 @@ mod tests {
             Some("Paris".to_string()),
             None,
             Some("75001".to_string()),
-            None,
             Some("FR".to_string()), // already uppercase
             None,
         );

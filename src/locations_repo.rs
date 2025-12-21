@@ -5,6 +5,18 @@ use uuid::Uuid;
 use crate::locations::{Location, LocationModel, NewLocationModel, Point};
 use crate::web::PgPool;
 
+/// Parameters for finding or creating a location
+#[derive(Debug, Clone)]
+pub struct LocationParams {
+    pub street1: Option<String>,
+    pub street2: Option<String>,
+    pub city: Option<String>,
+    pub state: Option<String>,
+    pub zip_code: Option<String>,
+    pub country_code: Option<String>,
+    pub geolocation: Option<Point>,
+}
+
 #[derive(Clone)]
 pub struct LocationsRepository {
     pool: PgPool,
@@ -81,31 +93,19 @@ impl LocationsRepository {
     }
 
     /// Find or create a location by address (atomic operation)
-    #[allow(clippy::too_many_arguments)]
-    pub async fn find_or_create(
-        &self,
-        street1: Option<String>,
-        street2: Option<String>,
-        city: Option<String>,
-        state: Option<String>,
-        zip_code: Option<String>,
-        region_code: Option<String>,
-        country_code: Option<String>,
-        geolocation: Option<Point>,
-    ) -> Result<Location> {
+    pub async fn find_or_create(&self, params: LocationParams) -> Result<Location> {
         use crate::schema::locations::dsl::locations as locations_table;
 
         let pool = self.pool.clone();
 
         // Clone values for the closure, normalizing country_code to uppercase
-        let param_street1 = street1.clone();
-        let param_street2 = street2.clone();
-        let param_city = city.clone();
-        let param_state = state.clone();
-        let param_zip_code = zip_code.clone();
-        let param_region_code = region_code.clone();
-        let param_country_code = country_code.map(|c| c.to_uppercase());
-        let param_geolocation = geolocation;
+        let param_street1 = params.street1;
+        let param_street2 = params.street2;
+        let param_city = params.city;
+        let param_state = params.state;
+        let param_zip_code = params.zip_code;
+        let param_country_code = params.country_code.map(|c| c.to_uppercase());
+        let param_geolocation = params.geolocation;
 
         let result = tokio::task::spawn_blocking(move || {
             let mut conn = pool.get()?;
@@ -117,7 +117,6 @@ impl LocationsRepository {
                 param_city.clone(),
                 param_state.clone(),
                 param_zip_code.clone(),
-                param_region_code.clone(),
                 param_country_code.clone(),
                 param_geolocation,
             );
@@ -137,7 +136,7 @@ impl LocationsRepository {
             // Use raw SQL with COALESCE to match the unique index exactly
             let location_model: LocationModel = diesel::sql_query(
                 r#"
-                SELECT id, street1, street2, city, state, zip_code, region_code, country_code,
+                SELECT id, street1, street2, city, state, zip_code, country_code,
                        geolocation, created_at, updated_at
                 FROM locations
                 WHERE COALESCE(street1, '') = COALESCE($1, '')
@@ -209,7 +208,7 @@ impl LocationsRepository {
 
             let location_models: Vec<LocationModel> = diesel::sql_query(
                 r#"
-                SELECT l.id, l.street1, l.street2, l.city, l.state, l.zip_code, l.region_code,
+                SELECT l.id, l.street1, l.street2, l.city, l.state, l.zip_code,
                        l.country_code, l.geolocation, l.created_at, l.updated_at
                 FROM locations l
                 WHERE NOT EXISTS (SELECT 1 FROM aircraft_registrations WHERE location_id = l.id)
@@ -255,7 +254,6 @@ mod tests {
             city: Some("Anytown".to_string()),
             state: Some("CA".to_string()),
             zip_code: Some("12345".to_string()),
-            region_code: Some("4".to_string()),
             country_code: Some("US".to_string()),
             geolocation: Some(Point::new(34.0522, -118.2437)),
             created_at: Utc::now(),
