@@ -30,20 +30,24 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
-# Generate random complex password for OpenSearch admin user
-# Requirements: at least one lowercase, one uppercase, one number, one special character
-echo -e "${BLUE}Generating secure password for OpenSearch admin user...${NC}"
-OPENSEARCH_INITIAL_ADMIN_PASSWORD=$(LC_ALL=C tr -dc 'A-Za-z0-9!@#$%^&*()_+=-' < /dev/urandom | head -c 32)
-# Ensure password meets complexity requirements by adding one of each required character
-OPENSEARCH_INITIAL_ADMIN_PASSWORD="Aa1!${OPENSEARCH_INITIAL_ADMIN_PASSWORD}"
-export OPENSEARCH_INITIAL_ADMIN_PASSWORD
-
-# Save the password to a secure file for later reference
+# Generate or load OpenSearch admin password
 OPENSEARCH_PASSWORD_FILE="/etc/opensearch/.admin_password"
-mkdir -p /etc/opensearch
-echo "$OPENSEARCH_INITIAL_ADMIN_PASSWORD" > "$OPENSEARCH_PASSWORD_FILE"
-chmod 600 "$OPENSEARCH_PASSWORD_FILE"
-echo -e "${GREEN}OpenSearch admin password saved to: $OPENSEARCH_PASSWORD_FILE${NC}"
+if [ -f "$OPENSEARCH_PASSWORD_FILE" ]; then
+    echo -e "${BLUE}Using existing OpenSearch admin password from $OPENSEARCH_PASSWORD_FILE${NC}"
+    OPENSEARCH_INITIAL_ADMIN_PASSWORD=$(cat "$OPENSEARCH_PASSWORD_FILE")
+else
+    echo -e "${BLUE}Generating secure password for OpenSearch admin user...${NC}"
+    OPENSEARCH_INITIAL_ADMIN_PASSWORD=$(LC_ALL=C tr -dc 'A-Za-z0-9!@#$%^&*()_+=-' < /dev/urandom | head -c 32)
+    # Ensure password meets complexity requirements by adding one of each required character
+    OPENSEARCH_INITIAL_ADMIN_PASSWORD="Aa1!${OPENSEARCH_INITIAL_ADMIN_PASSWORD}"
+
+    # Save the password to a secure file for later reference
+    mkdir -p /etc/opensearch
+    echo "$OPENSEARCH_INITIAL_ADMIN_PASSWORD" > "$OPENSEARCH_PASSWORD_FILE"
+    chmod 600 "$OPENSEARCH_PASSWORD_FILE"
+    echo -e "${GREEN}OpenSearch admin password saved to: $OPENSEARCH_PASSWORD_FILE${NC}"
+fi
+export OPENSEARCH_INITIAL_ADMIN_PASSWORD
 
 echo -e "${GREEN}Provisioning Pelias geocoding server with OpenSearch...${NC}"
 
@@ -86,8 +90,13 @@ fi
 apt-get update
 apt-get install -y opensearch
 
-# Install ICU plugin
-/usr/share/opensearch/bin/opensearch-plugin install analysis-icu --batch
+# Install ICU plugin if not already installed
+if /usr/share/opensearch/bin/opensearch-plugin list | grep -q analysis-icu; then
+    echo -e "${BLUE}ICU analysis plugin already installed${NC}"
+else
+    echo -e "${BLUE}Installing ICU analysis plugin...${NC}"
+    /usr/share/opensearch/bin/opensearch-plugin install analysis-icu --batch
+fi
 
 # Add current user and soar user to opensearch group for access to logs and config
 echo -e "${BLUE}Adding users to opensearch group...${NC}"
@@ -102,7 +111,9 @@ if id soar &>/dev/null; then
 fi
 
 # Configure for Pelias
-cat >> /etc/opensearch/opensearch.yml <<EOF
+if ! grep -q "# Pelias configuration" /etc/opensearch/opensearch.yml 2>/dev/null; then
+    echo -e "${BLUE}Adding Pelias configuration to opensearch.yml...${NC}"
+    cat >> /etc/opensearch/opensearch.yml <<EOF
 
 # Pelias configuration
 discovery.type: single-node
@@ -111,6 +122,9 @@ indices.query.bool.max_clause_count: 4096
 # Disable security for local development (WARNING: Enable for production!)
 plugins.security.disabled: true
 EOF
+else
+    echo -e "${BLUE}Pelias configuration already exists in opensearch.yml${NC}"
+fi
 
 # Set JVM heap size (8GB - adjust based on RAM)
 mkdir -p /etc/opensearch/jvm.options.d
@@ -252,19 +266,31 @@ EOF
 chown pelias:pelias /opt/pelias/docker/.env
 
 # Download Who's on First data
-echo -e "${BLUE}Downloading Who's on First data (this will take ~30 minutes and use ~70GB)...${NC}"
 cd /opt/pelias/docker
-sudo -u pelias docker compose run --rm whosonfirst npm run download
+if [ -d "/opt/pelias/docker/data/whosonfirst" ] && [ "$(find /opt/pelias/docker/data/whosonfirst -type f -name '*.geojson' 2>/dev/null | wc -l)" -gt 100 ]; then
+    echo -e "${BLUE}Who's on First data already downloaded (skipping)${NC}"
+else
+    echo -e "${BLUE}Downloading Who's on First data (this will take ~30 minutes and use ~70GB)...${NC}"
+    sudo -u pelias docker compose run --rm whosonfirst npm run download
+fi
 
 # Create Pelias index
-echo -e "${BLUE}Creating Pelias index in OpenSearch...${NC}"
-sudo -u pelias docker compose run --rm schema npm run create_index
+if curl -s "http://localhost:9200/pelias" | grep -q "pelias"; then
+    echo -e "${BLUE}Pelias index already exists (skipping creation)${NC}"
+else
+    echo -e "${BLUE}Creating Pelias index in OpenSearch...${NC}"
+    sudo -u pelias docker compose run --rm schema npm run create_index
+fi
 
 # Import Who's on First data
-echo -e "${BLUE}Importing Who's on First data (this will take ~20-30 minutes)...${NC}"
-sudo -u pelias docker compose run --rm whosonfirst npm start
-
-echo -e "${GREEN}Data import complete${NC}"
+DOC_COUNT=$(curl -s "http://localhost:9200/pelias/_count" | jq -r '.count // 0' 2>/dev/null || echo "0")
+if [ "$DOC_COUNT" -gt 100000 ]; then
+    echo -e "${BLUE}Who's on First data already imported ($DOC_COUNT documents, skipping)${NC}"
+else
+    echo -e "${BLUE}Importing Who's on First data (this will take ~20-30 minutes)...${NC}"
+    sudo -u pelias docker compose run --rm whosonfirst npm start
+    echo -e "${GREEN}Data import complete${NC}"
+fi
 
 # Clone and install Pelias API
 if [ ! -d /opt/pelias/api/.git ]; then
