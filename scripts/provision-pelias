@@ -448,7 +448,7 @@ WorkingDirectory=/opt/pelias/pip
 Environment="NODE_ENV=production"
 Environment="PORT=4200"
 Environment="PELIAS_CONFIG=/opt/pelias/pip/pelias.json"
-ExecStart=/usr/bin/node /opt/pelias/pip/index.js
+ExecStart=/usr/bin/node --max-old-space-size=28672 /opt/pelias/pip/index.js
 Restart=on-failure
 RestartSec=10s
 StandardOutput=journal
