@@ -130,8 +130,14 @@ if ! grep -q "# Pelias configuration" /etc/opensearch/opensearch.yml 2>/dev/null
 discovery.type: single-node
 indices.query.bool.max_clause_count: 4096
 
-# Disable security for local development (WARNING: Enable for production!)
+# Network configuration - HTTP only
+network.host: 0.0.0.0
+http.port: 9200
+
+# Disable security plugin completely (no HTTPS, no authentication)
 plugins.security.disabled: true
+plugins.security.ssl.http.enabled: false
+plugins.security.ssl.transport.enabled: false
 EOF
 else
     echo -e "${BLUE}Pelias configuration already exists in opensearch.yml${NC}"
