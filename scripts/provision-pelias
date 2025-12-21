@@ -364,8 +364,9 @@ EOF
 chown pelias:pelias /opt/pelias/docker/docker-compose.yml
 
 # Download Who's on First data
-if [ -d "/opt/pelias/docker/data/whosonfirst" ] && [ "$(find /opt/pelias/docker/data/whosonfirst -type f -name '*.geojson' 2>/dev/null | wc -l)" -gt 100 ]; then
+if [ -d "/opt/pelias/docker/data/whosonfirst/sqlite" ] && [ "$(find /opt/pelias/docker/data/whosonfirst/sqlite -type f -name '*.db' 2>/dev/null | wc -l)" -gt 0 ]; then
     echo -e "${BLUE}Who's on First data already downloaded (skipping)${NC}"
+    du -sh /opt/pelias/docker/data/whosonfirst/ | awk '{print "  Current data size: " $1}'
 else
     echo -e "${BLUE}Downloading Who's on First data (this will take ~30 minutes and use ~70GB)...${NC}"
     su - pelias -c "cd /opt/pelias/docker && ./pelias download wof"
