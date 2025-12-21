@@ -32,6 +32,8 @@ fi
 
 # Generate or load OpenSearch admin password
 OPENSEARCH_PASSWORD_FILE="/etc/opensearch/.admin_password"
+PASSWORD_NEEDS_SAVING=false
+
 if [ -f "$OPENSEARCH_PASSWORD_FILE" ]; then
     echo -e "${BLUE}Using existing OpenSearch admin password from $OPENSEARCH_PASSWORD_FILE${NC}"
     OPENSEARCH_INITIAL_ADMIN_PASSWORD=$(cat "$OPENSEARCH_PASSWORD_FILE")
@@ -40,12 +42,8 @@ else
     OPENSEARCH_INITIAL_ADMIN_PASSWORD=$(LC_ALL=C tr -dc 'A-Za-z0-9!@#$%^&*()_+=-' < /dev/urandom | head -c 32)
     # Ensure password meets complexity requirements by adding one of each required character
     OPENSEARCH_INITIAL_ADMIN_PASSWORD="Aa1!${OPENSEARCH_INITIAL_ADMIN_PASSWORD}"
-
-    # Save the password to a secure file for later reference
-    mkdir -p /etc/opensearch
-    echo "$OPENSEARCH_INITIAL_ADMIN_PASSWORD" > "$OPENSEARCH_PASSWORD_FILE"
-    chmod 600 "$OPENSEARCH_PASSWORD_FILE"
-    echo -e "${GREEN}OpenSearch admin password saved to: $OPENSEARCH_PASSWORD_FILE${NC}"
+    PASSWORD_NEEDS_SAVING=true
+    echo -e "${BLUE}Password will be saved after OpenSearch installation${NC}"
 fi
 export OPENSEARCH_INITIAL_ADMIN_PASSWORD
 
@@ -89,6 +87,15 @@ fi
 
 apt-get update
 apt-get install -y opensearch
+
+# Save the admin password file if it was newly generated
+if [ "$PASSWORD_NEEDS_SAVING" = true ]; then
+    echo -e "${BLUE}Saving OpenSearch admin password to: $OPENSEARCH_PASSWORD_FILE${NC}"
+    mkdir -p /etc/opensearch
+    echo "$OPENSEARCH_INITIAL_ADMIN_PASSWORD" > "$OPENSEARCH_PASSWORD_FILE"
+    chmod 600 "$OPENSEARCH_PASSWORD_FILE"
+    echo -e "${GREEN}OpenSearch admin password saved${NC}"
+fi
 
 # Install ICU plugin if not already installed
 if /usr/share/opensearch/bin/opensearch-plugin list | grep -q analysis-icu; then
