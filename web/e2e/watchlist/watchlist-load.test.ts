@@ -18,15 +18,11 @@ test.describe('Watchlist', () => {
 		expect(pageContent).not.toContain('Error: Missing authorization token');
 
 		// Check that "Add Aircraft" button is visible
-		await expect(
-			authenticatedPage.getByRole('button', { name: /add aircraft/i })
-		).toBeVisible();
+		await expect(authenticatedPage.getByRole('button', { name: /add aircraft/i })).toBeVisible();
 
 		// Verify the watchlist loaded (should see either entries or empty state)
 		const hasEntries = await authenticatedPage.locator('.grid > .card').count();
-		const hasEmptyState = await authenticatedPage
-			.getByText('Your watchlist is empty')
-			.isVisible();
+		const hasEmptyState = await authenticatedPage.getByText('Your watchlist is empty').isVisible();
 
 		// Should have either entries or empty state visible
 		expect(hasEntries > 0 || hasEmptyState).toBe(true);
