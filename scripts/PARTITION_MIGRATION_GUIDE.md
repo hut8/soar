@@ -1,18 +1,46 @@
 # Partition Migration Guide - Fixing DEFAULT Partition Issue
 
+## Quick Start (Recommended)
+
+**Use the generalized script for any future occurrences:**
+
+```bash
+# Fix any partitioned table with DEFAULT partition problems
+./scripts/fix-partitioned-table.sh <database> <table_name> <partition_key> <timezone>
+
+# Examples:
+./scripts/fix-partitioned-table.sh soar fixes received_at '+01'
+./scripts/fix-partitioned-table.sh soar raw_messages received_at '+01'
+```
+
+This script automatically:
+- Detects the date range in the DEFAULT partition
+- Creates missing partitions
+- Migrates data safely
+- Includes comprehensive documentation about what happened
+
+---
+
+## Historical Context: December 2025 Incident
+
 ## Problem Summary
 
-**Issue**: Partman maintenance is failing with:
+**Issue**: Partman maintenance failed with:
 ```
 ERROR: partition "fixes_p20251218" would overlap partition "fixes_p20251217"
 ```
 
 **Root Cause**:
-- Partman maintenance stopped running (likely due to "too many clients" connection limit)
-- Without maintenance, new partitions weren't created for Dec 18-20
+- **December 18, 2025 01:00**: Partman maintenance stopped running due to "too many clients already" error
+- **PostgreSQL max_connections**: 200
+- **Application pool size**: 50 per instance (reduced to 20 after this incident)
+- **Result**: Multiple service instances exhausted database connections
+- Without maintenance, new partitions weren't created for Dec 18-21
 - Data fell through to DEFAULT partitions (`fixes_default`, `raw_messages_default`)
 - PostgreSQL won't create new partitions that overlap with data in DEFAULT
-- Result: **54M rows in `fixes_default`**, **94M rows in `raw_messages_default`**
+- **Final state**: **54M rows in `fixes_default`**, **94M rows in `raw_messages_default`**
+
+**Important**: The partman-maintenance.timer (runs every 4 hours) is the **ONLY** mechanism that creates partitions. There are no triggers or other automatic partition creation mechanisms.
 
 ## Current State
 
@@ -185,3 +213,37 @@ journalctl -u partman-maintenance --since "1 day ago"
 # PostgreSQL logs
 sudo tail -f /var/log/postgresql/postgresql-*.log
 ```
+
+---
+
+## Deprecated Scripts (Historical Reference Only)
+
+The following scripts were created for the December 2025 incident and contain hard-coded dates:
+- `migrate-default-partition.sql` (fixes table, Dec 18-20 2025)
+- `migrate-raw-messages-default-partition.sql` (raw_messages table, Dec 18-21 2025)
+
+**DO NOT USE THESE SCRIPTS.** They are kept for historical reference only.
+
+**Use `fix-partitioned-table.sh` instead** - it automatically detects date ranges and works for any future occurrences.
+
+## Prevention Measures Implemented
+
+Following the December 2025 incident, the following changes were made:
+
+1. ✅ **Reduced connection pool size** (50 → 20 in `src/main.rs`)
+   - Allows up to 10 concurrent service instances safely
+   - Prevents "too many clients" errors
+
+2. ✅ **Fixed systemd logging** (file → journalctl)
+   - Centralized logging with automatic timestamps
+   - View logs: `journalctl -u partman-maintenance`
+
+3. ✅ **Created generalized fix script** (`fix-partitioned-table.sh`)
+   - Works for any partitioned table
+   - Automatically detects date ranges
+   - Comprehensive documentation included
+
+4. ✅ **Documented partition creation mechanism**
+   - Only partman-maintenance.timer creates partitions (every 4 hours)
+   - No triggers or other automatic mechanisms
+   - Monitor: `journalctl -u partman-maintenance -f`

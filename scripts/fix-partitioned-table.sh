@@ -1,0 +1,316 @@
+#!/bin/bash
+#
+# fix-partitioned-table.sh - Fix partitioned tables with data in DEFAULT partition
+#
+# ==============================================================================
+# WHAT HAPPENED (Historical Context)
+# ==============================================================================
+#
+# Dates: December 18-21, 2025
+# Tables Affected: fixes, raw_messages
+# Data Volume: 54M rows in fixes_default, 94M rows in raw_messages_default
+#
+# Timeline:
+# - Dec 18, 2025 01:00: partman-maintenance.timer failed with "too many clients already"
+# - Dec 18-20: Without maintenance, new daily partitions were not created
+# - Dec 18-21: Incoming data fell through to DEFAULT partitions (fixes_default, raw_messages_default)
+# - Dec 20: Partman attempted to create partitions but failed with:
+#   "ERROR: partition 'fixes_p20251218' would overlap partition 'fixes_p20251217'"
+#   PostgreSQL cannot create a partition when DEFAULT already contains data for that date range
+#
+# ==============================================================================
+# ROOT CAUSE
+# ==============================================================================
+#
+# 1. Database connection pool exhaustion ("too many clients already")
+#    - PostgreSQL max_connections: 200
+#    - Application pool size: 50 per instance (reduced to 20 in Dec 2025)
+#    - Multiple service instances caused connection exhaustion
+#
+# 2. Partman maintenance couldn't run
+#    - Timer job: partman-maintenance.timer (runs every 4 hours)
+#    - When partman fails, new partitions aren't pre-created
+#    - This is the ONLY mechanism that creates partitions (no triggers)
+#
+# 3. Data routed to DEFAULT partition
+#    - PostgreSQL automatically routes data to DEFAULT when no partition matches
+#    - Both tables configured with ignore_default_data = true (DEFAULT should not exist)
+#    - DEFAULT partition accumulated millions of rows
+#
+# 4. PostgreSQL limitation: Cannot create partition overlapping DEFAULT
+#    - Once DEFAULT has data for a date range, partman cannot create partition for that range
+#    - Attempting to do so results in "would overlap" error
+#
+# ==============================================================================
+# WHAT THIS SCRIPT FIXES
+# ==============================================================================
+#
+# This script resolves the DEFAULT partition problem by:
+# 1. Detaching the DEFAULT partition from the parent table
+# 2. Creating missing date-based partitions
+# 3. Moving data from the detached DEFAULT into proper partitions
+# 4. Dropping the empty DEFAULT partition
+# 5. Allowing partman maintenance to resume normal operation
+#
+# ==============================================================================
+# WHEN TO USE THIS SCRIPT
+# ==============================================================================
+#
+# Run this script whenever:
+# - Partman maintenance fails with "would overlap partition" errors
+# - You discover data in a DEFAULT partition (*_default tables)
+# - Partitions are missing for recent dates
+# - Connection exhaustion or other issues prevented partman from running
+#
+# ==============================================================================
+# PREREQUISITES
+# ==============================================================================
+#
+# 1. Verify DEFAULT partition exists and has data:
+#    SELECT COUNT(*), MIN(received_at), MAX(received_at) FROM fixes_default;
+#
+# 2. Check which partitions are missing:
+#    SELECT tablename FROM pg_tables WHERE tablename LIKE 'fixes_p202512%' ORDER BY tablename DESC;
+#
+# 3. Ensure you have sufficient disk space (migration creates temporary data)
+#
+# 4. Run during low-traffic period if possible (brief locks during detachment)
+#
+# ==============================================================================
+# USAGE
+# ==============================================================================
+#
+# ./fix-partitioned-table.sh <database> <table_name> <partition_key> <timezone>
+#
+# Examples:
+#   ./fix-partitioned-table.sh soar fixes received_at '+01'
+#   ./fix-partitioned-table.sh soar raw_messages received_at '+01'
+#
+# Parameters:
+#   database      - PostgreSQL database name
+#   table_name    - Parent table name (e.g., "fixes", "raw_messages")
+#   partition_key - Column used for partitioning (e.g., "received_at")
+#   timezone      - Timezone offset for partition boundaries (e.g., "+01" for CET)
+#
+# ==============================================================================
+
+set -euo pipefail
+
+# Check arguments
+if [ $# -ne 4 ]; then
+    echo "Usage: $0 <database> <table_name> <partition_key> <timezone>"
+    echo ""
+    echo "Examples:"
+    echo "  $0 soar fixes received_at '+01'"
+    echo "  $0 soar raw_messages received_at '+01'"
+    exit 1
+fi
+
+DATABASE="$1"
+TABLE_NAME="$2"
+PARTITION_KEY="$3"
+TIMEZONE="$4"
+
+DEFAULT_PARTITION="${TABLE_NAME}_default"
+
+echo "================================================================================"
+echo "Fixing DEFAULT partition for table: ${TABLE_NAME}"
+echo "Database: ${DATABASE}"
+echo "Partition key: ${PARTITION_KEY}"
+echo "Timezone: ${TIMEZONE}"
+echo "================================================================================"
+echo ""
+
+# Step 1: Check if DEFAULT partition exists and get date range
+echo "Step 1: Checking DEFAULT partition..."
+READ_RESULT=$(psql -U soar -d "${DATABASE}" -t -A -c "
+    SELECT EXISTS (
+        SELECT 1 FROM pg_tables WHERE tablename = '${DEFAULT_PARTITION}'
+    );
+")
+
+if [ "$READ_RESULT" != "t" ]; then
+    echo "ERROR: DEFAULT partition '${DEFAULT_PARTITION}' does not exist."
+    echo "Nothing to fix. Exiting."
+    exit 0
+fi
+
+# Get min and max dates from DEFAULT partition
+echo "Analyzing date range in ${DEFAULT_PARTITION}..."
+DATE_RANGE=$(psql -U soar -d "${DATABASE}" -t -A -F'|' -c "
+    SELECT
+        DATE(MIN(${PARTITION_KEY})) as min_date,
+        DATE(MAX(${PARTITION_KEY})) as max_date,
+        COUNT(*) as row_count
+    FROM ${DEFAULT_PARTITION};
+")
+
+MIN_DATE=$(echo "$DATE_RANGE" | cut -d'|' -f1)
+MAX_DATE=$(echo "$DATE_RANGE" | cut -d'|' -f2)
+ROW_COUNT=$(echo "$DATE_RANGE" | cut -d'|' -f3)
+
+if [ -z "$MIN_DATE" ] || [ "$MIN_DATE" = "" ]; then
+    echo "DEFAULT partition is empty. Dropping it..."
+    psql -U soar -d "${DATABASE}" -c "ALTER TABLE ${TABLE_NAME} DETACH PARTITION ${DEFAULT_PARTITION};"
+    psql -U soar -d "${DATABASE}" -c "DROP TABLE ${DEFAULT_PARTITION};"
+    echo "Empty DEFAULT partition dropped successfully."
+    exit 0
+fi
+
+echo "Found ${ROW_COUNT} rows in ${DEFAULT_PARTITION}"
+echo "Date range: ${MIN_DATE} to ${MAX_DATE}"
+echo ""
+
+# Step 2: Detach DEFAULT partition
+echo "Step 2: Detaching DEFAULT partition..."
+echo "WARNING: This will briefly lock the parent table."
+echo ""
+
+# Note: Cannot use CONCURRENTLY when a DEFAULT partition exists (PostgreSQL limitation)
+psql -U soar -d "${DATABASE}" -c "ALTER TABLE ${TABLE_NAME} DETACH PARTITION ${DEFAULT_PARTITION};"
+
+echo "Successfully detached ${DEFAULT_PARTITION}"
+echo ""
+
+# Step 3: Create missing partitions
+echo "Step 3: Creating missing daily partitions..."
+echo ""
+
+# Generate list of dates between MIN_DATE and MAX_DATE (inclusive)
+CURRENT_DATE="$MIN_DATE"
+while [ "$CURRENT_DATE" != "$MAX_DATE" ]; do
+    NEXT_DATE=$(date -d "$CURRENT_DATE + 1 day" +%Y-%m-%d)
+    PARTITION_NAME="${TABLE_NAME}_p$(date -d "$CURRENT_DATE" +%Y%m%d)"
+
+    # Partition boundaries use timezone offset
+    START_TS="${CURRENT_DATE} 01:00:00${TIMEZONE}"
+    END_TS="${NEXT_DATE} 01:00:00${TIMEZONE}"
+
+    echo "Creating partition ${PARTITION_NAME} for ${CURRENT_DATE}..."
+
+    psql -U soar -d "${DATABASE}" -c "
+        CREATE TABLE IF NOT EXISTS ${PARTITION_NAME} PARTITION OF ${TABLE_NAME}
+        FOR VALUES FROM ('${START_TS}') TO ('${END_TS}');
+    " || echo "Partition ${PARTITION_NAME} may already exist, continuing..."
+
+    CURRENT_DATE="$NEXT_DATE"
+done
+
+# Create partition for MAX_DATE
+PARTITION_NAME="${TABLE_NAME}_p$(date -d "$MAX_DATE" +%Y%m%d)"
+NEXT_DATE=$(date -d "$MAX_DATE + 1 day" +%Y-%m-%d)
+START_TS="${MAX_DATE} 01:00:00${TIMEZONE}"
+END_TS="${NEXT_DATE} 01:00:00${TIMEZONE}"
+
+echo "Creating partition ${PARTITION_NAME} for ${MAX_DATE}..."
+psql -U soar -d "${DATABASE}" -c "
+    CREATE TABLE IF NOT EXISTS ${PARTITION_NAME} PARTITION OF ${TABLE_NAME}
+    FOR VALUES FROM ('${START_TS}') TO ('${END_TS}');
+" || echo "Partition ${PARTITION_NAME} may already exist, continuing..."
+
+echo ""
+echo "Partitions created successfully."
+echo ""
+
+# Step 4: Get column list (excluding generated columns)
+echo "Step 4: Preparing data migration (excluding generated columns)..."
+
+COLUMNS=$(psql -U soar -d "${DATABASE}" -t -A -c "
+    SELECT string_agg(column_name, ', ' ORDER BY ordinal_position)
+    FROM information_schema.columns
+    WHERE table_name = '${TABLE_NAME}'
+      AND is_generated = 'NEVER'
+      AND column_name != 'tableoid';
+")
+
+echo "Columns to migrate: ${COLUMNS}"
+echo ""
+
+# Step 5: Migrate data day by day
+echo "Step 5: Migrating data from ${DEFAULT_PARTITION} to proper partitions..."
+echo "This may take a while for large datasets..."
+echo ""
+
+CURRENT_DATE="$MIN_DATE"
+while [ "$CURRENT_DATE" != "$MAX_DATE" ]; do
+    NEXT_DATE=$(date -d "$CURRENT_DATE + 1 day" +%Y-%m-%d)
+    START_TS="${CURRENT_DATE} 01:00:00${TIMEZONE}"
+    END_TS="${NEXT_DATE} 01:00:00${TIMEZONE}"
+
+    echo "Migrating data for ${CURRENT_DATE}..."
+
+    # Use DELETE...RETURNING + INSERT pattern to move data
+    psql -U soar -d "${DATABASE}" -c "
+        WITH moved_rows AS (
+            DELETE FROM ${DEFAULT_PARTITION}
+            WHERE ${PARTITION_KEY} >= '${START_TS}'
+              AND ${PARTITION_KEY} < '${END_TS}'
+            RETURNING ${COLUMNS}
+        )
+        INSERT INTO ${TABLE_NAME} (${COLUMNS})
+        SELECT * FROM moved_rows;
+    "
+
+    CURRENT_DATE="$NEXT_DATE"
+done
+
+# Migrate data for MAX_DATE
+NEXT_DATE=$(date -d "$MAX_DATE + 1 day" +%Y-%m-%d)
+START_TS="${MAX_DATE} 01:00:00${TIMEZONE}"
+END_TS="${NEXT_DATE} 01:00:00${TIMEZONE}"
+
+echo "Migrating data for ${MAX_DATE}..."
+psql -U soar -d "${DATABASE}" -c "
+    WITH moved_rows AS (
+        DELETE FROM ${DEFAULT_PARTITION}
+        WHERE ${PARTITION_KEY} >= '${START_TS}'
+          AND ${PARTITION_KEY} < '${END_TS}'
+        RETURNING ${COLUMNS}
+    )
+    INSERT INTO ${TABLE_NAME} (${COLUMNS})
+    SELECT * FROM moved_rows;
+"
+
+echo ""
+echo "Data migration completed."
+echo ""
+
+# Step 6: Verify DEFAULT partition is empty
+echo "Step 6: Verifying migration..."
+
+REMAINING=$(psql -U soar -d "${DATABASE}" -t -A -c "SELECT COUNT(*) FROM ${DEFAULT_PARTITION};")
+
+if [ "$REMAINING" -ne 0 ]; then
+    echo "WARNING: ${DEFAULT_PARTITION} still has ${REMAINING} rows!"
+    echo "This may indicate data outside the expected date range."
+    echo "Check the data before dropping:"
+    echo "  SELECT ${PARTITION_KEY}, COUNT(*) FROM ${DEFAULT_PARTITION} GROUP BY ${PARTITION_KEY} ORDER BY ${PARTITION_KEY};"
+    exit 1
+fi
+
+echo "${DEFAULT_PARTITION} is empty (verified)."
+echo ""
+
+# Step 7: Drop the detached DEFAULT partition
+echo "Step 7: Dropping empty ${DEFAULT_PARTITION}..."
+psql -U soar -d "${DATABASE}" -c "DROP TABLE ${DEFAULT_PARTITION};"
+
+echo "Successfully dropped ${DEFAULT_PARTITION}."
+echo ""
+
+# Step 8: Show final state
+echo "================================================================================"
+echo "Migration completed successfully!"
+echo "================================================================================"
+echo ""
+echo "Next steps:"
+echo "1. Verify partitions were created:"
+echo "   SELECT tablename FROM pg_tables WHERE tablename LIKE '${TABLE_NAME}_p%' ORDER BY tablename DESC;"
+echo ""
+echo "2. Run partman maintenance to ensure future partitions are created:"
+echo "   CALL partman.run_maintenance_proc();"
+echo ""
+echo "3. Monitor partman logs:"
+echo "   journalctl -u partman-maintenance -f"
+echo ""
+echo "================================================================================"
