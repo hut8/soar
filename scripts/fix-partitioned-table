@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# fix-partitioned-table.sh - Fix partitioned tables with data in DEFAULT partition
+# fix-partitioned-table - Fix partitioned tables with data in DEFAULT partition
 #
 # ==============================================================================
 # WHAT HAPPENED (Historical Context)
@@ -80,11 +80,11 @@
 # USAGE
 # ==============================================================================
 #
-# ./fix-partitioned-table.sh <database> <table_name> <partition_key> <timezone>
+# ./fix-partitioned-table <database> <table_name> <partition_key> <timezone>
 #
 # Examples:
-#   ./fix-partitioned-table.sh soar fixes received_at '+01'
-#   ./fix-partitioned-table.sh soar raw_messages received_at '+01'
+#   ./fix-partitioned-table soar fixes received_at '+01'
+#   ./fix-partitioned-table soar raw_messages received_at '+01'
 #
 # Parameters:
 #   database      - PostgreSQL database name

@@ -6,11 +6,11 @@
 
 ```bash
 # Fix any partitioned table with DEFAULT partition problems
-./scripts/fix-partitioned-table.sh <database> <table_name> <partition_key> <timezone>
+./scripts/fix-partitioned-table <database> <table_name> <partition_key> <timezone>
 
 # Examples:
-./scripts/fix-partitioned-table.sh soar fixes received_at '+01'
-./scripts/fix-partitioned-table.sh soar raw_messages received_at '+01'
+./scripts/fix-partitioned-table soar fixes received_at '+01'
+./scripts/fix-partitioned-table soar raw_messages received_at '+01'
 ```
 
 This script automatically:
@@ -214,18 +214,6 @@ journalctl -u partman-maintenance --since "1 day ago"
 sudo tail -f /var/log/postgresql/postgresql-*.log
 ```
 
----
-
-## Deprecated Scripts (Historical Reference Only)
-
-The following scripts were created for the December 2025 incident and contain hard-coded dates:
-- `migrate-default-partition.sql` (fixes table, Dec 18-20 2025)
-- `migrate-raw-messages-default-partition.sql` (raw_messages table, Dec 18-21 2025)
-
-**DO NOT USE THESE SCRIPTS.** They are kept for historical reference only.
-
-**Use `fix-partitioned-table.sh` instead** - it automatically detects date ranges and works for any future occurrences.
-
 ## Prevention Measures Implemented
 
 Following the December 2025 incident, the following changes were made:
@@ -234,16 +222,21 @@ Following the December 2025 incident, the following changes were made:
    - Allows up to 10 concurrent service instances safely
    - Prevents "too many clients" errors
 
-2. ✅ **Fixed systemd logging** (file → journalctl)
+2. ✅ **Increased partition pre-creation buffer** (premake: 3 → 7 days)
+   - Partitions now created 7 days in advance instead of 3
+   - Provides more buffer if partman maintenance fails temporarily
+   - Migration: `2025-12-21-013401-0000_increase_partman_premake`
+
+3. ✅ **Fixed systemd logging** (file → journalctl)
    - Centralized logging with automatic timestamps
    - View logs: `journalctl -u partman-maintenance`
 
-3. ✅ **Created generalized fix script** (`fix-partitioned-table.sh`)
+4. ✅ **Created generalized fix script** (`scripts/fix-partitioned-table`)
    - Works for any partitioned table
    - Automatically detects date ranges
    - Comprehensive documentation included
 
-4. ✅ **Documented partition creation mechanism**
+5. ✅ **Documented partition creation mechanism**
    - Only partman-maintenance.timer creates partitions (every 4 hours)
    - No triggers or other automatic mechanisms
    - Monitor: `journalctl -u partman-maintenance -f`
