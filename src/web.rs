@@ -470,14 +470,21 @@ async fn metrics_middleware(request: Request<Body>, next: Next) -> Response {
     response
 }
 
-// Handler for robots.txt - serves embedded content
+// Handler for robots.txt - serves environment-specific content
 async fn robots_txt() -> impl IntoResponse {
     let mut headers = HeaderMap::new();
     headers.insert("content-type", "text/plain".parse().unwrap());
     // Cache robots.txt for 24 hours
     headers.insert("cache-control", "public, max-age=86400".parse().unwrap());
 
-    (StatusCode::OK, headers, ROBOTS_TXT)
+    // For staging environment, block all crawling
+    let content = if std::env::var("SOAR_ENV").as_deref() == Ok("staging") {
+        "User-agent: *\nDisallow: /\n"
+    } else {
+        ROBOTS_TXT
+    };
+
+    (StatusCode::OK, headers, content)
 }
 
 // Handler for Prometheus metrics endpoint

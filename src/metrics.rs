@@ -236,9 +236,6 @@ pub async fn analytics_metrics_task(pool: crate::web::PgPool) {
             metrics::gauge!("analytics.aircraft.active_7d").set(summary.active_devices_7d as f64);
             metrics::gauge!("analytics.aircraft.outliers")
                 .set(summary.outlier_devices_count as f64);
-            if let Some(score) = summary.data_quality_score {
-                metrics::gauge!("analytics.data_quality_score").set(score);
-            }
         }
     }
 }
@@ -519,7 +516,6 @@ pub fn initialize_analytics_metrics() {
     metrics::gauge!("analytics.flights.last_30d").set(0.0);
     metrics::gauge!("analytics.aircraft.active_7d").set(0.0);
     metrics::gauge!("analytics.aircraft.outliers").set(0.0);
-    metrics::gauge!("analytics.data_quality_score").set(0.0);
 }
 
 /// Initialize airspace-related metrics
