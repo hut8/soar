@@ -457,7 +457,7 @@ SyslogIdentifier=pelias-pip
 
 # Resource limits
 LimitNOFILE=65536
-MemoryMax=16G
+MemoryMax=32G
 
 [Install]
 WantedBy=multi-user.target
