@@ -16,6 +16,7 @@
 set -e
 set -u
 set -o pipefail
+set -x
 
 # Colors for output
 RED='\033[0;31m'
@@ -39,7 +40,10 @@ if [ -f "$OPENSEARCH_PASSWORD_FILE" ]; then
     OPENSEARCH_INITIAL_ADMIN_PASSWORD=$(cat "$OPENSEARCH_PASSWORD_FILE")
 else
     echo -e "${BLUE}Generating secure password for OpenSearch admin user...${NC}"
+    # Temporarily disable pipefail to avoid SIGPIPE error from tr | head
+    set +o pipefail
     OPENSEARCH_INITIAL_ADMIN_PASSWORD=$(LC_ALL=C tr -dc 'A-Za-z0-9!@#$%^&*()_+=-' < /dev/urandom | head -c 32)
+    set -o pipefail
     # Ensure password meets complexity requirements by adding one of each required character
     OPENSEARCH_INITIAL_ADMIN_PASSWORD="Aa1!${OPENSEARCH_INITIAL_ADMIN_PASSWORD}"
     PASSWORD_NEEDS_SAVING=true
