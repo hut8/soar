@@ -62,6 +62,13 @@
 # - Partitions are missing for recent dates
 # - Connection exhaustion or other issues prevented partman from running
 #
+# IMPORTANT - Order of Operations for Tables with Foreign Keys:
+# - If migrating BOTH 'fixes' and 'raw_messages', migrate 'fixes' FIRST
+# - This is because fixes.aprs_message_id references raw_messages.raw_message_id
+# - If you try to detach raw_messages_default while fixes still references it, you'll get:
+#   "ERROR: removing partition violates foreign key constraint"
+# - Correct order: 1) fixes, then 2) raw_messages
+#
 # ==============================================================================
 # PREREQUISITES
 # ==============================================================================
@@ -198,7 +205,24 @@ if [ "$IS_ATTACHED" = "t" ]; then
     echo ""
 
     # Note: Cannot use CONCURRENTLY when a DEFAULT partition exists (PostgreSQL limitation)
-    psql -U soar -d "${DATABASE}" -c "ALTER TABLE ${TABLE_NAME} DETACH PARTITION ${DEFAULT_PARTITION};"
+    # Attempt to detach - if this fails due to foreign key constraints, provide helpful error
+    if ! psql -U soar -d "${DATABASE}" -c "ALTER TABLE ${TABLE_NAME} DETACH PARTITION ${DEFAULT_PARTITION};" 2>&1; then
+        echo ""
+        echo "ERROR: Failed to detach ${DEFAULT_PARTITION}"
+        echo ""
+        echo "This typically happens when other partitioned tables have foreign keys referencing this table."
+        echo "For example, if 'raw_messages_default' is referenced by 'fixes' partitions."
+        echo ""
+        echo "SOLUTION: Migrate the dependent table FIRST:"
+        echo "  1. If this is 'raw_messages', run './fix-partitioned-table soar fixes received_at' first"
+        echo "  2. Then run this script again for 'raw_messages'"
+        echo ""
+        echo "The foreign key relationships in SOAR:"
+        echo "  - fixes.aprs_message_id -> raw_messages.raw_message_id (with partition key)"
+        echo "  - fixes partitions reference raw_messages partitions (including DEFAULT)"
+        echo ""
+        exit 1
+    fi
 
     echo "Successfully detached ${DEFAULT_PARTITION}"
 else
@@ -285,7 +309,7 @@ while [ "$CURRENT_DATE" != "$MAX_DATE" ]; do
 
     # Use DELETE...RETURNING + INSERT pattern to move data
     # Note: We use * in RETURNING to avoid issues with column list expansion
-    psql -U soar -d "${DATABASE}" -c "
+    psql -U soar -d "${DATABASE}" << EOF
         WITH moved_rows AS (
             DELETE FROM ${DEFAULT_PARTITION}
             WHERE ${PARTITION_KEY} >= '${START_TS}'
@@ -294,7 +318,7 @@ while [ "$CURRENT_DATE" != "$MAX_DATE" ]; do
         )
         INSERT INTO ${TABLE_NAME} (${COLUMNS})
         SELECT ${COLUMNS} FROM moved_rows;
-    "
+EOF
 
     CURRENT_DATE="$NEXT_DATE"
 done
@@ -305,7 +329,7 @@ START_TS="${MAX_DATE} 00:00:00+00"
 END_TS="${NEXT_DATE} 00:00:00+00"
 
 echo "Migrating data for ${MAX_DATE}..."
-psql -U soar -d "${DATABASE}" -c "
+psql -U soar -d "${DATABASE}" << EOF
     WITH moved_rows AS (
         DELETE FROM ${DEFAULT_PARTITION}
         WHERE ${PARTITION_KEY} >= '${START_TS}'
@@ -314,7 +338,7 @@ psql -U soar -d "${DATABASE}" -c "
     )
     INSERT INTO ${TABLE_NAME} (${COLUMNS})
     SELECT ${COLUMNS} FROM moved_rows;
-"
+EOF
 
 echo ""
 echo "Data migration completed."
