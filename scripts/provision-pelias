@@ -132,8 +132,8 @@ if ! grep -q "# Pelias configuration" /etc/opensearch/opensearch.yml 2>/dev/null
 discovery.type: single-node
 indices.query.bool.max_clause_count: 4096
 
-# Network configuration - HTTP only (accessible from Docker bridge)
-network.host: 0.0.0.0
+# Network configuration - HTTP only on localhost (Docker uses host networking)
+network.host: 127.0.0.1
 http.port: 9200
 
 # Disable security plugin completely (no HTTPS, no authentication)
@@ -144,13 +144,13 @@ EOF
     OPENSEARCH_CONFIG_CHANGED=true
 else
     echo -e "${BLUE}Pelias configuration section found in opensearch.yml${NC}"
-    # Ensure network.host is set to 0.0.0.0 for Docker bridge access
-    if ! grep -q "^network.host: 0.0.0.0" /etc/opensearch/opensearch.yml; then
-        echo -e "${YELLOW}Updating network.host to 0.0.0.0 for Docker bridge access...${NC}"
+    # Ensure network.host is set to 127.0.0.1 (localhost only - not exposed to internet)
+    if ! grep -q "^network.host: 127.0.0.1" /etc/opensearch/opensearch.yml; then
+        echo -e "${YELLOW}Updating network.host to 127.0.0.1 (localhost only)...${NC}"
         if grep -q "^network.host:" /etc/opensearch/opensearch.yml; then
-            sed -i 's/^network.host:.*/network.host: 0.0.0.0/' /etc/opensearch/opensearch.yml
+            sed -i 's/^network.host:.*/network.host: 127.0.0.1/' /etc/opensearch/opensearch.yml
         else
-            sed -i '/# Pelias configuration/a network.host: 0.0.0.0' /etc/opensearch/opensearch.yml
+            sed -i '/# Pelias configuration/a network.host: 127.0.0.1' /etc/opensearch/opensearch.yml
         fi
         OPENSEARCH_CONFIG_CHANGED=true
     fi
@@ -190,19 +190,6 @@ for i in {1..30}; do
     fi
     sleep 2
 done
-
-# Verify OpenSearch is accessible from Docker bridge network
-echo -e "${BLUE}Verifying OpenSearch is accessible from Docker bridge (172.17.0.1)...${NC}"
-if curl -s http://172.17.0.1:9200 > /dev/null 2>&1; then
-    echo -e "${GREEN}OpenSearch is accessible from Docker bridge${NC}"
-else
-    echo -e "${RED}Error: OpenSearch not accessible from Docker bridge${NC}"
-    echo -e "${YELLOW}Current network.host setting:${NC}"
-    grep "^network.host" /etc/opensearch/opensearch.yml || echo "  (not set)"
-    echo -e "${YELLOW}Listening ports:${NC}"
-    ss -tlnp | grep :9200 || echo "  (none found)"
-    exit 1
-fi
 
 # Install Docker (for data import tools only)
 if ! command -v docker &> /dev/null; then
@@ -307,7 +294,7 @@ cat > /opt/pelias/docker/pelias.json <<EOF
     "hosts": [
       {
         "protocol": "http",
-        "host": "172.17.0.1",
+        "host": "127.0.0.1",
         "port": 9200
       }
     ]
@@ -356,20 +343,19 @@ chown pelias:pelias /opt/pelias/docker/.env
 # Create minimal docker-compose.yml for data import
 echo -e "${BLUE}Creating docker-compose.yml for Pelias data import...${NC}"
 cat > /opt/pelias/docker/docker-compose.yml <<'EOF'
-networks:
-  default:
-    driver: bridge
 services:
   schema:
     image: pelias/schema:master
     container_name: pelias_schema
     user: "${DOCKER_USER}"
+    network_mode: host
     volumes:
       - "./pelias.json:/code/pelias.json"
   whosonfirst:
     image: pelias/whosonfirst:master
     container_name: pelias_whosonfirst
     user: "${DOCKER_USER}"
+    network_mode: host
     volumes:
       - "./pelias.json:/code/pelias.json"
       - "${DATA_DIR}:/data"
