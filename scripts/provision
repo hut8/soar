@@ -47,14 +47,14 @@ if [[ "$ENVIRONMENT" == "production" ]]; then
     WEB_PORT="61225"
     DOMAIN="glider.flights"
     # Caddy site configs to install for production
-    CADDY_SITES=("glider.flights" "photon.glider.flights" "grafana.glider.flights")
+    CADDY_SITES=("glider.flights" "photon.glider.flights" "pelias.glider.flights" "grafana.glider.flights")
 else
     DB_NAME="soar_staging"
     ENV_FILE="/etc/soar/env-staging"
     WEB_PORT="61226"
     DOMAIN="staging.glider.flights"
     # Caddy site configs to install for staging
-    CADDY_SITES=("staging.glider.flights" "grafana.staging.glider.flights")
+    CADDY_SITES=("staging.glider.flights" "pelias.staging.glider.flights" "grafana.staging.glider.flights")
 fi
 
 echo -e "${GREEN}Provisioning SOAR server for ${ENVIRONMENT} environment...${NC}"

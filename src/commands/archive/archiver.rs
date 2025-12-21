@@ -26,6 +26,13 @@ pub trait Archivable: Sized + Serialize + for<'de> Deserialize<'de> + Send + 'st
         Self::table_name()
     }
 
+    /// Whether this table is partitioned (affects post-deletion cleanup)
+    /// - Partitioned tables (like fixes, raw_messages) use ANALYZE only after dropping partitions
+    /// - Non-partitioned tables (like flights, receiver_statuses) use VACUUM ANALYZE after DELETE
+    fn is_partitioned() -> bool {
+        false // Default to non-partitioned for backwards compatibility
+    }
+
     /// Get the oldest date of records in the database that are eligible for archival.
     /// Only considers records before the given date to enable partition pruning.
     /// If the oldest record is newer than before_date, returns None.
@@ -192,8 +199,14 @@ pub async fn archive_day<T: Archivable>(
         .context("Failed to get file metadata")?
         .len();
 
-    // Run VACUUM ANALYZE on table after deletion
-    vacuum_analyze_table(pool, T::table_name()).await?;
+    // Update table statistics after deletion
+    // - Partitioned tables: Use ANALYZE only (no VACUUM needed after dropping partitions)
+    // - Non-partitioned tables: Use VACUUM ANALYZE to reclaim space and update stats
+    if T::is_partitioned() {
+        analyze_table(pool, T::table_name()).await?;
+    } else {
+        vacuum_analyze_table(pool, T::table_name()).await?;
+    }
 
     Ok((
         count as usize,
@@ -292,6 +305,102 @@ pub async fn vacuum_analyze_table(pool: &PgPool, table_name: &str) -> Result<()>
     .await??;
 
     Ok(())
+}
+
+/// Run ANALYZE on a table to update statistics
+/// Use this after dropping partitions (no VACUUM needed since no rows were deleted)
+pub async fn analyze_table(pool: &PgPool, table_name: &str) -> Result<()> {
+    info!("Running ANALYZE on table '{}'...", table_name);
+    let pool = pool.clone();
+    let table_name = table_name.to_string();
+
+    tokio::task::spawn_blocking(move || {
+        let mut conn = pool.get()?;
+        // ANALYZE cannot run inside a transaction, so we use SimpleConnection
+        // which executes the command directly without a transaction
+        use diesel::connection::SimpleConnection;
+        let query = format!("ANALYZE {}", table_name);
+        conn.batch_execute(&query)
+            .context(format!("Failed to ANALYZE table '{}'", table_name))?;
+        info!("Successfully completed ANALYZE on table '{}'", table_name);
+        Ok::<(), anyhow::Error>(())
+    })
+    .await??;
+
+    Ok(())
+}
+
+/// Finalize any pending detachment for a specific partition
+/// This handles the edge case where a previous DETACH PARTITION CONCURRENTLY
+/// was interrupted (e.g., session crash) and left the partition in "detaching" state.
+/// Returns true if a pending detachment was finalized, false otherwise.
+pub async fn finalize_pending_detachment(
+    pool: &PgPool,
+    parent_table: &str,
+    partition_name: &str,
+) -> Result<bool> {
+    let pool = pool.clone();
+    let parent_table = parent_table.to_string();
+    let partition_name = partition_name.to_string();
+
+    tokio::task::spawn_blocking(move || {
+        let mut conn = pool.get()?;
+        use diesel::connection::SimpleConnection;
+        use diesel::sql_types::Bool;
+
+        // Check if partition is in pending detach state
+        // A partition is pending detach if it exists in pg_inherits with inhdetachpending=true
+        #[derive(diesel::QueryableByName)]
+        struct PendingCheck {
+            #[diesel(sql_type = Bool)]
+            exists: bool,
+        }
+
+        let check_query = format!(
+            "SELECT EXISTS (
+                SELECT 1 FROM pg_inherits i
+                JOIN pg_class child ON i.inhrelid = child.oid
+                JOIN pg_class parent ON i.inhparent = parent.oid
+                WHERE parent.relname = '{}'
+                  AND child.relname = '{}'
+                  AND i.inhdetachpending = true
+            ) as exists",
+            parent_table, partition_name
+        );
+
+        let result: PendingCheck = diesel::sql_query(&check_query)
+            .get_result(&mut conn)
+            .context("Failed to check for pending detachment")?;
+
+        let is_pending = result.exists;
+
+        if is_pending {
+            info!(
+                "Found pending detachment for partition '{}' on table '{}', finalizing...",
+                partition_name, parent_table
+            );
+
+            // Finalize the pending detachment
+            let finalize_query = format!(
+                "ALTER TABLE {} DETACH PARTITION {} CONCURRENTLY FINALIZE",
+                parent_table, partition_name
+            );
+
+            conn.batch_execute(&finalize_query).context(format!(
+                "Failed to finalize pending detachment for partition '{}'",
+                partition_name
+            ))?;
+
+            info!(
+                "Successfully finalized pending detachment for partition '{}'",
+                partition_name
+            );
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    })
+    .await?
 }
 
 /// Helper for writing records to compressed CSV file with streaming

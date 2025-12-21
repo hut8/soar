@@ -1,0 +1,84 @@
+{
+  "geocoding": {
+    "version": "0.2",
+    "attribution": "http://localhost:4000/attribution",
+    "query": {
+      "layers": [
+        "locality",
+        "county",
+        "region",
+        "country"
+      ],
+      "size": 10,
+      "private": false,
+      "point.lat": 35.6762,
+      "point.lon": 139.6503,
+      "boundary.circle.lat": 35.6762,
+      "boundary.circle.lon": 139.6503,
+      "lang": {
+        "name": "English",
+        "iso6391": "en",
+        "iso6393": "eng",
+        "via": "default",
+        "defaulted": true
+      },
+      "querySize": 20
+    },
+    "engine": {
+      "name": "Pelias",
+      "author": "Mapzen",
+      "version": "1.0"
+    },
+    "timestamp": 1766268802857
+  },
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          139.636499,
+          35.641987
+        ]
+      },
+      "properties": {
+        "id": "102031397",
+        "gid": "whosonfirst:locality:102031397",
+        "layer": "locality",
+        "source": "whosonfirst",
+        "source_id": "102031397",
+        "country_code": "JP",
+        "name": "Setagaya",
+        "confidence": 0.5,
+        "distance": 4.008,
+        "accuracy": "centroid",
+        "country": "Japan",
+        "country_gid": "whosonfirst:country:85632429",
+        "country_a": "JPN",
+        "region": "Tokyo",
+        "region_gid": "whosonfirst:region:85672817",
+        "region_a": "TK",
+        "county": "Setagaya",
+        "county_gid": "whosonfirst:county:1108741703",
+        "locality": "Setagaya",
+        "locality_gid": "whosonfirst:locality:102031397",
+        "continent": "Asia",
+        "continent_gid": "whosonfirst:continent:102191569",
+        "label": "Setagaya, Tokyo, Japan"
+      },
+      "bbox": [
+        139.572748258,
+        35.5807206006,
+        139.691162109,
+        35.6974551833
+      ]
+    }
+  ],
+  "bbox": [
+    139.572748258,
+    35.5807206006,
+    139.691162109,
+    35.6974551833
+  ]
+}

@@ -1,0 +1,86 @@
+{
+  "geocoding": {
+    "version": "0.2",
+    "attribution": "http://localhost:4000/attribution",
+    "query": {
+      "layers": [
+        "locality",
+        "county",
+        "region",
+        "country"
+      ],
+      "size": 10,
+      "private": false,
+      "point.lat": 37.7749,
+      "point.lon": -122.4194,
+      "boundary.circle.lat": 37.7749,
+      "boundary.circle.lon": -122.4194,
+      "lang": {
+        "name": "English",
+        "iso6391": "en",
+        "iso6393": "eng",
+        "via": "default",
+        "defaulted": true
+      },
+      "querySize": 20
+    },
+    "engine": {
+      "name": "Pelias",
+      "author": "Mapzen",
+      "version": "1.0"
+    },
+    "timestamp": 1766268799996
+  },
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -122.693976,
+          37.759715
+        ]
+      },
+      "properties": {
+        "id": "85922583",
+        "gid": "whosonfirst:locality:85922583",
+        "layer": "locality",
+        "source": "whosonfirst",
+        "source_id": "85922583",
+        "country_code": "US",
+        "name": "San Francisco",
+        "confidence": 0.5,
+        "distance": 24.221,
+        "accuracy": "centroid",
+        "country": "United States",
+        "country_gid": "whosonfirst:country:85633793",
+        "country_a": "USA",
+        "region": "California",
+        "region_gid": "whosonfirst:region:85688637",
+        "region_a": "CA",
+        "county": "San Francisco County",
+        "county_gid": "whosonfirst:county:102087579",
+        "county_a": "SF",
+        "locality": "San Francisco",
+        "locality_gid": "whosonfirst:locality:85922583",
+        "locality_a": "SF",
+        "continent": "North America",
+        "continent_gid": "whosonfirst:continent:102191575",
+        "label": "San Francisco, CA, USA"
+      },
+      "bbox": [
+        -123.173825,
+        37.63983,
+        -122.28178,
+        37.929824
+      ]
+    }
+  ],
+  "bbox": [
+    -123.173825,
+    37.63983,
+    -122.28178,
+    37.929824
+  ]
+}

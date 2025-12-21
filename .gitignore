@@ -11,3 +11,7 @@ web/build/
 web/playwright-report/
 web/test-results/
 test-results
+
+# Grafana alerting configuration (processed from templates, contains credentials)
+infrastructure/grafana-provisioning/alerting/contact-points.yml
+infrastructure/systemd/grafana-server.service.d-smtp.conf

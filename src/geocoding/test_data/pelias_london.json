@@ -1,0 +1,87 @@
+{
+  "geocoding": {
+    "version": "0.2",
+    "attribution": "http://localhost:4000/attribution",
+    "query": {
+      "layers": [
+        "locality",
+        "county",
+        "region",
+        "country"
+      ],
+      "size": 10,
+      "private": false,
+      "point.lat": 51.5074,
+      "point.lon": -0.1278,
+      "boundary.circle.lat": 51.5074,
+      "boundary.circle.lon": -0.1278,
+      "lang": {
+        "name": "English",
+        "iso6391": "en",
+        "iso6393": "eng",
+        "via": "default",
+        "defaulted": true
+      },
+      "querySize": 20
+    },
+    "engine": {
+      "name": "Pelias",
+      "author": "Mapzen",
+      "version": "1.0"
+    },
+    "timestamp": 1766268801458
+  },
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -0.109401,
+          51.500526
+        ]
+      },
+      "properties": {
+        "id": "101750367",
+        "gid": "whosonfirst:locality:101750367",
+        "layer": "locality",
+        "source": "whosonfirst",
+        "source_id": "101750367",
+        "country_code": "GB",
+        "name": "London",
+        "confidence": 0.5,
+        "distance": 1.487,
+        "accuracy": "centroid",
+        "country": "United Kingdom",
+        "country_gid": "whosonfirst:country:85633159",
+        "country_a": "GBR",
+        "macroregion": "England",
+        "macroregion_gid": "whosonfirst:macroregion:404227469",
+        "region": "Greater London",
+        "region_gid": "whosonfirst:region:1880762729",
+        "macrocounty": "Greater London",
+        "macrocounty_gid": "whosonfirst:macrocounty:1880762179",
+        "county": "Kingston upon Thames",
+        "county_gid": "whosonfirst:county:1880771795",
+        "locality": "London",
+        "locality_gid": "whosonfirst:locality:101750367",
+        "continent": "Europe",
+        "continent_gid": "whosonfirst:continent:102191581",
+        "label": "London, England, United Kingdom"
+      },
+      "bbox": [
+        -0.510375,
+        51.28676,
+        0.334016,
+        51.691874
+      ]
+    }
+  ],
+  "bbox": [
+    -0.510375,
+    51.28676,
+    0.334016,
+    51.691874
+  ]
+}
