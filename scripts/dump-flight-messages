@@ -212,11 +212,12 @@ TEST_CASE=$(cat <<EOF
 #[tokio::test]
 #[ignore] // Remove this attribute once test is fully implemented
 async fn ${TEST_FUNCTION_NAME}() {
+    use soar::message_sources::{TestMessageSource, process_messages_from_source};
+
     // ARRANGE: Set up test environment
-    // TODO: Set up test database
+    // TODO: Set up test database and packet router
     // let pool = setup_test_db().await;
-    // let flight_tracker = FlightTracker::new(&pool);
-    // let fix_processor = FixProcessor::new(...);
+    // let packet_router = setup_packet_router(&pool).await;
 
     // Load test messages from file
     let mut source = TestMessageSource::from_file("tests/data/flights/${FILENAME}.txt")
@@ -224,35 +225,30 @@ async fn ${TEST_FUNCTION_NAME}() {
         .expect("Failed to load test messages");
 
     // ACT: Process all messages through the pipeline
+    // TODO: Uncomment once packet_router is set up
+    // let messages_processed = process_messages_from_source(&mut source, &packet_router)
+    //     .await
+    //     .expect("Failed to process messages");
+
+    // Temporary: Count messages until packet_router is implemented
     let mut messages_processed = 0;
-    while let Some(message) = source.next_message().await.unwrap() {
-        // TODO: Parse timestamp and APRS message
-        // let (timestamp_str, aprs_message) = message.split_once(' ')
-        //     .expect("Message should have timestamp");
-        // let timestamp = DateTime::parse_from_rfc3339(timestamp_str)
-        //     .expect("Valid RFC3339 timestamp")
-        //     .with_timezone(&Utc);
-
-        // TODO: Process through the full pipeline
-        // process_aprs_message(aprs_message, timestamp, &packet_router).await;
-
+    while source.next_message().await.unwrap().is_some() {
         messages_processed += 1;
     }
 
     // ASSERT: Verify expected behavior
-    // TODO: Add assertions for expected flight detection behavior
+    // Verify all messages were read
+    assert_eq!(messages_processed, ${MESSAGE_COUNT}, "Should process all messages");
+
+    // TODO: Add specific assertions for this test case
     // Examples:
     // - Number of flights created
     // - Flight start/end times
     // - Flight state transitions
     // - Correct handling of timeouts, landings, etc.
-
-    // Verify all messages were processed
-    assert_eq!(messages_processed, ${MESSAGE_COUNT}, "Should process all messages");
-
-    // TODO: Add specific assertions for this test case
+    //
     // Example:
-    // let device_id = ...; // Extract from first message
+    // let device_id = extract_device_id_from_first_message();
     // let flights = get_flights_for_device(&pool, device_id).await;
     // assert_eq!(flights.len(), 2, "$DESCRIPTION");
 }

@@ -17,7 +17,7 @@ Each file contains raw APRS messages in chronological order, with descriptive fi
 
 ## Generating Test Cases
 
-The `dump-flight-messages.sh` script automatically:
+The `dump-flight-messages` script automatically:
 1. Extracts messages from the database
 2. Generates a descriptive filename
 3. Creates a corresponding test case with arrange/act/assert structure
@@ -26,7 +26,7 @@ The `dump-flight-messages.sh` script automatically:
 
 ```bash
 # Run the script with environment and flight ID
-./scripts/dump-flight-messages.sh production <flight-id>
+./scripts/dump-flight-messages production <flight-id>
 
 # The script will prompt you for a description
 Description: timeout resurrection creates new flight

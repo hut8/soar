@@ -388,6 +388,21 @@ The hooks run automatically on every commit. To run manually:
 pre-commit run --all-files
 ```
 
+### Flight Detection Testing
+
+SOAR includes a comprehensive testing framework for debugging and validating flight detection logic using real APRS message sequences from the database.
+
+**Quick start:**
+```bash
+# Extract messages from a problematic flight and generate test case
+scripts/dump-flight-messages production <flight-id>
+
+# Enter description when prompted (e.g., "timeout resurrection creates new flight")
+# Script generates test data file and test case automatically
+```
+
+For complete documentation, see [Flight Detection Testing Guide](docs/FLIGHT-DETECTION-TESTING.md).
+
 ### Database Migrations
 
 Install Diesel CLI (done automatically by `install-dev-tools.sh`):

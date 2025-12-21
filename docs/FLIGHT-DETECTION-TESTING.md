@@ -19,7 +19,7 @@ This is particularly useful for debugging issues like:
 ## Quick Start Workflow
 
 1. **Identify problematic flight** on Recent Flights page (copy flight UUID)
-2. **Run script**: `./scripts/dump-flight-messages.sh production <flight-id>`
+2. **Run script**: `./scripts/dump-flight-messages production <flight-id>`
 3. **Enter description** when prompted (e.g., "timeout resurrection creates new flight")
 4. **Review generated test** in `tests/flight_detection_test.rs`
 5. **Implement TODOs**: Add database setup, message processing, and assertions
@@ -75,19 +75,19 @@ Where:
 
 ### Step 2: Run the Test Case Generator
 
-Use the `dump-flight-messages.sh` script to extract messages and automatically generate a test case:
+Use the `dump-flight-messages` script to extract messages and automatically generate a test case:
 
 ```bash
 # From staging database (local)
-./scripts/dump-flight-messages.sh staging <flight-id>
+./scripts/dump-flight-messages staging <flight-id>
 
 # From production database (via SSH to glider.flights)
-./scripts/dump-flight-messages.sh production <flight-id>
+./scripts/dump-flight-messages production <flight-id>
 ```
 
 **Example:**
 ```bash
-./scripts/dump-flight-messages.sh production 123e4567-e89b-12d3-a456-426614174000
+./scripts/dump-flight-messages production 123e4567-e89b-12d3-a456-426614174000
 
 # The script will prompt you:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -376,7 +376,7 @@ cargo test --test flight_detection_test -- --nocapture
 ```bash
 # Make sure you're in the git repository
 cd /path/to/soar
-./scripts/dump-flight-messages.sh staging <flight-id>
+./scripts/dump-flight-messages staging <flight-id>
 ```
 
 ### No messages found for flight
@@ -408,7 +408,7 @@ ssh glider.flights "psql -U postgres -d soar -c 'SELECT 1'"
 ## Related Files
 
 - **Message sources**: `src/message_sources.rs`
-- **Dump script**: `scripts/dump-flight-messages.sh`
+- **Dump script**: `scripts/dump-flight-messages`
 - **Test data**: `tests/data/flights/`
 - **Example tests**: `tests/flight_detection_test.rs`
 - **Flight tracker**: `src/flight_tracker/`

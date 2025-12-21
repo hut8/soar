@@ -1,20 +1,25 @@
-//! Message source abstraction for OGN/APRS messages
+//! Message source abstraction for aircraft tracking messages
 //!
-//! This module provides a trait-based abstraction for consuming raw APRS messages
-//! from different sources. This enables:
+//! This module provides a trait-based abstraction for consuming raw aircraft tracking
+//! messages from different sources. This enables:
 //! - Production: Real-time NATS streaming
 //! - Testing: Replaying messages from files
 //!
-//! Message Format:
+//! Supported message types:
+//! - OGN/APRS: Glider and light aircraft tracking via APRS-IS
+//! - ADS-B: Commercial and general aviation via BEAST protocol
+//!
+//! Message Format (OGN/APRS):
 //! All messages follow the format: "YYYY-MM-DDTHH:MM:SS.SSSZ <raw_aprs_message>"
 //! Example: "2025-01-15T12:34:56.789Z FLRDDA5BA>APRS,qAS,LFNM:/074548h..."
 use anyhow::Result;
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use futures_util::StreamExt;
 use std::path::Path;
 use tokio::fs::File;
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tracing::{debug, warn};
+use tracing::{debug, info, trace, warn};
 
 /// Trait for sources of raw APRS messages
 ///
@@ -34,6 +39,97 @@ pub trait RawMessageSource: Send + Sync {
     fn remaining_hint(&self) -> Option<usize> {
         None
     }
+}
+
+/// Process messages from a source through the packet processing pipeline
+///
+/// This function reads messages from a `RawMessageSource` and processes them through
+/// the `PacketRouter`, handling timestamp extraction, parsing, and routing.
+///
+/// # Arguments
+/// * `source` - The message source (NATS, file, etc.)
+/// * `packet_router` - The packet router that handles message processing
+///
+/// # Returns
+/// The number of messages successfully processed
+///
+/// # Example
+/// ```no_run
+/// use soar::message_sources::{TestMessageSource, process_messages_from_source};
+/// use soar::packet_processors::PacketRouter;
+///
+/// # async fn example() -> anyhow::Result<()> {
+/// let mut source = TestMessageSource::from_file("test.txt").await?;
+/// let packet_router = PacketRouter::new(/* ... */);
+///
+/// let count = process_messages_from_source(&mut source, &packet_router).await?;
+/// println!("Processed {} messages", count);
+/// # Ok(())
+/// # }
+/// ```
+pub async fn process_messages_from_source(
+    source: &mut dyn RawMessageSource,
+    packet_router: &crate::packet_processors::PacketRouter,
+) -> Result<usize> {
+    let mut messages_processed = 0;
+
+    while let Some(message) = source.next_message().await? {
+        // Extract timestamp from the beginning of the message
+        // Format: "YYYY-MM-DDTHH:MM:SS.SSSZ <rest_of_message>"
+        let (received_at, actual_message) = match message.split_once(' ') {
+            Some((timestamp_str, rest)) => match DateTime::parse_from_rfc3339(timestamp_str) {
+                Ok(timestamp) => (timestamp.with_timezone(&Utc), rest),
+                Err(e) => {
+                    warn!(
+                        "Failed to parse timestamp from message: {} - using current time",
+                        e
+                    );
+                    (Utc::now(), message.as_str())
+                }
+            },
+            None => {
+                warn!("Message does not contain timestamp prefix - using current time");
+                (Utc::now(), message.as_str())
+            }
+        };
+
+        // Route server messages (starting with #) differently
+        // Server messages don't create PacketContext
+        if actual_message.starts_with('#') {
+            debug!("Server message: {}", actual_message);
+            packet_router
+                .process_server_message(actual_message, received_at)
+                .await;
+            messages_processed += 1;
+            continue;
+        }
+
+        // Try to parse the message using ogn-parser
+        match ogn_parser::parse(actual_message) {
+            Ok(parsed) => {
+                // Call PacketRouter to archive, process, and route to queues
+                packet_router
+                    .process_packet(parsed, actual_message, received_at)
+                    .await;
+                messages_processed += 1;
+            }
+            Err(e) => {
+                // For OGNFNT sources with invalid lat/lon, log as trace instead of error
+                // These are common and expected issues with this data source
+                let error_str = e.to_string();
+                if actual_message.contains("OGNFNT")
+                    && (error_str.contains("Invalid Latitude")
+                        || error_str.contains("Invalid Longitude"))
+                {
+                    trace!("Failed to parse APRS message '{actual_message}': {e}");
+                } else {
+                    info!("Failed to parse APRS message '{actual_message}': {e}");
+                }
+            }
+        }
+    }
+
+    Ok(messages_processed)
 }
 
 /// NATS message source for production use
