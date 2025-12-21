@@ -264,6 +264,7 @@ cat > /opt/pelias/docker/pelias.json <<EOF
   "esclient": {
     "hosts": [
       {
+        "protocol": "http",
         "host": "172.17.0.1",
         "port": 9200
       }
