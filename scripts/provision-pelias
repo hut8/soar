@@ -324,7 +324,7 @@ if [ -d "/opt/pelias/docker/data/whosonfirst" ] && [ "$(find /opt/pelias/docker/
     echo -e "${BLUE}Who's on First data already downloaded (skipping)${NC}"
 else
     echo -e "${BLUE}Downloading Who's on First data (this will take ~30 minutes and use ~70GB)...${NC}"
-    sudo -u pelias bash -c "cd /opt/pelias/docker && docker compose run --rm whosonfirst npm run download"
+    sudo -u pelias bash -c "cd /opt/pelias/docker && ./pelias download wof"
 fi
 
 # Create Pelias index
@@ -332,7 +332,7 @@ if curl -s "http://localhost:9200/pelias" | grep -q "pelias"; then
     echo -e "${BLUE}Pelias index already exists (skipping creation)${NC}"
 else
     echo -e "${BLUE}Creating Pelias index in OpenSearch...${NC}"
-    sudo -u pelias bash -c "cd /opt/pelias/docker && docker compose run --rm schema npm run create_index"
+    sudo -u pelias bash -c "cd /opt/pelias/docker && ./pelias elastic create"
 fi
 
 # Import Who's on First data
@@ -341,7 +341,7 @@ if [ "$DOC_COUNT" -gt 100000 ]; then
     echo -e "${BLUE}Who's on First data already imported ($DOC_COUNT documents, skipping)${NC}"
 else
     echo -e "${BLUE}Importing Who's on First data (this will take ~20-30 minutes)...${NC}"
-    sudo -u pelias bash -c "cd /opt/pelias/docker && docker compose run --rm whosonfirst npm start"
+    sudo -u pelias bash -c "cd /opt/pelias/docker && ./pelias import wof"
     echo -e "${GREEN}Data import complete${NC}"
 fi
 
