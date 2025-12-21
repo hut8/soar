@@ -17,6 +17,10 @@ set -e
 set -u
 set -o pipefail
 
+# Save the directory containing this script (repo root/scripts)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -485,7 +489,7 @@ PELIAS_CADDY_SITES=("pelias.glider.flights" "pelias.staging.glider.flights")
 
 echo "Installing Pelias Caddy site configs..."
 for site in "${PELIAS_CADDY_SITES[@]}"; do
-    SITE_SOURCE="infrastructure/caddy/${site}.conf"
+    SITE_SOURCE="$REPO_ROOT/infrastructure/caddy/${site}.conf"
     SITE_DEST="/etc/soar/caddy/${site}.conf"
 
     if [ -f "$SITE_SOURCE" ]; then
