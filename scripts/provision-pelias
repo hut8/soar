@@ -423,9 +423,13 @@ cp /opt/pelias/docker/pelias.json /opt/pelias/api/pelias.json
 cp /opt/pelias/docker/pelias.json /opt/pelias/pip/pelias.json
 chown pelias:pelias /opt/pelias/api/pelias.json /opt/pelias/pip/pelias.json
 
-# Update pelias.json for production services (use localhost instead of Docker bridge)
+# Update pelias.json for production services
+# - Use localhost instead of Docker bridge IP
+# - Use absolute path for whosonfirst data instead of Docker volume path
 sed -i 's/"host": "172.17.0.1"/"host": "127.0.0.1"/g' /opt/pelias/api/pelias.json
 sed -i 's/"host": "172.17.0.1"/"host": "127.0.0.1"/g' /opt/pelias/pip/pelias.json
+sed -i 's|"datapath": "/data/whosonfirst"|"datapath": "/opt/pelias/docker/data/whosonfirst"|g' /opt/pelias/api/pelias.json
+sed -i 's|"datapath": "/data/whosonfirst"|"datapath": "/opt/pelias/docker/data/whosonfirst"|g' /opt/pelias/pip/pelias.json
 
 # Create systemd service for Pelias PIP
 echo -e "${BLUE}Creating Pelias PIP systemd service...${NC}"
