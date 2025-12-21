@@ -6,17 +6,20 @@
 
 ```bash
 # Fix any partitioned table with DEFAULT partition problems
-./scripts/fix-partitioned-table <database> <table_name> <partition_key> <timezone>
+./scripts/fix-partitioned-table <database> <table_name> <partition_key>
 
 # Examples:
-./scripts/fix-partitioned-table soar fixes received_at '+01'
-./scripts/fix-partitioned-table soar raw_messages received_at '+01'
+./scripts/fix-partitioned-table soar fixes received_at
+./scripts/fix-partitioned-table soar raw_messages received_at
 ```
+
+**IMPORTANT:** PostgreSQL must be configured with `timezone = 'UTC'`
 
 This script automatically:
 - Detects the date range in the DEFAULT partition
-- Creates missing partitions
+- Creates missing partitions with UTC boundaries (00:00:00+00)
 - Migrates data safely
+- Is idempotent (safe to re-run if it fails partway through)
 - Includes comprehensive documentation about what happened
 
 ---
