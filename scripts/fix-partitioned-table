@@ -2,6 +2,9 @@
 #
 # fix-partitioned-table - Fix partitioned tables with data in DEFAULT partition
 #
+# Performance: Use -j flag to run multiple day migrations in parallel
+# Example: ./fix-partitioned-table soar fixes received_at -j 4
+#
 # ==============================================================================
 # WHAT HAPPENED (Historical Context)
 # ==============================================================================
@@ -92,30 +95,42 @@
 # USAGE
 # ==============================================================================
 #
-# ./fix-partitioned-table <database> <table_name> <partition_key>
+# ./fix-partitioned-table <database> <table_name> <partition_key> [-j <jobs>]
 #
 # Examples:
 #   ./fix-partitioned-table soar fixes received_at
-#   ./fix-partitioned-table soar raw_messages received_at
+#   ./fix-partitioned-table soar raw_messages received_at -j 4
 #
 # Parameters:
 #   database      - PostgreSQL database name
 #   table_name    - Parent table name (e.g., "fixes", "raw_messages")
 #   partition_key - Column used for partitioning (e.g., "received_at")
+#   -j N          - (Optional) Run N day migrations in parallel (default: 1)
 #
-# NOTE: This script now assumes UTC timezone. PostgreSQL must be configured with timezone = 'UTC'
+# Performance Tips:
+#   - Use -j 2-4 for modest speedup with manageable DB load
+#   - Use -j 8+ for maximum speed if your DB can handle it
+#   - Monitor: watch -n 1 'psql -U soar -d soar -c "SELECT * FROM pg_stat_activity WHERE state = '\''active'\'';"'
+#
+# NOTE: This script assumes UTC timezone. PostgreSQL must be configured with timezone = 'UTC'
 #
 # ==============================================================================
 
 set -euo pipefail
 
-# Check arguments
-if [ $# -ne 3 ]; then
-    echo "Usage: $0 <database> <table_name> <partition_key>"
+# Default parallelism
+PARALLEL_JOBS=1
+
+# Parse arguments
+if [ $# -lt 3 ] || [ $# -gt 5 ]; then
+    echo "Usage: $0 <database> <table_name> <partition_key> [-j <parallel_jobs>]"
     echo ""
     echo "Examples:"
     echo "  $0 soar fixes received_at"
-    echo "  $0 soar raw_messages received_at"
+    echo "  $0 soar raw_messages received_at -j 4"
+    echo ""
+    echo "Options:"
+    echo "  -j N    Run N day migrations in parallel (default: 1)"
     echo ""
     echo "NOTE: PostgreSQL must be configured with timezone = 'UTC'"
     exit 1
@@ -125,12 +140,27 @@ DATABASE="$1"
 TABLE_NAME="$2"
 PARTITION_KEY="$3"
 
+# Parse optional -j flag
+if [ $# -ge 4 ] && [ "$4" = "-j" ]; then
+    if [ $# -eq 5 ]; then
+        PARALLEL_JOBS="$5"
+        if ! [[ "$PARALLEL_JOBS" =~ ^[0-9]+$ ]] || [ "$PARALLEL_JOBS" -lt 1 ]; then
+            echo "ERROR: -j must be followed by a positive integer"
+            exit 1
+        fi
+    else
+        echo "ERROR: -j requires a number argument"
+        exit 1
+    fi
+fi
+
 DEFAULT_PARTITION="${TABLE_NAME}_default"
 
 echo "================================================================================"
 echo "Fixing DEFAULT partition for table: ${TABLE_NAME}"
 echo "Database: ${DATABASE}"
 echo "Partition key: ${PARTITION_KEY}"
+echo "Parallel jobs: ${PARALLEL_JOBS}"
 echo "================================================================================"
 echo ""
 
@@ -262,46 +292,77 @@ echo "This may take a while for large datasets..."
 echo "NOTE: DEFAULT partition is still attached - this is intentional to avoid FK violations."
 echo ""
 
-CURRENT_DATE="$MIN_DATE"
-while [ "$CURRENT_DATE" != "$MAX_DATE" ]; do
-    NEXT_DATE=$(date -d "$CURRENT_DATE + 1 day" +%Y-%m-%d)
-    START_TS="${CURRENT_DATE} 00:00:00+00"
-    END_TS="${NEXT_DATE} 00:00:00+00"
+# Function to migrate a single day
+migrate_day() {
+    local MIGRATE_DATE="$1"
+    local MIGRATE_COLUMNS="$2"
+    local NEXT_DATE=$(date -d "$MIGRATE_DATE + 1 day" +%Y-%m-%d)
+    local START_TS="${MIGRATE_DATE} 00:00:00+00"
+    local END_TS="${NEXT_DATE} 00:00:00+00"
 
-    echo "Migrating data for ${CURRENT_DATE}..."
+    echo "[$(date +%H:%M:%S)] Migrating data for ${MIGRATE_DATE}..."
 
     # Use DELETE...RETURNING + INSERT pattern to move data
-    # Note: We use * in RETURNING to avoid issues with column list expansion
-    psql -U soar -d "${DATABASE}" << EOF
+    if psql -U soar -d "${DATABASE}" << EOF
         WITH moved_rows AS (
             DELETE FROM ${DEFAULT_PARTITION}
             WHERE ${PARTITION_KEY} >= '${START_TS}'
               AND ${PARTITION_KEY} < '${END_TS}'
             RETURNING *
         )
-        INSERT INTO ${TABLE_NAME} (${COLUMNS})
-        SELECT ${COLUMNS} FROM moved_rows;
+        INSERT INTO ${TABLE_NAME} (${MIGRATE_COLUMNS})
+        SELECT ${MIGRATE_COLUMNS} FROM moved_rows;
 EOF
+    then
+        echo "[$(date +%H:%M:%S)] ✓ Completed ${MIGRATE_DATE}"
+        return 0
+    else
+        echo "[$(date +%H:%M:%S)] ✗ Failed ${MIGRATE_DATE}" >&2
+        return 1
+    fi
+}
 
-    CURRENT_DATE="$NEXT_DATE"
+# Export function and variables for parallel execution
+export -f migrate_day
+export DATABASE TABLE_NAME DEFAULT_PARTITION PARTITION_KEY COLUMNS
+
+# Build array of all dates to migrate
+DATES_TO_MIGRATE=()
+CURRENT_DATE="$MIN_DATE"
+while [ "$CURRENT_DATE" != "$(date -d "$MAX_DATE + 1 day" +%Y-%m-%d)" ]; do
+    DATES_TO_MIGRATE+=("$CURRENT_DATE")
+    CURRENT_DATE=$(date -d "$CURRENT_DATE + 1 day" +%Y-%m-%d)
 done
 
-# Migrate data for MAX_DATE
-NEXT_DATE=$(date -d "$MAX_DATE + 1 day" +%Y-%m-%d)
-START_TS="${MAX_DATE} 00:00:00+00"
-END_TS="${NEXT_DATE} 00:00:00+00"
+echo "Migrating ${#DATES_TO_MIGRATE[@]} days with ${PARALLEL_JOBS} parallel job(s)..."
+echo ""
 
-echo "Migrating data for ${MAX_DATE}..."
-psql -U soar -d "${DATABASE}" << EOF
-    WITH moved_rows AS (
-        DELETE FROM ${DEFAULT_PARTITION}
-        WHERE ${PARTITION_KEY} >= '${START_TS}'
-          AND ${PARTITION_KEY} < '${END_TS}'
-        RETURNING *
-    )
-    INSERT INTO ${TABLE_NAME} (${COLUMNS})
-    SELECT ${COLUMNS} FROM moved_rows;
-EOF
+# Migrate dates in parallel batches
+FAILED_DATES=()
+for i in "${!DATES_TO_MIGRATE[@]}"; do
+    MIGRATE_DATE="${DATES_TO_MIGRATE[$i]}"
+
+    # Launch migration as background job
+    migrate_day "$MIGRATE_DATE" "$COLUMNS" &
+
+    # If we've reached the parallel limit or the last date, wait for jobs to complete
+    if (( (i + 1) % PARALLEL_JOBS == 0 )) || (( i == ${#DATES_TO_MIGRATE[@]} - 1 )); then
+        # Wait for all background jobs and check exit codes
+        for job in $(jobs -p); do
+            if ! wait "$job"; then
+                FAILED_DATES+=("${DATES_TO_MIGRATE[$i]}")
+            fi
+        done
+    fi
+done
+
+# Check if any migrations failed
+if [ ${#FAILED_DATES[@]} -gt 0 ]; then
+    echo ""
+    echo "ERROR: Migration failed for ${#FAILED_DATES[@]} date(s):"
+    printf '  - %s\n' "${FAILED_DATES[@]}"
+    exit 1
+fi
 
 echo ""
 echo "Data migration completed."
