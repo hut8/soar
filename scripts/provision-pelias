@@ -8,7 +8,7 @@
 # - Installing and configuring Caddy reverse proxy
 #
 # Usage:
-#   sudo ./provision-opensearch
+#   sudo ./provision-pelias
 #
 # Note: This script uses Docker temporarily for data import only.
 #       Production services run via systemd.
@@ -29,6 +29,21 @@ if [[ $EUID -ne 0 ]]; then
    echo -e "${RED}Error: This script must be run as root (use sudo)${NC}"
    exit 1
 fi
+
+# Generate random complex password for OpenSearch admin user
+# Requirements: at least one lowercase, one uppercase, one number, one special character
+echo -e "${BLUE}Generating secure password for OpenSearch admin user...${NC}"
+OPENSEARCH_INITIAL_ADMIN_PASSWORD=$(LC_ALL=C tr -dc 'A-Za-z0-9!@#$%^&*()_+=-' < /dev/urandom | head -c 32)
+# Ensure password meets complexity requirements by adding one of each required character
+OPENSEARCH_INITIAL_ADMIN_PASSWORD="Aa1!${OPENSEARCH_INITIAL_ADMIN_PASSWORD}"
+export OPENSEARCH_INITIAL_ADMIN_PASSWORD
+
+# Save the password to a secure file for later reference
+OPENSEARCH_PASSWORD_FILE="/etc/opensearch/.admin_password"
+mkdir -p /etc/opensearch
+echo "$OPENSEARCH_INITIAL_ADMIN_PASSWORD" > "$OPENSEARCH_PASSWORD_FILE"
+chmod 600 "$OPENSEARCH_PASSWORD_FILE"
+echo -e "${GREEN}OpenSearch admin password saved to: $OPENSEARCH_PASSWORD_FILE${NC}"
 
 echo -e "${GREEN}Provisioning Pelias geocoding server with OpenSearch...${NC}"
 
@@ -73,6 +88,18 @@ apt-get install -y opensearch
 
 # Install ICU plugin
 /usr/share/opensearch/bin/opensearch-plugin install analysis-icu --batch
+
+# Add current user and soar user to opensearch group for access to logs and config
+echo -e "${BLUE}Adding users to opensearch group...${NC}"
+CURRENT_USER="${SUDO_USER:-$USER}"
+if id "$CURRENT_USER" &>/dev/null; then
+    usermod -a -G opensearch "$CURRENT_USER"
+    echo -e "${GREEN}Added $CURRENT_USER to opensearch group${NC}"
+fi
+if id soar &>/dev/null; then
+    usermod -a -G opensearch soar
+    echo -e "${GREEN}Added soar user to opensearch group${NC}"
+fi
 
 # Configure for Pelias
 cat >> /etc/opensearch/opensearch.yml <<EOF

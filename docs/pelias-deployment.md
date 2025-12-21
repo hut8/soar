@@ -12,7 +12,7 @@ git clone https://github.com/hut8/soar.git
 cd soar
 
 # Run the provisioning script (installs OpenSearch)
-sudo ./scripts/provision-opensearch
+sudo ./scripts/provision-pelias
 ```
 
 The script will:
