@@ -1778,94 +1778,73 @@
 	}
 
 	function updateAreaSubscriptions(): void {
-		if (!areaTrackerActive || !areaTrackerAvailable) return;
+		if (!areaTrackerActive || !areaTrackerAvailable || !map) return;
 
+		const bounds = map.getBounds();
+		if (!bounds) return;
+
+		const ne = bounds.getNorthEast();
+		const sw = bounds.getSouthWest();
+
+		const geoBounds = {
+			north: ne.lat(),
+			south: sw.lat(),
+			east: ne.lng(),
+			west: sw.lng()
+		};
+
+		const message = {
+			action: 'subscribe',
+			type: 'area_bulk' as const,
+			bounds: geoBounds
+		};
+
+		console.log('[AREA TRACKER] Bulk subscribe:', message);
+		fixFeed.sendWebSocketMessage(message);
+
+		// For debugging: calculate what squares this represents
 		const visibleSquares = getVisibleLatLonSquares();
-		const newSubscriptions = new SvelteSet<string>();
+		console.log(`[AREA TRACKER] Bulk subscription covers ${visibleSquares.length} squares`);
 
-		// Create subscription keys for visible squares
+		// Update current subscriptions for debugging display
+		const newSubscriptions = new SvelteSet<string>();
 		visibleSquares.forEach((square) => {
 			const key = `area.${square.lat}.${square.lon}`;
 			newSubscriptions.add(key);
 		});
-
-		// Find squares to unsubscribe from (no longer visible)
-		const toUnsubscribe = new SvelteSet<string>();
-		currentAreaSubscriptions.forEach((key) => {
-			if (!newSubscriptions.has(key)) {
-				toUnsubscribe.add(key);
-			}
-		});
-
-		// Find squares to subscribe to (newly visible)
-		const toSubscribe = new SvelteSet<string>();
-		newSubscriptions.forEach((key) => {
-			if (!currentAreaSubscriptions.has(key)) {
-				toSubscribe.add(key);
-			}
-		});
-
-		// Unsubscribe from areas no longer visible
-		toUnsubscribe.forEach((key) => {
-			const [, lat, lon] = key.split('.');
-			unsubscribeFromArea(parseInt(lat), parseInt(lon));
-		});
-
-		// Subscribe to newly visible areas
-		toSubscribe.forEach((key) => {
-			const [, lat, lon] = key.split('.');
-			subscribeToArea(parseInt(lat), parseInt(lon));
-		});
-
-		// Update current subscriptions
 		currentAreaSubscriptions = newSubscriptions;
 
-		console.log(
-			`[AREA TRACKER] Updated subscriptions: ${toSubscribe.size} new, ${toUnsubscribe.size} removed, ${currentAreaSubscriptions.size} total`
-		);
-
-		// Explicitly update debug status to ensure WebSocket status panel shows area subscriptions
+		// Update debug status to show area subscription count
 		debugStatus.update((current) => ({
 			...current,
-			activeAreaSubscriptions: currentAreaSubscriptions.size
+			activeAreaSubscriptions: visibleSquares.length
 		}));
 	}
 
 	function clearAreaSubscriptions(): void {
-		currentAreaSubscriptions.forEach((key) => {
-			const [, lat, lon] = key.split('.');
-			unsubscribeFromArea(parseInt(lat), parseInt(lon));
-		});
-		currentAreaSubscriptions.clear();
-		console.log('[AREA TRACKER] Cleared all area subscriptions');
+		if (!map) return;
 
-		// Explicitly update debug status to ensure WebSocket status panel updates
+		const message = {
+			action: 'unsubscribe',
+			type: 'area_bulk' as const,
+			bounds: {
+				north: 0,
+				south: 0,
+				east: 0,
+				west: 0
+			}
+		};
+
+		console.log('[AREA TRACKER] Bulk unsubscribe');
+		fixFeed.sendWebSocketMessage(message);
+
+		currentAreaSubscriptions.clear();
+
+		// Update debug status
 		debugStatus.update((current) => ({
 			...current,
 			activeAreaSubscriptions: 0
 		}));
-	}
-
-	function subscribeToArea(latitude: number, longitude: number): void {
-		const message = {
-			action: 'subscribe',
-			type: 'area' as const,
-			latitude,
-			longitude
-		};
-		console.log('[AREA TRACKER] Subscribe to area:', message);
-		fixFeed.sendWebSocketMessage(message);
-	}
-
-	function unsubscribeFromArea(latitude: number, longitude: number): void {
-		const message = {
-			action: 'unsubscribe',
-			type: 'area' as const,
-			latitude,
-			longitude
-		};
-		console.log('[AREA TRACKER] Unsubscribe from area:', message);
-		fixFeed.sendWebSocketMessage(message);
 	}
 
 	async function fetchAndDisplayDevicesInViewport(): Promise<void> {

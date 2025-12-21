@@ -177,35 +177,27 @@
 	 * Update area subscriptions based on visible viewport
 	 */
 	function updateAreaSubscriptions(): void {
+		const bounds = getVisibleBounds();
+		if (!bounds) return;
+
+		const geoBounds = {
+			north: bounds.latMax,
+			south: bounds.latMin,
+			east: bounds.lonMax,
+			west: bounds.lonMin
+		};
+
+		fixFeed.sendWebSocketMessage({
+			action: 'subscribe',
+			type: 'area_bulk',
+			bounds: geoBounds
+		});
+
+		// Update subscribed areas for tracking
 		const visibleSquares = getVisibleLatLonSquares();
-		const newSquares = new Set(visibleSquares.map((s) => `${s.lat},${s.lon}`));
-
-		// Unsubscribe from areas no longer visible
-		for (const areaKey of subscribedAreas) {
-			if (!newSquares.has(areaKey)) {
-				const [lat, lon] = areaKey.split(',').map(Number);
-				fixFeed.sendWebSocketMessage({
-					action: 'unsubscribe',
-					type: 'area',
-					latitude: lat,
-					longitude: lon
-				});
-				subscribedAreas.delete(areaKey);
-			}
-		}
-
-		// Subscribe to new visible areas
+		subscribedAreas.clear();
 		for (const square of visibleSquares) {
-			const areaKey = `${square.lat},${square.lon}`;
-			if (!subscribedAreas.has(areaKey)) {
-				fixFeed.sendWebSocketMessage({
-					action: 'subscribe',
-					type: 'area',
-					latitude: square.lat,
-					longitude: square.lon
-				});
-				subscribedAreas.add(areaKey);
-			}
+			subscribedAreas.add(`${square.lat},${square.lon}`);
 		}
 	}
 
@@ -315,15 +307,16 @@
 
 	onDestroy(() => {
 		// Unsubscribe from all areas
-		for (const areaKey of subscribedAreas) {
-			const [lat, lon] = areaKey.split(',').map(Number);
-			fixFeed.sendWebSocketMessage({
-				action: 'unsubscribe',
-				type: 'area',
-				latitude: lat,
-				longitude: lon
-			});
-		}
+		fixFeed.sendWebSocketMessage({
+			action: 'unsubscribe',
+			type: 'area_bulk',
+			bounds: {
+				north: 0,
+				south: 0,
+				east: 0,
+				west: 0
+			}
+		});
 		subscribedAreas.clear();
 
 		// Remove all aircraft entities
