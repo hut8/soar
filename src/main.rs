@@ -412,19 +412,22 @@ async fn setup_diesel_database() -> Result<Pool<ConnectionManager<PgConnection>>
     // Clone for schema dump later (database_url will be moved into ConnectionManager)
     let database_url_for_dump = database_url.clone();
 
-    // Create a Diesel connection pool with increased capacity for batched AGL updates
-    // Increased from default (10) to 50 to handle:
+    // Create a Diesel connection pool with conservative sizing to prevent "too many clients" errors
+    // PostgreSQL max_connections: 200
+    // Pool size: 20 per instance (allows up to 10 concurrent service instances safely)
+    // Handles:
     // - 5 APRS workers
     // - 8 elevation workers
     // - 1 batch writer
     // - Various background tasks and web requests
+    // Reduced from 50 to 20 after Dec 2025 connection exhaustion incident
     let manager = ConnectionManager::<PgConnection>::new(database_url);
     let pool = Pool::builder()
-        .max_size(50)
+        .max_size(20)
         .build(manager)
         .map_err(|e| anyhow::anyhow!("Failed to create Diesel connection pool: {e}"))?;
 
-    info!("Successfully created Diesel connection pool (max connections: 50)");
+    info!("Successfully created Diesel connection pool (max connections: 20)");
 
     // Run embedded migrations with a PostgreSQL advisory lock
     info!("Running database migrations...");
