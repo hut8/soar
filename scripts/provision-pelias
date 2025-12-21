@@ -315,9 +315,34 @@ chown pelias:pelias /opt/pelias/docker/pelias.json
 # Create .env file for Docker
 cat > /opt/pelias/docker/.env <<EOF
 DATA_DIR=/opt/pelias/docker/data
+DOCKER_USER=$(id -u pelias):$(id -g pelias)
 EOF
 
 chown pelias:pelias /opt/pelias/docker/.env
+
+# Create minimal docker-compose.yml for data import
+echo -e "${BLUE}Creating docker-compose.yml for Pelias data import...${NC}"
+cat > /opt/pelias/docker/docker-compose.yml <<'EOF'
+networks:
+  default:
+    driver: bridge
+services:
+  schema:
+    image: pelias/schema:master
+    container_name: pelias_schema
+    user: "${DOCKER_USER}"
+    volumes:
+      - "./pelias.json:/code/pelias.json"
+  whosonfirst:
+    image: pelias/whosonfirst:master
+    container_name: pelias_whosonfirst
+    user: "${DOCKER_USER}"
+    volumes:
+      - "./pelias.json:/code/pelias.json"
+      - "${DATA_DIR}:/data"
+EOF
+
+chown pelias:pelias /opt/pelias/docker/docker-compose.yml
 
 # Download Who's on First data
 if [ -d "/opt/pelias/docker/data/whosonfirst" ] && [ "$(find /opt/pelias/docker/data/whosonfirst -type f -name '*.geojson' 2>/dev/null | wc -l)" -gt 100 ]; then
