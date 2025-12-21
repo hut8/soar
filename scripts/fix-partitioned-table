@@ -254,10 +254,18 @@ echo "Step 4: Preparing data migration (excluding generated columns)..."
 COLUMNS=$(psql -U soar -d "${DATABASE}" -t -A -c "
     SELECT string_agg(column_name, ', ' ORDER BY ordinal_position)
     FROM information_schema.columns
-    WHERE table_name = '${TABLE_NAME}'
+    WHERE table_schema = 'public'
+      AND table_name = '${TABLE_NAME}'
       AND is_generated = 'NEVER'
       AND column_name != 'tableoid';
 ")
+
+# Verify we got column names
+if [ -z "$COLUMNS" ]; then
+    echo "ERROR: Failed to retrieve column list for table ${TABLE_NAME}"
+    echo "Please check that the table exists in the public schema."
+    exit 1
+fi
 
 echo "Columns to migrate: ${COLUMNS}"
 echo ""
@@ -276,15 +284,16 @@ while [ "$CURRENT_DATE" != "$MAX_DATE" ]; do
     echo "Migrating data for ${CURRENT_DATE}..."
 
     # Use DELETE...RETURNING + INSERT pattern to move data
+    # Note: We use * in RETURNING to avoid issues with column list expansion
     psql -U soar -d "${DATABASE}" -c "
         WITH moved_rows AS (
             DELETE FROM ${DEFAULT_PARTITION}
             WHERE ${PARTITION_KEY} >= '${START_TS}'
               AND ${PARTITION_KEY} < '${END_TS}'
-            RETURNING ${COLUMNS}
+            RETURNING *
         )
         INSERT INTO ${TABLE_NAME} (${COLUMNS})
-        SELECT * FROM moved_rows;
+        SELECT ${COLUMNS} FROM moved_rows;
     "
 
     CURRENT_DATE="$NEXT_DATE"
@@ -301,10 +310,10 @@ psql -U soar -d "${DATABASE}" -c "
         DELETE FROM ${DEFAULT_PARTITION}
         WHERE ${PARTITION_KEY} >= '${START_TS}'
           AND ${PARTITION_KEY} < '${END_TS}'
-        RETURNING ${COLUMNS}
+        RETURNING *
     )
     INSERT INTO ${TABLE_NAME} (${COLUMNS})
-    SELECT * FROM moved_rows;
+    SELECT ${COLUMNS} FROM moved_rows;
 "
 
 echo ""
