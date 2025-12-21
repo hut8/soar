@@ -243,12 +243,11 @@ else
     echo -e "${BLUE}pelias user already in docker group${NC}"
 fi
 
-# Create Pelias directories
+# Create base Pelias directory structure
 echo -e "${BLUE}Creating Pelias directory structure...${NC}"
-mkdir -p /opt/pelias/docker
+mkdir -p /opt/pelias
 mkdir -p /opt/pelias/api
 mkdir -p /opt/pelias/pip
-mkdir -p /opt/pelias/docker/data/whosonfirst
 chown -R pelias:pelias /opt/pelias
 
 # Clone Pelias docker repository (for import tools)
@@ -258,6 +257,10 @@ if [ ! -d /opt/pelias/docker/.git ]; then
 else
     echo -e "${BLUE}Pelias docker repository already exists${NC}"
 fi
+
+# Create data directory inside cloned repo
+mkdir -p /opt/pelias/docker/data/whosonfirst
+chown -R pelias:pelias /opt/pelias
 
 # Create pelias.json configuration
 echo -e "${BLUE}Creating pelias.json configuration...${NC}"
