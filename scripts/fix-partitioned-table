@@ -222,32 +222,43 @@ echo "Found ${ROW_COUNT} rows in ${DEFAULT_PARTITION}"
 echo "Date range: ${MIN_DATE} to ${MAX_DATE}"
 echo ""
 
-# Step 2: Temporarily drop FK constraints pointing to DEFAULT partition
+# Step 2: Temporarily drop FK constraints pointing to DEFAULT partition or parent table
 echo "Step 2: Checking for foreign key constraints to ${DEFAULT_PARTITION}..."
 
-# Find all FK constraints pointing to the DEFAULT partition
-# For inherited constraints, we need to find the parent table
-FK_CONSTRAINTS=$(psql -U soar -d "${DATABASE}" -t -A -c "
+# First, find FK constraints pointing to the parent table (not DEFAULT)
+# These are the base constraints we need to drop
+PARENT_TABLE=$(echo "${DEFAULT_PARTITION}" | sed 's/_default$//')
+
+echo "  Looking for base FK constraints on parent table: ${PARENT_TABLE}"
+BASE_FK_CONSTRAINTS=$(psql -U soar -d "${DATABASE}" -t -A -c "
     SELECT DISTINCT
-        conname || '|' ||
-        CASE
-            WHEN coninhcount > 0 THEN
-                -- Inherited constraint: find the parent table
-                (SELECT p.relname FROM pg_class p
-                 JOIN pg_inherits i ON p.oid = i.inhparent
-                 JOIN pg_constraint pc ON pc.conrelid = p.oid AND pc.conname = c.conname
-                 WHERE i.inhrelid = c.conrelid
-                 LIMIT 1)
-            ELSE
-                -- Regular constraint: use the table itself
-                c.conrelid::regclass::text
-        END as table_name,
-        coninhcount
+        c.conname || '|' || c.conrelid::regclass::text
     FROM pg_constraint c
-    WHERE confrelid = '${DEFAULT_PARTITION}'::regclass
-      AND contype = 'f'
-    ORDER BY table_name;
+    WHERE c.confrelid = '${PARENT_TABLE}'::regclass
+      AND c.contype = 'f'
+      AND c.conislocal = true;
 ")
+
+# Also find constraints pointing directly to DEFAULT (for non-partitioned tables)
+echo "  Looking for FK constraints directly to DEFAULT: ${DEFAULT_PARTITION}"
+DEFAULT_FK_CONSTRAINTS=$(psql -U soar -d "${DATABASE}" -t -A -c "
+    SELECT DISTINCT
+        c.conname || '|' || c.conrelid::regclass::text
+    FROM pg_constraint c
+    WHERE c.confrelid = '${DEFAULT_PARTITION}'::regclass
+      AND c.contype = 'f'
+      AND c.conislocal = true;
+")
+
+# Combine both sets
+FK_CONSTRAINTS="${BASE_FK_CONSTRAINTS}"
+if [ -n "$DEFAULT_FK_CONSTRAINTS" ]; then
+    if [ -n "$FK_CONSTRAINTS" ]; then
+        FK_CONSTRAINTS="${FK_CONSTRAINTS}"$'\n'"${DEFAULT_FK_CONSTRAINTS}"
+    else
+        FK_CONSTRAINTS="${DEFAULT_FK_CONSTRAINTS}"
+    fi
+fi
 
 if [ -n "$FK_CONSTRAINTS" ] && [ "$FK_CONSTRAINTS" != "" ]; then
     echo "Found foreign key constraints to ${DEFAULT_PARTITION}:"
@@ -255,19 +266,15 @@ if [ -n "$FK_CONSTRAINTS" ] && [ "$FK_CONSTRAINTS" != "" ]; then
     # Save FK definitions for recreation later
     FK_DEFINITIONS_FILE="/tmp/fk_constraints_${TABLE_NAME}_$$.sql"
 
-    # Track which constraints we've already dropped (to avoid duplicates)
-    declare -A DROPPED_CONSTRAINTS
-
-    while IFS='|' read -r FK_NAME FK_TABLE FK_INHCOUNT; do
-        # Skip if we've already dropped this constraint
-        CONSTRAINT_KEY="${FK_TABLE}.${FK_NAME}"
-        if [ -n "${DROPPED_CONSTRAINTS[$CONSTRAINT_KEY]:-}" ]; then
+    while IFS='|' read -r FK_NAME FK_TABLE; do
+        # Skip empty lines
+        if [ -z "$FK_NAME" ] || [ -z "$FK_TABLE" ]; then
             continue
         fi
 
         echo "  - ${FK_TABLE}.${FK_NAME}"
 
-        # Get the full FK definition for recreation from the actual table
+        # Get the full FK definition for recreation
         psql -U soar -d "${DATABASE}" -t -A -c "
             SELECT 'ALTER TABLE ' || conrelid::regclass || ' ADD CONSTRAINT ' || conname || ' ' ||
                    pg_get_constraintdef(oid) || ';'
@@ -275,14 +282,11 @@ if [ -n "$FK_CONSTRAINTS" ] && [ "$FK_CONSTRAINTS" != "" ]; then
             WHERE conname = '${FK_NAME}' AND conrelid = '${FK_TABLE}'::regclass;
         " >> "$FK_DEFINITIONS_FILE"
 
-        # Drop the FK constraint from the correct table
+        # Drop the FK constraint (this will also drop child constraints automatically)
         echo "  Dropping ${FK_TABLE}.${FK_NAME}..."
         psql -U soar -d "${DATABASE}" -c "
             ALTER TABLE ${FK_TABLE} DROP CONSTRAINT ${FK_NAME};
         "
-
-        # Mark as dropped
-        DROPPED_CONSTRAINTS[$CONSTRAINT_KEY]=1
     done <<< "$FK_CONSTRAINTS"
 
     echo ""
