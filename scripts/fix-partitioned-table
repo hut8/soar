@@ -222,10 +222,59 @@ echo "Found ${ROW_COUNT} rows in ${DEFAULT_PARTITION}"
 echo "Date range: ${MIN_DATE} to ${MAX_DATE}"
 echo ""
 
-# Step 2: Create missing partitions as STANDALONE tables
+# Step 2: Temporarily drop FK constraints pointing to DEFAULT partition
+echo "Step 2: Checking for foreign key constraints to ${DEFAULT_PARTITION}..."
+
+# Find all FK constraints pointing to the DEFAULT partition
+FK_CONSTRAINTS=$(psql -U soar -d "${DATABASE}" -t -A -c "
+    SELECT string_agg(conname || '|' || conrelid::regclass::text, ',')
+    FROM pg_constraint
+    WHERE confrelid = '${DEFAULT_PARTITION}'::regclass
+      AND contype = 'f';
+")
+
+if [ -n "$FK_CONSTRAINTS" ] && [ "$FK_CONSTRAINTS" != "" ]; then
+    echo "Found foreign key constraints to ${DEFAULT_PARTITION}:"
+
+    # Save FK definitions for recreation later
+    FK_DEFINITIONS_FILE="/tmp/fk_constraints_${TABLE_NAME}_$$.sql"
+
+    IFS=',' read -ra FK_ARRAY <<< "$FK_CONSTRAINTS"
+    for fk_info in "${FK_ARRAY[@]}"; do
+        FK_NAME=$(echo "$fk_info" | cut -d'|' -f1)
+        FK_TABLE=$(echo "$fk_info" | cut -d'|' -f2)
+
+        echo "  - ${FK_TABLE}.${FK_NAME}"
+
+        # Get the full FK definition for recreation
+        psql -U soar -d "${DATABASE}" -t -A -c "
+            SELECT 'ALTER TABLE ' || conrelid::regclass || ' ADD CONSTRAINT ' || conname || ' ' ||
+                   pg_get_constraintdef(oid) || ';'
+            FROM pg_constraint
+            WHERE conname = '${FK_NAME}' AND conrelid = '${FK_TABLE}'::regclass;
+        " >> "$FK_DEFINITIONS_FILE"
+
+        # Drop the FK constraint
+        echo "  Dropping ${FK_TABLE}.${FK_NAME}..."
+        psql -U soar -d "${DATABASE}" -c "
+            ALTER TABLE ${FK_TABLE} DROP CONSTRAINT ${FK_NAME};
+        "
+    done
+
+    echo ""
+    echo "FK constraints dropped. Definitions saved to: $FK_DEFINITIONS_FILE"
+    echo "These will be recreated after data migration."
+else
+    echo "No foreign key constraints found pointing to ${DEFAULT_PARTITION}"
+    FK_DEFINITIONS_FILE=""
+fi
+
+echo ""
+
+# Step 3: Create missing partitions as STANDALONE tables
 # We cannot create them as partitions directly because DEFAULT has data for those dates.
 # Instead, we create standalone tables, migrate data, then attach them as partitions.
-echo "Step 2: Creating missing daily partitions (as standalone tables)..."
+echo "Step 3: Creating missing daily partitions (as standalone tables)..."
 echo ""
 
 # Get the table structure (excluding constraints that reference the parent)
@@ -251,8 +300,8 @@ echo ""
 echo "Standalone tables created successfully."
 echo ""
 
-# Step 3: Get column list (excluding generated columns)
-echo "Step 3: Preparing data migration (excluding generated columns)..."
+# Step 4: Get column list (excluding generated columns)
+echo "Step 4: Preparing data migration (excluding generated columns)..."
 
 COLUMNS=$(psql -U soar -d "${DATABASE}" -t -A -c "
     SELECT string_agg(column_name, ', ' ORDER BY ordinal_position)
@@ -273,8 +322,8 @@ fi
 echo "Columns to migrate: ${COLUMNS}"
 echo ""
 
-# Step 4: Migrate data day by day to STANDALONE tables
-echo "Step 4: Migrating data from ${DEFAULT_PARTITION} to standalone partition tables..."
+# Step 5: Migrate data day by day to STANDALONE tables
+echo "Step 5: Migrating data from ${DEFAULT_PARTITION} to standalone partition tables..."
 echo "This may take a while for large datasets..."
 echo "NOTE: Migrating to standalone tables, not parent - this avoids routing back to DEFAULT."
 echo ""
@@ -357,8 +406,8 @@ echo ""
 echo "Data migration completed."
 echo ""
 
-# Step 5: Verify DEFAULT partition is empty
-echo "Step 5: Verifying migration..."
+# Step 6: Verify DEFAULT partition is empty
+echo "Step 6: Verifying migration..."
 
 REMAINING=$(psql -U soar -d "${DATABASE}" -t -A -c "SELECT COUNT(*) FROM ${DEFAULT_PARTITION};")
 
@@ -373,8 +422,8 @@ fi
 echo "${DEFAULT_PARTITION} is empty (verified)."
 echo ""
 
-# Step 6: Attach standalone tables as partitions
-echo "Step 6: Attaching standalone tables as partitions..."
+# Step 7: Attach standalone tables as partitions
+echo "Step 7: Attaching standalone tables as partitions..."
 echo ""
 
 CURRENT_DATE="$MIN_DATE"
@@ -401,8 +450,29 @@ echo ""
 echo "Standalone tables attached as partitions successfully."
 echo ""
 
-# Step 7: Detach DEFAULT partition (now that it's empty)
-echo "Step 7: Detaching empty ${DEFAULT_PARTITION}..."
+# Step 8: Recreate FK constraints
+if [ -n "$FK_DEFINITIONS_FILE" ] && [ -f "$FK_DEFINITIONS_FILE" ]; then
+    echo "Step 8: Recreating foreign key constraints..."
+    echo ""
+
+    while IFS= read -r fk_def; do
+        if [ -n "$fk_def" ]; then
+            echo "  Recreating: $fk_def"
+            psql -U soar -d "${DATABASE}" -c "$fk_def"
+        fi
+    done < "$FK_DEFINITIONS_FILE"
+
+    echo ""
+    echo "FK constraints recreated successfully."
+    rm -f "$FK_DEFINITIONS_FILE"
+else
+    echo "Step 8: No FK constraints to recreate (skipping)."
+fi
+
+echo ""
+
+# Step 9: Detach DEFAULT partition (now that it's empty)
+echo "Step 9: Detaching empty ${DEFAULT_PARTITION}..."
 
 IS_ATTACHED=$(psql -U soar -d "${DATABASE}" -t -A -c "
     SELECT EXISTS (
@@ -424,14 +494,14 @@ fi
 
 echo ""
 
-# Step 8: Drop the detached DEFAULT partition
-echo "Step 8: Dropping empty ${DEFAULT_PARTITION}..."
+# Step 10: Drop the detached DEFAULT partition
+echo "Step 10: Dropping empty ${DEFAULT_PARTITION}..."
 psql -U soar -d "${DATABASE}" -c "DROP TABLE ${DEFAULT_PARTITION};"
 
 echo "Successfully dropped ${DEFAULT_PARTITION}."
 echo ""
 
-# Step 9: Show final state
+# Step 11: Show final state
 echo "================================================================================"
 echo "Migration completed successfully!"
 echo "================================================================================"
