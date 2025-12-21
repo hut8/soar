@@ -213,11 +213,11 @@ for i in {1..10}; do
     sleep 2
 done
 
-# Install Node.js 18.x (for Pelias services)
+# Install Node.js 20.x LTS (for Pelias services)
 if ! command -v node &> /dev/null; then
-    echo -e "${BLUE}Installing Node.js 18.x...${NC}"
+    echo -e "${BLUE}Installing Node.js 20.x LTS...${NC}"
 
-    curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
     apt-get install -y nodejs
 
     echo -e "${GREEN}Node.js $(node --version) installed${NC}"
